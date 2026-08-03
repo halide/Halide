@@ -52,6 +52,18 @@
 #ifndef HWCAP2_SVE2
 #define HWCAP2_SVE2 0
 #endif
+#ifndef HWCAP2_SME2
+#define HWCAP2_SME2 0
+#endif
+#endif
+
+/* Detect SME target attribute support */
+#if defined(__aarch64__) && !defined(__arm__) &&                       \
+    ((defined(__GNUC__) && !defined(__clang__) && (__GNUC__ >= 14)) || \
+     (defined(__clang__) && (__clang_major__ >= 17)))
+#define HAS_ATTR_TARGET_SME 1
+#else
+#define HAS_ATTR_TARGET_SME 0
 #endif
 
 namespace Halide {
@@ -67,7 +79,20 @@ __attribute__((target("+sve"))) int get_sve_vector_length() {
     __asm__("cntb %x0, all, mul #8" : "=r"(result));
     return result;
 }
+
+#if HAS_ATTR_TARGET_SME
+__attribute__((target("+sme"))) int get_sme_streaming_vector_length() {  // codespell:ignore sme
+    register int result asm("w0");
+    __asm__("rdsvl %x0, #8" : "=r"(result));
+    return result;
+}
+#else
+int get_sme_streaming_vector_length() {
+    user_error << "Trying to get streaming_vector_length where SME is supposed to be unsupported\n";
+    return 0;
+}
 #endif
+#endif  // defined(__aarch64__)
 
 struct cpuid_result {
     int eax, ebx, ecx, edx;
@@ -282,6 +307,7 @@ Target calculate_host_target() {
     Target::Arch arch = Target::ARM;
 #if !defined(__arm__)
     bool has_scalable_vector = false;
+    bool has_streaming_scalable_vector = false;
 #endif
 
 #ifdef __APPLE__
@@ -296,7 +322,13 @@ Target calculate_host_target() {
     if (sysctl_is_set("hw.optional.arm.FEAT_FP16")) {
         initial_features.push_back(Target::ARMFp16);
     }
+#if HAS_ATTR_TARGET_SME
+    if (sysctl_is_set("hw.optional.arm.FEAT_SME2")) {
+        initial_features.push_back(Target::SME2);
+        has_streaming_scalable_vector = true;
+    }
 #endif
+#endif  // __APPLE__
 
 #ifdef __linux__
     unsigned long hwcaps = getauxval(AT_HWCAP);
@@ -322,6 +354,14 @@ Target calculate_host_target() {
         has_scalable_vector = true;
 #endif
     }
+
+#if HAS_ATTR_TARGET_SME
+    if (hwcaps2 & HWCAP2_SME2) {
+        initial_features.push_back(Target::SME2);
+        has_streaming_scalable_vector = true;
+    }
+#endif
+
 #endif
 
 #ifdef _MSC_VER
@@ -329,6 +369,7 @@ Target calculate_host_target() {
     // https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-isprocessorfeaturepresent
 #define PF_ARM_SVE_INSTRUCTIONS_AVAILABLE (46)
 #define PF_ARM_SVE2_INSTRUCTIONS_AVAILABLE (47)
+#define PF_ARM_SME2_INSTRUCTIONS_AVAILABLE (71)
 
     // This is the strategy used by Google's cpuinfo library for
     // detecting fp16 arithmetic support on Windows.
@@ -354,11 +395,24 @@ Target calculate_host_target() {
 #endif
     }
 
+#if HAS_ATTR_TARGET_SME
+    if (IsProcessorFeaturePresent(PF_ARM_SME2_INSTRUCTIONS_AVAILABLE)) {
+        initial_features.push_back(Target::SME2);
+        has_streaming_scalable_vector = true;
+    }
+#endif
 #endif
 
 #if !defined(__arm__)
     if (has_scalable_vector) {
         vector_bits = get_sve_vector_length();
+    }
+    if (has_streaming_scalable_vector) {
+        const int streaming_vector_bits = get_sme_streaming_vector_length();
+        Target::Feature sme_svl = Target::sme_svl_feature_from_bits(streaming_vector_bits);
+        user_assert(sme_svl != Target::FeatureEnd)
+            << "Detected unsupported SME streaming vector length " << streaming_vector_bits << " bits.\n";
+        initial_features.push_back(sme_svl);
     }
 #endif
 
@@ -642,8 +696,16 @@ Target::Feature calculate_host_cuda_capability(Target t) {
         return Target::CUDACapability75;
     } else if (ver < 86) {
         return Target::CUDACapability80;
-    } else {
+    } else if (ver < 89) {
         return Target::CUDACapability86;
+    } else if (ver < 90) {
+        return Target::CUDACapability89;
+    } else if (ver < 100) {
+        return Target::CUDACapability90;
+    } else if (ver < 120) {
+        return Target::CUDACapability100;
+    } else {
+        return Target::CUDACapability120;
     }
 }
 
@@ -778,6 +840,10 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"cuda_capability_75", Target::CUDACapability75},
     {"cuda_capability_80", Target::CUDACapability80},
     {"cuda_capability_86", Target::CUDACapability86},
+    {"cuda_capability_89", Target::CUDACapability89},
+    {"cuda_capability_90", Target::CUDACapability90},
+    {"cuda_capability_100", Target::CUDACapability100},
+    {"cuda_capability_120", Target::CUDACapability120},
     {"opencl", Target::OpenCL},
     {"cl_doubles", Target::CLDoubles},
     {"cl_half", Target::CLHalf},
@@ -834,6 +900,12 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"webgpu", Target::WebGPU},
     {"sve", Target::SVE},
     {"sve2", Target::SVE2},
+    {"sme2", Target::SME2},
+    {"sme_svl128", Target::SME_SVL128},
+    {"sme_svl256", Target::SME_SVL256},
+    {"sme_svl512", Target::SME_SVL512},
+    {"sme_svl1024", Target::SME_SVL1024},
+    {"sme_svl2048", Target::SME_SVL2048},
     {"arm_dot_prod", Target::ARMDotProd},
     {"arm_fp16", Target::ARMFp16},
     {"llvm_large_code_model", Target::LLVMLargeCodeModel},
@@ -1008,7 +1080,11 @@ bool merge_string(Target &t, const std::string &target) {
         !t.has_feature(Target::CUDACapability70) &&
         !t.has_feature(Target::CUDACapability75) &&
         !t.has_feature(Target::CUDACapability80) &&
-        !t.has_feature(Target::CUDACapability86)) {
+        !t.has_feature(Target::CUDACapability86) &&
+        !t.has_feature(Target::CUDACapability89) &&
+        !t.has_feature(Target::CUDACapability90) &&
+        !t.has_feature(Target::CUDACapability100) &&
+        !t.has_feature(Target::CUDACapability120)) {
         // Detect host cuda capability
         t.set_feature(get_host_cuda_capability(t));
     }
@@ -1113,6 +1189,12 @@ void Target::validate_features() const {
                                 NoNEON,
                                 POWER_ARCH_2_07,
                                 RVV,
+                                SME2,
+                                SME_SVL128,
+                                SME_SVL256,
+                                SME_SVL512,
+                                SME_SVL1024,
+                                SME_SVL2048,
                                 SVE,
                                 SVE2,
                                 VSX,
@@ -1174,6 +1256,12 @@ void Target::validate_features() const {
                                 POWER_ARCH_2_07,
                                 RVV,
                                 SSE41,
+                                SME_SVL128,
+                                SME_SVL256,
+                                SME_SVL512,
+                                SME_SVL1024,
+                                SME_SVL2048,
+                                SME2,
                                 SVE,
                                 SVE2,
                                 VSX,
@@ -1195,6 +1283,20 @@ void Target::validate_features() const {
                                 HLSL_SM69,
                             });
     }
+
+    const int num_sme_svl_features =
+        (int)has_feature(SME_SVL128) +
+        (int)has_feature(SME_SVL256) +
+        (int)has_feature(SME_SVL512) +
+        (int)has_feature(SME_SVL1024) +
+        (int)has_feature(SME_SVL2048);
+
+    user_assert(num_sme_svl_features <= 1)
+        << "Target may have at most one SME_SVL feature.\n";
+    user_assert(!has_feature(SME2) || num_sme_svl_features == 1)
+        << "Target feature sme2 requires exactly one SME_SVL feature.\n";
+    user_assert(has_feature(SME2) || num_sme_svl_features == 0)
+        << "Target features SME_SVL128, SME_SVL256, SME_SVL512, SME_SVL1024, and SME_SVL2048 require target feature sme2.\n";
 }
 
 Target::Target(const std::string &target) {
@@ -1236,6 +1338,23 @@ Target::Feature Target::feature_from_name(const std::string &name) {
         return feature;
     }
     return Target::FeatureEnd;
+}
+
+Target::Feature Target::sme_svl_feature_from_bits(int bits) {
+    switch (bits) {
+    case 128:
+        return Target::SME_SVL128;
+    case 256:
+        return Target::SME_SVL256;
+    case 512:
+        return Target::SME_SVL512;
+    case 1024:
+        return Target::SME_SVL1024;
+    case 2048:
+        return Target::SME_SVL2048;
+    default:
+        return Target::FeatureEnd;
+    }
 }
 
 std::string Target::to_string() const {
@@ -1341,6 +1460,134 @@ void Target::set_features(const std::vector<Feature> &features_to_set, bool valu
     }
 }
 
+namespace {
+
+// The feature-implication table. Each entry {a, b} means "feature a implies
+// feature b": there is no real device or configuration that has a set without
+// b, so any target with a should be treated as also having b. The list is kept
+// in topological order (an antecedent always appears before it is used as a
+// consequent), so that a single forward pass sets every implied feature, and a
+// single backward pass removes every redundant implied feature.
+//
+// Implications that depend on target state other than the feature set (the
+// arch, os, or vector_bits) don't fit the simple pair model, and are handled
+// directly in set_implied_features()/unset_implied_features().
+const std::vector<std::pair<Target::Feature, Target::Feature>> &implied_feature_pairs() {
+    static const std::vector<std::pair<Target::Feature, Target::Feature>> pairs = {
+        // x86. Each AVX-family feature is a strict superset of the ones below
+        // it, so it is impossible to have the higher one without the lower.
+        {Target::AVX512_SapphireRapids, Target::AVX512_Zen4},
+        {Target::AVX512_SapphireRapids, Target::AVXVNNI},
+        {Target::AVX512_Zen5, Target::AVX512_Zen4},
+        {Target::AVX512_Zen5, Target::AVXVNNI},
+        {Target::AVX512_Zen4, Target::AVX512_Cannonlake},
+        {Target::AVX512_Cannonlake, Target::AVX512_Skylake},
+        {Target::AVX512_Skylake, Target::AVX512},
+        {Target::AVX512_KNL, Target::AVX512},
+        {Target::AVX512, Target::AVX2},
+        // Every AVX2-enabled architecture also has F16C and FMA.
+        {Target::AVX2, Target::F16C},
+        {Target::AVX2, Target::FMA},
+        {Target::AVX2, Target::AVX},
+        {Target::AVX, Target::SSE41},
+
+        // ARM
+        {Target::SVE2, Target::ARMDotProd},
+        {Target::SVE2, Target::ARMFp16},
+        {Target::SVE, Target::ARMFp16},
+        {Target::SME2, Target::ARMDotProd},
+        {Target::SME2, Target::ARMFp16},
+        // ARMFp16 implies ARM v8.2-A; we don't know of any device where that
+        // doesn't hold. The v8.x cascade below then fills in v8.1a and v8a.
+        {Target::ARMFp16, Target::ARMv82a},
+        // The ARM v8.x version features form a descending chain: each level
+        // implies the one below it, down to v8a.
+        {Target::ARMv89a, Target::ARMv88a},
+        {Target::ARMv88a, Target::ARMv87a},
+        {Target::ARMv87a, Target::ARMv86a},
+        {Target::ARMv86a, Target::ARMv85a},
+        {Target::ARMv85a, Target::ARMv84a},
+        {Target::ARMv84a, Target::ARMv83a},
+        {Target::ARMv83a, Target::ARMv82a},
+        {Target::ARMv82a, Target::ARMv81a},
+        {Target::ARMv81a, Target::ARMv8a},
+
+        // Tracing loads or stores also produces the enclosing realization
+        // begin/end events, so that the traced loads and stores have context.
+        {Target::TraceLoads, Target::TraceRealizations},
+        {Target::TraceStores, Target::TraceRealizations},
+    };
+    return pairs;
+}
+
+}  // namespace
+
+void Target::set_implied_features() {
+    // Implications that depend on more than just the feature set.
+    if (arch == X86 && has_feature(AVX10_1)) {
+        // AVX10.1 at a given vector width supports the corresponding legacy
+        // AVX feature set. The pairs below then cascade further.
+        if (vector_bits >= 256) {
+            set_feature(AVX2);
+        }
+        if (vector_bits >= 512) {
+            set_feature(AVX512_SapphireRapids);
+        }
+    }
+    if (arch == ARM && os == OSX) {
+        // Apple silicon implements at least the ARM v8.4-A spec.
+        set_feature(ARMv84a);
+    }
+
+    // Simple feature -> feature implications. One forward pass suffices because
+    // the table is topologically sorted.
+    for (const auto &[feature, implied] : implied_feature_pairs()) {
+        if (has_feature(feature)) {
+            set_feature(implied);
+        }
+    }
+}
+
+void Target::unset_implied_features() {
+    // Walk the table backwards, clearing any feature that is implied by another
+    // feature that remains set. Because the table is topologically sorted,
+    // walking backwards guarantees a consequent is only cleared after it has
+    // been used as an antecedent, so a chain collapses to just its highest
+    // feature in one pass.
+    const auto &pairs = implied_feature_pairs();
+    for (auto it = pairs.rbegin(); it != pairs.rend(); ++it) {
+        if (has_feature(it->first)) {
+            set_feature(it->second, false);
+        }
+    }
+
+    // Undo the conditional implications from set_implied_features(). These run
+    // after the pair loop, mirroring how their seeds run before it there.
+    if (arch == X86 && has_feature(AVX10_1)) {
+        if (vector_bits >= 512) {
+            set_feature(AVX512_SapphireRapids, false);
+        }
+        if (vector_bits >= 256) {
+            set_feature(AVX2, false);
+        }
+    }
+    if (arch == ARM && os == OSX) {
+        set_feature(ARMv84a, false);
+    }
+}
+
+Target Target::with_implied_features() const {
+    Target copy = *this;
+    copy.set_implied_features();
+    return copy;
+}
+
+Target Target::without_implied_features() const {
+    Target copy = *this;
+    copy.unset_implied_features();
+    return copy;
+}
+
 bool Target::has_feature(Feature f) const {
     if (f == FeatureEnd) {
         return true;
@@ -1418,6 +1665,18 @@ int Target::get_cuda_capability_lower_bound() const {
     }
     if (has_feature(Target::CUDACapability86)) {
         return 86;
+    }
+    if (has_feature(Target::CUDACapability89)) {
+        return 89;
+    }
+    if (has_feature(Target::CUDACapability90)) {
+        return 90;
+    }
+    if (has_feature(Target::CUDACapability100)) {
+        return 100;
+    }
+    if (has_feature(Target::CUDACapability120)) {
+        return 120;
     }
     return 20;
 }
@@ -1639,9 +1898,36 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
         return Target::Vulkan;
     case DeviceAPI::WebGPU:
         return Target::WebGPU;
+    case DeviceAPI::SMEStreaming:
+        return Target::SME2;
     default:
         return Target::FeatureEnd;
     }
+}
+
+int Target::sme_streaming_vector_bits() const {
+    int result = 0;
+    auto set_result = [&result](int bits) {
+        user_assert(result == 0)
+            << "Target may have at most one SME_SVL feature.\n";
+        result = bits;
+    };
+    if (has_feature(Target::SME_SVL128)) {
+        set_result(128);
+    }
+    if (has_feature(Target::SME_SVL256)) {
+        set_result(256);
+    }
+    if (has_feature(Target::SME_SVL512)) {
+        set_result(512);
+    }
+    if (has_feature(Target::SME_SVL1024)) {
+        set_result(1024);
+    }
+    if (has_feature(Target::SME_SVL2048)) {
+        set_result(2048);
+    }
+    return result;
 }
 
 int Target::natural_vector_size(const Halide::Type &t) const {
@@ -1749,6 +2035,10 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         CUDACapability75,
         CUDACapability80,
         CUDACapability86,
+        CUDACapability89,
+        CUDACapability90,
+        CUDACapability100,
+        CUDACapability120,
 
         HVX_v62,
         HVX_v65,
@@ -1887,6 +2177,18 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     if (cuda_capability < 86) {
         output.features.reset(CUDACapability86);
     }
+    if (cuda_capability < 89) {
+        output.features.reset(CUDACapability89);
+    }
+    if (cuda_capability < 90) {
+        output.features.reset(CUDACapability90);
+    }
+    if (cuda_capability < 100) {
+        output.features.reset(CUDACapability100);
+    }
+    if (cuda_capability < 120) {
+        output.features.reset(CUDACapability120);
+    }
 
     // Pick tight lower bound for Vulkan capability. Use fall-through to clear redundant features
     int vulkan_a = get_vulkan_capability_lower_bound();
@@ -2000,65 +2302,5 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     result = output;
     return true;
 }
-
-namespace Internal {
-
-void target_test() {
-    Target t;
-    for (const auto &feature : feature_name_map) {
-        t.set_feature(feature.second);
-    }
-    for (int i = 0; i < (int)(Target::FeatureEnd); i++) {
-        internal_assert(t.has_feature((Target::Feature)i)) << "Feature " << i << " not in feature_names_map.\n";
-    }
-
-    // 3 targets: {A,B,C}. Want gcd(A,B)=C
-    std::vector<std::array<std::string, 3>> gcd_tests = {
-        {{"x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma"}},
-        {{"x86-64-linux-sse41-fma-no_asserts-no_runtime", "x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma"}},
-        {{"x86-64-linux-avx2-sse41", "x86-64-linux-sse41-fma", "x86-64-linux-sse41"}},
-        {{"x86-64-linux-avx2-sse41", "x86-32-linux-sse41-fma", ""}},
-        {{"x86-64-linux-cuda", "x86-64-linux", "x86-64-linux-cuda"}},
-        {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda", "x86-64-linux-cuda"}},
-        {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda-cuda_capability_30", "x86-64-linux-cuda-cuda_capability_30"}},
-        {{"x86-64-linux-vulkan", "x86-64-linux", "x86-64-linux-vulkan"}},
-        {{"x86-64-linux-vulkan-vk_v13", "x86-64-linux-vulkan", "x86-64-linux-vulkan"}},
-        {{"x86-64-linux-vulkan-vk_v13", "x86-64-linux-vulkan-vk_v10", "x86-64-linux-vulkan-vk_v10"}},
-        {{"hexagon-32-qurt-hvx_v65", "hexagon-32-qurt-hvx_v62", "hexagon-32-qurt-hvx_v62"}},
-        {{"hexagon-32-qurt-hvx_v62", "hexagon-32-qurt", "hexagon-32-qurt"}},
-        {{"hexagon-32-qurt-hvx_v62-hvx", "hexagon-32-qurt", ""}},
-        {{"hexagon-32-qurt-hvx_v62-hvx", "hexagon-32-qurt-hvx", "hexagon-32-qurt-hvx"}},
-        {{"x86-64-windows-d3d12compute-hlsl_sm66", "x86-64-windows-d3d12compute", "x86-64-windows-d3d12compute"}},
-        {{"x86-64-windows-d3d12compute-hlsl_sm66", "x86-64-windows-d3d12compute-hlsl_sm60", "x86-64-windows-d3d12compute-hlsl_sm60"}},
-        {{"x86-64-windows-d3d12compute-hlsl_sm62", "x86-64-windows-d3d12compute-hlsl_sm62", "x86-64-windows-d3d12compute-hlsl_sm62"}},
-        {{"x86-64-windows-d3d12compute-hlsl_sm69", "x86-64-windows-d3d12compute", "x86-64-windows-d3d12compute"}},
-        {{"x86-64-windows-d3d12compute-hlsl_sm69", "x86-64-windows-d3d12compute-hlsl_sm60", "x86-64-windows-d3d12compute-hlsl_sm60"}},
-    };
-
-    for (const auto &test : gcd_tests) {
-        Target result{};
-        Target a{test[0]};
-        Target b{test[1]};
-        if (a.get_runtime_compatible_target(b, result)) {
-            internal_assert(!test[2].empty() && result == Target{test[2]})
-                << "Targets " << a.to_string() << " and " << b.to_string() << " were computed to have gcd "
-                << result.to_string() << " but expected '" << test[2] << "'\n";
-        } else {
-            internal_assert(test[2].empty())
-                << "Targets " << a.to_string() << " and " << b.to_string() << " were computed to have no gcd "
-                << "but " << test[2] << " was expected.";
-        }
-    }
-
-    internal_assert(Target().vector_bits == 0) << "Default Target vector_bits not 0.\n";
-    internal_assert(Target("arm-64-linux-sve2-vector_bits_512").vector_bits == 512) << "Vector bits not parsed correctly.\n";
-    Target with_vector_bits(Target::Linux, Target::ARM, 64, Target::ProcessorGeneric, {Target::SVE}, 512);
-    internal_assert(with_vector_bits.vector_bits == 512) << "Vector bits not populated in constructor.\n";
-    internal_assert(Target(with_vector_bits.to_string()).vector_bits == 512) << "Vector bits not round tripped properly.\n";
-
-    std::cout << "Target test passed\n";
-}
-
-}  // namespace Internal
 
 }  // namespace Halide

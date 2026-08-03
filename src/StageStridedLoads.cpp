@@ -1,4 +1,5 @@
-#include "StageStridedLoads.h"
+#include <tuple>
+
 #include "CSE.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
@@ -7,6 +8,7 @@
 #include "IRVisitor.h"
 #include "Scope.h"
 #include "Simplify.h"
+#include "StageStridedLoads.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -39,31 +41,15 @@ public:
 
         bool operator<(const Key &other) const {
             // Check fields in order of cost to compare
-            if (stride < other.stride) {
+            auto lhs = std::tie(stride, lanes, scope, allocation, type, buf);
+            auto rhs = std::tie(other.stride, other.lanes, other.scope,
+                                other.allocation, other.type, other.buf);
+            if (lhs < rhs) {
                 return true;
-            } else if (stride > other.stride) {
-                return false;
-            } else if (lanes < other.lanes) {
-                return true;
-            } else if (lanes > other.lanes) {
-                return false;
-            } else if (scope < other.scope) {
-                return true;
-            } else if (scope > other.scope) {
-                return false;
-            } else if (allocation < other.allocation) {
-                return true;
-            } else if (allocation > other.allocation) {
-                return false;
-            } else if (type < other.type) {
-                return true;
-            } else if (other.type < type) {
-                return false;
-            } else if (buf < other.buf) {
-                return true;
-            } else if (buf > other.buf) {
+            } else if (rhs < lhs) {
                 return false;
             } else {
+                // base compares by graph equivalence, so it can't go in the tuple.
                 return graph_less_than(base, other.base);
             }
         }
@@ -309,9 +295,13 @@ Stmt stage_strided_loads(const Stmt &stmt, const Target &target) {
             // Definitely not a strided load
             return self->visit_base(l);
         } else {
-            // Might be a strided load after simplification
-            return Load::make(l->type, l->name, self->mutate(l->index), l->image, l->param,
-                              self->mutate(l->predicate), l->alignment, l->is_streaming);
+            // Might be a strided load after simplification. Note that this
+            // deliberately calls Load::make rather than Load::with, because
+            // Load::with returns the original node when nothing has changed,
+            // and here we want a distinct node even in that case.
+            return Load::make(l->type, l->name, self->mutate(l->index), l->image,
+                              l->param, self->mutate(l->predicate), l->alignment,
+                              l->is_streaming);
         }
     });
 

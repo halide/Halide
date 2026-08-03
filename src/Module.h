@@ -116,16 +116,26 @@ struct LoweredFunc {
      * the Target. */
     NameMangling name_mangling;
 
+    /** The attributes in bit flags purposed for additional information used in lowering and codegen. */
+    enum Attribute : uint64_t {
+        NO_ATTRIBUTE = 0,
+        SME_STREAMING_TASK = 1 << 0,
+        SME_NONSTREAMING_TASK = 1 << 1,
+    };
+    uint64_t attributes;
+
     LoweredFunc(const std::string &name,
                 const std::vector<LoweredArgument> &args,
                 Stmt body,
                 LinkageType linkage,
-                NameMangling mangling = NameMangling::Default);
+                NameMangling mangling = NameMangling::Default,
+                uint64_t attributes = 0);
     LoweredFunc(const std::string &name,
                 const std::vector<Argument> &args,
                 Stmt body,
                 LinkageType linkage,
-                NameMangling mangling = NameMangling::Default);
+                NameMangling mangling = NameMangling::Default,
+                uint64_t attributes = 0);
 };
 
 }  // namespace Internal

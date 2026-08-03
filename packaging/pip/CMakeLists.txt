@@ -10,7 +10,7 @@ function(configure_trampoline PACKAGE INSTALL_DIR)
 endfunction()
 
 configure_trampoline(Halide "${Halide_INSTALL_CMAKEDIR}")
-configure_trampoline(HalideHelpers "${Halide_INSTALL_HELPERSDIR}")
+configure_trampoline(HalideCompiler "${Halide_INSTALL_COMPILERDIR}")
 
 install(
     FILES

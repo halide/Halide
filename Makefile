@@ -543,6 +543,7 @@ SOURCE_FILES = \
   LoopCarry.cpp \
   Lower.cpp \
   LowerParallelTasks.cpp \
+  LowerSMEStreamingTasks.cpp \
   LowerWarpShuffles.cpp \
   Memoization.cpp \
   Module.cpp \
@@ -749,6 +750,7 @@ HEADER_FILES = \
   LoopPartitioningDirective.h \
   Lower.h \
   LowerParallelTasks.h \
+  LowerSMEStreamingTasks.h \
   LowerWarpShuffles.h \
   MainPage.h \
   Memoization.h \
@@ -1298,6 +1300,9 @@ ERROR_TESTS = $(shell ls $(ROOT_DIR)/test/error/*.cpp)
 WARNING_TESTS = $(shell ls $(ROOT_DIR)/test/warning/*.cpp)
 RUNTIME_TESTS = $(shell ls $(ROOT_DIR)/test/runtime/*.cpp)
 FUZZ_TESTS = $(filter-out %halide_fuzz_main.cpp %IRGraphCXXPrinter.cpp, $(shell ls $(ROOT_DIR)/test/fuzz/*.cpp))
+# Match the args used by the CMake build: 1000 runs per test, and no more than
+# five minutes of total time.
+FUZZ_TEST_ARGS ?= -runs=1000 -max_total_time=300
 GENERATOR_EXTERNAL_TESTS := $(shell ls $(ROOT_DIR)/test/generator/*test.cpp)
 GENERATOR_EXTERNAL_TEST_GENERATOR := $(shell ls $(ROOT_DIR)/test/generator/*_generator.cpp)
 TUTORIALS = $(filter-out %_generate.cpp, $(shell ls $(ROOT_DIR)/tutorial/*.cpp))
@@ -2093,7 +2098,7 @@ quiet_correctness_%: $(BIN_DIR)/correctness_%
 
 fuzz_%: $(BIN_DIR)/fuzz_%
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; $(CURDIR)/$<
+	cd $(TMP_DIR) ; $(CURDIR)/$< $(FUZZ_TEST_ARGS)
 	@-echo
 
 valgrind_%: $(BIN_DIR)/correctness_%

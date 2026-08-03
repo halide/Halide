@@ -1,12 +1,10 @@
-#include <set>
-
+#include "Inline.h"
 #include "CSE.h"
 #include "Debug.h"
 #include "ExternFuncArgument.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "Inline.h"
 #include "Qualify.h"
 #include "Substitute.h"
 
@@ -109,103 +107,238 @@ void validate_schedule_inlined_function(Function f) {
     }
 }
 
-class Inliner : public IRMutator {
-    using IRMutator::visit;
+// ---------------------------------------------------------------------------
+// Inliner: design notes
+//
+// Picking how many functions to inline per CSE invocation is a balance
+// between two penalties:
+//
+// - Doing all N functions in one pass is bad. CSE's RemoveLets, while
+//   substituting Let bindings away, can re-walk shared subtrees
+//   exponentially in their nesting depth, and the materialized body at a
+//   call site after N levels of inlining is a DAG of exactly that shape.
+//   Per-CSE-invocation cost grows roughly exponentially in the batch size.
+//
+// - Doing one function per pass is also bad. Each pass walks the entire
+//   current IR, which grows as bodies get materialized; N passes ×
+//   O(|s|) is quadratic in N.
+//
+// The exponential bites much harder than the quadratic, so we use a small
+// constant batch_size (8). Empirically the optimum drifts roughly like
+// log(N) (K≈8 at N=100, K≈12 at N=300), so a constant works well across
+// the range we measured.
+//
+// Implementation: each add() call assigns the entry an order_id (its
+// position in the add() sequence). operator() processes the set by
+// iterative deepening through that sequence -- a series of passes that
+// raise an active_limit by batch_size each time, with visit(Call) only
+// inlining entries whose order_id is below the current limit. The CSE
+// that runs between passes (per-Provide in the Stmt mutator, top-level
+// in the Expr form) flattens shared subtrees into named Let references,
+// so the next pass's RemoveLets input has bounded shared-Let nesting.
+//
+// Correct for any add() order: a Call that survives a pass (because it
+// got wrapped inside a body materialized by an earlier limit) is picked
+// up by a later pass once its order_id falls under the limit. But add()
+// in consumer-first (reverse-topological) order is best for performance:
+// each pass's substitutions then expose the next layer of producer Calls
+// for the following pass. With the wrong order, the work piles up in the
+// final pass once the limit hits the entries the call sites actually
+// reference, defeating the bounded-per-pass cost.
+// ---------------------------------------------------------------------------
 
-    Function func;
+Inliner::Inliner(const Function &f) {
+    internal_assert(f.can_be_inlined()) << "Illegal to inline " << f.name() << "\n";
+    validate_schedule_inlined_function(f);
+    add(f);
+}
 
-    Expr visit(const Call *op) override {
-        if (op->name == func.name()) {
+void Inliner::add(const Function &f) {
+    for (int i = 0; i < f.outputs(); i++) {
+        Key k{f.name(), i};
+        auto [it, inserted] = to_inline.insert({k, Entry{}});
+        if (inserted) {
+            it->second.func = f;
+            // order_id is the entry's position in the add() sequence, used
+            // by operator()'s iterative-deepening loop to decide when this
+            // entry first becomes eligible to inline.
+            it->second.order_id = to_inline.size() - 1;
+        }
+    }
+}
 
-            // Mutate the args
-            auto args = mutate(op->args);
+Expr Inliner::operator()(const Expr &e) {
+    if (active_limit != SIZE_MAX || to_inline.size() <= batch_size) {
+        return common_subexpression_elimination(mutate(e));
+    }
+    Expr result = e;
+    size_t limit = batch_size;
+    while (true) {
+        active_limit = limit;
+        min_skipped_order_id = SIZE_MAX;
+        Expr mutated = mutate(result);
+        active_limit = SIZE_MAX;
+        // Only run CSE if mutate actually changed anything; a pass that
+        // only discovered above-the-limit Calls produces an unchanged
+        // result and there's nothing for CSE to do.
+        if (!mutated.same_as(result)) {
+            result = common_subexpression_elimination(mutated);
+        }
+        // Re-processing of cached bodies in visit(Call) bubbles their
+        // remaining un-inlined Call into min_skipped_order_id, so this
+        // truly means "nothing inlinable is left anywhere in the result."
+        if (min_skipped_order_id == SIZE_MAX) {
+            break;
+        }
+        // Jump directly to the next un-inlined entry instead of stepping
+        // by batch_size through regions of order-space the input doesn't
+        // reference. (No need to check limit against to_inline.size():
+        // if every entry were below the limit, none could have been
+        // skipped, so min_skipped_order_id would be SIZE_MAX already.)
+        limit = min_skipped_order_id + batch_size;
+    }
+    return result;
+}
 
-            // Grab the body
-            Expr body = qualify(func.name() + ".", func.values()[op->value_index]);
+Stmt Inliner::operator()(const Stmt &s) {
+    if (active_limit != SIZE_MAX || to_inline.size() <= batch_size) {
+        return mutate(s);
+    }
+    // Same deepening loop as the Expr version. No top-of-loop CSE here
+    // because the CSE that bounds per-pass work happens in two places
+    // already: the per-Provide CSE inside visit(Provide) flattens each
+    // Provide after this pass's substitutions, and any recursive
+    // operator()(Expr) from get_qualified_body sees active_limit set and
+    // CSEs the qualified body it produces.
+    Stmt result = s;
+    size_t limit = batch_size;
+    while (true) {
+        active_limit = limit;
+        min_skipped_order_id = SIZE_MAX;
+        result = mutate(result);
+        active_limit = SIZE_MAX;
+        if (min_skipped_order_id == SIZE_MAX) {
+            break;
+        }
+        limit = min_skipped_order_id + batch_size;
+    }
+    return result;
+}
 
-            const vector<string> func_args = func.args();
-
-            // Bind the args using Let nodes
-            internal_assert(args.size() == func_args.size());
-
-            for (size_t i = 0; i < args.size(); i++) {
-                if (is_const(args[i]) || args[i].as<Variable>()) {
-                    body = substitute(func.name() + "." + func_args[i], args[i], body);
-                } else {
-                    body = Let::make(func.name() + "." + func_args[i], args[i], body);
-                }
-            }
-
-            found++;
-
-            return body;
-
-        } else {
+Expr Inliner::visit(const Call *op) {
+    auto it = to_inline.find({op->name, op->value_index});
+    if (it != to_inline.end()) {
+        // If this entry's order_id is past the current limit, leave the
+        // Call alone; a later pass with a higher limit will pick it up.
+        // Remember the smallest such order_id so the outer loop can jump
+        // the limit directly to it instead of stepping by batch_size.
+        if (it->second.order_id >= active_limit) {
+            min_skipped_order_id = std::min(min_skipped_order_id, it->second.order_id);
             return IRMutator::visit(op);
         }
-    }
+        // Below the limit: actually substitute.
+        Entry &entry = it->second;
+        const Function &func = entry.func;
+        // Mutate the args
+        auto args = mutate(op->args);
 
-    Expr visit(const Variable *op) override {
-        if (op->name == func.name() + ".buffer") {
-            const Call *call = func.is_wrapper();
-            internal_assert(call);
-            // Do a whole-image inline. Substitute the .buffer symbol
-            // for the wrapped object's .buffer symbol.
-            string buf_name;
-            if (call->call_type == Call::Halide) {
-                buf_name = call->name;
-                if (Function(call->func).outputs() > 1) {
-                    buf_name += "." + std::to_string(call->value_index);
-                }
-                buf_name += ".buffer";
-                return Variable::make(type_of<halide_buffer_t *>(), buf_name);
-            } else if (call->param.defined()) {
-                return Variable::make(type_of<halide_buffer_t *>(), call->name + ".buffer", call->param);
-            } else {
-                internal_assert(call->image.defined());
-                return Variable::make(type_of<halide_buffer_t *>(), call->name + ".buffer", call->image);
-            }
-        } else {
-            return op;
+        // Compute (or re-process) the cached qualified body when the
+        // current active_limit lets us pull more inlinable Calls into it.
+        if (!entry.qualified_body.defined()) {
+            entry.qualified_body = qualify(func.name() + ".", func.values()[op->value_index]);
+            entry.lowest_pending_order_id = 0;
         }
-    }
+        if (active_limit > entry.lowest_pending_order_id) {
+            size_t saved_min = min_skipped_order_id;
+            min_skipped_order_id = SIZE_MAX;
+            entry.qualified_body = (*this)(entry.qualified_body);
+            entry.lowest_pending_order_id = min_skipped_order_id;
+            min_skipped_order_id = std::min(saved_min, min_skipped_order_id);
+        }
+        // Whether or not we re-processed, the cached body still has Calls
+        // at order_id == lowest_pending un-inlined. Propagate that up so
+        // the outer deepening loop knows there's more work.
+        min_skipped_order_id = std::min(min_skipped_order_id, entry.lowest_pending_order_id);
+        Expr body = entry.qualified_body;
 
-    Stmt visit(const Provide *op) override {
-        ScopedValue<int> old_found(found, 0);
-        Stmt stmt = IRMutator::visit(op);
+        const vector<string> func_args = func.args();
 
-        // TODO: making this > 1 should be desirable,
-        // but explodes compiletimes in some situations.
-        if (found > 0) {
-            stmt = common_subexpression_elimination(stmt);
+        // Bind the args using Let nodes
+        internal_assert(args.size() == func_args.size());
+
+        for (size_t i = 0; i < args.size(); i++) {
+            body = Let::make(func.name() + "." + func_args[i], args[i], body);
         }
 
-        return stmt;
+        return body;
     }
+    return IRMutator::visit(op);
+}
 
-public:
-    int found = 0;
-
-    Inliner(const Function &f)
-        : func(f) {
-        internal_assert(f.can_be_inlined()) << "Illegal to inline " << f.name() << "\n";
-        validate_schedule_inlined_function(f);
+Expr Inliner::visit(const Variable *op) {
+    // Whole-image inline for wrappers: if op is "<f>.buffer" for some inlined
+    // wrapper f, rewrite it to the wrapped buffer's Variable. Extract the
+    // "<f>" prefix and look up directly rather than scanning to_inline.
+    const string suffix = ".buffer";
+    if (op->name.size() <= suffix.size() ||
+        op->name.compare(op->name.size() - suffix.size(), suffix.size(), suffix) != 0) {
+        return op;
     }
-};
+    // Wrappers always have a single output, so look up by (name, 0).
+    auto it = to_inline.find({op->name.substr(0, op->name.size() - suffix.size()), 0});
+    if (it == to_inline.end()) {
+        return op;
+    }
+    const Function &func = it->second.func;
+    const Call *call = func.is_wrapper();
+    internal_assert(call);
+    if (call->call_type == Call::Halide) {
+        string buf_name = call->name;
+        if (Function(call->func).outputs() > 1) {
+            buf_name += "." + std::to_string(call->value_index);
+        }
+        buf_name += ".buffer";
+        return Variable::make(type_of<halide_buffer_t *>(), buf_name);
+    } else if (call->param.defined()) {
+        return Variable::make(type_of<halide_buffer_t *>(), call->name + ".buffer", call->param);
+    } else {
+        internal_assert(call->image.defined());
+        return Variable::make(type_of<halide_buffer_t *>(), call->name + ".buffer", call->image);
+    }
+}
+
+Stmt Inliner::visit(const Provide *op) {
+    Stmt stmt = IRMutator::visit(op);
+    // CSE on the Provide if it changed -- IRMutator returns op unchanged
+    // if no child Expr was rewritten, so this skips CSE on Provides where
+    // no inlining (or wrapper .buffer rewrite) touched anything inside.
+    // Running CSE on the whole Stmt rather than each value/index separately
+    // catches shared subexpressions between them.
+    if (!stmt.same_as(op)) {
+        stmt = common_subexpression_elimination(stmt);
+    }
+    return stmt;
+}
 
 Stmt inline_function(const Stmt &s, const Function &f) {
     return Inliner(f)(s);
 }
 
-Expr inline_function(Expr e, const Function &f) {
-    Inliner i(f);
-    e = i(e);
-    // TODO: making this > 1 should be desirable,
-    // but explodes compiletimes in some situations.
-    if (i.found > 0) {
-        e = common_subexpression_elimination(e);
+Expr inline_function(const Expr &e, const Function &f) {
+    return Inliner(f)(e);
+}
+
+Stmt inline_functions(const Stmt &s, const vector<Function> &fs) {
+    if (fs.empty()) {
+        return s;
     }
-    return e;
+    Inliner i;
+    for (const Function &f : fs) {
+        internal_assert(f.can_be_inlined()) << "Illegal to inline " << f.name() << "\n";
+        validate_schedule_inlined_function(f);
+        i.add(f);
+    }
+    return i(s);
 }
 
 // Inline all calls to 'f' inside 'caller'

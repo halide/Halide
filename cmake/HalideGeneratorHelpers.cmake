@@ -119,7 +119,7 @@ function(add_halide_generator TARGET)
             add_executable(${gen} ALIAS ${TARGET})
 
             if (NOT TARGET Halide::Generator)
-                find_package(Halide REQUIRED)
+                find_package(HalideCompiler REQUIRED)
             endif ()
             target_link_libraries(${TARGET} PRIVATE Halide::Generator ${ARG_LINK_LIBRARIES})
 
@@ -186,6 +186,10 @@ function(add_halide_generator TARGET)
             VISIBILITY_INLINES_HIDDEN ON
             POSITION_INDEPENDENT_CODE ON
         )
+
+        if (NOT TARGET Halide::PyStubs)
+            find_package(HalideCompiler REQUIRED COMPONENTS Python)
+        endif ()
         target_link_libraries(
             ${TARGET}_pystub
             PRIVATE Halide::PyStubs Halide::Halide ${ARG_LINK_LIBRARIES}
@@ -790,6 +794,11 @@ function(add_halide_library TARGET)
 
     if (ARG_AUTOSCHEDULER)
         if ("${ARG_AUTOSCHEDULER}" MATCHES "::")
+            # Autoscheduler plugins are compiled targets that live in HalideCompiler;
+            # lazily load it if it hasn't already been (e.g. while cross-compiling).
+            if (NOT TARGET "${ARG_AUTOSCHEDULER}")
+                find_package(HalideCompiler REQUIRED)
+            endif ()
             if (NOT TARGET "${ARG_AUTOSCHEDULER}")
                 message(FATAL_ERROR "Autoscheduler ${ARG_AUTOSCHEDULER} does not exist.")
             endif ()

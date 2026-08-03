@@ -8,6 +8,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -553,19 +554,9 @@ struct FusedPair {
                (var_name == other.var_name);
     }
     bool operator<(const FusedPair &other) const {
-        if (func_1 != other.func_1) {
-            return func_1 < other.func_1;
-        }
-        if (func_2 != other.func_2) {
-            return func_2 < other.func_2;
-        }
-        if (var_name != other.var_name) {
-            return var_name < other.var_name;
-        }
-        if (stage_1 != other.stage_1) {
-            return stage_1 < other.stage_1;
-        }
-        return stage_2 < other.stage_2;
+        return std::tie(func_1, func_2, var_name, stage_1, stage_2) <
+               std::tie(other.func_1, other.func_2, other.var_name,
+                        other.stage_1, other.stage_2);
     }
 };
 

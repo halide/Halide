@@ -25,7 +25,7 @@ repos:
         exclude: \.patch$
 
   - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.11
+    rev: v1.7.12
     hooks:
       - id: actionlint
 
@@ -51,7 +51,7 @@ repos:
     rev: v2.4.1
     hooks:
       - id: codespell
-        args: [ --ignore-words-list, "CreateOr,implementors,PADD,re-use,re-used,re-using,subtile,subtiles,tRe" ]
+        args: [ --ignore-words-list, "CreateOr,implementors,PADD,re-use,re-used,re-using,SME,+sme,subtile,subtiles,tRe" ]
         exclude: |
           (?x)(
             ^src/autoschedulers/common/cmdline\.h$

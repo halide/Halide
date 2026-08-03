@@ -144,8 +144,9 @@ T get_value_as(const halide_trace_packet_t &p, int idx) {
     // so that value_as<>() won't complain under sanitizers.
     halide_scalar_value_t aligned_value;
     // Only copy the number of bytes in the type: the stream isn't guaranteed
-    // to be padded to sizeof(halide_scalar_value_t).
-    memcpy(&aligned_value, val, type.bits / 8);
+    // to be padded to sizeof(halide_scalar_value_t). type.bits comes from the
+    // stream, so cap the copy so a bogus type can't overrun aligned_value.
+    memcpy(&aligned_value, val, std::min<size_t>(type.bits / 8, sizeof(aligned_value)));
     return value_as<double>(type, aligned_value);
 }
 
@@ -174,10 +175,33 @@ struct PacketAndPayload : public halide_trace_packet_t {
             return false;  // EOF
         }
 
+        if (this->size < header_size) {
+            fail() << "Malformed trace packet: size " << this->size << " smaller than header";
+        }
         const size_t payload_size = this->size - header_size;
         if (payload_size > sizeof(this->payload) || !read_or_die(this->payload, payload_size)) {
             // Shouldn't ever get EOF here
             fail() << "Unable to read packet payload of size " << payload_size;
+        }
+        // dimensions and type come straight from the untrusted header, and
+        // coordinates()/value()/func()/trace_tag() use them to index into
+        // payload. Reject any packet whose declared layout doesn't fit the
+        // bytes we read so those accessors stay in bounds.
+        if (this->dimensions < 0) {
+            fail() << "Malformed trace packet: negative dimensions " << this->dimensions;
+        }
+        const size_t fixed_bytes = (size_t)this->dimensions * sizeof(int32_t) + this->value_bytes();
+        if (fixed_bytes > payload_size) {
+            fail() << "Malformed trace packet: coordinates/value exceed payload";
+        }
+        int terminators = 0;
+        for (size_t i = fixed_bytes; i < payload_size; i++) {
+            if (this->payload[i] == 0 && ++terminators == 2) {
+                break;
+            }
+        }
+        if (terminators < 2) {
+            fail() << "Malformed trace packet: func/trace_tag not terminated within payload";
         }
         return true;
     }

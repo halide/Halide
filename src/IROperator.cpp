@@ -129,7 +129,8 @@ bool is_const(const Expr &e, int64_t value) {
     } else if (const FloatImm *i = e.as<FloatImm>()) {
         return i->value == value;
     } else if (const Cast *c = e.as<Cast>()) {
-        return is_const(c->value, value);
+        return c->type.can_represent(value) &&
+               is_const(c->value, value);
     } else if (const Broadcast *b = e.as<Broadcast>()) {
         return is_const(b->value, value);
     } else {

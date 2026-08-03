@@ -156,6 +156,7 @@ target_sources(
     LoopPartitioningDirective.h
     Lower.h
     LowerParallelTasks.h
+    LowerSMEStreamingTasks.h
     LowerWarpShuffles.h
     MainPage.h
     Memoization.h
@@ -335,6 +336,7 @@ target_sources(
     LoopCarry.cpp
     Lower.cpp
     LowerParallelTasks.cpp
+    LowerSMEStreamingTasks.cpp
     LowerWarpShuffles.cpp
     Memoization.cpp
     Module.cpp
@@ -533,7 +535,7 @@ endif ()
 # Build serialization, enabled by default
 if (WITH_SERIALIZATION)
     find_package(FlatBuffers REQUIRED)
-    _Halide_pkgdep(FlatBuffers)
+    _Halide_pkgdep(FlatBuffers NAMESPACE flatbuffers)
 
     target_link_libraries(Halide PRIVATE flatbuffers::flatbuffers)
 

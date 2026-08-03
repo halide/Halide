@@ -320,6 +320,12 @@ struct Load : public ExprNode<Load> {
                      ModulusRemainder alignment,
                      bool is_streaming = false);
 
+    /** Make a Load that loads from the same buffer as this one, but with new
+     * children. The type is the element type of this Load, with the lane count
+     * taken from the new index. Returns this Load unchanged if the new children
+     * are the same as the existing ones. */
+    Expr with(const Expr &index, const Expr &predicate, ModulusRemainder alignment) const;
+
     static const IRNodeType _node_type = IRNodeType::Load;
 };
 
@@ -361,6 +367,11 @@ struct Let : public ExprNode<Let> {
 
     static Expr make(const std::string &name, Expr value, Expr body);
 
+    /** Make a Let with the same name as this one, but with new children.
+     * Returns this Let unchanged if the new children are the same as the
+     * existing ones. */
+    Expr with(const Expr &value, const Expr &body) const;
+
     static const IRNodeType _node_type = IRNodeType::Let;
 };
 
@@ -372,6 +383,11 @@ struct LetStmt : public StmtNode<LetStmt> {
     Stmt body;
 
     static Stmt make(const std::string &name, Expr value, Stmt body);
+
+    /** Make a LetStmt with the same name as this one, but with new children.
+     * Returns this LetStmt unchanged if the new children are the same as the
+     * existing ones. */
+    Stmt with(const Expr &value, const Stmt &body) const;
 
     static const IRNodeType _node_type = IRNodeType::LetStmt;
 };
@@ -385,6 +401,10 @@ struct AssertStmt : public StmtNode<AssertStmt> {
     Expr message;
 
     static Stmt make(Expr condition, Expr message);
+
+    /** Make an AssertStmt with new children. Returns this AssertStmt unchanged
+     * if the new children are the same as the existing ones. */
+    Stmt with(const Expr &condition, const Expr &message) const;
 
     static const IRNodeType _node_type = IRNodeType::AssertStmt;
 };
@@ -409,6 +429,11 @@ struct ProducerConsumer : public StmtNode<ProducerConsumer> {
     Stmt body;
 
     static Stmt make(const std::string &name, bool is_producer, Stmt body);
+
+    /** Make a ProducerConsumer with the same name and producer/consumer flag as
+     * this one, but with a new body. Returns this ProducerConsumer unchanged if
+     * the new body is the same as the existing one. */
+    Stmt with(const Stmt &body) const;
 
     static Stmt make_produce(const std::string &name, Stmt body);
     static Stmt make_consume(const std::string &name, Stmt body);
@@ -439,6 +464,11 @@ struct Store : public StmtNode<Store> {
                      Parameter param, Expr predicate, ModulusRemainder alignment,
                      bool is_streaming = false);
 
+    /** Make a Store to the same buffer as this one, but with new children.
+     * Returns this Store unchanged if the new children are the same as the
+     * existing ones. */
+    Stmt with(const Expr &value, const Expr &index, const Expr &predicate, ModulusRemainder alignment) const;
+
     static const IRNodeType _node_type = IRNodeType::Store;
 };
 
@@ -456,6 +486,12 @@ struct Provide : public StmtNode<Provide> {
     Expr predicate;
 
     static Stmt make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args, const Expr &predicate);
+
+    /** Make a Provide to the same Func as this one, but with new children.
+     * Returns this Provide unchanged if the new children are the same as the
+     * existing ones. */
+    Stmt with(const std::vector<Expr> &values, const std::vector<Expr> &args,
+              const Expr &predicate) const;
 
     static const IRNodeType _node_type = IRNodeType::Provide;
 };
@@ -496,6 +532,18 @@ struct Allocate : public StmtNode<Allocate> {
                      Expr condition, Stmt body,
                      Expr new_expr = Expr(), const std::string &free_function = std::string(), int padding = 0);
 
+    /** Make an Allocate with the same name, type, memory type, custom
+     * new/free, and padding as this one, but with new children. Returns this
+     * Allocate unchanged if the new children are the same as the existing
+     * ones. */
+    Stmt with(const std::vector<Expr> &extents, const Expr &condition, const Stmt &body) const;
+
+    /** As above, but also replacing the custom new expression. There is no
+     * default for new_expr, because an undefined new_expr means "use the
+     * default allocator" rather than "leave it alone". */
+    Stmt with(const std::vector<Expr> &extents, const Expr &condition, const Stmt &body,
+              const Expr &new_expr) const;
+
     /** A routine to check if the extents are all constants, and if so verify
      * the total size is less than 2^31 - 1. If the result is constant, but
      * overflows, this routine asserts. This returns 0 if the extents are
@@ -532,6 +580,11 @@ struct Realize : public StmtNode<Realize> {
 
     static Stmt make(const std::string &name, const std::vector<Type> &types, MemoryType memory_type, const Region &bounds, Expr condition, Stmt body);
 
+    /** Make a Realize with the same name, types, and memory type as this one,
+     * but with new children. Returns this Realize unchanged if the new children
+     * are the same as the existing ones. */
+    Stmt with(const Region &bounds, const Expr &condition, const Stmt &body) const;
+
     static const IRNodeType _node_type = IRNodeType::Realize;
 };
 
@@ -541,6 +594,10 @@ struct Block : public StmtNode<Block> {
     Stmt first, rest;
 
     static Stmt make(Stmt first, Stmt rest);
+
+    /** Make a Block with new children. Returns this Block unchanged if the new
+     * children are the same as the existing ones. */
+    Stmt with(const Stmt &first, const Stmt &rest) const;
 
     /** Construct zero or more Blocks to invoke a list of statements in order.
      * This method may not return a Block statement if stmts.size() <= 1. */
@@ -557,6 +614,10 @@ struct Fork : public StmtNode<Fork> {
 
     static Stmt make(Stmt first, Stmt rest);
 
+    /** Make a Fork with new children. Returns this Fork unchanged if the new
+     * children are the same as the existing ones. */
+    Stmt with(const Stmt &first, const Stmt &rest) const;
+
     static const IRNodeType _node_type = IRNodeType::Fork;
 };
 
@@ -567,6 +628,12 @@ struct IfThenElse : public StmtNode<IfThenElse> {
 
     static Stmt make(Expr condition, Stmt then_case, Stmt else_case = Stmt());
 
+    /** Make an IfThenElse with new children. Note that else_case has no default
+     * here, because an undefined else_case means "no else clause" rather than
+     * "leave it alone". Returns this IfThenElse unchanged if the new children
+     * are the same as the existing ones. */
+    Stmt with(const Expr &condition, const Stmt &then_case, const Stmt &else_case) const;
+
     static const IRNodeType _node_type = IRNodeType::IfThenElse;
 };
 
@@ -575,6 +642,10 @@ struct Evaluate : public StmtNode<Evaluate> {
     Expr value;
 
     static Stmt make(Expr v);
+
+    /** Make an Evaluate of a new value. Returns this Evaluate unchanged if the
+     * new value is the same as the existing one. */
+    Stmt with(const Expr &value) const;
 
     static const IRNodeType _node_type = IRNodeType::Evaluate;
 };
@@ -615,6 +686,7 @@ struct Call : public ExprNode<Call> {
     // are *not* guaranteed to be stable across time.
     enum IntrinsicOp {
         // keep-sorted start sticky_comments=yes
+
         abs,
         // Absolute difference between two values. absd(a, b) = abs(a - b), but
         // without overflow issues for integer types.
@@ -656,6 +728,8 @@ struct Call : public ExprNode<Call> {
         extract_bits,
         // Extracts a single element from a mask vector
         extract_mask_element,
+        // Returns the runtime value of ARM SME streaming vscale (the vector length multiplier in streaming mode)
+        get_runtime_streaming_vscale,
         // Returns the runtime value of ARM SVE vscale (the vector length multiplier)
         get_runtime_vscale,
         get_user_context,
@@ -689,6 +763,16 @@ struct Call : public ExprNode<Call> {
         mod_round_to_zero,
         mul_shift_right,
         mux,
+        // A pointer into a sub-range of another allocation.
+        // offset_pointer(base, offset) returns the base pointer of the
+        // allocation named by the Variable `base`, advanced by `offset`
+        // elements (in units of the aliasing allocation's element type). Used
+        // as the new_expr of an Allocate node to express that it aliases a
+        // sub-range of a larger backing allocation. GPU allocation fusing emits
+        // these so that per-Func names survive lowering (for the profiler and
+        // for a readable conceptual stmt); they are folded into the indices of
+        // loads and stores by inject_gpu_offload before GPU codegen.
+        offset_pointer,
         popcount,
         prefetch,
         // Marks the point where profiling should start counting pipeline instances
@@ -840,6 +924,10 @@ struct Call : public ExprNode<Call> {
     static Expr make(Type type, const std::string &name, const std::vector<Expr> &args, CallType call_type,
                      FunctionPtr func = FunctionPtr(), int value_index = 0,
                      Buffer<> image = Buffer<>(), Parameter param = Parameter());
+
+    /** Make the same call as this one, but with new args. Returns this Call
+     * unchanged if the new args are the same as the existing ones. */
+    Expr with(const std::vector<Expr> &args) const;
 
     /** Convenience constructor for calls to other halide functions */
     static Expr make(const Function &func, const std::vector<Expr> &args, int idx = 0);
@@ -996,6 +1084,11 @@ struct For : public StmtNode<For> {
                      DeviceAPI device_api,
                      Stmt body);
 
+    /** Make a For loop with the same name, for type, partition policy, and
+     * device API as this one, but with new children. Returns this For unchanged
+     * if the new children are the same as the existing ones. */
+    Stmt with(const Expr &min, const Expr &max, const Stmt &body) const;
+
     bool is_unordered_parallel() const {
         return Halide::Internal::is_unordered_parallel(for_type);
     }
@@ -1017,6 +1110,10 @@ struct Acquire : public StmtNode<Acquire> {
     Stmt body;
 
     static Stmt make(Expr semaphore, Expr count, Stmt body);
+
+    /** Make an Acquire with new children. Returns this Acquire unchanged if the
+     * new children are the same as the existing ones. */
+    Stmt with(const Expr &semaphore, const Expr &count, const Stmt &body) const;
 
     static const IRNodeType _node_type = IRNodeType::Acquire;
 };
@@ -1123,6 +1220,11 @@ struct Prefetch : public StmtNode<Prefetch> {
                      const PrefetchDirective &prefetch,
                      Expr condition, Stmt body);
 
+    /** Make a Prefetch of the same Func with the same directive as this one,
+     * but with new children. Returns this Prefetch unchanged if the new
+     * children are the same as the existing ones. */
+    Stmt with(const Region &bounds, const Expr &condition, const Stmt &body) const;
+
     static const IRNodeType _node_type = IRNodeType::Prefetch;
 };
 
@@ -1137,6 +1239,11 @@ struct HoistedStorage : public StmtNode<HoistedStorage> {
 
     static Stmt make(const std::string &name,
                      Stmt body);
+
+    /** Make a HoistedStorage with the same name as this one, but with a new
+     * body. Returns this HoistedStorage unchanged if the new body is the same
+     * as the existing one. */
+    Stmt with(const Stmt &body) const;
 
     static const IRNodeType _node_type = IRNodeType::HoistedStorage;
 };
@@ -1158,6 +1265,11 @@ struct Atomic : public StmtNode<Atomic> {
     static Stmt make(const std::string &producer_name,
                      const std::string &mutex_name,
                      Stmt body);
+
+    /** Make an Atomic over the same producer and mutex as this one, but with a
+     * new body. Returns this Atomic unchanged if the new body is the same as
+     * the existing one. */
+    Stmt with(const Stmt &body) const;
 
     static const IRNodeType _node_type = IRNodeType::Atomic;
 };
