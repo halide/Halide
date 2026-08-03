@@ -1,15 +1,14 @@
 # Custom Runtime Namespaces
 
-Every Halide runtime exposes a set C ABI symbols consisting of common 
-host functions -- `halide_malloc`, `halide_free`, `halide_error`, 
-`halide_do_par_for`, and so on -- as well as target specific methods which 
-handle device functionality -- `halide_cuda_*`, `halide_direct3dcompute_*`, 
-`halide_metal_*`, `halide_opencl_*`, `halide_vulkan_*`, etc.  This C ABI also 
-consists of mutable process-global state stored as global variables (e.g. 
-the installed custom allocator, the thread pool, the memoization cache, 
-the profiler, etc.).  This works well when a program contains a single 
-Halide runtime, but it becomes a problem when a program must contain 
-*more than one*.
+Every Halide runtime exposes a set C ABI symbols consisting of common host
+functions -- `halide_malloc`, `halide_free`, `halide_error`,
+`halide_do_par_for`, and so on -- as well as target specific methods which
+handle device functionality -- `halide_cuda_*`, `halide_direct3dcompute_*`,
+`halide_metal_*`, `halide_opencl_*`, `halide_vulkan_*`, etc. This C ABI also
+consists of mutable process-global state stored as global variables (e.g. the
+installed custom allocator, the thread pool, the memoization cache, the
+profiler, etc.). This works well when a program contains a single Halide
+runtime, but it becomes a problem when a program must contain *more than one*.
 
 Two independently produced components -- say, two libraries that each embed
 their own AOT-compiled Halide pipelines and runtime -- both define
@@ -94,8 +93,8 @@ Both the LLVM and the C backend honor runtime prefixes.
 
 ## Limitations
 
-- Namespacing is not currently supported for JIT, but it's something we would 
-  like to support in the future.  The difficulty is that the JIT resolves runtime 
+- Namespacing is not currently supported for JIT, but it's something we would
+  like to support in the future. The difficulty is that the JIT resolves runtime
   calls against a single process-global shared runtime which already exists. So,
   for now, requesting a runtime namespace on a JIT target will emit an error.
 
@@ -145,9 +144,9 @@ p.compile_to_module({}, "my_pipeline", target)
 target raises a `Halide::CompileError`.
 
 Inside a `Generator`, the prefixes travel on the `GeneratorContext` as
-`RuntimePrefixParams` and are applied automatically when the generator's
-module is built; in practice these are supplied through the command line or
-CMake, described below.
+`RuntimePrefixParams` and are applied automatically when the generator's module
+is built; in practice these are supplied through the command line or CMake,
+described below.
 
 ## Usage from the GenGen command line
 
