@@ -1,7 +1,7 @@
-import ProfilerControlPanel from "@/components/views/profiler/controls/ProfilerControlPanel";
-import Treemap from "@/components/views/profiler/Treemap";
+import ProfilerControlPanel from "@/components/views/profile/controls/ProfilerControlPanel";
+import Treemap from "@/components/views/profile/Treemap";
 
-function Profiler() {
+function Profile() {
   return (
     <div className="bg-ps-secondary flex h-full w-full">
       <div className="flex h-full flex-1 items-center justify-center">
@@ -12,4 +12,4 @@ function Profiler() {
   );
 }
 
-export default Profiler;
+export default Profile;

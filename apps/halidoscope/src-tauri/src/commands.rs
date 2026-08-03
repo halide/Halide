@@ -7,7 +7,7 @@ use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use tauri::ipc::Response;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 use crate::render::{
     GrayscaleState, IncludeInf, IncludeNan, LoadFrequencyState, NormalizationMode, RedundantState,
@@ -215,10 +215,27 @@ fn pack_render_response(
 
 /// Parses a `.hltrace` file and returns the metadata the frontend needs to set up canvases and
 /// the scrub timeline. Replaces any previously loaded trace.
+///
+/// Runs the parse on a blocking-task thread rather than the main thread: `open_trace` isn't
+/// declared `async`, so a plain `fn` command would otherwise execute inline on the thread that
+/// pumps the webview's event loop, freezing the UI (including any in-progress loading indicator)
+/// for the duration of the parse. Progress (percentage of bytes parsed) is emitted to the
+/// frontend as `trace-load-progress` events.
 #[tauri::command]
-pub fn open_trace(path: String, state: State<AppState>) -> Result<TraceMeta, String> {
-    let trace = Trace::load_from_file(&path)?;
-    let meta = TraceMeta::from_trace(&trace);
+pub async fn open_trace(
+    path: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<TraceMeta, String> {
+    let (trace, meta) = tauri::async_runtime::spawn_blocking(move || {
+        let trace = Trace::load_from_file(&path, |pct| {
+            let _ = app.emit("trace-load-progress", pct);
+        })?;
+        let meta = TraceMeta::from_trace(&trace);
+        Ok::<_, String>((trace, meta))
+    })
+    .await
+    .map_err(|e| e.to_string())??;
 
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
     *guard = Some(Loaded {

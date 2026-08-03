@@ -40,8 +40,7 @@
           "name": "trace",
           "short": "t",
           "takesValue": true,
-          "description": "Path to .hltrace file to load on startup.",
-          "required": true
+          "description": "Path to .hltrace file to load on startup."
         },
         {
           "name": "profile",
