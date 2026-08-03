@@ -315,8 +315,7 @@ public:
         if (result != 0) {
             const std::string msg = take_last_error();
             throw std::runtime_error(
-                msg.empty() ? ("Halide kernel '" + name() + "' returned error " + std::to_string(result))
-                            : ("Halide kernel '" + name() + "': " + msg));
+                msg.empty() ? ("Halide kernel '" + name() + "' returned error " + std::to_string(result)) : ("Halide kernel '" + name() + "': " + msg));
         }
 
         // Flush any device-side outputs back to host (host-only buffer protocol).
@@ -380,7 +379,7 @@ private:
 
 #define HALIDE_RUNTIME_SCALAR_CASE(CODE, BITS, CTYPE, FIELD) \
     if (t.code == (CODE) && t.bits == (BITS)) {              \
-        out->u.FIELD = py::cast<CTYPE>(value);              \
+        out->u.FIELD = py::cast<CTYPE>(value);               \
         return;                                              \
     }
 

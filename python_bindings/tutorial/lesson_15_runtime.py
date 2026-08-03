@@ -96,8 +96,15 @@ def link_shared_library(archive, stem, name):
             f.write("EXPORTS\n")
             f.write(f"    {name}_argv\n")
             f.write(f"    {name}_metadata\n")
-        args = ["link", "/nologo", "/DLL", "/NOENTRY",
-                archive, f"/DEF:{def_path}", f"/OUT:{library}"]
+        args = [
+            "link",
+            "/nologo",
+            "/DLL",
+            "/NOENTRY",
+            archive,
+            f"/DEF:{def_path}",
+            f"/OUT:{library}",
+        ]
     elif system == "Darwin":
         library = stem + ".dylib"
         cc = os.environ.get("CC", "cc")
@@ -105,9 +112,17 @@ def link_shared_library(archive, stem, name):
     else:
         library = stem + ".so"
         cc = os.environ.get("CC", "cc")
-        args = [cc, "-shared", "-o", library,
-                "-Wl,--whole-archive", archive, "-Wl,--no-whole-archive",
-                "-lpthread", "-ldl"]
+        args = [
+            cc,
+            "-shared",
+            "-o",
+            library,
+            "-Wl,--whole-archive",
+            archive,
+            "-Wl,--no-whole-archive",
+            "-lpthread",
+            "-ldl",
+        ]
 
     try:
         subprocess.run(args, check=True)

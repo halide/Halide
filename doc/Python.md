@@ -632,8 +632,8 @@ The approach above imports a Python extension that was produced at build time by
 precompiled Halide kernel _dynamically_, at runtime, from an ordinary shared
 library -- and to do so in an environment that does not have the Halide compiler
 (or `libHalide`) installed at all. This is what the `halide.runtime` module is
-for: it is a small, standalone package that can load and call AOT-compiled Halide
-kernels without depending on `libHalide`.
+for: it is a small, standalone package that can load and call AOT-compiled
+Halide kernels without depending on `libHalide`.
 
 This is primarily useful for deployment. You can compile your pipelines on a
 build machine that has the full Halide toolchain, then ship only the resulting
@@ -641,7 +641,8 @@ kernels plus this tiny runtime, and run them on machines that have neither the
 compiler nor LLVM installed.
 
 `halide.runtime` is always included in the full `halide` package, but it is also
-published as a separate, `libHalide`-free wheel for exactly this deployment case:
+published as a separate, `libHalide`-free wheel for exactly this deployment
+case:
 
 ```shell
 pip install halide-runtime
@@ -658,9 +659,9 @@ pointing you at the full `halide` package.)
 `halide.runtime` loads a shared library that exports a Halide filter's
 `<name>_argv` and `<name>_metadata` symbols -- the ordinary product of AOT
 compilation. Note that this is _not_ the same artifact as the Python extension
-produced by `add_halide_python_extension_library`, which deliberately hides every
-symbol except its `PyInit_` entry point. Instead, link the AOT library into a
-plain shared module that keeps those symbols visible:
+produced by `add_halide_python_extension_library`, which deliberately hides
+every symbol except its `PyInit_` entry point. Instead, link the AOT library
+into a plain shared module that keeps those symbols visible:
 
 ```cmake
 add_halide_library(my_kernel FROM my_generator GENERATOR my_kernel)
@@ -678,8 +679,8 @@ set_target_properties(my_kernel_module PROPERTIES
 ```
 
 Because `add_halide_library` bundles a Halide runtime into the library by
-default, the resulting shared module is self-contained and, like `halide.runtime`
-itself, has no dependency on `libHalide`.
+default, the resulting shared module is self-contained and, like
+`halide.runtime` itself, has no dependency on `libHalide`.
 
 #### Loading and calling a kernel
 
@@ -694,15 +695,17 @@ import halide.runtime as hlr
 # name defaults to the library's file name; pass name=... if it differs.
 kernel = hlr.load("/path/to/my_kernel.so", name="my_kernel")
 
-print(kernel.name)            # "my_kernel"
-print(kernel.target)          # the Target string it was compiled for
+print(kernel.name)  # "my_kernel"
+print(kernel.target)  # the Target string it was compiled for
 print(kernel.argument_names)  # e.g. ['input', 'offset', 'output']
 
 # `kernel.arguments` gives the full calling convention: one dict per argument,
 # in argv order, with its name, kind ('input_scalar', 'input_buffer', or
 # 'output_buffer'), element type (e.g. 'uint8'), and dimensions (0 for scalars).
 for arg in kernel.arguments:
-    print(arg)  # {'name': 'input', 'kind': 'input_buffer', 'type': 'uint8', 'dimensions': 2}
+    print(
+        arg
+    )  # {'name': 'input', 'kind': 'input_buffer', 'type': 'uint8', 'dimensions': 2}
 
 input_buf = imageio.imread("/path/to/some/file.png")
 output_buf = np.empty(input_buf.shape, dtype=input_buf.dtype)
@@ -715,8 +718,8 @@ kernel(input_buf, np.int32(5), output_buf)
 ```
 
 As with the compiled extension, Halide does not allocate outputs for you: you
-must pass in a correctly-sized output buffer, and error conditions raise a Python
-exception rather than returning an int.
+must pass in a correctly-sized output buffer, and error conditions raise a
+Python exception rather than returning an int.
 
 #### The `halide.runtime.Buffer` type
 
@@ -726,17 +729,18 @@ such an object as a Halide runtime buffer, without copying:
 
 ```python
 buf = hlr.Buffer(np.empty((480, 640), dtype=np.uint8))
-buf.dimensions   # 2
-buf.type         # "uint8"
-buf.shape        # [480, 640]
+buf.dimensions  # 2
+buf.type  # "uint8"
+buf.shape  # [480, 640]
 
 view = np.asarray(buf)  # a zero-copy view of the same memory
 ```
 
-A `Buffer` exposes the same `_get_raw_halide_buffer_t` protocol that `halide.Buffer`
-and the extensions produced by `add_halide_python_extension_library` use, so the
-very same object can be handed either to a kernel loaded via `halide.runtime.load`
-or to a function in a generated extension module.
+A `Buffer` exposes the same `_get_raw_halide_buffer_t` protocol that
+`halide.Buffer` and the extensions produced by
+`add_halide_python_extension_library` use, so the very same object can be handed
+either to a kernel loaded via `halide.runtime.load` or to a function in a
+generated extension module.
 
 The same memory-order caveats described in the previous section apply here:
 numpy's default row-major layout corresponds to Halide's axes in reverse order,

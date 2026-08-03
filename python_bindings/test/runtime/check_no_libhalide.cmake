@@ -9,25 +9,13 @@ if (NOT MODULE)
 endif ()
 
 if (APPLE)
-    execute_process(
-        COMMAND otool -L "${MODULE}"
-        OUTPUT_VARIABLE deps
-        RESULT_VARIABLE rc
-    )
+    execute_process(COMMAND otool -L "${MODULE}" OUTPUT_VARIABLE deps RESULT_VARIABLE rc)
 else ()
     find_program(OBJDUMP objdump)
     if (OBJDUMP)
-        execute_process(
-            COMMAND "${OBJDUMP}" -p "${MODULE}"
-            OUTPUT_VARIABLE deps
-            RESULT_VARIABLE rc
-        )
+        execute_process(COMMAND "${OBJDUMP}" -p "${MODULE}" OUTPUT_VARIABLE deps RESULT_VARIABLE rc)
     else ()
-        execute_process(
-            COMMAND ldd "${MODULE}"
-            OUTPUT_VARIABLE deps
-            RESULT_VARIABLE rc
-        )
+        execute_process(COMMAND ldd "${MODULE}" OUTPUT_VARIABLE deps RESULT_VARIABLE rc)
     endif ()
 endif ()
 
@@ -36,8 +24,7 @@ if (NOT rc EQUAL 0)
 endif ()
 
 if (deps MATCHES "libHalide")
-    message(FATAL_ERROR
-        "Runtime module ${MODULE} unexpectedly depends on libHalide:\n${deps}")
+    message(FATAL_ERROR "Runtime module ${MODULE} unexpectedly depends on libHalide:\n${deps}")
 endif ()
 
 message(STATUS "OK: ${MODULE} has no libHalide dependency")

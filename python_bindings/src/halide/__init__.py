@@ -60,7 +60,19 @@ def install_dir():
 
 # The implicit-argument placeholders, which `from .halide_ import *` would skip
 # because they begin with an underscore.
-_PLACEHOLDER_ARG_NAMES = ("_", "_0", "_1", "_2", "_3", "_4", "_5", "_6", "_7", "_8", "_9")
+_PLACEHOLDER_ARG_NAMES = (
+    "_",
+    "_0",
+    "_1",
+    "_2",
+    "_3",
+    "_4",
+    "_5",
+    "_6",
+    "_7",
+    "_8",
+    "_9",
+)
 
 _GENERATOR_HELPER_NAMES = (
     "_create_python_generator",

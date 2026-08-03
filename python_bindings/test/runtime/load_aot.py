@@ -42,7 +42,10 @@ def main():
     grid = np.arange(6, dtype=np.uint8).reshape(2, 3)
     buf = hlr.Buffer(grid)
     assert buf.dimensions == 2 and buf.type == "uint8" and buf.shape == [2, 3]
-    assert isinstance(buf._get_raw_halide_buffer_t(), int) and buf._get_raw_halide_buffer_t() != 0
+    assert (
+        isinstance(buf._get_raw_halide_buffer_t(), int)
+        and buf._get_raw_halide_buffer_t() != 0
+    )
     view = np.asarray(buf)
     assert np.array_equal(view, grid)
     view[0, 0] = 42

@@ -7,9 +7,9 @@ Python, with **no dependency on libHalide** (no compiler, no LLVM).
 import numpy as np
 import halide.runtime as hlr
 
-kernel = hlr.load("mykernel.so")        # dlopen a precompiled Halide artifact
+kernel = hlr.load("mykernel.so")  # dlopen a precompiled Halide artifact
 out = np.empty_like(inp)
-kernel(inp, out)                         # call it with NumPy arrays
+kernel(inp, out)  # call it with NumPy arrays
 ```
 
 This package provides only `halide.runtime` — `hlr.load(...)`, the resulting

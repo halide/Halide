@@ -40,7 +40,7 @@ SCALARS = {
     "s_u16": 40000,
     "s_u32": 3_000_000_000,
     "s_u64": 10_000_000_000,
-    "s_f32": 1.5,   # exactly representable in float32
+    "s_f32": 1.5,  # exactly representable in float32
     "s_f64": 2.25,
 }
 
@@ -88,18 +88,30 @@ def main():
     in64 = input_buf.astype(np.int64)
     scalar_sum = (
         1  # s_bool
-        - 5 + 300 - 70000 + 5_000_000_000  # signed
-        + 7 + 40000 + 3_000_000_000 + 10_000_000_000  # unsigned
+        - 5
+        + 300
+        - 70000
+        + 5_000_000_000  # signed
+        + 7
+        + 40000
+        + 3_000_000_000
+        + 10_000_000_000  # unsigned
     )
     expected_total = in64 + scalar_sum
     np.testing.assert_array_equal(call_args["total"], expected_total)
 
-    expected_scaled = np.float32(1.5).astype(np.float64) * in64.astype(np.float64) + 2.25
+    expected_scaled = (
+        np.float32(1.5).astype(np.float64) * in64.astype(np.float64) + 2.25
+    )
     np.testing.assert_array_equal(call_args["scaled"], expected_scaled)
 
     # Default `combine=add`: packed.0 = input + s_u8.
-    np.testing.assert_array_equal(call_args["packed.0"], (input_buf + 7).astype(np.uint8))
-    np.testing.assert_array_equal(call_args["packed.1"], expected_total.astype(np.int32))
+    np.testing.assert_array_equal(
+        call_args["packed.0"], (input_buf + 7).astype(np.uint8)
+    )
+    np.testing.assert_array_equal(
+        call_args["packed.1"], expected_total.astype(np.int32)
+    )
 
     # The enum GeneratorParam is a compile-time choice: the `combine=xor` build is
     # a different kernel with the *same* calling convention but different behavior.
@@ -108,7 +120,9 @@ def main():
         "the enum GeneratorParam must not change the runtime calling convention"
     )
     xor_args = run(xor_kernel, shape, input_buf)
-    np.testing.assert_array_equal(xor_args["packed.0"], (input_buf ^ 7).astype(np.uint8))
+    np.testing.assert_array_equal(
+        xor_args["packed.0"], (input_buf ^ 7).astype(np.uint8)
+    )
     # Everything not selected by the enum is unchanged.
     np.testing.assert_array_equal(xor_args["total"], expected_total)
 
