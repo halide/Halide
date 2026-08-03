@@ -62,6 +62,7 @@ target_sources(
     AllocationBoundsInference.h
     ApplySplit.h
     Approximation.h
+    ApproximationComponents.h
     Argument.h
     AssociativeOpsTable.h
     Associativity.h

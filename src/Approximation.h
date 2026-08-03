@@ -10,6 +10,7 @@
  */
 
 #include <memory>
+#include <string>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -17,6 +18,42 @@
 #include "Func.h"
 
 namespace Halide {
+
+/** An opaque identity for one Approximation stage. Keys are cheap to copy and
+ * remain stable when an Approximation is moved into Compose/Apply. A copied
+ * Approximation deliberately retains its key: the key identifies the logical
+ * stage selected by the caller, not a particular C++ address. */
+class ApproximationStageKey {
+public:
+    ApproximationStageKey() = default;
+
+    bool defined() const {
+        return token_ != nullptr;
+    }
+
+    friend bool operator==(const ApproximationStageKey &a, const ApproximationStageKey &b) {
+        return a.token_ == b.token_;
+    }
+    friend bool operator!=(const ApproximationStageKey &a, const ApproximationStageKey &b) {
+        return !(a == b);
+    }
+
+private:
+    explicit ApproximationStageKey(std::shared_ptr<const char> token)
+        : token_(std::move(token)) {
+    }
+
+    std::shared_ptr<const char> token_;
+    friend class Approximation;
+};
+
+/** The ports produced by one stage during encode or decode. This trace is
+ * supplemental scheduling metadata; it does not alter the signature contract
+ * or the legacy flat handle lists. */
+struct ApproximationStageOutputs {
+    ApproximationStageKey stage;
+    std::vector<Func> ports;
+};
 
 /** The result of Approximation::encode(): the Func(s) that make up the
  * signature contract other code is expected to consume, plus any extra
@@ -26,6 +63,7 @@ namespace Halide {
 struct EncodeResult {
     std::vector<Func> encoded;
     std::vector<Func> handles;
+    std::vector<ApproximationStageOutputs> stage_outputs;
 };
 
 /** The result of Approximation::decode(): decoded is the round-trip
@@ -37,6 +75,7 @@ struct EncodeResult {
 struct DecodeResult {
     std::vector<Func> decoded;
     std::vector<Func> handles;
+    std::vector<ApproximationStageOutputs> stage_outputs;
 };
 
 /** Approximation is the base class for a lossy, quantified transformation
@@ -63,7 +102,14 @@ struct DecodeResult {
  * for splicing an Approximation into an existing call graph. */
 class Approximation {
 public:
+    Approximation()
+        : stage_key_(std::make_shared<const char>(0)) {
+    }
     virtual ~Approximation() = default;
+
+    ApproximationStageKey stage_key() const {
+        return stage_key_;
+    }
 
     /** Produce the encoded form of `inputs`. EncodeResult::encoded's
      * elements are not required to have the same type, dimensionality, or
@@ -78,6 +124,9 @@ public:
      * encoded form. See DecodeResult for the constraint on `decoded`'s
      * size, which depends on how this Approximation is used. */
     virtual DecodeResult decode(std::vector<Func> encoded) = 0;
+
+private:
+    ApproximationStageKey stage_key_;
 };
 
 namespace Internal {
@@ -121,6 +170,13 @@ struct ApproximationResult {
      * -- without calling Approximation::encode() themselves. */
     std::vector<Func> encoded;
     std::vector<Func> handles;
+    std::vector<ApproximationStageOutputs> encoded_stage_outputs;
+    std::vector<ApproximationStageOutputs> decoded_stage_outputs;
+
+    /** Return a stage output port, or an undefined Func if the key was not
+     * invoked in this direction or the port is out of range. */
+    Func encoded_by(const ApproximationStageKey &stage, size_t port = 0) const;
+    Func decoded_by(const ApproximationStageKey &stage, size_t port = 0) const;
 };
 
 /** Sequentially composes any number of Approximations into a pipeline:
@@ -273,11 +329,15 @@ public:
     }
 
     EncodeResult encode(std::vector<Func> inputs) {
-        return chosen_->encode(std::move(inputs));
+        EncodeResult r = chosen_->encode(std::move(inputs));
+        r.stage_outputs.push_back({chosen_->stage_key(), r.encoded});
+        return r;
     }
 
     DecodeResult decode(std::vector<Func> encoded) {
-        return chosen_->decode(std::move(encoded));
+        DecodeResult r = chosen_->decode(std::move(encoded));
+        r.stage_outputs.push_back({chosen_->stage_key(), r.decoded});
+        return r;
     }
 
 private:
