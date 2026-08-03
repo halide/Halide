@@ -19,6 +19,20 @@ void set_alignment_and_bounds(OutputImageParam p, int size) {
 // precision operands get the tensor cores, and anything else gets a schedule
 // that keeps the accumulator in ordinary registers. The product is always
 // accumulated and returned in single precision.
+//
+// Time for one multiply on an RTX 5060 Ti, against cublas doing the same
+// thing at each precision (cublasSgemm, and cublasGemmEx with half precision
+// operands and a single precision accumulator):
+//
+//                    1024      2048       4096
+//     Halide f32    311 us   1675 us   18727 us
+//     cublas f32    147 us   1029 us    7813 us
+//     Halide f16     53 us    365 us    2784 us
+//     cublas f16     51 us    347 us    2699 us
+//
+// So the tensor core schedule is within a few percent of cublas, and the
+// float one is about half its speed - the tensor cores are what this app has
+// been tuned for.
 class MatMul : public Halide::Generator<MatMul> {
 public:
     GeneratorParam<int> size{"size", 1024};
@@ -85,8 +99,7 @@ public:
     }
 
 private:
-    // 311 us for 1024x1024 on an RTX 5060 Ti, where cublas is 146 us at the
-    // same precision.
+    // The float schedule. See the table above for how it does.
     void schedule_cuda() {
         Var xi, yi, xii, yii;
 
@@ -110,13 +123,9 @@ private:
         B.in().compute_at(prod, r).vectorize(_0).unroll(_1);
     }
 
-    // 53 us for 1024x1024 on an RTX 5060 Ti, which is 5.9x the schedule above
-    // and 2.8x cublas at single precision.
-    //
-    // Against cublas doing the same thing - half precision operands into a
-    // single precision accumulator - this is a little slower at every size:
-    // 96% of its throughput at 1024, 95% at 2048, and 97% at 4096, with the
-    // block shapes below picked per size by measurement.
+    // The tensor core schedule, which reaches 96%, 95% and 97% of cublas at
+    // the three sizes in the table above. The block shapes below are picked
+    // per size by measurement.
     void schedule_tensor_cores() {
         // The tensor core tile shape, and how many of them each warp
         // accumulates at once. Each operand tile loaded feeds tiles_x (or
