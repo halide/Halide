@@ -812,9 +812,10 @@ public:
     // derived rather than taken as its own parameter -- see nibble_pack/
     // crumb_pack/rotating_bit_pack/le_bit_pack below for the named-shape
     // constructors most call sites should use instead of this directly.
-    PlanarBitPack(int field_bits, int pos_count, int qmax = 0, bool plane_axis = false)
+    PlanarBitPack(int field_bits, int pos_count, int qmax = 0, bool plane_axis = false,
+                  int value_scale = 1)
         : field_bits_(field_bits), plane_count_(8 / field_bits), pos_count_(pos_count), qmax_(qmax),
-          plane_axis_(plane_axis) {
+          plane_axis_(plane_axis), value_scale_(value_scale) {
     }
 
     Halide::EncodeResult encode(std::vector<Halide::Func> inputs) override {
@@ -832,7 +833,8 @@ public:
 
         RDom rp(0, plane_count_, "rp");
         Expr kk = outer * group + rp * pos_count_ + pos;
-        Expr field = cast<uint32_t>(cast<int32_t>(codes(kk, blk)) + qmax_) & ((1u << field_bits_) - 1);
+        Expr field = cast<uint32_t>((cast<int32_t>(codes(kk, blk)) + qmax_) / value_scale_) &
+                     ((1u << field_bits_) - 1);
         Func bytes("planar_bit_pack_bytes");
         bytes(byte_idx, blk) = cast<uint8_t>(0);
         bytes(byte_idx, blk) = bytes(byte_idx, blk) | cast<uint8_t>(field << (rp * field_bits_));
@@ -869,8 +871,8 @@ public:
             // plus mask (~24 NEON ops per 16 lanes), which is the whole
             // q5_x-vs-q4_x gap. A Buffer<> is embedded in the binary as constant
             // data, so this is a pure lookup, no runtime input.
-            static const Halide::Buffer<uint8_t> b2b = [] {
-                Halide::Buffer<uint8_t> t(8, 256);
+            static const Halide::Buffer<int8_t> b2b = [] {
+                Halide::Buffer<int8_t> t(8, 256);
                 t.set_min(0, 0);
                 for (int by = 0; by < 256; by++) {
                     for (int bit = 0; bit < 8; bit++) {
@@ -879,18 +881,47 @@ public:
                 }
                 return t;
             }();
-            field = cast<uint32_t>(b2b(cast<int32_t>(plane * field_bits_), cast<int32_t>(byte)));
+            static const Halide::Buffer<int8_t> b2b_shifted = [] {
+                Halide::Buffer<int8_t> t(8, 256);
+                t.set_min(0, 0);
+                for (int by = 0; by < 256; by++) {
+                    for (int bit = 0; bit < 8; bit++) {
+                        t(bit, by) = ((by >> bit) & 1) << 4;
+                    }
+                }
+                return t;
+            }();
+            static const Halide::Buffer<int8_t> b2b_shifted_signed = [] {
+                Halide::Buffer<int8_t> t(8, 256);
+                t.set_min(0, 0);
+                for (int by = 0; by < 256; by++) {
+                    for (int bit = 0; bit < 8; bit++) {
+                        t(bit, by) = (((by >> bit) & 1) << 4) - 16;
+                    }
+                }
+                return t;
+            }();
+            const Expr bit_index = cast<int32_t>(plane * field_bits_);
+            const Expr byte_value = cast<int32_t>(byte);
+            if (value_scale_ == 16 && qmax_ == 16) {
+                field = b2b_shifted_signed(bit_index, byte_value);
+            } else if (value_scale_ == 16 && qmax_ == 0) {
+                field = b2b_shifted(bit_index, byte_value);
+            } else {
+                field = cast<int32_t>(b2b(bit_index, byte_value)) * value_scale_ - qmax_;
+            }
         } else {
-            field = (byte >> (plane * field_bits_)) & ((1u << field_bits_) - 1);
+            field = cast<int32_t>((byte >> (plane * field_bits_)) & ((1u << field_bits_) - 1)) * value_scale_ - qmax_;
         }
         Func codes("planar_bit_pack_codes");
-        codes(kk, blk, _) = cast<int8_t>(cast<int32_t>(field) - qmax_);
+        codes(kk, blk, _) = cast<int8_t>(field);
         return {{codes}, {}};
     }
 
 private:
     int field_bits_, plane_count_, pos_count_, qmax_;
     bool plane_axis_;
+    int value_scale_;
 };
 
 // Named PlanarBitPack shapes for the four bit-widths this file actually
@@ -915,8 +946,8 @@ inline std::unique_ptr<Halide::Approximation> rotating_bit_pack(int window, int 
 // The Stage-2 qh addressing (make_code_pack's code_bits==5 case): one flat
 // bit per element, byte kk/8 at shift kk%8 -- PlanarBitPack{1, 1} regardless
 // of block size (pos_count is always 1; there's no "window" to parameterize).
-inline std::unique_ptr<Halide::Approximation> le_bit_pack() {
-    return std::make_unique<PlanarBitPack>(1, 1);
+inline std::unique_ptr<Halide::Approximation> le_bit_pack(int value_scale = 1, int qmax = 0) {
+    return std::make_unique<PlanarBitPack>(1, 1, qmax, false, value_scale);
 }
 
 // GGML's Q5_0/Q5_1 5-bit code split (a 4-bit low nibble plus a 5th high bit,
@@ -1271,6 +1302,74 @@ public:
 private:
     Halide::Type block_type_;
     std::string scale_field_, codes_field_;
+};
+
+// Struct-typed layout for the split-code Q5_0/Q5_1 blocks. Keeping qh as a
+// typed UInt(32) field lets LowerStructTypes expose one four-byte load to LLVM;
+// the byte-buffer form presents four unrelated UInt(8) loads, which cannot be
+// coalesced before the byte-indexed expansion-table lookups. `codes_bytes`
+// retains the existing logical {qh[4], qs[16]} layout, so the reusable
+// combined-bit codec inside this leaf is unchanged.
+class Q5StructBlockLayout : public Halide::Approximation {
+public:
+    Q5StructBlockLayout(Halide::Type block_type, bool affine)
+        : block_type_(block_type), affine_(affine) {
+    }
+
+    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) override {
+        using namespace Halide;
+        Func codes_bytes = inputs[0];
+        Func scale = inputs[1];
+        Func min = affine_ ? inputs[2] : Func();
+        Var blk("blk");
+
+        Expr qh = cast<uint32_t>(codes_bytes(0, blk)) |
+                  (cast<uint32_t>(codes_bytes(1, blk)) << 8) |
+                  (cast<uint32_t>(codes_bytes(2, blk)) << 16) |
+                  (cast<uint32_t>(codes_bytes(3, blk)) << 24);
+        std::vector<Expr> vals = {cast<float16_t>(scale(blk))};
+        if (affine_) {
+            vals.push_back(cast<float16_t>(min(blk)));
+        }
+        vals.push_back(qh);
+        for (int i = 0; i < 16; i++) {
+            vals.push_back(codes_bytes(i + 4, blk));
+        }
+
+        Func packed("q5_struct_block_packed");
+        packed(blk) = pack_struct(block_type_, vals);
+        return {{packed}, {}};
+    }
+
+    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) override {
+        using namespace Halide;
+        Func packed = encoded[0];
+        Var local("local"), blk("blk");
+
+        Func scale("q5_struct_block_scale");
+        scale(blk) = cast<float>(field(packed(blk), "d"));
+        Func qh("q5_struct_block_qh");
+        qh(blk) = field(packed(blk), "qh");
+        Func qh_bytes("q5_struct_block_qh_bytes");
+        qh_bytes(local, blk) = cast<uint8_t>(qh(blk) >> (local * 8));
+        Func qs_bytes("q5_struct_block_qs_bytes");
+        qs_bytes(local, blk) = cast<uint8_t>(field(packed(blk), "qs")[local]);
+        Func codes_bytes("q5_struct_block_codes_bytes");
+        codes_bytes(local, blk) = select(local < 4,
+                                         qh_bytes(local, blk),
+                                         qs_bytes(local - 4, blk));
+
+        if (affine_) {
+            Func min("q5_struct_block_min");
+            min(blk) = cast<float>(field(packed(blk), "m"));
+            return {{codes_bytes, scale, min}, {qh}};
+        }
+        return {{codes_bytes, scale}, {qh}};
+    }
+
+private:
+    Halide::Type block_type_;
+    bool affine_;
 };
 
 // One field, in ON-DISK byte order, of a struct-packed block layout: an
@@ -1679,8 +1778,8 @@ private:
 // CombineBits{...}} -- not this leaf, which is only the split/combine math.
 class CombineBits : public Halide::Approximation {
 public:
-    CombineBits(int high_weight, int offset)
-        : high_weight_(high_weight), offset_(offset) {
+    CombineBits(int high_weight, int offset, bool expanded_high = false)
+        : high_weight_(high_weight), offset_(offset), expanded_high_(expanded_high) {
     }
 
     Halide::EncodeResult encode(std::vector<Halide::Func> inputs) override {
@@ -1693,7 +1792,9 @@ public:
         Func low("combine_bits_low");
         low(kk, blk) = cast<int8_t>(combined % high_weight_);
         Func high("combine_bits_high");
-        high(kk, blk) = cast<int8_t>(combined / high_weight_);
+        high(kk, blk) = cast<int8_t>(expanded_high_ ?
+                                         (combined / high_weight_) * high_weight_ - offset_ :
+                                         combined / high_weight_);
         return {{low, high}, {}};
     }
 
@@ -1701,12 +1802,15 @@ public:
         using namespace Halide;
         Func low = encoded[0], high = encoded[1];
         Func code("combine_bits_code");
-        code(kk, blk) = cast<int8_t>((cast<int32_t>(low(kk, blk)) + high_weight_ * cast<int32_t>(high(kk, blk))) - offset_);
+        code(kk, blk) = cast<int8_t>(expanded_high_ ?
+                                         cast<int32_t>(low(kk, blk)) + cast<int32_t>(high(kk, blk)) :
+                                         (cast<int32_t>(low(kk, blk)) + high_weight_ * cast<int32_t>(high(kk, blk))) - offset_);
         return {{code}, {}};
     }
 
 private:
     int high_weight_, offset_;
+    bool expanded_high_;
     Halide::Var kk{"kk"}, blk{"blk"};
 };
 
@@ -2658,10 +2762,12 @@ inline CodePackField make_code_pack(int block_size, int code_bits, int qmax) {
         // nibble_pack. `qmax` becomes CombineBits' final recentering offset
         // (0 for Q5_1's already-unsigned affine codes) rather than a per-part
         // qmax, since the parts here are raw, uncentered digits.
-        return {make_combined_bit_codec(
-                    16, qmax,
-                    FieldSpec{1, 4, le_bit_pack()},                          // qh -> high bit
-                    FieldSpec{0, block_size / 2, nibble_pack(block_size)}),  // qs -> low nibble
+        return {std::make_unique<Compose>(
+                    make_block_layout(
+                        FieldSpec{1, 4, le_bit_pack(16, qmax)},                 // qh -> folded high bit and offset
+                        FieldSpec{0, block_size / 2, nibble_pack(block_size)})  // qs -> low nibble
+                        .layout,
+                    CombineBits{16, qmax, /*expanded_high=*/true}),
                 block_size / 2 + 4};
     }
     if (code_bits == 1) {
@@ -2744,8 +2850,18 @@ inline SchemeAndBytes make_affine_block_scheme(
 // (kind=symmetric_5bit/affine_5bit) don't need to change in lockstep.
 inline SchemeAndBytes make_symmetric_5bit_block_scheme(int block_size, int qmax,
                                                        Layout layout = Layout::FlatRow) {
-    return make_symmetric_block_scheme(block_size, qmax, RoundingMode::TruncateHalfUpWithOffset,
-                                       ScaleAnchor::ExtremeSignedValue, /*code_bits=*/5, layout);
+    using namespace Halide;
+    _halide_user_assert(block_size == 32) << "The Q5 struct layout requires a 32-element block.\n";
+    Type block_type = Type::Struct({{"d", Float(16)}, {"qh", UInt(32)}, {"qs", UInt(8), 16}});
+    CodePackField code = make_code_pack(block_size, /*code_bits=*/5, qmax);
+    return {std::make_unique<Compose>(
+                Q5StructBlockLayout{block_type, /*affine=*/false},
+                Apply{0, std::move(code.pack)},
+                SymmetricAffineQuantize{block_size, qmax, RoundingMode::TruncateHalfUpWithOffset,
+                                        ScaleAnchor::ExtremeSignedValue},
+                BlockReshape{block_size, layout == Layout::BlockIndexed}),
+            block_type.bytes(),
+            block_type};
 }
 
 // Affine quantize (like make_affine_block_scheme()) but 5-bit -- likewise now
@@ -2757,7 +2873,17 @@ inline SchemeAndBytes make_symmetric_5bit_block_scheme(int block_size, int qmax,
 inline SchemeAndBytes make_affine_5bit_block_scheme(int block_size, int levels,
                                                     AffineRounding rounding,
                                                     Layout layout = Layout::FlatRow) {
-    return make_affine_block_scheme(block_size, levels, rounding, /*code_bits=*/5, layout);
+    using namespace Halide;
+    _halide_user_assert(block_size == 32) << "The Q5 struct layout requires a 32-element block.\n";
+    Type block_type = Type::Struct({{"d", Float(16)}, {"m", Float(16)}, {"qh", UInt(32)}, {"qs", UInt(8), 16}});
+    CodePackField code = make_code_pack(block_size, /*code_bits=*/5, /*qmax=*/0);
+    return {std::make_unique<Compose>(
+                Q5StructBlockLayout{block_type, /*affine=*/true},
+                Apply{0, std::move(code.pack)},
+                AffineQuantize{block_size, levels, rounding},
+                BlockReshape{block_size, layout == Layout::BlockIndexed}),
+            block_type.bytes(),
+            block_type};
 }
 
 // Symmetric byte-packed quantize (like make_symmetric_block_scheme() with
