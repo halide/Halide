@@ -1,12 +1,12 @@
 import { clsx } from "clsx";
 import * as d3 from "d3";
+import { useAtomValue } from "jotai";
 import { Tooltip } from "radix-ui";
 import * as React from "react";
 
 import { useProfileContext } from "@/hooks/profile";
-import type { Profile } from "@/types";
 import { profileMetricAtom, type ProfileMetric } from "@/state/profile-metric";
-import { useAtomValue } from "jotai";
+import type { Profile } from "@/types";
 
 type TreemapNode = {
   name: string;
