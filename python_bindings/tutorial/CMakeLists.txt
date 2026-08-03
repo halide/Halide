@@ -34,6 +34,7 @@ set(tests
     lesson_12_using_the_gpu.py
     lesson_13_tuples.py
     lesson_14_types.py
+    lesson_15_runtime.py
     lesson_17_predicated_rdom.py
     lesson_18_parallel_associative_reductions.py
     lesson_19_wrapper_funcs.py

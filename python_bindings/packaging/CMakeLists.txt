@@ -6,6 +6,25 @@ set(Halide_INSTALL_PYTHONDIR "${CMAKE_INSTALL_LIBDIR}/python3/site-packages/hali
 )
 
 if (WITH_PYTHON_BINDINGS)
+    # The runtime-only Python surface -- the lazy top-level __init__ (which does
+    # not import the compiler until a compiler attribute is used) and the
+    # halide.runtime subpackage. These go in the Halide_PythonRuntime component
+    # so a libHalide-free halide-runtime wheel can select just this component and
+    # still be a complete, importable package.
+    install(
+        FILES "${Halide_Python_SOURCE_DIR}/src/halide/__init__.py"
+        DESTINATION "${Halide_INSTALL_PYTHONDIR}"
+        COMPONENT Halide_PythonRuntime
+    )
+    install(
+        DIRECTORY "${Halide_Python_SOURCE_DIR}/src/halide/runtime/"
+        DESTINATION "${Halide_INSTALL_PYTHONDIR}/runtime"
+        COMPONENT Halide_PythonRuntime
+        FILES_MATCHING
+        PATTERN "*.py"
+    )
+
+    # The remaining (compiler-side) Python sources.
     install(
         DIRECTORY "${Halide_Python_SOURCE_DIR}/src/halide/"
         DESTINATION "${Halide_INSTALL_PYTHONDIR}"
@@ -13,12 +32,23 @@ if (WITH_PYTHON_BINDINGS)
         FILES_MATCHING
         PATTERN "*.py"
         PATTERN "halide_" EXCLUDE
+        PATTERN "runtime" EXCLUDE
+        PATTERN "__init__.py" EXCLUDE
     )
 
     install(
         TARGETS Halide_Python
         EXPORT Halide_Python-targets
         LIBRARY DESTINATION "${Halide_INSTALL_PYTHONDIR}" COMPONENT Halide_Python
+    )
+
+    # The standalone halide.runtime module. It links no libHalide, so it needs
+    # no RPATH patching. It gets its own install component so a libHalide-free
+    # runtime-only wheel can select just this (plus the *.py below); the full
+    # package installs every component and so includes it too.
+    install(
+        TARGETS Halide_PythonRuntime
+        LIBRARY DESTINATION "${Halide_INSTALL_PYTHONDIR}/runtime" COMPONENT Halide_PythonRuntime
     )
 
     get_property(halide_is_imported TARGET Halide::Halide PROPERTY IMPORTED)
