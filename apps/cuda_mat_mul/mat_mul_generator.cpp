@@ -23,26 +23,35 @@ void set_alignment_and_bounds(OutputImageParam p, int size) {
 // pair with.
 //
 // Time for one multiply on an RTX 5060 Ti, against cublas doing the same
-// thing (cublasSgemm, and cublasGemmEx with half precision operands and a
-// single precision accumulator). The block shapes below were picked by
-// sweeping sixty of them at each size and operand type.
+// thing at each pair of types. The block shapes below were picked by sweeping
+// sixty of them at each size and operand type.
 //
 //                            1024      2048       4096
-//     Halide f32            313 us   1679 us   18796 us
-//     cublas f32            148 us   1034 us    7938 us
-//     Halide f16 -> f32      53 us    368 us    2811 us
-//     Halide bf16 -> f32     54 us    367 us    2810 us
-//     cublas f16 -> f32      52 us    350 us    2724 us
-//     Halide f16 -> f16      36 us    199 us    1592 us
-//     Halide u8 -> i32       35 us    220 us    1697 us
+//     Halide f32            312 us   1670 us   18812 us
+//     cublas f32            148 us   1026 us    7818 us
 //
-// The float schedule is about half of cublas. Against cublas doing the same
-// thing, half and brain float land within a few percent of it. The two rows
-// below that are doing less work per multiply, so they are not comparable to
-// the ones above: a half accumulator halves the registers it takes, and
-// eight-bit operands halve the traffic through shared memory. Both are around
-// 1.7x the single precision accumulator here, which makes bytes the
-// interesting case for imaging, where the inputs are usually bytes anyway.
+//     Halide f16 -> f32      53 us    367 us    2810 us
+//     cublas f16 -> f32      51 us    350 us    2714 us
+//
+//     Halide bf16 -> f32     53 us    367 us    2801 us
+//     cublas bf16 -> f32     51 us    350 us    2714 us
+//
+//     Halide f16 -> f16      36 us    198 us    1589 us
+//     cublas f16 -> f16      31 us    228 us    1566 us
+//
+//     Halide u8 -> i32       35 us    219 us    1691 us
+//     cublas s8 -> i32       20 us    140 us    1055 us
+//
+// Rows within a pair of types are comparable to each other; rows in different
+// pairs are not, because a narrower accumulator or narrower operands are less
+// work. The 16-bit float schedules land within a few percent of cublas, and
+// the half accumulator one is ahead of it at 2048. The float schedule is
+// about half of cublas, and the eight-bit one is the weakest: 55% of it at
+// 1024 and 62% at 4096. cublas is not using the wmma instructions there -
+// eight-bit operands have an mma shape with twice the reduction depth per
+// instruction, which this schedule has no way to reach. cublas takes signed
+// operands where the variant here takes unsigned ones; the hardware runs both
+// at the same rate.
 //
 class MatMul : public Halide::Generator<MatMul> {
 public:

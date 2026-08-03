@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cublas_v2.h>
+#include <cuda_fp16.h>
 #include <cuda_runtime.h>
 
 #include "mat_mul.h"
@@ -279,6 +280,42 @@ int main(int argc, char **argv) {
                                                    CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT); },
                               []() { cudaDeviceSynchronize(); });
             printf("cublas half: %f s (%.1f GFlop/s)\n", t, gflops(size, t));
+
+            // Brain floats, also into a single precision accumulator.
+            t = bench_batched([&]() { cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_N,
+                                                   size, size, size, &alpha,
+                                                   A, CUDA_R_16BF, size,
+                                                   B, CUDA_R_16BF, size, &beta,
+                                                   C, CUDA_R_32F, size,
+                                                   CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT); },
+                              []() { cudaDeviceSynchronize(); });
+            printf("cublas bfloat: %f s (%.1f GFlop/s)\n", t, gflops(size, t));
+
+            // Eight-bit integers into a 32-bit accumulator. cublas takes
+            // signed operands here where the Halide variant above takes
+            // unsigned ones; the hardware runs both at the same rate.
+            int32_t ialpha = 1, ibeta = 1;
+            t = bench_batched([&]() { cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_N,
+                                                   size, size, size, &ialpha,
+                                                   A, CUDA_R_8I, size,
+                                                   B, CUDA_R_8I, size, &ibeta,
+                                                   C, CUDA_R_32I, size,
+                                                   CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT); },
+                              []() { cudaDeviceSynchronize(); });
+            printf("cublas int8: %f s (%.1f GFlop/s)\n", t, gflops(size, t));
+
+            // Halves into a half accumulator, which is what the half output
+            // variant above does.
+            __half halpha = __float2half(1.f), hbeta = __float2half(1.f);
+            t = bench_batched([&]() { cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_N,
+                                                   size, size, size, &halpha,
+                                                   A, CUDA_R_16F, size,
+                                                   B, CUDA_R_16F, size, &hbeta,
+                                                   C, CUDA_R_16F, size,
+                                                   CUBLAS_COMPUTE_16F, CUBLAS_GEMM_DEFAULT); },
+                              []() { cudaDeviceSynchronize(); });
+            printf("cublas half into half: %f s (%.1f GFlop/s)\n",
+                   t, gflops(size, t));
         }
 
         cudaFree(A);
