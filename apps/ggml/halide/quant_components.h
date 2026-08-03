@@ -294,39 +294,39 @@ enum class ScaleAnchor { AbsMax,
 // decode(): {codes, scale} -> cast<float>(codes) * scale -- this half is
 // exactly the same regardless of rounding/anchor (both Q4_0's and Q8_0's
 // existing hand-written dequantize math already reduce to this one formula).
+inline Halide::BlockRoundingMode core_rounding_mode(RoundingMode mode) {
+    switch (mode) {
+    case RoundingMode::Nearest:
+        return Halide::BlockRoundingMode::Nearest;
+    case RoundingMode::TruncateHalfUpWithOffset:
+        return Halide::BlockRoundingMode::TruncateHalfUpWithOffset;
+    case RoundingMode::SignOnly:
+        return Halide::BlockRoundingMode::SignOnly;
+    case RoundingMode::NearestEvenClampedHigh:
+        return Halide::BlockRoundingMode::NearestEvenClampedHigh;
+    }
+    _halide_internal_error << "Unknown symmetric rounding mode\n";
+}
+
+inline Halide::BlockScaleAnchor core_scale_anchor(ScaleAnchor anchor) {
+    switch (anchor) {
+    case ScaleAnchor::AbsMax:
+        return Halide::BlockScaleAnchor::AbsMax;
+    case ScaleAnchor::ExtremeSignedValue:
+        return Halide::BlockScaleAnchor::ExtremeSignedValue;
+    case ScaleAnchor::MeanAbs:
+        return Halide::BlockScaleAnchor::MeanAbs;
+    case ScaleAnchor::ExtremeSignedValueTwoStep:
+        return Halide::BlockScaleAnchor::ExtremeSignedValueTwoStep;
+    }
+    _halide_internal_error << "Unknown symmetric scale anchor\n";
+}
+
 class SymmetricAffineQuantize : public Halide::SymmetricBlockQuantize {
 public:
     SymmetricAffineQuantize(int block_size, int qmax, RoundingMode rounding, ScaleAnchor anchor)
-        : Halide::SymmetricBlockQuantize(block_size, qmax, core_rounding(rounding), core_anchor(anchor)) {
-    }
-
-private:
-    static Halide::BlockRoundingMode core_rounding(RoundingMode mode) {
-        switch (mode) {
-        case RoundingMode::Nearest:
-            return Halide::BlockRoundingMode::Nearest;
-        case RoundingMode::TruncateHalfUpWithOffset:
-            return Halide::BlockRoundingMode::TruncateHalfUpWithOffset;
-        case RoundingMode::SignOnly:
-            return Halide::BlockRoundingMode::SignOnly;
-        case RoundingMode::NearestEvenClampedHigh:
-            return Halide::BlockRoundingMode::NearestEvenClampedHigh;
-        }
-        _halide_internal_error << "Unknown symmetric rounding mode\n";
-    }
-
-    static Halide::BlockScaleAnchor core_anchor(ScaleAnchor anchor) {
-        switch (anchor) {
-        case ScaleAnchor::AbsMax:
-            return Halide::BlockScaleAnchor::AbsMax;
-        case ScaleAnchor::ExtremeSignedValue:
-            return Halide::BlockScaleAnchor::ExtremeSignedValue;
-        case ScaleAnchor::MeanAbs:
-            return Halide::BlockScaleAnchor::MeanAbs;
-        case ScaleAnchor::ExtremeSignedValueTwoStep:
-            return Halide::BlockScaleAnchor::ExtremeSignedValueTwoStep;
-        }
-        _halide_internal_error << "Unknown symmetric scale anchor\n";
+        : Halide::SymmetricBlockQuantize(block_size, qmax,
+                                         core_rounding_mode(rounding), core_scale_anchor(anchor)) {
     }
 };
 
@@ -2668,15 +2668,43 @@ inline SchemeAndBytes make_symmetric_block_scheme(
     int block_size, int qmax, RoundingMode rounding, ScaleAnchor anchor, int code_bits,
     Layout layout = Layout::FlatRow, bool struct_layout = false) {
     using namespace Halide;
+
+    if (struct_layout && code_bits == 4) {
+        _halide_user_assert(block_size == 32 && qmax == 8)
+            << "The core q4_0 layout requires a 32-element, qmax=8 block\n";
+        Type block_type = Type::Struct({{"d", Float(16)}, {"qs", UInt(8), 16}});
+        return {std::make_unique<Compose>(
+                    Halide::StructLayout{block_type, {"qs", "d"}},
+                    Apply{1, Halide::StorageCast<float, float16_t>{}},
+                    Apply{0, Halide::PlanarFieldPack{4, 16}},
+                    Apply{0, Halide::AdditiveOffset<int8_t, uint8_t>{8}},
+                    Halide::SymmetricBlockQuantize{block_size, qmax,
+                                                   core_rounding_mode(rounding), core_scale_anchor(anchor)},
+                    Halide::BlockReshape{block_size, layout == Layout::BlockIndexed}),
+                block_type.bytes(),
+                block_type};
+    }
+
+    if (struct_layout && code_bits == 8) {
+        _halide_user_assert(block_size == 32 && qmax == 127)
+            << "The core q8_0 layout requires a 32-element, qmax=127 block\n";
+        Type block_type = Type::Struct({{"d", Float(16)}, {"qs", Int(8), 32}});
+        return {std::make_unique<Compose>(
+                    Halide::StructLayout{block_type, {"qs", "d"}},
+                    Apply{1, Halide::StorageCast<float, float16_t>{}},
+                    Halide::SymmetricBlockQuantize{block_size, qmax,
+                                                   core_rounding_mode(rounding), core_scale_anchor(anchor)},
+                    Halide::BlockReshape{block_size, layout == Layout::BlockIndexed}),
+                block_type.bytes(),
+                block_type};
+    }
+
     auto [code_pack, code_bytes] = make_code_pack(block_size, code_bits, qmax);
 
     if (struct_layout) {
-        // The on-disk block as a first-class struct: `{fp16 d; uint8 qs[...]}`,
-        // matching every symmetric GGML block_* layout. The compiler owns the
-        // offsets and the total byte size; StructBlockLayout reads/writes `d` as
-        // a typed field (subsuming Fp16Pack) and hands the `qs` bytes to the same
-        // code_pack the byte-buffer path uses. Apply{0, code_pack} interprets
-        // those bytes (nibble/byte/bit extraction) exactly as before.
+        // Compatibility path for Q1_0. Q4_0/Q8_0 use their faithful, fully
+        // core-composed layouts above; other symmetric formats migrate
+        // deliberately rather than changing behavior through this fallback.
         Type block_type = Type::Struct({{"d", Float(16)}, {"qs", UInt(8), code_bytes}});
         return {std::make_unique<Compose>(
                     StructBlockLayout{block_type, "d", "qs"},

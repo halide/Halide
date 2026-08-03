@@ -147,11 +147,22 @@ public:
         std::unique_ptr<Halide::Approximation> ac;
         int ab;
         bool act_has_block_sums = false;
+        Halide::Type act_type;
         switch (a_kind.value()) {
-        case AKind::Q8_0:
-            ac = make_symmetric_block_scheme(a_nat, a_qmax, RoundingMode::Nearest, ScaleAnchor::AbsMax, 8, Layout::BlockIndexed).scheme;
+        case AKind::Q8_0: {
+            // Keep the shared activation ABI byte-addressed. A struct-typed
+            // activation was tested for same-size blocks, but disturbed the
+            // tuned q4_0/q5_0 load shape; the faithful struct scheme remains in
+            // use for q8_0's codecs and weight operand.
+            const bool structured_q8 = false;
+            SchemeAndBytes sb = make_symmetric_block_scheme(
+                a_nat, a_qmax, RoundingMode::Nearest, ScaleAnchor::AbsMax, 8,
+                Layout::BlockIndexed, structured_q8);
+            ac = std::move(sb.scheme);
+            act_type = sb.block_type;
             ab = 2 + a_nat;
             break;
+        }
         case AKind::Q8_1: {
             SchemeAndBytes sb = make_symmetric_byte_sum_block_scheme(a_nat, a_qmax, Layout::BlockIndexed);
             ac = std::move(sb.scheme);
@@ -166,12 +177,12 @@ public:
         }
         ac = reblock_activation(std::move(ac), a_nat, wbs);
 
-        // Activation stays on the byte path for now (Q8_0/Q8_1 are shared across
-        // many weight formats, and the Reblock relayout is byte-based); only the
-        // weight operand is struct-typed here.
         const bool five_bit = w_kind.value() == WKind::Symmetric5Bit || w_kind.value() == WKind::Affine5Bit;
-        return {std::move(wc), wb, std::move(ac), ab, wbs, sched, distribute, weight_type, Halide::Type{}, act_has_block_sums,
-                five_bit ? 2 : 4, reconstructed_codes_stage, packed_high_word_stage};
+        const bool clean_symmetric = w_kind.value() == WKind::Symmetric &&
+                                     (w_code_bits == 4 || w_code_bits == 8);
+        return {std::move(wc), wb, std::move(ac), ab, wbs, sched, distribute, weight_type, act_type, act_has_block_sums,
+                five_bit ? 2 : 4, reconstructed_codes_stage, packed_high_word_stage,
+                clean_symmetric, clean_symmetric};
     }
 };
 
