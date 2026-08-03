@@ -133,6 +133,7 @@ tests(GROUPS error
       uninitialized_param.cpp
       uninitialized_param_2.cpp
       unknown_target.cpp
+      update_after_wrap.cpp
       vector_tile.cpp
       vectorize_dynamic.cpp
       vectorize_too_little.cpp

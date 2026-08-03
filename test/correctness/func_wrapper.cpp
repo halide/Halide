@@ -175,20 +175,21 @@ int global_wrapper_test() {
     return 0;
 }
 
-int update_defined_after_wrapper_test() {
+int wrapper_of_func_with_update_test() {
     Func f("f"), g("g");
     Var x("x"), y("y");
 
     f(x, y) = x + y;
     g(x, y) = f(x, y);
 
-    Func wrapper = f.in(g);
-
-    // Update of 'g' is defined after f.in(g) is called. g's updates should
-    // still call f's wrapper.
+    // in() rewrites the call graph eagerly, so it only affects the stages of 'g'
+    // that exist when it is called. Define g's update first, then wrap; both of
+    // g's calls to f are then redirected to the wrapper.
     RDom r(0, 100, 0, 100);
     r.where(r.x < r.y);
     g(r.x, r.y) += 2 * f(r.x, r.y);
+
+    Func wrapper = f.in(g);
 
     Param<bool> param;
 
@@ -559,8 +560,8 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    printf("Running update is defined after wrap test\n");
-    if (update_defined_after_wrapper_test() != 0) {
+    printf("Running wrapper of func with update test\n");
+    if (wrapper_of_func_with_update_test() != 0) {
         return 1;
     }
 

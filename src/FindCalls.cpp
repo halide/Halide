@@ -44,8 +44,7 @@ public:
 void populate_environment_helper(const Function &f,
                                  std::map<std::string, Function> *env,
                                  std::vector<Function> *order,
-                                 bool recursive = true,
-                                 bool include_wrappers = false) {
+                                 bool recursive = true) {
     std::map<std::string, Function>::const_iterator iter = env->find(f.name());
     if (iter != env->end()) {
         user_assert(iter->second.same_as(f))
@@ -73,12 +72,6 @@ void populate_environment_helper(const Function &f,
         }
     }
 
-    if (include_wrappers) {
-        for (const auto &it : f.schedule().wrappers()) {
-            insert_func(Function{it.second}, &calls.calls, &calls.order);
-        }
-    }
-
     if (!recursive) {
         for (const Function &g : calls.order) {
             insert_func(g, env, order);
@@ -86,7 +79,7 @@ void populate_environment_helper(const Function &f,
     } else {
         insert_func(f, env, order);
         for (const Function &g : calls.order) {
-            populate_environment_helper(g, env, order, recursive, include_wrappers);
+            populate_environment_helper(g, env, order, recursive);
         }
     }
 }
@@ -97,7 +90,7 @@ std::map<std::string, Function> build_environment(const std::vector<Function> &f
     std::map<std::string, Function> env;
     std::vector<Function> order;
     for (const Function &f : funcs) {
-        populate_environment_helper(f, &env, &order, true, true);
+        populate_environment_helper(f, &env, &order, true);
     }
 
     // Validate the environment: no Parameter (ImageParam, Generator
@@ -164,7 +157,7 @@ std::vector<Function> called_funcs_in_order_found(const std::vector<Function> &f
     std::map<std::string, Function> env;
     std::vector<Function> order;
     for (const Function &f : funcs) {
-        populate_environment_helper(f, &env, &order, true, true);
+        populate_environment_helper(f, &env, &order, true);
     }
     return order;
 }
@@ -172,14 +165,14 @@ std::vector<Function> called_funcs_in_order_found(const std::vector<Function> &f
 std::map<std::string, Function> find_transitive_calls(const Function &f) {
     std::map<std::string, Function> res;
     std::vector<Function> order;
-    populate_environment_helper(f, &res, &order, true, false);
+    populate_environment_helper(f, &res, &order, true);
     return res;
 }
 
 std::map<std::string, Function> find_direct_calls(const Function &f) {
     std::map<std::string, Function> res;
     std::vector<Function> order;
-    populate_environment_helper(f, &res, &order, false, false);
+    populate_environment_helper(f, &res, &order, false);
     return res;
 }
 

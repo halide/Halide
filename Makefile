@@ -627,7 +627,6 @@ SOURCE_FILES = \
   Var.cpp \
   VectorizeLoops.cpp \
   WasmExecutor.cpp \
-  WrapCalls.cpp
 # keep-sorted end
 
  C_TEMPLATE_FILES = \
@@ -816,7 +815,6 @@ HEADER_FILES = \
   Var.h \
   VectorizeLoops.h \
   WasmExecutor.h \
-  WrapCalls.h
 # keep-sorted end
 
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)

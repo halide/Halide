@@ -1279,10 +1279,14 @@ public:
     }
     // @}
 
-    /** Creates and returns a new identity Func that wraps this Func. During
-     * compilation, Halide replaces all calls to this Func done by 'f'
-     * with calls to the wrapper. If this Func is already wrapped for
-     * use in 'f', will return the existing wrapper.
+    /** Creates and returns a new identity Func that wraps this Func, and
+     * immediately rewrites 'f' to call the wrapper instead of this Func. If
+     * this Func is already wrapped for use in 'f', returns the existing wrapper
+     * without rewriting anything again.
+     *
+     * The rewrite is eager, so it only affects the definitions of 'f' that
+     * exist at the time of the call. 'f' is frozen afterwards: adding further
+     * definitions to it is an error, since they would not be wrapped.
      *
      * For example, g.in(f) would rewrite a pipeline like this:
      \code
@@ -1380,15 +1384,18 @@ public:
     Func in(const std::vector<Func> &fs);
 
     /** Create and return a global identity wrapper, which wraps all calls to
-     * this Func by any other Func. If a global wrapper already exists,
-     * returns it. The global identity wrapper is only used by callers for
-     * which no custom wrapper has been specified.
-     */
+     * this Func by any other Func. If a global wrapper already exists, returns
+     * it. Unlike the custom wrappers above, this doesn't rewrite consumers:
+     * calls to this Func are routed through the wrapper (the redirection is
+     * baked out at the top of lowering), so it applies to every caller -- those
+     * defined before and after -- that doesn't have a custom wrapper. It's
+     * independent of the custom wrappers, so the two can be used together. */
     Func in();
 
     /** Similar to \ref Func::in; however, instead of replacing the call to
      * this Func with an identity Func that refers to it, this replaces the
-     * call with a clone of this Func.
+     * call with a clone of this Func. Like in(), the rewrite is eager and
+     * freezes the consumers it rewrites.
      *
      * For example, f.clone_in(g) would rewrite a pipeline like this:
      \code

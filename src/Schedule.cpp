@@ -366,13 +366,16 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->async = contents->async;
     copy.contents->ring_buffer = contents->ring_buffer;
 
-    // Deep-copy wrapper functions.
+    // Deep-copy wrapper functions. In a partial deep-copy (e.g. cloning a
+    // single Func via clone_in), the wrapper Funcs may not be among the Funcs
+    // being copied. Those wrappers describe redirections for callers of the
+    // original Func and don't apply to the copy, so drop them.
     for (const auto &iter : contents->wrappers) {
-        FunctionPtr &copied_func = copied_map[iter.second];
-        internal_assert(copied_func.defined()) << Function(iter.second).name() << "\n";
-        copy.contents->wrappers[iter.first] = copied_func;
+        const auto &copied_func = copied_map.find(iter.second);
+        if (copied_func != copied_map.end()) {
+            copy.contents->wrappers[iter.first] = copied_func->second;
+        }
     }
-    internal_assert(copy.contents->wrappers.size() == contents->wrappers.size());
     return copy;
 }
 

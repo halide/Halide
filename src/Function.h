@@ -323,6 +323,13 @@ public:
     const std::map<std::string, FunctionPtr> &wrappers() const;
     // @}
 
+    /** Set / get this Func's global wrapper (created by Func::in()). Calls that
+     * follow global-wrapper links resolve through it. */
+    // @{
+    void set_global_wrapper(const Function &wrapper);
+    Function global_wrapper() const;
+    // @}
+
     /** Check if a Function is a trivial wrapper around another
      * Function, Buffer, or Parameter. Returns the Call node if it
      * is. Otherwise returns null.

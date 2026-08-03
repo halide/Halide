@@ -876,7 +876,8 @@ struct Call : public ExprNode<Call> {
                      Buffer<> image = Buffer<>(), Parameter param = Parameter());
 
     /** Convenience constructor for calls to other halide functions */
-    static Expr make(const Function &func, const std::vector<Expr> &args, int idx = 0);
+    static Expr make(const Function &func, const std::vector<Expr> &args, int idx = 0,
+                     bool follow_global_wrappers = false);
 
     /** Convenience constructor for loads from concrete images */
     static Expr make(const Buffer<> &image, const std::vector<Expr> &args) {
