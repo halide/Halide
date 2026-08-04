@@ -27,8 +27,6 @@ Expr extract_lane(const Expr &vec, int lane);
  * intrinsic */
 Stmt rewrite_interleavings(const Stmt &s);
 
-void deinterleave_vector_test();
-
 }  // namespace Internal
 }  // namespace Halide
 

@@ -54,8 +54,6 @@ public:
         return target;
     }
 
-    static void test();
-
 protected:
     enum class IntegerSuffixStyle {
         PlainC = 0,
@@ -306,6 +304,18 @@ protected:
                                       const MetadataNameMap &metadata_name_map);
     void emit_halide_free_helper(const std::string &alloc_name, const std::string &free_function);
 };
+
+/** @name Internal-only accessors for test/correctness/codegen_c.cpp
+ * The underlying binary2cpp-generated blobs aren't visible outside
+ * libHalide (they're filtered out of the exported-symbols list), so
+ * expose their (CRLF-normalized) contents through ordinary functions
+ * in the Halide::Internal namespace instead.
+ */
+///@{
+std::string codegen_c_test_prologue_source();
+std::string codegen_c_test_runtime_header_source();
+std::string codegen_c_test_inlined_c_source();
+///@}
 
 }  // namespace Internal
 }  // namespace Halide

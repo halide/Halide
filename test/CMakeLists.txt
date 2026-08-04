@@ -1,11 +1,12 @@
 include(HalideTestHelpers)
 include(CheckCXXCompilerFlag)
 
-# Internal tests are a special case.
-# HalideTestHelpers depends on this test being present.
-add_executable(_test_internal internal.cpp)
+# _test_internal is not itself a test; it exists purely so that the other
+# test executables below can reuse its precompiled <Halide.h> header via
+# target_precompile_headers(REUSE_FROM). HalideTestHelpers depends on this
+# target being present.
+add_executable(_test_internal EXCLUDE_FROM_ALL pch_helper.cpp)
 target_link_libraries(_test_internal PRIVATE Halide::Test Halide::TerminateHandler)
-target_include_directories(_test_internal PRIVATE "${Halide_SOURCE_DIR}/src")
 target_precompile_headers(_test_internal PRIVATE <Halide.h>)
 if (Halide_CCACHE_BUILD)
     if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -15,8 +16,6 @@ if (Halide_CCACHE_BUILD)
         )
     endif ()
 endif ()
-
-add_halide_test(_test_internal GROUPS internal)
 
 Halide_feature(WITH_TEST_AUTO_SCHEDULE "Build autoscheduler tests" AUTO DEPENDS WITH_AUTOSCHEDULERS)
 if (WITH_TEST_AUTO_SCHEDULE)

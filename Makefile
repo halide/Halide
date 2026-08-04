@@ -996,7 +996,7 @@ endif
 endif
 
 .PHONY: all
-all: distrib test_internal
+all: distrib
 
 # Depending on which linker we're using,
 # we need a different invocation to get the
@@ -1393,7 +1393,7 @@ test_generator: $(GENERATOR_AOT_TESTS) $(GENERATOR_AOTCPP_TESTS) $(GENERATOR_JIT
 	$(FILTERS_DIR)/rungen_test
 	$(FILTERS_DIR)/registration_test
 
-ALL_TESTS = test_internal test_correctness test_error test_tutorial test_warning test_runtime test_generator
+ALL_TESTS = test_correctness test_error test_tutorial test_warning test_runtime test_generator
 
 # These targets perform timings of each test. For most tests this includes Halide JIT compile times, and run times.
 # For generator tests they time the compile time only. The times are recorded in CSV files.
@@ -1453,10 +1453,6 @@ $(BIN_DIR)/%/runtime.a: $(BIN_DIR)/runtime.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -r runtime -o $(CURDIR)/$(BIN_DIR)/$* target=$*
 
-$(BIN_DIR)/test_internal: $(ROOT_DIR)/test/internal.cpp $(TEST_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(TEST_CXX_FLAGS) $< -I$(SRC_DIR) $(TEST_LD_FLAGS) -o $@
-
 ifneq (,$(shell which flatc))
 $(BUILD_DIR)/Deserialization.o : $(BUILD_DIR)/halide_ir.fbs.h
 $(BUILD_DIR)/Serialization.o : $(BUILD_DIR)/halide_ir.fbs.h
@@ -1485,6 +1481,12 @@ $(BIN_DIR)/correctness_halide_buffer: $(ROOT_DIR)/test/correctness/halide_buffer
 # libjpeg.
 $(BIN_DIR)/correctness_image_io: $(ROOT_DIR)/test/correctness/image_io.cpp $(TEST_DEPS)
 	$(CXX) $(TEST_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
+
+# The spirv_ir test needs access to the internal-only SpirvIR.h header and
+# the vendored SPIR-V headers used by the Vulkan backend.
+$(BIN_DIR)/correctness_spirv_ir: $(ROOT_DIR)/test/correctness/spirv_ir.cpp $(TEST_DEPS)
+	@mkdir -p $(@D)
+	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) -I$(SRC_DIR) $(SPIRV_CXX_FLAGS) $(TEST_LD_FLAGS) -o $@
 
 # OpenCL runtime correctness test requires runtime.a to be linked.
 $(BIN_DIR)/$(TARGET)/correctness_opencl_runtime: $(ROOT_DIR)/test/correctness/opencl_runtime.cpp $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
@@ -2074,11 +2076,6 @@ $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_run: $(ROOT_DIR)/tutorial/lesson_21
 	$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< \
 	-I$(INCLUDE_DIR) -L$(BIN_DIR) -I $(TMP_DIR) $(TMP_DIR)/auto_schedule_*.a \
         -lHalide $(TEST_LD_FLAGS) $(COMMON_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
-	@-echo
-
-test_internal: $(BIN_DIR)/test_internal
-	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; $(CURDIR)/$<
 	@-echo
 
 correctness_%: $(BIN_DIR)/correctness_%
