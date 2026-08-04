@@ -1236,14 +1236,7 @@ impl ThreadState {
             .unwrap_or_else(|| vec![0]);
         let n_threads = thread_ids.len();
 
-        let global_thread_ids: Vec<i32> = trace
-            .thread_ids_by_func
-            .values()
-            .flatten()
-            .copied()
-            .collect::<std::collections::BTreeSet<i32>>()
-            .into_iter()
-            .collect();
+        let global_thread_ids: Vec<i32> = trace.global_thread_ids.iter().copied().collect();
 
         // `-1` marks a pixel no store/load has touched yet.
         let thread_id_buffer = vec![-1; geom.width * geom.height];
