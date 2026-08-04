@@ -42,7 +42,7 @@ pub fn run() {
                         std::process::exit(0);
                     }
                     match matches.subcommand {
-                        Some(subcommand) => halidoscope_cli(subcommand),
+                        Some(subcommand) => halidoscope_cli(*subcommand),
                         None => {
                             tauri::WebviewWindowBuilder::from_config(
                                 app.handle(),

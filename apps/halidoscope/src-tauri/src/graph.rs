@@ -6,7 +6,7 @@ pub fn to_dot(dag_edges: &BTreeMap<String, BTreeSet<String>>) -> String {
 
     for (key, value) in dag_edges.iter() {
         for dest in value {
-            write!(dot, "\t{key} -> {dest}\n").unwrap_or_default();
+            writeln!(dot, "\t{key} -> {dest}").unwrap_or_default();
         }
     }
 

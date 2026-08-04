@@ -115,10 +115,7 @@ impl TraceMeta {
                     max_redundant_store_count: stats.max_redundant_store_count,
                     max_reuse_distance: stats.max_reuse_distance,
                     buffer_liveness: IndexRange::from_tuple(
-                        trace
-                            .func_buffer_liveness_range(name)
-                            .unwrap_or(&(0, 0))
-                            .clone(),
+                        *trace.func_buffer_liveness_range(name).unwrap_or(&(0, 0)),
                     ),
                     produce_ranges: trace
                         .func_produce_ranges(name)
@@ -142,8 +139,8 @@ impl TraceMeta {
                         .map_or(1, |ids| ids.len() as u32),
                     thread_ids: trace
                         .func_thread_ids(name)
-                        .map(|ids| ids.into_iter().map(|x| x.to_string()).collect())
-                        .unwrap_or_else(|| vec![]),
+                        .map(|ids| ids.iter().map(|x| x.to_string()).collect())
+                        .unwrap_or_default(),
                 }
             })
             .collect();
