@@ -1,7 +1,8 @@
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with
-code in this repository.
+code in this repository. Personal overrides (e.g. always preferring the
+Makefile) belong in a git-ignored `CLAUDE.local.md` in the repo root, not here.
 
 ## What this is
 
@@ -16,22 +17,30 @@ Vulkan, WebGPU).
 ## Building
 
 CMake (3.28+) is the supported build system; the top-level `Makefile` also works
-but is unsupported ("use at your own risk", can't build Python bindings or
-packages).
+and is preferred by some contributors, but is unsupported for third parties
+("use at your own risk", can't build Python bindings or packages). If instructed
+to use the Makefile, don't forget to verify that any new tests are added to the
+CMake build too before pushing.
 
-Halide needs LLVM 21, 22, or 23 (trunk also works). Easiest way to get one:
+Halide needs LLVM 21, 22, or 23 (trunk also works). Easiest way to get one is
+via a `uv`-managed Python virtual env; activate it before building so CMake can
+autodetect the LLVM install:
 
 ```shell
 $ uv sync --group ci-llvm-22 --no-install-project
-$ export Halide_LLVM_ROOT=$(halide-llvm --prefix)
+$ source .venv/bin/activate
 ```
 
 Basic build:
 
 ```shell
-$ cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release -DHalide_LLVM_ROOT=$Halide_LLVM_ROOT
+$ cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release
 $ cmake --build build
 ```
+
+If CMake can't find LLVM (e.g. the venv isn't active in the current shell), pass
+it explicitly: `-DHalide_LLVM_ROOT=$(halide-llvm --prefix)` (run `halide-llvm`
+from inside the venv to get the right absolute path).
 
 On macOS with Homebrew LLVM, `cmake --preset=macOS -S . -B build` finds it
 automatically. Other useful presets (see `CMakePresets.json`): `debug`,
@@ -101,6 +110,24 @@ It runs `clang-format` (C++, sorted includes), `clang-tidy` (via
   fixes — open a separate PR.
 - AI-assisted contributions require a `Co-authored-by:` trailer identifying the
   tool (see `CONTRIBUTING.md` for the exact format Halide expects).
+- Documentation, comments, and tutorials should match the existing style and
+  prose — keep explanations simple and concise. If a change makes any of these
+  out of date, identify and update them to match the implementation.
+
+## Common mistakes to avoid
+
+- Comments should describe the code as it is now, not the history of how it got
+  there — don't reference past bugs, prior implementations, or the current
+  task/PR in comments.
+- Prefer existing compiler machinery (`IRVisitor`/`IRMutator`/`IRMatch` helpers,
+  existing `Simplify` rules, etc.) over hand-rolling a new mechanism that
+  duplicates something already in the codebase.
+- Only amend or force-push commits that haven't been pushed yet; once a commit
+  is pushed, add new commits on top instead (PRs are squash-merged, so in-branch
+  history doesn't need to be pristine).
+- When benchmarking multiple things, run them sequentially, not in parallel —
+  concurrent runs contend for CPU/cache resources and produce misleading
+  numbers.
 
 ## Architecture
 
