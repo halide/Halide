@@ -50,6 +50,8 @@ namespace Halide {
 namespace Internal {
 namespace CpuDetect {
 
+// TODO: When we upgrade to C++20, replace these with concepts.
+
 struct SysctlSource {
 };
 
