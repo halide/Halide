@@ -246,6 +246,13 @@ tags
 TAGS
 
 ################################################################################
+## AI tooling
+
+# Claude Code user-specific overrides
+CLAUDE.local.md
+.claude/settings.local.json
+
+################################################################################
 ## Halide-specific rule overrides
 
 # Allow particular extension-less files
