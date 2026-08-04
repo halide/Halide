@@ -29,7 +29,7 @@ struct NodeDesc {
               SUB,
               ADD_CONST,
               SCALE_ADD } op;
-    int a = 0, b = 0;   // indices of input nodes (< this node's index)
+    int a = 0, b = 0;  // indices of input nodes (< this node's index)
     int ca = 0, cb = 0, cc = 0, k = 0;
 };
 
@@ -231,8 +231,7 @@ FUZZ_TEST(in_clone, FuzzingContext &fuzz) {
         }
 
         bool clone = fuzz.ConsumeBool();
-        Func wrapper = clone ? funcs[target].clone_in(funcs[consumer])
-                             : funcs[target].in(funcs[consumer]);
+        Func wrapper = clone ? funcs[target].clone_in(funcs[consumer]) : funcs[target].in(funcs[consumer]);
 
         // Mirror the rewrite in the model: a clone recomputes what the target
         // computed (same callees); a plain wrapper just reads from the target.
