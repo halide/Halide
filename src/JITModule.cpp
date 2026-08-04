@@ -918,15 +918,11 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         // msan doesn't work for jit modules
         target.set_feature(Target::MSAN, false);
 
-        Target one_gpu(target);
+        // Build a target that selects exactly one device runtime: strip all
+        // device-offload features (and their sub-features), then enable the
+        // single one this runtime module is for, below.
+        Target one_gpu = target.without_device_features();
         one_gpu.set_feature(Target::Debug, false);
-        one_gpu.set_feature(Target::OpenCL, false);
-        one_gpu.set_feature(Target::Metal, false);
-        one_gpu.set_feature(Target::CUDA, false);
-        one_gpu.set_feature(Target::HVX, false);
-        one_gpu.set_feature(Target::D3D12Compute, false);
-        one_gpu.set_feature(Target::Vulkan, false);
-        one_gpu.set_feature(Target::WebGPU, false);
         string module_name;
         switch (runtime_kind) {
         case OpenCLDebug:

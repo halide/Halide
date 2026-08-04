@@ -1533,7 +1533,6 @@ typedef enum halide_target_feature_t {
     halide_target_feature_sme_svl512,             ///< Assume ARM SME streaming vector length is 512 bits.
     halide_target_feature_sme_svl1024,            ///< Assume ARM SME streaming vector length is 1024 bits.
     halide_target_feature_sme_svl2048,            ///< Assume ARM SME streaming vector length is 2048 bits.
-    halide_target_feature_egl,                    ///< Force use of EGL support.
     halide_target_feature_arm_dot_prod,           ///< Enable ARMv8.2-a dotprod extension (i.e. udot and sdot instructions)
     halide_target_feature_arm_fp16,               ///< Enable ARMv8.2-a half-precision floating point data processing
     halide_llvm_large_code_model,                 ///< Use the LLVM large code model to compile

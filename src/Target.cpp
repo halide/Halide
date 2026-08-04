@@ -1,5 +1,7 @@
 #include <array>
 #include <iostream>
+#include <map>
+#include <set>
 #include <string>
 
 #include "Target.h"
@@ -848,7 +850,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"cl_doubles", Target::CLDoubles},
     {"cl_half", Target::CLHalf},
     {"cl_atomics64", Target::CLAtomics64},
-    {"egl", Target::EGL},
     {"user_context", Target::UserContext},
     {"profile", Target::Profile},
     {"no_runtime", Target::NoRuntime},
@@ -1009,8 +1010,7 @@ Target get_jit_target_from_environment() {
     }
 }
 
-namespace {
-bool merge_string(Target &t, const std::string &target) {
+bool Target::merge_string(Target &t, const std::string &target) {
     string rest = target;
     vector<string> tokens;
     size_t first_dash;
@@ -1041,33 +1041,35 @@ bool merge_string(Target &t, const std::string &target) {
                 return false;
             }
             bits_specified = true;
-            t.set_bits(std::stoi(tok));
+            t.bits_ = std::stoi(tok);
         } else if (Target::Arch arch; lookup_arch(tok, arch)) {
             if (arch_specified) {
                 return false;
             }
             arch_specified = true;
-            t.set_arch(arch);
+            t.arch_ = arch;
         } else if (Target::OS os; lookup_os(tok, os)) {
             if (os_specified) {
                 return false;
             }
             os_specified = true;
-            t.set_os(os);
+            t.os_ = os;
         } else if (Target::Processor processor_tune; lookup_processor(tok, processor_tune)) {
             if (processor_specified) {
                 return false;
             }
             processor_specified = true;
-            t.set_processor_tune(processor_tune);
+            t.processor_tune_ = processor_tune;
         } else if (lookup_feature(tok, feature)) {
-            t.set_feature(feature);
+            t.set_feature_raw(feature);
             features_specified = true;
         } else if (tok == "trace_all") {
-            t.set_features({Target::TraceLoads, Target::TraceStores, Target::TraceRealizations});
+            t.set_feature_raw(Target::TraceLoads);
+            t.set_feature_raw(Target::TraceStores);
+            t.set_feature_raw(Target::TraceRealizations);
             features_specified = true;
         } else if ((vector_bits = parse_vector_bits(tok)) >= 0) {
-            t.set_vector_bits(vector_bits);
+            t.vector_bits_ = vector_bits;
         } else {
             return false;
         }
@@ -1089,7 +1091,7 @@ bool merge_string(Target &t, const std::string &target) {
         !t.has_feature(Target::CUDACapability100) &&
         !t.has_feature(Target::CUDACapability120)) {
         // Detect host cuda capability
-        t.set_feature(get_host_cuda_capability(t));
+        t.set_feature_raw(get_host_cuda_capability(t));
     }
 
     if (is_host &&
@@ -1098,7 +1100,7 @@ bool merge_string(Target &t, const std::string &target) {
         !t.has_feature(Target::VulkanV12) &&
         !t.has_feature(Target::VulkanV13)) {
         // Detect host vulkan capability
-        t.set_feature(get_host_vulkan_capability(t));
+        t.set_feature_raw(get_host_vulkan_capability(t));
     }
 
     if (arch_specified && !bits_specified) {
@@ -1117,6 +1119,8 @@ bool merge_string(Target &t, const std::string &target) {
 
     return true;
 }
+
+namespace {
 
 void bad_target_string(const std::string &target) {
     const char *separator = "";
@@ -1179,6 +1183,86 @@ void do_check_bad(const Target &t, const std::initializer_list<Target::Feature> 
     }
 }
 
+// The processor-tuning values that are legal for each architecture, beyond the
+// universally-legal Target::ProcessorGeneric (which is omitted here and checked
+// as a fast path in validate_features()). Today only x86 defines specific CPU
+// tunings; per-CPU tunings for ARM or other arches would be added here. Any
+// Processor added to the enum should be listed for exactly one arch below.
+const std::map<Target::Arch, std::set<Target::Processor>> &legal_processors_by_arch() {
+    static const std::map<Target::Arch, std::set<Target::Processor>> table = {
+        {Target::X86,
+         {
+             Target::K8,
+             Target::K8_SSE3,
+             Target::AMDFam10,
+             Target::BtVer1,
+             Target::BdVer1,
+             Target::BdVer2,
+             Target::BdVer3,
+             Target::BdVer4,
+             Target::BtVer2,
+             Target::ZnVer1,
+             Target::ZnVer2,
+             Target::ZnVer3,
+             Target::ZnVer4,
+             Target::ZnVer5,
+         }},
+    };
+    return table;
+}
+
+// A processor tuning is specific to an architecture. ProcessorGeneric is always
+// legal; every other tuning is legal only for the architecture that defines it.
+bool processor_tune_valid_for_arch(Target::Processor p, Target::Arch a) {
+    if (p == Target::Processor::ProcessorGeneric) {
+        return true;
+    }
+    const auto &table = legal_processors_by_arch();
+    auto it = table.find(a);
+    return it != table.end() && it->second.count(p);
+}
+
+// Sub-features that refine a "parent" feature but do not imply it (so they are
+// not in implied_feature_pairs()): a capability/version/extension is only
+// meaningful when its parent device feature is also set. validate_features()
+// rejects a sub-feature whose parent is absent, and
+// Target::without_device_features() clears sub-features alongside their parent.
+// New capability/version features belong here.
+const std::map<Target::Feature, std::vector<Target::Feature>> &sub_features_by_parent() {
+    static const std::map<Target::Feature, std::vector<Target::Feature>> table = {
+        {
+            Target::CUDA,
+            {Target::CUDACapability30, Target::CUDACapability32, Target::CUDACapability35,
+             Target::CUDACapability50, Target::CUDACapability61, Target::CUDACapability70,
+             Target::CUDACapability75, Target::CUDACapability80, Target::CUDACapability86},
+        },
+        {
+            Target::OpenCL,
+            {Target::CLDoubles, Target::CLHalf, Target::CLAtomics64},
+        },
+        {
+            Target::Vulkan,
+            {Target::VulkanInt8, Target::VulkanInt16, Target::VulkanInt64,
+             Target::VulkanFloat16, Target::VulkanFloat64,
+             Target::VulkanV10, Target::VulkanV12, Target::VulkanV13},
+        },
+        {
+            Target::D3D12Compute,
+            {Target::HLSL_SM60, Target::HLSL_SM61, Target::HLSL_SM62, Target::HLSL_SM63,
+             Target::HLSL_SM64, Target::HLSL_SM65, Target::HLSL_SM66, Target::HLSL_SM67,
+             Target::HLSL_SM68, Target::HLSL_SM69},
+        },
+    };
+    return table;
+}
+
+// The scalable-vector features: ones whose vector width isn't fixed by the ISA
+// but is instead carried in the Target's vector_bits. vector_bits is only
+// meaningful when one of these is present.
+bool has_scalable_vector_feature(const Target &t) {
+    return t.features_any_of({Target::SVE, Target::SVE2, Target::RVV, Target::AVX10_1});
+}
+
 }  // namespace
 
 void Target::validate_features() const {
@@ -1188,7 +1272,16 @@ void Target::validate_features() const {
                                 ARMDotProd,
                                 ARMFp16,
                                 ARMv7s,
+                                ARMv8a,
                                 ARMv81a,
+                                ARMv82a,
+                                ARMv83a,
+                                ARMv84a,
+                                ARMv85a,
+                                ARMv86a,
+                                ARMv87a,
+                                ARMv88a,
+                                ARMv89a,
                                 NoNEON,
                                 POWER_ARCH_2_07,
                                 RVV,
@@ -1235,7 +1328,16 @@ void Target::validate_features() const {
                                 ARMDotProd,
                                 ARMFp16,
                                 ARMv7s,
+                                ARMv8a,
                                 ARMv81a,
+                                ARMv82a,
+                                ARMv83a,
+                                ARMv84a,
+                                ARMv85a,
+                                ARMv86a,
+                                ARMv87a,
+                                ARMv88a,
+                                ARMv89a,
                                 AVX,
                                 AVX2,
                                 AVXVNNI,
@@ -1271,20 +1373,16 @@ void Target::validate_features() const {
                             });
     }
 
-    // D3D12Compute SM version features require D3D12Compute to also be set.
-    if (!has_feature(D3D12Compute)) {
-        do_check_bad(*this, {
-                                HLSL_SM60,
-                                HLSL_SM61,
-                                HLSL_SM62,
-                                HLSL_SM63,
-                                HLSL_SM64,
-                                HLSL_SM65,
-                                HLSL_SM66,
-                                HLSL_SM67,
-                                HLSL_SM68,
-                                HLSL_SM69,
-                            });
+    // Sub-features (device capability/version/extension refinements) are only
+    // meaningful when their parent device feature is also set.
+    for (const auto &[parent, subs] : sub_features_by_parent()) {
+        if (!has_feature(parent)) {
+            for (Feature s : subs) {
+                user_assert(!has_feature(s))
+                    << "Target feature " << feature_to_name(s) << " requires "
+                    << feature_to_name(parent) << " to also be set. (" << *this << ")\n";
+            }
+        }
     }
 
     const int num_sme_svl_features =
@@ -1300,6 +1398,36 @@ void Target::validate_features() const {
         << "Target feature sme2 requires exactly one SME_SVL feature.\n";
     user_assert(has_feature(SME2) || num_sme_svl_features == 0)
         << "Target features SME_SVL128, SME_SVL256, SME_SVL512, SME_SVL1024, and SME_SVL2048 require target feature sme2.\n";
+
+    // Processor tuning must be legal for the architecture.
+    user_assert(processor_tune_valid_for_arch(processor_tune_, arch_))
+        << "The selected processor tuning is not valid for this architecture. (" << *this << ")\n";
+
+    // A vector_bits value only means something for scalable-vector targets;
+    // for everyone else the vector width is fixed by the ISA.
+    if (vector_bits_ != 0) {
+        user_assert(has_scalable_vector_feature(*this))
+            << "vector_bits is only meaningful for a target with a scalable vector "
+               "feature (SVE, SVE2, RVV, or AVX10_1). ("
+            << *this << ")\n";
+    }
+
+    // Large buffers are addressed with 64-bit indices, so they can't exist on a
+    // 32-bit target. (bits == 0 is left alone: the width is not yet known.)
+    if (has_feature(LargeBuffers)) {
+        user_assert(bits_ == 64 || bits_ == 0)
+            << "The large_buffers feature requires a 64-bit target. (" << *this << ")\n";
+    }
+
+    // profile and profile_by_timer are two implementations of the same feature.
+    user_assert(!(has_feature(Profile) && has_feature(ProfileByTimer)))
+        << "At most one of the profile and profile_by_timer features may be set. (" << *this << ")\n";
+
+    // The simulator feature selects the iOS simulator environment.
+    if (has_feature(Simulator)) {
+        user_assert(os_ == IOS || os_ == OSUnknown)
+            << "The simulator feature is only valid for the iOS operating system. (" << *this << ")\n";
+    }
 }
 
 Target::Target(const std::string &target) {
@@ -1449,7 +1577,7 @@ bool Target::has_unknowns() const {
     return os_ == OSUnknown || arch_ == ArchUnknown || bits_ == 0;
 }
 
-void Target::set_feature(Feature f, bool value) {
+void Target::set_feature_raw(Feature f, bool value) {
     if (f == FeatureEnd) {
         return;
     }
@@ -1457,10 +1585,83 @@ void Target::set_feature(Feature f, bool value) {
     features.set(f, value);
 }
 
-void Target::set_features(const std::vector<Feature> &features_to_set, bool value) {
-    for (Feature f : features_to_set) {
-        set_feature(f, value);
+void Target::set_arch(Arch a) {
+    Target candidate = *this;
+    candidate.arch_ = a;
+    // A processor tuning is architecture-specific; changing the arch can orphan
+    // it, just as removing a feature orphans the features it implied. Drop it
+    // rather than reject the new arch. (Setting an invalid tuning directly via
+    // set_processor_tune still errors.)
+    if (!processor_tune_valid_for_arch(candidate.processor_tune_, candidate.arch_)) {
+        candidate.processor_tune_ = Processor::ProcessorGeneric;
     }
+    candidate.validate_features();
+    *this = candidate;
+}
+
+void Target::set_os(OS o) {
+    Target candidate = *this;
+    candidate.os_ = o;
+    candidate.validate_features();
+    os_ = o;
+}
+
+void Target::set_bits(int b) {
+    user_assert(b == 0 || b == 32 || b == 64)
+        << "Target bits must be 0, 32, or 64; got " << b << ".\n";
+    Target candidate = *this;
+    candidate.bits_ = b;
+    candidate.validate_features();
+    bits_ = b;
+}
+
+void Target::set_vector_bits(int vb) {
+    user_assert(vb >= 0)
+        << "Target vector_bits must be non-negative; got " << vb << ".\n";
+    Target candidate = *this;
+    candidate.vector_bits_ = vb;
+    candidate.validate_features();
+    vector_bits_ = vb;
+}
+
+void Target::set_processor_tune(Processor pt) {
+    Target candidate = *this;
+    candidate.processor_tune_ = pt;
+    candidate.validate_features();
+    processor_tune_ = pt;
+}
+
+void Target::set_feature(Feature f, bool value) {
+    if (f == FeatureEnd) {
+        return;
+    }
+    user_assert(f < FeatureEnd) << "Invalid Target feature.\n";
+    Target candidate = *this;
+    candidate.features.set(f, value);
+    // vector_bits is meaningless without a scalable-vector feature; drop it if
+    // this change removed the last one (e.g. deriving a non-SVE target).
+    if (candidate.vector_bits_ != 0 && !has_scalable_vector_feature(candidate)) {
+        candidate.vector_bits_ = 0;
+    }
+    candidate.validate_features();
+    *this = candidate;
+}
+
+void Target::set_features(const std::vector<Feature> &features_to_set, bool value) {
+    // Set every feature into a candidate copy and validate once, so that a
+    // batch that is only valid as a whole (e.g. an HLSL shader-model feature
+    // together with d3d12compute) is accepted regardless of order.
+    Target candidate = *this;
+    for (Feature f : features_to_set) {
+        candidate.set_feature_raw(f, value);
+    }
+    // vector_bits is meaningless without a scalable-vector feature; drop it if
+    // this batch removed the last one (e.g. deriving a non-SVE target).
+    if (candidate.vector_bits_ != 0 && !has_scalable_vector_feature(candidate)) {
+        candidate.vector_bits_ = 0;
+    }
+    candidate.validate_features();
+    *this = candidate;
 }
 
 namespace {
@@ -1626,6 +1827,33 @@ Target Target::with_feature(Feature f) const {
 Target Target::without_feature(Feature f) const {
     Target copy = *this;
     copy.set_feature(f, false);
+    return copy;
+}
+
+Target Target::without_device_features() const {
+    // Every feature that selects a device-offload runtime. Clearing one must
+    // also clear its dependent sub-features (via sub_features_by_parent),
+    // otherwise the result would be an internally-inconsistent Target.
+    static const Feature device_features[] = {
+        CUDA,
+        OpenCL,
+        Metal,
+        HVX,
+        D3D12Compute,
+        Vulkan,
+        WebGPU,
+    };
+    Target copy = *this;
+    const auto &subs = sub_features_by_parent();
+    for (Feature parent : device_features) {
+        copy.set_feature_raw(parent, false);
+        auto it = subs.find(parent);
+        if (it != subs.end()) {
+            for (Feature s : it->second) {
+                copy.set_feature_raw(s, false);
+            }
+        }
+    }
     return copy;
 }
 

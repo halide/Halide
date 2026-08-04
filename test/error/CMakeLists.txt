@@ -127,6 +127,19 @@ tests(
     store_root_without_compute_root.cpp
     stream_loads_illegal_self.cpp
     stream_stores_illegal_rvar.cpp
+    target_bad_bit_width.cpp
+    target_feature_wrong_arch.cpp
+    target_hexagon_without_hvx.cpp
+    target_invalid_feature.cpp
+    target_jit_no_bounds_query.cpp
+    target_large_buffers_requires_64_bit.cpp
+    target_negative_vector_bits.cpp
+    target_processor_wrong_arch.cpp
+    target_profile_and_profile_by_timer.cpp
+    target_simulator_requires_ios.cpp
+    target_subfeature_without_parent.cpp
+    target_unrecognized_feature.cpp
+    target_vector_bits_without_scalable_feature.cpp
     thread_id_outside_block_id.cpp
     too_many_args.cpp
     treat_rvar_as_var.cpp

@@ -108,7 +108,6 @@ struct Target {
         CLDoubles = halide_target_feature_cl_doubles,
         CLHalf = halide_target_feature_cl_half,
         CLAtomics64 = halide_target_feature_cl_atomic64,
-        EGL = halide_target_feature_egl,
         UserContext = halide_target_feature_user_context,
         Profile = halide_target_feature_profile,
         NoRuntime = halide_target_feature_no_runtime,
@@ -201,10 +200,14 @@ struct Target {
     Target() = default;
     Target(OS o, Arch a, int b, Processor pt, const std::vector<Feature> &initial_features = std::vector<Feature>(),
            int vb = 0)
-        : os_(o), arch_(a), bits_(b), vector_bits_(vb), processor_tune_(pt) {
+        : os_(o), arch_(a), processor_tune_(pt) {
+        set_bits(b);
         for (const auto &f : initial_features) {
-            set_feature(f);
+            set_feature_raw(f);
         }
+        // Set vector_bits after the features, since its validity depends on
+        // them (a scalable-vector feature must be present).
+        set_vector_bits(vb);
         validate_features();
     }
 
@@ -283,6 +286,12 @@ struct Target {
      * a const reference. */
     Target without_feature(Feature f) const;
 
+    /** Return a copy of the target with every device-offload feature (CUDA,
+     * OpenCL, Metal, Hexagon/HVX, D3D12Compute, Vulkan, WebGPU) and their
+     * dependent sub-features (e.g. cuda capabilities, vulkan versions) cleared.
+     * Useful for building a runtime that targets exactly one device API. */
+    Target without_device_features() const;
+
     /** Is a fully feature GPU compute runtime enabled? I.e. is
      * Func::gpu_tile and similar going to work? Currently includes
      * CUDA, OpenCL, Metal and D3D12Compute. */
@@ -311,41 +320,35 @@ struct Target {
      * will be an arbitrary DeviceAPI. */
     DeviceAPI get_required_device_api() const;
 
-    /** Getters and setters for target properties. */
+    /** Getters and setters for target properties.
+     *
+     * The setters validate their result: a setter that would produce a Target
+     * which is internally inconsistent fails with a user_error and leaves the
+     * Target unchanged. */
     OS os() const {
         return os_;
     }
-    void set_os(OS o) {
-        os_ = o;
-    }
+    void set_os(OS o);
 
     Arch arch() const {
         return arch_;
     }
-    void set_arch(Arch a) {
-        arch_ = a;
-    }
+    void set_arch(Arch a);
 
     int bits() const {
         return bits_;
     }
-    void set_bits(int b) {
-        bits_ = b;
-    }
+    void set_bits(int b);
 
     int vector_bits() const {
         return vector_bits_;
     }
-    void set_vector_bits(int vb) {
-        vector_bits_ = vb;
-    }
+    void set_vector_bits(int vb);
 
     Processor processor_tune() const {
         return processor_tune_;
     }
-    void set_processor_tune(Processor pt) {
-        processor_tune_ = pt;
-    }
+    void set_processor_tune(Processor pt);
 
     bool operator==(const Target &other) const {
         return os_ == other.os_ &&
@@ -468,6 +471,14 @@ private:
      * This is *not* guaranteed to get all invalid combinations, but is intended
      * to catch at least the most common (e.g., setting arm-specific features on x86). */
     void validate_features() const;
+
+    /** Set (or clear) a feature bit without running validation. */
+    void set_feature_raw(Feature f, bool value = true);
+
+    /** Parse a target string into \p t, without validating that the resulting
+     * feature set is sensible for the arch. Returns false if the string is not
+     * well-formed. */
+    static bool merge_string(Target &t, const std::string &target);
 };
 
 /** Return the target corresponding to the host machine. */

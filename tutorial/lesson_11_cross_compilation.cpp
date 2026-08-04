@@ -90,7 +90,12 @@ int main() {
     // We then pass the target as the last argument to compile_to_file.
     brighter.compile_to_file("lesson_11_arm_32_android", args, "brighter", target);
 
-    // And now a Windows object file for 64-bit x86 with AVX and SSE 4.1:
+    // And now a Windows object file for 64-bit x86 with AVX and SSE 4.1.
+    // Each cross-compilation target is independent, so start from a fresh
+    // Target rather than mutating the previous one: features that were
+    // meaningful for the last architecture (or missing for this one) would
+    // otherwise linger and produce an inconsistent target.
+    target = Target();
     target.set_os(Target::Windows);
     target.set_arch(Target::X86);
     target.set_bits(64);
@@ -106,6 +111,7 @@ int main() {
     // this using the target features field.  Support for Apple's
     // 64-bit ARM processors is very new in llvm, and still somewhat
     // flaky.
+    target = Target();
     target.set_os(Target::IOS);
     target.set_arch(Target::ARM);
     target.set_bits(32);
