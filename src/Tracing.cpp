@@ -73,9 +73,6 @@ public:
         : env(e),
           trace_all_loads(t.has_feature(Target::TraceLoads)),
           trace_all_stores(t.has_feature(Target::TraceStores)),
-          // TraceLoads and TraceStores imply TraceRealizations (see
-          // set_implied_features), because tracing loads or stores doesn't work
-          // without the enclosing realization begin/end events.
           trace_all_realizations(t.has_feature(Target::TraceRealizations)) {
     }
 

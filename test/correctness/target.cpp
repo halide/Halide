@@ -224,7 +224,7 @@ int main(int argc, char **argv) {
         return 1;
     }
     ts = t1.to_string();
-    if (ts != "arm-64-linux-armv8a") {
+    if (ts != "arm-64-linux-armv83a") {
         printf("get_runtime_compatible_target failure: %s\n", ts.c_str());
         return 1;
     }
@@ -248,7 +248,7 @@ int main(int argc, char **argv) {
     const GcdTest gcd_tests[] = {
         {"x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma"},
         {"x86-64-linux-sse41-fma-no_asserts-no_runtime", "x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma"},
-        {"x86-64-linux-avx2-sse41", "x86-64-linux-sse41-fma", "x86-64-linux-sse41"},
+        {"x86-64-linux-avx2-sse41", "x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma"},
         {"x86-64-linux-avx2-sse41", "x86-32-linux-sse41-fma", ""},
         {"x86-64-linux-cuda", "x86-64-linux", "x86-64-linux-cuda"},
         {"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda", "x86-64-linux-cuda"},
@@ -321,70 +321,88 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // Feature implications. Each entry is {input, set_implied_features result,
-    // set-then-unset (minimal) result}.
+    // Feature implications. Each entry is {input, complete representation,
+    // minimal representation}.
     struct ImpliedTest {
         const char *input;
-        const char *set_implied;
+        const char *complete;
         const char *minimal;
     };
     const ImpliedTest implied_tests[] = {
         // x86 AVX family
         {"x86-64-linux-avx2",
-         "x86-64-linux-sse41-avx-avx2-f16c-fma",
+         "x86-64-linux-avx-avx2-f16c-fma-sse41",
          "x86-64-linux-avx2"},
         {"x86-64-linux-avx512_skylake",
-         "x86-64-linux-sse41-avx-avx2-f16c-fma-avx512-avx512_skylake",
+         "x86-64-linux-avx-avx2-avx512-avx512_skylake-f16c-fma-sse41",
          "x86-64-linux-avx512_skylake"},
         {"x86-64-linux-avx512_sapphirerapids",
-         "x86-64-linux-sse41-avx-avx2-f16c-fma-avxvnni-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4-avx512_sapphirerapids",
+         "x86-64-linux-avx-avx2-avx512-avx512_cannonlake-avx512_sapphirerapids-avx512_skylake-avx512_zen4-avxvnni-f16c-fma-sse41",
          "x86-64-linux-avx512_sapphirerapids"},
         // Redundantly-specified features collapse to the minimal form.
         {"x86-64-linux-sse41-avx-avx2-f16c-fma",
-         "x86-64-linux-sse41-avx-avx2-f16c-fma",
+         "x86-64-linux-avx-avx2-f16c-fma-sse41",
          "x86-64-linux-avx2"},
         // AVX10.1 implications depend on vector_bits.
         {"x86-64-linux-avx10_1-vector_bits_512",
-         "x86-64-linux-sse41-avx-avx2-f16c-fma-avxvnni-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4-avx512_sapphirerapids-avx10_1-vector_bits_512",
+         "x86-64-linux-avx-avx10_1-avx2-avx512-avx512_cannonlake-avx512_sapphirerapids-avx512_skylake-avx512_zen4-avxvnni-f16c-fma-sse41-vector_bits_512",
          "x86-64-linux-avx10_1-vector_bits_512"},
         {"x86-64-linux-avx10_1",
          "x86-64-linux-avx10_1",
          "x86-64-linux-avx10_1"},
         // ARM v8.x cascade, and SVE/SVE2 cascading through arm_fp16.
         {"arm-64-linux-armv84a",
-         "arm-64-linux-armv8a-armv81a-armv82a-armv83a-armv84a",
+         "arm-64-linux-armv81a-armv82a-armv83a-armv84a-armv8a",
          "arm-64-linux-armv84a"},
         {"arm-64-linux-sve2",
-         "arm-64-linux-armv8a-armv81a-armv82a-arm_fp16-arm_dot_prod-sve2",
+         "arm-64-linux-arm_dot_prod-arm_fp16-armv81a-armv82a-armv8a-sve2",
          "arm-64-linux-sve2"},
         {"arm-64-linux-sme2-sme_svl512",
          "arm-64-linux-armv8a-armv81a-armv82a-arm_fp16-arm_dot_prod-sme2-sme_svl512",
          "arm-64-linux-sme2-sme_svl512"},
         // Apple silicon implies at least ARM v8.4a.
         {"arm-64-osx",
-         "arm-64-osx-armv8a-armv81a-armv82a-armv83a-armv84a",
+         "arm-64-osx-armv81a-armv82a-armv83a-armv84a-armv8a",
          "arm-64-osx"},
         // Tracing loads/stores implies tracing realizations.
         {"x86-64-linux-trace_loads",
          "x86-64-linux-trace_loads-trace_realizations",
          "x86-64-linux-trace_loads"},
+        // Ordered device capability/version chains.
+        {"x86-64-linux-cuda-cuda_capability_50",
+         "x86-64-linux-cuda-cuda_capability_30-cuda_capability_32-cuda_capability_35-cuda_capability_50",
+         "x86-64-linux-cuda-cuda_capability_50"},
+        {"x86-64-linux-vulkan-vk_v13",
+         "x86-64-linux-vk_v10-vk_v12-vk_v13-vulkan",
+         "x86-64-linux-vk_v13-vulkan"},
+        {"x86-64-windows-d3d12compute-hlsl_sm63",
+         "x86-64-windows-d3d12compute-hlsl_sm60-hlsl_sm61-hlsl_sm62-hlsl_sm63",
+         "x86-64-windows-d3d12compute-hlsl_sm63"},
     };
     for (const auto &test : implied_tests) {
-        Target set_result(test.input);
-        set_result.set_implied_features();
-        if (set_result.get_features_bitset() != Target(test.set_implied).get_features_bitset()) {
-            printf("set_implied_features(%s) gave %s but expected %s\n",
-                   test.input, set_result.to_string().c_str(), test.set_implied);
+        const Target result(test.input);
+        if (result.to_complete_string() != test.complete) {
+            printf("The complete form of %s was %s but expected %s\n",
+                   test.input, result.to_complete_string().c_str(), test.complete);
             return 1;
         }
-        Target norm_result(test.input);
-        norm_result.set_implied_features();
-        norm_result.unset_implied_features();
-        if (norm_result.get_features_bitset() != Target(test.minimal).get_features_bitset()) {
-            printf("set then unset implied features on %s gave %s but expected %s\n",
-                   test.input, norm_result.to_string().c_str(), test.minimal);
+        if (result.to_string() != test.minimal) {
+            printf("The minimal form of %s was %s but expected %s\n",
+                   test.input, result.to_string().c_str(), test.minimal);
             return 1;
         }
+        if (Target(result.to_string()) != result) {
+            printf("The minimal form of %s did not round-trip\n", test.input);
+            return 1;
+        }
+    }
+
+    if (Target("x86-64-linux-cuda-cuda_capability_80").get_cuda_capability_lower_bound() != 80 ||
+        Target("x86-64-linux-vulkan-vk_v13").get_vulkan_capability_lower_bound() != 13 ||
+        Target("x86-64-windows-d3d12compute-hlsl_sm67").get_d3d12compute_capability_lower_bound() != 67 ||
+        Target("arm-64-linux-armv88a").get_arm_v8_lower_bound() != 88) {
+        printf("Capability lower-bound getter failure\n");
+        return 1;
     }
 
     printf("Success!\n");

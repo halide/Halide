@@ -200,18 +200,14 @@ void test_one_target(FuzzingContext &fuzz) {
         check_roundtrip(t);
     }
 
-    // Check that implied-feature canonicalization round-trips safely.
-    check_roundtrip(t.with_implied_features());
-    check_roundtrip(t.without_implied_features());
-
-    // Check that implied-feature canonicalization is idempotent
-    const Target wi = t.with_implied_features();
-    require(wi.with_implied_features() == wi,
-            "with_implied_features() is not idempotent:\n  " + t.to_string());
-
-    const Target wo = t.without_implied_features();
-    require(wo.without_implied_features() == wo,
-            "without_implied_features() is not idempotent:\n  " + t.to_string());
+    // Both the minimal public representation and the complete debugging
+    // representation must name the same Target.
+    if (!t.has_unknowns()) {
+        std::string complete = t.to_complete_string();
+        require(Target(complete) == t,
+                "Round-trip through to_complete_string() changed the target:\n  " +
+                    complete);
+    }
 }
 
 }  // namespace

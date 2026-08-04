@@ -531,10 +531,8 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
 
     const Module &old_module = contents->module;
 
-    // A lowered module stores the target with implied features set, so compare
-    // against the same normalized form of the requested target.
     bool same_compile = !old_module.functions().empty() &&
-                        old_module.target() == target.with_implied_features();
+                        old_module.target() == target;
     // Either generated name or one of the LoweredFuncs in the existing module has the same name.
     same_compile = same_compile && fn_name.empty();
     bool found_name = false;
