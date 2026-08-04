@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <iostream>
 #include <limits>
@@ -3575,6 +3576,36 @@ std::optional<std::string> nonempty_dense_update_precondition(const Function &fn
     return std::nullopt;
 }
 
+// The largest (and, by symmetry, most negative) integer exactly representable
+// in floating-point type `t`: 2^(significant bits), where significant bits
+// counts the mantissa plus its implicit leading one. Bounding a reduction by
+// this range instead of `t`'s full dynamic range ensures an integer
+// accumulation retyped to `t` is exact, not merely finite.
+ConstantInterval float_exact_integer_bounds(Type t) {
+    int significant_bits;
+    if (t.is_bfloat()) {
+        internal_assert(t.bits() == 16) << "Unhandled bfloat width in change_type()\n";
+        significant_bits = 8;  // 7 explicit mantissa bits + 1 implicit
+    } else {
+        switch (t.bits()) {
+        case 16:
+            significant_bits = 11;
+            break;
+        case 32:
+            significant_bits = 24;
+            break;
+        case 64:
+            significant_bits = 53;
+            break;
+        default:
+            internal_error << "Unhandled float width in change_type()\n";
+            significant_bits = 0;
+        }
+    }
+    const int64_t bound = (int64_t)1 << significant_bits;
+    return ConstantInterval(-bound, bound);
+}
+
 // Prove that computing `typed`'s reduction at type `t` cannot overflow. Returns
 // true if it is safe; if safety can only be guaranteed under a runtime
 // precondition, that condition is returned in *condition. Returns an error
@@ -3584,7 +3615,13 @@ std::optional<std::string> change_type_prove_safe(
 ) {
     *condition = Expr();
     const Function fn = typed.function();
-    ConstantInterval limit = ConstantInterval::bounds_of_type(t);
+    // A float target's bounds machinery limit is the largest exactly
+    // representable integer, not its full dynamic range: an accumulation that
+    // overflows that range would silently round instead of erroring, so it
+    // must be caught here just like integer overflow is.
+    ConstantInterval limit = t.is_float() ?
+                                 float_exact_integer_bounds(t) :
+                                 ConstantInterval::bounds_of_type(t);
     if (!limit.max_defined) {
         // ConstantInterval cannot represent UInt(64)'s true upper bound. Use the
         // largest representable conservative subset rather than treating an
@@ -3604,6 +3641,18 @@ std::optional<std::string> change_type_prove_safe(
         Expr v = e;
         if (const Cast *c = v.as<Cast>()) {
             v = c->value;
+        }
+        // retype_leaf() may have folded a leaf directly into a float constant
+        // (e.g. a literal seed retyped to a float target) rather than leaving
+        // a Cast to strip. constant_integer_bounds() only reasons about
+        // integer-typed expressions, so recover such a leaf's exact integer
+        // value here; a non-integer float constant falls through to the
+        // type-based (unbounded) fallback below, same as before this check
+        // was added.
+        if (v.type().is_float()) {
+            if (optional<double> fv = as_const_float(v); fv && std::floor(*fv) == *fv) {
+                return ConstantInterval::single_point((int64_t)*fv);
+            }
         }
         auto cache = cache_call_bounds(v, fvb);
         return constant_integer_bounds(v, Scope<ConstantInterval>::empty_scope(), &cache);
@@ -3807,7 +3856,7 @@ Func Func::change_type(Type t, bool unsafe) {
     }
 
     // Safety check.
-    if (!unsafe && t.is_int_or_uint()) {
+    if (!unsafe && (t.is_int_or_uint() || t.is_float())) {
         Expr condition;
         const auto err = change_type_prove_safe(typed, t, func_bounds, &condition);
         user_assert(!err)

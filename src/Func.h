@@ -2670,9 +2670,13 @@ public:
      * instructions). Schedule the returned Func to control the retyped
      * computation.
      *
-     * The change is validated with the bounds machinery: for an integer target,
-     * change_type() proves the accumulation cannot overflow by combining the
-     * per-term value range with the reduction extent. If it can only be
+     * The change is validated with the bounds machinery: for an integer or
+     * floating-point target, change_type() proves the accumulation cannot
+     * overflow (or, for a float target, lose precision) by combining the
+     * per-term value range with the reduction extent. A float target is
+     * checked against the largest integer it can represent exactly (e.g. 2048
+     * for float16), not its full dynamic range, so an integer accumulation
+     * retyped to it stays exact rather than merely finite. If it can only be
      * guaranteed under a runtime precondition (e.g. the RDom extent isn't too
      * wide), that precondition is injected into the pipeline's assertion block
      * (and removed by the no_asserts target feature). If safety cannot be

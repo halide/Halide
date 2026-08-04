@@ -948,6 +948,271 @@ int change_type_static_extent_count_does_not_overflow_test() {
     return 0;
 }
 
+// A float target is checked against the largest integer it can represent
+// exactly (2048 for float16), not its much larger dynamic range, so an
+// integer-valued accumulation retyped to it stays exact.
+int change_type_float_target_precision_test() {
+    const int K = 10;
+    ImageParam A{Int(8), 1, "A_f16_safe"};
+
+    Var i{"i"};
+    RDom r(0, K, "r");
+
+    Func Acc{"Acc_f16_safe"};
+    Acc(i) = cast<double>(0);
+    Acc(i) += cast<double>(A(r));
+
+    // K terms of magnitude at most 4 sum to at most 40, well within float16's
+    // exactly-representable range of [-2048, 2048].
+    Func Acc_f16 = Acc.change_type(Float(16));
+    internal_assert(Acc_f16.types()[0] == Float(16))
+        << "change_type float target: expected Float(16), got " << Acc_f16.types()[0] << "\n";
+    Acc_f16.compute_root();
+
+    Buffer<int8_t> a(K);
+    for (int k = 0; k < K; k++) {
+        a(k) = (int8_t)((k % 9) - 4);
+    }
+    A.set(a);
+
+    Buffer<double> result = Acc.realize({4});
+    double sum = 0;
+    for (int k = 0; k < K; k++) {
+        sum += a(k);
+    }
+    for (int m = 0; m < 4; m++) {
+        internal_assert(result(m) == sum)
+            << "change_type float target mismatch at " << m << ": " << result(m)
+            << " vs " << sum << "\n";
+    }
+    return 0;
+}
+
+// A sum whose magnitude can exceed float16's exactly-representable range must
+// be rejected just like an integer overflow would be: past that range,
+// retyping the accumulator to Float(16) would silently round instead of
+// producing the exact integer result.
+int change_type_float_target_precision_rejected_test() {
+#if HALIDE_WITH_EXCEPTIONS
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
+
+    const int K = 100;
+
+    {
+        ImageParam A{Int(8), 1, "A_f16_unsafe"};
+        Var i{"i"};
+        RDom r(0, K, "r");
+
+        Func Acc{"Acc_f16_unsafe"};
+        Acc(i) = cast<double>(0);
+        Acc(i) += cast<double>(A(r));  // magnitude up to 100 * 127 = 12700
+
+        bool threw = false;
+        try {
+            Acc.change_type(Float(16));
+        } catch (const Halide::CompileError &) {
+            threw = true;
+        }
+        internal_assert(threw)
+            << "change_type(Float(16)) should reject a sum whose magnitude can reach "
+            << "12700, well past float16's exactly-representable range of 2048\n";
+    }
+
+    // With unsafe = true the caller takes responsibility and it is allowed.
+    {
+        ImageParam A{Int(8), 1, "A_f16_bypass"};
+        Var i{"i"};
+        RDom r(0, K, "r");
+
+        Func Acc{"Acc_f16_bypass"};
+        Acc(i) = cast<double>(0);
+        Acc(i) += cast<double>(A(r));
+
+        Func Acc_f16 = Acc.change_type(Float(16), /*unsafe*/ true);
+        internal_assert(Acc_f16.types()[0] == Float(16))
+            << "unsafe change_type should proceed despite possible precision loss\n";
+    }
+#endif
+    return 0;
+}
+
+// A second update stage that clamps the accumulator with a big minimum does
+// not relax the safety check on the summation before it: the accumulator is
+// physically stored as `t` between stages, so a sum that can overflow `t` is
+// unsafe even though the later min brings the final result back into range.
+int change_type_sum_then_clamp_test() {
+#if HALIDE_WITH_EXCEPTIONS
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
+
+    const int K = 100;
+
+    {
+        ImageParam A{Int(8), 1, "A_sum_then_clamp_narrow"};
+        Var i{"i"};
+        RDom r(0, K, "r");
+
+        Func Acc{"Acc_sum_then_clamp_narrow"};
+        Acc(i) = 0.0f;
+        Acc(i) += cast<float>(A(r));     // magnitude up to 100 * 127 = 12700
+        Acc(i) = min(Acc(i), 10000.0f);  // clamps the final result, not the running sum
+
+        bool threw = false;
+        try {
+            Acc.change_type(Int(8));
+        } catch (const Halide::CompileError &) {
+            threw = true;
+        }
+        internal_assert(threw)
+            << "change_type(Int(8)) should reject a sum that overflows Int(8) before "
+            << "the clamp ever runs\n";
+    }
+
+    // Int(16) comfortably holds the intermediate sum, so the clamp is just an
+    // ordinary min reduction stacked on top of it and this must succeed.
+    {
+        ImageParam A{Int(8), 1, "A_sum_then_clamp_wide"};
+        Var i{"i"};
+        RDom r(0, K, "r");
+
+        Func Acc{"Acc_sum_then_clamp_wide"};
+        Acc(i) = 0.0f;
+        Acc(i) += cast<float>(A(r));
+        Acc(i) = min(Acc(i), 10000.0f);
+
+        Func Acc_i16 = Acc.change_type(Int(16));
+        Acc_i16.compute_root();
+
+        Buffer<int8_t> a(K);
+        for (int k = 0; k < K; k++) {
+            a(k) = (int8_t)((k * 31) % 255 - 127);
+        }
+        A.set(a);
+
+        Buffer<float> result = Acc.realize({4});
+        int32_t sum = 0;
+        for (int k = 0; k < K; k++) {
+            sum += (int32_t)a(k);
+        }
+        const float expected = std::min((float)sum, 10000.0f);
+        for (int m = 0; m < 4; m++) {
+            internal_assert(result(m) == expected)
+                << "change_type sum-then-clamp mismatch at " << m << ": " << result(m)
+                << " vs " << expected << "\n";
+        }
+    }
+#endif
+    return 0;
+}
+
+// A scan's self-reference is offset from the update's own coordinate (e.g.
+// Acc(r-1) inside the update that defines Acc(r)), but change_type() treats
+// any direct call to the accumulator as its self-reference regardless of
+// offset, so the same reduction-extent bound applies as for a plain
+// reduction: the worst case is every increment landing on a single output
+// location.
+int change_type_sum_scan_test() {
+    const int K = 100;
+    ImageParam A{Int(8), 1, "A_scan"};
+
+    Var x{"x"};
+    RDom r(1, K - 1, "r");
+
+    Func Acc{"Acc_scan"};
+    Acc(x) = cast<float>(A(0));
+    Acc(r) = Acc(r - 1) + cast<float>(A(r));
+
+    // The worst-case bound treats all K-1 increments as landing on a single
+    // output element: (K - 1) * 127 = 12573 in magnitude, which fits Int(16).
+    Func Acc_i16 = Acc.change_type(Int(16));
+    internal_assert(Acc_i16.types()[0] == Int(16))
+        << "change_type scan: expected Int(16), got " << Acc_i16.types()[0] << "\n";
+    Acc_i16.compute_root();
+
+    Buffer<int8_t> a(K);
+    for (int k = 0; k < K; k++) {
+        a(k) = (int8_t)((k * 31) % 255 - 127);
+    }
+    A.set(a);
+
+    Buffer<float> result = Acc.realize({K});
+    int32_t running = a(0);
+    internal_assert(result(0) == (float)running)
+        << "change_type scan mismatch at 0: " << result(0) << " vs " << running << "\n";
+    for (int k = 1; k < K; k++) {
+        running += (int32_t)a(k);
+        internal_assert(result(k) == (float)running)
+            << "change_type scan mismatch at " << k << ": " << result(k)
+            << " vs " << running << "\n";
+    }
+    return 0;
+}
+
+// A histogram's update writes to whichever bin A(r) selects, so any of the K
+// increments could scatter into the same bin. change_type() bounds it exactly
+// like a sum into a single accumulator, by (extent) * (per-term magnitude),
+// rather than by the (much smaller) count any single bin can actually reach.
+int change_type_histogram_test() {
+    const int K = 200;
+    const int NBINS = 8;
+
+#if HALIDE_WITH_EXCEPTIONS
+    if (Halide::exceptions_enabled()) {
+        ImageParam A{UInt(8), 1, "A_hist_narrow"};
+        Var i{"i"};
+        RDom r(0, K, "r");
+
+        Func Hist{"Hist_narrow"};
+        Hist(i) = 0.0f;
+        Hist(cast<int>(A(r)) % NBINS) += 1.0f;
+
+        bool threw = false;
+        try {
+            Hist.change_type(Int(8));
+        } catch (const Halide::CompileError &) {
+            threw = true;
+        }
+        internal_assert(threw)
+            << "change_type(Int(8)) should reject a histogram whose 200 increments "
+            << "could all land in the same bin\n";
+    }
+#endif
+
+    ImageParam A{UInt(8), 1, "A_hist_wide"};
+    Var i{"i"};
+    RDom r(0, K, "r");
+
+    Func Hist{"Hist_wide"};
+    Hist(i) = 0.0f;
+    Hist(cast<int>(A(r)) % NBINS) += 1.0f;
+
+    Func Hist_i16 = Hist.change_type(Int(16));
+    internal_assert(Hist_i16.types()[0] == Int(16))
+        << "change_type histogram: expected Int(16), got " << Hist_i16.types()[0] << "\n";
+    Hist_i16.compute_root();
+
+    Buffer<uint8_t> a(K);
+    for (int k = 0; k < K; k++) {
+        a(k) = (uint8_t)(k * 37);
+    }
+    A.set(a);
+
+    Buffer<float> result = Hist.realize({NBINS});
+    int32_t expected[NBINS] = {0};
+    for (int k = 0; k < K; k++) {
+        expected[(int)a(k) % NBINS]++;
+    }
+    for (int b = 0; b < NBINS; b++) {
+        internal_assert(result(b) == (float)expected[b])
+            << "change_type histogram mismatch at bin " << b << ": " << result(b)
+            << " vs " << expected[b] << "\n";
+    }
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -1033,6 +1298,26 @@ int main(int argc, char **argv) {
     }
     printf("Running change_type_static_extent_count_does_not_overflow_test\n");
     if (change_type_static_extent_count_does_not_overflow_test()) {
+        return 1;
+    }
+    printf("Running change_type_float_target_precision_test\n");
+    if (change_type_float_target_precision_test()) {
+        return 1;
+    }
+    printf("Running change_type_float_target_precision_rejected_test\n");
+    if (change_type_float_target_precision_rejected_test()) {
+        return 1;
+    }
+    printf("Running change_type_sum_then_clamp_test\n");
+    if (change_type_sum_then_clamp_test()) {
+        return 1;
+    }
+    printf("Running change_type_sum_scan_test\n");
+    if (change_type_sum_scan_test()) {
+        return 1;
+    }
+    printf("Running change_type_histogram_test\n");
+    if (change_type_histogram_test()) {
         return 1;
     }
 
