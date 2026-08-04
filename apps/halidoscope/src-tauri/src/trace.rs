@@ -165,8 +165,7 @@ impl TracePacket {
 
 // ── Per-Func statistics ───────────────────────────────────────────────────────
 
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct FuncStats {
     pub name: String,
     pub min_coords: Vec<i32>,
@@ -187,7 +186,6 @@ pub struct FuncStats {
     pub max_reuse_distance: u64,
 }
 
-
 /// Full spatial layout of a Func: pixel dimensions plus the channel axis (logical dim 2).
 #[derive(Debug, Clone, Copy)]
 pub struct FuncGeometry {
@@ -203,7 +201,7 @@ pub struct FuncGeometry {
     pub max_reuse_distance: u64,
 }
 
-// ── Complete trace ────────────────────────────────────────────────────────────
+// ── Complete trace ───────────────────────────────────────────────────────────────────────────────
 
 // Note: We use BTreeMaps for deterministic iteration order here. We could consider switching to
 // HashMaps to get O(1) lookups if we find Func lookup starts to become a bottleneck.
@@ -217,9 +215,14 @@ pub struct Trace {
     pub produce_ranges_by_func: BTreeMap<String, Vec<(u32, u32)>>,
     pub consume_ranges_by_func: BTreeMap<String, Vec<(u32, u32)>>,
     pub thread_ids_by_func: BTreeMap<String, BTreeSet<i32>>,
+    pub global_max_store_count: u32,
+    pub global_max_load_count: u32,
+    pub global_max_redundant_store_count: u32,
+    pub global_max_reuse_distance: u64,
+    pub global_thread_ids: BTreeSet<i32>,
 }
 
-// ── Binary parsing helpers ────────────────────────────────────────────────────
+// ── Binary parsing helpers ───────────────────────────────────────────────────────────────────────
 
 // halide_trace_packet_t fixed header: 6 × 4 bytes = 24 bytes.
 //   u32  size                                         @ 0
@@ -397,7 +400,7 @@ fn parse_func_type_and_dim(
     }
 }
 
-// ── Trace loading ─────────────────────────────────────────────────────────────
+// ── Trace loading ────────────────────────────────────────────────────────────────────────────────
 
 impl Trace {
     pub fn load_from_file(path: &str, on_progress: impl FnMut(u8)) -> Result<Self, String> {
@@ -405,10 +408,6 @@ impl Trace {
         Self::load_from_bytes(&data, on_progress)
     }
 
-    /// Parses `data` into a `Trace`, invoking `on_progress` with the percentage (0-100) of bytes
-    /// consumed each time it crosses a new integer percentage point. Progress tracks bytes
-    /// consumed rather than packet count since the total packet count isn't known until parsing
-    /// completes (packets are variable-length).
     pub fn load_from_bytes(data: &[u8], mut on_progress: impl FnMut(u8)) -> Result<Self, String> {
         let total = data.len();
         let mut pos = 0;
@@ -423,6 +422,13 @@ impl Trace {
         let mut produce_ranges_by_func: BTreeMap<String, Vec<(u32, u32)>> = BTreeMap::new();
         let mut consume_ranges_by_func: BTreeMap<String, Vec<(u32, u32)>> = BTreeMap::new();
         let mut thread_ids_by_func: BTreeMap<String, BTreeSet<i32>> = BTreeMap::new();
+
+        // Trace-level maximum values.
+        let mut global_max_store_count = 0u32;
+        let mut global_max_load_count = 0u32;
+        let mut global_max_redundant_store_count = 0u32;
+        let mut global_max_reuse_distance = 0u64;
+        let mut global_thread_ids: BTreeSet<i32> = BTreeSet::new();
 
         // id -> (event, func_name, parent_id): needed for DAG inference after all packets are
         // parsed.
@@ -714,64 +720,23 @@ impl Trace {
                     .entry(pkt.func.clone())
                     .or_default()
                     .insert(pkt.thread_id);
+
+                // Insert the thread id into the global_thread_ids BTreeSet.
+                global_thread_ids.insert(pkt.thread_id);
             }
         }
 
-        // Compute max per-pixel store/load counts for each Func using the index lists. We extract
-        // extents first (shared borrow) then write back (mut borrow) to keep the two borrows of
-        // `funcs` non-overlapping.
-        for (func_name, indices) in &store_indices_by_func {
-            let extents = funcs.get(func_name.as_str()).and_then(func_extents);
-            if let Some((w, h, min_x, min_y)) = extents {
-                let mut counts = vec![0u32; w * h];
-                for &idx in indices {
-                    let pkt = &packets[idx];
-                    for_each_lane_pixel(
-                        pkt,
-                        min_x,
-                        min_y,
-                        w,
-                        h,
-                        None,
-                        |_lane, pixel_idx, _val_idx| {
-                            counts[pixel_idx] += 1;
-                        },
-                    );
-                }
-                if let Some(stats) = funcs.get_mut(func_name.as_str()) {
-                    stats.max_store_count = counts.iter().copied().max().unwrap_or(0);
-                }
-            }
-        }
-
-        for (func_name, indices) in &load_indices_by_func {
-            let extents = funcs.get(func_name.as_str()).and_then(func_extents);
-            if let Some((w, h, min_x, min_y)) = extents {
-                let mut counts = vec![0u32; w * h];
-                for &idx in indices {
-                    let pkt = &packets[idx];
-                    for_each_lane_pixel(
-                        pkt,
-                        min_x,
-                        min_y,
-                        w,
-                        h,
-                        None,
-                        |_lane, pixel_idx, _val_idx| {
-                            counts[pixel_idx] += 1;
-                        },
-                    );
-                }
-                if let Some(stats) = funcs.get_mut(func_name.as_str()) {
-                    stats.max_load_count = counts.iter().copied().max().unwrap_or(0);
-                }
-            }
-        }
-
-        // Compute max per-pixel redundant store counts: replay all stores for each Func, tracking
-        // the last value written to each (x, y, channel). A store is redundant when the incoming
-        // value bit-matches the previously stored value at that location and there have been no
-        // intervening loads from that location.
+        // Compute max per-pixel store count, load count, redundant store count, and reuse
+        // distance for each Func. All four statistics are derived from a single two-pointer
+        // merge of that Func's store/load indices in global packet order, so we compute them
+        // together in one walk rather than re-merging the same indices four separate times.
+        // (Redundant store count: a store is redundant when the incoming value bit-matches the
+        // previously stored value at that location and there have been no intervening loads from
+        // that location. Reuse distance: the packet-index gap between a store and the next load
+        // from the same (x, y, channel).)
+        //
+        // We extract extents/channels first (shared borrow) then write back (mut borrow) to keep
+        // the two borrows of `funcs` non-overlapping.
         for (func_name, store_indices) in &store_indices_by_func {
             let extents = funcs.get(func_name.as_str()).and_then(func_extents);
             if let Some((w, h, min_x, min_y)) = extents {
@@ -790,95 +755,11 @@ impl Trace {
                     .map(Vec::as_slice)
                     .unwrap_or(&[]);
 
+                let mut store_counts = vec![0u32; w * h];
+                let mut load_counts = vec![0u32; w * h];
                 // None = no store has landed here yet; Some(bits) = last stored value as u64 bits.
                 let mut last_values = vec![None::<u64>; w * h * channels];
                 let mut redundant_counts = vec![0u32; w * h];
-                let mut si = 0;
-                let mut li = 0;
-
-                while si < store_indices.len() || li < load_indices.len() {
-                    let next_is_store = si < store_indices.len()
-                        && (li >= load_indices.len() || store_indices[si] < load_indices[li]);
-
-                    if next_is_store {
-                        let global_idx = store_indices[si];
-                        si += 1;
-
-                        let pkt = &packets[global_idx];
-                        for_each_lane_pixel(
-                            pkt,
-                            min_x,
-                            min_y,
-                            w,
-                            h,
-                            Some((min_c, channels)),
-                            |lane, pixel_idx, val_idx| {
-                                let Some(v) = pkt.decoded_value(lane) else {
-                                    return;
-                                };
-                                let v_bits = v.to_bits();
-                                if let Some(prev_bits) = last_values[val_idx] {
-                                    if prev_bits == v_bits {
-                                        redundant_counts[pixel_idx] += 1;
-                                    }
-                                }
-                                last_values[val_idx] = Some(v_bits);
-                            },
-                        );
-                    } else {
-                        // If we observe a Load, reset the last_values slot for that location to None.
-                        let global_idx = load_indices[li];
-                        li += 1;
-                        let pkt = &packets[global_idx];
-                        for_each_lane_pixel(
-                            pkt,
-                            min_x,
-                            min_y,
-                            w,
-                            h,
-                            Some((min_c, channels)),
-                            |_lane, _pixel_idx, val_idx| {
-                                last_values[val_idx] = None;
-                            },
-                        );
-                    }
-                }
-
-                if let Some(stats) = funcs.get_mut(func_name.as_str()) {
-                    stats.max_redundant_store_count =
-                        redundant_counts.iter().copied().max().unwrap_or(0);
-                }
-            }
-        }
-
-        // Compute max per-pixel reuse distance for each Func. Two separate loops handle the two
-        // cases:
-        //
-        //   1. Intermediate Funcs (have stores): anchor = most recent store; distance measured to
-        //      the next load from the same (x, y, channel). Events are two-pointer merged in
-        //      global order.
-        //
-        //   2. Pipeline inputs (loads only, no stores): the first load at each pixel is a memcpy
-        //      and is "free". Subsequent loads to the same pixel measure distance from that first
-        //      load. Black = only one load ever (no reuse).
-        //
-        for (func_name, store_indices) in &store_indices_by_func {
-            let extents = funcs.get(func_name.as_str()).and_then(func_extents);
-            if let Some((w, h, min_x, min_y)) = extents {
-                let stats = funcs.get(func_name.as_str()).unwrap();
-                let (channels, min_c) = if stats.min_coords.len() >= 3 {
-                    (
-                        (stats.max_coords[2] - stats.min_coords[2]).max(1) as usize,
-                        stats.min_coords[2],
-                    )
-                } else {
-                    (1, 0)
-                };
-                let load_indices = load_indices_by_func
-                    .get(func_name.as_str())
-                    .map(Vec::as_slice)
-                    .unwrap_or(&[]);
-
                 // usize::MAX = no store has landed at this (x, y, channel) yet.
                 let mut last_store_at = vec![usize::MAX; w * h * channels];
                 let mut max_reuse_distances = vec![0u64; w * h];
@@ -892,6 +773,7 @@ impl Trace {
                     if next_is_store {
                         let global_idx = store_indices[si];
                         si += 1;
+
                         let pkt = &packets[global_idx];
                         for_each_lane_pixel(
                             pkt,
@@ -899,15 +781,47 @@ impl Trace {
                             min_y,
                             w,
                             h,
+                            None,
+                            |_lane, pixel_idx, _val_idx| {
+                                store_counts[pixel_idx] += 1;
+                            },
+                        );
+                        for_each_lane_pixel(
+                            pkt,
+                            min_x,
+                            min_y,
+                            w,
+                            h,
                             Some((min_c, channels)),
-                            |_lane, _pixel_idx, val_idx| {
+                            |lane, pixel_idx, val_idx| {
+                                if let Some(v) = pkt.decoded_value(lane) {
+                                    let v_bits = v.to_bits();
+                                    if let Some(prev_bits) = last_values[val_idx] {
+                                        if prev_bits == v_bits {
+                                            redundant_counts[pixel_idx] += 1;
+                                        }
+                                    }
+                                    last_values[val_idx] = Some(v_bits);
+                                }
                                 last_store_at[val_idx] = global_idx;
                             },
                         );
                     } else {
                         let global_idx = load_indices[li];
                         li += 1;
+
                         let pkt = &packets[global_idx];
+                        for_each_lane_pixel(
+                            pkt,
+                            min_x,
+                            min_y,
+                            w,
+                            h,
+                            None,
+                            |_lane, pixel_idx, _val_idx| {
+                                load_counts[pixel_idx] += 1;
+                            },
+                        );
                         for_each_lane_pixel(
                             pkt,
                             min_x,
@@ -916,6 +830,11 @@ impl Trace {
                             h,
                             Some((min_c, channels)),
                             |_lane, pixel_idx, val_idx| {
+                                // A load resets redundancy tracking for this location: an
+                                // intervening load means the next store, even if bit-identical,
+                                // is not redundant.
+                                last_values[val_idx] = None;
+
                                 if last_store_at[val_idx] != usize::MAX {
                                     let dist = (global_idx - last_store_at[val_idx]) as u64;
                                     if dist > max_reuse_distances[pixel_idx] {
@@ -928,17 +847,30 @@ impl Trace {
                 }
 
                 if let Some(stats) = funcs.get_mut(func_name.as_str()) {
+                    stats.max_store_count = store_counts.iter().copied().max().unwrap_or(0);
+                    stats.max_load_count = load_counts.iter().copied().max().unwrap_or(0);
+                    stats.max_redundant_store_count =
+                        redundant_counts.iter().copied().max().unwrap_or(0);
                     stats.max_reuse_distance =
                         max_reuse_distances.iter().copied().max().unwrap_or(0);
+
+                    global_max_store_count = global_max_store_count.max(stats.max_store_count);
+                    global_max_load_count = global_max_load_count.max(stats.max_load_count);
+                    global_max_redundant_store_count =
+                        global_max_redundant_store_count.max(stats.max_redundant_store_count);
+                    global_max_reuse_distance =
+                        global_max_reuse_distance.max(stats.max_reuse_distance);
                 }
             }
         }
 
-        // Pipeline inputs: Funcs with loads but no stores. The first load at each (x, y, channel)
-        // is free (analogous to a memcpy). Subsequent loads measure distance from that first load.
+        // Pipeline inputs: Funcs with loads but no stores. These aren't covered by the merged
+        // loop above, so compute their load count and reuse distance in one pass here. The first
+        // load at each (x, y, channel) is free (analogous to a memcpy); subsequent loads measure
+        // distance from that first load.
         for (func_name, load_indices) in &load_indices_by_func {
             if store_indices_by_func.contains_key(func_name.as_str()) {
-                continue; // handled by the store-anchor loop above
+                continue; // handled by the merged loop above
             }
             let extents = funcs.get(func_name.as_str()).and_then(func_extents);
             if let Some((w, h, min_x, min_y)) = extents {
@@ -952,12 +884,24 @@ impl Trace {
                     (1, 0)
                 };
 
+                let mut load_counts = vec![0u32; w * h];
                 // usize::MAX = first load hasn't occurred at this (x, y, channel) yet.
                 let mut first_load_at = vec![usize::MAX; w * h * channels];
                 let mut max_reuse_distances = vec![0u64; w * h];
 
                 for &global_idx in load_indices {
                     let pkt = &packets[global_idx];
+                    for_each_lane_pixel(
+                        pkt,
+                        min_x,
+                        min_y,
+                        w,
+                        h,
+                        None,
+                        |_lane, pixel_idx, _val_idx| {
+                            load_counts[pixel_idx] += 1;
+                        },
+                    );
                     for_each_lane_pixel(
                         pkt,
                         min_x,
@@ -979,8 +923,13 @@ impl Trace {
                 }
 
                 if let Some(stats) = funcs.get_mut(func_name.as_str()) {
+                    stats.max_load_count = load_counts.iter().copied().max().unwrap_or(0);
                     stats.max_reuse_distance =
                         max_reuse_distances.iter().copied().max().unwrap_or(0);
+
+                    global_max_load_count = global_max_load_count.max(stats.max_load_count);
+                    global_max_reuse_distance =
+                        global_max_reuse_distance.max(stats.max_reuse_distance);
                 }
             }
         }
@@ -997,6 +946,11 @@ impl Trace {
             produce_ranges_by_func,
             consume_ranges_by_func,
             thread_ids_by_func,
+            global_max_store_count,
+            global_max_load_count,
+            global_max_redundant_store_count,
+            global_max_reuse_distance,
+            global_thread_ids,
         })
     }
 
