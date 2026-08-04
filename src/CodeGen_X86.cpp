@@ -1648,9 +1648,9 @@ void CodeGen_X86::visit(const Allocate *op) {
 
 void CodeGen_X86::visit(const Load *op) {
     if (const auto *mt = mem_type.find(op->name)) {
-        if (*mt == MemoryType::AMXTile) {
+        if (*mt == MemoryType::Tile) {
             const Ramp *ramp = op->index.as<Ramp>();
-            internal_assert(ramp) << "Expected AMXTile to have index ramp\n";
+            internal_assert(ramp) << "Expected a tile to have index ramp\n";
             Value *ptr = codegen_buffer_pointer(op->name, op->type, ramp->base);
             LoadInst *load = builder->CreateAlignedLoad(llvm_type_of(upgrade_type_for_storage(op->type)), ptr, llvm::Align(op->type.bytes()));
             add_tbaa_metadata(load, op->name, op->index);
@@ -1663,11 +1663,11 @@ void CodeGen_X86::visit(const Load *op) {
 
 void CodeGen_X86::visit(const Store *op) {
     if (const auto *mt = mem_type.find(op->name)) {
-        if (*mt == MemoryType::AMXTile) {
+        if (*mt == MemoryType::Tile) {
             Value *val = codegen(op->value);
             Halide::Type value_type = op->value.type();
             const Ramp *ramp = op->index.as<Ramp>();
-            internal_assert(ramp) << "Expected AMXTile to have index ramp\n";
+            internal_assert(ramp) << "Expected a tile to have index ramp\n";
             Value *ptr = codegen_buffer_pointer(op->name, value_type, ramp->base);
             StoreInst *store = builder->CreateAlignedStore(val, ptr, llvm::Align(value_type.bytes()));
             add_tbaa_metadata(store, op->name, op->index);

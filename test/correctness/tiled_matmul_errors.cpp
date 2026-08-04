@@ -45,7 +45,7 @@ void schedule_matmul(Func mm, RVar r, int tile_x, int tile_y, int tile_r) {
     Var x("x"), y("y"), rxi("rxi"), ryi("ryi");
     RVar rri("rri"), rro("rro");
     mm.compute_at(mm.in(), x)
-        .store_in(MemoryType::AMXTile)
+        .store_in(MemoryType::Tile)
         .update()
         .tile(x, y, rxi, ryi, tile_x, tile_y, TailStrategy::GuardWithIf)
         .split(r, rro, rri, tile_r)
@@ -83,7 +83,7 @@ void scenario_too_large() {
     mm.in().compile_jit(amx_target);
 }
 
-// AMXTile allocated for a non-i32/f32 result. AMX always accumulates into
+// A tile allocated for a non-i32/f32 result. AMX always accumulates into
 // 32-bit registers, so we reject. Triggers the user_assert in
 // visit(Allocate).
 void scenario_bad_result_type() {
@@ -177,7 +177,7 @@ void scenario_conv1d() {
     conv.in().compile_jit(amx_target);
 }
 
-// A non-matmul value scheduled into an AMXTile allocation by mistake.
+// A non-matmul value scheduled into a tile allocation by mistake.
 // Triggers the "no matrix multiply was found" assertion.
 void scenario_no_matmul() {
     Var x("x"), y("y"), xo("xo"), yo("yo"), xi("xi"), yi("yi");
@@ -185,7 +185,7 @@ void scenario_no_matmul() {
     Func f("f");
     f(x, y) = 0;
     f.compute_at(f.in(), xo)
-        .store_in(MemoryType::AMXTile)
+        .store_in(MemoryType::Tile)
         .vectorize(x, 8)
         .vectorize(y, 8);
 
@@ -226,7 +226,7 @@ void scenario_mismatched_strides() {
 
     Var rxi("rxi"), ryi("ryi");
     RVar rri("rri"), rro("rro");
-    mm.compute_at(mm.in(), x).store_in(MemoryType::AMXTile);
+    mm.compute_at(mm.in(), x).store_in(MemoryType::Tile);
     mm.update(0)
         .tile(x, y, rxi, ryi, 8, 4, TailStrategy::GuardWithIf)
         .split(r1.x, rro, rri, 8)
@@ -251,7 +251,7 @@ void scenario_mismatched_strides() {
 }
 
 // A user gives the same Func two update definitions that each store into
-// the same AMXTile allocation but with different tile sizes (e.g. a fast
+// the same tile allocation but with different tile sizes (e.g. a fast
 // path for the bulk of K and a smaller fallback). The matcher requires
 // every matmul touching a given allocation to agree on tile dimensions.
 void scenario_inconsistent_tiles() {
@@ -268,7 +268,7 @@ void scenario_inconsistent_tiles() {
     Var rxi("rxi"), ryi("ryi");
     RVar rri("rri"), rro("rro");
 
-    mm.compute_at(mm.in(), x).store_in(MemoryType::AMXTile);
+    mm.compute_at(mm.in(), x).store_in(MemoryType::Tile);
     mm.update(0)
         .tile(x, y, rxi, ryi, 8, 8, TailStrategy::GuardWithIf)
         .split(r1.x, rro, rri, 8)
@@ -301,7 +301,7 @@ void scenario_inconsistent_tiles() {
     mm.in().compile_jit(amx_target);
 }
 
-// A reduction inside an AMXTile that's a sum-of-something-else, not a
+// A reduction inside a tile that's a sum-of-something-else, not a
 // vector_reduce_add of a widening multiply. Here we accumulate a
 // non-multiplied value, which produces a Store whose RHS is not a
 // vector-reduce-of-multiply.
@@ -318,7 +318,7 @@ void scenario_not_a_matmul_pattern() {
     Var rxi("rxi"), ryi("ryi");
     RVar rri("rri"), rro("rro");
     mm.compute_at(mm.in(), x)
-        .store_in(MemoryType::AMXTile)
+        .store_in(MemoryType::Tile)
         .update()
         .tile(x, y, rxi, ryi, 8, 8, TailStrategy::GuardWithIf)
         .split(r.x, rro, rri, 8)

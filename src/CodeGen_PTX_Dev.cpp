@@ -528,7 +528,7 @@ void CodeGen_PTX_Dev::codegen_wmma(const Call *op) {
 
 bool CodeGen_PTX_Dev::is_fragment_alloc(const std::string &name) {
     const MemoryType *t = alloc_memory_type.find(name);
-    return t && *t == MemoryType::WMMAFragment;
+    return t && *t == MemoryType::Tile;
 }
 
 llvm::Type *CodeGen_PTX_Dev::fragment_reg_type(Type t) {

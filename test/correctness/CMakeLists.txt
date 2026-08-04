@@ -5,6 +5,7 @@ tests(
     SOURCES
     # keep-sorted start case=no
     align_bounds.cpp
+    amx_matmul.cpp
     argmax.cpp
     async_device_copy.cpp
     autodiff.cpp
@@ -334,7 +335,6 @@ tests(
     sve_codegen_reinterpret.cpp
     target.cpp
     target_query.cpp
-    tiled_matmul.cpp
     tiled_matmul_errors.cpp
     tracing.cpp
     tracing_bounds.cpp
@@ -378,6 +378,7 @@ tests(
     vectorized_load_from_vectorized_allocation.cpp
     vectorized_reduction_bug.cpp
     widening_reduction.cpp
+    wmma_matmul.cpp
     # keep-sorted end
 )
 

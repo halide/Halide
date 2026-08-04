@@ -82,7 +82,7 @@ class CountGPUBlocksThreads : public IRVisitor {
         // extract_wmma_operations will wrap the statements that touch this
         // allocation in loops over the lanes of a warp, so count it as a lane
         // dimension.
-        const bool wmma = op->memory_type == MemoryType::WMMAFragment;
+        const bool wmma = op->memory_type == MemoryType::Tile;
         int dl = wmma && !in_lanes;
         ScopedValue<bool> old_in_lanes(in_lanes, in_lanes || wmma);
         nl += dl;
@@ -120,7 +120,7 @@ class CanonicalizeGPUVars : public IRMutator {
     Stmt visit(const Realize *op) override {
         ScopedValue<bool> old(in_wmma_alloc,
                               in_wmma_alloc ||
-                                  op->memory_type == MemoryType::WMMAFragment);
+                                  op->memory_type == MemoryType::Tile);
         return IRMutator::visit(op);
     }
 

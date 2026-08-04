@@ -62,7 +62,7 @@ void set_alignment_and_bounds(OutputImageParam p, int size) {
 // them, living across it. Such an accumulator lands at block level, where a
 // Register allocation is sized for the whole block tile and spills. So it
 // stages per thread and shares nothing. The tensor core schedules only escape
-// this because a WMMAFragment allocation at block level is already per-lane.
+// this because a tile allocation at block level is already per-lane.
 //
 class MatMul : public Halide::Generator<MatMul> {
 public:
@@ -230,57 +230,45 @@ private:
         const int pa = pad_a ? (int)pad_a : 16 / A.type().bytes();
         const int pb = pad_b ? (int)pad_b : 16 / A.type().bytes();
 
-        Var xi("xi"), yi("yi"), xt("xt"), yt("yt"), mmxi("mmxi"), mmyi("mmyi");
-        Var xw("xw"), yw("yw"), rxi("rxi"), ryi("ryi");
-        RVar ro("ro"), ri("ri"), rri("rri");
+        // out and prod are tiled the same way: blocks of warps, each warp
+        // holding several tensor core tiles. mmx, mmy and mmr are the
+        // dimensions of one tensor core operation.
+        Var xi("xi"), yi("yi"), xw("xw"), yw("yw");
+        Var mmx("mmx"), mmy("mmy");
+        RVar ro("ro"), ri("ri"), mmr("mmr");
 
-        out.split(x, x, xi, block_x)
-            .split(xi, xt, xi, tile * tx)
-            .split(xi, xi, mmxi, tile)
-            .split(y, y, yi, block_y)
-            .split(yi, yt, yi, tile * ty)
-            .split(yi, yi, mmyi, tile)
+        out.tile(x, y, xi, yi, block_x, block_y)
+            .tile(xi, yi, xw, yw, xi, yi, tile * tx, tile * ty)
+            .tile(xi, yi, mmx, mmy, tile, tile)
             .gpu_blocks(x, y)
-            .gpu_threads(xt, yt)
-            .reorder(mmxi, mmyi, xi, yi, xt, yt, x, y)
+            .gpu_threads(xw, yw)
             .unroll(xi)
             .unroll(yi)
-            .vectorize(mmxi)
-            .vectorize(mmyi);
+            .tile_store(mmx, mmy);
 
         // The accumulators live in tensor core registers for the whole
         // reduction, and are written out to memory once at the end. They sit
         // at block level so that the reduction loop can be above the loop over
         // warps, which lets every warp share one staged panel.
         prod.compute_at(out, x)
-            .store_in(MemoryType::WMMAFragment)
-            .split(x, xw, xi, tile * tx)
-            .split(xi, xi, rxi, tile)
-            .split(y, yw, yi, tile * ty)
-            .split(yi, yi, ryi, tile)
-            .reorder(rxi, ryi, xi, yi, xw, yw)
+            .tile(x, y, xw, yw, xi, yi, tile * tx, tile * ty)
+            .tile(xi, yi, mmx, mmy, tile, tile)
             .gpu_threads(xw, yw)
-            .vectorize(rxi)
-            .vectorize(ryi)
+            .tile_init(mmx, mmy)
             .unroll(xi)
             .unroll(yi);
 
         prod.update()
             .split(r, ro, ri, br)
-            .split(x, xw, xi, tile * tx)
-            .split(xi, xi, rxi, tile)
-            .split(y, yw, yi, tile * ty)
-            .split(yi, yi, ryi, tile)
-            .split(ri, ri, rri, tile)
-            .reorder(rri, rxi, ryi, xi, yi, ri, xw, yw, ro)
+            .split(ri, ri, mmr, tile)
+            .tile(x, y, xw, yw, xi, yi, tile * tx, tile * ty)
+            .tile(xi, yi, mmx, mmy, tile, tile)
+            .reorder(xi, yi, ri, xw, yw, ro)
             .gpu_threads(xw, yw)
             .unroll(xi)
             .unroll(yi)
             .unroll(ri)
-            .atomic()
-            .vectorize(rri)
-            .vectorize(rxi)
-            .vectorize(ryi);
+            .tile_matmul(mmr, mmx, mmy);
 
         // Stage the operand panels into shared memory once per reduction step,
         // to be shared by every warp in the block. Each thread moves sixteen
@@ -290,36 +278,36 @@ private:
         // Each thread moves sixteen bytes, the widest asynchronous copy the
         // hardware has. How many elements that is depends on the operand type.
         const int vec = 16 / A.type().bytes();
-        Var rro("rro"), rrv("rrv"), xxo("xxo"), xxi("xxi");
-        Var t("t"), ti("ti"), tw("tw"), tw2("tw2"), to("to");
+        Var ko("ko"), kv("kv"), xo("xo"), xv("xv");
+        Var t("t"), ti("ti"), to("to");
 
         // B.in() is dense in the reduction dimension, which is its _0.
         B.in()
             .compute_at(prod, ro)
             .store_in(MemoryType::GPUSharedAsync)
             .align_storage(_0, br + pa)
-            .split(_0, rro, rrv, vec)
-            .fuse(rro, _1, t)
+            .split(_0, ko, kv, vec)
+            .fuse(ko, _1, t)
             .split(t, t, ti, 32)
-            .split(t, t, tw, wx)
-            .split(t, to, tw2, wy)
+            .split(t, t, xw, wx)
+            .split(t, to, yw, wy)
             .gpu_lanes(ti)
-            .gpu_threads(tw, tw2)
-            .vectorize(rrv);
+            .gpu_threads(xw, yw)
+            .vectorize(kv);
 
         // A.in() is dense in x, which is its _0.
         A.in()
             .compute_at(prod, ro)
             .store_in(MemoryType::GPUSharedAsync)
             .align_storage(_0, block_x + pb)
-            .split(_0, xxo, xxi, vec)
-            .fuse(xxo, _1, t)
+            .split(_0, xo, xv, vec)
+            .fuse(xo, _1, t)
             .split(t, t, ti, 32)
-            .split(t, t, tw, wx)
-            .split(t, to, tw2, wy)
+            .split(t, t, xw, wx)
+            .split(t, to, yw, wy)
             .gpu_lanes(ti)
-            .gpu_threads(tw, tw2)
-            .vectorize(xxi);
+            .gpu_threads(xw, yw)
+            .vectorize(xv);
     }
 
     Var x{"x"}, y{"y"};

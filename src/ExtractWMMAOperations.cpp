@@ -21,7 +21,7 @@
  * with the wmma load and store instructions, which move a tile between the
  * registers of a warp and a 2D array in memory.
  *
- * A WMMAFragment allocation holds one of the three matrices of a multiply, and
+ * A tile allocation holds one of the three matrices of a multiply, and
  * which one follows from how it is used. An allocation accumulated into by a
  * matrix multiply is the accumulator; one read as an operand of a multiply is
  * that operand. The role determines which accesses are legal:
@@ -251,7 +251,7 @@ MatmulInfo analyze_matmul(const Store *op) {
     // lane permutation left on it by vectorization.
 
     auto fail = [&](const char *reason) -> MatmulInfo {
-        user_error << "Matrix multiply not recognized. Store to a WMMAFragment "
+        user_error << "Matrix multiply not recognized. Store to a Tile "
                    << "allocation must be a zero-initialization, a fill from a matrix "
                    << "in memory, or a sum of a vector reduce op and a load from the "
                    << "same allocation. In the following store, " << reason << ".\n"
@@ -426,7 +426,7 @@ Stmt convert_to_tile_store(const Store *op, const Expr &store_index,
                                     op->is_streaming));
 }
 
-// Everything we learn about one WMMAFragment allocation from the way it is
+// Everything we learn about one tile allocation from the way it is
 // used. The role and the shape come from the matrix multiplies it takes part
 // in, so neither is known until those have been found.
 struct Fragment {
@@ -647,7 +647,7 @@ class ExtractWMMAOperations : public IRMutator {
     }
 
     Stmt visit(const Allocate *op) override {
-        if (op->memory_type != MemoryType::WMMAFragment) {
+        if (op->memory_type != MemoryType::Tile) {
             return IRMutator::visit(op);
         }
 
@@ -669,7 +669,7 @@ class ExtractWMMAOperations : public IRMutator {
 
         if (pass == 0) {
             user_assert(f.role != Role::Unknown)
-                << op->name << " is stored in WMMAFragment memory, but no matrix "
+                << op->name << " is stored in Tile memory, but no matrix "
                 << "multiply was found that accumulates into it or reads it as an "
                 << "operand, so we can't tell what layout it should have.\n";
             return op;
@@ -681,7 +681,7 @@ class ExtractWMMAOperations : public IRMutator {
         // get replicated per thread.
         for (int i = 0; i < (int)f.subtiles.size(); i++) {
             body = Allocate::make(f.fragment_name + std::to_string(i), f.element_type,
-                                  MemoryType::WMMAFragment, {f.value_type().lanes()},
+                                  MemoryType::Tile, {f.value_type().lanes()},
                                   const_true(), body);
         }
         return body;

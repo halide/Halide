@@ -135,15 +135,13 @@ bool test(const Params &p) {
         .bound(y, 0, p.M)
         .split(x, x, xi, p.tile_n * p.tiles_n * p.warps)
         .split(xi, xt, xi, p.tile_n * p.tiles_n)
-        .split(xi, xi, mmxi, p.tile_n)
         .split(y, y, yi, p.tile_m * p.tiles_m)
-        .split(yi, yi, mmyi, p.tile_m)
+        .tile(xi, yi, mmxi, mmyi, p.tile_n, p.tile_m)
         .gpu_blocks(x, y)
-        .reorder(mmxi, mmyi, xi, yi, xt, x, y)
+        .reorder(xi, yi, xt, x, y)
         .unroll(xi)
         .unroll(yi)
-        .vectorize(mmxi)
-        .vectorize(mmyi);
+        .tile_store(mmxi, mmyi);
     if (p.warps > 1) {
         // With one warp there's no need for a loop over warps, and leaving it
         // serial keeps anything computed inside it out of the thread loops.
@@ -151,25 +149,24 @@ bool test(const Params &p) {
     }
 
     prod.compute_at(out, xt)
-        .store_in(MemoryType::WMMAFragment)
-        .split(x, x, rxi, p.tile_n)
-        .split(y, y, ryi, p.tile_m)
-        .vectorize(rxi)
-        .vectorize(ryi)
+        .tile(x, y, rxi, ryi, p.tile_n, p.tile_m)
         .unroll(x)
         .unroll(y);
+    // The accumulator either starts at a constant or is loaded from memory,
+    // and those are different tile instructions.
+    if (p.init_from_memory) {
+        prod.tile_load(rxi, ryi);
+    } else {
+        prod.tile_init(rxi, ryi);
+    }
 
     prod.update()
-        .split(x, x, rxi, p.tile_n)
-        .split(y, y, ryi, p.tile_m)
+        .tile(x, y, rxi, ryi, p.tile_n, p.tile_m)
         .split(k, rro, rri, p.tile_k)
-        .reorder(rri, rxi, ryi, x, y, rro)
+        .reorder(x, y, rro)
         .unroll(x)
         .unroll(y)
-        .atomic()
-        .vectorize(rri)
-        .vectorize(rxi)
-        .vectorize(ryi);
+        .tile_matmul(rri, rxi, ryi);
 
     if (p.init_from_memory) {
         Var ixi("ixi"), iyi("iyi");
@@ -251,17 +248,25 @@ bool test_block_level_accumulator() {
     Var kko("kko"), kki("kki"), xxo("xxo"), xxi("xxi");
     RVar ko("ko"), ki("ki"), rri("rri");
 
-    out.bound(x, 0, N).bound(y, 0, M).split(x, x, xi, block_x).split(xi, xt, xi, tile * tiles_x).split(xi, xi, mmxi, tile).split(y, y, yi, block_y).split(yi, yi, mmyi, tile).gpu_blocks(x, y).gpu_threads(xt).reorder(mmxi, mmyi, xi, yi, xt, x, y).unroll(xi).unroll(yi).vectorize(mmxi).vectorize(mmyi);
+    out.bound(x, 0, N)
+        .bound(y, 0, M)
+        .tile(x, y, xi, yi, block_x, block_y)
+        .split(xi, xt, xi, tile * tiles_x)
+        .tile(xi, yi, mmxi, mmyi, tile, tile)
+        .gpu_blocks(x, y)
+        .gpu_threads(xt)
+        .reorder(xi, yi, xt, x, y)
+        .unroll(xi)
+        .unroll(yi)
+        .tile_store(mmxi, mmyi);
 
     prod.compute_at(out, x)
-        .store_in(MemoryType::WMMAFragment)
         .split(x, xw, xi, tile * tiles_x)
         .split(xi, xi, rxi, tile)
         .split(y, y, ryi, tile)
-        .reorder(rxi, ryi, xi, y, xw)
+        .reorder(xi, y, xw)
         .gpu_threads(xw)
-        .vectorize(rxi)
-        .vectorize(ryi)
+        .tile_init(rxi, ryi)
         .unroll(xi)
         .unroll(y);
 
@@ -271,15 +276,12 @@ bool test_block_level_accumulator() {
         .split(xi, xi, rxi, tile)
         .split(y, y, ryi, tile)
         .split(ki, ki, rri, tile)
-        .reorder(rri, rxi, ryi, xi, y, ki, xw, ko)
+        .reorder(xi, y, ki, xw, ko)
         .gpu_threads(xw)
         .unroll(xi)
         .unroll(y)
         .unroll(ki)
-        .atomic()
-        .vectorize(rri)
-        .vectorize(rxi)
-        .vectorize(ryi);
+        .tile_matmul(rri, rxi, ryi);
 
     As.compute_at(prod, ko)
         .store_in(MemoryType::GPUShared)
@@ -348,62 +350,49 @@ bool test_staged_operands() {
 
     out.bound(x, 0, N)
         .bound(y, 0, M)
-        .split(x, x, xi, tile * tiles_x)
-        .split(xi, xi, mmxi, tile)
-        .split(y, y, yi, tile * tiles_y)
-        .split(yi, yi, mmyi, tile)
+        .tile(x, y, xi, yi, tile * tiles_x, tile * tiles_y)
+        .tile(xi, yi, mmxi, mmyi, tile, tile)
         .gpu_blocks(x, y)
-        .reorder(mmxi, mmyi, xi, yi, x, y)
+        .reorder(xi, yi, x, y)
         .unroll(xi)
         .unroll(yi)
         .vectorize(mmxi)
         .vectorize(mmyi);
 
     prod.compute_at(out, x)
-        .store_in(MemoryType::WMMAFragment)
-        .split(x, x, rxi, tile)
-        .split(y, y, ryi, tile)
-        .vectorize(rxi)
-        .vectorize(ryi)
+        .tile(x, y, rxi, ryi, tile, tile)
+        .tile_init(rxi, ryi)
         .unroll(x)
         .unroll(y);
 
     // Loop nest of the update, outermost first: ko, ki, y, x.
     prod.update()
         .split(k, ko, ki, bk)
-        .split(x, x, rxi, tile)
-        .split(y, y, ryi, tile)
+        .tile(x, y, rxi, ryi, tile, tile)
         .split(ki, ki, rri, tile)
-        .reorder(rri, rxi, ryi, x, y, ki, ko)
+        .reorder(x, y, ki, ko)
         .unroll(x)
         .unroll(y)
         .unroll(ki)
-        .atomic()
-        .vectorize(rri)
-        .vectorize(rxi)
-        .vectorize(ryi);
+        .tile_matmul(rri, rxi, ryi);
 
     // One a fragment per row of tiles, live across the loop over columns.
     Am.compute_at(prod, y)
-        .store_in(MemoryType::WMMAFragment)
         .split(kk, kko, kki, tile)
         .split(yy, yyo, yyi, tile)
         .reorder(kki, yyi, kko, yyo)
         .unroll(kko)
         .unroll(yyo)
-        .vectorize(kki)
-        .vectorize(yyi);
+        .tile_load(kki, yyi);
 
     // All the b fragments at once, live across the loops over both.
     Bm.compute_at(prod, ki)
-        .store_in(MemoryType::WMMAFragment)
         .split(xx, xxo, xxi, tile)
         .split(kk, kko, kki, tile)
         .reorder(xxi, kki, xxo, kko)
         .unroll(xxo)
         .unroll(kko)
-        .vectorize(xxi)
-        .vectorize(kki);
+        .tile_load(xxi, kki);
 
     Buffer<float> result(N, M);
     out.realize(result);
@@ -454,47 +443,36 @@ bool test_operand_hoisted_out_of_loop() {
     out.bound(x, 0, N)
         .bound(y, 0, M)
         .bound(n, 0, batch)
-        .split(x, x, xi, N)
-        .split(xi, xi, mmxi, tile)
-        .split(y, y, yi, M)
-        .split(yi, yi, mmyi, tile)
+        .tile(x, y, xi, yi, N, M)
+        .tile(xi, yi, mmxi, mmyi, tile, tile)
         .gpu_blocks(x, y)
-        .reorder(mmxi, mmyi, xi, yi, n, x, y)
+        .reorder(xi, yi, n, x, y)
         .unroll(xi)
         .unroll(yi)
         .vectorize(mmxi)
         .vectorize(mmyi);
 
     prod.compute_at(out, n)
-        .store_in(MemoryType::WMMAFragment)
-        .split(x, x, rxi, tile)
-        .split(y, y, ryi, tile)
-        .vectorize(rxi)
-        .vectorize(ryi)
+        .tile(x, y, rxi, ryi, tile, tile)
+        .tile_init(rxi, ryi)
         .unroll(x)
         .unroll(y);
 
     prod.update()
-        .split(x, x, rxi, tile)
-        .split(y, y, ryi, tile)
+        .tile(x, y, rxi, ryi, tile, tile)
         .split(k, rro, rri, tile)
-        .reorder(rri, rxi, ryi, x, y, rro)
+        .reorder(x, y, rro)
         .unroll(x)
         .unroll(y)
-        .atomic()
-        .vectorize(rri)
-        .vectorize(rxi)
-        .vectorize(ryi);
+        .tile_matmul(rri, rxi, ryi);
 
     Am.compute_at(out, x)
-        .store_in(MemoryType::WMMAFragment)
         .split(kk, kko, kki, tile)
         .split(yy, yyo, yyi, tile)
         .reorder(kki, yyi, kko, yyo)
         .unroll(kko)
         .unroll(yyo)
-        .vectorize(kki)
-        .vectorize(yyi);
+        .tile_load(kki, yyi);
 
     Buffer<float> result(N, M, batch);
     out.realize(result);
