@@ -67,34 +67,23 @@ double gflops(int size, double seconds) {
     return 2.0 * size * size * size / seconds * 1e-9;
 }
 
-// Time a batch of launches with a single synchronization at the end, rather
-// than synchronizing after each one. Both implementations queue work
-// asynchronously, and cublas in particular does a heuristic lookup on the host
-// for every call, so synchronizing per launch measures that host work instead
-// of letting it overlap with the GPU.
+// Time one call of the filter. Both implementations queue work
+// asynchronously, and cublas does a heuristic lookup on the host for every
+// call, so synchronizing per launch would measure that host work rather than
+// letting it overlap with the GPU. Batch the launches instead, and sync once.
 // `sync` has to match the launcher: Halide runs on its own CUDA context, so
 // cudaDeviceSynchronize does not wait for it.
 template<typename F, typename S>
 double bench_batched(F &&launch, S &&sync) {
-    const int samples = 5, iterations = 5;
-    for (int i = 0; i < iterations; i++) {
-        launch();
-    }
-    sync();
-    double best = 0;
-    for (int s = 0; s < samples; s++) {
-        auto t0 = Halide::Tools::benchmark_now();
-        for (int i = 0; i < iterations; i++) {
-            launch();
-        }
-        sync();
-        auto t1 = Halide::Tools::benchmark_now();
-        double t = Halide::Tools::benchmark_duration_seconds(t0, t1) / iterations;
-        if (s == 0 || t < best) {
-            best = t;
-        }
-    }
-    return best;
+    const int batch = 5;
+    return Halide::Tools::benchmark(5, 1,
+                                    [&]() {
+                                        for (int i = 0; i < batch; i++) {
+                                            launch();
+                                        }
+                                        sync();
+                                    }) /
+           batch;
 }
 
 }  // namespace
