@@ -8,6 +8,12 @@ include(CheckCXXCompilerFlag)
 add_executable(_test_internal EXCLUDE_FROM_ALL pch_helper.cpp)
 target_link_libraries(_test_internal PRIVATE Halide::Test Halide::TerminateHandler)
 target_precompile_headers(_test_internal PRIVATE <Halide.h>)
+if (NOT Halide_TARGET MATCHES "wasm")
+    # The PCH must be compiled with the same warning flags as the targets that
+    # reuse it (via REUSE_FROM) -- MSVC in particular treats a mismatched
+    # warning level as an error under /WX.
+    set_halide_compiler_warnings(_test_internal)
+endif ()
 if (Halide_CCACHE_BUILD)
     if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         target_compile_options(
