@@ -82,6 +82,7 @@ tests(
     debug_to_file_multiple_outputs.cpp
     debug_to_file_reorder.cpp
     decompose_vector_shuffle.cpp
+    deep_inline_chain.cpp
     deferred_loop_level.cpp
     deinterleave4.cpp
     device_buffer_copies_with_profile.cpp
@@ -141,6 +142,7 @@ tests(
     gpu_cpu_simultaneous_read.cpp
     gpu_data_flows.cpp
     gpu_different_blocks_threads_dimensions.cpp
+    gpu_dynamic_and_register_realization.cpp
     gpu_dynamic_shared.cpp
     gpu_f16_intrinsics.cpp
     gpu_free_sync.cpp
@@ -303,6 +305,7 @@ tests(
     sliding_reduction.cpp
     sliding_window.cpp
     sliding_window_cascade.cpp
+    sme_streaming.cpp
     solve.cpp
     sort_exprs.cpp
     specialize.cpp

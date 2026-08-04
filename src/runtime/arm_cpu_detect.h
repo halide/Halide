@@ -102,6 +102,11 @@ struct ArmDetection {
     /** A reported feature uses scalable vector registers. libHalide measures
      * their width; the runtime doesn't need to do anything with this. */
     bool have_scalable_vector;
+
+    /** SME2 was detected. This is set unconditionally from the hardware
+     * capability bit; libHalide additionally needs local compiler support to
+     * measure the streaming vector length, which this doesn't know about. */
+    bool have_sme2;
 };
 
 /** We know how to detect SVE (as opposed to SVE2) on every platform below, but
@@ -125,6 +130,15 @@ void for_each_detectable_arm_feature(Fn fn) {
     fn(halide_target_feature_armv7s);
     fn(halide_target_feature_sve);
     fn(halide_target_feature_sve2);
+    fn(halide_target_feature_sme2);
+    // The streaming vector length isn't autodetected (it requires entering
+    // streaming mode to measure, which the runtime doesn't do), but it's still
+    // something the runtime knows how to be asked about.
+    fn(halide_target_feature_sme_svl128);
+    fn(halide_target_feature_sme_svl256);
+    fn(halide_target_feature_sme_svl512);
+    fn(halide_target_feature_sme_svl1024);
+    fn(halide_target_feature_sme_svl2048);
 }
 
 namespace detail {
@@ -144,6 +158,7 @@ constexpr uint64_t hwcap_asimddp(ArmArch arch) {
 // AArch64 only.
 constexpr uint64_t hwcap_sve = 1ull << 22;
 constexpr uint64_t hwcap2_sve2 = 1ull << 1;
+constexpr uint64_t hwcap2_sme2 = 1ull << 37;
 
 // Feature codes for Windows' IsProcessorFeaturePresent. Spelled in lower case
 // because windows.h defines the upper-case names as macros.
@@ -153,6 +168,7 @@ constexpr int pf_arm_fmac_instructions_available = 27;
 constexpr int pf_arm_v82_dp_instructions_available = 43;
 constexpr int pf_arm_sve_instructions_available = 46;
 constexpr int pf_arm_sve2_instructions_available = 47;
+constexpr int pf_arm_sme2_instructions_available = 71;
 
 // sysctl names and values used on Apple platforms.
 constexpr int cpu_type_arm = 12;
@@ -195,6 +211,15 @@ bool set_sve2_if_present(Ops &ops, bool present) {
     return false;
 }
 
+template<typename Ops>
+bool set_sme2_if_present(Ops &ops, bool present) {
+    if (present) {
+        ops.set_feature(halide_target_feature_sme2);
+        return true;
+    }
+    return false;
+}
+
 }  // namespace detail
 
 /** Detect ARM features from the Linux/Android auxiliary vector. */
@@ -210,13 +235,15 @@ ArmDetection detect_arm_features(Ops &ops, ArmArch arch, AuxvSource) {
         ops.set_feature(halide_target_feature_arm_fp16);
     }
 
-    ArmDetection detection{false};
+    ArmDetection detection{false, false};
     if (arch == ArmArch::Arm64) {
         const bool have_sve =
             detail::set_sve_if_enabled(ops, [&] { return (hwcap & detail::hwcap_sve) != 0; });
         const bool have_sve2 =
             detail::set_sve2_if_present(ops, (hwcap2 & detail::hwcap2_sve2) != 0);
         detection.have_scalable_vector = have_sve || have_sve2;
+        detection.have_sme2 =
+            detail::set_sme2_if_present(ops, (hwcap2 & detail::hwcap2_sme2) != 0);
     }
     return detection;
 }
@@ -239,7 +266,10 @@ ArmDetection detect_arm_features(Ops &ops, ArmArch arch, SysctlSource) {
         ops.set_feature(halide_target_feature_arm_fp16);
     }
 
-    return {false};
+    const bool have_sme2 = detail::set_sme2_if_present(
+        ops, detail::sysctl_is_set(ops, "hw.optional.arm.FEAT_SME2"));
+
+    return {false, have_sme2};
 }
 
 /** Detect ARM features via IsProcessorFeaturePresent, on Windows. */
@@ -256,7 +286,7 @@ ArmDetection detect_arm_features(Ops &ops, ArmArch arch, WindowsSource) {
         ops.set_feature(halide_target_feature_arm_dot_prod);
     }
 
-    ArmDetection detection{false};
+    ArmDetection detection{false, false};
     if (arch == ArmArch::Arm64) {
         const bool have_sve = detail::set_sve_if_enabled(ops, [&]() {
             return ops.processor_feature_present(detail::pf_arm_sve_instructions_available);
@@ -264,13 +294,15 @@ ArmDetection detect_arm_features(Ops &ops, ArmArch arch, WindowsSource) {
         const bool have_sve2 = detail::set_sve2_if_present(
             ops, ops.processor_feature_present(detail::pf_arm_sve2_instructions_available));
         detection.have_scalable_vector = have_sve || have_sve2;
+        detection.have_sme2 = detail::set_sme2_if_present(
+            ops, ops.processor_feature_present(detail::pf_arm_sme2_instructions_available));
     }
     return detection;
 }
 
 template<typename Ops>
 ArmDetection detect_arm_features(Ops &, ArmArch, NullSource) {
-    return {false};
+    return {false, false};
 }
 
 /** Detect ARM features via the operation source selected by Ops. */
