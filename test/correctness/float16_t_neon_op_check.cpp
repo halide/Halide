@@ -26,9 +26,9 @@ public:
         // Error is thrown if there is unacceptable mismatch between jit_target and host_target.
         Target jit_target = get_jit_target_from_environment();
         bool can_run_the_code =
-            (target.arch == jit_target.arch &&
-             target.bits == jit_target.bits &&
-             target.os == jit_target.os);
+            (target.arch() == jit_target.arch() &&
+             target.bits() == jit_target.bits() &&
+             target.os() == jit_target.os());
         // A bunch of feature flags also need to match between the
         // compiled code and the host in order to run the code.
         for (Target::Feature f : {Target::ARMFp16, Target::NoNEON}) {

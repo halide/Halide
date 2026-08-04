@@ -271,20 +271,20 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (Target().vector_bits != 0) {
+    if (Target().vector_bits() != 0) {
         printf("Default Target vector_bits not 0.\n");
         return 1;
     }
-    if (Target("arm-64-linux-sve2-vector_bits_512").vector_bits != 512) {
+    if (Target("arm-64-linux-sve2-vector_bits_512").vector_bits() != 512) {
         printf("Vector bits not parsed correctly.\n");
         return 1;
     }
     Target with_vector_bits(Target::Linux, Target::ARM, 64, Target::ProcessorGeneric, {Target::SVE}, 512);
-    if (with_vector_bits.vector_bits != 512) {
+    if (with_vector_bits.vector_bits() != 512) {
         printf("Vector bits not populated in constructor.\n");
         return 1;
     }
-    if (Target(with_vector_bits.to_string()).vector_bits != 512) {
+    if (Target(with_vector_bits.to_string()).vector_bits() != 512) {
         printf("Vector bits not round tripped properly.\n");
         return 1;
     }

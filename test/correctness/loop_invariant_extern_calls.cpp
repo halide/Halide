@@ -27,7 +27,7 @@ int not_really_parallel_for(JITUserContext *ctx, int (*f)(JITUserContext *, int,
 }
 
 int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+    if (get_jit_target_from_environment().arch() == Target::WebAssembly) {
         printf("[SKIP] Skipping test for WebAssembly as the wasm JIT cannot support custom parallel runtimes\n");
         return 0;
     }

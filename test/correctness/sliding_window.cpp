@@ -18,7 +18,7 @@ extern "C" void *my_malloc(JITUserContext *, size_t x) {
 int main(int argc, char **argv) {
     Var x, y;
 
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+    if (get_jit_target_from_environment().arch() == Target::WebAssembly) {
         printf("[SKIP] WebAssembly JIT does not support custom allocators.\n");
         return 0;
     }

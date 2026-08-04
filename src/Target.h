@@ -30,8 +30,8 @@ struct Target {
         QuRT,
         NoOS,
         Fuchsia,
-        WebAssemblyRuntime
-    } os = OSUnknown;
+        WebAssemblyRuntime,
+    };
 
     /** The architecture used by the target. Determines the
      * instruction set to use.
@@ -43,16 +43,8 @@ struct Target {
         Hexagon,
         POWERPC,
         WebAssembly,
-        RISCV
-    } arch = ArchUnknown;
-
-    /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
-    int bits = 0;
-
-    /** The bit-width of a vector register for targets where this is configurable and
-     * targeting a fixed size is desired. The default of 0 indicates no assumption of
-     * fixed size is allowed. */
-    int vector_bits = 0;
+        RISCV,
+    };
 
     /** The specific processor to be targeted, tuned for.
      * Corresponds to processor_name_map in Target.cpp.
@@ -75,7 +67,7 @@ struct Target {
         ZnVer3,    /// Tune for AMD Zen 3 CPU (AMD Family 19h, launched 2020).
         ZnVer4,    /// Tune for AMD Zen 4 CPU (AMD Family 19h, launched 2022).
         ZnVer5,    /// Tune for AMD Zen 5 CPU (AMD Family 1Ah, launched 2024).
-    } processor_tune = ProcessorGeneric;
+    };
 
     /** Optional features a target can have.
      * Corresponds to feature_name_map in Target.cpp.
@@ -204,12 +196,12 @@ struct Target {
         HLSL_SM67 = halide_target_feature_hlsl_sm67,
         HLSL_SM68 = halide_target_feature_hlsl_sm68,
         HLSL_SM69 = halide_target_feature_hlsl_sm69,
-        FeatureEnd = halide_target_feature_end
+        FeatureEnd = halide_target_feature_end,
     };
     Target() = default;
     Target(OS o, Arch a, int b, Processor pt, const std::vector<Feature> &initial_features = std::vector<Feature>(),
            int vb = 0)
-        : os(o), arch(a), bits(b), vector_bits(vb), processor_tune(pt) {
+        : os_(o), arch_(a), bits_(b), vector_bits_(vb), processor_tune_(pt) {
         for (const auto &f : initial_features) {
             set_feature(f);
         }
@@ -319,13 +311,49 @@ struct Target {
      * will be an arbitrary DeviceAPI. */
     DeviceAPI get_required_device_api() const;
 
+    /** Getters and setters for target properties. */
+    OS os() const {
+        return os_;
+    }
+    void set_os(OS o) {
+        os_ = o;
+    }
+
+    Arch arch() const {
+        return arch_;
+    }
+    void set_arch(Arch a) {
+        arch_ = a;
+    }
+
+    int bits() const {
+        return bits_;
+    }
+    void set_bits(int b) {
+        bits_ = b;
+    }
+
+    int vector_bits() const {
+        return vector_bits_;
+    }
+    void set_vector_bits(int vb) {
+        vector_bits_ = vb;
+    }
+
+    Processor processor_tune() const {
+        return processor_tune_;
+    }
+    void set_processor_tune(Processor pt) {
+        processor_tune_ = pt;
+    }
+
     bool operator==(const Target &other) const {
-        return os == other.os &&
-               arch == other.arch &&
-               bits == other.bits &&
-               processor_tune == other.processor_tune &&
+        return os_ == other.os_ &&
+               arch_ == other.arch_ &&
+               bits_ == other.bits_ &&
+               processor_tune_ == other.processor_tune_ &&
                features == other.features &&
-               vector_bits == other.vector_bits;
+               vector_bits_ == other.vector_bits_;
     }
 
     bool operator!=(const Target &other) const {
@@ -373,18 +401,15 @@ struct Target {
 
     /** Return true iff 64 bits and has_feature(LargeBuffers). */
     bool has_large_buffers() const {
-        return bits == 64 && has_feature(LargeBuffers);
+        return bits_ == 64 && has_feature(LargeBuffers);
     }
 
     /** Return the maximum buffer size in bytes supported on this
-     * Target. This is 2^31 - 1 except on 64-bit targets when the LargeBuffers
-     * feature is enabled, which expands the maximum to 2^63 - 1. */
+     * Target. This is (signed) INT32_MAX except on 64-bit targets
+     * when the LargeBuffers feature is enabled, which expands the
+     * maximum to (signed) INT64_MAX. */
     int64_t maximum_buffer_size() const {
-        if (has_large_buffers()) {
-            return (((uint64_t)1) << 63) - 1;
-        } else {
-            return (((uint64_t)1) << 31) - 1;
-        }
+        return has_large_buffers() ? INT64_MAX : INT32_MAX;
     }
 
     /** Get the minimum cuda capability found as an integer. Returns
@@ -430,6 +455,12 @@ struct Target {
     static Target::Feature sme_svl_feature_from_bits(int bits);
 
 private:
+    OS os_ = OSUnknown;
+    Arch arch_ = ArchUnknown;
+    int bits_ = 0;
+    int vector_bits_ = 0;
+    Processor processor_tune_ = ProcessorGeneric;
+
     /** A bitmask that stores the active features. */
     std::bitset<FeatureEnd> features;
 

@@ -6,7 +6,7 @@ int main(int argc, char **argv) {
 
     // TODO(#5738): remove after winbots are upgraded
     Target target = get_jit_target_from_environment();
-    if (target.os == Target::Windows &&
+    if (target.os() == Target::Windows &&
         (target.has_feature(Target::OpenCL) ||
          target.has_feature(Target::D3D12Compute))) {
         printf("[SKIP-WITH-ISSUE-5738] workaround for issue #5738\n");

@@ -6,7 +6,7 @@ using namespace Halide;
 int main(int argc, char **argv) {
 
     Target target = get_jit_target_from_environment();
-    if (target.arch == Target::WebAssembly) {
+    if (target.arch() == Target::WebAssembly) {
         printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
         return 0;
     }
@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
             const int vec = target.natural_vector_size<uint8_t>();
 
             if (use_nested_vectorization) {
-                if (target.arch == Target::X86) {
+                if (target.arch() == Target::X86) {
                     // x86 schedule. Exploits the ability of pmaddwd
                     // to pull one arg from memory. Because we'll be
                     // intentionally spilling, the tile will be
@@ -159,7 +159,7 @@ int main(int argc, char **argv) {
             if (use_nested_vectorization) {
 
                 int reduce;
-                if (target.arch == Target::X86) {
+                if (target.arch() == Target::X86) {
                     reduce = 8;
                 } else if (target.has_feature(Target::ARMDotProd)) {
                     reduce = 4;
@@ -221,7 +221,7 @@ int main(int argc, char **argv) {
     // 16-bit blur into 32-bit accumulator, with reduction over
     // adjacent vector lanes at the same time as reduction over slices
     // of the vector. This is only a win on platforms with a pmaddwd-like instruction.
-    if (target.arch == Target::X86) {
+    if (target.arch() == Target::X86) {
 
         double times[2];
 

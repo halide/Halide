@@ -991,8 +991,8 @@ void CodeGen_ARM::init_module() {
     // TODO: https://github.com/halide/Halide/issues/8872
     // if (target.features_any_of({Target::SVE, Target::SVE2})) {
     if (target.has_feature(Target::SVE2)) {
-        user_assert(target.vector_bits != 0) << "For SVE/SVE2 support, Target::vector_bits must be set. For generator target strings, add \"vector_bits_<bits>\".\n";
-        user_assert((target.vector_bits % 128) == 0) << "For SVE/SVE2 support, Target::vector_bits must be a multiple of 128.\n";
+        user_assert(target.vector_bits() != 0) << "For SVE/SVE2 support, Target::vector_bits must be set. For generator target strings, add \"vector_bits_<bits>\".\n";
+        user_assert((target.vector_bits() % 128) == 0) << "For SVE/SVE2 support, Target::vector_bits must be a multiple of 128.\n";
     } else if (target.has_feature(Target::SVE)) {
         user_warning << "Halide does not support SVE for now. Use SVE2 if your target device supports it.\n";
     }
@@ -1034,7 +1034,7 @@ void CodeGen_ARM::init_module() {
 
         // Get the name of the intrinsic with the appropriate prefix.
         const char *intrin_name = nullptr;
-        if (target.bits == 32) {
+        if (target.bits() == 32) {
             intrin_name = intrin.arm32;
         } else {
             intrin_name = intrin.arm64;
@@ -1064,7 +1064,7 @@ void CodeGen_ARM::init_module() {
                 intrinsics_map = &intrinsics_neon;
                 break;
             case SIMDFlavors::SVE:
-                vscale = target.vector_bits / 128;
+                vscale = target.vector_bits() / 128;
                 intrinsics_map = &intrinsics_sve2;
                 break;
             case SIMDFlavors::Streaming:
@@ -1086,7 +1086,7 @@ void CodeGen_ARM::init_module() {
                     continue;
                 }
             }
-            if ((target.bits == 64) &&
+            if ((target.bits() == 64) &&
                 (intrin.flags & ArmIntrinsic::Neon64Unavailable) &&
                 !is_sve_or_streaming) {
                 continue;
@@ -1101,7 +1101,7 @@ void CodeGen_ARM::init_module() {
                 const bool is_vanilla_intrinsic = starts_with(intrin_name, "llvm.");
                 if (!is_vanilla_intrinsic && (intrin.flags & ArmIntrinsic::NoPrefix) == 0) {
                     const char *prefix =
-                        target.bits == 32   ? "llvm.arm.neon." :
+                        target.bits() == 32 ? "llvm.arm.neon." :
                         is_sve_or_streaming ? "llvm.aarch64.sve." :
                                               "llvm.aarch64.neon.";
                     return concat_strings(prefix, intrin_name);
@@ -1199,7 +1199,7 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
     internal_assert(llvm_func);
     bool is_streaming_task = (f.attributes & LoweredFunc::Attribute::SME_STREAMING_TASK) && target.has_feature(Target::SME2);
 
-    if (target.os != Target::IOS && target.os != Target::OSX) {
+    if (target.os() != Target::IOS && target.os() != Target::OSX) {
         // Substitute in strided loads to get vld2/3/4 emission. We don't do it
         // on Apple silicon, because doing a dense load and then shuffling is
         // actually faster.
@@ -1228,7 +1228,7 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
         in_streaming = (feasible_vscale > 0) && is_streaming_task;
 
         if (!in_streaming && target.has_feature(Target::SVE2)) {
-            feasible_vscale = check_feasible_vscale(target.vector_bits,  // VL
+            feasible_vscale = check_feasible_vscale(target.vector_bits(),  // VL
                                                     lanes_used, "", simple_name);
         }
     }
@@ -1332,7 +1332,7 @@ void CodeGen_ARM::visit(const Cast *op) {
                         continue;
                     }
                 }
-                if (target.bits == 32 && pattern.intrin.find("shift_right") != string::npos) {
+                if (target.bits() == 32 && pattern.intrin.find("shift_right") != string::npos) {
                     // The 32-bit ARM backend wants right shifts as negative values.
                     matches[1] = simplify(-cast(matches[1].type().with_code(halide_type_int), matches[1]));
                 }
@@ -1593,7 +1593,7 @@ void CodeGen_ARM::visit(const Store *op) {
         intrin_type = t;
         Type elt = t.element_of();
         int vec_bits = t.bits() * t.lanes();
-        if (t.bits() <= target.bits &&
+        if (t.bits() <= target.bits() &&
             (elt == Float(32) || elt == Float(64) ||
              is_float16_and_has_feature(elt) ||
              elt == Int(8) || elt == Int(16) || elt == Int(32) || elt == Int(64) ||
@@ -1637,7 +1637,7 @@ void CodeGen_ARM::visit(const Store *op) {
         std::ostringstream instr;
         vector<llvm::Type *> arg_types;
         llvm::Type *intrin_llvm_type = llvm_type_with_constraint(intrin_type, false, is_sve ? VectorTypeConstraint::VScale : VectorTypeConstraint::Fixed);
-        if (target.bits == 32) {
+        if (target.bits() == 32) {
             instr << "llvm.arm.neon.vst"
                   << num_vecs
                   << ".p0"
@@ -1735,7 +1735,7 @@ void CodeGen_ARM::visit(const Store *op) {
                 slice_args[j] = convert_fixed_or_scalable_vector_type(slice_args[j], get_vector_type(slice_args[j]->getType()->getScalarType(), intrin_type.lanes()));
             }
 
-            if (target.bits == 32) {
+            if (target.bits() == 32) {
                 // Set the pointer argument
                 slice_args.insert(slice_args.begin(), ptr);
                 // Set the alignment argument
@@ -1873,7 +1873,7 @@ void CodeGen_ARM::visit(const Store *op) {
     }
 
     // We have builtins for strided stores with fixed but unknown stride, but they use inline assembly
-    if (target.bits != 64 /* Not yet implemented for aarch64 */) {
+    if (target.bits() != 64 /* Not yet implemented for aarch64 */) {
         ostringstream builtin;
         builtin << "strided_store_"
                 << (op->value.type().is_float() ? "f" : "i")
@@ -1927,7 +1927,7 @@ void CodeGen_ARM::visit(const Load *op) {
     }
 
     // We have builtins for strided loads with fixed but unknown stride, but they use inline assembly.
-    if (target.bits != 64 /* Not yet implemented for aarch64 */) {
+    if (target.bits() != 64 /* Not yet implemented for aarch64 */) {
         ostringstream builtin;
         builtin << "strided_load_"
                 << (op->type.is_float() ? "f" : "i")
@@ -2040,7 +2040,7 @@ void CodeGen_ARM::visit(const Shuffle *op) {
     // load.
     int stride = op->slice_stride();
     const Load *load = op->vectors[0].as<Load>();
-    if (target.os != Target::IOS && target.os != Target::OSX &&
+    if (target.os() != Target::IOS && target.os() != Target::OSX &&
         load &&
         op->vectors.size() == 1 &&
         op->is_slice() &&
@@ -2506,7 +2506,7 @@ void CodeGen_ARM::visit(const Call *op) {
         // llvm's roundeven intrinsic reliably lowers to the correct
         // instructions on aarch64, but despite having the same instruction
         // available, it doesn't seem to work for arm-32.
-        if (target.bits == 32) {
+        if (target.bits() == 32) {
             // So let's call the fallback to make sure it's vectorizable.
             value = codegen(lower_round_to_nearest_ties_to_even(op->args[0]));
             return;
@@ -2524,7 +2524,7 @@ void CodeGen_ARM::visit(const Call *op) {
                         continue;
                     }
                 }
-                if (target.bits == 32 && pattern.intrin.find("shift_right") != string::npos) {
+                if (target.bits() == 32 && pattern.intrin.find("shift_right") != string::npos) {
                     // The 32-bit ARM backend wants right shifts as negative values.
                     matches[1] = simplify(-cast(matches[1].type().with_code(halide_type_int), matches[1]));
                 }
@@ -2775,7 +2775,7 @@ bool CodeGen_ARM::codegen_pairwise_vector_reduce(const VectorReduce *op, const E
             narrow = lossless_cast(narrow_type.with_code(Type::UInt), op->value);
         }
         if (narrow.defined()) {
-            if (init.defined() && (target.bits == 32 || (target_vscale() > 0))) {
+            if (init.defined() && (target.bits() == 32 || (target_vscale() > 0))) {
                 // On 32-bit or SVE2, we have an intrinsic for widening add-accumulate.
                 // TODO: this could be written as a pattern with widen_right_add (#6951).
                 intrin = "pairwise_widening_add_accumulate";
@@ -2927,7 +2927,7 @@ int CodeGen_ARM::natural_vector_size(const Halide::Type &t) const {
 }
 
 string CodeGen_ARM::mcpu_target() const {
-    if (target.bits == 32) {
+    if (target.bits() == 32) {
         if (target.has_feature(Target::ARMv7s)) {
             return "swift";
         } else if (target.has_feature(Target::ARMv82a)) {
@@ -2938,9 +2938,9 @@ string CodeGen_ARM::mcpu_target() const {
             return "cortex-a9";
         }
     } else {
-        if (target.os == Target::IOS) {
+        if (target.os() == Target::IOS) {
             return "apple-a7";
-        } else if (target.os == Target::OSX) {
+        } else if (target.os() == Target::OSX) {
             return "apple-m1";
         } else if (target.has_feature(Target::SVE2)) {
             return "cortex-x1";
@@ -2963,7 +2963,7 @@ string CodeGen_ARM::mattrs() const {
         // The ARM (32-bit) backend calls this feature "v8"; the AArch64
         // backend calls it "v8a". The dotted sub-versions (v8.1a, v8.2a,
         // etc.) use the same names in both backends.
-        attrs.emplace_back(target.bits == 32 ? "+v8" : "+v8a");
+        attrs.emplace_back(target.bits() == 32 ? "+v8" : "+v8a");
     }
     if (target.has_feature(Target::ARMv81a)) {
         attrs.emplace_back("+v8.1a");
@@ -2998,7 +2998,7 @@ string CodeGen_ARM::mattrs() const {
     if (target.has_feature(Target::ARMDotProd)) {
         attrs.emplace_back("+dotprod");
     }
-    if (target.bits == 32) {
+    if (target.bits() == 32) {
         if (target.has_feature(Target::ARMv7s)) {
             attrs.emplace_back("+neon");
         }
@@ -3019,7 +3019,7 @@ string CodeGen_ARM::mattrs() const {
         if (target.has_feature(Target::SME2)) {
             attrs.emplace_back("+sme2");
         }
-        if (target.os == Target::IOS || target.os == Target::OSX) {
+        if (target.os() == Target::IOS || target.os() == Target::OSX) {
             attrs.emplace_back("+reserve-x18");
         }
     }
@@ -3030,9 +3030,9 @@ bool CodeGen_ARM::use_soft_float_abi() const {
     // One expects the flag is irrelevant on 64-bit, but we'll make the logic
     // exhaustive anyway. It is not clear the armv7s case is necessary either.
     return target.has_feature(Target::SoftFloatABI) ||
-           (target.bits == 32 &&
-            ((target.os == Target::Android) ||
-             (target.os == Target::IOS && !target.has_feature(Target::ARMv7s))));
+           (target.bits() == 32 &&
+            ((target.os() == Target::Android) ||
+             (target.os() == Target::IOS && !target.has_feature(Target::ARMv7s))));
 }
 
 int CodeGen_ARM::native_vector_bits() const {

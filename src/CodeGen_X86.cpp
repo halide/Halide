@@ -1716,7 +1716,7 @@ bool gather_might_be_slow(Target target) {
     // an AMD processor, gather is safe to use. If we have the AVX512 extensions
     // present in Zen4 (or above), we also know we're not on an affected
     // processor.
-    switch (target.processor_tune) {
+    switch (target.processor_tune()) {
     case Target::Processor::AMDFam10:
     case Target::Processor::BdVer1:
     case Target::Processor::BdVer2:
@@ -1740,7 +1740,7 @@ bool gather_might_be_slow(Target target) {
 
 string CodeGen_X86::mcpu_tune() const {
     // Check if any explicit request for tuning exists.
-    switch (target.processor_tune) {  // Please keep sorted.
+    switch (target.processor_tune()) {  // Please keep sorted.
     case Target::Processor::AMDFam10:
         return "amdfam10";
     case Target::Processor::BdVer1:
@@ -1773,7 +1773,7 @@ string CodeGen_X86::mcpu_tune() const {
     case Target::Processor::ProcessorGeneric:
         break;
     }
-    internal_assert(target.processor_tune == Target::Processor::ProcessorGeneric && "The switch should be exhaustive.");
+    internal_assert(target.processor_tune() == Target::Processor::ProcessorGeneric && "The switch should be exhaustive.");
     return mcpu_target();  // Detect "best" CPU from the enabled ISA's.
 }
 
@@ -1857,7 +1857,7 @@ string CodeGen_X86::mattrs() const {
     }
 
     if (target.has_feature(Target::AVX10_1)) {
-        switch (target.vector_bits) {
+        switch (target.vector_bits()) {
         case 256:
             attrs.emplace_back("+avx10.1-256");
             break;
@@ -1886,7 +1886,7 @@ bool CodeGen_X86::use_soft_float_abi() const {
 
 int CodeGen_X86::native_vector_bits() const {
     if (target.has_feature(Target::AVX10_1)) {
-        return target.vector_bits;
+        return target.vector_bits();
     } else if (target.has_feature(Target::AVX512)) {
         return 512;
     } else if (target.has_feature(Target::AVX)) {

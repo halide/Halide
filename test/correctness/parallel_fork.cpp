@@ -64,7 +64,7 @@ Func make(Schedule schedule) {
 }
 
 int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+    if (get_jit_target_from_environment().arch() == Target::WebAssembly) {
         printf("[SKIP] Skipping test for WebAssembly as it does not support async() yet.\n");
         return 0;
     }

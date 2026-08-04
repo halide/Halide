@@ -20,14 +20,14 @@ public:
     }
 
     void add_tests() override {
-        if (target.arch == Target::ARM) {
+        if (target.arch() == Target::ARM) {
             check_neon_all();
             check_streaming_accesses();
         }
     }
 
     void check_streaming_accesses() {
-        if (target.bits != 64) {
+        if (target.bits() != 64) {
             return;
         }
 
@@ -73,7 +73,7 @@ public:
         // to peephole match any with vector, so we just try 64-bits, 128
         // bits, 192 bits, and 256 bits for everything.
 
-        bool arm32 = (target.bits == 32);
+        bool arm32 = (target.bits() == 32);
 
         for (int w = 1; w <= 4; w++) {
 
@@ -324,7 +324,7 @@ public:
                 check(arm32 ? "vld1.32" : "ldr", 2 * w, in_f32(x + y));
             }
 
-            if (target.os != Target::IOS && target.os != Target::OSX) {
+            if (target.os() != Target::IOS && target.os() != Target::OSX) {
                 // VLD* are not profitable on Apple silicon
 
                 // Even on non-Apple silicon, LLVM occasionally decides it's
@@ -909,7 +909,7 @@ public:
             check(arm32 ? "vrsqrts.f32" : "frsqrts", 4 * w, fast_inverse_sqrt(f32_1));
 
             // VFRINTN
-            if (target.bits == 64) {
+            if (target.bits() == 64) {
                 // LLVM doesn't want to emit vfrintn on arm-32
                 if (target.has_feature(Target::ARMFp16)) {
                     check(arm32 ? "vfrintn.f16" : "frintn", 8 * w, round(f16_1));

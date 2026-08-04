@@ -32,7 +32,7 @@ bool is_type_supported(int vec_width, const Target &target) {
     }
     if (target.has_feature(Target::Vulkan)) {
         if (type_of<T>() == Float(64)) {
-            if ((target.os == Target::OSX || target.os == Target::IOS)) {
+            if ((target.os() == Target::OSX || target.os() == Target::IOS)) {
                 return false;  // MoltenVK doesn't support Float64
             }
         }
@@ -146,7 +146,7 @@ int main(int argc, char **argv) {
 
     // We only test power-of-two vector widths for now
     int vec_width_max = 64;
-    if (target.arch == Target::WebAssembly) {
+    if (target.arch() == Target::WebAssembly) {
         // The wasm jit is very slow, so shorten this test here.
         vec_width_max = 16;
     }

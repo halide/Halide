@@ -20,7 +20,7 @@ public:
     }
 
     void add_tests() override {
-        if (target.arch == Target::POWERPC) {
+        if (target.arch() == Target::POWERPC) {
             check_altivec_all();
         }
     }

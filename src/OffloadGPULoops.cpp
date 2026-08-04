@@ -184,7 +184,7 @@ protected:
         debug(2) << "Compiled launch to kernel \"" << kernel_name << "\"\n";
 
         bool runtime_run_takes_types = gpu_codegen->kernel_run_takes_types();
-        Type target_size_t_type = target.bits == 32 ? Int(32) : Int(64);
+        Type target_size_t_type = target.bits() == 32 ? Int(32) : Int(64);
 
         vector<Expr> args, arg_types_or_sizes, arg_is_buffer;
         for (const DeviceArgument &i : closure_args) {
@@ -254,8 +254,8 @@ public:
         // For the GPU target we just want to pass the flags, to avoid the
         // generated kernel code unintentionally having any dependence on the
         // host arch or os.
-        device_target.os = Target::OSUnknown;
-        device_target.arch = Target::ArchUnknown;
+        device_target.set_os(Target::OSUnknown);
+        device_target.set_arch(Target::ArchUnknown);
         if (target.has_feature(Target::CUDA)) {
             cgdev[DeviceAPI::CUDA] = new_CodeGen_PTX_Dev(device_target);
         }

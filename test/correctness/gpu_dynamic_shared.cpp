@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
             printf("[SKIP] Vulkan %d.%d is less than required 1.3.\n", major, minor);
             return 0;
         }
-        if ((t.os == Target::IOS) || (t.os == Target::OSX)) {
+        if ((t.os() == Target::IOS) || (t.os() == Target::OSX)) {
             printf("[SKIP] Skipping test for Vulkan on iOS/OSX (MoltenVK doesn't support dynamic LocalSizeId yet)!\n");
             return 0;
         }

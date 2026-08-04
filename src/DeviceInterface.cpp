@@ -152,7 +152,7 @@ DeviceAPI get_default_device_api_for_target(const Target &target) {
         return DeviceAPI::OpenCL;
     } else if (target.has_feature(Target::CUDA)) {
         return DeviceAPI::CUDA;
-    } else if (target.arch != Target::Hexagon && target.has_feature(Target::HVX)) {
+    } else if (target.arch() != Target::Hexagon && target.has_feature(Target::HVX)) {
         return DeviceAPI::Hexagon;
     } else if (target.has_feature(Target::HexagonDma)) {
         return DeviceAPI::HexagonDma;

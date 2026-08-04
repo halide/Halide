@@ -6,7 +6,7 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
-    if (target.arch == Target::WebAssembly) {
+    if (target.arch() == Target::WebAssembly) {
         printf("[SKIP] Autoschedulers do not support WebAssembly.\n");
         return 0;
     }
@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
 
     int num_levels = 10;
 
-    if (target.arch == Target::X86 && target.bits == 32) {
+    if (target.arch() == Target::X86 && target.bits() == 32) {
         // Work around a slowdown in LLVM that seems to trigger in this particular case:
         // https://github.com/llvm/llvm-project/issues/156114
         num_levels = 3;

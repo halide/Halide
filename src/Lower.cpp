@@ -246,7 +246,7 @@ void lower_impl(const vector<Function> &output_funcs,
     bool will_inject_host_copies =
         (t.has_gpu_feature() ||
          t.has_feature(Target::HexagonDma) ||
-         (t.arch != Target::Hexagon && (t.has_feature(Target::HVX))));
+         (t.arch() != Target::Hexagon && (t.has_feature(Target::HVX))));
 
     debug(1) << "Adding checks for images\n";
     s = add_image_checks(s, outputs, t, order, env, func_bounds, will_inject_host_copies);
@@ -474,7 +474,7 @@ void lower_impl(const vector<Function> &output_funcs,
     // Make a copy of the Stmt code, before we lower anything to less human-readable code.
     result_module.set_conceptual_code_stmt(s);
 
-    if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {
+    if (t.arch() != Target::Hexagon && t.has_feature(Target::HVX)) {
         debug(1) << "Splitting off Hexagon offload...\n";
         s = inject_hexagon_rpc(s, t, result_module);
         debug(2) << "Lowering after splitting off Hexagon offload:\n"

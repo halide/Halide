@@ -92,14 +92,14 @@ struct BoundConstType {
     uint16_t lanes = 0;
 
     HALIDE_ALWAYS_INLINE BoundConstType() noexcept = default;
-    HALIDE_ALWAYS_INLINE BoundConstType(Type t) noexcept
-        : code(t.code()), bits((uint8_t)t.bits()), lanes((uint16_t)t.lanes()) {
+    HALIDE_ALWAYS_INLINE BoundConstType(Type type) noexcept
+        : code(type.code()), bits((uint8_t)type.bits()), lanes((uint16_t)type.lanes()) {
     }
     HALIDE_ALWAYS_INLINE operator Type() const noexcept {
         return Type(code, bits, lanes);
     }
-    HALIDE_ALWAYS_INLINE bool operator==(const BoundConstType &other) const noexcept {
-        return code == other.code && bits == other.bits && lanes == other.lanes;
+    HALIDE_ALWAYS_INLINE bool operator==(const BoundConstType &other_type) const noexcept {
+        return code == other_type.code && bits == other_type.bits && lanes == other_type.lanes;
     }
 };
 static_assert(sizeof(BoundConstType) == 4, "BoundConstType should be a compact 4-byte numeric type");

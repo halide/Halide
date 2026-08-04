@@ -25,7 +25,7 @@ extern "C" HALIDE_EXPORT_SYMBOL int check_struct(struct_t *s) {
 HalideExtern_1(int, check_struct, struct_t *);
 
 int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+    if (get_jit_target_from_environment().arch() == Target::WebAssembly) {
         printf("[SKIP] Skipping test for WebAssembly as the wasm JIT cannot support passing arbitrary pointers to/from HalideExtern code.\n");
         return 0;
     }

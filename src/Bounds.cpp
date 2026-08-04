@@ -1460,7 +1460,7 @@ protected:
                             interval.max = a_interval.max >> abs(b_interval.max);
                         }
                     } else if (op->is_intrinsic(Call::shift_right)) {
-                        // Only try to improve on bounds-of-type if we can prove 0 <= b < t.bits,
+                        // Only try to improve on bounds-of-type if we can prove 0 <= b < t.bits(),
                         // as shift_right(a, b) is UB for b outside that range.
                         if (b_interval.is_bounded()) {
                             bool b_min_ok_positive = can_prove(b_interval.min >= 0 &&

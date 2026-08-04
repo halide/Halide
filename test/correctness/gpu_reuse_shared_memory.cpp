@@ -259,7 +259,7 @@ int main(int argc, char **argv) {
         }
 
         printf("Running dynamic shared test\n");
-        if (t.has_feature(Target::Vulkan) && ((t.os == Target::IOS) || t.os == Target::OSX)) {
+        if (t.has_feature(Target::Vulkan) && ((t.os() == Target::IOS) || t.os() == Target::OSX)) {
             printf("Skipping test for Vulkan on iOS/OSX (MoltenVK doesn't support dynamic sizes for shared memory)!\n");
         } else {
             if (dynamic_shared_test(memory_type) != 0) {

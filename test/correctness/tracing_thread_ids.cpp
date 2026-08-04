@@ -75,7 +75,7 @@ int parallel_task_ancestor_id(int id) {
 }  // namespace
 
 int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+    if (get_jit_target_from_environment().arch() == Target::WebAssembly) {
         printf("[SKIP] WebAssembly JIT does not support threads.\n");
         return 0;
     }

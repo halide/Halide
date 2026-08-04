@@ -82,7 +82,7 @@ void reorder_storage(const Stage &stage,
 
 int natural_vector_size(const Target &target, const Type &t) {
     const int data_size = t.bytes();
-    if (target.os == Target::OSUnknown || target.arch == Target::ArchUnknown || target.bits != 0) {
+    if (target.os() == Target::OSUnknown || target.arch() == Target::ArchUnknown || target.bits() != 0) {
         return 32 / data_size;
     } else {
         return target.natural_vector_size(t);

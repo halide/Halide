@@ -703,7 +703,7 @@ Callable Pipeline::compile_to_callable(const std::vector<Argument> &args_in, con
     // TODO: it fills in the value side with JITExtern values, but does anything actually use those?
     auto jit_externs = jit_externs_in;
     std::vector<JITModule> externs_jit_module = Pipeline::make_externs_jit_module(jit_target, jit_externs);
-    if (jit_target.arch == Target::WebAssembly) {
+    if (jit_target.arch() == Target::WebAssembly) {
         FindExterns find_externs(jit_externs);
         for (const LoweredFunc &f : module.functions()) {
             f.body.accept(&find_externs);

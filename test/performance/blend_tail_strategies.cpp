@@ -10,7 +10,7 @@ int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
 
     // Make sure we don't have predicated instructions available
-    if ((t.arch != Target::X86 && t.arch != Target::ARM) ||
+    if ((t.arch() != Target::X86 && t.arch() != Target::ARM) ||
         t.has_feature(Target::AVX512) ||
         t.has_feature(Target::SVE)) {
         printf("[SKIP] This is a test for architectures without predication. "

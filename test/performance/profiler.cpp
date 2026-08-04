@@ -105,7 +105,7 @@ int run_test(bool use_timer_profiler) {
 
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
-    if (target.arch == Target::WebAssembly) {
+    if (target.arch() == Target::WebAssembly) {
         printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
         return 0;
     }
@@ -114,7 +114,7 @@ int main(int argc, char **argv) {
     if (run_test(false) != 0) {
         return 1;
     }
-    if (target.os == Target::Linux) {
+    if (target.os() == Target::Linux) {
         printf("Testing timer based profiler.\n");
         if (run_test(true) != 0) {
             return 1;

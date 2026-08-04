@@ -31,10 +31,11 @@ void define_target(py::module &m) {
             .def("__eq__", [](const Target &value, Target *value2) { return value2 && value == *value2; })
             .def("__ne__", [](const Target &value, Target *value2) { return !value2 || value != *value2; })
 
-            .def_readwrite("os", &Target::os)
-            .def_readwrite("arch", &Target::arch)
-            .def_readwrite("bits", &Target::bits)
-            .def_readwrite("processor_tune", &Target::processor_tune)
+            .def_property("os", &Target::os, &Target::set_os)
+            .def_property("arch", &Target::arch, &Target::set_arch)
+            .def_property("bits", &Target::bits, &Target::set_bits)
+            .def_property("vector_bits", &Target::vector_bits, &Target::set_vector_bits)
+            .def_property("processor_tune", &Target::processor_tune, &Target::set_processor_tune)
 
             .def("__repr__", &target_repr)
             .def("__str__", &Target::to_string)

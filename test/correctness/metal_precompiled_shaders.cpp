@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
     // This test only runs on macOS with Metal support
     Target t = get_jit_target_from_environment();
 
-    if (t.os != Target::OSX || !t.has_feature(Target::Metal)) {
+    if (t.os() != Target::OSX || !t.has_feature(Target::Metal)) {
         printf("[SKIP] This test only runs on macOS with Metal support\n");
         return 0;
     }

@@ -172,7 +172,7 @@ int main(int argc, char **argv) {
 
     // TODO(https://github.com/halide/Halide/issues/8985): LLVM's JIT emits
     // misaligned jump tables on arm-32 with arm_fp16, causing SIGILL.
-    if (target.arch == Target::ARM && target.bits == 32 &&
+    if (target.arch() == Target::ARM && target.bits() == 32 &&
         target.has_feature(Target::ARMFp16)) {
         printf("[SKIP] arm-32 JIT with arm_fp16 hits LLVM jump table misalignment bug.\n");
         return 0;
@@ -181,7 +181,7 @@ int main(int argc, char **argv) {
     std::vector<Task> tasks;
     add_tasks(target, tasks);
 
-    if (target.arch == Target::X86) {
+    if (target.arch() == Target::X86) {
         // LLVM has had SIMD codegen errors that we missed because we didn't test against
         // multiple SIMD architectures, using just 'host' instead. To remedy this, we'll
         // re-run this multiple times, downgrading the SIMD successively, to ensure we get
@@ -193,20 +193,20 @@ int main(int argc, char **argv) {
         // e.g. if you specify a target with AVX2, the codegen will automatically include
         // AVX and SSE41 as well.)
         if (target.has_feature(Target::AVX512)) {
-            Target avx2_target(target.os, target.arch, target.bits, {Target::AVX2});
+            Target avx2_target(target.os(), target.arch(), target.bits(), {Target::AVX2});
             add_tasks(avx2_target, tasks);
         }
         if (target.has_feature(Target::AVX2)) {
-            Target sse41_target(target.os, target.arch, target.bits, {Target::AVX});
+            Target sse41_target(target.os(), target.arch(), target.bits(), {Target::AVX});
             add_tasks(sse41_target, tasks);
         }
         if (target.has_feature(Target::AVX)) {
-            Target sse41_target(target.os, target.arch, target.bits, {Target::SSE41});
+            Target sse41_target(target.os(), target.arch(), target.bits(), {Target::SSE41});
             add_tasks(sse41_target, tasks);
         }
         if (target.has_feature(Target::SSE41)) {
             // Halide assumes that all x86 targets have at least sse2
-            Target sse2_target(target.os, target.arch, target.bits);
+            Target sse2_target(target.os(), target.arch(), target.bits());
             add_tasks(sse2_target, tasks);
         }
     }

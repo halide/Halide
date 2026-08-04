@@ -16,8 +16,8 @@ int main(int argc, char **argv) {
 
     f(x) = x;
 
-    const int wrong_vector_bits = target.vector_bits == 128 ? 256 : 128;
-    target.vector_bits = wrong_vector_bits;
+    const int wrong_vector_bits = target.vector_bits() == 128 ? 256 : 128;
+    target.set_vector_bits(wrong_vector_bits);
 
     // Compile with wrong vscale and run on host, which should end up with assertion failure.
     Buffer<int> out = f.realize({100}, target);

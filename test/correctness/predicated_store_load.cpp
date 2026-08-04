@@ -430,7 +430,7 @@ int vectorized_predicated_load_const_index_test(const Target &t) {
 }
 
 int vectorized_predicated_load_lut_test(const Target &t) {
-    if (t.arch != Target::X86) {
+    if (t.arch() != Target::X86) {
         // This test will fail on Hexagon as the LUT is larger than 16 bits.
         // Since using less than 16-bit LUT will make the predicate on the
         // vector store/load disappear, only run the test for X86.

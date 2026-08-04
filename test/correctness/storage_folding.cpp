@@ -109,7 +109,7 @@ void realize_and_expect_error(Func f, int w, int h) {
 }
 
 int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+    if (get_jit_target_from_environment().arch() == Target::WebAssembly) {
         printf("[SKIP] WebAssembly JIT does not support custom allocators.\n");
         return 0;
     }

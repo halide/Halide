@@ -28,7 +28,7 @@ void my_error_handler(JITUserContext *user_context, const char *) {
 }
 
 int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+    if (get_jit_target_from_environment().arch() == Target::WebAssembly) {
         printf("[SKIP] WebAssembly JIT does not support custom allocators.\n");
         return 0;
     }

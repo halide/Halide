@@ -137,8 +137,8 @@ public:
             const int vec = natural_vector_size<float>();
 
             if (get_target().has_feature(Target::AVX512_Skylake) ||
-                (get_target().arch == Target::ARM &&
-                 get_target().bits == 64)) {
+                (get_target().arch() == Target::ARM &&
+                 get_target().bits() == 64)) {
                 // On Skylake we have one load per fma and 32
                 // registers available, so there's considerable
                 // flexibility in the schedule. We'll use 20 accumulator
@@ -146,7 +146,7 @@ public:
                 // choice for ARMv8, which also has 32 registers.
                 tile_w = 4;
                 tile_h = 5;
-            } else if (get_target().arch == Target::X86) {
+            } else if (get_target().arch() == Target::X86) {
                 // With 16-register ISAs like x86 with AVX2, we can
                 // only do one load per two fmas, which constrains the
                 // schedule to have to be a squarish 12-register tile

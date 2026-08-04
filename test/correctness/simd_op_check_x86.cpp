@@ -40,7 +40,7 @@ public:
 
     void add_tests() override {
         // Queue up a bunch of tasks representing each test to run.
-        if (target.arch == Target::X86) {
+        if (target.arch() == Target::X86) {
             check_sse_and_avx();
             check_streaming_accesses();
         }

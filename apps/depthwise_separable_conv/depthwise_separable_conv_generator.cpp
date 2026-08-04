@@ -190,8 +190,8 @@ public:
             // file on this target.
             int num_regs = 16;
             if (get_target().has_feature(Target::AVX512_Skylake) ||
-                (get_target().arch == Target::ARM &&
-                 get_target().bits == 64)) {
+                (get_target().arch() == Target::ARM &&
+                 get_target().bits() == 64)) {
                 num_regs = 32;
             }
 

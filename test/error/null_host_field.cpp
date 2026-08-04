@@ -5,7 +5,7 @@ using namespace Halide;
 using namespace Halide::Internal;
 
 int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+    if (get_jit_target_from_environment().arch() == Target::WebAssembly) {
         printf("[SKIP] WebAssembly JIT does not yet support non-host buffers.\n");
         _halide_user_assert(0);
     }

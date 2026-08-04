@@ -6,7 +6,7 @@ using namespace Halide;
 int main(int argc, char **argv) {
     // For simplicity, only run this test on hosts that we can predict.
     Target t = get_host_target();
-    if (t.arch != Target::X86 || t.bits != 64 || t.os != Target::OSX) {
+    if (t.arch() != Target::X86 || t.bits() != 64 || t.os() != Target::OSX) {
         printf("[SKIP] This test only runs on x86-64-osx.\n");
         return 0;
     }

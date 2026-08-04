@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
     }
 
     for (int vectorize = 0; vectorize <= 1; vectorize++) {
-        if (vectorize && get_jit_target_from_environment().arch != Target::X86) {
+        if (vectorize && get_jit_target_from_environment().arch() != Target::X86) {
             // Not all architectures support vectorized popc/ctz/clz operations,
             // and will fail at LLVM time. Skipping for non-x86 for now.
             continue;

@@ -291,7 +291,7 @@ CodeGen_C::~CodeGen_C() {
                    << "// includes a full copy of the Halide runtime so that it\n"
                    << "// can be used standalone. Declarations for the functions\n"
                    << "// in the Halide runtime are below.\n";
-            if (target.os == Target::Windows) {
+            if (target.os() == Target::Windows) {
                 stream
                     << "//\n"
                     << "// The inclusion of this runtime means that it is not legal\n"

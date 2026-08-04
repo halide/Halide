@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
     if (result != 0) {
         return 1;
     }
-    if (t.os == Target::Linux) {
+    if (t.os() == Target::Linux) {
         printf("Testing timer based profiler.\n");
         result = run_test(t.with_feature(Target::ProfileByTimer));
         if (result != 0) {

@@ -101,8 +101,8 @@ private:
         return (((uint16_t)code) << 8) | (uint16_t)bits;
     }
 
-    static constexpr QuickCallCheckInfo make_scalar_qcci(halide_type_t t) {
-        return _make_qcci(t.code, t.bits);
+    static constexpr QuickCallCheckInfo make_scalar_qcci(halide_type_t type) {
+        return _make_qcci(type.code, type.bits);
     }
 
     static constexpr QuickCallCheckInfo make_buffer_qcci() {

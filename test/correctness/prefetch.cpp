@@ -59,7 +59,7 @@ Expr get_max_byte_size(const Target &t) {
     Expr max_byte_size;
     if (t.has_feature(Target::HVX)) {
         max_byte_size = Expr();
-    } else if (t.arch == Target::ARM) {
+    } else if (t.arch() == Target::ARM) {
         max_byte_size = 32;
     } else {
         max_byte_size = 64;

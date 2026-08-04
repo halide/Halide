@@ -7,7 +7,7 @@ using namespace Halide;
 int main(int argc, char **argv) {
     // Wasm JIT is substantially slower than others,
     // so do fewer iterations to avoid timing out.
-    const bool is_wasm = get_jit_target_from_environment().arch == Target::WebAssembly;
+    const bool is_wasm = get_jit_target_from_environment().arch() == Target::WebAssembly;
 
     // Test if the compiler itself is thread-safe. This test is
     // intended to be run in a thread-sanitizer.

@@ -439,7 +439,7 @@ std::pair<FuncType, FuncType> tiled_transpose(FuncType f, int max_tile_size,
     // efficient transpose. The strategy is to break the transpose into 4x4 tiles,
     // transpose the tiles themselves (dense vector load/stores), then transpose
     // the data within each tile (stride 4 loads).
-    if (target.arch != Target::ARM && !always_tile) {
+    if (target.arch() != Target::ARM && !always_tile) {
         return {transpose(f), FuncType()};
     }
 

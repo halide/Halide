@@ -2720,7 +2720,7 @@ void destroy<WasmModuleContents>(const WasmModuleContents *p) {
 /*static*/
 bool WasmModule::can_jit_target(const Target &target) {
 #if WITH_WABT || WITH_V8
-    if (target.arch == Target::WebAssembly) {
+    if (target.arch() == Target::WebAssembly) {
         return true;
     }
 #endif

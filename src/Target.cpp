@@ -636,7 +636,7 @@ bool is_using_hexagon(const Target &t) {
             t.has_feature(Target::HVX_v66) ||
             t.has_feature(Target::HVX_v68) ||
             t.has_feature(Target::HexagonDma) ||
-            t.arch == Target::Hexagon);
+            t.arch() == Target::Hexagon);
 }
 
 int get_hvx_lower_bound(const Target &t) {
@@ -998,7 +998,7 @@ Target get_jit_target_from_environment() {
     } else {
         Target t(target);
         t.set_feature(Target::JIT);
-        user_assert((t.os == host.os && t.arch == host.arch && t.bits == host.bits) || Internal::WasmModule::can_jit_target(t))
+        user_assert((t.os() == host.os() && t.arch() == host.arch() && t.bits() == host.bits()) || Internal::WasmModule::can_jit_target(t))
             << "HL_JIT_TARGET must match the host OS, architecture, and bit width.\n"
             << "HL_JIT_TARGET was " << target << ". "
             << "Host is " << host.to_string() << ".\n";
@@ -1041,22 +1041,25 @@ bool merge_string(Target &t, const std::string &target) {
                 return false;
             }
             bits_specified = true;
-            t.bits = std::stoi(tok);
-        } else if (lookup_arch(tok, t.arch)) {
+            t.set_bits(std::stoi(tok));
+        } else if (Target::Arch arch; lookup_arch(tok, arch)) {
             if (arch_specified) {
                 return false;
             }
             arch_specified = true;
-        } else if (lookup_os(tok, t.os)) {
+            t.set_arch(arch);
+        } else if (Target::OS os; lookup_os(tok, os)) {
             if (os_specified) {
                 return false;
             }
             os_specified = true;
-        } else if (lookup_processor(tok, t.processor_tune)) {
+            t.set_os(os);
+        } else if (Target::Processor processor_tune; lookup_processor(tok, processor_tune)) {
             if (processor_specified) {
                 return false;
             }
             processor_specified = true;
+            t.set_processor_tune(processor_tune);
         } else if (lookup_feature(tok, feature)) {
             t.set_feature(feature);
             features_specified = true;
@@ -1064,7 +1067,7 @@ bool merge_string(Target &t, const std::string &target) {
             t.set_features({Target::TraceLoads, Target::TraceStores, Target::TraceRealizations});
             features_specified = true;
         } else if ((vector_bits = parse_vector_bits(tok)) >= 0) {
-            t.vector_bits = vector_bits;
+            t.set_vector_bits(vector_bits);
         } else {
             return false;
         }
@@ -1102,11 +1105,11 @@ bool merge_string(Target &t, const std::string &target) {
         return false;
     }
 
-    if (bits_specified && t.bits == 0) {
+    if (bits_specified && t.bits() == 0) {
         // bits == 0 is allowed iff arch and os are "unknown" and no features are set,
         // to allow for roundtripping the string for default Target() ctor.
-        if (!(arch_specified && t.arch == Target::ArchUnknown) ||
-            !(os_specified && t.os == Target::OSUnknown) ||
+        if (!(arch_specified && t.arch() == Target::ArchUnknown) ||
+            !(os_specified && t.os() == Target::OSUnknown) ||
             features_specified) {
             return false;
         }
@@ -1180,7 +1183,7 @@ void do_check_bad(const Target &t, const std::initializer_list<Target::Feature> 
 
 void Target::validate_features() const {
     // Note that the features don't have to be exhaustive, but enough to avoid obvious mistakes is good.
-    if (arch == X86) {
+    if (arch_ == X86) {
         do_check_bad(*this, {
                                 ARMDotProd,
                                 ARMFp16,
@@ -1203,7 +1206,7 @@ void Target::validate_features() const {
                                 WasmSimd128,
                                 WasmThreads,
                             });
-    } else if (arch == ARM) {
+    } else if (arch_ == ARM) {
         do_check_bad(*this, {
                                 AVX,
                                 AVX2,
@@ -1227,7 +1230,7 @@ void Target::validate_features() const {
                                 WasmSimd128,
                                 WasmThreads,
                             });
-    } else if (arch == WebAssembly) {
+    } else if (arch_ == WebAssembly) {
         do_check_bad(*this, {
                                 ARMDotProd,
                                 ARMFp16,
@@ -1360,21 +1363,21 @@ Target::Feature Target::sme_svl_feature_from_bits(int bits) {
 std::string Target::to_string() const {
     string result;
     for (const auto &arch_entry : arch_name_map) {
-        if (arch_entry.second == arch) {
+        if (arch_entry.second == arch_) {
             result += arch_entry.first;
             break;
         }
     }
-    result += "-" + std::to_string(bits);
+    result += "-" + std::to_string(bits_);
     for (const auto &os_entry : os_name_map) {
-        if (os_entry.second == os) {
+        if (os_entry.second == os_) {
             result += "-" + os_entry.first;
             break;
         }
     }
-    if (processor_tune != ProcessorGeneric) {
+    if (processor_tune_ != ProcessorGeneric) {
         for (const auto &processor_entry : processor_name_map) {
-            if (processor_entry.second == processor_tune) {
+            if (processor_entry.second == processor_tune_) {
                 result += "-" + processor_entry.first;
                 break;
             }
@@ -1390,8 +1393,8 @@ std::string Target::to_string() const {
     if (has_feature(Target::TraceLoads) && has_feature(Target::TraceStores) && has_feature(Target::TraceRealizations)) {
         result = Internal::replace_all(std::move(result), "trace_loads-trace_realizations-trace_stores", "trace_all");
     }
-    if (vector_bits != 0) {
-        result += "-vector_bits_" + std::to_string(vector_bits);
+    if (vector_bits_ != 0) {
+        result += "-vector_bits_" + std::to_string(vector_bits_);
     }
 
     return result;
@@ -1401,25 +1404,25 @@ std::string Target::to_string() const {
 bool Target::supported() const {
     bool bad = false;
 #if !defined(WITH_ARM)
-    bad |= arch == Target::ARM && bits == 32;
+    bad |= arch_ == Target::ARM && bits_ == 32;
 #endif
 #if !defined(WITH_AARCH64)
-    bad |= arch == Target::ARM && bits == 64;
+    bad |= arch_ == Target::ARM && bits_ == 64;
 #endif
 #if !defined(WITH_X86)
-    bad |= arch == Target::X86;
+    bad |= arch_ == Target::X86;
 #endif
 #if !defined(WITH_POWERPC)
-    bad |= arch == Target::POWERPC;
+    bad |= arch_ == Target::POWERPC;
 #endif
 #if !defined(WITH_HEXAGON)
-    bad |= arch == Target::Hexagon;
+    bad |= arch_ == Target::Hexagon;
 #endif
 #if !defined(WITH_WEBASSEMBLY)
-    bad |= arch == Target::WebAssembly;
+    bad |= arch_ == Target::WebAssembly;
 #endif
 #if !defined(WITH_RISCV)
-    bad |= arch == Target::RISCV;
+    bad |= arch_ == Target::RISCV;
 #endif
 #if !defined(WITH_NVPTX)
     bad |= has_feature(Target::CUDA);
@@ -1443,7 +1446,7 @@ bool Target::supported() const {
 }
 
 bool Target::has_unknowns() const {
-    return os == OSUnknown || arch == ArchUnknown || bits == 0;
+    return os_ == OSUnknown || arch_ == ArchUnknown || bits_ == 0;
 }
 
 void Target::set_feature(Feature f, bool value) {
@@ -1524,17 +1527,17 @@ const std::vector<std::pair<Target::Feature, Target::Feature>> &implied_feature_
 
 void Target::set_implied_features() {
     // Implications that depend on more than just the feature set.
-    if (arch == X86 && has_feature(AVX10_1)) {
+    if (arch_ == X86 && has_feature(AVX10_1)) {
         // AVX10.1 at a given vector width supports the corresponding legacy
         // AVX feature set. The pairs below then cascade further.
-        if (vector_bits >= 256) {
+        if (vector_bits_ >= 256) {
             set_feature(AVX2);
         }
-        if (vector_bits >= 512) {
+        if (vector_bits_ >= 512) {
             set_feature(AVX512_SapphireRapids);
         }
     }
-    if (arch == ARM && os == OSX) {
+    if (arch_ == ARM && os_ == OSX) {
         // Apple silicon implements at least the ARM v8.4-A spec.
         set_feature(ARMv84a);
     }
@@ -1563,15 +1566,15 @@ void Target::unset_implied_features() {
 
     // Undo the conditional implications from set_implied_features(). These run
     // after the pair loop, mirroring how their seeds run before it there.
-    if (arch == X86 && has_feature(AVX10_1)) {
-        if (vector_bits >= 512) {
+    if (arch_ == X86 && has_feature(AVX10_1)) {
+        if (vector_bits_ >= 512) {
             set_feature(AVX512_SapphireRapids, false);
         }
-        if (vector_bits >= 256) {
+        if (vector_bits_ >= 256) {
             set_feature(AVX2, false);
         }
     }
-    if (arch == ARM && os == OSX) {
+    if (arch_ == ARM && os_ == OSX) {
         set_feature(ARMv84a, false);
     }
 }
@@ -1937,15 +1940,15 @@ int Target::natural_vector_size(const Halide::Type &t) const {
     const bool is_integer = t.is_int() || t.is_uint();
     const int data_size = t.bytes();
 
-    if (arch == Target::ARM) {
-        if (vector_bits != 0 &&
+    if (arch_ == Target::ARM) {
+        if (vector_bits_ != 0 &&
             (has_feature(Halide::Target::SVE2) ||
              (t.is_float() && has_feature(Halide::Target::SVE)))) {
-            return vector_bits / (data_size * 8);
+            return vector_bits_ / (data_size * 8);
         } else {
             return 16 / data_size;
         }
-    } else if (arch == Target::Hexagon) {
+    } else if (arch_ == Target::Hexagon) {
         if (is_integer) {
             if (has_feature(Halide::Target::HVX)) {
                 return 128 / data_size;
@@ -1957,7 +1960,7 @@ int Target::natural_vector_size(const Halide::Type &t) const {
             // HVX does not have vector float instructions.
             return 1;
         }
-    } else if (arch == Target::X86) {
+    } else if (arch_ == Target::X86) {
         if (is_integer && (has_feature(Halide::Target::AVX512_Skylake) ||
                            has_feature(Halide::Target::AVX512_Cannonlake) ||
                            has_feature(Halide::Target::AVX512_Zen4) ||
@@ -1987,7 +1990,7 @@ int Target::natural_vector_size(const Halide::Type &t) const {
             // SSE was all 128-bit. We ignore MMX.
             return 16 / data_size;
         }
-    } else if (arch == Target::WebAssembly) {
+    } else if (arch_ == Target::WebAssembly) {
         if (has_feature(Halide::Target::WasmSimd128)) {
             // 128-bit vectors for other types.
             return 16 / data_size;
@@ -1995,10 +1998,10 @@ int Target::natural_vector_size(const Halide::Type &t) const {
             // No vectors, sorry.
             return 1;
         }
-    } else if (arch == Target::RISCV) {
-        if (vector_bits != 0 &&
+    } else if (arch_ == Target::RISCV) {
+        if (vector_bits_ != 0 &&
             has_feature(Halide::Target::RVV)) {
-            return vector_bits / (data_size * 8);
+            return vector_bits_ / (data_size * 8);
         } else {
             return 1;
         }
@@ -2122,7 +2125,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         matching_mask.set(feature);
     }
 
-    if (arch != other.arch || bits != other.bits || os != other.os) {
+    if (arch_ != other.arch_ || bits_ != other.bits_ || os_ != other.os_) {
         debug(1) << "runtime targets must agree on platform (arch-bits-os)\n"
                  << "  this:  " << *this << "\n"
                  << "  other: " << other << "\n";
@@ -2139,7 +2142,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // Union of features is computed through bitwise-or, and masked away by the features we care about
     // Intersection of features is computed through bitwise-and and masked away, too.
     // We merge the bits via bitwise or.
-    Target output = Target{os, arch, bits, processor_tune};
+    Target output = Target{os_, arch_, bits_, processor_tune_};
     output.features = ((features | other.features) & union_mask) | ((features | other.features) & matching_mask) | ((features & other.features) & intersection_mask);
 
     // Pick tight lower bound for CUDA capability. Use fall-through to clear redundant features

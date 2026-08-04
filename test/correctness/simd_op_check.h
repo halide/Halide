@@ -106,15 +106,15 @@ public:
     }
 
     virtual bool can_run_code() const {
-        if (target.arch == Target::WebAssembly) {
+        if (target.arch() == Target::WebAssembly) {
             return Halide::Internal::WasmModule::can_jit_target(Target("wasm-32-wasmrt"));
         }
         // If we can (target matches host), run the error checking Halide::Func.
         Target host_target = get_host_target();
         bool can_run_the_code =
-            (target.arch == host_target.arch &&
-             target.bits == host_target.bits &&
-             target.os == host_target.os);
+            (target.arch() == host_target.arch() &&
+             target.bits() == host_target.bits() &&
+             target.os() == host_target.os());
         // A bunch of feature flags also need to match between the
         // compiled code and the host in order to run the code.
         for (Target::Feature f : {
