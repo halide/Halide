@@ -44,9 +44,10 @@ void set_alignment_and_bounds(OutputImageParam p, int size) {
 // The tensor core ceilings are measured, by issuing wmma instructions back to
 // back out of registers. The float one is 36 SMs times the 2817 MHz this part
 // averages while benchmarking times the 256 flops per SM per clock the cuda
-// cores do.
+// cores do. cublas is asked for a beta of zero, so that it writes its output
+// rather than accumulating onto it, which is what the filters here do.
 //
-// The tensor core schedules reach 87% to 95% of their ceilings, and beat
+// The tensor core schedules reach 87% to 96% of their ceilings, and beat
 // cublas at f16 -> f16 at 2048. Two rows fall short for reasons outside the
 // schedule.
 //
