@@ -605,8 +605,10 @@ inline bool is_power_of_two(int64_t x) {
     return (x & (x - 1)) == 0;
 }
 
+/** Round x up to the next multiple of n. Works for integral types and for
+ * Expr. */
 template<typename T>
-inline T align_up(T x, int n) {
+inline T align_up(const T &x, int n) {
     return (x + n - 1) / n * n;
 }
 
