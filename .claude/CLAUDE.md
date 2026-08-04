@@ -128,6 +128,9 @@ It runs `clang-format` (C++, sorted includes), `clang-tidy` (via
 - When benchmarking multiple things, run them sequentially, not in parallel —
   concurrent runs contend for CPU/cache resources and produce misleading
   numbers.
+- `For` loop IR nodes store an inclusive `min`/`max` pair (the loop runs for `i`
+  in `[min, max]`), not `min`/`extent` — mixing the two up is a common source of
+  apparent off-by-one errors.
 
 ## Architecture
 
