@@ -45,27 +45,21 @@ void schedule_matmul(Func mm, RVar r, int tile_x, int tile_y, int tile_r) {
     Var x("x"), y("y"), rxi("rxi"), ryi("ryi");
     RVar rri("rri"), rro("rro");
     mm.compute_at(mm.in(), x)
-        .store_in(MemoryType::Tile)
         .update()
         .tile(x, y, rxi, ryi, tile_x, tile_y, TailStrategy::GuardWithIf)
         .split(r, rro, rri, tile_r)
-        .reorder(rri, rxi, ryi, rro, x, y)
-        .atomic()
-        .vectorize(rri)
-        .vectorize(rxi)
-        .vectorize(ryi);
+        .reorder(rro, x, y)
+        .tile_matmul(rri, rxi, ryi);
 
     Var ixi("ixi"), iyi("iyi");
     mm.compute_at(mm.in(), x)
         .tile(x, y, ixi, iyi, tile_x, tile_y)
-        .vectorize(ixi)
-        .vectorize(iyi);
+        .tile_init(ixi, iyi);
 
     Var mmxi("mmxi"), mmyi("mmyi");
     mm.in()
         .tile(x, y, mmxi, mmyi, tile_x, tile_y)
-        .vectorize(mmxi)
-        .vectorize(mmyi);
+        .tile_store(mmxi, mmyi);
 }
 
 // A tile too large for an AMX register (rows > 16). Triggers the explicit
@@ -226,27 +220,20 @@ void scenario_mismatched_strides() {
 
     Var rxi("rxi"), ryi("ryi");
     RVar rri("rri"), rro("rro");
-    mm.compute_at(mm.in(), x).store_in(MemoryType::Tile);
     mm.update(0)
         .tile(x, y, rxi, ryi, 8, 4, TailStrategy::GuardWithIf)
         .split(r1.x, rro, rri, 8)
-        .reorder(rri, rxi, ryi, rro, x, y)
-        .atomic()
-        .vectorize(rri)
-        .vectorize(rxi)
-        .vectorize(ryi);
+        .reorder(rro, x, y)
+        .tile_matmul(rri, rxi, ryi);
     mm.update(1)
         .tile(x, y, rxi, ryi, 4, 8, TailStrategy::GuardWithIf)
         .split(r2.x, rro, rri, 8)
-        .reorder(rri, rxi, ryi, rro, x, y)
-        .atomic()
-        .vectorize(rri)
-        .vectorize(rxi)
-        .vectorize(ryi);
+        .reorder(rro, x, y)
+        .tile_matmul(rri, rxi, ryi);
     Var ixi("ixi"), iyi("iyi");
-    mm.compute_at(mm.in(), x).tile(x, y, ixi, iyi, 8, 8).vectorize(ixi).vectorize(iyi);
+    mm.compute_at(mm.in(), x).tile(x, y, ixi, iyi, 8, 8).tile_init(ixi, iyi);
     Var mmxi("mmxi"), mmyi("mmyi");
-    mm.in().tile(x, y, mmxi, mmyi, 8, 8).vectorize(mmxi).vectorize(mmyi);
+    mm.in().tile(x, y, mmxi, mmyi, 8, 8).tile_store(mmxi, mmyi);
     mm.in().compile_jit(amx_target);
 }
 
@@ -268,35 +255,26 @@ void scenario_inconsistent_tiles() {
     Var rxi("rxi"), ryi("ryi");
     RVar rri("rri"), rro("rro");
 
-    mm.compute_at(mm.in(), x).store_in(MemoryType::Tile);
     mm.update(0)
         .tile(x, y, rxi, ryi, 8, 8, TailStrategy::GuardWithIf)
         .split(r1.x, rro, rri, 8)
-        .reorder(rri, rxi, ryi, rro, x, y)
-        .atomic()
-        .vectorize(rri)
-        .vectorize(rxi)
-        .vectorize(ryi);
+        .reorder(rro, x, y)
+        .tile_matmul(rri, rxi, ryi);
     mm.update(1)
         .tile(x, y, rxi, ryi, 4, 4, TailStrategy::GuardWithIf)
         .split(r2.x, rro, rri, 8)
-        .reorder(rri, rxi, ryi, rro, x, y)
-        .atomic()
-        .vectorize(rri)
-        .vectorize(rxi)
-        .vectorize(ryi);
+        .reorder(rro, x, y)
+        .tile_matmul(rri, rxi, ryi);
 
     Var ixi("ixi"), iyi("iyi");
     mm.compute_at(mm.in(), x)
         .tile(x, y, ixi, iyi, 8, 8)
-        .vectorize(ixi)
-        .vectorize(iyi);
+        .tile_init(ixi, iyi);
 
     Var mmxi("mmxi"), mmyi("mmyi");
     mm.in()
         .tile(x, y, mmxi, mmyi, 8, 8)
-        .vectorize(mmxi)
-        .vectorize(mmyi);
+        .tile_store(mmxi, mmyi);
 
     mm.in().compile_jit(amx_target);
 }
@@ -318,27 +296,21 @@ void scenario_not_a_matmul_pattern() {
     Var rxi("rxi"), ryi("ryi");
     RVar rri("rri"), rro("rro");
     mm.compute_at(mm.in(), x)
-        .store_in(MemoryType::Tile)
         .update()
         .tile(x, y, rxi, ryi, 8, 8, TailStrategy::GuardWithIf)
         .split(r.x, rro, rri, 8)
-        .reorder(rri, rxi, ryi, rro, x, y)
-        .atomic()
-        .vectorize(rri)
-        .vectorize(rxi)
-        .vectorize(ryi);
+        .reorder(rro, x, y)
+        .tile_matmul(rri, rxi, ryi);
 
     Var ixi("ixi"), iyi("iyi");
     mm.compute_at(mm.in(), x)
         .tile(x, y, ixi, iyi, 8, 8)
-        .vectorize(ixi)
-        .vectorize(iyi);
+        .tile_init(ixi, iyi);
 
     Var mmxi("mmxi"), mmyi("mmyi");
     mm.in()
         .tile(x, y, mmxi, mmyi, 8, 8)
-        .vectorize(mmxi)
-        .vectorize(mmyi);
+        .tile_store(mmxi, mmyi);
 
     mm.in().compile_jit(amx_target);
 }

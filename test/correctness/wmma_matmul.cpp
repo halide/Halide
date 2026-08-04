@@ -356,8 +356,7 @@ bool test_staged_operands() {
         .reorder(xi, yi, x, y)
         .unroll(xi)
         .unroll(yi)
-        .vectorize(mmxi)
-        .vectorize(mmyi);
+        .tile_store(mmxi, mmyi);
 
     prod.compute_at(out, x)
         .tile(x, y, rxi, ryi, tile, tile)
@@ -449,8 +448,7 @@ bool test_operand_hoisted_out_of_loop() {
         .reorder(xi, yi, n, x, y)
         .unroll(xi)
         .unroll(yi)
-        .vectorize(mmxi)
-        .vectorize(mmyi);
+        .tile_store(mmxi, mmyi);
 
     prod.compute_at(out, n)
         .tile(x, y, rxi, ryi, tile, tile)
