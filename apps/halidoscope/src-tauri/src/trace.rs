@@ -36,7 +36,7 @@ impl HalideType {
     // Obtain the number of bytes for a single scalar element (i.e., one SIMD lane) of a packet's
     // value. For sub-byte types, this rounds up to the nearest whole byte.
     pub fn elem_bytes(self) -> usize {
-        (self.bits as usize + 7) / 8
+        (self.bits as usize).div_ceil(8)
     }
 
     // Obtain the number of bytes for the entire value of a packet. This is the product of the
@@ -166,6 +166,7 @@ impl TracePacket {
 // ── Per-Func statistics ───────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct FuncStats {
     pub name: String,
     pub min_coords: Vec<i32>,
@@ -186,21 +187,6 @@ pub struct FuncStats {
     pub max_reuse_distance: u64,
 }
 
-impl Default for FuncStats {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            min_coords: vec![],
-            max_coords: vec![],
-            min_value: None,
-            max_value: None,
-            max_store_count: 0,
-            max_load_count: 0,
-            max_redundant_store_count: 0,
-            max_reuse_distance: 0,
-        }
-    }
-}
 
 /// Full spatial layout of a Func: pixel dimensions plus the channel axis (logical dim 2).
 #[derive(Debug, Clone, Copy)]

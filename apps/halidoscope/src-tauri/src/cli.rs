@@ -14,7 +14,7 @@ use crate::render::{
 };
 use crate::trace::Trace;
 
-pub fn halidoscope_cli(subcommand: Box<SubcommandMatches>) {
+pub fn halidoscope_cli(subcommand: SubcommandMatches) {
     match subcommand.name.as_str() {
         "dot" => dot(subcommand),
         "list" => list(subcommand),
@@ -27,7 +27,7 @@ pub fn halidoscope_cli(subcommand: Box<SubcommandMatches>) {
     };
 }
 
-fn dot(subcommand: Box<SubcommandMatches>) -> Option<()> {
+fn dot(subcommand: SubcommandMatches) -> Option<()> {
     let args = &subcommand.matches.args;
 
     let trace_path = args.get("trace").and_then(|a| a.value.as_str())?;
@@ -69,7 +69,7 @@ fn dot(subcommand: Box<SubcommandMatches>) -> Option<()> {
     }
 }
 
-fn list(subcommand: Box<SubcommandMatches>) -> Option<()> {
+fn list(subcommand: SubcommandMatches) -> Option<()> {
     let args = &subcommand.matches.args;
 
     let trace_path = args.get("trace").and_then(|a| a.value.as_str())?;
@@ -122,7 +122,7 @@ fn list(subcommand: Box<SubcommandMatches>) -> Option<()> {
     std::process::exit(0);
 }
 
-fn stats(subcommand: Box<SubcommandMatches>) -> Option<()> {
+fn stats(subcommand: SubcommandMatches) -> Option<()> {
     let args = &subcommand.matches.args;
 
     let trace_path = args.get("trace").and_then(|a| a.value.as_str())?;
@@ -213,7 +213,7 @@ fn stats(subcommand: Box<SubcommandMatches>) -> Option<()> {
     std::process::exit(0);
 }
 
-fn snapshot(subcommand: Box<SubcommandMatches>) -> Option<()> {
+fn snapshot(subcommand: SubcommandMatches) -> Option<()> {
     let args = &subcommand.matches.args;
 
     let trace_path = args.get("trace").and_then(|a| a.value.as_str())?;
@@ -249,8 +249,8 @@ fn snapshot(subcommand: Box<SubcommandMatches>) -> Option<()> {
     }
 
     let ext = Path::new(destination).extension().and_then(OsStr::to_str);
-    let store_indices = trace.func_store_indices(&func)?;
-    let load_indices = trace.func_load_indices(&func)?;
+    let store_indices = trace.func_store_indices(func)?;
+    let load_indices = trace.func_load_indices(func)?;
     let k = packet_index.try_into().unwrap_or_else(|_| {
         eprintln!("Packet index {} is too large.", packet_index);
         std::process::exit(1);
