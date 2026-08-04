@@ -1408,13 +1408,10 @@ public:
      * this will throw an error. */
     Func in(const std::vector<Func> &fs);
 
-    /** Create and return a global identity wrapper, which wraps all calls to
-     * this Func by any other Func. If a global wrapper already exists, returns
-     * it. Unlike the custom wrappers above, this doesn't rewrite consumers:
-     * calls to this Func are routed through the wrapper (the redirection is
-     * baked out at the top of lowering), so it applies to every caller -- those
-     * defined before and after -- that doesn't have a custom wrapper. It's
-     * independent of the custom wrappers, so the two can be used together. */
+    /** Create and return a global identity wrapper, and rewrite all consumers
+     * of this Func -- both those defined before this call and those defined
+     * after -- to call the wrapper instead. Consumers with a custom wrapper of
+     * this Func are unaffected. If a global wrapper already exists, returns it. */
     Func in();
 
     /** Similar to \ref Func::in; however, instead of replacing the call to
