@@ -316,6 +316,25 @@ public:
     }
 };
 
+// An allocation inside the thread loops stays in register/local memory
+// (handled by ExtractRegisterAllocations) rather than being pulled out to the
+// block level (handled by ExtractSharedAndHeapAllocations) if it has a fixed
+// size or an explicit register/stack/fragment memory type. A tensor core
+// fragment is per-lane, so it belongs in registers wherever it was declared.
+bool allocation_goes_to_registers(const Allocate *op, bool in_threads) {
+    bool fixed_size_thread_allocation = (op->constant_allocation_size() != 0) && in_threads;
+    return (fixed_size_thread_allocation &&
+            op->memory_type != MemoryType::Heap &&
+            !is_gpu_shared(op->memory_type) &&
+            op->memory_type != MemoryType::GPUTexture) ||
+           op->memory_type == MemoryType::Register ||
+           op->memory_type == MemoryType::Stack ||
+           op->memory_type == MemoryType::WMMAFragment;
+}
+
+// Rename an allocation and all of its loads, stores, and frees. Relies on the
+// invariant that no allocation of the same name is nested inside this one, so
+// every reference in the body belongs to it.
 class ExtractSharedAndHeapAllocations : public IRMutator {
 protected:
     using IRMutator::visit;
@@ -548,15 +567,7 @@ protected:
             << "Allocate node inside GPU kernel has custom new expression.\n"
             << "(Memoization is not supported inside GPU kernels at present.)\n";
 
-        bool fixed_size_thread_allocation = (op->constant_allocation_size() != 0) && in_threads;
-
-        if ((fixed_size_thread_allocation &&
-             op->memory_type != MemoryType::Heap &&
-             !is_gpu_shared(op->memory_type) &&
-             op->memory_type != MemoryType::GPUTexture) ||
-            op->memory_type == MemoryType::Register ||
-            op->memory_type == MemoryType::Stack ||
-            op->memory_type == MemoryType::WMMAFragment) {
+        if (allocation_goes_to_registers(op, in_threads)) {
             // These allocations go in register or local memory
             return IRMutator::visit(op);
         }
@@ -1153,6 +1164,15 @@ public:
         return result;
     }
 
+    // Returns the names of every allocation pulled out to the block level.
+    std::set<string> allocation_names() const {
+        std::set<string> names;
+        for (const SharedAllocation &a : allocations) {
+            names.insert(a.name);
+        }
+        return names;
+    }
+
     ExtractSharedAndHeapAllocations(DeviceAPI d)
         : device_api(d),
           thread_id_var_name(unique_name('t')),
@@ -1176,6 +1196,10 @@ protected:
     };
 
     bool in_lane_loop = false;
+
+    // Names of allocations pulled out to the block level, so we can rename any
+    // register allocation that would otherwise collide with one.
+    const std::set<string> block_alloc_names;
 
     Stmt visit(const For *op) override {
         ScopedValue<string> old_loop_var(loop_var);
@@ -1240,8 +1264,43 @@ protected:
             << "it must live in stack memory, heap memory, or registers. "
             << "Shared allocations at this loop level are not yet supported.\n";
 
+        // If this name also lives at the block level, rename this register copy
+        // so it doesn't shadow the block allocation once it gets hoisted to wrap
+        // the thread body. The block copy keeps the Func's name for the
+        // profiler. By the no-shadowing invariant, every load/store of this name
+        // in the body belongs to this allocation.
+        string name = op->name;
+        Stmt body = op->body;
+        if (block_alloc_names.count(op->name)) {
+            name = unique_name(op->name);
+            const string &from = op->name;
+            const string &to = name;
+            body = mutate_with(
+                body,
+                [&](auto *self, const Load *load) -> Expr {
+                    if (load->name == from) {
+                        return Load::make(load->type, to, self->mutate(load->index), load->image, load->param,
+                                          self->mutate(load->predicate), load->alignment, load->is_streaming);
+                    }
+                    return self->visit_base(load);
+                },
+                [&](auto *self, const Store *store) -> Stmt {
+                    if (store->name == from) {
+                        return Store::make(to, self->mutate(store->value), self->mutate(store->index), store->param,
+                                           self->mutate(store->predicate), store->alignment, store->is_streaming);
+                    }
+                    return self->visit_base(store);
+                },
+                [&](auto *, const Free *free) -> Stmt {
+                    if (free->name == from) {
+                        return Free::make(to);
+                    }
+                    return free;
+                });
+        }
+
         RegisterAllocation alloc;
-        alloc.name = op->name;
+        alloc.name = name;
         alloc.type = op->type;
         alloc.size = 1;
         alloc.loop_var = loop_var;
@@ -1252,7 +1311,7 @@ protected:
         alloc.memory_type = op->memory_type;
 
         allocations.push_back(alloc);
-        return mutate(op->body);
+        return mutate(body);
     }
 
     template<typename LetOrLetStmt>
@@ -1285,6 +1344,10 @@ protected:
 
 public:
     vector<RegisterAllocation> allocations;
+
+    ExtractRegisterAllocations(std::set<string> block_alloc_names)
+        : block_alloc_names(std::move(block_alloc_names)) {
+    }
 
     // Multiple realizations of the same Func inside the thread loops (e.g. from
     // unrolling a loop that holds a register allocation) share a name with
@@ -1513,7 +1576,7 @@ protected:
                      << body << "\n\n";
 
             Expr block_size_x = block_size.threads_dimensions() ? block_size.num_threads(0) : 1;
-            ExtractRegisterAllocations register_allocs;
+            ExtractRegisterAllocations register_allocs(block_allocations.allocation_names());
             ForType innermost_loop_type = ForType::GPUThread;
             if (block_size.threads_dimensions()) {
                 body = register_allocs(body);

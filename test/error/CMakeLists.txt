@@ -72,7 +72,9 @@ tests(
     fuse_same_var.cpp
     fuse_vectorized_var_with_rvar.cpp
     hoist_storage_extern.cpp
+    hoist_storage_root_without_compute_root.cpp
     hoist_storage_without_compute_at.cpp
+    host_inside_gpu_loop.cpp
     implicit_args.cpp
     impossible_constraints.cpp
     incomplete_target.cpp
@@ -89,6 +91,7 @@ tests(
     memoize_redefine_eviction_key.cpp
     metal_threads_too_large.cpp
     metal_vector_too_large.cpp
+    mismatch_runtime_streaming_vscale.cpp
     mismatch_runtime_vscale.cpp
     missing_args.cpp
     no_default_device.cpp
@@ -115,11 +118,13 @@ tests(
     run_with_large_stack_throws.cpp
     rvar_fuse_reorder.cpp
     shift_inwards_and_blend_race.cpp
+    sme_streaming_without_target_feature.cpp
     specialize_fail.cpp
     split_inner_wrong_tail_strategy.cpp
     split_non_innermost_predicated.cpp
     split_same_var_names.cpp
     store_at_without_compute_at.cpp
+    store_root_without_compute_root.cpp
     stream_loads_illegal_self.cpp
     stream_stores_illegal_rvar.cpp
     thread_id_outside_block_id.cpp

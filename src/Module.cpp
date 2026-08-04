@@ -352,16 +352,18 @@ LoweredFunc::LoweredFunc(const std::string &name,
                          const std::vector<LoweredArgument> &args,
                          Stmt body,
                          LinkageType linkage,
-                         NameMangling name_mangling)
-    : name(name), args(args), body(std::move(body)), linkage(linkage), name_mangling(name_mangling) {
+                         NameMangling name_mangling,
+                         uint64_t attributes)
+    : name(name), args(args), body(std::move(body)), linkage(linkage), name_mangling(name_mangling), attributes(attributes) {
 }
 
 LoweredFunc::LoweredFunc(const std::string &name,
                          const std::vector<Argument> &args,
                          Stmt body,
                          LinkageType linkage,
-                         NameMangling name_mangling)
-    : name(name), body(std::move(body)), linkage(linkage), name_mangling(name_mangling) {
+                         NameMangling name_mangling,
+                         uint64_t attributes)
+    : name(name), body(std::move(body)), linkage(linkage), name_mangling(name_mangling), attributes(attributes) {
     for (const Argument &i : args) {
         this->args.emplace_back(i);
     }

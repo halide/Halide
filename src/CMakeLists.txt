@@ -157,6 +157,7 @@ target_sources(
     LoopPartitioningDirective.h
     Lower.h
     LowerParallelTasks.h
+    LowerSMEStreamingTasks.h
     LowerWarpShuffles.h
     MainPage.h
     Memoization.h
@@ -337,6 +338,7 @@ target_sources(
     LoopCarry.cpp
     Lower.cpp
     LowerParallelTasks.cpp
+    LowerSMEStreamingTasks.cpp
     LowerWarpShuffles.cpp
     Memoization.cpp
     Module.cpp
