@@ -35,6 +35,7 @@
 // and PyHalideBuffer<>. `unpack_buffer` is `inline` and PyHalideBuffer lives in
 // an anonymous namespace, so including this translation unit here (rather than
 // compiling it separately) is well-formed and keeps a single implementation.
+// NOLINTNEXTLINE(bugprone-suspicious-include): intentionally shared source.
 #include "PythonExtensionRuntime.template.cpp"
 
 namespace py = pybind11;
@@ -99,12 +100,12 @@ std::string &last_error() {
 }
 
 extern "C" void runtime_error_handler(void * /*user_context*/, const char *msg) {
-    std::lock_guard<std::mutex> lock(error_mutex());
+    std::scoped_lock lock(error_mutex());
     last_error() = msg ? msg : "";
 }
 
 std::string take_last_error() {
-    std::lock_guard<std::mutex> lock(error_mutex());
+    std::scoped_lock lock(error_mutex());
     std::string s = last_error();
     last_error().clear();
     return s;
@@ -520,7 +521,7 @@ private:
     halide_buffer_t buf_{};
 };
 
-std::shared_ptr<Kernel> load(const std::string &path, py::object name_obj) {
+std::shared_ptr<Kernel> load(const std::string &path, const py::object &name_obj) {
     LibHandle handle = open_library(path);
     if (!handle) {
         throw std::runtime_error("Could not load '" + path + "': " + library_error());

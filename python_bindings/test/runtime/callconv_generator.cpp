@@ -52,7 +52,8 @@ public:
 
         // The enum GeneratorParam picks the operation at compile time.
         Expr combined;
-        switch (combine) {
+        const Combine op = combine;
+        switch (op) {
         case Combine::Add:
             combined = input(x, y) + s_u8;
             break;

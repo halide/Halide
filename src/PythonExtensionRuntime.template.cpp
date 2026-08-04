@@ -127,7 +127,7 @@ struct PyHalideBuffer {
             return false;
         }
 
-        PyObject *py_raw_buffer = PyObject_CallMethod(py_obj, get_raw_halide_runtime_buffer_fn, NULL);
+        PyObject *py_raw_buffer = PyObject_CallMethod(py_obj, get_raw_halide_runtime_buffer_fn, nullptr);
         if (!py_raw_buffer) {
             PyErr_Clear();
             return false;
