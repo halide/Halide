@@ -2,8 +2,9 @@
 //!
 //! This module owns the types that cross the Tauri IPC boundary.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;
+use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 use tauri::ipc::Response;
@@ -35,7 +36,6 @@ pub struct FuncMeta {
     pub width: u32,
     pub height: u32,
     pub channels: u32,
-    pub num_stores: u32,
     pub min_coords: Vec<i32>,
     pub max_coords: Vec<i32>,
     pub min_value: Option<f64>,
@@ -71,12 +71,6 @@ pub struct TraceMeta {
 
 impl TraceMeta {
     pub fn from_trace(trace: &Trace) -> Self {
-        let mut global_max_store_count = 0u32;
-        let mut global_max_load_count = 0u32;
-        let mut global_max_redundant_store_count = 0u32;
-        let mut global_max_reuse_distance = 0u64;
-        let mut global_thread_ids: BTreeSet<i32> = BTreeSet::new();
-
         let funcs = trace
             .funcs
             .iter()
@@ -86,26 +80,12 @@ impl TraceMeta {
                     Some(g) => (g.width as u32, g.height as u32, g.channels as u32),
                     None => (0, 0, 1),
                 };
-                let stores = trace.func_store_indices(name);
-                let num_stores = stores.map(<[usize]>::len).unwrap_or(0) as u32;
-
-                global_max_store_count = stats.max_store_count.max(global_max_store_count);
-                global_max_load_count = stats.max_load_count.max(global_max_load_count);
-                global_max_redundant_store_count = stats
-                    .max_redundant_store_count
-                    .max(global_max_redundant_store_count);
-                global_max_reuse_distance = stats.max_reuse_distance.max(global_max_reuse_distance);
-
-                if let Some(thread_ids) = trace.func_thread_ids(name) {
-                    global_thread_ids.extend(thread_ids);
-                }
 
                 FuncMeta {
                     name: name.clone(),
                     width,
                     height,
                     channels,
-                    num_stores,
                     min_coords: stats.min_coords.clone(),
                     max_coords: stats.max_coords.clone(),
                     min_value: stats.min_value,
@@ -131,9 +111,6 @@ impl TraceMeta {
                         .copied()
                         .map(IndexRange::from_tuple)
                         .collect(),
-                    // A missing entry means `name` ran entirely serially (never inside a
-                    // `BeginParallelTask`), not that it has no threads; default to the implicit
-                    // serial thread `{0}` so `thread_ids` and `thread_count` agree.
                     thread_count: trace
                         .func_thread_ids(name)
                         .map_or(1, |ids| ids.len() as u32),
@@ -156,12 +133,13 @@ impl TraceMeta {
             total_packets: trace.packets.len() as u32,
             dag_edges,
             stats: StatsMeta {
-                global_max_store_count,
-                global_max_load_count,
-                global_max_redundant_store_count,
-                global_max_reuse_distance,
-                global_thread_ids: global_thread_ids
-                    .into_iter()
+                global_max_store_count: trace.global_max_store_count,
+                global_max_load_count: trace.global_max_load_count,
+                global_max_redundant_store_count: trace.global_max_redundant_store_count,
+                global_max_reuse_distance: trace.global_max_reuse_distance,
+                global_thread_ids: trace
+                    .global_thread_ids
+                    .iter()
                     .map(|id| id.to_string())
                     .collect(),
             },
@@ -225,10 +203,14 @@ pub async fn open_trace(
     state: State<'_, AppState>,
 ) -> Result<TraceMeta, String> {
     let (trace, meta) = tauri::async_runtime::spawn_blocking(move || {
+        let start = Instant::now();
         let trace = Trace::load_from_file(&path, |pct| {
             let _ = app.emit("trace-load-progress", pct);
         })?;
+
         let meta = TraceMeta::from_trace(&trace);
+
+        eprintln!("open_trace took {:?}", start.elapsed());
         Ok::<_, String>((trace, meta))
     })
     .await
