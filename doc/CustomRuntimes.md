@@ -1,4 +1,4 @@
-# Custom Runtime Namespaces
+# Custom Runtime Prefixes
 
 Every Halide runtime exposes a set C ABI symbols consisting of common host
 functions -- `halide_malloc`, `halide_free`, `halide_error`,
@@ -32,7 +32,7 @@ Rather than a single prefix, three independent prefixes are available, one per
 - **Import** -- the names a *generated kernel* uses to call into the runtime.
   When a pipeline is compiled with `no_runtime`, its calls to `halide_malloc`
   and friends are left as external references; the import prefix renames those
-  references so they resolve against a matching namespaced runtime at link time.
+  references so they resolve against a matching prefixed runtime at link time.
 
 - **Export** -- the names a *runtime library* makes externally visible. When you
   compile a standalone runtime, the export prefix renames the public C ABI it
@@ -41,8 +41,8 @@ Rather than a single prefix, three independent prefixes are available, one per
 - **Internal** -- the names used *within* the runtime library. This covers the
   runtime's own C++ symbols in the `Halide::Runtime::Internal` namespace,
   including the mutable state globals. Renaming these is what actually keeps two
-  namespaced runtimes' state independent; without it the state globals would
-  still collide even if the public ABI were renamed.
+  prefixed runtimes' state independent; without it the state globals would still
+  collide even if the public ABI were renamed.
 
 Each prefix is optional and they are set independently. A prefix replaces the
 leading `halide_` of the C ABI names; because the internal C++ symbols contain
@@ -88,22 +88,23 @@ Both the LLVM and the C backend honor runtime prefixes.
   the preprocessor rewrites the runtime's function declarations and every call
   site consistently, while leaving types (`halide_buffer_t`), typedefs
   (`halide_malloc_t`), and enum values untouched. These `#define`s are emitted
-  only into the generated C/C++ *source*, never the header, so several
-  namespaced headers can still be included together.
+  only into the generated C/C++ *source*, never the header, so several prefixed
+  headers can still be included together.
 
 ## Limitations
 
-- Namespacing is not currently supported for JIT, but it's something we would
-  like to support in the future. The difficulty is that the JIT resolves runtime
-  calls against a single process-global shared runtime which already exists. So,
-  for now, requesting a runtime namespace on a JIT target will emit an error.
+- Runtime prefixes are not currently supported for JIT, but it's something we
+  would like to support in the future. The difficulty is that the JIT resolves
+  runtime calls against a single process-global shared runtime which already
+  exists. So, for now, requesting runtime prefixes on a JIT target will emit an
+  error.
 
 ## Usage from C++
 
 The prefixes are described by a `Halide::RuntimePrefixParams`, which wraps a
 `std::map<RuntimeLinkage, std::string>`.
 
-To compile a **standalone runtime** with a namespace, pass the map to
+To compile a **standalone runtime** with a set of prefixes, pass the map to
 `compile_standalone_runtime`:
 
 ```c++
@@ -154,7 +155,7 @@ The prefixes are ordinary generator parameters named `runtime_prefixes.import`,
 `runtime_prefixes.export`, and `runtime_prefixes.internal`. Any of them may be
 omitted.
 
-To emit a namespaced **standalone runtime** (the `-r` output):
+To emit a prefixed **standalone runtime** (the `-r` output):
 
 ```
 ./my_generator -r my_prefix_runtime -o . -e object \
@@ -182,7 +183,7 @@ library its matching import/internal prefixes together with `USE_RUNTIME`:
 ```cmake
 add_halide_generator(my_pipeline.generator SOURCES my_pipeline_generator.cpp)
 
-# A runtime in the "my_prefix_" namespace.
+# A runtime with the "my_prefix_" prefix.
 add_halide_runtime(
     my_prefix_runtime
     PARAMS runtime_prefixes.export=my_prefix_ runtime_prefixes.internal=my_prefix_internal_
