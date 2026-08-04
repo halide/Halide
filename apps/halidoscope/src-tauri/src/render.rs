@@ -537,7 +537,7 @@ impl Renderer for StoreFrequencyState {
             (NormalizationMode::AcrossFuncs, 0) => 0.0,
             (NormalizationMode::AcrossFuncs, global_max) => 255.0 / global_max as f64,
             (NormalizationMode::PerFunc, _) => {
-                let local_max = *&self.local_max_store_count;
+                let local_max = self.local_max_store_count;
                 if local_max > 0 {
                     255.0 / local_max as f64
                 } else {
@@ -996,9 +996,7 @@ impl ReuseDistanceState {
     pub fn new(trace: &Trace, func: &str) -> Option<Self> {
         let geom = trace.func_geometry(func)?;
         let n_cells = geom.width * geom.height * geom.channels;
-        let is_input = trace
-            .func_store_indices(func)
-            .map_or(true, |s| s.is_empty());
+        let is_input = trace.func_store_indices(func).is_none_or(|s| s.is_empty());
 
         let local_max_reuse_distance = trace.funcs.get(func).map(|s| s.max_reuse_distance)?;
         let global_max_reuse_distance = trace.funcs.values().map(|s| s.max_reuse_distance).max()?;
@@ -1234,7 +1232,7 @@ impl ThreadState {
         let geom = trace.func_geometry(func)?;
         let thread_ids = trace
             .func_thread_ids(func)
-            .map(|ids| ids.iter().map(|&id| id as i32).collect::<Vec<i32>>())
+            .map(|ids| ids.iter().copied().collect::<Vec<i32>>())
             .unwrap_or_else(|| vec![0]);
         let n_threads = thread_ids.len();
 
