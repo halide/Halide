@@ -62,7 +62,10 @@ if (Python3_Interpreter_FOUND AND (LLDB_EXECUTABLE OR GDB_EXECUTABLE))
         )
     endfunction ()
 
-    if (LLDB_EXECUTABLE)
+    # LLDB's Windows support does not reliably evaluate expressions against
+    # MSVC-emitted PDB debug info, so skip it there even if an lldb.exe
+    # happens to be on PATH (e.g. the ambient one on GitHub Actions runners).
+    if (LLDB_EXECUTABLE AND NOT (WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC"))
         add_debugger_test(debugger_lldb lldb "${LLDB_EXECUTABLE}")
     endif ()
     if (GDB_EXECUTABLE)
