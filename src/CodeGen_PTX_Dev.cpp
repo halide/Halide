@@ -1,11 +1,10 @@
-#include <set>
+#include "CodeGen_PTX_Dev.h"
 
 #include "CSE.h"
 #include "CanonicalizeGPUVars.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_LLVM.h"
-#include "CodeGen_PTX_Dev.h"
 #include "ConciseCasts.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
@@ -25,6 +24,7 @@
 #include "Target.h"
 
 #include <fstream>
+#include <set>
 
 namespace Halide {
 namespace Internal {

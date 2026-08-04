@@ -1,7 +1,5 @@
 #include "ExtractWMMAOperations.h"
 
-#include <map>
-
 #include "CanonicalizeGPUVars.h"
 #include "FindIntrinsics.h"
 #include "IREquality.h"
@@ -11,6 +9,8 @@
 #include "Simplify.h"
 #include "Substitute.h"
 #include "Util.h"
+
+#include <map>
 
 /** \file Support extraction of NVIDIA tensor core (wmma) instructions.
  *
