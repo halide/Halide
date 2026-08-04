@@ -18,6 +18,13 @@ using Halide::Runtime::Buffer;
 
 namespace {
 
+// The operands are small integers so that every dot product is exact in every
+// accumulator here, which lets the results be checked for equality rather than
+// to a tolerance. That makes them unusually compressible, so the numbers were
+// checked against dense random operands too: no configuration moved by more
+// than a couple of percent, which is what you would expect of a multiply that
+// is issue-bound rather than waiting on memory.
+//
 // The same matrix multiply is compiled twice from one generator: once with
 // float operands, which get a schedule that accumulates in ordinary registers,
 // and once with half operands, which get the tensor cores. Both accumulate in
