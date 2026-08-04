@@ -382,7 +382,8 @@ void Function::update_with_deserialization(const std::string &name,
                                            const std::vector<std::string> &trace_tags,
                                            bool no_profiling,
                                            const std::string &profiler_display_name,
-                                           bool frozen) {
+                                           bool frozen,
+                                           const FunctionPtr &global_wrapper) {
     contents->name = name;
     contents->origin_name = origin_name;
     contents->output_types = output_types;
@@ -406,6 +407,7 @@ void Function::update_with_deserialization(const std::string &name,
     contents->no_profiling = no_profiling;
     contents->profiler_display_name = profiler_display_name;
     contents->frozen = frozen;
+    contents->global_wrapper = global_wrapper;
 }
 
 namespace {
@@ -1253,10 +1255,15 @@ const map<string, FunctionPtr> &Function::wrappers() const {
     return contents->func_schedule.wrappers();
 }
 
-void Function::set_global_wrapper(const Function &wrapper) {
-    // Self-references (and wrapper bodies) are already marked not to follow
-    // global wrappers when they are weakened (see WeakenFunctionPtrs), so
-    // pointing our global-wrapper link at 'wrapper' won't make them cycle.
+void Function::set_global_wrapper(Function &wrapper) {
+    wrapper.freeze();
+
+    // Weaken the wrapper's back-references to us, and mark them not to follow
+    // global wrappers -- otherwise the wrapper's own call to us would resolve
+    // through the link we're about to set and call itself.
+    WeakenFunctionPtrs weakener(contents.get());
+    wrapper.mutate(&weakener);
+
     FunctionPtr ptr = wrapper.contents;
     ptr.weaken();
     ptr.follow_global_wrappers = true;
@@ -1264,7 +1271,16 @@ void Function::set_global_wrapper(const Function &wrapper) {
 }
 
 Function Function::global_wrapper() const {
-    return contents->global_wrapper.defined() ? Function(contents->global_wrapper) : Function();
+    if (!contents->global_wrapper.defined()) {
+        return Function();
+    }
+    // Return a strong handle pointing directly at the immediate wrapper. The
+    // stored link is weak and follows further global-wrapper links; strip both
+    // so callers get this Func's own wrapper rather than the end of the chain.
+    FunctionPtr ptr = contents->global_wrapper;
+    ptr.strengthen();
+    ptr.follow_global_wrappers = false;
+    return Function(ptr);
 }
 
 Function Function::new_function_in_same_group(const std::string &f) {

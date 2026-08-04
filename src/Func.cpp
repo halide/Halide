@@ -2339,80 +2339,87 @@ vector<Func> resolve_transitive_callers(const Function &target, const vector<Fun
 
 Func get_wrapper(Function wrapped_fn, string wrapper_name, const vector<Func> &fs_in, bool clone) {
     vector<Func> fs = fs_in.empty() ? fs_in : resolve_transitive_callers(wrapped_fn, fs_in);
-    // Either all Funcs in 'fs' have the same wrapper or they don't already
-    // have any wrappers. Otherwise, throw an error. If 'fs' is empty, then
-    // it is a global wrapper.
     const map<string, FunctionPtr> &wrappers = wrapped_fn.wrappers();
     wrapper_name += ("$" + std::to_string(wrappers.size()));
-    const auto &iter = fs.empty() ? wrappers.find("") : wrappers.find(fs[0].name());
-    if (iter == wrappers.end()) {
-        // Make sure the other Funcs also don't have any wrappers
+
+    if (fs.empty()) {
+        // Global wrapper (Func::in()). Idempotent: return the existing one, if
+        // any. Unlike custom wrappers it lives in a dedicated global_wrapper
+        // link rather than the wrappers map.
+        Function existing = wrapped_fn.global_wrapper();
+        if (existing.get_contents().defined()) {
+            return Func(existing);
+        }
+    } else {
+        // Either all Funcs in 'fs' already share the same wrapper, or none of
+        // them have one. Otherwise it's an error.
+        const auto &iter = wrappers.find(fs[0].name());
+        if (iter != wrappers.end()) {
+            internal_assert(iter->second.defined());
+            validate_wrapper(wrapped_fn.name(), wrappers, fs, iter->second);
+            Function wrapper(iter->second);
+            internal_assert(wrapper.frozen());
+            return Func(wrapper);
+        }
         for (size_t i = 1; i < fs.size(); ++i) {
             user_assert(wrappers.count(fs[i].name()) == 0)
                 << "Cannot define the wrapper since " << fs[i].name()
                 << " already has a wrapper while " << fs[0].name() << " doesn't \n";
         }
-        Func wrapper = clone ? create_clone_wrapper(wrapped_fn, wrapper_name) : create_in_wrapper(wrapped_fn, wrapper_name);
-        Function wrapper_fn = wrapper.function();
-
-        // Build a profiler display name like "<wrapped>.in()" or
-        // "<wrapped>.in(<c1>, <c2>)" using the wrapped Func's display
-        // name and the consumers' display names (falling back to the
-        // IR-level name in each case). For .clone_in() use "clone_in".
-        auto display = [](const Function &f) {
-            return f.profiler_display_name().empty() ? f.name() : f.profiler_display_name();
-        };
-        std::string profiler_name = display(wrapped_fn) + (clone ? ".clone_in(" : ".in(");
-        for (size_t i = 0; i < fs.size(); i++) {
-            if (i > 0) {
-                profiler_name += ", ";
-            }
-            profiler_name += display(fs[i].function());
-        }
-        profiler_name += ")";
-        wrapper_fn.set_profiler_display_name(profiler_name);
-
-        if (fs.empty()) {
-            // Global wrapper. Record it as wrapped_fn's global wrapper; calls to
-            // wrapped_fn follow global-wrapper links (see FuncRef::operator Expr
-            // and FunctionPtr::get), so all consumers -- present and future --
-            // resolve to it, and deep_copy materializes that at the start of
-            // lowering.
-            wrapped_fn.add_wrapper("", wrapper_fn);
-            wrapped_fn.set_global_wrapper(wrapper_fn);
-        } else {
-            for (const Func &f : fs) {
-                user_assert(wrapped_fn.name() != f.name())
-                    << "Cannot create wrapper of itself (\"" << wrapped_fn.name() << "\")\n";
-                wrapped_fn.add_wrapper(f.name(), wrapper_fn);
-
-                // Eagerly redirect this consumer's calls to wrapped_fn to the
-                // new wrapper.
-                Function consumer(f.function());
-                FunctionPtr replacement = wrapper_fn.get_contents();
-                replacement.follow_global_wrappers = true;
-                if (consumer.get_contents().group() == wrapper_fn.get_contents().group()) {
-                    // References within a FunctionGroup must be weak.
-                    replacement.weaken();
-                }
-                std::map<FunctionPtr, FunctionPtr> subs;
-                subs[wrapped_fn.get_contents()] = replacement;
-                consumer.substitute_calls(subs);
-
-                // The rewrite only touched the definitions that existed at this
-                // point, so freeze the consumer: adding more definitions to it
-                // afterwards would silently fail to be wrapped.
-                consumer.freeze();
-            }
-        }
-        return wrapper;
     }
-    internal_assert(iter->second.defined());
-    validate_wrapper(wrapped_fn.name(), wrappers, fs, iter->second);
 
-    Function wrapper(iter->second);
-    internal_assert(wrapper.frozen());
-    return Func(wrapper);
+    Func wrapper = clone ? create_clone_wrapper(wrapped_fn, wrapper_name) : create_in_wrapper(wrapped_fn, wrapper_name);
+    Function wrapper_fn = wrapper.function();
+
+    // Build a profiler display name like "<wrapped>.in()" or
+    // "<wrapped>.in(<c1>, <c2>)" using the wrapped Func's display
+    // name and the consumers' display names (falling back to the
+    // IR-level name in each case). For .clone_in() use "clone_in".
+    auto display = [](const Function &f) {
+        return f.profiler_display_name().empty() ? f.name() : f.profiler_display_name();
+    };
+    std::string profiler_name = display(wrapped_fn) + (clone ? ".clone_in(" : ".in(");
+    for (size_t i = 0; i < fs.size(); i++) {
+        if (i > 0) {
+            profiler_name += ", ";
+        }
+        profiler_name += display(fs[i].function());
+    }
+    profiler_name += ")";
+    wrapper_fn.set_profiler_display_name(profiler_name);
+
+    if (fs.empty()) {
+        // Global wrapper. Calls to wrapped_fn follow global-wrapper links (see
+        // FuncRef::operator Expr and FunctionPtr::get), so all consumers --
+        // present and future -- resolve to it, and deep_copy materializes that
+        // at the start of lowering.
+        wrapped_fn.set_global_wrapper(wrapper_fn);
+    } else {
+        for (const Func &f : fs) {
+            user_assert(wrapped_fn.name() != f.name())
+                << "Cannot create wrapper of itself (\"" << wrapped_fn.name() << "\")\n";
+            wrapped_fn.add_wrapper(f.name(), wrapper_fn);
+
+            // Eagerly redirect this consumer's calls to wrapped_fn to the new
+            // wrapper.
+            Function consumer(f.function());
+            FunctionPtr replacement = wrapper_fn.get_contents();
+            replacement.follow_global_wrappers = true;
+            if (consumer.get_contents().group() == wrapper_fn.get_contents().group()) {
+                // References within a FunctionGroup must be weak.
+                replacement.weaken();
+            }
+            std::map<FunctionPtr, FunctionPtr> subs;
+            subs[wrapped_fn.get_contents()] = replacement;
+            consumer.substitute_calls(subs);
+
+            // The rewrite only touched the definitions that existed at this
+            // point, so freeze the consumer: adding more definitions to it
+            // afterwards would silently fail to be wrapped.
+            consumer.freeze();
+        }
+    }
+    return wrapper;
 }
 
 }  // anonymous namespace
