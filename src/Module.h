@@ -29,7 +29,6 @@ enum class OutputFileType {
     bitcode,
     c_header,
     c_source,
-    compiler_log,
     conceptual_stmt,
     conceptual_stmt_html,
     cpp_stub,
@@ -132,7 +131,6 @@ struct LoweredFunc {
 
 namespace Internal {
 struct ModuleContents;
-class CompilerLogger;
 }  // namespace Internal
 
 struct AutoSchedulerResults;
@@ -242,14 +240,12 @@ void compile_standalone_runtime(const std::string &object_filename, const Target
 std::map<OutputFileType, std::string> compile_standalone_runtime(const std::map<OutputFileType, std::string> &output_files, const Target &t);
 
 using ModuleFactory = std::function<Module(const std::string &fn_name, const Target &target)>;
-using CompilerLoggerFactory = std::function<std::unique_ptr<Internal::CompilerLogger>(const std::string &fn_name, const Target &target)>;
 
 void compile_multitarget(const std::string &fn_name,
                          const std::map<OutputFileType, std::string> &output_files,
                          const std::vector<Target> &targets,
                          const std::vector<std::string> &suffixes,
-                         const ModuleFactory &module_factory,
-                         const CompilerLoggerFactory &compiler_logger_factory = nullptr);
+                         const ModuleFactory &module_factory);
 
 }  // namespace Halide
 
