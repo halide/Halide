@@ -26,30 +26,31 @@ void set_alignment_and_bounds(OutputImageParam p, int size) {
 // accumulator are less work.
 //
 //                             1024      2048      4096   ceiling
-//     Halide f32              6878     10294      7298     25960
-//     cublas f32             14503     16574     17449
+//     Halide f32              6937     10199      7306     25960
+//     cublas f32             14688     16782     17545
 //
-//     Halide f16 -> f32      40070     46671     48888     51541
-//     cublas f16 -> f32      41658     49069     50440
+//     Halide f16 -> f32      40396     47019     49314     51541
+//     cublas f16 -> f32      42324     49596     51212
 //
-//     Halide bf16 -> f32     40025     46681     48692     51541
-//     cublas bf16 -> f32     41664     49054     50437
+//     Halide bf16 -> f32     40347     47007     49129     51541
+//     cublas bf16 -> f32     42315     49601     51179
 //
-//     Halide f16 -> f16      60349     86502     86599     99626
-//     cublas f16 -> f16      69221     75073     87073
+//     Halide f16 -> f16      60745     87075     86973     99626
+//     cublas f16 -> f16      73466     76443     90182
 //
-//     Halide u8 -> i32       62869     82391     89641    100650
-//     cublas s8 -> i32      107868    122203    129970
+//     Halide u8 -> i32       63588     83223     90390    100650
+//     cublas u8 -> i32      120109    128990    140195
 //
 // The tensor core ceilings are measured, by issuing wmma instructions back to
 // back out of registers. The float one is 36 SMs times the 2817 MHz this part
 // averages while benchmarking times the 256 flops per SM per clock the cuda
 // cores do.
 //
-// The tensor core schedules reach 87% to 95% of their ceilings, and match
-// cublas at f16 -> f16. Two rows fall short for reasons outside the schedule.
+// The tensor core schedules reach 87% to 95% of their ceilings, and beat
+// cublas at f16 -> f16 at 2048. Two rows fall short for reasons outside the
+// schedule.
 //
-// At eight bits cublas is 29% past the ceiling, so it is not using wmma, which
+// At eight bits cublas is 39% past the ceiling, so it is not using wmma, which
 // multiplies bytes no faster than it multiplies halves into halves. The mma
 // instructions reach 188355 GOP/s at the same shape, 1.87x, for the same 8192
 // ops per instruction. Reaching that needs mma's fragment layout, which this

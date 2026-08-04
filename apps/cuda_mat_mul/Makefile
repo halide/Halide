@@ -52,7 +52,7 @@ $(BIN)/%/runner: runner.cpp $(BIN)/%/mat_mul.a $(BIN)/%/mat_mul_f16.a \
                  $(BIN)/%/mat_mul_bf16.a $(BIN)/%/mat_mul_u8.a \
                  $(BIN)/%/mat_mul_f16_acc16.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) -lcudart -lcublas
+	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) $(LIBHALIDE_LDFLAGS) -lcudart -lcublas
 
 test: $(BIN)/$(HL_TARGET)/runner
 	$^ $(MATRIX_SIZE)
