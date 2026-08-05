@@ -33,7 +33,6 @@ struct LoweredFunc;
 std::ostream &operator<<(std::ostream &, const LoweredFunc &);
 
 bool debug_is_active_impl(int verbosity, const char *file, const char *function, int line);
-#define debug_is_active(n) (::Halide::Internal::debug_is_active_impl((n), __FILE__, __FUNCTION__, __LINE__))
 
 /** Decide whether a debug() call at the given verbosity/location would print
  * under the rules in `spec`, which uses the same grammar as the
@@ -68,7 +67,7 @@ void debug_filter_test();
 
 #define debug(n)                                     \
     /* NOLINTNEXTLINE(bugprone-macro-parentheses) */ \
-    if (debug_is_active((n))) std::cerr
+    if (::Halide::Internal::debug_is_active_impl((n), __FILE__, __FUNCTION__, __LINE__)) std::cerr
 
 /** Allow easily printing the contents of containers, or std::vector-like containers,
  *  in debug output. Used like so:
