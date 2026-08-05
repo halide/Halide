@@ -1094,7 +1094,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
 
         // Detect atomic add: value = load + delta where delta is independent of the buffer.
         Expr equiv_load = Load::make(t, op->name, op->index, Buffer<>(),
-                                     op->param, op->predicate, op->alignment);
+                                     op->param, op->predicate, op->alignment, false);
         Expr delta = simplify(common_subexpression_elimination(op->value - equiv_load));
         bool is_atomic_add = !expr_uses_var(delta, op->name);
 

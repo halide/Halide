@@ -535,8 +535,7 @@ class LowerWarpShuffles : public IRMutator {
         }
 
         // Load the value to be shuffled
-        Expr base_val = Load::make(type, name, idx, Buffer<>(),
-                                   Parameter(), const_true(idx.type().lanes()), ModulusRemainder());
+        Expr base_val = Load::make(type, name, idx);
 
         Expr scalar_lane = lane;
         if (const Broadcast *b = scalar_lane.as<Broadcast>()) {
