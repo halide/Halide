@@ -4048,9 +4048,6 @@ struct ExecuteGeneratorArgs {
     // to the Generator created, an error will occur.
     GeneratorParamsMap generator_params;
 
-    // Compiler Logger to use, for diagnostic work. If null, don't do any logging.
-    CompilerLoggerFactory compiler_logger_factory = nullptr;
-
     // If true, log the path of all output files to stdout.
     bool log_outputs = false;
 };

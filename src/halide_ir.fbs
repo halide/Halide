@@ -104,6 +104,7 @@ enum DeviceAPI: byte {
     D3D12Compute,
     Vulkan,
     WebGPU,
+    SMEStreaming,
 }
 
 enum MemoryType: byte {

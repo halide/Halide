@@ -257,7 +257,6 @@ function(_Halide_library_from_generator TARGET)
     set(bitcode_extension ".bc")
     # set(c_header_extension ".h")  # handled specially
     set(c_source_extension ".halide_generated.cpp")
-    set(compiler_log_extension ".halide_compiler_log")
     set(conceptual_stmt_extension ".conceptual.stmt")
     set(conceptual_stmt_html_extension ".conceptual.stmt.html")
     # set(cpp_stub_extension ".stub.h")  # handled by add_halide_stub()

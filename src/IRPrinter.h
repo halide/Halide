@@ -293,11 +293,26 @@ protected:
     void visit(const HoistedStorage *) override;
 };
 
-/** Debugging helpers for LLDB */
+/** Debugging helpers for interactive debuggers (LLDB/GDB).
+ *
+ * These render a value with the IR printer and return the resulting string, so
+ * a debugger's pretty-printer can obtain a human-readable summary by evaluating
+ * e.g. `Halide::Internal::debug_string(*this)` in the inferior. Keep these as
+ * concrete (non-template) overloads so the symbols are emitted into libHalide
+ * and remain callable from a debugger even in a build with no other caller. */
 /// @{
-std::string lldb_string(const Expr &);
-std::string lldb_string(const Internal::BaseExprNode *);
-std::string lldb_string(const Stmt &);
+std::string debug_string(const Expr &);
+std::string debug_string(const BaseExprNode *);
+std::string debug_string(const Stmt &);
+std::string debug_string(const BaseStmtNode *);
+std::string debug_string(const Type &);
+std::string debug_string(const Target &);
+std::string debug_string(const Module &);
+std::string debug_string(const Tuple &);
+std::string debug_string(const Interval &);
+std::string debug_string(const ConstantInterval &);
+std::string debug_string(const ModulusRemainder &);
+std::string debug_string(const LoweredFunc &);
 /// @}
 
 }  // namespace Internal

@@ -2118,6 +2118,16 @@ Stage &Stage::hexagon(const VarOrRVar &x) {
     return *this;
 }
 
+Stage &Stage::sme_streaming(const VarOrRVar &x) {
+    set_dim_device_api(x, DeviceAPI::SMEStreaming);
+    return *this;
+}
+
+Stage &Stage::host(const VarOrRVar &x) {
+    set_dim_device_api(x, DeviceAPI::Host);
+    return *this;
+}
+
 Stage &Stage::prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
     definition.schedule().touched() = true;
     PrefetchDirective prefetch = {f.name(), at.name(), from.name(), std::move(offset), strategy, Parameter()};
@@ -2943,6 +2953,18 @@ Func &Func::gpu_tile(const VarOrRVar &x, const VarOrRVar &y, const VarOrRVar &z,
 Func &Func::hexagon(const VarOrRVar &x) {
     invalidate_cache();
     Stage(func, func.definition(), 0).hexagon(x);
+    return *this;
+}
+
+Func &Func::sme_streaming(const VarOrRVar &x) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).sme_streaming(x);
+    return *this;
+}
+
+Func &Func::host(const VarOrRVar &x) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).host(x);
     return *this;
 }
 

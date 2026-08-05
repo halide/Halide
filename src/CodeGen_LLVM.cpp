@@ -9,7 +9,6 @@
 #include "CodeGen_Internal.h"
 #include "CodeGen_LLVM.h"
 #include "CodeGen_Targets.h"
-#include "CompilerLogger.h"
 #include "Debug.h"
 #include "Deinterleave.h"
 #include "EmulateFloat16Math.h"
@@ -208,7 +207,7 @@ CodeGen_LLVM::CodeGen_LLVM(const Target &t)
 
 void CodeGen_LLVM::set_context(llvm::LLVMContext &context) {
     this->context = &context;
-    effective_vscale = target_vscale();
+    set_effective_vscale(target_vscale());
 }
 
 std::unique_ptr<CodeGen_LLVM> CodeGen_LLVM::new_for_target(const Target &target, llvm::LLVMContext &context) {
@@ -1361,8 +1360,6 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(const Type &t) const {
 void CodeGen_LLVM::optimize_module() {
     debug(3) << "Optimizing module\n";
 
-    auto time_start = std::chrono::high_resolution_clock::now();
-
     debug(3) << [&] {
         module->print(dbgs(), nullptr, false, true);
         return "";
@@ -1494,13 +1491,6 @@ void CodeGen_LLVM::optimize_module() {
         module->print(dbgs(), nullptr, false, true);
         return "";
     }();
-
-    auto *logger = get_compiler_logger();
-    if (logger) {
-        auto time_end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> diff = time_end - time_start;
-        logger->record_compilation_time(CompilerLogger::Phase::LLVM, diff.count());
-    }
 }
 
 void CodeGen_LLVM::sym_push(const string &name, llvm::Value *value) {
