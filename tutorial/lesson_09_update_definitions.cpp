@@ -15,6 +15,7 @@
 // source tree.
 
 #include "Halide.h"
+#include <cmath>
 #include <cstdio>
 
 // We're going to be using x86 SSE intrinsics later on in this lesson.
@@ -174,7 +175,7 @@ int main() {
         // Check the results match:
         for (int y = 0; y < 100; y++) {
             for (int x = 0; x < 100; x++) {
-                if (fabs(halide_result(x, y) - c_result[y][x]) > 0.01f) {
+                if (std::abs(halide_result(x, y) - c_result[y][x]) > 0.01f) {
                     printf("halide_result(%d, %d) = %f instead of %f\n",
                            x, y, halide_result(x, y), c_result[y][x]);
                     return -1;
@@ -800,6 +801,7 @@ int main() {
 #endif
 
         // Run this one hundred times so we can average the timing results.
+        // NOLINTBEGIN
         for (int iters = 0; iters < 100; iters++) {
 
 #pragma omp parallel for
@@ -890,6 +892,7 @@ int main() {
                 free(clamped_storage);
             }
         }
+        // NOLINTEND
 
 // Skip the timing comparison if we don't have openmp
 // enabled. Otherwise it's unfair to C.
