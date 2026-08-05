@@ -354,6 +354,7 @@ tests(
     undef.cpp
     uninitialized_read.cpp
     unique_func_image.cpp
+    unique_name.cpp
     unroll_dynamic_loop.cpp
     unroll_huge_mux.cpp
     unroll_loop_with_implied_constant_bounds.cpp

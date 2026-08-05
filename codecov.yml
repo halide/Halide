@@ -1,0 +1,15 @@
+coverage:
+  status:
+    # This build's coverage run doesn't collect enough data (subset of
+    # targets/tests, no autoschedulers_cpu, etc.) to be a trustworthy signal
+    # for blocking a PR on a coverage percentage. Keep these checks
+    # informational so coverage is still visible for manual inspection, but
+    # only the "successfully collected data" status (i.e. whether Codecov
+    # actually received and processed the report; see fail_ci_if_error in
+    # testing-macos.yml) can fail CI.
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true
