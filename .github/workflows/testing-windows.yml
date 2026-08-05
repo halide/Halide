@@ -64,44 +64,11 @@ jobs:
           # Python, so on Windows it would download x86_64 halide-llvm (~250MB) even for
           # a 32-bit build. Instead: read the pinned version from the lockfile (no download),
           # sync only ci-base (no LLVM), then fetch the correct win32 wheel directly.
-          # pypi.halide-lang.org's upstream network path intermittently
-          # blackholes a source IP for tens of seconds to a few minutes
-          # (root-caused in halide/build_bot#362, escalated to MIT network
-          # ops). uv's own retries only span ~47s, which wasn't always
-          # enough, so this retries harder (5 attempts, backoff doubling
-          # 60s -> 300s) and logs the runner's egress IP plus a path trace
-          # to the PyPI host on each failure, so a specific incident's
-          # 5-tuple/timestamp can be handed to MIT for correlation.
-          retry() {
-            local i n=5 delay=60 max_delay=300
-            for ((i = 1; i <= n; i++)); do
-              if "$@"; then return 0; fi
-              if [ "$i" -lt "$n" ]; then
-                echo "::warning::CI env sync attempt $i/$n failed at $(date -u +%FT%TZ); retrying in ${delay}s"
-                echo "::group::Network diagnostics (attempt $i/$n)"
-                echo "egress IP: $(curl -s --max-time 5 https://api.ipify.org || echo unknown)"
-                if command -v tracepath >/dev/null 2>&1; then
-                  tracepath -m 15 pypi.halide-lang.org || true
-                elif command -v traceroute >/dev/null 2>&1; then
-                  traceroute -m 15 -w 2 pypi.halide-lang.org || true
-                elif command -v tracert >/dev/null 2>&1; then
-                  tracert -h 15 -w 2000 pypi.halide-lang.org || true
-                else
-                  echo "no traceroute tool available"
-                fi
-                echo "::endgroup::"
-                sleep "$delay"
-                delay=$((delay * 2 > max_delay ? max_delay : delay * 2))
-              fi
-            done
-            return 1
-          }
-
           LLVM_VER=$(uv export --group '${{ matrix.uv_group }}' --no-emit-project \
             | awk -F'==' '/^halide-llvm==/ { gsub(/ .*/, "", $2); print $2 }')
 
           uv sync --python '${{ matrix.python }}' --group ci-base --no-install-project
-          retry uv pip install --python-platform i686-pc-windows-msvc --only-binary :all: \
+          uv pip install --python-platform i686-pc-windows-msvc --only-binary :all: \
             --extra-index-url https://pypi.halide-lang.org/simple/ \
             "halide-llvm==${LLVM_VER}"
 
