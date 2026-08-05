@@ -459,10 +459,8 @@ protected:
                 int n = (int)local_counters_indices.size();
                 int idx =
                     local_counters_indices.try_emplace({id, i}, n).first->second;
-                Expr old = Load::make(UInt(64), local_counters, idx,
-                                      Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{});
-                stores.push_back(Store::make(local_counters, old + c.counters[i], idx,
-                                             Parameter{}, const_true(), ModulusRemainder{}));
+                Expr old = Load::make(UInt(64), local_counters, idx);
+                stores.push_back(Store::make(local_counters, old + c.counters[i], idx));
             }
             stores.push_back(s);
             return Block::make(stores);
@@ -790,8 +788,7 @@ protected:
             for (auto [p, idx] : local_counters_indices) {
                 auto [id, counter] = p;
                 to_flush[id].counters[counter] =
-                    Load::make(UInt(64), local_counters, idx,
-                               Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{});
+                    Load::make(UInt(64), local_counters, idx);
             }
 
             counters.swap(to_flush);
@@ -801,8 +798,7 @@ protected:
             std::vector<Stmt> stmts;
             stmts.reserve(local_counters_indices.size() + 2);
             for (int i = 0; i < (int)local_counters_indices.size(); i++) {
-                stmts.push_back(Store::make(local_counters, make_zero(UInt(64)), i,
-                                            Parameter{}, const_true(), ModulusRemainder{}));
+                stmts.push_back(Store::make(local_counters, make_zero(UInt(64)), i));
             }
 
             stmts.push_back(std::move(body));
@@ -1340,7 +1336,8 @@ private:
             body = substitute(names.profiler_instance, Variable::make(Handle(), names.hvx_profiler_instance), body);
             body = LetStmt::make(names.hvx_profiler_instance, get_state, body);
         } else if (op->device_api == DeviceAPI::None ||
-                   op->device_api == DeviceAPI::Host) {
+                   op->device_api == DeviceAPI::Host ||
+                   op->device_api == DeviceAPI::SMEStreaming) {
             body = mutate(body);
         } else {
             body = op->body;
@@ -1535,7 +1532,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
         for (int i = num_funcs - 1; i >= 0; --i) {
             s = Block::make(Store::make(names.profiler_func_stack_peak_buf,
                                         make_const(UInt(64), profiling.func_stack_peak[i]),
-                                        i, Parameter(), const_true(), ModulusRemainder()),
+                                        i),
                             s);
         }
         s = Block::make(s, Free::make(names.profiler_func_stack_peak_buf));

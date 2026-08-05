@@ -6,6 +6,7 @@ tests(
     # keep-sorted start case=no
     align_bounds.cpp
     argmax.cpp
+    arm_cpu_detect.cpp
     async_device_copy.cpp
     autodiff.cpp
     bad_likely.cpp
@@ -141,6 +142,7 @@ tests(
     gpu_cpu_simultaneous_read.cpp
     gpu_data_flows.cpp
     gpu_different_blocks_threads_dimensions.cpp
+    gpu_dynamic_and_register_realization.cpp
     gpu_dynamic_shared.cpp
     gpu_f16_intrinsics.cpp
     gpu_free_sync.cpp
@@ -259,6 +261,7 @@ tests(
     pipeline_set_jit_externs_func.cpp
     plain_c_includes.c
     popc_clz_ctz_bounds.cpp
+    powerpc_cpu_detect.cpp
     predicated_store_load.cpp
     predicated_store_load_single_lane.cpp
     prefetch.cpp
@@ -302,6 +305,7 @@ tests(
     sliding_reduction.cpp
     sliding_window.cpp
     sliding_window_cascade.cpp
+    sme_streaming.cpp
     solve.cpp
     sort_exprs.cpp
     specialize.cpp
@@ -350,6 +354,7 @@ tests(
     undef.cpp
     uninitialized_read.cpp
     unique_func_image.cpp
+    unique_name.cpp
     unroll_dynamic_loop.cpp
     unroll_huge_mux.cpp
     unroll_loop_with_implied_constant_bounds.cpp
@@ -374,8 +379,15 @@ tests(
     vectorized_load_from_vectorized_allocation.cpp
     vectorized_reduction_bug.cpp
     widening_reduction.cpp
+    x86_cpu_detect.cpp
     # keep-sorted end
 )
+
+# These test the host CPU detection logic that libHalide shares with the
+# runtime, so they need to see the private headers they share.
+target_include_directories(correctness_arm_cpu_detect PRIVATE ${Halide_SOURCE_DIR}/src/runtime)
+target_include_directories(correctness_powerpc_cpu_detect PRIVATE ${Halide_SOURCE_DIR}/src/runtime)
+target_include_directories(correctness_x86_cpu_detect PRIVATE ${Halide_SOURCE_DIR}/src/runtime)
 
 # Simd op check tests fix the target features internally, so they
 # only need to be run on one target in CI. Every CI runner targets

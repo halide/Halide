@@ -318,7 +318,11 @@ struct Load : public ExprNode<Load> {
                      Parameter param,
                      Expr predicate,
                      ModulusRemainder alignment,
-                     bool is_streaming = false);
+                     bool is_streaming);
+
+    /** Make an unpredicated, non-streaming Load from an internal buffer, with
+     * no image or parameter and no known alignment. */
+    static Expr make(Type type, const std::string &name, Expr index);
 
     /** Make a Load that loads from the same buffer as this one, but with new
      * children. The type is the element type of this Load, with the lane count
@@ -462,7 +466,11 @@ struct Store : public StmtNode<Store> {
 
     static Stmt make(const std::string &name, Expr value, Expr index,
                      Parameter param, Expr predicate, ModulusRemainder alignment,
-                     bool is_streaming = false);
+                     bool is_streaming);
+
+    /** Make an unpredicated, non-streaming Store to an internal buffer, with no
+     * parameter and no known alignment. */
+    static Stmt make(const std::string &name, Expr value, Expr index);
 
     /** Make a Store to the same buffer as this one, but with new children.
      * Returns this Store unchanged if the new children are the same as the
@@ -741,6 +749,8 @@ struct Call : public ExprNode<Call> {
         extract_bits,
         // Extracts a single element from a mask vector
         extract_mask_element,
+        // Returns the runtime value of ARM SME streaming vscale (the vector length multiplier in streaming mode)
+        get_runtime_streaming_vscale,
         // Returns the runtime value of ARM SVE vscale (the vector length multiplier)
         get_runtime_vscale,
         get_user_context,

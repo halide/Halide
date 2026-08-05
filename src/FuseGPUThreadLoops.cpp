@@ -6,7 +6,6 @@
 #include "CSE.h"
 #include "CanonicalizeGPUVars.h"
 #include "CodeGen_GPU_Dev.h"
-#include "CompilerLogger.h"
 #include "ExprUsesVar.h"
 #include "FuseGPUThreadLoops.h"
 #include "IR.h"
@@ -226,6 +225,23 @@ public:
     }
 };
 
+// An allocation inside the thread loops stays in register/local memory
+// (handled by ExtractRegisterAllocations) rather than being pulled out to the
+// block level (handled by ExtractSharedAndHeapAllocations) if it has a fixed
+// size or an explicit register/stack memory type.
+bool allocation_goes_to_registers(const Allocate *op, bool in_threads) {
+    bool fixed_size_thread_allocation = (op->constant_allocation_size() != 0) && in_threads;
+    return (fixed_size_thread_allocation &&
+            op->memory_type != MemoryType::Heap &&
+            op->memory_type != MemoryType::GPUShared &&
+            op->memory_type != MemoryType::GPUTexture) ||
+           op->memory_type == MemoryType::Register ||
+           op->memory_type == MemoryType::Stack;
+}
+
+// Rename an allocation and all of its loads, stores, and frees. Relies on the
+// invariant that no allocation of the same name is nested inside this one, so
+// every reference in the body belongs to it.
 class ExtractSharedAndHeapAllocations : public IRMutator {
 protected:
     using IRMutator::visit;
@@ -312,9 +328,9 @@ protected:
 
     void precompute_allocation_size(SharedAllocation &s) {
         Expr val = Load::make(Int(32), s.name + ".shared_size", 0,
-                              Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{});
+                              Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{}, false);
         Stmt update_size = Store::make(s.name + ".shared_size", max(s.size, val), 0,
-                                       Parameter{}, const_true(), ModulusRemainder{});
+                                       Parameter{}, const_true(), ModulusRemainder{}, false);
 
         if (host_side_preamble.defined()) {
             host_side_preamble = Block::make(host_side_preamble, update_size);
@@ -362,9 +378,6 @@ protected:
                         << "Shared allocation for " << s.name
                         << " has a size that is non-monotonic in the gpu block variable " << op->name
                         << ": " << s.size << "\n";
-                    if (get_compiler_logger()) {
-                        get_compiler_logger()->record_non_monotonic_loop_var(op->name, s.size);
-                    }
                     precompute_allocation_size(s);
                     break;
                 case Monotonic::Increasing:
@@ -458,14 +471,7 @@ protected:
             << "Allocate node inside GPU kernel has custom new expression.\n"
             << "(Memoization is not supported inside GPU kernels at present.)\n";
 
-        bool fixed_size_thread_allocation = (op->constant_allocation_size() != 0) && in_threads;
-
-        if ((fixed_size_thread_allocation &&
-             op->memory_type != MemoryType::Heap &&
-             op->memory_type != MemoryType::GPUShared &&
-             op->memory_type != MemoryType::GPUTexture) ||
-            op->memory_type == MemoryType::Register ||
-            op->memory_type == MemoryType::Stack) {
+        if (allocation_goes_to_registers(op, in_threads)) {
             // These allocations go in register or local memory
             return IRMutator::visit(op);
         }
@@ -1039,7 +1045,7 @@ public:
                 string alloc_name = alloc.name + ".shared_size";
                 string var_name = alloc.name + ".shared_size_var";
                 Expr val = Load::make(Int(32), alloc_name, 0,
-                                      Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{});
+                                      Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{}, false);
                 result = LetStmt::make(var_name, val, result);
                 alloc.size = Variable::make(Int(32), var_name);
             }
@@ -1053,13 +1059,22 @@ public:
             if (alloc.size_computed_on_host) {
                 string alloc_name = alloc.name + ".shared_size";
                 Stmt init = Store::make(alloc_name, 0, 0,
-                                        Parameter{}, const_true(), ModulusRemainder{});
+                                        Parameter{}, const_true(), ModulusRemainder{}, false);
                 result = Block::make(init, result);
                 result = Allocate::make(alloc_name, Int(32), MemoryType::Stack, {1}, const_true(), result);
             }
         }
 
         return result;
+    }
+
+    // Returns the names of every allocation pulled out to the block level.
+    std::set<string> allocation_names() const {
+        std::set<string> names;
+        for (const SharedAllocation &a : allocations) {
+            names.insert(a.name);
+        }
+        return names;
     }
 
     ExtractSharedAndHeapAllocations(DeviceAPI d)
@@ -1085,6 +1100,10 @@ protected:
     };
 
     bool in_lane_loop = false;
+
+    // Names of allocations pulled out to the block level, so we can rename any
+    // register allocation that would otherwise collide with one.
+    const std::set<string> block_alloc_names;
 
     Stmt visit(const For *op) override {
         ScopedValue<string> old_loop_var(loop_var);
@@ -1148,8 +1167,43 @@ protected:
             << "it must live in stack memory, heap memory, or registers. "
             << "Shared allocations at this loop level are not yet supported.\n";
 
+        // If this name also lives at the block level, rename this register copy
+        // so it doesn't shadow the block allocation once it gets hoisted to wrap
+        // the thread body. The block copy keeps the Func's name for the
+        // profiler. By the no-shadowing invariant, every load/store of this name
+        // in the body belongs to this allocation.
+        string name = op->name;
+        Stmt body = op->body;
+        if (block_alloc_names.count(op->name)) {
+            name = unique_name(op->name);
+            const string &from = op->name;
+            const string &to = name;
+            body = mutate_with(
+                body,
+                [&](auto *self, const Load *load) -> Expr {
+                    if (load->name == from) {
+                        return Load::make(load->type, to, self->mutate(load->index), load->image, load->param,
+                                          self->mutate(load->predicate), load->alignment, load->is_streaming);
+                    }
+                    return self->visit_base(load);
+                },
+                [&](auto *self, const Store *store) -> Stmt {
+                    if (store->name == from) {
+                        return Store::make(to, self->mutate(store->value), self->mutate(store->index), store->param,
+                                           self->mutate(store->predicate), store->alignment, store->is_streaming);
+                    }
+                    return self->visit_base(store);
+                },
+                [&](auto *, const Free *free) -> Stmt {
+                    if (free->name == from) {
+                        return Free::make(to);
+                    }
+                    return free;
+                });
+        }
+
         RegisterAllocation alloc;
-        alloc.name = op->name;
+        alloc.name = name;
         alloc.type = op->type;
         alloc.size = 1;
         alloc.loop_var = loop_var;
@@ -1160,7 +1214,7 @@ protected:
         alloc.memory_type = op->memory_type;
 
         allocations.push_back(alloc);
-        return mutate(op->body);
+        return mutate(body);
     }
 
     template<typename LetOrLetStmt>
@@ -1193,6 +1247,10 @@ protected:
 
 public:
     vector<RegisterAllocation> allocations;
+
+    ExtractRegisterAllocations(std::set<string> block_alloc_names)
+        : block_alloc_names(std::move(block_alloc_names)) {
+    }
 
     // Multiple realizations of the same Func inside the thread loops (e.g. from
     // unrolling a loop that holds a register allocation) share a name with
@@ -1417,7 +1475,7 @@ protected:
                      << body << "\n\n";
 
             Expr block_size_x = block_size.threads_dimensions() ? block_size.num_threads(0) : 1;
-            ExtractRegisterAllocations register_allocs;
+            ExtractRegisterAllocations register_allocs(block_allocations.allocation_names());
             ForType innermost_loop_type = ForType::GPUThread;
             if (block_size.threads_dimensions()) {
                 body = register_allocs(body);

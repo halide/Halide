@@ -29,7 +29,6 @@ enum class OutputFileType {
     bitcode,
     c_header,
     c_source,
-    compiler_log,
     conceptual_stmt,
     conceptual_stmt_html,
     cpp_stub,
@@ -116,23 +115,32 @@ struct LoweredFunc {
      * the Target. */
     NameMangling name_mangling;
 
+    /** The attributes in bit flags purposed for additional information used in lowering and codegen. */
+    enum Attribute : uint64_t {
+        NO_ATTRIBUTE = 0,
+        SME_STREAMING_TASK = 1 << 0,
+        SME_NONSTREAMING_TASK = 1 << 1,
+    };
+    uint64_t attributes;
+
     LoweredFunc(const std::string &name,
                 const std::vector<LoweredArgument> &args,
                 Stmt body,
                 LinkageType linkage,
-                NameMangling mangling = NameMangling::Default);
+                NameMangling mangling = NameMangling::Default,
+                uint64_t attributes = 0);
     LoweredFunc(const std::string &name,
                 const std::vector<Argument> &args,
                 Stmt body,
                 LinkageType linkage,
-                NameMangling mangling = NameMangling::Default);
+                NameMangling mangling = NameMangling::Default,
+                uint64_t attributes = 0);
 };
 
 }  // namespace Internal
 
 namespace Internal {
 struct ModuleContents;
-class CompilerLogger;
 }  // namespace Internal
 
 struct AutoSchedulerResults;
@@ -242,14 +250,12 @@ void compile_standalone_runtime(const std::string &object_filename, const Target
 std::map<OutputFileType, std::string> compile_standalone_runtime(const std::map<OutputFileType, std::string> &output_files, const Target &t);
 
 using ModuleFactory = std::function<Module(const std::string &fn_name, const Target &target)>;
-using CompilerLoggerFactory = std::function<std::unique_ptr<Internal::CompilerLogger>(const std::string &fn_name, const Target &target)>;
 
 void compile_multitarget(const std::string &fn_name,
                          const std::map<OutputFileType, std::string> &output_files,
                          const std::vector<Target> &targets,
                          const std::vector<std::string> &suffixes,
-                         const ModuleFactory &module_factory,
-                         const CompilerLoggerFactory &compiler_logger_factory = nullptr);
+                         const ModuleFactory &module_factory);
 
 }  // namespace Halide
 

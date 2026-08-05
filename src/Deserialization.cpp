@@ -256,6 +256,8 @@ DeviceAPI Deserializer::deserialize_device_api(Serialize::DeviceAPI device_api) 
         return DeviceAPI::Vulkan;
     case Serialize::DeviceAPI::WebGPU:
         return DeviceAPI::WebGPU;
+    case Serialize::DeviceAPI::SMEStreaming:
+        return DeviceAPI::SMEStreaming;
     default:
         user_error << "unknown device api " << (int)device_api << "\n";
         return DeviceAPI::None;
