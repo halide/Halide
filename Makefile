@@ -483,7 +483,6 @@ SOURCE_FILES = \
   CodeGen_WebAssembly.cpp \
   CodeGen_WebGPU_Dev.cpp \
   CodeGen_X86.cpp \
-  CompilerLogger.cpp \
   ConstantBounds.cpp \
   ConstantInterval.cpp \
   CPlusPlusMangle.cpp \
@@ -681,7 +680,6 @@ HEADER_FILES = \
   CodeGen_Targets.h \
   CodeGen_Vulkan_Dev.h \
   CodeGen_WebGPU_Dev.h \
-  CompilerLogger.h \
   ConciseCasts.h \
   ConstantBounds.h \
   ConstantInterval.h \
@@ -826,7 +824,6 @@ HEADERS = $(HEADER_FILES:%.h=$(SRC_DIR)/%.h)
 
 # keep-sorted start skip_lines=1
 RUNTIME_CPP_COMPONENTS = \
-  aarch64_cpu_features \
   alignment_128 \
   alignment_32 \
   alignment_64 \
@@ -859,7 +856,6 @@ RUNTIME_CPP_COMPONENTS = \
   hexagon_dma_pool \
   hexagon_host \
   ios_io \
-  linux_aarch64_cpu_features \
   linux_arm_cpu_features \
   linux_arm_thread_id \
   linux_clock \
@@ -877,7 +873,6 @@ RUNTIME_CPP_COMPONENTS = \
   msan \
   msan_stubs \
   opencl \
-  osx_aarch64_cpu_features \
   osx_arm_cpu_features \
   osx_clock \
   osx_get_symbol \

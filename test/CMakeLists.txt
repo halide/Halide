@@ -70,3 +70,8 @@ Halide_feature(WITH_TEST_FUZZ "Build fuzz tests" ON)
 if (WITH_TEST_FUZZ)
     add_subdirectory(fuzz)
 endif ()
+
+Halide_feature(WITH_TEST_DEBUGGER "Build debugger-integration tests" ON)
+if (WITH_TEST_DEBUGGER)
+    add_subdirectory(debugger)
+endif ()
