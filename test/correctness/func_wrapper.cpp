@@ -175,6 +175,57 @@ int global_wrapper_test() {
     return 0;
 }
 
+int global_wrapper_via_get_func_test() {
+    // A Func handle from Pipeline::get_func is built by walking Call nodes,
+    // whose FunctionPtrs may be marked to follow global wrappers. The handle
+    // itself must not follow, or a second Func::in() on it would wrap the
+    // wrapper created by the first (producing a wrapper-of-a-wrapper).
+    Func f("f"), g("g");
+    Var x("x"), y("y");
+    f(x, y) = x + y;
+    g(x, y) = f(x, y);
+
+    Pipeline p({g});
+    Func f_from_env;
+    for (int i = 0; i < 2; i++) {
+        Func fn = p.get_func(i);
+        if (fn.name() == f.name()) {
+            f_from_env = fn;
+        }
+    }
+    if (!f_from_env.defined()) {
+        printf("get_func did not return f\n");
+        return 1;
+    }
+
+    Func w1 = f_from_env.in();
+    Func w2 = f_from_env.in();
+    if (w1.name() != w2.name()) {
+        printf("Func::in() on a get_func handle was not idempotent: %s vs %s\n",
+               w1.name().c_str(), w2.name().c_str());
+        return 1;
+    }
+
+    f.compute_root();
+    w1.compute_root();
+
+    CallGraphs expected = {
+        {g.name(), {w1.name()}},
+        {w1.name(), {f.name()}},
+        {f.name(), {}},
+    };
+    if (check_call_graphs(g, expected) != 0) {
+        return 1;
+    }
+
+    Buffer<int> im = g.realize({50, 50});
+    auto func = [](int x, int y) { return x + y; };
+    if (check_image(im, func)) {
+        return 1;
+    }
+    return 0;
+}
+
 int wrapper_of_func_with_update_test() {
     Func f("f"), g("g");
     Var x("x"), y("y");
@@ -557,6 +608,11 @@ int main(int argc, char **argv) {
 
     printf("Running global wrap test\n");
     if (global_wrapper_test() != 0) {
+        return 1;
+    }
+
+    printf("Running global wrap via get_func test\n");
+    if (global_wrapper_via_get_func_test() != 0) {
         return 1;
     }
 

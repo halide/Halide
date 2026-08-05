@@ -593,7 +593,10 @@ class SubstituteSelfReference : public IRMutator {
             vector<Expr> args;
             args.insert(args.end(), c->args.begin(), c->args.end());
             args.insert(args.end(), new_args.begin(), new_args.end());
-            expr = Call::make(substitute, args, c->value_index);
+            // This rewrites a Func's self-reference into a self-reference of
+            // the rfactor intermediate, so it must not follow global wrappers.
+            expr = Call::make(substitute, args, c->value_index,
+                              /*follow_global_wrappers=*/false);
         }
         return expr;
     }
