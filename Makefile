@@ -824,7 +824,6 @@ HEADERS = $(HEADER_FILES:%.h=$(SRC_DIR)/%.h)
 
 # keep-sorted start skip_lines=1
 RUNTIME_CPP_COMPONENTS = \
-  aarch64_cpu_features \
   alignment_128 \
   alignment_32 \
   alignment_64 \
@@ -857,7 +856,6 @@ RUNTIME_CPP_COMPONENTS = \
   hexagon_dma_pool \
   hexagon_host \
   ios_io \
-  linux_aarch64_cpu_features \
   linux_arm_cpu_features \
   linux_arm_thread_id \
   linux_clock \
@@ -875,7 +873,6 @@ RUNTIME_CPP_COMPONENTS = \
   msan \
   msan_stubs \
   opencl \
-  osx_aarch64_cpu_features \
   osx_arm_cpu_features \
   osx_clock \
   osx_get_symbol \
