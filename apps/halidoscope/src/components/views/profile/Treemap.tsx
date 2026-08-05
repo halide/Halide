@@ -6,7 +6,7 @@ import * as React from "react";
 
 import { useProfileContext } from "@/hooks/profile";
 import { profileMetricAtom, type ProfileMetric } from "@/state/profile-metric";
-import type { Profile } from "@/types";
+import type { Profile } from "@/types/profile";
 
 type TreemapNode = {
   name: string;
