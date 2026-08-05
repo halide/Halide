@@ -236,7 +236,8 @@ void IRGraphCXXPrinter::visit(const Call *op) {
         // Variant 3: Convenience constructor for calls to other halide functions.
         // We wrap the FunctionPtr into a Function object to perfectly match
         // the expected `const Function &func` signature.
-        emit_node<Call>("Call", op, Internal::Function(op->func), op->args, op->value_index);
+        emit_node<Call>("Call", op, Internal::Function(op->func), op->args, op->value_index,
+                        op->func.follow_global_wrappers);
     } else if (op->is_intrinsic()) {
 
         emit_node<Call>("Call", op, op->type, op->name, op->args, op->call_type);
