@@ -26,6 +26,7 @@
 #include "Deinterleave.h"
 #include "EarlyFree.h"
 #include "ExtractTileOperations.h"
+#include "ExtractWMMAOperations.h"
 #include "FindCalls.h"
 #include "FindIntrinsics.h"
 #include "FlattenNestedRamps.h"
@@ -351,6 +352,12 @@ void lower_impl(const vector<Function> &output_funcs,
     s = vectorize_loops(s, env);
     s = simplify(s);
     log("Lowering after vectorizing:", s);
+
+    if (t.has_feature(Target::CUDA)) {
+        debug(1) << "Extracting tensor core operations...\n";
+        s = extract_wmma_operations(s);
+        log("Lowering after extracting tensor core operations:", s);
+    }
 
     if (t.has_gpu_feature() ||
         t.has_feature(Target::Vulkan)) {

@@ -49,7 +49,11 @@ void define_enums(py::module &m) {
         .value("GPUShared", MemoryType::GPUShared)
         .value("GPUTexture", MemoryType::GPUTexture)
         .value("LockedCache", MemoryType::LockedCache)
-        .value("VTCM", MemoryType::VTCM);
+        .value("VTCM", MemoryType::VTCM)
+        .value("Tile", MemoryType::Tile)
+        .value("GPUSharedAsync", MemoryType::GPUSharedAsync)
+        // Deprecated alias for Tile.
+        .value("AMXTile", MemoryType::Tile);
 
     py::enum_<NameMangling>(m, "NameMangling")
         .value("Default", NameMangling::Default)

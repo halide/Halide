@@ -27,12 +27,53 @@ find_package(Halide REQUIRED)
 # Generator
 add_halide_generator(mat_mul.generator SOURCES mat_mul_generator.cpp)
 
-# Filters
-add_halide_library(mat_mul FROM mat_mul.generator FEATURES cuda cuda_capability_50 PARAMS size=1024)
+# Filters. The operand type picks the schedule: half precision gets the tensor
+# cores, which need compute capability 7.0 or above, and float gets a schedule
+# that accumulates in ordinary registers.
+add_halide_library(
+    mat_mul
+    FROM mat_mul.generator
+    FEATURES cuda cuda_capability_50
+    PARAMS size=1024 A.type=float32 B.type=float32 out.type=float32
+)
+add_halide_library(
+    mat_mul_f16
+    FROM mat_mul.generator
+    GENERATOR mat_mul
+    FEATURES cuda cuda_capability_80
+    PARAMS size=1024 A.type=float16 B.type=float16 out.type=float32
+)
+
+add_halide_library(
+    mat_mul_f16_acc16
+    FROM mat_mul.generator
+    GENERATOR mat_mul
+    FEATURES cuda cuda_capability_80
+    PARAMS size=1024 A.type=float16 B.type=float16 out.type=float16
+)
+add_halide_library(
+    mat_mul_bf16
+    FROM mat_mul.generator
+    GENERATOR mat_mul
+    FEATURES cuda cuda_capability_80
+    PARAMS size=1024 A.type=bfloat16 B.type=bfloat16 out.type=float32
+)
+add_halide_library(
+    mat_mul_u8
+    FROM mat_mul.generator
+    GENERATOR mat_mul
+    FEATURES cuda cuda_capability_80
+    PARAMS size=1024 A.type=uint8 B.type=uint8 out.type=int32
+)
 
 # Main executable
 add_executable(runner runner.cpp)
-target_link_libraries(runner PRIVATE mat_mul Halide::Tools CUDA::cudart CUDA::cublas)
+target_link_libraries(
+    runner
+    PRIVATE
+    mat_mul mat_mul_f16 mat_mul_f16_acc16 mat_mul_bf16 mat_mul_u8 Halide::Halide Halide::Tools
+    CUDA::cudart CUDA::cublas
+)
 
 # Test that the app actually works!
 add_test(NAME mat_mul COMMAND runner)

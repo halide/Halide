@@ -180,14 +180,16 @@ MemoryType Deserializer::deserialize_memory_type(Serialize::MemoryType memory_ty
         return MemoryType::Register;
     case Serialize::MemoryType::GPUShared:
         return MemoryType::GPUShared;
+    case Serialize::MemoryType::GPUSharedAsync:
+        return MemoryType::GPUSharedAsync;
     case Serialize::MemoryType::GPUTexture:
         return MemoryType::GPUTexture;
     case Serialize::MemoryType::LockedCache:
         return MemoryType::LockedCache;
     case Serialize::MemoryType::VTCM:
         return MemoryType::VTCM;
-    case Serialize::MemoryType::AMXTile:
-        return MemoryType::AMXTile;
+    case Serialize::MemoryType::Tile:
+        return MemoryType::Tile;
     default:
         user_error << "unknown memory type " << (int)memory_type << "\n";
         return MemoryType::Auto;

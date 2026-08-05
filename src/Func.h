@@ -499,6 +499,47 @@ public:
     }
     // @}
 
+    /** Schedule this stage as one operation of the target's matrix unit,
+     * which computes on whole tiles held in MemoryType::Tile. There is one
+     * method per thing such a unit can do:
+     *
+     * - tile_init fills a tile with a value uniform across it, usually zero.
+     * - tile_load copies a tile in from more general memory.
+     * - tile_store copies a tile back out to more general memory. On targets
+     *   whose tiles live in general purpose registers this may also fold in
+     *   elementwise work whose other operands are uniform across the tile; on
+     *   targets whose tiles are a separate register file, such as x86, it
+     *   cannot, because no elementwise instruction can read a tile.
+     * - tile_matmul multiplies a pair of tiles into this one, taking the
+     *   reduction dimension first. Its operands come either from memory, in
+     *   which case they are staged into tiles implicitly, or from Funcs held
+     *   in MemoryType::Tile.
+     *
+     * The dimensions passed are the ones that make up a tile, innermost
+     * first. They are reordered into that order and vectorized. That is all
+     * these do: they are sugar over reorder and vectorize, plus atomic for the
+     * multiply, which is what permits a reduction dimension to be vectorized.
+     * Asking for it is asking to reassociate the sum, which a matrix unit does
+     * anyway, rather than asking for atomic memory operations.
+     *
+     * Which dimensions make up a tile, and their order, is fixed by the
+     * instruction rather than free to schedule, so these move them to be the
+     * innermost loops in the order given. The surrounding loops keep their
+     * relative order, and can be reordered separately either side of these
+     * calls. There is no need to name the tile dimensions in such a reorder.
+     *
+     * On CUDA these are warp-level, with an inner loop over the 32 lanes of a
+     * warp that the schedule does not name. That loop becomes the innermost
+     * GPU thread dimension, so schedule these outside the innermost thread
+     * loops of any other Func computed alongside them, and give those Funcs a
+     * 32-wide gpu_lanes loop of their own to match. */
+    // @{
+    Stage &tile_init(const VarOrRVar &x, const VarOrRVar &y);
+    Stage &tile_load(const VarOrRVar &x, const VarOrRVar &y);
+    Stage &tile_store(const VarOrRVar &x, const VarOrRVar &y);
+    Stage &tile_matmul(const VarOrRVar &r, const VarOrRVar &x, const VarOrRVar &y);
+    // @}
+
     /** Get the Vars and RVars of this definition, from innermost out, with
      * splits applied. This represents all the potentially-valid compute_at
      * sites for this Stage. The RVars returned will be symbolic and not tied to
@@ -1520,6 +1561,17 @@ public:
      * argument form. The variable to be vectorized should be the
      * innermost one. */
     Func &vectorize(const VarOrRVar &var);
+
+    /** Schedule this Func as one operation of the target's matrix unit. See
+     * Stage::tile_init. Everything but tile_store also sets this Func's
+     * memory type to MemoryType::Tile, since those are the ones that produce
+     * a tile; tile_store reads one and writes somewhere more general. */
+    // @{
+    Func &tile_init(const VarOrRVar &x, const VarOrRVar &y);
+    Func &tile_load(const VarOrRVar &x, const VarOrRVar &y);
+    Func &tile_store(const VarOrRVar &x, const VarOrRVar &y);
+    Func &tile_matmul(const VarOrRVar &r, const VarOrRVar &x, const VarOrRVar &y);
+    // @}
 
     /** Mark a dimension to be completely unrolled. The dimension
      * should have constant extent - e.g. because it is the inner

@@ -113,40 +113,37 @@ bool matmul(int col, int row, int acc, int tile_x, int tile_y, int tile_r, bool 
     // loads. But if you go too big you'll run out of tile registers and
     // compilation will fail (The LLVM AMX register allocator will spill, but it
     // seems to be fussy about it). Doing this also tests the case of more than
-    // one matrix multiply operation applied to a single AMXTile allocation.
+    // one matrix multiply operation applied to a single tile allocation.
     int outer_tile_x = col > tile_x ? 2 : 1, outer_tile_y = row > tile_y ? 2 : 1;
 
     mm.compute_at(mm.in(), x)
-        .store_in(MemoryType::AMXTile)
         .update()
         .tile(x, y, rxi, ryi, tile_x, tile_y, TailStrategy::GuardWithIf)
         .split(r, rro, rri, tile_r)
-        .reorder(rri, rxi, ryi, rro, x, y)
-        .atomic()
-        .vectorize(rri)
-        .vectorize(rxi)
-        .vectorize(ryi)
+        .reorder(rro, x, y)
+        .tile_matmul(rri, rxi, ryi)
         .tile(x, y, xi, yi, outer_tile_x, outer_tile_y)
-        .reorder(rri, rxi, ryi, xi, yi, rro, x, y)
+        .reorder(xi, yi, rro, x, y)
         .unroll(xi)
         .unroll(yi);
 
     Var ixi("ixi"), iyi("iyi");
     mm.compute_at(mm.in(), x)
         .tile(x, y, ixi, iyi, tile_x, tile_y)
-        .vectorize(ixi)
-        .vectorize(iyi)
+        .tile_init(ixi, iyi)
         .unroll(x)
         .unroll(y);
 
-    // schedule the consumer
-    Var mmxi("mmxi"), mmyi("mmyi");
+    // Schedule the consumer, which is what copies each tile back out. The
+    // outer tiling matches the group of tiles the accumulator holds, and the
+    // inner one is a single tile.
+    Var mmxo("mmxo"), mmyo("mmyo"), mmxi("mmxi"), mmyi("mmyi");
     mm.in()
-        .tile(x, y, mmxi, mmyi, tile_x * outer_tile_x, tile_y * outer_tile_y)
-        .vectorize(mmxi, tile_x)
-        .vectorize(mmyi, tile_y)
-        .unroll(mmxi)
-        .unroll(mmyi);
+        .tile(x, y, mmxo, mmyo, tile_x * outer_tile_x, tile_y * outer_tile_y)
+        .tile(mmxo, mmyo, mmxi, mmyi, tile_x, tile_y)
+        .tile_store(mmxi, mmyi)
+        .unroll(mmxo)
+        .unroll(mmyo);
 
     Func result = mm.in();
 
@@ -160,7 +157,7 @@ bool matmul(int col, int row, int acc, int tile_x, int tile_y, int tile_r, bool 
         result.realize(out);
     } else {
         // Just compile it to see if anything crashes
-        result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s",
+        result.compile_to_assembly(Internal::get_test_tmp_dir() + "amx_matmul.s",
                                    {A_buf, B_buf}, Target{"x86-64-linux-avx512_sapphirerapids-no_asserts-no_runtime-no_bounds_query"});
         return true;
     }
@@ -211,28 +208,22 @@ bool matmul_bf16(int col, int row, int acc, int tile_x, int tile_y, int tile_r, 
     RVar rri("rri"), rro("rro");
 
     mm.compute_at(mm.in(), x)
-        .store_in(MemoryType::AMXTile)
         .update()
         .tile(x, y, rxi, ryi, tile_x, tile_y, TailStrategy::GuardWithIf)
         .split(r.x, rro, rri, tile_r)
         .reorder({rri, rxi, ryi, rro, x, y})
-        .atomic()
-        .vectorize(rri)
-        .vectorize(rxi)
-        .vectorize(ryi);
+        .tile_matmul(rri, rxi, ryi);
 
     Var ixi("ixi"), iyi("iyi");
     mm.compute_at(mm.in(), x)
         .tile(x, y, ixi, iyi, tile_x, tile_y)
-        .vectorize(ixi)
-        .vectorize(iyi);
+        .tile_init(ixi, iyi);
 
     // schedule the consumer
     Var mmxi("mmxi"), mmyi("mmyi");
     mm.in()
         .tile(x, y, mmxi, mmyi, tile_x, tile_y)
-        .vectorize(mmxi)
-        .vectorize(mmyi);
+        .tile_store(mmxi, mmyi);
 
     Func result = mm.in();
 
@@ -242,15 +233,15 @@ bool matmul_bf16(int col, int row, int acc, int tile_x, int tile_y, int tile_r, 
     Buffer<float> out(col, row);
 
     // Uncomment to check the asm
-    // result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.ll", {A, B}, target);
-    // result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
+    // result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "amx_matmul_bf16.ll", {A, B}, target);
+    // result.compile_to_assembly(Internal::get_test_tmp_dir() + "amx_matmul.s", {A, B}, target);
 
     Target target = get_jit_target_from_environment();
     if (target.has_feature(Target::AVX512_SapphireRapids)) {
         result.realize(out);
     } else {
         // Just compile it to see if anything crashes
-        result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, Target{"x86-64-linux-avx512_sapphirerapids"});
+        result.compile_to_assembly(Internal::get_test_tmp_dir() + "amx_matmul.s", {A, B}, Target{"x86-64-linux-avx512_sapphirerapids"});
         return true;
     }
 

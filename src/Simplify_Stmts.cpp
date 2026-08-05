@@ -320,6 +320,7 @@ Stmt Simplify::visit(const Provide *op) {
 }
 
 Stmt Simplify::visit(const Store *op) {
+
     found_buffer_reference(op->name);
 
     Expr predicate = mutate(op->predicate, nullptr);
