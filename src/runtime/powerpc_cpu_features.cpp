@@ -1,35 +1,23 @@
 #include "HalideRuntime.h"
+#include "auxv_ops.h"
 #include "cpu_features.h"
-
-#define AT_HWCAP 16
-#define AT_HWCAP2 26
-
-#define PPC_FEATURE_HAS_VSX 0x00000080
-
-#define PPC_FEATURE2_ARCH_2_07 0x80000000
-
-extern "C" {
-
-unsigned long int getauxval(unsigned long int);
-}
+#include "powerpc_cpu_detect.h"
 
 namespace Halide {
 namespace Runtime {
 namespace Internal {
 
 extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
-    halide_set_known_cpu_feature(features, halide_target_feature_vsx);
-    halide_set_known_cpu_feature(features, halide_target_feature_power_arch_2_07);
+    using namespace Halide::Internal::CpuDetect;
 
-    const unsigned long hwcap = getauxval(AT_HWCAP);
-    const unsigned long hwcap2 = getauxval(AT_HWCAP2);
+    // The set of features we know how to detect must match what the shared
+    // detection logic can actually report, so take both from the same list.
+    for_each_detectable_powerpc_feature(
+        [&](halide_target_feature_t f) { halide_set_known_cpu_feature(features, f); });
 
-    if (hwcap & PPC_FEATURE_HAS_VSX) {
-        halide_set_available_cpu_feature(features, halide_target_feature_vsx);
-    }
-    if (hwcap2 & PPC_FEATURE2_ARCH_2_07) {
-        halide_set_available_cpu_feature(features, halide_target_feature_power_arch_2_07);
-    }
+    GetAuxValOps<AvailableCpuFeatureSink> ops{{features}};
+    (void)detect_powerpc_features(ops);
+
     return halide_error_code_success;
 }
 

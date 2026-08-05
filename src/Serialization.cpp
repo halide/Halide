@@ -226,6 +226,8 @@ Serialize::DeviceAPI Serializer::serialize_device_api(const DeviceAPI &device_ap
         return Serialize::DeviceAPI::Vulkan;
     case DeviceAPI::WebGPU:
         return Serialize::DeviceAPI::WebGPU;
+    case DeviceAPI::SMEStreaming:
+        return Serialize::DeviceAPI::SMEStreaming;
     default:
         user_error << "Unsupported device API\n";
         return Serialize::DeviceAPI::None;

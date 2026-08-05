@@ -2195,8 +2195,8 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         }
     }
 
-    // If the func is scheduled on the gpu, check that the relevant
-    // api is enabled in the target.
+    // If the func is scheduled to use device API,
+    // check that the relevant feature is enabled in the target.
     vector<Definition> definitions;
     if (f.has_pure_definition()) {
         definitions.push_back(f.definition());
@@ -2592,6 +2592,27 @@ class RemoveLoopsOverOutermost : public IRMutator {
     }
 };
 
+class ValidateHostLoopContext : public IRVisitor {
+    using IRVisitor::visit;
+
+    DeviceAPI current_device_api = DeviceAPI::Host;
+
+    void visit(const For *op) override {
+        if (op->device_api == DeviceAPI::Host) {
+            user_assert(current_device_api == DeviceAPI::Host ||
+                        current_device_api == DeviceAPI::SMEStreaming)
+                << "The host() schedule directive cannot be used inside a "
+                << current_device_api << " loop. It is currently only supported "
+                << "to leave an enclosing sme_streaming() loop or in host loop redundantly.\n";
+        }
+
+        const DeviceAPI next_device_api =
+            op->device_api == DeviceAPI::None ? current_device_api : op->device_api;
+        ScopedValue<DeviceAPI> scoped_device_api(current_device_api, next_device_api);
+        IRVisitor::visit(op);
+    }
+};
+
 bool group_should_be_inlined(const vector<Function> &funcs) {
     return (funcs.size() == 1 &&
             (funcs[0].has_extern_definition() || funcs[0].definition().schedule().fused_pairs().empty()) &&
@@ -2615,13 +2636,64 @@ Stmt schedule_functions(const vector<Function> &outputs,
 
     validate_fused_groups_schedule(fused_groups, env);
 
+    // Collect consecutive inlinable groups and apply them in one
+    // inline_functions pass. We flush the batch before each realization so
+    // the realization's validate_schedule sees the post-inline 's' (its
+    // callers, if they were inlined, will have been substituted in by then).
+    vector<Function> pending_inlines;
+    auto flush_pending_inlines = [&]() {
+        if (pending_inlines.empty()) {
+            return;
+        }
+        debug(1) << "Inlining group of " << pending_inlines.size()
+                 << " function(s): " << pending_inlines << "\n";
+        s = inline_functions(s, pending_inlines);
+        pending_inlines.clear();
+        debug(2) << "Lowering after inlining group of functions:\n"
+                 << s << "\n";
+    };
+
     for (const auto &group : reverse_view(fused_groups)) {
+        vector<Function> group_funcs;
+        group_funcs.reserve(group.size());
+        for (const string &name : group) {
+            group_funcs.push_back(env.find(name)->second);
+        }
+
+        if (group_should_be_inlined(group_funcs)) {
+            // Inlinable groups have a single pure func. Check the
+            // schedule-property errors directly here; we can't call
+            // validate_schedule (which walks 's' for call sites) because
+            // batched inline chains may not yet have their inner call
+            // sites exposed in 's'.
+            const Function &f = group_funcs[0];
+            const LoopLevel &store_at = f.schedule().store_level();
+            const LoopLevel &hoist_storage_at = f.schedule().hoist_storage_level();
+            if (store_at.is_root()) {
+                user_error << "Func \"" << f.name() << "\" is scheduled store_root(), but is inlined. Funcs that use store_root must also call compute_root or compute_at.\n";
+            } else if (!store_at.is_inlined()) {
+                user_error << "Func \"" << f.name() << "\" is scheduled store_at(), but is inlined. Funcs that use store_at must also call compute_at.\n";
+            }
+            if (hoist_storage_at.is_root()) {
+                user_error << "Func \"" << f.name() << "\" is scheduled hoist_storage_root(), but is inlined. Funcs that use hoist_storage_root must also call compute_root or compute_at.\n";
+            } else if (!hoist_storage_at.is_inlined()) {
+                user_error << "Func \"" << f.name() << "\" is scheduled hoist_storage(), but is inlined. Funcs that use hoist_storage_root must also call compute_at.\n";
+            }
+            validate_schedule_inlined_function(f);
+            pending_inlines.push_back(f);
+            continue;
+        }
+
+        // Realization: flush any pending inlines first so that
+        // validate_schedule and the InjectFunctionRealization walk see the
+        // post-inline 's'. In particular, ComputeLegalSchedules inside
+        // validate_schedule needs the inlined call sites to be visible to
+        // find this group's funcs.
+        flush_pending_inlines();
+
         vector<Function> funcs;
         vector<bool> is_output_list;
-
-        for (const string &name : group) {
-            Function f = env.find(name)->second;
-
+        for (const Function &f : group_funcs) {
             bool is_output = false;
             for (const Function &o : outputs) {
                 is_output = is_output | o.same_as(f);
@@ -2658,6 +2730,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
 
         debug(2) << s << "\n";
     }
+    flush_pending_inlines();
 
     // We can remove the loop over root now. It's the outermost one.
     s = mutate_with(s, [&](auto *self, const For *op) {
@@ -2666,6 +2739,9 @@ Stmt schedule_functions(const vector<Function> &outputs,
 
     // We can also remove all the loops over __outermost now.
     s = RemoveLoopsOverOutermost()(s);
+
+    ValidateHostLoopContext validate_host_loop_context;
+    s.accept(&validate_host_loop_context);
 
     return s;
 }
