@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { FuncMeta, StatsMeta } from "@/types";
+import { FuncMeta, StatsMeta } from "@/types/trace";
 
 const TraceContext = React.createContext<{
   funcs: Record<string, FuncMeta>;

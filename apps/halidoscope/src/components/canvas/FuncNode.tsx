@@ -17,14 +17,13 @@ import * as React from "react";
 import HandleCircle from "@/components/canvas/HandleCircle";
 import { useTraceContext } from "@/hooks/trace";
 import { funcAtom } from "@/state/func";
-import { infAtom } from "@/state/inf";
+import { infAtom, nanAtom } from "@/state/nan-inf";
 import { livenessAtom } from "@/state/liveness";
 import { packetAtom } from "@/state/packet";
-import { nanAtom } from "@/state/nan";
 import { renderAtom } from "@/state/render";
 import { tabularDataAtom } from "@/state/tabularData";
 import { threadAtom } from "@/state/thread";
-import type { FuncMeta } from "@/types";
+import type { FuncMeta } from "@/types/trace";
 import {
   renderGrayscale,
   renderRgb,

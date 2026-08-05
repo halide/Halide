@@ -1,8 +1,8 @@
 import { useAtom } from "jotai";
 import { Accordion } from "radix-ui";
 
-import type { FuncMeta } from "@/types";
 import { funcAtom } from "@/state/func";
+import type { FuncMeta } from "@/types/trace";
 
 interface FuncsPanelProps {
   funcs: Record<string, FuncMeta>;

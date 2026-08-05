@@ -12,7 +12,8 @@ import TraceLoading from "@/components/views/trace/TraceLoading";
 import { ProfileContextProvider } from "@/hooks/profile";
 import { TraceContextProvider } from "@/hooks/trace";
 import { funcAtom } from "@/state/func";
-import type { Profile as Pfile, FuncMeta, StatsMeta } from "@/types";
+import type { Profile as Pfile } from "@/types/profile";
+import type { FuncMeta, StatsMeta } from "@/types/trace";
 import { openProfile, openTrace } from "@/utils/api";
 
 import "./App.css";
