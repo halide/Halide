@@ -426,6 +426,13 @@ target_sources(
     # keep-sorted end
 )
 
+# Attach the Natvis visualizers to the target. On MSVC they are embedded into
+# the PDB so they load automatically when debugging anything linked against
+# Halide; other generators treat the .natvis as a non-compiled source (a no-op
+# for the build) but expose it to IDEs such as CLion/Rider, whose LLDB-based
+# debuggers now honor Natvis on Linux and macOS too. See tools/Halide.natvis.
+target_sources(Halide PRIVATE "${Halide_SOURCE_DIR}/tools/Halide.natvis")
+
 set(C_TEMPLATE_FILES CodeGen_C_prologue CodeGen_C_vectors)
 
 set(HTML_TEMPLATE_FILES StmtToHTML_dependencies.html StmtToHTML.js StmtToHTML.css)
