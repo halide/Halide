@@ -223,7 +223,7 @@ Expr make_matrix_address(const string &name, Type element_type, const Expr &base
     Expr index = make_matrix_index(base, rows, cols, layout, stride);
     const int lanes = rows * cols;
     return Load::make(element_type.with_lanes(lanes), name, index, image, param,
-                      const_true(lanes), ModulusRemainder());
+                      const_true(lanes), ModulusRemainder(), false);
 }
 
 Expr make_matrix_to_fragment(Role role, const Shape &shape, Layout layout,
@@ -422,8 +422,7 @@ Stmt convert_to_tile_store(const Store *op, const Expr &store_index,
     Expr index = make_matrix_index(mem.base, shape.M, shape.N, layout, mem.stride);
     Type element_type = op->value.type().element_of();
     Expr frag = Load::make(element_type.with_lanes(accumulator_elements), new_name,
-                           Ramp::make(0, 1, accumulator_elements), {}, {},
-                           const_true(accumulator_elements), {});
+                           Ramp::make(0, 1, accumulator_elements));
     const int lanes = shape.M * shape.N;
     Expr lane = make_lane(unique_name("wmma_lane") + gpu_thread_name(0));
     Expr matrix = Call::make(element_type.with_lanes(lanes), Call::wmma_fragment_to_matrix_d,
@@ -557,8 +556,7 @@ class ExtractWMMAOperations : public IRMutator {
             const int lanes = f->value_type().lanes();
             const string name =
                 operand_subtile_name(f, operand.mr.base, role, shape, layout, stride);
-            return Load::make(f->value_type(), name, Ramp::make(0, 1, lanes), {}, {},
-                              const_true(lanes), {});
+            return Load::make(f->value_type(), name, Ramp::make(0, 1, lanes));
         }
         return make_matrix_to_fragment(role, shape, layout, operand.load,
                                        operand.mr.base, stride, lane);
@@ -619,8 +617,7 @@ class ExtractWMMAOperations : public IRMutator {
             }
         }
         return in_lane_loop(
-            lane, Store::make(name, std::move(value), Ramp::make(0, 1, lanes), Parameter(),
-                              const_true(lanes), ModulusRemainder()));
+            lane, Store::make(name, std::move(value), Ramp::make(0, 1, lanes)));
     }
 
     Stmt convert_to_matmul(const Store *op, Fragment *f, const MatmulInfo &info) {
@@ -631,8 +628,7 @@ class ExtractWMMAOperations : public IRMutator {
         Type acc_type = info.accumulator_type.with_lanes(accumulator_elements);
         Expr frag_idx = Ramp::make(0, 1, accumulator_elements);
         const string name = subtile_name(f, op->index);
-        Expr c = Load::make(acc_type, name, frag_idx, {}, {},
-                            const_true(accumulator_elements), {});
+        Expr c = Load::make(acc_type, name, frag_idx);
 
         Expr mma = Call::make(acc_type, Call::wmma_mma,
                               {info.shape.M, info.shape.N, info.shape.K,
@@ -641,8 +637,7 @@ class ExtractWMMAOperations : public IRMutator {
                               Call::Intrinsic);
 
         Stmt store = in_lane_loop(
-            lane, Store::make(name, std::move(mma), frag_idx, Parameter(),
-                              const_true(accumulator_elements), ModulusRemainder()));
+            lane, Store::make(name, std::move(mma), frag_idx));
         for (const auto &[let_name, v] : reverse_view(info.peeled_lets)) {
             store = LetStmt::make(let_name, v, store);
         }
