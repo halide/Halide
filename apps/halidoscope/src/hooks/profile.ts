@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import type { Profile } from "@/types";
+import type { Profile } from "@/types/profile";
 
 const Profile = React.createContext<Profile>({
   pipelines: [],

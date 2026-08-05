@@ -5,7 +5,8 @@ import * as React from "react";
 
 import { packetAtom } from "@/state/packet";
 import { playbackRateAtom } from "@/state/playback";
-import { SCRUB_DEBOUNCE_MS } from "@/utils/constants";
+
+const SCRUB_DEBOUNCE_MS = 50;
 
 interface Props {
   packetCount: number;

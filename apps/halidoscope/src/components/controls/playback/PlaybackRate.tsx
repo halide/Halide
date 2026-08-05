@@ -1,8 +1,7 @@
 import { useAtom } from "jotai";
 import { Label, Slider } from "radix-ui";
 
-import { DEFAULT_PLAYBACK_RATE } from "@/utils/constants";
-import { playbackRateAtom } from "@/state/playback";
+import { playbackRateAtom, DEFAULT_PLAYBACK_RATE } from "@/state/playback";
 
 const MIN_RATE = 100;
 const MAX_RATE = 20_000;

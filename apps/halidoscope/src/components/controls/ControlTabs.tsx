@@ -4,7 +4,7 @@ import DebugPanel from "@/components/controls/DebugPanel";
 import DisplayPanel from "@/components/controls/DisplayPanel";
 import FuncsPanel from "@/components/controls/FuncsPanel";
 import VisualizationPanel from "@/components/controls/VisualizationPanel";
-import { FuncMeta } from "@/types";
+import { FuncMeta } from "@/types/trace";
 
 function ControlTabs({ funcs }: { funcs: Record<string, FuncMeta> }) {
   return (
