@@ -136,6 +136,9 @@ ostream &operator<<(ostream &out, const DeviceAPI &api) {
     case DeviceAPI::WebGPU:
         out << "<WebGPU>";
         break;
+    case DeviceAPI::SMEStreaming:
+        out << "<SMEStreaming>";
+        break;
     }
     return out;
 }
