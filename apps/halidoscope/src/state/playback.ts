@@ -1,5 +1,6 @@
 import { atom } from "jotai";
 
-import { DEFAULT_PLAYBACK_RATE } from "@/utils/constants";
+/** Default packets replayed in each tick during trace playback. */
+export const DEFAULT_PLAYBACK_RATE = 10000;
 
 export const playbackRateAtom = atom<number>(DEFAULT_PLAYBACK_RATE);

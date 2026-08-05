@@ -1,10 +1,14 @@
 import Dagre from "@dagrejs/dagre";
 import type { Node, Edge } from "@xyflow/react";
 
-import { EdgeTypes, FuncMeta, NodeTypes } from "@/types";
+import type { FuncMeta } from "@/types/trace";
+
+/** Represents the types of permitted nodes for the @xyflow/react canvas. */
+type NodeTypes = "funcNode";
 
 /**
- * Build xyflow nodes from the backend's funcs payload, which maps Halide func
+ * Build xyflow nodes from the backend's funcs payload.
+ *
  * @param funcs The funcs payload from the backend.
  * @param type The node type to assign to each node.
  * @returns An array of nodes formatted for use with @xyflow/react.
@@ -29,6 +33,9 @@ export function buildNodes(
     };
   });
 }
+
+/** Represents the types of permitted edges for the @xyflow/react canvas. */
+type EdgeTypes = "funcEdge";
 
 /**
  * Build xyflow edges from the backend's dag_edges payload, which maps Halide
@@ -63,6 +70,13 @@ export function buildEdges(
   return edges;
 }
 
+/**
+ * Lay out the Halide pipeline as a DAG with Dagre and return nodes and edges
+ * augmented with positional information.
+ *
+ * @param nodes The set of Halide funcs in the pipeline.
+ * @param edges The edges representing dataflow between Halide funcs.
+ */
 export function getLayoutedElements(
   nodes: Node<FuncMeta>[],
   edges: Edge[],

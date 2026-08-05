@@ -4,7 +4,6 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;
-use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 use tauri::ipc::Response;
@@ -203,14 +202,12 @@ pub async fn open_trace(
     state: State<'_, AppState>,
 ) -> Result<TraceMeta, String> {
     let (trace, meta) = tauri::async_runtime::spawn_blocking(move || {
-        let start = Instant::now();
         let trace = Trace::load_from_file(&path, |pct| {
             let _ = app.emit("trace-load-progress", pct);
         })?;
 
         let meta = TraceMeta::from_trace(&trace);
 
-        eprintln!("open_trace took {:?}", start.elapsed());
         Ok::<_, String>((trace, meta))
     })
     .await
