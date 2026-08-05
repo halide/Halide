@@ -98,6 +98,14 @@ struct AutoSchedulerResults {
     std::vector<uint8_t> featurization;        // The featurization of the pipeline (if any)
 };
 
+/** Options controlling how Pipeline::halidoscope() locates and launches the
+ * Halidoscope GUI binary. */
+struct HalidoscopeOptions {
+    /** Path to the halidoscope executable, or just its name if it's on
+     * $PATH. Defaults to looking it up on $PATH. */
+    std::string halidoscope_path = "halidoscope";
+};
+
 class Pipeline;
 
 using AutoSchedulerFn = std::function<void(const Pipeline &, const Target &, const AutoschedulerParams &, AutoSchedulerResults *outputs)>;
@@ -499,9 +507,9 @@ public:
      * profiler enabled), write the resulting trace and profile artifacts to
      * a temporary directory, and open them in the Halidoscope GUI
      * (https://github.com/halide/Halide, apps/halidoscope). The
-     * `halidoscope` executable is looked up on $PATH, unless the
-     * HALIDOSCOPE_PATH environment variable is set, in which case that path
-     * is used instead.
+     * `halidoscope` executable is looked up on $PATH by default; pass a
+     * HalidoscopeOptions with halidoscope_path set to override
+     * that.
      *
      * This performs two additional realizations of the pipeline purely for
      * the sake of instrumentation -- it does not realize the "real" output
@@ -512,14 +520,15 @@ public:
      * Not reentrant/thread-safe; do not call this concurrently with itself
      * or with another Halide JIT realization in the same process. */
     // @{
-    void halidoscope(std::vector<int32_t> sizes = {}, const Target &target = Target());
-    void halidoscope(RealizationArg output, const Target &target = Target());
+    void halidoscope(std::vector<int32_t> sizes = {}, HalidoscopeOptions options = HalidoscopeOptions(), const Target &target = Target());
+    void halidoscope(RealizationArg output, HalidoscopeOptions options = HalidoscopeOptions(), const Target &target = Target());
     // @}
 
 private:
     std::string generate_function_name() const;
 
     void halidoscope_impl(const std::function<void(Pipeline &, const Target &)> &do_realize,
+                          const HalidoscopeOptions &options,
                           const Target &target_arg);
 };
 

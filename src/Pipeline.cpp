@@ -1047,8 +1047,22 @@ Pipeline::RealizationArg halidoscope_clone_output(const Pipeline::RealizationArg
 }  // namespace
 
 void Pipeline::halidoscope_impl(const std::function<void(Pipeline &, const Target &)> &do_realize,
+                                const HalidoscopeOptions &options,
                                 const Target &target_arg) {
     user_assert(defined()) << "Pipeline is undefined\n";
+
+    // Fail fast if halidoscope_path looks like an explicit path (as opposed
+    // to a bare name meant to be resolved via $PATH, e.g. the default
+    // "halidoscope") and nothing exists there -- no need to burn two full
+    // pipeline realizations before discovering the binary is missing. A bare
+    // name can't be checked this way (file_exists() just wraps access(),
+    // which won't search $PATH), so that case is instead caught below, after
+    // actually trying to launch it.
+    if (options.halidoscope_path.find('/') != std::string::npos) {
+        user_assert(file_exists(options.halidoscope_path))
+            << "halidoscope: no file found at HalidoscopeOptions::halidoscope_path='"
+            << options.halidoscope_path << "'.\n";
+    }
 
     // Pipeline::compile_jit() discards the *entire* target (feature bits
     // included) and replaces it with get_jit_target_from_environment()
@@ -1108,26 +1122,32 @@ void Pipeline::halidoscope_impl(const std::function<void(Pipeline &, const Targe
     }
 
     // --- Launch Halidoscope, blocking until the window is closed. ---
-    std::string binary = "halidoscope";
-    if (const char *override_path = getenv("HALIDOSCOPE_PATH")) {
-        binary = override_path;
-    }
-    run_process({binary, "--trace", trace_path, "--profile", profile_path});
+    std::string binary = options.halidoscope_path;
+    int halidoscope_rc = run_process({binary, "--trace", trace_path, "--profile", profile_path});
 
     file_unlink(trace_path);
     file_unlink(profile_path);
     dir_rmdir(dir);
+
+    // run_process() returns -1 if the binary couldn't be started at all (as
+    // opposed to running and exiting with a nonzero status) -- for a bare
+    // name like the default "halidoscope", that almost always means it
+    // wasn't found on $PATH (an explicit path is already checked above).
+    user_assert(halidoscope_rc != -1)
+        << "halidoscope: could not find or launch the Halidoscope binary '" << binary
+        << "'. Make sure it is installed and on $PATH, or set "
+           "HalidoscopeOptions::halidoscope_path to point at it directly.\n";
 }
 
-void Pipeline::halidoscope(std::vector<int32_t> sizes, const Target &target) {
-    halidoscope_impl([&sizes](Pipeline &p, const Target &t) { p.realize(sizes, t); }, target);
+void Pipeline::halidoscope(std::vector<int32_t> sizes, HalidoscopeOptions options, const Target &target) {
+    halidoscope_impl([&sizes](Pipeline &p, const Target &t) { p.realize(sizes, t); }, options, target);
 }
 
-void Pipeline::halidoscope(RealizationArg output, const Target &target) {
+void Pipeline::halidoscope(RealizationArg output, HalidoscopeOptions options, const Target &target) {
     halidoscope_impl([&output](Pipeline &p, const Target &t) {
         p.realize(halidoscope_clone_output(output), t);
     },
-                     target);
+                     options, target);
 }
 
 // Make a vector of void *'s to pass to the jit call using the
