@@ -16,7 +16,7 @@ import Overlay from "@/components/canvas/Overlay";
 import { funcAtom } from "@/state/func";
 import { edgesAtom } from "@/state/graph";
 import { livenessAtom } from "@/state/liveness";
-import { FuncMeta } from "@/types";
+import type { FuncMeta } from "@/types/trace";
 import { buildEdges, buildNodes, getLayoutedElements } from "@/utils/graph";
 
 const NODE_TYPES = {

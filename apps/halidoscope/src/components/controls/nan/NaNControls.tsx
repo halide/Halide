@@ -5,9 +5,12 @@ import { Checkbox, Label, Select } from "radix-ui";
 import ColorInput from "@/components/controls/color/ColorInput";
 import ArrowDownIcon from "@/components/icons/ArrowDownIcon";
 import CheckIcon from "@/components/icons/CheckIcon";
-import { DEFAULT_NAN_COLOR, nanAtom } from "@/state/nan";
-import type { AnimationMode } from "@/types";
-import { ANIMATION_MODES } from "@/utils/constants";
+import {
+  DEFAULT_NAN_COLOR,
+  nanAtom,
+  ANIMATION_MODES,
+  type AnimationMode,
+} from "@/state/nan-inf";
 
 function NaNControls() {
   const [nan, setNan] = useAtom(nanAtom);

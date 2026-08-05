@@ -5,9 +5,12 @@ import { Checkbox, Label, Select } from "radix-ui";
 import ColorInput from "@/components/controls/color/ColorInput";
 import ArrowDownIcon from "@/components/icons/ArrowDownIcon";
 import CheckIcon from "@/components/icons/CheckIcon";
-import { DEFAULT_INF_COLOR, infAtom } from "@/state/inf";
-import type { AnimationMode } from "@/types";
-import { ANIMATION_MODES } from "@/utils/constants";
+import {
+  DEFAULT_INF_COLOR,
+  infAtom,
+  ANIMATION_MODES,
+  type AnimationMode,
+} from "@/state/nan-inf";
 
 function InfControls() {
   const [inf, setInf] = useAtom(infAtom);
