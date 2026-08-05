@@ -294,6 +294,13 @@ Expr Load::make(Type type, const std::string &name, Expr index, Buffer<> image, 
     return node;
 }
 
+Expr Load::make(Type type, const std::string &name, Expr index) {
+    // Compute the lane count before moving out of index.
+    int lanes = type.lanes();
+    return make(type, name, std::move(index), Buffer<>(), Parameter(),
+                const_true(lanes), ModulusRemainder(), false);
+}
+
 Expr Load::with(const Expr &index, const Expr &predicate, ModulusRemainder alignment) const {
     if (index.same_as(this->index) &&
         predicate.same_as(this->predicate) &&
@@ -478,6 +485,13 @@ Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter para
     node->alignment = alignment;
     node->is_streaming = is_streaming;
     return node;
+}
+
+Stmt Store::make(const std::string &name, Expr value, Expr index) {
+    // Compute the lane count before moving out of value.
+    int lanes = value.type().lanes();
+    return make(name, std::move(value), std::move(index), Parameter(),
+                const_true(lanes), ModulusRemainder(), false);
 }
 
 Stmt Store::with(const Expr &value, const Expr &index, const Expr &predicate, ModulusRemainder alignment) const {

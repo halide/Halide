@@ -343,12 +343,12 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
 
     Type res_type = op->value.type().with_lanes(256);
     Expr subtile_idx = Ramp::make(0, 1, 256);
-    auto out_load = Load::make(res_type, new_name, subtile_idx, {}, {}, const_true(256), {});
+    auto out_load = Load::make(res_type, new_name, subtile_idx);
 
     auto matmul = Call::make(res_type, "tile_matmul",
                              {I, col_bytes, K, out_load, lhs_call, rhs_call},
                              Call::Intrinsic);
-    auto store = Store::make(new_name, matmul, std::move(subtile_idx), Parameter(), const_true(256), ModulusRemainder());
+    auto store = Store::make(new_name, matmul, std::move(subtile_idx));
     for (auto &[name, value] : reverse_view(peeled_lets)) {
         store = LetStmt::make(name, std::move(value), store);
     }
@@ -363,7 +363,7 @@ Stmt convert_to_zero(const Store *op, const string &new_name, int I, int J) {
     auto tile_zero_type = store_type.with_lanes(1024 / store_type.bytes());
     auto val = Call::make(tile_zero_type, "tile_zero", {rows, colbytes}, Call::Intrinsic);
     Expr subtile_idx = Ramp::make(0, 1, 256);
-    return Store::make(new_name, std::move(val), std::move(subtile_idx), Parameter(), const_true(256), ModulusRemainder());
+    return Store::make(new_name, std::move(val), std::move(subtile_idx));
 }
 
 Stmt convert_to_tile_store(const Store *op, const string &amx_name, int I, int J) {
@@ -400,7 +400,7 @@ Stmt convert_to_tile_store(const Store *op, const string &amx_name, int I, int J
     auto out_var = Variable::make(Handle(), op->name);
     auto tile_type = op->value.type().with_lanes(256);
     Expr subtile_idx = Ramp::make(0, 1, 256);
-    auto tile_val = Load::make(tile_type, amx_name, std::move(subtile_idx), {}, {}, const_true(256), {});
+    auto tile_val = Load::make(tile_type, amx_name, std::move(subtile_idx));
     auto bytes = op->value.type().bytes();
     // This should have been caught earlier, so internal assert
     internal_assert(bytes == 4)

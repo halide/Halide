@@ -103,7 +103,7 @@ class IsNoOp : public IRVisitor {
             }
 
             Expr equivalent_load = Load::make(op->value.type(), op->name, op->index,
-                                              Buffer<>(), Parameter(), op->predicate, op->alignment);
+                                              Buffer<>(), Parameter(), op->predicate, op->alignment, false);
             Expr is_no_op = equivalent_load == op->value;
             is_no_op = StripIdentities()(is_no_op);
             // We need to call CSE since sometimes we have "let" stmt on the RHS
