@@ -712,8 +712,7 @@ void check_reject_gather_shuffle() {
 // ---- is_load_of_multiramp ------------------------------------------------
 
 Expr make_test_load(int lanes) {
-    return Load::make(Int(16, lanes), "buf", Ramp::make(Expr(0), Expr(1), lanes),
-                      Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder());
+    return Load::make(Int(16, lanes), "buf", Ramp::make(Expr(0), Expr(1), lanes));
 }
 
 void check_load_under_cast_and_broadcast() {
