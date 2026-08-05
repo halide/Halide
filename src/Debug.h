@@ -35,6 +35,23 @@ std::ostream &operator<<(std::ostream &, const LoweredFunc &);
 bool debug_is_active_impl(int verbosity, const char *file, const char *function, int line);
 #define debug_is_active(n) (::Halide::Internal::debug_is_active_impl((n), __FILE__, __FUNCTION__, __LINE__))
 
+/** Decide whether a debug() call at the given verbosity/location would print
+ * under the rules in `spec`, which uses the same grammar as the
+ * HL_DEBUG_CODEGEN environment variable:
+ *
+ *     verbosity[,filename[:line_low[-line_high]]][@func]
+ *
+ * Rules are separated by ';' and OR-ed together; a call prints if any rule
+ * accepts it. `filename` and `func` are matched as suffixes. Malformed rules
+ * are ignored. This is the pure core behind debug_is_active_impl(), exposed so
+ * the parser/matcher can be unit tested without touching the process
+ * environment. */
+bool debug_spec_accepts(const std::string &spec, int verbosity,
+                        const char *file, const char *function, int line);
+
+/** Test the HL_DEBUG_CODEGEN rule parser/matcher (see debug_spec_accepts). */
+void debug_filter_test();
+
 /** For optional debugging during codegen, use the debug macro as
  * follows:
  *
