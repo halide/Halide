@@ -64,6 +64,13 @@ void define_pipeline(py::module &m) {
             return "<halide.AutoschedulerParams>";
         });
 
+    py::class_<HalidoscopeOptions>(m, "HalidoscopeOptions")
+        .def(py::init<>())
+        .def_readwrite("halidoscope_path", &HalidoscopeOptions::halidoscope_path)
+        .def("__repr__", [](const HalidoscopeOptions &o) -> std::string {
+            return "<halide.HalidoscopeOptions halidoscope_path='" + o.halidoscope_path + "'>";
+        });
+
     auto pipeline_class =
         py::class_<Pipeline>(m, "Pipeline")
             .def(py::init<>())
@@ -231,30 +238,30 @@ void define_pipeline(py::module &m) {
             // Blocks until the Halidoscope window is closed, so the GIL must be
             // released for the duration of the call, same as realize() above.
             .def("halidoscope",  //
-                 [](Pipeline &p, Buffer<> buffer, const Target &target) -> void {
+                 [](Pipeline &p, Buffer<> buffer, const HalidoscopeOptions &options, const Target &target) -> void {
                      py::gil_scoped_release release;
-                     p.halidoscope(Realization(std::move(buffer)), target);  //
+                     p.halidoscope(Realization(std::move(buffer)), options, target);  //
                  },
-                 py::arg("dst"), py::arg("target") = Target())
+                 py::arg("dst"), py::arg("options") = HalidoscopeOptions(), py::arg("target") = Target())
 
             // See the comment on the corresponding realize() overload above: this
             // overload must be declared before the list-of-sizes one, so that an
             // empty list [] is resolved as list-of-sizes (a 0-dimensional Buffer)
             // rather than as an ambiguous empty list-of-buffers.
             .def("halidoscope",  //
-                 [](Pipeline &p, std::vector<int32_t> sizes, const Target &target) -> void {
+                 [](Pipeline &p, std::vector<int32_t> sizes, const HalidoscopeOptions &options, const Target &target) -> void {
                      py::gil_scoped_release release;
-                     p.halidoscope(std::move(sizes), target);  //
+                     p.halidoscope(std::move(sizes), options, target);  //
                  },
-                 py::arg("sizes") = std::vector<int32_t>{}, py::arg("target") = Target())
+                 py::arg("sizes") = std::vector<int32_t>{}, py::arg("options") = HalidoscopeOptions(), py::arg("target") = Target())
 
             // This will actually allow a list-of-buffers as well as a tuple-of-buffers, but that's OK.
             .def("halidoscope",  //
-                 [](Pipeline &p, std::vector<Buffer<>> buffers, const Target &target) -> void {
+                 [](Pipeline &p, std::vector<Buffer<>> buffers, const HalidoscopeOptions &options, const Target &target) -> void {
                      py::gil_scoped_release release;
-                     p.halidoscope(Realization(std::move(buffers)), target);  //
+                     p.halidoscope(Realization(std::move(buffers)), options, target);  //
                  },
-                 py::arg("dst"), py::arg("target") = Target())
+                 py::arg("dst"), py::arg("options") = HalidoscopeOptions(), py::arg("target") = Target())
 
             .def("infer_input_bounds",  //
                  [](Pipeline &p, const py::object &dst, const Target &target) -> void {
