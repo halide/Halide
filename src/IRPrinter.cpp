@@ -245,12 +245,12 @@ void IRPrinter::test() {
     expr_source << (x + 3) * (y / 2 + 17);
     internal_assert(expr_source.str() == "((x + 3)*((y/2) + 17))");
 
-    Stmt store = Store::make("buf", (x * 17) / (x - 3), y - 1, Parameter(), const_true(), ModulusRemainder());
+    Stmt store = Store::make("buf", (x * 17) / (x - 3), y - 1);
     Stmt for_loop = For::make("x", -2, y + 2, ForType::Parallel, Partition::Auto, DeviceAPI::Host, store);
     vector<Expr> args(1);
     args[0] = x % 3;
     Expr call = Call::make(i32, "buf", args, Call::Extern);
-    Stmt store2 = Store::make("out", call + 1, x, Parameter(), const_true(), ModulusRemainder(3, 5));
+    Stmt store2 = Store::make("out", call + 1, x, Parameter(), const_true(), ModulusRemainder(3, 5), false);
     Stmt for_loop2 = For::make("x", 0, y, ForType::Vectorized, Partition::Auto, DeviceAPI::Host, store2);
 
     Stmt producer = ProducerConsumer::make_produce("buf", for_loop);
@@ -1550,22 +1550,70 @@ void IRPrinter::visit(const HoistedStorage *op) {
     print_braced_stmt(op->body);
 }
 
-std::string lldb_string(const Expr &ir) {
+namespace {
+// Render any type that has an operator<< into a std::string. The public
+// debug_string overloads below are deliberately concrete so their symbols are
+// emitted into libHalide and stay callable from a debugger.
+template<typename T>
+std::string stream_to_string(const T &value) {
+    std::stringstream s{};
+    s << value;
+    return s.str();
+}
+}  // namespace
+
+std::string debug_string(const Expr &ir) {
     std::stringstream s{};
     IRPrinter p(s);
     p.print_no_parens(ir);
     return s.str();
 }
 
-std::string lldb_string(const Internal::BaseExprNode *n) {
-    return lldb_string(Expr(n));
+std::string debug_string(const BaseExprNode *n) {
+    return debug_string(Expr(n));
 }
 
-std::string lldb_string(const Stmt &ir) {
+std::string debug_string(const Stmt &ir) {
     std::stringstream s{};
     IRPrinter p(s);
     p.print_summary(ir);
     return s.str();
+}
+
+std::string debug_string(const BaseStmtNode *n) {
+    return debug_string(Stmt(n));
+}
+
+std::string debug_string(const Type &t) {
+    return stream_to_string(t);
+}
+
+std::string debug_string(const Target &t) {
+    return stream_to_string(t);
+}
+
+std::string debug_string(const Module &m) {
+    return stream_to_string(m);
+}
+
+std::string debug_string(const Tuple &t) {
+    return stream_to_string(t);
+}
+
+std::string debug_string(const Interval &i) {
+    return stream_to_string(i);
+}
+
+std::string debug_string(const ConstantInterval &i) {
+    return stream_to_string(i);
+}
+
+std::string debug_string(const ModulusRemainder &m) {
+    return stream_to_string(m);
+}
+
+std::string debug_string(const LoweredFunc &f) {
+    return stream_to_string(f);
 }
 
 }  // namespace Internal

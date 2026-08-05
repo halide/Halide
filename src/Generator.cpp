@@ -6,7 +6,6 @@
 #include <unordered_map>
 #include <utility>
 
-#include "CompilerLogger.h"
 #include "Generator.h"
 #include "IRPrinter.h"
 #include "Module.h"
@@ -666,7 +665,7 @@ gengen
      [assembly, bitcode, c_header, c_source, cpp_stub, featurization,
       llvm_assembly, object, python_extension, pytorch_wrapper, registration,
       schedule, static_library, stmt, stmt_html, conceptual_stmt,
-      conceptual_stmt_html, compiler_log, hlpipe, device_code].
+      conceptual_stmt_html, hlpipe, device_code].
      If omitted, default value is [c_header, static_library, registration].
 
  -p  A comma-separated list of shared libraries that will be loaded before the
@@ -864,36 +863,6 @@ gengen
     // If true, log the path of all output files to stdout.
     args.log_outputs = (v_val == "1");
 
-    // Allow quick-n-dirty use of compiler logging via HL_DEBUG_COMPILER_LOGGER env var
-    const bool do_compiler_logging = args.output_types.count(OutputFileType::compiler_log) ||
-                                     (get_env_variable("HL_DEBUG_COMPILER_LOGGER") == "1");
-    if (do_compiler_logging) {
-        const bool obfuscate_compiler_logging = get_env_variable("HL_OBFUSCATE_COMPILER_LOGGER") == "1";
-        args.compiler_logger_factory =
-            [obfuscate_compiler_logging, &args](const std::string &function_name, const Target &target) -> std::unique_ptr<CompilerLogger> {
-            // rebuild generator_args from the map so that they are always canonical
-            std::stringstream generator_args_string;
-            std::string autoscheduler_name;
-            std::string sep;
-            for (const auto &it : args.generator_params) {
-                std::string quote = it.second.find(' ') != std::string::npos ? "\\\"" : "";
-                generator_args_string << sep << it.first << "=" << quote << it.second << quote;
-                sep = " ";
-                if (it.first == "autoscheduler") {
-                    autoscheduler_name = it.second;
-                }
-            }
-            std::unique_ptr<JSONCompilerLogger> t(new JSONCompilerLogger(
-                obfuscate_compiler_logging ? "" : args.generator_name,
-                obfuscate_compiler_logging ? "" : args.function_name,
-                obfuscate_compiler_logging ? "" : autoscheduler_name,
-                obfuscate_compiler_logging ? Target() : target,
-                obfuscate_compiler_logging ? "" : generator_args_string.str(),
-                obfuscate_compiler_logging));
-            return t;
-        };
-    }
-
     // Do some preflighting here to emit errors that are likely from the command line
     // but not necessarily from the API call.
     user_assert(!(generator_names.empty() && args.runtime_name.empty()))
@@ -996,11 +965,6 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
                 return GeneratorRegistry::create(generator_name, context);
             };
         }
-        if (!args.compiler_logger_factory) {
-            args.compiler_logger_factory = [](const std::string &, const Target &) -> std::unique_ptr<CompilerLogger> {
-                return nullptr;
-            };
-        }
         if (args.function_name.empty()) {
             args.function_name = args.generator_name;
         }
@@ -1060,7 +1024,6 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
         }
 
         auto output_files = compute_output_files(gcd_target, base_path, args.output_types);
-        // Runtime doesn't get to participate in the CompilerLogger party
         compile_standalone_runtime(output_files, gcd_target);
     }
 
@@ -1083,7 +1046,6 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
 
         if (args.output_types.count(OutputFileType::cpp_stub)) {
             // When generating cpp_stub we ignore all generator args passed in, and supply a fake Target.
-            // (CompilerLogger is never enabled for cpp_stub, for now anyway.)
             const Target fake_target = Target();
             auto gen = args.create_generator(args.generator_name, GeneratorContext(fake_target));
             auto output_files = compute_output_files(fake_target, base_path, args.output_types);
@@ -1114,7 +1076,7 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
                            gen->build_gradient_module(function_name) :
                            gen->build_module(function_name);
             };
-            compile_multitarget(args.function_name, output_files, args.targets, args.suffixes, module_factory, args.compiler_logger_factory);
+            compile_multitarget(args.function_name, output_files, args.targets, args.suffixes, module_factory);
             if (args.log_outputs) {
                 for (const auto &o : output_files) {
                     std::cout << "Generated file: " << o.second << "\n";

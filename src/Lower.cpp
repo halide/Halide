@@ -20,7 +20,6 @@
 #include "CSE.h"
 #include "CanonicalizeGPUVars.h"
 #include "ClampUnsafeAccesses.h"
-#include "CompilerLogger.h"
 #include "Debug.h"
 #include "DebugArguments.h"
 #include "DebugToFile.h"
@@ -144,8 +143,6 @@ void lower_impl(const vector<Function> &output_funcs,
                 bool trace_pipeline,
                 const vector<IRMutator *> &custom_passes,
                 Module &result_module) {
-    auto time_start = std::chrono::high_resolution_clock::now();
-
     size_t initial_lowered_function_count = result_module.functions().size();
 
     // Create a deep-copy of the entire graph of Funcs.
@@ -612,13 +609,6 @@ void lower_impl(const vector<Function> &output_funcs,
     }
 
     result_module.append(main_func);
-
-    auto *logger = get_compiler_logger();
-    if (logger) {
-        auto time_end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> diff = time_end - time_start;
-        logger->record_compilation_time(CompilerLogger::Phase::HalideLowering, diff.count());
-    }
 }
 
 }  // namespace

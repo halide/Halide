@@ -2106,7 +2106,7 @@ class ScatterGatherGenerator : public IRMutator {
     // the input parameter value.
     Expr is_scatter_acc(const Store *op) {
         Expr lhs = Load::make(op->value.type(), op->name, op->index, Buffer<>(),
-                              Parameter(), const_true(op->value.type().lanes()), op->alignment);
+                              Parameter(), const_true(op->value.type().lanes()), op->alignment, false);
         Expr wild = Variable::make(op->value.type(), "*");
         vector<Expr> matches;
         if (expr_match(lhs + wild, op->value, matches) ||

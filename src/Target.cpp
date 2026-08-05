@@ -10,6 +10,11 @@
 #include "Util.h"
 #include "WasmExecutor.h"
 
+#include "runtime/arm_cpu_detect.h"
+#include "runtime/auxv_ops.h"
+#include "runtime/powerpc_cpu_detect.h"
+#include "runtime/x86_cpu_detect.h"
+
 #if defined(__powerpc__) && (defined(__FreeBSD__) || defined(__linux__))
 #if defined(__FreeBSD__)
 #include <machine/cpu.h>
@@ -33,28 +38,14 @@
 #include <sys/types.h>
 #endif
 
-#if defined(__linux__) && (defined(__x86_64__) || defined(__i386__))
-#include <unistd.h>  // for syscall()
-#endif
-
 #if defined(__linux__) && (defined(__arm__) || defined(__aarch64__))
+// The hwcap bit values live in runtime/arm_cpu_detect.h, shared with the
+// runtime, rather than coming from <asm/hwcap.h>: the runtime can't include
+// kernel headers, and when the two disagreed the compiler silently stopped
+// detecting features whose macros the build machine's headers lacked. We still
+// include the kernel header to cross-check the values we do use.
 #include <asm/hwcap.h>
 #include <sys/auxv.h>
-#ifndef HWCAP_ASIMDHP
-#define HWCAP_ASIMDHP 0
-#endif
-#ifndef HWCAP_ASIMDDP
-#define HWCAP_ASIMDDP 0
-#endif
-#ifndef HWCAP_SVE
-#define HWCAP_SVE 0
-#endif
-#ifndef HWCAP2_SVE2
-#define HWCAP2_SVE2 0
-#endif
-#ifndef HWCAP2_SME2
-#define HWCAP2_SME2 0
-#endif
 #endif
 
 /* Detect SME target attribute support */
@@ -73,214 +64,163 @@ using std::vector;
 
 namespace {
 
-#if defined(__aarch64__)
-__attribute__((target("+sve"))) int get_sve_vector_length() {
-    register int result asm("w0");
-    __asm__("cntb %x0, all, mul #8" : "=r"(result));
-    return result;
-}
+namespace CpuDetect = Internal::CpuDetect;
 
-#if HAS_ATTR_TARGET_SME
-__attribute__((target("+sme"))) int get_sme_streaming_vector_length() {  // codespell:ignore sme
-    register int result asm("w0");
-    __asm__("rdsvl %x0, #8" : "=r"(result));
-    return result;
-}
-#else
-int get_sme_streaming_vector_length() {
-    user_error << "Trying to get streaming_vector_length where SME is supposed to be unsupported\n";
-    return 0;
-}
-#endif
-#endif  // defined(__aarch64__)
+// Common recording half of the shared host-CPU detection logic.
+struct TargetFeatureSink {
+    std::vector<Target::Feature> features;
 
-struct cpuid_result {
-    int eax, ebx, ecx, edx;
+    void set_feature(halide_target_feature_t feature) {
+        features.push_back((Target::Feature)feature);
+    }
 };
-
-#if defined(_M_IX86) || defined(_M_AMD64)
-
-[[nodiscard]] cpuid_result cpuid(int infoType, int extra = 0) {
-    int info[4];
-    __cpuidex(info, infoType, extra);
-    return {info[0], info[1], info[2], info[3]};
-}
-
-[[nodiscard]] uint64_t xgetbv(uint32_t xcr) {
-    return _xgetbv(xcr);
-}
-
-#elif defined(__x86_64__) || defined(__i386__)
-
-// CPU feature detection code taken from ispc
-// (https://github.com/ispc/ispc/blob/master/builtins/dispatch.ll)
-
-[[nodiscard]] cpuid_result cpuid(int infoType, int extra = 0) {
-    cpuid_result result;
-    __asm__ __volatile__(
-        "cpuid                 \n\t"
-        : "=a"(result.eax), "=b"(result.ebx), "=c"(result.ecx), "=d"(result.edx)
-        : "0"(infoType), "2"(extra));
-    return result;
-}
-
-[[nodiscard]] uint64_t xgetbv(uint32_t xcr) {
-    uint32_t lo, hi;
-    __asm__ __volatile__("xgetbv" : "=a"(lo), "=d"(hi) : "c"(xcr));
-    return ((uint64_t)hi << 32) | lo;
-}
-
-#endif
 
 #if defined(__x86_64__) || defined(__i386__) || defined(_M_IX86) || defined(_M_AMD64)
 
-#ifdef __linux__
-// On Linux, the AMX XTILEDATA state component (XCR0 bit 18) is allocated
-// lazily: the kernel leaves it disabled in XCR0 for a thread until that
-// thread explicitly requests permission to use it via arch_prctl(2). Without
-// this call, xgetbv() would report AMX as OS-disabled even on hardware that
-// fully supports it. This is a no-op (and harmless) if already granted, and
-// only applies in 64-bit mode, since arch_prctl and AMX are both x86-64-only.
-constexpr long sys_arch_prctl = 158;  // x86-64 Linux syscall number
-constexpr long arch_req_xcomp_perm = 0x1023;
-constexpr long xfeature_xtiledata = 18;
-
-void request_amx_os_permission() {
-    syscall(sys_arch_prctl, arch_req_xcomp_perm, xfeature_xtiledata);
-}
+// The platform half of the shared detection logic in runtime/x86_cpu_detect.h.
+// Unlike the runtime, we can emit cpuid/xgetbv directly.
+struct X86HostOps : TargetFeatureSink {
+    [[nodiscard]] CpuDetect::CpuidResult cpuid(uint32_t leaf, uint32_t subleaf) {
+#if defined(_M_IX86) || defined(_M_AMD64)
+        int info[4];
+        __cpuidex(info, (int)leaf, (int)subleaf);
+        return {(uint32_t)info[0], (uint32_t)info[1], (uint32_t)info[2], (uint32_t)info[3]};
 #else
-void request_amx_os_permission() {
-}
+        // CPU feature detection code taken from ispc
+        // (https://github.com/ispc/ispc/blob/master/builtins/dispatch.ll)
+        CpuDetect::CpuidResult result;
+        __asm__ __volatile__(
+            "cpuid                 \n\t"
+            : "=a"(result.eax), "=b"(result.ebx), "=c"(result.ecx), "=d"(result.edx)
+            : "0"(leaf), "2"(subleaf));
+        return result;
 #endif
+    }
 
-enum class VendorSignatures {
-    Unknown,
-    GenuineIntel,
-    AuthenticAMD,
+    [[nodiscard]] uint64_t xgetbv(uint32_t xcr) {
+#if defined(_M_IX86) || defined(_M_AMD64)
+        return _xgetbv(xcr);
+#else
+        uint32_t lo, hi;
+        __asm__ __volatile__("xgetbv" : "=a"(lo), "=d"(hi) : "c"(xcr));
+        return ((uint64_t)hi << 32) | lo;
+#endif
+    }
+
+    void request_amx_os_permission() {
+        CpuDetect::detail::request_linux_amx_permission();
+    }
 };
-
-VendorSignatures get_vendor_signature() {
-    const auto info = cpuid(0);
-
-    if (info.eax < 1) {
-        return VendorSignatures::Unknown;
-    }
-
-    // "Genu ineI ntel"
-    if (info.ebx == 0x756e6547 && info.edx == 0x49656e69 && info.ecx == 0x6c65746e) {
-        return VendorSignatures::GenuineIntel;
-    }
-
-    // "Auth enti cAMD"
-    if (info.ebx == 0x68747541 && info.edx == 0x69746e65 && info.ecx == 0x444d4163) {
-        return VendorSignatures::AuthenticAMD;
-    }
-
-    return VendorSignatures::Unknown;
-}
-
-void detect_family_and_model(int info0, unsigned &family, unsigned &model) {
-    family = (info0 >> 8) & 0xF;  // Bits 8..11
-    model = (info0 >> 4) & 0xF;   // Bits 4..7
-    if (family == 0x6 || family == 0xF) {
-        if (family == 0xF) {
-            // Examine extended family ID if family ID is 0xF.
-            family += (info0 >> 20) & 0xFf;  // Bits 20..27
-        }
-        // Examine extended model ID if family ID is 0x6 or 0xF.
-        model += ((info0 >> 16) & 0xF) << 4;  // Bits 16..19
-    }
-}
-
-Target::Processor get_amd_processor(unsigned family, unsigned model, bool have_sse3) {
-    switch (family) {
-    case 0xF:  // AMD Family 0Fh
-        if (have_sse3) {
-            return Target::Processor::K8_SSE3;  // Hammer (modern, with SSE3)
-        }
-        return Target::Processor::K8;        // Hammer (original, without SSE3)
-    case 0x10:                               // AMD Family 10h
-        return Target::Processor::AMDFam10;  // Barcelona
-    case 0x14:                               // AMD Family 14h
-        return Target::Processor::BtVer1;    // Bobcat
-    case 0x15:                               // AMD Family 15h
-        if (model >= 0x60 && model <= 0x7f) {
-            return Target::Processor::BdVer4;  // 60h-7Fh: Excavator
-        }
-        if (model >= 0x30 && model <= 0x3f) {
-            return Target::Processor::BdVer3;  // 30h-3Fh: Steamroller
-        }
-        if ((model >= 0x10 && model <= 0x1f) || model == 0x02) {
-            return Target::Processor::BdVer2;  // 02h, 10h-1Fh: Piledriver
-        }
-        if (model <= 0x0f) {
-            return Target::Processor::BdVer1;  // 00h-0Fh: Bulldozer
-        }
-        break;
-    case 0x16:                             // AMD Family 16h
-        return Target::Processor::BtVer2;  // Jaguar
-    case 0x17:                             // AMD Family 17h
-        if ((model >= 0x30 && model <= 0x3f) || model == 0x71) {
-            return Target::Processor::ZnVer2;  // 30h-3Fh, 71h: Zen2
-        }
-        if (model <= 0x0f) {
-            return Target::Processor::ZnVer1;  // 00h-0Fh: Zen1
-        }
-        break;
-    case 0x19:  // AMD Family 19h
-        if (
-            // Zen 3
-            (0x50 <= model && model <= 0x5F) ||  // Cezanne
-            (0x40 <= model && model <= 0x4F) ||  // Rembrandt
-            (0x30 <= model && model <= 0x3F) ||  // Badami
-            (0x20 <= model && model <= 0x2F) ||  // Vermeer
-            (0x00 <= model && model <= 0x0F)     // Chagall, Milan, Genesis
-        ) {
-            return Target::Processor::ZnVer3;
-        } else if (
-            // Zen 4
-            (0xA0 <= model && model <= 0xAF) ||  // Genoa, Dragon Range
-            (0x78 <= model && model <= 0x7F) ||  // Phoenix 2, Hawk Point 2 (Zen 4c)
-            (0x70 <= model && model <= 0x77) ||  // Phoenix, Hawk Point 1
-            (0x60 <= model && model <= 0x6F) ||  // Raphael
-            (0x10 <= model && model <= 0x1F)     // Storm Peak
-        ) {
-            return Target::Processor::ZnVer4;
-        }
-        break;
-    case 0x1a:                             // AMD Family 1Ah
-        return Target::Processor::ZnVer5;  // Zen5
-    default:
-        break;  // Unknown AMD CPU.
-    }
-
-    return Target::Processor::ProcessorGeneric;
-}
 
 #endif  // defined(__x86_64__) || defined(__i386__) || defined(_MSC_VER)
 
-#ifdef __APPLE__
+#if defined(__arm__) || defined(__aarch64__) || defined(_M_ARM64) || defined(_M_ARM64EC)
 
-template<typename T>
-std::optional<T> getsysctl(const char *name) {
-    T value;
-    size_t size = sizeof(value);
-    if (sysctlbyname(name, &value, &size, nullptr, 0)) {
-        return std::nullopt;
+#if defined(__arm__)
+constexpr CpuDetect::ArmArch host_arm_arch = CpuDetect::ArmArch::Arm32;
+#else
+constexpr CpuDetect::ArmArch host_arm_arch = CpuDetect::ArmArch::Arm64;
+#endif
+
+#ifdef __linux__
+// The auxiliary vector is filled in by the kernel, so the values in the shared
+// header have to match the ones the kernel headers define. Cross-check the ones
+// this build's headers know about; older headers omit some, which is why we
+// don't take the values from them in the first place.
+#ifdef HWCAP_ASIMDHP
+static_assert(CpuDetect::detail::hwcap_asimdhp(host_arm_arch) == HWCAP_ASIMDHP);
+#endif
+#ifdef AT_HWCAP
+static_assert(CpuDetect::detail::at_hwcap == AT_HWCAP);
+#endif
+#ifdef AT_HWCAP2
+static_assert(CpuDetect::detail::at_hwcap2 == AT_HWCAP2);
+#endif
+#ifdef HWCAP_ASIMDDP
+static_assert(CpuDetect::detail::hwcap_asimddp(host_arm_arch) == HWCAP_ASIMDDP);
+#endif
+#if defined(HWCAP_SVE) && !defined(__arm__)
+static_assert(CpuDetect::detail::hwcap_sve == HWCAP_SVE);
+#endif
+#if defined(HWCAP2_SVE2) && !defined(__arm__)
+static_assert(CpuDetect::detail::hwcap2_sve2 == HWCAP2_SVE2);
+#endif
+#if defined(HWCAP2_SME2) && !defined(__arm__)
+static_assert(CpuDetect::detail::hwcap2_sme2 == HWCAP2_SME2);
+#endif
+#endif  // __linux__
+
+#ifdef __linux__
+using ArmPlatformOps = CpuDetect::GetAuxValOps<TargetFeatureSink>;
+#elif defined(__APPLE__)
+using ArmPlatformOps = CpuDetect::SysctlByNameOps<TargetFeatureSink>;
+#elif defined(_MSC_VER)
+using ArmPlatformOps = CpuDetect::WindowsProcessorFeatureOps<TargetFeatureSink>;
+#else
+struct ArmPlatformOps : TargetFeatureSink {
+    using ArmDetectionSource = CpuDetect::NullSource;
+};
+#endif
+
+struct ArmHostOps : ArmPlatformOps {
+#if defined(__aarch64__)
+    __attribute__((target("+sve"))) int get_sve_vector_length() {
+        register int result asm("w0");
+        __asm__("cntb %x0, all, mul #8" : "=r"(result));
+        return result;
     }
-    return std::make_optional(value);
-}
 
-[[maybe_unused]] bool sysctl_is_set(const char *name) {
-    return getsysctl<int>(name).value_or(0);
-}
+#if HAS_ATTR_TARGET_SME
+    __attribute__((target("+sme"))) int get_sme_streaming_vector_length() {  // codespell:ignore sme
+        register int result asm("w0");
+        __asm__("rdsvl %x0, #8" : "=r"(result));
+        return result;
+    }
+#else
+    int get_sme_streaming_vector_length() {
+        user_error << "Trying to get streaming_vector_length where SME is supposed to be unsupported\n";
+        return 0;
+    }
+#endif
+#endif
+};
 
-[[maybe_unused]] bool is_armv7s() {
-    return getsysctl<cpu_type_t>("hw.cputype") == CPU_TYPE_ARM &&
-           getsysctl<cpu_subtype_t>("hw.cpusubtype") == CPU_SUBTYPE_ARM_V7S;
-}
+#endif  // ARM
 
-#endif  // __APPLE__
+#if defined(__powerpc__) && (defined(__FreeBSD__) || defined(__linux__))
+
+// The values in the shared header have to match the ones the platform headers
+// define, since the auxiliary vector is filled in by the OS. The runtime can't
+// include those headers, so cross-check here, where we can.
+static_assert(CpuDetect::detail::ppc_feature_has_altivec == PPC_FEATURE_HAS_ALTIVEC);
+static_assert(CpuDetect::detail::ppc_feature_has_vsx == PPC_FEATURE_HAS_VSX);
+static_assert(CpuDetect::detail::ppc_feature2_arch_2_07 == PPC_FEATURE2_ARCH_2_07);
+#ifdef AT_HWCAP
+static_assert(CpuDetect::detail::at_hwcap == AT_HWCAP);
+#endif
+#ifdef AT_HWCAP2
+static_assert(CpuDetect::detail::at_hwcap2 == AT_HWCAP2);
+#endif
+
+#if defined(__linux__)
+using PowerPCHostOps = CpuDetect::GetAuxValOps<TargetFeatureSink>;
+#else
+struct PowerPCHostOps : TargetFeatureSink {
+    uint64_t get_hwcap() {
+        uint64_t value = 0;
+        elf_aux_info(AT_HWCAP, &value, sizeof(value));
+        return value;
+    }
+
+    uint64_t get_hwcap2() {
+        uint64_t value = 0;
+        elf_aux_info(AT_HWCAP2, &value, sizeof(value));
+        return value;
+    }
+};
+#endif
+
+#endif  // POWERPC
 
 Target calculate_host_target() {
     Target::OS os = Target::OSUnknown;
@@ -305,322 +245,96 @@ Target calculate_host_target() {
 #else
 #if defined(__arm__) || defined(__aarch64__) || defined(_M_ARM64) || defined(_M_ARM64EC)
     Target::Arch arch = Target::ARM;
-#if !defined(__arm__)
-    bool has_scalable_vector = false;
-    bool has_streaming_scalable_vector = false;
-#endif
+
+    // The feature detection itself is shared with the runtime; see
+    // runtime/arm_cpu_detect.h. We supply the platform half: asking the OS, and
+    // recording what we're told. Which question to ask depends on the OS, not
+    // the CPU, so there is one call per platform.
+    ArmHostOps ops;
+    CpuDetect::ArmDetection detection{false, false};
 
 #ifdef __APPLE__
-    if (is_armv7s()) {
-        initial_features.push_back(Target::ARMv7s);
-    }
-
-    if (sysctl_is_set("hw.optional.arm.FEAT_DotProd")) {
-        initial_features.push_back(Target::ARMDotProd);
-    }
-
-    if (sysctl_is_set("hw.optional.arm.FEAT_FP16")) {
-        initial_features.push_back(Target::ARMFp16);
-    }
-#if HAS_ATTR_TARGET_SME
-    if (sysctl_is_set("hw.optional.arm.FEAT_SME2")) {
-        initial_features.push_back(Target::SME2);
-        has_streaming_scalable_vector = true;
-    }
-#endif
+    detection = CpuDetect::detect_arm_features(ops, host_arm_arch);
 #endif  // __APPLE__
 
 #ifdef __linux__
-    unsigned long hwcaps = getauxval(AT_HWCAP);
-    unsigned long hwcaps2 = getauxval(AT_HWCAP2);
-
-    if (hwcaps & HWCAP_ASIMDDP) {
-        initial_features.push_back(Target::ARMDotProd);
-    }
-
-    if (hwcaps & HWCAP_ASIMDHP) {
-        initial_features.push_back(Target::ARMFp16);
-    }
-
-    // TODO: https://github.com/halide/Halide/issues/8872
-    // if (hwcaps & HWCAP_SVE) {
-    //     initial_features.push_back(Target::SVE);
-    //     has_scalable_vector = true;
-    // }
-
-    if (hwcaps2 & HWCAP2_SVE2) {
-        initial_features.push_back(Target::SVE2);
-#if !defined(__arm__)
-        has_scalable_vector = true;
-#endif
-    }
-
-#if HAS_ATTR_TARGET_SME
-    if (hwcaps2 & HWCAP2_SME2) {
-        initial_features.push_back(Target::SME2);
-        has_streaming_scalable_vector = true;
-    }
-#endif
-
+    detection = CpuDetect::detect_arm_features(ops, host_arm_arch);
 #endif
 
 #ifdef _MSC_VER
-
-    // https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-isprocessorfeaturepresent
-#define PF_ARM_SVE_INSTRUCTIONS_AVAILABLE (46)
-#define PF_ARM_SVE2_INSTRUCTIONS_AVAILABLE (47)
-#define PF_ARM_SME2_INSTRUCTIONS_AVAILABLE (71)
-
-    // This is the strategy used by Google's cpuinfo library for
-    // detecting fp16 arithmetic support on Windows.
-    if (!IsProcessorFeaturePresent(PF_FLOATING_POINT_EMULATED) &&
-        IsProcessorFeaturePresent(PF_ARM_FMAC_INSTRUCTIONS_AVAILABLE)) {
-        initial_features.push_back(Target::ARMFp16);
-    }
-
-    if (IsProcessorFeaturePresent(PF_ARM_V82_DP_INSTRUCTIONS_AVAILABLE)) {
-        initial_features.push_back(Target::ARMDotProd);
-    }
-
-    // TODO: https://github.com/halide/Halide/issues/8872
-    // if (IsProcessorFeaturePresent(PF_ARM_SVE_INSTRUCTIONS_AVAILABLE)) {
-    //     initial_features.push_back(Target::SVE);
-    //     has_scalable_vector = true;
-    // }
-
-    if (IsProcessorFeaturePresent(PF_ARM_SVE2_INSTRUCTIONS_AVAILABLE)) {
-        initial_features.push_back(Target::SVE2);
-#if !defined(__arm__)
-        has_scalable_vector = true;
-#endif
-    }
-
-#if HAS_ATTR_TARGET_SME
-    if (IsProcessorFeaturePresent(PF_ARM_SME2_INSTRUCTIONS_AVAILABLE)) {
-        initial_features.push_back(Target::SME2);
-        has_streaming_scalable_vector = true;
-    }
-#endif
+    detection = CpuDetect::detect_arm_features(ops, host_arm_arch);
 #endif
 
-#if !defined(__arm__)
-    if (has_scalable_vector) {
-        vector_bits = get_sve_vector_length();
+#if defined(__aarch64__)
+    // SME2 is a hardware capability, but without HAS_ATTR_TARGET_SME the local
+    // compiler can't emit the streaming-mode probe needed to determine the SME
+    // streaming vector length, so don't advertise SME2 support in that case.
+    if (!HAS_ATTR_TARGET_SME) {
+        detection.have_sme2 = false;
     }
-    if (has_streaming_scalable_vector) {
-        const int streaming_vector_bits = get_sme_streaming_vector_length();
+#endif
+
+    for (Target::Feature f : ops.features) {
+#if defined(__aarch64__)
+        if (f == Target::SME2 && !detection.have_sme2) {
+            continue;
+        }
+#endif
+        initial_features.push_back(f);
+    }
+
+#if defined(__aarch64__)
+    if (detection.have_scalable_vector) {
+        vector_bits = ops.get_sve_vector_length();
+    }
+
+    if (detection.have_sme2) {
+        const int streaming_vector_bits = ops.get_sme_streaming_vector_length();
         Target::Feature sme_svl = Target::sme_svl_feature_from_bits(streaming_vector_bits);
         user_assert(sme_svl != Target::FeatureEnd)
             << "Detected unsupported SME streaming vector length " << streaming_vector_bits << " bits.\n";
         initial_features.push_back(sme_svl);
     }
+#else
+    (void)detection;
 #endif
 
 #else
 #if defined(__powerpc__) && (defined(__FreeBSD__) || defined(__linux__))
     Target::Arch arch = Target::POWERPC;
 
-#if defined(__linux__)
-    unsigned long hwcap = getauxval(AT_HWCAP);
-    unsigned long hwcap2 = getauxval(AT_HWCAP2);
-#elif defined(__FreeBSD__)
-    unsigned long hwcap, hwcap2;
-    elf_aux_info(AT_HWCAP, &hwcap, sizeof(hwcap));
-    elf_aux_info(AT_HWCAP2, &hwcap2, sizeof(hwcap2));
-#endif
-    bool have_altivec = (hwcap & PPC_FEATURE_HAS_ALTIVEC) != 0;
-    bool have_vsx = (hwcap & PPC_FEATURE_HAS_VSX) != 0;
-    bool arch_2_07 = (hwcap2 & PPC_FEATURE2_ARCH_2_07) != 0;
+    // The feature detection itself is shared with the runtime; see
+    // runtime/powerpc_cpu_detect.h. We supply the platform half: reading the
+    // auxiliary vector and recording what it reports.
+    PowerPCHostOps ops;
+    const CpuDetect::PowerPCDetection detection =
+        CpuDetect::detect_powerpc_features(ops);
 
-    user_assert(have_altivec)
+    user_assert(detection.have_altivec)
         << "The POWERPC backend assumes at least AltiVec support. This machine does not appear to have AltiVec.\n";
 
-    if (have_vsx) initial_features.push_back(Target::VSX);
-    if (arch_2_07) initial_features.push_back(Target::POWER_ARCH_2_07);
+    initial_features.insert(initial_features.end(), ops.features.begin(), ops.features.end());
 #else
     Target::Arch arch = Target::X86;
 
-    VendorSignatures vendor_signature = get_vendor_signature();
+    // The feature detection itself is shared with the runtime; see
+    // runtime/x86_cpu_detect.h. We supply the platform half: issuing the
+    // instructions, and recording what we're told.
+    X86HostOps ops;
+    const CpuDetect::X86Detection detection = CpuDetect::detect_x86_features(ops);
 
-    const auto info = cpuid(1);
-
-    unsigned family = 0, model = 0;
-    detect_family_and_model(info.eax, family, model);
-
-    // Check OS support for AVX/AVX-512 state saving via XSAVE.
-    // Even if the CPU supports these features, the OS must enable
-    // the corresponding state components in XCR0 or use will fault.
-    bool have_osxsave = (info.ecx & (1 << 27)) != 0;  // ECX[27]
-    bool os_avx = false;
-    bool os_avx512 = false;
-    bool os_apx = false;
-    bool os_amx = false;
-    if (have_osxsave) {
-        if (use_64_bits) {
-            request_amx_os_permission();
-        }
-        uint64_t xcr0 = xgetbv(0);
-        os_avx = (xcr0 & 0x6) == 0x6;                   // XMM (bit 1) + YMM (bit 2)
-        os_avx512 = os_avx && ((xcr0 & 0xE0) == 0xE0);  // opmask (5) + ZMM_Hi256 (6) + Hi16_ZMM (7)
-        os_apx = (xcr0 & 0x80000) == 0x80000;           // APX extended GPRs (bit 19)
-        os_amx = (xcr0 & 0x60000) == 0x60000;           // AMX XTILECFG (17) + XTILEDATA (18)
-    }
-
-    bool have_sse41 = (info.ecx & (1 << 19)) != 0;           // ECX[19]
-    bool have_sse2 = (info.edx & (1 << 26)) != 0;            // EDX[26]
-    bool have_sse3 = (info.ecx & (1 << 0)) != 0;             // ECX[0]
-    bool have_avx = (info.ecx & (1 << 28)) != 0 && os_avx;   // ECX[28], requires OS AVX support
-    bool have_f16c = (info.ecx & (1 << 29)) != 0 && os_avx;  // ECX[29], VEX-encoded
-    bool have_rdrand = (info.ecx & (1 << 30)) != 0;          // ECX[30]
-    bool have_fma = (info.ecx & (1 << 12)) != 0 && os_avx;   // ECX[12], VEX-encoded
-
-    // FMA4 is in CPUID extended leaf 0x80000001, ECX bit 16.
-    // It uses VEX-encoded YMM instructions, so requires OS AVX support.
-    const auto info_ext = cpuid(0x80000001);
-    bool have_fma4 = (info_ext.ecx & (1 << 16)) != 0 && os_avx;  // ECX[16], VEX-encoded
-
-    user_assert(have_sse2)
+    user_assert(detection.have_sse2)
         << "The x86 backend assumes at least sse2 support. This machine does not appear to have sse2.\n"
         << "cpuid returned: "
-        << std::hex << info.eax
-        << ", " << info.ebx
-        << ", " << info.ecx
-        << ", " << info.edx
+        << std::hex << detection.leaf1.eax
+        << ", " << detection.leaf1.ebx
+        << ", " << detection.leaf1.ecx
+        << ", " << detection.leaf1.edx
         << std::dec << "\n";
 
-    if (vendor_signature == VendorSignatures::AuthenticAMD) {
-        processor = get_amd_processor(family, model, have_sse3);
-
-        if (processor == Target::Processor::ZnVer4) {
-            Target t{os, arch, bits, processor, initial_features, vector_bits};
-            t.set_feature(Target::SSE41);
-            if (os_avx) {
-                t.set_features({Target::AVX, Target::F16C, Target::FMA, Target::AVX2});
-            }
-            if (os_avx512) {
-                t.set_features({Target::AVX512, Target::AVX512_Skylake,
-                                Target::AVX512_Cannonlake, Target::AVX512_Zen4});
-            }
-            return t;
-        } else if (processor == Target::Processor::ZnVer5) {
-            Target t{os, arch, bits, processor, initial_features, vector_bits};
-            t.set_feature(Target::SSE41);
-            if (os_avx) {
-                t.set_features({Target::AVX, Target::F16C, Target::FMA,
-                                Target::AVX2, Target::AVXVNNI});
-            }
-            if (os_avx512) {
-                t.set_features({Target::AVX512, Target::AVX512_Skylake,
-                                Target::AVX512_Cannonlake,
-                                Target::AVX512_Zen4, Target::AVX512_Zen5});
-            }
-            return t;
-        }
-    }
-
-    // Processors not specifically detected by model number above use the cpuid
-    // feature bits to determine what flags are supported. For future models,
-    // detect them explicitly above rather than extending the code below.
-
-    if (have_sse41) {
-        initial_features.push_back(Target::SSE41);
-    }
-    if (have_avx) {
-        initial_features.push_back(Target::AVX);
-    }
-    if (have_f16c) {
-        initial_features.push_back(Target::F16C);
-    }
-    if (have_fma) {
-        initial_features.push_back(Target::FMA);
-    }
-    if (have_fma4) {
-        initial_features.push_back(Target::FMA4);
-    }
-
-    if (use_64_bits && have_avx && have_f16c && have_rdrand) {
-        // So far, so good.  AVX2/512?
-        const auto info2 = cpuid(7, 0);
-        const auto info3 = cpuid(7, 1);
-        const uint32_t avx2 = 1U << 5;
-        const uint32_t avx512f = 1U << 16;
-        const uint32_t avx512dq = 1U << 17;
-        const uint32_t avx512pf = 1U << 26;
-        const uint32_t avx512er = 1U << 27;
-        const uint32_t avx512cd = 1U << 28;
-        const uint32_t avx512bw = 1U << 30;
-        const uint32_t avx512vl = 1U << 31;
-        const uint32_t avx512ifma = 1U << 21;
-        const uint32_t avx512 = avx512f | avx512cd;
-        const uint32_t avx512_knl = avx512 | avx512pf | avx512er;
-        const uint32_t avx512_skylake = avx512 | avx512vl | avx512bw | avx512dq;
-        const uint32_t avx512_cannonlake = avx512_skylake | avx512ifma;  // Assume ifma => vbmi
-        if ((info2.ebx & avx2) == avx2) {
-            initial_features.push_back(Target::AVX2);
-        }
-        if (os_avx512 && (info2.ebx & avx512) == avx512) {
-            initial_features.push_back(Target::AVX512);
-            // TODO: port to family/model -based detection.
-            if ((info2.ebx & avx512_knl) == avx512_knl) {
-                initial_features.push_back(Target::AVX512_KNL);
-            }
-            // TODO: port to family/model -based detection.
-            if ((info2.ebx & avx512_skylake) == avx512_skylake) {
-                initial_features.push_back(Target::AVX512_Skylake);
-            }
-            // TODO: port to family/model -based detection.
-            if ((info2.ebx & avx512_cannonlake) == avx512_cannonlake) {
-                initial_features.push_back(Target::AVX512_Cannonlake);
-
-                const uint32_t avxvnni = 1U << 4;    // avxvnni (note, not avx512vnni) result in eax
-                const uint32_t amx_bf16 = 1U << 22;  // amx_bf16 result in edx, with cpuid(eax=7, ecx=0)
-                const uint32_t amx_tile = 1U << 24;  // amx_tile result in edx, with cpuid(eax=7, ecx=0)
-                const uint32_t amx_int8 = 1U << 25;  // amx_int8 result in edx, with cpuid(eax=7, ecx=0)
-                const uint32_t amx = amx_bf16 | amx_tile | amx_int8;
-                // TODO: port to family/model -based detection.
-                if ((info3.eax & avxvnni) == avxvnni) {
-                    initial_features.push_back(Target::AVXVNNI);
-                    // avx512_sapphirerapids implies AMX instruction support, which
-                    // requires the OS to have enabled the AMX XCR0 state components.
-                    if ((info2.edx & amx) == amx && os_amx) {
-                        initial_features.push_back(Target::AVX512_SapphireRapids);
-                    }
-                }
-            }
-        }
-
-        // AVX10 converged vector instructions. The enumeration bit is
-        // CPUID.(EAX=7,ECX=1).EDX[19].
-        const uint32_t avx10 = 1U << 19;
-        if (os_avx512 && (info3.edx & avx10)) {
-            const auto info_avx10 = cpuid(0x24, 0x0);
-
-            // This checks that the AVX10 version is greater than zero.
-            // It isn't really needed as for now only one version exists, but
-            // the docs indicate bits 0:7 of EBX should be >= 0 so...
-            if ((info_avx10.ebx & 0xff) >= 1) {
-                initial_features.push_back(Target::AVX10_1);
-
-                const uint32_t avx10_128 = 1U << 16;
-                const uint32_t avx10_256 = 1U << 17;
-                const uint32_t avx10_512 = 1U << 18;
-                // Choose the maximum one that is available.
-                if (info_avx10.ebx & avx10_512) {
-                    vector_bits = 512;
-                } else if (info_avx10.ebx & avx10_256) {
-                    vector_bits = 256;
-                } else if (info_avx10.ebx & avx10_128) {  // Not clear it is worth turning on AVX10 for this case.
-                    vector_bits = 128;
-                }
-            }
-        }
-
-        // APX register extensions, etc.
-        const uint32_t apx = 1U << 21;
-        if (os_apx && (info3.edx & apx)) {
-            initial_features.push_back(Target::X86APX);
-        }
-    }
+    initial_features.insert(initial_features.end(), ops.features.begin(), ops.features.end());
+    processor = static_cast<Target::Processor>(detection.processor);
+    vector_bits = detection.vector_bits;
 
 #endif
 #endif

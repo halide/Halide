@@ -6,7 +6,6 @@
 #include "CSE.h"
 #include "CanonicalizeGPUVars.h"
 #include "CodeGen_GPU_Dev.h"
-#include "CompilerLogger.h"
 #include "ExprUsesVar.h"
 #include "FuseGPUThreadLoops.h"
 #include "IR.h"
@@ -328,9 +327,9 @@ protected:
 
     void precompute_allocation_size(SharedAllocation &s) {
         Expr val = Load::make(Int(32), s.name + ".shared_size", 0,
-                              Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{});
+                              Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{}, false);
         Stmt update_size = Store::make(s.name + ".shared_size", max(s.size, val), 0,
-                                       Parameter{}, const_true(), ModulusRemainder{});
+                                       Parameter{}, const_true(), ModulusRemainder{}, false);
 
         if (host_side_preamble.defined()) {
             host_side_preamble = Block::make(host_side_preamble, update_size);
@@ -378,9 +377,6 @@ protected:
                         << "Shared allocation for " << s.name
                         << " has a size that is non-monotonic in the gpu block variable " << op->name
                         << ": " << s.size << "\n";
-                    if (get_compiler_logger()) {
-                        get_compiler_logger()->record_non_monotonic_loop_var(op->name, s.size);
-                    }
                     precompute_allocation_size(s);
                     break;
                 case Monotonic::Increasing:
@@ -1047,7 +1043,7 @@ public:
                 string alloc_name = alloc.name + ".shared_size";
                 string var_name = alloc.name + ".shared_size_var";
                 Expr val = Load::make(Int(32), alloc_name, 0,
-                                      Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{});
+                                      Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{}, false);
                 result = LetStmt::make(var_name, val, result);
                 alloc.size = Variable::make(Int(32), var_name);
             }
@@ -1061,7 +1057,7 @@ public:
             if (alloc.size_computed_on_host) {
                 string alloc_name = alloc.name + ".shared_size";
                 Stmt init = Store::make(alloc_name, 0, 0,
-                                        Parameter{}, const_true(), ModulusRemainder{});
+                                        Parameter{}, const_true(), ModulusRemainder{}, false);
                 result = Block::make(init, result);
                 result = Allocate::make(alloc_name, Int(32), MemoryType::Stack, {1}, const_true(), result);
             }

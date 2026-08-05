@@ -100,8 +100,7 @@ protected:
     Expr get_state_var(const string &name) {
         // Expr v = Variable::make(type_of<void *>(), name);
         state_needed[name] = true;
-        return Load::make(type_of<void *>(), name, 0,
-                          Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+        return Load::make(type_of<void *>(), name, 0);
     }
 
     Expr make_state_var(const string &name) {
@@ -366,7 +365,7 @@ class FlattenAliasedAllocations : public IRMutator {
             const Alias &a = aliases.get(op->name);
             return Load::make(op->type, a.backing, mutate(op->index) + a.offset,
                               op->image, op->param, mutate(op->predicate),
-                              shift_alignment(op->alignment, a.offset));
+                              shift_alignment(op->alignment, a.offset), false);
         }
         return IRMutator::visit(op);
     }
@@ -376,7 +375,7 @@ class FlattenAliasedAllocations : public IRMutator {
             const Alias &a = aliases.get(op->name);
             return Store::make(a.backing, mutate(op->value), mutate(op->index) + a.offset,
                                op->param, mutate(op->predicate),
-                               shift_alignment(op->alignment, a.offset));
+                               shift_alignment(op->alignment, a.offset), false);
         }
         return IRMutator::visit(op);
     }
