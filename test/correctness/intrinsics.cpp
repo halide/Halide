@@ -117,7 +117,7 @@ Var x;
 Expr make_leaf(Type t, const char *name) {
     return Load::make(t, name, Ramp::make(x, 1, t.lanes()),
                       Buffer<>{}, Parameter{},
-                      const_true(t.lanes()), ModulusRemainder{});
+                      const_true(t.lanes()), ModulusRemainder{}, false);
 }
 
 int main(int argc, char **argv) {
