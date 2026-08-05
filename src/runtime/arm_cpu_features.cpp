@@ -1,112 +1,49 @@
 #include "HalideRuntime.h"
+#include "arm_cpu_detect.h"
+#include "auxv_ops.h"
 #include "cpu_features.h"
 
 namespace Halide {
 namespace Runtime {
 namespace Internal {
 
+using namespace Halide::Internal::CpuDetect;
+
 #if LINUX
-
-extern "C" unsigned long getauxval(unsigned long type);
-
-#define AT_HWCAP 16
-
-// https://cs.android.com/android/platform/superproject/+/master:bionic/libc/kernel/uapi/asm-arm/asm/hwcap.h
-// https://github.com/torvalds/linux/blob/master/arch/arm/include/uapi/asm/hwcap.h
-#define HWCAP_ASIMDHP (1 << 23)
-#define HWCAP_ASIMDDP (1 << 24)
-
-namespace {
-
-void set_platform_features(CpuFeatures *features) {
-    unsigned long hwcaps = getauxval(AT_HWCAP);
-
-    if (hwcaps & HWCAP_ASIMDDP) {
-        halide_set_available_cpu_feature(features, halide_target_feature_arm_dot_prod);
-    }
-
-    if (hwcaps & HWCAP_ASIMDHP) {
-        halide_set_available_cpu_feature(features, halide_target_feature_arm_fp16);
-    }
-}
-
-}  // namespace
+using PlatformOps = GetAuxValOps<AvailableCpuFeatureSink>;
 
 #elif OSX
+using PlatformOps = SysctlByNameOps<AvailableCpuFeatureSink>;
 
-typedef int integer_t;
-
-typedef integer_t cpu_type_t;
-typedef integer_t cpu_subtype_t;
-
-#define CPU_TYPE_ARM ((cpu_type_t)12)
-#define CPU_SUBTYPE_ARM_V7S ((cpu_subtype_t)11) /* Swift */
-
-extern "C" int sysctlbyname(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
-
-namespace {
-
-bool sysctl_is_set(const char *name) {
-    int enabled = 0;
-    size_t enabled_len = sizeof(enabled);
-    return sysctlbyname(name, &enabled, &enabled_len, nullptr, 0) == 0 && enabled;
-}
-
-bool is_armv7s() {
-    cpu_type_t type;
-    size_t type_len = sizeof(type);
-    if (sysctlbyname("hw.cputype", &type, &type_len, nullptr, 0)) {
-        return false;
-    }
-
-    cpu_subtype_t subtype;
-    size_t subtype_len = sizeof(subtype);
-    if (sysctlbyname("hw.cpusubtype", &subtype, &subtype_len, nullptr, 0)) {
-        return false;
-    }
-
-    return type == CPU_TYPE_ARM && subtype == CPU_SUBTYPE_ARM_V7S;
-}
-
-void set_platform_features(CpuFeatures *features) {
-    if (is_armv7s()) {
-        halide_set_available_cpu_feature(features, halide_target_feature_armv7s);
-    }
-
-    if (sysctl_is_set("hw.optional.arm.FEAT_DotProd")) {
-        halide_set_available_cpu_feature(features, halide_target_feature_arm_dot_prod);
-    }
-
-    if (sysctl_is_set("hw.optional.arm.FEAT_FP16")) {
-        halide_set_available_cpu_feature(features, halide_target_feature_arm_fp16);
-    }
-}
-
-}  // namespace
+#elif WINDOWS
+using PlatformOps = WindowsProcessorFeatureOps<AvailableCpuFeatureSink>;
 
 #else
-
-namespace {
-
-void set_platform_features(CpuFeatures *) {
-}
-
-}  // namespace
+struct PlatformOps : AvailableCpuFeatureSink {
+    using ArmDetectionSource = NullSource;
+};
 
 #endif
 
-extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
-    halide_set_known_cpu_feature(features, halide_target_feature_arm_dot_prod);
-    halide_set_known_cpu_feature(features, halide_target_feature_arm_fp16);
-    halide_set_known_cpu_feature(features, halide_target_feature_armv7s);
-    halide_set_known_cpu_feature(features, halide_target_feature_no_neon);
-    halide_set_known_cpu_feature(features, halide_target_feature_sve);
-    halide_set_known_cpu_feature(features, halide_target_feature_sve2);
+#if BITS_64
+constexpr ArmArch arm_arch = ArmArch::Arm64;
+#else
+constexpr ArmArch arm_arch = ArmArch::Arm32;
+#endif
 
-    // All ARM architectures support "No Neon".
+extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
+    // The set of features we know about must match the shared detection logic,
+    // so take both from the same list.
+    for_each_detectable_arm_feature(
+        [&](halide_target_feature_t f) { halide_set_known_cpu_feature(features, f); });
+
+    // Every ARM host can run code targeted with "No Neon". This isn't detected,
+    // so it isn't part of the shared list.
+    halide_set_known_cpu_feature(features, halide_target_feature_no_neon);
     halide_set_available_cpu_feature(features, halide_target_feature_no_neon);
 
-    set_platform_features(features);
+    PlatformOps ops{{features}};
+    (void)detect_arm_features(ops, arm_arch);
 
     return halide_error_code_success;
 }

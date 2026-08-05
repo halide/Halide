@@ -440,7 +440,13 @@ $ make -f ../Halide/Makefile
 `HL_JIT_TARGET=...` will set Halide's JIT compilation target.
 
 `HL_DEBUG_CODEGEN=1` will print out pseudocode for what Halide is compiling.
-Higher numbers will print more detail.
+Higher numbers will print more detail. The output can be filtered by source
+location using the grammar `verbosity[,filename[:line_low[-line_high]]][@func]`,
+with rules separated by `;` and OR-ed together (filenames and function names are
+matched as suffixes). For example, `HL_DEBUG_CODEGEN=3,Simplify.cpp:100-180`
+prints verbosity-3 output only from lines 100–180 of `Simplify.cpp`. See
+[doc/Testing.md](doc/Testing.md) for more, including the LLDB/GDB debugger
+helpers.
 
 `HL_NUM_THREADS=...` specifies the number of threads to create for the thread
 pool. When the async scheduling directive is used, more threads than this number
