@@ -30,9 +30,9 @@ int main(int argc, char **argv) {
     check(ramp, ramp_a, ramp_b);
     check(broadcast, broadcast_a, broadcast_b);
 
-    check(Load::make(ramp.type(), "buf", ramp, Buffer<>(), Parameter(), const_true(ramp.type().lanes()), ModulusRemainder()),
-          Load::make(ramp_a.type(), "buf", ramp_a, Buffer<>(), Parameter(), const_true(ramp_a.type().lanes()), ModulusRemainder()),
-          Load::make(ramp_b.type(), "buf", ramp_b, Buffer<>(), Parameter(), const_true(ramp_b.type().lanes()), ModulusRemainder()));
+    check(Load::make(ramp.type(), "buf", ramp),
+          Load::make(ramp_a.type(), "buf", ramp_a),
+          Load::make(ramp_b.type(), "buf", ramp_b));
 
     Expr vec_x = Variable::make(Int(32, 4), "vec_x");
     Expr vec_y = Variable::make(Int(32, 4), "vec_y");

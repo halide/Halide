@@ -130,13 +130,13 @@ int main(int argc, char **argv) {
     {
         Expr pred = x * x + y * y > 0;
         Expr index = select(x * x + y * y > 0, x * x + y * y + 2, x * x + y * y + 10);
-        Expr load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
-        Expr pred_load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), pred, ModulusRemainder());
+        Expr load = Load::make(Int(32), "buf", index);
+        Expr pred_load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), pred, ModulusRemainder(), false);
         e = select(x * y > 10, x * y + 2, x * y + 3 + load) + pred_load;
 
         Expr t2 = Variable::make(Bool(), "t2");
-        Expr cse_load = Load::make(Int(32), "buf", t[3], Buffer<>(), Parameter(), const_true(), ModulusRemainder());
-        Expr cse_pred_load = Load::make(Int(32), "buf", t[3], Buffer<>(), Parameter(), t2, ModulusRemainder());
+        Expr cse_load = Load::make(Int(32), "buf", t[3]);
+        Expr cse_pred_load = Load::make(Int(32), "buf", t[3], Buffer<>(), Parameter(), t2, ModulusRemainder(), false);
         correct = ssa_block({x * y,
                              x * x + y * y,
                              t[1] > 0,
@@ -149,13 +149,13 @@ int main(int argc, char **argv) {
     {
         Expr pred = x * x + y * y > 0;
         Expr index = select(x * x + y * y > 0, x * x + y * y + 2, x * x + y * y + 10);
-        Expr load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
-        Expr pred_load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), pred, ModulusRemainder());
+        Expr load = Load::make(Int(32), "buf", index);
+        Expr pred_load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), pred, ModulusRemainder(), false);
         e = select(x * y > 10, x * y + 2, x * y + 3 + pred_load) + pred_load;
 
         Expr t2 = Variable::make(Bool(), "t2");
-        Expr cse_load = Load::make(Int(32), "buf", select(t2, t[1] + 2, t[1] + 10), Buffer<>(), Parameter(), const_true(), ModulusRemainder());
-        Expr cse_pred_load = Load::make(Int(32), "buf", select(t2, t[1] + 2, t[1] + 10), Buffer<>(), Parameter(), t2, ModulusRemainder());
+        Expr cse_load = Load::make(Int(32), "buf", select(t2, t[1] + 2, t[1] + 10));
+        Expr cse_pred_load = Load::make(Int(32), "buf", select(t2, t[1] + 2, t[1] + 10), Buffer<>(), Parameter(), t2, ModulusRemainder(), false);
         correct = ssa_block({x * y,
                              x * x + y * y,
                              t[1] > 0,
