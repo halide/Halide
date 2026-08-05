@@ -113,6 +113,14 @@ inline StreamT &operator<<(StreamT &stream, const PrintSpanLn<T> &wrapper) {
     return stream;
 }
 
+/** Internal-only accessor for test/correctness/debug_helpers.cpp.
+ * debug_is_active_impl() only ever parses HL_DEBUG_CODEGEN once (cached in a
+ * function-local static), so it can't be exercised against multiple specs
+ * from a single process; this re-parses `spec` fresh on every call using the
+ * same grammar, so the parser/matcher can be unit tested directly. */
+bool debug_spec_accepts(const std::string &spec, int verbosity,
+                        const char *file, const char *function, int line);
+
 }  // namespace Internal
 }  // namespace Halide
 
