@@ -6,7 +6,6 @@
 #include "CSE.h"
 #include "CanonicalizeGPUVars.h"
 #include "CodeGen_GPU_Dev.h"
-#include "CompilerLogger.h"
 #include "ExprUsesVar.h"
 #include "FuseGPUThreadLoops.h"
 #include "IR.h"
@@ -378,9 +377,6 @@ protected:
                         << "Shared allocation for " << s.name
                         << " has a size that is non-monotonic in the gpu block variable " << op->name
                         << ": " << s.size << "\n";
-                    if (get_compiler_logger()) {
-                        get_compiler_logger()->record_non_monotonic_loop_var(op->name, s.size);
-                    }
                     precompute_allocation_size(s);
                     break;
                 case Monotonic::Increasing:

@@ -578,6 +578,15 @@ Expr lossless_cast(Type t,
 }
 
 Expr lossless_negate(const Expr &x) {
+    if (x.type().is_uint()) {
+        // An unsigned type can only exactly represent the negation of zero:
+        // any other value would have to be negative, which doesn't fit. In
+        // particular, this rules out e.g. treating cast(uint8, -v) as if it
+        // were -cast(uint8, v) when v doesn't fit in a uint8 to begin with
+        // (the two differ by 256, not just in sign).
+        return is_const_zero(x) ? x : Expr();
+    }
+
     if (const Mul *m = x.as<Mul>()) {
         // Check the terms can't multiply to produce the most negative value.
         if (x.type().is_int() &&
