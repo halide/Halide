@@ -884,14 +884,22 @@ struct Call : public ExprNode<Call> {
         widening_shift_left,
         widening_shift_right,
         widening_sub,
+        // Every intrinsic below takes the lane of the warp it runs in, because
+        // its value depends on which lane that is and nothing else in its
+        // arguments does. Without it a call whose other arguments are all
+        // constants, such as wmma_lane_owns, could be hoisted out of the loop
+        // over lanes. They are Intrinsic rather than PureIntrinsic only to stop
+        // lets being hoisted out from under them, which makes instruction
+        // selection in the backend harder.
+        //
         // Permute this lane's tensor core accumulator (d) fragment up into a
         // whole matrix, leaving the entries this lane doesn't hold undefined.
-        // wmma_fragment_to_matrix_d(M, N, K, fragment)
+        // wmma_fragment_to_matrix_d(M, N, K, fragment, lane)
         wmma_fragment_to_matrix_d,
         // Whether this lane holds each entry of an M x N tensor core
         // accumulator in its fragment. Used as the predicate of the store that
         // copies an accumulator out to memory.
-        // wmma_lane_owns(M, N, K)
+        // wmma_lane_owns(M, N, K, lane)
         wmma_lane_owns,
         // Take this lane's share of a tensor core fragment out of a matrix.
         // The a operand is M x K, the b operand is K x N, and the accumulator
@@ -903,7 +911,7 @@ struct Call : public ExprNode<Call> {
         // rows or columns are recoverable from the index. The hardware can only
         // do this as part of a memory read, which is why the argument has to be
         // a Load rather than an arbitrary matrix value.
-        // wmma_matrix_to_fragment_a(M, N, K, matrix)
+        // wmma_matrix_to_fragment_a(M, N, K, matrix, lane)
         // @{
         wmma_matrix_to_fragment_a,
         wmma_matrix_to_fragment_b,
@@ -913,7 +921,7 @@ struct Call : public ExprNode<Call> {
         // and b fragments were taken out of their matrices, which changes how
         // the hardware arranges them in registers. The accumulator's fragment
         // layout doesn't depend on how it was loaded, so it isn't a parameter.
-        // wmma_mma(M, N, K, a_layout, b_layout, a, b, c)
+        // wmma_mma(M, N, K, a_layout, b_layout, a, b, c, lane)
         wmma_mma,
         // keep-sorted end
         IntrinsicOpCount  // Sentinel: keep last.

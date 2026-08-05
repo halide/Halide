@@ -44,8 +44,8 @@ int wmma_matrix_arg(const Call *op);
  * produced by the pass above. Such a store writes the whole matrix, with each
  * lane of the warp writing the entries it holds:
  *
- *     out[matrix] = wmma_fragment_to_matrix(M, N, K, fragment)
- *         with predicate wmma_lane_owns(M, N, K)
+ *     out[matrix] = wmma_fragment_to_matrix(M, N, K, fragment, lane)
+ *         with predicate wmma_lane_owns(M, N, K, lane)
  *
  * wmma_fragment_to_matrix_d permutes this lane's fragment up into a whole
  * matrix, leaving the entries the lane doesn't hold undefined, and

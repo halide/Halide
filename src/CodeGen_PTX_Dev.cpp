@@ -669,7 +669,7 @@ void CodeGen_PTX_Dev::codegen_wmma_store(const Store *op) {
     // and the column-major layout falls out of the index as usual.
     Expr index;
     const Call *inflate = peel_store_permutations(op, &index).as<Call>();
-    internal_assert(inflate && inflate->args.size() == 4);
+    internal_assert(inflate && inflate->args.size() == 5);
     Expr predicate = op->predicate;
     while (const Shuffle *shuffle = predicate.as<Shuffle>()) {
         predicate = shuffle->vectors[0];

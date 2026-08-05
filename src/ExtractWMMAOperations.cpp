@@ -188,9 +188,17 @@ bool is_rhs(const Operand &op, Layout *layout, Expr *stride) {
 // accumulator has to be executed by all 32 lanes of a warp. Nothing in the
 // schedule says so - it's a consequence of asking for tensor core storage - so
 // the loop over lanes is introduced here.
-Stmt in_lane_loop(Stmt s) {
-    return For::make(unique_name("wmma_lane") + gpu_thread_name(0),
-                     0, warp_lanes - 1, ForType::GPULane, Partition::Never,
+// The lane of the warp a tensor core operation runs in. Every wmma intrinsic
+// takes it, because their values depend on it and nothing else in their
+// arguments does.
+Expr make_lane(const string &name) {
+    return Variable::make(Int(32), name);
+}
+
+Stmt in_lane_loop(const Expr &lane, Stmt s) {
+    const Variable *v = lane.as<Variable>();
+    internal_assert(v) << "the lane of a tensor core operation is not a variable\n";
+    return For::make(v->name, 0, warp_lanes - 1, ForType::GPULane, Partition::Never,
                      DeviceAPI::CUDA, std::move(s));
 }
 
@@ -219,7 +227,8 @@ Expr make_matrix_address(const string &name, Type element_type, const Expr &base
 }
 
 Expr make_matrix_to_fragment(Role role, const Shape &shape, Layout layout,
-                             const Load *load, const Expr &base, const Expr &stride) {
+                             const Load *load, const Expr &base, const Expr &stride,
+                             const Expr &lane) {
     int rows, cols;
     fragment_matrix_shape(role, shape, &rows, &cols);
     Expr address = make_matrix_address(load->name, load->type.element_of(), base,
@@ -227,7 +236,7 @@ Expr make_matrix_to_fragment(Role role, const Shape &shape, Layout layout,
     Type type = load->type.element_of().with_lanes(
         elements_per_lane(role, shape, load->type.element_of()));
     return Call::make(type, intrinsic_for_role(role),
-                      {shape.M, shape.N, shape.K, std::move(address)},
+                      {shape.M, shape.N, shape.K, std::move(address), lane},
                       Call::Intrinsic);
 }
 
@@ -416,12 +425,14 @@ Stmt convert_to_tile_store(const Store *op, const Expr &store_index,
                            Ramp::make(0, 1, accumulator_elements), {}, {},
                            const_true(accumulator_elements), {});
     const int lanes = shape.M * shape.N;
+    Expr lane = make_lane(unique_name("wmma_lane") + gpu_thread_name(0));
     Expr matrix = Call::make(element_type.with_lanes(lanes), Call::wmma_fragment_to_matrix_d,
-                             {shape.M, shape.N, shape.K, std::move(frag)},
+                             {shape.M, shape.N, shape.K, std::move(frag), lane},
                              Call::Intrinsic);
     Expr owned = Call::make(UInt(1, lanes), Call::wmma_lane_owns,
-                            {shape.M, shape.N, shape.K}, Call::Intrinsic);
-    return in_lane_loop(Store::make(op->name, std::move(matrix), std::move(index),
+                            {shape.M, shape.N, shape.K, lane}, Call::Intrinsic);
+    return in_lane_loop(lane,
+                        Store::make(op->name, std::move(matrix), std::move(index),
                                     op->param, std::move(owned), ModulusRemainder(),
                                     op->is_streaming));
 }
@@ -541,7 +552,7 @@ class ExtractWMMAOperations : public IRMutator {
     // The value a matrix multiply uses for one of its operands: the fragment it
     // was staged in, or a load synthesized here if it wasn't staged.
     Expr operand_value(const Operand &operand, Role role, const Shape &shape,
-                       Layout layout, const Expr &stride) {
+                       Layout layout, const Expr &stride, const Expr &lane) {
         if (Fragment *f = find_fragment(operand.load->name)) {
             const int lanes = f->value_type().lanes();
             const string name =
@@ -550,7 +561,7 @@ class ExtractWMMAOperations : public IRMutator {
                               const_true(lanes), {});
         }
         return make_matrix_to_fragment(role, shape, layout, operand.load,
-                                       operand.mr.base, stride);
+                                       operand.mr.base, stride, lane);
     }
 
     Stmt convert_to_fill(const Store *op, Fragment *f) {
@@ -568,6 +579,7 @@ class ExtractWMMAOperations : public IRMutator {
             f, make_matrix_index(dest.base, rows, cols,
                                  dest.row_major ? Layout::Row : Layout::Col, dest.stride));
         const int lanes = f->value_type().lanes();
+        Expr lane = make_lane(unique_name("wmma_lane") + gpu_thread_name(0));
         Expr value;
         if (is_const_zero(op->value)) {
             // Zeroing a fragment is layout-independent, so it doesn't need an
@@ -603,17 +615,18 @@ class ExtractWMMAOperations : public IRMutator {
             } else {
                 value = make_matrix_to_fragment(
                     f->role, f->shape, mem.row_major ? Layout::Row : Layout::Col,
-                    matrix, mem.base, mem.stride);
+                    matrix, mem.base, mem.stride, lane);
             }
         }
         return in_lane_loop(
-            Store::make(name, std::move(value), Ramp::make(0, 1, lanes), Parameter(),
-                        const_true(lanes), ModulusRemainder()));
+            lane, Store::make(name, std::move(value), Ramp::make(0, 1, lanes), Parameter(),
+                              const_true(lanes), ModulusRemainder()));
     }
 
     Stmt convert_to_matmul(const Store *op, Fragment *f, const MatmulInfo &info) {
-        Expr a = operand_value(info.lhs, Role::A, info.shape, info.lhs_layout, info.lda);
-        Expr b = operand_value(info.rhs, Role::B, info.shape, info.rhs_layout, info.ldb);
+        Expr lane = make_lane(unique_name("wmma_lane") + gpu_thread_name(0));
+        Expr a = operand_value(info.lhs, Role::A, info.shape, info.lhs_layout, info.lda, lane);
+        Expr b = operand_value(info.rhs, Role::B, info.shape, info.rhs_layout, info.ldb, lane);
 
         Type acc_type = info.accumulator_type.with_lanes(accumulator_elements);
         Expr frag_idx = Ramp::make(0, 1, accumulator_elements);
@@ -624,12 +637,12 @@ class ExtractWMMAOperations : public IRMutator {
         Expr mma = Call::make(acc_type, Call::wmma_mma,
                               {info.shape.M, info.shape.N, info.shape.K,
                                (int)info.lhs_layout, (int)info.rhs_layout,
-                               std::move(a), std::move(b), std::move(c)},
+                               std::move(a), std::move(b), std::move(c), lane},
                               Call::Intrinsic);
 
         Stmt store = in_lane_loop(
-            Store::make(name, std::move(mma), frag_idx, Parameter(),
-                        const_true(accumulator_elements), ModulusRemainder()));
+            lane, Store::make(name, std::move(mma), frag_idx, Parameter(),
+                              const_true(accumulator_elements), ModulusRemainder()));
         for (const auto &[let_name, v] : reverse_view(info.peeled_lets)) {
             store = LetStmt::make(let_name, v, store);
         }
