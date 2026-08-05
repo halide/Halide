@@ -234,15 +234,14 @@ public:
         writes.push_back(Store::make(key_name,
                                      StringImm::make(std::to_string(top_level_name.size()) + ":" + top_level_name +
                                                      std::to_string(function_name.size()) + ":" + function_name),
-                                     (index / Handle().bytes()), Parameter(), const_true(), ModulusRemainder()));
+                                     (index / Handle().bytes())));
         size_t alignment = Handle().bytes();
         index += Handle().bytes();
 
         // Halide compilation is not threadsafe anyway...
         writes.push_back(Store::make(key_name,
                                      memoize_instance,
-                                     (index / Int(32).bytes()),
-                                     Parameter(), const_true(), ModulusRemainder()));
+                                     (index / Int(32).bytes())));
         alignment += 4;
         index += 4;
 
@@ -250,7 +249,7 @@ public:
         if (needed_alignment > 1) {
             while (alignment % needed_alignment) {
                 writes.push_back(Store::make(key_name, Cast::make(UInt(8), 0),
-                                             index, Parameter(), const_true(), ModulusRemainder()));
+                                             index));
                 index = index + 1;
                 alignment++;
             }
@@ -259,8 +258,7 @@ public:
         for (const ConstDependencyKeyInfoPair &i : dependencies.dependency_info) {
             writes.push_back(Store::make(key_name,
                                          i.second.value_expr,
-                                         (index / i.second.size_expr),
-                                         Parameter(), const_true(), ModulusRemainder()));
+                                         (index / i.second.size_expr)));
             index += i.second.size_expr;
         }
         Stmt blocks = Block::make(writes);

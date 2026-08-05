@@ -2780,7 +2780,7 @@ void CodeGen_LLVM::codegen_atomic_rmw(const Store *op) {
                                  Buffer<>(),
                                  op->param,
                                  op->predicate,
-                                 op->alignment);
+                                 op->alignment, false);
     Expr delta = simplify(common_subexpression_elimination(op->value - equiv_load));
     bool is_atomic_add = supports_atomic_add(value_type) && !expr_uses_var(delta, op->name);
     if (is_atomic_add) {
