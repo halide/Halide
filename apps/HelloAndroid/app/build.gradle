@@ -1,0 +1,55 @@
+plugins {
+    id "com.android.application"
+}
+
+def halideRoot = project.findProperty("Halide_ROOT") ?: System.getenv("Halide_ROOT")
+if (halideRoot == null) {
+    throw new GradleException(
+        "Set -PHalide_ROOT=<path/to/halide install> (or the Halide_ROOT " +
+        "environment variable) to point this build at a Halide installation."
+    )
+}
+
+android {
+    namespace = "com.example.hellohalide"
+    compileSdk = 37
+
+    defaultConfig {
+        applicationId = "com.example.hellohalide"
+        minSdk = 21
+        targetSdk = 37
+        versionCode = 1
+        versionName = "1.0"
+
+        ndk {
+            abiFilters.addAll("arm64-v8a", "x86_64")
+        }
+
+        externalNativeBuild {
+            cmake {
+                arguments "-DCMAKE_PREFIX_PATH=${halideRoot}"
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = "src/main/cpp/CMakeLists.txt"
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled = false
+        }
+    }
+}
+
+dependencies {
+    implementation "androidx.core:core:1.13.1"
+}
