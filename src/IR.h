@@ -725,9 +725,11 @@ struct Call : public ExprNode<Call> {
         count_leading_zeros,
         count_trailing_zeros,
         debug_to_file,
-        // Marks an allocation that has been stripped from the IR (e.g. by
-        // FuseGPUThreadLoops fusing it into a shared buffer), so that
-        // downstream passes that need to see allocations still can.
+        // Emitted (when profiling) for a device-only allocation that has no
+        // host-side Allocate node: the buffer lives solely on the device, so
+        // InjectHostDevBufferCopies elides its host allocation. Lets the
+        // profiler, which tracks memory at host Allocate nodes, still see the
+        // allocation and bill its size to the Func.
         // Args: (StringImm Func name, size in bytes, IntImm memory type).
         declare_allocation,
         // Declares that region required of a particular Func at this
