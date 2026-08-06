@@ -11,9 +11,14 @@ include(ExternalProject)
 # baremetal cross-compile).
 
 # Prefer $EMSDK (set by sourcing emsdk_env.sh); PATH_SUFFIXES is what lets this
-# find emcc without the PATH.
-find_program(EMCC REQUIRED NAMES emcc HINTS ENV EMSDK PATH_SUFFIXES "upstream/emscripten")
-get_filename_component(EMSCRIPTEN_ROOT "${EMCC}" DIRECTORY)
+# find em-config without the PATH.
+find_program(EM_CONFIG REQUIRED NAMES em-config HINTS ENV EMSDK PATH_SUFFIXES "upstream/emscripten")
+execute_process(
+    COMMAND "${EM_CONFIG}" EMSCRIPTEN_ROOT
+    OUTPUT_VARIABLE EMSCRIPTEN_ROOT
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    COMMAND_ERROR_IS_FATAL ANY
+)
 find_file(
     EMSCRIPTEN_TOOLCHAIN_FILE REQUIRED
     NAMES Emscripten.cmake
