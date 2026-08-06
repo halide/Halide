@@ -485,11 +485,8 @@ public class Camera2BasicFragment extends Fragment implements View.OnClickListen
 
     @Override
     public void onClick(View view) {
-        switch (view.getId()) {
-            case R.id.toggle: {
-                mUseEdgeDetector = !mUseEdgeDetector;
-                break;
-            }
+        if (view.getId() == R.id.toggle) {
+            mUseEdgeDetector = !mUseEdgeDetector;
         }
     }
 

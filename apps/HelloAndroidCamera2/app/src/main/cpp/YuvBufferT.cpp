@@ -78,11 +78,15 @@ YuvBufferT::YuvBufferT(uint8_t *lumaPointer,
             {0, chromaVHeight, chromaVRowStrideBytes}};
         interleavedChromaView_ = Halide::Runtime::Buffer<uint8_t>(chromaVPointer, 2, chromaShape);
     } else if (chromaStorage_ == ChromaStorage::kPlanarPackedUFirst) {
-        packedPlanarChromaView_ = chromaU_;
-        packedPlanarChromaView_.crop(1, 0, chromaUHeight * 2);
+        halide_dimension_t chromaShape[] = {
+            {0, chromaUWidth, chromaUElementStrideBytes},
+            {0, chromaUHeight * 2, chromaURowStrideBytes}};
+        packedPlanarChromaView_ = Halide::Runtime::Buffer<uint8_t>(chromaUPointer, 2, chromaShape);
     } else if (chromaStorage_ == ChromaStorage::kPlanarPackedVFirst) {
-        packedPlanarChromaView_ = chromaV_;
-        packedPlanarChromaView_.crop(1, 0, chromaVHeight * 2);
+        halide_dimension_t chromaShape[] = {
+            {0, chromaVWidth, chromaVElementStrideBytes},
+            {0, chromaVHeight * 2, chromaVRowStrideBytes}};
+        packedPlanarChromaView_ = Halide::Runtime::Buffer<uint8_t>(chromaVPointer, 2, chromaShape);
     }
 
     interleavedChromaView_.set_host_dirty();
