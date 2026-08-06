@@ -7,15 +7,23 @@ import type { Scale } from "@/state/tabularData";
 interface HistogramProps {
   data: { x1: number; x2: number; y0: number; y1: number; color: string }[];
   domain: [number, number];
-  range: string[];
   scale: Scale;
   labels: {
     x: string;
     y: string;
   };
+  renderLegend: boolean;
+  interval?: number;
 }
 
-function Histogram({ data, domain, scale, range, labels }: HistogramProps) {
+function Histogram({
+  data,
+  domain,
+  scale,
+  labels,
+  renderLegend,
+  interval,
+}: HistogramProps) {
   const ref = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -44,11 +52,9 @@ function Histogram({ data, domain, scale, range, labels }: HistogramProps) {
         tickPadding: 24,
         tickSize: 0,
         type: scale,
+        interval,
       },
       marks: [
-        // Bars carry a literal, precomputed `color` (rather than relying on Plot's shared
-        // `color` scale), since RGB's stacked per-channel bands need per-band colors that a
-        // single domain-to-color mapping can't express.
         Plot.rect(data, {
           x1: "x1",
           x2: "x2",
@@ -56,10 +62,7 @@ function Histogram({ data, domain, scale, range, labels }: HistogramProps) {
           y2: "y1",
           fill: "color",
         }),
-        // RGB's stacked bands don't have one representative color per bucket, so the axis
-        // color strip below is only meaningful (and only supplied via `range`) for the
-        // single-series histograms.
-        ...(range.length > 0
+        ...(renderLegend
           ? [
               Plot.ruleY(data, {
                 stroke: "color",
@@ -79,7 +82,7 @@ function Histogram({ data, domain, scale, range, labels }: HistogramProps) {
     return () => {
       plot.remove();
     };
-  }, [data, domain, labels, range, scale]);
+  }, [data, domain, labels, scale, renderLegend, interval]);
 
   return data.every((d) => d.y1 === d.y0) ? (
     <div className="flex h-full flex-col items-center justify-center gap-2">
