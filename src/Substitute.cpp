@@ -236,5 +236,43 @@ Stmt substitute_in_all_lets(const Stmt &stmt) {
     return SubstituteInAllLets()(stmt);
 }
 
+Expr RenameFreeVars::visit(const Variable *op) {
+    if (!op->param.defined() && !op->image.defined()) {
+        return Variable::make(op->type, get_new_name(op->name));
+    } else {
+        return op;
+    }
+}
+
+const std::string &RenameFreeVars::get_new_name(const std::string &s) {
+    auto [it, inserted] = new_names.emplace(s, s);
+    if (inserted) {
+        it->second = s + "$_";
+    }
+    return it->second;
+}
+
+namespace {
+class SubstituteInBooleanLets : public IRMutator {
+public:
+    using IRMutator::mutate;
+
+private:
+    using IRMutator::visit;
+
+    Expr visit(const Let *op) override {
+        if (op->value.type() == Bool()) {
+            return substitute(op->name, mutate(op->value), mutate(op->body));
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+};
+}  // namespace
+
+Expr substitute_in_boolean_lets(const Expr &e) {
+    return SubstituteInBooleanLets().mutate(e);
+}
+
 }  // namespace Internal
 }  // namespace Halide
