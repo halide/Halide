@@ -10,3 +10,12 @@ _enable_neon:
     // Jump to C runtime, you may need to change the label name
     // depending on the boot up sequence and what runtime you linked.
     BL _mainCRTStartup
+
+// rdimon.specs (semihosting) has no entropy syscall, but libstdc++'s
+// std::random_device support references it transitively via ordinary
+// std::set/std::string use. Never actually invoked at runtime, so it's
+// safe to just report failure.
+.global _getentropy
+_getentropy:
+    MVN r0,#0               // return -1
+    BX lr
