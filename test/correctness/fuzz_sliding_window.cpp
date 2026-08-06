@@ -28,6 +28,12 @@ constexpr bool use_var_outermost = true;
 constexpr bool partition_loops = true;
 constexpr bool generate_upsamples = true;
 constexpr bool generate_downsamples = true;
+// Bend some coordinates into monotonic but non-affine functions of themselves.
+// Turned off by default because it finds wrong output, on main as well as
+// here: a region required that is flat over part of its range (a clamped
+// coordinate, i.e. the min/max cases in make_piecewise_affine below) slides
+// incorrectly. The select cases are fine.
+constexpr bool generate_piecewise_affine = false;
 constexpr bool always_3x3_stencils = false;
 constexpr bool always_1x3_stencils = false;
 constexpr bool always_3x1_stencils = false;
@@ -38,16 +44,57 @@ constexpr bool verbose = false;
 
 Var x{"x"}, y{"y"}, yo{"yo"}, yi{"yi"};
 
+// Bend a coordinate into a monotonically increasing but non-affine function of
+// itself, so that the monotonicity analysis has to cope with something other
+// than a linear ramp. The footprint stays bounded, so this doesn't stop
+// anything sliding that otherwise would.
+Expr make_piecewise_affine(const Expr &e, std::mt19937 &rng) {
+    int kind = rng() % 4;
+    int k = (int)(rng() % (size / 2));
+    if (!generate_piecewise_affine) {
+        return e;
+    }
+    switch (kind) {
+    case 0:
+        // Flat above a knee.
+        return min(e, k);
+    case 1:
+        // Flat below a knee.
+        return max(e, k - size / 2);
+    case 2:
+        // A step, so it's increasing but skips values.
+        return select(e < k, e, e + 2);
+    default:
+        // Two different slopes.
+        return select(e < k, e, (e * 2) - k);
+    }
+}
+
 // Make a random stencil access to f from a consumer that is `rate` pyramid
 // levels coarser than it (so -1 upsamples, 0 is a plain stencil, and 1
 // downsamples).
-Expr random_use_of(Func f, std::mt19937 &rng, int rate) {
+Expr random_use_of(Func f, std::mt19937 &rng, int rate, bool *bent) {
     auto r = [&]() { return (int)(rng() % 5) - 2; };
 
     int x1 = r();
     int y1 = r();
     int x2 = r();
     int y2 = r();
+
+    // Bend one coordinate some of the time. Draw the rng values
+    // unconditionally so that turning this off doesn't change the rest of the
+    // pipeline.
+    bool bend_x = (rng() % 8) == 0;
+    bool bend_y = (rng() % 8) == 0;
+    Expr xc = make_piecewise_affine(x, rng);
+    Expr yc = make_piecewise_affine(y, rng);
+    if (!bend_x) {
+        xc = x;
+    }
+    if (!bend_y) {
+        yc = y;
+    }
+    *bent = *bent || bend_x || bend_y;
 
     if (always_3x3_stencils) {
         x1 = y1 = 1;
@@ -69,11 +116,11 @@ Expr random_use_of(Func f, std::mt19937 &rng, int rate) {
     }
 
     if (rate < 0 && generate_upsamples) {
-        return f(x / 2 + x1, y / 2 + y1) + f(x / 2 + x2, y / 2 + y2);
+        return f(xc / 2 + x1, yc / 2 + y1) + f(xc / 2 + x2, yc / 2 + y2);
     } else if (rate > 0 && generate_downsamples) {
-        return f(x * 2 + x1, y * 2 + y1) + f(x * 2 + x2, y * 2 + y2);
+        return f(xc * 2 + x1, yc * 2 + y1) + f(xc * 2 + x2, yc * 2 + y2);
     } else {
-        return f(x + x1, y + y1) + f(x + x2, y + y2);
+        return f(xc + x1, yc + y1) + f(xc + x2, yc + y2);
     }
 }
 
@@ -154,6 +201,9 @@ bool run_trial(int trial, uint32_t seed, const Buffer<uint8_t> &input_buf) {
             bool in_registers = false;
             // Which level of the pyramid this stage sits on.
             int level = 0;
+            // Whether any consumer indexes this stage with a non-affine
+            // expression, which stops its footprint being a constant size.
+            bool bent = false;
 
             Node(const std::string &name)
                 : f(name) {
@@ -203,8 +253,8 @@ bool run_trial(int trial, uint32_t seed, const Buffer<uint8_t> &input_buf) {
             Node *in_2 = &stages[i2];
 
             Expr rhs =
-                (random_use_of(in_1->f, rng, level[i] - level[i1]) +
-                 random_use_of(in_2->f, rng, level[i] - level[i2]));
+                (random_use_of(in_1->f, rng, level[i] - level[i1], &in_1->bent) +
+                 random_use_of(in_2->f, rng, level[i] - level[i2], &in_2->bent));
 
             stages[i].f(x, y) = rhs;
 
@@ -328,6 +378,7 @@ bool run_trial(int trial, uint32_t seed, const Buffer<uint8_t> &input_buf) {
                     !c.is_root() &&
                     c.var == (int)stages[c.func].vars.size() - 1 &&
                     levels[1] == levels[2] - 1 &&
+                    !producer->bent &&
                     one_consumer_site &&
                     first_consumer == &stages.back() &&
                     first_consumer->level == producer->level;
