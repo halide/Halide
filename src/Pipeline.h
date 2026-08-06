@@ -120,6 +120,9 @@ struct HalidoscopeOptions {
     /** Path to the halidoscope executable, or just its name if it's on
      * $PATH. Defaults to looking it up on $PATH. */
     std::string halidoscope_path = "halidoscope";
+    /** (Optional) Path to the non-volatile directory for storing
+     * Halidoscope-generated trace binaries and profiler output. */
+    std::optional<std::string> halidoscope_output_dir = std::nullopt;
 };
 
 class Pipeline;
