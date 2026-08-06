@@ -2,6 +2,7 @@
 
 #include "CSE.h"
 #include "CanonicalizeGPUVars.h"
+#include "ExprUsesVar.h"
 #include "IR.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
@@ -113,29 +114,6 @@ vector<Expr> canonical(const Access &a) {
     return args;
 }
 
-// Rename only the variables that can differ between two threads of a block.
-// Renaming the rest would describe a thread of some other block, which is not
-// the question being asked.
-class RenamePerThreadVars : public IRMutator {
-    using IRMutator::visit;
-
-    Expr visit(const Variable *op) override {
-        if (names.count(op->name)) {
-            return Variable::make(op->type, op->name + "$_");
-        }
-        return op;
-    }
-
-    const std::set<string> &names;
-
-public:
-    using IRMutator::mutate;
-
-    RenamePerThreadVars(const std::set<string> &names)
-        : names(names) {
-    }
-};
-
 class CheckCrossTalk : public IRVisitor {
     using IRVisitor::visit;
 
@@ -186,13 +164,16 @@ class CheckCrossTalk : public IRVisitor {
         for (int i = 0; i < 3; i++) {
             per_thread.insert(gpu_thread_name(i));
         }
-        RenamePerThreadVars renamer(per_thread);
+        // Only rename what can differ between two threads of a block. Renaming
+        // the rest, such as the base of the block's tile, would describe a
+        // thread of some other block, which is not the question being asked.
+        RenameFreeVars renamer(per_thread);
         Expr distinct = const_false();
         Scope<Interval> bounds;
         for (int i = 0; i < thread_dims; i++) {
             const string &name = gpu_thread_name(i);
             Expr me = Variable::make(Int(32), name);
-            Expr them = Variable::make(Int(32), name + "$_");
+            Expr them = Variable::make(Int(32), renamer.get_new_name(name));
             distinct = distinct || (me != them);
             Expr extent;
             for (const Access &a : finder.accesses) {
@@ -205,12 +186,15 @@ class CheckCrossTalk : public IRVisitor {
             if (extent.defined() && is_const(extent)) {
                 Interval in(0, simplify(extent - 1));
                 bounds.push(name, in);
-                bounds.push(name + "$_", in);
+                bounds.push(renamer.get_new_name(name), in);
             }
         }
 
         // A thread may only touch what it stores itself, so look for a meeting
-        // between any access and some other thread's store.
+        // between any access and some other thread's store. A store outside
+        // the loops over threads is no exception: fusing the loops leaves it
+        // guarded by a test that only the first thread passes, so it is a
+        // value only that thread has.
         Expr hazard = const_false();
         for (const Access &a : finder.accesses) {
             vector<Expr> mine = canonical(a);
@@ -219,6 +203,7 @@ class CheckCrossTalk : public IRVisitor {
                     continue;
                 }
                 vector<Expr> theirs = canonical(b);
+
                 if (mine.size() != theirs.size()) {
                     continue;
                 }

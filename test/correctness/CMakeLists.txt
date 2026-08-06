@@ -160,6 +160,7 @@ tests(
     gpu_object_lifetime_2.cpp
     gpu_object_lifetime_3.cpp
     gpu_param_allocation.cpp
+    gpu_register_at_block_level.cpp
     gpu_reuse_shared_memory.cpp
     gpu_specialize.cpp
     gpu_store_in_register_with_no_lanes_loop.cpp

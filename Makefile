@@ -463,7 +463,7 @@ SOURCE_FILES = \
   Buffer.cpp \
   Callable.cpp \
   CanonicalizeGPUVars.cpp \
-CheckGPUCrossTalk.cpp \
+  CheckGPUCrossTalk.cpp \
   ClampUnsafeAccesses.cpp \
   Closure.cpp \
   CodeGen_ARM.cpp \
@@ -666,7 +666,7 @@ HEADER_FILES = \
   Buffer.h \
   Callable.h \
   CanonicalizeGPUVars.h \
-CheckGPUCrossTalk.h \
+  CheckGPUCrossTalk.h \
   ClampUnsafeAccesses.h \
   Closure.h \
   CodeGen_C.h \

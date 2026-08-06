@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <iterator>
 #include <map>
+#include <set>
 
 #include "Expr.h"
 #include "IRMutator.h"
@@ -69,19 +70,28 @@ Expr substitute_in_all_lets(const Expr &expr);
 Stmt substitute_in_all_lets(const Stmt &stmt);
 // @}
 
-/** Rename every free variable in some IR to a fresh name, so that the result
+/** Rename free variables in some IR to fresh names, so that the result
  * describes the same computation performed by a different instance of
- * something: another thread, or another value of a loop variable. Ask it for
- * the new name of a variable to say when the two instances differ. */
+ * something: another thread, or another value of a loop variable. Pass a set
+ * of names to rename only those, for when some of the variables mean the same
+ * thing to both instances. Ask get_new_name for the new name of a variable to
+ * say when the two instances differ; the names it makes are unique, so do not
+ * try to guess them. */
 class RenameFreeVars : public IRMutator {
     using IRMutator::visit;
 
     std::map<std::string, std::string> new_names;
+    const std::set<std::string> *only = nullptr;
 
     Expr visit(const Variable *op) override;
 
 public:
     using IRMutator::mutate;
+
+    RenameFreeVars() = default;
+    explicit RenameFreeVars(const std::set<std::string> &only)
+        : only(&only) {
+    }
 
     const std::string &get_new_name(const std::string &s);
 };
