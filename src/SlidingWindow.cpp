@@ -5,7 +5,6 @@
 #include "Debug.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
-#include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
@@ -17,6 +16,56 @@
 #include <list>
 #include <set>
 #include <utility>
+
+// Sliding window is the optimization that turns a stencil pipeline like this:
+//
+//   for y:
+//     produce f over [y-1, y+1]   // three rows, one per iteration
+//     consume f to make g(y)
+//
+// into this:
+//
+//   for y:
+//     produce f over [y+1, y+1]   // one row, reusing the two from last time
+//     consume f to make g(y)
+//
+// It applies when a Func's storage outlives its computation (store_at is
+// outside compute_at), and the region of it required moves monotonically as
+// some serial loop between those two levels advances. Then each iteration only
+// needs to compute the sliver of the Func that the previous iteration didn't.
+//
+// The wrinkle is the first iteration, which has no previous iteration to
+// inherit from. There are two ways this pass deals with that:
+//
+// - Explicit warm-up. The region computed becomes a select: on the first
+//   iteration compute the whole thing, and after that just the sliver. This
+//   always applies, but it leaves a select in the bounds, which is bad for
+//   loop partitioning and for anything downstream that wants simple bounds.
+//
+// - Implicit warm-up, by rewinding the loop. We instead back the loop min up
+//   by however many iterations it takes for the slivers to add up to the whole
+//   region, and leave the steady-state bounds alone. The extra iterations at
+//   the front produce nothing but the warm-up, so everything in the loop body
+//   that isn't part of warming a window up must be guarded to only run from
+//   the original loop min onwards. This is the preferred form, and is what
+//   makes this pass tricky, because several Funcs may want to rewind the same
+//   loop by different amounts, and their warm-ups have to interleave
+//   correctly: a Func's warm-up iterations may need values from a Func
+//   upstream of it, which must therefore start warming up even earlier.
+//
+// So for each serial loop we:
+//
+//   1. Order the Funcs realized around it consumers-first, so that by the time
+//      we slide a Func we know how far back its consumers start, and can warm
+//      it up in time for them (SlidingWindow::consumers_first).
+//   2. Slide each one, rewinding the loop min further as needed
+//      (SlidingWindowOnFunctionAndLoop).
+//   3. Guard everything in the body that the warm-up iterations don't need
+//      (InjectWarmupGuards).
+//
+// A Func with MemoryType::Register slides differently: rather than indexing
+// into a buffer, its values are shifted along a small unrolled array of
+// registers each iteration (RollFunc).
 
 namespace Halide {
 namespace Internal {
@@ -89,33 +138,6 @@ Expr expand_expr(const Expr &e, const Scope<Expr> &scope) {
     Expr result = common_subexpression_elimination(ee(e));
     debug(4) << "Expanded " << e << " into " << result << "\n";
     return result;
-}
-
-class FindProduce : public IRVisitor {
-    const string &func;
-
-    using IRVisitor::visit;
-
-    void visit(const ProducerConsumer *op) override {
-        if (op->is_producer && op->name == func) {
-            found = true;
-        } else {
-            IRVisitor::visit(op);
-        }
-    }
-
-public:
-    bool found = false;
-
-    FindProduce(const string &func)
-        : func(func) {
-    }
-};
-
-bool find_produce(const Stmt &s, const string &func) {
-    FindProduce finder(func);
-    s.accept(&finder);
-    return finder.found;
 }
 
 // This mutator rewrites calls and provides to a particular
@@ -215,11 +237,19 @@ public:
     }
 };
 
-// Perform sliding window optimization for a function over a
-// particular serial for loop
+// Perform sliding window optimization for a function over a particular serial
+// for loop. Rewrites the lets that give the region required of the func to
+// only cover the sliver newly required this iteration. If it can work out how
+// many iterations of warm-up that needs, it reports that back in new_loop_min
+// and the caller rewinds the loop; otherwise the new bounds get a select in
+// them that computes the whole region on the first iteration.
 class SlidingWindowOnFunctionAndLoop : public IRMutator {
     Function func;
     string loop_var;
+    // The first iteration at which anything consumes this func. This is the
+    // original loop min, unless a consumer is itself warming up a sliding
+    // window over this loop, in which case it's the iteration that consumer
+    // starts at.
     Expr loop_min;
     set<int> &slid_dimensions;
     Scope<Expr> scope;
@@ -445,14 +475,17 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 // We have a new loop min, so we an assume every iteration has
                 // a previous iteration. In order for this to be safe, we need
                 // the new min/max at the new loop min to be less than or equal to
-                // the min/max required at the original loop min.
-                Expr loop_var_expr = Variable::make(Int(32), loop_var);
-                Expr orig_loop_min_expr = Variable::make(Int(32), loop_var + ".loop_min.orig");
+                // the min/max required at the loop min. Note that loop_min is
+                // the first iteration at which anything consumes this func,
+                // which is before the original loop min if a consumer is
+                // warming up a sliding window of its own. The region this func
+                // must retain has to cover what those warm-up iterations ask
+                // for too.
                 if (can_slide_up) {
-                    Expr min_required_at_loop_min = substitute(loop_var, orig_loop_min_expr, min_required);
+                    Expr min_required_at_loop_min = substitute(loop_var, loop_min, min_required);
                     new_min = max(new_min, min_required_at_loop_min);
                 } else {
-                    Expr max_required_at_loop_min = substitute(loop_var, orig_loop_min_expr, max_required);
+                    Expr max_required_at_loop_min = substitute(loop_var, loop_min, max_required);
                     new_max = min(new_max, max_required_at_loop_min);
                 }
             } else {
@@ -523,38 +556,6 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             }
 
             return result;
-        } else if (!find_produce(op, func.name()) && new_loop_min.defined()) {
-            // The producer might have expanded the loop before the min to warm
-            // up the window. This consumer doesn't contain a producer that might
-            // be part of the warmup, so guard it with an if to only run it on
-            // the original loop bounds.
-            Expr loop_var_expr = Variable::make(Int(32), loop_var);
-            Expr orig_loop_min_expr = Variable::make(Int(32), loop_var + ".loop_min.orig");
-            Expr guard = likely_if_innermost(orig_loop_min_expr <= loop_var_expr);
-
-            // Put the if inside the consumer node, so semaphores end up outside the if.
-            // TODO: This is correct, but it produces slightly suboptimal code: if we
-            // didn't do this, the loop could likely be trimmed and the if simplified away.
-            Stmt body = mutate(op->body);
-            if (const IfThenElse *old_guard = body.as<IfThenElse>()) {
-                Expr x = Variable::make(Int(32), "*");
-                vector<Expr> matches;
-                if (expr_match(likely_if_innermost(x <= loop_var_expr), old_guard->condition, matches)) {
-                    // There's already a condition on loop_var_expr here. Since we're
-                    // adding a condition at the old loop min, this if must already be
-                    // guarding more than we will.
-                    guard = Expr();
-                }
-            }
-            if (guard.defined()) {
-                debug(3) << "Guarding body " << guard << "\n";
-                body = IfThenElse::make(guard, body);
-            }
-            if (body.same_as(op->body)) {
-                return op;
-            } else {
-                return ProducerConsumer::make_consume(op->name, body);
-            }
         } else {
             return IRMutator::visit(op);
         }
@@ -611,7 +612,13 @@ public:
           slid_dimensions(slid_dimensions), bounds_scope(bounds_scope) {
     }
 
+    // If defined, the loop min the caller should rewind to in order to warm up
+    // this func's window. Undefined if we couldn't work one out, in which case
+    // the new bounds warm themselves up with a select on the first iteration.
     Expr new_loop_min;
+
+    // The dimension slid over and the region required before and after
+    // sliding. Only used for MemoryType::Register.
     int dim_idx;
     Interval old_bounds;
     Interval new_bounds;
@@ -708,6 +715,112 @@ bool depends_on(const string &a, const string &b, const Stmt &s) {
     return depends_on(a, b, s, cache);
 }
 
+// Which funcs does a Stmt contain the production of?
+class FindProducedFuncs : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const ProducerConsumer *op) override {
+        if (op->is_producer) {
+            found.insert(op->name);
+        }
+        IRVisitor::visit(op);
+    }
+
+public:
+    set<string> found;
+};
+
+// Some producers slide by rewinding the start of the loop, so that the
+// iterations before the original loop min warm up their window. Those
+// iterations must run the warming-up producers and everything upstream of
+// them, and nothing else, so guard everything else to only run over the
+// original loop bounds.
+class InjectWarmupGuards : public IRMutator {
+    const map<string, Expr> &warming_up;
+    const Expr &guard;
+    const Stmt &body;
+
+    // Which funcs the warm-up iterations need. Memoized, because answering
+    // the question requires a traversal.
+    map<string, bool> needed_cache;
+
+    bool needed(const string &func) {
+        auto cached = needed_cache.find(func);
+        if (cached != needed_cache.end()) {
+            return cached->second;
+        }
+        // A func is needed by the warm-up iterations if it's warming up
+        // itself, or if it's an input to one that is.
+        bool result = warming_up.count(func) != 0;
+        for (auto it = warming_up.begin(); !result && it != warming_up.end(); it++) {
+            result = depends_on(func, it->first, body);
+        }
+        needed_cache[func] = result;
+        return result;
+    }
+
+    using IRMutator::visit;
+
+    Stmt wrap(const Stmt &s) {
+        debug(3) << "Guarding body " << guard << "\n";
+        return IfThenElse::make(guard, s);
+    }
+
+    // Is there anything in here that the warm-up iterations need? If not we
+    // can guard the whole thing with a single if instead of descending.
+    bool contains_needed(const Stmt &s) {
+        FindProducedFuncs finder;
+        s.accept(&finder);
+        for (const string &f : finder.found) {
+            if (needed(f)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    Stmt visit(const ProducerConsumer *op) override {
+        if (!op->is_producer) {
+            // Recurse rather than wrapping, so that any synchronization
+            // attached to a consume node stays outside the guard.
+            return IRMutator::visit(op);
+        } else if (needed(op->name)) {
+            // Anything computed inside this producer is an input to it, so
+            // the warm-up iterations need that too.
+            return op;
+        } else if (contains_needed(op->body)) {
+            // Producers fused with this one are still warming up.
+            return IRMutator::visit(op);
+        } else {
+            return wrap(op);
+        }
+    }
+
+    Stmt visit(const For *op) override {
+        return contains_needed(op) ? IRMutator::visit(op) : wrap(op);
+    }
+
+    Stmt visit(const IfThenElse *op) override {
+        return contains_needed(op) ? IRMutator::visit(op) : wrap(op);
+    }
+
+    Stmt visit(const Provide *op) override {
+        return wrap(op);
+    }
+
+    Stmt visit(const Evaluate *op) override {
+        // Sliding window markers are notes to storage folding, not work.
+        if (Call::as_intrinsic(op->value, {Call::sliding_window_marker})) {
+            return op;
+        }
+        return wrap(op);
+    }
+
+public:
+    InjectWarmupGuards(const map<string, Expr> &warming_up, const Expr &guard, const Stmt &body)
+        : warming_up(warming_up), guard(guard), body(body) {
+    }
+};
 // Update the loop variable referenced by prefetch directives.
 class SubstitutePrefetchVar : public IRMutator {
     const string &old_var;
@@ -789,6 +902,45 @@ class SlidingWindow : public IRMutator {
         return op->with(op->bounds, op->condition, new_body);
     }
 
+    // Order the funcs realized around a loop so that consumers come before the
+    // funcs they consume. Note that this is not the same as the order of the
+    // realizations, because e.g. a store_root'd producer is realized outside
+    // its consumers.
+    static vector<Function> consumers_first(const list<Function> &funcs, const Stmt &body) {
+        vector<Function> in(funcs.begin(), funcs.end()), out;
+        const size_t n = in.size();
+        // consumes[i * n + j] is whether producing in[i] uses in[j].
+        vector<bool> consumes(n * n, false);
+        for (size_t i = 0; i < n; i++) {
+            for (size_t j = 0; j < n; j++) {
+                consumes[i * n + j] = i != j && depends_on(in[j].name(), in[i].name(), body);
+            }
+        }
+        // Topologically sort by repeatedly taking a func that nothing left in
+        // the list consumes.
+        vector<bool> done(n, false);
+        while (out.size() < n) {
+            size_t next = n;
+            for (size_t i = 0; i < n && next == n; i++) {
+                if (done[i]) {
+                    continue;
+                }
+                next = i;
+                for (size_t k = 0; k < n; k++) {
+                    if (!done[k] && consumes[k * n + i]) {
+                        next = n;
+                        break;
+                    }
+                }
+            }
+            // The dependency graph is acyclic, so we must have found one.
+            internal_assert(next < n);
+            done[next] = true;
+            out.push_back(in[next]);
+        }
+        return out;
+    }
+
     Stmt visit(const For *op) override {
         if (!(op->for_type == ForType::Serial || op->for_type == ForType::Unrolled)) {
             return IRMutator::visit(op);
@@ -800,22 +952,30 @@ class SlidingWindow : public IRMutator {
         Expr loop_min = op->min;
         Expr loop_max = op->max;
 
-        list<pair<string, Expr>> prev_loop_mins;
+        // For each func slid so far that rewound the loop, the iteration it
+        // now starts running at.
+        list<pair<string, Expr>> warmup_starts;
         list<pair<string, Expr>> new_lets;
-        for (const Function &func : sliding) {
+        // The funcs that slide by rewinding the loop min, and the iteration
+        // each of them starts at.
+        map<string, Expr> warming_up;
+        // The loop min before any warm-up iterations were prepended. Note
+        // that this is captured before the loop below rewinds anything.
+        Expr orig_loop_min = op->min;
+
+        for (const Function &func : consumers_first(sliding, body)) {
             debug(3) << "Doing sliding window analysis on function " << func.name() << "\n";
 
-            // Figure out where we should start sliding from. If no
-            // other func needs this func, we can just start at the
-            // original loop min.
-            Expr prev_loop_min = op->min;
-            // If a previously slid func needs this func to be warmed
-            // up, then we need to back up the loop to warm up this
-            // func before the already slid func starts warming up.
-            for (const auto &i : prev_loop_mins) {
+            // Figure out the first iteration at which this func is consumed.
+            // If nothing that consumes it is warming up a window of its own,
+            // that's just the loop min.
+            Expr consumed_from = op->min;
+            // Otherwise we need to have this func warmed up in time for the
+            // earliest-starting consumer, which means rewinding the loop even
+            // further than they did.
+            for (const auto &i : warmup_starts) {
                 if (depends_on(func.name(), i.first, body)) {
-                    prev_loop_min = i.second;
-                    break;
+                    consumed_from = simplify(min(consumed_from, i.second));
                 }
             }
 
@@ -827,7 +987,7 @@ class SlidingWindow : public IRMutator {
             ScopedBinding<Interval> bind_bounds(bounds_scope, op->name,
                                                 Interval(min_bounds.min, max_bounds.max));
 
-            SlidingWindowOnFunctionAndLoop slider(func, name, prev_loop_min, slid_dims, bounds_scope);
+            SlidingWindowOnFunctionAndLoop slider(func, name, consumed_from, slid_dims, bounds_scope);
 
             body = slider(body);
 
@@ -837,33 +997,29 @@ class SlidingWindow : public IRMutator {
             }
 
             if (slider.new_loop_min.defined()) {
-                Expr new_loop_min = slider.new_loop_min;
-                if (!prev_loop_min.same_as(loop_min)) {
-                    // If we didn't start sliding from the previous
-                    // loop min, we the old loop min might already
-                    // be further back than this new one.
-                    new_loop_min = min(new_loop_min, loop_min);
-                }
 
-                // Put this at the front of the list, so we find it first
-                // when checking subsequent funcs.
-                prev_loop_mins.emplace_front(func.name(), new_loop_min);
+                // This func starts here, but an earlier func may already have
+                // rewound the loop further than this, so keep the earlier of
+                // the two as the loop min.
+                Expr warmup_start = slider.new_loop_min;
+                warmup_starts.emplace_front(func.name(), warmup_start);
+                warming_up[func.name()] = warmup_start;
+                Expr new_loop_min =
+                    loop_min.same_as(op->min) ? warmup_start : min(warmup_start, loop_min);
 
-                // Update the loop body to use the adjusted loop min.
+                // Rename the loop var in the body. Note that we leave
+                // references to the old loop min alone - they still refer to
+                // the iteration at which the real work starts, which is what
+                // any consumer of them wants.
                 string new_name = name + ".$n";
                 loop_min = Variable::make(Int(32), new_name + ".loop_min");
-                body = substitute({
-                                      {name, Variable::make(Int(32), new_name)},
-                                      {name + ".loop_min", loop_min},
-                                  },
-                                  body);
+                body = substitute(name, Variable::make(Int(32), new_name), body);
                 body = SubstitutePrefetchVar(name, new_name)(body);
 
                 name = new_name;
 
                 // The new loop interval is the new loop min to the old loop max.
                 new_lets.emplace_front(name + ".loop_min", new_loop_min);
-                new_lets.emplace_front(name + ".loop_min.orig", loop_min);
             }
 
             if (slid_dims.size() > old_slid_dims_size) {
@@ -874,6 +1030,13 @@ class SlidingWindow : public IRMutator {
                                          Call::Intrinsic);
                 body = Block::make(Evaluate::make(marker), body);
             }
+        }
+
+        if (!warming_up.empty()) {
+            // The loop now starts before the original loop min. Everything the
+            // extra iterations aren't there to warm up must be skipped over.
+            Expr guard = likely_if_innermost(orig_loop_min <= Variable::make(Int(32), name));
+            body = InjectWarmupGuards(warming_up, guard, body)(body);
         }
 
         body = mutate(body);
@@ -910,25 +1073,10 @@ public:
     }
 };
 
-// It is convenient to be able to assume that loops have a .loop_min.orig
-// let giving the original loop min. Most of these will get simplified away.
-class AddLoopMinOrig : public IRMutator {
-    using IRMutator::visit;
-
-    Stmt visit(const For *op) override {
-        Stmt body = mutate(op->body);
-        Expr min = mutate(op->min);
-        Expr max = mutate(op->max);
-
-        Stmt result = op->with(min, max, body);
-        return LetStmt::make(op->name + ".loop_min.orig", op->min, result);
-    }
-};
-
 }  // namespace
 
 Stmt sliding_window(const Stmt &s, const map<string, Function> &env) {
-    return SlidingWindow(env)(AddLoopMinOrig()(s));
+    return SlidingWindow(env)(s);
 }
 
 }  // namespace Internal

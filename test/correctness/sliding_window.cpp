@@ -439,6 +439,34 @@ int main(int argc, char **argv) {
         }
     }
 
+    {
+        // Two funcs sliding over the same loop, where one consumes the other,
+        // and the outer func also consumes both. Both need to warm up their
+        // windows, but over different numbers of iterations.
+        // Sliding warms up its window by computing a little more than is
+        // required at the edges, so give the input some slack.
+        Buffer<int> input(9, 9);
+        input.set_min(-4, -4);
+        input.fill(1);
+
+        Var yo, yi;
+        Func f, g, h;
+        f(x, y) = input(x, y);
+        g(x, y) = (f(x + 1, y) + f(x - 1, y)) * 2;
+        h(x, y) = (f(x + 1, y) + f(x - 1, y)) + (g(x + 1, y) + g(x - 1, y));
+
+        h.never_partition_all().split(y, yo, yi, 1, TailStrategy::RoundUp);
+        h.output_buffer().dim(0).set_bounds(0, 1).dim(1).set_bounds(0, 1);
+        f.never_partition_all().store_at(h, yo).compute_at(h, x);
+        g.never_partition_all().store_root().compute_at(h, x);
+
+        Buffer<int> im = h.realize({1, 1});
+        if (im(0, 0) != 10) {
+            printf("h(0, 0) = %d instead of %d\n", im(0, 0), 10);
+            return 1;
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }
