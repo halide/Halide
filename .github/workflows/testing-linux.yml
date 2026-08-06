@@ -210,3 +210,69 @@ jobs:
             apps/support/android_smoke_test.sh \
               apps/HelloAndroidCamera2/app/build/outputs/apk/debug/app-debug.apk \
               com.example.helloandroidcamera2 .CameraActivity android.permission.CAMERA
+
+  baremetal-apps:
+    # Deliberately its own job: needs an arm-none-eabi cross toolchain and
+    # QEMU's Arm system emulator, neither of which any other job installs.
+    # Actually cross-compiles and runs all three documented build methods
+    # (see apps/HelloBaremetal/README.md) under QEMU with semihosting, rather
+    # than only checking that they build for host.
+    if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
+    name: HelloBaremetal apps
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpng-dev libjpeg-dev gcc-arm-none-eabi qemu-system-arm
+
+      - name: Sync CI environment
+        run: |
+          uv sync --group ci-llvm-main --no-install-project
+          echo "${GITHUB_WORKSPACE}/.venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" >> "$GITHUB_ENV"
+
+      - name: Configure LLVM
+        run: echo "Halide_LLVM_ROOT=$(halide-llvm --prefix)" >> "$GITHUB_ENV"
+
+      - name: Configure CMake
+        run: >-
+          cmake --preset ci-linux-x86-64
+          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install"
+
+      - name: Build and install Halide
+        run: cmake --build build --target install
+
+      - name: Build HelloBaremetal (host target)
+        working-directory: apps/HelloBaremetal
+        env:
+          CMAKE_PREFIX_PATH: ${{ github.workspace }}/install
+        run: |
+          for method in cmake-twice cmake-super_build cmake-external_project; do
+            cmake -S "$method" -B "$method/build"
+            cmake --build "$method/build"
+          done
+
+      # The actual point of this job: build.sh cross-compiles each method for
+      # the bare-metal Arm target, then ctest runs the result under QEMU with
+      # semihosting, actually exercising the cross-compiled binary rather than
+      # only checking that it builds for host.
+      - name: Build and run HelloBaremetal (bare-metal cross-compile under QEMU)
+        working-directory: apps/HelloBaremetal
+        env:
+          CMAKE_PREFIX_PATH: ${{ github.workspace }}/install
+        run: |
+          declare -A test_dir=(
+            [cmake-twice]=build-target
+            [cmake-super_build]=build/app
+            [cmake-external_project]=build
+          )
+          for method in cmake-twice cmake-super_build cmake-external_project; do
+            ( cd "$method" && ./build.sh )
+            ctest --test-dir "$method/${test_dir[$method]}" --output-on-failure
+          done
