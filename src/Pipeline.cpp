@@ -1105,7 +1105,7 @@ void Pipeline::halidoscope_impl(const std::function<void(Pipeline &, const Targe
     std::vector<uint8_t> data;
     serialize_pipeline(*this, data, external_params);
 
-    std::string dir = dir_make_temp();
+    std::string dir = options.halidoscope_output_dir ? *options.halidoscope_output_dir : dir_make_temp();
     std::string trace_path = dir + "/trace.hltrace";
     std::string profile_path = dir + "/profile.json";
 
@@ -1154,9 +1154,13 @@ void Pipeline::halidoscope_impl(const std::function<void(Pipeline &, const Targe
     std::string binary = options.halidoscope_path;
     int halidoscope_rc = run_process({binary, "--trace", trace_path, "--profile", profile_path});
 
-    file_unlink(trace_path);
-    file_unlink(profile_path);
-    dir_rmdir(dir);
+    // If we did not specify a persistent output directory, clean up the
+    // temporary directory storing trace and profile data.
+    if (!options.halidoscope_output_dir) {
+        file_unlink(trace_path);
+        file_unlink(profile_path);
+        dir_rmdir(dir);
+    }
 
     // run_process() returns -1 if the binary couldn't be started at all (as
     // opposed to running and exiting with a nonzero status) -- for a bare
