@@ -49,45 +49,6 @@ public:
     vector<vector<Expr>> loads;
 };
 
-/** Rename all free variables to unique new names. */
-class RenameFreeVars : public IRMutator {
-    using IRMutator::visit;
-
-    map<string, string> new_names;
-
-    Expr visit(const Variable *op) override {
-        if (!op->param.defined() && !op->image.defined()) {
-            return Variable::make(op->type, get_new_name(op->name));
-        } else {
-            return op;
-        }
-    }
-
-public:
-    string get_new_name(const string &s) {
-        map<string, string>::iterator iter = new_names.find(s);
-        if (iter != new_names.end()) {
-            return iter->second;
-        } else {
-            string new_name = s + "$_";
-            new_names[s] = new_name;
-            return new_name;
-        }
-    }
-};
-
-/** Substitute in boolean expressions. */
-class SubstituteInBooleanLets : public IRMutator {
-    using IRMutator::visit;
-
-    Expr visit(const Let *op) override {
-        if (op->value.type() == Bool()) {
-            return substitute(op->name, mutate(op->value), mutate(op->body));
-        } else {
-            return IRMutator::visit(op);
-        }
-    }
-};
 }  // namespace
 
 bool can_parallelize_rvar(const string &v,
@@ -156,7 +117,7 @@ bool can_parallelize_rvar(const string &v,
     debug(3) << "Attempting to falsify: " << hazard << "\n";
     // Pull out common non-boolean terms
     hazard = common_subexpression_elimination(hazard);
-    hazard = SubstituteInBooleanLets()(hazard);
+    hazard = substitute_in_boolean_lets(hazard);
     hazard = simplify(hazard, bounds);
     debug(3) << "Simplified to: " << hazard << "\n";
 

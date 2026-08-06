@@ -74,6 +74,7 @@ target_sources(
     Buffer.h
     Callable.h
     CanonicalizeGPUVars.h
+    CheckGPUCrossTalk.h
     ClampUnsafeAccesses.h
     Closure.h
     CodeGen_C.h
@@ -257,6 +258,7 @@ target_sources(
     Buffer.cpp
     Callable.cpp
     CanonicalizeGPUVars.cpp
+    CheckGPUCrossTalk.cpp
     ClampUnsafeAccesses.cpp
     Closure.cpp
     CodeGen_ARM.cpp

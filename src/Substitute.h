@@ -11,6 +11,7 @@
 #include <map>
 
 #include "Expr.h"
+#include "IRMutator.h"
 
 namespace Halide {
 namespace Internal {
@@ -67,6 +68,27 @@ Stmt graph_substitute(const Expr &find, const Expr &replacement, const Stmt &stm
 Expr substitute_in_all_lets(const Expr &expr);
 Stmt substitute_in_all_lets(const Stmt &stmt);
 // @}
+
+/** Rename every free variable in some IR to a fresh name, so that the result
+ * describes the same computation performed by a different instance of
+ * something: another thread, or another value of a loop variable. Ask it for
+ * the new name of a variable to say when the two instances differ. */
+class RenameFreeVars : public IRMutator {
+    using IRMutator::visit;
+
+    std::map<std::string, std::string> new_names;
+
+    Expr visit(const Variable *op) override;
+
+public:
+    using IRMutator::mutate;
+
+    const std::string &get_new_name(const std::string &s);
+};
+
+/** Substitute in any let whose value is a boolean, so that the simplifier can
+ * see the conditions it is being asked to reason about. */
+Expr substitute_in_boolean_lets(const Expr &e);
 
 }  // namespace Internal
 }  // namespace Halide

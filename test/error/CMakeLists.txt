@@ -76,6 +76,7 @@ tests(
     hoist_storage_extern.cpp
     hoist_storage_root_without_compute_root.cpp
     hoist_storage_without_compute_at.cpp
+    gpu_register_crosstalk.cpp
     host_inside_gpu_loop.cpp
     implicit_args.cpp
     impossible_constraints.cpp
