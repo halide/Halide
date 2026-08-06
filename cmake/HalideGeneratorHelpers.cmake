@@ -793,10 +793,11 @@ function(add_halide_library TARGET)
 
     if (ARG_AUTOSCHEDULER)
         if ("${ARG_AUTOSCHEDULER}" MATCHES "::")
-            # Autoscheduler plugins are compiled targets that live in HalideCompiler;
-            # lazily load it if it hasn't already been (e.g. while cross-compiling).
+            # Autoscheduler plugins are compiled targets that live in their own
+            # HalideAutoschedulers package; lazily load it if it hasn't already
+            # been (e.g. while cross-compiling).
             if (NOT TARGET "${ARG_AUTOSCHEDULER}")
-                find_package(HalideCompiler REQUIRED)
+                find_package(HalideAutoschedulers REQUIRED)
             endif ()
             if (NOT TARGET "${ARG_AUTOSCHEDULER}")
                 message(FATAL_ERROR "Autoscheduler ${ARG_AUTOSCHEDULER} does not exist.")
