@@ -467,6 +467,50 @@ int main(int argc, char **argv) {
         }
     }
 
+    {
+        // g is computed inside h's production and slides over the outermost
+        // loop, while f and h both slide over yi and warm up their windows by
+        // rewinding it. g has to start when h's warm-up does - any earlier and
+        // it runs extra times, which corrupts its own sliding.
+        const int size = 15;
+        Var yo, yi;
+        Buffer<int> ref;
+        for (int slide = 0; slide < 2; slide++) {
+            Func f, g, h, out;
+            f(x, y) = x * 3 + y;
+            g(x, y) = f(x * 2 - 1, y * 2 - 1) + f(x * 2, y * 2 + 2);
+            h(x, y) = (f(x, y + 1) + f(x, y - 2)) +
+                      (g(x / 2 + 2, y / 2 - 2) + g(x / 2 - 2, y / 2 + 2));
+            out(x, y) = h(x * 2 + 1, y * 2 - 2) + h(x * 2 + 1, y * 2 + 2);
+
+            if (slide) {
+                out.split(y, yo, yi, 4, TailStrategy::RoundUp);
+                f.store_at(out, yo).compute_at(out, yi);
+                g.store_at(out, Var::outermost()).compute_at(h, Var::outermost());
+                h.store_at(out, yo).compute_at(out, yi);
+            } else {
+                f.compute_root();
+                g.compute_root();
+                h.compute_root();
+            }
+
+            Buffer<int> im = out.realize({size, size});
+            if (!slide) {
+                ref = im;
+            } else {
+                for (int y = 0; y < size; y++) {
+                    for (int x = 0; x < size; x++) {
+                        if (im(x, y) != ref(x, y)) {
+                            printf("out(%d, %d) = %d instead of %d\n",
+                                   x, y, im(x, y), ref(x, y));
+                            return 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }

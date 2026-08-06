@@ -60,8 +60,11 @@
 //      it up in time for them (SlidingWindow::consumers_first).
 //   2. Slide each one, rewinding the loop min further as needed
 //      (SlidingWindowOnFunctionAndLoop).
-//   3. Guard everything in the body that the warm-up iterations don't need
-//      (InjectWarmupGuards).
+//   3. Work out, for every statement in the body, which iteration it starts at,
+//      and guard it accordingly (InjectWarmupGuards). Statements don't all
+//      share one start: a Func needed by a warming-up Func has to start when
+//      that Func does, which is before the real work starts but after the
+//      earliest warm-up iteration.
 //
 // A Func with MemoryType::Register slides differently: rather than indexing
 // into a buffer, its values are shifted along a small unrolled array of
@@ -731,77 +734,99 @@ public:
 };
 
 // Some producers slide by rewinding the start of the loop, so that the
-// iterations before the original loop min warm up their window. Those
-// iterations must run the warming-up producers and everything upstream of
-// them, and nothing else, so guard everything else to only run over the
-// original loop bounds.
+// iterations before the original loop min warm up their window. Every
+// statement in the body then needs to say which iteration it starts at:
+//
+// - A warming-up producer needs no guard. Its bounds are empty until it has
+//   something to do.
+//
+// - Anything a warming-up producer consumes has to be ready in time for it, so
+//   it starts when that producer starts. Not earlier: it may be warming up a
+//   window of its own over some enclosing loop, and running it extra times
+//   would corrupt that.
+//
+// - Everything else is real work, and starts at the original loop min.
 class InjectWarmupGuards : public IRMutator {
-    const map<string, Expr> &warming_up;
-    const Expr &guard;
+    // For each func that rewound the loop, the iteration it starts at.
+    const map<string, Expr> &warmup_starts;
+    const string &loop_var;
+    // The loop min before anything rewound it.
+    const Expr &orig_loop_min;
     const Stmt &body;
 
-    // Which funcs the warm-up iterations need. Memoized, because answering
-    // the question requires a traversal.
-    map<string, bool> needed_cache;
+    // Memoized, because answering the question requires a traversal. An
+    // undefined Expr means the func's producer needs no guard.
+    map<string, Expr> start_cache;
 
-    bool needed(const string &func) {
-        auto cached = needed_cache.find(func);
-        if (cached != needed_cache.end()) {
+    Expr start_of(const string &func) {
+        auto cached = start_cache.find(func);
+        if (cached != start_cache.end()) {
             return cached->second;
         }
-        // A func is needed by the warm-up iterations if it's warming up
-        // itself, or if it's an input to one that is.
-        bool result = warming_up.count(func) != 0;
-        for (auto it = warming_up.begin(); !result && it != warming_up.end(); it++) {
-            result = depends_on(func, it->first, body);
+        Expr start = orig_loop_min;
+        if (warmup_starts.count(func)) {
+            start = Expr();
+        } else {
+            for (const auto &w : warmup_starts) {
+                if (depends_on(func, w.first, body)) {
+                    start = simplify(min(start, w.second));
+                }
+            }
         }
-        needed_cache[func] = result;
-        return result;
+        start_cache[func] = start;
+        return start;
     }
 
-    using IRMutator::visit;
+    // The iteration at which the statements we're currently looking at run,
+    // if nothing inside them says otherwise. Undefined means no guard, which
+    // is the case inside a producer that's warming up.
+    Expr current_start;
+
+    // The iteration everything produced in here starts at, or an undefined
+    // Expr if they don't all agree with each other and with current_start, in
+    // which case we need to descend and guard them separately.
+    Expr common_start(const Stmt &s) {
+        FindProducedFuncs finder;
+        s.accept(&finder);
+        for (const string &f : finder.found) {
+            Expr f_start = start_of(f);
+            if (!f_start.defined() || !current_start.defined() ||
+                !equal(f_start, current_start)) {
+                return Expr();
+            }
+        }
+        return current_start;
+    }
 
     Stmt wrap(const Stmt &s) {
+        if (!current_start.defined()) {
+            return s;
+        }
+        Expr guard = likely_if_innermost(current_start <= Variable::make(Int(32), loop_var));
         debug(3) << "Guarding body " << guard << "\n";
         return IfThenElse::make(guard, s);
     }
 
-    // Is there anything in here that the warm-up iterations need? If not we
-    // can guard the whole thing with a single if instead of descending.
-    bool contains_needed(const Stmt &s) {
-        FindProducedFuncs finder;
-        s.accept(&finder);
-        for (const string &f : finder.found) {
-            if (needed(f)) {
-                return true;
-            }
-        }
-        return false;
-    }
+    using IRMutator::visit;
 
     Stmt visit(const ProducerConsumer *op) override {
         if (!op->is_producer) {
             // Recurse rather than wrapping, so that any synchronization
             // attached to a consume node stays outside the guard.
             return IRMutator::visit(op);
-        } else if (needed(op->name)) {
-            // Anything computed inside this producer is an input to it, so
-            // the warm-up iterations need that too.
-            return op;
-        } else if (contains_needed(op->body)) {
-            // Producers fused with this one are still warming up.
-            return IRMutator::visit(op);
-        } else {
-            return wrap(op);
         }
+        // Anything computed inside this producer is an input to it, so by
+        // default it runs when this producer does.
+        ScopedValue<Expr> bind(current_start, start_of(op->name));
+        return common_start(op->body).defined() ? wrap(op) : IRMutator::visit(op);
     }
 
     Stmt visit(const For *op) override {
-        return contains_needed(op) ? IRMutator::visit(op) : wrap(op);
+        return common_start(op).defined() ? wrap(op) : IRMutator::visit(op);
     }
 
     Stmt visit(const IfThenElse *op) override {
-        return contains_needed(op) ? IRMutator::visit(op) : wrap(op);
+        return common_start(op).defined() ? wrap(op) : IRMutator::visit(op);
     }
 
     Stmt visit(const Provide *op) override {
@@ -817,8 +842,10 @@ class InjectWarmupGuards : public IRMutator {
     }
 
 public:
-    InjectWarmupGuards(const map<string, Expr> &warming_up, const Expr &guard, const Stmt &body)
-        : warming_up(warming_up), guard(guard), body(body) {
+    InjectWarmupGuards(const map<string, Expr> &warmup_starts, const string &loop_var,
+                       const Expr &orig_loop_min, const Stmt &body)
+        : warmup_starts(warmup_starts), loop_var(loop_var),
+          orig_loop_min(orig_loop_min), body(body), current_start(orig_loop_min) {
     }
 };
 // Update the loop variable referenced by prefetch directives.
@@ -1035,8 +1062,7 @@ class SlidingWindow : public IRMutator {
         if (!warming_up.empty()) {
             // The loop now starts before the original loop min. Everything the
             // extra iterations aren't there to warm up must be skipped over.
-            Expr guard = likely_if_innermost(orig_loop_min <= Variable::make(Int(32), name));
-            body = InjectWarmupGuards(warming_up, guard, body)(body);
+            body = InjectWarmupGuards(warming_up, name, orig_loop_min, body)(body);
         }
 
         body = mutate(body);
