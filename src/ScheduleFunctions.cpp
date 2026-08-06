@@ -11,6 +11,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "IRVisitor.h"
 #include "Inline.h"
 #include "Prefetch.h"
 #include "Qualify.h"
@@ -486,6 +487,195 @@ bool any_specialization_requests_streaming(const Definition &def) {
 }
 
 // Build a loop nest about a provide node using a schedule
+// True if the expression contains a branch() intrinsic anywhere.
+class ContainsBranch : public IRGraphVisitor {
+    using IRGraphVisitor::visit;
+    void visit(const Call *op) override {
+        if (op->is_intrinsic(Call::branch)) {
+            found = true;
+        }
+        IRGraphVisitor::visit(op);
+    }
+
+public:
+    bool found = false;
+};
+
+bool expr_contains_branch(const Expr &e) {
+    ContainsBranch v;
+    e.accept(&v);
+    return v.found;
+}
+
+// A branch() value is turned into real point-wise control flow here: an
+// IfThenElse around one Provide per arm (recursing for the multi-way form).
+// This is the same idea as specialize(), but point-wise rather than func-wise.
+Stmt build_branch_provide(const string &name, const Expr &value, const vector<Expr> &site) {
+    if (const Call *c = Call::as_intrinsic(value, {Call::branch})) {
+        internal_assert(c->args.size() == 3);
+        Stmt then_case = build_branch_provide(name, c->args[1], site);
+        Stmt else_case = build_branch_provide(name, c->args[2], site);
+        return IfThenElse::make(c->args[0], then_case, else_case);
+    }
+    return Provide::make(name, {value}, site, const_true());
+}
+
+// True if s is the control-flow tree we just built for a branch: an IfThenElse
+// (with a real else) whose leaves are all Provides to this func. Loops are
+// allowed inside, so this still matches after we have hoisted it out of a loop.
+bool is_branch_stmt(const Stmt &s, const string &name) {
+    if (const Provide *p = s.as<Provide>()) {
+        return p->name == name;
+    }
+    if (const IfThenElse *i = s.as<IfThenElse>()) {
+        return i->else_case.defined() &&
+               is_branch_stmt(i->then_case, name) &&
+               is_branch_stmt(i->else_case, name);
+    }
+    if (const For *f = s.as<For>()) {
+        return is_branch_stmt(f->body, name);
+    }
+    return false;
+}
+
+// Hoist a branch out of every loop whose variable its condition does not use,
+// so it ends up at the outermost loop level where it is invariant:
+//     for v { if (c) A else B }   ->   if (c) { for v A } else { for v B }
+// Producers compute_at'd at a level inside the branch then only run when that
+// side is taken, which is what gates their computation (rather than inlining).
+class HoistBranchOutOfLoops : public IRMutator {
+    using IRMutator::visit;
+
+    const string &func_name;
+
+    Stmt visit(const For *op) override {
+        Stmt body = mutate(op->body);
+        const IfThenElse *i = body.as<IfThenElse>();
+        if (i != nullptr &&
+            is_branch_stmt(body, func_name) &&
+            !expr_uses_var(i->condition, op->name)) {
+            Stmt then_loop = For::make(op->name, op->min, op->max, op->for_type,
+                                       op->partition_policy, op->device_api, i->then_case);
+            Stmt else_loop = For::make(op->name, op->min, op->max, op->for_type,
+                                       op->partition_policy, op->device_api, i->else_case);
+            return IfThenElse::make(i->condition, then_loop, else_loop);
+        }
+        if (body.same_as(op->body)) {
+            return op;
+        }
+        return For::make(op->name, op->min, op->max, op->for_type,
+                         op->partition_policy, op->device_api, body);
+    }
+
+public:
+    explicit HoistBranchOutOfLoops(const string &n)
+        : func_name(n) {
+    }
+};
+
+// Collect the conditions of a (possibly multi-way) branch value.
+void collect_branch_conditions(const Expr &value, vector<Expr> &conds) {
+    if (const Call *c = Call::as_intrinsic(value, {Call::branch})) {
+        conds.push_back(c->args[0]);
+        collect_branch_conditions(c->args[2], conds);
+    }
+}
+
+// On CPU a lane-varying condition is fine: it becomes predication (see below).
+// Inside a GPU kernel we do not have that fallback, so combining branch() with
+// vectorization there is a hard error rather than a silent fallback to select.
+void check_branch_schedule(const Function &func, const Definition &def) {
+    bool any_vectorized = false, any_gpu = false;
+    for (const Dim &d : def.schedule().dims()) {
+        any_vectorized |= (d.for_type == ForType::Vectorized);
+        any_gpu |= (d.for_type == ForType::GPUBlock ||
+                    d.for_type == ForType::GPUThread ||
+                    d.for_type == ForType::GPULane);
+    }
+    user_assert(!(any_gpu && any_vectorized))
+        << "branch() in Func \"" << func.name() << "\" is used in a GPU kernel that "
+        << "is also vectorized. On GPU only a per-thread or per-wave "
+        << "(non-vectorized) branch is allowed. Use select() for the vectorized "
+        << "dimension.\n";
+}
+
+// After hoisting, a branch that is still nested inside a vectorized loop has a
+// lane-varying condition (otherwise it would have been hoisted out of that
+// loop). We leave it as an IfThenElse and let VectorizeLoops handle it: it
+// pushes the vector condition down onto the loads and stores of each arm as a
+// predicate, so only the active lanes actually access memory. If some arm can
+// not be predicated, VectorizeLoops scalarizes the statement instead, which
+// restores true per-lane control flow. Both are faithful to branch(): the
+// untaken side never loads, stores, or faults. This is what makes branch()
+// useful for boundary conditions, e.g.
+//     f(x) = branch(x >= 0 && x < w, in(unsafe_promise_clamped(x, 0, w-1)), 0)
+// becomes a predicated (masked) vector load rather than a clamp plus a select.
+
+// Find the condition of some branch() buried in an expression, or an undefined
+// Expr if there is none.
+class FindBranchCondition : public IRGraphVisitor {
+    using IRGraphVisitor::visit;
+    void visit(const Call *op) override {
+        if (!found.defined() && op->is_intrinsic(Call::branch)) {
+            found = op->args[0];
+        }
+        IRGraphVisitor::visit(op);
+    }
+
+public:
+    Expr found;
+};
+
+// Replace every branch() whose condition equals `cond` by one of its arms
+// (arg index 1 = true side, 2 = false side), collapsing that one condition.
+class PickBranchArm : public IRMutator {
+    using IRMutator::visit;
+    Expr cond;
+    int arm;
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::branch) && equal(op->args[0], cond)) {
+            return mutate(op->args[arm]);
+        }
+        return IRMutator::visit(op);
+    }
+
+public:
+    PickBranchArm(Expr c, int a)
+        : cond(std::move(c)), arm(a) {
+    }
+};
+
+// Lift every branch() in a point-wise value up to the top, producing a whole-
+// value (possibly nested / multi-way) branch. For a point-wise surrounding
+// expression E, E[branch(c, a, b)] == branch(c, E[a], E[b]), because branch has
+// the same value as select and pure point-wise ops distribute over select. This
+// undoes the burying that reverse-mode autodiff does when it multiplies a
+// branch-valued forward Func into a larger adjoint expression: the branch is
+// recovered as real control flow instead of being an illegal sub-expression.
+// Branches that share a condition are resolved together, so k distinct
+// conditions give at most 2^k arms (in practice one).
+Expr lift_branches(const Expr &value) {
+    if (const Call *c = Call::as_intrinsic(value, {Call::branch})) {
+        // Already a top-level branch; just lift any branches inside the arms.
+        return Call::make(c->type, Call::branch,
+                          {c->args[0],
+                           lift_branches(c->args[1]),
+                           lift_branches(c->args[2])},
+                          Call::PureIntrinsic);
+    }
+    FindBranchCondition f;
+    value.accept(&f);
+    if (!f.found.defined()) {
+        return value;
+    }
+    Expr cond = f.found;
+    Expr t = PickBranchArm(cond, 1)(value);
+    Expr e = PickBranchArm(cond, 2)(value);
+    return Call::make(value.type(), Call::branch,
+                      {cond, lift_branches(t), lift_branches(e)},
+                      Call::PureIntrinsic);
+}
+
 Stmt build_provide_loop_nest(const map<string, Function> &env,
                              const string &prefix,
                              const Function &func,
@@ -513,8 +703,39 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
         debug(3) << "Site " << i << " = " << s << "\n";
     }
 
-    // Make the (multi-dimensional multi-valued) store node.
-    Stmt body = Provide::make(func.name(), values, site, const_true());
+    // If a branch() got buried inside a larger point-wise value - typically
+    // because reverse-mode autodiff multiplied a branch-valued forward Func into
+    // an adjoint expression - lift it back to the top so it can become real
+    // control flow. E[branch(c, a, b)] == branch(c, E[a], E[b]) for point-wise E.
+    if (values.size() == 1 && expr_contains_branch(values[0]) &&
+        !Call::as_intrinsic(values[0], {Call::branch})) {
+        // Flatten Expr-level Lets first: lifting pulls the branch condition to
+        // the top, and it must not reference a Let variable whose binding lives
+        // inside the surrounding expression. CSE re-compresses later in lowering.
+        values[0] = lift_branches(substitute_in_all_lets(values[0]));
+    }
+
+    // Make the (multi-dimensional multi-valued) store node. If the value is a
+    // branch(), build real point-wise control flow instead of a single Provide.
+    vector<Expr> branch_conds;
+    Stmt body;
+    if (values.size() == 1 && Call::as_intrinsic(values[0], {Call::branch})) {
+        collect_branch_conditions(values[0], branch_conds);
+        check_branch_schedule(func, def);
+        body = build_branch_provide(func.name(), values[0], site);
+    } else {
+        // A branch may only be the whole value of a definition. It can survive
+        // buried inside a multi-valued (Tuple) definition, which we can not turn
+        // into point-wise control flow.
+        for (const Expr &v : values) {
+            user_assert(!expr_contains_branch(v))
+                << "A Func defined with branch() was inlined into \"" << func.name()
+                << "\". A branch must be the whole value of a definition, so a "
+                << "branch-defined Func can not be inlined. Schedule it with "
+                << "compute_root() or compute_at().\n";
+        }
+        body = Provide::make(func.name(), values, site, const_true());
+    }
     if (def.schedule().atomic()) {  // Add atomic node.
         bool any_unordered_parallel = false;
         for (const auto &d : def.schedule().dims()) {
@@ -546,6 +767,15 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
 
     // Default schedule/values if there is no specialization
     Stmt stmt = build_loop_nest(body, prefix, start_fuse, func, def);
+    if (!branch_conds.empty()) {
+        // Hoist the branch to the outermost loop level where its condition is
+        // invariant. Producers compute_at'd at a level inside the branch then
+        // only run when that side is taken, which gates their computation.
+        stmt = HoistBranchOutOfLoops(func.name())(stmt);
+        // Anything still stuck inside a vectorized loop has a lane-varying
+        // condition. It stays an IfThenElse and becomes predicated loads and
+        // stores (or a scalarized statement) in VectorizeLoops.
+    }
     stmt = inject_placeholder_prefetch(stmt, env, prefix, def.schedule().prefetches());
 
     // Make any specialized copies
@@ -2717,6 +2947,16 @@ Stmt schedule_functions(const vector<Function> &outputs,
         }
 
         if (group_should_be_inlined(funcs)) {
+            // A branch() becomes real control flow, so a Func defined with one
+            // needs its own loop nest: inlining it would bury the branch inside
+            // a consumer's expression, where it can not be turned into a branch.
+            for (const Expr &v : funcs[0].definition().values()) {
+                user_assert(!expr_contains_branch(v))
+                    << "Func \"" << funcs[0].name() << "\" is defined with branch(), "
+                    << "which becomes real control flow, so it can not be inlined "
+                    << "into its consumer. Schedule it with compute_root() or "
+                    << "compute_at().\n";
+            }
             debug(1) << "Inlining " << funcs[0].name() << "\n";
             s = inline_function(s, funcs[0]);
         } else {

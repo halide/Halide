@@ -851,6 +851,63 @@ inline Expr select(const Expr &c0, const FuncRef &v0, const Expr &c1, const Func
 }
 // @}
 
+/** The result of branch(). It is deliberately NOT an Expr: a branch may only
+ * appear as the entire right-hand side of a Func definition
+ * (f(x) = branch(cond, a, b)), never as a sub-expression. That single
+ * restriction is what makes the "evaluate only one side" guarantee tractable:
+ * bounds inference and CSE never see a lazy sub-expression, and the definition
+ * can be lowered to real control flow with one store per arm. */
+struct Branch {
+    /** Internal representation (an if_then_else-style intrinsic). Users never
+     * touch this directly; assign the Branch to a Func instead. */
+    Expr expr;
+};
+
+/** An explicitly branched variant of select. branch(cond, a, b) means the same
+ * thing as select(cond, a, b), but is guaranteed to lower to a real
+ * control-flow branch that evaluates only the taken side, instead of the
+ * branchless select that always evaluates both sides.
+ *
+ * Unlike select(), the result is a \ref Branch, not an Expr, so it can only be
+ * used as the whole right-hand side of a Func definition:
+ *     f(x) = branch(cond, a, b);
+ * A branch-defined Func can therefore not be inlined into a consumer; schedule
+ * it with compute_root() or compute_at() instead.
+ *
+ * The branch is hoisted to the outermost loop level at which its condition is
+ * loop-invariant, so a producer compute_at'd at a loop level inside the branch
+ * is only computed when that side is taken. That is how a branch gates real
+ * computation rather than just a load.
+ *
+ * The condition must be a scalar bool. It works on CPU and on GPU, where it
+ * becomes a real per-thread or per-wave branch.
+ *
+ * If the condition varies across the lanes of a vectorized dimension, it can
+ * not be a scalar jump, so it instead becomes predication: the loads and stores
+ * of each arm are masked, and only the active lanes access memory (if an arm
+ * can not be predicated, the statement is scalarized instead). The untaken side
+ * still never loads, stores, or faults, which makes branch() a natural way to
+ * express a boundary condition:
+ *     f(x) = branch(x >= 0 && x < w, in(unsafe_promise_clamped(x, 0, w-1)), 0);
+ * compiles to a predicated vector load on targets that have one (e.g. AVX-512).
+ * The unsafe_promise_clamped is what tells bounds inference that the index
+ * stays in range, so `in` is not required outside its real extent.
+ *
+ * Combining branch() with vectorization inside a GPU kernel is a hard error
+ * (not a silent fallback to select): use select() for the vectorized
+ * dimension. */
+Branch branch(Expr condition, Expr true_value, Expr false_value);
+
+/** A multi-way variant of branch, mirroring the multi-way select. Each
+ * condition becomes its own real branch, forming an if / else-if / else
+ * chain. */
+template<typename... Args,
+         std::enable_if_t<Internal::all_are_convertible<Expr, Args...>::value> * = nullptr>
+inline Branch branch(Expr c0, Expr v0, Expr c1, Expr v1, Args &&...args) {
+    return branch(std::move(c0), std::move(v0),
+                  branch(std::move(c1), std::move(v1), std::forward<Args>(args)...).expr);
+}
+
 /** Oftentimes we want to pack a list of expressions with the same type
  * into a channel dimension, e.g.,
  * img(x, y, c) = select(c == 0, 100, // Red

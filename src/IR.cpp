@@ -811,6 +811,7 @@ constexpr const char *intrinsic_op_names[] = {
     "bitwise_or",
     "bitwise_xor",
     "bool_to_mask",
+    "branch",
     "bundle",
     "call_cached_indirect_function",
     "cast_mask",
