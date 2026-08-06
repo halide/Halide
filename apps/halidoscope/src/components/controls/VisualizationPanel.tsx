@@ -4,11 +4,10 @@ import { Separator } from "radix-ui";
 import * as React from "react";
 
 import ControlSection from "@/components/controls/ControlSection";
-import BarChart from "@/components/controls/bar-chart/BarChart";
-import BarChartParameters from "@/components/controls/bar-chart/BarChartParameters";
-import Histogram from "@/components/controls/histogram/Histogram";
-import HistogramParameters from "@/components/controls/histogram/HistogramParameters";
+import BarChart from "@/components/controls/charts/BarChart";
+import Histogram from "@/components/controls/charts/Histogram";
 import RenderMode from "@/components/controls/render/RenderMode";
+import RenderModeParameters from "@/components/controls/render/RenderModeParameters";
 import { useTraceContext } from "@/hooks/trace";
 import { funcAtom } from "@/state/func";
 import { type RenderMode as RM, renderAtom } from "@/state/render";
@@ -38,17 +37,6 @@ const METRIC_PALETTE = [
   "#D64000",
 ];
 
-interface HistogramData {
-  type: "Histogram";
-  data: { x1: number; x2: number; y0: number; y1: number; color: string }[];
-  domain: [number, number];
-  range: string[];
-}
-
-// Standard subtractive-light combinations used to render RGB's per-channel histograms as
-// stacked, flat-colored bands (e.g. overlapping red and green bars become one yellow band) —
-// the same result `mix-blend-mode: screen` produces, but precomputed so it doesn't depend on
-// (and get washed out by) whatever's behind the chart.
 const PURE_CHANNEL_COLORS: Record<"r" | "g" | "b", string> = {
   r: "#ff0000",
   g: "#00ff00",
@@ -63,6 +51,13 @@ const PAIR_CHANNEL_COLORS: Record<string, string> = {
 
 const TRIPLE_CHANNEL_COLOR = "#ffffff";
 
+interface HistogramData {
+  type: "Histogram";
+  data: { x1: number; x2: number; y0: number; y1: number; color: string }[];
+  domain: [number, number];
+  renderLegend: boolean;
+}
+
 interface BarChartData {
   type: "Bar Chart";
   data: { x: string; y: number }[];
@@ -70,14 +65,7 @@ interface BarChartData {
   range: string[];
 }
 
-interface NoChartData {
-  type: "No Chart";
-  data: number[];
-  domain: [number, number];
-  range: string[];
-}
-
-type ChartData = HistogramData | BarChartData | NoChartData;
+type ChartData = HistogramData | BarChartData;
 
 function VisualizationPanel() {
   const { funcs, stats } = useTraceContext();
@@ -96,9 +84,6 @@ function VisualizationPanel() {
       const extent = domain[1] - domain[0];
       const step =
         domain.every(Number.isInteger) && extent <= 64 ? 1 : extent / buckets;
-      // Colors are resolved to literal values here (rather than left to Plot's shared `color`
-      // scale) so that this histogram can be composed alongside others (e.g. RGB's stacked
-      // per-channel bands) without needing a single shared domain-to-color mapping.
       const colorScale = d3
         .scaleLinear<string>()
         .domain(
@@ -122,8 +107,8 @@ function VisualizationPanel() {
             color: colorScale(x1),
           };
         }),
-        domain,
-        range,
+        domain: [domain[0], domain[1] + step],
+        renderLegend: true,
       };
     },
     [],
@@ -162,6 +147,7 @@ function VisualizationPanel() {
         if (lo[1] > 0) {
           data.push({ x1, x2, y0: 0, y1: lo[1], color: TRIPLE_CHANNEL_COLOR });
         }
+
         if (mid[1] > lo[1]) {
           const pairKey = [mid[0], hi[0]].sort().join("");
           data.push({
@@ -172,6 +158,7 @@ function VisualizationPanel() {
             color: PAIR_CHANNEL_COLORS[pairKey],
           });
         }
+
         if (hi[1] > mid[1]) {
           data.push({
             x1,
@@ -187,13 +174,13 @@ function VisualizationPanel() {
         type: "Histogram",
         data,
         domain,
-        range: [],
+        renderLegend: true,
       };
     },
     [],
   );
 
-  const { type, data, domain, range } = React.useMemo((): ChartData => {
+  const chartData = React.useMemo((): ChartData => {
     switch (render.renderMode) {
       case "Grayscale": {
         const min = funcs[activeFunc].min_value ?? 0;
@@ -304,9 +291,6 @@ function VisualizationPanel() {
           }, []),
         };
       }
-      default: {
-        return { type: "No Chart", data: [], domain: [-1, -1], range: [] };
-      }
     }
   }, [
     render,
@@ -321,60 +305,54 @@ function VisualizationPanel() {
   ]);
 
   const renderChart = React.useCallback(() => {
-    switch (type) {
+    switch (chartData.type) {
       case "Histogram":
         return (
-          <>
-            <Separator.Root className="bg-ps-border-tertiary h-px" />
-            <ControlSection title="stats">
-              <HistogramParameters />
-              <Histogram
-                data={data}
-                domain={domain}
-                range={range}
-                scale={scale}
-                labels={{
-                  x: RENDER_MODE_TO_LABEL[render.renderMode],
-                  y: "Coordinate Count",
-                }}
-              />
-            </ControlSection>
-            <Separator.Root className="bg-ps-border-tertiary h-px" />
-          </>
+          <Histogram
+            data={chartData.data}
+            domain={chartData.domain}
+            scale={scale}
+            labels={{
+              x: RENDER_MODE_TO_LABEL[render.renderMode],
+              y: "Coordinate Count",
+            }}
+            renderLegend={chartData.renderLegend}
+            interval={
+              render.renderMode !== "Grayscale" && render.renderMode !== "RGB"
+                ? 1
+                : undefined
+            }
+          />
         );
       case "Bar Chart":
         return (
-          <>
-            <Separator.Root className="bg-ps-border-tertiary h-px" />
-            <ControlSection title="Stats">
-              <BarChartParameters />
-              <BarChart
-                data={data}
-                domain={domain}
-                range={range}
-                labels={{
-                  x: RENDER_MODE_TO_LABEL[render.renderMode],
-                  y: `${thread.op} Count`,
-                }}
-                highlight={(x: string) =>
-                  x === thread.id || thread.id === NO_THREAD_INFO_SENTINEL_ID
-                }
-              />
-            </ControlSection>
-            <Separator.Root className="bg-ps-border-tertiary h-px" />
-          </>
+          <BarChart
+            data={chartData.data}
+            domain={chartData.domain}
+            range={chartData.range}
+            labels={{
+              x: RENDER_MODE_TO_LABEL[render.renderMode],
+              y: `${thread.op} Count`,
+            }}
+            highlight={(x: string) =>
+              x === thread.id || thread.id === NO_THREAD_INFO_SENTINEL_ID
+            }
+          />
         );
-      case "No Chart":
-        return <Separator.Root className="bg-ps-border-tertiary h-px" />;
     }
-  }, [type, data, domain, range, scale, render.renderMode, thread]);
+  }, [chartData, scale, render.renderMode, thread]);
 
   return (
     <div className="flex flex-col gap-4 px-3 py-4">
       <ControlSection title="Render Mode">
         <RenderMode />
       </ControlSection>
-      {renderChart()}
+      <Separator.Root className="bg-ps-border-tertiary h-px" />
+      <ControlSection title="Stats">
+        <RenderModeParameters />
+        {renderChart()}
+      </ControlSection>
+      <Separator.Root className="bg-ps-border-tertiary h-px" />
     </div>
   );
 }
