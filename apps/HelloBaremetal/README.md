@@ -37,15 +37,16 @@ located in `CMakeLists.txt` in the following sub directories.
 3. cmake-external_project
 
 If you want to understand the detail of build steps, please read "Cross
-compiling" section of [README_cmake](../../README_cmake.md#cross-compiling), and
-then `build.sh` and `CMakeLists.txt` in each sub directories.
+compiling" section of
+[HalideCMakePackage](../../doc/HalideCMakePackage.md#cross-compiling), and then
+`build.sh` and `CMakeLists.txt` in each sub directories.
 
 ### Build procedure
 
 #### Baremetal target
 
 As a prerequisite, toolchain described above needs to be installed in your host
-machine. The detail of the toolchanin configuration is set in
+machine. The detail of the toolchain configuration is set in
 [toolchain.arm-32-sample.cmake](cmake/toolchain.arm-32-sample.cmake), which you
 might need to modify depending on the target baremetal system. Then, just run
 the build script in one of the aforementioned sub directories.
