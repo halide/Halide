@@ -9,9 +9,6 @@
 #include "Expr.h"
 
 namespace Halide {
-
-struct Target;
-
 namespace Internal {
 
 /** Rewrite all GPU loops to have a min of zero. */

@@ -17,7 +17,6 @@
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
-#include "Target.h"
 
 namespace Halide {
 namespace Internal {
@@ -516,7 +515,6 @@ protected:
 
         allocations.push_back(alloc);
         shared.erase(op->name);
-
         return op->body;
     }
 
