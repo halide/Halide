@@ -121,6 +121,43 @@ int main(int argc, char **argv) {
         }
     }
 
+    {
+        // A tile per thread, read back through a wrapper computed inside the
+        // loops over threads. The wrapper's own loops start at the thread's
+        // part of the allocation, so their bounds speak of the thread rather
+        // than being constants, and they still have to bound how far it
+        // reaches.
+        Func f("f"), g("g");
+        Var x("x"), y("y"), xi("xi"), yi("yi"), xii("xii"), yii("yii");
+        f(x, y) = x + y * 100;
+        g(x, y) = f(x, y) * 2;
+        g.tile(x, y, xi, yi, 32, 16)
+            .tile(xi, yi, xii, yii, 2, 2)
+            .gpu_blocks(x, y)
+            .gpu_threads(xi, yi)
+            .unroll(xii)
+            .unroll(yii);
+        f.compute_at(g, x)
+            .store_in(MemoryType::Register)
+            .tile(x, y, xii, yii, 2, 2)
+            .gpu_threads(x, y)
+            .unroll(xii)
+            .unroll(yii);
+        f.in().compute_at(g, xi).unroll(x).unroll(y);
+
+        Buffer<int> result = g.realize({64, 64}, target);
+        for (int y = 0; y < 64; y++) {
+            for (int x = 0; x < 64; x++) {
+                int correct = (x + y * 100) * 2;
+                if (result(x, y) != correct) {
+                    printf("wrapper: result(%d, %d) = %d instead of %d\n",
+                           x, y, result(x, y), correct);
+                    return 1;
+                }
+            }
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }

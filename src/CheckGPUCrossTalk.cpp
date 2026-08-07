@@ -42,6 +42,19 @@ struct Access {
     int order;
 };
 
+// Rewrite an expr in terms of the loops the fused loops over threads will use.
+// Counting inwards, the nth loop around it is the nth thread dimension,
+// whatever it is called, and its min is folded in, because the fused loop
+// starts at zero.
+Expr canonicalize(Expr e, const vector<ThreadLoop> &thread_loops) {
+    for (size_t i = 0; i < thread_loops.size() && i < 3; i++) {
+        const ThreadLoop &t = thread_loops[thread_loops.size() - 1 - i];
+        Expr v = Variable::make(Int(32), gpu_thread_name((int)i)) + t.min;
+        e = simplify(substitute(t.name, v, e));
+    }
+    return e;
+}
+
 class FindAccesses : public IRVisitor {
     using IRVisitor::visit;
 
@@ -77,11 +90,12 @@ class FindAccesses : public IRVisitor {
             }
             // The loops a thread runs inside its own part of the allocation
             // bound how far its accesses reach, which is what says the parts
-            // do not overlap.
-            Expr min = resolve(op->min), max = resolve(op->max);
-            if (is_const(min) && is_const(max)) {
-                loop_bounds.emplace_back(op->name, Interval(min, max));
-            }
+            // do not overlap. A loop that starts at the thread's own part of
+            // the allocation has bounds that speak of the thread, so they get
+            // the same treatment as the accesses themselves.
+            Expr min = canonicalize(resolve(op->min), thread_loops);
+            Expr max = canonicalize(resolve(op->max), thread_loops);
+            loop_bounds.emplace_back(op->name, Interval(min, max));
             IRVisitor::visit(op);
         }
     }
@@ -150,18 +164,11 @@ string name_and_args(const string &name, const vector<Expr> &args) {
     return s.str();
 }
 
-// Rewrite an access in terms of the loops the fused loops over threads will
-// use. Counting inwards, the nth loop around an access is the nth thread
-// dimension, whatever it is called, and its min is folded in, because the
-// fused loop starts at zero.
 vector<Expr> canonical(const Access &a) {
-    vector<Expr> args = a.args;
-    for (size_t i = 0; i < a.thread_loops.size() && i < 3; i++) {
-        const ThreadLoop &t = a.thread_loops[a.thread_loops.size() - 1 - i];
-        Expr v = Variable::make(Int(32), gpu_thread_name((int)i)) + t.min;
-        for (Expr &arg : args) {
-            arg = simplify(substitute(t.name, v, arg));
-        }
+    vector<Expr> args;
+    args.reserve(a.args.size());
+    for (const Expr &arg : a.args) {
+        args.push_back(canonicalize(arg, a.thread_loops));
     }
     return args;
 }
