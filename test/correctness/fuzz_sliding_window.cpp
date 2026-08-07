@@ -28,12 +28,9 @@ constexpr bool use_var_outermost = true;
 constexpr bool partition_loops = true;
 constexpr bool generate_upsamples = true;
 constexpr bool generate_downsamples = true;
-// Bend some coordinates into monotonic but non-affine functions of themselves.
-// Turned off by default because it finds wrong output, on main as well as
-// here: a region required that is flat over part of its range (a clamped
-// coordinate, i.e. the min/max cases in make_piecewise_affine below) slides
-// incorrectly. The select cases are fine.
-constexpr bool generate_piecewise_affine = false;
+// Bend some coordinates into monotonic but non-affine functions of themselves,
+// which is what a stencil over something with a boundary condition looks like.
+constexpr bool generate_piecewise_affine = true;
 constexpr bool always_3x3_stencils = false;
 constexpr bool always_1x3_stencils = false;
 constexpr bool always_3x1_stencils = false;

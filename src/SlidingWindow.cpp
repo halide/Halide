@@ -538,10 +538,35 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                               new_max_at_new_loop_min >= max_required_at_loop_min &&
                               new_min_at_new_loop_min <= new_max_at_new_loop_min;
         }
+        // Rewinding the loop only warms the window up if the warm-up tiles
+        // with copies of the steady state, which needs every iteration to
+        // advance the window by the same amount. That's what being affine in
+        // the loop var buys us. A region required that's flat over part of its
+        // range - a clamped coordinate, say - doesn't advance at all there, so
+        // no number of extra iterations covers it, and we have to warm up
+        // explicitly on the first iteration instead.
+        // Resampling by a constant factor advances uniformly too, just over
+        // several iterations at a time, so look for any small period. This is
+        // conservative in one known way: rewinding introduces a max into the
+        // region computed, so a Func slid before this one can leave a plateau
+        // of symbolic length in the region required of this one, and we give
+        // up on rewinding even though that particular plateau is harmless.
+        auto advances_uniformly = [&](const Expr &e) {
+            for (int period = 1; period <= 8; period++) {
+                Expr step = simplify(substitute(loop_var, loop_var_expr + period, e) - e);
+                if (!expr_uses_var(step, loop_var)) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        bool affine = advances_uniformly(min_required) && advances_uniformly(max_required);
+
         // Try to solve the equation.
         new_loop_min_eq = simplify(new_loop_min_eq);
         Interval solve_result = solve_for_inner_interval(new_loop_min_eq, new_loop_min_name);
-        if (solve_result.has_upper_bound() &&
+        if (affine &&
+            solve_result.has_upper_bound() &&
             can_prove(solve_result.max < loop_min) &&
             !expr_uses_vars(solve_result.max, enclosing_loops)) {
             result.warmup_start = simplify(solve_result.max);
