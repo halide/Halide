@@ -78,6 +78,7 @@ tests(
     hoist_storage_without_compute_at.cpp
     gpu_register_crosstalk.cpp
     gpu_register_shifted_between_threads.cpp
+    gpu_register_stages_disagree.cpp
     gpu_register_stored_by_one_thread.cpp
     gpu_register_stored_by_one_warp.cpp
     host_inside_gpu_loop.cpp
