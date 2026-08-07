@@ -173,7 +173,7 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
           }
 
           const nanCtx = nanOverlayRef.current?.getContext("2d");
-          if (nanCtx) {
+          if (nanCtx && result.nanOverlayData) {
             nanCtx.putImageData(
               new ImageData(result.nanOverlayData, width, height),
               0,
@@ -182,7 +182,7 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
           }
 
           const infCtx = infOverlayRef.current?.getContext("2d");
-          if (infCtx) {
+          if (infCtx && result.infOverlayData) {
             infCtx.putImageData(
               new ImageData(result.infOverlayData, width, height),
               0,
