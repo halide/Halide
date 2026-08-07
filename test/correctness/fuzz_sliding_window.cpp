@@ -28,6 +28,13 @@ constexpr bool use_var_outermost = true;
 constexpr bool partition_loops = true;
 constexpr bool generate_upsamples = true;
 constexpr bool generate_downsamples = true;
+constexpr bool generate_flips = true;
+// Resample by a symbolic factor rather than a literal 2, so that the number of
+// warm-up iterations is an Expr rather than a constant. Mode 1 uses a Param
+// directly, so its sign is unknown and the region required can't be shown to
+// move monotonically; sliding should switch itself off rather than go wrong.
+// Mode 2 clamps it positive, so sliding can still happen.
+constexpr int symbolic_scale_modes = 3;
 // Bend some coordinates into monotonic but non-affine functions of themselves,
 // which is what a stencil over something with a boundary condition looks like.
 constexpr bool generate_piecewise_affine = true;
@@ -40,6 +47,7 @@ constexpr bool input_all_ones = false;
 constexpr bool verbose = false;
 
 Var x{"x"}, y{"y"}, yo{"yo"}, yi{"yi"};
+Param<int> scale_param{"scale_param"};
 
 // Bend a coordinate into a monotonically increasing but non-affine function of
 // itself, so that the monotonicity analysis has to cope with something other
@@ -69,8 +77,24 @@ Expr make_piecewise_affine(const Expr &e, std::mt19937 &rng) {
 
 // Make a random stencil access to f from a consumer that is `rate` pyramid
 // levels coarser than it (so -1 upsamples, 0 is a plain stencil, and 1
-// downsamples).
-Expr random_use_of(Func f, std::mt19937 &rng, int rate, bool *bent) {
+// downsamples). If flip is set, the consumer walks it backwards, which makes
+// the region required move downwards as the loop advances.
+// The factor by which one pyramid level resamples the one below it.
+Expr resample_factor(int mode) {
+    switch (mode) {
+    case 1:
+        // Sign unknown at compile time.
+        return scale_param;
+    case 2:
+        // Known positive, but not a constant.
+        return max(scale_param, 1);
+    default:
+        return 2;
+    }
+}
+
+Expr random_use_of(Func f, std::mt19937 &rng, int rate, bool flip, int scale_mode,
+                   bool *symbolic) {
     auto r = [&]() { return (int)(rng() % 5) - 2; };
 
     int x1 = r();
@@ -91,7 +115,12 @@ Expr random_use_of(Func f, std::mt19937 &rng, int rate, bool *bent) {
     if (!bend_y) {
         yc = y;
     }
-    *bent = *bent || bend_x || bend_y;
+    *symbolic = *symbolic || bend_x || bend_y;
+
+    if (flip && generate_flips) {
+        xc = (size - 1) - xc;
+        yc = (size - 1) - yc;
+    }
 
     if (always_3x3_stencils) {
         x1 = y1 = 1;
@@ -112,10 +141,17 @@ Expr random_use_of(Func f, std::mt19937 &rng, int rate, bool *bent) {
         y2 = 0;
     }
 
+    if (rate != 0 && scale_mode != 0) {
+        *symbolic = true;
+    }
+    // Dividing by something that could be zero or negative is a different
+    // problem to the one we're testing, so only the multiplies are symbolic.
+    Expr up = max(resample_factor(scale_mode), 1);
+    Expr down = resample_factor(scale_mode);
     if (rate < 0 && generate_upsamples) {
-        return f(xc / 2 + x1, yc / 2 + y1) + f(xc / 2 + x2, yc / 2 + y2);
+        return f(xc / up + x1, yc / up + y1) + f(xc / up + x2, yc / up + y2);
     } else if (rate > 0 && generate_downsamples) {
-        return f(xc * 2 + x1, yc * 2 + y1) + f(xc * 2 + x2, yc * 2 + y2);
+        return f(xc * down + x1, yc * down + y1) + f(xc * down + x2, yc * down + y2);
     } else {
         return f(xc + x1, yc + y1) + f(xc + x2, yc + y2);
     }
@@ -196,10 +232,13 @@ bool run_trial(int trial, uint32_t seed, const Buffer<uint8_t> &input_buf) {
             Loop hoist_storage, store_at, compute_at;
             LoopNest innermost;
             bool in_registers = false;
-            // Which level of the pyramid this stage sits on.
+            // Which level of the pyramid this stage sits on, and whether it
+            // is walked forwards or backwards relative to the output.
             int level = 0;
-            // Whether any consumer indexes this stage with a non-affine
-            // expression, which stops its footprint being a constant size.
+            bool flipped = false;
+            // Whether any consumer indexes this stage in a way that stops its
+            // footprint being a constant size: non-affinely, or by a symbolic
+            // amount.
             bool bent = false;
 
             Node(const std::string &name)
@@ -228,13 +267,23 @@ bool run_trial(int trial, uint32_t seed, const Buffer<uint8_t> &input_buf) {
         // pipelines look like this, and it means the footprint of a Func never
         // grows with the loop var, which would otherwise make its storage
         // impossible to bound.
+        // One factor per pipeline, so that every level agrees on it.
+        int scale_mode = rng() % symbolic_scale_modes;
+
         std::vector<int> level(num_stages, 0);
+        std::vector<bool> flipped(num_stages, false);
         for (int i = 1; i < num_stages; i++) {
-            level[i] = level[rng() % i] + (int)(rng() % 3) - 1;
+            int parent = rng() % i;
+            level[i] = level[parent] + (int)(rng() % 3) - 1;
+            // Like the level, the direction each stage is walked in has to be
+            // a property of the stage, or a Func read both forwards and
+            // backwards would have a footprint that grows with the loop var.
+            flipped[i] = flipped[parent] != ((rng() % 4) == 0);
         }
 
         for (int i = 0; i < num_stages; i++) {
             stages[i].level = level[i];
+            stages[i].flipped = flipped[i];
         }
 
         for (int i = 1; i < num_stages; i++) {
@@ -250,8 +299,10 @@ bool run_trial(int trial, uint32_t seed, const Buffer<uint8_t> &input_buf) {
             Node *in_2 = &stages[i2];
 
             Expr rhs =
-                (random_use_of(in_1->f, rng, level[i] - level[i1], &in_1->bent) +
-                 random_use_of(in_2->f, rng, level[i] - level[i2], &in_2->bent));
+                (random_use_of(in_1->f, rng, level[i] - level[i1],
+                               flipped[i] != flipped[i1], scale_mode, &in_1->bent) +
+                 random_use_of(in_2->f, rng, level[i] - level[i2],
+                               flipped[i] != flipped[i2], scale_mode, &in_2->bent));
 
             stages[i].f(x, y) = rhs;
 
@@ -375,7 +426,8 @@ bool run_trial(int trial, uint32_t seed, const Buffer<uint8_t> &input_buf) {
                     !producer->bent &&
                     one_consumer_site &&
                     first_consumer == &stages.back() &&
-                    first_consumer->level == producer->level;
+                    first_consumer->level == producer->level &&
+                    first_consumer->flipped == producer->flipped;
 
                 producer->in_registers =
                     want_registers && enable_registers && small_enough_for_registers;
@@ -482,6 +534,8 @@ bool run_trial(int trial, uint32_t seed, const Buffer<uint8_t> &input_buf) {
                 std::cout << source.str() << "\n";
             }
         }
+
+        scale_param.set(2);
 
         if (boundary_condition) {
             input.set(input_buf);
