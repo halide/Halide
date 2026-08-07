@@ -6,6 +6,7 @@
 #include <cctype>
 #include <chrono>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <system_error>
@@ -37,7 +38,6 @@
 #include <mach-o/dyld.h>
 #include <mach-o/loader.h>
 #elif defined(__linux__)
-#include <cstring>
 #include <elf.h>
 #include <link.h>
 #endif
@@ -219,9 +219,52 @@ std::vector<uint8_t> compiler_build_id() {
         },
         &ctx);
     return ctx.id;
+#elif defined(_WIN32)
+    // PE debug directory, CodeView (RSDS) entry: the linker-assigned PDB GUID
+    // + age, present whenever the binary was built with debug info emitted
+    // (the default for MSVC and clang-cl, with or without a shipped PDB) and
+    // read straight from the mapped image, no file I/O required.
+    HMODULE module = nullptr;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            reinterpret_cast<LPCWSTR>(&compiler_identity_digest),
+                            &module)) {
+        return {};
+    }
+    const auto *base = reinterpret_cast<const uint8_t *>(module);
+    const auto *dos = reinterpret_cast<const IMAGE_DOS_HEADER *>(base);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) {
+        return {};
+    }
+    const auto *nt = reinterpret_cast<const IMAGE_NT_HEADERS *>(base + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) {
+        return {};
+    }
+    const IMAGE_DATA_DIRECTORY &debug_entry =
+        nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG];
+    if (debug_entry.VirtualAddress == 0 || debug_entry.Size < sizeof(IMAGE_DEBUG_DIRECTORY)) {
+        return {};
+    }
+    const auto *debug_dirs =
+        reinterpret_cast<const IMAGE_DEBUG_DIRECTORY *>(base + debug_entry.VirtualAddress);
+    const size_t count = debug_entry.Size / sizeof(IMAGE_DEBUG_DIRECTORY);
+    for (size_t i = 0; i < count; i++) {
+        const IMAGE_DEBUG_DIRECTORY &dd = debug_dirs[i];
+        if (dd.Type != IMAGE_DEBUG_TYPE_CODEVIEW || dd.AddressOfRawData == 0) {
+            continue;
+        }
+        // RSDS (PDB70) layout: 4-byte signature, 16-byte GUID, 4-byte age,
+        // then a NUL-terminated PDB path we don't need.
+        const uint8_t *cv = base + dd.AddressOfRawData;
+        if (dd.SizeOfData < 4 + 16 + 4 || std::memcmp(cv, "RSDS", 4) != 0) {
+            continue;
+        }
+        return std::vector<uint8_t>(cv + 4, cv + 4 + 16 + 4);
+    }
+    return {};
 #else
-    // TODO: read the PE debug-directory CodeView GUID on Windows. Until then we
-    // fall back to hashing the whole binary, which is correct (but slower).
+    // No known way to cheaply fingerprint the binary on this platform; fall
+    // back to hashing the whole binary, which is correct (but slower).
     return {};
 #endif
 }
@@ -521,8 +564,8 @@ std::string compiler_identity_digest() {
         }
 
         // Fall back to hashing the entire binary when no build id is available
-        // (e.g. a Linux image linked with --build-id=none, or Windows). This is
-        // equally correct, just slower.
+        // (e.g. a Linux image linked with --build-id=none, or a Windows image
+        // built without debug info). This is equally correct, just slower.
         const fs::path path = libhalide_path();
         if (path.empty()) {
             debug(1) << "GeneratorCache: could not locate libHalide to fingerprint; "

@@ -38,11 +38,12 @@ following are guaranteed to produce identical outputs:
 
 - **Compiler identity**: a fingerprint of the running libHalide (or, if
   statically linked, the generator executable itself). This is normally the
-  linker-assigned build ID, read directly from the already-loaded image (Mach-O
-  `LC_UUID` on macOS, ELF `.note.gnu.build-id` on Linux) so that rebuilding
-  Halide invalidates the cache without hashing the ~32 MB binary on every run.
-  If no build ID is available (e.g. `--build-id=none`, or Windows, which isn't
-  yet implemented), it falls back to hashing the whole binary.
+  linker-assigned build ID, read directly from the already-loaded image
+  (Mach-O `LC_UUID` on macOS, ELF `.note.gnu.build-id` on Linux, the PE debug
+  directory's CodeView/PDB GUID on Windows) so that rebuilding Halide
+  invalidates the cache without hashing the ~32 MB binary on every run. If no
+  build ID is available (e.g. `--build-id=none`, or a Windows image built
+  without debug info), it falls back to hashing the whole binary.
 - **The generator name, output types, build mode** (normal vs. gradient), and
   the fully-resolved **generator-param settings** (`target=` is handled
   separately, below).
