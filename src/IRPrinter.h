@@ -163,8 +163,6 @@ public:
      * trailing punctuation. */
     void print_list(const std::vector<Expr> &exprs);
 
-    static void test();
-
 protected:
     Indentation get_indent() const {
         return Indentation{indent};

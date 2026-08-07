@@ -7,6 +7,7 @@ tests(
     align_bounds.cpp
     argmax.cpp
     arm_cpu_detect.cpp
+    associativity.cpp
     async_device_copy.cpp
     autodiff.cpp
     bad_likely.cpp
@@ -25,6 +26,7 @@ tests(
     bounds_inference_chunk.cpp
     bounds_inference_complex.cpp
     bounds_inference_outer_split.cpp
+    bounds_internal.cpp
     bounds_of_abs.cpp
     bounds_of_cast.cpp
     bounds_of_func.cpp
@@ -47,6 +49,7 @@ tests(
     chunk_sharing.cpp
     circular_reference_leak.cpp
     code_explosion.cpp
+    codegen_c.cpp
     compare_vars.cpp
     compile_to.cpp
     compile_to_bitcode.cpp
@@ -65,7 +68,9 @@ tests(
     constant_type.cpp
     constraints.cpp
     convolution_multiple_kernels.cpp
+    cplusplus_mangle.cpp
     cross_compilation.cpp
+    cse.cpp
     cse_name_collision.cpp
     cse_nan.cpp
     cuda_8_bit_dot_product.cpp
@@ -78,6 +83,7 @@ tests(
     d3d12compute_sm6x.cpp
     d3d12compute_strict_float.cpp
     dead_realization_in_specialization.cpp
+    debug_helpers.cpp
     debug_to_file.cpp
     debug_to_file_multiple_outputs.cpp
     debug_to_file_reorder.cpp
@@ -85,6 +91,7 @@ tests(
     deep_inline_chain.cpp
     deferred_loop_level.cpp
     deinterleave4.cpp
+    deinterleave_vector.cpp
     device_buffer_copies_with_profile.cpp
     device_buffer_copy.cpp
     device_copy_at_inner_loop.cpp
@@ -102,6 +109,7 @@ tests(
     error_macro_unreachable.cpp
     exception.cpp
     explicit_inline_reductions.cpp
+    expr_match.cpp
     extern_bounds_inference.cpp
     extern_consumer.cpp
     extern_error.cpp
@@ -133,6 +141,7 @@ tests(
     fuzz_schedule.cpp
     gameoflife.cpp
     gather.cpp
+    generator_internal.cpp
     gpu_alloc_group_profiling.cpp
     gpu_allocation_cache.cpp
     gpu_arg_types.cpp
@@ -202,8 +211,11 @@ tests(
     intrinsics.cpp
     invalid_gpu_loop_nests.cpp
     inverse.cpp
+    ir_equality.cpp
+    ir_printer.cpp
     irmatch.cpp
     irprinter.cpp
+    is_monotonic.cpp
     isnan.cpp
     issue_3926.cpp
     iterate_over_circle.cpp
@@ -233,6 +245,7 @@ tests(
     metal_precompiled_shaders.cpp
     min_extent.cpp
     mod.cpp
+    modulus_remainder.cpp
     multi_output_pipeline_with_bad_sizes.cpp
     multi_splits_with_diff_tail_strategies.cpp
     multi_way_select.cpp
@@ -268,6 +281,7 @@ tests(
     print.cpp
     print_loop_nest.cpp
     process_some_tiles.cpp
+    propagate_estimate.cpp
     pseudostack_shares_slots.cpp
     python_extension_gen.cpp
     pytorch.cpp
@@ -312,9 +326,11 @@ tests(
     specialize.cpp
     specialize_to_gpu.cpp
     specialize_trim_condition.cpp
+    spirv_ir.cpp
     split_by_non_factor.cpp
     split_factor_type.cpp
     split_fuse_rvar.cpp
+    split_predicate.cpp
     split_reuse_inner_name_bug.cpp
     split_store_compute.cpp
     stable_realization_order.cpp
@@ -356,6 +372,7 @@ tests(
     uninitialized_read.cpp
     unique_func_image.cpp
     unique_name.cpp
+    uniquify_variable_names.cpp
     unroll_dynamic_loop.cpp
     unroll_huge_mux.cpp
     unroll_loop_with_implied_constant_bounds.cpp
@@ -472,6 +489,17 @@ target_link_libraries(correctness_image_io PRIVATE Halide::ImageIO)
 
 # Make sure the test that needs Halide::ThreadPool has it
 target_link_libraries(correctness_gpu_allocation_cache PRIVATE Halide::ThreadPool)
+
+# spirv_ir tests SpirvIR.h, which is an internal-only header (not part of the
+# public Halide.h umbrella) used by the Vulkan backend, so it needs access to
+# src/ and to the vendored SPIR-V headers, plus the WITH_SPIRV define that the
+# Halide library itself is unconditionally built with. The SPIRV-Headers
+# import target set up in src/CMakeLists.txt is directory-scoped there, so we
+# need our own find_package call to see it here.
+find_package(SPIRV-Headers 1.5.5 REQUIRED HINTS "${Halide_SOURCE_DIR}/dependencies/spirv")
+target_include_directories(correctness_spirv_ir PRIVATE "${Halide_SOURCE_DIR}/src")
+target_link_libraries(correctness_spirv_ir PRIVATE SPIRV-Headers::SPIRV-Headers)
+target_compile_definitions(correctness_spirv_ir PRIVATE WITH_SPIRV)
 
 # Tests which use external funcs need to enable exports.
 set_target_properties(
