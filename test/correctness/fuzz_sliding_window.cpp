@@ -61,6 +61,20 @@ constexpr bool generate_index_modes = true;
 // to cover what the earlier stages wrote. An update that scatters along the
 // dimension we'd slide stops us sliding at all.
 constexpr bool generate_updates = true;
+// Schedule the producers in ways that sliding window has to cope with:
+// vectorizing or unrolling the dimension it slides, specializing the consumer
+// so the loop nest appears twice, and prefetching, which carries a loop name
+// that sliding has to keep up to date when it rewinds a loop.
+// Splitting the dimension a Func slides along, with a tail strategy that
+// computes outside the region it was asked for, corrupts the window: the
+// values either side of the sliver this iteration computes belong to previous
+// iterations and are still needed. Off by default because it finds wrong
+// output, on main as well as here, for RoundUp, ShiftInwards and both blend
+// variants alike. GuardWithIf is fine.
+constexpr bool generate_vectorize = false;
+constexpr bool generate_unroll = false;
+constexpr bool generate_specialize = true;
+constexpr bool generate_prefetch = true;
 // Bend some coordinates into monotonic but non-affine functions of themselves,
 // which is what a stencil over something with a boundary condition looks like.
 constexpr bool generate_piecewise_affine = true;
@@ -557,6 +571,14 @@ bool run_trial(int trial, uint32_t seed, const Buffer<uint8_t> &input_buf) {
             constexpr int num_tail_strategies = sizeof(output_tail_strategies) / sizeof(output_tail_strategies[0]);
             auto strat = output_tail_strategies[rng() % num_tail_strategies];
             output_func.split(y, yo, yi, split_factor, strat);
+            bool want_specialize = (rng() % 4) == 0;
+            if (generate_specialize && want_specialize) {
+                // Two copies of the loop nest, which sliding window has to
+                // treat independently.
+                output_func.specialize(output_func.output_buffer().dim(0).min() == 0);
+                source << output_func_str
+                       << ".specialize(output_func.output_buffer().dim(0).min() == 0);\n";
+            }
             source << ".split(y, yo, yi, "
                    << split_factor << ", TailStrategy::" << strat << ");\n";
 
@@ -624,6 +646,31 @@ bool run_trial(int trial, uint32_t seed, const Buffer<uint8_t> &input_buf) {
                         stages[i].f.compute_at(f, v);
                         source << ".compute_at(f[" << compute_at.func << "], " << var_name(v) << ")";
                     }
+                }
+
+                // Vectorizing or unrolling the producer's own loops changes
+                // the region it provides, which sliding has to account for.
+                // Draw the rng values unconditionally so that turning these
+                // off doesn't change the rest of the schedule.
+                int inner_sched = rng() % 6;
+                if (inner_sched < 2) {
+                    // Splitting the dimension we'd slide stops it sliding, so
+                    // there's no small window to keep in registers.
+                    stages[i].in_registers = false;
+                }
+                if (inner_sched == 0 && generate_vectorize) {
+                    stages[i].f.vectorize(x, 4, TailStrategy::RoundUp);
+                    source << ".vectorize(x, 4, TailStrategy::RoundUp)";
+                } else if (inner_sched == 1 && generate_unroll) {
+                    stages[i].f.unroll(y, 2, TailStrategy::RoundUp);
+                    source << ".unroll(y, 2, TailStrategy::RoundUp)";
+                }
+
+                if ((rng() % 6) == 0 && generate_prefetch && !compute_at.is_root()) {
+                    Var v = stages[compute_at.func].vars[compute_at.var];
+                    stages[i].f.prefetch(stages[i].f, v, v, 1);
+                    source << ".prefetch(f[" << i << "], " << var_name(v) << ", "
+                           << var_name(v) << ", 1)";
                 }
                 if (stages[i].in_registers) {
                     stages[i].f.store_in(MemoryType::Register);
