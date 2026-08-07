@@ -56,6 +56,11 @@ enum IndexMode {
     NUM_INDEX_MODES
 };
 constexpr bool generate_index_modes = true;
+// Give some stages update definitions. A Func with updates slides differently:
+// the bounds of every stage have to move together, and the region computed has
+// to cover what the earlier stages wrote. An update that scatters along the
+// dimension we'd slide stops us sliding at all.
+constexpr bool generate_updates = true;
 // Bend some coordinates into monotonic but non-affine functions of themselves,
 // which is what a stencil over something with a boundary condition looks like.
 constexpr bool generate_piecewise_affine = true;
@@ -281,6 +286,9 @@ bool run_trial(int trial, uint32_t seed, const Buffer<uint8_t> &input_buf) {
             bool flipped = false;
             // How this stage's consumers index it.
             IndexMode index_mode = NORMAL;
+            // Whether this stage has an update definition, which makes the
+            // region it computes bigger than the region required.
+            bool has_update = false;
             // Whether any consumer indexes this stage in a way that stops its
             // footprint being a constant size: non-affinely, or by a symbolic
             // amount.
@@ -380,6 +388,42 @@ bool run_trial(int trial, uint32_t seed, const Buffer<uint8_t> &input_buf) {
             }
             for (int j = 0; j < (i == num_stages - 1 ? 4 : 3); j++) {
                 stages[i].innermost.push_back(Loop{i, j});
+            }
+
+            // Maybe give this stage an update definition.
+            int update_kind = rng() % 8;
+            if (generate_updates && i < num_stages - 1) {
+                switch (update_kind) {
+                case 0:
+                    // Pure in both dimensions, so it can still slide.
+                    stages[i].f(x, y) += cast<uint8_t>(1);
+                    source << "f[" << i << "](x, y) += cast<uint8_t>(1);\n";
+                    break;
+                case 1:
+                    // Pure, and reads itself.
+                    stages[i].f(x, y) = stages[i].f(x, y) * cast<uint8_t>(3);
+                    source << "f[" << i << "](x, y) = f[" << i << "](x, y)*3;\n";
+                    break;
+                case 2: {
+                    // Scatters along x, so we mustn't slide along x.
+                    RDom r(0, 3);
+                    stages[i].f(r, y) += cast<uint8_t>(2);
+                    source << "RDom r" << i << "(0, 3);\n"
+                           << "f[" << i << "](r" << i << ", y) += cast<uint8_t>(2);\n";
+                    break;
+                }
+                case 3: {
+                    // Scatters along y, so we mustn't slide along y.
+                    RDom r(0, 3);
+                    stages[i].f(x, r) += cast<uint8_t>(2);
+                    source << "RDom r" << i << "(0, 3);\n"
+                           << "f[" << i << "](x, r" << i << ") += cast<uint8_t>(2);\n";
+                    break;
+                }
+                default:
+                    break;
+                }
+                stages[i].has_update = update_kind < 4;
             }
 
             std::ostringstream rhs_source;
@@ -483,7 +527,8 @@ bool run_trial(int trial, uint32_t seed, const Buffer<uint8_t> &input_buf) {
                     first_consumer == &stages.back() &&
                     first_consumer->level == producer->level &&
                     first_consumer->flipped == producer->flipped &&
-                    producer->index_mode == NORMAL;
+                    producer->index_mode == NORMAL &&
+                    !producer->has_update;
 
                 producer->in_registers =
                     want_registers && enable_registers && small_enough_for_registers;

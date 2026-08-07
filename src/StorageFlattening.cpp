@@ -546,8 +546,14 @@ protected:
         // Record index in the stack.
         hoisted_storages_map[op->name] = hoisted_storages.size() - 1;
         Stmt body = mutate(op->body);
-        internal_assert(!hoisted_storages.back().hoisted_allocations.empty())
-            << "Couldn't find a matching Allocate node for hoisted storage " << op->name << "\n";
+        if (hoisted_storages.back().hoisted_allocations.empty()) {
+            // Nothing in here allocates it. A Func hoisted into the loops of a
+            // Func with update definitions gets one of these nodes per stage,
+            // but is only realized inside the stages that use it.
+            hoisted_storages_map.erase(op->name);
+            hoisted_storages.pop_back();
+            return body;
+        }
         const auto &alloc_info = hoisted_storages.back().hoisted_allocations.front();
         vector<Expr> extents = alloc_info.extents;
         Expr condition = alloc_info.condition;
