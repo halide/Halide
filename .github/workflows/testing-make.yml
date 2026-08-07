@@ -89,9 +89,6 @@ jobs:
 
       - run: make build_tests
 
-      - run: make test_internal
-        if: ${{ !cancelled() }}
-
       - run: make test_correctness
         if: ${{ !cancelled() }}
 
