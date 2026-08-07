@@ -25,15 +25,15 @@ function FuncsPanel({ funcs }: FuncsPanelProps) {
           value={func.name}
           className="group flex flex-col"
         >
-          <Accordion.Trigger className="flex w-full items-center gap-1 py-2 text-left font-mono uppercase">
+          <Accordion.Trigger className="flex w-full items-baseline gap-1 py-2 text-left font-mono">
             <svg
               className="transition-transform duration-200 group-data-[state=open]:rotate-90"
               width="8"
               height="8"
-              viewBox="0 0 8 8"
+              viewBox="0 0 12 12"
               fill="currentColor"
             >
-              <polygon points="0,0 8,4 0,8" />
+              <polygon points="0,0 8,6 0,12" />
             </svg>
             {func.name}
           </Accordion.Trigger>
