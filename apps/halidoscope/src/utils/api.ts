@@ -21,9 +21,9 @@ export interface RenderFuncResponse {
   /** The rendered RGBA8 tensor data for the Func's buffer. */
   tensorData: Uint8ClampedArray<ArrayBuffer>;
   /** The RGBA8 overlay marking coordinates where a NaN was observed. */
-  nanOverlayData: Uint8ClampedArray<ArrayBuffer>;
+  nanOverlayData: Uint8ClampedArray<ArrayBuffer> | null;
   /** The RGBA8 overlay marking coordinates where an Inf was observed. */
-  infOverlayData: Uint8ClampedArray<ArrayBuffer>;
+  infOverlayData: Uint8ClampedArray<ArrayBuffer> | null;
   /**
    * The per-coordinate tabular data backing histograms, or null if not
    * requested.
@@ -79,6 +79,10 @@ export interface RenderFuncParams {
  * @param buffer The buffer containing tensor, tabular, and overlay data.
  * @param width The width of the buffer.
  * @param height The height of the buffer.
+ * @param includeNan A flag indicating whether or not to expect a NaN overlay
+ * in the buffer payload.
+ * @param includeInf A flag indicating whether or not to expect an Inf overlay
+ * in the buffer payload.
  * @param includeTabularData A flag indicating whether or not to expect tabular
  * data in the buffer payload.
  * @returns A {@link RenderFuncResponse}.
@@ -87,34 +91,42 @@ function splitRenderBuffer({
   buffer,
   width,
   height,
+  includeNan,
+  includeInf,
   includeTabularData,
 }: {
   buffer: ArrayBuffer;
   width: number;
   height: number;
+  includeNan: boolean;
+  includeInf: boolean;
   includeTabularData: boolean;
 }): RenderFuncResponse {
   const pixelByteLength = width * height * 4;
   const overlayPlaneByteLength = width * height * 4;
-  const tabularByteLength =
-    buffer.byteLength - pixelByteLength - overlayPlaneByteLength * 2;
+  const overlayBytes =
+    (includeNan ? overlayPlaneByteLength : 0) +
+    (includeInf ? overlayPlaneByteLength : 0);
+  const tabularByteLength = buffer.byteLength - pixelByteLength - overlayBytes;
 
   return {
     tensorData: new Uint8ClampedArray(buffer, 0, pixelByteLength),
-    nanOverlayData: new Uint8ClampedArray(
-      buffer,
-      pixelByteLength,
-      overlayPlaneByteLength,
-    ),
-    infOverlayData: new Uint8ClampedArray(
-      buffer,
-      pixelByteLength + overlayPlaneByteLength,
-      overlayPlaneByteLength,
-    ),
+    nanOverlayData: includeNan
+      ? new Uint8ClampedArray(buffer, pixelByteLength, overlayPlaneByteLength)
+      : null,
+    infOverlayData: includeInf
+      ? new Uint8ClampedArray(
+          buffer,
+          pixelByteLength + (includeNan ? overlayPlaneByteLength : 0),
+          overlayPlaneByteLength,
+        )
+      : null,
     tabularData: includeTabularData
       ? new Uint32Array(
           buffer,
-          pixelByteLength + 2 * overlayPlaneByteLength,
+          pixelByteLength +
+            (includeNan ? overlayPlaneByteLength : 0) +
+            (includeInf ? overlayPlaneByteLength : 0),
           tabularByteLength / 4,
         )
       : null,
@@ -151,6 +163,8 @@ export async function renderGrayscale({
     buffer,
     width,
     height,
+    includeNan: includeNan.active,
+    includeInf: includeInf.active,
     includeTabularData,
   });
 }
@@ -186,6 +200,8 @@ export async function renderRgb({
     buffer,
     width,
     height,
+    includeNan: includeNan.active,
+    includeInf: includeInf.active,
     includeTabularData,
   });
 }
@@ -220,6 +236,8 @@ export async function renderStoreFrequency({
     buffer,
     width,
     height,
+    includeNan: includeNan.active,
+    includeInf: includeInf.active,
     includeTabularData,
   });
 }
@@ -254,6 +272,8 @@ export async function renderLoadFrequency({
     buffer,
     width,
     height,
+    includeNan: includeNan.active,
+    includeInf: includeInf.active,
     includeTabularData,
   });
 }
@@ -294,6 +314,8 @@ export async function renderRedundantStores({
     buffer,
     width,
     height,
+    includeNan: includeNan.active,
+    includeInf: includeInf.active,
     includeTabularData,
   });
 }
@@ -335,6 +357,8 @@ export async function renderReuseDistance({
     buffer,
     width,
     height,
+    includeNan: includeNan.active,
+    includeInf: includeInf.active,
     includeTabularData,
   });
 }
@@ -383,6 +407,8 @@ export async function renderThread({
     buffer,
     width,
     height,
+    includeNan: includeNan.active,
+    includeInf: includeInf.active,
     includeTabularData,
   });
 }
