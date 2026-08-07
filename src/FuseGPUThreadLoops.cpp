@@ -89,16 +89,47 @@ class MarkAsyncCopies : public IRMutator {
                            mutate(op->predicate), op->alignment, op->is_streaming);
     }
 
+    // Waiting for a copy is something each thread does for the copies it
+    // issued itself, so the wait belongs inside the loops over threads. Put it
+    // at the end of the innermost one, which is still before the barrier that
+    // publishes the data to the rest of the block and before any of it is
+    // read. Leaving it after them would make it a statement outside the loops
+    // over threads, which is a thing only the first thread does.
+    class AwaitInEachThread : public IRMutator {
+        using IRMutator::visit;
+
+        Stmt visit(const For *op) override {
+            Stmt body = mutate(op->body);
+            if ((op->for_type == ForType::GPUThread || op->for_type == ForType::GPULane) &&
+                body.same_as(op->body)) {
+                // Placing the wait is the only thing this does, so a body that
+                // comes back unchanged is one with no loop over threads inside
+                // it, and this is the innermost one.
+                body = Block::make(body, Evaluate::make(wait));
+            }
+            return op->with(op->min, op->max, body);
+        }
+
+        const Expr &wait;
+
+    public:
+        using IRMutator::mutate;
+
+        AwaitInEachThread(const Expr &wait)
+            : wait(wait) {
+        }
+    };
+
     Stmt visit(const ProducerConsumer *op) override {
         Stmt body = mutate(op->body);
         auto it = groups.find(op->name);
         if (op->is_producer && it != groups.end() && device_api == DeviceAPI::CUDA) {
-            // At the end of the producer, which is before the barrier that
-            // publishes the data to the rest of the block, and before any of
-            // it is read.
             Expr wait = Call::make(Int(32), Call::cuda_await_copies,
                                    {it->second}, Call::Intrinsic);
-            body = Block::make(body, Evaluate::make(wait));
+            Stmt with_wait = AwaitInEachThread(wait).mutate(body);
+            // Unchanged means there was no loop over threads to put it in,
+            // because only one thread runs this producer.
+            body = with_wait.same_as(body) ? Block::make(body, Evaluate::make(wait)) : with_wait;
         }
         return op->with(body);
     }
