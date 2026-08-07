@@ -4022,7 +4022,6 @@ struct ExecuteGeneratorArgs {
     // changing a plugin invalidates cached artifacts. May be left empty.
     std::vector<std::string> plugins;
 
-
     // If true, log the path of all output files to stdout.
     bool log_outputs = false;
 };
