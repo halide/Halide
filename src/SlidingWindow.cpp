@@ -373,6 +373,11 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     // node (not including the loop being slid over itself).
     Scope<> enclosing_loops;
 
+    // How many of those actually run more than once. A loop over a single
+    // point can't carry anything from one iteration to the next, so it doesn't
+    // count as somewhere a window could slide.
+    int enclosing_real_loops = 0;
+
     map<string, Expr> replacements;
 
     // The immediately-enclosing For node, and the one enclosing the target
@@ -457,6 +462,15 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
         if (!dim.empty() && slid_dimensions.count(dim_idx)) {
             return result.reject("this dimension has already been slid over");
+        }
+        if (func.schedule().memory_type() == MemoryType::Register &&
+            enclosing_real_loops > 0) {
+            // A rolled register array can only carry values across the
+            // innermost loop it lives in. By the time an outer loop advances,
+            // everything the array held has been overwritten by the sweep of
+            // the loop below it, so a second roll over this loop would read
+            // values that are no longer there. Leave it for the inner loop.
+            return result.reject("it should roll over an inner loop instead");
         }
         if (!min_required.defined()) {
             return result.reject("more than one dimension depends on the loop var");
@@ -693,6 +707,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                      << min << ", " << max << "\n";
             return op;
         } else {
+            ScopedValue<int> bind_count(enclosing_real_loops, enclosing_real_loops + 1);
             return IRMutator::visit(op);
         }
     }

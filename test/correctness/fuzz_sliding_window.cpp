@@ -346,12 +346,10 @@ bool run_trial(int trial, uint32_t seed, const Buffer<uint8_t> &input_buf) {
                 // A register allocation must have constant extent in every
                 // dimension. That needs the func to be computed in the
                 // innermost loop of its consumers (so the unslid dimensions
-                // only span one iteration's footprint), stored in the loop just
-                // outside that one (so there's a single sliding dimension,
-                // whose extent the window size makes constant), and read only
-                // by the output stage, at the output's own level of the pyramid
-                // (so that the footprint is a handful of taps that advance one
-                // per iteration, rather than something that grows with the loop
+                // only span one iteration's footprint), and read only by the
+                // output stage, at the output's own level of the pyramid (so
+                // that the footprint is a handful of taps that advance one per
+                // iteration, rather than something that grows with the loop
                 // var). That's the line-buffer shape that register sliding is
                 // for. Halide has the last word on whether an allocation can
                 // live in registers, and being told no is a compile error we
@@ -374,7 +372,6 @@ bool run_trial(int trial, uint32_t seed, const Buffer<uint8_t> &input_buf) {
                 bool small_enough_for_registers =
                     !c.is_root() &&
                     c.var == (int)stages[c.func].vars.size() - 1 &&
-                    levels[1] == levels[2] - 1 &&
                     !producer->bent &&
                     one_consumer_site &&
                     first_consumer == &stages.back() &&

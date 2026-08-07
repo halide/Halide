@@ -395,6 +395,32 @@ int main(int argc, char **argv) {
     }
 
     {
+        // Sliding in registers over two loops at once. A rolled register array
+        // only carries values across the innermost loop it lives in, so f can
+        // roll over x but not also over yi. If it tries to do both, the values
+        // it expects to still be there from the previous yi were overwritten
+        // by the sweep of the x loop.
+        Var yo, yi;
+        Func f, g;
+        f(x, y) = x * 3 + y;
+        g(x, y) = f(x, y) + f(x - 1, y) + f(x, y - 1);
+
+        g.split(y, yo, yi, 4);
+        f.store_at(g, yo).compute_at(g, x).store_in(MemoryType::Register);
+
+        Buffer<int> im = g.realize({12, 12});
+        for (int y = 0; y < im.height(); y++) {
+            for (int x = 0; x < im.width(); x++) {
+                int c = (x * 3 + y) + ((x - 1) * 3 + y) + (x * 3 + y - 1);
+                if (im(x, y) != c) {
+                    printf("g(%d, %d) = %d instead of %d\n", x, y, im(x, y), c);
+                    return 1;
+                }
+            }
+        }
+    }
+
+    {
         // A consumer that clamps its coordinate, so that the region required
         // of the producer is flat for a while and then starts moving. The loop
         // can't be rewound to warm this up, because rewinding it doesn't move
