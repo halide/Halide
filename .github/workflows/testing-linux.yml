@@ -202,11 +202,10 @@ jobs:
             -no-window -gpu swiftshader_indirect -no-snapshot -noaudio
             -no-boot-anim -camera-back emulated -camera-front emulated
           disable-animations: true
+          # android-emulator-runner's `script` input splits on newlines and
+          # runs each line as its own independent `sh -c` command -- it does
+          # NOT honor `\` line-continuation across lines -- so each invocation
+          # below must stay on a single line.
           script: |
-            apps/support/android_smoke_test.sh \
-              apps/HelloAndroid/app/build/outputs/apk/debug/app-debug.apk \
-              com.example.hellohalide .CameraActivity android.permission.CAMERA \
-              "requires a buffer of exactly"
-            apps/support/android_smoke_test.sh \
-              apps/HelloAndroidCamera2/app/build/outputs/apk/debug/app-debug.apk \
-              com.example.helloandroidcamera2 .CameraActivity android.permission.CAMERA
+            apps/support/android_smoke_test.sh apps/HelloAndroid/app/build/outputs/apk/debug/app-debug.apk com.example.hellohalide .CameraActivity android.permission.CAMERA "requires a buffer of exactly"
+            apps/support/android_smoke_test.sh apps/HelloAndroidCamera2/app/build/outputs/apk/debug/app-debug.apk com.example.helloandroidcamera2 .CameraActivity android.permission.CAMERA
