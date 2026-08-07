@@ -542,7 +542,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         new_loop_min_eq = simplify(new_loop_min_eq);
         Interval solve_result = solve_for_inner_interval(new_loop_min_eq, new_loop_min_name);
         if (solve_result.has_upper_bound() &&
-            !equal(solve_result.max, loop_min) &&
+            can_prove(solve_result.max < loop_min) &&
             !expr_uses_vars(solve_result.max, enclosing_loops)) {
             result.warmup_start = simplify(solve_result.max);
 

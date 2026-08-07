@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include <algorithm>
 #include <stdio.h>
 
 using namespace Halide;
@@ -390,6 +391,29 @@ int main(int argc, char **argv) {
         if (count != 10) {
             printf("f was called %d times instead of %d times\n", count, 10);
             return 1;
+        }
+    }
+
+    {
+        // A consumer that clamps its coordinate, so that the region required
+        // of the producer is flat for a while and then starts moving. The loop
+        // can't be rewound to warm this up, because rewinding it doesn't move
+        // the window; it has to warm up on the first iteration instead.
+        Func f, g;
+        f(x, y) = x * 3 + y;
+        g(x, y) = f(max(x, 4), y) + f(max(x, 4) + 2, y);
+
+        f.store_root().compute_at(g, x);
+
+        Buffer<int> im = g.realize({15, 15});
+        for (int y = 0; y < im.height(); y++) {
+            for (int x = 0; x < im.width(); x++) {
+                int c = std::max(x, 4) * 3 + y + (std::max(x, 4) + 2) * 3 + y;
+                if (im(x, y) != c) {
+                    printf("g(%d, %d) = %d instead of %d\n", x, y, im(x, y), c);
+                    return 1;
+                }
+            }
         }
     }
 
