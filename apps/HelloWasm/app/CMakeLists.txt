@@ -7,7 +7,6 @@ set(CMAKE_CXX_EXTENSIONS NO)
 
 # WASM-native dependencies
 find_package(Threads REQUIRED)
-find_package(SDL2 REQUIRED)
 
 # Halide and the generator package are both host-built config packages, not
 # part of the Emscripten sysroot the toolchain file restricts find_package()
@@ -61,15 +60,13 @@ foreach (simd IN ITEMS "" "_simd")
         endforeach ()
 
         add_executable(${config} core.cpp)
-        target_link_libraries(
-            ${config}
-            PRIVATE ${config}_init ${config}_update ${config}_render SDL2::SDL2
-        )
+        target_link_libraries(${config} PRIVATE ${config}_init ${config}_update ${config}_render)
+        target_compile_options(${config} PRIVATE --use-port=sdl2)
         # -O3 here (not just relying on CMAKE_BUILD_TYPE=Release's compile
         # flags) because Emscripten's link step does its own codegen/Binaryen
         # optimization passes that CMake's default per-config linker flags
         # don't cover.
-        target_link_options(${config} PRIVATE -sWASM=1 -sTOTAL_MEMORY=512MB -O3)
+        target_link_options(${config} PRIVATE --use-port=sdl2 -sWASM=1 -sTOTAL_MEMORY=512MB -O3)
         if (is_threads)
             target_link_libraries(${config} PRIVATE Threads::Threads)
             target_link_options(${config} PRIVATE -matomics)
