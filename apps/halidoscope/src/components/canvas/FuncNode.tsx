@@ -38,7 +38,7 @@ import {
 import { isFuncBufferLive, isEdgeLive } from "@/utils/liveness";
 
 function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
-  const { name, width, height } = data;
+  const { name, width, height, buffer_liveness, max_store_count } = data;
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const nanOverlayRef = React.useRef<HTMLCanvasElement>(null);
   const infOverlayRef = React.useRef<HTMLCanvasElement>(null);
@@ -111,56 +111,82 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
       return;
     }
 
+    renderingRef.current = true;
+
     async function draw() {
       try {
+        // Funcs with no stores (pipeline inputs) never see a Begin/EndRealization
+        // pair, so `buffer_liveness` defaults to (0, 0) rather than a real teardown
+        // point — treat those as always live instead of "dead" past index 0.
+        const isRealized = max_store_count > 0;
+
+        // Reuse cached buffers for a Func outside of its liveness range.
+        let cachedPreLiveResult: RenderFuncResponse | null = null;
+        let cachedPostLiveResult: RenderFuncResponse | null = null;
+
         while (true) {
           const target = latestIndexRef.current;
+          const notYetLive = target < buffer_liveness.start;
+          const noLongerLive = isRealized && target > buffer_liveness.end;
 
           let result: RenderFuncResponse;
-          const params: RenderFuncParams = {
-            func: name,
-            globalIndex: target,
-            normalizationMode: render.normalizationMode,
-            width,
-            height,
-            includeTabularData: active,
-            includeNan: {
-              active: nan.active,
-              ...nan.color,
-            },
-            includeInf: {
-              active: inf.active,
-              ...inf.color,
-            },
-          };
 
-          switch (render.renderMode) {
-            case "Grayscale":
-              result = await renderGrayscale(params);
-              break;
-            case "RGB":
-              result = await renderRgb(params);
-              break;
-            case "Store Frequency":
-              result = await renderStoreFrequency(params);
-              break;
-            case "Load Frequency":
-              result = await renderLoadFrequency(params);
-              break;
-            case "Redundant Stores":
-              result = await renderRedundantStores(params);
-              break;
-            case "Reuse Distance":
-              result = await renderReuseDistance(params);
-              break;
-            case "Thread Coverage":
-              result = await renderThread({
-                ...params,
-                threadOpMode: thread.op,
-                threadId: thread.id,
-              });
+          if (notYetLive && cachedPreLiveResult) {
+            result = cachedPreLiveResult;
+          } else if (noLongerLive && cachedPostLiveResult) {
+            result = cachedPostLiveResult;
+          } else {
+            const params: RenderFuncParams = {
+              func: name,
+              globalIndex: target,
+              normalizationMode: render.normalizationMode,
+              width,
+              height,
+              includeTabularData: active,
+              includeNan: {
+                active: nan.active,
+                ...nan.color,
+              },
+              includeInf: {
+                active: inf.active,
+                ...inf.color,
+              },
+            };
 
-              break;
+            switch (render.renderMode) {
+              case "Grayscale":
+                result = await renderGrayscale(params);
+                break;
+              case "RGB":
+                result = await renderRgb(params);
+                break;
+              case "Store Frequency":
+                result = await renderStoreFrequency(params);
+                break;
+              case "Load Frequency":
+                result = await renderLoadFrequency(params);
+                break;
+              case "Redundant Stores":
+                result = await renderRedundantStores(params);
+                break;
+              case "Reuse Distance":
+                result = await renderReuseDistance(params);
+                break;
+              case "Thread Coverage":
+                result = await renderThread({
+                  ...params,
+                  threadOpMode: thread.op,
+                  threadId: thread.id,
+                });
+                break;
+            }
+
+            // Set cached versions if we fall outside a Funcs buffer range.
+            if (notYetLive) {
+              cachedPreLiveResult = result;
+            } else if (noLongerLive) {
+              cachedPostLiveResult = result;
+            }
           }
 
           const ctx = canvasRef.current?.getContext("2d");
@@ -206,6 +232,8 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
         console.error(
           `Failed to render ${name} at index ${latestIndexRef.current}: ${err}`,
         );
+      } finally {
+        renderingRef.current = false;
       }
     }
 
@@ -222,6 +250,9 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
     thread,
     nan,
     inf,
+    buffer_liveness.start,
+    buffer_liveness.end,
+    max_store_count,
   ]);
 
   return (
@@ -235,13 +266,10 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
         className="truncate"
       >
         <span
-          className={clsx(
-            "text-ps-text-primary font-mono whitespace-nowrap uppercase",
-            {
-              "text-tiny": zoom < 0.5,
-              "text-xs": zoom >= 0.5,
-            },
-          )}
+          className={clsx("text-ps-text-primary font-mono whitespace-nowrap", {
+            "text-tiny": zoom < 0.5,
+            "text-xs": zoom >= 0.5,
+          })}
         >
           {name}
         </span>

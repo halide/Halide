@@ -173,8 +173,8 @@ function VisualizationPanel() {
       return {
         type: "Histogram",
         data,
-        domain,
-        renderLegend: true,
+        domain: [domain[0], domain[1] + step],
+        renderLegend: false,
       };
     },
     [],
@@ -311,7 +311,11 @@ function VisualizationPanel() {
           <Histogram
             data={chartData.data}
             domain={chartData.domain}
-            scale={scale}
+            scale={
+              render.renderMode === "Grayscale" || render.renderMode === "RGB"
+                ? "linear"
+                : scale
+            }
             labels={{
               x: RENDER_MODE_TO_LABEL[render.renderMode],
               y: "Coordinate Count",
