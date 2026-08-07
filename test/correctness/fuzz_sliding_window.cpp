@@ -35,6 +35,27 @@ constexpr bool generate_flips = true;
 // move monotonically; sliding should switch itself off rather than go wrong.
 // Mode 2 clamps it positive, so sliding can still happen.
 constexpr int symbolic_scale_modes = 3;
+// How a Func's consumers index it. Like the pyramid level and the direction,
+// this has to be a property of the Func rather than of each access, or it
+// would have a footprint that grows with the loop var. NORMAL has to stay
+// common, or hardly anything slides.
+enum IndexMode {
+    NORMAL,
+    // A dimension indexed by a constant, so the region required of it in that
+    // dimension doesn't depend on the loop vars at all.
+    BROADCAST_X,
+    BROADCAST_Y,
+    // Both dimensions indexed by the same coordinate.
+    DIAGONAL,
+    // The dimensions swapped, so sliding over one loop slides the other
+    // dimension.
+    TRANSPOSE,
+    // One dimension depending on both loop vars.
+    SHEAR_X,
+    SHEAR_Y,
+    NUM_INDEX_MODES
+};
+constexpr bool generate_index_modes = true;
 // Bend some coordinates into monotonic but non-affine functions of themselves,
 // which is what a stencil over something with a boundary condition looks like.
 constexpr bool generate_piecewise_affine = true;
@@ -94,7 +115,7 @@ Expr resample_factor(int mode) {
 }
 
 Expr random_use_of(Func f, std::mt19937 &rng, int rate, bool flip, int scale_mode,
-                   bool *symbolic) {
+                   IndexMode index_mode, bool *symbolic) {
     auto r = [&]() { return (int)(rng() % 5) - 2; };
 
     int x1 = r();
@@ -149,12 +170,34 @@ Expr random_use_of(Func f, std::mt19937 &rng, int rate, bool flip, int scale_mod
     Expr up = max(resample_factor(scale_mode), 1);
     Expr down = resample_factor(scale_mode);
     if (rate < 0 && generate_upsamples) {
-        return f(xc / up + x1, yc / up + y1) + f(xc / up + x2, yc / up + y2);
+        xc = xc / up;
+        yc = yc / up;
     } else if (rate > 0 && generate_downsamples) {
-        return f(xc * down + x1, yc * down + y1) + f(xc * down + x2, yc * down + y2);
-    } else {
-        return f(xc + x1, yc + y1) + f(xc + x2, yc + y2);
+        xc = xc * down;
+        yc = yc * down;
     }
+
+    // A coordinate in the middle of the Func, for the broadcast modes.
+    Expr k = size / 2;
+    auto use = [&](int dx, int dy) {
+        switch (generate_index_modes ? index_mode : NORMAL) {
+        case BROADCAST_X:
+            return f(k, yc + dy);
+        case BROADCAST_Y:
+            return f(xc + dx, k);
+        case DIAGONAL:
+            return f(xc + dx, xc + dy);
+        case TRANSPOSE:
+            return f(yc + dy, xc + dx);
+        case SHEAR_X:
+            return f(xc + yc + dx, yc + dy);
+        case SHEAR_Y:
+            return f(xc + dx, xc + yc + dy);
+        default:
+            return f(xc + dx, yc + dy);
+        }
+    };
+    return use(x1, y1) + use(x2, y2);
 }
 
 // A location for compute_ats or store_ats.
@@ -236,6 +279,8 @@ bool run_trial(int trial, uint32_t seed, const Buffer<uint8_t> &input_buf) {
             // is walked forwards or backwards relative to the output.
             int level = 0;
             bool flipped = false;
+            // How this stage's consumers index it.
+            IndexMode index_mode = NORMAL;
             // Whether any consumer indexes this stage in a way that stops its
             // footprint being a constant size: non-affinely, or by a symbolic
             // amount.
@@ -272,6 +317,13 @@ bool run_trial(int trial, uint32_t seed, const Buffer<uint8_t> &input_buf) {
 
         std::vector<int> level(num_stages, 0);
         std::vector<bool> flipped(num_stages, false);
+        std::vector<IndexMode> index_mode(num_stages, NORMAL);
+        for (int i = 0; i < num_stages; i++) {
+            // Weighted towards NORMAL, so that pipelines still mostly slide.
+            index_mode[i] = ((rng() % 3) == 0) ?
+                                (IndexMode)(rng() % NUM_INDEX_MODES) :
+                                NORMAL;
+        }
         for (int i = 1; i < num_stages; i++) {
             int parent = rng() % i;
             level[i] = level[parent] + (int)(rng() % 3) - 1;
@@ -284,6 +336,7 @@ bool run_trial(int trial, uint32_t seed, const Buffer<uint8_t> &input_buf) {
         for (int i = 0; i < num_stages; i++) {
             stages[i].level = level[i];
             stages[i].flipped = flipped[i];
+            stages[i].index_mode = index_mode[i];
         }
 
         for (int i = 1; i < num_stages; i++) {
@@ -300,9 +353,11 @@ bool run_trial(int trial, uint32_t seed, const Buffer<uint8_t> &input_buf) {
 
             Expr rhs =
                 (random_use_of(in_1->f, rng, level[i] - level[i1],
-                               flipped[i] != flipped[i1], scale_mode, &in_1->bent) +
+                               flipped[i] != flipped[i1], scale_mode,
+                               index_mode[i1], &in_1->bent) +
                  random_use_of(in_2->f, rng, level[i] - level[i2],
-                               flipped[i] != flipped[i2], scale_mode, &in_2->bent));
+                               flipped[i] != flipped[i2], scale_mode,
+                               index_mode[i2], &in_2->bent));
 
             stages[i].f(x, y) = rhs;
 
@@ -427,7 +482,8 @@ bool run_trial(int trial, uint32_t seed, const Buffer<uint8_t> &input_buf) {
                     one_consumer_site &&
                     first_consumer == &stages.back() &&
                     first_consumer->level == producer->level &&
-                    first_consumer->flipped == producer->flipped;
+                    first_consumer->flipped == producer->flipped &&
+                    producer->index_mode == NORMAL;
 
                 producer->in_registers =
                     want_registers && enable_registers && small_enough_for_registers;
