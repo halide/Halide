@@ -224,6 +224,14 @@ void check_algebra() {
     check(x * y + z * x, (y + z) * x);
     check(y * x + x * z, (y + z) * x);
     check(y * x + z * x, (y + z) * x);
+    check((x - y) * z + (y * z + w), x * z + w);
+    check((x - y) * z + (w + y * z), x * z + w);
+    check((x - y) * z + (y * z - w), x * z - w);
+    // The same cancellation reached by hoisting the common factor instead.
+    check((x - y) * z + y * z, x * z);
+    // The shape this comes up in: an index whose dimensions have a term
+    // shuffled between them, which cancels once the factors are distributed.
+    check(((y * 8 - z) * 16 + (z * 16 + x)) * 4, (y * 128 + x) * 4);
 
     check(x - 0, x);
     check((x / y) - (x / y), 0);

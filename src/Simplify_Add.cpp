@@ -95,6 +95,13 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
          rewrite((x - y) + (y + z), x + z) ||
          rewrite((x - y) + (z + y), x + z) ||
 
+         // The same cancellation, but with a factor distributed over each
+         // side. Without the w, z would be a factor of the whole expression,
+         // and hoisting it would expose the cancellation to the rules above.
+         rewrite((x - y) * z + (y * z + w), x * z + w) ||
+         rewrite((x - y) * z + (w + y * z), x * z + w) ||
+         rewrite((x - y) * z + (y * z - w), x * z - w) ||
+
          rewrite(x + ((y - x) - z), y - z) ||
          rewrite(((x - y) - z) + y, x - z) ||
 
@@ -135,6 +142,7 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
            rewrite(x + y * x, (y + 1) * x) ||
            rewrite(x * y + x, x * (y + 1)) ||
            rewrite(y * x + x, (y + 1) * x, !is_const(x)) ||
+
            rewrite(x + (x + y) / c0, (fold(c0 + 1) * x + y) / c0, c0 != 0) ||
            rewrite(x + (y + x) / c0, (fold(c0 + 1) * x + y) / c0, c0 != 0) ||
            rewrite(x + (y - x) / c0, (fold(c0 - 1) * x + y) / c0, c0 != 0) ||
