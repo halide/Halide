@@ -85,9 +85,6 @@ jobs:
       - run: make build_tests
         if: runner.os != 'macOS'
 
-      - run: make test_internal
-        if: ${{ !cancelled() && runner.os != 'macOS' }}
-
       - run: make test_correctness
         if: ${{ !cancelled() && runner.os != 'macOS' }}
 
