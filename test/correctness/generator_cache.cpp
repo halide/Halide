@@ -122,12 +122,17 @@ int main(int argc, char **argv) {
     // Children inherit HL_CACHE_DIR from our environment.
     set_cache_dir(cache.string());
 
+    // The generator's object output uses the platform-appropriate extension
+    // (.obj on Windows, .o elsewhere); see Module.cpp's get_output_info.
+    const std::string obj_ext =
+        Internal::get_output_info(get_host_target()).at(OutputFileType::object).extension;
+
     // Run one generation in a fresh child process; returns the object path.
     const auto run = [&](const std::string &sub, const std::string &offset) -> fs::path {
         const fs::path outdir = tmp / sub;
         fs::create_directories(outdir);
         (void)Internal::run_process({self, "--gen", outdir.string(), offset});
-        return outdir / "cache_add.o";
+        return outdir / ("cache_add" + obj_ext);
     };
 
     // 1. First compile of offset=1: this populates the cache.
