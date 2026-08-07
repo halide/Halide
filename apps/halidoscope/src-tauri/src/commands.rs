@@ -10,7 +10,7 @@ use tauri::ipc::Response;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::render::{
-    GrayscaleState, IncludeInf, IncludeNan, LoadFrequencyState, NormalizationMode, RedundantState,
+    GrayscaleState, InfState, LoadFrequencyState, NanState, NormalizationMode, RedundantState,
     Renderer, ReuseDistanceState, RgbState, StoreFrequencyState, ThreadOpMode, ThreadState,
 };
 use crate::trace::Trace;
@@ -171,14 +171,16 @@ pub struct AppState {
 /// Packs tensor data, tabular data, and NaN / Inf data in a single IPC response.
 fn pack_render_response(
     mut pixels: Vec<u8>,
-    nan_inf_overlays: Vec<u8>,
-    tabular_data: &[u32],
+    nan_overlay: Vec<u8>,
+    inf_overlay: Vec<u8>,
+    tabular_data: Vec<u32>,
 ) -> Vec<u8> {
-    pixels.reserve(nan_inf_overlays.len() + tabular_data.len() * 4);
+    pixels.reserve(nan_overlay.len() + inf_overlay.len() + tabular_data.len() * 4);
 
-    pixels.extend_from_slice(&nan_inf_overlays);
+    pixels.extend_from_slice(&nan_overlay);
+    pixels.extend_from_slice(&inf_overlay);
 
-    for &v in tabular_data {
+    for v in tabular_data {
         pixels.extend_from_slice(&v.to_le_bytes());
     }
 
@@ -235,8 +237,8 @@ pub fn render_grayscale(
     global_index: u32,
     normalization_mode: NormalizationMode,
     include_tabular_data: bool,
-    include_nan: IncludeNan,
-    include_inf: IncludeInf,
+    include_nan: NanState,
+    include_inf: InfState,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -259,16 +261,30 @@ pub fn render_grayscale(
     renderer.seek(trace, store_indices, k);
 
     let pixels = renderer.to_rgba(normalization_mode);
+
+    let nan_overlay = if include_nan.active {
+        renderer.to_nan_overlay(include_nan)
+    } else {
+        Vec::new()
+    };
+
+    let inf_overlay = if include_inf.active {
+        renderer.to_inf_overlay(include_inf)
+    } else {
+        Vec::new()
+    };
+
     let histogram = if include_tabular_data {
         renderer.to_histogram()
     } else {
         Vec::new()
     };
-    let nan_inf_overlays = renderer.to_nan_inf_overlay(include_nan, include_inf);
+
     Ok(Response::new(pack_render_response(
         pixels,
-        nan_inf_overlays,
-        &histogram,
+        nan_overlay,
+        inf_overlay,
+        histogram,
     )))
 }
 
@@ -280,8 +296,8 @@ pub fn render_rgb(
     global_index: u32,
     normalization_mode: NormalizationMode,
     include_tabular_data: bool,
-    include_nan: IncludeNan,
-    include_inf: IncludeInf,
+    include_nan: NanState,
+    include_inf: InfState,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -304,16 +320,30 @@ pub fn render_rgb(
     renderer.seek(trace, store_indices, k);
 
     let pixels = renderer.to_rgba(normalization_mode);
+
+    let nan_overlay = if include_nan.active {
+        renderer.to_nan_overlay(include_nan)
+    } else {
+        Vec::new()
+    };
+
+    let inf_overlay = if include_inf.active {
+        renderer.to_inf_overlay(include_inf)
+    } else {
+        Vec::new()
+    };
+
     let histogram = if include_tabular_data {
         renderer.to_histogram()
     } else {
         Vec::new()
     };
-    let nan_inf_overlays = renderer.to_nan_inf_overlay(include_nan, include_inf);
+
     Ok(Response::new(pack_render_response(
         pixels,
-        nan_inf_overlays,
-        &histogram,
+        nan_overlay,
+        inf_overlay,
+        histogram,
     )))
 }
 
@@ -324,8 +354,8 @@ pub fn render_store_frequency(
     global_index: u32,
     normalization_mode: NormalizationMode,
     include_tabular_data: bool,
-    include_nan: IncludeNan,
-    include_inf: IncludeInf,
+    include_nan: NanState,
+    include_inf: InfState,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -350,16 +380,30 @@ pub fn render_store_frequency(
     renderer.seek(trace, store_indices, k);
 
     let pixels = renderer.to_rgba(normalization_mode);
+
+    let nan_overlay = if include_nan.active {
+        renderer.to_nan_overlay(include_nan)
+    } else {
+        Vec::new()
+    };
+
+    let inf_overlay = if include_inf.active {
+        renderer.to_inf_overlay(include_inf)
+    } else {
+        Vec::new()
+    };
+
     let histogram = if include_tabular_data {
         renderer.to_tabular_data(normalization_mode)
     } else {
         Vec::new()
     };
-    let nan_inf_overlays = renderer.to_nan_inf_overlay(include_nan, include_inf);
+
     Ok(Response::new(pack_render_response(
         pixels,
-        nan_inf_overlays,
-        &histogram,
+        nan_overlay,
+        inf_overlay,
+        histogram,
     )))
 }
 
@@ -370,8 +414,8 @@ pub fn render_load_frequency(
     global_index: u32,
     normalization_mode: NormalizationMode,
     include_tabular_data: bool,
-    include_nan: IncludeNan,
-    include_inf: IncludeInf,
+    include_nan: NanState,
+    include_inf: InfState,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -396,17 +440,30 @@ pub fn render_load_frequency(
     renderer.seek(trace, load_indices, k);
 
     let pixels = renderer.to_rgba(normalization_mode);
+
+    let nan_overlay = if include_nan.active {
+        renderer.to_nan_overlay(include_nan)
+    } else {
+        Vec::new()
+    };
+
+    let inf_overlay = if include_inf.active {
+        renderer.to_inf_overlay(include_inf)
+    } else {
+        Vec::new()
+    };
+
     let histogram = if include_tabular_data {
         renderer.to_tabular_data(normalization_mode)
     } else {
         Vec::new()
     };
-    let nan_inf_overlays = renderer.to_nan_inf_overlay(include_nan, include_inf);
 
     Ok(Response::new(pack_render_response(
         pixels,
-        nan_inf_overlays,
-        &histogram,
+        nan_overlay,
+        inf_overlay,
+        histogram,
     )))
 }
 
@@ -419,8 +476,8 @@ pub fn render_redundant_stores(
     global_index: u32,
     normalization_mode: NormalizationMode,
     include_tabular_data: bool,
-    include_nan: IncludeNan,
-    include_inf: IncludeInf,
+    include_nan: NanState,
+    include_inf: InfState,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -445,16 +502,30 @@ pub fn render_redundant_stores(
     renderer.seek(trace, store_indices, load_indices, store_k, load_k);
 
     let pixels = renderer.to_rgba(normalization_mode);
+
+    let nan_overlay = if include_nan.active {
+        renderer.to_nan_overlay(include_nan)
+    } else {
+        Vec::new()
+    };
+
+    let inf_overlay = if include_inf.active {
+        renderer.to_inf_overlay(include_inf)
+    } else {
+        Vec::new()
+    };
+
     let histogram = if include_tabular_data {
         renderer.to_tabular_data(normalization_mode)
     } else {
         Vec::new()
     };
-    let nan_inf_overlays = renderer.to_nan_inf_overlay(include_nan, include_inf);
+
     Ok(Response::new(pack_render_response(
         pixels,
-        nan_inf_overlays,
-        &histogram,
+        nan_overlay,
+        inf_overlay,
+        histogram,
     )))
 }
 
@@ -467,8 +538,8 @@ pub fn render_reuse_distance(
     global_index: u32,
     normalization_mode: NormalizationMode,
     include_tabular_data: bool,
-    include_nan: IncludeNan,
-    include_inf: IncludeInf,
+    include_nan: NanState,
+    include_inf: InfState,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -495,16 +566,30 @@ pub fn render_reuse_distance(
     renderer.seek(trace, store_indices, load_indices, store_k, load_k);
 
     let pixels = renderer.to_rgba(normalization_mode);
+
+    let nan_overlay = if include_nan.active {
+        renderer.to_nan_overlay(include_nan)
+    } else {
+        Vec::new()
+    };
+
+    let inf_overlay = if include_inf.active {
+        renderer.to_inf_overlay(include_inf)
+    } else {
+        Vec::new()
+    };
+
     let histogram = if include_tabular_data {
         renderer.to_tabular_data(normalization_mode)
     } else {
         Vec::new()
     };
-    let nan_inf_overlays = renderer.to_nan_inf_overlay(include_nan, include_inf);
+
     Ok(Response::new(pack_render_response(
         pixels,
-        nan_inf_overlays,
-        &histogram,
+        nan_overlay,
+        inf_overlay,
+        histogram,
     )))
 }
 
@@ -514,8 +599,8 @@ pub fn render_thread(
     global_index: u32,
     op_mode: ThreadOpMode,
     thread_id: String,
-    include_nan: IncludeNan,
-    include_inf: IncludeInf,
+    include_nan: NanState,
+    include_inf: InfState,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -539,13 +624,27 @@ pub fn render_thread(
     renderer.seek(trace, store_indices, load_indices, store_k, load_k, op_mode);
 
     let pixels = renderer.to_rgba(thread_id);
+
+    let nan_overlay = if include_nan.active {
+        renderer.to_nan_overlay(include_nan)
+    } else {
+        Vec::new()
+    };
+
+    let inf_overlay = if include_inf.active {
+        renderer.to_inf_overlay(include_inf)
+    } else {
+        Vec::new()
+    };
+
     let (store_counts, load_counts) = renderer.to_thread_counts();
     let thread_counts: Vec<u32> = store_counts.iter().chain(load_counts).copied().collect();
-    let nan_inf_overlays = renderer.to_nan_inf_overlay(include_nan, include_inf);
+
     Ok(Response::new(pack_render_response(
         pixels,
-        nan_inf_overlays,
-        &thread_counts,
+        nan_overlay,
+        inf_overlay,
+        thread_counts,
     )))
 }
 
