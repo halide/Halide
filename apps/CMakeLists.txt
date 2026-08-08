@@ -60,6 +60,7 @@ add_app(harris)
 add_app(HelloBaremetal)
 # add_app(HelloiOS)  # don't build HelloiOS here because it isn't universal.
 add_app(HelloPyTorch)
+# add_app(HelloWasm)  # driven by its own super-build; see apps/HelloWasm/README.md
 add_app(hexagon_benchmarks)
 add_app(hexagon_dma)
 add_app(hist)
