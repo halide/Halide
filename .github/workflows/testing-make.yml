@@ -72,13 +72,14 @@ jobs:
               pkg-config \
               libpng-dev \
               libjpeg-turbo8-dev \
+              libopencv-dev \
               "llvm-${LLVM_VERSION}-dev" \
               "clang-${LLVM_VERSION}" \
               "lld-${LLVM_VERSION}" \
               "liblld-${LLVM_VERSION}-dev"
             echo "LLVM_CONFIG=llvm-config-${LLVM_VERSION}" | tee -a "$GITHUB_ENV"
           elif [ "$RUNNER_OS" = "macOS" ]; then
-            brew install libjpeg-turbo libpng pkgconf protobuf "llvm@${LLVM_VERSION}" "lld@${LLVM_VERSION}"
+            brew install libjpeg-turbo libpng pkgconf protobuf opencv "llvm@${LLVM_VERSION}" "lld@${LLVM_VERSION}"
             echo "LLVM_CONFIG=$(brew --prefix "llvm@${LLVM_VERSION}")/bin/llvm-config" | tee -a "$GITHUB_ENV"
           fi
 

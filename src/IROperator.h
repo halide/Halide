@@ -389,6 +389,10 @@ inline Expr cast(Expr a) {
 /** Cast an expression to a new type. */
 Expr cast(Type t, Expr a);
 
+/** Declare an Expr with unknown type has a given type. Useful when defining
+ * Funcs inductively. */
+Expr declare_type(Type t, const Expr &e);
+
 /** Return the sum of two expressions, doing any necessary type
  * coercion using \ref Internal::match_types */
 Expr operator+(Expr a, Expr b);
