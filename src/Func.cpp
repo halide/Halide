@@ -4304,15 +4304,7 @@ Func Func::change_type(Type t, bool unsafe) {
 
     // Rewrite this Func into an inline cast-back wrapper of the retyped clone, so
     // that every existing consumer keeps seeing the original type.
-<<<<<<< HEAD
-    vector<Expr> wrapped;
-    wrapped.reserve(n_values);
-    for (size_t i = 0; i < n_values; ++i) {
-        wrapped.push_back(cast(old_ts[i], Call::make(typed.function(), pure_arg_exprs, (int)i, /*follow_global_wrappers=*/true)));
-    }
-=======
-    const Expr wrapped = cast(old_t, Call::make(typed.function(), pure_arg_exprs, 0));
->>>>>>> f630dee10 (hoist_invariants(): return one Func per accumulator, not a Tuple)
+    const Expr wrapped = cast(old_t, Call::make(typed.function(), pure_arg_exprs, 0, /*follow_global_wrappers=*/true));
     vector<string> arg_names;
     arg_names.reserve(pure_vars.size());
     for (const Var &v : pure_vars) {
