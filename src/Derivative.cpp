@@ -729,7 +729,8 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                 calls.reserve(rhs_tuple.size());
                 for (int i = 0; i < (int)rhs_tuple.size(); i++) {
                     calls.push_back(Call::make(
-                        adjoint_funcs[func_key].function(), args, i));
+                        adjoint_funcs[func_key].function(), args, i,
+                        /*follow_global_wrappers=*/true));
                 }
                 prev_adjoint(args) = Tuple(calls);
                 adjoint_funcs[prev_func_key] = prev_adjoint;
@@ -741,7 +742,8 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                 for (int i = 0; i < (int)output_exprs.size(); i++) {
                     expr_adjoints[output_exprs[i]] =
                         Call::make(adjoint_funcs[func_key].function(),
-                                   update_args, i);
+                                   update_args, i,
+                                   /*follow_global_wrappers=*/true);
                 }
 
                 for (Expr &e : reverse_view(expr_list)) {

@@ -296,7 +296,13 @@ Func Pipeline::get_func(size_t index) {
     user_assert(index < order.size())
         << "Index value passed is " << index << "; however, there are only "
         << order.size() << " functions in the pipeline.\n";
-    return Func(env.find(order[index])->second);
+    // Return a stable handle to the named Func. The environment is built by
+    // walking Call nodes, whose FunctionPtrs may be marked to follow global
+    // wrappers; a Func handle must not follow, or it would silently shift to a
+    // wrapper created later (e.g. by a subsequent Func::in()).
+    FunctionPtr ptr = env.find(order[index])->second.get_contents();
+    ptr.follow_global_wrappers = false;
+    return Func(Function(ptr));
 }
 
 void Pipeline::compile_to(const std::map<OutputFileType, std::string> &output_files,

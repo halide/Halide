@@ -150,7 +150,10 @@ class AddPredicates : public IRGraphMutator {
         if (type == ApplySplitResult::BlendProvides) {
             int idx = 0;
             for (Expr &v : values) {
-                v = select(cond, v, Call::make(func, args, idx++));
+                // A Func referring to its own prior value; must not resolve
+                // through a global wrapper.
+                v = select(cond, v, Call::make(func, args, idx++,
+                                               /*follow_global_wrappers=*/false));
             }
             return p->with(values, args, predicate);
         } else if (type == ApplySplitResult::PredicateProvides) {

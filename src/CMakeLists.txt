@@ -224,7 +224,6 @@ target_sources(
     Var.h
     VectorizeLoops.h
     WasmExecutor.h
-    WrapCalls.h
     # keep-sorted end
 )
 
@@ -420,7 +419,6 @@ target_sources(
     Var.cpp
     VectorizeLoops.cpp
     WasmExecutor.cpp
-    WrapCalls.cpp
     # keep-sorted end
 )
 
