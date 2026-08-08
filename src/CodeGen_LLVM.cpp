@@ -4338,7 +4338,7 @@ void CodeGen_LLVM::visit(const IfThenElse *op) {
         for (int i = 0; i < (int)blocks.size(); i++) {
             string name = "case_" + std::to_string(rhs[i]) + "_bb";
             BasicBlock *case_bb = BasicBlock::Create(*context, name, function);
-            switch_inst->addCase(ConstantInt::get(IntegerType::get(*context, 32), rhs[i]), case_bb);
+            switch_inst->addCase(ConstantInt::get(IntegerType::get(*context, 32), rhs[i], /*isSigned=*/true), case_bb);
             builder->SetInsertPoint(case_bb);
             codegen(blocks[i].second);
             builder->CreateBr(after_bb);
