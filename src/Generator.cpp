@@ -3,10 +3,12 @@
 #include <condition_variable>
 #include <fstream>
 #include <memory>
+#include <mutex>
 #include <unordered_map>
 #include <utility>
 
 #include "Generator.h"
+#include "GeneratorCache.h"
 #include "IRPrinter.h"
 #include "Module.h"
 #include "Serialization.h"
@@ -742,6 +744,8 @@ gengen
     for (const auto &lib_path : split_string(flags_info["-p"], ",")) {
         if (!lib_path.empty()) {
             load_plugin(lib_path);
+            // Record the plugin so it can be folded into the compile-cache key.
+            args.plugins.push_back(lib_path);
         }
     }
 
@@ -971,6 +975,114 @@ int generate_filter_main(int argc, char **argv) {
     return generate_filter_main(argc, argv, GeneratorsFromRegistry());
 }
 
+namespace {
+
+// Warn (at most once) if the user asked for the generator compile cache via
+// HL_CACHE_DIR but this build of Halide has no serialization support, which
+// the cache relies on to fingerprint pipelines. In that case caching is a
+// silent no-op without this notice.
+void warn_if_cache_requested_without_serialization() {
+#ifndef WITH_SERIALIZATION
+    if (!GeneratorCache::cache_dir().empty()) {
+        static std::once_flag warned;
+        std::call_once(warned, []() {
+            user_warning << "HL_CACHE_DIR is set, but this build of Halide was compiled "
+                            "without serialization support (WITH_SERIALIZATION); the "
+                            "generator compile cache is disabled. Rebuild Halide with "
+                            "WITH_SERIALIZATION=ON to enable it.\n";
+        });
+    }
+#endif
+}
+
+// Run a compile step through the cache: if `key` is non-empty and a matching
+// entry exists, restore the outputs instead of compiling; otherwise compile
+// and (if `key` is non-empty) store the results. An empty `key` means caching
+// is disabled for this invocation, so `compile` always runs.
+template<typename CompileFn>
+void run_with_cache(const std::string &key,
+                    const std::map<OutputFileType, std::string> &output_files,
+                    CompileFn &&compile) {
+    if (!key.empty() && GeneratorCache::try_restore(key, output_files)) {
+        return;
+    }
+    compile();
+    if (!key.empty()) {
+        GeneratorCache::store(key, output_files);
+    }
+}
+
+#ifdef WITH_SERIALIZATION
+// Mix the invocation-wide (target-independent) inputs that affect codegen
+// into a fresh key builder: the compiler identity plus names, build mode,
+// requested output types, and the canonical generator-param settings.
+// Returns false (leaving `b` unusable) if the compiler could not be
+// fingerprinted, meaning caching must be skipped.
+bool add_common_key_fields(CacheKeyBuilder &b, const char *kind, const ExecuteGeneratorArgs &args) {
+    const std::string compiler_id = compiler_identity_digest();
+    if (compiler_id.empty()) {
+        return false;
+    }
+    b.add(kind);
+    b.add(compiler_id);
+    b.add(args.function_name);
+    b.add(args.file_base_name);
+    b.add(args.build_mode == ExecuteGeneratorArgs::Gradient ? "gradient" : "default");
+    // args.output_types is a std::set, so iteration order is deterministic.
+    for (OutputFileType t : args.output_types) {
+        b.add(std::to_string((int)t));
+    }
+    // args.generator_params is a std::map (sorted); "target" is handled
+    // separately and must never be a generator param here.
+    for (const auto &kv : args.generator_params) {
+        if (kv.first == "target") {
+            continue;
+        }
+        b.add(kv.first);
+        b.add(kv.second);
+    }
+    // Loaded plugins (e.g. autoschedulers) affect codegen but live outside
+    // libHalide, so hash each one's contents when it resolves to a readable
+    // file (the common case, where -p is a full path); otherwise fall back to
+    // the spec string so at least a rename is caught.
+    for (const auto &plugin : args.plugins) {
+        b.add(plugin);
+        if (file_exists(plugin)) {
+            b.add_file(plugin);
+        }
+    }
+    return true;
+}
+
+// Build a fresh generator for `target` and serialize its (pre-autoschedule)
+// pipeline into `data`. This is the fingerprint of the actual algorithm and
+// schedule; it is deliberately taken before autoscheduling so we never pay to
+// run a (potentially expensive) autoscheduler just to compute a cache key.
+// Returns false if serialization is not possible, so the caller skips caching
+// and compiles normally.
+template<typename FactoryFn>
+bool serialize_pipeline_for_key(FactoryFn &&generator_factory, const Target &target,
+                                std::vector<uint8_t> &data) {
+#ifdef HALIDE_WITH_EXCEPTIONS
+    try {
+#endif
+        auto gen = generator_factory(std::string{}, target);
+        Pipeline pipeline = gen->build_pipeline();
+        std::map<std::string, Parameter> params;
+        serialize_pipeline(pipeline, data, params);
+        return true;
+#ifdef HALIDE_WITH_EXCEPTIONS
+    } catch (...) {
+        debug(1) << "GeneratorCache: pipeline serialization failed; "
+                    "caching disabled for this generator.\n";
+        return false;
+    }
+#endif
+}
+#endif  // WITH_SERIALIZATION
+
+}  // namespace
+
 void execute_generator(const ExecuteGeneratorArgs &args_in) {
     const auto fix_defaults = [](const ExecuteGeneratorArgs &args_in) -> ExecuteGeneratorArgs {
         ExecuteGeneratorArgs args = args_in;
@@ -1053,8 +1165,30 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
         }
 
         auto output_files = compute_output_files(gcd_target, base_path, args.output_types);
-        // Runtime doesn't get to participate in the CompilerLogger party
-        compile_standalone_runtime(output_files, gcd_target, runtime_prefixes_map);
+
+        // The standalone runtime has no user pipeline to serialize; its output
+        // is fully determined by the (runtime-compatible) target and the Halide
+        // compiler, so those alone form the cache key.
+        warn_if_cache_requested_without_serialization();
+        std::string cache_key;
+#ifdef WITH_SERIALIZATION
+        if (!GeneratorCache::cache_dir().empty()) {
+            const std::string compiler_id = compiler_identity_digest();
+            if (!compiler_id.empty()) {
+                CacheKeyBuilder b;
+                b.add("runtime");
+                b.add(compiler_id);
+                b.add(gcd_target.to_string());
+                for (OutputFileType t : args.output_types) {
+                    b.add(std::to_string((int)t));
+                }
+                cache_key = b.hex();
+            }
+        }
+#endif
+        run_with_cache(cache_key, output_files, [&]() {
+            compile_standalone_runtime(output_files, gcd_target, runtime_prefixes_map);
+        });
     }
 
     if (!args.generator_name.empty()) {
@@ -1106,7 +1240,34 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
                            gen->build_gradient_module(function_name) :
                            gen->build_module(function_name);
             };
-            compile_multitarget(args.function_name, output_files, args.targets, args.suffixes, module_factory);
+
+            warn_if_cache_requested_without_serialization();
+            std::string cache_key;
+#ifdef WITH_SERIALIZATION
+            if (!GeneratorCache::cache_dir().empty()) {
+                CacheKeyBuilder b;
+                if (add_common_key_fields(b, "generator", args)) {
+                    bool serialized_ok = true;
+                    for (size_t i = 0; i < args.targets.size(); ++i) {
+                        const Target &target = args.targets[i];
+                        b.add(target.to_string());
+                        b.add(i < args.suffixes.size() ? args.suffixes[i] : std::string{});
+                        std::vector<uint8_t> data;
+                        if (!serialize_pipeline_for_key(generator_factory, target, data)) {
+                            serialized_ok = false;
+                            break;
+                        }
+                        b.add(data);
+                    }
+                    if (serialized_ok) {
+                        cache_key = b.hex();
+                    }
+                }
+            }
+#endif
+            run_with_cache(cache_key, output_files, [&]() {
+                compile_multitarget(args.function_name, output_files, args.targets, args.suffixes, module_factory);
+            });
             if (args.log_outputs) {
                 for (const auto &o : output_files) {
                     std::cout << "Generated file: " << o.second << "\n";

@@ -7,6 +7,36 @@ option(Halide_NO_DEFAULT_FLAGS
 include(${CMAKE_CURRENT_LIST_DIR}/HalideTargetHelpers.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/TargetExportScript.cmake)
 
+##
+# Generator compile cache (opt-in via the HL_CACHE_DIR environment variable or
+# -DHalide_CACHE_DIR). When set, generators serialize their pipeline and reuse
+# previously emitted artifacts from this directory instead of recompiling. See
+# the HL_CACHE_DIR docs for details.
+##
+
+set(Halide_CACHE_DIR "$ENV{HL_CACHE_DIR}"
+    CACHE PATH
+    "Directory for the Halide generator compile cache; empty disables it (see HL_CACHE_DIR)."
+)
+
+# Produce the command prefix used to invoke a generator executable target. When
+# a cache directory is configured, the invocation is wrapped in
+# `cmake -E env HL_CACHE_DIR=... --` so the value reaches the generator process,
+# and the executable is referenced by file (a bare target name only
+# auto-resolves as the first token of a COMMAND). When no cache is configured
+# the bare target is returned, so the emitted command is identical to before.
+# In both cases the caller is responsible for listing the target in DEPENDS.
+function(_Halide_generator_invocation OUT_VAR GEN_TARGET)
+    if (Halide_CACHE_DIR)
+        set(${OUT_VAR}
+            ${CMAKE_COMMAND} -E env "HL_CACHE_DIR=${Halide_CACHE_DIR}" --
+            "$<TARGET_FILE:${GEN_TARGET}>" PARENT_SCOPE
+        )
+    else ()
+        set(${OUT_VAR} "${GEN_TARGET}" PARENT_SCOPE)
+    endif ()
+endfunction()
+
 define_property(  # nolint
     TARGET
     PROPERTY Halide_RT_TARGETS
@@ -489,7 +519,8 @@ function(_Halide_compute_generator_cmd)
 
     get_property(py_src TARGET "${ARG_FROM}" PROPERTY Halide_PYTHON_GENERATOR_SOURCE)
     if (NOT py_src)
-        set("${ARG_OUT_COMMAND}" "${ARG_FROM}" PARENT_SCOPE)
+        _Halide_generator_invocation(gen_cmd "${ARG_FROM}")
+        set("${ARG_OUT_COMMAND}" ${gen_cmd} PARENT_SCOPE)
         set("${ARG_OUT_DEPENDS}" "${ARG_FROM}" PARENT_SCOPE)
         return()
     endif ()
@@ -506,9 +537,14 @@ function(_Halide_compute_generator_cmd)
         message(FATAL_ERROR "Missing Python::Interpreter. Missing call to find_package(Python 3)?")
     endif ()
 
+    set(cache_env_assign "")
+    if (Halide_CACHE_DIR)
+        set(cache_env_assign "HL_CACHE_DIR=${Halide_CACHE_DIR}")
+    endif ()
+
     set("${ARG_OUT_COMMAND}"
         ${CMAKE_COMMAND} -E env
-        "PYTHONPATH=$<PATH:NORMAL_PATH,$<TARGET_FILE_DIR:Halide::Python>/..>" --
+        "PYTHONPATH=$<PATH:NORMAL_PATH,$<TARGET_FILE_DIR:Halide::Python>/..>" ${cache_env_assign} --
         ${Halide_PYTHON_LAUNCHER} "$<TARGET_FILE:Python::Interpreter>" $<SHELL_PATH:${py_src}>
         PARENT_SCOPE
     )
@@ -976,6 +1012,8 @@ function(add_halide_python_extension_library TARGET)
         message(FATAL_ERROR "HALIDE_LIBRARIES must be specified")
     endif ()
 
+    _Halide_generator_invocation(genrt_cmd Halide::GenRT)
+
     set(runtimes "")
     set(pycpps "")
     set(function_names "")  # space-separated X-macros
@@ -1021,8 +1059,8 @@ function(add_halide_python_extension_library TARGET)
     add_custom_command(
         OUTPUT ${pyext_module_definition_src}
         COMMAND
-            Halide::GenRT -r "${pyext_runtime_name}" -e python_extension
-            -o "${CMAKE_CURRENT_BINARY_DIR}" target=host
+            ${genrt_cmd} -r "${pyext_runtime_name}" -e python_extension -o "${CMAKE_CURRENT_BINARY_DIR}"
+            target=host
         DEPENDS Halide::GenRT
         VERBATIM
     )
@@ -1097,6 +1135,8 @@ function(add_halide_runtime RT)
         set(ARG_FILE_BASE_NAME "${RT}")
     endif ()
 
+    _Halide_generator_invocation(genrt_cmd Halide::GenRT)
+
     # OUTPUT_DIR is an absolute path. Compute a relative prefix for
     # add_custom_command OUTPUT paths to avoid Xcode .rule file collisions.
     cmake_path(SET ARG_OUTPUT_DIR "${ARG_OUTPUT_DIR}")
@@ -1143,7 +1183,7 @@ function(add_halide_runtime RT)
         add_custom_command(
             OUTPUT "${GEN_OUTS}"
             COMMAND
-                Halide::GenRT -r "${ARG_FILE_BASE_NAME}" -o "${ARG_OUTPUT_DIR}"
+                ${genrt_cmd} -r "${ARG_FILE_BASE_NAME}" -o "${ARG_OUTPUT_DIR}"
                 "target=$<JOIN:$<REMOVE_DUPLICATES:${target_list}>,$<COMMA>>"
                 ${ARG_PARAMS}
             DEPENDS Halide::GenRT
@@ -1179,7 +1219,7 @@ function(add_halide_runtime RT)
                 add_custom_command(
                     OUTPUT "${output_prefix}${this_rt}${object_extension}"
                     COMMAND
-                        Halide::GenRT -r "${this_rt}" -o "${ARG_OUTPUT_DIR}" -e object
+                        ${genrt_cmd} -r "${this_rt}" -o "${ARG_OUTPUT_DIR}" -e object
                         "target=$<JOIN:$<REMOVE_DUPLICATES:${arch_target_list}>,$<COMMA>>"
                         ${ARG_PARAMS}
                     DEPENDS Halide::GenRT
@@ -1198,7 +1238,7 @@ function(add_halide_runtime RT)
             add_custom_command(
                 OUTPUT "${output_prefix}${ARG_FILE_BASE_NAME}${object_extension}"
                 COMMAND
-                    Halide::GenRT -r "${ARG_FILE_BASE_NAME}" -o "${ARG_OUTPUT_DIR}" -e object
+                    ${genrt_cmd} -r "${ARG_FILE_BASE_NAME}" -o "${ARG_OUTPUT_DIR}" -e object
                     "target=$<JOIN:$<REMOVE_DUPLICATES:${target_list}>,$<COMMA>>"
                     ${ARG_PARAMS}
                 DEPENDS Halide::GenRT

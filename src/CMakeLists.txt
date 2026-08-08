@@ -128,6 +128,7 @@ target_sources(
     FuseGPUThreadLoops.h
     FuzzFloatStores.h
     Generator.h
+    GeneratorCache.h
     HexagonOffload.h
     HexagonOptimize.h
     ImageParam.h
@@ -308,6 +309,7 @@ target_sources(
     FuseGPUThreadLoops.cpp
     FuzzFloatStores.cpp
     Generator.cpp
+    GeneratorCache.cpp
     HexagonOffload.cpp
     HexagonOptimize.cpp
     ImageParam.cpp
