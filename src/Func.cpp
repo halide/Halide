@@ -3431,7 +3431,7 @@ Expr retype_value(const Expr &e, const string &fname, const Function &dst, Type 
                   const FuncValueBounds &fvb) {
     if (const Call *c = e.as<Call>()) {
         if (c->call_type == Call::Halide && c->name == fname) {
-            return Call::make(dst, c->args, c->value_index);
+            return Call::make(dst, c->args, c->value_index, /*follow_global_wrappers=*/false);
         }
     }
     if (contains_self_reference(e, fname)) {
@@ -3872,7 +3872,7 @@ Func Func::change_type(Type t, bool unsafe) {
 
     // Rewrite this Func into an inline cast-back wrapper of the retyped clone, so
     // that every existing consumer keeps seeing the original type.
-    const Expr wrapped = cast(old_t, Call::make(typed.function(), pure_arg_exprs, 0));
+    const Expr wrapped = cast(old_t, Call::make(typed.function(), pure_arg_exprs, 0, /*follow_global_wrappers=*/true));
     vector<string> arg_names;
     arg_names.reserve(pure_vars.size());
     for (const Var &v : pure_vars) {
