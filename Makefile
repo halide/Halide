@@ -1355,6 +1355,11 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubuser,$(GENERATOR_AOT
 # Build requirements are finicky, testing non-C++ backend is good enough here
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_gpu_multi_context_threaded,$(GENERATOR_AOTCPP_TESTS))
 
+# runtime_prefixes_iso is a single combined test that already links both the
+# LLVM and C backends together (see the custom generator_aot rule below), so
+# there is no separate C++-backend-only variant.
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_runtime_prefixes_iso,$(GENERATOR_AOTCPP_TESTS))
+
 test_aotcpp_generator: $(GENERATOR_AOTCPP_TESTS)
 
 # This is just a test to ensure than RunGen builds and links for a critical mass of Generators;
@@ -1844,6 +1849,69 @@ $(BIN_DIR)/$(TARGET)/generator_aot_nested_externs: $(ROOT_DIR)/test/generator/ne
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
 $(BIN_DIR)/$(TARGET)/generator_aotcpp_nested_externs: $(ROOT_DIR)/test/generator/nested_externs_aottest.cpp $(FILTERS_DIR)/nested_externs_root.halide_generated.cpp $(FILTERS_DIR)/nested_externs_inner.halide_generated.cpp $(FILTERS_DIR)/nested_externs_combine.halide_generated.cpp $(FILTERS_DIR)/nested_externs_leaf.halide_generated.cpp $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+	@mkdir -p $(@D)
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
+
+# runtime_prefixes_iso builds one AOT test that links three separately
+# namespaced runtimes (stock "halide_", "runtime_a_", "runtime_b_") together with
+# both LLVM- and C-backend kernels for each, and checks that their runtime state
+# stays independent. This needs custom rules: three namespaced standalone
+# runtimes, and six kernels (LLVM + C backend) with distinct function names and
+# matching import/internal prefixes. See test/generator/CMakeLists.txt.
+$(FILTERS_DIR)/rniso_rt_none.a: $(BIN_DIR)/runtime.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -r rniso_rt_none -e static_library -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)
+
+$(FILTERS_DIR)/rniso_rt_a.a: $(BIN_DIR)/runtime.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -r rniso_rt_a -e static_library -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET) runtime_prefixes.export=runtime_a_ runtime_prefixes.internal=runtime_ai_
+
+$(FILTERS_DIR)/rniso_rt_b.a: $(BIN_DIR)/runtime.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -r rniso_rt_b -e static_library -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET) runtime_prefixes.export=runtime_b_ runtime_prefixes.internal=runtime_bi_
+
+# LLVM-backend kernels (static_library + header). -n sets the output file base
+# name (which otherwise defaults to the -f function name) so the emitted files
+# match these targets.
+$(FILTERS_DIR)/rniso_none.a: $(BIN_DIR)/runtime_prefixes_iso.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g runtime_prefixes_iso -f pipe_none -n rniso_none -e static_library,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime
+
+$(FILTERS_DIR)/rniso_a.a: $(BIN_DIR)/runtime_prefixes_iso.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g runtime_prefixes_iso -f pipe_a -n rniso_a -e static_library,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime runtime_prefixes.import=runtime_a_ runtime_prefixes.internal=runtime_ai_
+
+$(FILTERS_DIR)/rniso_b.a: $(BIN_DIR)/runtime_prefixes_iso.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g runtime_prefixes_iso -f pipe_b -n rniso_b -e static_library,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime runtime_prefixes.import=runtime_b_ runtime_prefixes.internal=runtime_bi_
+
+# C-backend kernels (c_source + header). The .h is produced by the same command.
+$(FILTERS_DIR)/rniso_none_c.halide_generated.cpp: $(BIN_DIR)/runtime_prefixes_iso.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g runtime_prefixes_iso -f pipe_none_c -n rniso_none_c -e c_source,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime
+
+$(FILTERS_DIR)/rniso_a_c.halide_generated.cpp: $(BIN_DIR)/runtime_prefixes_iso.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g runtime_prefixes_iso -f pipe_a_c -n rniso_a_c -e c_source,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime runtime_prefixes.import=runtime_a_ runtime_prefixes.internal=runtime_ai_
+
+$(FILTERS_DIR)/rniso_b_c.halide_generated.cpp: $(BIN_DIR)/runtime_prefixes_iso.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g runtime_prefixes_iso -f pipe_b_c -n rniso_b_c -e c_source,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime runtime_prefixes.import=runtime_b_ runtime_prefixes.internal=runtime_bi_
+
+# The C-backend headers are emitted alongside the .cpp above (not from a .a).
+$(FILTERS_DIR)/rniso_none_c.h: $(FILTERS_DIR)/rniso_none_c.halide_generated.cpp
+	@echo $@ produced implicitly by $^
+$(FILTERS_DIR)/rniso_a_c.h: $(FILTERS_DIR)/rniso_a_c.halide_generated.cpp
+	@echo $@ produced implicitly by $^
+$(FILTERS_DIR)/rniso_b_c.h: $(FILTERS_DIR)/rniso_b_c.halide_generated.cpp
+	@echo $@ produced implicitly by $^
+
+RNISO_LLVM_LIBS = $(FILTERS_DIR)/rniso_none.a $(FILTERS_DIR)/rniso_a.a $(FILTERS_DIR)/rniso_b.a
+RNISO_C_SRCS = $(FILTERS_DIR)/rniso_none_c.halide_generated.cpp $(FILTERS_DIR)/rniso_a_c.halide_generated.cpp $(FILTERS_DIR)/rniso_b_c.halide_generated.cpp
+RNISO_RUNTIMES = $(FILTERS_DIR)/rniso_rt_none.a $(FILTERS_DIR)/rniso_rt_a.a $(FILTERS_DIR)/rniso_rt_b.a
+RNISO_HEADERS = $(FILTERS_DIR)/rniso_none.h $(FILTERS_DIR)/rniso_a.h $(FILTERS_DIR)/rniso_b.h $(FILTERS_DIR)/rniso_none_c.h $(FILTERS_DIR)/rniso_a_c.h $(FILTERS_DIR)/rniso_b_c.h
+
+$(BIN_DIR)/$(TARGET)/generator_aot_runtime_prefixes_iso: $(ROOT_DIR)/test/generator/runtime_prefixes_iso_aottest.cpp $(RNISO_LLVM_LIBS) $(RNISO_C_SRCS) $(RNISO_HEADERS) $(RNISO_RUNTIMES) $(RUNTIME_EXPORTED_INCLUDES)
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
