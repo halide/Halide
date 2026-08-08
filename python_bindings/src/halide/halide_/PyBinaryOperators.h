@@ -209,14 +209,18 @@ template<typename PythonClass>
 void add_binary_operators(PythonClass &class_instance) {
     using self_t = typename PythonClass::type;
 
-    // The order of definitions matters.
-    // Python first will try input value as int, then double, then self_t
-    // (note that we skip 'float' because we should never encounter that in python;
-    // all floating-point literals should be double)
+    // The order of definitions matters: pybind11 tries overloads in
+    // registration order, and (as of pybind11 3.1) a Python int is an
+    // acceptable non-converting match for a C++ double parameter (per PEP
+    // 484 numeric tower rules), not just for int. So int must be registered
+    // before double, or a plain Python int (e.g. from a GeneratorParam<int>)
+    // silently binds to the double overload and produces a float Expr.
+    // (We skip 'float' because we should never encounter that in python;
+    // all floating-point literals should be double.)
     add_binary_operators_with<self_t>(class_instance);
     add_binary_operators_with<Expr>(class_instance);
-    add_binary_operators_with<double>(class_instance);
     add_binary_operators_with<int>(class_instance);
+    add_binary_operators_with<double>(class_instance);
 
     // Halide::pow() has only an Expr, Expr variant
     class_instance
