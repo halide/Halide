@@ -11,6 +11,9 @@ endfunction()
 
 configure_trampoline(Halide "${Halide_INSTALL_CMAKEDIR}")
 configure_trampoline(HalideCompiler "${Halide_INSTALL_COMPILERDIR}")
+if (WITH_AUTOSCHEDULERS)
+    configure_trampoline(HalideAutoschedulers "${Halide_INSTALL_AUTOSCHEDULERSDIR}")
+endif ()
 
 install(
     FILES
@@ -37,6 +40,17 @@ install(
     DESTINATION "${SKBUILD_DATA_DIR}/share/cmake/HalideCompiler"
     COMPONENT Halide_Python
 )
+
+# Same thing for HalideAutoschedulers
+if (WITH_AUTOSCHEDULERS)
+    install(
+        FILES
+            "${CMAKE_CURRENT_BINARY_DIR}/HalideAutoschedulersConfig.cmake"
+            "${CMAKE_CURRENT_BINARY_DIR}/../HalideAutoschedulersConfigVersion.cmake"
+        DESTINATION "${SKBUILD_DATA_DIR}/share/cmake/HalideAutoschedulers"
+        COMPONENT Halide_Python
+    )
+endif ()
 
 ##
 # Set up RPATH for the Python bindings plugin.

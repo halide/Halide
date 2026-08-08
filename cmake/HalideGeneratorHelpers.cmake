@@ -700,6 +700,7 @@ function(add_halide_library TARGET)
 
     cmake_path(SET ARG_OUTPUT_DIR "${ARG_OUTPUT_DIR}")
     cmake_path(ABSOLUTE_PATH ARG_OUTPUT_DIR BASE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}" NORMALIZE)
+    file(MAKE_DIRECTORY "${ARG_OUTPUT_DIR}")
 
     if (ARG_NAMESPACE)
         set(ARG_FUNCTION_NAME "${ARG_NAMESPACE}::${ARG_FUNCTION_NAME}")
@@ -793,10 +794,11 @@ function(add_halide_library TARGET)
 
     if (ARG_AUTOSCHEDULER)
         if ("${ARG_AUTOSCHEDULER}" MATCHES "::")
-            # Autoscheduler plugins are compiled targets that live in HalideCompiler;
-            # lazily load it if it hasn't already been (e.g. while cross-compiling).
+            # Autoscheduler plugins are compiled targets that live in their own
+            # HalideAutoschedulers package; lazily load it if it hasn't already
+            # been (e.g. while cross-compiling).
             if (NOT TARGET "${ARG_AUTOSCHEDULER}")
-                find_package(HalideCompiler REQUIRED)
+                find_package(HalideAutoschedulers REQUIRED)
             endif ()
             if (NOT TARGET "${ARG_AUTOSCHEDULER}")
                 message(FATAL_ERROR "Autoscheduler ${ARG_AUTOSCHEDULER} does not exist.")

@@ -13,6 +13,10 @@ set(Halide_INSTALL_COMPILERDIR "${CMAKE_INSTALL_LIBDIR}/cmake/HalideCompiler"
     CACHE STRING "Path to Halide's platform-specific compiled-library CMake files"
 )
 
+set(Halide_INSTALL_AUTOSCHEDULERSDIR "${CMAKE_INSTALL_LIBDIR}/cmake/HalideAutoschedulers"
+    CACHE STRING "Path to Halide's autoscheduler plugin CMake files"
+)
+
 set(Halide_INSTALL_PLUGINDIR "${CMAKE_INSTALL_LIBDIR}" CACHE STRING "Path to Halide plugins folder")
 
 set(Halide_INSTALL_TOOLSDIR "${CMAKE_INSTALL_DATADIR}/tools"
@@ -55,11 +59,13 @@ if (WITH_AUTOSCHEDULERS)
     set(autoschedulers Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2016 Halide_Anderson2021)
 
     # Autoscheduler plugins are compiled, platform-specific shared libraries,
-    # so they belong to HalideCompiler even though they're loaded via dlopen
-    # rather than linked directly.
+    # but they are dlopen()'d by the generator process at Generator run time
+    # and never linked, so they get their own export set/package
+    # (HalideAutoschedulers) instead of joining HalideCompiler's. See the
+    # ARCH_INDEPENDENT comment below for why that distinction matters.
     install(
         TARGETS ${autoschedulers}
-        EXPORT HalideCompiler_Targets
+        EXPORT HalideAutoschedulers_Targets
         LIBRARY
         DESTINATION ${Halide_INSTALL_PLUGINDIR}
         COMPONENT Halide_Runtime
@@ -215,6 +221,16 @@ install(
     COMPONENT Halide_Development
 )
 
+if (WITH_AUTOSCHEDULERS)
+    install(
+        EXPORT HalideAutoschedulers_Targets
+        DESTINATION ${Halide_INSTALL_AUTOSCHEDULERSDIR}
+        NAMESPACE Halide::
+        FILE HalideAutoschedulers-targets.cmake
+        COMPONENT Halide_Development
+    )
+endif ()
+
 write_basic_package_version_file(
     HalideConfigVersion.cmake
     COMPATIBILITY SameMajorVersion
@@ -222,6 +238,27 @@ write_basic_package_version_file(
 )
 
 write_basic_package_version_file(HalideCompilerConfigVersion.cmake COMPATIBILITY SameMajorVersion)
+
+if (WITH_AUTOSCHEDULERS)
+    # Autoscheduler plugins are real compiled, platform-specific binaries, so
+    # this ARCH_INDEPENDENT is a deliberate abuse of the flag, not an oversight
+    # (contrast HalideCompilerConfigVersion.cmake just above, which is
+    # correctly *not* ARCH_INDEPENDENT for the same kind of compiled target).
+    # It's safe here specifically because nothing ever links against
+    # Halide::<Scheduler> -- add_halide_library(... AUTOSCHEDULER ...) only
+    # ever reads its $<TARGET_FILE:...> to pass to the generator executable's
+    # `-p` (plugin) command-line flag, which then dlopen()s it at Generator
+    # run time. That means this package's version check never needs to agree
+    # with the *consuming* project's word size, which is the one that
+    # matters when a baremetal/embedded toolchain file is in play -- e.g.
+    # CMAKE_SIZEOF_VOID_P reflects the cross-compiler's target ABI, not the
+    # host machine's, when CMAKE_CROSSCOMPILING is set.
+    write_basic_package_version_file(
+        HalideAutoschedulersConfigVersion.cmake
+        COMPATIBILITY SameMajorVersion
+        ARCH_INDEPENDENT
+    )
+endif ()
 
 if (WITH_PYTHON_BINDINGS)
     set(extra_paths Halide_Python_INSTALL_CMAKEDIR)
@@ -243,6 +280,14 @@ configure_package_config_file(
     NO_SET_AND_CHECK_MACRO NO_CHECK_REQUIRED_COMPONENTS_MACRO
 )
 
+if (WITH_AUTOSCHEDULERS)
+    configure_package_config_file(
+        common/HalideAutoschedulersConfig.cmake HalideAutoschedulersConfig.cmake
+        INSTALL_DESTINATION "${Halide_INSTALL_AUTOSCHEDULERSDIR}"
+        NO_SET_AND_CHECK_MACRO NO_CHECK_REQUIRED_COMPONENTS_MACRO
+    )
+endif ()
+
 install(
     FILES
         ${CMAKE_CURRENT_BINARY_DIR}/HalideConfig.cmake
@@ -263,6 +308,16 @@ install(
     DESTINATION ${Halide_INSTALL_COMPILERDIR}
     COMPONENT Halide_Development
 )
+
+if (WITH_AUTOSCHEDULERS)
+    install(
+        FILES
+            ${CMAKE_CURRENT_BINARY_DIR}/HalideAutoschedulersConfig.cmake
+            ${CMAKE_CURRENT_BINARY_DIR}/HalideAutoschedulersConfigVersion.cmake
+        DESTINATION ${Halide_INSTALL_AUTOSCHEDULERSDIR}
+        COMPONENT Halide_Development
+    )
+endif ()
 
 ##
 # Compute find_dependency calls for HalideCompiler
