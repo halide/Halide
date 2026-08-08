@@ -30,6 +30,7 @@
 #include "Lower.h"
 #include "Param.h"
 #include "PrintLoopNest.h"
+#include "RealizationOrder.h"
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
@@ -3234,6 +3235,8 @@ Func &Func::compute_inline() {
 }
 
 Stage &Stage::eager_inline(const std::vector<Func> &fs) {
+    vector<Function> funcs;
+    map<string, Func> by_name;
     for (const Func &f : fs) {
         user_assert(f.defined())
             << "eager_inline() was passed an undefined Func.\n";
@@ -3241,11 +3244,24 @@ Stage &Stage::eager_inline(const std::vector<Func> &fs) {
             << "eager_inline() cannot inline " << f.name()
             << ": it must be a pure Func with no update or extern definition and "
             << "no specializations.\n";
-        // Rewrites this stage's definition in place, replacing every direct call
-        // to f with f's body. Processing fs left to right means a body spliced in
-        // by an earlier inline exposes its own direct calls to later fs, which the
-        // next iteration then inlines.
-        Internal::inline_function(definition, f.function());
+        funcs.push_back(f.function());
+        by_name.emplace(f.name(), f);
+    }
+
+    // Inlining rewrites this stage's definition in place, replacing every direct
+    // call to f with f's body. A call to g inside f's body only becomes visible
+    // to us after f is inlined, so a caller must be inlined before its callees.
+    // topological_order() gives realization order (callees before callers);
+    // reverse it to inline callers first, so passing fs in any order works.
+    map<string, Function> env = Internal::build_environment(funcs);
+    vector<string> order = Internal::topological_order(funcs, env);
+    std::reverse(order.begin(), order.end());
+
+    for (const string &name : order) {
+        auto it = by_name.find(name);
+        if (it != by_name.end()) {
+            Internal::inline_function(definition, it->second.function());
+        }
     }
     return *this;
 }

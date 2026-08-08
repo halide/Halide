@@ -26,9 +26,10 @@ int main(int argc, char **argv) {
     b(x) = a(x) * 2;     // calls a
     c(x) = b(x) + a(x);  // calls b (which calls a) and a directly
 
-    // Inline b then a into c. Inlining b splices in its call to a, which the
-    // subsequent inline of a then also folds.
-    c.eager_inline(b, a);
+    // Pass the Funcs in "wrong" (callee-before-caller) order: a before b, even
+    // though b's body calls a. eager_inline() topologically sorts them, so both
+    // are fully folded regardless of the argument order.
+    c.eager_inline(a, b);
 
     Expr c_body = c.function().definition().values()[0];
     Expr c_expected = x * 3 + 3;
@@ -42,6 +43,62 @@ int main(int argc, char **argv) {
         if (out(i) != ref) {
             printf("eager_inline chain mismatch at %d: %d vs %d\n", i, out(i), ref);
             return 1;
+        }
+    }
+
+    // A longer chain, also passed in a scrambled order, to exercise the
+    // topological sort more thoroughly: each Func's body calls the previous one.
+    {
+        Func d0{"d0"}, d1{"d1"}, d2{"d2"}, d3{"d3"}, sink{"sink"};
+        d0(x) = x + 1;
+        d1(x) = d0(x) * 2;    // calls d0
+        d2(x) = d1(x) + 3;    // calls d1
+        d3(x) = d2(x) * 5;    // calls d2
+        sink(x) = d3(x) - 4;  // calls d3
+
+        // Scrambled order (not caller-first): the sort must still order them so
+        // every call gets folded.
+        sink.eager_inline(d2, d0, d3, d1);
+
+        Expr sink_body = sink.function().definition().values()[0];
+        internal_assert(!mentions(sink_body, "d0") && !mentions(sink_body, "d1") &&
+                        !mentions(sink_body, "d2") && !mentions(sink_body, "d3"))
+            << "eager_inline left residual calls after a scrambled-order chain\n"
+            << "Saw: " << sink_body << "\n";
+
+        Buffer<int> sout = sink.realize({8});
+        for (int i = 0; i < 8; i++) {
+            int ref = (((i + 1) * 2 + 3) * 5) - 4;
+            if (sout(i) != ref) {
+                printf("eager_inline scrambled-chain mismatch at %d: %d vs %d\n", i, sout(i), ref);
+                return 1;
+            }
+        }
+    }
+
+    // Passing a Func that this stage does not call is silently ignored: there
+    // are no direct calls to fold, so the definition is left unchanged.
+    {
+        Func p{"p"}, unrelated{"unrelated"}, q{"q"};
+        p(x) = x + 1;
+        unrelated(x) = x * 100;  // never referenced by q
+        q(x) = p(x) + 2;         // calls p, but not unrelated
+
+        // Mix a reachable Func (p) with an unreachable one (unrelated): p is
+        // inlined, unrelated is a no-op rather than an error.
+        q.eager_inline(unrelated, p);
+
+        Expr q_body = q.function().definition().values()[0];
+        internal_assert(!mentions(q_body, "p"))
+            << "eager_inline should have inlined the reachable Func p\n"
+            << "Saw: " << q_body << "\n";
+
+        Buffer<int> qout = q.realize({8});
+        for (int i = 0; i < 8; i++) {
+            if (qout(i) != (i + 1) + 2) {
+                printf("eager_inline unreachable-arg mismatch at %d: %d vs %d\n", i, qout(i), (i + 1) + 2);
+                return 1;
+            }
         }
     }
 

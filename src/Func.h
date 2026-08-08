@@ -192,9 +192,9 @@ public:
     // @}
 
     /** Immediately inline direct calls to each of the given Funcs into this
-     * stage's definition, processed left to right so that inlining an earlier
-     * Func can expose direct calls to a later one (e.g. when an earlier Func's
-     * body itself calls a later one).
+     * stage's definition. The Funcs are inlined in dependency order regardless
+     * of the order they are passed, so if one inlined Func's body calls another,
+     * both are fully folded in.
      *
      * Unlike compute_inline(), which merely marks a Func to be inlined during
      * lowering, eager_inline() performs the substitution now, at schedule time,
@@ -2657,9 +2657,9 @@ public:
     Func &compute_inline();
 
     /** Immediately inline direct calls to each of the given Funcs into this
-     * Func's initial (pure) definition, processed left to right so that inlining
-     * an earlier Func can expose direct calls to a later one (e.g. when an
-     * earlier Func's body itself calls a later one). This is shorthand for
+     * Func's initial (pure) definition. The Funcs are inlined in dependency
+     * order regardless of the order they are passed, so if one inlined Func's
+     * body calls another, both are fully folded in. This is shorthand for
      * update(0)-style scheduling: to inline into an update definition, call
      * eager_inline() on that stage, e.g. f.update(n).eager_inline(...).
      *
