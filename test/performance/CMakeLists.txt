@@ -29,6 +29,7 @@ tests(
     realize_overhead.cpp
     rgb_interleaved.cpp
     tiled_matmul.cpp
+    tiled_matmul_arm_neon.cpp
     vectorize.cpp
     wrap.cpp
     # keep-sorted end
@@ -46,6 +47,7 @@ tests(
     parallel_scenarios.cpp
     profiler.cpp
     rfactor.cpp
+    separable_downsample.cpp
     sort.cpp
     stack_vs_heap.cpp
     thread_safe_jit_callable.cpp
