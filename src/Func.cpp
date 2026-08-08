@@ -3332,35 +3332,6 @@ bool is_self_reference(const Expr &e, const string &fname) {
     return false;
 }
 
-/**
- * Initialize a constant-bounds cache with the FuncValueBounds-derived range
- * of every Func call in \p e. The bounds machinery keys its cache by pointer
- * identity (\ref Halide::ExprCompare), so using the exact Call nodes that
- * appear in \p e lets \ref constant_integer_bounds and \ref lossless_cast see
- * a tighter range than just the type's bounds.
- *
- * @return An initialized constant-bounds cache for \p e
- */
-auto cache_call_bounds(const Expr &e, const FuncValueBounds &fvb) {
-    std::map<Expr, ConstantInterval, ExprCompare> cache;
-    if (!fvb.empty()) {
-        visit_with(e, [&](auto *self, const Call *op) {
-            self->visit_base(op);  // Recurse into the call's arguments.
-            if (op->call_type != Call::Halide || !op->type.is_int_or_uint()) {
-                return;
-            }
-            auto it = fvb.find({op->name, op->value_index});
-            if (it == fvb.end()) {
-                return;
-            }
-            auto type_range = ConstantInterval::bounds_of_type(op->type);
-            auto value_range = covering_constant_interval(it->second);
-            cache.emplace(Expr(op), ConstantInterval::make_intersection(type_range, value_range));
-        });
-    }
-    return cache;
-}
-
 // Rewrite a factor-free leaf expression `e` to type `t`
 Expr retype_leaf(const Expr &e, Type t, const FuncValueBounds &fvb) {
     if (e.type() == t) {
@@ -3409,13 +3380,13 @@ Expr retype_leaf(const Expr &e, Type t, const FuncValueBounds &fvb) {
 
     // Retype via lossless_cast() when it can prove the cast exact, pushing it down
     // through widening intrinsics so integer forms survive to instruction
-    // selection. Seeding the cache with producer value ranges lets it succeed for
-    // casts that are only exact under those ranges (e.g. narrowing a clamped
-    // producer). This is a no-op-or-improvement for any target type: a float
-    // target just takes lossless_cast()'s representable-widening path, and
-    // anything it can't prove falls through to the plain cast below.
-    auto cache = cache_call_bounds(folded, fvb);
-    if (Expr r = lossless_cast(t, folded, Scope<ConstantInterval>::empty_scope(), &cache);
+    // selection. Passing fvb lets it succeed for casts that are only exact under
+    // a producer's proven value range (e.g. narrowing a clamped producer). This
+    // is a no-op-or-improvement for any target type: a float target just takes
+    // lossless_cast()'s representable-widening path, and anything it can't
+    // prove falls through to the plain cast below.
+    std::map<Expr, ConstantInterval, ExprCompare> cache;
+    if (Expr r = lossless_cast(t, folded, Scope<ConstantInterval>::empty_scope(), &cache, &fvb);
         r.defined()) {
         return r;
     }
@@ -3654,8 +3625,7 @@ std::optional<std::string> change_type_prove_safe(
                 return ConstantInterval::single_point((int64_t)*fv);
             }
         }
-        auto cache = cache_call_bounds(v, fvb);
-        return constant_integer_bounds(v, Scope<ConstantInterval>::empty_scope(), &cache);
+        return constant_integer_bounds(v, Scope<ConstantInterval>::empty_scope(), nullptr, &fvb);
     };
 
     // The initial accumulator value must be representable at the new type. Carry

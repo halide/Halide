@@ -502,17 +502,18 @@ Expr const_false(int w) {
 Expr lossless_cast(Type t,
                    Expr e,
                    const Scope<ConstantInterval> &scope,
-                   std::map<Expr, ConstantInterval, ExprCompare> *cache) {
+                   std::map<Expr, ConstantInterval, ExprCompare> *cache,
+                   const FuncValueBounds *func_bounds) {
     if (!e.defined() || t == e.type()) {
         return e;
     } else if (t.can_represent(e.type())) {
         return cast(t, std::move(e));
     } else if (const Cast *c = e.as<Cast>()) {
         if (c->type.can_represent(c->value.type())) {
-            return lossless_cast(t, c->value, scope, cache);
+            return lossless_cast(t, c->value, scope, cache, func_bounds);
         }
     } else if (const Broadcast *b = e.as<Broadcast>()) {
-        Expr v = lossless_cast(t.with_lanes(b->value.type().lanes()), b->value, scope, cache);
+        Expr v = lossless_cast(t.with_lanes(b->value.type().lanes()), b->value, scope, cache, func_bounds);
         if (v.defined()) {
             return Broadcast::make(v, b->lanes);
         }
@@ -531,7 +532,7 @@ Expr lossless_cast(Type t,
     } else if (const Shuffle *shuf = e.as<Shuffle>()) {
         std::vector<Expr> vecs;
         for (const auto &vec : shuf->vectors) {
-            vecs.emplace_back(lossless_cast(t.with_lanes(vec.type().lanes()), vec, scope, cache));
+            vecs.emplace_back(lossless_cast(t.with_lanes(vec.type().lanes()), vec, scope, cache, func_bounds));
             if (!vecs.back().defined()) {
                 return Expr();
             }
@@ -540,72 +541,72 @@ Expr lossless_cast(Type t,
     } else if (t.is_int_or_uint()) {
         // Check the bounds. If they're small enough, we can throw narrowing
         // casts around e, or subterms.
-        ConstantInterval ci = constant_integer_bounds(e, scope, cache);
+        ConstantInterval ci = constant_integer_bounds(e, scope, cache, func_bounds);
 
         if (t.can_represent(ci)) {
             // There are certain IR nodes where if the result is expressible
             // using some type, and the args are expressible using that type,
             // then the operation can just be done in that type.
             if (const Add *op = e.as<Add>()) {
-                Expr a = lossless_cast(t, op->a, scope, cache);
-                Expr b = lossless_cast(t, op->b, scope, cache);
+                Expr a = lossless_cast(t, op->a, scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->b, scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
                     return Add::make(a, b);
                 }
             } else if (const Sub *op = e.as<Sub>()) {
-                Expr a = lossless_cast(t, op->a, scope, cache);
-                Expr b = lossless_cast(t, op->b, scope, cache);
+                Expr a = lossless_cast(t, op->a, scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->b, scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
                     return Sub::make(a, b);
                 }
             } else if (const Mul *op = e.as<Mul>()) {
-                Expr a = lossless_cast(t, op->a, scope, cache);
-                Expr b = lossless_cast(t, op->b, scope, cache);
+                Expr a = lossless_cast(t, op->a, scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->b, scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
                     return Mul::make(a, b);
                 }
             } else if (const Min *op = e.as<Min>()) {
-                Expr a = lossless_cast(t, op->a, scope, cache);
-                Expr b = lossless_cast(t, op->b, scope, cache);
+                Expr a = lossless_cast(t, op->a, scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->b, scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
                     return Min::make(a, b);
                 }
             } else if (const Max *op = e.as<Max>()) {
-                Expr a = lossless_cast(t, op->a, scope, cache);
-                Expr b = lossless_cast(t, op->b, scope, cache);
+                Expr a = lossless_cast(t, op->a, scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->b, scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
                     return Max::make(a, b);
                 }
             } else if (const Mod *op = e.as<Mod>()) {
-                Expr a = lossless_cast(t, op->a, scope, cache);
-                Expr b = lossless_cast(t, op->b, scope, cache);
+                Expr a = lossless_cast(t, op->a, scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->b, scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
                     return Mod::make(a, b);
                 }
             } else if (const Call *op = Call::as_intrinsic(e, {Call::widening_add, Call::widen_right_add})) {
-                Expr a = lossless_cast(t, op->args[0], scope, cache);
-                Expr b = lossless_cast(t, op->args[1], scope, cache);
+                Expr a = lossless_cast(t, op->args[0], scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->args[1], scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
                     return Add::make(a, b);
                 }
             } else if (const Call *op = Call::as_intrinsic(e, {Call::widening_sub, Call::widen_right_sub})) {
-                Expr a = lossless_cast(t, op->args[0], scope, cache);
-                Expr b = lossless_cast(t, op->args[1], scope, cache);
+                Expr a = lossless_cast(t, op->args[0], scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->args[1], scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
                     return Sub::make(a, b);
                 }
             } else if (const Call *op = Call::as_intrinsic(e, {Call::widening_mul, Call::widen_right_mul})) {
-                Expr a = lossless_cast(t, op->args[0], scope, cache);
-                Expr b = lossless_cast(t, op->args[1], scope, cache);
+                Expr a = lossless_cast(t, op->args[0], scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->args[1], scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
                     return Mul::make(a, b);
                 }
             } else if (const Call *op = Call::as_intrinsic(e, {Call::shift_left, Call::widening_shift_left,
                                                                Call::shift_right, Call::widening_shift_right})) {
-                Expr a = lossless_cast(t, op->args[0], scope, cache);
-                Expr b = lossless_cast(t, op->args[1], scope, cache);
+                Expr a = lossless_cast(t, op->args[0], scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->args[1], scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
-                    ConstantInterval cb = constant_integer_bounds(b, scope, cache);
+                    ConstantInterval cb = constant_integer_bounds(b, scope, cache, func_bounds);
                     if (cb > -t.bits() && cb < t.bits()) {
                         if (op->is_intrinsic({Call::shift_left, Call::widening_shift_left})) {
                             return a << b;
@@ -618,7 +619,7 @@ Expr lossless_cast(Type t,
                 if ((t.bits() > 1 && op->op == VectorReduce::Add) ||
                     op->op == VectorReduce::Min ||
                     op->op == VectorReduce::Max) {
-                    Expr v = lossless_cast(t.with_lanes(op->value.type().lanes()), op->value, scope, cache);
+                    Expr v = lossless_cast(t.with_lanes(op->value.type().lanes()), op->value, scope, cache, func_bounds);
                     if (v.defined()) {
                         auto reduce_op = op->op;
                         if (t.bits() == 1) {

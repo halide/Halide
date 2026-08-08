@@ -1,7 +1,9 @@
 #include "Halide.h"
+#include "halide_test_dirs.h"
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <fstream>
 #include <sstream>
 #include <string>
 
@@ -352,6 +354,61 @@ int change_type_narrowing_dot_product_test() {
             << "change_type narrowing dot-product mismatch at " << m << ": " << result(m)
             << " vs " << dot << "\n";
     }
+    return 0;
+}
+
+// A retype from float to Int(32) should expose the same widening_mul reduction
+// shape that a Func written directly in Int(32) would, so it's eligible for the
+// same instruction selection. This cross-compiles for an arm64 target with the
+// dot-product extension (no need to run the code) and checks that the
+// generated assembly contains an `sdot` instruction, confirming that the
+// retyped reduction reaches CodeGen_ARM's dot-product pattern rather than
+// falling back to scalar-equivalent widening adds.
+int change_type_float_to_dot_product_codegen_test() {
+    Target target = Target(Target::Linux, Target::ARM, 64)
+                        .with_feature(Target::ARMDotProd)
+                        .with_feature(Target::NoAsserts)
+                        .with_feature(Target::NoBoundsQuery)
+                        .with_feature(Target::NoRuntime);
+
+    const int K = 4;
+    ImageParam A{Int(8), 1, "A"}, B{Int(8), 1, "B"};
+
+    Var x{"x"}, xo{"xo"}, xi{"xi"};
+    RDom r(0, K, "r");
+
+    Func Acc{"Acc"};
+    Acc(x) = 0.0f;
+    Acc(x) += cast<float>(A(x * K + r)) * cast<float>(B(x * K + r));
+
+    Func Acc_i32 = Acc.change_type(Int(32));
+    internal_assert(Acc_i32.types()[0] == Int(32))
+        << "change_type float-to-dot-product: expected Int(32), got " << Acc_i32.types()[0] << "\n";
+
+    Acc_i32.compute_root().bound(x, 0, 16).vectorize(x, 4);
+    Acc_i32.update(0)
+        .atomic(true)
+        .vectorize(r)
+        .split(x, xo, xi, 4)
+        .vectorize(xi);
+
+    std::string file = Internal::get_test_tmp_dir() + "change_type_dot_product.s";
+    Acc_i32.compile_to_assembly(file, {A, B}, target);
+
+    std::ifstream asm_file(file);
+    internal_assert(asm_file.is_open()) << "Failed to open " << file << "\n";
+    bool found_sdot = false;
+    std::string line;
+    while (getline(asm_file, line)) {
+        if (line.find("sdot") != std::string::npos) {
+            found_sdot = true;
+            break;
+        }
+    }
+    internal_assert(found_sdot)
+        << "change_type float-to-dot-product: expected an sdot instruction in the "
+           "generated assembly, but none was found in "
+        << file << "\n";
     return 0;
 }
 
@@ -1242,6 +1299,10 @@ int main(int argc, char **argv) {
     }
     printf("Running change_type_narrowing_dot_product_test\n");
     if (change_type_narrowing_dot_product_test()) {
+        return 1;
+    }
+    printf("Running change_type_float_to_dot_product_codegen_test\n");
+    if (change_type_float_to_dot_product_codegen_test()) {
         return 1;
     }
     printf("Running change_type_truncating_rejected_test\n");
