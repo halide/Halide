@@ -25,10 +25,12 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "ImageParam.h"
+#include "Inline.h"
 #include "LLVM_Output.h"
 #include "Lower.h"
 #include "Param.h"
 #include "PrintLoopNest.h"
+#include "RealizationOrder.h"
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
@@ -3230,6 +3232,46 @@ Func &Func::hoist_storage_root() {
 
 Func &Func::compute_inline() {
     return compute_at(LoopLevel::inlined());
+}
+
+Stage &Stage::eager_inline(const std::vector<Func> &fs) {
+    vector<Function> funcs;
+    map<string, Func> by_name;
+    for (const Func &f : fs) {
+        user_assert(f.defined())
+            << "eager_inline() was passed an undefined Func.\n";
+        user_assert(f.function().can_be_inlined())
+            << "eager_inline() cannot inline " << f.name()
+            << ": it must be a pure Func with no update or extern definition and "
+            << "no specializations.\n";
+        funcs.push_back(f.function());
+        by_name.emplace(f.name(), f);
+    }
+
+    // Inlining rewrites this stage's definition in place, replacing every direct
+    // call to f with f's body. A call to g inside f's body only becomes visible
+    // to us after f is inlined, so a caller must be inlined before its callees.
+    // topological_order() gives realization order (callees before callers);
+    // reverse it to inline callers first, so passing fs in any order works.
+    map<string, Function> env = Internal::build_environment(funcs);
+    vector<string> order = Internal::topological_order(funcs, env);
+    std::reverse(order.begin(), order.end());
+
+    for (const string &name : order) {
+        auto it = by_name.find(name);
+        if (it != by_name.end()) {
+            Internal::inline_function(definition, it->second.function());
+        }
+    }
+    return *this;
+}
+
+Func &Func::eager_inline(const std::vector<Func> &fs) {
+    invalidate_cache();
+    // Target the initial (pure) definition, mirroring other Func-level scheduling
+    // shorthands; use f.update(n).eager_inline(...) to inline into an update.
+    Stage(func, func.definition(), 0).eager_inline(fs);
+    return *this;
 }
 
 Func &Func::trace_loads() {
