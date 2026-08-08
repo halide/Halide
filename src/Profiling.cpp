@@ -1,9 +1,14 @@
 #include <algorithm>
+#include <cstdlib>
 #include <map>
 #include <set>
 #include <string>
 
+#include "Bounds.h"
 #include "CodeGen_Internal.h"
+#include "DeviceInterface.h"
+#include "ExprUsesVar.h"
+#include "FindCalls.h"
 #include "Function.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -11,6 +16,7 @@
 #include "Profiling.h"
 #include "Scope.h"
 #include "Simplify.h"
+#include "Solve.h"
 #include "Substitute.h"
 #include "UniquifyVariableNames.h"
 #include "Util.h"
@@ -70,6 +76,7 @@ struct Names {
     std::string profiler_func_stack_peak_buf;
     std::string profiler_func_kinds;
     std::string profiler_func_buffer_func_ids;
+    std::string profiler_func_counters_approximated;
     std::string profiler_start_error_code;
 
     // IDs 0-3 are reserved for bookkeeping slots, in this order.
@@ -88,6 +95,7 @@ struct Names {
           profiler_func_stack_peak_buf(unique_name("profiler_func_stack_peak_buf")),
           profiler_func_kinds(unique_name("profiler_func_kinds")),
           profiler_func_buffer_func_ids(unique_name("profiler_func_buffer_func_ids")),
+          profiler_func_counters_approximated(unique_name("profiler_func_counters_approximated")),
           profiler_start_error_code(unique_name("profiler_start_error_code")) {
 
         // Reserve the bookkeeping slots first so their ids match the
@@ -142,25 +150,6 @@ struct Names {
                         display_name = f.profiler_display_name();
                     }
                 }
-            } else if (kind == halide_profiler_func_kind_allocation &&
-                       starts_with(ir_name, "allocgroup__")) {
-                // Render "allocgroup__f1$0.0__f2$0.1.buffer" as
-                // "f1$0.0,f2$0.1.buffer": split off the "allocgroup" tag,
-                // join the rest with commas.
-                //
-                // TODO(next PR): once the per-Func counter machinery is
-                // back, attribute the bytes to each participating Func
-                // instead of presenting one combined row. The right place
-                // to thread that data through is a "declare_allocation"
-                // intrinsic emitted by FuseGPUThreadLoops at the position
-                // where it strips the Allocate, carrying the Func name,
-                // size, and MemoryType — the profiler can then bill the
-                // size to each Func via a hoistable counter (the GPU
-                // runtime has no memory_allocate hook, so we can't track
-                // it as a live allocation).
-                std::vector<std::string> parts = split_string(ir_name, "__");
-                parts.erase(parts.begin());  // drop the "allocgroup" tag
-                display_name = join_strings(parts, ",");
             }
             entry_info.push_back({display_name, ir_name, parent_id, canon, kind, buffer_func_id});
         }
@@ -186,6 +175,54 @@ struct Names {
         return (int)entry_info.size();
     }
 };
+
+Expr compute_allocation_size(const vector<Expr> &extents,
+                             const Expr &condition,
+                             const Type &type,
+                             const std::string &name,
+                             bool &can_fit_on_stack) {
+    can_fit_on_stack = true;
+
+    Expr cond = simplify(condition);
+    if (is_const_zero(cond)) {
+        return make_zero(UInt(64));
+    }
+
+    int64_t constant_size = Allocate::constant_allocation_size(extents, name);
+    if (constant_size > 0) {
+        int64_t stack_bytes = constant_size * type.bytes();
+        if (can_allocation_fit_on_stack(stack_bytes)) {
+            return make_const(UInt(64), stack_bytes);
+        }
+    }
+
+    internal_assert(!extents.empty());
+
+    can_fit_on_stack = false;
+    Expr size = cast<uint64_t>(extents[0]);
+    for (size_t i = 1; i < extents.size(); i++) {
+        size *= extents[i];
+    }
+    size = simplify(Select::make(condition, size * type.bytes(), make_zero(UInt(64))));
+    return size;
+}
+
+// Unwrap a Broadcast(...) wrapper from an arg, then extract the Func name.
+// declare_box_required_at_root / declare_stage carry the Func name as a
+// StringImm in their first arg — the name is just a label for the
+// profiler report, not a symbol that exists in scope, so using a
+// StringImm keeps it from being matched by passes like
+// InjectHostDevBufferCopies that substitute Variables named after Funcs.
+// The arg can show up wrapped in a Broadcast after vectorization.
+const std::string &handle_name(const Expr &e) {
+    const Expr *inner = &e;
+    if (const Broadcast *b = e.as<Broadcast>()) {
+        inner = &b->value;
+    }
+    const StringImm *s = inner->as<StringImm>();
+    internal_assert(s) << e;
+    return s->value;
+}
 
 // First pass: enumerate the entries (see file-level comment) and assign
 // each one an id. Walks every ProducerConsumer node (one entry per
@@ -264,6 +301,614 @@ class PreAllocateEntries : public IRMutator {
 public:
     PreAllocateEntries(Names &names, const std::map<std::string, Function> &env)
         : names(names), env(env) {
+    }
+};
+
+// Second pass: inject counters for various stats as far outermost as possible,
+// to minimize overhead. For example, instead of this:
+// for (x in [min, max]) {
+//   increment_counter(..., 1);
+//   ...
+// }
+// We want to inject this:
+// increment_counter(..., max - min + 1);
+// for (x in [min, max]) {
+//   ...
+// }
+class InjectCounters : public IRMutator {
+public:
+    InjectCounters(Names &names, const map<string, Function> &env)
+        : names(names), env(env) {
+        // The previous pass populated names.entry_info with every entry.
+        // Index them by IR name so declare_box_required_root (which
+        // carries the IR-level Func name from ScheduleFunctions) can
+        // find all entries for a Func.
+        for (int i = 0; i < names.num_ids(); i++) {
+            entries_by_name[names.entry_info[i].ir_name].push_back(i);
+        }
+    }
+
+protected:
+    Names &names;
+    const map<string, Function> &env;
+
+    using IRMutator::visit;
+
+    // ID of the currently-produced Func
+    int producer_id = -1;
+
+    // Per-Func flag: are we currently inside that Func's pure def?
+    // Updated by the declare_stage marker that ScheduleFunctions emits
+    // at the start of each stage's loop nest (the marker also carries
+    // the Func name). A per-Func map handles compute_with cases where
+    // the stages of different Funcs are interleaved in the IR — each
+    // Store consults the flag for its own Func.
+    std::map<std::string, bool> func_in_pure_stage;
+
+    // The counters we track. This list must be kept in sync with multiple other
+    // things. If you add a counter, also update:
+    // - the num_counters int below the enum
+    // - halide_profiler_update_counters in profiler_inlined.cpp
+    // - the fields of halide_profiler_func_stats in HalideRuntime.h
+    // - the block of code that prints counters to json in profiler_common.cpp
+    enum { MemoryTotal = 0,
+           NumAllocs,
+           ParallelLoops,
+           ParallelTasks,
+           PointsRequiredAtRoot,
+           PointsComputed };
+
+    static constexpr int num_counters = PointsComputed + 1;
+
+    struct Counters {
+
+        Expr counters[num_counters];
+
+        void add(const Counters &other) {
+            for (int i = 0; i < num_counters; i++) {
+                if (counters[i].defined()) {
+                    if (other.counters[i].defined()) {
+                        counters[i] += other.counters[i];
+                    }
+                } else {
+                    counters[i] = other.counters[i];
+                }
+            }
+            free_vars.insert(other.free_vars.begin(), other.free_vars.end());
+        }
+
+        void mul(const Expr &e) {
+            for (auto &counter : counters) {
+                if (counter.defined()) {
+                    counter *= e;
+                }
+            }
+            add_free_vars(e);
+        }
+
+        void count(int c, const Expr &e) {
+            internal_assert(e.defined() && e.type() == UInt(64)) << e;
+            if (counters[c].defined()) {
+                counters[c] += e;
+            } else {
+                counters[c] = e;
+            }
+            add_free_vars(e);
+        }
+
+        void count(int c) {
+            count(c, make_one(UInt(64)));
+        }
+
+        void add_free_vars(const Expr &e) {
+            visit_with(e, [&](auto *, const Variable *var) {
+                free_vars.insert(var->name);
+            });
+        }
+
+        // The free vars in the expressions
+        std::set<std::string> free_vars;
+    };
+
+    const For *enclosing_loop = nullptr, *enclosing_parallel_loop = nullptr;
+    // True while mutating the body of any GPU loop. The CPU local_counters
+    // mechanism doesn't translate to GPU code (the buffer would have to be
+    // device-accessible, with atomic adds, and IHDBC has already run by the
+    // time we're injecting profiling). Instead, when in_gpu is set, we
+    // make any counter contribution that would normally have to flush
+    // mid-kernel hoist conservatively out of the kernel — substituting an
+    // upper bound for loop vars, wrapping in a Let for LetStmts, and
+    // wrapping in a Select for IfThenElse (or taking the max of the
+    // branches when the condition is impure).
+    bool in_gpu = false;
+    // thread-local counters
+    std::string local_counters;
+    // A map from a func id and a counter id to a slot in the local counters array
+    std::map<std::pair<int, int>, int> local_counters_indices;
+
+    std::map<int, Counters> counters;
+
+    // entry id -> bitmask (over the num_counters counter slots) of counters
+    // that were summed as a conservative upper bound rather than exactly
+    // (see sum_counters_over_gpu_loop). Read by inject_profiling to fill the
+    // per-Func counters_approximated field.
+    std::map<int, uint32_t> counters_approximated;
+
+    // name -> all entry ids with that name. Built once in the constructor;
+    // only declare_box_required_root reads it.
+    std::map<std::string, std::vector<int>> entries_by_name;
+
+    bool is_func(const std::string &name) const {
+        return env.find(name) != env.end();
+    }
+
+    Stmt flush(const Stmt &s, int id, const Counters &c) {
+        if (enclosing_loop &&
+            enclosing_parallel_loop &&
+            enclosing_loop != enclosing_parallel_loop) {
+            // Flush to local counters
+            if (local_counters.empty()) {
+                local_counters = unique_name("local_counters");
+            }
+            std::vector<Stmt> stores;
+            stores.reserve(num_counters);
+            for (int i = 0; i < num_counters; i++) {
+                if (!c.counters[i].defined()) {
+                    continue;
+                }
+                int n = (int)local_counters_indices.size();
+                int idx =
+                    local_counters_indices.try_emplace({id, i}, n).first->second;
+                Expr old = Load::make(UInt(64), local_counters, idx);
+                stores.push_back(Store::make(local_counters, old + c.counters[i], idx));
+            }
+            stores.push_back(s);
+            return Block::make(stores);
+        } else {
+            // Flush to global counters
+            std::vector<Expr> args(2 + num_counters);
+            args[0] = Variable::make(Handle(), names.profiler_instance);
+            args[1] = id;
+            for (int i = 0; i < num_counters; i++) {
+                Expr count = c.counters[i];
+                args[i + 2] = count.defined() ? count : make_zero(UInt(64));
+            }
+            Expr call = Call::make(Int(32), "halide_profiler_update_counters", args, Call::Extern);
+            return Block::make(Evaluate::make(std::move(call)), s);
+        }
+    }
+
+    Stmt flush_all(const Stmt &stmt) {
+        Stmt s = stmt;
+        for (const auto &p : counters) {
+            s = flush(s, p.first, p.second);
+        }
+        counters.clear();
+        return s;
+    }
+
+    Stmt flush_all_that_depend_on_var(const Stmt &stmt, const std::string &var) {
+        Stmt s = stmt;
+        for (auto it = counters.begin(); it != counters.end();) {
+            const auto &[id, c] = *it;
+            if (c.free_vars.count(var)) {
+                s = flush(s, id, c);
+                it = counters.erase(it);
+            } else {
+                it++;
+            }
+        }
+        return s;
+    }
+
+    void merge(const std::map<int, Counters> &other) {
+        for (const auto &it : other) {
+            counters[it.first].add(it.second);
+        }
+    }
+
+    // Recompute a Counters object's free_vars set from its current Exprs.
+    // Used after any hoisting operation that mutates the Exprs in place.
+    static void recompute_free_vars(Counters &c) {
+        c.free_vars.clear();
+        for (const auto &counter : c.counters) {
+            if (counter.defined()) {
+                c.add_free_vars(counter);
+            }
+        }
+    }
+
+    // GPU can't flush counters mid-kernel, so sum each counter over a
+    // closing-out loop symbolically (in place of the mul-by-extent used for
+    // CPU loops). We bound the per-iteration value by its max, and the
+    // number of contributing iterations by the loop-clipped range where the
+    // value can be non-zero (0 < counter, since counters are non-negative).
+    // solve_for_outer_interval over-approximates that range, so the result
+    // stays a conservative upper bound — far tighter than max-value ×
+    // full-extent for a footprint-guarded contribution like
+    // select(guard, k, 0), which the simplifier reduces to the bare guard.
+    // A counter that doesn't depend on the loop var falls out as its value ×
+    // the full extent. If no finite value bound exists we drop it (an
+    // under-estimate we accept over a bogus huge number).
+    void sum_counters_over_gpu_loop(const For *op, const Expr &extent) {
+        const std::string &var = op->name;
+        Interval loop_bounds(op->min, simplify(op->min + extent - 1));
+        Scope<Interval> scope;
+        scope.push(var, loop_bounds);
+        for (auto &[id, c] : counters) {
+            for (int ci = 0; ci < num_counters; ci++) {
+                Expr &counter = c.counters[ci];
+                if (!counter.defined()) {
+                    continue;
+                }
+                // A counter that varies over the loop is summed as val.max ×
+                // (contributing width), a conservative upper bound rather than
+                // an exact sum, so flag it. (An invariant counter reduces to
+                // its exact value × extent below.)
+                if (expr_uses_var(counter, var)) {
+                    counters_approximated[id] |= (1u << ci);
+                }
+                Interval val = bounds_of_expr_in_scope(counter, scope);
+                if (!val.has_upper_bound()) {
+                    counter = Expr();
+                    continue;
+                }
+                Interval support = solve_for_outer_interval(
+                    simplify(make_zero(counter.type()) < counter), var);
+                support = Interval::make_intersection(support, loop_bounds);
+                Expr width = clamp(simplify(support.max - support.min + 1), 0, extent);
+                counter = simplify(val.max * cast(UInt(64), width));
+            }
+            recompute_free_vars(c);
+        }
+    }
+
+    // GPU hoisting: when a LetStmt is closing out, any counter contribution
+    // that depends on the let-bound name gets wrapped in an exact Let —
+    // but only if the RHS is pure. An impure RHS (e.g. a Load whose
+    // backing buffer may be mutated, or a non-pure Call) would be
+    // re-evaluated in a different scope by the wrapped Let, which can
+    // change its meaning. In that case we drop the contribution and mark
+    // the entry approximated.
+    void hoist_let(const std::string &name, const Expr &value) {
+        bool value_pure = is_pure(value);
+        for (auto &[id, c] : counters) {
+            if (!c.free_vars.count(name)) {
+                continue;
+            }
+            for (auto &counter : c.counters) {
+                if (counter.defined() && expr_uses_var(counter, name)) {
+                    if (value_pure) {
+                        counter = Let::make(name, value, counter);
+                    } else {
+                        counter = Expr();
+                    }
+                }
+            }
+            recompute_free_vars(c);
+        }
+    }
+
+    // GPU hoisting: combine the then- and else-branch counter contributions
+    // of an IfThenElse into the outer scope. For a pure condition, exact via
+    // Select. For an impure condition (e.g. a Load), upper-bound the
+    // contribution by max(then, else) (the branches are mutually exclusive)
+    // and mark the entries as approximated.
+    void hoist_if(const Expr &condition,
+                  std::map<int, Counters> &then_counters,
+                  std::map<int, Counters> &else_counters) {
+        bool cond_pure = is_pure(condition);
+        std::set<int> ids;
+        for (const auto &p : then_counters) {
+            ids.insert(p.first);
+        }
+        for (const auto &p : else_counters) {
+            ids.insert(p.first);
+        }
+        for (int id : ids) {
+            Counters merged;
+            auto *t = then_counters.count(id) ? &then_counters[id] : nullptr;
+            auto *e = else_counters.count(id) ? &else_counters[id] : nullptr;
+            for (int i = 0; i < num_counters; i++) {
+                Expr tv = (t && t->counters[i].defined()) ? t->counters[i] : Expr();
+                Expr ev = (e && e->counters[i].defined()) ? e->counters[i] : Expr();
+                if (!tv.defined() && !ev.defined()) {
+                    continue;
+                }
+                Expr zero64 = make_zero(UInt(64));
+                Expr ti = tv.defined() ? tv : zero64;
+                Expr ei = ev.defined() ? ev : zero64;
+                if (cond_pure) {
+                    merged.counters[i] = select(condition, ti, ei);
+                } else {
+                    // Branches are mutually exclusive — only one runs per
+                    // execution — so the tight conservative upper bound on
+                    // the contribution is max(then, else).
+                    merged.counters[i] = max(ti, ei);
+                }
+            }
+            recompute_free_vars(merged);
+            counters[id].add(merged);
+        }
+    }
+
+    // Compute the total number of points in a box passed to declare_box_required*.
+    // The args after the func handle are (min, max) pairs per dim; the result is
+    // a scalar UInt(64) total, reduced across any surrounding vector lanes.
+    static Expr box_total(const Call *op) {
+        int lanes = op->type.lanes();
+        Expr total = make_one(UInt(64, lanes));
+        for (size_t i = 1; i < op->args.size(); i += 2) {
+            total *= cast(total.type(), op->args[i + 1] + 1 - op->args[i]);
+        }
+        if (lanes > 1) {
+            total = VectorReduce::make(VectorReduce::Add, total, 1);
+        }
+        // Simplifying here removes false dependences on loop vars.
+        return simplify(total);
+    }
+
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::declare_box_required_at_root)) {
+            // Bill the pipeline-wide root box to this Func's canonical
+            // entry only. It's a Func-level fact, not a per-entry one, so
+            // summing it across entries would over-count. The reporter
+            // looks it up via fs->canonical_id when computing each entry's
+            // local recompute ratio.
+            auto it = entries_by_name.find(handle_name(op->args[0]));
+            if (it != entries_by_name.end()) {
+                // entries_by_name was filled in id-ascending order, and the
+                // canonical id is the first id allocated for the name, so
+                // it->second.front() is always the canonical id.
+                counters[it->second.front()].count(PointsRequiredAtRoot, box_total(op));
+            }
+            return make_zero(op->type);
+        } else if (op->is_intrinsic(Call::declare_allocation)) {
+            internal_assert(op->args.size() == 3);
+            std::string fname = names.prefix(handle_name(op->args[0]));
+            auto eit = env.find(fname);
+            if (eit != env.end() && !eit->second.should_not_profile()) {
+                int id = names.id_for_entry(fname, producer_id);
+                counters[id].count(NumAllocs);
+                counters[id].count(MemoryTotal, cast(UInt(64), op->args[1]));
+            }
+            // Leave the marker in the IR (rather than stripping it) so
+            // InjectProfiling can also emit the memory_current/peak
+            // tracking calls for it — those aren't counters and can't be
+            // handled here.
+            return op;
+        } else if (op->is_intrinsic(Call::declare_stage)) {
+            // Marker from ScheduleFunctions saying "we're starting stage N
+            // of Func F here". Update our per-Func pure-def flag and strip
+            // the marker from the IR.
+            internal_assert(op->args.size() == 2);
+            auto stage = as_const_int(op->args[1]);
+            internal_assert(stage);
+            func_in_pure_stage[handle_name(op->args[0])] = (*stage == 0);
+            return make_zero(op->type);
+        } else {
+            // Counter events are never nested, so no recursive mutate call.
+            return op;
+        }
+    }
+
+    // True for Stores to buffers we want to bill: a Func's own storage, or
+    // an output parameter. False for internal bookkeeping buffers like
+    // storage-folding head trackers, async semaphores, and sampling
+    // tokens — we don't want their stores inflating points_computed.
+    bool is_real_data_buffer(const Store *op) const {
+        return op->param.defined() || is_func(names.prefix(op->name));
+    }
+
+    Stmt visit(const Store *op) override {
+        if (is_real_data_buffer(op)) {
+            std::string f = names.prefix(op->name);
+            // Stores in a producer block are to the Func being produced, so
+            // bill them to the current producer's entry id. (That's the
+            // right entry even if f has multiple entries elsewhere.)
+            int id = (producer_id >= 0 && names.entry_info[producer_id].ir_name == f) ?
+                         producer_id :
+                         names.id_for_name(f);
+            Counters &c = counters[id];
+            int lanes = op->value.type().lanes();
+            // Only the pure def (stage 0) contributes to "points computed";
+            // update-def stores are a separate kind of work and shouldn't
+            // show up as recompute. For Tuple-valued Funcs each output
+            // point produces one Store per tuple element (to buffers
+            // f.0, f.1, ...), so counting all of them would inflate
+            // points_computed by the tuple arity. Skip any store whose
+            // buffer name's final dotted component parses as a non-zero
+            // integer -- those are the non-canonical tuple elements.
+            auto it = func_in_pure_stage.find(f);
+            if (it != func_in_pure_stage.end() && it->second) {
+                size_t last_dot = op->name.rfind('.');
+                if (last_dot == std::string::npos || ends_with(op->name, ".0")) {
+                    c.count(PointsComputed, make_const(UInt(64), lanes));
+                }
+            }
+        }
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const ProducerConsumer *op) override {
+        if (op->is_producer) {
+            // One entry per producer node, parented to the surrounding
+            // producer. See file-level comment for why this matters.
+            int id = names.id_for_entry(op->name, producer_id);
+            ScopedValue<int> old(producer_id, id);
+            return IRMutator::visit(op);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
+    Stmt visit(const Allocate *op) override {
+        // Bill heap allocations to NumAllocs and MemoryTotal.
+        std::string fname = names.prefix(op->name);
+        auto eit = env.find(fname);
+        if (eit != env.end() && !eit->second.should_not_profile()) {
+            bool can_fit_on_stack;
+            Expr size = compute_allocation_size(op->extents, op->condition,
+                                                op->type, op->name, can_fit_on_stack);
+            bool on_stack = can_fit_on_stack && !op->new_expr.defined();
+            if (!is_const_zero(size) && !on_stack) {
+                int id = names.id_for_entry(fname, producer_id);
+                counters[id].count(NumAllocs, cast(UInt(64), op->condition));
+                counters[id].count(MemoryTotal, size);
+            }
+        }
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const For *op) override {
+        // GPU loops are also is_unordered_parallel(). We can't use the CPU
+        // local_counters mechanism inside a GPU kernel (device memory,
+        // atomics, IHDBC ordering), so when in_gpu we hoist any
+        // closing-out contributions instead of flushing — see the helper
+        // methods above.
+        ScopedValue<bool> bind_gpu(in_gpu, in_gpu || is_gpu(op->for_type));
+
+        decltype(counters) old;
+        old.swap(counters);
+
+        Stmt body;
+        {
+            ScopedValue<const For *> bind1(enclosing_loop, op);
+            ScopedValue<const For *> bind2(enclosing_parallel_loop,
+                                           op->is_unordered_parallel() ?
+                                               op :
+                                               enclosing_parallel_loop);
+            body = mutate(op->body);
+        }
+
+        if (op->is_unordered_parallel() &&
+            !local_counters.empty()) {
+            // Flush any thread-local counters to global state
+            std::map<int, Counters> to_flush;
+            for (auto [p, idx] : local_counters_indices) {
+                auto [id, counter] = p;
+                to_flush[id].counters[counter] =
+                    Load::make(UInt(64), local_counters, idx);
+            }
+
+            counters.swap(to_flush);
+            Stmt post_flush = flush_all(Evaluate::make(0));
+            counters.swap(to_flush);
+
+            std::vector<Stmt> stmts;
+            stmts.reserve(local_counters_indices.size() + 2);
+            for (int i = 0; i < (int)local_counters_indices.size(); i++) {
+                stmts.push_back(Store::make(local_counters, make_zero(UInt(64)), i));
+            }
+
+            stmts.push_back(std::move(body));
+            stmts.push_back(post_flush);
+            body = Block::make(stmts);
+
+            Expr size = (int)local_counters_indices.size();
+            body = Allocate::make(local_counters, UInt(64), MemoryType::Stack, {size}, const_true(), body);
+        }
+
+        // Scale up the counters by the loop trip count
+        Expr e = simplify(op->extent());
+
+        if (in_gpu) {
+            // Can't flush in the middle of a GPU kernel — sum each counter
+            // over the loop symbolically (this subsumes the mul-by-extent
+            // done for CPU loops below).
+            sum_counters_over_gpu_loop(op, e);
+        } else {
+            body = flush_all_that_depend_on_var(body, op->name);
+            for (auto &[_, c] : counters) {
+                c.mul(e);
+            }
+        }
+
+        merge(old);
+
+        if (op->is_unordered_parallel()) {
+            // The parallel loop belongs to the currently-producing Func.
+            int id = producer_id >= 0 ? producer_id : names.id_for_name(names.prefix(op->name));
+
+            if (!bind_gpu.old_value) {
+                // Unless this is an inner GPU loop, this counts as a parallel loop launch
+                counters[id].count(ParallelLoops);
+            }
+            counters[id].count(ParallelTasks, cast(UInt(64), e));
+        }
+
+        return For::make(op->name, op->min, op->max,
+                         op->for_type, op->partition_policy, op->device_api, std::move(body));
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        decltype(counters) old;
+        counters.swap(old);
+        Stmt body = mutate(op->body);
+        if (in_gpu) {
+            hoist_let(op->name, op->value);
+        } else {
+            body = flush_all_that_depend_on_var(body, op->name);
+        }
+        merge(old);
+        return LetStmt::make(op->name, op->value, body);
+    }
+
+    Stmt visit(const IfThenElse *op) override {
+        if (in_gpu) {
+            // Inside a GPU kernel we can't flush in the branches; instead
+            // combine the branch contributions into the outer scope via
+            // Select (or a conservative max of the branches if the
+            // condition is impure).
+            decltype(counters) outer;
+            counters.swap(outer);
+            Stmt then_case = mutate(op->then_case);
+            decltype(counters) then_counters;
+            counters.swap(then_counters);
+            Stmt else_case;
+            decltype(counters) else_counters;
+            if (op->else_case.defined()) {
+                else_case = mutate(op->else_case);
+                counters.swap(else_counters);
+            }
+            counters.swap(outer);
+            hoist_if(op->condition, then_counters, else_counters);
+            return IfThenElse::make(op->condition, then_case, else_case);
+        }
+
+        decltype(counters) old;
+        counters.swap(old);
+        Stmt then_case, else_case;
+        then_case = mutate(op->then_case);
+        then_case = flush_all(then_case);
+        if (op->else_case.defined()) {
+            else_case = mutate(op->else_case);
+            else_case = flush_all(else_case);
+        }
+        counters.swap(old);
+        return IfThenElse::make(op->condition, then_case, else_case);
+    }
+
+    Stmt visit(const Block *op) override {
+        // Put the outermost counter update just outside the timing start
+        const Evaluate *eval = op->first.as<Evaluate>();
+        const Call *call = eval ? eval->value.as<Call>() : nullptr;
+        if (call && call->is_intrinsic(Call::profiling_enable_instance_marker)) {
+            return flush_all(IRMutator::visit(op));
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
+public:
+    Stmt operator()(const Stmt &s) {
+        return flush_all(IRMutator::operator()(s));
+    }
+
+    // Counter-approximation bitmask for entry `id` (0 if all exact).
+    uint32_t approximated_counters(int id) const {
+        auto it = counters_approximated.find(id);
+        return it == counters_approximated.end() ? 0 : it->second;
     }
 };
 
@@ -414,6 +1059,16 @@ private:
         return s;
     }
 
+    // Bill a heap allocation of `size` bytes to entry `idx`, bumping its
+    // memory_current/peak. Shared by the Allocate visitor and the
+    // declare_allocation marker (device-only buffers whose host Allocate
+    // was nulled out). num_allocs/memory_total are handled separately via
+    // the counter path.
+    Expr memory_allocate_call(int idx, const Expr &size) {
+        return Call::make(Int(32), "halide_profiler_memory_allocate",
+                          {profiler_instance, idx, size}, Call::Extern);
+    }
+
     Stmt set_current_func(int id) {
         if (most_recently_set_func == id) {
             return Evaluate::make(0);
@@ -427,44 +1082,33 @@ private:
         return s;
     }
 
-    Expr compute_allocation_size(const vector<Expr> &extents,
-                                 const Expr &condition,
-                                 const Type &type,
-                                 const std::string &name,
-                                 bool &can_fit_on_stack) {
-        can_fit_on_stack = true;
-
-        Expr cond = simplify(condition);
-        if (is_const_zero(cond)) {  // Condition always false
-            return make_zero(UInt(64));
-        }
-
-        int64_t constant_size = Allocate::constant_allocation_size(extents, name);
-        if (constant_size > 0) {
-            int64_t stack_bytes = constant_size * type.bytes();
-            if (can_allocation_fit_on_stack(stack_bytes)) {  // Allocation on stack
-                return make_const(UInt(64), stack_bytes);
-            }
-        }
-
-        // Check that the allocation is not scalar (if it were scalar
-        // it would have constant size).
-        internal_assert(!extents.empty());
-
-        can_fit_on_stack = false;
-        Expr size = cast<uint64_t>(extents[0]);
-        for (size_t i = 1; i < extents.size(); i++) {
-            size *= extents[i];
-        }
-        size = simplify(Select::make(condition, size * type.bytes(), make_zero(UInt(64))));
-        return size;
-    }
-
     Expr visit(const Call *op) override {
         if (op->is_intrinsic(Call::profiling_enable_instance_marker)) {
             // End of the bounds-query prelude — start collecting samples.
             return Call::make(Int(32), "halide_profiler_enable_instance",
                               {profiler_instance}, Call::Extern);
+        } else if (op->is_intrinsic(Call::declare_allocation)) {
+            // A device-only buffer: InjectHostDevBufferCopies nulled its
+            // host Allocate (condition false), so visit(Allocate) pushed a
+            // zero-size func_alloc_sizes entry and emitted no tracking. The
+            // device storage is real, and its Free node still brackets the
+            // lifetime, so rewrite the entry to the device size — the
+            // matching Free then emits a memory_free — and emit the
+            // memory_allocate here. (num_allocs/memory_total are billed via
+            // the counter path.)
+            internal_assert(op->args.size() == 3);
+            std::string name = handle_name(op->args[0]);
+            Expr size = simplify(cast<uint64_t>(op->args[1]));
+            int idx = -1;
+            if (func_alloc_sizes.contains(name)) {
+                idx = func_alloc_sizes.get(name).id;
+                func_alloc_sizes.pop(name);
+            }
+            func_alloc_sizes.push(name, {/*on_stack=*/false, size, idx});
+            if (profiling_memory && idx >= 0 && !is_const_zero(size)) {
+                return memory_allocate_call(idx, size);
+            }
+            return make_zero(op->type);
         } else {
             return IRMutator::visit(op);
         }
@@ -494,12 +1138,8 @@ private:
             idx = stack.back();
             break;
         case Kind::NotAFunc:
-            // Allocations whose name doesn't match a Func (e.g. fused
-            // allocation-group buffers) still get tracked: mint an
-            // allocation-kind entry under the current producer so the
-            // bytes are attributed somewhere.
-            idx = names.id_for_entry(op->name, stack.back() == names.overhead_id ? -1 : stack.back(),
-                                     halide_profiler_func_kind_allocation);
+            // Ignore allocations that don't correspond to a Func
+            idx = -1;
             break;
         }
 
@@ -520,15 +1160,14 @@ private:
         }
 
         vector<Stmt> tasks;
-        bool track_heap_allocation = !is_const_zero(size) && !on_stack && profiling_memory;
+        bool track_heap_allocation = !is_const_zero(size) && !on_stack && profiling_memory && idx >= 0;
         if (track_heap_allocation) {
             debug(3) << "  Allocation on heap: " << op->name
                      << "(" << size << ") in pipeline "
                      << names.pipeline_name << "\n";
 
             tasks.push_back(set_current_func(names.malloc_id));
-            tasks.push_back(Evaluate::make(Call::make(Int(32), "halide_profiler_memory_allocate",
-                                                      {profiler_instance, idx, size}, Call::Extern)));
+            tasks.push_back(Evaluate::make(memory_allocate_call(idx, size)));
         }
 
         Stmt body = mutate(op->body);
@@ -564,7 +1203,7 @@ private:
         if (!is_const_zero(alloc.size)) {
             int idx = alloc.id;
             if (!alloc.on_stack) {
-                if (profiling_memory) {
+                if (profiling_memory && idx >= 0) {
                     debug(3) << "  Free on heap: " << op->name << "(" << alloc.size << ") in pipeline " << names.pipeline_name << "\n";
 
                     vector<Stmt> tasks{
@@ -818,15 +1457,20 @@ private:
 
 }  // namespace
 
-Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::map<string, Function> &env) {
+Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::map<string, Function> &env, const Target &target) {
     Names names(pipeline_name, env);
 
     // 1) Allocate an id for every entry. After this, names.entry_info
     //    is the full set of entries we'll report on.
     Stmt s = PreAllocateEntries(names, env)(stmt);
 
-    // 2) Inject the profiler scaffolding: thread activation, memory
-    //    tracking, current-func tracking, copy-to-host/device timing.
+    // 2) Inject the counter-update calls for stats (parallel loops,
+    //    points computed, etc.).
+    InjectCounters injector(names, env);
+    s = injector(s);
+
+    // 3) Inject the rest of the profiler scaffolding: thread activation,
+    //    memory tracking, current-func tracking, copy-to-host/device timing.
     InjectProfiling profiling(names, env);
     s = profiling(s);
 
@@ -839,6 +1483,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     Expr func_canonical_ids_buf = Variable::make(Handle(), names.profiler_func_canonical_ids);
     Expr func_kinds_buf = Variable::make(Handle(), names.profiler_func_kinds);
     Expr func_buffer_func_ids_buf = Variable::make(Handle(), names.profiler_func_buffer_func_ids);
+    Expr func_counters_approximated_buf = Variable::make(Handle(), names.profiler_func_counters_approximated);
 
     Expr start_profiler = Call::make(Int(32), "halide_profiler_instance_start",
                                      {pipeline_name,
@@ -848,6 +1493,8 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
                                       func_canonical_ids_buf,
                                       func_kinds_buf,
                                       func_buffer_func_ids_buf,
+                                      func_counters_approximated_buf,
+                                      make_const(UInt(64), target.natural_vector_size(UInt(8))),
                                       instance},
                                      Call::Extern);
 
@@ -898,6 +1545,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     std::vector<Expr> func_canonical_ids(num_funcs);
     std::vector<Expr> func_kinds(num_funcs);
     std::vector<Expr> func_buffer_func_ids(num_funcs);
+    std::vector<Expr> func_counters_approximated(num_funcs);
     for (int i = 0; i < num_funcs; i++) {
         const auto &info = names.entry_info[i];
         func_names[i] = info.name;
@@ -905,6 +1553,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
         func_canonical_ids[i] = info.canonical_id;
         func_kinds[i] = make_const(Int(32), (int)info.kind);
         func_buffer_func_ids[i] = info.buffer_func_id;
+        func_counters_approximated[i] = make_const(UInt(32), injector.approximated_counters(i));
     }
 
     s = LetStmt::make(names.profiler_func_names, Call::make(Handle(), Call::make_struct, func_names, Call::Intrinsic), s);
@@ -912,6 +1561,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     s = LetStmt::make(names.profiler_func_canonical_ids, Call::make(Handle(), Call::make_struct, func_canonical_ids, Call::Intrinsic), s);
     s = LetStmt::make(names.profiler_func_kinds, Call::make(Handle(), Call::make_struct, func_kinds, Call::Intrinsic), s);
     s = LetStmt::make(names.profiler_func_buffer_func_ids, Call::make(Handle(), Call::make_struct, func_buffer_func_ids, Call::Intrinsic), s);
+    s = LetStmt::make(names.profiler_func_counters_approximated, Call::make(Handle(), Call::make_struct, func_counters_approximated, Call::Intrinsic), s);
     s = Block::make(Evaluate::make(stop_profiler), s);
 
     // Allocate memory for the profiler instance state

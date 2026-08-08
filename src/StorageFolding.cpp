@@ -678,11 +678,11 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                         // consumer wants to move the counter, it must
                         // also acquire or release the semaphore to
                         // prevent them from diverging too far.
-                        dynamic_footprint = func.name() + ".folding_semaphore." + op->name + unique_name('_');
+                        dynamic_footprint = unique_name("fold") + "." + func.name() + "." + op->name + ".semaphore";
                         head = dynamic_footprint + ".head";
                         tail = dynamic_footprint + ".tail";
                     } else {
-                        dynamic_footprint = func.name() + "." + op->name + unique_name('_') + ".head";
+                        dynamic_footprint = unique_name("fold") + "." + func.name() + "." + op->name + ".head";
                         head = tail = dynamic_footprint;
                     }
 

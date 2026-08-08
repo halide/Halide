@@ -1493,6 +1493,12 @@ void check_boolean() {
     check(select(x > 5, 2, 3) + select(x > 5, 6, 2), select(5 < x, 8, 5));
     check(select(x > 5, 8, 3) - select(x > 5, 6, 2), select(5 < x, 2, 1));
 
+    // A comparison of a constant against a select of constants folds for
+    // any type, including unsigned ones (which don't satisfy no_overflow).
+    check(0 < select(x < 5, 4, 0), x < 5);
+    check(make_zero(UInt(32)) < select(x < 5, make_const(UInt(32), 4), make_const(UInt(32), 0)), x < 5);
+    check(select(x < 5, make_const(UInt(32), 0), make_const(UInt(32), 4)) < make_const(UInt(32), 1), x < 5);
+
     check(select(x < 5, select(x < 5, 0, 1), 2), select(x < 5, 0, 2));
     check(select(x < 5, 0, select(x < 5, 1, 2)), select(x < 5, 0, 2));
 
