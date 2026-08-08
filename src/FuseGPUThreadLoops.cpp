@@ -29,6 +29,128 @@ using std::vector;
 
 namespace {
 
+// Being filled by the copy engine is a property of the stores to an
+// allocation, not of the memory it lives in, so MemoryType::GPUSharedAsync is
+// only the schedule's way of saying it. Rewrite such allocations to ordinary
+// shared memory, wrapping the value of each store to them in a
+// cuda_bypass_registers intrinsic and awaiting the copies where the data is
+// consumed. Everything below then sees one kind of shared memory, which is
+// what lets all of a kernel's shared allocations be packed together.
+class MarkAsyncCopies : public IRMutator {
+    using IRMutator::visit;
+
+    // The allocations being filled by the copy engine, and the group each
+    // one's copies belong to. Copies in a group are awaited together.
+    map<string, int> groups;
+    int next_group = 0;
+
+    // Only CUDA has a copy engine to drive. Elsewhere the allocation still
+    // becomes ordinary shared memory, but the stores to it stay ordinary too.
+    DeviceAPI device_api = DeviceAPI::None;
+
+    Stmt visit(const For *op) override {
+        ScopedValue<DeviceAPI> d(device_api, op->device_api == DeviceAPI::None ?
+                                                 device_api :
+                                                 op->device_api);
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const Allocate *op) override {
+        if (op->memory_type != MemoryType::GPUSharedAsync) {
+            return IRMutator::visit(op);
+        }
+
+        // One group per allocation, so that consuming one Func doesn't wait
+        // for the copies into another.
+        auto [it, inserted] = groups.emplace(op->name, next_group++);
+        internal_assert(inserted)
+            << "Two asynchronously copied allocations are both named " << op->name << "\n";
+
+        Stmt body = mutate(op->body);
+        groups.erase(it);
+
+        return Allocate::make(op->name, op->type, MemoryType::GPUShared,
+                              op->extents, mutate(op->condition), body,
+                              op->new_expr, op->free_function, op->padding);
+    }
+
+    Stmt visit(const Store *op) override {
+        auto it = groups.find(op->name);
+        if (it == groups.end() || device_api != DeviceAPI::CUDA) {
+            return IRMutator::visit(op);
+        }
+        // The Func name is carried along because the allocations get packed
+        // together below, after which the store no longer knows which Func it
+        // belongs to, and that is the name an error has to name.
+        Expr value = Call::make(op->value.type(), Call::cuda_bypass_registers,
+                                {mutate(op->value), it->second, StringImm::make(op->name)},
+                                Call::Intrinsic);
+        return Store::make(op->name, value, mutate(op->index), op->param,
+                           mutate(op->predicate), op->alignment, op->is_streaming);
+    }
+
+    // Waiting for a copy is something each thread does for the copies it
+    // issued itself, so the wait belongs inside the loops over threads. Put it
+    // at the end of the innermost one, which is still before the barrier that
+    // publishes the data to the rest of the block and before any of it is
+    // read. Leaving it after them would make it a statement outside the loops
+    // over threads, which is a thing only the first thread does.
+    class AwaitInEachThread : public IRMutator {
+        using IRMutator::visit;
+
+        Stmt visit(const For *op) override {
+            Stmt body = mutate(op->body);
+            if ((op->for_type == ForType::GPUThread || op->for_type == ForType::GPULane) &&
+                body.same_as(op->body)) {
+                // Placing the wait is the only thing this does, so a body that
+                // comes back unchanged is one with no loop over threads inside
+                // it, and this is the innermost one.
+                body = Block::make(body, Evaluate::make(wait));
+            }
+            return op->with(op->min, op->max, body);
+        }
+
+        const Expr &wait;
+
+    public:
+        using IRMutator::mutate;
+
+        AwaitInEachThread(const Expr &wait)
+            : wait(wait) {
+        }
+    };
+
+    Stmt visit(const ProducerConsumer *op) override {
+        Stmt body = mutate(op->body);
+        auto it = groups.find(op->name);
+        if (op->is_producer && it != groups.end() && device_api == DeviceAPI::CUDA) {
+            Expr wait = Call::make(Int(32), Call::cuda_await_copies,
+                                   {it->second}, Call::Intrinsic);
+            Stmt with_wait = AwaitInEachThread(wait).mutate(body);
+            // Unchanged means there was no loop over threads to put it in,
+            // because only one thread runs this producer.
+            body = with_wait.same_as(body) ? Block::make(body, Evaluate::make(wait)) : with_wait;
+        }
+        return op->with(body);
+    }
+
+public:
+    using IRMutator::mutate;
+};
+
+// The copy engine moves up to 16 bytes at a time, and needs its destination
+// aligned to the width of the copy. Allocations are packed one after another,
+// so a group has to end on a 16-byte boundary for whatever follows it to be
+// copyable into. Round a group's size up accordingly, given the size in bytes
+// of the units it is measured in.
+Expr round_up_group_size(const Expr &size, int unit_bytes) {
+    const int alignment = 16;
+    if (unit_bytes >= alignment) {
+        return size;
+    }
+    return align_up(size, alignment / unit_bytes);
+}
+
 class ExtractBlockSize : public IRVisitor {
 protected:
     Expr block_extent[3], block_count[3];
@@ -232,7 +354,7 @@ bool allocation_goes_to_registers(const Allocate *op, bool in_threads) {
     bool fixed_size_thread_allocation = (op->constant_allocation_size() != 0) && in_threads;
     return (fixed_size_thread_allocation &&
             op->memory_type != MemoryType::Heap &&
-            op->memory_type != MemoryType::GPUShared &&
+            !is_gpu_shared(op->memory_type) &&
             op->memory_type != MemoryType::GPUTexture) ||
            op->memory_type == MemoryType::Register ||
            op->memory_type == MemoryType::Stack;
@@ -476,7 +598,7 @@ protected:
         }
 
         user_assert(op->memory_type == MemoryType::Auto ||
-                    op->memory_type == MemoryType::GPUShared ||
+                    is_gpu_shared(op->memory_type) ||
                     op->memory_type == MemoryType::GPUTexture ||
                     op->memory_type == MemoryType::Heap)
             << "Allocation " << op->name << " must live in shared or heap memory, "
@@ -878,7 +1000,7 @@ public:
                 int ratio = alloc.widest_type.bytes() / alloc_type.bytes();
                 internal_assert(ratio != 0)
                     << "alloc_type should have been at most as wide as the widest type in group\n";
-                total_size += alloc.max_size * ratio;
+                total_size += round_up_group_size(alloc.max_size * ratio, alloc_type.bytes());
             }
 
             // Upgrade the alloc type to the widest type found, and
@@ -953,7 +1075,8 @@ public:
                         offset = Variable::make(Int(32), name + "." + std::to_string(i - 1) + ".offset");
                         int ratio = (widest_type.bytes() / cluster[i - 1].widest_type.bytes());
                         internal_assert(ratio != 0);
-                        offset += simplify((cluster[i - 1].max_size + ratio - 1) / ratio);
+                        offset += simplify(round_up_group_size(
+                            (cluster[i - 1].max_size + ratio - 1) / ratio, widest_type.bytes()));
                     } else {
                         if (memory_type == MemoryType::Heap) {
                             // One slice of a larger global allocation
@@ -1362,6 +1485,7 @@ protected:
         debug(4) << "Encountered store to " << op->name << "\n";
         auto mem_type = memory_type_for_name(op->name);
         switch (mem_type) {
+        case MemoryType::GPUSharedAsync:
         case MemoryType::GPUShared:
             debug(4) << "   memory type is shared\n";
             shared_stores.insert(op->name);
@@ -1387,6 +1511,7 @@ protected:
         debug(4) << "Encountered load from " << op->name << "\n";
         auto mem_type = memory_type_for_name(op->name);
         switch (mem_type) {
+        case MemoryType::GPUSharedAsync:
         case MemoryType::GPUShared:
             debug(4) << "   memory type is shared\n";
             shared_loads.insert(op->name);
@@ -1689,6 +1814,9 @@ Stmt fuse_gpu_thread_loops(Stmt s) {
     // into the innermost GPU block. FuseGPUThreadLoops would then
     // merge the predicate into the merged GPU thread.
     s = NormalizeIfStatements()(s);
+    // Must run before the allocations are packed together, because packing
+    // them relies on there being only one kind of shared memory.
+    s = MarkAsyncCopies().mutate(s);
     s = FuseGPUThreadLoops()(s);
     s = ZeroGPULoopMins()(s);
     return s;
