@@ -91,7 +91,7 @@ class LowerStructTypesMutator : public IRMutator {
         auto byte_load = [&](int b) {
             Expr idx = b == 0 ? byte_offset : byte_offset + make_const(index_type, b);
             return Load::make(UInt(8), load->name, idx, load->image, load->param,
-                              const_true(), ModulusRemainder());
+                              const_true(), ModulusRemainder(), load->is_streaming);
         };
 
         if (elem_bytes == 1) {
@@ -227,7 +227,7 @@ protected:
                 for (int b = 0; b < elem_bytes; b++) {
                     Expr byte_val = elem_bytes == 1 ? bits : extract_bits(UInt(8), bits, make_const(Int(32), 8 * b));
                     Expr byte_idx = b == 0 ? elem_byte_base : elem_byte_base + make_const(index_type, b);
-                    stores.push_back(Store::make(op->name, byte_val, byte_idx, op->param, predicate, ModulusRemainder()));
+                    stores.push_back(Store::make(op->name, byte_val, byte_idx, op->param, predicate, ModulusRemainder(), op->is_streaming));
                 }
             }
         }
