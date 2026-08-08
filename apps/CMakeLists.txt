@@ -55,8 +55,8 @@ add_app(fft)
 add_app(gaussian_blur)
 add_app(hannk)
 add_app(harris)
-# add_app(HelloAndroid)  # TODO(#5374): missing CMake build
-# add_app(HelloAndroidCamera2)  # TODO(#5374): missing CMake build
+# add_app(HelloAndroid)  # don't build HelloAndroid here because it is driven by gradle
+# add_app(HelloAndroidCamera2)  # don't build HelloAndroidCamera2 here because it is driven by gradle
 add_app(HelloBaremetal)
 # add_app(HelloiOS)  # don't build HelloiOS here because it isn't universal.
 add_app(HelloPyTorch)

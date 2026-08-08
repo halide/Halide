@@ -1,14 +1,20 @@
 package com.example.hellohalide;
 
+import android.Manifest;
 import android.app.Activity;
-import android.os.Bundle;
+import android.content.pm.PackageManager;
 import android.hardware.Camera;
+import android.os.Bundle;
 import android.util.Log;
 import android.widget.FrameLayout;
 import android.view.SurfaceView;
 
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+
 public class CameraActivity extends Activity {
     private static final String TAG = "CameraActivity";
+    private static final int REQUEST_CAMERA_PERMISSION = 1;
 
     private Camera camera;
     private CameraPreview preview;
@@ -45,6 +51,26 @@ public class CameraActivity extends Activity {
     @Override
     public void onResume() {
         super.onResume();
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                == PackageManager.PERMISSION_GRANTED) {
+            openCamera();
+        } else {
+            ActivityCompat.requestPermissions(
+                    this, new String[] {Manifest.permission.CAMERA}, REQUEST_CAMERA_PERMISSION);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(
+            int requestCode, String[] permissions, int[] grantResults) {
+        if (requestCode == REQUEST_CAMERA_PERMISSION
+                && grantResults.length > 0
+                && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            openCamera();
+        }
+    }
+
+    private void openCamera() {
         camera = getCameraInstance();
         preview.setCamera(camera);
     }

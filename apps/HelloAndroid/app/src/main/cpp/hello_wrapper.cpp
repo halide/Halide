@@ -80,6 +80,7 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(
     if (dst) {
         srcBuf.host = (uint8_t *)src;
         srcBuf.set_host_dirty();
+        srcBuf.dimensions = 2;
         srcBuf.dim = srcDim;
         srcBuf.dim[0].min = 0;
         srcBuf.dim[0].extent = w;
@@ -97,6 +98,7 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(
         }
 
         dstBuf.host = dst;
+        dstBuf.dimensions = 2;
         dstBuf.dim = dstDim;
         dstBuf.dim[0].min = 0;
         dstBuf.dim[0].extent = w;

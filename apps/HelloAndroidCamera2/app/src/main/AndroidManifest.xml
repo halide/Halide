@@ -12,12 +12,8 @@
  limitations under the License.
 -->
 
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.example.helloandroidcamera2"
-    android:versionCode="1"
-    android:versionName="1.0">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <uses-sdk android:minSdkVersion="21" />
     <uses-permission android:name="android.permission.CAMERA" />
 
     <application android:allowBackup="true"
@@ -26,6 +22,7 @@
         android:theme="@style/MaterialTheme">
 
         <activity android:name="com.example.helloandroidcamera2.CameraActivity"
+                  android:exported="true"
                   android:label="@string/app_name"
                   android:screenOrientation="landscape">
             <intent-filter>
