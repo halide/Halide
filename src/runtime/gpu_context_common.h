@@ -127,7 +127,7 @@ class GPUCompilationCache {
         }
 
         for (int i = 0; i < (1 << log2_compilations_size); i++) {
-            if (compilations[i].kernel_id > kInvalidId &&
+            if (compilations[i].kernel_id > kDeletedId &&
                 (all || (compilations[i].context == context)) &&
                 compilations[i].use_count == 0) {
                 debug(user_context) << "Releasing cached compilation: " << compilations[i].module_state
@@ -166,6 +166,31 @@ public:
         ScopedMutexLock lock_guard(&mutex);
 
         release_context_already_locked(user_context, false, context, f);
+    }
+
+    template<typename ShouldDeleteModuleT, typename FreeModuleT>
+    void delete_context_if(void *user_context, ContextT context,
+                           ShouldDeleteModuleT &should_delete, FreeModuleT &f) {
+        ScopedMutexLock lock_guard(&mutex);
+
+        if (count == 0) {
+            return;
+        }
+
+        for (int i = 0; i < (1 << log2_compilations_size); i++) {
+            if (compilations[i].kernel_id > kDeletedId &&
+                compilations[i].context == context &&
+                compilations[i].use_count == 0 &&
+                should_delete(compilations[i].module_state)) {
+                debug(user_context) << "Releasing cached compilation: " << compilations[i].module_state
+                                    << " id " << compilations[i].kernel_id
+                                    << " context " << compilations[i].context << "\n";
+                f(compilations[i].module_state);
+                compilations[i].module_state = nullptr;
+                compilations[i].kernel_id = kDeletedId;
+                count--;
+            }
+        }
     }
 
     template<typename FreeModuleT>
