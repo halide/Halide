@@ -22,6 +22,10 @@
     - [Using a Generator for JIT compilation](#using-a-generator-for-jit-compilation)
     - [Using a Generator for AOT compilation](#using-a-generator-for-aot-compilation)
     - [Calling Generator-Produced code from Python](#calling-generator-produced-code-from-python)
+    - [Calling AOT Code Without the Compiler (`halide.runtime`)](#calling-aot-code-without-the-compiler-halideruntime)
+      - [Producing a loadable kernel](#producing-a-loadable-kernel)
+      - [Loading and calling a kernel](#loading-and-calling-a-kernel)
+      - [The `halide.runtime.Buffer` type](#the-halideruntimebuffer-type)
     - [Advanced Generator-Related Topics](#advanced-generator-related-topics)
       - [Generator Aliases](#generator-aliases)
       - [Dynamic Inputs and Outputs](#dynamic-inputs-and-outputs)
@@ -620,6 +624,128 @@ Halide. But if you construct the numpy arrays yourself (like above), you can
 pass `order='F'` to make numpy use the Halide-compatible memory layout. If
 you're passing in an array constructed somewhere else, the easiest thing to do
 is to `.transpose()` it before passing it to your Halide code.
+
+### Calling AOT Code Without the Compiler (`halide.runtime`)
+
+The approach above imports a Python extension that was produced at build time by
+`add_halide_python_extension_library`. Sometimes you instead want to load a
+precompiled Halide kernel _dynamically_, at runtime, from an ordinary shared
+library -- and to do so in an environment that does not have the Halide compiler
+(or `libHalide`) installed at all. This is what the `halide.runtime` module is
+for: it is a small, standalone package that can load and call AOT-compiled
+Halide kernels without depending on `libHalide`.
+
+This is primarily useful for deployment. You can compile your pipelines on a
+build machine that has the full Halide toolchain, then ship only the resulting
+kernels plus this tiny runtime, and run them on machines that have neither the
+compiler nor LLVM installed.
+
+`halide.runtime` is always included in the full `halide` package, but it is also
+published as a separate, `libHalide`-free wheel for exactly this deployment
+case:
+
+```shell
+pip install halide-runtime
+```
+
+Importing `halide.runtime` never loads `libHalide`; in the full package, the
+compiler is loaded only if and when you first access a compiler symbol such as
+`hl.Func`. (In a runtime-only install there is no compiler at all, so accessing
+one raises an `ImportError` explaining that only the runtime is present and
+pointing you at the full `halide` package.)
+
+#### Producing a loadable kernel
+
+`halide.runtime` loads a shared library that exports a Halide filter's
+`<name>_argv` and `<name>_metadata` symbols -- the ordinary product of AOT
+compilation. Note that this is _not_ the same artifact as the Python extension
+produced by `add_halide_python_extension_library`, which deliberately hides
+every symbol except its `PyInit_` entry point. Instead, link the AOT library
+into a plain shared module that keeps those symbols visible:
+
+```cmake
+add_halide_library(my_kernel FROM my_generator GENERATOR my_kernel)
+
+# Wrap the static AOT library in a shared module, keeping the filter's
+# _argv/_metadata symbols exported so they can be resolved at load time.
+# (A MODULE library needs at least one source of its own; an empty stub is fine.)
+add_library(my_kernel_module MODULE stub.c)
+target_link_libraries(my_kernel_module PRIVATE
+                      "$<LINK_LIBRARY:WHOLE_ARCHIVE,my_kernel>")
+set_target_properties(my_kernel_module PROPERTIES
+                      PREFIX "" OUTPUT_NAME my_kernel
+                      C_VISIBILITY_PRESET default
+                      CXX_VISIBILITY_PRESET default)
+```
+
+Because `add_halide_library` bundles a Halide runtime into the library by
+default, the resulting shared module is self-contained and, like
+`halide.runtime` itself, has no dependency on `libHalide`.
+
+#### Loading and calling a kernel
+
+Once you have such a library, loading and calling it looks much like using the
+compiled extension above:
+
+```python
+import numpy as np
+import halide.runtime as hlr
+
+# dlopen the shared library and locate the Halide filter inside it. The filter
+# name defaults to the library's file name; pass name=... if it differs.
+kernel = hlr.load("/path/to/my_kernel.so", name="my_kernel")
+
+print(kernel.name)  # "my_kernel"
+print(kernel.target)  # the Target string it was compiled for
+print(kernel.argument_names)  # e.g. ['input', 'offset', 'output']
+
+# `kernel.arguments` gives the full calling convention: one dict per argument,
+# in argv order, with its name, kind ('input_scalar', 'input_buffer', or
+# 'output_buffer'), element type (e.g. 'uint8'), and dimensions (0 for scalars).
+for arg in kernel.arguments:
+    print(
+        arg
+    )  # {'name': 'input', 'kind': 'input_buffer', 'type': 'uint8', 'dimensions': 2}
+
+input_buf = imageio.imread("/path/to/some/file.png")
+output_buf = np.empty(input_buf.shape, dtype=input_buf.dtype)
+
+# Arguments -- inputs, scalars, and the output buffer(s) -- are passed
+# positionally in the order given by kernel.argument_names, or by keyword,
+# in the Python manner:
+kernel(input_buf, np.int32(5), output_buf)
+# kernel(input=input_buf, offset=5, output=output_buf)
+```
+
+As with the compiled extension, Halide does not allocate outputs for you: you
+must pass in a correctly-sized output buffer, and error conditions raise a
+Python exception rather than returning an int.
+
+#### The `halide.runtime.Buffer` type
+
+Any object that supports the Python buffer protocol (such as a numpy array) may
+be passed directly to a kernel. For finer control, `halide.runtime.Buffer` wraps
+such an object as a Halide runtime buffer, without copying:
+
+```python
+buf = hlr.Buffer(np.empty((480, 640), dtype=np.uint8))
+buf.dimensions  # 2
+buf.type  # "uint8"
+buf.shape  # [480, 640]
+
+view = np.asarray(buf)  # a zero-copy view of the same memory
+```
+
+A `Buffer` exposes the same `_get_raw_halide_buffer_t` protocol that
+`halide.Buffer` and the extensions produced by
+`add_halide_python_extension_library` use, so the very same object can be handed
+either to a kernel loaded via `halide.runtime.load` or to a function in a
+generated extension module.
+
+The same memory-order caveats described in the previous section apply here:
+numpy's default row-major layout corresponds to Halide's axes in reverse order,
+so construct your arrays with `order='F'` (or `.transpose()` them) when the axis
+order matters.
 
 ### Advanced Generator-Related Topics
 

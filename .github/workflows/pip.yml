@@ -20,8 +20,8 @@ permissions:
   contents: read  #  to fetch code (actions/checkout)
 
 jobs:
-  build-wheels:
-    name: Build Halide wheels for ${{ matrix.platform_tag }}
+  build-halide-bin:
+    name: Build halide-bin for ${{ matrix.platform_tag }}
 
     runs-on: ${{ matrix.os }}
     strategy:
@@ -64,16 +64,18 @@ jobs:
           echo "Halide_LLVM_ROOT=$(halide-llvm --prefix)" >> "$GITHUB_ENV"
 
       ########################################################################
-      # Wheels
+      # Wheel (no CPython ABI to matrix over -- halide-bin is a plain
+      # py3-none-<platform> wheel, so we only ever need to invoke
+      # cibuildwheel against a single, arbitrary interpreter to drive the
+      # underlying CMake build once per platform).
       ########################################################################
 
-      #- uses: mxschmitt/action-tmate@v3
-
-      - name: Build wheels
+      - name: Build wheel
         uses: pypa/cibuildwheel@v4.1.1
+        with:
+          package-dir: packaging/pip-bin
         env:
-          CIBW_BUILD: "cp3*-${{ matrix.platform_tag }}"
-          CIBW_SKIP: "cp3{5,6,7,8,9}* cp314t-*"
+          CIBW_BUILD: "cp312-${{ matrix.platform_tag }}"
           CIBW_BEFORE_ALL_LINUX: >
             /opt/python/cp312-cp312/bin/pip install cmake ninja
             "halide-llvm==${{ env.LLVM_VERSION }}"
@@ -130,17 +132,114 @@ jobs:
           CIBW_ENVIRONMENT_LINUX: >
             Halide_LLVM_ROOT=/project/opt/llvm
             CMAKE_PREFIX_PATH=/project/opt
-            SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE='{local_scheme="no-local-version"}'
+            SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE_BIN='{local_scheme="no-local-version"}'
           CIBW_ENVIRONMENT_MACOS: >
             CMAKE_PREFIX_PATH='${{ github.workspace }}/opt'
+            Python_ROOT_DIR=''
+            SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE_BIN='{local_scheme="no-local-version"}'
+          CIBW_ENVIRONMENT_WINDOWS: >
+            CMAKE_GENERATOR=Ninja
+            CMAKE_PREFIX_PATH='${{ github.workspace }}\opt'
+            SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE_BIN='{local_scheme="no-local-version"}'
+          CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: delvewheel repair --ignore-existing -w {dest_dir} {wheel}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheels-bin-${{ matrix.platform_tag }}
+          path: ./wheelhouse/*.whl
+
+  build-wheels:
+    name: Build Halide wheels for ${{ matrix.platform_tag }}
+    needs: build-halide-bin
+
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform_tag: manylinux_x86_64
+          - os: windows-latest
+            platform_tag: win_amd64
+          - os: macos-15-intel
+            platform_tag: macosx_x86_64
+          - os: macos-15
+            platform_tag: macosx_arm64
+
+    env:
+      MACOSX_DEPLOYMENT_TARGET: 11
+      HALIDE_SPLIT_BUILD: "1"
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: lukka/get-cmake@v4.4.0
+        with:
+          cmakeVersion: "~3.28.0"
+
+      ########################################################################
+      # halide-bin
+      #
+      # Building the Python bindings no longer needs LLVM/FlatBuffers/WABT at
+      # all -- it links against an already-installed halide-bin via
+      # find_package(Halide). Fetch the wheel this platform's
+      # build-halide-bin job just produced, and unpack a copy of it so
+      # CMAKE_PREFIX_PATH can point straight at a real directory (as opposed
+      # to a still-zipped wheel).
+      ########################################################################
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: wheels-bin-${{ matrix.platform_tag }}
+          path: dist-bin
+
+      - name: Unpack halide-bin for the build
+        shell: bash
+        run: python -m zipfile -e dist-bin/*.whl opt/halide-bin
+
+      ########################################################################
+      # Wheels
+      ########################################################################
+
+      #- uses: mxschmitt/action-tmate@v3
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v4.1.1
+        env:
+          CIBW_BUILD: "cp3*-${{ matrix.platform_tag }}"
+          CIBW_SKIP: "cp3{5,6,7,8,9}* cp314t-*"
+          CIBW_ENVIRONMENT_LINUX: >
+            CMAKE_PREFIX_PATH=/project/opt/halide-bin/halide_bin/data
+            SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE='{local_scheme="no-local-version"}'
+          CIBW_ENVIRONMENT_MACOS: >
+            CMAKE_PREFIX_PATH='${{ github.workspace }}/opt/halide-bin/halide_bin/data'
             Python_ROOT_DIR=''
             SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE='{local_scheme="no-local-version"}'
           CIBW_ENVIRONMENT_WINDOWS: >
             CMAKE_GENERATOR=Ninja
-            CMAKE_PREFIX_PATH='${{ github.workspace }}\opt'
+            CMAKE_PREFIX_PATH='${{ github.workspace }}\opt\halide-bin\halide_bin\data'
             SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE='{local_scheme="no-local-version"}'
-          CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: delvewheel repair --ignore-existing -w {dest_dir} {wheel}
-          CIBW_BEFORE_TEST_LINUX: pip install cmake ninja
+          # halide_.pyd/.so now depends on a Halide.dll/libHalide supplied by the
+          # already-installed halide-bin package, not one bundled in this wheel --
+          # `--exclude` stops delvewheel from vendoring a second copy of it, while
+          # `--add-path` lets its dependency scan actually resolve it.
+          CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: >
+            delvewheel repair --ignore-existing --exclude Halide.dll
+            --add-path '${{ github.workspace }}\opt\halide-bin\halide_bin\data\bin'
+            -w {dest_dir} {wheel}
+          # halide-bin isn't published yet during this CI run, so resolve it
+          # from the wheel we just downloaded instead of the package index.
+          # Linux additionally needs cmake/ninja installed into the (otherwise
+          # bare) per-wheel manylinux test container -- macOS/Windows already
+          # have them on PATH via the get-cmake action above.
+          CIBW_BEFORE_TEST_LINUX: >
+            pip install cmake ninja &&
+            pip install --no-index --find-links {project}/dist-bin halide-bin
+          CIBW_BEFORE_TEST: pip install --no-index --find-links {project}/dist-bin halide-bin
           CIBW_TEST_COMMAND: >
             cmake -G Ninja -S {project}/python_bindings/apps -B build -DCMAKE_BUILD_TYPE=Release &&
             cmake --build build &&
@@ -156,9 +255,94 @@ jobs:
           name: wheels-${{ matrix.platform_tag }}
           path: ./wheelhouse/*.whl
 
+  build-runtime-wheels:
+    name: Build halide-runtime wheels for ${{ matrix.platform_tag }}
+    needs: build-halide-bin
+
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform_tag: manylinux_x86_64
+          - os: windows-latest
+            platform_tag: win_amd64
+          - os: macos-15-intel
+            platform_tag: macosx_x86_64
+          - os: macos-15
+            platform_tag: macosx_arm64
+
+    env:
+      MACOSX_DEPLOYMENT_TARGET: 11
+      HALIDE_SPLIT_BUILD: "1"
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: lukka/get-cmake@v4.4.0
+        with:
+          cmakeVersion: "~3.28.0"
+
+      ########################################################################
+      # halide-bin
+      #
+      # The runtime module is compiled against an already-installed halide-bin
+      # (for the runtime headers, the shared marshalling source, and GenRT to
+      # generate its bundled Halide runtime), exactly like build-wheels above.
+      # Unlike that job, the resulting extension links no libHalide and the wheel
+      # has no halide-bin dependency.
+      ########################################################################
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: wheels-bin-${{ matrix.platform_tag }}
+          path: dist-bin
+
+      - name: Unpack halide-bin for the build
+        shell: bash
+        run: python -m zipfile -e dist-bin/*.whl opt/halide-bin
+
+      ########################################################################
+      # Wheels
+      ########################################################################
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v4.1.1
+        with:
+          package-dir: packaging/pip-runtime
+        env:
+          CIBW_BUILD: "cp3*-${{ matrix.platform_tag }}"
+          CIBW_SKIP: "cp3{5,6,7,8,9}* cp314t-*"
+          CIBW_ENVIRONMENT_LINUX: >
+            CMAKE_PREFIX_PATH=/project/opt/halide-bin/halide_bin/data
+            SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE_RUNTIME='{local_scheme="no-local-version"}'
+          CIBW_ENVIRONMENT_MACOS: >
+            CMAKE_PREFIX_PATH='${{ github.workspace }}/opt/halide-bin/halide_bin/data'
+            Python_ROOT_DIR=''
+            SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE_RUNTIME='{local_scheme="no-local-version"}'
+          CIBW_ENVIRONMENT_WINDOWS: >
+            CMAKE_GENERATOR=Ninja
+            CMAKE_PREFIX_PATH='${{ github.workspace }}\opt\halide-bin\halide_bin\data'
+            SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE_RUNTIME='{local_scheme="no-local-version"}'
+          # The runtime wheel links no libHalide, so its test environment needs
+          # nothing installed: a successful `import halide.runtime` in a bare
+          # environment is itself proof that the module is libHalide-free.
+          CIBW_TEST_COMMAND: >
+            python -c "import halide.runtime as r; assert r.load and r.Kernel and r.Buffer; print('halide.runtime OK')"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheels-runtime-${{ matrix.platform_tag }}
+          path: ./wheelhouse/*.whl
+
   publish:
     name: Publish on PyPI
-    needs: build-wheels
+    needs: [build-halide-bin, build-wheels, build-runtime-wheels]
     runs-on: ubuntu-latest
     permissions:
       id-token: write

@@ -26,25 +26,14 @@ install(
     # bin/, which CMake does not understand. These users can add %VIRTUAL_ENV%
     # to their CMAKE_PREFIX_PATH.
     DESTINATION "${SKBUILD_DATA_DIR}/share/cmake/Halide"
-    COMPONENT Halide_Python
+    COMPONENT Halide_Development
 )
 
-# Same thing for HalideCompiler
+# Same thing for HalideHelpers
 install(
     FILES
-        "${CMAKE_CURRENT_BINARY_DIR}/HalideCompilerConfig.cmake"
-        "${CMAKE_CURRENT_BINARY_DIR}/../HalideCompilerConfigVersion.cmake"
-    DESTINATION "${SKBUILD_DATA_DIR}/share/cmake/HalideCompiler"
-    COMPONENT Halide_Python
+        "${CMAKE_CURRENT_BINARY_DIR}/HalideHelpersConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/../HalideHelpersConfigVersion.cmake"
+    DESTINATION "${SKBUILD_DATA_DIR}/share/cmake/HalideHelpers"
+    COMPONENT Halide_Development
 )
-
-##
-# Set up RPATH for the Python bindings plugin.
-
-if (WITH_PYTHON_BINDINGS)
-    _Halide_compute_rpath(
-        TARGETS Halide_Python
-        ORIGIN_DIR "${Halide_INSTALL_PYTHONDIR}"
-        LIB_DIR "${CMAKE_INSTALL_LIBDIR}"
-    )
-endif ()
