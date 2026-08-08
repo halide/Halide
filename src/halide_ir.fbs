@@ -721,6 +721,7 @@ table Func {
     no_profiling: bool = false;
     profiler_display_name: string;
     frozen: bool = false;
+    global_wrapper: WrapperRef;
 }
 
 table Pipeline {

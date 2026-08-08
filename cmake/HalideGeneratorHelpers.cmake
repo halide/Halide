@@ -736,6 +736,7 @@ function(add_halide_library TARGET)
 
     cmake_path(SET ARG_OUTPUT_DIR "${ARG_OUTPUT_DIR}")
     cmake_path(ABSOLUTE_PATH ARG_OUTPUT_DIR BASE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}" NORMALIZE)
+    file(MAKE_DIRECTORY "${ARG_OUTPUT_DIR}")
 
     if (ARG_NAMESPACE)
         set(ARG_FUNCTION_NAME "${ARG_NAMESPACE}::${ARG_FUNCTION_NAME}")
@@ -829,10 +830,11 @@ function(add_halide_library TARGET)
 
     if (ARG_AUTOSCHEDULER)
         if ("${ARG_AUTOSCHEDULER}" MATCHES "::")
-            # Autoscheduler plugins are compiled targets that live in HalideCompiler;
-            # lazily load it if it hasn't already been (e.g. while cross-compiling).
+            # Autoscheduler plugins are compiled targets that live in their own
+            # HalideAutoschedulers package; lazily load it if it hasn't already
+            # been (e.g. while cross-compiling).
             if (NOT TARGET "${ARG_AUTOSCHEDULER}")
-                find_package(HalideCompiler REQUIRED)
+                find_package(HalideAutoschedulers REQUIRED)
             endif ()
             if (NOT TARGET "${ARG_AUTOSCHEDULER}")
                 message(FATAL_ERROR "Autoscheduler ${ARG_AUTOSCHEDULER} does not exist.")
@@ -1126,7 +1128,7 @@ endfunction()
 function(add_halide_runtime RT)
     set(options NO_DEFAULT_TARGETS)
     set(oneValueArgs FILE_BASE_NAME NO_THREADS NO_DL_LIBS OUTPUT_DIR)
-    set(multiValueArgs TARGETS)
+    set(multiValueArgs TARGETS PARAMS)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if (NOT ARG_FILE_BASE_NAME)
@@ -1183,6 +1185,7 @@ function(add_halide_runtime RT)
             COMMAND
                 ${genrt_cmd} -r "${ARG_FILE_BASE_NAME}" -o "${ARG_OUTPUT_DIR}"
                 "target=$<JOIN:$<REMOVE_DUPLICATES:${target_list}>,$<COMMA>>"
+                ${ARG_PARAMS}
             DEPENDS Halide::GenRT
             VERBATIM
         )
@@ -1218,6 +1221,7 @@ function(add_halide_runtime RT)
                     COMMAND
                         ${genrt_cmd} -r "${this_rt}" -o "${ARG_OUTPUT_DIR}" -e object
                         "target=$<JOIN:$<REMOVE_DUPLICATES:${arch_target_list}>,$<COMMA>>"
+                        ${ARG_PARAMS}
                     DEPENDS Halide::GenRT
                     VERBATIM
                 )
@@ -1236,6 +1240,7 @@ function(add_halide_runtime RT)
                 COMMAND
                     ${genrt_cmd} -r "${ARG_FILE_BASE_NAME}" -o "${ARG_OUTPUT_DIR}" -e object
                     "target=$<JOIN:$<REMOVE_DUPLICATES:${target_list}>,$<COMMA>>"
+                    ${ARG_PARAMS}
                 DEPENDS Halide::GenRT
                 VERBATIM
             )

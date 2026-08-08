@@ -126,6 +126,30 @@ Type CodeGen_PTX_Dev::upgrade_type_for_storage(const Type &t) const {
     return CodeGen_LLVM::upgrade_type_for_storage(t);
 }
 
+// The largest extent of each of the GPU thread loops, if they are all
+// constant. A kernel may contain several thread loops in sequence, so take the
+// largest of each.
+class BlockSize : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const For *op) override {
+        for (int i = 0; i < 3; i++) {
+            if (ends_with(op->name, gpu_thread_name(i))) {
+                if (auto e = as_const_int(simplify(op->extent()))) {
+                    extent[i] = std::max(extent[i], (int)*e);
+                } else {
+                    known = false;
+                }
+            }
+        }
+        IRVisitor::visit(op);
+    }
+
+public:
+    int extent[3] = {1, 1, 1};
+    bool known = true;
+};
+
 void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
                                  const std::string &name,
                                  const std::vector<DeviceArgument> &args) {
@@ -203,6 +227,20 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     MDNode *md_node = MDNode::get(*context, md_args);
 
     module->getOrInsertNamedMetadata("nvvm.annotations")->addOperand(md_node);
+
+    // Tell ptxas the most threads a block can have. Without this it assumes
+    // the maximum, and budgets registers for it.
+    BlockSize block_size;
+    stmt.accept(&block_size);
+    if (block_size.known) {
+        function->addFnAttr("nvvm.maxntid",
+                            std::to_string(block_size.extent[0]) + "," +
+                                std::to_string(block_size.extent[1]) + "," +
+                                std::to_string(block_size.extent[2]));
+        debug(2) << "Kernel " << name << " has block size "
+                 << block_size.extent[0] << "x" << block_size.extent[1]
+                 << "x" << block_size.extent[2] << "\n";
+    }
 
     // Now verify the function is ok
     verifyFunction(*function);

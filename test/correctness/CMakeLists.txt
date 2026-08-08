@@ -301,6 +301,7 @@ tests(
     respect_input_constraint_in_bounds_inference.cpp
     reuse_stack_alloc.cpp
     round.cpp
+    runtime_prefixes.cpp
     saturating_casts.cpp
     scatter.cpp
     set_custom_trace.cpp

@@ -60,9 +60,10 @@ void define_module(py::module &m) {
             });
 
     m.def("link_modules", &link_modules, py::arg("name"), py::arg("modules"));
-    m.def("compile_standalone_runtime", static_cast<void (*)(const std::string &, const Target &)>(&compile_standalone_runtime), py::arg("filename"), py::arg("target"));
+    using RuntimeNamespaceMap = std::map<RuntimeLinkage, std::string>;
+    m.def("compile_standalone_runtime", static_cast<void (*)(const std::string &, const Target &, const RuntimeNamespaceMap &)>(&compile_standalone_runtime), py::arg("filename"), py::arg("target"), py::arg("namespace_map") = RuntimeNamespaceMap{});
     using OutputMap = std::map<OutputFileType, std::string>;
-    m.def("compile_standalone_runtime", static_cast<OutputMap (*)(const OutputMap &, const Target &)>(&compile_standalone_runtime), py::arg("outputs"), py::arg("target"));
+    m.def("compile_standalone_runtime", static_cast<OutputMap (*)(const OutputMap &, const Target &, const RuntimeNamespaceMap &)>(&compile_standalone_runtime), py::arg("outputs"), py::arg("target"), py::arg("namespace_map") = RuntimeNamespaceMap{});
 
     // TODO: compile_multitarget() deliberately skipped for now.
 }

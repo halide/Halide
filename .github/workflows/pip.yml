@@ -47,7 +47,7 @@ jobs:
           fetch-tags: true
 
       - uses: ilammy/msvc-dev-cmd@v1
-      - uses: lukka/get-cmake@v4.4.0
+      - uses: lukka/get-cmake@v4.4.2
         with:
           cmakeVersion: "~3.28.0"
 
@@ -70,10 +70,10 @@ jobs:
       #- uses: mxschmitt/action-tmate@v3
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v4.1.1
+        uses: pypa/cibuildwheel@v4.2.0
         env:
           CIBW_BUILD: "cp3*-${{ matrix.platform_tag }}"
-          CIBW_SKIP: "cp3{5,6,7,8,9}* cp314t-*"
+          CIBW_SKIP: "cp3{5,6,7,8,9}* cp3??t-*"
           CIBW_BEFORE_ALL_LINUX: >
             /opt/python/cp312-cp312/bin/pip install cmake ninja
             "halide-llvm==${{ env.LLVM_VERSION }}"
