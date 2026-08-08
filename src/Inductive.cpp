@@ -3,6 +3,7 @@
 #include "Bounds.h"
 #include "ConciseCasts.h"
 #include "Error.h"
+#include "ExprUsesVar.h"
 #include "Function.h"
 #include "IR.h"
 #include "IREquality.h"
@@ -31,10 +32,21 @@ class BaseCaseSolver : public IRVisitor {
 
     Scope<Interval> bounds;
 
+    Scope<> inductive_vars;
+
     int nested_select = 0;
 
     void visit(const Call *op) override {
         if (op->is_intrinsic(Call::if_then_else)) {
+
+            // A select whose condition doesn't depend on any inductive var
+            // can be traversed normally.
+            bool cond_is_inductive = expr_uses_vars(op->args[0], inductive_vars);
+            if (!cond_is_inductive) {
+                IRVisitor::visit(op);
+                return;
+            }
+
             // Theoretically there is no need to check op->args[0].
             // Select nodes are only converted to if_then_else when the condition is pure,
             // which means the condition cannot have any recursive calls.
@@ -84,18 +96,31 @@ class BaseCaseSolver : public IRVisitor {
             condition_intervals = old_intervals;
             nested_select -= 1;
         } else if (op->name == func) {
+            // An update definition's self-reference whose inductive args match the
+            // pure vars exactly is acceptable.
+            if (is_update) {
+                bool exact_pure_self_reference = true;
+                for (size_t position = 0; position < vars.size() && exact_pure_self_reference; position++) {
+                    if (is_inductive_var[position] &&
+                        (position >= op->args.size() || !equal(op->args[position], Variable::make(op->args[position].type(), vars[position])))) {
+                        exact_pure_self_reference = false;
+                    }
+                }
+                if (exact_pure_self_reference) {
+                    IRVisitor::visit(op);
+                    return;
+                }
+            }
 
             user_assert(nested_select > 0) << "Function " << func << " contains an inductive function reference outside of a select operation value.\n";
             user_assert(nested_select == 1) << "Function " << func << " contains an inductive function reference inside a nested select operation.\n";
             bool found_inductive = false;
             for (size_t position = 0; position < vars.size(); position++) {
                 const Expr inductive_expr = op->args[position];
-                const Expr new_v = Variable::make(inductive_expr.type(), vars[position]);
-
                 if (!is_inductive_var[position]) {
                     continue;
                 }
-
+                const Expr new_v = Variable::make(inductive_expr.type(), vars[position]);
                 const Expr gets_lower = simplify(new_v - inductive_expr > 0, bounds);
                 const Interval i_lower = solve_for_inner_interval(gets_lower, vars[position]);
 
@@ -115,7 +140,7 @@ class BaseCaseSolver : public IRVisitor {
                 i_scope.push(vars[position], new_interval);
                 result_intervals[position] = Interval::make_union(result_intervals[position], Interval::make_union(new_interval, bounds_of_expr_in_scope(inductive_expr, i_scope)));
             }
-            user_assert(found_inductive || is_update) << "Unable to prove in inductive function " << func << " that the inductive step is monotonically decreasing.\n";
+            user_assert(found_inductive) << "Unable to prove in inductive function " << func << " that the inductive step is monotonically decreasing.\n";
 
             IRVisitor::visit(op);
 
@@ -131,6 +156,11 @@ public:
         : vars(v), func(func), start_box(con), is_inductive_var(is_inductive_var), is_update(is_update) {
         condition_intervals = vector<Interval>(start_box.size());
         result_intervals = vector<Interval>(start_box.size(), Interval::nothing());
+        for (size_t i = 0; i < vars.size(); i++) {
+            if (is_inductive_var[i]) {
+                inductive_vars.push(vars[i]);
+            }
+        }
     }
 };
 

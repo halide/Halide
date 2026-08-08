@@ -733,9 +733,13 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values, con
     user_assert(!frozen())
         << "Func " << name() << " cannot be given a new update definition, "
         << "because it has already been realized or used in the definition of another Func.\n";
-    // An update can be inductive only if it is the function's sole update and the pure
-    // definition is not itself inductive.
-    bool allow_inductive_self_reference = contents->updates.empty() && !is_inductive();
+
+    // Inductive functions cannot have updates on top of them
+    user_assert(!is_inductive())
+        << "An update definition was added to Func " << name() << " after an inductive definition.\n";
+
+    // An update can be inductive only if it is the function's sole update
+    bool allow_inductive_self_reference = contents->updates.empty();
 
     for (auto &value : values) {
         user_assert(value.defined())

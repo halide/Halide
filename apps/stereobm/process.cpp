@@ -7,7 +7,8 @@
 #include "HalideBuffer.h"
 #include "HalideRuntime.h"
 
-#include "stereobm.h"
+#include "stereobm_inductive.h"
+#include "stereobm_noninductive.h"
 
 #include "halide_benchmark.h"
 #include "halide_image_io.h"
@@ -47,10 +48,21 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    // Default 1: this is a small image, so single-threaded is both the most
+    // stable and the fastest configuration for both backends.
+    int num_threads = 1;
+    if (const char *nt = getenv("NUM_THREADS")) {
+        num_threads = std::max(1, atoi(nt));
+    }
+    halide_set_num_threads(num_threads);
+#if STEREOBM_BUILD_OPENCV
+    cv::setNumThreads(num_threads);
+#endif
+    printf("threads: %d\n", num_threads);
+
     Halide::Runtime::Buffer<uint8_t, 2> left, right;
 
 #if STEREOBM_BUILD_OPENCV
-    // Load a pair of 3-channel images and convert to grayscale with OpenCV
     cv::Mat left_color = cv::imread(argv[1], cv::IMREAD_COLOR);
     cv::Mat right_color = cv::imread(argv[2], cv::IMREAD_COLOR);
     if (left_color.empty() || right_color.empty()) {
@@ -71,7 +83,6 @@ int main(int argc, char **argv) {
     left = gray_to_buffer(cv_left);
     right = gray_to_buffer(cv_right);
 #else
-    // Without OpenCV, load with Halide's image IO and manually convert to grayscale
     auto load_gray = [](const char *path) {
         Halide::Runtime::Buffer<uint8_t, 3> color = load_and_convert_image(path);
         Halide::Runtime::Buffer<uint8_t, 2> gray(color.width(), color.height());
@@ -86,12 +97,33 @@ int main(int argc, char **argv) {
 #endif
 
     Halide::Runtime::Buffer<int16_t, 2> output(left.width(), left.height());
+    Halide::Runtime::Buffer<int16_t, 2> output_ni(left.width(), left.height());
 
     double best = benchmark([&]() {
-        stereobm(left, right, output);
+        stereobm_inductive(left, right, output);
         output.device_sync();
     });
-    printf("Halide time: %gms\n", best * 1e3);
+    printf("Halide inductive time:     %gms\n", best * 1e3);
+
+    double best_ni = benchmark([&]() {
+        stereobm_noninductive(left, right, output_ni);
+        output_ni.device_sync();
+    });
+    printf("Halide non-inductive time: %gms\n", best_ni * 1e3);
+
+    {
+        long long mismatches = 0;
+        int max_abs_diff = 0;
+        output.for_each_element([&](int i, int j) {
+            int diff = std::abs((int)output(i, j) - (int)output_ni(i, j));
+            if (diff != 0) {
+                mismatches++;
+                max_abs_diff = std::max(max_abs_diff, diff);
+            }
+        });
+        printf("inductive vs non-inductive: %lld / %d mismatches (max abs diff %d)\n",
+               mismatches, output.width() * output.height(), max_abs_diff);
+    }
 
 #if STEREOBM_BUILD_OPENCV
     cv::Ptr<cv::StereoBM> bm = cv::StereoBM::create(DEPTH, WINSIZE);
@@ -136,7 +168,6 @@ int main(int argc, char **argv) {
     }
 #endif
 
-    // normalize output to range [0, 255]
     int32_t dmin = INT32_MAX, dmax = INT32_MIN;
     output.for_each_value([&](int16_t v) {
         dmin = std::min(dmin, (int32_t)v);

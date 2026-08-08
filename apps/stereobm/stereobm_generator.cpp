@@ -49,7 +49,6 @@ using namespace Halide::BoundaryConditions;
 
 class StereoBM : public Generator<StereoBM> {
 public:
-    // Inputs: two grayscale images of the same scene as seen by a left and right camera
     Input<Buffer<uint8_t, 2>> left_gray{"left_gray"};
     Input<Buffer<uint8_t, 2>> right_gray{"right_gray"};
 
@@ -78,7 +77,7 @@ public:
         Expr H = left_gray.dim(1).extent();
 
         Func proc0("proc0"), proc1("proc1");
-        // shift the input to ensure the indices of blur_y correspond to the center pixel in the window.
+        // Shift so blur_y's index corresponds to the window's center pixel.
         proc0(x, y) = cast<int16_t>(BoundaryConditions::mirror_interior(left_gray)(x - winsize / 2, y - winsize / 2));
         proc1(x, y) = cast<int16_t>(BoundaryConditions::mirror_interior(right_gray)(x - winsize / 2, y - winsize / 2));
 
@@ -179,13 +178,13 @@ public:
         vsum.bound(di, 0, depth);
 
         blur_y.compute_at(splitoutput, y).store_at(splitoutput, y).vectorize(di, depth);
-        vsum.compute_at(splitoutput, y).store_at(splitoutput, xo).vectorize(di, depth).fold_storage(y, 1);
+        vsum.compute_at(splitoutput, y).store_at(splitoutput, xo).vectorize(di, depth);
 
         f1.compute_at(splitoutput, y).vectorize(di, depth);
         zero_blur.compute_at(splitoutput, xo).vectorize(di, depth);
 
         zerotext.compute_at(splitoutput, xo).vectorize(xi, native_lanes);
-        textsum.compute_at(splitoutput, y).store_at(splitoutput, xo).vectorize(xi).fold_storage(y, 1);
+        textsum.compute_at(splitoutput, y).store_at(splitoutput, xo).vectorize(xi);
         textf1.compute_at(splitoutput, y);
         textblury.compute_at(splitoutput, y).store_at(splitoutput, y);
         textblury.compute_with(blur_y, xi);
