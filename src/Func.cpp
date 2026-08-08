@@ -605,7 +605,10 @@ vector<Expr> substitute_self_reference(vector<Expr> values,
             if (c->call_type == Call::Halide && func_name == c->name) {
                 vector<Expr> args(c->args);
                 args.insert(args.end(), preserved_vars.begin(), preserved_vars.end());
-                expr = Call::make(intm, args, c->value_index);
+                // This rewrites a Func's self-reference into a self-reference of
+                // the rfactor intermediate, so it must not follow global wrappers.
+                expr = Call::make(intm, args, c->value_index,
+                                  /*follow_global_wrappers=*/false);
             }
             return expr;
         });
