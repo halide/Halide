@@ -336,9 +336,12 @@ void PointerTable::allocate(void *user_context, size_t new_capacity) {
         debug(user_context) << "PointerTable: Allocating (bytes=" << (int32_t)bytes << " allocator=" << (void *)allocator.allocate << ")...\n";
 #endif
 
+        // resize() assigns the requested count before growing, so the existing
+        // allocation may hold fewer than count entries.
+        size_t copy_count = min(count, capacity);
         void *new_ptr = bytes ? allocator.allocate(user_context, bytes) : nullptr;
-        if (count != 0 && ptr != nullptr && new_ptr != nullptr) {
-            memcpy(new_ptr, ptr, count * sizeof(void *));
+        if (copy_count != 0 && ptr != nullptr && new_ptr != nullptr) {
+            memcpy(new_ptr, ptr, copy_count * sizeof(void *));
         }
         if (ptr != nullptr) {
             halide_debug_assert(user_context, allocator.deallocate != nullptr);

@@ -88,7 +88,6 @@ target_sources(
     CodeGen_Targets.h
     CodeGen_Vulkan_Dev.h
     CodeGen_WebGPU_Dev.h
-    CompilerLogger.h
     ConciseCasts.h
     ConstantBounds.h
     ConstantInterval.h
@@ -129,6 +128,7 @@ target_sources(
     FuseGPUThreadLoops.h
     FuzzFloatStores.h
     Generator.h
+    GeneratorCache.h
     HexagonOffload.h
     HexagonOptimize.h
     ImageParam.h
@@ -156,6 +156,7 @@ target_sources(
     LoopPartitioningDirective.h
     Lower.h
     LowerParallelTasks.h
+    LowerSMEStreamingTasks.h
     LowerWarpShuffles.h
     MainPage.h
     Memoization.h
@@ -224,7 +225,6 @@ target_sources(
     Var.h
     VectorizeLoops.h
     WasmExecutor.h
-    WrapCalls.h
     # keep-sorted end
 )
 
@@ -275,7 +275,6 @@ target_sources(
     CodeGen_WebAssembly.cpp
     CodeGen_WebGPU_Dev.cpp
     CodeGen_X86.cpp
-    CompilerLogger.cpp
     ConstantBounds.cpp
     ConstantInterval.cpp
     CPlusPlusMangle.cpp
@@ -310,6 +309,7 @@ target_sources(
     FuseGPUThreadLoops.cpp
     FuzzFloatStores.cpp
     Generator.cpp
+    GeneratorCache.cpp
     HexagonOffload.cpp
     HexagonOptimize.cpp
     ImageParam.cpp
@@ -335,6 +335,7 @@ target_sources(
     LoopCarry.cpp
     Lower.cpp
     LowerParallelTasks.cpp
+    LowerSMEStreamingTasks.cpp
     LowerWarpShuffles.cpp
     Memoization.cpp
     Module.cpp
@@ -420,9 +421,15 @@ target_sources(
     Var.cpp
     VectorizeLoops.cpp
     WasmExecutor.cpp
-    WrapCalls.cpp
     # keep-sorted end
 )
+
+# Attach the Natvis visualizers to the target. On MSVC they are embedded into
+# the PDB so they load automatically when debugging anything linked against
+# Halide; other generators treat the .natvis as a non-compiled source (a no-op
+# for the build) but expose it to IDEs such as CLion/Rider, whose LLDB-based
+# debuggers now honor Natvis on Linux and macOS too. See tools/Halide.natvis.
+target_sources(Halide PRIVATE "${Halide_SOURCE_DIR}/tools/Halide.natvis")
 
 set(C_TEMPLATE_FILES CodeGen_C_prologue CodeGen_C_vectors)
 

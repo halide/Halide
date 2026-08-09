@@ -1350,6 +1350,10 @@ enum halide_error_code_t {
 
     /** Profiling failed for a pipeline invocation. */
     halide_error_code_cannot_profile_pipeline = -48,
+
+    /** "vscale" value of Streaming Scalable Vector detected in runtime does not
+     * match the streaming vscale value used in compilation. */
+    halide_error_code_streaming_vscale_invalid = -49,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -1426,6 +1430,7 @@ extern int halide_error_storage_bound_too_small(void *user_context, const char *
 extern int halide_error_device_crop_failed(void *user_context);
 extern int halide_error_split_factor_not_positive(void *user_context, const char *func_name, const char *orig, const char *outer, const char *inner, const char *factor_str, int factor);
 extern int halide_error_vscale_invalid(void *user_context, const char *func_name, int runtime_vscale, int compiletime_vscale);
+extern int halide_error_streaming_vscale_invalid(void *user_context, const char *func_name, int runtime_vscale, int compiletime_vscale);
 // @}
 
 /** Optional features a compilation Target can have.
@@ -1457,16 +1462,20 @@ typedef enum halide_target_feature_t {
     halide_target_feature_vsx,              ///< Use VSX instructions. Only relevant on POWERPC.
     halide_target_feature_power_arch_2_07,  ///< Use POWER ISA 2.07 new instructions. Only relevant on POWERPC.
 
-    halide_target_feature_cuda,               ///< Enable the CUDA runtime. Defaults to compute capability 2.0 (Fermi)
-    halide_target_feature_cuda_capability30,  ///< Enable CUDA compute capability 3.0 (Kepler)
-    halide_target_feature_cuda_capability32,  ///< Enable CUDA compute capability 3.2 (Tegra K1)
-    halide_target_feature_cuda_capability35,  ///< Enable CUDA compute capability 3.5 (Kepler)
-    halide_target_feature_cuda_capability50,  ///< Enable CUDA compute capability 5.0 (Maxwell)
-    halide_target_feature_cuda_capability61,  ///< Enable CUDA compute capability 6.1 (Pascal)
-    halide_target_feature_cuda_capability70,  ///< Enable CUDA compute capability 7.0 (Volta)
-    halide_target_feature_cuda_capability75,  ///< Enable CUDA compute capability 7.5 (Turing)
-    halide_target_feature_cuda_capability80,  ///< Enable CUDA compute capability 8.0 (Ampere)
-    halide_target_feature_cuda_capability86,  ///< Enable CUDA compute capability 8.6 (Ampere)
+    halide_target_feature_cuda,                ///< Enable the CUDA runtime. Defaults to compute capability 2.0 (Fermi)
+    halide_target_feature_cuda_capability30,   ///< Enable CUDA compute capability 3.0 (Kepler)
+    halide_target_feature_cuda_capability32,   ///< Enable CUDA compute capability 3.2 (Tegra K1)
+    halide_target_feature_cuda_capability35,   ///< Enable CUDA compute capability 3.5 (Kepler)
+    halide_target_feature_cuda_capability50,   ///< Enable CUDA compute capability 5.0 (Maxwell)
+    halide_target_feature_cuda_capability61,   ///< Enable CUDA compute capability 6.1 (Pascal)
+    halide_target_feature_cuda_capability70,   ///< Enable CUDA compute capability 7.0 (Volta)
+    halide_target_feature_cuda_capability75,   ///< Enable CUDA compute capability 7.5 (Turing)
+    halide_target_feature_cuda_capability80,   ///< Enable CUDA compute capability 8.0 (Ampere)
+    halide_target_feature_cuda_capability86,   ///< Enable CUDA compute capability 8.6 (Ampere)
+    halide_target_feature_cuda_capability89,   ///< Enable CUDA compute capability 8.9 (Ada)
+    halide_target_feature_cuda_capability90,   ///< Enable CUDA compute capability 9.0 (Hopper)
+    halide_target_feature_cuda_capability100,  ///< Enable CUDA compute capability 10.0 (Blackwell)
+    halide_target_feature_cuda_capability120,  ///< Enable CUDA compute capability 12.0 (Blackwell)
 
     halide_target_feature_opencl,       ///< Enable the OpenCL runtime.
     halide_target_feature_cl_doubles,   ///< Enable double support on OpenCL targets
@@ -1518,6 +1527,12 @@ typedef enum halide_target_feature_t {
     halide_target_feature_webgpu,                 ///< Enable the WebGPU runtime.
     halide_target_feature_sve,                    ///< Enable ARM Scalable Vector Extensions
     halide_target_feature_sve2,                   ///< Enable ARM Scalable Vector Extensions v2
+    halide_target_feature_sme2,                   ///< Enable ARM Scalable Matrix Extensions v2
+    halide_target_feature_sme_svl128,             ///< Assume ARM SME streaming vector length is 128 bits.
+    halide_target_feature_sme_svl256,             ///< Assume ARM SME streaming vector length is 256 bits.
+    halide_target_feature_sme_svl512,             ///< Assume ARM SME streaming vector length is 512 bits.
+    halide_target_feature_sme_svl1024,            ///< Assume ARM SME streaming vector length is 1024 bits.
+    halide_target_feature_sme_svl2048,            ///< Assume ARM SME streaming vector length is 2048 bits.
     halide_target_feature_egl,                    ///< Force use of EGL support.
     halide_target_feature_arm_dot_prod,           ///< Enable ARMv8.2-a dotprod extension (i.e. udot and sdot instructions)
     halide_target_feature_arm_fp16,               ///< Enable ARMv8.2-a half-precision floating point data processing
@@ -1561,6 +1576,29 @@ typedef enum halide_target_feature_t {
     halide_target_feature_hlsl_sm69,              ///< Enable D3D12 Shader Model 6.9 (long vectors 5-1024 lanes, native 16-bit/wave/int64 required)
     halide_target_feature_end                     ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
+
+/** The specific processor a compilation Target can be tuned for.
+ *
+ * Be sure to keep this in sync with the Processor enum in Target.h if you add
+ * a new processor.
+ */
+typedef enum halide_target_processor_t {
+    halide_target_processor_generic = 0,  ///< Do not tune for any specific CPU.
+    halide_target_processor_k8,           ///< AMD K8 Hammer CPU (AMD Family 0Fh, launched 2003).
+    halide_target_processor_k8_sse3,      ///< Later AMD K8 CPU with SSE3 support.
+    halide_target_processor_amdfam10,     ///< AMD K10 "Barcelona" CPU (AMD Family 10h, launched 2007).
+    halide_target_processor_btver1,       ///< AMD Bobcat CPU (AMD Family 14h, launched 2011).
+    halide_target_processor_bdver1,       ///< AMD Bulldozer CPU (AMD Family 15h, launched 2011).
+    halide_target_processor_bdver2,       ///< AMD Piledriver CPU (AMD Family 15h (2nd-gen), launched 2012).
+    halide_target_processor_bdver3,       ///< AMD Steamroller CPU (AMD Family 15h (3rd-gen), launched 2014).
+    halide_target_processor_bdver4,       ///< AMD Excavator CPU (AMD Family 15h (4th-gen), launched 2015).
+    halide_target_processor_btver2,       ///< AMD Jaguar CPU (AMD Family 16h, launched 2013).
+    halide_target_processor_znver1,       ///< AMD Zen CPU (AMD Family 17h, launched 2017).
+    halide_target_processor_znver2,       ///< AMD Zen 2 CPU (AMD Family 17h, launched 2019).
+    halide_target_processor_znver3,       ///< AMD Zen 3 CPU (AMD Family 19h, launched 2020).
+    halide_target_processor_znver4,       ///< AMD Zen 4 CPU (AMD Family 19h, launched 2022).
+    halide_target_processor_znver5,       ///< AMD Zen 5 CPU (AMD Family 1Ah, launched 2024).
+} halide_target_processor_t;
 
 /** This function is called internally by Halide in some situations to determine
  * if the current execution environment can support the given set of

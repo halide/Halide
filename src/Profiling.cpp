@@ -605,7 +605,7 @@ private:
                 Stmt set_current = set_current_func(stack.back());
                 body = Block::make(set_current, mutate(op->body));
             }
-            return ProducerConsumer::make(op->name, op->is_producer, body);
+            return op->with(body);
         } else {
             return IRMutator::visit(op);
         }
@@ -697,7 +697,8 @@ private:
             body = substitute(names.profiler_instance, Variable::make(Handle(), names.hvx_profiler_instance), body);
             body = LetStmt::make(names.hvx_profiler_instance, get_state, body);
         } else if (op->device_api == DeviceAPI::None ||
-                   op->device_api == DeviceAPI::Host) {
+                   op->device_api == DeviceAPI::Host ||
+                   op->device_api == DeviceAPI::SMEStreaming) {
             body = mutate(body);
         } else {
             body = op->body;
@@ -707,7 +708,7 @@ private:
             most_recently_set_func = -1;
         }
 
-        Stmt stmt = For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
+        Stmt stmt = op->with(op->min, op->max, body);
 
         // Sync after each outermost GPU launch so kernel time is billed
         // to the right row rather than to a later blocking host call.
@@ -796,8 +797,7 @@ private:
             steps.push_back(mutate(other));
         }
         return Block::make(start_profiler,
-                           LetStmt::make(op->name, mutate(op->value),
-                                         Block::make(steps)));
+                           op->with(mutate(op->value), Block::make(steps)));
     }
 
     Stmt visit(const LetStmt *op) override {
@@ -812,7 +812,7 @@ private:
         if (body.same_as(op->body) && value.same_as(op->value)) {
             return op;
         }
-        return LetStmt::make(op->name, value, body);
+        return op->with(value, body);
     }
 };
 
@@ -885,7 +885,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
         for (int i = num_funcs - 1; i >= 0; --i) {
             s = Block::make(Store::make(names.profiler_func_stack_peak_buf,
                                         make_const(UInt(64), profiling.func_stack_peak[i]),
-                                        i, Parameter(), const_true(), ModulusRemainder()),
+                                        i),
                             s);
         }
         s = Block::make(s, Free::make(names.profiler_func_stack_peak_buf));

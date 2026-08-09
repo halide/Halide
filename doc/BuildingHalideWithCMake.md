@@ -438,15 +438,15 @@ Halide reads and understands several options that can configure the build. The
 following are the most consequential and control how Halide is actually
 compiled.
 
-| Option                                   | Default               | Description                                                                                       |
-| ---------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------- |
-| [`BUILD_SHARED_LIBS`][build_shared_libs] | `ON`                  | Standard CMake variable that chooses whether to build as a static or shared library.              |
-| `Halide_LLVM_SHARED_LIBS`                | `OFF`                 | Link to the shared version of LLVM. Not available on Windows.                                     |
-| `Halide_ENABLE_RTTI`                     | _inherited from LLVM_ | Enable RTTI when building Halide. Recommended to be set to `ON`                                   |
-| `Halide_ENABLE_EXCEPTIONS`               | `ON`                  | Enable exceptions when building Halide                                                            |
-| `Halide_TARGET`                          | _empty_               | The default target triple to use for `add_halide_library` (and the generator tests, by extension) |
-| `WITH_AUTOSCHEDULERS`                    | `ON`                  | Enable building the autoschedulers. Requires `BUILD_SHARED_LIBS`.                                 |
-| `WITH_SERIALIZATION`                     | `ON`                  | Include experimental Serialization/Deserialization features                                       |
+| Option                                   | Default               | Description                                                                                                                     |
+| ---------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| [`BUILD_SHARED_LIBS`][build_shared_libs] | `ON`                  | Standard CMake variable that chooses whether to build as a static or shared library.                                            |
+| `Halide_LLVM_SHARED_LIBS`                | `OFF`                 | Link to the shared version of LLVM. Not available on Windows.                                                                   |
+| `Halide_ENABLE_RTTI`                     | _inherited from LLVM_ | Enable RTTI when building Halide. Recommended to be set to `ON`                                                                 |
+| `Halide_ENABLE_EXCEPTIONS`               | `ON`                  | Enable exceptions when building Halide                                                                                          |
+| `Halide_TARGET`                          | _empty_               | The default target triple to use for `add_halide_library` (and the generator tests, by extension)                               |
+| `WITH_AUTOSCHEDULERS`                    | `ON`                  | Enable building the autoschedulers. Requires `BUILD_SHARED_LIBS`.                                                               |
+| `WITH_SERIALIZATION`                     | `ON`                  | Include experimental Serialization/Deserialization features; also required for the [generator compile cache](GeneratorCache.md) |
 
 The following options are disabled by default when building Halide through the
 [ `add_subdirectory`][add_subdirectory] or [`FetchContent`][fetchcontent]

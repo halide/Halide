@@ -115,6 +115,72 @@ bool test(int w, bool div, bool round_to_zero) {
         }
     }
 
+    // Exhaustively check fast_integer_divide{,_round_to_zero}/fast_integer_modulo
+    // against Halide's native division/modulo across the complete space of
+    // uint8 denominators, 0 to 255 inclusive. A denominator of 0 gives a
+    // result of 0, matching Halide's ordinary / and %.
+    //
+    // The reference is computed in a signed type twice as wide as T: that's
+    // wide enough to hold both T's full range and the denominator's true
+    // (always non-negative) value, so for 8-bit signed T, a denominator
+    // above 127 isn't reinterpreted as negative the way casting it straight
+    // into T would. It also keeps native div_round_to_zero -- which, unlike
+    // / and %, isn't guaranteed safe for a zero divisor or for INT_MIN / -1
+    // -- away from a literal zero divisor.
+    {
+        const int denom_extent = 256;
+        Buffer<T> full_input(w, denom_extent);
+        for (int y = 0; y < denom_extent; y++) {
+            for (int x = 0; x < w; x++) {
+                full_input(x, y) = (T)(uint32_t)rng();
+                if (round_to_zero && full_input(x, y) == 0) {
+                    full_input(x, y) = 1;
+                }
+            }
+        }
+
+        Type wide = Int((int)bits * 2);
+        Expr wide_num = cast(wide, full_input(x, y));
+        Expr wide_den = cast(wide, y);
+
+        Func correct_full, fast_full;
+        if (div) {
+            if (round_to_zero) {
+                // Keep the actual hardware division away from a divisor of
+                // zero (unlike / and %, div_round_to_zero doesn't protect
+                // against this itself), and patch the result afterwards.
+                Expr safe_den = select(wide_den == 0, cast(wide, 1), wide_den);
+                correct_full(x, y) = cast<T>(select(wide_den == 0, cast(wide, 0),
+                                                    div_round_to_zero(wide_num, safe_den)));
+                fast_full(x, y) = Halide::fast_integer_divide_round_to_zero(full_input(x, y), cast<uint8_t>(y));
+            } else {
+                correct_full(x, y) = cast<T>(wide_num / wide_den);
+                fast_full(x, y) = Halide::fast_integer_divide(full_input(x, y), cast<uint8_t>(y));
+            }
+        } else {
+            correct_full(x, y) = cast<T>(wide_num % wide_den);
+            fast_full(x, y) = Halide::fast_integer_modulo(full_input(x, y), cast<uint8_t>(y));
+        }
+
+        correct_full.compile_jit(t);
+        fast_full.compile_jit(t);
+
+        Buffer<T> correct_full_result = correct_full.realize({w, denom_extent});
+        Buffer<T> fast_full_result = fast_full.realize({w, denom_extent});
+
+        for (int y = 0; y < denom_extent; y++) {
+            for (int x = 0; x < w; x++) {
+                if (fast_full_result(x, y) != correct_full_result(x, y)) {
+                    printf("fast_integer_divide/modulo(%lld, %d) = %lld instead of %lld\n",
+                           (long long int)full_input(x, y), y,
+                           (long long int)fast_full_result(x, y),
+                           (long long int)correct_full_result(x, y));
+                    return false;
+                }
+            }
+        }
+    }
+
     return true;
 }
 

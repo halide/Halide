@@ -47,7 +47,7 @@ jobs:
           fetch-tags: true
 
       - uses: ilammy/msvc-dev-cmd@v1
-      - uses: lukka/get-cmake@v4.4.0
+      - uses: lukka/get-cmake@v4.4.2
         with:
           cmakeVersion: "~3.28.0"
 
@@ -70,10 +70,10 @@ jobs:
       #- uses: mxschmitt/action-tmate@v3
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v4.1.0
+        uses: pypa/cibuildwheel@v4.2.0
         env:
           CIBW_BUILD: "cp3*-${{ matrix.platform_tag }}"
-          CIBW_SKIP: "cp3{5,6,7,8,9}* cp314t-*"
+          CIBW_SKIP: "cp3{5,6,7,8,9}* cp3??t-*"
           CIBW_BEFORE_ALL_LINUX: >
             /opt/python/cp312-cp312/bin/pip install cmake ninja
             "halide-llvm==${{ env.LLVM_VERSION }}"
@@ -162,6 +162,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
+    env:
+      GH_TOKEN: ${{ secrets.PYPI_RELEASES_TOKEN }}
     steps:
       - uses: actions/download-artifact@v8
         with:
@@ -169,12 +171,38 @@ jobs:
           merge-multiple: true
           path: dist
 
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Publish nightly build to halide/pypi
         if: github.event_name == 'push' && github.ref_name == 'main'
-        with:
-          user: upload
-          password: ${{ secrets.HALIDE_PYPI_PASSWORD }}
-          repository-url: https://pypi.halide-lang.org/
+        run: |
+          set -euo pipefail
+
+          shopt -s nullglob
+          files=(dist/halide-*.whl)
+          shopt -u nullglob
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "no wheels found in dist/, nothing to publish"
+            exit 1
+          fi
+
+          # Wheel filenames are "{name}-{version}-{python tag}-{abi
+          # tag}-{platform tag}.whl"; any hyphens in name/version are
+          # normalized to underscores specifically so "-" is an unambiguous
+          # field separator, so plain splitting is safe here.
+          filename=$(basename "${files[0]}")
+          version="${filename#halide-}"
+          version="${version%%-*}"
+          tag="halide@${version}"
+
+          if gh release view "$tag" --repo halide/pypi >/dev/null 2>&1; then
+            gh release upload "$tag" "${files[@]}" --repo halide/pypi --clobber
+          else
+            gh release create "$tag" "${files[@]}" \
+              --repo halide/pypi --title "$tag" --notes "Automated nightly build from Halide"
+          fi
+
+      - name: Trigger index rebuild
+        if: github.event_name == 'push' && github.ref_name == 'main'
+        run: gh workflow run rebuild-index.yml --repo halide/pypi
 
       - uses: pypa/gh-action-pypi-publish@release/v1
         if: github.event_name == 'release' && github.event.action == 'published'
