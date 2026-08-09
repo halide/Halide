@@ -67,7 +67,6 @@ public:
     void generate() {
         const Type uint16 = UInt(16);
         const Type int16 = Int(16);
-        const Type int32 = Int(32);
         const int native_lanes = get_target().natural_vector_size<int16_t>();
 
         const int T = tilesize;
