@@ -91,7 +91,8 @@ public:
                                      const std::vector<std::string> &trace_tags,
                                      bool no_profiling,
                                      const std::string &profiler_display_name,
-                                     bool frozen);
+                                     bool frozen,
+                                     const FunctionPtr &global_wrapper);
 
     /** Get a handle on the halide function contents that this Function
      * represents. */
@@ -339,6 +340,14 @@ public:
     // @{
     void add_wrapper(const std::string &f, Function &wrapper);
     const std::map<std::string, FunctionPtr> &wrappers() const;
+    // @}
+
+    /** Set / get this Func's global wrapper (created by Func::in()). Calls that
+     * follow global-wrapper links resolve through it. set_global_wrapper freezes
+     * the wrapper and weakens its back-reference to this Func. */
+    // @{
+    void set_global_wrapper(Function &wrapper);
+    Function global_wrapper() const;
     // @}
 
     /** Check if a Function is a trivial wrapper around another

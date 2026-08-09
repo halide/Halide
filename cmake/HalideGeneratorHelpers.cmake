@@ -119,7 +119,7 @@ function(add_halide_generator TARGET)
             add_executable(${gen} ALIAS ${TARGET})
 
             if (NOT TARGET Halide::Generator)
-                find_package(Halide REQUIRED)
+                find_package(HalideCompiler REQUIRED)
             endif ()
             target_link_libraries(${TARGET} PRIVATE Halide::Generator ${ARG_LINK_LIBRARIES})
 
@@ -186,6 +186,10 @@ function(add_halide_generator TARGET)
             VISIBILITY_INLINES_HIDDEN ON
             POSITION_INDEPENDENT_CODE ON
         )
+
+        if (NOT TARGET Halide::PyStubs)
+            find_package(HalideCompiler REQUIRED COMPONENTS Python)
+        endif ()
         target_link_libraries(
             ${TARGET}_pystub
             PRIVATE Halide::PyStubs Halide::Halide ${ARG_LINK_LIBRARIES}
@@ -253,7 +257,6 @@ function(_Halide_library_from_generator TARGET)
     set(bitcode_extension ".bc")
     # set(c_header_extension ".h")  # handled specially
     set(c_source_extension ".halide_generated.cpp")
-    set(compiler_log_extension ".halide_compiler_log")
     set(conceptual_stmt_extension ".conceptual.stmt")
     set(conceptual_stmt_html_extension ".conceptual.stmt.html")
     # set(cpp_stub_extension ".stub.h")  # handled by add_halide_stub()
@@ -697,6 +700,7 @@ function(add_halide_library TARGET)
 
     cmake_path(SET ARG_OUTPUT_DIR "${ARG_OUTPUT_DIR}")
     cmake_path(ABSOLUTE_PATH ARG_OUTPUT_DIR BASE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}" NORMALIZE)
+    file(MAKE_DIRECTORY "${ARG_OUTPUT_DIR}")
 
     if (ARG_NAMESPACE)
         set(ARG_FUNCTION_NAME "${ARG_NAMESPACE}::${ARG_FUNCTION_NAME}")
@@ -790,6 +794,12 @@ function(add_halide_library TARGET)
 
     if (ARG_AUTOSCHEDULER)
         if ("${ARG_AUTOSCHEDULER}" MATCHES "::")
+            # Autoscheduler plugins are compiled targets that live in their own
+            # HalideAutoschedulers package; lazily load it if it hasn't already
+            # been (e.g. while cross-compiling).
+            if (NOT TARGET "${ARG_AUTOSCHEDULER}")
+                find_package(HalideAutoschedulers REQUIRED)
+            endif ()
             if (NOT TARGET "${ARG_AUTOSCHEDULER}")
                 message(FATAL_ERROR "Autoscheduler ${ARG_AUTOSCHEDULER} does not exist.")
             endif ()
@@ -1080,7 +1090,7 @@ endfunction()
 function(add_halide_runtime RT)
     set(options NO_DEFAULT_TARGETS)
     set(oneValueArgs FILE_BASE_NAME NO_THREADS NO_DL_LIBS OUTPUT_DIR)
-    set(multiValueArgs TARGETS)
+    set(multiValueArgs TARGETS PARAMS)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if (NOT ARG_FILE_BASE_NAME)
@@ -1135,6 +1145,7 @@ function(add_halide_runtime RT)
             COMMAND
                 Halide::GenRT -r "${ARG_FILE_BASE_NAME}" -o "${ARG_OUTPUT_DIR}"
                 "target=$<JOIN:$<REMOVE_DUPLICATES:${target_list}>,$<COMMA>>"
+                ${ARG_PARAMS}
             DEPENDS Halide::GenRT
             VERBATIM
         )
@@ -1170,6 +1181,7 @@ function(add_halide_runtime RT)
                     COMMAND
                         Halide::GenRT -r "${this_rt}" -o "${ARG_OUTPUT_DIR}" -e object
                         "target=$<JOIN:$<REMOVE_DUPLICATES:${arch_target_list}>,$<COMMA>>"
+                        ${ARG_PARAMS}
                     DEPENDS Halide::GenRT
                     VERBATIM
                 )
@@ -1188,6 +1200,7 @@ function(add_halide_runtime RT)
                 COMMAND
                     Halide::GenRT -r "${ARG_FILE_BASE_NAME}" -o "${ARG_OUTPUT_DIR}" -e object
                     "target=$<JOIN:$<REMOVE_DUPLICATES:${target_list}>,$<COMMA>>"
+                    ${ARG_PARAMS}
                 DEPENDS Halide::GenRT
                 VERBATIM
             )

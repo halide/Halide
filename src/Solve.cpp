@@ -991,10 +991,10 @@ class SolveForInterval : public IRVisitor {
             scope.pop(op->name);
         }
         if (result.has_lower_bound() && expr_uses_var(result.min, op->name)) {
-            result.min = Let::make(op->name, op->value, result.min);
+            result.min = op->with(op->value, result.min);
         }
         if (result.has_upper_bound() && expr_uses_var(result.max, op->name)) {
-            result.max = Let::make(op->name, op->value, result.max);
+            result.max = op->with(op->value, result.max);
         }
     }
 

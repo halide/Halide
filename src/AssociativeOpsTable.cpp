@@ -2,6 +2,7 @@
 #include "IRPrinter.h"
 
 #include <mutex>
+#include <tuple>
 
 namespace Halide {
 namespace Internal {
@@ -93,17 +94,8 @@ struct TableKey {
         return (types == other.types) && (root == other.root) && (dim == other.dim);
     }
     bool operator<(const TableKey &other) const {
-        if (types < other.types) {
-            return true;
-        } else if (types > other.types) {
-            return false;
-        }
-        if (root < other.root) {
-            return true;
-        } else if (root > other.root) {
-            return false;
-        }
-        return (dim < other.dim);
+        return std::tie(types, root, dim) <
+               std::tie(other.types, other.root, other.dim);
     }
 };
 

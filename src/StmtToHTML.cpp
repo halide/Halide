@@ -718,7 +718,8 @@ public:
         // -- print text
         print_opening_tag("span", "matched");
         print_html_element("span", "keyword", "module");
-        print_text(" name=" + m.name() + ", target=" + m.target().to_string());
+        // The module retains implied features, but print it in minimal form.
+        print_text(" name=" + m.name() + ", target=" + m.target().without_implied_features().to_string());
         print_closing_tag("span");
 
         // Open code block to hold module body
@@ -767,7 +768,8 @@ public:
         // -- print text
         print_opening_tag("span", "matched");
         print_html_element("span", "keyword", "module");
-        print_text(" name=" + m.name() + ", target=" + m.target().to_string());
+        // The module retains implied features, but print it in minimal form.
+        print_text(" name=" + m.name() + ", target=" + m.target().without_implied_features().to_string());
         print_closing_tag("span");
 
         // Open code block to hold module body

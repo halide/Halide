@@ -34,19 +34,27 @@ endif
 
 build: $(BUILD_TARGETS)
 
-$(GENERATOR_BIN)/stereobm.generator: stereobm_generator.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/stereobm_inductive.generator: stereobm_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
-$(BIN)/%/stereobm.a: $(GENERATOR_BIN)/stereobm.generator
+$(GENERATOR_BIN)/stereobm_noninductive.generator: stereobm_noninductive_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$^ -g stereobm -e $(GENERATOR_OUTPUTS) -o $(@D) -f stereobm target=$* $(STEREOBM_GEN_PARAMS)
+	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
-$(BIN)/%/process_opencv: process.cpp $(BIN)/%/stereobm.a
+$(BIN)/%/stereobm_inductive.a: $(GENERATOR_BIN)/stereobm_inductive.generator
+	@mkdir -p $(@D)
+	$^ -g stereobm -e $(GENERATOR_OUTPUTS) -o $(@D) -f stereobm_inductive target=$* $(STEREOBM_GEN_PARAMS)
+
+$(BIN)/%/stereobm_noninductive.a: $(GENERATOR_BIN)/stereobm_noninductive.generator
+	@mkdir -p $(@D)
+	$^ -g stereobm -e $(GENERATOR_OUTPUTS) -o $(@D) -f stereobm_noninductive target=$* $(STEREOBM_GEN_PARAMS)
+
+$(BIN)/%/process_opencv: process.cpp $(BIN)/%/stereobm_inductive.a $(BIN)/%/stereobm_noninductive.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -Wno-cast-qual -DSTEREOBM_BUILD_OPENCV=1 $(STEREOBM_DEFINES) $(OPENCV_CXXFLAGS) -I$(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENCV_LIBS)
 
-$(BIN)/%/process: process.cpp $(BIN)/%/stereobm.a
+$(BIN)/%/process: process.cpp $(BIN)/%/stereobm_inductive.a $(BIN)/%/stereobm_noninductive.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -DSTEREOBM_BUILD_OPENCV=0 $(STEREOBM_DEFINES) -I$(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS)
 

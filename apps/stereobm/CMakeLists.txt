@@ -11,16 +11,22 @@ set(CMAKE_CXX_EXTENSIONS NO)
 option(STEREOBM_BUILD_OPENCV "Build the OpenCV cv::StereoBM comparison for stereobm" ON)
 message(STATUS "STEREOBM_BUILD_OPENCV is ${STEREOBM_BUILD_OPENCV}")
 
-# Find Halide and optionally OpenCV
 find_package(Halide REQUIRED)
 if (STEREOBM_BUILD_OPENCV)
     find_package(OpenCV CONFIG REQUIRED COMPONENTS core imgproc imgcodecs calib3d)
 endif ()
 
-# Generator
-add_halide_generator(stereobm.generator SOURCES stereobm_generator.cpp LINK_LIBRARIES Halide::Tools)
+add_halide_generator(
+    stereobm_inductive.generator
+    SOURCES stereobm_generator.cpp
+    LINK_LIBRARIES Halide::Tools
+)
+add_halide_generator(
+    stereobm_noninductive.generator
+    SOURCES stereobm_noninductive_generator.cpp
+    LINK_LIBRARIES Halide::Tools
+)
 
-# We set parameters here to feed into both OpenCV and our generator, so that they are consistent.
 set(STEREOBM_WINSIZE 9)
 set(STEREOBM_DEPTH 16)
 set(STEREOBM_FILTERCAP 31)
@@ -39,8 +45,23 @@ set(STEREOBM_PARAM_DEFS
 )
 
 add_halide_library(
-    stereobm
-    FROM stereobm.generator
+    stereobm_inductive
+    FROM stereobm_inductive.generator
+    GENERATOR stereobm
+    PARAMS
+    winsize=${STEREOBM_WINSIZE}
+    depth=${STEREOBM_DEPTH}
+    tilesize=${STEREOBM_TILESIZE}
+    threshold=${STEREOBM_THRESHOLD}
+    mindisp=${STEREOBM_MINDISP}
+    uniqueness_ratio=${STEREOBM_UNIQUENESS}
+    filtercap=${STEREOBM_FILTERCAP}
+)
+
+add_halide_library(
+    stereobm_noninductive
+    FROM stereobm_noninductive.generator
+    GENERATOR stereobm
     PARAMS
     winsize=${STEREOBM_WINSIZE}
     depth=${STEREOBM_DEPTH}
@@ -53,20 +74,25 @@ add_halide_library(
 
 # Always build the variant without OpenCV.
 add_executable(stereobm_process process.cpp)
-target_link_libraries(stereobm_process PRIVATE Halide::ImageIO stereobm)
+target_link_libraries(
+    stereobm_process
+    PRIVATE Halide::ImageIO stereobm_inductive stereobm_noninductive
+)
 target_compile_definitions(stereobm_process PRIVATE STEREOBM_BUILD_OPENCV=0 ${STEREOBM_PARAM_DEFS})
 
 # Build the OpenCV variant if available.
 if (STEREOBM_BUILD_OPENCV)
     add_executable(stereobm_process_opencv process.cpp)
-    target_link_libraries(stereobm_process_opencv PRIVATE Halide::ImageIO stereobm ${OpenCV_LIBS})
+    target_link_libraries(
+        stereobm_process_opencv
+        PRIVATE Halide::ImageIO stereobm_inductive stereobm_noninductive ${OpenCV_LIBS}
+    )
     target_compile_definitions(
         stereobm_process_opencv
         PRIVATE STEREOBM_BUILD_OPENCV=1 ${STEREOBM_PARAM_DEFS}
     )
 endif ()
 
-# Test that the app actually works!
 set(IMAGEL ${CMAKE_CURRENT_LIST_DIR}/../images/aloeL.png)
 set(IMAGER ${CMAKE_CURRENT_LIST_DIR}/../images/aloeR.png)
 

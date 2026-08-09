@@ -24,7 +24,6 @@
 namespace Halide {
 
 using std::ostream;
-using std::ostringstream;
 using std::string;
 using std::vector;
 
@@ -95,7 +94,8 @@ ostream &operator<<(ostream &stream, const Module &m) {
         stream << s << "\n";
     }
 
-    stream << "module name=" << m.name() << ", target=" << m.target().to_string() << "\n";
+    // The module retains implied features, but print it in minimal form.
+    stream << "module name=" << m.name() << ", target=" << m.target().without_implied_features().to_string() << "\n";
     for (const auto &b : m.buffers()) {
         stream << b << "\n";
     }
@@ -136,6 +136,9 @@ ostream &operator<<(ostream &out, const DeviceAPI &api) {
         break;
     case DeviceAPI::WebGPU:
         out << "<WebGPU>";
+        break;
+    case DeviceAPI::SMEStreaming:
+        out << "<SMEStreaming>";
         break;
     }
     return out;
@@ -233,59 +236,6 @@ ostream &operator<<(ostream &stream, const Target &target) {
 }
 
 namespace Internal {
-
-void IRPrinter::test() {
-    Type i32 = Int(32);
-    Type f32 = Float(32);
-    Expr x = Variable::make(Int(32), "x");
-    Expr y = Variable::make(Int(32), "y");
-    ostringstream expr_source;
-    expr_source << (x + 3) * (y / 2 + 17);
-    internal_assert(expr_source.str() == "((x + 3)*((y/2) + 17))");
-
-    Stmt store = Store::make("buf", (x * 17) / (x - 3), y - 1, Parameter(), const_true(), ModulusRemainder());
-    Stmt for_loop = For::make("x", -2, y + 2, ForType::Parallel, Partition::Auto, DeviceAPI::Host, store);
-    vector<Expr> args(1);
-    args[0] = x % 3;
-    Expr call = Call::make(i32, "buf", args, Call::Extern);
-    Stmt store2 = Store::make("out", call + 1, x, Parameter(), const_true(), ModulusRemainder(3, 5));
-    Stmt for_loop2 = For::make("x", 0, y, ForType::Vectorized, Partition::Auto, DeviceAPI::Host, store2);
-
-    Stmt producer = ProducerConsumer::make_produce("buf", for_loop);
-    Stmt consumer = ProducerConsumer::make_consume("buf", for_loop2);
-    Stmt pipeline = Block::make(producer, consumer);
-
-    Stmt assertion = AssertStmt::make(y >= 3, Call::make(Int(32), "halide_error_param_too_small_i64",
-                                                         {string("y"), y, 3}, Call::Extern));
-    Stmt block = Block::make(assertion, pipeline);
-    Stmt let_stmt = LetStmt::make("y", 17, block);
-    Stmt allocate = Allocate::make("buf", f32, MemoryType::Stack, {1023}, const_true(), let_stmt);
-
-    ostringstream source;
-    source << allocate;
-    std::string correct_source =
-        "allocate buf[float32 * 1023] in Stack\n"
-        "let y = 17\n"
-        "assert(y >= 3, halide_error_param_too_small_i64(\"y\", y, 3))\n"
-        "produce buf {\n"
-        " parallel (x, -2, y + 2) {\n"
-        "  buf[y - 1] = (x*17)/(x - 3)\n"
-        " }\n"
-        "}\n"
-        "consume buf {\n"
-        " vectorized (x, 0, y) {\n"
-        "  out[x] = buf(x % 3) + 1\n"
-        " }\n"
-        "}\n";
-
-    if (source.str() != correct_source) {
-        internal_error << "Correct output:\n"
-                       << correct_source
-                       << "Actual output:\n"
-                       << source.str();
-    }
-    std::cout << "IRPrinter test passed\n";
-}
 
 std::ostream &operator<<(std::ostream &stream, IRNodeType type) {
 #define CASE(e)         \
@@ -1551,22 +1501,70 @@ void IRPrinter::visit(const HoistedStorage *op) {
     print_braced_stmt(op->body);
 }
 
-std::string lldb_string(const Expr &ir) {
+namespace {
+// Render any type that has an operator<< into a std::string. The public
+// debug_string overloads below are deliberately concrete so their symbols are
+// emitted into libHalide and stay callable from a debugger.
+template<typename T>
+std::string stream_to_string(const T &value) {
+    std::stringstream s{};
+    s << value;
+    return s.str();
+}
+}  // namespace
+
+std::string debug_string(const Expr &ir) {
     std::stringstream s{};
     IRPrinter p(s);
     p.print_no_parens(ir);
     return s.str();
 }
 
-std::string lldb_string(const Internal::BaseExprNode *n) {
-    return lldb_string(Expr(n));
+std::string debug_string(const BaseExprNode *n) {
+    return debug_string(Expr(n));
 }
 
-std::string lldb_string(const Stmt &ir) {
+std::string debug_string(const Stmt &ir) {
     std::stringstream s{};
     IRPrinter p(s);
     p.print_summary(ir);
     return s.str();
+}
+
+std::string debug_string(const BaseStmtNode *n) {
+    return debug_string(Stmt(n));
+}
+
+std::string debug_string(const Type &t) {
+    return stream_to_string(t);
+}
+
+std::string debug_string(const Target &t) {
+    return stream_to_string(t);
+}
+
+std::string debug_string(const Module &m) {
+    return stream_to_string(m);
+}
+
+std::string debug_string(const Tuple &t) {
+    return stream_to_string(t);
+}
+
+std::string debug_string(const Interval &i) {
+    return stream_to_string(i);
+}
+
+std::string debug_string(const ConstantInterval &i) {
+    return stream_to_string(i);
+}
+
+std::string debug_string(const ModulusRemainder &m) {
+    return stream_to_string(m);
+}
+
+std::string debug_string(const LoweredFunc &f) {
+    return stream_to_string(f);
 }
 
 }  // namespace Internal

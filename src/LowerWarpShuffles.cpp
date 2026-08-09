@@ -435,9 +435,7 @@ class LowerWarpShuffles : public IRMutator {
                 internal_assert(alloc && alloc->extents.size() == 1);
                 int new_size = allocation_info.get(alloc->name).size;
                 allocation_info.pop(alloc->name);
-                body = Allocate::make(alloc->name, alloc->type, alloc->memory_type,
-                                      {new_size}, alloc->condition,
-                                      body, alloc->new_expr, alloc->free_function, alloc->padding);
+                body = alloc->with({new_size}, alloc->condition, body);
             }
             allocations.clear();
 
@@ -451,14 +449,11 @@ class LowerWarpShuffles : public IRMutator {
             // Rewrap any hoisted allocations that weren't placed outside some inner loop
             for (const Stmt &s : allocations) {
                 const Allocate *alloc = s.as<Allocate>();
-                body = Allocate::make(alloc->name, alloc->type, alloc->memory_type,
-                                      alloc->extents, alloc->condition,
-                                      body, alloc->new_expr, alloc->free_function, alloc->padding);
+                body = alloc->with(alloc->extents, alloc->condition, body);
             }
             allocations.clear();
 
-            return For::make(op->name, op->min, op->min + warp_size - 1,
-                             op->for_type, op->partition_policy, op->device_api, body);
+            return op->with(op->min, op->min + warp_size - 1, body);
         } else {
             return IRMutator::visit(op);
         }
@@ -512,7 +507,7 @@ class LowerWarpShuffles : public IRMutator {
             // them. Reassembling the result into a flat address gives
             // the expression below.
             Expr in_warp_idx = simplify((idx / (warp_size * stride)) * stride + reduce_expr(idx, stride, bounds), bounds);
-            return Store::make(op->name, value, in_warp_idx, op->param, op->predicate, ModulusRemainder(), op->is_streaming);
+            return op->with(value, in_warp_idx, op->predicate, ModulusRemainder());
         } else {
             return IRMutator::visit(op);
         }
@@ -540,8 +535,7 @@ class LowerWarpShuffles : public IRMutator {
         }
 
         // Load the value to be shuffled
-        Expr base_val = Load::make(type, name, idx, Buffer<>(),
-                                   Parameter(), const_true(idx.type().lanes()), ModulusRemainder());
+        Expr base_val = Load::make(type, name, idx);
 
         Expr scalar_lane = lane;
         if (const Broadcast *b = scalar_lane.as<Broadcast>()) {
@@ -658,8 +652,12 @@ class LowerWarpShuffles : public IRMutator {
     }
 
     Stmt visit(const Allocate *op) override {
-        if (this_lane.defined() || op->memory_type == MemoryType::GPUShared) {
-            // Not a warp-level allocation
+        if (this_lane.defined() ||
+            op->memory_type == MemoryType::GPUShared ||
+            op->memory_type == MemoryType::Heap) {
+            // Not a warp-level allocation. Warp-level storage is per-lane
+            // register storage; shared and heap (global) memory are never
+            // striped across lanes.
             return IRMutator::visit(op);
         } else {
             // Pick up this allocation and deposit it inside the loop over lanes at reduced size.
@@ -734,7 +732,7 @@ class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
         } else {
             debug(3) << "Successfully hoisted shuffle out of for loop\n";
         }
-        return For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
+        return op->with(op->min, op->max, body);
     }
 
     Stmt visit(const Store *op) override {

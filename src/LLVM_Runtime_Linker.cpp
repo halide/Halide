@@ -226,35 +226,31 @@ DECLARE_NO_INITMOD(metal_objc_x86)
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
 DECLARE_LL_INITMOD(arm_no_neon)
+#else
+DECLARE_NO_INITMOD(arm)
+DECLARE_NO_INITMOD(arm_no_neon)
+#endif  // WITH_ARM
+
+#if defined(WITH_ARM) || defined(WITH_AARCH64)
 DECLARE_CPP_INITMOD(arm_cpu_features)
 DECLARE_CPP_INITMOD(linux_arm_cpu_features)
 DECLARE_CPP_INITMOD(osx_arm_cpu_features)
 #else
-DECLARE_NO_INITMOD(arm)
-DECLARE_NO_INITMOD(arm_no_neon)
 DECLARE_NO_INITMOD(arm_cpu_features)
 DECLARE_NO_INITMOD(linux_arm_cpu_features)
 DECLARE_NO_INITMOD(osx_arm_cpu_features)
-#endif  // WITH_ARM
+#endif  // WITH_ARM || WITH_AARCH64
 
 #ifdef WITH_AARCH64
 DECLARE_LL_INITMOD(aarch64)
-DECLARE_CPP_INITMOD(aarch64_cpu_features)
-DECLARE_CPP_INITMOD(linux_aarch64_cpu_features)
-DECLARE_CPP_INITMOD(osx_aarch64_cpu_features)
 DECLARE_CPP_INITMOD_64(windows_aarch64_cpu_features_arm)
 #else
 DECLARE_NO_INITMOD(aarch64)
-DECLARE_NO_INITMOD(aarch64_cpu_features)
-DECLARE_NO_INITMOD(linux_aarch64_cpu_features)
-DECLARE_NO_INITMOD(osx_aarch64_cpu_features)
 DECLARE_NO_INITMOD(windows_aarch64_cpu_features_arm)
 #endif  // WITH_AARCH64
 
 #ifdef WITH_NVPTX
-DECLARE_LL_INITMOD(ptx_compute_20)
-DECLARE_LL_INITMOD(ptx_compute_30)
-DECLARE_LL_INITMOD(ptx_compute_35)
+DECLARE_LL_INITMOD(ptx_libdevice)
 #endif  // WITH_NVPTX
 
 #if defined(WITH_D3D12) && defined(WITH_X86)
@@ -295,6 +291,7 @@ DECLARE_NO_INITMOD(windows_vulkan)
 
 #ifdef WITH_X86
 // keep-sorted start by_regex=["INITMOD\\(.+"]
+DECLARE_CPP_INITMOD(linux_x86_cpu_features)
 DECLARE_LL_INITMOD(x86)
 DECLARE_LL_INITMOD(x86_amx)
 DECLARE_LL_INITMOD(x86_avx)
@@ -305,6 +302,7 @@ DECLARE_LL_INITMOD(x86_sse41)
 // keep-sorted end
 #else
 // keep-sorted start by_regex=["INITMOD\\(.+"]
+DECLARE_NO_INITMOD(linux_x86_cpu_features)
 DECLARE_NO_INITMOD(x86)
 DECLARE_NO_INITMOD(x86_amx)
 DECLARE_NO_INITMOD(x86_avx)
@@ -1273,27 +1271,21 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             // These modules are only used for AOT compilation
             modules.push_back(get_initmod_can_use_target(c, bits_64, debug));
             if (t.arch == Target::X86) {
-                modules.push_back(get_initmod_x86_cpu_features(c, bits_64, debug));
+                if (t.os == Target::Android || t.os == Target::Linux) {
+                    modules.push_back(get_initmod_linux_x86_cpu_features(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_x86_cpu_features(c, bits_64, debug));
+                }
             }
             if (t.arch == Target::ARM) {
-                if (t.bits == 64) {
-                    if (t.os == Target::Android || t.os == Target::Linux) {
-                        modules.push_back(get_initmod_linux_aarch64_cpu_features(c, bits_64, debug));
-                    } else if (t.os == Target::OSX || t.os == Target::IOS) {
-                        modules.push_back(get_initmod_osx_aarch64_cpu_features(c, bits_64, debug));
-                    } else if (t.os == Target::Windows) {
-                        modules.push_back(get_initmod_windows_aarch64_cpu_features_arm(c, bits_64, debug));
-                    } else {
-                        modules.push_back(get_initmod_aarch64_cpu_features(c, bits_64, debug));
-                    }
+                if (t.os == Target::Android || t.os == Target::Linux) {
+                    modules.push_back(get_initmod_linux_arm_cpu_features(c, bits_64, debug));
+                } else if (t.os == Target::OSX || t.os == Target::IOS) {
+                    modules.push_back(get_initmod_osx_arm_cpu_features(c, bits_64, debug));
+                } else if (t.bits == 64 && t.os == Target::Windows) {
+                    modules.push_back(get_initmod_windows_aarch64_cpu_features_arm(c, bits_64, debug));
                 } else {
-                    if (t.os == Target::Android || t.os == Target::Linux) {
-                        modules.push_back(get_initmod_linux_arm_cpu_features(c, bits_64, debug));
-                    } else if (t.os == Target::OSX || t.os == Target::IOS) {
-                        modules.push_back(get_initmod_osx_arm_cpu_features(c, bits_64, debug));
-                    } else {
-                        modules.push_back(get_initmod_arm_cpu_features(c, bits_64, debug));
-                    }
+                    modules.push_back(get_initmod_arm_cpu_features(c, bits_64, debug));
                 }
             }
             if (t.arch == Target::POWERPC) {
@@ -1412,22 +1404,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, l
     std::vector<std::unique_ptr<llvm::Module>> modules;
     modules.push_back(get_initmod_ptx_dev_ll(c));
 
-    std::unique_ptr<llvm::Module> module;
-
-    // This table is based on the guidance at:
-    // http://docs.nvidia.com/cuda/libdevice-users-guide/basic-usage.html#linking-with-libdevice
-    if (target.has_feature(Target::CUDACapability35)) {
-        module = get_initmod_ptx_compute_35_ll(c);
-    } else if (target.features_any_of({Target::CUDACapability32,
-                                       Target::CUDACapability50})) {
-        // For some reason sm_32 and sm_50 use libdevice 20
-        module = get_initmod_ptx_compute_20_ll(c);
-    } else if (target.has_feature(Target::CUDACapability30)) {
-        module = get_initmod_ptx_compute_30_ll(c);
-    } else {
-        module = get_initmod_ptx_compute_20_ll(c);
-    }
-    modules.push_back(std::move(module));
+    modules.push_back(get_initmod_ptx_libdevice_ll(c));
 
     link_modules(modules, target);
 

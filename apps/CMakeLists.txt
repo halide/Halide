@@ -41,7 +41,7 @@ if (Halide_TARGET MATCHES "wasm")
 endif ()
 
 # keep-sorted start case=no ignore_prefixes=#
-# add_app(auto_viz)  # TODO(#5374): missing CMake build
+add_app(auto_viz)
 add_app(bgu)
 add_app(bilateral_grid)
 add_app(blur)
@@ -55,13 +55,14 @@ add_app(fft)
 add_app(gaussian_blur)
 add_app(hannk)
 add_app(harris)
-# add_app(HelloAndroid)  # TODO(#5374): missing CMake build
-# add_app(HelloAndroidCamera2)  # TODO(#5374): missing CMake build
-add_app(HelloBaremetal)
+# add_app(HelloAndroid)  # don't build HelloAndroid here because it is driven by gradle
+# add_app(HelloAndroidCamera2)  # don't build HelloAndroidCamera2 here because it is driven by gradle
+# add_app(HelloBaremetal)  # cross-compiles for a bare-metal ARM target; see apps/HelloBaremetal/README.md
 # add_app(HelloiOS)  # don't build HelloiOS here because it isn't universal.
-# add_app(HelloPyTorch)  # TODO(#5374): missing CMake build
+add_app(HelloPyTorch)
+# add_app(HelloWasm)  # driven by its own super-build; see apps/HelloWasm/README.md
 add_app(hexagon_benchmarks)
-# add_app(hexagon_dma)  # TODO(#5374): missing CMake build
+add_app(hexagon_dma)
 add_app(hist)
 add_app(iir_blur)
 add_app(iir_cascade)
@@ -72,11 +73,9 @@ add_app(linear_blur)
 add_app(local_laplacian)
 add_app(max_filter)
 add_app(nl_means)
-# add_app(nn_ops)  # TODO(#5374): missing CMake build
 add_app(onnx)
 add_app(resize)
-# add_app(resnet_50)  # TODO(#5374): missing CMake build
-# add_app(simd_op_check)  # TODO(#5374): missing CMake build
+add_app(resnet_50)
 add_app(stencil_chain)
 add_app(stereobm)
 add_app(unsharp)

@@ -627,8 +627,8 @@ HALIDE_ALWAYS_INLINE Type Bool(int lanes = 1) {
 }
 
 /** Construct a handle type */
-HALIDE_ALWAYS_INLINE Type Handle(int lanes = 1, const halide_handle_cplusplus_type *handle_type = nullptr) {
-    return Type(Type::Handle, 64, lanes, handle_type);
+HALIDE_ALWAYS_INLINE Type Handle(const halide_handle_cplusplus_type *handle_type = nullptr) {
+    return Type(Type::Handle, 64, 1, handle_type);
 }
 
 /** Construct an unknown type */

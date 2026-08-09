@@ -9,7 +9,6 @@
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_PyTorch.h"
-#include "CompilerLogger.h"
 #include "Debug.h"
 #include "HexagonOffload.h"
 #include "IROperator.h"
@@ -37,7 +36,6 @@ std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target)
         {OutputFileType::bitcode, {"bitcode", ".bc", IsMulti}},
         {OutputFileType::c_header, {"c_header", ".h", IsSingle}},
         {OutputFileType::c_source, {"c_source", ".halide_generated.cpp", IsSingle}},
-        {OutputFileType::compiler_log, {"compiler_log", ".halide_compiler_log", IsSingle}},
         {OutputFileType::cpp_stub, {"cpp_stub", ".stub.h", IsSingle}},
         {OutputFileType::featurization, {"featurization", ".featurization", IsMulti}},
         {OutputFileType::function_info_header, {"function_info_header", ".function_info.h", IsSingle}},
@@ -327,6 +325,7 @@ struct ModuleContents {
     std::vector<Internal::LoweredFunc> functions;
     std::vector<Module> submodules;
     MetadataNameMap metadata_name_map;
+    RuntimeNamespaceMap runtime_prefixes_map;
     bool any_strict_float{false};
     std::unique_ptr<AutoSchedulerResults> auto_scheduler_results;
 
@@ -352,16 +351,18 @@ LoweredFunc::LoweredFunc(const std::string &name,
                          const std::vector<LoweredArgument> &args,
                          Stmt body,
                          LinkageType linkage,
-                         NameMangling name_mangling)
-    : name(name), args(args), body(std::move(body)), linkage(linkage), name_mangling(name_mangling) {
+                         NameMangling name_mangling,
+                         uint64_t attributes)
+    : name(name), args(args), body(std::move(body)), linkage(linkage), name_mangling(name_mangling), attributes(attributes) {
 }
 
 LoweredFunc::LoweredFunc(const std::string &name,
                          const std::vector<Argument> &args,
                          Stmt body,
                          LinkageType linkage,
-                         NameMangling name_mangling)
-    : name(name), body(std::move(body)), linkage(linkage), name_mangling(name_mangling) {
+                         NameMangling name_mangling,
+                         uint64_t attributes)
+    : name(name), body(std::move(body)), linkage(linkage), name_mangling(name_mangling), attributes(attributes) {
     for (const Argument &i : args) {
         this->args.emplace_back(i);
     }
@@ -371,11 +372,12 @@ LoweredFunc::LoweredFunc(const std::string &name,
 
 using namespace Halide::Internal;
 
-Module::Module(const std::string &name, const Target &target, const MetadataNameMap &metadata_name_map)
+Module::Module(const std::string &name, const Target &target, const MetadataNameMap &metadata_name_map, const RuntimeNamespaceMap &runtime_prefixes_map)
     : contents(new Internal::ModuleContents) {
     contents->name = name;
     contents->target = target;
     contents->metadata_name_map = metadata_name_map;
+    contents->runtime_prefixes_map = runtime_prefixes_map;
 }
 
 void Module::set_auto_scheduler_results(const AutoSchedulerResults &auto_scheduler_results) {
@@ -551,6 +553,14 @@ MetadataNameMap Module::get_metadata_name_map() const {
     return contents->metadata_name_map;
 }
 
+RuntimeNamespaceMap Module::get_runtime_prefixes_map() const {
+    return contents->runtime_prefixes_map;
+}
+
+void Module::set_runtime_prefixes_map(const RuntimeNamespaceMap &runtime_prefixes_map) {
+    contents->runtime_prefixes_map = runtime_prefixes_map;
+}
+
 void Module::set_conceptual_code_stmt(const Internal::Stmt &stmt) {
     contents->conceptual_code = stmt;
 }
@@ -606,7 +616,6 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         debug(1) << "Module.compile(): creating temp file for assembly output at " << assembly_path << "\n";
     }
 
-    auto *logger = get_compiler_logger();
     if (contains(output_files, OutputFileType::object) || contains(output_files, OutputFileType::assembly) ||
         contains(output_files, OutputFileType::bitcode) || contains(output_files, OutputFileType::llvm_assembly) ||
         contains(output_files, OutputFileType::static_library) || !assembly_path.empty()) {
@@ -618,10 +627,6 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
             debug(1) << "Module.compile(): object " << f << "\n";
             auto out = make_raw_fd_ostream(f);
             compile_llvm_module_to_object(*llvm_module, *out);
-            if (logger) {
-                out->flush();
-                logger->record_object_code_size(file_stat(f).file_size);
-            }
         }
         if (contains(output_files, OutputFileType::static_library)) {
             // To simplify the code, we always emit to a temporary file
@@ -639,10 +644,6 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
                 auto out = make_raw_fd_ostream(object);
                 compile_llvm_module_to_object(*llvm_module, *out);
                 out->flush();  // create_static_library() is happier if we do this
-                if (logger && !contains(output_files, OutputFileType::object)) {
-                    // Don't double-record object-code size if we already recorded it for object
-                    logger->record_object_code_size(file_stat(object).file_size);
-                }
             }
             debug(1) << "Module.compile(): static_library " << output_files.at(OutputFileType::static_library) << "\n";
             Target base_target(target().os, target().arch, target().bits, target().processor_tune);
@@ -725,9 +726,16 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
     if (contains(output_files, OutputFileType::c_source)) {
         debug(1) << "Module.compile(): c_source " << output_files.at(OutputFileType::c_source) << "\n";
         std::ofstream file(output_files.at(OutputFileType::c_source));
+        // Forward any runtime namespace import prefix so the generated source
+        // calls a namespaced runtime rather than the stock halide_ one.
+        const auto &ns = contents->runtime_prefixes_map;
+        const auto it = ns.find(RuntimeLinkage::Import);
+        const std::string import_prefix = (it != ns.end()) ? it->second : std::string{};
         Internal::CodeGen_C cg(file,
                                target(),
-                               target().has_feature(Target::CPlusPlusMangling) ? Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
+                               target().has_feature(Target::CPlusPlusMangling) ? Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation,
+                               /* include_guard */ "",
+                               import_prefix);
         cg.compile(*this);
     }
     if (contains(output_files, OutputFileType::python_extension)) {
@@ -771,24 +779,13 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         file.close();
         internal_assert(!file.fail());
     }
-    if (contains(output_files, OutputFileType::compiler_log)) {
-        debug(1) << "Module.compile(): compiler_log " << output_files.at(OutputFileType::compiler_log) << "\n";
-        std::ofstream file(output_files.at(OutputFileType::compiler_log));
-        internal_assert(get_compiler_logger() != nullptr);
-        get_compiler_logger()->emit_to_stream(file);
-        file.close();
-        internal_assert(!file.fail());
-    }
-    // If HL_DEBUG_COMPILER_LOGGER is set, dump the log (if any) to stderr now, whether or it is required
-    if (get_env_variable("HL_DEBUG_COMPILER_LOGGER") == "1" && get_compiler_logger() != nullptr) {
-        get_compiler_logger()->emit_to_stream(std::cerr);
-    }
 }
 
-std::map<OutputFileType, std::string> compile_standalone_runtime(const std::map<OutputFileType, std::string> &output_files, const Target &t) {
+std::map<OutputFileType, std::string> compile_standalone_runtime(const std::map<OutputFileType, std::string> &output_files, const Target &t, const std::map<RuntimeLinkage, std::string> &runtime_prefixes_map) {
     validate_outputs(output_files);
 
-    Module empty("standalone_runtime", t.without_feature(Target::NoRuntime).without_feature(Target::JIT));
+    MetadataNameMap metadata_name_map = {};  // empty metadata for a standalone runtime
+    Module empty("standalone_runtime", t.without_feature(Target::NoRuntime).without_feature(Target::JIT), metadata_name_map, runtime_prefixes_map);
     // For runtime, it only makes sense to output object files or static_library, so ignore
     // everything else.
     std::map<OutputFileType, std::string> actual_outputs;
@@ -805,36 +802,15 @@ std::map<OutputFileType, std::string> compile_standalone_runtime(const std::map<
     return actual_outputs;
 }
 
-void compile_standalone_runtime(const std::string &object_filename, const Target &t) {
-    compile_standalone_runtime({{OutputFileType::object, object_filename}}, t);
+void compile_standalone_runtime(const std::string &object_filename, const Target &t, const std::map<RuntimeLinkage, std::string> &runtime_prefixes_map) {
+    compile_standalone_runtime({{OutputFileType::object, object_filename}}, t, runtime_prefixes_map);
 }
-
-namespace {
-
-class ScopedCompilerLogger {
-public:
-    ScopedCompilerLogger(const CompilerLoggerFactory &compiler_logger_factory, const std::string &fn_name, const Target &target) {
-        internal_assert(!get_compiler_logger());
-        if (compiler_logger_factory) {
-            set_compiler_logger(compiler_logger_factory(fn_name, target));
-        } else {
-            set_compiler_logger(nullptr);
-        }
-    }
-
-    ~ScopedCompilerLogger() {
-        set_compiler_logger(nullptr);
-    }
-};
-
-}  // namespace
 
 void compile_multitarget(const std::string &fn_name,
                          const std::map<OutputFileType, std::string> &output_files,
                          const std::vector<Target> &targets,
                          const std::vector<std::string> &suffixes,
-                         const ModuleFactory &module_factory,
-                         const CompilerLoggerFactory &compiler_logger_factory) {
+                         const ModuleFactory &module_factory) {
     validate_outputs(output_files);
 
     user_assert(!fn_name.empty()) << "Function name must be specified.\n";
@@ -875,7 +851,6 @@ void compile_multitarget(const std::string &fn_name,
     const bool needs_wrapper = (targets.size() > 1);
     if (targets.size() == 1) {
         debug(1) << "compile_multitarget: single target is " << base_target.to_string() << "\n";
-        ScopedCompilerLogger activate(compiler_logger_factory, fn_name, base_target);
 
         // If we want to have single-output object files use the target suffix, we'd
         // want to do this instead:
@@ -910,7 +885,7 @@ void compile_multitarget(const std::string &fn_name,
     constexpr int kFeaturesWordCount = (Target::FeatureEnd + 63) / (sizeof(uint64_t) * 8);
     uint64_t runtime_features[kFeaturesWordCount] = {(uint64_t)-1LL};
 
-    TemporaryFileDir temp_obj_dir, temp_compiler_log_dir;
+    TemporaryFileDir temp_obj_dir;
     std::vector<Expr> wrapper_args;
     std::vector<LoweredArgument> base_target_args;
     std::vector<AutoSchedulerResults> auto_scheduler_results;
@@ -954,7 +929,6 @@ void compile_multitarget(const std::string &fn_name,
         // Ensure that each subtarget sees the same sequence of random numbers
         reset_random_counters();
         {
-            ScopedCompilerLogger activate(compiler_logger_factory, sub_fn_name, sub_fn_target);
             Module sub_module = module_factory(sub_fn_name, sub_fn_target);
             // Re-assign every time -- should be the same across all targets anyway,
             // but base_target is always the last one we encounter.
@@ -969,9 +943,6 @@ void compile_multitarget(const std::string &fn_name,
             sub_out.erase(OutputFileType::schedule);
             sub_out.erase(OutputFileType::c_header);
             sub_out.erase(OutputFileType::function_info_header);
-            if (contains(sub_out, OutputFileType::compiler_log)) {
-                sub_out[OutputFileType::compiler_log] = temp_compiler_log_dir.add_temp_file(output_files.at(OutputFileType::compiler_log), suffix, target);
-            }
             debug(1) << "compile_multitarget: compile_sub_target " << sub_out[OutputFileType::object] << "\n";
             sub_module.compile(sub_out);
             const auto *r = sub_module.get_auto_scheduler_results();
@@ -1155,25 +1126,6 @@ void compile_multitarget(const std::string &fn_name,
         debug(1) << "compile_multitarget: static_library "
                  << output_files.at(OutputFileType::static_library) << "\n";
         create_static_library(temp_obj_dir.files(), base_target, output_files.at(OutputFileType::static_library));
-    }
-
-    if (contains(output_files, OutputFileType::compiler_log)) {
-        debug(1) << "compile_multitarget: compiler_log "
-                 << output_files.at(OutputFileType::compiler_log) << "\n";
-
-        std::ofstream compiler_log_file(output_files.at(OutputFileType::compiler_log));
-        compiler_log_file << "[\n";
-        const auto &f = temp_compiler_log_dir.files();
-        for (size_t i = 0; i < f.size(); i++) {
-            auto d = read_entire_file(f[i]);
-            compiler_log_file.write(d.data(), d.size());
-            if (i < f.size() - 1) {
-                compiler_log_file << ",\n";
-            }
-        }
-        compiler_log_file << "]\n";
-        compiler_log_file.close();
-        internal_assert(!compiler_log_file.fail());
     }
 }
 

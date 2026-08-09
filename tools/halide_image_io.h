@@ -825,7 +825,7 @@ void read_big_endian_row(const uint8_t *src, int y, ImageType *im) {
         const int cmax = im_typed.dim(2).max();
         for (int x = xmin; x <= xmax; x++) {
             for (int c = cmin; c <= cmax; c++) {
-                im_typed(x, y, c + cmin) = read_big_endian<ElemType>(src);
+                im_typed(x, y, c) = read_big_endian<ElemType>(src);
                 src += sizeof(ElemType);
             }
         }
@@ -904,6 +904,14 @@ bool load_png(const std::string &filename, ImageType *im) {
     const int height = png_get_image_height(png_ptr, info_ptr);
     const int channels = png_get_channels(png_ptr, info_ptr);
     const int bit_depth = png_get_bit_depth(png_ptr, info_ptr);
+
+    // Only 8- and 16-bit samples map to a supported buffer type. Sub-byte
+    // depths (1/2/4) keep a packed row layout, but the row reader below is
+    // selected as 16-bit for anything that isn't 8-bit, so it would read past
+    // the packed row and write past the buffer. Reject them here.
+    if (!check(bit_depth == 8 || bit_depth == 16, "Unsupported PNG bit depth")) {
+        return false;
+    }
 
     const halide_type_t im_type(halide_type_uint, bit_depth);
     std::vector<int> im_dimensions = {width, height};
@@ -1036,6 +1044,10 @@ bool read_pnm_header(Internal::FileOpener &f, const std::string &hdr_fmt, int *w
         return false;
     }
 
+    if (!check(*width > 0 && *height > 0, "Invalid width or height")) {
+        return false;
+    }
+
     int maxval;
     if (!check(f.scan_line("%d", &maxval) == 1, "Could not read max value")) {
         return false;
@@ -1075,7 +1087,10 @@ bool load_pnm(const std::string &filename, int channels, ImageType *im) {
                              Internal::read_big_endian_row<uint8_t, ImageType> :
                              Internal::read_big_endian_row<uint16_t, ImageType>;
 
-    std::vector<uint8_t> row(width * channels * (bit_depth / 8));
+    // read_big_endian_row walks this many bytes per row, so the product has to
+    // be formed in size_t: in int it wraps for a wide enough header, leaving a
+    // row buffer far shorter than the row the reader goes on to consume.
+    std::vector<uint8_t> row((size_t)width * channels * (bit_depth / 8));
     const int ymin = im->dim(1).min();
     const int ymax = im->dim(1).max();
     for (int y = ymin; y <= ymax; ++y) {
@@ -1337,6 +1352,12 @@ bool load_npy(const std::string &filename, ImageType *im) {
     NpyHeader h;
     if (!check(h.parse(header), "Could not parse .npy header dict")) {
         return false;
+    }
+
+    for (const int extent : h.extents) {
+        if (!check(extent > 0, "Bad extent in .npy file")) {
+            return false;
+        }
     }
 
     halide_type_t im_type((halide_type_code_t)0, 0);
@@ -1779,6 +1800,12 @@ bool load_mat(const std::string &filename, ImageType *im) {
     if (dims & 1) {
         uint32_t padding;
         if (!check(f.read_bytes(&padding, 4), "Could not read .mat header\n")) {
+            return false;
+        }
+    }
+
+    for (const int extent : extents) {
+        if (!check(extent > 0, "Bad extent in .mat file\n")) {
             return false;
         }
     }

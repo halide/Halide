@@ -274,8 +274,7 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
                 condition = simplify(condition);
             }
 
-            Expr load = Load::make(op->type, op->name, index, op->image, op->param,
-                                   const_true(op->type.lanes()), op->alignment, op->is_streaming);
+            Expr load = op->with(index, const_true(op->type.lanes()), op->alignment);
 
             return Call::make(op->type, Call::if_then_else,
                               {condition, load}, Call::PureIntrinsic);
@@ -285,8 +284,7 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
             // some sort of loop Expr. Another option would be
             // introducing a set of runtime functions to do predicated
             // loads.
-            Expr load = Load::make(op->type, op->name, index, op->image, op->param,
-                                   const_true(op->type.lanes()), op->alignment, op->is_streaming);
+            Expr load = op->with(index, const_true(op->type.lanes()), op->alignment);
             return Call::make(op->type, Call::if_then_else,
                               {predicate, load}, Call::PureIntrinsic);
         }
@@ -304,15 +302,11 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
         int lanes = value.type().lanes();
 
         if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
-            Stmt unpredicated_store = Store::make(op->name, value, index, op->param, const_true(lanes), op->alignment, op->is_streaming);
+            Stmt unpredicated_store = op->with(value, index, const_true(lanes), op->alignment);
             return IfThenElse::make(scalar_pred->value, unpredicated_store);
         }
 
-        if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
-            return op;
-        } else {
-            return Store::make(op->name, value, index, op->param, predicate, op->alignment, op->is_streaming);
-        }
+        return op->with(value, index, predicate, op->alignment);
     }
 };
 
@@ -364,8 +358,7 @@ private:
             if (uses_hvx) {
                 body = acquire_hvx_context(body, target);
                 body = substitute("uses_hvx", true, body);
-                Stmt new_for = For::make(op->name, op->min, op->max, op->for_type,
-                                         op->partition_policy, op->device_api, body);
+                Stmt new_for = op->with(op->min, op->max, body);
                 Stmt prolog =
                     IfThenElse::make(uses_hvx_var, call_halide_qurt_hvx_unlock());
                 Stmt epilog =
@@ -409,8 +402,7 @@ private:
                 //   vector code
                 //   halide_qurt_unlock
                 // }
-                s = For::make(op->name, op->min, op->max, op->for_type,
-                              op->partition_policy, op->device_api, body);
+                s = op->with(op->min, op->max, body);
             }
 
             uses_hvx = old_uses_hvx;
@@ -1025,6 +1017,23 @@ Value *CodeGen_Hexagon::interleave_vectors(const vector<llvm::Value *> &v) {
     int native_elements =
         native_vector_bits() / element_ty->getScalarSizeInBits();
     int result_elements = get_vector_num_elements(v_ty) * v.size();
+    if (element_bits == 1) {
+        // If this is a vector of booleans, convert it to a vector of bytes,
+        // interleave that, and convert back. This avoids routing predicate
+        // (mask) vectors through the vdelta-based byte shuffle network
+        // below, which assumes native-vector-sized byte data: small,
+        // sub-native-width concatenations of predicates (as produced here
+        // when the number of lanes is much smaller than a native HVX
+        // vector) can trip up LLVM's Hexagon backend during DAG combining.
+        vector<llvm::Value *> i8_v(v.size());
+        for (size_t i = 0; i < v.size(); i++) {
+            llvm::Type *i8_ty = get_vector_type(i8_t, get_vector_num_elements(v[i]->getType()));
+            i8_v[i] = builder->CreateIntCast(v[i], i8_ty, true);
+        }
+        Value *result = interleave_vectors(i8_v);
+        llvm::Type *result_ty = get_vector_type(element_ty, result_elements);
+        return builder->CreateIntCast(result, result_ty, true);
+    }
     if (v.size() == 2) {
         // Interleaving two vectors.
         Value *a = v[0];
