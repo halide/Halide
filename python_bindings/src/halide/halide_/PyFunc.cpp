@@ -219,6 +219,10 @@ void define_func(py::module &m) {
             .def("bound_storage", &Func::bound_storage)
             .def("memoize", &Func::memoize, py::arg("eviction_key") = EvictionKey())
             .def("compute_inline", &Func::compute_inline)
+            .def("eager_inline", (Func & (Func::*)(const std::vector<Func> &)) & Func::eager_inline, py::arg("fs"))
+            .def("eager_inline", [](Func &func, const py::args &args) -> Func & {
+                return func.eager_inline(args_to_vector<Func>(args));
+            })
             .def("compute_root", &Func::compute_root)
             .def("store_root", &Func::store_root)
 

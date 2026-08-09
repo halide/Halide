@@ -191,6 +191,31 @@ public:
     Func rfactor(const RVar &r, const Var &v);
     // @}
 
+    /** Immediately inline direct calls to each of the given Funcs into this
+     * stage's definition. The Funcs are inlined in dependency order regardless
+     * of the order they are passed, so if one inlined Func's body calls another,
+     * both are fully folded in.
+     *
+     * Unlike compute_inline(), which merely marks a Func to be inlined during
+     * lowering, eager_inline() performs the substitution now, at schedule time,
+     * rewriting only this stage's definition in place. This is useful to surface
+     * structure that other schedule-time directives (e.g. rfactor()) need to see.
+     *
+     * Each inlined Func must be inlinable: a pure Func (no update or extern
+     * definition) with no specializations, and with a schedule compatible with
+     * inlining (as for compute_inline()). The inlined Funcs are otherwise
+     * unchanged; only this stage's calls to them are replaced. */
+    // @{
+    Stage &eager_inline(const std::vector<Func> &fs);
+
+    template<typename... Args>
+    HALIDE_NO_USER_CODE_INLINE std::enable_if_t<Internal::all_are_convertible<Func, Args...>::value, Stage &>
+    eager_inline(const Func &first, Args &&...args) {
+        std::vector<Func> collected_args{first, std::forward<Args>(args)...};
+        return eager_inline(collected_args);
+    }
+    // @}
+
     /** Schedule the iteration over this stage to be fused with another
      * stage 's' from outermost loop to a given LoopLevel. 'this' stage will
      * be computed AFTER 's' in the innermost fused dimension. There should not
@@ -2630,6 +2655,33 @@ public:
      \endcode
      */
     Func &compute_inline();
+
+    /** Immediately inline direct calls to each of the given Funcs into this
+     * Func's initial (pure) definition. The Funcs are inlined in dependency
+     * order regardless of the order they are passed, so if one inlined Func's
+     * body calls another, both are fully folded in. This is shorthand for
+     * update(0)-style scheduling: to inline into an update definition, call
+     * eager_inline() on that stage, e.g. f.update(n).eager_inline(...).
+     *
+     * Unlike compute_inline(), which merely marks a Func to be inlined during
+     * lowering, eager_inline() performs the substitution now, at schedule time,
+     * rewriting the definition in place. This is useful to surface structure that
+     * other schedule-time directives need to see.
+     *
+     * Each inlined Func must be inlinable: a pure Func (no update or extern
+     * definition) with no specializations, and with a schedule compatible with
+     * inlining (as for compute_inline()). The inlined Funcs are otherwise
+     * unchanged; only this definition's calls to them are replaced. */
+    // @{
+    Func &eager_inline(const std::vector<Func> &fs);
+
+    template<typename... Args>
+    HALIDE_NO_USER_CODE_INLINE std::enable_if_t<Internal::all_are_convertible<Func, Args...>::value, Func &>
+    eager_inline(const Func &first, Args &&...args) {
+        std::vector<Func> collected_args{first, std::forward<Args>(args)...};
+        return eager_inline(collected_args);
+    }
+    // @}
 
     /** Get a handle on an update step for the purposes of scheduling
      * it. */

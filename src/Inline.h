@@ -81,11 +81,13 @@ private:
 
 /** Inline a single named function, which must be pure. For a pure function to
  * be inlined, it must not have any specializations (i.e. it can only have one
- * values definition). */
+ * values definition). The Definition overload rewrites just one stage's
+ * definition in place; the Function overload rewrites all of a Func's stages. */
 // @{
 Stmt inline_function(const Stmt &s, const Function &f);
 Expr inline_function(const Expr &e, const Function &f);
 void inline_function(Function caller, const Function &f);
+void inline_function(Definition &def, const Function &f);
 // @}
 
 /** Inline a set of pure functions. Equivalent in effect to calling
