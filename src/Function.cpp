@@ -1138,14 +1138,15 @@ bool Function::is_inductive() const {
         return found;
     };
 
+    const std::vector<std::string> &pure_args = args();
     auto has_shifted_self_call = [&](const std::vector<Expr> &def_args, const std::vector<Expr> &values) {
         bool found = false;
         for (const Expr &e : values) {
             visit_with(e, [&](auto *self, const Call *op) {
                 if (op->name == name() && op->call_type == Call::Halide) {
-                    for (size_t i = 0; i < op->args.size() && i < def_args.size(); i++) {
+                    for (size_t i = 0; i < op->args.size() && i < def_args.size() && i < pure_args.size(); i++) {
                         const Variable *lhs_var = def_args[i].as<Variable>();
-                        if (lhs_var && !lhs_var->reduction_domain.defined()) {
+                        if (lhs_var && !lhs_var->reduction_domain.defined() && lhs_var->name == pure_args[i]) {
                             const Variable *call_var = op->args[i].as<Variable>();
                             bool matches = call_var && call_var->name == lhs_var->name;
                             if (!matches) {
