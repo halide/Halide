@@ -54,27 +54,28 @@ struct Target {
      * fixed size is allowed. */
     int vector_bits = 0;
 
-    /** The specific processor to be targeted, tuned for.
-     * Corresponds to processor_name_map in Target.cpp.
+    /** The specific processor to target or tune for. Mirrors
+     * halide_target_processor_t in HalideRuntime.h and corresponds to
+     * processor_name_map in Target.cpp.
      *
      * New entries should be added to the end. */
     enum Processor {
         /// Do not tune for any specific CPU. In practice, this means that halide will decide the tune CPU based on the enabled features.
-        ProcessorGeneric = 0,
-        K8,        /// Tune for AMD K8 Hammer CPU (AMD Family 0Fh, launched 2003).
-        K8_SSE3,   /// Tune for later versions of AMD K8 CPU, with SSE3 support.
-        AMDFam10,  /// Tune for AMD K10 "Barcelona" CPU (AMD Family 10h, launched 2007).
-        BtVer1,    /// Tune for AMD Bobcat CPU (AMD Family 14h, launched 2011).
-        BdVer1,    /// Tune for AMD Bulldozer CPU (AMD Family 15h, launched 2011).
-        BdVer2,    /// Tune for AMD Piledriver CPU (AMD Family 15h (2nd-gen), launched 2012).
-        BdVer3,    /// Tune for AMD Steamroller CPU (AMD Family 15h (3nd-gen), launched 2014).
-        BdVer4,    /// Tune for AMD Excavator CPU (AMD Family 15h (4th-gen), launched 2015).
-        BtVer2,    /// Tune for AMD Jaguar CPU (AMD Family 16h, launched 2013).
-        ZnVer1,    /// Tune for AMD Zen   CPU (AMD Family 17h, launched 2017).
-        ZnVer2,    /// Tune for AMD Zen 2 CPU (AMD Family 17h, launched 2019).
-        ZnVer3,    /// Tune for AMD Zen 3 CPU (AMD Family 19h, launched 2020).
-        ZnVer4,    /// Tune for AMD Zen 4 CPU (AMD Family 19h, launched 2022).
-        ZnVer5,    /// Tune for AMD Zen 5 CPU (AMD Family 1Ah, launched 2024).
+        ProcessorGeneric = halide_target_processor_generic,
+        K8 = halide_target_processor_k8,
+        K8_SSE3 = halide_target_processor_k8_sse3,
+        AMDFam10 = halide_target_processor_amdfam10,
+        BtVer1 = halide_target_processor_btver1,
+        BdVer1 = halide_target_processor_bdver1,
+        BdVer2 = halide_target_processor_bdver2,
+        BdVer3 = halide_target_processor_bdver3,
+        BdVer4 = halide_target_processor_bdver4,
+        BtVer2 = halide_target_processor_btver2,
+        ZnVer1 = halide_target_processor_znver1,
+        ZnVer2 = halide_target_processor_znver2,
+        ZnVer3 = halide_target_processor_znver3,
+        ZnVer4 = halide_target_processor_znver4,
+        ZnVer5 = halide_target_processor_znver5,
     } processor_tune = ProcessorGeneric;
 
     /** Optional features a target can have.
@@ -108,6 +109,10 @@ struct Target {
         CUDACapability75 = halide_target_feature_cuda_capability75,
         CUDACapability80 = halide_target_feature_cuda_capability80,
         CUDACapability86 = halide_target_feature_cuda_capability86,
+        CUDACapability89 = halide_target_feature_cuda_capability89,
+        CUDACapability90 = halide_target_feature_cuda_capability90,
+        CUDACapability100 = halide_target_feature_cuda_capability100,
+        CUDACapability120 = halide_target_feature_cuda_capability120,
         OpenCL = halide_target_feature_opencl,
         CLDoubles = halide_target_feature_cl_doubles,
         CLHalf = halide_target_feature_cl_half,
@@ -154,6 +159,12 @@ struct Target {
         WebGPU = halide_target_feature_webgpu,
         SVE = halide_target_feature_sve,
         SVE2 = halide_target_feature_sve2,
+        SME2 = halide_target_feature_sme2,
+        SME_SVL128 = halide_target_feature_sme_svl128,
+        SME_SVL256 = halide_target_feature_sme_svl256,
+        SME_SVL512 = halide_target_feature_sme_svl512,
+        SME_SVL1024 = halide_target_feature_sme_svl1024,
+        SME_SVL2048 = halide_target_feature_sme_svl2048,
         ARMDotProd = halide_target_feature_arm_dot_prod,
         ARMFp16 = halide_target_feature_arm_fp16,
         LLVMLargeCodeModel = halide_llvm_large_code_model,
@@ -236,6 +247,29 @@ struct Target {
 
     void set_features(const std::vector<Feature> &features_to_set, bool value = true);
 
+    /** Set any feature flags that are implied by the flags currently set. For
+     * example, setting AVX2 implies AVX, so calling this on a target with the
+     * AVX2 feature will also set the AVX feature. The set of implications is a
+     * DAG, so this reaches a fixed point in a single pass. Call this before
+     * inspecting a target's features, so that (e.g.) a check for SSE41
+     * succeeds on an AVX2 target. */
+    void set_implied_features();
+
+    /** Unset any feature flags that are implied by other flags that remain
+     * set, producing the minimal set of feature flags that
+     * set_implied_features() would expand back to the same target. For
+     * example, on a target with both AVX2 and AVX set, this unsets AVX (since
+     * AVX2 implies it), but on a target with only AVX set it leaves AVX
+     * alone. Call this before emitting a target as a string, to get a compact
+     * canonical form. */
+    void unset_implied_features();
+
+    /** Return a copy of the target with set_implied_features() applied. */
+    Target with_implied_features() const;
+
+    /** Return a copy of the target with unset_implied_features() applied. */
+    Target without_implied_features() const;
+
     bool has_feature(Feature f) const;
 
     bool has_feature(halide_target_feature_t f) const {
@@ -291,7 +325,8 @@ struct Target {
                arch == other.arch &&
                bits == other.bits &&
                processor_tune == other.processor_tune &&
-               features == other.features;
+               features == other.features &&
+               vector_bits == other.vector_bits;
     }
 
     bool operator!=(const Target &other) const {
@@ -325,6 +360,10 @@ struct Target {
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for this Target. */
     int natural_vector_size(const Halide::Type &t) const;
+
+    /** Return the fixed SME streaming vector length in bits selected by this target,
+     * or 0 if no SME_SVL feature is set. */
+    int sme_streaming_vector_bits() const;
 
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for this Target. */
@@ -387,6 +426,10 @@ struct Target {
      * If the string is not a known feature name, return FeatureEnd. */
     static Target::Feature feature_from_name(const std::string &name);
 
+    /** Return the SME_SVL feature corresponding to an SME streaming vector
+     * length in bits, or FeatureEnd if no exact SME_SVL feature exists. */
+    static Target::Feature sme_svl_feature_from_bits(int bits);
+
 private:
     /** A bitmask that stores the active features. */
     std::bitset<FeatureEnd> features;
@@ -415,11 +458,6 @@ Target get_jit_target_from_environment();
  * apis that do not correspond to any single target feature, returns
  * Target::FeatureEnd */
 Target::Feature target_feature_for_device_api(DeviceAPI api);
-
-namespace Internal {
-
-void target_test();
-}
 
 }  // namespace Halide
 

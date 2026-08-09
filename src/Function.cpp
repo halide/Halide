@@ -38,10 +38,19 @@ class WeakenFunctionPtrs : public IRMutator {
         Expr expr = IRMutator::visit(c);
         c = expr.as<Call>();
         internal_assert(c);
+        // Match by the named Func (group slot), independent of any
+        // global-wrapper following, so this still finds self-references after
+        // the Func has been given a global wrapper.
+        FunctionPtr unfollowed = c->func;
+        unfollowed.follow_global_wrappers = false;
         if (c->func.defined() &&
-            c->func.get() == func) {
+            unfollowed.get() == func) {
             FunctionPtr ptr = c->func;
             ptr.weaken();
+            // These are a Func's own self-references, or a wrapper's call to the
+            // Func it wraps. Either way they must keep calling that Func rather
+            // than following its global wrapper (which would form a cycle).
+            ptr.follow_global_wrappers = false;
             expr = Call::make(c->type, c->name, c->args, c->call_type,
                               ptr, c->value_index,
                               c->image, c->param);
@@ -116,6 +125,11 @@ struct FunctionContents {
 
     bool frozen = false;
 
+    // A weak pointer to this Func's global wrapper, if it has one (created by
+    // Func::in()). Lives in the same group. A call that follows global-wrapper
+    // links (see FunctionPtr) resolves through this to the wrapper.
+    FunctionPtr global_wrapper;
+
     void accept(IRVisitor *visitor) const {
         func_schedule.accept(visitor);
 
@@ -184,7 +198,17 @@ struct FunctionGroup {
 };
 
 FunctionContents *FunctionPtr::get() const {
-    return &(group()->members[idx]);
+    if (!defined()) {
+        return nullptr;
+    }
+    FunctionContents *c = &(group()->members[idx]);
+    // Follow the chain of global wrappers to its end, if requested, so that a
+    // call resolves to the callee's global wrapper as if it had been rewritten.
+    while (follow_global_wrappers && c->global_wrapper.defined()) {
+        const FunctionPtr &next = c->global_wrapper;
+        c = &(next.group()->members[next.idx]);
+    }
+    return c;
 }
 
 template<>
@@ -358,7 +382,8 @@ void Function::update_with_deserialization(const std::string &name,
                                            const std::vector<std::string> &trace_tags,
                                            bool no_profiling,
                                            const std::string &profiler_display_name,
-                                           bool frozen) {
+                                           bool frozen,
+                                           const FunctionPtr &global_wrapper) {
     contents->name = name;
     contents->origin_name = origin_name;
     contents->output_types = output_types;
@@ -382,6 +407,7 @@ void Function::update_with_deserialization(const std::string &name,
     contents->no_profiling = no_profiling;
     contents->profiler_display_name = profiler_display_name;
     contents->frozen = frozen;
+    contents->global_wrapper = global_wrapper;
 }
 
 namespace {
@@ -525,6 +551,17 @@ void Function::deep_copy(const FunctionPtr &copy, DeepCopyMap &copied_map) const
     copy->output_buffers = contents->output_buffers;
     copy->func_schedule = contents->func_schedule.deep_copy(copied_map);
 
+    // Remap the global-wrapper link, if the wrapper is part of this copy.
+    if (contents->global_wrapper.defined()) {
+        auto it = copied_map.find(contents->global_wrapper);
+        if (it != copied_map.end()) {
+            FunctionPtr gw = it->second;
+            gw.weaken();
+            gw.follow_global_wrappers = true;
+            copy->global_wrapper = gw;
+        }
+    }
+
     // Copy the pure definition
     if (contents->init_def.defined()) {
         copy->init_def = contents->init_def.get_copy();
@@ -554,7 +591,8 @@ void Function::deep_copy(string name, const FunctionPtr &copy, DeepCopyMap &copi
 void Function::define(const vector<string> &args, vector<Expr> values) {
     user_assert(!frozen())
         << "Func " << name() << " cannot be given a new pure definition, "
-        << "because it has already been realized or used in the definition of another Func.\n";
+        << "because it has already been realized, used in the definition of "
+        << "another Func, or been the target of a wrapper via in()/clone_in().\n";
     user_assert(!has_extern_definition())
         << "In pure definition of Func \"" << name() << "\":\n"
         << "Func with extern definition cannot be given a pure definition.\n";
@@ -693,7 +731,8 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values, con
         << "Can't add an update definition without a pure definition first.\n";
     user_assert(!frozen())
         << "Func " << name() << " cannot be given a new update definition, "
-        << "because it has already been realized or used in the definition of another Func.\n";
+        << "because it has already been realized, used in the definition of "
+        << "another Func, or been the target of a wrapper via in()/clone_in().\n";
 
     for (auto &value : values) {
         user_assert(value.defined())
@@ -1216,6 +1255,34 @@ const map<string, FunctionPtr> &Function::wrappers() const {
     return contents->func_schedule.wrappers();
 }
 
+void Function::set_global_wrapper(Function &wrapper) {
+    wrapper.freeze();
+
+    // Weaken the wrapper's back-references to us, and mark them not to follow
+    // global wrappers -- otherwise the wrapper's own call to us would resolve
+    // through the link we're about to set and call itself.
+    WeakenFunctionPtrs weakener(contents.get());
+    wrapper.mutate(&weakener);
+
+    FunctionPtr ptr = wrapper.contents;
+    ptr.weaken();
+    ptr.follow_global_wrappers = true;
+    contents->global_wrapper = ptr;
+}
+
+Function Function::global_wrapper() const {
+    if (!contents->global_wrapper.defined()) {
+        return Function();
+    }
+    // Return a strong handle pointing directly at the immediate wrapper. The
+    // stored link is weak and follows further global-wrapper links; strip both
+    // so callers get this Func's own wrapper rather than the end of the chain.
+    FunctionPtr ptr = contents->global_wrapper;
+    ptr.strengthen();
+    ptr.follow_global_wrappers = false;
+    return Function(ptr);
+}
+
 Function Function::new_function_in_same_group(const std::string &f) {
     int group_size = (int)(contents.group()->members.size());
     contents.group()->members.resize(group_size + 1);
@@ -1253,8 +1320,7 @@ const Call *Function::is_wrapper() const {
         expected_args.push_back(Variable::make(Int(32), v));
     }
     Expr expected_rhs =
-        Call::make(call->type, call->name, expected_args, call->call_type,
-                   call->func, call->value_index, call->image, call->param);
+        call->with(expected_args);
     if (equal(rhs[0], expected_rhs)) {
         return call;
     } else {
@@ -1282,6 +1348,8 @@ Function &Function::substitute_calls(const map<FunctionPtr, FunctionPtr> &substi
                 internal_assert(it != substitutions.end())
                     << "Function not in environment: " << c->func->name << "\n";
                 FunctionPtr subs = it->second;
+                // Preserve whether this call routes through global wrappers.
+                subs.follow_global_wrappers = c->func.follow_global_wrappers;
                 debug(4) << "...Replace call to Func \"" << c->name << "\" with "
                          << "\"" << subs->name << "\"\n";
                 expr = Call::make(c->type, subs->name, c->args, c->call_type,

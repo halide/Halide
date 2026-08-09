@@ -3,11 +3,12 @@
 #include <condition_variable>
 #include <fstream>
 #include <memory>
+#include <mutex>
 #include <unordered_map>
 #include <utility>
 
-#include "CompilerLogger.h"
 #include "Generator.h"
+#include "GeneratorCache.h"
 #include "IRPrinter.h"
 #include "Module.h"
 #include "Serialization.h"
@@ -21,17 +22,27 @@ namespace Halide {
 
 GeneratorContext::GeneratorContext(const Target &target)
     : target_(target),
-      autoscheduler_params_() {
+      autoscheduler_params_(),
+      runtime_prefixes_params_() {
 }
 
 GeneratorContext::GeneratorContext(const Target &target,
                                    const AutoschedulerParams &autoscheduler_params)
     : target_(target),
-      autoscheduler_params_(autoscheduler_params) {
+      autoscheduler_params_(autoscheduler_params),
+      runtime_prefixes_params_() {
+}
+
+GeneratorContext::GeneratorContext(const Target &target,
+                                   const AutoschedulerParams &autoscheduler_params,
+                                   const RuntimePrefixParams &runtime_prefixes_params)
+    : target_(target),
+      autoscheduler_params_(autoscheduler_params),
+      runtime_prefixes_params_(runtime_prefixes_params) {
 }
 
 GeneratorContext GeneratorContext::with_target(const Target &t) const {
-    return GeneratorContext(t, autoscheduler_params_);
+    return GeneratorContext(t, autoscheduler_params_, runtime_prefixes_params_);
 }
 
 namespace Internal {
@@ -166,8 +177,9 @@ private:
         std::vector<Internal::GeneratorParamBase *> out;
         for (auto *p : in) {
             // These are always propagated specially.
-            if (p->name() == "target" ||
-                p->name() == "autoscheduler") {
+            if ((p->name() == "target") ||
+                (p->name() == "autoscheduler") ||
+                (p->name() == "runtime_prefixes")) {
                 continue;
             }
             if (p->is_synthetic_param()) {
@@ -210,7 +222,10 @@ void StubEmitter::emit_generator_params_struct() {
             std::string c_type = p->get_c_type();
             if (c_type == "AutoschedulerParams") {
                 c_type = "const AutoschedulerParams&";
+            } else if (c_type == "RuntimePrefixParams") {
+                c_type = "const RuntimePrefixParams&";
             }
+
             stream << get_indent() << comma << c_type << " " << p->name() << "\n";
             comma = ", ";
         }
@@ -666,7 +681,7 @@ gengen
      [assembly, bitcode, c_header, c_source, cpp_stub, featurization,
       llvm_assembly, object, python_extension, pytorch_wrapper, registration,
       schedule, static_library, stmt, stmt_html, conceptual_stmt,
-      conceptual_stmt_html, compiler_log, hlpipe, device_code].
+      conceptual_stmt_html, hlpipe, device_code].
      If omitted, default value is [c_header, static_library, registration].
 
  -p  A comma-separated list of shared libraries that will be loaded before the
@@ -729,6 +744,8 @@ gengen
     for (const auto &lib_path : split_string(flags_info["-p"], ",")) {
         if (!lib_path.empty()) {
             load_plugin(lib_path);
+            // Record the plugin so it can be folded into the compile-cache key.
+            args.plugins.push_back(lib_path);
         }
     }
 
@@ -864,36 +881,6 @@ gengen
     // If true, log the path of all output files to stdout.
     args.log_outputs = (v_val == "1");
 
-    // Allow quick-n-dirty use of compiler logging via HL_DEBUG_COMPILER_LOGGER env var
-    const bool do_compiler_logging = args.output_types.count(OutputFileType::compiler_log) ||
-                                     (get_env_variable("HL_DEBUG_COMPILER_LOGGER") == "1");
-    if (do_compiler_logging) {
-        const bool obfuscate_compiler_logging = get_env_variable("HL_OBFUSCATE_COMPILER_LOGGER") == "1";
-        args.compiler_logger_factory =
-            [obfuscate_compiler_logging, &args](const std::string &function_name, const Target &target) -> std::unique_ptr<CompilerLogger> {
-            // rebuild generator_args from the map so that they are always canonical
-            std::stringstream generator_args_string;
-            std::string autoscheduler_name;
-            std::string sep;
-            for (const auto &it : args.generator_params) {
-                std::string quote = it.second.find(' ') != std::string::npos ? "\\\"" : "";
-                generator_args_string << sep << it.first << "=" << quote << it.second << quote;
-                sep = " ";
-                if (it.first == "autoscheduler") {
-                    autoscheduler_name = it.second;
-                }
-            }
-            std::unique_ptr<JSONCompilerLogger> t(new JSONCompilerLogger(
-                obfuscate_compiler_logging ? "" : args.generator_name,
-                obfuscate_compiler_logging ? "" : args.function_name,
-                obfuscate_compiler_logging ? "" : autoscheduler_name,
-                obfuscate_compiler_logging ? Target() : target,
-                obfuscate_compiler_logging ? "" : generator_args_string.str(),
-                obfuscate_compiler_logging));
-            return t;
-        };
-    }
-
     // Do some preflighting here to emit errors that are likely from the command line
     // but not necessarily from the API call.
     user_assert(!(generator_names.empty() && args.runtime_name.empty()))
@@ -988,17 +975,120 @@ int generate_filter_main(int argc, char **argv) {
     return generate_filter_main(argc, argv, GeneratorsFromRegistry());
 }
 
+namespace {
+
+// Warn (at most once) if the user asked for the generator compile cache via
+// HL_CACHE_DIR but this build of Halide has no serialization support, which
+// the cache relies on to fingerprint pipelines. In that case caching is a
+// silent no-op without this notice.
+void warn_if_cache_requested_without_serialization() {
+#ifndef WITH_SERIALIZATION
+    if (!GeneratorCache::cache_dir().empty()) {
+        static std::once_flag warned;
+        std::call_once(warned, []() {
+            user_warning << "HL_CACHE_DIR is set, but this build of Halide was compiled "
+                            "without serialization support (WITH_SERIALIZATION); the "
+                            "generator compile cache is disabled. Rebuild Halide with "
+                            "WITH_SERIALIZATION=ON to enable it.\n";
+        });
+    }
+#endif
+}
+
+// Run a compile step through the cache: if `key` is non-empty and a matching
+// entry exists, restore the outputs instead of compiling; otherwise compile
+// and (if `key` is non-empty) store the results. An empty `key` means caching
+// is disabled for this invocation, so `compile` always runs.
+template<typename CompileFn>
+void run_with_cache(const std::string &key,
+                    const std::map<OutputFileType, std::string> &output_files,
+                    CompileFn &&compile) {
+    if (!key.empty() && GeneratorCache::try_restore(key, output_files)) {
+        return;
+    }
+    compile();
+    if (!key.empty()) {
+        GeneratorCache::store(key, output_files);
+    }
+}
+
+#ifdef WITH_SERIALIZATION
+// Mix the invocation-wide (target-independent) inputs that affect codegen
+// into a fresh key builder: the compiler identity plus names, build mode,
+// requested output types, and the canonical generator-param settings.
+// Returns false (leaving `b` unusable) if the compiler could not be
+// fingerprinted, meaning caching must be skipped.
+bool add_common_key_fields(CacheKeyBuilder &b, const char *kind, const ExecuteGeneratorArgs &args) {
+    const std::string compiler_id = compiler_identity_digest();
+    if (compiler_id.empty()) {
+        return false;
+    }
+    b.add(kind);
+    b.add(compiler_id);
+    b.add(args.function_name);
+    b.add(args.file_base_name);
+    b.add(args.build_mode == ExecuteGeneratorArgs::Gradient ? "gradient" : "default");
+    // args.output_types is a std::set, so iteration order is deterministic.
+    for (OutputFileType t : args.output_types) {
+        b.add(std::to_string((int)t));
+    }
+    // args.generator_params is a std::map (sorted); "target" is handled
+    // separately and must never be a generator param here.
+    for (const auto &kv : args.generator_params) {
+        if (kv.first == "target") {
+            continue;
+        }
+        b.add(kv.first);
+        b.add(kv.second);
+    }
+    // Loaded plugins (e.g. autoschedulers) affect codegen but live outside
+    // libHalide, so hash each one's contents when it resolves to a readable
+    // file (the common case, where -p is a full path); otherwise fall back to
+    // the spec string so at least a rename is caught.
+    for (const auto &plugin : args.plugins) {
+        b.add(plugin);
+        if (file_exists(plugin)) {
+            b.add_file(plugin);
+        }
+    }
+    return true;
+}
+
+// Build a fresh generator for `target` and serialize its (pre-autoschedule)
+// pipeline into `data`. This is the fingerprint of the actual algorithm and
+// schedule; it is deliberately taken before autoscheduling so we never pay to
+// run a (potentially expensive) autoscheduler just to compute a cache key.
+// Returns false if serialization is not possible, so the caller skips caching
+// and compiles normally.
+template<typename FactoryFn>
+bool serialize_pipeline_for_key(FactoryFn &&generator_factory, const Target &target,
+                                std::vector<uint8_t> &data) {
+#ifdef HALIDE_WITH_EXCEPTIONS
+    try {
+#endif
+        auto gen = generator_factory(std::string{}, target);
+        Pipeline pipeline = gen->build_pipeline();
+        std::map<std::string, Parameter> params;
+        serialize_pipeline(pipeline, data, params);
+        return true;
+#ifdef HALIDE_WITH_EXCEPTIONS
+    } catch (...) {
+        debug(1) << "GeneratorCache: pipeline serialization failed; "
+                    "caching disabled for this generator.\n";
+        return false;
+    }
+#endif
+}
+#endif  // WITH_SERIALIZATION
+
+}  // namespace
+
 void execute_generator(const ExecuteGeneratorArgs &args_in) {
     const auto fix_defaults = [](const ExecuteGeneratorArgs &args_in) -> ExecuteGeneratorArgs {
         ExecuteGeneratorArgs args = args_in;
         if (!args.create_generator) {
             args.create_generator = [](const std::string &generator_name, const GeneratorContext &context) -> AbstractGeneratorPtr {
                 return GeneratorRegistry::create(generator_name, context);
-            };
-        }
-        if (!args.compiler_logger_factory) {
-            args.compiler_logger_factory = [](const std::string &, const Target &) -> std::unique_ptr<CompilerLogger> {
-                return nullptr;
             };
         }
         if (args.function_name.empty()) {
@@ -1059,9 +1149,46 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
             debug(1) << "Building runtime for computed target: " << gcd_target << "\n";
         }
 
+        // Extract any runtime_prefixes.{import,export,internal} generator
+        // params so a standalone runtime can be emitted with custom symbol
+        // prefixes (the kernel path handles these via the Generator, but the
+        // runtime has no Generator instance).
+        RuntimeNamespaceMap runtime_prefixes_map;
+        for (const auto &kv : args.generator_params) {
+            if (kv.first == "runtime_prefixes.import") {
+                runtime_prefixes_map[RuntimeLinkage::Import] = kv.second;
+            } else if (kv.first == "runtime_prefixes.export") {
+                runtime_prefixes_map[RuntimeLinkage::Export] = kv.second;
+            } else if (kv.first == "runtime_prefixes.internal") {
+                runtime_prefixes_map[RuntimeLinkage::Internal] = kv.second;
+            }
+        }
+
         auto output_files = compute_output_files(gcd_target, base_path, args.output_types);
-        // Runtime doesn't get to participate in the CompilerLogger party
-        compile_standalone_runtime(output_files, gcd_target);
+
+        // The standalone runtime has no user pipeline to serialize; its output
+        // is fully determined by the (runtime-compatible) target and the Halide
+        // compiler, so those alone form the cache key.
+        warn_if_cache_requested_without_serialization();
+        std::string cache_key;
+#ifdef WITH_SERIALIZATION
+        if (!GeneratorCache::cache_dir().empty()) {
+            const std::string compiler_id = compiler_identity_digest();
+            if (!compiler_id.empty()) {
+                CacheKeyBuilder b;
+                b.add("runtime");
+                b.add(compiler_id);
+                b.add(gcd_target.to_string());
+                for (OutputFileType t : args.output_types) {
+                    b.add(std::to_string((int)t));
+                }
+                cache_key = b.hex();
+            }
+        }
+#endif
+        run_with_cache(cache_key, output_files, [&]() {
+            compile_standalone_runtime(output_files, gcd_target, runtime_prefixes_map);
+        });
     }
 
     if (!args.generator_name.empty()) {
@@ -1083,7 +1210,6 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
 
         if (args.output_types.count(OutputFileType::cpp_stub)) {
             // When generating cpp_stub we ignore all generator args passed in, and supply a fake Target.
-            // (CompilerLogger is never enabled for cpp_stub, for now anyway.)
             const Target fake_target = Target();
             auto gen = args.create_generator(args.generator_name, GeneratorContext(fake_target));
             auto output_files = compute_output_files(fake_target, base_path, args.output_types);
@@ -1114,7 +1240,34 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
                            gen->build_gradient_module(function_name) :
                            gen->build_module(function_name);
             };
-            compile_multitarget(args.function_name, output_files, args.targets, args.suffixes, module_factory, args.compiler_logger_factory);
+
+            warn_if_cache_requested_without_serialization();
+            std::string cache_key;
+#ifdef WITH_SERIALIZATION
+            if (!GeneratorCache::cache_dir().empty()) {
+                CacheKeyBuilder b;
+                if (add_common_key_fields(b, "generator", args)) {
+                    bool serialized_ok = true;
+                    for (size_t i = 0; i < args.targets.size(); ++i) {
+                        const Target &target = args.targets[i];
+                        b.add(target.to_string());
+                        b.add(i < args.suffixes.size() ? args.suffixes[i] : std::string{});
+                        std::vector<uint8_t> data;
+                        if (!serialize_pipeline_for_key(generator_factory, target, data)) {
+                            serialized_ok = false;
+                            break;
+                        }
+                        b.add(data);
+                    }
+                    if (serialized_ok) {
+                        cache_key = b.hex();
+                    }
+                }
+            }
+#endif
+            run_with_cache(cache_key, output_files, [&]() {
+                compile_multitarget(args.function_name, output_files, args.targets, args.suffixes, module_factory);
+            });
             if (args.log_outputs) {
                 for (const auto &o : output_files) {
                     std::cout << "Generated file: " << o.second << "\n";
@@ -1136,7 +1289,8 @@ GeneratorParamBase::~GeneratorParamBase() {
 void GeneratorParamBase::check_value_readable() const {
     // These are always readable.
     if (name() == "target" ||
-        name() == "autoscheduler") {
+        name() == "autoscheduler" ||
+        name() == "runtime_prefixes") {
         return;
     }
     user_assert(generator && generator->phase >= GeneratorBase::ConfigureCalled)
@@ -1189,6 +1343,53 @@ bool GeneratorParam_AutoSchedulerParams::try_set(const std::string &key, const s
         const auto sub_key = key.substr(n.size() + 1);
         user_assert(this->value_.extra.count(sub_key) == 0) << "The GeneratorParam " << key << " cannot be set more than once.\n";
         this->value_.extra[sub_key] = value;
+        return true;
+    } else {
+        return false;
+    }
+}
+
+GeneratorParam_RuntimePrefixParams::GeneratorParam_RuntimePrefixParams()
+    : GeneratorParamImpl<RuntimePrefixParams>("runtime_prefixes", {}) {
+}
+
+void GeneratorParam_RuntimePrefixParams::set_from_string(const std::string &new_value_string) {
+    internal_error << "This method should never be called.";
+}
+
+std::string GeneratorParam_RuntimePrefixParams::get_default_value() const {
+    internal_error << "This method should never be called.";
+    return "";
+}
+
+std::string GeneratorParam_RuntimePrefixParams::call_to_string(const std::string &v) const {
+    internal_error << "This method should never be called.";
+    return "";
+}
+
+std::string GeneratorParam_RuntimePrefixParams::get_c_type() const {
+    internal_error << "This method should never be called.";
+    return "";
+}
+
+bool GeneratorParam_RuntimePrefixParams::try_set(const std::string &key, const std::string &value) {
+    const auto &n = this->name();
+    // Sub-keys arrive as "runtime_prefixes.import" / ".export" / ".internal";
+    // there is no bare top-level string form for this GeneratorParam.
+    if (starts_with(key, n + ".")) {
+        const auto sub_key = key.substr(n.size() + 1);
+        if (sub_key == "internal") {
+            user_assert(this->value_.prefixes.count(RuntimeLinkage::Internal) == 0) << "The GeneratorParam " << key << " cannot be set more than once.\n";
+            this->value_.prefixes.insert({RuntimeLinkage::Internal, value});
+        } else if (sub_key == "export") {
+            user_assert(this->value_.prefixes.count(RuntimeLinkage::Export) == 0) << "The GeneratorParam " << key << " cannot be set more than once.\n";
+            this->value_.prefixes.insert({RuntimeLinkage::Export, value});
+        } else if (sub_key == "import") {
+            user_assert(this->value_.prefixes.count(RuntimeLinkage::Import) == 0) << "The GeneratorParam " << key << " cannot be set more than once.\n";
+            this->value_.prefixes.insert({RuntimeLinkage::Import, value});
+        } else {
+            return false;
+        }
         return true;
     } else {
         return false;
@@ -1363,12 +1564,13 @@ GeneratorOutputBase *GeneratorBase::find_output_by_name(const std::string &name)
 }
 
 GeneratorContext GeneratorBase::context() const {
-    return GeneratorContext(target, autoscheduler_.value());
+    return GeneratorContext(target, autoscheduler_.value(), runtime_prefixes_.value());
 }
 
 void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
     target.set(context.target_);
     autoscheduler_.set(context.autoscheduler_params_);
+    runtime_prefixes_.set(context.runtime_prefixes_params_);
 
     // preemptively build our param_info now
     internal_assert(param_info_ptr == nullptr);
@@ -1527,6 +1729,9 @@ void GeneratorBase::check_input_kind(Internal::GeneratorInputBase *in, Internal:
 void GeneratorBase::set_generatorparam_value(const std::string &name, const std::string &value) {
     user_assert(name != "target") << "The GeneratorParam named " << name << " cannot be set by set_generatorparam_value().\n";
     if (autoscheduler_.try_set(name, value)) {
+        return;
+    }
+    if (runtime_prefixes_.try_set(name, value)) {
         return;
     }
 
@@ -2069,206 +2274,6 @@ Target StubOutputBufferBase::get_target() const {
 
 RegisterGenerator::RegisterGenerator(const char *registered_name, GeneratorFactory generator_factory) {
     Internal::GeneratorRegistry::register_factory(registered_name, std::move(generator_factory));
-}
-
-void generator_test() {
-    GeneratorContext context(get_host_target().without_feature(Target::Profile));
-
-    // Verify that the Generator's internal phase actually prevents unsupported
-    // order of operations.
-    {
-        class Tester : public Generator<Tester> {
-        public:
-            GeneratorParam<int> gp0{"gp0", 0};
-            GeneratorParam<float> gp1{"gp1", 1.f};
-            GeneratorParam<uint64_t> gp2{"gp2", 2};
-
-            Input<int> input{"input"};
-            Output<Func> output{"output", Int(32), 1};
-
-            void generate() {
-                internal_assert(gp0 == 1);
-                internal_assert(gp1 == 2.f);
-                internal_assert(gp2 == (uint64_t)2);  // unchanged
-                Var x;
-                output(x) = input + gp0;
-            }
-            void schedule() {
-                // empty
-            }
-        };
-
-        Tester tester;
-        tester.init_from_context(context);
-        internal_assert(tester.phase == GeneratorBase::Created);
-
-        // Verify that calling GeneratorParam::set() works.
-        tester.gp0.set(1);
-
-        tester.set_inputs_vector({{StubInput(42)}});
-        internal_assert(tester.phase == GeneratorBase::InputsSet);
-
-        // tester.set_inputs_vector({{StubInput(43)}});  // This will assert-fail.
-
-        // Also ok to call in this phase.
-        tester.gp1.set(2.f);
-
-        tester.call_generate();
-        internal_assert(tester.phase == GeneratorBase::GenerateCalled);
-
-        // tester.set_inputs_vector({{StubInput(44)}});  // This will assert-fail.
-        // tester.gp2.set(2);  // This will assert-fail.
-
-        tester.call_schedule();
-        internal_assert(tester.phase == GeneratorBase::ScheduleCalled);
-
-        // tester.set_inputs_vector({{StubInput(45)}});  // This will assert-fail.
-        // tester.gp2.set(2);  // This will assert-fail.
-        // tester.sp2.set(202);  // This will assert-fail.
-    }
-
-    // Verify that set_inputs() works properly, even if the specific subtype of Generator is not known.
-    {
-        class Tester : public Generator<Tester> {
-        public:
-            Input<int> input_int{"input_int"};
-            Input<float> input_float{"input_float"};
-            Input<uint8_t> input_byte{"input_byte"};
-            Input<uint64_t[4]> input_scalar_array{"input_scalar_array"};
-            Input<Func> input_func_typed{"input_func_typed", Int(16), 1};
-            Input<Func> input_func_untyped{"input_func_untyped", 1};
-            Input<Func[]> input_func_array{"input_func_array", 1};
-            Input<Buffer<uint8_t, 3>> input_buffer_typed{"input_buffer_typed"};
-            Input<Buffer<>> input_buffer_untyped{"input_buffer_untyped"};
-            Output<Func> output{"output", Float(32), 1};
-
-            void generate() {
-                Var x;
-                output(x) = input_int +
-                            input_float +
-                            input_byte +
-                            input_scalar_array[3] +
-                            input_func_untyped(x) +
-                            input_func_typed(x) +
-                            input_func_array[0](x) +
-                            input_buffer_typed(x, 0, 0) +
-                            input_buffer_untyped(x, Halide::_);
-            }
-            void schedule() {
-                // nothing
-            }
-        };
-
-        Tester tester_instance;
-        tester_instance.init_from_context(context);
-        // Use a base-typed reference to verify the code below doesn't know about subtype
-        GeneratorBase &tester = tester_instance;
-
-        const int i = 1234;
-        const float f = 2.25f;
-        const uint8_t b = 0x42;
-        const std::vector<uint64_t> a = {1, 2, 3, 4};
-        Var x;
-        Func fn_typed, fn_untyped;
-        fn_typed(x) = make_const(Int(16), 38);
-        fn_untyped(x) = 32.f;
-        const std::vector<Func> fn_array = {fn_untyped, fn_untyped};
-
-        Buffer<uint8_t> buf_typed(1, 1, 1);
-        Buffer<float> buf_untyped(1);
-
-        buf_typed.fill(33);
-        buf_untyped.fill(34);
-
-        // set_inputs() requires inputs in Input<>-decl-order,
-        // and all inputs match type exactly.
-        tester.set_inputs(i, f, b, a, fn_typed, fn_untyped, fn_array, buf_typed, buf_untyped);
-        tester.call_generate();
-        tester.call_schedule();
-
-        Buffer<float> im = tester_instance.realize({1});
-        internal_assert(im.dimensions() == 1);
-        internal_assert(im.dim(0).extent() == 1);
-        internal_assert(im(0) == 1475.25f) << "Expected 1475.25 but saw " << im(0);
-    }
-
-    // Verify that array inputs and outputs are typed correctly.
-    {
-        class Tester : public Generator<Tester> {
-        public:
-            Input<int[]> expr_array_input{"expr_array_input"};
-            Input<Func[]> func_array_input{"input_func_array"};
-            Input<Buffer<>[]> buffer_array_input{"buffer_array_input"};
-
-            Input<int[]> expr_array_output{"expr_array_output"};
-            Output<Func[]> func_array_output{"func_array_output"};
-            Output<Buffer<>[]> buffer_array_output{"buffer_array_output"};
-
-            void generate() {
-            }
-        };
-
-        Tester tester_instance;
-
-        static_assert(std::is_same_v<decltype(tester_instance.expr_array_input[0]), const Expr &>, "type mismatch");
-        static_assert(std::is_same_v<decltype(tester_instance.expr_array_output[0]), const Expr &>, "type mismatch");
-
-        static_assert(std::is_same_v<decltype(tester_instance.func_array_input[0]), const Func &>, "type mismatch");
-        static_assert(std::is_same_v<decltype(tester_instance.func_array_output[0]), Func &>, "type mismatch");
-
-        static_assert(std::is_same_v<decltype(tester_instance.buffer_array_input[0]), ImageParam>, "type mismatch");
-        static_assert(std::is_same_v<decltype(tester_instance.buffer_array_output[0]), Func>, "type mismatch");
-    }
-
-    class GPTester : public Generator<GPTester> {
-    public:
-        GeneratorParam<int> gp{"gp", 0};
-        Output<Func> output{"output", Int(32), 0};
-
-        void generate() {
-            internal_assert(get_target().has_feature(Target::Profile));
-            output() = 0;
-        }
-        void schedule() {
-        }
-
-        // Test that we can override init_from_context() to modify the target
-        // we use. (Generally speaking, your code probably should ever need to
-        // do this; this code only does it for testing purposes. See comments
-        // in Generator.h.)
-        void init_from_context(const GeneratorContext &context) override {
-            auto t = context.target().with_feature(Target::Profile);
-            Generator<GPTester>::init_from_context(context.with_target(t));
-        }
-    };
-    GPTester gp_tester;
-    gp_tester.init_from_context(context);
-    // Accessing the GeneratorParam will assert-fail if we
-    // don't do some minimal setup here.
-    gp_tester.set_inputs_vector({});
-    gp_tester.call_generate();
-    gp_tester.call_schedule();
-    auto &gp = gp_tester.gp;
-
-    // Verify that RDom parameter-pack variants can convert GeneratorParam to Expr
-    RDom rdom(0, gp, 0, gp);
-
-    // Verify that Func parameter-pack variants can convert GeneratorParam to Expr
-    Var x, y;
-    Func f, g;
-    f(x, y) = x + y;
-    g(x, y) = f(gp, gp);  // check Func::operator() overloads
-    g(rdom.x, rdom.y) += f(rdom.x, rdom.y);
-    g.update(0).reorder(rdom.y, rdom.x);  // check Func::reorder() overloads for RDom::operator RVar()
-
-    // Verify that print() parameter-pack variants can convert GeneratorParam to Expr
-    print(f(0, 0), g(1, 1), gp);
-    print_when(true, f(0, 0), g(1, 1), gp);
-
-    // Verify that Tuple parameter-pack variants can convert GeneratorParam to Expr
-    Tuple t(gp, gp, gp);
-
-    std::cout << "Generator test passed\n";
 }
 
 }  // namespace Internal

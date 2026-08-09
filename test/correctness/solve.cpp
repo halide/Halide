@@ -164,6 +164,28 @@ void test_positive_const_multiplier_still_rewritten() {
                 (x != 2) || (Mod::make(seven, three) != 0));
 }
 
+// IROperator::is_const(e, -1) used to ignore signedness in casts. When `c`
+// was a cast from `-1` to uint8, Solve.cpp's `f(x) * c cmp b` rewrite for
+// `c == -1` treated `c` as -1 rather than the correct value (255).
+void test_cast_signedness_respected() {
+    // int32(uint8(-1_i8)) == 255, not -1.
+    Expr fake_negative_one = Cast::make(Int(32), Cast::make(UInt(8), -1));
+
+    // Let N = fake_negative_one.
+    // Broken: y < N * x ~> x < -y    ~> 1 < -100      ~> false
+    // Fixed:  y < N * x ~> x * N > y ~> 1 * 255 > 100 ~> true
+    std::map<std::string, Expr> vars{
+        {"x", Expr(1)},
+        {"y", Expr(100)},
+    };
+    check_solve_equivalent(y < fake_negative_one * x, vars);
+    check_solve_equivalent(y <= fake_negative_one * x, vars);
+    check_solve_equivalent(y > fake_negative_one * x, vars);
+    check_solve_equivalent(y >= fake_negative_one * x, vars);
+    check_solve_equivalent(y == fake_negative_one * x, vars);
+    check_solve_equivalent(y != fake_negative_one * x, vars);
+}
+
 // Solver used to rewrite `f(x) + f(x) -> f(x) * 2` via `operator*(Expr, int)`,
 // which rejects constants that don't fit in the expression type. For UInt(1),
 // the literal 2 isn't representable, aborting the whole solve. Use Mul::make
@@ -430,8 +452,8 @@ void test_and_condition_over_domain() {
 void test_regression_signed_integer_overflow_pow() {
     // This case used to break due to signed integer overflow in
     // the simplifier.
-    Expr a16 = Load::make(Int(16), "a", {x}, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
-    Expr b16 = Load::make(Int(16), "b", {x}, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+    Expr a16 = Load::make(Int(16), "a", {x});
+    Expr b16 = Load::make(Int(16), "b", {x});
     Expr lhs = pow(cast<int32_t>(a16), 2) + pow(cast<int32_t>(b16), 2);
 
     Scope<Interval> s;
@@ -610,6 +632,7 @@ int main(int argc, char **argv) {
     test_unsigned_equality_still_rearranged();
     test_nonconstant_multiplier_not_rewritten();
     test_positive_const_multiplier_still_rewritten();
+    test_cast_signedness_respected();
     test_solve_does_not_abort_on_narrow_self_add();
     test_narrow_div_add_equivalence();
     test_simplify_preserves_float_to_uint_cast_chain();

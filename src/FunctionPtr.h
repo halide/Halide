@@ -35,6 +35,13 @@ struct FunctionPtr {
     /** The index of the function within the group. */
     int idx = 0;
 
+    /** Whether get() follows global-wrapper links (created by Func::in()). Set
+     * on Call nodes so that a call to a Func resolves to that Func's global
+     * wrapper, as if every caller had been rewritten; left false on Func handles
+     * (so they still refer to the Func itself) and on a wrapper's own call to
+     * the Func it wraps. See FunctionContents::global_wrapper. */
+    bool follow_global_wrappers = false;
+
     /** Get a pointer to the group this Function belongs to. */
     FunctionGroup *group() const {
         return weak ? weak : strong.get();
@@ -75,13 +82,16 @@ struct FunctionPtr {
         return weak || strong.defined();
     }
 
-    /** Check if two FunctionPtrs refer to the same Function. */
+    /** Check if two FunctionPtrs refer to the same Function, resolving through
+     * global-wrapper links (so a following pointer to a Func and a direct
+     * pointer to its wrapper are "the same"). */
     bool same_as(const FunctionPtr &other) const {
-        return idx == other.idx && group() == other.group();
+        return get() == other.get();
     }
 
-    /** Pointer comparison, for using FunctionPtrs as keys in maps and
-     * sets. */
+    /** Pointer comparison, for using FunctionPtrs as keys in maps and sets.
+     * Orders by the resolved Func (following global-wrapper links), matching
+     * same_as. */
     bool operator<(const FunctionPtr &other) const {
         return get() < other.get();
     }

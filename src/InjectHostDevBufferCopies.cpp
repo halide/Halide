@@ -116,7 +116,12 @@ protected:
             << "A GPU API should have been selected by this stage in lowering\n";
         DeviceAPI old = current_device_api;
         if (op->device_api != DeviceAPI::None) {
-            current_device_api = op->device_api;
+            // In the context of device buffer, we treat SMEStreaming as Host.
+            if (op->device_api == DeviceAPI::SMEStreaming) {
+                current_device_api = DeviceAPI::Host;
+            } else {
+                current_device_api = op->device_api;
+            }
         }
         IRVisitor::visit(op);
         current_device_api = old;
@@ -499,7 +504,7 @@ protected:
                     Evaluate::make(Call::make(Handle(), Call::register_destructor,
                                               {Expr("halide_device_free_as_destructor"), buf}, Call::Intrinsic));
                 Stmt body = Block::make(destructor, op->body);
-                return LetStmt::make(op->name, op->value, body);
+                return op->with(op->value, body);
             } else {
                 return IRMutator::visit(op);
             }
@@ -550,7 +555,7 @@ protected:
                 Expr value = substitute(buffer, reinterpret(Handle(), make_zero(UInt(64))), op->value);
 
                 // Rewrap the letstmt
-                return LetStmt::make(op->name, value, body);
+                return op->with(value, body);
             } else {
                 return IRMutator::visit(op);
             }
@@ -655,13 +660,13 @@ protected:
                 body = substitute(op->name, reinterpret(Handle(), make_zero(UInt(64))), body);
             }
 
-            return Allocate::make(op->name, op->type, op->memory_type, op->extents,
-                                  condition, body, op->new_expr, op->free_function, op->padding);
+            return op->with(op->extents, condition, body);
         }
     }
 
     Stmt visit(const For *op) override {
         if (op->device_api != DeviceAPI::Host &&
+            op->device_api != DeviceAPI::SMEStreaming &&
             op->device_api != DeviceAPI::None) {
             // Don't enter device loops
             return op;

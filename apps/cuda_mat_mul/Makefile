@@ -22,7 +22,7 @@ $(BIN)/%/runner: runner.cpp $(BIN)/%/mat_mul.a
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) -lcudart -lcublas
 
 test: $(BIN)/$(HL_TARGET)/runner
-	HL_CUDA_JIT_MAX_REGISTERS=256 $^ $(MATRIX_SIZE)
+	$^ $(MATRIX_SIZE)
 
 clean:
 	rm -rf $(BIN)

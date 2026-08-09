@@ -792,6 +792,85 @@ _add_halide_aot_tests(pyramid GROUPS multithreaded)
 _add_halide_libraries(rdom_input)
 _add_halide_aot_tests(rdom_input)
 
+# runtime_prefixes_iso_aottest.cpp
+# runtime_prefixes_iso_generator.cpp
+#
+# Builds three variants of the same pipeline -- with both the LLVM and the C
+# backend -- each linked against a runtime with a distinct symbol namespace,
+# links them all into one program, and checks that each runtime's state (the
+# custom allocator, thread count, and error handler) stays independent. The test
+# runs host objects directly, so it is skipped for wasm.
+if (NOT ${_USING_WASM})
+    add_halide_generator(runtime_prefixes_iso.generator SOURCES runtime_prefixes_iso_generator.cpp)
+
+    # none: the stock halide_ runtime.
+    add_halide_runtime(rniso_rt_none)
+    add_halide_library(
+        rniso_none
+        FROM runtime_prefixes_iso.generator
+        GENERATOR runtime_prefixes_iso
+        FUNCTION_NAME pipe_none
+        USE_RUNTIME rniso_rt_none
+    )
+    add_halide_library(
+        rniso_none_c C_BACKEND
+        FROM runtime_prefixes_iso.generator
+        GENERATOR runtime_prefixes_iso
+        FUNCTION_NAME pipe_none_c
+        USE_RUNTIME rniso_rt_none
+    )
+
+    # a: export/import prefix "runtime_a_", internal prefix "runtime_ai_".
+    add_halide_runtime(
+        rniso_rt_a
+        PARAMS runtime_prefixes.export=runtime_a_ runtime_prefixes.internal=runtime_ai_
+    )
+    add_halide_library(
+        rniso_a
+        FROM runtime_prefixes_iso.generator
+        GENERATOR runtime_prefixes_iso
+        FUNCTION_NAME pipe_a
+        USE_RUNTIME rniso_rt_a
+        PARAMS runtime_prefixes.import=runtime_a_ runtime_prefixes.internal=runtime_ai_
+    )
+    add_halide_library(
+        rniso_a_c C_BACKEND
+        FROM runtime_prefixes_iso.generator
+        GENERATOR runtime_prefixes_iso
+        FUNCTION_NAME pipe_a_c
+        USE_RUNTIME rniso_rt_a
+        PARAMS runtime_prefixes.import=runtime_a_ runtime_prefixes.internal=runtime_ai_
+    )
+
+    # b: export/import prefix "runtime_b_", internal prefix "runtime_bi_".
+    add_halide_runtime(
+        rniso_rt_b
+        PARAMS runtime_prefixes.export=runtime_b_ runtime_prefixes.internal=runtime_bi_
+    )
+    add_halide_library(
+        rniso_b
+        FROM runtime_prefixes_iso.generator
+        GENERATOR runtime_prefixes_iso
+        FUNCTION_NAME pipe_b
+        USE_RUNTIME rniso_rt_b
+        PARAMS runtime_prefixes.import=runtime_b_ runtime_prefixes.internal=runtime_bi_
+    )
+    add_halide_library(
+        rniso_b_c C_BACKEND
+        FROM runtime_prefixes_iso.generator
+        GENERATOR runtime_prefixes_iso
+        FUNCTION_NAME pipe_b_c
+        USE_RUNTIME rniso_rt_b
+        PARAMS runtime_prefixes.import=runtime_b_ runtime_prefixes.internal=runtime_bi_
+    )
+
+    _add_one_aot_test(
+        generator_aot_runtime_prefixes_iso
+        SRCS runtime_prefixes_iso_aottest.cpp
+        DEPS rniso_none rniso_a rniso_b rniso_none_c rniso_a_c rniso_b_c
+    )
+endif ()
+
 # string_param_aottest.cpp
 # string_param_generator.cpp
 _add_halide_libraries(string_param PARAMS "rpn_expr=5 y * x +")

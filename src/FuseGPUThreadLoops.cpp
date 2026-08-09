@@ -6,7 +6,6 @@
 #include "CSE.h"
 #include "CanonicalizeGPUVars.h"
 #include "CodeGen_GPU_Dev.h"
-#include "CompilerLogger.h"
 #include "ExprUsesVar.h"
 #include "FuseGPUThreadLoops.h"
 #include "IR.h"
@@ -225,6 +224,23 @@ public:
     }
 };
 
+// An allocation inside the thread loops stays in register/local memory
+// (handled by ExtractRegisterAllocations) rather than being pulled out to the
+// block level (handled by ExtractSharedAndHeapAllocations) if it has a fixed
+// size or an explicit register/stack memory type.
+bool allocation_goes_to_registers(const Allocate *op, bool in_threads) {
+    bool fixed_size_thread_allocation = (op->constant_allocation_size() != 0) && in_threads;
+    return (fixed_size_thread_allocation &&
+            op->memory_type != MemoryType::Heap &&
+            op->memory_type != MemoryType::GPUShared &&
+            op->memory_type != MemoryType::GPUTexture) ||
+           op->memory_type == MemoryType::Register ||
+           op->memory_type == MemoryType::Stack;
+}
+
+// Rename an allocation and all of its loads, stores, and frees. Relies on the
+// invariant that no allocation of the same name is nested inside this one, so
+// every reference in the body belongs to it.
 class ExtractSharedAndHeapAllocations : public IRMutator {
 protected:
     using IRMutator::visit;
@@ -253,8 +269,7 @@ protected:
     struct AllocGroup {
         AllocGroup() = default;
         AllocGroup(const SharedAllocation &alloc)
-            : name(alloc.name),
-              widest_type(alloc.type),
+            : widest_type(alloc.type),
               max_size(alloc.size),
               memory_type(alloc.memory_type) {
             group.push_back(alloc);
@@ -274,7 +289,6 @@ protected:
                 max_size = max(max_size, alloc.size / size_ratio);
             }
             group.push_back(alloc);
-            name += "_" + alloc.name;
         }
 
         // Only need to check the back of the vector since we always insert
@@ -283,7 +297,6 @@ protected:
             return group.back().liveness.max < stage;
         }
 
-        string name;
         Type widest_type;
         Expr max_size;                   // In units of the widest type
         vector<SharedAllocation> group;  // Groups of allocs that should be coalesced together
@@ -314,9 +327,9 @@ protected:
 
     void precompute_allocation_size(SharedAllocation &s) {
         Expr val = Load::make(Int(32), s.name + ".shared_size", 0,
-                              Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{});
+                              Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{}, false);
         Stmt update_size = Store::make(s.name + ".shared_size", max(s.size, val), 0,
-                                       Parameter{}, const_true(), ModulusRemainder{});
+                                       Parameter{}, const_true(), ModulusRemainder{}, false);
 
         if (host_side_preamble.defined()) {
             host_side_preamble = Block::make(host_side_preamble, update_size);
@@ -364,9 +377,6 @@ protected:
                         << "Shared allocation for " << s.name
                         << " has a size that is non-monotonic in the gpu block variable " << op->name
                         << ": " << s.size << "\n";
-                    if (get_compiler_logger()) {
-                        get_compiler_logger()->record_non_monotonic_loop_var(op->name, s.size);
-                    }
                     precompute_allocation_size(s);
                     break;
                 case Monotonic::Increasing:
@@ -412,9 +422,7 @@ protected:
             host_side_preamble = old_preamble;
         }
 
-        return For::make(op->name, new_min, new_max,
-                         op->for_type, op->partition_policy,
-                         op->device_api, body);
+        return op->with(new_min, new_max, body);
     }
 
     Stmt visit(const Block *op) override {
@@ -457,21 +465,12 @@ protected:
         return IfThenElse::make(condition, then_case, else_case);
     }
 
-    int alloc_node_counter = 0;
-
     Stmt visit(const Allocate *op) override {
         user_assert(!op->new_expr.defined())
             << "Allocate node inside GPU kernel has custom new expression.\n"
             << "(Memoization is not supported inside GPU kernels at present.)\n";
 
-        bool fixed_size_thread_allocation = (op->constant_allocation_size() != 0) && in_threads;
-
-        if ((fixed_size_thread_allocation &&
-             op->memory_type != MemoryType::Heap &&
-             op->memory_type != MemoryType::GPUShared &&
-             op->memory_type != MemoryType::GPUTexture) ||
-            op->memory_type == MemoryType::Register ||
-            op->memory_type == MemoryType::Stack) {
+        if (allocation_goes_to_registers(op, in_threads)) {
             // These allocations go in register or local memory
             return IRMutator::visit(op);
         }
@@ -484,7 +483,7 @@ protected:
             << "but is scheduled to live in " << op->memory_type << " memory.\n";
 
         SharedAllocation alloc;
-        alloc.name = op->name + "." + std::to_string(alloc_node_counter++);
+        alloc.name = op->name;
         alloc.type = op->type;
         alloc.liveness = IntInterval(barrier_stage, barrier_stage);
         alloc.size = 1;
@@ -533,13 +532,14 @@ protected:
         if (it != shared.end()) {
             SharedAllocation *alloc = it->second;
             alloc->liveness.max = barrier_stage;
-            Expr predicate = mutate(op->predicate);
-            Expr index = mutate_index(alloc, op->index);
-            return Load::make(op->type, alloc->name,
-                              index, op->image, op->param, predicate, op->alignment, op->is_streaming);
-        } else {
-            return IRMutator::visit(op);
+            // The allocation keeps its name, so we only need to rewrite the
+            // node when the storage is striped across threads.
+            if (alloc->striped_over_threads) {
+                return Load::make(op->type, op->name, mutate_index(alloc, op->index),
+                                  op->image, op->param, mutate(op->predicate), op->alignment, op->is_streaming);
+            }
         }
+        return IRMutator::visit(op);
     }
 
     Stmt visit(const Store *op) override {
@@ -547,14 +547,12 @@ protected:
         if (it != shared.end()) {
             SharedAllocation *alloc = it->second;
             alloc->liveness.max = barrier_stage;
-            Expr predicate = mutate(op->predicate);
-            Expr index = mutate_index(alloc, op->index);
-            Expr value = mutate(op->value);
-            return Store::make(alloc->name, value, index,
-                               op->param, predicate, op->alignment, op->is_streaming);
-        } else {
-            return IRMutator::visit(op);
+            if (alloc->striped_over_threads) {
+                return Store::make(op->name, mutate(op->value), mutate_index(alloc, op->index),
+                                   op->param, mutate(op->predicate), op->alignment, op->is_streaming);
+            }
         }
+        return IRMutator::visit(op);
     }
 
     Stmt visit(const LetStmt *op) override {
@@ -578,7 +576,7 @@ protected:
 
         if (host_side_preamble.defined() &&
             stmt_uses_var(host_side_preamble, op->name)) {
-            host_side_preamble = LetStmt::make(op->name, op->value, host_side_preamble);
+            host_side_preamble = op->with(op->value, host_side_preamble);
         }
 
         if (old_preamble.defined()) {
@@ -599,7 +597,7 @@ protected:
         if (op->body.same_as(body) && value.same_as(op->value)) {
             return op;
         } else {
-            return LetStmt::make(op->name, value, body);
+            return op->with(value, body);
         }
     }
 
@@ -758,6 +756,51 @@ protected:
     vector<GlobalAllocation> global_allocations;
 
 public:
+    // A single Func can be realized at several sites at the block level with
+    // disjoint lifetimes (e.g. when a serial loop above the GPU threads is
+    // unrolled), producing multiple allocations that share a name. Collapse
+    // each such set into one allocation spanning the union of their lifetimes
+    // and sized to the largest, so the Func keeps its own name instead of one
+    // suffixed per copy. The loads and stores already all use that name, and
+    // the host-side size computation already accumulates a max across the
+    // copies, so nothing else needs rewriting.
+    void merge_repeated_allocations() {
+        vector<SharedAllocation> merged;
+        map<string, size_t> index;
+        for (SharedAllocation &s : allocations) {
+            auto it = index.find(s.name);
+            if (it == index.end()) {
+                index[s.name] = merged.size();
+                merged.push_back(s);
+                continue;
+            }
+            SharedAllocation &m = merged[it->second];
+            internal_assert(m.type == s.type &&
+                            m.memory_type == s.memory_type &&
+                            m.striped_over_threads == s.striped_over_threads &&
+                            m.size_computed_on_host == s.size_computed_on_host)
+                << "Mismatched allocations share the name " << s.name << "\n";
+            internal_assert(m.liveness.max < s.liveness.min ||
+                            s.liveness.max < m.liveness.min)
+                << "Allocations sharing the name " << s.name
+                << " have overlapping lifetimes and cannot be coalesced\n";
+            m.liveness.min = std::min(m.liveness.min, s.liveness.min);
+            m.liveness.max = std::max(m.liveness.max, s.liveness.max);
+            if (!m.size_computed_on_host) {
+                m.size = simplify(max(m.size, s.size));
+            }
+        }
+        allocations.swap(merged);
+    }
+
+    // Run the mutator, then coalesce repeated allocations so callers always
+    // see a finalized allocation list.
+    Stmt operator()(const Stmt &s) {
+        Stmt result = mutate(s);
+        merge_repeated_allocations();
+        return result;
+    }
+
     Stmt rewrap_block(Stmt s, const ExtractBlockSize &bs) {
 
         // Combine the allocations into groups that have disjoint
@@ -802,26 +845,35 @@ public:
             // the cluster (in terms of the alloc_type), and the
             // widest type in the cluster (which may be wider than the
             // alloc_type).
-            string name;
-            Expr total_size = 0;
-            Type widest_type;
             int number_of_allocs = 0;
             for (const auto &alloc : cluster) {
                 number_of_allocs += alloc.group.size();
             }
+
+            // A single shared allocation needs no offset math, so we can name
+            // the backing allocation after the Func directly and skip the
+            // aliasing wrappers entirely, keeping the common case uncluttered.
+            // Anything else (multiple fused allocations, or a heap allocation
+            // that is sliced per-block out of a larger device allocation) gets
+            // a fresh backing name plus one aliasing allocation per Func. The
+            // per-Func names live on the aliasing allocations, so the backing
+            // itself just needs a unique name.
+            const bool simple = number_of_allocs == 1 && memory_type != MemoryType::Heap;
+
+            string name;
+            if (simple) {
+                name = cluster[0].group[0].name;
+            } else if (memory_type == MemoryType::Heap) {
+                name = unique_name("global_alloc");
+            } else {
+                name = unique_name("shared_alloc");
+            }
+
+            Expr total_size = 0;
+            Type widest_type = cluster[0].widest_type;
             for (const auto &alloc : cluster) {
-                if (name.empty()) {
+                if (alloc.widest_type.bytes() > widest_type.bytes()) {
                     widest_type = alloc.widest_type;
-                    if (number_of_allocs > 1) {
-                        name = "allocgroup__" + alloc.name;
-                    } else {
-                        name = alloc.name;
-                    }
-                } else {
-                    if (alloc.widest_type.bytes() > widest_type.bytes()) {
-                        widest_type = alloc.widest_type;
-                    }
-                    name += "__" + alloc.name;
                 }
                 int ratio = alloc.widest_type.bytes() / alloc_type.bytes();
                 internal_assert(ratio != 0)
@@ -853,7 +905,36 @@ public:
             const string total_size_name = name + ".size";
             Expr total_size_var = Variable::make(Int(32), total_size_name);
 
-            // Make the allocation
+            // Wrap the body in one aliasing allocation per Func, each pointing
+            // at its offset within the backing allocation. Loads and stores
+            // keep their original per-Func names; the offsets get folded in
+            // later by inject_gpu_offload, just before GPU codegen. The offsets
+            // are in units of each allocation's own type; the group offsets
+            // they build on are in units of widest_type across the cluster.
+            if (!simple) {
+                for (int i = (int)(cluster.size()) - 1; i >= 0; i--) {
+                    Expr group_offset = Variable::make(Int(32), name + "." + std::to_string(i) + ".offset");
+                    for (const SharedAllocation &alloc : cluster[i].group) {
+                        Expr offset = group_offset;
+                        internal_assert(alloc.type.bytes() <= widest_type.bytes());
+                        if (alloc.type.bytes() < widest_type.bytes()) {
+                            offset *= (widest_type.bytes() / alloc.type.bytes());
+                        }
+                        offset = simplify(offset);
+                        Expr base = Variable::make(Handle(), name);
+                        // Intrinsic, not PureIntrinsic: this keeps CSE/LICM from
+                        // lifting it out of the aliasing Allocate's new_expr,
+                        // which would move the reference to the backing
+                        // allocation out of the backing allocation's own scope.
+                        Expr aliased = Call::make(Handle(), Call::offset_pointer,
+                                                  {base, offset}, Call::Intrinsic);
+                        s = Allocate::make(alloc.name, alloc.type, alloc.memory_type,
+                                           {alloc.size}, const_true(), s, aliased);
+                    }
+                }
+            }
+
+            // Make the backing allocation.
             if (memory_type == MemoryType::Heap) {
                 global_allocations.push_back(GlobalAllocation{name, total_size, alloc_type});
             } else {
@@ -861,78 +942,29 @@ public:
                                    {total_size_var}, const_true(), s);
             }
 
-            // Define a group offset for each group in the
-            // cluster. The group offsets are in elements of
-            // widest_type across the entire cluster. Using that,
-            // define an individual offset for each allocation in the
-            // group, using units of that allocation's type.
-            for (int i = (int)(cluster.size()) - 1; i >= 0; i--) {
-                Expr group_offset = Variable::make(Int(32), name + "." + std::to_string(i) + ".offset");
-
-                for (const SharedAllocation &alloc : cluster[i].group) {
-                    // Change units, as described above.
-                    Expr offset = group_offset;
-                    internal_assert(alloc.type.bytes() <= widest_type.bytes());
-                    if (alloc.type.bytes() < widest_type.bytes()) {
-                        offset *= (widest_type.bytes() / alloc.type.bytes());
-                    }
-                    offset = simplify(offset);
-
-                    // Rewrite all loads and stores to point to the allocation
-                    // cluster they belong to with the appropriate offset into it.
-                    class RewriteGroupAccess : public IRMutator {
-                        using IRMutator::visit;
-                        Expr visit(const Load *op) override {
-                            if (op->name == alloc_name) {
-                                return Load::make(op->type, cluster_name, mutate(op->index) + offset,
-                                                  op->image, op->param, mutate(op->predicate),
-                                                  op->alignment, op->is_streaming);
-                            } else {
-                                return IRMutator::visit(op);
-                            }
-                        }
-
-                        Stmt visit(const Store *op) override {
-                            if (op->name == alloc_name) {
-                                return Store::make(cluster_name, mutate(op->value), mutate(op->index) + offset,
-                                                   op->param, mutate(op->predicate), op->alignment, op->is_streaming);
-                            } else {
-                                return IRMutator::visit(op);
-                            }
-                        }
-                        const string &alloc_name;
-                        const string &cluster_name;
-                        const Expr &offset;
-
-                    public:
-                        RewriteGroupAccess(const string &alloc_name,
-                                           const string &cluster_name,
-                                           const Expr &offset)
-                            : alloc_name(alloc_name), cluster_name(cluster_name), offset(offset) {
-                        }
-                    } rewriter{alloc.name, name, offset};
-                    s = rewriter(s);
-                }
-
-                // Define the group offset in terms of the previous group in the cluster
-                Expr offset;
-                if (i > 0) {
-                    // Build off the last offset
-                    offset = Variable::make(Int(32), name + "." + std::to_string(i - 1) + ".offset");
-                    int ratio = (widest_type.bytes() / cluster[i - 1].widest_type.bytes());
-                    internal_assert(ratio != 0);
-                    offset += simplify((cluster[i - 1].max_size + ratio - 1) / ratio);
-                } else {
-                    if (memory_type == MemoryType::Heap) {
-                        // One slice of a larger global allocation
-                        offset = get_block_id(bs) * total_size_var;
+            // Define the group offsets, each in terms of the previous group in
+            // the cluster.
+            if (!simple) {
+                for (int i = (int)(cluster.size()) - 1; i >= 0; i--) {
+                    string group_offset_name = name + "." + std::to_string(i) + ".offset";
+                    Expr offset;
+                    if (i > 0) {
+                        // Build off the last offset
+                        offset = Variable::make(Int(32), name + "." + std::to_string(i - 1) + ".offset");
+                        int ratio = (widest_type.bytes() / cluster[i - 1].widest_type.bytes());
+                        internal_assert(ratio != 0);
+                        offset += simplify((cluster[i - 1].max_size + ratio - 1) / ratio);
                     } else {
-                        // Base address for shared memory is zero
-                        offset = 0;
+                        if (memory_type == MemoryType::Heap) {
+                            // One slice of a larger global allocation
+                            offset = get_block_id(bs) * total_size_var;
+                        } else {
+                            // Base address for shared memory is zero
+                            offset = 0;
+                        }
                     }
+                    s = LetStmt::make(group_offset_name, simplify(offset), s);
                 }
-
-                s = LetStmt::make(group_offset.as<Variable>()->name, simplify(offset), s);
             }
             s = LetStmt::make(total_size_name, total_size, s);
         }
@@ -1011,7 +1043,7 @@ public:
                 string alloc_name = alloc.name + ".shared_size";
                 string var_name = alloc.name + ".shared_size_var";
                 Expr val = Load::make(Int(32), alloc_name, 0,
-                                      Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{});
+                                      Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{}, false);
                 result = LetStmt::make(var_name, val, result);
                 alloc.size = Variable::make(Int(32), var_name);
             }
@@ -1025,13 +1057,22 @@ public:
             if (alloc.size_computed_on_host) {
                 string alloc_name = alloc.name + ".shared_size";
                 Stmt init = Store::make(alloc_name, 0, 0,
-                                        Parameter{}, const_true(), ModulusRemainder{});
+                                        Parameter{}, const_true(), ModulusRemainder{}, false);
                 result = Block::make(init, result);
                 result = Allocate::make(alloc_name, Int(32), MemoryType::Stack, {1}, const_true(), result);
             }
         }
 
         return result;
+    }
+
+    // Returns the names of every allocation pulled out to the block level.
+    std::set<string> allocation_names() const {
+        std::set<string> names;
+        for (const SharedAllocation &a : allocations) {
+            names.insert(a.name);
+        }
+        return names;
     }
 
     ExtractSharedAndHeapAllocations(DeviceAPI d)
@@ -1057,6 +1098,10 @@ protected:
     };
 
     bool in_lane_loop = false;
+
+    // Names of allocations pulled out to the block level, so we can rename any
+    // register allocation that would otherwise collide with one.
+    const std::set<string> block_alloc_names;
 
     Stmt visit(const For *op) override {
         ScopedValue<string> old_loop_var(loop_var);
@@ -1103,12 +1148,9 @@ protected:
                 allocations.swap(old);
             }
 
-            return For::make(op->name, mutate(op->min), mutate(op->max), op->for_type, op->partition_policy, op->device_api, body);
+            return op->with(mutate(op->min), mutate(op->max), body);
         }
     }
-
-    int alloc_node_counter = 0;
-    Scope<string> alloc_renaming;
 
     Stmt visit(const Allocate *op) override {
         if (in_lane_loop) {
@@ -1123,10 +1165,43 @@ protected:
             << "it must live in stack memory, heap memory, or registers. "
             << "Shared allocations at this loop level are not yet supported.\n";
 
-        ScopedBinding<int> p(register_allocations, op->name, 0);
+        // If this name also lives at the block level, rename this register copy
+        // so it doesn't shadow the block allocation once it gets hoisted to wrap
+        // the thread body. The block copy keeps the Func's name for the
+        // profiler. By the no-shadowing invariant, every load/store of this name
+        // in the body belongs to this allocation.
+        string name = op->name;
+        Stmt body = op->body;
+        if (block_alloc_names.count(op->name)) {
+            name = unique_name(op->name);
+            const string &from = op->name;
+            const string &to = name;
+            body = mutate_with(
+                body,
+                [&](auto *self, const Load *load) -> Expr {
+                    if (load->name == from) {
+                        return Load::make(load->type, to, self->mutate(load->index), load->image, load->param,
+                                          self->mutate(load->predicate), load->alignment, load->is_streaming);
+                    }
+                    return self->visit_base(load);
+                },
+                [&](auto *self, const Store *store) -> Stmt {
+                    if (store->name == from) {
+                        return Store::make(to, self->mutate(store->value), self->mutate(store->index), store->param,
+                                           self->mutate(store->predicate), store->alignment, store->is_streaming);
+                    }
+                    return self->visit_base(store);
+                },
+                [&](auto *, const Free *free) -> Stmt {
+                    if (free->name == from) {
+                        return Free::make(to);
+                    }
+                    return free;
+                });
+        }
 
         RegisterAllocation alloc;
-        alloc.name = op->name + "." + std::to_string(alloc_node_counter++);
+        alloc.name = name;
         alloc.type = op->type;
         alloc.size = 1;
         alloc.loop_var = loop_var;
@@ -1137,36 +1212,12 @@ protected:
         alloc.memory_type = op->memory_type;
 
         allocations.push_back(alloc);
-        {
-            ScopedBinding<string> bind(alloc_renaming, op->name, alloc.name);
-            return mutate(op->body);
-        }
-    }
-
-    Expr visit(const Load *op) override {
-        const string *new_name = alloc_renaming.find(op->name);
-        if (!new_name) {
-            new_name = &(op->name);
-        }
-        return Load::make(op->type, *new_name, mutate(op->index),
-                          op->image, op->param, mutate(op->predicate),
-                          op->alignment, op->is_streaming);
-    }
-
-    Stmt visit(const Store *op) override {
-        const string *new_name = alloc_renaming.find(op->name);
-        if (!new_name) {
-            new_name = &(op->name);
-        }
-        return Store::make(*new_name, mutate(op->value), mutate(op->index),
-                           op->param, mutate(op->predicate), op->alignment, op->is_streaming);
+        return mutate(body);
     }
 
     template<typename LetOrLetStmt>
     auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
-        auto body = op->body;
-
-        body = mutate(op->body);
+        auto body = mutate(op->body);
         Expr value = mutate(op->value);
 
         for (RegisterAllocation &s : allocations) {
@@ -1190,11 +1241,48 @@ protected:
         return visit_let(op);
     }
 
-    Scope<int> register_allocations;
     string loop_var;
 
 public:
     vector<RegisterAllocation> allocations;
+
+    ExtractRegisterAllocations(std::set<string> block_alloc_names)
+        : block_alloc_names(std::move(block_alloc_names)) {
+    }
+
+    // Multiple realizations of the same Func inside the thread loops (e.g. from
+    // unrolling a loop that holds a register allocation) share a name with
+    // disjoint, sequential lifetimes. Coalesce them into one allocation sized
+    // to the largest, so the Func keeps its own name (needed for profiler
+    // attribution) and reuses the scarce register storage instead of getting
+    // one array per copy. The loads and stores already all use that name.
+    void merge_repeated_allocations() {
+        vector<RegisterAllocation> merged;
+        map<string, size_t> index;
+        for (RegisterAllocation &s : allocations) {
+            auto it = index.find(s.name);
+            if (it == index.end()) {
+                index[s.name] = merged.size();
+                merged.push_back(s);
+                continue;
+            }
+            RegisterAllocation &m = merged[it->second];
+            internal_assert(m.type == s.type &&
+                            m.memory_type == s.memory_type &&
+                            m.loop_var == s.loop_var)
+                << "Mismatched register allocations share the name " << s.name << "\n";
+            m.size = simplify(max(m.size, s.size));
+        }
+        allocations.swap(merged);
+    }
+
+    // Run the mutator, then coalesce repeated allocations so callers always
+    // see a finalized allocation list.
+    Stmt operator()(const Stmt &s) {
+        Stmt result = mutate(s);
+        merge_repeated_allocations();
+        return result;
+    }
 
     Stmt rewrap(Stmt body, const string &loop_var) {
         for (RegisterAllocation &alloc : allocations) {
@@ -1264,8 +1352,7 @@ protected:
                 // synchronizations within the block
                 body = Block::make(body, make_barrier(0));
             }
-            return For::make(op->name, op->min, op->max,
-                             op->for_type, op->partition_policy, op->device_api, body);
+            return op->with(op->min, op->max, body);
         } else {
             return IRMutator::visit(op);
         }
@@ -1386,7 +1473,7 @@ protected:
                      << body << "\n\n";
 
             Expr block_size_x = block_size.threads_dimensions() ? block_size.num_threads(0) : 1;
-            ExtractRegisterAllocations register_allocs;
+            ExtractRegisterAllocations register_allocs(block_allocations.allocation_names());
             ForType innermost_loop_type = ForType::GPUThread;
             if (block_size.threads_dimensions()) {
                 body = register_allocs(body);
@@ -1437,11 +1524,7 @@ protected:
             debug(3) << "Add back in shared allocations:\n"
                      << body << "\n\n";
 
-            if (body.same_as(op->body)) {
-                return op;
-            } else {
-                return For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
-            }
+            return op->with(op->min, op->max, body);
         } else {
             return IRMutator::visit(op);
         }
@@ -1512,7 +1595,7 @@ protected:
             internal_assert(op);
             Expr adjusted = Variable::make(Int(32), op->name) + op->min;
             Stmt body = substitute(op->name, adjusted, op->body);
-            stmt = For::make(op->name, 0, simplify(op->max - op->min), op->for_type, op->partition_policy, op->device_api, body);
+            stmt = op->with(0, simplify(op->max - op->min), body);
         }
         return stmt;
     }
@@ -1558,8 +1641,7 @@ protected:
             return IRMutator::visit(op);
         }
 
-        return For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api,
-                         IfThenElse::make(condition, op->body, Stmt()));
+        return op->with(op->min, op->max, IfThenElse::make(condition, op->body, Stmt()));
     }
 
 public:

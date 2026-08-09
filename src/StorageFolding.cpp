@@ -68,8 +68,7 @@ class FoldStorageOfFunction : public IRMutator {
             vector<Expr> args = op->args;
             internal_assert(dim < (int)args.size());
             args[dim] = is_const_one(factor) ? 0 : (args[dim] % factor);
-            expr = Call::make(op->type, op->name, args, op->call_type,
-                              op->func, op->value_index, op->image, op->param);
+            expr = op->with(args);
         } else if (op->name == Call::buffer_crop) {
             Expr source = op->args[2];
             const Variable *buf_var = source.as<Variable>();
@@ -115,7 +114,7 @@ class FoldStorageOfFunction : public IRMutator {
 
                     // TODO: dynamic footprint is no longer the min, and may be tracked separately on producer and consumer sides (head vs tail)
                     valid_min =
-                        Load::make(Int(32), dynamic_footprint, 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+                        Load::make(Int(32), dynamic_footprint, 0);
                     Expr check = (old_min >= valid_min &&
                                   (old_min + old_extent - 1) < valid_min + factor);
                     no_wraparound = no_wraparound && check;
@@ -142,7 +141,7 @@ class FoldStorageOfFunction : public IRMutator {
         if (op->name == func) {
             vector<Expr> args = op->args;
             args[dim] = is_const_one(factor) ? 0 : (args[dim] % factor);
-            stmt = Provide::make(op->name, op->values, args, op->predicate);
+            stmt = op->with(op->values, args, op->predicate);
         }
         return stmt;
     }
@@ -175,7 +174,7 @@ class InjectFoldingCheck : public IRMutator {
                     // Update valid range based on bounds written to.
                     Box b = box_provided(body, func.name());
                     Expr old_leading_edge =
-                        Load::make(Int(32), head + "_next", 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+                        Load::make(Int(32), head + "_next", 0);
 
                     internal_assert(!b.empty());
 
@@ -192,9 +191,9 @@ class InjectFoldingCheck : public IRMutator {
                     Expr new_leading_edge_var = Variable::make(Int(32), new_leading_edge_var_name);
 
                     Stmt update_leading_edge =
-                        Store::make(head, new_leading_edge_var, 0, Parameter(), const_true(), ModulusRemainder());
+                        Store::make(head, new_leading_edge_var, 0);
                     Stmt update_next_leading_edge =
-                        Store::make(head + "_next", new_leading_edge_var, 0, Parameter(), const_true(), ModulusRemainder());
+                        Store::make(head + "_next", new_leading_edge_var, 0);
 
                     // Check the region being written to in this
                     // iteration lies within the range of coordinates
@@ -255,7 +254,7 @@ class InjectFoldingCheck : public IRMutator {
                     body = mutate(op->body);
                 } else {
                     Expr leading_edge =
-                        Load::make(Int(32), tail + "_next", 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+                        Load::make(Int(32), tail + "_next", 0);
 
                     if (func.schedule().async()) {
                         Expr new_leading_edge;
@@ -275,8 +274,8 @@ class InjectFoldingCheck : public IRMutator {
                         Expr release_producer =
                             Call::make(Int(32), "halide_semaphore_release", {sema_var, to_release}, Call::Extern);
                         // The consumer is going to get its own forked copy of the footprint, so it needs to update it too.
-                        Stmt update_leading_edge = Store::make(tail, new_leading_edge_var, 0, Parameter(), const_true(), ModulusRemainder());
-                        update_leading_edge = Block::make(Store::make(tail + "_next", new_leading_edge_var, 0, Parameter(), const_true(), ModulusRemainder()),
+                        Stmt update_leading_edge = Store::make(tail, new_leading_edge_var, 0);
+                        update_leading_edge = Block::make(Store::make(tail + "_next", new_leading_edge_var, 0),
                                                           update_leading_edge);
                         update_leading_edge = Block::make(Evaluate::make(release_producer), update_leading_edge);
                         update_leading_edge = LetStmt::make(new_leading_edge_name, new_leading_edge, update_leading_edge);
@@ -296,7 +295,7 @@ class InjectFoldingCheck : public IRMutator {
                 }
             }
 
-            return ProducerConsumer::make(op->name, op->is_producer, body);
+            return op->with(body);
         } else {
             return IRMutator::visit(op);
         }
@@ -324,7 +323,7 @@ class InjectFoldingCheck : public IRMutator {
                 }
 
                 Stmt update_leading_edge =
-                    Store::make(head, leading_edge, 0, Parameter(), const_true(), ModulusRemainder());
+                    Store::make(head, leading_edge, 0);
                 body = Block::make(update_leading_edge, body);
 
                 // We don't need to make sure the min is moving
@@ -335,7 +334,7 @@ class InjectFoldingCheck : public IRMutator {
 
                 if (func.schedule().async()) {
                     Expr old_leading_edge =
-                        Load::make(Int(32), head, 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+                        Load::make(Int(32), head, 0);
                     Expr to_acquire;
                     if (storage_dim.fold_forward) {
                         to_acquire = leading_edge - old_leading_edge;
@@ -359,12 +358,12 @@ class InjectFoldingCheck : public IRMutator {
                 }
 
                 Stmt update_leading_edge =
-                    Store::make(tail, leading_edge, 0, Parameter(), const_true(), ModulusRemainder());
+                    Store::make(tail, leading_edge, 0);
                 body = Block::make(update_leading_edge, body);
 
                 if (func.schedule().async()) {
                     Expr old_leading_edge =
-                        Load::make(Int(32), tail, 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+                        Load::make(Int(32), tail, 0);
                     Expr to_release;
                     if (storage_dim.fold_forward) {
                         to_release = leading_edge - old_leading_edge;
@@ -377,9 +376,9 @@ class InjectFoldingCheck : public IRMutator {
                 }
             }
 
-            return LetStmt::make(op->name, op->value, body);
+            return op->with(op->value, body);
         } else {
-            return LetStmt::make(op->name, op->value, mutate(op->body));
+            return op->with(op->value, mutate(op->body));
         }
     }
 
@@ -879,7 +878,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 // for further folding opportunities
                 // recursively.
             } else if (!body.same_as(op->body)) {
-                stmt = For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
+                stmt = op->with(op->min, op->max, body);
                 break;
             } else {
                 stmt = op;
@@ -895,11 +894,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         // marker.
         body = mutate(body);
 
-        if (body.same_as(op->body)) {
-            stmt = op;
-        } else {
-            stmt = For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
-        }
+        stmt = op->with(op->min, op->max, body);
 
         if (func.schedule().async() && !dynamic_footprint.empty()) {
             // Step the counters backwards over the entire extent of
@@ -913,11 +908,11 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             // next scanline while a consumer is still on the last few
             // pixels of the previous scanline.
 
-            Expr head = Load::make(Int(32), dynamic_footprint + ".head", 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
-            Expr tail = Load::make(Int(32), dynamic_footprint + ".tail", 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+            Expr head = Load::make(Int(32), dynamic_footprint + ".head", 0);
+            Expr tail = Load::make(Int(32), dynamic_footprint + ".tail", 0);
             Expr step = Variable::make(Int(32), func.name() + ".extent." + std::to_string(dims_folded.back().dim)) + dims_folded.back().factor;
-            Stmt reset_head = Store::make(dynamic_footprint + ".head_next", head - step, 0, Parameter(), const_true(), ModulusRemainder());
-            Stmt reset_tail = Store::make(dynamic_footprint + ".tail_next", tail - step, 0, Parameter(), const_true(), ModulusRemainder());
+            Stmt reset_head = Store::make(dynamic_footprint + ".head_next", head - step, 0);
+            Stmt reset_tail = Store::make(dynamic_footprint + ".tail_next", tail - step, 0);
             stmt = Block::make({stmt, reset_head, reset_tail});
         }
         return stmt;
@@ -993,7 +988,7 @@ class StorageFolding : public IRMutator {
         if (body.same_as(op->body)) {
             return op;
         } else if (folder.dims_folded.empty()) {
-            return Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, body);
+            return op->with(op->bounds, op->condition, body);
         } else {
             Region bounds = op->bounds;
 
@@ -1006,7 +1001,7 @@ class StorageFolding : public IRMutator {
                 bounds[d] = Range(0, f);
             }
 
-            Stmt stmt = Realize::make(op->name, op->types, op->memory_type, bounds, op->condition, body);
+            Stmt stmt = op->with(bounds, op->condition, body);
 
             // Each fold may have an associated semaphore that needs initialization, along with some counters
             for (const auto &fold : folder.dims_folded) {
@@ -1023,16 +1018,16 @@ class StorageFolding : public IRMutator {
                     init = op->bounds[fold.dim].min + op->bounds[fold.dim].extent - 1;
                 }
                 if (!fold.head.empty()) {
-                    stmt = Block::make(Store::make(fold.head + "_next", init, 0, Parameter(), const_true(), ModulusRemainder()), stmt);
+                    stmt = Block::make(Store::make(fold.head + "_next", init, 0), stmt);
                     stmt = Allocate::make(fold.head + "_next", Int(32), MemoryType::Stack, {}, const_true(), stmt);
-                    stmt = Block::make(Store::make(fold.head, init, 0, Parameter(), const_true(), ModulusRemainder()), stmt);
+                    stmt = Block::make(Store::make(fold.head, init, 0), stmt);
                     stmt = Allocate::make(fold.head, Int(32), MemoryType::Stack, {}, const_true(), stmt);
                 }
                 if (!fold.tail.empty()) {
                     internal_assert(func.schedule().async()) << "Expected a single counter for synchronous folding";
-                    stmt = Block::make(Store::make(fold.tail + "_next", init, 0, Parameter(), const_true(), ModulusRemainder()), stmt);
+                    stmt = Block::make(Store::make(fold.tail + "_next", init, 0), stmt);
                     stmt = Allocate::make(fold.tail + "_next", Int(32), MemoryType::Stack, {}, const_true(), stmt);
-                    stmt = Block::make(Store::make(fold.tail, init, 0, Parameter(), const_true(), ModulusRemainder()), stmt);
+                    stmt = Block::make(Store::make(fold.tail, init, 0), stmt);
                     stmt = Allocate::make(fold.tail, Int(32), MemoryType::Stack, {}, const_true(), stmt);
                 }
             }

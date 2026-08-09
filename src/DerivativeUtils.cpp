@@ -580,7 +580,7 @@ protected:
         if (op->name == f.name()) {
             vector<Expr> args = op->args;
             args[variable_id] = f.args()[variable_id];
-            return Call::make(op->type, op->name, args, op->call_type, op->func, op->value_index, op->image, op->param);
+            return op->with(args);
         } else {
             return IRMutator::visit(op);
         }
