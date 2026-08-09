@@ -4048,6 +4048,12 @@ struct ExecuteGeneratorArgs {
     // to the Generator created, an error will occur.
     GeneratorParamsMap generator_params;
 
+    // Plugins loaded for this run (e.g. autoschedulers), as passed to -p. These
+    // do not affect execution here (they are loaded before execute_generator is
+    // called), but they are mixed into the generator compile-cache key so that
+    // changing a plugin invalidates cached artifacts. May be left empty.
+    std::vector<std::string> plugins;
+
     // If true, log the path of all output files to stdout.
     bool log_outputs = false;
 };
