@@ -57,11 +57,11 @@ $(BIN)/%/process: process.cpp $(BIN)/%/stereobm_inductive.a $(BIN)/%/stereobm_no
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -DSTEREOBM_BUILD_OPENCV=0 $(STEREOBM_DEFINES) -I$(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS)
 
-$(BIN)/%/out.png: $(BIN)/%/process_opencv
+$(BIN)/%/out.png: $(BIN)/%/process
 	@mkdir -p $(@D)
 	$< $(IMAGES)/aloeL.png $(IMAGES)/aloeR.png $@
 
-$(BIN)/%/out2.png: $(BIN)/%/process
+$(BIN)/%/out2.png: $(BIN)/%/process_opencv
 	@mkdir -p $(@D)
 	$< $(IMAGES)/aloeL.png $(IMAGES)/aloeR.png $@
 
