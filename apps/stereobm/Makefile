@@ -1,13 +1,12 @@
 include ../support/Makefile.inc
 
 # process.cpp compares against OpenCV's StereoBM.
-# Auto-disable if opencv4 is not available via pkg-config.
-HAVE_OPENCV4 := $(shell pkg-config --exists opencv4 2>/dev/null && echo yes)
-STEREOBM_BUILD_OPENCV ?= $(if $(HAVE_OPENCV4),1,0)
-ifeq ($(STEREOBM_BUILD_OPENCV),1)
-  OPENCV_CXXFLAGS := $(shell pkg-config --cflags opencv4 2>/dev/null)
-  OPENCV_LIBS := $(shell pkg-config --libs opencv4 2>/dev/null)
-endif
+# Auto-disable if opencv4 isn't actually usable via pkg-config: "--exists" can
+# succeed with a stale/broken .pc file while "--cflags"/"--libs" still come
+# back empty, so require real flags rather than trusting "--exists" alone.
+OPENCV_CXXFLAGS := $(shell pkg-config --cflags opencv4 2>/dev/null)
+OPENCV_LIBS := $(shell pkg-config --libs opencv4 2>/dev/null)
+STEREOBM_BUILD_OPENCV ?= $(if $(OPENCV_CXXFLAGS),1,0)
 
 # We set parameters here to feed into both OpenCV and our generator, so that they are consistent.
 STEREOBM_WINSIZE ?= 9
