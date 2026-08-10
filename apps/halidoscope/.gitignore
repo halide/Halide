@@ -26,3 +26,4 @@ dist-ssr
 # Trace binaries
 *.hltrace
 /samples/
+/demos/
