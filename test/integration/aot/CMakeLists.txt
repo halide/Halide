@@ -5,9 +5,18 @@ enable_testing()
 
 find_package(Halide REQUIRED)
 
-option(aot_USE_AUTOSCHEDULER "Use the autoscheduler" OFF)
-if (aot_USE_AUTOSCHEDULER)
+option(aot_USE_AUTOSCHEDULER "Use the autoscheduler via the AUTOSCHEDULER keyword" OFF)
+option(aot_USE_PLUGINS_DIRECTLY
+    "Use the autoscheduler by naming it directly via PLUGINS, bypassing the \
+AUTOSCHEDULER keyword's lazy find_package(HalideAutoschedulers)"
+    OFF
+)
+if (aot_USE_AUTOSCHEDULER AND aot_USE_PLUGINS_DIRECTLY)
+    message(FATAL_ERROR "aot_USE_AUTOSCHEDULER and aot_USE_PLUGINS_DIRECTLY are mutually exclusive")
+elseif (aot_USE_AUTOSCHEDULER)
     set(extra_options AUTOSCHEDULER Halide::Adams2019)
+elseif (aot_USE_PLUGINS_DIRECTLY)
+    set(extra_options PLUGINS Halide::Adams2019 PARAMS autoscheduler=Adams2019)
 endif ()
 
 add_executable(add_gen add.cpp)
