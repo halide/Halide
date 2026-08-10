@@ -1,4 +1,4 @@
-package com.example.helloandroidcamera2;
+package com.example.helloandroid;
 
 import android.util.Log;
 
@@ -9,7 +9,7 @@ public class HalideFilters {
 
     // Load native Halide shared library.
     static {
-        System.loadLibrary("HelloAndroidCamera2");
+        System.loadLibrary("HelloAndroid");
     }
 
     /**

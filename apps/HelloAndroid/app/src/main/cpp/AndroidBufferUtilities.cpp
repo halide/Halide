@@ -13,7 +13,7 @@
 extern "C" {
 
 JNIEXPORT
-jlong JNICALL Java_com_example_helloandroidcamera2_AndroidBufferUtilities_allocNativeYuvBufferT(
+jlong JNICALL Java_com_example_helloandroid_AndroidBufferUtilities_allocNativeYuvBufferT(
     JNIEnv *env, jobject, jint srcWidth, jint srcHeight,
     jobject srcLumaByteBuffer, jint srcLumaRowStrideBytes,
     jobject srcChromaUByteBuffer, jobject srcChromaVByteBuffer,
@@ -38,7 +38,7 @@ jlong JNICALL Java_com_example_helloandroidcamera2_AndroidBufferUtilities_allocN
     return reinterpret_cast<jlong>(buffer);
 }
 
-JNIEXPORT jboolean JNICALL Java_com_example_helloandroidcamera2_AndroidBufferUtilities_freeNativeYuvBufferT(
+JNIEXPORT jboolean JNICALL Java_com_example_helloandroid_AndroidBufferUtilities_freeNativeYuvBufferT(
     JNIEnv *env, jobject obj, jlong handle) {
     if (handle == 0L) {
         return false;
@@ -49,7 +49,7 @@ JNIEXPORT jboolean JNICALL Java_com_example_helloandroidcamera2_AndroidBufferUti
 }
 
 JNIEXPORT
-jboolean JNICALL Java_com_example_helloandroidcamera2_AndroidBufferUtilities_rotateNativeYuvBufferT180(
+jboolean JNICALL Java_com_example_helloandroid_AndroidBufferUtilities_rotateNativeYuvBufferT180(
     JNIEnv *env, jobject obj, jlong handle) {
     if (handle == 0L) {
         return false;
@@ -59,12 +59,12 @@ jboolean JNICALL Java_com_example_helloandroidcamera2_AndroidBufferUtilities_rot
     return true;
 }
 
-JNIEXPORT jlong JNICALL Java_com_example_helloandroidcamera2_AndroidBufferUtilities_lockSurface(
+JNIEXPORT jlong JNICALL Java_com_example_helloandroid_AndroidBufferUtilities_lockSurface(
     JNIEnv *env, jobject obj, jobject surface) {
     return reinterpret_cast<jlong>(LockedSurface::lock(env, surface));
 }
 
-JNIEXPORT jlong JNICALL Java_com_example_helloandroidcamera2_AndroidBufferUtilities_allocNativeYuvBufferTFromSurfaceHandle(
+JNIEXPORT jlong JNICALL Java_com_example_helloandroid_AndroidBufferUtilities_allocNativeYuvBufferTFromSurfaceHandle(
     JNIEnv *env, jobject obj, jlong lockedSurfaceHandle) {
     if (lockedSurfaceHandle == 0L) {
         return 0L;
@@ -78,7 +78,7 @@ JNIEXPORT jlong JNICALL Java_com_example_helloandroidcamera2_AndroidBufferUtilit
     return reinterpret_cast<jlong>(yuvBufferT);
 }
 
-JNIEXPORT jboolean JNICALL Java_com_example_helloandroidcamera2_AndroidBufferUtilities_unlockSurface(
+JNIEXPORT jboolean JNICALL Java_com_example_helloandroid_AndroidBufferUtilities_unlockSurface(
     JNIEnv *env, jobject obj, jlong lockedSurfaceHandle) {
     if (lockedSurfaceHandle == 0L) {
         return false;

@@ -11,11 +11,11 @@ if (halideRoot == null) {
 }
 
 android {
-    namespace = "com.example.hellohalide"
+    namespace = "com.example.helloandroid"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.example.hellohalide"
+        applicationId = "com.example.helloandroid"
         minSdk = 21
         targetSdk = 37
         versionCode = 1

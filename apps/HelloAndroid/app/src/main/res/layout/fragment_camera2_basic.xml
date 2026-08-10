@@ -4,7 +4,7 @@
     android:layout_height="match_parent"
     android:orientation="horizontal">
 
-    <com.example.helloandroidcamera2.AutoFitSurfaceView
+    <com.example.helloandroid.AutoFitSurfaceView
         android:id="@+id/surface_view"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content" />

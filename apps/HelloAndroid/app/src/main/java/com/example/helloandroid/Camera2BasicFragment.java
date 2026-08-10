@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.example.helloandroidcamera2;
+package com.example.helloandroid;
 
 import android.app.Activity;
 import android.app.AlertDialog;
