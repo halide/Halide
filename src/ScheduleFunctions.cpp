@@ -1249,8 +1249,15 @@ protected:
     Stmt declare_box(const Stmt &stmt, const Function &f, Call::IntrinsicOp intrin) {
         Expr name_arg;
         if (intrin == Call::declare_box_touched) {
+            // This intrinsic refers to a property of a named object in scope
+            // (the Realize node), so it carries a Variable: if that object
+            // were renamed, the reference should follow it to the new name.
             name_arg = Variable::make(Handle(), f.name());
         } else {
+            // The profiler markers (declare_box_required_at_root,
+            // declare_stage) don't refer to anything in scope — the name is
+            // just a user-friendly label for printing — so a StringImm
+            // suffices, and also won't be caught by variable substitution.
             name_arg = Expr(f.name());
         }
         std::vector<Expr> args;

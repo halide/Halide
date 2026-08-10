@@ -374,7 +374,7 @@ protected:
                     counters[i] = other.counters[i];
                 }
             }
-            free_vars.insert(other.free_vars.begin(), other.free_vars.end());
+            vars.insert(other.vars.begin(), other.vars.end());
         }
 
         void mul(const Expr &e) {
@@ -383,7 +383,7 @@ protected:
                     counter *= e;
                 }
             }
-            add_free_vars(e);
+            add_vars(e);
         }
 
         void count(int c, const Expr &e) {
@@ -393,21 +393,23 @@ protected:
             } else {
                 counters[c] = e;
             }
-            add_free_vars(e);
+            add_vars(e);
         }
 
         void count(int c) {
             count(c, make_one(UInt(64)));
         }
 
-        void add_free_vars(const Expr &e) {
+        void add_vars(const Expr &e) {
             visit_with(e, [&](auto *, const Variable *var) {
-                free_vars.insert(var->name);
+                vars.insert(var->name);
             });
         }
 
-        // The free vars in the expressions
-        std::set<std::string> free_vars;
+        // The names of Variables appearing in the counter expressions. Not
+        // truly "free" — it doesn't account for internal lets — but a
+        // conservative superset is all the flush logic needs.
+        std::set<std::string> vars;
     };
 
     const For *enclosing_loop = nullptr, *enclosing_parallel_loop = nullptr;
@@ -491,7 +493,7 @@ protected:
         Stmt s = stmt;
         for (auto it = counters.begin(); it != counters.end();) {
             const auto &[id, c] = *it;
-            if (c.free_vars.count(var)) {
+            if (c.vars.count(var)) {
                 s = flush(s, id, c);
                 it = counters.erase(it);
             } else {
@@ -507,13 +509,13 @@ protected:
         }
     }
 
-    // Recompute a Counters object's free_vars set from its current Exprs.
+    // Recompute a Counters object's vars set from its current Exprs.
     // Used after any hoisting operation that mutates the Exprs in place.
-    static void recompute_free_vars(Counters &c) {
-        c.free_vars.clear();
+    static void recompute_vars(Counters &c) {
+        c.vars.clear();
         for (const auto &counter : c.counters) {
             if (counter.defined()) {
-                c.add_free_vars(counter);
+                c.add_vars(counter);
             }
         }
     }
@@ -545,21 +547,22 @@ protected:
                 // (contributing width), a conservative upper bound rather than
                 // an exact sum, so flag it. (An invariant counter reduces to
                 // its exact value × extent below.)
-                if (expr_uses_var(counter, var)) {
-                    counters_approximated[id] |= (1u << ci);
-                }
                 Interval val = bounds_of_expr_in_scope(counter, scope);
-                if (!val.has_upper_bound()) {
+                if (val.is_single_point()) {
+                    counter = simplify(val.min * cast(UInt(64), extent));
+                } else if (!val.has_upper_bound()) {
                     counter = Expr();
-                    continue;
+                    counters_approximated[id] &= ~(1u << ci);
+                } else {
+                    counters_approximated[id] |= (1u << ci);
+                    Interval support = solve_for_outer_interval(
+                        simplify(make_zero(counter.type()) < counter), var);
+                    support = Interval::make_intersection(support, loop_bounds);
+                    Expr width = clamp(simplify(support.max - support.min + 1), 0, extent);
+                    counter = simplify(val.max * cast(UInt(64), width));
                 }
-                Interval support = solve_for_outer_interval(
-                    simplify(make_zero(counter.type()) < counter), var);
-                support = Interval::make_intersection(support, loop_bounds);
-                Expr width = clamp(simplify(support.max - support.min + 1), 0, extent);
-                counter = simplify(val.max * cast(UInt(64), width));
             }
-            recompute_free_vars(c);
+            recompute_vars(c);
         }
     }
 
@@ -573,7 +576,7 @@ protected:
     void hoist_let(const std::string &name, const Expr &value) {
         bool value_pure = is_pure(value);
         for (auto &[id, c] : counters) {
-            if (!c.free_vars.count(name)) {
+            if (!c.vars.count(name)) {
                 continue;
             }
             for (auto &counter : c.counters) {
@@ -585,7 +588,7 @@ protected:
                     }
                 }
             }
-            recompute_free_vars(c);
+            recompute_vars(c);
         }
     }
 
@@ -621,13 +624,17 @@ protected:
                 if (cond_pure) {
                     merged.counters[i] = select(condition, ti, ei);
                 } else {
-                    // Branches are mutually exclusive — only one runs per
-                    // execution — so the tight conservative upper bound on
-                    // the contribution is max(then, else).
+                    // Exactly one branch runs per execution, but with an
+                    // impure condition we can't tell which. max(then, else)
+                    // is the smallest value guaranteed to be at least the
+                    // contribution of whichever branch actually ran. It's an
+                    // upper bound rather than the exact count, so flag it as
+                    // approximated.
                     merged.counters[i] = max(ti, ei);
+                    counters_approximated[id] |= (1u << i);
                 }
             }
-            recompute_free_vars(merged);
+            recompute_vars(merged);
             counters[id].add(merged);
         }
     }
@@ -848,6 +855,9 @@ protected:
         if (in_gpu) {
             hoist_let(op->name, op->value);
         } else {
+            // Conservatively just flush here rather than complicate the counter
+            // with lets. In practice this lets us hoist counters well outside
+            // inner loops.
             body = flush_all_that_depend_on_var(body, op->name);
         }
         merge(old);
@@ -902,7 +912,13 @@ protected:
 
 public:
     Stmt operator()(const Stmt &s) {
-        return flush_all(IRMutator::operator()(s));
+        Stmt result = IRMutator::operator()(s);
+        // All counters should already have been flushed: those depending on
+        // a loop/if var at that construct, and the rest at the
+        // profiling_enable_instance_marker Block that BoundsInference wraps
+        // the whole pipeline body in.
+        internal_assert(counters.empty()) << "unflushed profiler counters remain";
+        return result;
     }
 
     // Counter-approximation bitmask for entry `id` (0 if all exact).
