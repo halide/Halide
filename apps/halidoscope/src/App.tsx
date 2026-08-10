@@ -45,8 +45,13 @@ function App() {
   // Loading state.
   const [traceLoading, setTraceLoading] = React.useState<{
     state: TraceLoadingState;
+    message: string;
     progress: number;
-  }>({ state: TraceLoadingState.Loading, progress: 0 });
+  }>({
+    state: TraceLoadingState.Loading,
+    message: "Loading trace...",
+    progress: 0,
+  });
 
   // Trace state.
   const [funcs, setFuncs] = React.useState<Record<string, FuncMeta>>({});
@@ -68,11 +73,22 @@ function App() {
 
   const loadTrace = React.useCallback(
     async (path: string) => {
-      setTraceLoading({ state: TraceLoadingState.Loading, progress: 0 });
-
-      const unlisten = await listen<number>("trace-load-progress", (event) => {
-        setTraceLoading((prev) => ({ ...prev, progress: event.payload }));
+      setTraceLoading({
+        state: TraceLoadingState.Loading,
+        message: "Loading trace...",
+        progress: 0,
       });
+
+      const unlisten = await listen<{ progress: number; message: string }>(
+        "trace-load-progress",
+        (event) => {
+          setTraceLoading((prev) => ({
+            ...prev,
+            progress: event.payload.progress,
+            message: event.payload.message,
+          }));
+        },
+      );
 
       try {
         const { funcs, total_packets, dag_edges, stats } =
@@ -90,7 +106,11 @@ function App() {
         setActiveFunc(funcs[0]?.name ?? "");
       } finally {
         unlisten();
-        setTraceLoading({ state: TraceLoadingState.Loaded, progress: 100 });
+        setTraceLoading({
+          state: TraceLoadingState.Loaded,
+          message: "Trace loaded...",
+          progress: 100,
+        });
       }
     },
     [setActiveFunc],
@@ -149,7 +169,12 @@ function App() {
   const renderTrace = React.useCallback(() => {
     switch (traceLoading.state) {
       case TraceLoadingState.Loading:
-        return <TraceLoading progress={traceLoading.progress} />;
+        return (
+          <TraceLoading
+            progress={traceLoading.progress}
+            message={traceLoading.message}
+          />
+        );
       case TraceLoadingState.NeedsUpload:
         return <TraceUpload onUpload={loadTrace} />;
       case TraceLoadingState.Loaded:

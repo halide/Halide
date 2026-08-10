@@ -403,12 +403,15 @@ fn parse_func_type_and_dim(
 // ── Trace loading ────────────────────────────────────────────────────────────────────────────────
 
 impl Trace {
-    pub fn load_from_file(path: &str, on_progress: impl FnMut(u8)) -> Result<Self, String> {
+    pub fn load_from_file(path: &str, on_progress: impl FnMut(String, u8)) -> Result<Self, String> {
         let data = std::fs::read(path).map_err(|e| e.to_string())?;
         Self::load_from_bytes(&data, on_progress)
     }
 
-    pub fn load_from_bytes(data: &[u8], mut on_progress: impl FnMut(u8)) -> Result<Self, String> {
+    pub fn load_from_bytes(
+        data: &[u8],
+        mut on_progress: impl FnMut(String, u8),
+    ) -> Result<Self, String> {
         let total = data.len();
         let mut pos = 0;
         let mut last_reported_pct: u8 = 0;
@@ -661,19 +664,21 @@ impl Trace {
             packets.push(pkt);
             pos += size;
 
-            // Intentionally max pct at 95 to support movement to 100 after all stats below are
-            // computed.
-            let pct = (pos as u64 * 100 / total.max(1) as u64).max(95) as u8;
+            let pct = (pos as u64 * 100 / total.max(1) as u64) as u8;
             if pct > last_reported_pct {
                 last_reported_pct = pct;
-                on_progress(pct);
+                on_progress("Loading trace...".to_string(), pct);
             }
         }
 
         // ── DAG inference ────────────────────────────────────────────────────────────────────────
         // Walk up the parent chain from each load to find the enclosing Produce event; that
-        // Produce's func is a producer of the loaded func.
-        for (func_name, load_parent_id) in &pending_loads {
+        // Produce's func is a producer of the loaded func. This walk is O(pending_loads * chain
+        // depth) and pending_loads has one entry per Load packet, so it can take a while on large
+        // traces — report progress through it rather than sitting silent until it's done.
+        let total_pending_loads = pending_loads.len();
+        let mut dag_last_reported_pct: u8 = 0;
+        for (index, (func_name, load_parent_id)) in pending_loads.iter().enumerate() {
             let loaded_func = func_name.clone();
 
             let mut current = *load_parent_id;
@@ -692,12 +697,28 @@ impl Trace {
                     None => break,
                 }
             }
+
+            let pct = (index as u64 * 25 / total_pending_loads.max(1) as u64) as u8;
+            if pct > dag_last_reported_pct {
+                dag_last_reported_pct = pct;
+                on_progress("Analyzing trace...".to_string(), pct);
+            }
         }
+
+        on_progress("Analyzing trace...".to_string(), 25);
 
         // Resolve the executing thread for each load/store packet by walking its parent chain up
         // to the nearest enclosing `BeginParallelTask`. Exclude any stores / loads that do not
         // have a meaningful thread_id (denoted by a sentinel value of -1).
-        for pkt in packets.iter_mut() {
+        let total_packets = packets.len();
+        let mut thread_last_reported_pct: u8 = 25;
+        for (index, pkt) in packets.iter_mut().enumerate() {
+            let pct = 25 + (index as u64 * 25 / total_packets.max(1) as u64) as u8;
+            if pct > thread_last_reported_pct {
+                thread_last_reported_pct = pct;
+                on_progress("Analyzing trace...".to_string(), pct);
+            }
+
             if !pkt.is_load_or_store() {
                 continue;
             }
@@ -737,7 +758,9 @@ impl Trace {
         //
         // We extract extents/channels first (shared borrow) then write back (mut borrow) to keep
         // the two borrows of `funcs` non-overlapping.
-        for (func_name, store_indices) in &store_indices_by_func {
+        let total_store_funcs = store_indices_by_func.len();
+        let mut merge_last_reported_pct: u8 = 50;
+        for (index, (func_name, store_indices)) in store_indices_by_func.iter().enumerate() {
             let extents = funcs.get(func_name.as_str()).and_then(func_extents);
             if let Some((w, h, min_x, min_y)) = extents {
                 let stats = funcs.get(func_name.as_str()).unwrap();
@@ -862,13 +885,29 @@ impl Trace {
                         global_max_reuse_distance.max(stats.max_reuse_distance);
                 }
             }
+
+            let pct = 50 + (index as u64 * 25 / total_store_funcs.max(1) as u64) as u8;
+            if pct > merge_last_reported_pct {
+                merge_last_reported_pct = pct;
+                on_progress("Analyzing trace...".to_string(), pct);
+            }
         }
+
+        on_progress("Analyzing trace...".to_string(), 75);
 
         // Pipeline inputs: Funcs with loads but no stores. These aren't covered by the merged
         // loop above, so compute their load count and reuse distance in one pass here. The first
         // load at each (x, y, channel) is free (analogous to a memcpy); subsequent loads measure
         // distance from that first load.
-        for (func_name, load_indices) in &load_indices_by_func {
+        let total_load_funcs = load_indices_by_func.len();
+        let mut load_funcs_last_reported_pct: u8 = 75;
+        for (index, (func_name, load_indices)) in load_indices_by_func.iter().enumerate() {
+            let pct = 75 + (index as u64 * 25 / total_load_funcs.max(1) as u64) as u8;
+            if pct > load_funcs_last_reported_pct {
+                load_funcs_last_reported_pct = pct;
+                on_progress("Analyzing trace...".to_string(), pct);
+            }
+
             if store_indices_by_func.contains_key(func_name.as_str()) {
                 continue; // handled by the merged loop above
             }
@@ -934,7 +973,7 @@ impl Trace {
             }
         }
 
-        on_progress(100);
+        on_progress("Analyzing trace...".to_string(), 100);
 
         Ok(Self {
             packets,
