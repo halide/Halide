@@ -150,14 +150,16 @@ Serialize::MemoryType Serializer::serialize_memory_type(const MemoryType &memory
         return Serialize::MemoryType::Register;
     case MemoryType::GPUShared:
         return Serialize::MemoryType::GPUShared;
+    case MemoryType::GPUSharedAsync:
+        return Serialize::MemoryType::GPUSharedAsync;
     case MemoryType::GPUTexture:
         return Serialize::MemoryType::GPUTexture;
     case MemoryType::LockedCache:
         return Serialize::MemoryType::LockedCache;
     case MemoryType::VTCM:
         return Serialize::MemoryType::VTCM;
-    case MemoryType::AMXTile:
-        return Serialize::MemoryType::AMXTile;
+    case MemoryType::Tile:
+        return Serialize::MemoryType::Tile;
     default:
         user_error << "Unsupported memory type\n";
         return Serialize::MemoryType::Auto;

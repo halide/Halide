@@ -393,7 +393,7 @@ class ExtractTileOperations : public IRMutator {
     int found_J = -1;
     int found_K = -1;
 
-    // An AMXTile allocation may represent multiple AMX accumulator
+    // A tile allocation may represent multiple AMX accumulator
     // registers as 2D sub-tiles. This map tracks those.
     std::vector<MultiRamp> amx_subtiles;
 
@@ -404,7 +404,7 @@ class ExtractTileOperations : public IRMutator {
     }
 
     Stmt visit(const Allocate *op) override {
-        if (op->memory_type == MemoryType::AMXTile) {
+        if (op->memory_type == MemoryType::Tile) {
             user_assert(
                 (op->type.is_int() && op->type.bits() == 32) ||
                 (op->type.is_float() && op->type.bits() == 32))
@@ -422,7 +422,7 @@ class ExtractTileOperations : public IRMutator {
             pass = 0;
             body = mutate(body);
             user_assert(found_I >= 0 && found_J >= 0 && found_K >= 0)
-                << op->name << " is stored in AMXTile memory, but no matrix multiply "
+                << op->name << " is stored in Tile memory, but no matrix multiply "
                 << "operation was found that stores to it, so the shape of the tile "
                 << "was unable to be determined.\n";
             pass = 1;
@@ -430,7 +430,7 @@ class ExtractTileOperations : public IRMutator {
 
             for (int i = 0; i < (int)amx_subtiles.size(); i++) {
                 body = Allocate::make(amx_name + std::to_string(i), op->type.element_of(),
-                                      MemoryType::AMXTile, {256}, const_true(), body);
+                                      MemoryType::Tile, {256}, const_true(), body);
             }
             return body;
         }

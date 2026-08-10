@@ -6,6 +6,7 @@
 #include "IR.h"
 #include "IRMutator.h"
 #include "Substitute.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {
@@ -36,14 +37,21 @@ class CountGPUBlocksThreads : public IRVisitor {
 
     // Counters that track the number of blocks, threads, and lanes loops that
     // we're inside of, respectively. Lanes loops also count as threads loops.
-    int nb = 0, nt = 0, nl = 0;
+    int nb = 0, nt = 0, nl = 0, nto = 0;
+
+    // Whether we're already inside a lane dimension. Every lane dimension maps
+    // to the innermost thread dimension, so one nested inside another is the
+    // same dimension, not a new one.
+    bool in_lanes = false;
 
     void visit(const For *op) override {
         // Figure out how much to increment each counter by based on the loop
         // type.
         int db = op->for_type == ForType::GPUBlock;
-        int dl = op->for_type == ForType::GPULane;
+        int dl = (op->for_type == ForType::GPULane) && !in_lanes;
         int dt = op->for_type == ForType::GPUThread;
+        ScopedValue<bool> old_in_lanes(in_lanes,
+                                       in_lanes || op->for_type == ForType::GPULane);
 
         // The threads counter includes lanes loops
         dt += dl;
@@ -52,11 +60,13 @@ class CountGPUBlocksThreads : public IRVisitor {
         nb += db;
         nl += dl;
         nt += dt;
+        nto += op->for_type == ForType::GPUThread;
 
         // Update the maximum counter values seen.
         nblocks = std::max(nb, nblocks);
         nthreads = std::max(nt, nthreads);
         nlanes = std::max(nl, nlanes);
+        nthreads_excluding_lanes = std::max(nto, nthreads_excluding_lanes);
 
         // Visit the body
         IRVisitor::visit(op);
@@ -65,6 +75,23 @@ class CountGPUBlocksThreads : public IRVisitor {
         nb -= db;
         nl -= dl;
         nt -= dt;
+        nto -= op->for_type == ForType::GPUThread;
+    }
+
+    void visit(const Realize *op) override {
+        // extract_wmma_operations will wrap the statements that touch this
+        // allocation in loops over the lanes of a warp, so count it as a lane
+        // dimension.
+        const bool wmma = op->memory_type == MemoryType::Tile;
+        int dl = wmma && !in_lanes;
+        ScopedValue<bool> old_in_lanes(in_lanes, in_lanes || wmma);
+        nl += dl;
+        nt += dl;
+        nlanes = std::max(nl, nlanes);
+        nthreads = std::max(nt, nthreads);
+        IRVisitor::visit(op);
+        nl -= dl;
+        nt -= dl;
     }
 
 public:
@@ -73,12 +100,29 @@ public:
     int nblocks = 0;
     int nthreads = 0;
     int nlanes = 0;
+    // Threads not counting lanes, which is what a thread loop's depth is when
+    // the lane dimension comes from an enclosing tensor core allocation rather
+    // than from anything in this loop's body.
+    int nthreads_excluding_lanes = 0;
 };
 
 class CanonicalizeGPUVars : public IRMutator {
     map<std::string, std::string> gpu_vars;
 
+    // Whether we're inside a tensor core accumulator allocation.
+    // extract_wmma_operations will introduce a loop over the lanes of a warp
+    // somewhere inside it, which takes the innermost thread dimension, so the
+    // thread loops in here are one dimension further out than they look.
+    bool in_wmma_alloc = false;
+
     using IRMutator::visit;
+
+    Stmt visit(const Realize *op) override {
+        ScopedValue<bool> old(in_wmma_alloc,
+                              in_wmma_alloc ||
+                                  op->memory_type == MemoryType::Tile);
+        return IRMutator::visit(op);
+    }
 
     std::string find_replacement(const std::string &suffix, const std::string &name) {
         vector<std::string> v = split_string(name, suffix);
@@ -107,7 +151,9 @@ class CanonicalizeGPUVars : public IRMutator {
                 name += gpu_block_name(counter.nblocks);
                 debug(5) << "Replacing " << op->name << " with GPU block name " << name << "\n";
             } else if (op->for_type == ForType::GPUThread) {
-                name += gpu_thread_name(counter.nthreads);
+                name += gpu_thread_name(in_wmma_alloc ?
+                                            counter.nthreads_excluding_lanes + 1 :
+                                            counter.nthreads);
                 debug(5) << "Replacing " << op->name << " with GPU thread name " << name << "\n";
             } else if (op->for_type == ForType::GPULane) {
                 name += gpu_thread_name(0);

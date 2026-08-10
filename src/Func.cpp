@@ -1717,6 +1717,49 @@ Stage &Stage::vectorize(const VarOrRVar &var) {
     return *this;
 }
 
+namespace {
+
+// Reorder the given dimensions to be the innermost loops of a stage, in the
+// order given, leaving the relative order of the others unchanged. Naming
+// every dimension makes reorder produce this exact total order, rather than
+// just permuting the named ones among the positions they already hold. The
+// outermost sentinel is left off so that it stays put.
+Stage &reorder_innermost(Stage &stage, const std::vector<VarOrRVar> &vars) {
+    std::vector<VarOrRVar> order = vars;
+    for (const VarOrRVar &v : stage.split_vars()) {
+        if (v.name() == Var::outermost().name()) {
+            continue;
+        }
+        bool named = std::any_of(vars.begin(), vars.end(),
+                                 [&](const VarOrRVar &w) { return w.name() == v.name(); });
+        if (!named) {
+            order.push_back(v);
+        }
+    }
+    return stage.reorder(order);
+}
+
+}  // namespace
+
+Stage &Stage::tile_init(const VarOrRVar &x, const VarOrRVar &y) {
+    return reorder_innermost(*this, {x, y}).vectorize(x).vectorize(y);
+}
+
+Stage &Stage::tile_load(const VarOrRVar &x, const VarOrRVar &y) {
+    return reorder_innermost(*this, {x, y}).vectorize(x).vectorize(y);
+}
+
+Stage &Stage::tile_store(const VarOrRVar &x, const VarOrRVar &y) {
+    return reorder_innermost(*this, {x, y}).vectorize(x).vectorize(y);
+}
+
+Stage &Stage::tile_matmul(const VarOrRVar &r, const VarOrRVar &x, const VarOrRVar &y) {
+    // Vectorizing a reduction dimension needs the stage marked atomic, which
+    // is asking to reassociate the sum rather than asking for atomic memory
+    // operations.
+    return reorder_innermost(atomic(), {r, x, y}).vectorize(r).vectorize(x).vectorize(y);
+}
+
 Stage &Stage::unroll(const VarOrRVar &var) {
     set_dim_type(var, ForType::Unrolled);
     return *this;
@@ -2639,6 +2682,35 @@ Func &Func::serial(const VarOrRVar &var) {
 Func &Func::parallel(const VarOrRVar &var) {
     invalidate_cache();
     Stage(func, func.definition(), 0).parallel(var);
+    return *this;
+}
+
+Func &Func::tile_init(const VarOrRVar &x, const VarOrRVar &y) {
+    invalidate_cache();
+    store_in(MemoryType::Tile);
+    Stage(func, func.definition(), 0).tile_init(x, y);
+    return *this;
+}
+
+Func &Func::tile_load(const VarOrRVar &x, const VarOrRVar &y) {
+    invalidate_cache();
+    store_in(MemoryType::Tile);
+    Stage(func, func.definition(), 0).tile_load(x, y);
+    return *this;
+}
+
+// A tile_store reads a tile and writes somewhere more general, so this Func is
+// the destination rather than the tile.
+Func &Func::tile_store(const VarOrRVar &x, const VarOrRVar &y) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).tile_store(x, y);
+    return *this;
+}
+
+Func &Func::tile_matmul(const VarOrRVar &r, const VarOrRVar &x, const VarOrRVar &y) {
+    invalidate_cache();
+    store_in(MemoryType::Tile);
+    Stage(func, func.definition(), 0).tile_matmul(r, x, y);
     return *this;
 }
 

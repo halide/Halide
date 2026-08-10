@@ -59,6 +59,38 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
         info->cast_to(op->type);
     }
 
+    // A pure elementwise call of broadcasts is a broadcast of the call. Lifting
+    // the broadcast out lets the surrounding expression see that the value is
+    // the same in every lane. The clauses below that special-case particular
+    // functions have already mutated their arguments, so they can use this
+    // directly; anything that falls through to the general case at the bottom
+    // gets the same treatment there.
+    auto lift_broadcast_out = [&](const std::vector<Expr> &args) -> Expr {
+        if (!op->type.is_vector() || !op->is_pure()) {
+            return Expr();
+        }
+        const int lanes = op->type.lanes();
+        std::vector<Expr> scalar_args;
+        scalar_args.reserve(args.size());
+        for (const Expr &arg : args) {
+            if (arg.type().is_scalar()) {
+                scalar_args.push_back(arg);
+            } else if (const Broadcast *b = arg.as<Broadcast>();
+                       b && b->lanes == lanes && b->value.type().is_scalar()) {
+                scalar_args.push_back(b->value);
+            } else {
+                return Expr();
+            }
+        }
+        if (scalar_args.empty()) {
+            return Expr();
+        }
+        Expr scalar = Call::make(op->type.element_of(), op->name, scalar_args,
+                                 op->call_type, op->func, op->value_index,
+                                 op->image, op->param);
+        return mutate(Broadcast::make(std::move(scalar), lanes), info);
+    };
+
     if (op->is_intrinsic(Call::unreachable)) {
         in_unreachable = true;
         return op;
@@ -778,6 +810,8 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
                 if (auto f = as_const_float(arg)) {
                     auto fn = it->second;
                     return make_const(arg.type(), fn(*f), info);
+                } else if (Expr e = lift_broadcast_out({arg}); e.defined()) {
+                    return e;
                 } else if (arg.same_as(op->args[0])) {
                     return op;
                 } else {
@@ -810,6 +844,8 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
                 if (auto f = as_const_float(arg)) {
                     auto fn = it->second;
                     return make_const(arg.type(), fn(*f), info);
+                } else if (Expr e = lift_broadcast_out({arg}); e.defined()) {
+                    return e;
                 } else if (call && (call->call_type == Call::PureExtern || call->call_type == Call::PureIntrinsic) &&
                            (it = pure_externs_truncation.find(call->name)) != pure_externs_truncation.end()) {
                     // For any combination of these integer-valued functions, we can
@@ -863,6 +899,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
     // No else: we want to fall thru from the PureExtern clause.
     {
         auto [new_args, changed] = mutate_with_changes(op->args);
+
+        if (Expr e = lift_broadcast_out(new_args); e.defined()) {
+            return e;
+        }
+
         if (!changed) {
             return op;
         } else {

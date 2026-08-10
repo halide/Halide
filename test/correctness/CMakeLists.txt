@@ -5,6 +5,7 @@ tests(
     SOURCES
     # keep-sorted start case=no
     align_bounds.cpp
+    amx_matmul.cpp
     argmax.cpp
     arm_cpu_detect.cpp
     associativity.cpp
@@ -148,6 +149,8 @@ tests(
     gpu_allocation_cache.cpp
     gpu_arg_types.cpp
     gpu_assertion_in_kernel.cpp
+    gpu_async_copy.cpp
+    gpu_async_copy_errors.cpp
     gpu_bounds_inference_failure.cpp
     gpu_condition_lifting.cpp
     gpu_cpu_simultaneous_read.cpp
@@ -353,7 +356,6 @@ tests(
     sve_codegen_reinterpret.cpp
     target.cpp
     target_query.cpp
-    tiled_matmul.cpp
     tiled_matmul_errors.cpp
     tracing.cpp
     tracing_bounds.cpp
@@ -399,6 +401,7 @@ tests(
     vectorized_load_from_vectorized_allocation.cpp
     vectorized_reduction_bug.cpp
     widening_reduction.cpp
+    wmma_matmul.cpp
     x86_cpu_detect.cpp
     # keep-sorted end
 )
