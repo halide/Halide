@@ -17,14 +17,14 @@
 package com.example.helloandroid;
 
 import android.Manifest;
-import android.app.Activity;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.fragment.app.FragmentActivity;
 
-public class CameraActivity extends Activity {
+public class CameraActivity extends FragmentActivity {
     private static final int REQUEST_CAMERA_PERMISSION = 1;
 
     @Override
@@ -53,7 +53,7 @@ public class CameraActivity extends Activity {
     }
 
     private void showCameraFragment() {
-        getFragmentManager().beginTransaction()
+        getSupportFragmentManager().beginTransaction()
                 .replace(R.id.container, Camera2BasicFragment.newInstance())
                 .commit();
     }

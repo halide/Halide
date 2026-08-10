@@ -1,21 +1,21 @@
 HelloAndroid is a simple application which uses Halide to process images
-streamed from the Android camera2 API. It reads every frame into the CPU via an
-ImageReader and uses Halide to either blit the frame to the output surface
-(converting between YUV formats), or apply an edge detector on the luma channel.
-This example requires a phone or tablet that supports the camera2 API (Android
-API level 21 or above). This sample has been tested on Nexus 5, Nexus 6 and
-Nexus 9.
+streamed from the Android camera via CameraX (built on top of the camera2 API).
+It reads every frame into the CPU via an `ImageAnalysis` use case and uses
+Halide to either blit the frame to the output surface (converting between YUV
+formats), or apply an edge detector on the luma channel. This example requires a
+phone or tablet running Android API level 23 or above. This sample has been
+tested on Nexus 5, Nexus 6 and Nexus 9.
 
 CAVEAT: This example uses the not-so-well-documented ANativeWindow C API to
 directly write into the graphics buffers that support the Java "Surface" and
 "SurfaceView" classes. In particular, we rely on the YV12 format and use the
 ANativeWindow API to "reconfigure" buffers so that they do not have to match the
 resolution of the display. This exploits the hardware scaler to resample the
-displayed image. However, although camera2 reports a set of supported
-resolutions for ImageReader, there is no such enumeration for the display. On
-untested devices, chooseOptimalSize() may return camera resolution for which
-there is no matching graphics resolution. This will lead to a green screen with
-a logcat error message that looks something like:
+displayed image. However, although CameraX's `ResolutionSelector` reports a set
+of supported analysis resolutions, there is no such enumeration for the display.
+On untested devices, CameraX may settle on a camera resolution for which there
+is no matching graphics resolution. This will lead to a green screen with a
+logcat error message that looks something like:
 
 E/halide_native( 6146): ANativeWindow buffer locked but its size was 1920 x
 1440, expected 1440 x 1080
