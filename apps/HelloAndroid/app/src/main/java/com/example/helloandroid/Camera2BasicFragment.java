@@ -28,6 +28,7 @@ import android.view.LayoutInflater;
 import android.view.OrientationEventListener;
 import android.view.Surface;
 import android.view.SurfaceHolder;
+import android.view.SurfaceView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -80,10 +81,10 @@ public class Camera2BasicFragment extends Fragment implements View.OnClickListen
     };
 
     /**
-     * The on-screen {@link AutoFitSurfaceView} and its {@link Surface}. CameraX never draws to
-     * this directly -- it's the destination we lock and write Halide's output into.
+     * The on-screen {@link SurfaceView} and its {@link Surface}. CameraX never draws to this
+     * directly -- it's the destination we lock and write Halide's output into.
      */
-    private AutoFitSurfaceView mSurfaceView;
+    private SurfaceView mSurfaceView;
     private Surface mSurface;
 
     /**
@@ -128,7 +129,7 @@ public class Camera2BasicFragment extends Fragment implements View.OnClickListen
     @Override
     public void onViewCreated(final View view, Bundle savedInstanceState) {
         Log.d(TAG, "onViewCreated");
-        mSurfaceView = (AutoFitSurfaceView) view.findViewById(R.id.surface_view);
+        mSurfaceView = (SurfaceView) view.findViewById(R.id.surface_view);
         // Hidden until bindCameraUseCases() below knows the resolution CameraX picked, and can
         // size this view (and the Surface it holds) to match.
         mSurfaceView.setVisibility(View.GONE);
@@ -231,11 +232,10 @@ public class Camera2BasicFragment extends Fragment implements View.OnClickListen
 
         Size size = imageAnalysis.getResolutionInfo().getResolution();
         Log.d(TAG, "CameraX selected analysis size: " + size);
-        // Deliberately not AutoFitSurfaceView.setAspectRatio(): the view fills the screen
-        // (fragment_camera2_basic.xml), and setFixedSize()'s buffer/display decoupling below
-        // (see the README's ANativeWindow CAVEAT) lets the system scale the analysis-resolution
-        // buffer to fit, at the cost of a small stretch if the screen's aspect ratio doesn't
-        // exactly match the 16:9 analysis stream.
+        // The SurfaceView fills the screen (fragment_camera2_basic.xml), and setFixedSize()'s
+        // buffer/display decoupling below (see the README's ANativeWindow CAVEAT) lets the system
+        // scale the analysis-resolution buffer to fit, at the cost of a small stretch if the
+        // screen's aspect ratio doesn't exactly match the 16:9 analysis stream.
         SurfaceHolder holder = mSurfaceView.getHolder();
         holder.setFormat(ImageFormat.YV12);
         holder.setFixedSize(size.getWidth(), size.getHeight());
