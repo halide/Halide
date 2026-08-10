@@ -14,6 +14,7 @@ tests(
         in_clone.cpp
         lossless_cast.cpp
         simplify.cpp
+        sliding_window.cpp
         solve.cpp
         widening_lerp.cpp
     # By default, the libfuzzer harness runs with a timeout of 1200 seconds.

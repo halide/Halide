@@ -1,12 +1,15 @@
 #include "Halide.h"
+#include "fuzz_helpers.h"
+#include <iostream>
+#include <random>
+#include <sstream>
+
+namespace {
 
 using namespace Halide;
 
 // Configuration settings. If you find a failure, you can progressively simplify
 // the IR by turning things on and off.
-
-constexpr int num_trials = 100;  // Use -1 for infinite
-constexpr bool stop_on_first_failure = true;
 
 // We want large pipelines to get into complex situations, but small
 // pipelines so that we can test lots of them and so that the
@@ -88,11 +91,44 @@ constexpr bool verbose = false;
 Var x{"x"}, y{"y"}, yo{"yo"}, yi{"yi"};
 Param<int> scale_param{"scale_param"};
 
+// We build each pipeline twice, once with everything compute_root and once
+// scheduled to slide, and check they agree. Both builds have to describe the
+// same pipeline, so the first one records the choices it made and the second
+// replays them.
+class Rng {
+    FuzzingContext &fuzz;
+    std::vector<uint32_t> recorded;
+    size_t pos = 0;
+    bool replaying = false;
+
+public:
+    Rng(FuzzingContext &fuzz)
+        : fuzz(fuzz) {
+    }
+
+    uint32_t operator()() {
+        if (replaying && pos < recorded.size()) {
+            return recorded[pos++];
+        }
+        // Past the end of the recording. The compute_root build makes no
+        // scheduling decisions, so the sliding build draws more than it did;
+        // those extra values only affect the schedule, which is what we want
+        // to vary between the two.
+        recorded.push_back(fuzz.ConsumeIntegral<uint32_t>());
+        return recorded.back();
+    }
+
+    void replay() {
+        replaying = true;
+        pos = 0;
+    }
+};
+
 // Bend a coordinate into a monotonically increasing but non-affine function of
 // itself, so that the monotonicity analysis has to cope with something other
 // than a linear ramp. The footprint stays bounded, so this doesn't stop
 // anything sliding that otherwise would.
-Expr make_piecewise_affine(const Expr &e, std::mt19937 &rng) {
+Expr make_piecewise_affine(const Expr &e, Rng &rng) {
     int kind = rng() % 4;
     int k = (int)(rng() % (size / 2));
     if (!generate_piecewise_affine) {
@@ -132,7 +168,7 @@ Expr resample_factor(int mode) {
     }
 }
 
-Expr random_use_of(Func f, std::mt19937 &rng, int rate, bool flip, int scale_mode,
+Expr random_use_of(Func f, Rng &rng, int rate, bool flip, int scale_mode,
                    IndexMode index_mode, bool *symbolic) {
     auto r = [&]() { return (int)(rng() % 5) - 2; };
 
@@ -266,21 +302,24 @@ LoopNest common_prefix(const LoopNest &a, const LoopNest &b) {
     return l;
 }
 
-bool run_trial(int trial, uint32_t seed, const Buffer<uint8_t> &input_buf) {
+}  // namespace
 
-    if (verbose) {
-        std::cout << "Trial " << trial << " with seed " << seed << "\n";
-    }
+FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
+    // Filled once and reused, so that repeated runs don't spend all their time
+    // in the boundary condition.
+    static Buffer<uint8_t> input_buf(size, size);
 
     std::ostringstream source;
 
-    std::mt19937 rng;
+    Rng rng(fuzz);
 
     Buffer<uint8_t> correct_output, sliding_output;
     for (int sched = 0; sched < 2; sched++) {
         source = std::ostringstream{};
 
-        rng.seed(seed);
+        if (sched == 1) {
+            rng.replay();
+        }
 
         ImageParam input(UInt(8), 2);
         source << "ImageParam input(UInt(8), 2);\n"
@@ -436,7 +475,13 @@ bool run_trial(int trial, uint32_t seed, const Buffer<uint8_t> &input_buf) {
                 default:
                     break;
                 }
-                stages[i].has_update = update_kind < 4;
+                if (update_kind < 4) {
+                    stages[i].has_update = true;
+                    // We only ever schedule the last stage of a Func, which
+                    // Halide warns about unless we say it's deliberate.
+                    stages[i].f.update(0).unscheduled();
+                    source << "f[" << i << "].update(0).unscheduled();\n";
+                }
             }
 
             std::ostringstream rhs_source;
@@ -692,7 +737,7 @@ bool run_trial(int trial, uint32_t seed, const Buffer<uint8_t> &input_buf) {
         }
 
         static bool first_run = true;
-        std::mt19937 input_fill_rng{rng()};
+        std::mt19937 input_fill_rng{(uint32_t)rng()};
         if (!boundary_condition || first_run) {
             if (input_all_ones) {
                 input.get().as<uint8_t>().fill(1);
@@ -723,42 +768,8 @@ bool run_trial(int trial, uint32_t seed, const Buffer<uint8_t> &input_buf) {
         }
     }
     if (!ok) {
-        std::cout << "Failed on trial " << trial << " with seed " << seed << "\n"
-                  << source.str() << "\n";
-        return false;
-    }
-    return true;
-}
-
-int main(int argc, char **argv) {
-    uint32_t initial_seed = time(NULL);
-
-    std::mt19937 trial_seed_generator{(uint32_t)initial_seed};
-
-    Buffer<uint8_t> input_buf(size, size);
-
-    bool repro_mode = argc == 2;
-    uint32_t repro_seed = repro_mode ? (uint32_t)std::atol(argv[1]) : 0;
-
-    int num_failures = 0;
-
-    if (repro_mode) {
-        num_failures = run_trial(0, repro_seed, input_buf) ? 0 : 1;
-    } else {
-        std::cout << "Initial seed = " << initial_seed << "\n";
-        for (int trial = 0; trial != num_trials - 1; trial++) {
-            num_failures += run_trial(trial, trial_seed_generator(), input_buf) ? 0 : 1;
-            if (num_failures > 0 && stop_on_first_failure) {
-                break;
-            }
-        }
-    }
-
-    if (num_failures > 0) {
-        std::cout << num_failures << " failures\n";
+        std::cout << source.str() << "\n";
         return 1;
-    } else {
-        std::cout << "Success!\n";
-        return 0;
     }
+    return 0;
 }
