@@ -1104,6 +1104,15 @@ T remove_intrinsics(const T &e, const std::initializer_list<Call::IntrinsicOp> &
 
 }  // namespace
 
+Expr peel_lets(const Expr &e, std::vector<std::pair<std::string, Expr>> *lets) {
+    Expr body = e;
+    while (const Let *let = body.as<Let>()) {
+        lets->emplace_back(let->name, let->value);
+        body = let->body;
+    }
+    return body;
+}
+
 Expr remove_likelies(const Expr &e) {
     return remove_intrinsics(e, {Call::likely, Call::likely_if_innermost});
 }

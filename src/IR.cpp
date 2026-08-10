@@ -820,6 +820,8 @@ constexpr const char *intrinsic_op_names[] = {
     "concat_bits",
     "count_leading_zeros",
     "count_trailing_zeros",
+    "cuda_await_copies",
+    "cuda_bypass_registers",
     "debug_to_file",
     "declare_box_touched",
     "div_round_to_zero",

@@ -653,7 +653,7 @@ class LowerWarpShuffles : public IRMutator {
 
     Stmt visit(const Allocate *op) override {
         if (this_lane.defined() ||
-            op->memory_type == MemoryType::GPUShared ||
+            is_gpu_shared(op->memory_type) ||
             op->memory_type == MemoryType::Heap) {
             // Not a warp-level allocation. Warp-level storage is per-lane
             // register storage; shared and heap (global) memory are never

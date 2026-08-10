@@ -150,6 +150,8 @@ Serialize::MemoryType Serializer::serialize_memory_type(const MemoryType &memory
         return Serialize::MemoryType::Register;
     case MemoryType::GPUShared:
         return Serialize::MemoryType::GPUShared;
+    case MemoryType::GPUSharedAsync:
+        return Serialize::MemoryType::GPUSharedAsync;
     case MemoryType::GPUTexture:
         return Serialize::MemoryType::GPUTexture;
     case MemoryType::LockedCache:

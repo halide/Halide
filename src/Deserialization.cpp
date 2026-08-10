@@ -180,6 +180,8 @@ MemoryType Deserializer::deserialize_memory_type(Serialize::MemoryType memory_ty
         return MemoryType::Register;
     case Serialize::MemoryType::GPUShared:
         return MemoryType::GPUShared;
+    case Serialize::MemoryType::GPUSharedAsync:
+        return MemoryType::GPUSharedAsync;
     case Serialize::MemoryType::GPUTexture:
         return MemoryType::GPUTexture;
     case Serialize::MemoryType::LockedCache:

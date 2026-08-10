@@ -156,6 +156,9 @@ std::ostream &operator<<(std::ostream &out, const MemoryType &t) {
     case MemoryType::Register:
         out << "Register";
         break;
+    case MemoryType::GPUSharedAsync:
+        out << "GPUSharedAsync";
+        break;
     case MemoryType::GPUShared:
         out << "GPUShared";
         break;
