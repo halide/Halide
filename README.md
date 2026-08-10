@@ -458,6 +458,10 @@ default, the number of cores on the host is used.)
 output can be parsed programmatically by starting from the code in
 `utils/HalideTraceViz.cpp`.
 
+`HL_CACHE_DIR=...` enables the opt-in generator compile cache, restoring a
+generator's previously emitted artifacts instead of recompiling when its inputs
+are unchanged. See [Generator cache](doc/GeneratorCache.md).
+
 # Further references
 
 We have more documentation in `doc/`, the following links might be helpful:
@@ -466,6 +470,7 @@ We have more documentation in `doc/`, the following links might be helpful:
 | --------------------------------------------- | ------------------------------------------------------------------------- |
 | [CMake build](doc/BuildingHalideWithCMake.md) | How to configure and build Halide using CMake.                            |
 | [CMake package](doc/HalideCMakePackage.md)    | How to use the Halide CMake package to build your code.                   |
+| [Generator cache](doc/GeneratorCache.md)      | How to speed up rebuilds with the opt-in generator compile cache.         |
 | [Hexagon](doc/Hexagon.md)                     | How to use the Hexagon backend.                                           |
 | [Python](doc/Python.md)                       | Documentation for the Python bindings.                                    |
 | [RunGen](doc/RunGen.md)                       | How to use the RunGen interface to run and benchmark arbitrary pipelines. |

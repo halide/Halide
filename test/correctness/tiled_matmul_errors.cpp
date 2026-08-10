@@ -230,10 +230,17 @@ void scenario_mismatched_strides() {
         .split(r2.x, rro, rri, 8)
         .reorder(rro, x, y)
         .tile_matmul(rri, rxi, ryi);
+
     Var ixi("ixi"), iyi("iyi");
-    mm.compute_at(mm.in(), x).tile(x, y, ixi, iyi, 8, 8).tile_init(ixi, iyi);
+    mm.compute_at(mm.in(), x)
+        .tile(x, y, ixi, iyi, 8, 8)
+        .tile_init(ixi, iyi);
+
     Var mmxi("mmxi"), mmyi("mmyi");
-    mm.in().tile(x, y, mmxi, mmyi, 8, 8).tile_store(mmxi, mmyi);
+    mm.in()
+        .tile(x, y, mmxi, mmyi, 8, 8)
+        .tile_store(mmxi, mmyi);
+
     mm.in().compile_jit(amx_target);
 }
 

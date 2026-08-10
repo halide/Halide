@@ -990,8 +990,12 @@ struct Call : public ExprNode<Call> {
      * unchanged if the new args are the same as the existing ones. */
     Expr with(const std::vector<Expr> &args) const;
 
-    /** Convenience constructor for calls to other halide functions */
-    static Expr make(const Function &func, const std::vector<Expr> &args, int idx = 0);
+    /** Convenience constructor for calls to other halide functions. Pass
+     * follow_global_wrappers = true when constructing a consumer's call to
+     * 'func', so that a global wrapper (Func::in()) redirects it; pass false
+     * only for a Func's reference to itself. */
+    static Expr make(const Function &func, const std::vector<Expr> &args, int idx,
+                     bool follow_global_wrappers);
 
     /** Convenience constructor for loads from concrete images */
     static Expr make(const Buffer<> &image, const std::vector<Expr> &args) {

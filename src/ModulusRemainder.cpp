@@ -342,38 +342,6 @@ ModulusRemainder ComputeModulusRemainder::analyze(const Expr &e) {
     return result;
 }
 
-namespace {
-void check(const Expr &e, int64_t m, int64_t r) {
-    ModulusRemainder result = modulus_remainder(e);
-    if (result.modulus != m || result.remainder != r) {
-        std::cerr << "Test failed for modulus_remainder:\n";
-        std::cerr << "Expression: " << e << "\n";
-        std::cerr << "Correct modulus, remainder  = " << m << ", " << r << "\n";
-        std::cerr << "Computed modulus, remainder = "
-                  << result.modulus << ", "
-                  << result.remainder << "\n";
-        exit(1);
-    }
-}
-}  // namespace
-
-void modulus_remainder_test() {
-    Expr x = Variable::make(Int(32), "x");
-    Expr y = Variable::make(Int(32), "y");
-
-    check((30 * x + 3) + (40 * y + 2), 10, 5);
-    check((6 * x + 3) * (4 * y + 1), 2, 1);
-    check(max(30 * x - 24, 40 * y + 31), 5, 1);
-    check(10 * x - 33 * y, 1, 0);
-    check(10 * x - 35 * y, 5, 0);
-    check(123, 0, 123);
-    check(Let::make("y", x * 3 + 4, y * 3 + 4), 9, 7);
-    // Check overflow
-    check((5045320 * x + 4) * (405713 * y + 3) * (8000123 * x + 4354), 1, 0);
-
-    std::cout << "modulus_remainder test passed\n";
-}
-
 int64_t gcd(int64_t a, int64_t b) {
     // We don't care about factors of -1, so we're going to do this unsigned so
     // that we can take an absolute value without worrying about INT64_MIN.

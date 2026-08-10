@@ -51,7 +51,6 @@ public:
     int reclaim(void *user_context, MemoryRegion *memory_region);   //< free the region and consolidate
     int retain(void *user_context, MemoryRegion *memory_region);    //< retain the region and increase usage count
     bool collect(void *user_context);                               //< returns true if any blocks were removed
-    int release(void *user_context);
     int destroy(void *user_context);
 
     // Returns the currently managed block resource
@@ -660,23 +659,6 @@ int RegionAllocator::deallocate_block_region_if_unused(void *user_context, Block
     int error_code = allocators.region.deallocate(user_context, memory_region);
     region->memory.handle = nullptr;
     return error_code;
-}
-
-int RegionAllocator::release(void *user_context) {
-#ifdef DEBUG_RUNTIME_INTERNAL
-    debug(user_context) << "RegionAllocator: Releasing all regions ("
-                        << "user_context=" << (void *)(user_context) << ") ...";
-#endif
-
-    BlockRegion *block_region = block->regions;
-    while (block_region != nullptr) {
-        release_block_region(user_context, block_region);
-        if (is_last_block_region(user_context, block_region)) {
-            break;
-        }
-        block_region = block_region->next_ptr;
-    }
-    return 0;
 }
 
 bool RegionAllocator::collect(void *user_context) {

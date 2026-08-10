@@ -81,7 +81,6 @@
 #include "UnrollLoops.h"
 #include "UnsafePromises.h"
 #include "VectorizeLoops.h"
-#include "WrapCalls.h"
 
 namespace Halide {
 namespace Internal {
@@ -158,9 +157,6 @@ void lower_impl(const vector<Function> &output_funcs,
     for (auto &iter : env) {
         iter.second.lock_loop_levels();
     }
-
-    // Substitute in wrapper Funcs
-    env = wrap_func_calls(env);
 
     // Compute a realization order and determine group of functions which loops
     // are to be fused together

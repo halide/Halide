@@ -189,11 +189,9 @@ Type CodeGen_PTX_Dev::upgrade_type_for_storage(const Type &t) const {
     return CodeGen_LLVM::upgrade_type_for_storage(t);
 }
 
-namespace {
-
-// The size of the thread block a kernel will be launched with. ptxas allocates
-// registers on the assumption that a block may be as large as the hardware
-// allows unless we tell it otherwise, which costs occupancy.
+// The largest extent of each of the GPU thread loops, if they are all
+// constant. A kernel may contain several thread loops in sequence, so take the
+// largest of each.
 class BlockSize : public IRVisitor {
     using IRVisitor::visit;
 
@@ -214,8 +212,6 @@ public:
     int extent[3] = {1, 1, 1};
     bool known = true;
 };
-
-}  // namespace
 
 void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
                                  const std::string &name,
@@ -295,21 +291,15 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 
     module->getOrInsertNamedMetadata("nvvm.annotations")->addOperand(md_node);
 
-    // Tell ptxas how large the thread block is. Without this it has to assume
-    // the largest block the hardware supports, and allocates registers for that
-    // rather than for the block we actually launch.
+    // Tell ptxas the most threads a block can have. Without this it assumes
+    // the maximum, and budgets registers for it.
     BlockSize block_size;
     stmt.accept(&block_size);
     if (block_size.known) {
-        const char *annotation[] = {"maxntidx", "maxntidy", "maxntidz"};
-        for (int i = 0; i < 3; i++) {
-            llvm::Metadata *args[] = {
-                llvm::ValueAsMetadata::get(function),
-                MDString::get(*context, annotation[i]),
-                llvm::ValueAsMetadata::get(ConstantInt::get(i32_t, block_size.extent[i]))};
-            module->getOrInsertNamedMetadata("nvvm.annotations")
-                ->addOperand(MDNode::get(*context, args));
-        }
+        function->addFnAttr("nvvm.maxntid",
+                            std::to_string(block_size.extent[0]) + "," +
+                                std::to_string(block_size.extent[1]) + "," +
+                                std::to_string(block_size.extent[2]));
         debug(2) << "Kernel " << name << " has block size "
                  << block_size.extent[0] << "x" << block_size.extent[1]
                  << "x" << block_size.extent[2] << "\n";

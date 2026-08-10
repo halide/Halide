@@ -9,6 +9,7 @@
 #include "Simplify.h"
 #include "Util.h"
 
+#include <algorithm>
 #include <numeric>
 #include <optional>
 
@@ -35,21 +36,43 @@ void collapse_adjacent_dims(MultiRamp *m) {
 }
 
 // Walk two shapes innermost-out, emitting the coarsest shape that groups into
-// both of them. Returns false if there is no such shape, which happens when a
-// pair of lane counts is coprime. If from_a is non-null it receives, for each
-// refined dim, the index of the dim of `a` it came from.
+// both of them. For example, {12, 2} and {4, 6} have the common refinement
+// {4, 3, 2}: the first two dims group to give 12 and the last two group to
+// give 6.
+//
+// Returns false if there is no such shape. The prefix products of a refinement
+// each divide the next, and have to include the prefix products of both
+// shapes, so at every step one of the two remaining lane counts must divide
+// the other. {12, 2} and {8, 3} have no common refinement, because neither 12
+// nor 8 divides the other.
+//
+// The two shapes must describe the same number of lanes, and no dim may have a
+// single lane. A one-lane dim would emit a spurious 1 into the refinement, but
+// MultiRamp's constructor strips them, so no shape taken from one has any. Two
+// empty shapes are a pair of scalars, and refine to an empty shape.
+//
+// If from_a is non-null it receives, for each refined dim, the index of the dim
+// of `a` it came from.
 bool common_refinement(const std::vector<int> &a, const std::vector<int> &b,
                        std::vector<int> *refined, std::vector<int> *from_a) {
     refined->clear();
     if (from_a) {
         from_a->clear();
     }
+    // x and y are the lanes of the current dim of each shape not yet accounted
+    // for by the refinement. A value of one means the dim is used up and it is
+    // time to move on to the next.
     size_t i = 0, j = 0;
-    int x = a.empty() ? 1 : a[0];
-    int y = b.empty() ? 1 : b[0];
+    int x = 1, y = 1;
     while (i < a.size() && j < b.size()) {
-        int g = gcd(x, y);
-        if (g == 1) {
+        if (x == 1) {
+            x = a[i];
+        }
+        if (y == 1) {
+            y = b[j];
+        }
+        int g = std::min(x, y);
+        if (std::max(x, y) % g != 0) {
             return false;
         }
         refined->push_back(g);
@@ -58,13 +81,17 @@ bool common_refinement(const std::vector<int> &a, const std::vector<int> &b,
         }
         x /= g;
         y /= g;
-        if (x == 1 && ++i < a.size()) {
-            x = a[i];
+        if (x == 1) {
+            i++;
         }
-        if (y == 1 && ++j < b.size()) {
-            y = b[j];
+        if (y == 1) {
+            j++;
         }
     }
+    // Each step consumes the same number of lanes from both shapes, so if they
+    // describe the same number of lanes they run out together.
+    internal_assert(i == a.size() && j == b.size())
+        << "common_refinement: shapes must describe the same number of lanes\n";
     return true;
 }
 

@@ -25,6 +25,13 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 #   export CLANG_TIDY_LLVM_INSTALL_DIR=/opt/homebrew/opt/llvm@X
 #
 # Where X matches the EXPECTED_VERSION below.
+#
+# On Linux, Ubuntu's packaged libwabt.a isn't built with -fPIC, so it can't
+# be linked into libHalide.so. This script won't build wabt for you; point
+# wabt_ROOT at a wabt install built with -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+# (and, e.g., -DUSE_INTERNAL_SHA256=ON to avoid an OpenSSL dependency):
+#
+#   export wabt_ROOT=/path/to/wabt/install
 
 EXPECTED_VERSION=21
 
@@ -44,6 +51,11 @@ if [ "$(uname)" == "Darwin" ]; then
     _DEFAULT_LLVM_LOCATION="/opt/homebrew/opt/llvm@$EXPECTED_VERSION"
 else
     _DEFAULT_LLVM_LOCATION="/usr/lib/llvm-$EXPECTED_VERSION"
+
+    if [ -z "${wabt_ROOT:-}" ]; then
+        echo "wabt_ROOT must point to a wabt install built with -DCMAKE_POSITION_INDEPENDENT_CODE=ON on Linux." 1>&2
+        exit 1
+    fi
 fi
 
 J=$(get_thread_count)
@@ -115,7 +127,7 @@ if [[ $(${CC} --version) =~ .*Homebrew.* ]]; then
 fi
 
 echo Configuring Halide...
-cmake -S "${ROOT_DIR}" -B "${CLANG_TIDY_BUILD_DIR}" -Wno-dev -DWITH_TESTS=OFF
+cmake -S "${ROOT_DIR}" -B "${CLANG_TIDY_BUILD_DIR}" -Wno-dev -DWITH_TESTS=OFF -DHalide_WASM_BACKEND=wabt
 
 [ -e "${CLANG_TIDY_BUILD_DIR}/compile_commands.json" ]
 

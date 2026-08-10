@@ -155,6 +155,44 @@ set_tests_properties(
 )
 
 ##
+# Generator compile cache (HL_CACHE_DIR) tests
+#
+# The first build populates a shared cache directory, proving the shipped
+# add_halide_library rules pass HL_CACHE_DIR through to the generator process
+# (checked by check_cache.cmake) and that the produced artifacts link and run.
+# The second build, into a fresh build tree sharing the same cache, exercises
+# the restore path end-to-end: its run_add must still link and execute, so any
+# corruption of the restored artifacts would fail the build. (The hit/miss
+# semantics themselves are covered by test/correctness/generator_cache.cpp.)
+##
+
+set(cache_store "${CMAKE_CURRENT_BINARY_DIR}/cache-store")
+
+add_test(
+    NAME cache_generator_populate
+    COMMAND
+        ${CMAKE_CTEST_COMMAND}
+        --build-and-test "${CMAKE_CURRENT_LIST_DIR}/cache" "${CMAKE_CURRENT_BINARY_DIR}/cache-populate"
+        --build-generator Ninja
+        --build-options -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER} -DCMAKE_BUILD_TYPE=Release
+        "-DHalide_CACHE_DIR=${cache_store}"
+        --test-command ${CMAKE_CTEST_COMMAND} --output-on-failure
+)
+set_tests_properties(cache_generator_populate PROPERTIES FIXTURES_SETUP cache_store)
+
+add_test(
+    NAME cache_generator_reuse
+    COMMAND
+        ${CMAKE_CTEST_COMMAND}
+        --build-and-test "${CMAKE_CURRENT_LIST_DIR}/cache" "${CMAKE_CURRENT_BINARY_DIR}/cache-reuse"
+        --build-generator Ninja
+        --build-options -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER} -DCMAKE_BUILD_TYPE=Release
+        "-DHalide_CACHE_DIR=${cache_store}"
+        --test-command ${CMAKE_CTEST_COMMAND} --output-on-failure
+)
+set_tests_properties(cache_generator_reuse PROPERTIES FIXTURES_REQUIRED cache_store)
+
+##
 # Multi-directory static/shared independence tests
 ##
 
