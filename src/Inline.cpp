@@ -1,6 +1,7 @@
 #include "Inline.h"
 #include "CSE.h"
 #include "Debug.h"
+#include "Definition.h"
 #include "ExternFuncArgument.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -149,7 +150,6 @@ void validate_schedule_inlined_function(Function f) {
 
 Inliner::Inliner(const Function &f) {
     internal_assert(f.can_be_inlined()) << "Illegal to inline " << f.name() << "\n";
-    validate_schedule_inlined_function(f);
     add(f);
 }
 
@@ -354,6 +354,11 @@ void inline_function(Function caller, const Function &f) {
             }
         }
     }
+}
+
+void inline_function(Definition &def, const Function &f) {
+    Inliner i(f);
+    def.mutate(&i);
 }
 
 }  // namespace Internal

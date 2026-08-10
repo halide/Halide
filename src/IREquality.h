@@ -157,8 +157,6 @@ struct IRGraphDeepCompare {
     }
 };
 
-void ir_equality_test();
-
 }  // namespace Internal
 }  // namespace Halide
 

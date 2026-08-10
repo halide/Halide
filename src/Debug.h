@@ -34,23 +34,6 @@ std::ostream &operator<<(std::ostream &, const LoweredFunc &);
 
 bool debug_is_active_impl(int verbosity, const char *file, const char *function, int line);
 
-/** Decide whether a debug() call at the given verbosity/location would print
- * under the rules in `spec`, which uses the same grammar as the
- * HL_DEBUG_CODEGEN environment variable:
- *
- *     verbosity[,filename[:line_low[-line_high]]][@func]
- *
- * Rules are separated by ';' and OR-ed together; a call prints if any rule
- * accepts it. `filename` and `func` are matched as suffixes. Malformed rules
- * are ignored. This is the pure core behind debug_is_active_impl(), exposed so
- * the parser/matcher can be unit tested without touching the process
- * environment. */
-bool debug_spec_accepts(const std::string &spec, int verbosity,
-                        const char *file, const char *function, int line);
-
-/** Test the HL_DEBUG_CODEGEN rule parser/matcher (see debug_spec_accepts). */
-void debug_filter_test();
-
 /** For optional debugging during codegen, use the debug macro as
  * follows:
  *
@@ -128,6 +111,14 @@ inline StreamT &operator<<(StreamT &stream, const PrintSpanLn<T> &wrapper) {
     stream << "}\n";
     return stream;
 }
+
+/** Internal-only accessor for test/correctness/debug_helpers.cpp.
+ * debug_is_active_impl() only ever parses HL_DEBUG_CODEGEN once (cached in a
+ * function-local static), so it can't be exercised against multiple specs
+ * from a single process; this re-parses `spec` fresh on every call using the
+ * same grammar, so the parser/matcher can be unit tested directly. */
+bool debug_spec_accepts(const std::string &spec, int verbosity,
+                        const char *file, const char *function, int line);
 
 }  // namespace Internal
 }  // namespace Halide

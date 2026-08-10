@@ -9,6 +9,7 @@
 #include "Simplify.h"
 #include "Util.h"
 
+#include <algorithm>
 #include <numeric>
 #include <optional>
 
@@ -32,6 +33,66 @@ void collapse_adjacent_dims(MultiRamp *m) {
             i++;
         }
     }
+}
+
+// Walk two shapes innermost-out, emitting the coarsest shape that groups into
+// both of them. For example, {12, 2} and {4, 6} have the common refinement
+// {4, 3, 2}: the first two dims group to give 12 and the last two group to
+// give 6.
+//
+// Returns false if there is no such shape. The prefix products of a refinement
+// each divide the next, and have to include the prefix products of both
+// shapes, so at every step one of the two remaining lane counts must divide
+// the other. {12, 2} and {8, 3} have no common refinement, because neither 12
+// nor 8 divides the other.
+//
+// The two shapes must describe the same number of lanes, and no dim may have a
+// single lane. A one-lane dim would emit a spurious 1 into the refinement, but
+// MultiRamp's constructor strips them, so no shape taken from one has any. Two
+// empty shapes are a pair of scalars, and refine to an empty shape.
+//
+// If from_a is non-null it receives, for each refined dim, the index of the dim
+// of `a` it came from.
+bool common_refinement(const std::vector<int> &a, const std::vector<int> &b,
+                       std::vector<int> *refined, std::vector<int> *from_a) {
+    refined->clear();
+    if (from_a) {
+        from_a->clear();
+    }
+    // x and y are the lanes of the current dim of each shape not yet accounted
+    // for by the refinement. A value of one means the dim is used up and it is
+    // time to move on to the next.
+    size_t i = 0, j = 0;
+    int x = 1, y = 1;
+    while (i < a.size() && j < b.size()) {
+        if (x == 1) {
+            x = a[i];
+        }
+        if (y == 1) {
+            y = b[j];
+        }
+        int g = std::min(x, y);
+        if (std::max(x, y) % g != 0) {
+            return false;
+        }
+        refined->push_back(g);
+        if (from_a) {
+            from_a->push_back((int)i);
+        }
+        x /= g;
+        y /= g;
+        if (x == 1) {
+            i++;
+        }
+        if (y == 1) {
+            j++;
+        }
+    }
+    // Each step consumes the same number of lanes from both shapes, so if they
+    // describe the same number of lanes they run out together.
+    internal_assert(i == a.size() && j == b.size())
+        << "common_refinement: shapes must describe the same number of lanes\n";
+    return true;
 }
 
 }  // namespace
@@ -62,68 +123,32 @@ void MultiRamp::mul(const Expr &e) {
 // common refinement (the sum is not a multiramp). Adding multiramps with
 // different total lane counts is a caller error and triggers an assertion.
 bool MultiRamp::add(const MultiRamp &other) {
-    // We walk through both ramps' dimensions innermost-to-outermost, consuming
-    // gcd(a_lanes, b_lanes) of lanes at a time. When a dimension is only
-    // partially consumed, the remaining part of that dimension corresponds to
-    // an "outer" sub-dim in the refined shape and its stride must be scaled
-    // by the factor just consumed.
+    // Refine the two shapes until they agree, express both in that shape, and
+    // add the strides elementwise.
     internal_assert(total_lanes() == other.total_lanes())
         << "MultiRamp::add: total lane counts must match (" << total_lanes()
         << " vs " << other.total_lanes() << ")";
+    Expr new_base = simplify(base + other.base);
     if (lanes.empty()) {
         // Both are 0-dim scalars.
-        base = simplify(base + other.base);
+        base = new_base;
         return true;
     }
-    MultiRamp result;
-    result.base = simplify(base + other.base);
-    size_t ai = 0, bi = 0;
-    int a_lanes = lanes[0], b_lanes = other.lanes[0];
-    Expr a_stride = strides[0], b_stride = other.strides[0];
-    while (true) {
-        int next_lanes = gcd(a_lanes, b_lanes);
-        if (next_lanes == 1) {
-            // The two next lanes are coprime, e.g:
-            //   [0, 1, 2, 100, 101, 102] + [0, 1, 100, 101, 200, 201]
-            // which has no common refinement.
-            return false;
-        }
-        result.strides.emplace_back(simplify(a_stride + b_stride));
-        result.lanes.push_back(next_lanes);
-        a_lanes /= next_lanes;
-        b_lanes /= next_lanes;
-        bool a_done = false, b_done = false;
-        if (a_lanes == 1) {
-            ai++;
-            if (ai >= lanes.size()) {
-                a_done = true;
-            } else {
-                a_lanes = lanes[ai];
-                a_stride = strides[ai];
-            }
-        } else {
-            // Remaining portion of current A-dim has a scaled stride.
-            a_stride = simplify(a_stride * next_lanes);
-        }
-        if (b_lanes == 1) {
-            bi++;
-            if (bi >= other.lanes.size()) {
-                b_done = true;
-            } else {
-                b_lanes = other.lanes[bi];
-                b_stride = other.strides[bi];
-            }
-        } else {
-            b_stride = simplify(b_stride * next_lanes);
-        }
-        if (a_done && b_done) {
-            collapse_adjacent_dims(&result);
-            *this = std::move(result);
-            return true;
-        }
-        // The up-front lane-count check ensures both sides always exhaust
-        // together, so neither side should be done here.
+    std::vector<int> refined;
+    if (!common_refinement(lanes, other.lanes, &refined, nullptr)) {
+        // e.g. [0, 1, 2, 100, 101, 102] + [0, 1, 100, 101, 200, 201]
+        return false;
     }
+    std::vector<Expr> a_strides, b_strides;
+    bool ok = (strides_for_shape(refined, &a_strides) &&
+               other.strides_for_shape(refined, &b_strides));
+    internal_assert(ok) << "a common refinement should group into both shapes\n";
+    std::vector<Expr> new_strides(refined.size());
+    for (size_t i = 0; i < refined.size(); i++) {
+        new_strides[i] = simplify(a_strides[i] + b_strides[i]);
+    }
+    *this = MultiRamp(new_base, new_strides, refined);
+    return true;
 }
 
 bool MultiRamp::strides_for_shape(const std::vector<int> &target_lanes,
@@ -410,6 +435,52 @@ std::optional<Expr> unbroadcast(const Expr &e) {
     }
 }
 
+// Recognize a list of constant lane indices as a MultiRamp of constants, which
+// is what it means for a shuffle to be a reshaping of its input rather than an
+// arbitrary gather.
+bool multiramp_of_constants(const std::vector<int> &idx, Type t, MultiRamp *result) {
+    const int n = (int)idx.size();
+    internal_assert(n > 0);
+    if (n == 1) {
+        *result = MultiRamp(make_const(t, idx[0]), {}, {});
+        return true;
+    }
+
+    // The innermost dim is the longest prefix that's an arithmetic progression.
+    const int stride = idx[1] - idx[0];
+    int extent = 1;
+    while (extent < n && idx[extent] == idx[0] + extent * stride) {
+        extent++;
+    }
+    if (n % extent) {
+        return false;
+    }
+
+    // Every block of that length has to be the same progression.
+    std::vector<int> starts;
+    starts.reserve(n / extent);
+    for (int b = 0; b < n; b += extent) {
+        for (int j = 0; j < extent; j++) {
+            if (idx[b + j] != idx[b] + j * stride) {
+                return false;
+            }
+        }
+        starts.push_back(idx[b]);
+    }
+
+    MultiRamp outer;
+    if (!multiramp_of_constants(starts, t, &outer)) {
+        return false;
+    }
+
+    std::vector<Expr> strides{make_const(t, stride)};
+    strides.insert(strides.end(), outer.strides.begin(), outer.strides.end());
+    std::vector<int> lanes{extent};
+    lanes.insert(lanes.end(), outer.lanes.begin(), outer.lanes.end());
+    *result = MultiRamp(outer.base, strides, lanes);
+    return true;
+}
+
 // Internal is_multiramp. May leave *result in a partial state on failure;
 // the public is_multiramp below protects callers by only committing on
 // success. Recursive calls go through the public wrapper, so each branch
@@ -429,6 +500,19 @@ bool is_multiramp_impl(const Expr &e, const Scope<Expr> &scope, MultiRamp *resul
         result->strides.push_back(make_zero(elem_t));
         result->lanes.push_back(b->lanes);
         return true;
+    } else if (const Shuffle *s = e.as<Shuffle>(); s && s->vectors.size() == 1) {
+        // A shuffle of a single vector is a reshaping of it, rather than a
+        // gather, when its lane indices are themselves a multiramp that
+        // permutes them. This is the shape flatten_nested_ramps leaves a
+        // strided load in, and what a transpose of a tile looks like.
+        MultiRamp inner, perm;
+        if (is_multiramp(s->vectors[0], scope, &inner) &&
+            multiramp_of_constants(s->indices, inner.base.type(), &perm) &&
+            inner.shuffle(perm)) {
+            *result = inner;
+            return true;
+        }
+        return false;
     } else if (const Ramp *r = e.as<Ramp>()) {
         if (auto stride = unbroadcast(r->stride)) {
             if (is_multiramp(r->base, scope, result)) {
@@ -478,6 +562,7 @@ bool is_multiramp_impl(const Expr &e, const Scope<Expr> &scope, MultiRamp *resul
             }
         }
     }
+
     return false;
 }
 }  // namespace
@@ -491,6 +576,119 @@ bool is_multiramp(const Expr &e, const Scope<Expr> &scope, MultiRamp *result) {
         return true;
     }
     return false;
+}
+
+namespace {
+
+// Strip the cast, broadcasts and lane permutations off a load, moving the
+// ones that rearrange lanes onto a copy of the load's index, where
+// is_multiramp can make sense of them. A broadcast of a load is a load of a
+// broadcast of the index, and likewise for a lane permutation.
+//
+// At most one cast is peeled, so that comparing the element type of the
+// original Expr against the type of the Load tells the caller whether the
+// values were cast, and to what.
+const Load *peel_load(const Expr &e, Expr *index, bool cast_allowed) {
+    if (const Cast *cast = e.as<Cast>()) {
+        if (!cast_allowed) {
+            return nullptr;
+        }
+        return peel_load(cast->value, index, false);
+    } else if (const Broadcast *broadcast = e.as<Broadcast>()) {
+        const Load *load = peel_load(broadcast->value, index, cast_allowed);
+        if (load) {
+            *index = Broadcast::make(*index, broadcast->lanes);
+        }
+        return load;
+    } else if (const Shuffle *shuffle = e.as<Shuffle>()) {
+        if (shuffle->vectors.size() != 1) {
+            return nullptr;
+        }
+        const Load *load = peel_load(shuffle->vectors[0], index, cast_allowed);
+        if (load) {
+            // Shuffling the values loaded is the same as shuffling the
+            // addresses loaded from.
+            *index = Shuffle::make({*index}, shuffle->indices);
+        }
+        return load;
+    } else if (const Load *load = e.as<Load>()) {
+        *index = load->index;
+        return load;
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+int get_subtile(const Expr &index, const std::string &description,
+                std::vector<MultiRamp> *subtiles) {
+    MultiRamp mr;
+    if (!is_multiramp(index, Scope<Expr>::empty_scope(), &mr)) {
+        user_error << "Access to " << description << " not affine: " << index << "\n";
+    }
+    if (!can_prove(mr.alias_free())) {
+        user_error << "Access to " << description << " may have duplicated lanes: "
+                   << index << "\n";
+    }
+    if (subtiles->empty()) {
+        subtiles->push_back(std::move(mr));
+        return 0;
+    }
+
+    // All strides and lanes must match across all subtiles, or we give up.
+    const MultiRamp &first = (*subtiles)[0];
+    if (mr.dimensions() != first.dimensions()) {
+        user_error << "Access to " << description << " does not have the same shape as "
+                   << "other accesses to the same memory.";
+    }
+    for (int i = 0; i < first.dimensions(); i++) {
+        if (!can_prove(mr.strides[i] == first.strides[i]) ||
+            mr.lanes[i] != first.lanes[i]) {
+            user_error << "Access to " << description << " has different size and strides "
+                       << "to other accesses to the same memory. All accesses must have "
+                       << "the same subtile size and strides: " << index;
+        }
+    }
+
+    // Now check for disjointedness. Add a synthetic dimension, the purpose of
+    // which will become clear.
+    mr.strides.emplace_back();
+    mr.lanes.push_back(2);
+    for (int i = 0; i < (int)subtiles->size(); i++) {
+        const MultiRamp &other = (*subtiles)[i];
+        // One of two things must be true:
+        // 1) All of the lanes of mr equal the corresponding lane of other.
+        // We've already checked the strides and lanes, so it's just a matter of
+        // checking the base.
+        if (can_prove(mr.base == other.base)) {
+            return i;
+        }
+
+        // 2) None of the lanes of mr equal any of the lanes of other. To do
+        // this we construct a combined mr that can be either 'mr' or 'other',
+        // and ask if it's alias-free. This is what the synthetic dimension was
+        // for.
+        mr.strides.back() = mr.base - other.base;
+        if (!can_prove(mr.alias_free())) {
+            user_error << "Failed to prove access to " << description << " does not "
+                       << "partially overlap another distinct access: " << index;
+        }
+    }
+
+    // Didn't already exist and didn't alias with anything.
+    mr.strides.pop_back();
+    mr.lanes.pop_back();
+    subtiles->push_back(std::move(mr));
+    return (int)subtiles->size() - 1;
+}
+
+const Load *is_load_of_multiramp(const Expr &e, const Scope<Expr> &scope, MultiRamp *result) {
+    Expr index;
+    const Load *load = peel_load(e, &index, true);
+    if (load && is_multiramp(index, scope, result)) {
+        return load;
+    }
+    return nullptr;
 }
 
 Expr MultiRamp::operator==(const MultiRamp &other) const {
@@ -575,6 +773,71 @@ std::vector<MultiRamp::PeeledDim> MultiRamp::alias_free_slice() {
     }
     *this = std::move(remaining);
     return peeled;
+}
+
+bool MultiRamp::shuffle(const MultiRamp &mask) {
+    if (mask.total_lanes() != total_lanes()) {
+        return false;
+    }
+    // A permutation of [0, n) starts at zero and steps by constants.
+    auto base = as_const_int(simplify(mask.base));
+    if (!base || *base != 0) {
+        return false;
+    }
+    std::vector<int64_t> mask_strides;
+    for (const Expr &e : mask.strides) {
+        auto s = as_const_int(simplify(e));
+        if (!s) {
+            return false;
+        }
+        mask_strides.push_back(*s);
+    }
+
+    // Sorting the mask's dims by stride has to give the prefix products of
+    // their lane counts. Anything else walks the lane index in a way that
+    // isn't a reshaping of it.
+    std::vector<int> order(mask_strides.size());
+    std::iota(order.begin(), order.end(), 0);
+    std::sort(order.begin(), order.end(),
+              [&](int a, int b) { return mask_strides[a] < mask_strides[b]; });
+    std::vector<int> mask_shape;
+    int64_t expected = 1;
+    for (int d : order) {
+        if (mask_strides[d] != expected) {
+            return false;
+        }
+        mask_shape.push_back(mask.lanes[d]);
+        expected *= mask.lanes[d];
+    }
+
+    // Refine the mask's shape and ours against each other, tracking which of
+    // the mask's dims each refined dim came from.
+    std::vector<int> refined, from_mask_dim;
+    if (!common_refinement(mask_shape, lanes, &refined, &from_mask_dim)) {
+        return false;
+    }
+    // A common refinement groups into our dims, so this cannot fail.
+    std::vector<Expr> refined_strides;
+    bool ok = strides_for_shape(refined, &refined_strides);
+    internal_assert(ok) << "refined shape does not group into the multiramp's dims\n";
+
+    // Emit the refined dims grouped and ordered the way the mask reads them.
+    std::vector<int> sorted_pos(order.size());
+    for (int k = 0; k < (int)order.size(); k++) {
+        sorted_pos[order[k]] = k;
+    }
+    std::vector<Expr> new_strides;
+    std::vector<int> new_lanes;
+    for (int d = 0; d < mask.dimensions(); d++) {
+        for (size_t k = 0; k < refined.size(); k++) {
+            if (from_mask_dim[k] == sorted_pos[d]) {
+                new_strides.push_back(refined_strides[k]);
+                new_lanes.push_back(refined[k]);
+            }
+        }
+    }
+    *this = MultiRamp(this->base, new_strides, new_lanes);
+    return true;
 }
 
 int MultiRamp::rotate_stride_one_innermost() {

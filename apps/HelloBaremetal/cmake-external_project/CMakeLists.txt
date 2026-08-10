@@ -1,7 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-
-# Enable assembly language (.s) support additionally
-project(HelloBaremetal LANGUAGES C CXX ASM)
+project(HelloBaremetal)
 
 # Set up C++ language settings
 set(CMAKE_CXX_STANDARD 17)
@@ -10,7 +8,6 @@ set(CMAKE_CXX_EXTENSIONS NO)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/bin)
 
-set(GEN_EXE "add.generator")
 set(GEN_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/generator)
 
 # Step 1
@@ -22,9 +19,9 @@ ExternalProject_Add(
     SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/generator
     BINARY_DIR ${GEN_BINARY_DIR}
     INSTALL_COMMAND ""
-    CMAKE_ARGS -DGEN_EXE=${GEN_EXE}
+    CMAKE_ARGS -DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}
+    CONFIGURE_HANDLED_BY_BUILD TRUE
 )
-
 
 # Step 2
 # Build application with cross compiler,
@@ -36,16 +33,15 @@ set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
 # NOTE : find_package(HelloBaremetal-add_generator REQUIRED) is not ready at configuration time.
 # Instead, declare the generator executable as imported, which is built in external project
-add_executable(${GEN_EXE} IMPORTED)
-# Specify the location of exe file to import
-set_property(TARGET ${GEN_EXE} PROPERTY IMPORTED_LOCATION ${GEN_BINARY_DIR}/${GEN_EXE})
+add_executable(add.generator IMPORTED)
+set_property(TARGET add.generator PROPERTY IMPORTED_LOCATION ${GEN_BINARY_DIR}/add.generator)
 # Associate with external project so that it invokes build process
-add_dependencies(${GEN_EXE} gen_project)
+add_dependencies(add.generator gen_project)
 
 # Generate filter function
 add_halide_library(
     add
-    FROM ${GEN_EXE}
+    FROM add.generator
     GENERATOR add
     # You may set Target feature in addition to what is set in the toolchain file
     FEATURES debug
@@ -58,8 +54,17 @@ add_halide_library(
 add_executable(add_filter ${SRC_DIR}/filter.cpp)
 target_link_libraries(add_filter PRIVATE Halide::ImageIO add)
 
-# Depending on the target CPU, we need to enable Arm NEON manually
-# if the executable contains any SIMD instructions.
-target_sources(add_filter PRIVATE "$<$<BOOL:${BAREMETAL}>:${SRC_DIR}/enable_neon.s>")
-# It is safe to do it in boot up process before main function (or C runtime) starts.
-target_link_options(add_filter PRIVATE "$<$<BOOL:${BAREMETAL}>:--entry=_enable_neon>")
+# Test that the app actually works, under QEMU with semihosting. Only
+# meaningful for the actual bare-metal cross-compile; in the host-target
+# build mode there's no toolchain to run it through.
+if (CMAKE_CROSSCOMPILING)
+    enable_testing()
+    set(IMAGE ${SRC_DIR}/../images/gray_small.pgm)
+    if (EXISTS ${IMAGE})
+        add_test(
+            NAME add_filter
+            COMMAND ${SRC_DIR}/run_baremetal.sh $<TARGET_FILE:add_filter> ${IMAGE} 16 out.pgm
+        )
+        set_tests_properties(add_filter PROPERTIES PASS_REGULAR_EXPRESSION "Success!")
+    endif ()
+endif ()

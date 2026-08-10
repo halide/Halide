@@ -232,3 +232,16 @@ jobs:
         run: |
           cmake -S . -B build -DHalide_TARGET=wasm-32-wasmrt-wasm_simd128-wasm_threads
           cmake --build build --target build_generator
+
+      # HelloWasm is a super-build (not add_subdirectory()'d from apps/), so
+      # it needs its own configure/build/test rather than riding along with
+      # the "Configure/Build/Test apps" steps above.
+      - name: Configure HelloWasm
+        run: cmake -S . -B build -DCMAKE_PREFIX_PATH="${{ github.workspace }}/install"
+        working-directory: apps/HelloWasm
+
+      - name: Build and test HelloWasm
+        run: |
+          cmake --build build
+          ctest --test-dir build --output-on-failure
+        working-directory: apps/HelloWasm

@@ -271,6 +271,13 @@ actually contains the compiled libraries; you generally don't need to
 `HalideCompiler_ROOT`/`-DHalideCompiler_DIR=...` when pointing CMake at a
 specific installed build.
 
+Autoscheduler plugins (see [Autoschedulers](#autoschedulers)) are resolved
+separately, via a `HalideAutoschedulers` package, and are always available to
+`add_halide_library(... AUTOSCHEDULER ...)` regardless of cross-compiling --
+unlike `HalideCompiler`, this package's targets are never linked against (only
+dlopen()'d, by their build path, at Generator run time), so there's no reason to
+gate them behind the `JIT`/`Python` components.
+
 Note that `static`/`shared`, unlike `JIT`/`Python`, never force this load by
 themselves -- requesting one merely records your preference for whichever
 package eventually loads the compiled compiler (whether that's this same
@@ -313,10 +320,11 @@ Variables set by the package:
 
 Variables that control package behavior:
 
-| Variable                  | Description                                                                                                                                     |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Halide_PYTHON_LAUNCHER`  | Semicolon separated list containing a command to launch the Python interpreter. Can be used to set environment variables for Python generators. |
-| `Halide_NO_DEFAULT_FLAGS` | Off by default. When enabled, suppresses recommended compiler flags that would be added by `add_halide_generator`                               |
+| Variable                  | Description                                                                                                                                                                                                    |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Halide_PYTHON_LAUNCHER`  | Semicolon separated list containing a command to launch the Python interpreter. Can be used to set environment variables for Python generators.                                                                |
+| `Halide_NO_DEFAULT_FLAGS` | Off by default. When enabled, suppresses recommended compiler flags that would be added by `add_halide_generator`                                                                                              |
+| `Halide_CACHE_DIR`        | Defaults to `$ENV{HL_CACHE_DIR}`. When set, routes `HL_CACHE_DIR` to every generator/GenRT invocation so it can reuse cached artifacts instead of recompiling. See [doc/GeneratorCache.md](GeneratorCache.md). |
 
 ## Imported targets
 
@@ -347,6 +355,11 @@ The following targets only guaranteed when `WITH_AUTOSCHEDULERS` is true:
 | `Halide::Anderson2021`  | the Anderson, et.al. 2021 autoscheduler (full GPU support)      |
 | `Halide::Li2018`        | the Li et.al. 2018 gradient autoscheduler (limited GPU support) |
 | `Halide::Mullapudi2016` | the Mullapudi et.al. 2016 autoscheduler (no GPU support)        |
+
+These come from a separate `HalideAutoschedulers` package (distinct from
+`HalideCompiler`), loaded automatically the first time
+`add_halide_library(... AUTOSCHEDULER ...)` needs one -- including while
+cross-compiling.
 
 ## Functions
 

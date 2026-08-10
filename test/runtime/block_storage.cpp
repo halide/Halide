@@ -146,6 +146,39 @@ int main(int argc, char **argv) {
         HALIDE_CHECK(user_context, e2.f32 == s2.f32);
     }
 
+    // test growing past the initial capacity
+    {
+        BlockStorage::Config config = BlockStorage::default_config();
+        config.entry_size = sizeof(int);
+
+        const size_t entry_count = 2 * BlockStorage::default_capacity;
+
+        // Appending past the default capacity reallocates, so the entries
+        // already stored have to survive the move.
+        BlockStorage bs1(user_context, config);
+        for (size_t i = 0; i < entry_count; ++i) {
+            int value = (int)i;
+            bs1.append(user_context, &value);
+        }
+        HALIDE_CHECK(user_context, bs1.size() == entry_count);
+        for (size_t i = 0; i < entry_count; ++i) {
+            HALIDE_CHECK(user_context, read_as<int>(bs1, i) == (int)i);
+        }
+
+        // fill() resizes before copying, which grows the allocation the same way.
+        int values[2 * BlockStorage::default_capacity];
+        for (size_t i = 0; i < entry_count; ++i) {
+            values[i] = (int)(entry_count - i);
+        }
+
+        BlockStorage bs2(user_context, config);
+        bs2.fill(user_context, values, entry_count);
+        HALIDE_CHECK(user_context, bs2.size() == entry_count);
+        for (size_t i = 0; i < entry_count; ++i) {
+            HALIDE_CHECK(user_context, read_as<int>(bs2, i) == values[i]);
+        }
+    }
+
     print(user_context) << "Success!\n";
     return 0;
 }

@@ -25,10 +25,12 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "ImageParam.h"
+#include "Inline.h"
 #include "LLVM_Output.h"
 #include "Lower.h"
 #include "Param.h"
 #include "PrintLoopNest.h"
+#include "RealizationOrder.h"
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
@@ -593,7 +595,10 @@ class SubstituteSelfReference : public IRMutator {
             vector<Expr> args;
             args.insert(args.end(), c->args.begin(), c->args.end());
             args.insert(args.end(), new_args.begin(), new_args.end());
-            expr = Call::make(substitute, args, c->value_index);
+            // This rewrites a Func's self-reference into a self-reference of
+            // the rfactor intermediate, so it must not follow global wrappers.
+            expr = Call::make(substitute, args, c->value_index,
+                              /*follow_global_wrappers=*/false);
         }
         return expr;
     }
@@ -2235,6 +2240,9 @@ Func create_in_wrapper(Function wrapped_fn, const string &wrapper_name) {
     Func wrapper(wrapped_fn.new_function_in_same_group(wrapper_name));
     vector<Var> args = Func(wrapped_fn).args();
     wrapper(args) = Func(wrapped_fn)(args);
+    // The body's calls to wrapped_fn must not follow its global wrapper (or the
+    // wrapper would call itself); add_wrapper -> WeakenFunctionPtrs clears the
+    // follow flag on them.
     return wrapper;
 }
 
@@ -2252,36 +2260,58 @@ Func create_clone_wrapper(Function wrapped_fn, const string &wrapper_name) {
     return wrapper;
 }
 
+// The set of Func names that count as "reaching" the wrapped Func during
+// custom-wrapper resolution: the wrapped Func itself plus all of its existing
+// custom wrappers/clones. Because in()/clone_in() rewrite consumers eagerly, a
+// Func that has already been wrapped calls the wrapper rather than the original,
+// so a call to any existing custom wrapper must be treated as equivalent to a
+// call to the original. The global wrapper (the "" entry) is deliberately
+// excluded: custom wraps are independent of it.
+std::set<std::string> wrapper_stop_names(const Function &target) {
+    std::set<std::string> names;
+    names.insert(target.name());
+    for (const auto &w : target.wrappers()) {
+        if (!w.first.empty()) {
+            names.insert(Function(w.second).name());
+        }
+    }
+    return names;
+}
+
 // Walk down the call graph from 'start'. Whenever we find a Func that directly
-// calls 'target', record it and stop descending that branch — we don't want to
-// pick up unrelated direct callers that happen to live deeper in the subtree.
-void collect_direct_callers_of(const Function &target,
+// calls the wrapped Func (or an existing wrapper of it, per 'stop_names'),
+// record it and stop descending that branch — we don't want to pick up
+// unrelated direct callers that happen to live deeper in the subtree.
+void collect_direct_callers_of(const std::set<std::string> &stop_names,
                                const Function &start,
                                std::set<std::string> &visited,
                                std::map<std::string, Function> &result) {
-    if (start.name() == target.name()) {
+    if (stop_names.count(start.name())) {
+        // 'start' is the wrapped Func itself or one of its existing wrappers;
+        // don't record it or descend through it.
         return;
     }
     if (!visited.insert(start.name()).second) {
         return;
     }
     std::map<std::string, Function> direct = find_direct_calls(start);
-    if (direct.count(target.name())) {
-        result.emplace(start.name(), start);
-        return;
+    for (const std::string &name : stop_names) {
+        if (direct.count(name)) {
+            result.emplace(start.name(), start);
+            return;
+        }
     }
     for (const auto &kv : direct) {
-        collect_direct_callers_of(target, kv.second, visited, result);
+        collect_direct_callers_of(stop_names, kv.second, visited, result);
     }
 }
 
 // Expand a user-supplied list of caller Funcs to the set of *direct* callers of
-// 'target' that lie on a path from any of those callers down to 'target'.
-// Funcs that already directly call 'target' pass through unchanged. If a Func
-// has no static path to 'target' at all, leave it alone: the IR may not yet
-// reflect a wrapper rewrite from a previous in()/clone_in(), and the existing
-// in()/clone_in() semantics permit registering a wrapper for such Funcs.
+// 'target' (through any existing wrappers) that lie on a path from any of those
+// callers down to 'target'. If a Func has no static path to 'target' at all,
+// leave it alone.
 vector<Func> resolve_transitive_callers(const Function &target, const vector<Func> &fs) {
+    std::set<std::string> stop_names = wrapper_stop_names(target);
     vector<Func> out;
     std::set<std::string> emitted;
     auto emit = [&](const Function &g) {
@@ -2292,8 +2322,16 @@ vector<Func> resolve_transitive_callers(const Function &target, const vector<Fun
     for (const Func &f : fs) {
         std::map<std::string, Function> direct_callers;
         std::set<std::string> visited;
-        collect_direct_callers_of(target, f.function(), visited, direct_callers);
+        collect_direct_callers_of(stop_names, f.function(), visited, direct_callers);
         if (direct_callers.empty()) {
+            // No transitive path was found. That's legitimate only if 'f' itself
+            // directly calls the wrapped Func (e.g. 'f' is an existing wrapper of
+            // it); then we wrap 'f' directly. Otherwise 'f' does not use the
+            // wrapped Func at all, which is a user error.
+            user_assert(find_direct_calls(f.function()).count(target.name()))
+                << "Cannot wrap Func \"" << target.name() << "\" in \"" << f.name()
+                << "\" because \"" << f.name() << "\" does not call \""
+                << target.name() << "\".\n";
             emit(f.function());
         } else {
             for (const auto &kv : direct_callers) {
@@ -2306,57 +2344,87 @@ vector<Func> resolve_transitive_callers(const Function &target, const vector<Fun
 
 Func get_wrapper(Function wrapped_fn, string wrapper_name, const vector<Func> &fs_in, bool clone) {
     vector<Func> fs = fs_in.empty() ? fs_in : resolve_transitive_callers(wrapped_fn, fs_in);
-    // Either all Funcs in 'fs' have the same wrapper or they don't already
-    // have any wrappers. Otherwise, throw an error. If 'fs' is empty, then
-    // it is a global wrapper.
     const map<string, FunctionPtr> &wrappers = wrapped_fn.wrappers();
     wrapper_name += ("$" + std::to_string(wrappers.size()));
-    const auto &iter = fs.empty() ? wrappers.find("") : wrappers.find(fs[0].name());
-    if (iter == wrappers.end()) {
-        // Make sure the other Funcs also don't have any wrappers
+
+    if (fs.empty()) {
+        // Global wrapper (Func::in()). Idempotent: return the existing one, if
+        // any. Unlike custom wrappers it lives in a dedicated global_wrapper
+        // link rather than the wrappers map.
+        Function existing = wrapped_fn.global_wrapper();
+        if (existing.get_contents().defined()) {
+            return Func(existing);
+        }
+    } else {
+        // Either all Funcs in 'fs' already share the same wrapper, or none of
+        // them have one. Otherwise it's an error.
+        const auto &iter = wrappers.find(fs[0].name());
+        if (iter != wrappers.end()) {
+            internal_assert(iter->second.defined());
+            validate_wrapper(wrapped_fn.name(), wrappers, fs, iter->second);
+            Function wrapper(iter->second);
+            internal_assert(wrapper.frozen());
+            return Func(wrapper);
+        }
         for (size_t i = 1; i < fs.size(); ++i) {
             user_assert(wrappers.count(fs[i].name()) == 0)
                 << "Cannot define the wrapper since " << fs[i].name()
                 << " already has a wrapper while " << fs[0].name() << " doesn't \n";
         }
-        Func wrapper = clone ? create_clone_wrapper(wrapped_fn, wrapper_name) : create_in_wrapper(wrapped_fn, wrapper_name);
-        Function wrapper_fn = wrapper.function();
-
-        // Build a profiler display name like "<wrapped>.in()" or
-        // "<wrapped>.in(<c1>, <c2>)" using the wrapped Func's display
-        // name and the consumers' display names (falling back to the
-        // IR-level name in each case). For .clone_in() use "clone_in".
-        auto display = [](const Function &f) {
-            return f.profiler_display_name().empty() ? f.name() : f.profiler_display_name();
-        };
-        std::string profiler_name = display(wrapped_fn) + (clone ? ".clone_in(" : ".in(");
-        for (size_t i = 0; i < fs.size(); i++) {
-            if (i > 0) {
-                profiler_name += ", ";
-            }
-            profiler_name += display(fs[i].function());
-        }
-        profiler_name += ")";
-        wrapper_fn.set_profiler_display_name(profiler_name);
-
-        if (fs.empty()) {
-            // Add global wrapper
-            wrapped_fn.add_wrapper("", wrapper_fn);
-        } else {
-            for (const Func &f : fs) {
-                user_assert(wrapped_fn.name() != f.name())
-                    << "Cannot create wrapper of itself (\"" << wrapped_fn.name() << "\")\n";
-                wrapped_fn.add_wrapper(f.name(), wrapper_fn);
-            }
-        }
-        return wrapper;
     }
-    internal_assert(iter->second.defined());
-    validate_wrapper(wrapped_fn.name(), wrappers, fs, iter->second);
 
-    Function wrapper(iter->second);
-    internal_assert(wrapper.frozen());
-    return Func(wrapper);
+    Func wrapper = clone ? create_clone_wrapper(wrapped_fn, wrapper_name) : create_in_wrapper(wrapped_fn, wrapper_name);
+    Function wrapper_fn = wrapper.function();
+
+    // Build a profiler display name like "<wrapped>.in()" or
+    // "<wrapped>.in(<c1>, <c2>)" using the wrapped Func's display
+    // name and the consumers' display names (falling back to the
+    // IR-level name in each case). For .clone_in() use "clone_in".
+    auto display = [](const Function &f) {
+        return f.profiler_display_name().empty() ? f.name() : f.profiler_display_name();
+    };
+    std::string profiler_name = display(wrapped_fn) + (clone ? ".clone_in(" : ".in(");
+    for (size_t i = 0; i < fs.size(); i++) {
+        if (i > 0) {
+            profiler_name += ", ";
+        }
+        profiler_name += display(fs[i].function());
+    }
+    profiler_name += ")";
+    wrapper_fn.set_profiler_display_name(profiler_name);
+
+    if (fs.empty()) {
+        // Global wrapper. Calls to wrapped_fn follow global-wrapper links (see
+        // FuncRef::operator Expr and FunctionPtr::get), so all consumers --
+        // present and future -- resolve to it, and deep_copy materializes that
+        // at the start of lowering.
+        wrapped_fn.set_global_wrapper(wrapper_fn);
+    } else {
+        for (const Func &f : fs) {
+            user_assert(wrapped_fn.name() != f.name())
+                << "Cannot create wrapper of itself (\"" << wrapped_fn.name() << "\")\n";
+            wrapped_fn.add_wrapper(f.name(), wrapper_fn);
+
+            // Eagerly redirect this consumer's calls to wrapped_fn to the new
+            // wrapper.
+            Function consumer(f.function());
+            FunctionPtr replacement = wrapper_fn.get_contents();
+            replacement.follow_global_wrappers = true;
+            if (consumer.get_contents().group() == wrapper_fn.get_contents().group()) {
+                // References within a FunctionGroup must be weak.
+                replacement.weaken();
+            }
+            std::map<FunctionPtr, FunctionPtr> subs;
+            subs[wrapped_fn.get_contents()] = replacement;
+            consumer.substitute_calls(subs);
+
+            // The rewrite only touched the definitions that existed at this
+            // point, so freeze the consumer: adding more definitions to it
+            // afterwards would silently fail to be wrapped.
+            consumer.freeze();
+        }
+    }
+    return wrapper;
 }
 
 }  // anonymous namespace
@@ -3166,6 +3234,46 @@ Func &Func::compute_inline() {
     return compute_at(LoopLevel::inlined());
 }
 
+Stage &Stage::eager_inline(const std::vector<Func> &fs) {
+    vector<Function> funcs;
+    map<string, Func> by_name;
+    for (const Func &f : fs) {
+        user_assert(f.defined())
+            << "eager_inline() was passed an undefined Func.\n";
+        user_assert(f.function().can_be_inlined())
+            << "eager_inline() cannot inline " << f.name()
+            << ": it must be a pure Func with no update or extern definition and "
+            << "no specializations.\n";
+        funcs.push_back(f.function());
+        by_name.emplace(f.name(), f);
+    }
+
+    // Inlining rewrites this stage's definition in place, replacing every direct
+    // call to f with f's body. A call to g inside f's body only becomes visible
+    // to us after f is inlined, so a caller must be inlined before its callees.
+    // topological_order() gives realization order (callees before callers);
+    // reverse it to inline callers first, so passing fs in any order works.
+    map<string, Function> env = Internal::build_environment(funcs);
+    vector<string> order = Internal::topological_order(funcs, env);
+    std::reverse(order.begin(), order.end());
+
+    for (const string &name : order) {
+        auto it = by_name.find(name);
+        if (it != by_name.end()) {
+            Internal::inline_function(definition, it->second.function());
+        }
+    }
+    return *this;
+}
+
+Func &Func::eager_inline(const std::vector<Func> &fs) {
+    invalidate_cache();
+    // Target the initial (pure) definition, mirroring other Func-level scheduling
+    // shorthands; use f.update(n).eager_inline(...) to inline into an update.
+    Stage(func, func.definition(), 0).eager_inline(fs);
+    return *this;
+}
+
 Func &Func::trace_loads() {
     invalidate_cache();
     func.trace_loads();
@@ -3508,7 +3616,7 @@ FuncRef::operator Expr() const {
         << "Can't convert a reference Func \"" << func.name()
         << "\" to an Expr, because " << func.name() << " returns a Tuple.\n";
 
-    return Call::make(func, args);
+    return Call::make(func, args, 0, /*follow_global_wrappers=*/true);
 }
 
 FuncTupleElementRef FuncRef::operator[](int i) const {
@@ -3616,7 +3724,7 @@ Stage FuncTupleElementRef::operator=(const FuncRef &e) {
 }
 
 FuncTupleElementRef::operator Expr() const {
-    return Internal::Call::make(func_ref.function(), args, idx);
+    return Internal::Call::make(func_ref.function(), args, idx, /*follow_global_wrappers=*/true);
 }
 
 Realization Func::realize(std::vector<int32_t> sizes, const Target &target) {

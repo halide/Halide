@@ -128,6 +128,7 @@ target_sources(
     FuseGPUThreadLoops.h
     FuzzFloatStores.h
     Generator.h
+    GeneratorCache.h
     HexagonOffload.h
     HexagonOptimize.h
     ImageParam.h
@@ -224,7 +225,6 @@ target_sources(
     Var.h
     VectorizeLoops.h
     WasmExecutor.h
-    WrapCalls.h
     # keep-sorted end
 )
 
@@ -309,6 +309,7 @@ target_sources(
     FuseGPUThreadLoops.cpp
     FuzzFloatStores.cpp
     Generator.cpp
+    GeneratorCache.cpp
     HexagonOffload.cpp
     HexagonOptimize.cpp
     ImageParam.cpp
@@ -420,7 +421,6 @@ target_sources(
     Var.cpp
     VectorizeLoops.cpp
     WasmExecutor.cpp
-    WrapCalls.cpp
     # keep-sorted end
 )
 

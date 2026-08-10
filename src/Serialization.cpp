@@ -1036,6 +1036,18 @@ Offset<Serialize::Func> Serializer::serialize_function(FlatBufferBuilder &builde
     const bool no_profiling = function.should_not_profile();
     const auto profiler_display_name_serialized = serialize_string(builder, function.profiler_display_name());
     const bool frozen = function.frozen();
+
+    Offset<Serialize::WrapperRef> global_wrapper_serialized = 0;
+    const Function global_wrapper = function.global_wrapper();
+    if (global_wrapper.get_contents().defined()) {
+        auto global_wrapper_name_serialized = serialize_string(builder, global_wrapper.name());
+        int func_index = -1;
+        if (auto it = this->func_mappings.find(global_wrapper.name()); it != this->func_mappings.end()) {
+            func_index = it->second;
+        }
+        global_wrapper_serialized = Serialize::CreateWrapperRef(builder, global_wrapper_name_serialized, func_index);
+    }
+
     auto func = Serialize::CreateFunc(builder,
                                       name_serialized,
                                       origin_name_serialized,
@@ -1059,7 +1071,8 @@ Offset<Serialize::Func> Serializer::serialize_function(FlatBufferBuilder &builde
                                       builder.CreateVector(trace_tags_serialized),
                                       no_profiling,
                                       profiler_display_name_serialized,
-                                      frozen);
+                                      frozen,
+                                      global_wrapper_serialized);
     return func;
 }
 

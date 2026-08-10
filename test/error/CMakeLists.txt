@@ -22,6 +22,8 @@ tests(
     bad_const_cast.cpp
     bad_device_api.cpp
     bad_dimensions.cpp
+    bad_eager_inline.cpp
+    bad_eager_inline_undefined.cpp
     bad_extern_split.cpp
     bad_fold.cpp
     bad_func_object.cpp
@@ -145,6 +147,7 @@ tests(
     uninitialized_param.cpp
     uninitialized_param_2.cpp
     unknown_target.cpp
+    update_after_wrap.cpp
     vector_tile.cpp
     vectorize_dynamic.cpp
     vectorize_too_little.cpp

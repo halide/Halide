@@ -98,7 +98,7 @@ void scenario_naive_rhs() {
 // A gather-style matmul with an indirect row index — natural for sparse /
 // pruned matmul, indirect attention, embedding lookups. The LHS load index
 // goes through a table lookup, so the multiramp lift fails. Triggers the
-// "loads indices are not affine" path in convert_to_matmul.
+// "not loads with affine indices" path in convert_to_matmul.
 void scenario_indirect() {
     Buffer<int8_t> A(64, 64);
     Buffer<int8_t> B(4, 64, 16);
@@ -111,6 +111,26 @@ void scenario_indirect() {
     mm(x, y) +=
         cast<int32_t>(A(r, clamp(row_indices(y), 0, 10))) *
         cast<int32_t>(B(r % 4, x, r / 4));
+    schedule_matmul(mm, r.x, 8, 8, 8);
+    mm.in().compile_jit(amx_target);
+}
+
+// A matmul over uint8 buffers whose values are reinterpreted as int8 before
+// multiplying. AMX types its tile registers by what was loaded, and their
+// signedness picks which of the four integer tdpb instructions runs, so
+// accepting this would run an unsigned multiply for a signed algorithm.
+// Triggers the "cast after being loaded" path in convert_to_matmul.
+void scenario_sign_changing_cast() {
+    Buffer<uint8_t> A(64, 64);
+    Buffer<uint8_t> B(4, 64, 16);
+    Var x("x"), y("y");
+    RDom r(0, 64, "r");
+
+    Func mm("matmul_sign_cast");
+    mm(x, y) = cast<int32_t>(0);
+    mm(x, y) +=
+        cast<int32_t>(cast<int8_t>(A(r, y))) *
+        cast<int32_t>(cast<int8_t>(B(r % 4, x, r / 4)));
     schedule_matmul(mm, r.x, 8, 8, 8);
     mm.in().compile_jit(amx_target);
 }
@@ -167,6 +187,45 @@ void scenario_widening_16bit() {
     mm(x, y) = cast<int32_t>(0);
     mm(x, y) += cast<int32_t>(A(r, y)) * cast<int32_t>(B(r % 4, x, r / 4));
     schedule_matmul(mm, r.x, 8, 8, 8);
+    mm.in().compile_jit(amx_target);
+}
+
+// Two matmuls into the same allocation with tiles of the same rank but
+// different extents, so they disagree about the shape of a tile register.
+void scenario_mismatched_strides() {
+    Buffer<int8_t> A(64, 64), C(64, 64);
+    Buffer<int8_t> B(4, 64, 16), D(4, 64, 16);
+    Var x("x"), y("y");
+    RDom r1(0, 64, "r1"), r2(0, 64, "r2");
+
+    Func mm("matmul_mismatched");
+    mm(x, y) = cast<int32_t>(0);
+    mm(x, y) += cast<int32_t>(A(r1, y)) * cast<int32_t>(B(r1 % 4, x, r1 / 4));
+    mm(x, y) += cast<int32_t>(C(r2, y)) * cast<int32_t>(D(r2 % 4, x, r2 / 4));
+
+    Var rxi("rxi"), ryi("ryi");
+    RVar rri("rri"), rro("rro");
+    mm.compute_at(mm.in(), x).store_in(MemoryType::AMXTile);
+    mm.update(0)
+        .tile(x, y, rxi, ryi, 8, 4, TailStrategy::GuardWithIf)
+        .split(r1.x, rro, rri, 8)
+        .reorder(rri, rxi, ryi, rro, x, y)
+        .atomic()
+        .vectorize(rri)
+        .vectorize(rxi)
+        .vectorize(ryi);
+    mm.update(1)
+        .tile(x, y, rxi, ryi, 4, 8, TailStrategy::GuardWithIf)
+        .split(r2.x, rro, rri, 8)
+        .reorder(rri, rxi, ryi, rro, x, y)
+        .atomic()
+        .vectorize(rri)
+        .vectorize(rxi)
+        .vectorize(ryi);
+    Var ixi("ixi"), iyi("iyi");
+    mm.compute_at(mm.in(), x).tile(x, y, ixi, iyi, 8, 8).vectorize(ixi).vectorize(iyi);
+    Var mmxi("mmxi"), mmyi("mmyi");
+    mm.in().tile(x, y, mmxi, mmyi, 8, 8).vectorize(mmxi).vectorize(mmyi);
     mm.in().compile_jit(amx_target);
 }
 
@@ -288,16 +347,18 @@ int main(int argc, char **argv) {
 
     int failures = 0;
 
-    failures += !expect_user_error("too_large", scenario_too_large);
-    failures += !expect_user_error("bad_result_type", scenario_bad_result_type);
-    failures += !expect_user_error("naive_rhs", scenario_naive_rhs);
-    failures += !expect_user_error("indirect", scenario_indirect);
-    failures += !expect_user_error("conv1d", scenario_conv1d);
-    failures += !expect_user_error("no_matmul", scenario_no_matmul);
-    failures += !expect_user_error("widening_16bit", scenario_widening_16bit);
-    failures += !expect_user_error("inconsistent_tiles", scenario_inconsistent_tiles);
-    failures += !expect_user_error("not_a_matmul_pattern", scenario_not_a_matmul_pattern);
-    failures += !expect_user_error("matmul_by_constant", scenario_matmul_by_constant);
+    failures += !expect_user_error("too_large", "too large to fit in", scenario_too_large);
+    failures += !expect_user_error("bad_result_type", "must yield 32-bit integers", scenario_bad_result_type);
+    failures += !expect_user_error("naive_rhs", "storage layout for a matrix multiply operand is unsupported", scenario_naive_rhs);
+    failures += !expect_user_error("indirect", "not loads with affine indices", scenario_indirect);
+    failures += !expect_user_error("sign_changing_cast", "cast after being loaded", scenario_sign_changing_cast);
+    failures += !expect_user_error("conv1d", "storage layout for a matrix multiply operand is unsupported", scenario_conv1d);
+    failures += !expect_user_error("no_matmul", "no matrix multiply operation was found", scenario_no_matmul);
+    failures += !expect_user_error("widening_16bit", "operand or result types are not supported", scenario_widening_16bit);
+    failures += !expect_user_error("mismatched_strides", "has different size and strides", scenario_mismatched_strides);
+    failures += !expect_user_error("inconsistent_tiles", "does not have the same shape", scenario_inconsistent_tiles);
+    failures += !expect_user_error("not_a_matmul_pattern", "operand or result types are not supported", scenario_not_a_matmul_pattern);
+    failures += !expect_user_error("matmul_by_constant", "not loads with affine indices", scenario_matmul_by_constant);
 
     if (failures != 0) {
         printf("%d scenario(s) failed to produce a user-facing CompileError\n", failures);
