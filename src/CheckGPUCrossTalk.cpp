@@ -1,18 +1,15 @@
 #include "CheckGPUCrossTalk.h"
 
 #include "Bounds.h"
-#include "CSE.h"
 #include "CanonicalizeGPUVars.h"
 #include "ExprUsesVar.h"
 #include "IR.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "IRMutator.h"
 #include "IRVisitor.h"
 #include "Simplify.h"
 #include "Substitute.h"
 
-#include <set>
 #include <sstream>
 
 namespace Halide {
@@ -31,15 +28,18 @@ struct ThreadLoop {
     Expr min, extent;
 };
 
-// An access to the allocation being checked, by dimension, and the loops over
-// threads it sits in, outermost first.
+// An access to the allocation being checked, by dimension. Accesses are
+// recorded in the order they appear, so an earlier one in the list is one that
+// has already happened.
 struct Access {
+    // As written, for error messages.
     vector<Expr> args;
-    vector<ThreadLoop> thread_loops;
+    // In terms of the loops the fused loops over threads will use, so that two
+    // accesses can be compared.
+    vector<Expr> canonical_args;
+    // How many loops over threads this sits in.
+    int thread_depth;
     bool is_store;
-    // Where this sits in the body, so we can tell a store that has already
-    // happened from one that has not happened yet.
-    int order;
 };
 
 // Rewrite an expr in terms of the loops the fused loops over threads will use.
@@ -79,15 +79,15 @@ class FindAccesses : public IRVisitor {
     }
 
     void visit(const For *op) override {
+        // Only a loop over threads separates one thread's copy of the
+        // allocation from another's. A loop over lanes does not: the lanes of a
+        // warp can reach each other's registers, which is what LowerWarpShuffles
+        // is for, so one is just another loop a single thread runs.
         if (op->for_type == ForType::GPUThread) {
             thread_loops.push_back({op->name, op->min, op->extent()});
-            per_thread.insert(op->name);
             IRVisitor::visit(op);
             thread_loops.pop_back();
         } else {
-            if (!thread_loops.empty()) {
-                per_thread.insert(op->name);
-            }
             // The loops a thread runs inside its own part of the allocation
             // bound how far its accesses reach, which is what says the parts
             // do not overlap. A loop that starts at the thread's own part of
@@ -101,9 +101,6 @@ class FindAccesses : public IRVisitor {
     }
 
     void visit(const LetStmt *op) override {
-        if (!thread_loops.empty()) {
-            per_thread.insert(op->name);
-        }
         op->value.accept(this);
         lets.emplace_back(op->name, op->value);
         op->body.accept(this);
@@ -111,13 +108,30 @@ class FindAccesses : public IRVisitor {
     }
 
     void visit(const Let *op) override {
-        if (!thread_loops.empty()) {
-            per_thread.insert(op->name);
-        }
         op->value.accept(this);
         lets.emplace_back(op->name, op->value);
         op->body.accept(this);
         lets.pop_back();
+    }
+
+    // Record an access, in terms of both the loops it was written with and the
+    // loops over threads it will end up in.
+    void record(const vector<Expr> &args, bool is_store) {
+        vector<Expr> resolved = resolve(args), canonical;
+        canonical.reserve(resolved.size());
+        for (const Expr &e : resolved) {
+            canonical.push_back(canonicalize(e, thread_loops));
+        }
+        // The nth loop counting inwards from this access is the nth thread
+        // dimension, so that is where its extent belongs.
+        int depth = (int)thread_loops.size();
+        for (int i = 0; i < depth && i < 3; i++) {
+            const Expr &e = thread_loops[depth - 1 - i].extent;
+            thread_extents[i] = thread_extents[i].defined() ?
+                                    simplify(max(thread_extents[i], e)) :
+                                    e;
+        }
+        accesses.push_back({resolved, canonical, depth, is_store});
     }
 
     void visit(const Provide *op) override {
@@ -125,13 +139,13 @@ class FindAccesses : public IRVisitor {
         // update definition, where the value reads the site being stored to.
         IRVisitor::visit(op);
         if (op->name == func) {
-            accesses.push_back({resolve(op->args), thread_loops, true, order++});
+            record(op->args, true);
         }
     }
 
     void visit(const Call *op) override {
         if (op->name == func && op->call_type == Call::Halide) {
-            accesses.push_back({resolve(op->args), thread_loops, false, order++});
+            record(op->args, false);
         }
         IRVisitor::visit(op);
     }
@@ -139,15 +153,12 @@ class FindAccesses : public IRVisitor {
     const string &func;
     vector<ThreadLoop> thread_loops;
     vector<std::pair<string, Expr>> lets;
-    int order = 0;
 
 public:
     vector<Access> accesses;
-    // Names bound at or inside the loops over threads, so they may take a
-    // different value in a different thread. Everything else, such as the base
-    // of the block's tile, is shared by the whole block.
-    std::set<string> per_thread;
     vector<std::pair<string, Interval>> loop_bounds;
+    // The most threads there are in each dimension, if that is known.
+    Expr thread_extents[3];
 
     FindAccesses(const string &func)
         : func(func) {
@@ -164,21 +175,17 @@ string name_and_args(const string &name, const vector<Expr> &args) {
     return s.str();
 }
 
-vector<Expr> canonical(const Access &a) {
-    vector<Expr> args;
-    args.reserve(a.args.size());
-    for (const Expr &arg : a.args) {
-        args.push_back(canonicalize(arg, a.thread_loops));
-    }
-    return args;
-}
-
 class CheckCrossTalk : public IRVisitor {
     using IRVisitor::visit;
 
     bool in_threads = false;
 
     void visit(const For *op) override {
+        // An allocation inside a loop over threads or lanes already belongs to
+        // whoever runs that loop, so there is nothing to tell apart. Note that
+        // a lane loop counts here but not when deciding which loops separate
+        // one thread's copy from another's, because a warp shares its lanes'
+        // registers but two threads share nothing.
         if (op->for_type == ForType::GPUThread || op->for_type == ForType::GPULane) {
             ScopedValue<bool> bind(in_threads, true);
             IRVisitor::visit(op);
@@ -206,7 +213,10 @@ class CheckCrossTalk : public IRVisitor {
 
         int thread_dims = 0;
         for (const Access &a : finder.accesses) {
-            thread_dims = std::max(thread_dims, (int)std::min(a.thread_loops.size(), (size_t)3));
+            thread_dims = std::max(thread_dims, std::min(a.thread_depth, 3));
+            internal_assert(a.args.size() == finder.accesses[0].args.size())
+                << "Accesses to " << op->name << " disagree about how many "
+                << "dimensions it has\n";
         }
         if (thread_dims == 0) {
             // Only one thread runs this, so there is no one to talk to.
@@ -234,50 +244,47 @@ class CheckCrossTalk : public IRVisitor {
         // simplifies the expression; it does not go into the region.
         Scope<Interval> thread_bounds;
         for (int i = 0; i < thread_dims; i++) {
-            Expr extent;
-            for (const Access &a : finder.accesses) {
-                size_t n = a.thread_loops.size();
-                if ((int)n > i) {
-                    const Expr &e = a.thread_loops[n - 1 - i].extent;
-                    extent = extent.defined() ? simplify(max(extent, e)) : e;
-                }
-            }
+            const Expr &extent = finder.thread_extents[i];
             if (extent.defined() && is_const(extent)) {
                 thread_bounds.push(gpu_thread_name(i), Interval(0, simplify(extent - 1)));
             }
         }
 
-        // A tail strategy wraps the clamp on the last thread's part in a
-        // likely intrinsic, which stops the simplifier folding it away once
-        // the number of threads is known.
-        auto region = [&](const Access &a, size_t dim) {
-            Expr e = simplify(remove_likelies(canonical(a)[dim]), thread_bounds);
-            return bounds_of_expr_in_scope(e, bounds);
-        };
+        // The region each access touches, by dimension. A tail strategy wraps
+        // the clamp on the last thread's part in a likely intrinsic, which
+        // stops the simplifier folding it away once the number of threads is
+        // known.
+        vector<vector<Interval>> regions(finder.accesses.size());
+        for (size_t i = 0; i < finder.accesses.size(); i++) {
+            for (const Expr &arg : finder.accesses[i].canonical_args) {
+                Expr e = simplify(remove_likelies(arg), thread_bounds);
+                regions[i].push_back(bounds_of_expr_in_scope(e, bounds));
+            }
+        }
 
-        for (const Access &load : finder.accesses) {
+        for (size_t l = 0; l < finder.accesses.size(); l++) {
+            const Access &load = finder.accesses[l];
             if (load.is_store) {
                 continue;
             }
             bool ok = false;
-            for (const Access &store : finder.accesses) {
-                // The store has to have happened already, and has to be in at
-                // least as many loops over threads, or it is the work of one
-                // thread standing in for all of them.
-                if (!store.is_store ||
-                    store.order > load.order ||
-                    store.thread_loops.size() < load.thread_loops.size() ||
-                    store.args.size() != load.args.size()) {
+            // Stores later in the list have definitely not happened yet. Ones
+            // earlier have, unless the two sit in different arms of the same
+            // if, which is not accounted for here.
+            for (size_t s = 0; s < l && !ok; s++) {
+                const Access &store = finder.accesses[s];
+                // The store has to be in at least as many loops over threads,
+                // or it is the work of one thread standing in for all of them.
+                if (!store.is_store || store.thread_depth < load.thread_depth) {
                     continue;
                 }
-                bool covers = true;
-                for (size_t i = 0; i < load.args.size() && covers; i++) {
-                    Interval l = region(load, i), st = region(store, i);
-                    covers = (l.has_lower_bound() && l.has_upper_bound() &&
-                              st.has_lower_bound() && st.has_upper_bound() &&
-                              can_prove(st.min <= l.min && l.max <= st.max));
+                ok = true;
+                for (size_t i = 0; i < regions[l].size() && ok; i++) {
+                    const Interval &want = regions[l][i], &have = regions[s][i];
+                    ok = (want.has_lower_bound() && want.has_upper_bound() &&
+                          have.has_lower_bound() && have.has_upper_bound() &&
+                          can_prove(have.min <= want.min && want.max <= have.max));
                 }
-                ok = ok || covers;
             }
             if (!ok) {
                 report(op, finder.accesses, load);
@@ -286,24 +293,23 @@ class CheckCrossTalk : public IRVisitor {
     }
 
     void report(const Realize *op, const vector<Access> &accesses, const Access &load) {
-
-            std::ostringstream accessed;
-            for (const Access &a : accesses) {
-                accessed << "  " << name_and_args(op->name, a.args)
-                         << (a.is_store ? " (stored)" : " (loaded)") << "\n";
-            }
-            user_error
-                << "The allocation " << op->name << " is scheduled to live in "
-                << op->memory_type << " memory, which is private to a GPU thread, but it is "
-                << "scheduled outside the loops over GPU threads, so every thread gets its "
-                << "own copy of it rather than sharing one. Halide could not prove that each "
-                << "thread keeps to its own part of it, so a thread may be relying on a value "
-                << "another thread was responsible for, which it does not have. It is "
-                << "loaded at:\n  " << name_and_args(op->name, load.args)
-                << "\nwhich is not within what this thread stores. It is accessed at:\n"
-                << accessed.str()
-                << "Either schedule " << op->name << " inside the loops over GPU threads, or "
-                << "store it in GPUShared memory, which the threads of a block do share.\n";
+        std::ostringstream accessed;
+        for (const Access &a : accesses) {
+            accessed << "  " << name_and_args(op->name, a.args)
+                     << (a.is_store ? " (stored)" : " (loaded)") << "\n";
+        }
+        user_error
+            << "The allocation " << op->name << " is scheduled to live in "
+            << op->memory_type << " memory, which is private to a GPU thread, but it is "
+            << "scheduled outside the loops over GPU threads, so every thread gets its "
+            << "own copy of it rather than sharing one. Halide could not prove that each "
+            << "thread keeps to its own part of it, so a thread may be relying on a value "
+            << "another thread was responsible for, which it does not have. It is "
+            << "loaded at:\n  " << name_and_args(op->name, load.args)
+            << "\nwhich is not within what this thread stores. It is accessed at:\n"
+            << accessed.str()
+            << "Either schedule " << op->name << " inside the loops over GPU threads, or "
+            << "store it in GPUShared memory, which the threads of a block do share.\n";
     }
 };
 

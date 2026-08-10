@@ -1,5 +1,4 @@
 #include "Substitute.h"
-#include "Util.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "Scope.h"
@@ -235,62 +234,6 @@ Expr substitute_in_all_lets(const Expr &expr) {
 
 Stmt substitute_in_all_lets(const Stmt &stmt) {
     return SubstituteInAllLets()(stmt);
-}
-
-Expr RenameFreeVars::visit(const Variable *op) {
-    if (!op->param.defined() && !op->image.defined() &&
-        (only == nullptr || only->count(op->name))) {
-        return Variable::make(op->type, get_new_name(op->name));
-    } else {
-        return op;
-    }
-}
-
-const std::string &RenameFreeVars::get_new_name(const std::string &s) {
-    auto [it, inserted] = new_names.emplace(s, s);
-    if (inserted) {
-        // The '$' matters: unique_name returns its argument unchanged for a
-        // name it has not seen that does not look like one of its own, which
-        // for most names in the IR is the first call. Appending it forces the
-        // globally counted suffix, and so a name that is really new.
-        it->second = unique_name(s + "$");
-    }
-    return it->second;
-}
-
-namespace {
-// Chained boolean lets are common, so bind them in a scope and expand them
-// where they are used, rather than substituting each one through the whole of
-// the rest of the expression as we go.
-class SubstituteInBooleanLets : public IRMutator {
-public:
-    using IRMutator::mutate;
-
-private:
-    using IRMutator::visit;
-
-    Scope<Expr> bindings;
-
-    Expr visit(const Let *op) override {
-        if (op->value.type() == Bool()) {
-            ScopedBinding<Expr> bind(bindings, op->name, mutate(op->value));
-            return mutate(op->body);
-        } else {
-            return IRMutator::visit(op);
-        }
-    }
-
-    Expr visit(const Variable *op) override {
-        if (const Expr *e = bindings.find(op->name)) {
-            return *e;
-        }
-        return op;
-    }
-};
-}  // namespace
-
-Expr substitute_in_boolean_lets(const Expr &e) {
-    return SubstituteInBooleanLets().mutate(e);
 }
 
 }  // namespace Internal
