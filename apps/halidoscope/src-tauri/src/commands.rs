@@ -189,14 +189,18 @@ fn pack_render_response(
 
 // ── Commands ──────────────────────────────────────────────────────────────────
 
+#[derive(Debug, Clone, Serialize)]
+struct TraceProgress {
+    message: String,
+    progress: u8,
+}
+
 /// Parses a `.hltrace` file and returns the metadata the frontend needs to set up canvases and
 /// the scrub timeline. Replaces any previously loaded trace.
 ///
-/// Runs the parse on a blocking-task thread rather than the main thread: `open_trace` isn't
-/// declared `async`, so a plain `fn` command would otherwise execute inline on the thread that
-/// pumps the webview's event loop, freezing the UI (including any in-progress loading indicator)
-/// for the duration of the parse. Progress (percentage of bytes parsed) is emitted to the
-/// frontend as `trace-load-progress` events.
+/// Runs the parse on a blocking-task thread rather than the main thread. Running async on a
+/// separate thread prevents us from blocking the webview's event loop and freezing the UI.
+/// Progress (percentage of bytes parsed) is emitted to the frontend as `trace-load-progress` events.
 #[tauri::command]
 pub async fn open_trace(
     path: String,
@@ -204,8 +208,8 @@ pub async fn open_trace(
     state: State<'_, AppState>,
 ) -> Result<TraceMeta, String> {
     let (trace, meta) = tauri::async_runtime::spawn_blocking(move || {
-        let trace = Trace::load_from_file(&path, |pct| {
-            let _ = app.emit("trace-load-progress", pct);
+        let trace = Trace::load_from_file(&path, |message, progress| {
+            let _ = app.emit("trace-load-progress", TraceProgress { message, progress });
         })?;
 
         let meta = TraceMeta::from_trace(&trace);
