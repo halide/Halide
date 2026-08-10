@@ -22,8 +22,10 @@ import android.app.Dialog;
 import android.content.DialogInterface;
 import android.graphics.ImageFormat;
 import android.os.Bundle;
+import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.Size;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.OrientationEventListener;
 import android.view.Surface;
@@ -32,6 +34,7 @@ import android.view.SurfaceView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.widget.FrameLayout;
 
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageAnalysis;
@@ -232,10 +235,26 @@ public class Camera2BasicFragment extends Fragment implements View.OnClickListen
 
         Size size = imageAnalysis.getResolutionInfo().getResolution();
         Log.d(TAG, "CameraX selected analysis size: " + size);
-        // The SurfaceView fills the screen (fragment_camera2_basic.xml), and setFixedSize()'s
-        // buffer/display decoupling below (see the README's ANativeWindow CAVEAT) lets the system
-        // scale the analysis-resolution buffer to fit, at the cost of a small stretch if the
-        // screen's aspect ratio doesn't exactly match the 16:9 analysis stream.
+        // Center-crop the preview like the system camera app: size the SurfaceView to the
+        // smallest rectangle of the analysis stream's aspect ratio that still covers the whole
+        // screen, centered, and let the FrameLayout clip the overflow. This keeps the system's
+        // scaling of the buffer (setFixedSize() below) uniform -- filling the screen with no
+        // stretch, trading away a strip of the frame's edges. Without it, scaling the buffer to a
+        // screen of a different aspect ratio would distort the image.
+        DisplayMetrics metrics = new DisplayMetrics();
+        requireActivity().getWindowManager().getDefaultDisplay().getRealMetrics(metrics);
+        float bufferAspect = (float) size.getWidth() / size.getHeight();
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) mSurfaceView.getLayoutParams();
+        if ((float) metrics.widthPixels / metrics.heightPixels < bufferAspect) {
+            params.height = metrics.heightPixels;
+            params.width = Math.round(metrics.heightPixels * bufferAspect);
+        } else {
+            params.width = metrics.widthPixels;
+            params.height = Math.round(metrics.widthPixels / bufferAspect);
+        }
+        params.gravity = Gravity.CENTER;
+        mSurfaceView.setLayoutParams(params);
+
         SurfaceHolder holder = mSurfaceView.getHolder();
         holder.setFormat(ImageFormat.YV12);
         holder.setFixedSize(size.getWidth(), size.getHeight());
