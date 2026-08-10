@@ -1,4 +1,4 @@
-package com.example.helloandroidcamera2;
+package com.example.helloandroid;
 
 import android.graphics.ImageFormat;
 import android.media.Image;
@@ -12,7 +12,7 @@ public class HalideYuvBufferT implements AutoCloseable {
 
     // Load native Halide shared library.
     static {
-        System.loadLibrary("HelloAndroidCamera2");
+        System.loadLibrary("HelloAndroid");
     }
 
     private long mHandle;

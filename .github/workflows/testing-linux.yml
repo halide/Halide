@@ -126,7 +126,7 @@ jobs:
     # CMake configure (see app/src/main/cpp/CMakeLists.txt), so no separate
     # generator pre-build step is needed here.
     if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
-    name: HelloAndroidCamera2 app
+    name: HelloAndroid app
     runs-on: ubuntu-24.04
 
     steps:
@@ -170,10 +170,10 @@ jobs:
         # via the documented `cmake.dir` local.properties key instead.
         run: |
           cmake_dir="$(dirname "$(dirname "$(command -v cmake)")")"
-          echo "cmake.dir=${cmake_dir}" | tee apps/HelloAndroidCamera2/local.properties
+          echo "cmake.dir=${cmake_dir}" | tee apps/HelloAndroid/local.properties
 
-      - name: Build HelloAndroidCamera2
-        working-directory: apps/HelloAndroidCamera2
+      - name: Build HelloAndroid
+        working-directory: apps/HelloAndroid
         run: ./gradlew assembleDebug "-PHalide_ROOT=${{ github.workspace }}/install"
 
       - name: Enable KVM group perms (required by the emulator)
@@ -202,7 +202,7 @@ jobs:
           # NOT honor `\` line-continuation across lines -- so each invocation
           # below must stay on a single line.
           script: |
-            apps/support/android_smoke_test.sh apps/HelloAndroidCamera2/app/build/outputs/apk/debug/app-debug.apk com.example.helloandroidcamera2 .CameraActivity android.permission.CAMERA
+            apps/HelloAndroid/android_smoke_test.sh apps/HelloAndroid/app/build/outputs/apk/debug/app-debug.apk com.example.helloandroid .CameraActivity android.permission.CAMERA
 
   baremetal-apps:
     # Deliberately its own job: needs an arm-none-eabi cross toolchain and

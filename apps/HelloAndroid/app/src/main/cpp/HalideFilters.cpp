@@ -57,7 +57,7 @@ bool checkEqualExtents(YuvBufferT *src, YuvBufferT *dst) {
     }
 }
 
-JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_HalideFilters_copyHalide(
+JNIEXPORT bool JNICALL Java_com_example_helloandroid_HalideFilters_copyHalide(
     JNIEnv *env, jobject obj, jlong srcYuvBufferTHandle, jlong dstYuvBufferTHandle) {
     if (srcYuvBufferTHandle == 0L || dstYuvBufferTHandle == 0L) {
         LOGE("copyHalide failed: src and dst must not be null");
@@ -112,7 +112,7 @@ JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_HalideFilters_copyHa
     return succeeded;
 }
 
-JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_HalideFilters_edgeDetectHalide(
+JNIEXPORT bool JNICALL Java_com_example_helloandroid_HalideFilters_edgeDetectHalide(
     JNIEnv *env, jobject obj, jlong srcYuvBufferTHandle, jlong dstYuvBufferTHandle) {
     if (srcYuvBufferTHandle == 0L || dstYuvBufferTHandle == 0L) {
         LOGE("edgeDetectHalide failed: src and dst must not be null");

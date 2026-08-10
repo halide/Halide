@@ -1,4 +1,4 @@
-package com.example.helloandroidcamera2;
+package com.example.helloandroid;
 
 import android.view.Surface;
 

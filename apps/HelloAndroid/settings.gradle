@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "HelloAndroidCamera2"
+rootProject.name = "HelloAndroid"
 include(":app")

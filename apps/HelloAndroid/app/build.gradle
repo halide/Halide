@@ -11,11 +11,11 @@ if (halideRoot == null) {
 }
 
 android {
-    namespace = "com.example.helloandroidcamera2"
+    namespace = "com.example.helloandroid"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.example.helloandroidcamera2"
+        applicationId = "com.example.helloandroid"
         minSdk = 21
         targetSdk = 37
         versionCode = 1

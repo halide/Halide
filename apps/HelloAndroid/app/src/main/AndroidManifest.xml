@@ -21,7 +21,7 @@
         android:icon="@drawable/ic_launcher"
         android:theme="@style/MaterialTheme">
 
-        <activity android:name="com.example.helloandroidcamera2.CameraActivity"
+        <activity android:name="com.example.helloandroid.CameraActivity"
                   android:exported="true"
                   android:label="@string/app_name"
                   android:screenOrientation="landscape">

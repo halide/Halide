@@ -1,4 +1,4 @@
-HelloAndroidCamera2 is a simple application which uses Halide to process images
+HelloAndroid is a simple application which uses Halide to process images
 streamed from the Android camera2 API. It reads every frame into the CPU via an
 ImageReader and uses Halide to either blit the frame to the output surface
 (converting between YUV formats), or apply an edge detector on the luma channel.
