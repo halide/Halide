@@ -141,15 +141,11 @@ public:
 // The copy engine moves up to 16 bytes at a time, and needs its destination
 // aligned to the width of the copy. Allocations are packed one after another,
 // so a group has to end on a 16-byte boundary for whatever follows it to be
-// copyable into. Round a group's size up accordingly, given the size in bytes
-// of the units it is measured in.
-Expr round_up_group_size(const Expr &size, int unit_bytes) {
-    const int alignment = 16;
-    if (unit_bytes >= alignment) {
-        return size;
-    }
-    return align_up(size, alignment / unit_bytes);
-}
+// copyable into. Group sizes are counted in units of the type they are
+// allocated as, so dividing gives the number of those units to align to. Units
+// of 16 bytes or more are big enough already and give zero, which align_up
+// takes to mean no alignment at all.
+const int async_copy_alignment = 16;
 
 class ExtractBlockSize : public IRVisitor {
 protected:
@@ -1000,7 +996,16 @@ public:
                 int ratio = alloc.widest_type.bytes() / alloc_type.bytes();
                 internal_assert(ratio != 0)
                     << "alloc_type should have been at most as wide as the widest type in group\n";
-                total_size += round_up_group_size(alloc.max_size * ratio, alloc_type.bytes());
+                // Sizes here are counted in units of one type or another, and
+                // are converted between them by dividing, so the types have to
+                // be whole multiples of each other.
+                internal_assert(is_power_of_two(alloc_type.bytes()) &&
+                                is_power_of_two(alloc.widest_type.bytes()))
+                    << "Allocation types must be a power of two bytes wide, but these "
+                    << "are " << alloc_type.bytes() << " and "
+                    << alloc.widest_type.bytes() << "\n";
+                total_size += align_up(alloc.max_size * ratio,
+                                       async_copy_alignment / alloc_type.bytes());
             }
 
             // Upgrade the alloc type to the widest type found, and
@@ -1075,8 +1080,8 @@ public:
                         offset = Variable::make(Int(32), name + "." + std::to_string(i - 1) + ".offset");
                         int ratio = (widest_type.bytes() / cluster[i - 1].widest_type.bytes());
                         internal_assert(ratio != 0);
-                        offset += simplify(round_up_group_size(
-                            (cluster[i - 1].max_size + ratio - 1) / ratio, widest_type.bytes()));
+                        offset += simplify(align_up((cluster[i - 1].max_size + ratio - 1) / ratio,
+                                                    async_copy_alignment / widest_type.bytes()));
                     } else {
                         if (memory_type == MemoryType::Heap) {
                             // One slice of a larger global allocation
