@@ -7,6 +7,7 @@
 // (a user error) rather than crashing or hitting an internal assert.
 
 #include "Halide.h"
+#include "expect_user_error.h"
 #include <stdio.h>
 
 #if HALIDE_WITH_EXCEPTIONS
@@ -16,22 +17,6 @@ using namespace Halide;
 namespace {
 
 const Target amx_target("x86-64-linux-avx512_sapphirerapids");
-
-// Run `body` and assert it produces a Halide user error.
-template<typename F>
-bool expect_user_error(const char *name, F body) {
-    try {
-        body();
-    } catch (const CompileError &e) {
-        printf("[%s] OK: %s\n", name, e.what());
-        return true;
-    } catch (...) {
-        printf("[%s] FAIL: expected a CompileError but got a different exception\n", name);
-        return false;
-    }
-    printf("[%s] FAIL: expected a user error but none was raised\n", name);
-    return false;
-}
 
 // Apply a stock AMX matmul schedule to `mm` (with reduction var `r`) and
 // the given tile sizes.

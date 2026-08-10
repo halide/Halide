@@ -8,6 +8,7 @@
 // back to a load and a store.
 
 #include "Halide.h"
+#include "expect_user_error.h"
 #include <stdio.h>
 
 #if HALIDE_WITH_EXCEPTIONS
@@ -21,28 +22,6 @@ Target async_target() {
     return get_host_target()
         .with_feature(Target::CUDA)
         .with_feature(Target::CUDACapability80);
-}
-
-// Run `body` and assert it produces a Halide user error mentioning `substring`.
-template<typename F>
-bool expect_user_error(const char *name, const char *substring, F body) {
-    try {
-        body();
-    } catch (const CompileError &e) {
-        std::string msg = e.what();
-        if (msg.find(substring) == std::string::npos) {
-            printf("[%s] FAIL: error did not mention \"%s\":\n%s\n",
-                   name, substring, msg.c_str());
-            return false;
-        }
-        printf("[%s] OK\n", name);
-        return true;
-    } catch (...) {
-        printf("[%s] FAIL: expected a CompileError but got a different exception\n", name);
-        return false;
-    }
-    printf("[%s] FAIL: expected a user error but none was raised\n", name);
-    return false;
 }
 
 Buffer<float> input_f32() {
