@@ -154,6 +154,21 @@ set_tests_properties(
     FAIL_REGULAR_EXPRESSION "Autoscheduler Halide::[A-Za-z0-9_]+ does not exist"
 )
 
+# Regression test: naming an autoscheduler plugin directly via PLUGINS must
+# still resolve against an installed HalideAutoschedulers package, even
+# though it bypasses the AUTOSCHEDULER keyword's own lazy find_package() call.
+add_test(
+    NAME aot_shared_generator_plugins_direct
+    COMMAND
+        ${CMAKE_CTEST_COMMAND}
+        --build-and-test "${CMAKE_CURRENT_LIST_DIR}/aot"
+        "${CMAKE_CURRENT_BINARY_DIR}/aot-shared-plugins-direct"
+        --build-generator Ninja
+        --build-options -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER} -DCMAKE_BUILD_TYPE=Release
+        -Daot_USE_PLUGINS_DIRECTLY=YES
+        --test-command ${CMAKE_CTEST_COMMAND} --output-on-failure
+)
+
 ##
 # Generator compile cache (HL_CACHE_DIR) tests
 #
