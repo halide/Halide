@@ -118,10 +118,20 @@ protected:
     std::vector<int> committed_groups;
     int uncommitted_group = -1;
 
+    enum class AsyncCopy {
+        /** Not a store the schedule asked to be copied asynchronously. */
+        NotAsked,
+        /** Emitted as an asynchronous copy. */
+        Done,
+        /** Asked for, but the store is not one the copy engine can make.
+         * *reason says why, and *func_name says which Func to blame. */
+        Failed,
+    };
+
     /** Try to emit a store into shared memory as an asynchronous copy, which
      * moves the data straight from global memory without routing it through
-     * registers. Returns false if this store isn't one we can do that for. */
-    bool codegen_async_copy(const Store *op, const char **reason);
+     * registers. */
+    AsyncCopy codegen_async_copy(const Store *op, const char **reason, std::string *func_name);
 
     /** Close the current group of asynchronous copies, if there is one. */
     void commit_copies();
@@ -449,37 +459,44 @@ std::string async_copy_func_name(const Call *marker) {
 // without going through registers, which saves the load, the store, and the
 // registers in between. The copy is asynchronous, so it has to be waited for
 // before the data is used; that happens at the end of the producer.
-bool CodeGen_PTX_Dev::codegen_async_copy(const Store *op, const char **reason) {
+CodeGen_PTX_Dev::AsyncCopy CodeGen_PTX_Dev::codegen_async_copy(const Store *op,
+                                                               const char **reason,
+                                                               std::string *func_name) {
+    // Whether the schedule asked for this is the first thing to settle, so that
+    // an ordinary store costs a look at the value and nothing more. The
+    // allocation itself can't be asked, because by this point it has been
+    // rewritten to ordinary shared memory and packed in with all the others.
+    // CSE and LICM lift common subexpressions of a stored value into Lets
+    // around it, which would hide the marker. Both what they wrapped and the
+    // Lets themselves have to be held in locals, because everything below
+    // points into them.
+    std::vector<std::pair<std::string, Expr>> lets;
+    const Expr stored = peel_lets(op->value, &lets);
+    const Call *marker = stored.as<Call>();
+    if (!(marker && marker->is_intrinsic(Call::cuda_bypass_registers))) {
+        return AsyncCopy::NotAsked;
+    }
+    // Everything from here on was asked for, so a failure is the schedule's,
+    // and gets reported against the Func the marker names.
+    *func_name = async_copy_func_name(marker);
+
     if (target.get_cuda_capability_lower_bound() < 80) {
         *reason = "asynchronous copies require CUDA compute capability 8.0 or above";
-        return false;
+        return AsyncCopy::Failed;
     }
     if (emit_atomic_stores) {
         *reason = "the store is atomic";
-        return false;
+        return AsyncCopy::Failed;
     }
     // Asynchronous copies need something to wait for them, which only happens
     // inside a producer.
     if (!in_producer) {
         *reason = "the store is not inside a produce node";
-        return false;
+        return AsyncCopy::Failed;
     }
 
-    // The value must be one the schedule asked to have moved without passing
-    // through registers, and it must be a plain load from something we didn't
-    // allocate in here, which is to say global memory. An ordinary store that
-    // happens to match the pattern is left synchronous.
-    // CSE and LICM lift common subexpressions of a stored value into Lets
-    // around it, which would hide the marker. Substituting them back in leaves
-    // an expression that stands alone, which is what the analysis below and
-    // codegen_buffer_pointer both need. It has to be held in a local, because
-    // everything below points into it.
-    const Expr stored = substitute_in_all_lets(op->value);
-    const Call *marker = stored.as<Call>();
-    if (!(marker && marker->is_intrinsic(Call::cuda_bypass_registers))) {
-        *reason = "the store was not marked as an asynchronous copy";
-        return false;
-    }
+    // The value must be a plain load from something we didn't allocate in here,
+    // which is to say global memory.
     internal_assert(marker->args.size() == 3);
     const Expr &copied = marker->args[0];
     auto group = as_const_int(marker->args[1]);
@@ -495,21 +512,21 @@ bool CodeGen_PTX_Dev::codegen_async_copy(const Store *op, const char **reason) {
             s && !s->vectors.empty()) {
             *reason = "the source is not read densely. Each copy moves one run of "
                       "bytes, so the Func must read its source with a stride of one";
-            return false;
+            return AsyncCopy::Failed;
         }
         *reason = "the value stored is not a load from a buffer outside the kernel. "
                   "An asynchronous copy moves bytes untouched, so the Func must be a "
                   "plain copy - no cast, no arithmetic, and no boundary condition";
-        return false;
+        return AsyncCopy::Failed;
     }
     if (alloc_memory_type.contains(src->name)) {
         *reason = "the value stored is loaded from another allocation inside the "
                   "kernel. An asynchronous copy reads from global memory";
-        return false;
+        return AsyncCopy::Failed;
     }
     if (!is_const_one(op->predicate) || !is_const_one(src->predicate)) {
         *reason = "the load or the store is predicated";
-        return false;
+        return AsyncCopy::Failed;
     }
 
     // The hardware copies 4, 8 or 16 bytes at a time, from and to consecutive
@@ -519,7 +536,7 @@ bool CodeGen_PTX_Dev::codegen_async_copy(const Store *op, const char **reason) {
     if (!(bytes == 4 || bytes == 8 || bytes == 16)) {
         *reason = "each thread must copy 4, 8 or 16 bytes at a time. Vectorize the "
                   "copy along its dense dimension by that many bytes' worth";
-        return false;
+        return AsyncCopy::Failed;
     }
     Expr dst_base = op->index, src_base = src->index;
     if (t.lanes() > 1) {
@@ -531,7 +548,7 @@ bool CodeGen_PTX_Dev::codegen_async_copy(const Store *op, const char **reason) {
         src_base = strided_ramp_base(simplify(src->index));
         if (!dst_base.defined() || !src_base.defined()) {
             *reason = "the source and the destination are not both indexed densely";
-            return false;
+            return AsyncCopy::Failed;
         }
     }
     // The hardware needs both addresses aligned to the width of the copy. A
@@ -555,12 +572,21 @@ bool CodeGen_PTX_Dev::codegen_async_copy(const Store *op, const char **reason) {
             *reason = "the destination is not known to be aligned to the width of "
                       "the copy. Any align_storage on this Func has to be a multiple "
                       "of the number of elements each thread copies";
-            return false;
+            return AsyncCopy::Failed;
         }
     }
 
+    // The addresses may refer to variables the peeled Lets bind, so put those
+    // in scope to build them. Emitting each value once here and referring to it
+    // is the point of them having been lifted out in the first place.
+    for (const auto &let : lets) {
+        sym_push(let.first, codegen(let.second));
+    }
     Value *dst = codegen_buffer_pointer(op->name, t.element_of(), dst_base);
     Value *src_ptr = codegen_buffer_pointer(src->name, t.element_of(), src_base);
+    for (const auto &let : lets) {
+        sym_pop(let.first);
+    }
 
     // Shared allocations are already in the shared address space. The source is
     // a kernel argument, so it's global, but it comes in as a generic pointer.
@@ -568,7 +594,7 @@ bool CodeGen_PTX_Dev::codegen_async_copy(const Store *op, const char **reason) {
     llvm::Type *global_ptr_t = PointerType::get(*context, 1);
     if (dst->getType() != shared_ptr_t) {
         *reason = "the destination did not end up in the shared address space";
-        return false;
+        return AsyncCopy::Failed;
     }
     src_ptr = builder->CreateAddrSpaceCast(src_ptr, global_ptr_t);
 
@@ -585,7 +611,7 @@ bool CodeGen_PTX_Dev::codegen_async_copy(const Store *op, const char **reason) {
     }
     builder->CreateCall(fn, {dst, src_ptr});
     uncommitted_group = (int)*group;
-    return true;
+    return AsyncCopy::Done;
 }
 
 void CodeGen_PTX_Dev::visit(const ProducerConsumer *op) {
@@ -655,19 +681,19 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
         user_assert(op->value.type().bits() >= 32) << "CUDA: 8-bit or 16-bit atomics are not supported.\n";
     }
 
-    {
-        const char *reason = "";
-        if (codegen_async_copy(op, &reason)) {
-            return;
-        }
-        // Asking for that memory type is a promise that the stores to it are
-        // copies the hardware can make asynchronously. If one isn't, say so
-        // rather than quietly emitting a load and a store instead.
-        const Expr stored = substitute_in_all_lets(op->value);
-        const Call *marker = stored.as<Call>();
-        if (marker && marker->is_intrinsic(Call::cuda_bypass_registers)) {
-            user_error
-                << async_copy_func_name(marker) << " is scheduled in GPUSharedAsync memory, but this "
+    // Asking for GPUSharedAsync memory is a promise that every store to the
+    // allocation is a copy the hardware can make asynchronously. If one isn't,
+    // say so rather than quietly emitting a load and a store instead.
+    const char *reason = "";
+    std::string func_name;
+    switch (codegen_async_copy(op, &reason, &func_name)) {
+    case AsyncCopy::Done:
+        return;
+    case AsyncCopy::NotAsked:
+        break;
+    case AsyncCopy::Failed:
+        user_error
+                << func_name << " is scheduled in GPUSharedAsync memory, but this "
                 << "store to it cannot be done with an asynchronous copy, because "
                 << reason << ".\n\n"
                 << "An asynchronous copy moves bytes from global memory into shared "
@@ -699,7 +725,7 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
                 << "by the serial loops the tile leaves outside.\n\n"
                 << "The store that could not be made asynchronous was:\n"
                 << Stmt(op);
-        }
+        break;
     }
 
     // Do aligned 4-wide 32-bit stores as a single i128 store.
