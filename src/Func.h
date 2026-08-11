@@ -2779,7 +2779,6 @@ public:
     }
 };
 
-
 template<typename... Args>
 HALIDE_NO_USER_CODE_INLINE std::enable_if_t<Internal::all_are_convertible<Func, Args...>::value, Stage &>
 Stage::eager_inline(const Func &first, Args &&...args) {
