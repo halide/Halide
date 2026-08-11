@@ -174,6 +174,7 @@ target_sources(
     Parameter.h
     PartitionLoops.h
     Pipeline.h
+    PromoteGPURegisters.h
     Prefetch.h
     PrefetchDirective.h
     Profiling.h
@@ -353,6 +354,7 @@ target_sources(
     Parameter.cpp
     PartitionLoops.cpp
     Pipeline.cpp
+    PromoteGPURegisters.cpp
     Prefetch.cpp
     PrintLoopNest.cpp
     Profiling.cpp

@@ -559,6 +559,7 @@ SOURCE_FILES = \
   Parameter.cpp \
   PartitionLoops.cpp \
   Pipeline.cpp \
+  PromoteGPURegisters.cpp \
   Prefetch.cpp \
   PrintLoopNest.cpp \
   Profiling.cpp \
@@ -767,6 +768,7 @@ HEADER_FILES = \
   Parameter.h \
   PartitionLoops.h \
   Pipeline.h \
+  PromoteGPURegisters.h \
   Prefetch.h \
   PrefetchDirective.h \
   Profiling.h \
