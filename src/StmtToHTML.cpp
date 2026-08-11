@@ -1821,7 +1821,7 @@ private:
         if (!is_const_one(op->predicate)) {
             print_closing_tag("div");  // Unindent
         }
-        if (const Let *let = op->value.as<Let>()) {
+        if (op->value.as<Let>()) {
             print_html_element("div", "EmtpyLine", "&nbsp;");
         }
 
