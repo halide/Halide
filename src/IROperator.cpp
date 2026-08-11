@@ -4,6 +4,7 @@
 #include <iostream>
 #include <set>
 #include <sstream>
+#include <type_traits>
 #include <utility>
 
 #include "CSE.h"
@@ -1161,7 +1162,7 @@ Body rewrap_used_lets_impl(const Body &body,
     body.accept(&used);
     Body result = body;
     for (const auto &[name, value] : reverse_view(lets)) {
-        if (used.names.erase(name)) {
+        if (used.names.count(name)) {
             value.accept(&used);
             if constexpr (std::is_same_v<Body, Expr>) {
                 result = Let::make(name, value, result);
