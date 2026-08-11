@@ -10,8 +10,8 @@ use tauri::ipc::Response;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::render::{
-    GrayscaleState, InfState, LoadFrequencyState, NanState, NormalizationMode, RedundantState,
-    Renderer, ReuseDistanceState, RgbState, StoreFrequencyState, ThreadOpMode, ThreadState,
+    GrayscaleState, LoadFrequencyState, NormalizationMode, RedundantState, Renderer,
+    ReuseDistanceState, RgbState, StoreFrequencyState, ThreadOpMode, ThreadState,
 };
 use crate::trace::Trace;
 
@@ -241,8 +241,8 @@ pub fn render_grayscale(
     global_index: u32,
     normalization_mode: NormalizationMode,
     include_tabular_data: bool,
-    include_nan: NanState,
-    include_inf: InfState,
+    include_nan: bool,
+    include_inf: bool,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -266,14 +266,14 @@ pub fn render_grayscale(
 
     let pixels = renderer.to_rgba(normalization_mode);
 
-    let nan_overlay = if include_nan.active {
-        renderer.to_nan_overlay(include_nan)
+    let nan_overlay = if include_nan {
+        renderer.to_nan_overlay()
     } else {
         Vec::new()
     };
 
-    let inf_overlay = if include_inf.active {
-        renderer.to_inf_overlay(include_inf)
+    let inf_overlay = if include_inf {
+        renderer.to_inf_overlay()
     } else {
         Vec::new()
     };
@@ -300,8 +300,8 @@ pub fn render_rgb(
     global_index: u32,
     normalization_mode: NormalizationMode,
     include_tabular_data: bool,
-    include_nan: NanState,
-    include_inf: InfState,
+    include_nan: bool,
+    include_inf: bool,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -325,14 +325,14 @@ pub fn render_rgb(
 
     let pixels = renderer.to_rgba(normalization_mode);
 
-    let nan_overlay = if include_nan.active {
-        renderer.to_nan_overlay(include_nan)
+    let nan_overlay = if include_nan {
+        renderer.to_nan_overlay()
     } else {
         Vec::new()
     };
 
-    let inf_overlay = if include_inf.active {
-        renderer.to_inf_overlay(include_inf)
+    let inf_overlay = if include_inf {
+        renderer.to_inf_overlay()
     } else {
         Vec::new()
     };
@@ -358,8 +358,8 @@ pub fn render_store_frequency(
     global_index: u32,
     normalization_mode: NormalizationMode,
     include_tabular_data: bool,
-    include_nan: NanState,
-    include_inf: InfState,
+    include_nan: bool,
+    include_inf: bool,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -385,14 +385,14 @@ pub fn render_store_frequency(
 
     let pixels = renderer.to_rgba(normalization_mode);
 
-    let nan_overlay = if include_nan.active {
-        renderer.to_nan_overlay(include_nan)
+    let nan_overlay = if include_nan {
+        renderer.to_nan_overlay()
     } else {
         Vec::new()
     };
 
-    let inf_overlay = if include_inf.active {
-        renderer.to_inf_overlay(include_inf)
+    let inf_overlay = if include_inf {
+        renderer.to_inf_overlay()
     } else {
         Vec::new()
     };
@@ -418,8 +418,8 @@ pub fn render_load_frequency(
     global_index: u32,
     normalization_mode: NormalizationMode,
     include_tabular_data: bool,
-    include_nan: NanState,
-    include_inf: InfState,
+    include_nan: bool,
+    include_inf: bool,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -445,14 +445,14 @@ pub fn render_load_frequency(
 
     let pixels = renderer.to_rgba(normalization_mode);
 
-    let nan_overlay = if include_nan.active {
-        renderer.to_nan_overlay(include_nan)
+    let nan_overlay = if include_nan {
+        renderer.to_nan_overlay()
     } else {
         Vec::new()
     };
 
-    let inf_overlay = if include_inf.active {
-        renderer.to_inf_overlay(include_inf)
+    let inf_overlay = if include_inf {
+        renderer.to_inf_overlay()
     } else {
         Vec::new()
     };
@@ -480,8 +480,8 @@ pub fn render_redundant_stores(
     global_index: u32,
     normalization_mode: NormalizationMode,
     include_tabular_data: bool,
-    include_nan: NanState,
-    include_inf: InfState,
+    include_nan: bool,
+    include_inf: bool,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -507,14 +507,14 @@ pub fn render_redundant_stores(
 
     let pixels = renderer.to_rgba(normalization_mode);
 
-    let nan_overlay = if include_nan.active {
-        renderer.to_nan_overlay(include_nan)
+    let nan_overlay = if include_nan {
+        renderer.to_nan_overlay()
     } else {
         Vec::new()
     };
 
-    let inf_overlay = if include_inf.active {
-        renderer.to_inf_overlay(include_inf)
+    let inf_overlay = if include_inf {
+        renderer.to_inf_overlay()
     } else {
         Vec::new()
     };
@@ -542,8 +542,8 @@ pub fn render_reuse_distance(
     global_index: u32,
     normalization_mode: NormalizationMode,
     include_tabular_data: bool,
-    include_nan: NanState,
-    include_inf: InfState,
+    include_nan: bool,
+    include_inf: bool,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -571,14 +571,14 @@ pub fn render_reuse_distance(
 
     let pixels = renderer.to_rgba(normalization_mode);
 
-    let nan_overlay = if include_nan.active {
-        renderer.to_nan_overlay(include_nan)
+    let nan_overlay = if include_nan {
+        renderer.to_nan_overlay()
     } else {
         Vec::new()
     };
 
-    let inf_overlay = if include_inf.active {
-        renderer.to_inf_overlay(include_inf)
+    let inf_overlay = if include_inf {
+        renderer.to_inf_overlay()
     } else {
         Vec::new()
     };
@@ -603,8 +603,8 @@ pub fn render_thread(
     global_index: u32,
     op_mode: ThreadOpMode,
     thread_id: String,
-    include_nan: NanState,
-    include_inf: InfState,
+    include_nan: bool,
+    include_inf: bool,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -629,14 +629,14 @@ pub fn render_thread(
 
     let pixels = renderer.to_rgba(thread_id);
 
-    let nan_overlay = if include_nan.active {
-        renderer.to_nan_overlay(include_nan)
+    let nan_overlay = if include_nan {
+        renderer.to_nan_overlay()
     } else {
         Vec::new()
     };
 
-    let inf_overlay = if include_inf.active {
-        renderer.to_inf_overlay(include_inf)
+    let inf_overlay = if include_inf {
+        renderer.to_inf_overlay()
     } else {
         Vec::new()
     };
