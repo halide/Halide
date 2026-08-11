@@ -2,6 +2,7 @@
 #include <atomic>
 #include <cmath>
 #include <iostream>
+#include <set>
 #include <sstream>
 #include <utility>
 
@@ -13,6 +14,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "IRVisitor.h"
 #include "Interval.h"
 #include "StrictifyFloat.h"
 #include "Util.h"
@@ -1111,6 +1113,90 @@ Expr peel_lets(const Expr &e, std::vector<std::pair<std::string, Expr>> *lets) {
         body = let->body;
     }
     return body;
+}
+
+Stmt peel_lets(const Stmt &s, std::vector<std::pair<std::string, Expr>> *lets) {
+    Stmt body = s;
+    while (const LetStmt *let = body.as<LetStmt>()) {
+        lets->emplace_back(let->name, let->value);
+        body = let->body;
+    }
+    return body;
+}
+
+namespace {
+
+/** Gather the names an Expr or Stmt might get from a wrapping let: the names of
+ * Variables, and the buffer names of Loads and Stores. Conservatively assumes
+ * every such name refers to one of the peeled lets, even where an inner let
+ * shadows it. One instance is reused across an entire rewrap so that shared
+ * subexpressions are only visited once. */
+class CollectUsedNames : public IRGraphVisitor {
+    using IRGraphVisitor::visit;
+
+    void visit(const Variable *op) override {
+        names.insert(op->name);
+    }
+
+    void visit(const Load *op) override {
+        names.insert(op->name);
+        IRGraphVisitor::visit(op);
+    }
+
+    void visit(const Store *op) override {
+        names.insert(op->name);
+        IRGraphVisitor::visit(op);
+    }
+
+public:
+    std::set<std::string> names;
+};
+
+template<typename Body>
+Body rewrap_used_lets_impl(const Body &body,
+                           const std::vector<std::pair<std::string, Expr>> &lets) {
+    // The set of names the growing body refers to. Maintaining it as we go
+    // avoids rescanning the body once per let.
+    CollectUsedNames used;
+    body.accept(&used);
+    Body result = body;
+    for (const auto &[name, value] : reverse_view(lets)) {
+        if (used.names.erase(name)) {
+            value.accept(&used);
+            if constexpr (std::is_same_v<Body, Expr>) {
+                result = Let::make(name, value, result);
+            } else {
+                result = LetStmt::make(name, value, result);
+            }
+        }
+    }
+    return result;
+}
+
+}  // namespace
+
+Expr rewrap_used_lets(const Expr &body, const std::vector<std::pair<std::string, Expr>> &lets) {
+    return rewrap_used_lets_impl(body, lets);
+}
+
+Stmt rewrap_used_lets(const Stmt &body, const std::vector<std::pair<std::string, Expr>> &lets) {
+    return rewrap_used_lets_impl(body, lets);
+}
+
+Expr rewrap_all_lets(const Expr &body, const std::vector<std::pair<std::string, Expr>> &lets) {
+    Expr result = body;
+    for (const auto &[name, value] : reverse_view(lets)) {
+        result = Let::make(name, value, result);
+    }
+    return result;
+}
+
+Stmt rewrap_all_lets(const Stmt &body, const std::vector<std::pair<std::string, Expr>> &lets) {
+    Stmt result = body;
+    for (const auto &[name, value] : reverse_view(lets)) {
+        result = LetStmt::make(name, value, result);
+    }
+    return result;
 }
 
 Expr remove_likelies(const Expr &e) {

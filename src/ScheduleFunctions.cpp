@@ -1576,10 +1576,7 @@ private:
         // Strip off the containing lets. The bounds of the parent fused loop
         // (i.e. the union bounds) might refer to them, so we need to move them
         // to the topmost position.
-        while (const auto *let = produce.as<LetStmt>()) {
-            add_lets.emplace_back(let->name, let->value);
-            produce = let->body;
-        }
+        produce = peel_lets(produce, &add_lets);
 
         // Only one branch runs at a time, so a single trailing fence
         // after the whole (specialized) production is equivalent to,
@@ -1853,9 +1850,7 @@ private:
         internal_assert(producer.defined());
 
         // Rewrap the loop in the containing lets.
-        for (const auto &[var, value] : reverse_view(add_lets)) {
-            producer = LetStmt::make(var, value, producer);
-        }
+        producer = rewrap_all_lets(producer, add_lets);
 
         // The original bounds of the loop nests (without any loop-fusion)
         auto bounds = CollectBounds::collect_bounds(producer);

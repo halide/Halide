@@ -1359,9 +1359,7 @@ protected:
             s = SerializeLoops()(s);
         }
         // We'll need the original scalar versions of any containing lets.
-        for (const auto &[var, value] : reverse_view(containing_lets)) {
-            s = LetStmt::make(var, value, s);
-        }
+        s = rewrap_all_lets(s, containing_lets);
 
         for (int ix = vectorized_vars.size() - 1; ix >= 0; ix--) {
             s = For::make(vectorized_vars[ix].name, vectorized_vars[ix].min,
@@ -1608,12 +1606,7 @@ protected:
         LiftVectorizableExprsOutOfSingleAtomicNode lifter(finder.liftable);
         Stmt new_body = lifter.mutate(op->body);
         new_body = op->with(new_body);
-        while (!lifter.lifted.empty()) {
-            auto p = lifter.lifted.back();
-            new_body = LetStmt::make(p.first, p.second, new_body);
-            lifter.lifted.pop_back();
-        }
-        return new_body;
+        return rewrap_all_lets(new_body, lifter.lifted);
     }
 
     const map<string, Function> &env;

@@ -457,10 +457,7 @@ class LoopCarryOverLoop : public IRMutator {
             // Run CSE
             call = simplify(common_subexpression_elimination(call));
             // Peel off lets
-            while (const Let *l = call.as<Let>()) {
-                initial_lets.emplace_back(l->name, l->value);
-                call = l->body;
-            }
+            call = peel_lets(call, &initial_lets);
             internal_assert(call.as<Call>());
             initial_scratch_values = call.as<Call>()->args;
 
@@ -476,16 +473,10 @@ class LoopCarryOverLoop : public IRMutator {
             Stmt initial_stores = Block::make(initial_scratch_stores);
 
             // Wrap them in the appropriate lets
-            for (const auto &[var, value] : reverse_view(initial_lets)) {
-                initial_stores = LetStmt::make(var, value, initial_stores);
-            }
+            initial_stores = rewrap_all_lets(initial_stores, initial_lets);
             // We may be lifting the initial stores out of let stmts,
             // so rewrap them in the necessary ones.
-            for (const auto &[var, value] : reverse_view(containing_lets)) {
-                if (stmt_uses_var(initial_stores, var)) {
-                    initial_stores = LetStmt::make(var, value, initial_stores);
-                }
-            }
+            initial_stores = rewrap_used_lets(initial_stores, containing_lets);
 
             allocs.push_back({scratch,
                               loads[c.front()][0]->type.element_of(),

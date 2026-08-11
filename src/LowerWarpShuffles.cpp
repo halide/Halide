@@ -743,13 +743,10 @@ class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
 public:
     bool success = true;
 
-    Stmt rewrap(Stmt s) {
-        while (!lifted_lets.empty()) {
-            const pair<string, Expr> &p = lifted_lets.back();
-            s = LetStmt::make(p.first, p.second, s);
-            lifted_lets.pop_back();
-        }
-        return s;
+    Stmt rewrap(const Stmt &s) {
+        Stmt result = rewrap_all_lets(s, lifted_lets);
+        lifted_lets.clear();
+        return result;
     }
 };
 
