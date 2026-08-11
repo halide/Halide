@@ -1108,7 +1108,7 @@ private:
     // Prints the closing tag for the specified html element.
     void print_closing_tag(const std::string &tag) {
         internal_assert(!context_stack.empty() && tag == context_stack_tags.back())
-            << "closing tag: " << tag << ", stack size: " << context_stack.size() << ", last element: " << (context_stack_tags.empty() ? "null" :  context_stack_tags.back());
+            << "closing tag: " << tag << ", stack size: " << context_stack.size() << ", last element: " << (context_stack_tags.empty() ? "null" : context_stack_tags.back());
         context_stack.pop_back();
         context_stack_tags.pop_back();
         stream << "</" + tag + ">";
@@ -1594,7 +1594,7 @@ private:
         print_html_element("span", "matched keyword", " in ");
         print_closing_tag("div");
         if (const Let *let = op->body.as<Let>()) {
-            visit(let); // flatten the let chain
+            visit(let);  // flatten the let chain
         } else {
             print(op->body);
         }
@@ -1793,7 +1793,7 @@ private:
         if (!is_const_one(op->predicate)) {
             print_html_element("span", "keyword matched", "predicate ");
             print(op->predicate);
-            print_opening_tag("div", "indent"); // Indent
+            print_opening_tag("div", "indent");  // Indent
         }
         print_opening_tag("span", "matched", type_str);
         if (op->is_streaming) {
@@ -1819,7 +1819,7 @@ private:
         print(op->value);
         print_closing_tag("span");
         if (!is_const_one(op->predicate)) {
-            print_closing_tag("div"); // Unindent
+            print_closing_tag("div");  // Unindent
         }
         if (const Let *let = op->value.as<Let>()) {
             print_html_element("div", "EmtpyLine", "&nbsp;");
