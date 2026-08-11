@@ -100,8 +100,20 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
 
   // Track the playhead position as a ref to avoid re-rendering on every scrub.
   const latestIndexRef = React.useRef(packetIndex);
+
   // Track whether an active render is in progress.
   const renderingRef = React.useRef(false);
+
+  // Cache render responses if we are outside of a Func's liveness range.
+  // In addition, add a useEffect call to invalidate the cache if any
+  // application state affecting the RenderFuncResponse changes.
+  const cachedPreLiveResultRef = React.useRef<RenderFuncResponse | null>(null);
+  const cachedPostLiveResultRef = React.useRef<RenderFuncResponse | null>(null);
+
+  React.useEffect(() => {
+    cachedPreLiveResultRef.current = null;
+    cachedPostLiveResultRef.current = null;
+  }, [render, nan, inf, thread, active]);
 
   React.useEffect(() => {
     latestIndexRef.current = packetIndex;
@@ -120,10 +132,6 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
         // point — treat those as always live instead of "dead" past index 0.
         const isRealized = max_store_count > 0;
 
-        // Reuse cached buffers for a Func outside of its liveness range.
-        let cachedPreLiveResult: RenderFuncResponse | null = null;
-        let cachedPostLiveResult: RenderFuncResponse | null = null;
-
         while (true) {
           const target = latestIndexRef.current;
           const notYetLive = target < buffer_liveness.start;
@@ -131,10 +139,10 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
 
           let result: RenderFuncResponse;
 
-          if (notYetLive && cachedPreLiveResult) {
-            result = cachedPreLiveResult;
-          } else if (noLongerLive && cachedPostLiveResult) {
-            result = cachedPostLiveResult;
+          if (notYetLive && cachedPreLiveResultRef.current) {
+            result = cachedPreLiveResultRef.current;
+          } else if (noLongerLive && cachedPostLiveResultRef.current) {
+            result = cachedPostLiveResultRef.current;
           } else {
             const params: RenderFuncParams = {
               func: name,
@@ -181,11 +189,11 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
                 break;
             }
 
-            // Set cached versions if we fall outside a Funcs buffer range.
+            // Cache the fetch if we fall outside the Func's buffer liveness range.
             if (notYetLive) {
-              cachedPreLiveResult = result;
+              cachedPreLiveResultRef.current = result;
             } else if (noLongerLive) {
-              cachedPostLiveResult = result;
+              cachedPostLiveResultRef.current = result;
             }
           }
 
