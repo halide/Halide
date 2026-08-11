@@ -268,9 +268,12 @@ class CheckCrossTalk : public IRVisitor {
                 continue;
             }
             bool ok = false;
-            // Stores later in the list have definitely not happened yet. Ones
-            // earlier have, unless the two sit in different arms of the same
-            // if, which is not accounted for here.
+            // Stores later in the list have not happened yet. Ones earlier
+            // have, except across the arms of an if, which doesn't matter here:
+            // any value the output depends on was stored by some thread, so if
+            // no other thread stored this one, this thread did. A site this
+            // thread never wrote holds a value nothing depends on, like the
+            // garbage that pads out a vector.
             for (size_t s = 0; s < l && !ok; s++) {
                 const Access &store = finder.accesses[s];
                 // The store has to be in at least as many loops over threads,
