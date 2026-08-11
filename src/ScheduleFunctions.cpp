@@ -510,6 +510,20 @@ bool expr_contains_branch(const Expr &e) {
     return v.found;
 }
 
+// A branch() becomes real control flow, so a Func defined with one needs its
+// own loop nest: inlining it would bury the branch inside a consumer's
+// expression, where it can not be turned into a branch. Called from every site
+// that decides to inline a func, both the batched and the one-at-a-time path.
+void check_branch_not_inlined(const Function &f) {
+    for (const Expr &v : f.definition().values()) {
+        user_assert(!expr_contains_branch(v))
+            << "Func \"" << f.name() << "\" is defined with branch(), "
+            << "which becomes real control flow, so it can not be inlined "
+            << "into its consumer. Schedule it with compute_root() or "
+            << "compute_at().\n";
+    }
+}
+
 // A branch() value is turned into real point-wise control flow here: an
 // IfThenElse around one Provide per arm (recursing for the multi-way form).
 // This is the same idea as specialize(), but point-wise rather than func-wise.
@@ -2913,6 +2927,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
                 user_error << "Func \"" << f.name() << "\" is scheduled hoist_storage(), but is inlined. Funcs that use hoist_storage_root must also call compute_at.\n";
             }
             validate_schedule_inlined_function(f);
+            check_branch_not_inlined(f);
             pending_inlines.push_back(f);
             continue;
         }
@@ -2950,16 +2965,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
         }
 
         if (group_should_be_inlined(funcs)) {
-            // A branch() becomes real control flow, so a Func defined with one
-            // needs its own loop nest: inlining it would bury the branch inside
-            // a consumer's expression, where it can not be turned into a branch.
-            for (const Expr &v : funcs[0].definition().values()) {
-                user_assert(!expr_contains_branch(v))
-                    << "Func \"" << funcs[0].name() << "\" is defined with branch(), "
-                    << "which becomes real control flow, so it can not be inlined "
-                    << "into its consumer. Schedule it with compute_root() or "
-                    << "compute_at().\n";
-            }
+            check_branch_not_inlined(funcs[0]);
             debug(1) << "Inlining " << funcs[0].name() << "\n";
             s = inline_function(s, funcs[0]);
         } else {
