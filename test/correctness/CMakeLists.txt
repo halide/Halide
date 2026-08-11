@@ -126,6 +126,7 @@ tests(
     fast_trigonometric.cpp
     fibonacci.cpp
     fit_function.cpp
+    flipped_vector_load_before_buffer_start.cpp
     float16_t.cpp
     float16_t_comparison.cpp
     float16_t_constants.cpp
