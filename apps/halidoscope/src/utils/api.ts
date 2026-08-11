@@ -73,16 +73,57 @@ export interface RenderFuncParams {
 }
 
 /**
+ * Expands a 1-bit-per-pixel row-major overlay mask (MSB-first within each
+ * byte, as packed by `pack_mask` in `render.rs`) into a dense RGBA8 buffer,
+ * painting set pixels with `color` and leaving unset pixels fully transparent.
+ *
+ * @param mask The packed bitmask, `ceil(width * height / 8)` bytes.
+ * @param width The width of the buffer the mask covers.
+ * @param height The height of the buffer the mask covers.
+ * @param color The color to paint set pixels with.
+ * @returns A `width * height * 4`-byte RGBA8 buffer.
+ */
+function expandMask(
+  mask: Uint8Array,
+  width: number,
+  height: number,
+  color: {
+    r: number;
+    g: number;
+    b: number;
+    a: number;
+  },
+): Uint8ClampedArray<ArrayBuffer> {
+  const out = new Uint8ClampedArray(width * height * 4);
+  const alpha = Math.round(Math.min(1, Math.max(0, color.a)) * 255);
+
+  for (let i = 0; i < width * height; i++) {
+    const bit = (mask[i >> 3] >> (7 - (i & 7))) & 1;
+
+    if (bit) {
+      const o = i * 4;
+      out[o] = color.r;
+      out[o + 1] = color.g;
+      out[o + 2] = color.b;
+      out[o + 3] = alpha;
+    }
+  }
+
+  return out;
+}
+
+/**
  * Splits the ArrayBuffer returned by a render command into the tensor data,
- * NaN/Inf overlays, and the (optionally returned) tabular data.
+ * NaN/Inf overlays, and the (optionally returned) tabular data. The NaN/Inf
+ * overlay planes are 1-bit-per-pixel masks (see `pack_mask` in `render.rs`)
+ * expanded here into RGBA8 using the same color the caller requested them in,
+ * since every set pixel in a given overlay shares that one color.
  *
  * @param buffer The buffer containing tensor, tabular, and overlay data.
  * @param width The width of the buffer.
  * @param height The height of the buffer.
- * @param includeNan A flag indicating whether or not to expect a NaN overlay
- * in the buffer payload.
- * @param includeInf A flag indicating whether or not to expect an Inf overlay
- * in the buffer payload.
+ * @param includeNan The NaN overlay color, or `null` if not requested.
+ * @param includeInf The Inf overlay color, or `null` if not requested.
  * @param includeTabularData A flag indicating whether or not to expect tabular
  * data in the buffer payload.
  * @returns A {@link RenderFuncResponse}.
@@ -98,37 +139,40 @@ function splitRenderBuffer({
   buffer: ArrayBuffer;
   width: number;
   height: number;
-  includeNan: boolean;
-  includeInf: boolean;
+  includeNan: RenderFuncParams["includeNan"] | null;
+  includeInf: RenderFuncParams["includeInf"] | null;
   includeTabularData: boolean;
 }): RenderFuncResponse {
   const pixelByteLength = width * height * 4;
-  const overlayPlaneByteLength = width * height * 4;
+  const maskByteLength = Math.ceil((width * height) / 8);
   const overlayBytes =
-    (includeNan ? overlayPlaneByteLength : 0) +
-    (includeInf ? overlayPlaneByteLength : 0);
+    (includeNan ? maskByteLength : 0) + (includeInf ? maskByteLength : 0);
   const tabularByteLength = buffer.byteLength - pixelByteLength - overlayBytes;
+
+  const nanMaskOffset = pixelByteLength;
+  const infMaskOffset = nanMaskOffset + (includeNan ? maskByteLength : 0);
+  const tabularOffset = infMaskOffset + (includeInf ? maskByteLength : 0);
 
   return {
     tensorData: new Uint8ClampedArray(buffer, 0, pixelByteLength),
     nanOverlayData: includeNan
-      ? new Uint8ClampedArray(buffer, pixelByteLength, overlayPlaneByteLength)
+      ? expandMask(
+          new Uint8Array(buffer, nanMaskOffset, maskByteLength),
+          width,
+          height,
+          includeNan,
+        )
       : null,
     infOverlayData: includeInf
-      ? new Uint8ClampedArray(
-          buffer,
-          pixelByteLength + (includeNan ? overlayPlaneByteLength : 0),
-          overlayPlaneByteLength,
+      ? expandMask(
+          new Uint8Array(buffer, infMaskOffset, maskByteLength),
+          width,
+          height,
+          includeInf,
         )
       : null,
     tabularData: includeTabularData
-      ? new Uint32Array(
-          buffer,
-          pixelByteLength +
-            (includeNan ? overlayPlaneByteLength : 0) +
-            (includeInf ? overlayPlaneByteLength : 0),
-          tabularByteLength / 4,
-        )
+      ? new Uint32Array(buffer, tabularOffset, tabularByteLength / 4)
       : null,
   };
 }
@@ -155,16 +199,16 @@ export async function renderGrayscale({
     globalIndex,
     normalizationMode,
     includeTabularData,
-    includeNan,
-    includeInf,
+    includeNan: includeNan.active,
+    includeInf: includeInf.active,
   });
 
   return splitRenderBuffer({
     buffer,
     width,
     height,
-    includeNan: includeNan.active,
-    includeInf: includeInf.active,
+    includeNan: includeNan.active ? includeNan : null,
+    includeInf: includeInf.active ? includeInf : null,
     includeTabularData,
   });
 }
@@ -192,16 +236,16 @@ export async function renderRgb({
     globalIndex,
     normalizationMode,
     includeTabularData,
-    includeNan,
-    includeInf,
+    includeNan: includeNan.active,
+    includeInf: includeInf.active,
   });
 
   return splitRenderBuffer({
     buffer,
     width,
     height,
-    includeNan: includeNan.active,
-    includeInf: includeInf.active,
+    includeNan: includeNan.active ? includeNan : null,
+    includeInf: includeInf.active ? includeInf : null,
     includeTabularData,
   });
 }
@@ -228,16 +272,16 @@ export async function renderStoreFrequency({
     globalIndex,
     normalizationMode,
     includeTabularData,
-    includeNan,
-    includeInf,
+    includeNan: includeNan.active,
+    includeInf: includeInf.active,
   });
 
   return splitRenderBuffer({
     buffer,
     width,
     height,
-    includeNan: includeNan.active,
-    includeInf: includeInf.active,
+    includeNan: includeNan.active ? includeNan : null,
+    includeInf: includeInf.active ? includeInf : null,
     includeTabularData,
   });
 }
@@ -264,16 +308,16 @@ export async function renderLoadFrequency({
     globalIndex,
     normalizationMode,
     includeTabularData,
-    includeNan,
-    includeInf,
+    includeNan: includeNan.active,
+    includeInf: includeInf.active,
   });
 
   return splitRenderBuffer({
     buffer,
     width,
     height,
-    includeNan: includeNan.active,
-    includeInf: includeInf.active,
+    includeNan: includeNan.active ? includeNan : null,
+    includeInf: includeInf.active ? includeInf : null,
     includeTabularData,
   });
 }
@@ -306,16 +350,16 @@ export async function renderRedundantStores({
     globalIndex,
     normalizationMode,
     includeTabularData,
-    includeNan,
-    includeInf,
+    includeNan: includeNan.active,
+    includeInf: includeInf.active,
   });
 
   return splitRenderBuffer({
     buffer,
     width,
     height,
-    includeNan: includeNan.active,
-    includeInf: includeInf.active,
+    includeNan: includeNan.active ? includeNan : null,
+    includeInf: includeInf.active ? includeInf : null,
     includeTabularData,
   });
 }
@@ -349,16 +393,16 @@ export async function renderReuseDistance({
     globalIndex,
     normalizationMode,
     includeTabularData,
-    includeNan,
-    includeInf,
+    includeNan: includeNan.active,
+    includeInf: includeInf.active,
   });
 
   return splitRenderBuffer({
     buffer,
     width,
     height,
-    includeNan: includeNan.active,
-    includeInf: includeInf.active,
+    includeNan: includeNan.active ? includeNan : null,
+    includeInf: includeInf.active ? includeInf : null,
     includeTabularData,
   });
 }
@@ -398,17 +442,17 @@ export async function renderThread({
     globalIndex,
     normalizationMode,
     opMode: threadOpMode,
-    threadId: threadId,
-    includeNan,
-    includeInf,
+    threadId,
+    includeNan: includeNan.active,
+    includeInf: includeInf.active,
   });
 
   return splitRenderBuffer({
     buffer,
     width,
     height,
-    includeNan: includeNan.active,
-    includeInf: includeInf.active,
+    includeNan: includeNan.active ? includeNan : null,
+    includeInf: includeInf.active ? includeInf : null,
     includeTabularData,
   });
 }
