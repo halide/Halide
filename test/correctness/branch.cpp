@@ -371,20 +371,20 @@ int main(int argc, char **argv) {
     // Part M: the branch is hoisted out of loops its condition does not use,
     // and is NOT hoisted when the condition uses the innermost loop var.
     {
-        Func fo("hoist_outer");
-        fo(x, y) = branch(y < 8, x + y, x - y);  // condition uses only y
-        Module mo = fo.compile_to_module({}, "hoist_outer");
+        Func f_outer("hoist_outer");
+        f_outer(x, y) = branch(y < 8, x + y, x - y);  // condition uses only y
+        Module m_outer = f_outer.compile_to_module({}, "hoist_outer");
         BranchAboveLoop above;
-        if (!scan_module(mo, above)) {
+        if (!scan_module(m_outer, above)) {
             printf("branch was not hoisted above the inner loop\n");
             return 1;
         }
 
-        Func fi("hoist_inner");
-        fi(x, y) = branch(x < 8, x + y, x - y);  // condition uses innermost var
-        Module mi = fi.compile_to_module({}, "hoist_inner");
+        Func f_inner("hoist_inner");
+        f_inner(x, y) = branch(x < 8, x + y, x - y);  // condition uses innermost var
+        Module m_inner = f_inner.compile_to_module({}, "hoist_inner");
         BranchAboveLoop above2;
-        if (scan_module(mi, above2)) {
+        if (scan_module(m_inner, above2)) {
             printf("branch was hoisted out of a loop its condition uses\n");
             return 1;
         }
@@ -1068,6 +1068,50 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Part AK: an undefined condition is rejected at construction.
+    {
+        bool threw = false;
+        try {
+            (void)branch(Expr(), x * 2, x + 1);
+        } catch (const CompileError &) {
+            threw = true;
+        }
+        if (!threw) {
+            printf("branch() with an undefined condition should have thrown\n");
+            return 1;
+        }
+    }
+
+    // Part AL: a non-boolean condition is rejected at construction.
+    {
+        bool threw = false;
+        try {
+            (void)branch(x, x * 2, x + 1);  // x is an int, not a bool
+        } catch (const CompileError &) {
+            threw = true;
+        }
+        if (!threw) {
+            printf("branch() with a non-boolean condition should have thrown\n");
+            return 1;
+        }
+    }
+
+    // Part AM: the two arms must have a matching type. Only int literals are
+    // coerced to the type of the other arm (like select), so a float arm and an
+    // int arm is an error rather than a silent promotion.
+    {
+        bool threw = false;
+        try {
+            (void)branch(x < 5, cast<float>(x), x);
+        } catch (const CompileError &) {
+            threw = true;
+        }
+        if (!threw) {
+            printf("branch() with mismatched arm types should have thrown\n");
+            return 1;
+        }
+    }
+
     // Part J: branch() combined with vectorization inside a GPU kernel errors.
     {
         Param<int> p("p");
@@ -1098,8 +1142,8 @@ int main(int argc, char **argv) {
         bool threw = false;
         try {
             Func f("tuple_branch");
-            f(x) = Tuple(0, 1);                // two values
-            f(x) = branch(x < 5, 100, 200);    // branch gives one -> mismatch
+            f(x) = Tuple(0, 1);              // two values
+            f(x) = branch(x < 5, 100, 200);  // branch gives one -> mismatch
             f.realize({10});
         } catch (const CompileError &) {
             threw = true;

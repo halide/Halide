@@ -348,7 +348,6 @@ void lower_impl(const vector<Function> &output_funcs,
     s = simplify(s);
     log("Lowering after vectorizing:", s);
 
-
     if (t.has_gpu_feature() ||
         t.has_feature(Target::Vulkan)) {
         debug(1) << "Injecting per-block gpu synchronization...\n";
