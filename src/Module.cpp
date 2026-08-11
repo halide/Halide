@@ -18,6 +18,7 @@
 #include "Pipeline.h"
 #include "PythonExtensionGen.h"
 #include "StmtToHTML.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {
@@ -887,6 +888,7 @@ void compile_multitarget(const std::string &fn_name,
 
     TemporaryFileDir temp_obj_dir;
     std::vector<Expr> wrapper_args;
+    std::vector<std::string> sub_fn_names;
     std::vector<LoweredArgument> base_target_args;
     std::vector<AutoSchedulerResults> auto_scheduler_results;
     MetadataNameMap metadata_name_map;
@@ -921,7 +923,7 @@ void compile_multitarget(const std::string &fn_name,
 
         // Each sub-target has a function name that is the 'real' name plus a suffix
         std::string suffix = suffix_for_entry(i);
-        std::string sub_fn_name = needs_wrapper ? (fn_name + suffix) : fn_name;
+        std::string sub_fn_name = fn_name + (needs_wrapper ? c_print_name(suffix.substr(1), true) : "");
 
         // We always produce the runtime separately, so add NoRuntime explicitly.
         Target sub_fn_target = target.with_feature(Target::NoRuntime);
@@ -978,6 +980,7 @@ void compile_multitarget(const std::string &fn_name,
 
         wrapper_args.push_back(can_use != 0);
         wrapper_args.emplace_back(sub_fn_name);
+        sub_fn_names.push_back(sub_fn_name);
     }
 
     // If we haven't specified "no runtime", build a runtime with the base target
@@ -1040,6 +1043,12 @@ void compile_multitarget(const std::string &fn_name,
     if (contains(output_files, OutputFileType::c_header)) {
         Module header_module(fn_name, base_target);
         header_module.append(LoweredFunc(fn_name, base_target_args, {}, LinkageType::ExternalPlusMetadata));
+        // Also declare each subtarget's entrypoint, so that callers can bypass
+        // the runtime-feature-detecting wrapper above and call a specific
+        // subtarget directly (e.g. for benchmarking purposes).
+        for (const std::string &sub_fn_name : sub_fn_names) {
+            header_module.append(LoweredFunc(sub_fn_name, base_target_args, {}, LinkageType::ExternalPlusMetadata));
+        }
         std::map<OutputFileType, std::string> header_out = {{OutputFileType::c_header, output_files.at(OutputFileType::c_header)}};
         debug(1) << "compile_multitarget: c_header " << header_out.at(OutputFileType::c_header) << "\n";
         header_module.compile(header_out);
