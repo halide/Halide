@@ -224,37 +224,31 @@ pub struct Trace {
 
 // ── Binary parsing helpers ───────────────────────────────────────────────────────────────────────
 
-// halide_trace_packet_t fixed header: 6 × 4 bytes = 24 bytes.
-//   u32  size                                         @ 0
-//   i32  event                                        @ 4
-//   i32  parent_id                                    @ 8
-//   union { i32 id; i32 value_index; }                @ 12
-//   union { type{code, bits, lanes}; i32 thread_id; } @ 16
-//   i32  dimensions                                   @ 20
+// Layout for `halide_trace_packet_t`'s fixed header, derived directly from HalideRuntime.h by
+// bindgen (see build.rs) rather than hand-copied, so a layout change upstream is caught at compile
+// time instead of silently desyncing. This only derives the struct's data layout: none of
+// `halide_trace_packet_t`'s C++ accessor methods are bound, so the variable-length trailing data
+// below is still walked by hand.
 //
 // Immediately after the header:
 //   i32  coordinates[dimensions]
 //   u8   value[type.lanes * ceil(type.bits / 8)]
 //   char func[]       (null-terminated)
 //   char trace_tag[]  (null-terminated; empty string if absent)
-const HEADER_BYTES: usize = 24;
-
-// Helper functions to read little-endian integers from a byte buffer at a given offset. try_into()
-// will convert the slice to a fixed-size [u8; N] array. We inline these for performance since they
-// are called in the hot path of packet parsing.
-#[inline]
-fn u32_le(buf: &[u8], off: usize) -> u32 {
-    u32::from_le_bytes(buf[off..off + 4].try_into().unwrap())
+mod ffi {
+    #![allow(non_camel_case_types, non_upper_case_globals, dead_code)]
+    include!(concat!(env!("OUT_DIR"), "/halide_trace_bindings.rs"));
 }
+use ffi::halide_trace_packet_t;
 
+const HEADER_BYTES: usize = std::mem::size_of::<halide_trace_packet_t>();
+
+// Helper function to read a little-endian i32 out of a byte buffer at a given offset. try_into()
+// converts the slice to a fixed-size [u8; 4] array. Inlined for performance since it's called in
+// the hot path of packet parsing (coordinate arrays).
 #[inline]
 fn i32_le(buf: &[u8], off: usize) -> i32 {
     i32::from_le_bytes(buf[off..off + 4].try_into().unwrap())
-}
-
-#[inline]
-fn u16_le(buf: &[u8], off: usize) -> u16 {
-    u16::from_le_bytes(buf[off..off + 2].try_into().unwrap())
 }
 
 /// Read a null-terminated C string. Returns `(string, bytes_consumed_including_null)`.
@@ -448,33 +442,43 @@ impl Trace {
 
         // Packet parsing loop.
         while pos + HEADER_BYTES <= total {
-            let size = u32_le(data, pos) as usize;
+            // Don't reinterpret-cast `data`'s bytes directly as `&halide_trace_packet_t` — we
+            // cannot statically prove the buffer is 4-byte aligned (though it practice it always
+            // should be), and an unaligned reference is UB. `read_unaligned` copies the header out
+            // by value instead.
+            let header: halide_trace_packet_t =
+                unsafe { std::ptr::read_unaligned(data[pos..pos + HEADER_BYTES].as_ptr().cast()) };
+
+            let size = header.size as usize;
             if size < HEADER_BYTES || pos + size > total {
                 break;
             }
 
             // ── Fixed header fields ───────────────────────────────────────────
-            let event = i32_le(data, pos + 4);
-            let parent_id = i32_le(data, pos + 8);
-            let dimensions = i32_le(data, pos + 20) as usize;
+            let parent_id = header.parent_id;
+            let dimensions = header.dimensions as usize;
 
-            let ev = EventCode::from_i32(event);
+            let ev = EventCode::from_i32(header.event as i32);
             let is_load_or_store = matches!(ev, EventCode::Load | EventCode::Store);
 
-            // Slot @ 12 is `id` for non-load/store events and `value_index` for load/store
-            // events; slot @ 16 is `type` for load/store events and `thread_id` (else 0)
-            // otherwise. See halide_trace_packet_t in HalideRuntime.h.
+            // `__bindgen_anon_1` is `id` for non-load/store events and `value_index` for
+            // load/store events; `__bindgen_anon_2` is `type` for load/store events and
+            // `thread_id` (else 0) otherwise. See halide_trace_packet_t in HalideRuntime.h.
+            // Reading a union field is inherently unsafe — the type can't track which variant
+            // is valid, so it's on us to pick the right one based on `ev`, same as the raw
+            // offset reads this replaced.
             let (id, value_index) = if is_load_or_store {
-                (0, i32_le(data, pos + 12))
+                (0, unsafe { header.__bindgen_anon_1.value_index })
             } else {
-                (i32_le(data, pos + 12), 0)
+                (unsafe { header.__bindgen_anon_1.id }, 0)
             };
 
             let (type_, thread_id) = if is_load_or_store {
+                let inner = unsafe { header.__bindgen_anon_2.__bindgen_anon_1 };
                 let type_ = HalideType {
-                    code: TypeCode::from_u8(data[pos + 16]),
-                    bits: data[pos + 17],
-                    lanes: u16_le(data, pos + 18),
+                    code: TypeCode::from_u8(inner.type_code),
+                    bits: inner.type_bits,
+                    lanes: inner.lanes,
                 };
 
                 // Initialize thread_ids as a sentinel value of -1.
@@ -486,7 +490,7 @@ impl Trace {
                         bits: 0,
                         lanes: 0,
                     },
-                    i32_le(data, pos + 16),
+                    unsafe { header.__bindgen_anon_2.thread_id },
                 )
             };
 
