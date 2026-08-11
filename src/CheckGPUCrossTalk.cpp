@@ -59,11 +59,14 @@ class FindAccesses : public IRVisitor {
     using IRVisitor::visit;
 
     // An index is usually in terms of let-bound variables, and the producer
-    // and the consumer name theirs differently, so put them back.
+    // and the consumer name theirs differently, so put the definitions back
+    // around it. Wrapping rather than substituting keeps a chain of lets that
+    // each use the one before it from expanding into something the size of
+    // their product.
     Expr resolve(Expr e) const {
         for (auto it = lets.rbegin(); it != lets.rend(); it++) {
             if (expr_uses_var(e, it->first)) {
-                e = substitute(it->first, it->second, e);
+                e = Let::make(it->first, it->second, e);
             }
         }
         return e;
@@ -165,11 +168,13 @@ public:
     }
 };
 
+// Only used to describe an access in an error message, so this is the one
+// place the lets are worth expanding, however large that gets.
 string name_and_args(const string &name, const vector<Expr> &args) {
     std::ostringstream s;
     s << name << "(";
     for (size_t i = 0; i < args.size(); i++) {
-        s << (i ? ", " : "") << args[i];
+        s << (i ? ", " : "") << substitute_in_all_lets(args[i]);
     }
     s << ")";
     return s.str();
