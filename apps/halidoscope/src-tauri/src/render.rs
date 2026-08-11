@@ -14,81 +14,41 @@ pub enum NormalizationMode {
     PerFunc,
 }
 
-#[derive(Deserialize, Clone, Copy)]
-pub struct NanState {
-    pub active: bool,
-    pub r: u8,
-    pub g: u8,
-    pub b: u8,
-    pub a: f64,
-}
-
-#[derive(Deserialize, Clone, Copy)]
-pub struct InfState {
-    pub active: bool,
-    pub r: u8,
-    pub g: u8,
-    pub b: u8,
-    pub a: f64,
-}
-
 // A trait that all 2D Canvas renderers implement.
 pub trait Renderer: Sized {
     type Value;
 
     fn seek(&mut self, trace: &Trace, store_indices: &[usize], target_k: usize);
     fn to_rgba(&self, normalization_mode: NormalizationMode) -> Vec<u8>;
-    fn to_nan_overlay(&self, nan_state: NanState) -> Vec<u8>;
-    fn to_inf_overlay(&self, inf_state: InfState) -> Vec<u8>;
+    fn to_nan_overlay(&self) -> Vec<u8>;
+    fn to_inf_overlay(&self) -> Vec<u8>;
     fn to_values(&self) -> Vec<Self::Value>;
 }
 
-fn nan_overlay(
-    values: &[f64],
-    width: usize,
-    height: usize,
-    channels: usize,
-    nan_state: NanState,
-) -> Vec<u8> {
-    let overlay_len = width * height * 4;
-    let mut out = vec![0u8; overlay_len];
+/// Packs a per-pixel predicate over channel values into a 1-bit-per-pixel mask: bit 1 for a pixel
+/// where `is_set` holds for any channel, bit 0 otherwise. Bits are packed MSB-first within each
+/// byte, in the same row-major order as `values`; the final byte is zero-padded if the pixel count
+/// isn't a multiple of 8. The frontend expands this back into a colored RGBA8 overlay, since every
+/// set pixel shares the same user-selected overlay color.
+fn pack_mask(values: &[f64], channels: usize, is_set: impl Fn(&[f64]) -> bool) -> Vec<u8> {
+    let num_pixels = values.len() / channels;
+    let mut out = vec![0u8; num_pixels.div_ceil(8)];
 
-    let alpha = (nan_state.a * 255.0).clamp(0.0, 255.0) as u8;
-
-    for (chunk, src) in out.chunks_exact_mut(4).zip(values.chunks_exact(channels)) {
-        if src.iter().any(|v| v.is_nan()) {
-            chunk[0] = nan_state.r;
-            chunk[1] = nan_state.g;
-            chunk[2] = nan_state.b;
-            chunk[3] = alpha;
+    for (i, src) in values.chunks_exact(channels).enumerate() {
+        if is_set(src) {
+            out[i / 8] |= 1 << (7 - (i % 8));
         }
     }
 
     out
 }
 
-fn inf_overlay(
-    values: &[f64],
-    width: usize,
-    height: usize,
-    channels: usize,
-    inf_state: InfState,
-) -> Vec<u8> {
-    let overlay_len = width * height * 4;
-    let mut out = vec![0u8; overlay_len];
+fn nan_mask(values: &[f64], channels: usize) -> Vec<u8> {
+    pack_mask(values, channels, |src| src.iter().any(|v| v.is_nan()))
+}
 
-    let alpha = (inf_state.a * 255.0).clamp(0.0, 255.0) as u8;
-
-    for (chunk, src) in out.chunks_exact_mut(4).zip(values.chunks_exact(channels)) {
-        if src.iter().any(|v| v.is_infinite()) {
-            chunk[0] = inf_state.r;
-            chunk[1] = inf_state.g;
-            chunk[2] = inf_state.b;
-            chunk[3] = alpha;
-        }
-    }
-
-    out
+fn inf_mask(values: &[f64], channels: usize) -> Vec<u8> {
+    pack_mask(values, channels, |src| src.iter().any(|v| v.is_infinite()))
 }
 
 // ── Grayscale rendering ──────────────────────────────────────────────────────────────────────────
@@ -234,26 +194,12 @@ impl Renderer for GrayscaleState {
         self.values.clone()
     }
 
-    fn to_nan_overlay(&self, nan_state: NanState) -> Vec<u8> {
-        let FuncGeometry {
-            width,
-            height,
-            channels,
-            ..
-        } = self.geom;
-
-        nan_overlay(&self.values, width, height, channels, nan_state)
+    fn to_nan_overlay(&self) -> Vec<u8> {
+        nan_mask(&self.values, self.geom.channels)
     }
 
-    fn to_inf_overlay(&self, inf_state: InfState) -> Vec<u8> {
-        let FuncGeometry {
-            width,
-            height,
-            channels,
-            ..
-        } = self.geom;
-
-        inf_overlay(&self.values, width, height, channels, inf_state)
+    fn to_inf_overlay(&self) -> Vec<u8> {
+        inf_mask(&self.values, self.geom.channels)
     }
 }
 
@@ -405,26 +351,12 @@ impl Renderer for RgbState {
         self.values.clone()
     }
 
-    fn to_nan_overlay(&self, nan_state: NanState) -> Vec<u8> {
-        let FuncGeometry {
-            width,
-            height,
-            channels,
-            ..
-        } = self.geom;
-
-        nan_overlay(&self.values, width, height, channels, nan_state)
+    fn to_nan_overlay(&self) -> Vec<u8> {
+        nan_mask(&self.values, self.geom.channels)
     }
 
-    fn to_inf_overlay(&self, inf_state: InfState) -> Vec<u8> {
-        let FuncGeometry {
-            width,
-            height,
-            channels,
-            ..
-        } = self.geom;
-
-        inf_overlay(&self.values, width, height, channels, inf_state)
+    fn to_inf_overlay(&self) -> Vec<u8> {
+        inf_mask(&self.values, self.geom.channels)
     }
 }
 
@@ -567,26 +499,12 @@ impl Renderer for StoreFrequencyState {
         self.counts.clone()
     }
 
-    fn to_nan_overlay(&self, nan_state: NanState) -> Vec<u8> {
-        let FuncGeometry {
-            width,
-            height,
-            channels,
-            ..
-        } = self.geom;
-
-        nan_overlay(&self.values, width, height, channels, nan_state)
+    fn to_nan_overlay(&self) -> Vec<u8> {
+        nan_mask(&self.values, self.geom.channels)
     }
 
-    fn to_inf_overlay(&self, inf_state: InfState) -> Vec<u8> {
-        let FuncGeometry {
-            width,
-            height,
-            channels,
-            ..
-        } = self.geom;
-
-        inf_overlay(&self.values, width, height, channels, inf_state)
+    fn to_inf_overlay(&self) -> Vec<u8> {
+        inf_mask(&self.values, self.geom.channels)
     }
 }
 
@@ -728,26 +646,12 @@ impl Renderer for LoadFrequencyState {
         self.counts.clone()
     }
 
-    fn to_nan_overlay(&self, nan_state: NanState) -> Vec<u8> {
-        let FuncGeometry {
-            width,
-            height,
-            channels,
-            ..
-        } = self.geom;
-
-        nan_overlay(&self.values, width, height, channels, nan_state)
+    fn to_nan_overlay(&self) -> Vec<u8> {
+        nan_mask(&self.values, self.geom.channels)
     }
 
-    fn to_inf_overlay(&self, inf_state: InfState) -> Vec<u8> {
-        let FuncGeometry {
-            width,
-            height,
-            channels,
-            ..
-        } = self.geom;
-
-        inf_overlay(&self.values, width, height, channels, inf_state)
+    fn to_inf_overlay(&self) -> Vec<u8> {
+        inf_mask(&self.values, self.geom.channels)
     }
 }
 
@@ -960,38 +864,24 @@ impl RedundantState {
         self.redundant_store_counts.clone()
     }
 
-    pub fn to_nan_overlay(&self, nan_state: NanState) -> Vec<u8> {
-        let FuncGeometry {
-            width,
-            height,
-            channels,
-            ..
-        } = self.geom;
-
+    pub fn to_nan_overlay(&self) -> Vec<u8> {
         let values: Vec<f64> = self
             .last_values
             .iter()
             .map(|v| v.map_or(0.0, f64::from_bits))
             .collect();
 
-        nan_overlay(&values, width, height, channels, nan_state)
+        nan_mask(&values, self.geom.channels)
     }
 
-    pub fn to_inf_overlay(&self, inf_state: InfState) -> Vec<u8> {
-        let FuncGeometry {
-            width,
-            height,
-            channels,
-            ..
-        } = self.geom;
-
+    pub fn to_inf_overlay(&self) -> Vec<u8> {
         let values: Vec<f64> = self
             .last_values
             .iter()
             .map(|v| v.map_or(0.0, f64::from_bits))
             .collect();
 
-        inf_overlay(&values, width, height, channels, inf_state)
+        inf_mask(&values, self.geom.channels)
     }
 }
 
@@ -1218,26 +1108,12 @@ impl ReuseDistanceState {
         self.max_reuse_distance.clone()
     }
 
-    pub fn to_nan_overlay(&self, nan_state: NanState) -> Vec<u8> {
-        let FuncGeometry {
-            width,
-            height,
-            channels,
-            ..
-        } = self.geom;
-
-        nan_overlay(&self.values, width, height, channels, nan_state)
+    pub fn to_nan_overlay(&self) -> Vec<u8> {
+        nan_mask(&self.values, self.geom.channels)
     }
 
-    pub fn to_inf_overlay(&self, inf_state: InfState) -> Vec<u8> {
-        let FuncGeometry {
-            width,
-            height,
-            channels,
-            ..
-        } = self.geom;
-
-        inf_overlay(&self.values, width, height, channels, inf_state)
+    pub fn to_inf_overlay(&self) -> Vec<u8> {
+        inf_mask(&self.values, self.geom.channels)
     }
 }
 
@@ -1459,25 +1335,11 @@ impl ThreadState {
         (&self.store_counts, &self.load_counts)
     }
 
-    pub fn to_nan_overlay(&self, nan_state: NanState) -> Vec<u8> {
-        let FuncGeometry {
-            width,
-            height,
-            channels,
-            ..
-        } = self.geom;
-
-        nan_overlay(&self.values, width, height, channels, nan_state)
+    pub fn to_nan_overlay(&self) -> Vec<u8> {
+        nan_mask(&self.values, self.geom.channels)
     }
 
-    pub fn to_inf_overlay(&self, inf_state: InfState) -> Vec<u8> {
-        let FuncGeometry {
-            width,
-            height,
-            channels,
-            ..
-        } = self.geom;
-
-        inf_overlay(&self.values, width, height, channels, inf_state)
+    pub fn to_inf_overlay(&self) -> Vec<u8> {
+        inf_mask(&self.values, self.geom.channels)
     }
 }
