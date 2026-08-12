@@ -32,7 +32,8 @@ struct ThreadLoop {
 // recorded in the order they appear, so an earlier one in the list is one that
 // has already happened.
 struct Access {
-    // As written, for error messages.
+    // As written, for error messages. Left in terms of whatever variables the
+    // schedule named, which is what the user will recognize.
     vector<Expr> args;
     // In terms of the loops the fused loops over threads will use, so that two
     // accesses can be compared.
@@ -60,16 +61,9 @@ class FindAccesses : public IRVisitor {
 
     // An index is usually in terms of let-bound variables, and the producer
     // and the consumer name theirs differently, so put the definitions back
-    // around it. Wrapping rather than substituting keeps a chain of lets that
-    // each use the one before it from expanding into something the size of
-    // their product.
-    Expr resolve(Expr e) const {
-        for (auto it = lets.rbegin(); it != lets.rend(); it++) {
-            if (expr_uses_var(e, it->first)) {
-                e = Let::make(it->first, it->second, e);
-            }
-        }
-        return e;
+    // around it.
+    Expr resolve(const Expr &e) const {
+        return rewrap_used_lets(e, lets);
     }
 
     vector<Expr> resolve(const vector<Expr> &args) const {
@@ -120,10 +114,10 @@ class FindAccesses : public IRVisitor {
     // Record an access, in terms of both the loops it was written with and the
     // loops over threads it will end up in.
     void record(const vector<Expr> &args, bool is_store) {
-        vector<Expr> resolved = resolve(args), canonical;
-        canonical.reserve(resolved.size());
-        for (const Expr &e : resolved) {
-            canonical.push_back(canonicalize(e, thread_loops));
+        vector<Expr> canonical;
+        canonical.reserve(args.size());
+        for (const Expr &e : args) {
+            canonical.push_back(canonicalize(resolve(e), thread_loops));
         }
         // The nth loop counting inwards from this access is the nth thread
         // dimension, so that is where its extent belongs.
@@ -134,7 +128,7 @@ class FindAccesses : public IRVisitor {
                                     simplify(max(thread_extents[i], e)) :
                                     e;
         }
-        accesses.push_back({resolved, canonical, depth, is_store});
+        accesses.push_back({args, canonical, depth, is_store});
     }
 
     void visit(const Provide *op) override {
@@ -168,13 +162,11 @@ public:
     }
 };
 
-// Only used to describe an access in an error message, so this is the one
-// place the lets are worth expanding, however large that gets.
 string name_and_args(const string &name, const vector<Expr> &args) {
     std::ostringstream s;
     s << name << "(";
     for (size_t i = 0; i < args.size(); i++) {
-        s << (i ? ", " : "") << substitute_in_all_lets(args[i]);
+        s << (i ? ", " : "") << args[i];
     }
     s << ")";
     return s.str();
