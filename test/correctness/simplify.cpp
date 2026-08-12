@@ -1138,10 +1138,14 @@ void check_bounds() {
     check(select(x < y, z, select(x < y, w, x) + 3), select(x < y, z, x + 3));
     check(select(x < y, select(x < y, w, x) + 3, z), select(x < y, w + 3, z));
     check(select(x < y, z, 3 - select(x < y, w, x)), select(x < y, z, 3 - x));
-    check(select(x < y, z, (select(x < y, w, x) + 3)/2), select(x < y, z, (x + 3)/2));
-    check(select(x < y, (select(x < y, w, x) + 3)/2, z), select(x < y, (w + 3)/2, z));
-    check(select(x < y, z, select(x < y, w, x)/2), select(x < y, z, x/2));
-    check(min(select(x < y, z, w), select(x < y, x, z)/2), select(x < y, min(x/2, z), min(z/2, w)));
+    check(select(x < y, z, (select(x < y, w, x) + 3) / 2), select(x < y, z, (x + 3) / 2));
+    check(select(x < y, (select(x < y, w, x) + 3) / 2, z), select(x < y, (w + 3) / 2, z));
+    check(select(x < y, z, select(x < y, w, x) / 2), select(x < y, z, x / 2));
+    check(min(select(x < y, z, w), select(x < y, x, z) / 2), select(x < y, min(x / 2, z), min(z / 2, w)));
+    check(select(x < y, z, select(x < y, w, x) * 3), select(x < y, z, x * 3));
+    check(select(x < y, select(x < y, w, x) * 3, z), select(x < y, w * 3, z));
+    check(select(x < y, z, (select(x < y, w, x) * 3) + 5), select(x < y, z, (x * 3) + 5));
+    check(min(select(x < y, z, w), select(x < y, x, z) * 3), select(x < y, min(x * 3, z), min(z * 3, w)));
 
     check(min(x + 1, y) - min(x, y - 1), 1);
     check(max(x + 1, y) - max(x, y - 1), 1);
