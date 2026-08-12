@@ -976,7 +976,7 @@ void compile_multitarget(const std::string &fn_name,
             runtime_features[i] &= cur_target_features[i];
         }
 
-        wrapper_args.push_back(can_use != 0);
+        wrapper_args.push_back(can_use);
         wrapper_args.emplace_back(sub_fn_name);
     }
 
