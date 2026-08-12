@@ -51,6 +51,27 @@ Expr Simplify::visit(const Select *op, ExprInfo *info) {
          rewrite(select(x, y, select(z, w, y)), select(x || !z, y, w)) ||
          rewrite(select(x, select(x, y, z), w), select(x, y, w)) ||
          rewrite(select(x, y, select(x, z, w)), select(x, y, w)) ||
+         // The same, but where the inner select is buried under some
+         // affine arithmetic. Substituting the branch the condition selects
+         // never introduces an operand that wasn't already being evaluated.
+         rewrite(select(x, select(x, z, w) + u, y), select(x, z + u, y)) ||
+         rewrite(select(x, u + select(x, z, w), y), select(x, u + z, y)) ||
+         rewrite(select(x, select(x, z, w) - u, y), select(x, z - u, y)) ||
+         rewrite(select(x, u - select(x, z, w), y), select(x, u - z, y)) ||
+         rewrite(select(x, y, select(x, z, w) + u), select(x, y, w + u)) ||
+         rewrite(select(x, y, u + select(x, z, w)), select(x, y, u + w)) ||
+         rewrite(select(x, y, select(x, z, w) - u), select(x, y, w - u)) ||
+         rewrite(select(x, y, u - select(x, z, w)), select(x, y, u - w)) ||
+         rewrite(select(x, (select(x, z, w) + u)/v, y), select(x, (z + u)/v, y)) ||
+         rewrite(select(x, (u + select(x, z, w))/v, y), select(x, (u + z)/v, y)) ||
+         rewrite(select(x, (select(x, z, w) - u)/v, y), select(x, (z - u)/v, y)) ||
+         rewrite(select(x, (u - select(x, z, w))/v, y), select(x, (u - z)/v, y)) ||
+         rewrite(select(x, y, (select(x, z, w) + u)/v), select(x, y, (w + u)/v)) ||
+         rewrite(select(x, y, (u + select(x, z, w))/v), select(x, y, (u + w)/v)) ||
+         rewrite(select(x, y, (select(x, z, w) - u)/v), select(x, y, (w - u)/v)) ||
+         rewrite(select(x, y, (u - select(x, z, w))/v), select(x, y, (u - w)/v)) ||
+         rewrite(select(x, select(x, z, w)/v, y), select(x, z/v, y)) ||
+         rewrite(select(x, y, select(x, z, w)/v), select(x, y, w/v)) ||
          rewrite(select(x, y + z, y + w), y + select(x, z, w)) ||
          rewrite(select(x, y + z, w + y), y + select(x, z, w)) ||
          rewrite(select(x, z + y, y + w), y + select(x, z, w)) ||

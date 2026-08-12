@@ -1133,6 +1133,16 @@ void check_bounds() {
     check(select(x < y, x + y, x), select(x < y, y, 0) + x);
     check(select(x < y, x, x + y), select(x < y, 0, y) + x);
 
+    // A select nested in a branch of a select on the same condition, under
+    // some affine arithmetic. The inner select's outcome is known.
+    check(select(x < y, z, select(x < y, w, x) + 3), select(x < y, z, x + 3));
+    check(select(x < y, select(x < y, w, x) + 3, z), select(x < y, w + 3, z));
+    check(select(x < y, z, 3 - select(x < y, w, x)), select(x < y, z, 3 - x));
+    check(select(x < y, z, (select(x < y, w, x) + 3)/2), select(x < y, z, (x + 3)/2));
+    check(select(x < y, (select(x < y, w, x) + 3)/2, z), select(x < y, (w + 3)/2, z));
+    check(select(x < y, z, select(x < y, w, x)/2), select(x < y, z, x/2));
+    check(min(select(x < y, z, w), select(x < y, x, z)/2), select(x < y, min(x/2, z), min(z/2, w)));
+
     check(min(x + 1, y) - min(x, y - 1), 1);
     check(max(x + 1, y) - max(x, y - 1), 1);
     check(min(x + 1, y) - min(y - 1, x), 1);
