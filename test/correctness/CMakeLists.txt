@@ -389,6 +389,7 @@ tests(
     vector_extern.cpp
     vector_print_bug.cpp
     vector_shuffle.cpp
+    vector_store_alignment.cpp
     vector_tile.cpp
     vectorize_guard_with_if.cpp
     vectorize_mixed_widths.cpp

@@ -61,6 +61,18 @@ void check_in_bounds(const Expr &a, const Expr &b, const Scope<Interval> &bi) {
     }
 }
 
+void check_with_assumptions(const Expr &a, const Expr &b, const std::vector<Expr> &assumptions) {
+    Expr simpler = simplify(a, Scope<Interval>(), Scope<ModulusRemainder>(), assumptions);
+    if (!equal(simpler, b)) {
+        std::cerr
+            << "\nSimplification failure:\n"
+            << "Input: " << a << "\n"
+            << "Output: " << simpler << "\n"
+            << "Expected output: " << b << "\n";
+        abort();
+    }
+}
+
 // Helper functions to use in the tests below
 Expr interleave_vectors(const std::vector<Expr> &e) {
     return Shuffle::make_interleave(e);
@@ -2320,6 +2332,15 @@ void check_unreachable() {
           Evaluate::make(0));
 }
 
+void check_assumptions() {
+    Expr x = Var("x");
+
+    check_with_assumptions(x % 32, 0, {(x + 31) % 32 == 31});
+    check_with_assumptions(x % 32, 0, {(31 + x) % 32 == 31});
+    check_with_assumptions(x % 32, 0, {(x - 1) % 32 == 31});
+    check_with_assumptions(x % 32, 0, {(31 - x) % 32 == 31});
+}
+
 int main(int argc, char **argv) {
     check_invariant();
     check_casts();
@@ -2331,6 +2352,7 @@ int main(int argc, char **argv) {
     check_overflow();
     check_bitwise();
     check_lets();
+    check_assumptions();
     check_unreachable();
 
     // Miscellaneous cases that don't fit into one of the categories above.
