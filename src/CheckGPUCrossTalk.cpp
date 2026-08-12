@@ -2,7 +2,6 @@
 
 #include "Bounds.h"
 #include "CanonicalizeGPUVars.h"
-#include "ExprUsesVar.h"
 #include "IR.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
@@ -43,34 +42,22 @@ struct Access {
     bool is_store;
 };
 
-// Rewrite an expr in terms of the loops the fused loops over threads will use.
-// Counting inwards, the nth loop around it is the nth thread dimension,
-// whatever it is called, and its min is folded in, because the fused loop
-// starts at zero.
-Expr canonicalize(Expr e, const vector<ThreadLoop> &thread_loops) {
-    for (size_t i = 0; i < thread_loops.size() && i < 3; i++) {
-        const ThreadLoop &t = thread_loops[thread_loops.size() - 1 - i];
-        Expr v = Variable::make(Int(32), gpu_thread_name((int)i)) + t.min;
-        e = simplify(substitute(t.name, v, e));
-    }
-    return e;
-}
-
 class FindAccesses : public IRVisitor {
     using IRVisitor::visit;
 
-    // An index is usually in terms of let-bound variables, and the producer
-    // and the consumer name theirs differently, so put the definitions back
-    // around it.
-    Expr resolve(const Expr &e) const {
-        return rewrap_used_lets(e, lets);
-    }
-
-    vector<Expr> resolve(const vector<Expr> &args) const {
-        vector<Expr> result;
-        result.reserve(args.size());
-        for (const Expr &e : args) {
-            result.push_back(resolve(e));
+    // Rewrite an expr into the terms two accesses can be compared in. An index
+    // is usually written using let-bound variables, and the producer and the
+    // consumer name theirs differently, so put the definitions back around it.
+    // Then swap each loop over threads for the fused loop it will become:
+    // counting inwards, the nth loop around the expr is the nth thread
+    // dimension, whatever it is called, and its min is folded in, because the
+    // fused loop starts at zero.
+    Expr canonicalize(const Expr &e) const {
+        Expr result = rewrap_used_lets(e, lets);
+        for (size_t i = 0; i < thread_loops.size() && i < 3; i++) {
+            const ThreadLoop &t = thread_loops[thread_loops.size() - 1 - i];
+            Expr v = Variable::make(Int(32), gpu_thread_name((int)i)) + t.min;
+            result = simplify(substitute(t.name, v, result));
         }
         return result;
     }
@@ -90,8 +77,7 @@ class FindAccesses : public IRVisitor {
             // do not overlap. A loop that starts at the thread's own part of
             // the allocation has bounds that speak of the thread, so they get
             // the same treatment as the accesses themselves.
-            Expr min = canonicalize(resolve(op->min), thread_loops);
-            Expr max = canonicalize(resolve(op->max), thread_loops);
+            Expr min = canonicalize(op->min), max = canonicalize(op->max);
             loop_bounds.emplace_back(op->name, Interval(min, max));
             IRVisitor::visit(op);
         }
@@ -117,7 +103,7 @@ class FindAccesses : public IRVisitor {
         vector<Expr> canonical;
         canonical.reserve(args.size());
         for (const Expr &e : args) {
-            canonical.push_back(canonicalize(resolve(e), thread_loops));
+            canonical.push_back(canonicalize(e));
         }
         // The nth loop counting inwards from this access is the nth thread
         // dimension, so that is where its extent belongs.
