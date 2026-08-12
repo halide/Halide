@@ -328,6 +328,7 @@ tests(
     solve.cpp
     sort_exprs.cpp
     specialize.cpp
+    specialize_stride_lowering.cpp
     specialize_to_gpu.cpp
     specialize_trim_condition.cpp
     spirv_ir.cpp

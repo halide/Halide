@@ -682,6 +682,41 @@ protected:
     }
 };
 
+bool is_specialization_branch_marker(const Stmt &s) {
+    if (const Evaluate *eval = s.as<Evaluate>()) {
+        if (const Call *call = eval->value.as<Call>()) {
+            return call->is_intrinsic(Call::specialization_branch_marker);
+        }
+    }
+    return false;
+}
+
+// Strips the markers mark_specialization_branch() (ScheduleFunctions.cpp)
+// brackets each specialize() branch with. Safe here because by the time
+// storage flattening has run, sibling branches have diverged for real (e.g.
+// a stride-1 specialization now has literal contiguous Store/Load nodes
+// where the generic fallback has stride-multiplied ones).
+Stmt remove_specialization_branch_markers(Stmt s) {
+    return mutate_with(s, [](auto *self, const Block *op) -> Stmt {
+        // Markers bracket both ends of a branch's body, so both first and
+        // rest need checking. If the real body between them simplified away
+        // entirely, this Block may already be a bare (front_marker,
+        // back_marker) pair with nothing left in between -- handle that
+        // directly, since recursing into a lone marker Evaluate (not itself
+        // a Block) would never visit it again to strip it.
+        bool first_is_marker = is_specialization_branch_marker(op->first);
+        bool rest_is_marker = is_specialization_branch_marker(op->rest);
+        if (first_is_marker && rest_is_marker) {
+            return Evaluate::make(0);
+        } else if (first_is_marker) {
+            return self->mutate(op->rest);
+        } else if (rest_is_marker) {
+            return self->mutate(op->first);
+        }
+        return self->visit_base(op);
+    });
+}
+
 }  // namespace
 
 Stmt storage_flattening(Stmt s,
@@ -706,6 +741,7 @@ Stmt storage_flattening(Stmt s,
     s = FlattenDimensions(tuple_env, outputs, target)(s);
     s = HoistStorage()(s);
     s = PromoteToMemoryType()(s);
+    s = remove_specialization_branch_markers(s);
 
     return s;
 }
