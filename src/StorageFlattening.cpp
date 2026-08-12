@@ -687,7 +687,7 @@ protected:
 // storage flattening has run, sibling branches have diverged for real (e.g.
 // a stride-1 specialization now has literal contiguous Store/Load nodes
 // where the generic fallback has stride-multiplied ones).
-Stmt remove_specialization_branch_markers(Stmt s) {
+Stmt remove_specialization_branch_markers(const Stmt &s) {
     return mutate_with(s, [](auto *self, const Call *op) -> Expr {
         if (op->is_intrinsic(Call::specialization_branch_marker)) {
             return make_zero(op->type);
