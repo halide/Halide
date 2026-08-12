@@ -24,11 +24,11 @@ WEAK halide_can_use_target_features_t halide_set_custom_can_use_target_features(
     return result;
 }
 
-WEAK halide_can_use_target_result_t halide_can_use_target_features(int count, const uint64_t *features) {
+WEAK int halide_can_use_target_features(int count, const uint64_t *features) {
     return (*custom_can_use_target_features)(count, features);
 }
 
-WEAK halide_can_use_target_result_t halide_default_can_use_target_features(int count, const uint64_t *features) {
+WEAK int halide_default_can_use_target_features(int count, const uint64_t *features) {
     // cpu features should never change, so call once and cache.
     // Note that since CpuFeatures has a (trivial) ctor, compilers may insert guards
     // for threadsafe initialization (per C++11); this can fail at link time

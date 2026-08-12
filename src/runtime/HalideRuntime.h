@@ -1619,20 +1619,22 @@ typedef enum halide_target_processor_t {
  * control the whether or not this procedure will be called again next invocation of a pipeline to determine
  * which version is eligible for calling.
  *
+ * You may use the convenience enum below to write your return statements.
+ *
  * The default implementation simply calls halide_default_can_use_target_features.
  *
  * Note that `features` points to an array of `count` uint64_t; this array must contain enough
  * bits to represent all the currently known features. Any excess bits must be set to zero.
  */
 // @{
-typedef enum {
+enum {
     halide_can_use_target_never = 0,
     halide_can_use_target_always = 1,
     halide_can_use_target_not_right_now = 2,
     halide_can_use_target_for_the_moment = 3,
-} halide_can_use_target_result_t;
-extern halide_can_use_target_result_t halide_can_use_target_features(int count, const uint64_t *features);
-typedef halide_can_use_target_result_t (*halide_can_use_target_features_t)(int count, const uint64_t *features);
+};
+extern int halide_can_use_target_features(int count, const uint64_t *features);
+typedef int (*halide_can_use_target_features_t)(int count, const uint64_t *features);
 extern halide_can_use_target_features_t halide_set_custom_can_use_target_features(halide_can_use_target_features_t);
 // @}
 
@@ -1641,7 +1643,7 @@ extern halide_can_use_target_features_t halide_set_custom_can_use_target_feature
  * for convenience of user code that may wish to extend halide_can_use_target_features
  * but continue providing existing support, e.g.
  *
- *     halide_can_use_target_result_t halide_can_use_target_features(int count, const uint64_t *features) {
+ *     int halide_can_use_target_features(int count, const uint64_t *features) {
  *          if (features[halide_target_somefeature >> 6] & (1LL << (halide_target_somefeature & 63))) {
  *              if (!can_use_somefeature()) {
  *                  return halide_can_use_target_never;
@@ -1650,7 +1652,7 @@ extern halide_can_use_target_features_t halide_set_custom_can_use_target_feature
  *          return halide_default_can_use_target_features(count, features);
  *     }
  */
-extern halide_can_use_target_result_t halide_default_can_use_target_features(int count, const uint64_t *features);
+extern int halide_default_can_use_target_features(int count, const uint64_t *features);
 
 typedef struct halide_dimension_t {
 #if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
