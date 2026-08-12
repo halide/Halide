@@ -204,7 +204,7 @@ extern "C" int halide_msan_annotate_memory_is_initialized(void *user_context, co
             }
             if (actual_error != expected_error) {
                 fprintf(stderr, "Failure: Unexpected error message: %.*s\n",
-                        (int)len, static_cast<const char *>(ptr));
+                        (int)actual_error.size(), actual_error.data());
                 exit(1);
             }
             return 0;  // stay in this state

@@ -11,15 +11,15 @@ class CheckVectorStoreAlignment : public IRVisitor {
     void visit(const Store *op) override {
         if (op->name == "output" && op->value.type().lanes() == 32) {
             found_vector_store = true;
-            alignment_is_known = op->alignment.modulus % 32 == 0 &&
-                                 op->alignment.remainder % 32 == 0;
+            all_vector_stores_aligned &= op->alignment.modulus % 32 == 0 &&
+                                         op->alignment.remainder % 32 == 0;
         }
         IRVisitor::visit(op);
     }
 
 public:
     bool found_vector_store = false;
-    bool alignment_is_known = false;
+    bool all_vector_stores_aligned = true;
 };
 
 }  // namespace
@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
         printf("Did not find the vectorized output store.\n");
         return 1;
     }
-    if (!checker.alignment_is_known) {
+    if (!checker.all_vector_stores_aligned) {
         printf("The vectorized output store was not known to be aligned by 32 elements.\n");
         return 1;
     }
