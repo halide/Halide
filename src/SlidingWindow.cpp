@@ -552,36 +552,18 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                               new_max_at_new_loop_min >= max_required_at_loop_min &&
                               new_min_at_new_loop_min <= new_max_at_new_loop_min;
         }
-        // Rewinding the loop only warms the window up if the warm-up tiles
-        // with copies of the steady state, which needs every iteration to
-        // advance the window by the same amount. That's what being affine in
-        // the loop var buys us. A region required that's flat over part of its
-        // range - a clamped coordinate, say - doesn't advance at all there, so
-        // no number of extra iterations covers it, and we have to warm up
-        // explicitly on the first iteration instead.
-        // Resampling by a constant factor advances uniformly too, just over
-        // several iterations at a time, so look for any small period. This is
-        // conservative in one known way: rewinding introduces a max into the
-        // region computed, so a Func slid before this one can leave a plateau
-        // of symbolic length in the region required of this one, and we give
-        // up on rewinding even though that particular plateau is harmless.
-        auto advances_uniformly = [&](const Expr &e) {
-            for (int period = 1; period <= 8; period++) {
-                Expr step = simplify(substitute(loop_var, loop_var_expr + period, e) - e);
-                if (!expr_uses_var(step, loop_var)) {
-                    return true;
-                }
-            }
-            return false;
-        };
-        bool affine = advances_uniformly(min_required) && advances_uniformly(max_required);
-
         // Try to solve the equation.
         new_loop_min_eq = simplify(new_loop_min_eq);
         Interval solve_result = solve_for_inner_interval(new_loop_min_eq, new_loop_min_name);
-        if (affine &&
-            solve_result.has_upper_bound() &&
-            can_prove(solve_result.max < loop_min) &&
+        // The solver returns something even when the constraints can't all be
+        // met, so check its answer really does satisfy them. That's the whole
+        // correctness condition for rewinding: the warm-up iterations tile the
+        // region with copies of the steady state, and reach back far enough to
+        // cover what's required at the loop min.
+        bool solved = (solve_result.has_upper_bound() &&
+                       can_prove(substitute(new_loop_min_name, solve_result.max,
+                                            new_loop_min_eq)));
+        if (solved &&
             !expr_uses_vars(solve_result.max, enclosing_loops)) {
             result.warmup_start = simplify(solve_result.max);
 
@@ -595,11 +577,9 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // must retain has to cover what those warm-up iterations ask
             // for too.
             if (can_slide_up) {
-                Expr min_required_at_loop_min = substitute(loop_var, loop_min, min_required);
-                new_min = max(new_min, min_required_at_loop_min);
+                new_min = max(new_min, min_required);
             } else {
-                Expr max_required_at_loop_min = substitute(loop_var, loop_min, max_required);
-                new_max = min(new_max, max_required_at_loop_min);
+                new_max = min(new_max, max_required);
             }
         } else {
             // We couldn't find a suitable new loop min, so we can't assume
@@ -1045,9 +1025,13 @@ class SlidingWindow : public IRMutator {
         // What we decided to do with each func around this loop, in the order
         // we decided it.
         vector<SlideDecision> plan;
-        // The loop min before any warm-up iterations were prepended. Note
-        // that this is captured before the loop below rewinds anything.
-        Expr orig_loop_min = op->min;
+        // The loop min before any warm-up iterations were prepended. This
+        // gets its own name, because <loop>.loop_min follows the loop as we
+        // rewind it, and anything that wants to know where the real work
+        // starts needs a reference that stays put. Most of these lets get
+        // simplified away.
+        string orig_loop_min_name = op->name + ".loop_min.orig";
+        Expr orig_loop_min = Variable::make(Int(32), orig_loop_min_name);
 
         for (const Function &func : consumers_first(sliding)) {
             debug(3) << "Doing sliding window analysis on function " << func.name() << "\n";
@@ -1055,7 +1039,7 @@ class SlidingWindow : public IRMutator {
             // Figure out the first iteration at which this func is consumed.
             // If nothing that consumes it is warming up a window of its own,
             // that's just the loop min.
-            Expr consumed_from = op->min;
+            Expr consumed_from = orig_loop_min;
             // Otherwise we need to have this func warmed up in time for the
             // earliest-starting consumer, which means rewinding the loop even
             // further than they did.
@@ -1096,13 +1080,21 @@ class SlidingWindow : public IRMutator {
                 Expr new_loop_min =
                     loop_min.same_as(op->min) ? warmup_start : min(warmup_start, loop_min);
 
-                // Rename the loop var in the body. Note that we leave
-                // references to the old loop min alone - they still refer to
-                // the iteration at which the real work starts, which is what
-                // any consumer of them wants.
+                // Rename the loop var in the body, and with it any reference
+                // to the loop's min, so that <loop>.loop_min keeps meaning the
+                // min of that loop. Storage folding relies on it: it separates
+                // the first iteration from the steady state by substituting
+                // into (loop min < loop var), which only simplifies if the
+                // select we leave in the bounds names the same variable.
+                //
+                // Anything that wants the iteration at which the real work
+                // starts holds the Expr for it rather than looking up a name,
+                // so it is unaffected by this.
                 string new_name = name + ".$n";
                 loop_min = Variable::make(Int(32), new_name + ".loop_min");
-                body = substitute(name, Variable::make(Int(32), new_name), body);
+                body = substitute({{name, Variable::make(Int(32), new_name)},
+                                   {name + ".loop_min", loop_min}},
+                                  body);
                 body = SubstitutePrefetchVar(name, new_name)(body);
 
                 name = new_name;
@@ -1140,7 +1132,7 @@ class SlidingWindow : public IRMutator {
             for (const auto &i : new_lets) {
                 result = LetStmt::make(i.first, i.second, result);
             }
-            return result;
+            return LetStmt::make(orig_loop_min_name, op->min, result);
         }
     }
 

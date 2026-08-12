@@ -21,9 +21,10 @@ constexpr int num_stages = 5;
 constexpr int size = 15;
 constexpr int split_factor = 4;
 constexpr TailStrategy output_tail_strategies[] =
-    {TailStrategy::ShiftInwards,
-     TailStrategy::GuardWithIf,
-     TailStrategy::RoundUp};
+    // Only strategies that never store outside the region required. The
+    // overcomputing ones can clobber values a sliding window still needs.
+    {TailStrategy::GuardWithIf,
+     TailStrategy::PredicateStores};
 constexpr bool enable_sliding = true;
 constexpr bool enable_hoisting = true;
 constexpr bool enable_registers = true;
@@ -512,6 +513,8 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
             }
         } else {
             // Give it a random legal schedule that uses sliding window
+            constexpr int num_tail_strategies = sizeof(output_tail_strategies) / sizeof(output_tail_strategies[0]);
+            auto strat = output_tail_strategies[rng() % num_tail_strategies];
             for (auto producer = stages.rbegin() + 1; producer != stages.rend(); producer++) {
                 if (!live_funcs.count(&(*producer))) {
                     continue;
@@ -530,6 +533,18 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
                     }
                 }
                 assert(!loc.empty());
+
+                // A PredicateStores split still runs the producers for the
+                // predicated-off tail iteration of the inner loop, so anything
+                // computed in there accesses outside the region its allocation
+                // was sized for. Only offer sites at or outside the outer loop.
+                if (strat == TailStrategy::PredicateStores) {
+                    while (loc.size() > 1 &&
+                           loc.back().func == num_stages - 1 &&
+                           loc.back().var >= 2) {
+                        loc.pop_back();
+                    }
+                }
 
                 // Drop some levels at random to get legal store_at and compute_at sites
                 std::vector<int> levels;
@@ -612,8 +627,6 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
                 source << ".never_partition_all()";
             }
 
-            constexpr int num_tail_strategies = sizeof(output_tail_strategies) / sizeof(output_tail_strategies[0]);
-            auto strat = output_tail_strategies[rng() % num_tail_strategies];
             output_func.split(y, yo, yi, split_factor, strat);
             bool want_specialize = (rng() % 4) == 0;
             if (generate_specialize && want_specialize) {
