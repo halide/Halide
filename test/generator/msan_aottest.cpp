@@ -10,6 +10,7 @@ int main(int argc, char **argv) {
 
 #include <iostream>
 #include <limits>
+#include <string_view>
 #include <type_traits>
 #include <vector>
 
@@ -42,7 +43,7 @@ enum {
 const void *output_base = nullptr;
 const void *output_previous = nullptr;
 int bounds_inference_count = 0;
-bool expect_intermediate_buffer_error = false;
+bool expect_constraint_violation_error = false;
 bool skip_extern_copy = false;
 uint64_t input_contents_checked = 0;
 uint64_t input_contents_uninitialized = 0;
@@ -56,7 +57,7 @@ void reset_state(const MsanBuffer &in, const MsanBuffer &out) {
     output_base = out.data();
     output_previous = nullptr;
     bounds_inference_count = 0;
-    expect_intermediate_buffer_error = false;
+    expect_constraint_violation_error = false;
     skip_extern_copy = false;
     input_contents_uninitialized = 0;
     input_contents_checked = 0;
@@ -194,9 +195,16 @@ extern "C" int halide_msan_annotate_memory_is_initialized(void *user_context, co
             annotate_stage = AnnotateBoundsInferenceBuffer;
         }
     } else if (annotate_stage == AnnotateIntermediateBuffer) {
-        if (expect_intermediate_buffer_error) {
-            if (len != 80) {
-                fprintf(stderr, "Failure: Expected error message of len=80, saw %d bytes\n", (unsigned int)len);
+        if (expect_constraint_violation_error) {
+            constexpr std::string_view expected_error =
+                "Constraint violated: input.extent.0 (1) == 4 (4)";
+            std::string_view actual_error{static_cast<const char *>(ptr), len};
+            if (!actual_error.empty() && actual_error.back() == '\0') {
+                actual_error.remove_suffix(1);
+            }
+            if (actual_error != expected_error) {
+                fprintf(stderr, "Failure: Unexpected error message: %.*s\n",
+                        (int)len, static_cast<const char *>(ptr));
                 exit(1);
             }
             return 0;  // stay in this state
@@ -428,7 +436,7 @@ int main() {
         auto out = MsanBuffer(1, 1, 1);
         auto in = make_input_for(out);
         reset_state(in, out);
-        expect_intermediate_buffer_error = true;
+        expect_constraint_violation_error = true;
         if (msan(in, out) == 0) {
             fprintf(stderr, "Failure (expected failure but did not)!\n");
             exit(1);
