@@ -308,7 +308,8 @@ Expr Simplify::visit(const EQ *op, ExprInfo *info) {
           false)) ||
 
         (no_overflow_int(a.type()) &&
-         (rewrite(x == x % c0, x / c0 == 0, c0 != 0) ||
+         (rewrite((x + c0) % c1 == c2, x % c1 == fold((c2 - c0) % c1)) ||
+          rewrite(x == x % c0, x / c0 == 0, c0 != 0) ||
           rewrite(x % c0 == x, x / c0 == 0, c0 != 0) ||
           rewrite(x == (x / c0) * c0, x % c0 == 0, c0 != 0) ||
           rewrite((x / c0) * c0 == x, x % c0 == 0, c0 != 0) ||

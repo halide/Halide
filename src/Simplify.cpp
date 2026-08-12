@@ -216,52 +216,17 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
             }
             simplify->bounds_and_alignment_info.push(vb->name, expr_info);
             bounds_pop_list.push_back(vb);
-        } else if (modulus && remainder) {
-            // Learn from expressions of the form x % 8 == 3, or
-            // (x + c) % 8 == 3.
-            ModulusRemainder inferred_alignment{*modulus, *remainder};
-            v = m->a.as<Variable>();
-            if (!v) {
-                if (const Add *add = m->a.as<Add>()) {
-                    if ((v = add->a.as<Variable>())) {
-                        if (const auto offset = as_const_int(add->b)) {
-                            inferred_alignment = inferred_alignment - *offset;
-                        } else {
-                            v = nullptr;
-                        }
-                    } else if ((v = add->b.as<Variable>())) {
-                        if (const auto offset = as_const_int(add->a)) {
-                            inferred_alignment = inferred_alignment - *offset;
-                        } else {
-                            v = nullptr;
-                        }
-                    }
-                } else if (const Sub *sub = m->a.as<Sub>()) {
-                    if ((v = sub->a.as<Variable>())) {
-                        if (const auto offset = as_const_int(sub->b)) {
-                            inferred_alignment = inferred_alignment + *offset;
-                        } else {
-                            v = nullptr;
-                        }
-                    } else if ((v = sub->b.as<Variable>())) {
-                        if (const auto offset = as_const_int(sub->a)) {
-                            inferred_alignment = ModulusRemainder{0, *offset} - inferred_alignment;
-                        } else {
-                            v = nullptr;
-                        }
-                    }
-                }
+        } else if (modulus && remainder && (v = m->a.as<Variable>())) {
+            // Learn from expressions of the form x % 8 == 3
+            Simplify::ExprInfo expr_info;
+            expr_info.alignment.modulus = *modulus;
+            expr_info.alignment.remainder = *remainder;
+            if (const auto *info = simplify->bounds_and_alignment_info.find(v->name)) {
+                // We already know something about this variable and don't want to suppress it.
+                expr_info.intersect(*info);
             }
-            if (v) {
-                Simplify::ExprInfo expr_info;
-                expr_info.alignment = inferred_alignment;
-                if (const auto *info = simplify->bounds_and_alignment_info.find(v->name)) {
-                    // We already know something about this variable and don't want to suppress it.
-                    expr_info.intersect(*info);
-                }
-                simplify->bounds_and_alignment_info.push(v->name, expr_info);
-                bounds_pop_list.push_back(v);
-            }
+            simplify->bounds_and_alignment_info.push(v->name, expr_info);
+            bounds_pop_list.push_back(v);
         }
     } else if (const LT *lt = fact.as<LT>()) {
         const Variable *v = lt->a.as<Variable>();
