@@ -198,7 +198,7 @@ extern "C" int halide_msan_annotate_memory_is_initialized(void *user_context, co
         if (expect_constraint_violation_error) {
             constexpr std::string_view expected_error =
                 "Constraint violated: input.extent.0 (1) == 4 (4)";
-            std::string_view actual_error{static_cast<const char *>(ptr), len};
+            std::string_view actual_error{static_cast<const char *>(ptr), (size_t)len};
             if (!actual_error.empty() && actual_error.back() == '\0') {
                 actual_error.remove_suffix(1);
             }
