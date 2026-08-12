@@ -701,6 +701,8 @@ protected:
                     }
                 } else if (is_const(mul_a->b, -1)) {
                     expr = mutate(Opp::make(mul_a->a, make_zero(b.type()) - b));
+                } else if (is_const(mul_a->b, 0)) {
+                    expr = mutate(Cmp::make(make_zero(b.type()), b));
                 } else if (is_negative_const(mul_a->b) && no_overflow_int(a.type())) {
                     // Restrict to no_overflow_int types: for narrow signed types
                     // (int8, int16), negate(INT_MIN) overflows back to INT_MIN,
