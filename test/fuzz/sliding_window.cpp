@@ -23,6 +23,7 @@ constexpr int split_factor = 4;
 constexpr TailStrategy output_tail_strategies[] =
     // Only strategies that never store outside the region required. The
     // overcomputing ones can clobber values a sliding window still needs.
+    // See https://github.com/halide/Halide/issues/7819
     {TailStrategy::GuardWithIf,
      TailStrategy::PredicateStores};
 constexpr bool enable_sliding = true;
@@ -538,6 +539,7 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
                 // predicated-off tail iteration of the inner loop, so anything
                 // computed in there accesses outside the region its allocation
                 // was sized for. Only offer sites at or outside the outer loop.
+                // See https://github.com/halide/Halide/issues/9322
                 if (strat == TailStrategy::PredicateStores) {
                     while (loc.size() > 1 &&
                            loc.back().func == num_stages - 1 &&
