@@ -1,5 +1,6 @@
 #include "ConstantInterval.h"
 
+#include "ConstantBounds.h"
 #include "Error.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
@@ -150,20 +151,14 @@ ConstantInterval ConstantInterval::make_intersection(const ConstantInterval &a,
 }
 
 ConstantInterval covering_constant_interval(const Interval &in) {
-    ConstantInterval ci = ConstantInterval::everything();
-    if (in.has_lower_bound()) {
-        if (auto lo = as_const_int(in.min)) {
-            ci.min_defined = true;
-            ci.min = *lo;
-        }
-    }
-    if (in.has_upper_bound()) {
-        if (auto hi = as_const_int(in.max)) {
-            ci.max_defined = true;
-            ci.max = *hi;
-        }
-    }
-    return ci;
+    auto min_bounds = constant_integer_bounds(in.min);
+    auto max_bounds = constant_integer_bounds(in.max);
+    ConstantInterval result;
+    result.min = min_bounds.min;
+    result.min_defined = min_bounds.min_defined;
+    result.max = max_bounds.max;
+    result.max_defined = max_bounds.max_defined;
+    return result;
 }
 
 void ConstantInterval::operator+=(const ConstantInterval &other) {
