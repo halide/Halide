@@ -993,6 +993,8 @@ const halide_profiler_func_stats *ProfilerScope::func_stats(const Func &f) const
     // The profiler reports a Func under its display name if it has one.
     const std::string &display_name = f.function().profiler_display_name();
     return func_stats(display_name.empty() ? f.name() : display_name);
+}
+
 namespace {
 
 // State for the custom_trace callbacks below. custom_trace is a plain C
@@ -1165,6 +1167,9 @@ void Pipeline::halidoscope_impl(const std::function<void(Pipeline &, const Targe
                                 const HalidoscopeOptions &options,
                                 const Target &target_arg) {
     user_assert(defined()) << "Pipeline is undefined\n";
+    user_assert(options.halidoscope_profile_runs >= 0)
+        << "halidoscope: HalidoscopeOptions::halidoscope_profile_runs must be a non-negative integer, got "
+        << options.halidoscope_profile_runs << ".\n";
 
     // Fail fast if halidoscope_path looks like an explicit path (as opposed
     // to a bare name meant to be resolved via $PATH, e.g. the default
@@ -1220,7 +1225,7 @@ void Pipeline::halidoscope_impl(const std::function<void(Pipeline &, const Targe
     }
 
     // --- Profile run: Halide's sampling profiler, captured into JSON. ---
-    {
+    if (options.halidoscope_profile_runs > 0) {
         Pipeline profiled = deserialize_pipeline(data, external_params);
         profiled.trace_pipeline();
         Target profile_target = base_target.with_feature(Target::Profile);
@@ -1230,7 +1235,15 @@ void Pipeline::halidoscope_impl(const std::function<void(Pipeline &, const Targe
         halidoscope_profile_json = &profile_json;
         profiled.jit_handlers().custom_trace = halidoscope_capture_profile;
 
-        do_realize(profiled, profile_target);
+        {
+            // Accumulate profiler stats across all the runs below instead
+            // of letting each realize() reset them; see ProfilerScope.
+            ProfilerScope guard(profiled);
+            for (int i = 0; i < options.halidoscope_profile_runs; i++) {
+                do_realize(profiled, profile_target);
+            }
+        }
+
 
         halidoscope_profile_json = nullptr;
         write_entire_file(profile_path, profile_json.data(), profile_json.size());
@@ -1238,13 +1251,22 @@ void Pipeline::halidoscope_impl(const std::function<void(Pipeline &, const Targe
 
     // --- Launch Halidoscope, blocking until the window is closed. ---
     std::string binary = options.halidoscope_path;
-    int halidoscope_rc = run_process({binary, "--trace", trace_path, "--profile", profile_path});
+
+    std::vector<std::string> halidoscope_args = {binary, "--trace", trace_path};
+    if (options.halidoscope_profile_runs > 0) {
+        halidoscope_args.push_back("--profile");
+        halidoscope_args.push_back(profile_path);
+    }
+
+    int halidoscope_rc = run_process(halidoscope_args);
 
     // If we did not specify a persistent output directory, clean up the
     // temporary directory storing trace and profile data.
     if (!options.halidoscope_output_dir) {
         file_unlink(trace_path);
-        file_unlink(profile_path);
+        if (options.halidoscope_profile_runs > 0) {
+            file_unlink(profile_path);
+        }
         dir_rmdir(dir);
     }
 

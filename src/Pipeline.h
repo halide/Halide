@@ -124,6 +124,9 @@ struct HalidoscopeOptions {
     /** (Optional) Path to the non-volatile directory for storing
      * Halidoscope-generated trace binaries and profiler output. */
     std::optional<std::string> halidoscope_output_dir = std::nullopt;
+    /** The number of runs for the profiler execution. Defaults to 1. A
+     * 0 value indicates that profiling should be skipped. */
+    int halidoscope_profile_runs = 1;
 };
 
 class Pipeline;
