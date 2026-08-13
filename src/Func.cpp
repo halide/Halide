@@ -3688,6 +3688,7 @@ std::optional<std::string> change_type_prove_safe(
         // below; every other combiner can grow it faster than a single term's
         // range in a way we don't model -- a product reduction most importantly,
         // or an unrecognized shape -- so reject it rather than silently overflow.
+        // TODO: add saturating_add/sub to match VectorReduce support?
         if (!op || (*op != IRNodeType::Add && *op != IRNodeType::Sub)) {
             return "change_type() only supports sum, difference, min, max, and, "
                    "and or reductions; this reduction's accumulator could overflow "
