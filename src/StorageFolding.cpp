@@ -652,7 +652,9 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     // know how much to release, and the amount released each
                     // iteration can't be negative either. Checking the ends
                     // above isn't enough for this, because either one alone
-                    // may satisfy it.
+                    // may satisfy it. The amount acquired is derived from
+                    // max_provided alone, which is why only that end is
+                    // checked just above.
                     can_fold_forwards &= min_required.defined() &&
                                          is_monotonic(min_required, op->name) == Monotonic::Increasing;
                     can_fold_backwards &= max_required.defined() &&

@@ -525,7 +525,9 @@ int main(int argc, char **argv) {
         // g is computed inside h's production and slides over the outermost
         // loop, while f and h both slide over yi and warm up their windows by
         // rewinding it. g has to start when h's warm-up does - any earlier and
-        // it runs extra times, which corrupts its own sliding.
+        // it runs extra times, which corrupts its own sliding. Unlike the cases
+        // above this one also passes without the fix; it's here for coverage of
+        // the nesting, not as a regression test.
         const int size = 15;
         Var yo, yi;
         Buffer<int> ref;

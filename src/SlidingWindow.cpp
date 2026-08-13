@@ -354,9 +354,9 @@ std::ostream &operator<<(std::ostream &s, const SlideDecision &d) {
 // Perform sliding window optimization for a function over a particular serial
 // for loop. Rewrites the lets that give the region required of the func to
 // only cover the sliver newly required this iteration. If it can work out how
-// many iterations of warm-up that needs, it reports that back in new_loop_min
-// and the caller rewinds the loop; otherwise the new bounds get a select in
-// them that computes the whole region on the first iteration.
+// many iterations of warm-up that needs, it reports that back in the decision's
+// warmup_start and the caller rewinds the loop; otherwise the new bounds get a
+// select in them that computes the whole region on the first iteration.
 class SlidingWindowOnFunctionAndLoop : public IRMutator {
     Function func;
     string loop_var;
@@ -1111,7 +1111,9 @@ class SlidingWindow : public IRMutator {
                 // Let storage folding know there's now a read-after-write hazard here
                 Expr marker = Call::make(Int(32),
                                          Call::sliding_window_marker,
-                                         {func.name(), Variable::make(Int(32), op->name)},
+                                         // Use name rather than op->name: the loop may
+                                         // have been renamed above when it was rewound.
+                                         {func.name(), Variable::make(Int(32), name)},
                                          Call::Intrinsic);
                 body = Block::make(Evaluate::make(marker), body);
             }
