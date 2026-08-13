@@ -374,11 +374,8 @@ bool expr_to_smt2(const Expr &e, string *result) {
             if (op->is_intrinsic(Call::signed_integer_overflow)) {
                 // Hrm. Just generate invalid SMT2 so we can fail in peace.
                 formula << "<SIGNED_INTEGER_OVERFLOW>";
-            } else if (op->is_intrinsic(Call::likely) ||
-                       op->is_intrinsic(Call::likely_if_innermost) ||
-                       op->name == "fold" || op->name == "prove_me") {
-                // Branch hints, and markers used by rewrite rules. None of
-                // them change the value they wrap.
+            } else if (op->name == "fold" || op->name == "prove_me") {
+                // Markers used by rewrite rules. They don't change the value.
                 op->args[0].accept(this);
             } else {
                 give_up(op);
@@ -428,7 +425,8 @@ int z3_timeout(int suggested) {
 Z3Result
 satisfy(Expr e, map<string, Expr> *bindings, const string &comment, int timeout) {
 
-    e = simplify(common_subexpression_elimination(e));
+    // Branch hints don't affect the value, and z3 has no notion of them
+    e = simplify(common_subexpression_elimination(remove_likelies(e)));
 
     if (is_const_one(e)) {
         return Z3Result::Sat;
