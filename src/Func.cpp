@@ -3394,17 +3394,29 @@ Expr retype_leaf(const Expr &e, Type t, const FuncValueBounds &fvb) {
     return cast(t, folded);
 }
 
-// Retype a whole definition value to type `t`, retargeting a direct
-// self-reference from `fname` to `dst` and retyping the other operand as the
-// increment. The direct-call restriction keeps the recurrence visible to the
-// overflow proof.
+// Retype a whole definition value to type `t`, retargeting a direct self-reference
+// from `fname` to `dst` and retyping the other operand as the increment. We only
+// recognize values in a few simple forms:
+//
+// 1. A bare self-reference: f(..) = f(..)  (e.g. transpose or copy)
+// 2. A direct reduction: f(..) = f(..) OP increment (or increment OP f(..))
+//    where `increment` contains no self-references.
+// 3. An expression with no self-references.
+//
+// This constraint keeps the recurrence visible to the overflow proof.
 Expr retype_value(const Expr &e, const string &fname, const Function &dst, Type t,
                   const FuncValueBounds &fvb) {
-    if (const Call *c = e.as<Call>()) {
-        if (c->call_type == Call::Halide && c->name == fname) {
+    auto retype_self_reference = [&](const Expr &expr) {
+        if (const Call *c = expr.as<Call>(); c && c->call_type == Call::Halide && c->name == fname) {
             return Call::make(dst, c->args, c->value_index, /*follow_global_wrappers=*/false);
         }
+        return Expr();
+    };
+
+    if (Expr self = retype_self_reference(e); self.defined()) {
+        return self;
     }
+
     if (contains_self_reference(e, fname)) {
         optional<pair<Expr, Expr>> operands = as_binary_operands(e);
         user_assert(operands) << "change_type() only supports update definitions "
@@ -3420,10 +3432,11 @@ Expr retype_value(const Expr &e, const string &fname, const Function &dst, Type 
         user_assert(e.node_type() != IRNodeType::Sub || a_is_self)
             << "change_type() only supports difference reductions of the form "
             << fname << "(...) - term.\n";
-        return make_binary_op(e.node_type(),
-                              retype_value(operands->first, fname, dst, t, fvb),
-                              retype_value(operands->second, fname, dst, t, fvb));
+        Expr a = a_is_self ? retype_self_reference(operands->first) : retype_leaf(operands->first, t, fvb);
+        Expr b = b_is_self ? retype_self_reference(operands->second) : retype_leaf(operands->second, t, fvb);
+        return make_binary_op(e.node_type(), a, b);
     }
+
     return retype_leaf(e, t, fvb);
 }
 
