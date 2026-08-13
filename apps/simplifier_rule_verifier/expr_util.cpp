@@ -387,6 +387,16 @@ void all_possible_exprs_that_compute_associative_op_helper(const Expr &e,
     }
 
     vector<Expr> terms = unpack_binary_op<Op>(e);
+    // The number of results is doubly exponential in the number of terms, so
+    // as in all_possible_exprs_that_compute_sum, refuse rather than OOM.
+    if (terms.size() >= 8) {
+        std::cerr << "Too many terms passed to "
+                  << "all_possible_exprs_that_compute_associative_op. "
+                  << "Would OOM. Just generating one and not recursing on leaves.\n";
+        result->push_back(e);
+        return;
+    }
+
     for (size_t i = 1; i < (size_t)((1 << terms.size()) - 1); i++) {
         vector<Expr> left, right;
         for (size_t j = 0; j < terms.size(); j++) {

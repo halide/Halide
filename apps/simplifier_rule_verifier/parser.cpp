@@ -25,7 +25,7 @@ void consume_whitespace(const char **cursor, const char *end) {
 
 bool consume(const char **cursor, const char *end, const char *expected) {
     const char *tmp = *cursor;
-    while (*tmp == *expected && tmp < end && *expected) {
+    while (tmp < end && *expected && *tmp == *expected) {
         tmp++;
         expected++;
     }
@@ -368,7 +368,7 @@ public:
         if (consume("likely_if_innermost(")) {
             Expr a = parse_expr();
             expect(")");
-            return likely(a);
+            return likely_if_innermost(a);
         }
 
         Type expected_type = Int(32);

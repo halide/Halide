@@ -460,7 +460,6 @@ void check_rule(Rule &r) {
         }
     }
 
-    map<string, Expr> binding;
     if (is_const_zero(r.predicate)) {
         out << "Synthesizing a predicate for " << r.orig << "\n";
         Expr new_predicate = const_true();
@@ -661,12 +660,6 @@ void check_rule(Rule &r) {
             out << "Rewrote predicate: " << r.predicate << " -> " << new_predicate << "\n";
             r.predicate = new_predicate;
         }
-        r.lhs = substitute(binding, r.lhs);
-
-        for (auto &it : binding) {
-            it.second = Call::make(it.second.type(), "fold", {it.second}, Call::PureExtern);
-        }
-        r.rhs = substitute(binding, r.rhs);
     }
 }
 
@@ -802,19 +795,21 @@ int main(int argc, char **argv) {
         e.accept(&finder);
 
         for (const auto &v : finder.all) {
-            if (finder.used_in_fold.count(v)) {
+            if (finder.used_in_fold.count(v) || v[0] != 'c') {
                 continue;
             }
-            if (v[0] == 'c') {
-                // Find a free wildcard var to replace it with
-                const char *names[] = {"x", "y", "z", "w", "u", "v"};
-                for (const char *n : names) {
-                    if (!expr_uses_var(e, n)) {
-                        Expr var = Variable::make(Int(32), n);
-                        r.lhs = substitute(v, var, r.lhs);
-                        r.rhs = substitute(v, var, r.rhs);
-                        break;
-                    }
+            // Find a wildcard name that isn't taken. The rule is rewritten as
+            // we go, so check it rather than the copy taken above, otherwise
+            // every constant wildcard picks the same name and they collapse
+            // into one.
+            for (const char *n : {"x", "y", "z", "w", "u", "v"}) {
+                if (!expr_uses_var(r.lhs, n) &&
+                    !expr_uses_var(r.rhs, n) &&
+                    !expr_uses_var(r.predicate, n)) {
+                    Expr var = Variable::make(Int(32), n);
+                    r.lhs = substitute(v, var, r.lhs);
+                    r.rhs = substitute(v, var, r.rhs);
+                    break;
                 }
             }
         }

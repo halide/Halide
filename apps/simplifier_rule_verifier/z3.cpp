@@ -9,7 +9,18 @@ using namespace Halide::Internal;
 using std::map;
 using std::string;
 
-bool parse_model(const char **cursor, const char *end, map<string, Expr> *bindings) {
+// Record a binding, if the name is one of the variables we asked about. z3
+// invents names of its own for let-bound subexpressions, which we skip.
+void record(const map<string, Type> &var_types, const string &name, int64_t value,
+            map<string, Expr> *bindings) {
+    auto it = var_types.find(name);
+    if (it != var_types.end()) {
+        (*bindings)[name] = make_const(it->second, value);
+    }
+}
+
+bool parse_model(const char **cursor, const char *end, const map<string, Type> &var_types,
+                 map<string, Expr> *bindings) {
     consume_whitespace(cursor, end);
     // Older versions of z3 tag the model with the token "model"
     if (!consume(cursor, end, "(")) {
@@ -28,31 +39,20 @@ bool parse_model(const char **cursor, const char *end, map<string, Expr> *bindin
         consume_whitespace(cursor, end);
         if (consume(cursor, end, "Bool")) {
             consume_whitespace(cursor, end);
-            bool interesting = !starts_with(name, "z3name!") && name[0] != 't';
             if (consume(cursor, end, "true)")) {
-                if (interesting) {
-                    (*bindings)[name] = const_true();
-                }
+                record(var_types, name, 1, bindings);
             } else if (consume(cursor, end, "false)")) {
-                if (interesting) {
-                    (*bindings)[name] = const_false();
-                }
+                record(var_types, name, 0, bindings);
             } else {
                 return false;
             }
         } else if (consume(cursor, end, "Int")) {
             consume_whitespace(cursor, end);
             if (consume(cursor, end, "(- ")) {
-                string val = consume_token(cursor, end);
-                if (!starts_with(name, "z3name!") && name[0] != 't') {
-                    (*bindings)[name] = -std::atoi(val.c_str());
-                }
+                record(var_types, name, -std::atoll(consume_token(cursor, end).c_str()), bindings);
                 consume(cursor, end, ")");
             } else {
-                string val = consume_token(cursor, end);
-                if (!starts_with(name, "z3name!") && name[0] != 't') {
-                    (*bindings)[name] = std::atoi(val.c_str());
-                }
+                record(var_types, name, std::atoll(consume_token(cursor, end).c_str()), bindings);
             }
             consume_whitespace(cursor, end);
             consume(cursor, end, ")");
@@ -65,27 +65,30 @@ bool parse_model(const char **cursor, const char *end, map<string, Expr> *bindin
             if (!consume(cursor, end, "#x")) {
                 return false;
             }
-            int64_t result = 0;
+            // Accumulate the bit pattern unsigned. Shifting into the sign bit
+            // of an int64_t, or by 64, would be undefined.
+            uint64_t bit_pattern = 0;
             for (int i = 0; i < bits; i += 4) {
-                result *= 16;
+                bit_pattern *= 16;
                 char next = (**cursor);
                 if (next >= '0' && next <= '9') {
-                    result += next - '0';
+                    bit_pattern += next - '0';
                 } else if (next >= 'a' && next <= 'f') {
-                    result += 10 + next - 'a';
+                    bit_pattern += 10 + next - 'a';
                 } else {
                     std::cerr << "Bad hex literal char: '" << next << "'\n";
                     abort();
                 }
                 (*cursor)++;
             }
-            // We only deal in signed
-            if (result >= (1 << (bits - 1))) {
-                result -= (1 << bits);
+            // Reinterpret as signed if that's what the variable is
+            int64_t value = (int64_t)bit_pattern;
+            auto it = var_types.find(name);
+            if (it != var_types.end() && it->second.is_int() && bits < 64 &&
+                bit_pattern >= (uint64_t)1 << (bits - 1)) {
+                value -= (int64_t)1 << bits;
             }
-            if (!starts_with(name, "z3name!") && name[0] != 't') {
-                (*bindings)[name] = (int)result;
-            }
+            record(var_types, name, value, bindings);
             consume(cursor, end, ")");
         } else {
             return false;
@@ -371,8 +374,11 @@ bool expr_to_smt2(const Expr &e, string *result) {
             if (op->is_intrinsic(Call::signed_integer_overflow)) {
                 // Hrm. Just generate invalid SMT2 so we can fail in peace.
                 formula << "<SIGNED_INTEGER_OVERFLOW>";
-            } else if (op->name == "fold" || op->name == "prove_me") {
-                // Markers used by rewrite rules. They don't change the value.
+            } else if (op->is_intrinsic(Call::likely) ||
+                       op->is_intrinsic(Call::likely_if_innermost) ||
+                       op->name == "fold" || op->name == "prove_me") {
+                // Branch hints, and markers used by rewrite rules. None of
+                // them change the value they wrap.
                 op->args[0].accept(this);
             } else {
                 give_up(op);
@@ -439,10 +445,15 @@ satisfy(Expr e, map<string, Expr> *bindings, const string &comment, int timeout)
 
     z3_source << "; " << comment << "\n";
 
+    map<string, Type> var_types;
     for (const auto &v : find_vars(e)) {
-        if (v.second.first.type().is_bool()) {
+        Type t = v.second.first.type();
+        var_types[v.first] = t;
+        if (t.is_bool()) {
             z3_source << "(declare-const " << v.first << " Bool)\n";
-        } else if (v.second.first.type() == Int(32)) {
+        } else if (t.is_int() && t.bits() >= 32) {
+            // Matches expr_to_smt2, which uses unbounded Int arithmetic for
+            // signed types of 32 bits and wider
             z3_source << "(declare-const " << v.first << " Int)\n";
         } else {
             z3_source << "(declare-const " << v.first << " (_ BitVec " << v.second.first.type().bits() << "))\n";
@@ -555,7 +566,7 @@ satisfy(Expr e, map<string, Expr> *bindings, const string &comment, int timeout)
         if (!consume(&cursor, end, "sat")) {
             return Z3Result::Unknown;
         }
-        parse_model(&cursor, end, bindings);
+        parse_model(&cursor, end, var_types, bindings);
         return Z3Result::Sat;
     }
 }
