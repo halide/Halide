@@ -85,6 +85,10 @@ jobs:
       - name: Install wasm toolchain
         run: brew install emscripten
 
+      # Used by apps/simplifier_rule_verifier, which skips its tests without it.
+      - name: Install z3
+        run: brew install z3
+
       # AppleClang on Intel unconditionally injects /usr/local/include and
       # /usr/local/lib into every compile/link, below CMake's control.
       # Homebrew's jpeg-turbo (built with -DWITH_JPEG8=1, i.e. reports
