@@ -3511,9 +3511,11 @@ Expr reduction_cardinality_fits(const Definition &def, int64_t limit) {
     return simplify(all_non_negative && (any_zero || product_fits));
 }
 
-// Prove that the first update executes at least once for every pure coordinate,
-// as required when translating an identity that does not round-trip through the
-// target type. Symbolic extents produce a runtime precondition.
+// Prove that the first update runs at least once for every pure coordinate.
+// This is needed when an identity can't safely round-trip through the result type,
+// so symbolic extents become a runtime precondition. Example: a min-histogram can
+// use a sentinel like inf in float, but not in int, because int cannot distinguish
+// "untouched" from the minimum possible value.
 std::optional<std::string> nonempty_dense_update_precondition(const Function &fn,
                                                               Expr *condition) {
     *condition = Expr();
