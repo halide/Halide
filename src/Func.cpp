@@ -3543,10 +3543,6 @@ std::optional<std::string> nonempty_dense_update_precondition(const Function &fn
             if (*ext <= 0) {
                 return "the first update has an empty reduction domain";
             }
-        } else if (optional<uint64_t> ext = as_const_uint(extent)) {
-            if (*ext == 0) {
-                return "the first update has an empty reduction domain";
-            }
         } else {
             positive_extents =
                 positive_extents && (cast(Int(64), extent) > 0);
