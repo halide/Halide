@@ -163,6 +163,8 @@ struct PipelineContents {
      * nonzero, realize leaves the profiler's statistics in place. */
     int profiler_scopes = 0;
 
+    bool defer_profile_flush = false;
+
     /** Optional prefixes used to rename halide_-prefixed runtime symbols.
      * Empty unless set via Pipeline::apply_runtime_prefixes(). */
     RuntimePrefixParams runtime_prefixes_params;
@@ -944,7 +946,7 @@ Realization Pipeline::realize(JITUserContext *context,
     }
 
     // If we're profiling, report runtimes and reset profiler stats.
-    if (contents->profiler_scopes == 0) {
+    if (contents->profiler_scopes == 0 && !contents->defer_profile_flush) {
         contents->jit_cache.finish_profiling(context);
     }
     jit_context.finalize(exit_status);
@@ -1125,6 +1127,17 @@ const halide_profiler_func_stats *ProfilerScope::func_stats(const Func &f) const
     return func_stats(display_name.empty() ? f.name() : display_name);
 }
 
+void Pipeline::set_defer_profile_flush(bool defer) {
+    user_assert(defined()) << "Pipeline is undefined\n";
+    contents->defer_profile_flush = defer;
+}
+
+void Pipeline::flush_profiler_state(JITUserContext *context) {
+    user_assert(defined()) << "Pipeline is undefined\n";
+    JITUserContext empty{};
+    contents->jit_cache.finish_profiling(context ? context : &empty);
+}
+
 namespace {
 
 // State for the custom_trace callbacks below. custom_trace is a plain C
@@ -1297,6 +1310,9 @@ void Pipeline::halidoscope_impl(const std::function<void(Pipeline &, const Targe
                                 const HalidoscopeOptions &options,
                                 const Target &target_arg) {
     user_assert(defined()) << "Pipeline is undefined\n";
+    user_assert(options.halidoscope_profile_runs >= 0)
+        << "halidoscope: HalidoscopeOptions::halidoscope_profile_runs must be a non-negative integer, got "
+        << options.halidoscope_profile_runs << ".\n";
 
     // Fail fast if halidoscope_path looks like an explicit path (as opposed
     // to a bare name meant to be resolved via $PATH, e.g. the default
@@ -1352,7 +1368,18 @@ void Pipeline::halidoscope_impl(const std::function<void(Pipeline &, const Targe
     }
 
     // --- Profile run: Halide's sampling profiler, captured into JSON. ---
-    {
+    struct DeferredProfileFlush {
+        Pipeline &p;
+        explicit DeferredProfileFlush(Pipeline &pipeline) : p(pipeline) {
+            p.set_defer_profile_flush(true);
+        }
+        ~DeferredProfileFlush() {
+            p.set_defer_profile_flush(false);
+            p.flush_profiler_state();
+        }
+    };
+
+    if (options.halidoscope_profile_runs > 0) {
         Pipeline profiled = deserialize_pipeline(data, external_params);
         profiled.trace_pipeline();
         Target profile_target = base_target.with_feature(Target::Profile);
@@ -1362,7 +1389,12 @@ void Pipeline::halidoscope_impl(const std::function<void(Pipeline &, const Targe
         halidoscope_profile_json = &profile_json;
         profiled.jit_handlers().custom_trace = halidoscope_capture_profile;
 
-        do_realize(profiled, profile_target);
+        {
+            DeferredProfileFlush guard(profiled);
+            for (int i = 0; i < options.halidoscope_profile_runs; i++) {
+                do_realize(profiled, profile_target);
+            }
+        }
 
         halidoscope_profile_json = nullptr;
         write_entire_file(profile_path, profile_json.data(), profile_json.size());
@@ -1370,13 +1402,22 @@ void Pipeline::halidoscope_impl(const std::function<void(Pipeline &, const Targe
 
     // --- Launch Halidoscope, blocking until the window is closed. ---
     std::string binary = options.halidoscope_path;
-    int halidoscope_rc = run_process({binary, "--trace", trace_path, "--profile", profile_path});
+
+    std::vector<std::string> halidoscope_args = {binary, "--trace", trace_path};
+    if (options.halidoscope_profile_runs > 0) {
+        halidoscope_args.push_back("--profile");
+        halidoscope_args.push_back(profile_path);
+    }
+
+    int halidoscope_rc = run_process(halidoscope_args);
 
     // If we did not specify a persistent output directory, clean up the
     // temporary directory storing trace and profile data.
     if (!options.halidoscope_output_dir) {
         file_unlink(trace_path);
-        file_unlink(profile_path);
+        if (options.halidoscope_profile_runs > 0) {
+            file_unlink(profile_path);
+        }
         dir_rmdir(dir);
     }
 
@@ -1615,7 +1656,7 @@ void Pipeline::realize(JITUserContext *context,
     debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
 
     // If we're profiling, report runtimes and reset profiler stats.
-    if (contents->profiler_scopes == 0) {
+    if (contents->profiler_scopes == 0 && !contents->defer_profile_flush) {
         contents->jit_cache.finish_profiling(context);
     }
 
