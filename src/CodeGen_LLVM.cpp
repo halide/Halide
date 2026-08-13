@@ -2231,19 +2231,29 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, con
                 // We want to find the smallest aligned width and offset
                 // that contains this ramp.
                 int64_t stride = *pstride;
-                base = *pbase;
-                internal_assert(base >= 0);
-                width = next_power_of_two(ramp->lanes * stride);
-
-                while (base % width) {
-                    base -= base % width;
-                    width *= 2;
+                int64_t lo = *pbase;
+                int64_t hi = lo + (ramp->lanes - 1) * stride;
+                if (stride < 0) {
+                    std::swap(lo, hi);
                 }
-                constant_index = true;
+                // Indices below zero can only come from lanes masked off by
+                // a predicate. The blocks below are aligned relative to the
+                // start of the buffer, so they can't describe a range that
+                // straddles it. Fall back to just the buffer-level node.
+                if (lo >= 0) {
+                    base = lo;
+                    width = next_power_of_two(hi - lo + 1);
+
+                    while (base % width) {
+                        base -= base % width;
+                        width *= 2;
+                    }
+                    constant_index = true;
+                }
             }
         } else {
             auto pbase = as_const_int(index);
-            if (pbase) {
+            if (pbase && *pbase >= 0) {
                 base = *pbase;
                 constant_index = true;
             }
