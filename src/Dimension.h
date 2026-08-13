@@ -17,19 +17,19 @@ class Dimension {
 public:
     /** Get an expression representing the minimum coordinates of this image
      * parameter in the given dimension. */
-    Expr min() const;
+    const Expr min() const;
 
     /** Get an expression representing the extent of this image
      * parameter in the given dimension */
-    Expr extent() const;
+    const Expr extent() const;
 
     /** Get an expression representing the maximum coordinates of
      * this image parameter in the given dimension. */
-    Expr max() const;
+    const Expr max() const;
 
     /** Get an expression representing the stride of this image in the
      * given dimension */
-    Expr stride() const;
+    const Expr stride() const;
 
     /** Set the min in a given dimension to equal the given
      * expression. Setting the mins to zero may simplify some

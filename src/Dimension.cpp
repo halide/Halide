@@ -18,19 +18,19 @@ Dimension::Dimension(const Parameter &p, int d, Func f)
         << " of a " << param.dimensions() << "-dimensional Parameter\n";
 }
 
-Expr Dimension::min() const {
+const Expr Dimension::min() const {
     std::ostringstream s;
     s << param.name() << ".min." << d;
     return Variable::make(Int(32), s.str(), param);
 }
 
-Expr Dimension::extent() const {
+const Expr Dimension::extent() const {
     std::ostringstream s;
     s << param.name() << ".extent." << d;
     return Variable::make(Int(32), s.str(), param);
 }
 
-Expr Dimension::max() const {
+const Expr Dimension::max() const {
     return min() + extent() - 1;
 }
 
@@ -44,7 +44,7 @@ Expr Dimension::extent_estimate() const {
     return param.extent_constraint_estimate(d);
 }
 
-Expr Dimension::stride() const {
+const Expr Dimension::stride() const {
     std::ostringstream s;
     s << param.name() << ".stride." << d;
     return Variable::make(Int(32), s.str(), param);
