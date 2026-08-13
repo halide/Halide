@@ -1066,7 +1066,12 @@ private:
     }
 
     void print(const Expr &ir) {
+        static int depth = 0;
+        depth++;
+        print_opening_tag("span", "expr-depth-" + std::to_string(depth));
         ir.accept(this);
+        print_closing_tag("span");
+        depth--;
     }
 
     void print(const Stmt &ir) {
@@ -1103,7 +1108,7 @@ private:
     // Prints the closing tag for the specified html element.
     void print_closing_tag(const std::string &tag) {
         internal_assert(!context_stack.empty() && tag == context_stack_tags.back())
-            << tag << " " << context_stack.empty() << " " << context_stack_tags.back();
+            << "closing tag: " << tag << ", stack size: " << context_stack.size() << ", last element: " << (context_stack_tags.empty() ? "null" : context_stack_tags.back());
         context_stack.pop_back();
         context_stack_tags.pop_back();
         stream << "</" + tag + ">";
@@ -1243,10 +1248,7 @@ private:
     }
 
     void print_function_call(const std::string &fn_name, const std::vector<Expr> &args, const std::string &tooltip) {
-        print_opening_tag("span", "matched");
-        print_html_element("span", "Symbol matched", fn_name, tooltip);
-        print_text("(");
-        print_closing_tag("span");
+        print_html_element("span", "Symbol matched", fn_name + "(", tooltip);
         bool print_delim = false;
         for (const auto &arg : args) {
             if (print_delim) {
@@ -1478,15 +1480,11 @@ private:
     }
 
     void visit(const Min *op) override {
-        print_opening_tag("span", "Min");
         print_function_call("min", {op->a, op->b}, type_to_string(op->type));
-        print_closing_tag("span");
     }
 
     void visit(const Max *op) override {
-        print_opening_tag("span", "Max");
         print_function_call("max", {op->a, op->b}, type_to_string(op->type));
-        print_closing_tag("span");
     }
 
     void visit(const EQ *op) override {
@@ -1539,10 +1537,21 @@ private:
         int id = gen_node_id(op);
         print_opening_tag("span", "Load", "load-" + std::to_string(id));
         print_opening_tag("span", "matched", type_str);
+        if (op->is_streaming) {
+            print_html_element("span", "keyword", "streaming ");
+        }
         stream << variable(op->name, type_to_string(op->type) + "*");
         print_text("[");
         print_closing_tag("span");
         print(op->index);
+        if (op->alignment.modulus != 1) {
+            print_opening_tag("span", "Alignment");
+            stream << " aligned("
+                   << op->alignment.modulus
+                   << ", "
+                   << op->alignment.remainder << ")";
+            print_closing_tag("span");
+        }
         print_html_element("span", "matched", "]", type_str);
         if (!is_const_one(op->predicate)) {
             print_html_element("span", "keyword", " if ");
@@ -1575,18 +1584,20 @@ private:
 
     void visit(const Let *op) override {
         scope.push(op->name, gen_unique_id());
-        print_opening_tag("span", "Let");
+        print_opening_tag("div", "Let");
         print_opening_tag("span", "matched");
-        print_text("(");
         print_html_element("span", "keyword", "let ");
         print_variable(op->name, op->type);
         print_html_element("span", "Operator Assign", " = ");
         print_closing_tag("span");
         print(op->value);
         print_html_element("span", "matched keyword", " in ");
-        print(op->body);
-        print_html_element("span", "matched", ")");
-        print_closing_tag("span");
+        print_closing_tag("div");
+        if (const Let *let = op->body.as<Let>()) {
+            visit(let);  // flatten the let chain
+        } else {
+            print(op->body);
+        }
         scope.pop(op->name);
     }
 
@@ -1770,7 +1781,7 @@ private:
     }
 
     void visit(const Store *op) override {
-        // Start a dive to hold code for this acquire
+        // Start a dive to hold code for this store
         print_opening_tag("div", "Store WrapLine");
 
         // Print cost buttons
@@ -1779,22 +1790,40 @@ private:
         std::string type_str = type_to_string(op->value.type());
 
         // Print store target
+        if (!is_const_one(op->predicate)) {
+            print_html_element("span", "keyword matched", "predicate ");
+            print(op->predicate);
+            print_opening_tag("div", "indent");  // Indent
+        }
         print_opening_tag("span", "matched", type_str);
+        if (op->is_streaming) {
+            print_html_element("span", "keyword", "streaming ");
+        }
         stream << variable(op->name, type_str + "*");
         print_text("[");
         print_closing_tag("span");
         print(op->index);
+        if (op->alignment.modulus != 1) {
+            print_opening_tag("span", "Alignment");
+            stream << " aligned("
+                   << op->alignment.modulus
+                   << ", "
+                   << op->alignment.remainder << ")";
+            print_closing_tag("span");
+        }
         print_html_element("span", "matched", "]", type_str);
         print_html_element("span", "Operator Assign Matched", " = ", type_str);
 
         // Print store value
         print_opening_tag("span", "StoreValue");
         print(op->value);
-        if (!is_const_one(op->predicate)) {
-            print_html_element("span", "keyword", " if ");
-            print(op->predicate);
-        }
         print_closing_tag("span");
+        if (!is_const_one(op->predicate)) {
+            print_closing_tag("div");  // Unindent
+        }
+        if (op->value.as<Let>()) {
+            print_html_element("div", "EmtpyLine", "&nbsp;");
+        }
 
         // Close div holding this store
         print_closing_tag("div");
@@ -2505,8 +2534,9 @@ private:
         // IR settings
         stream << "<form id='form-ir-settings' name='form-ir-settings'>IR:\n";
         stream << "   <label><input type='checkbox' name='checkbox-show-ir-wrap' checked />Wrap</label>\n";
-        stream << "   <label><input type='checkbox' name='checkbox-show-ir-line-nums' checked />Line numbers</label>\n";
-        stream << "   <label><input type='checkbox' name='checkbox-show-ir-costs' checked />Costs</label>\n";
+        stream << "   <label><input type='checkbox' name='checkbox-show-ir-line-nums' />Line numbers</label>\n";
+        stream << "   <label><input type='checkbox' name='checkbox-show-ir-costs' />Costs</label>\n";
+        stream << "   <label><input type='checkbox' name='checkbox-rainbow-parens' />Rainbow Parentheses</label>\n";
         stream << "</form>\n";
 
         // Which panes to show
@@ -2522,6 +2552,7 @@ private:
         // Color theme
         stream << "<form id='form-theme' name='form-theme'>Theme:\n";
         stream << "    <label><input type='radio' name='theme' value='auto' checked />Auto</label>\n";
+        stream << "    <label><input type='radio' name='theme' value='classic-dark' />Classic Dark</label>\n";
         stream << "    <label><input type='radio' name='theme' value='classic-light' />Classic Light</label>\n";
         stream << "    <label><input type='radio' name='theme' value='gruvbox-dark' />Gruvbox Dark</label>\n";
         stream << "<label><input type='radio' name='theme' value='gruvbox-light' />Gruvbox Light</label>\n";
