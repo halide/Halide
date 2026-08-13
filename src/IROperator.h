@@ -56,8 +56,7 @@ std::optional<int> is_const_power_of_two_integer(int64_t);
 std::optional<std::pair<Expr, Expr>> as_binary_operands(const Expr &e);
 
 /** Build a binary expression of node type `t` from operands `a` and `b`, using
- * the corresponding operator overload (so the usual type matching and constant
- * folding apply). `t` must be a binary operator; it is an internal error otherwise. */
+ * the corresponding Op::make function. */
 Expr make_binary_op(IRNodeType t, const Expr &a, const Expr &b);
 
 /** Is the expression a const (as defined by is_const), and also
