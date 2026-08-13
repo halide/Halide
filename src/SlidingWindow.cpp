@@ -407,7 +407,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
     // Decide what to do with this producer, using only the scopes gathered on
     // the way in. Makes no changes to the IR.
-    SlideDecision plan_slide(const ProducerConsumer *op) {
+    SlideDecision plan_slide() {
         SlideDecision result = decision;
 
         // We're interested in the case where exactly one of the dimensions of
@@ -577,9 +577,11 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // must retain has to cover what those warm-up iterations ask
             // for too.
             if (can_slide_up) {
-                new_min = max(new_min, min_required);
+                Expr min_required_at_loop_min = substitute(loop_var, loop_min, min_required);
+                new_min = max(new_min, min_required_at_loop_min);
             } else {
-                new_max = min(new_max, max_required);
+                Expr max_required_at_loop_min = substitute(loop_var, loop_min, max_required);
+                new_max = min(new_max, max_required_at_loop_min);
             }
         } else {
             // We couldn't find a suitable new loop min, so we can't assume
@@ -643,9 +645,9 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             return IRMutator::visit(op);
         }
 
-        internal_assert(!decision.considered) << "Visited " << func.name()
-                                              << "'s producer twice\n";
-        decision = plan_slide(op);
+        internal_assert(!decision.slid()) << "Slid " << func.name()
+                                          << "'s producer twice\n";
+        decision = plan_slide();
         decision.considered = true;
         debug(3) << decision;
 
@@ -809,7 +811,9 @@ class InjectWarmupGuards : public IRMutator {
     // The iteration everything produced in here starts at, or an undefined
     // Expr if they don't all agree with each other and with current_start, in
     // which case we need to descend and guard them separately.
-    Expr common_start(const Stmt &s) {
+    // Is there a single start shared by every producer in this Stmt? Only the
+    // existence matters to the callers, not the value.
+    bool has_common_start(const Stmt &s) {
         Expr start = current_start;
         visit_with(s, [&](auto *self, const ProducerConsumer *op) {
             if (op->is_producer) {
@@ -820,7 +824,7 @@ class InjectWarmupGuards : public IRMutator {
             }
             self->visit_base(op);
         });
-        return start;
+        return start.defined();
     }
 
     Stmt wrap(const Stmt &s) {
@@ -843,15 +847,15 @@ class InjectWarmupGuards : public IRMutator {
         // Anything computed inside this producer is an input to it, so by
         // default it runs when this producer does.
         ScopedValue<Expr> bind(current_start, start_of(op->name));
-        return common_start(op->body).defined() ? wrap(op) : IRMutator::visit(op);
+        return has_common_start(op->body) ? wrap(op) : IRMutator::visit(op);
     }
 
     Stmt visit(const For *op) override {
-        return common_start(op).defined() ? wrap(op) : IRMutator::visit(op);
+        return has_common_start(op) ? wrap(op) : IRMutator::visit(op);
     }
 
     Stmt visit(const IfThenElse *op) override {
-        return common_start(op).defined() ? wrap(op) : IRMutator::visit(op);
+        return has_common_start(op) ? wrap(op) : IRMutator::visit(op);
     }
 
     Stmt visit(const Provide *op) override {

@@ -219,7 +219,9 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
          rewrite(min(slice(x, c0, c1, c2), min(z, slice(y, c0, c1, c2))), min(slice(min(x, y), c0, c1, c2), z), c2 > 1 && lanes_of(x) == lanes_of(y)) ||
          rewrite(min(transpose(x, c0), transpose(y, c0)), transpose(min(x, y), c0)) ||
          (no_overflow(op->type) &&
-          (rewrite(min(min(x, y) + c0, x), min(x, y + c0), c0 > 0) ||
+          (rewrite(min(max(x, c0), max(y, c1) + c2), max(min(x, y + c2), c0), c0 == c1 + c2) ||
+
+           rewrite(min(min(x, y) + c0, x), min(x, y + c0), c0 > 0) ||
            rewrite(min(min(x, y) + c0, x), min(x, y) + c0, c0 < 0) ||
            rewrite(min(min(y, x) + c0, x), min(y + c0, x), c0 > 0) ||
            rewrite(min(min(y, x) + c0, x), min(y, x) + c0, c0 < 0) ||

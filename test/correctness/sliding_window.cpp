@@ -497,7 +497,7 @@ int main(int argc, char **argv) {
         // required at the edges, so give the input some slack.
         Buffer<int> input(9, 9);
         input.set_min(-4, -4);
-        input.fill(1);
+        input.fill([](int x, int y) { return x * 100 + y; });
 
         Var yo, yi;
         Func f, g, h;
@@ -511,8 +511,12 @@ int main(int argc, char **argv) {
         g.never_partition_all().store_root().compute_at(h, x);
 
         Buffer<int> im = h.realize({1, 1});
-        if (im(0, 0) != 10) {
-            printf("h(0, 0) = %d instead of %d\n", im(0, 0), 10);
+        // f(x, y) = 100x + y, so g(x, y) = 400x + 4y, and
+        // h(0, 0) = (100 + -100) + (400 + -400) = 0. Any coordinate mix-up
+        // moves this, unlike a constant input.
+        int correct = 0;
+        if (im(0, 0) != correct) {
+            printf("h(0, 0) = %d instead of %d\n", im(0, 0), correct);
             return 1;
         }
     }

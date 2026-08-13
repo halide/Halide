@@ -630,9 +630,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             bool can_fold_forwards = false, can_fold_backwards = false;
 
             if (!explicit_only) {
-                // We can't clobber data that will be read later. If
-                // async, the producer can't un-release slots in the
-                // circular buffer.
+                // We can't clobber data that will be read later.
                 // Either end advancing is enough. The footprint always fits
                 // in extent values, so if the max advances then everything
                 // below max - extent + 1 is outside every future footprint and
@@ -650,9 +648,15 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     // in the circular buffer.
                     can_fold_forwards &= (is_monotonic(max_provided, op->name) == Monotonic::Increasing);
                     can_fold_backwards &= (is_monotonic(min_provided, op->name) == Monotonic::Decreasing);
-                    // We need to be able to analyze the required footprint to know how much to release
-                    can_fold_forwards &= min_required.defined();
-                    can_fold_backwards &= max_required.defined();
+                    // We need to be able to analyze the required footprint to
+                    // know how much to release, and the amount released each
+                    // iteration can't be negative either. Checking the ends
+                    // above isn't enough for this, because either one alone
+                    // may satisfy it.
+                    can_fold_forwards &= min_required.defined() &&
+                                         is_monotonic(min_required, op->name) == Monotonic::Increasing;
+                    can_fold_backwards &= max_required.defined() &&
+                                          is_monotonic(max_required, op->name) == Monotonic::Decreasing;
                 }
             }
 
