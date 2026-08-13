@@ -3365,11 +3365,11 @@ Expr retype_leaf(const Expr &e, Type t, const FuncValueBounds &fvb) {
         }
     }
 
-    // Peel an int->float promotion: we're accumulating at an integer type, so
-    // the float round-trip is dead weight. This also exposes an integer form
-    // (e.g. cast<f32>(widening_mul(a, b)) -> widening_mul(a, b)) that
-    // lossless_cast() can retype without a detour through float, which f32
-    // can't always undo. A strict_cast is a Call, not a Cast, and is left alone.
+    // lossless_cast uses Type::can_represent to decide if it can strip an outer
+    // cast, which uses strict, not fast-math semantics. When accumulating at an
+    // integer type, we peel a redundant int-to-float promotion here according to
+    // fast-math semantics. This exposes an integer form that lossless_cast can
+    // retype. A strict_cast is a Call, not a Cast, and is left alone.
     if (t.is_int_or_uint()) {
         if (const Cast *c = folded.as<Cast>()) {
             if (folded.type().is_float() && c->value.type().is_int_or_uint()) {
