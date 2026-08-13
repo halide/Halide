@@ -19,7 +19,7 @@ add_library(
     super_simplify.cpp
     z3.cpp
 )
-target_link_libraries(rule_verifier_support PUBLIC Halide::Halide)
+target_link_libraries(rule_verifier_support PUBLIC Halide::Halide Halide::Tools)
 target_include_directories(rule_verifier_support PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_executable(filter_rewrite_rules filter_rewrite_rules.cpp)

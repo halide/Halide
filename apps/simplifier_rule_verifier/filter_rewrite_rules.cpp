@@ -1,18 +1,20 @@
 #include "Halide.h"
 #include "debug.h"
 #include "expr_util.h"
+#include "halide_thread_pool.h"
 #include "parser.h"
 #include "reduction_order.h"
 #include "z3.h"
 
 #include <atomic>
 #include <fstream>
+#include <future>
 #include <limits>
 #include <mutex>
-#include <thread>
 
 using namespace Halide;
 using namespace Halide::Internal;
+using Halide::Tools::ThreadPool;
 
 // Take a list of rewrite rules and classify them by root IR node, and
 // what problems they might have that require further investigation.
@@ -403,25 +405,6 @@ struct ScopedFlush {
     }
 };
 
-// Run f on every element of v, using one thread per core.
-template<typename T, typename F>
-void parallel_for_each(vector<T> &v, F f) {
-    std::atomic<size_t> next{0};
-    vector<std::thread> threads;
-    size_t num_threads = std::max(1u, std::thread::hardware_concurrency());
-    num_threads = std::min(num_threads, v.size());
-    for (size_t i = 0; i < num_threads; i++) {
-        threads.emplace_back([&]() {
-            for (size_t j = next++; j < v.size(); j = next++) {
-                f(v[j]);
-            }
-        });
-    }
-    for (auto &t : threads) {
-        t.join();
-    }
-}
-
 void check_rule(Rule &r) {
     std::ostringstream out;
     ScopedFlush flush_out(out);
@@ -700,7 +683,16 @@ int main(int argc, char **argv) {
 
     // Check the rules, and synthesize predicates for any that ask for one. Each
     // check shells out to z3, so run a few at a time.
-    parallel_for_each(rules, check_rule);
+    {
+        ThreadPool<void> pool;
+        vector<std::future<void>> futures;
+        for (Rule &r : rules) {
+            futures.emplace_back(pool.async([&r]() { check_rule(r); }));
+        }
+        for (auto &f : futures) {
+            f.get();
+        }
+    }
 
     std::cout << "Done checking rules\n";
 
