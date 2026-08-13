@@ -123,6 +123,9 @@ struct HalidoscopeOptions {
     /** (Optional) Path to the non-volatile directory for storing
      * Halidoscope-generated trace binaries and profiler output. */
     std::optional<std::string> halidoscope_output_dir = std::nullopt;
+    /** The number of runs for the profiler execution. Defaults to 1. A
+     * 0 value indicates that profiling should be skipped. */
+    int halidoscope_profile_runs = 1;
 };
 
 class Pipeline;
@@ -546,6 +549,16 @@ public:
     void halidoscope(std::vector<int32_t> sizes = {}, HalidoscopeOptions options = HalidoscopeOptions(), const Target &target = Target());
     void halidoscope(RealizationArg output, HalidoscopeOptions options = HalidoscopeOptions(), const Target &target = Target());
     // @}
+
+    /** Set a flag to defer automatically flushing profiler state when calling
+     * Pipeline::realize, which automatically calls jit_cache.finish_profiling()
+     * after each realization in a JIT pipeline. Useful to accumulate metrics
+     * from multiple profiling runs. */
+    void set_defer_profile_flush(bool defer);
+
+    /** Immediately flush profiler state, using the profiler's built-in state
+     * accumulation logic. */
+    void flush_profiler_state(JITUserContext *context = nullptr);
 
 private:
     std::string generate_function_name() const;
