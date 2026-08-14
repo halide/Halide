@@ -1139,11 +1139,19 @@ public:
             // B.2) We're downstream (a consumer) of a func for which we care about the bounds.
             vector<bool> bounds_needed(stages.size(), false);
             for (size_t i = 0; i < stages.size(); i++) {
-                if (inner_productions.count(stages[i].name)) {
+                // produced_inside covers both a real production nested in this
+                // loop and a declare_box_required_inwards marker, which asks
+                // us to compute a Func's bounds as if it were produced here.
+                bool produced_inside = inner_productions.count(stages[i].name);
+                if (produced_inside) {
                     bounds_needed[i] = true;
                 }
 
-                if (in_pipeline.count(stages[i].name)) {
+                // We're already inside this Func's produce/consume node, so we
+                // don't normally need its bounds again -- unless it's also
+                // produced (or inwards-marked) deeper inside this loop, in
+                // which case we do need a localized box here.
+                if (in_pipeline.count(stages[i].name) && !produced_inside) {
                     bounds_needed[i] = false;
                 }
 
@@ -1266,6 +1274,19 @@ public:
         in_pipeline.erase(p->name);
         inner_productions.insert(p->name);
         return stmt;
+    }
+
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::declare_box_required_inwards) &&
+            !op->args.empty()) {
+            if (const StringImm *name = op->args[0].as<StringImm>()) {
+                // Treat the inwards-decl site as an inner production of this
+                // Func, so that the logic above knows that we need to compute
+                // valid bounds for it and all its consumers here.
+                inner_productions.insert(name->value);
+            }
+        }
+        return IRMutator::visit(op);
     }
 };
 

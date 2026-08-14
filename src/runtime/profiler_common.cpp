@@ -498,6 +498,12 @@ enum {
     counter_vector_stores = 11,
     counter_scatters = 12,
     counter_bytes_stored = 13,
+    counter_realizations = 14,
+    counter_productions = 15,
+    counter_points_required_at_realization = 16,
+    counter_points_required_at_production = 17,
+    counter_points_required_inwards = 18,
+    counter_productions_if_inwards = 19,
 };
 
 ALWAYS_INLINE bool counter_is_approximate(const halide_profiler_func_stats *fs, int counter) {
@@ -996,6 +1002,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             warning_too_few_parallel_tasks,
             warning_not_parallelized,
             warning_high_recompute,
+            warning_could_compute_further_inside,
             warning_no_vector_ops,
             warning_more_gathers_than_vector_loads,
             warning_more_scatters_than_vector_stores,
@@ -1186,10 +1193,44 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     fs->parent >= 0) {
                     if (emit) {
                         sstr << fs->name << " redundantly recomputes each value " << recompute
-                             << " times on average. Consider a store_at/compute_at location "
-                             << "further outwards in the parent's loop nest, check whether "
-                             << "sliding-window optimization failed, or reduce the split "
-                             << "factors used in its schedule.";
+                             << " times on average. ";
+                        // Attribute the recompute to the largest of the three
+                        // stages: root->realization, realization->production
+                        // (sliding-window), or production->computed (split
+                        // factors / tail strategies).
+                        float a = (float)fs->points_required_at_realization / fs->points_required_at_root;
+                        float b = (float)fs->points_required_at_production / fs->points_required_at_realization;
+                        float c = (float)fs->points_computed / fs->points_required_at_production;
+                        if (a > b && a > c) {
+                            sstr << "Consider a store_at/compute_at location further outwards "
+                                 << "in the parent's loop nest. ";
+                        }
+                        if (b > c) {
+                            sstr << "The points required at the compute_at site is " << b
+                                 << " times larger than the points required at the store_at "
+                                 << "site. Sliding window optimization may have failed.";
+                        } else {
+                            sstr << "The number of points actually computed is " << c
+                                 << " times larger than the points required at the compute_at site."
+                                 << " The schedule may be using excessively large split factors.";
+                        }
+                    }
+                    return true;
+                }
+                return false;
+            case warning_could_compute_further_inside:
+                // The inverse of high_recompute: a more aggressive compute_at
+                // would be possible without incurring recompute. Only trigger
+                // if there's a heap allocation, otherwise it probably doesn't
+                // matter (the value may already be in registers).
+                if (recompute < 2.0f &&
+                    fs->num_allocs > 0 &&
+                    fs->points_required_inwards > 0 &&
+                    fs->productions_if_inwards > fs->productions &&
+                    fs->points_required_inwards < 1.01 * fs->points_required_at_realization) {
+                    if (emit) {
+                        sstr << fs->name << " could be computed further inside the loop nest "
+                             << "of its consumers without incurring significant redundant recompute.";
                     }
                     return true;
                 }
@@ -1682,7 +1723,13 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     field_u64("          ", "scalar_stores", fs->scalar_stores);
                     field_u64("          ", "vector_stores", fs->vector_stores);
                     field_u64("          ", "scatters", fs->scatters);
-                    field_u64("          ", "bytes_stored", fs->bytes_stored, true);
+                    field_u64("          ", "bytes_stored", fs->bytes_stored);
+                    field_u64("          ", "realizations", fs->realizations);
+                    field_u64("          ", "productions", fs->productions);
+                    field_u64("          ", "points_required_at_realization", fs->points_required_at_realization);
+                    field_u64("          ", "points_required_at_production", fs->points_required_at_production);
+                    field_u64("          ", "points_required_inwards", fs->points_required_inwards);
+                    field_u64("          ", "productions_if_inwards", fs->productions_if_inwards, true);
                     json << "        }";
 
                     // Flush periodically so we don't overflow the buffer for
