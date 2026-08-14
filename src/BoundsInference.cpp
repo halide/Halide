@@ -1323,7 +1323,7 @@ Stmt bounds_inference(Stmt s,
     std::vector<Stmt> stmts;
     while (const Block *rb = s.as<Block>()) {
         if (const auto *a = rb->first.as<AssertStmt>()) {
-            stmts.push_back(Stmt(a));
+            stmts.emplace_back(a);
             s = rb->rest;
         } else {
             break;
