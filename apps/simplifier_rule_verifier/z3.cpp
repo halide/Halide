@@ -533,12 +533,11 @@ satisfy(Expr e, map<string, Expr> *bindings, const string &comment, int timeout)
     TemporaryFile z3_output("output", "txt");
     write_entire_file(z3_file.pathname(), &src[0], src.size());
 
-    string cmd = (z3_executable() + " -T:" + std::to_string(z3_timeout(timeout)) +
-                  " \"" + z3_file.pathname() + "\" > \"" + z3_output.pathname() + "\"");
-
-    // z3's output is redirected to a file, so all we need back is the exit
-    // status. popen would leave us a pipe we never read, and isn't portable.
-    int ret = std::system(cmd.c_str());
+    // No shell involved, so nothing here needs quoting or escaping
+    int ret = run_process({z3_executable(),
+                           "-T:" + std::to_string(z3_timeout(timeout)),
+                           z3_file.pathname()},
+                          z3_output.pathname(), "");
 
     auto result_vec = read_entire_file(z3_output.pathname());
     string result(result_vec.begin(), result_vec.end());
@@ -550,7 +549,7 @@ satisfy(Expr e, map<string, Expr> *bindings, const string &comment, int timeout)
     }
 
     if (ret && !starts_with(result, "unsat")) {
-        std::cout << "** z3 query failed, status " << ret << "\n"
+        std::cout << "** z3 query failed with exit code " << ret << "\n"
                   << "** query was:\n"
                   << src << "\n"
                   << "** output was:\n"
