@@ -749,6 +749,81 @@ class ExtractWMMAOperations : public IRMutator {
         return ProducerConsumer::make(f->fragment_name, op->is_producer, mutate(op->body));
     }
 
+    // Which subtile of a fragment a read lies in, and which entries of it the
+    // read wants, as indices into the M x N matrix in row-major order. A read
+    // may be of only part of a tile - one row of it, say - so rather than being
+    // a subtile in its own right it lies within one that some other access
+    // established. Returns -1 if it doesn't lie within any of them.
+    int containing_subtile(Fragment *f, const Expr &index, vector<int> *indices) {
+        MultiRamp read;
+        if (!is_multiramp(index_within_thread(index), Scope<Expr>::empty_scope(), &read)) {
+            return -1;
+        }
+
+        // Enumerate where the entries sit relative to the start of the read, in
+        // the order a multiramp puts its lanes in.
+        vector<int> offsets{0};
+        for (size_t d = 0; d < read.strides.size(); d++) {
+            auto s = as_const_int(read.strides[d]);
+            if (!s) {
+                return -1;
+            }
+            vector<int> next;
+            for (int i = 0; i < read.lanes[d]; i++) {
+                for (int o : offsets) {
+                    next.push_back(o + i * (int)*s);
+                }
+            }
+            offsets.swap(next);
+        }
+
+        // Try each subtile in turn. They are disjoint, so at most one can hold
+        // all the entries read.
+        const Shape &shape = f->shape;
+        for (int i = 0; i < (int)f->subtiles.size(); i++) {
+            const MultiRamp &tile = f->subtiles[i];
+            WMMAMatrixLayout mem;
+            auto start = as_const_int(simplify(read.base - tile.base));
+            if (!start || !wmma_matrix_layout(tile, shape.M, shape.N, &mem)) {
+                continue;
+            }
+            auto stride = as_const_int(mem.stride);
+            if (!stride) {
+                continue;
+            }
+            // The matrix a fragment inflates to is in row-major order.
+            indices->clear();
+            for (int o : offsets) {
+                const int e = o + (int)*start;
+                const int row = mem.row_major ? e / (int)*stride : e % (int)*stride;
+                const int col = mem.row_major ? e % (int)*stride : e / (int)*stride;
+                if (row < 0 || row >= shape.M || col < 0 || col >= shape.N) {
+                    indices->clear();
+                    break;
+                }
+                indices->push_back(row * shape.N + col);
+            }
+            if (indices->size() == offsets.size()) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    // Whether a read takes a whole tile in row-major order, which is what the
+    // instruction that copies one out to memory does.
+    static bool is_whole_tile(const Fragment *f, const vector<int> &indices) {
+        if ((int)indices.size() != f->shape.M * f->shape.N) {
+            return false;
+        }
+        for (int i = 0; i < (int)indices.size(); i++) {
+            if (indices[i] != i) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     // A read of a fragment that isn't part of a tensor core instruction. The
     // entries wanted are spread across the lanes of the warp, so gather them.
     Expr visit(const Load *op) override {
@@ -763,83 +838,23 @@ class ExtractWMMAOperations : public IRMutator {
             return op;
         }
 
-        auto fail = [&](const char *reason) {
-            user_error << "Read of a tensor core accumulator not supported. "
-                       << reason << ".\n"
-                       << Expr(op);
-            return Expr{};
-        };
-
         user_assert(f->role == Role::Accumulator)
             << "The tensor core fragment " << f->name << " is read outside a tensor "
             << "core instruction, but it holds " << role_name(f->role) << " of a matrix "
             << "multiply. Only an accumulator can be read that way.\n";
-        if (!is_const_one(op->predicate)) {
-            return fail("The read has a predicate");
-        }
+        user_assert(is_const_one(op->predicate))
+            << "Read of a tensor core accumulator not supported. The read has a "
+            << "predicate.\n"
+            << Expr(op);
 
-        const Shape &shape = f->shape;
-        Expr within = index_within_thread(op->index);
-        MultiRamp read;
-        if (!is_multiramp(within, Scope<Expr>::empty_scope(), &read)) {
-            return fail("The index is not affine");
-        }
-
-        // Enumerate where the entries sit relative to the start of the read, in
-        // the order a multiramp puts its lanes in.
-        vector<int> offsets{0};
-        for (size_t d = 0; d < read.strides.size(); d++) {
-            auto s = as_const_int(read.strides[d]);
-            if (!s) {
-                return fail("The entries read are not evenly spaced");
-            }
-            vector<int> next;
-            for (int i = 0; i < read.lanes[d]; i++) {
-                for (int o : offsets) {
-                    next.push_back(o + i * (int)*s);
-                }
-            }
-            offsets.swap(next);
-        }
-
-        // A read may be of part of a tile - one row of it, say - so rather than
-        // being a subtile in its own right it lies within one written by some
-        // other access. Find which, by trying each in turn until the entries
-        // read all land inside it. The subtiles are disjoint, so at most one
-        // can hold them.
         vector<int> indices;
-        int found = -1;
-        for (int i = 0; found < 0 && i < (int)f->subtiles.size(); i++) {
-            const MultiRamp &tile = f->subtiles[i];
-            WMMAMatrixLayout mem;
-            auto start = as_const_int(simplify(read.base - tile.base));
-            if (!start || !wmma_matrix_layout(tile, shape.M, shape.N, &mem)) {
-                continue;
-            }
-            auto stride = as_const_int(mem.stride);
-            if (!stride) {
-                continue;
-            }
-            // The matrix a fragment inflates to is in row-major order.
-            indices.clear();
-            for (int o : offsets) {
-                const int e = o + (int)*start;
-                const int row = mem.row_major ? e / (int)*stride : e % (int)*stride;
-                const int col = mem.row_major ? e % (int)*stride : e / (int)*stride;
-                if (row < 0 || row >= shape.M || col < 0 || col >= shape.N) {
-                    indices.clear();
-                    break;
-                }
-                indices.push_back(row * shape.N + col);
-            }
-            if (indices.size() == offsets.size()) {
-                found = i;
-            }
-        }
-        if (found < 0) {
-            return fail("The entries read do not all lie within a single tile");
-        }
+        int found = containing_subtile(f, op->index, &indices);
+        user_assert(found >= 0)
+            << "Read of a tensor core accumulator not supported. The entries read "
+            << "do not all lie within a single tile.\n"
+            << Expr(op);
         const string name = f->fragment_name + std::to_string(found);
+        const Shape &shape = f->shape;
 
         Type element_type = op->type.element_of();
         Expr frag = Load::make(element_type.with_lanes(accumulator_elements), name,
@@ -858,24 +873,27 @@ class ExtractWMMAOperations : public IRMutator {
         Fragment *f = find_fragment(op->name);
 
         if (!f) {
-            // A store to memory of a load from a fragment copies a tile out.
+            // A store to memory of a whole tile read out of a fragment copies
+            // that tile out.
             Expr store_index;
             const Load *load = peel_store_permutations(op, &store_index).as<Load>();
             Fragment *src = load ? find_fragment(load->name) : nullptr;
-            if (src) {
-                if (pass == 0) {
-                    subtile_name(src, load->index);
-                    return op;
-                }
+            if (src && pass == 0) {
+                return op;
+            }
+            vector<int> indices;
+            int subtile = src ? containing_subtile(src, load->index, &indices) : -1;
+            if (subtile >= 0 && is_whole_tile(src, indices)) {
                 user_assert(src->role == Role::Accumulator)
                     << "The tensor core fragment " << src->name << " is copied out to "
                     << "memory, but it holds " << role_name(src->role) << " of a matrix "
                     << "multiply. Only an accumulator can be copied out.\n";
                 return convert_to_tile_store(op, store_index,
-                                             subtile_name(src, load->index), src->shape);
+                                             src->fragment_name + std::to_string(subtile),
+                                             src->shape);
             }
-            // Not a copy of a tile out to memory. Recurse, so that any use of a
-            // fragment buried in here gets reported as an error.
+            // Not a copy of a whole tile out to memory. Recurse, so that reads
+            // of a fragment in here become gathers.
             return IRMutator::visit(op);
         }
 

@@ -1,4 +1,5 @@
 #include "HalideRuntimeCuda.h"
+#include "constants.h"
 #include "device_buffer_utils.h"
 #include "device_interface.h"
 #include "gpu_context_common.h"
@@ -11,6 +12,8 @@ namespace Halide {
 namespace Runtime {
 namespace Internal {
 namespace Cuda {
+
+using Halide::Runtime::Internal::Constants::wmma_get_element_marker;
 
 // Define the function pointers for the CUDA API.
 
@@ -523,12 +526,316 @@ WEAK int validate_device_pointer(void *user_context, halide_buffer_t *buf, size_
 #endif
 }
 
-WEAK CUmodule compile_kernel(void *user_context, const char *ptx_src, int size) {
+// A kernel that loads a 16x16 accumulator out of memory and has every lane
+// report what it holds in each of its registers. Run on a matrix whose entries
+// say where they are, this measures the whole layout.
+WEAK const char *wmma_probe_ptx =
+    ".version 6.3\n"
+    ".target sm_70\n"
+    ".address_size 64\n"
+    ".visible .entry halide_wmma_probe(\n"
+    "  .param .u64 src,\n"
+    "  .param .u64 dst\n"
+    ")\n"
+    ".maxntid 32, 1, 1\n"
+    "{\n"
+    "  .reg .b32 %f<8>;\n"
+    "  .reg .b32 %r<4>;\n"
+    "  .reg .b64 %rd<8>;\n"
+    "  ld.param.u64 %rd1, [src];\n"
+    "  ld.param.u64 %rd2, [dst];\n"
+    "  cvta.to.global.u64 %rd3, %rd1;\n"
+    "  cvta.to.global.u64 %rd4, %rd2;\n"
+    "  mov.u32 %r1, 16;\n"
+    "  wmma.load.c.sync.aligned.row.m16n16k16.global.f32\n"
+    "    {%f0, %f1, %f2, %f3, %f4, %f5, %f6, %f7}, [%rd3], %r1;\n"
+    "  mov.u32 %r2, %laneid;\n"
+    "  mul.wide.u32 %rd5, %r2, 32;\n"
+    "  add.s64 %rd6, %rd4, %rd5;\n"
+    "  st.global.b32 [%rd6], %f0;\n"
+    "  st.global.b32 [%rd6+4], %f1;\n"
+    "  st.global.b32 [%rd6+8], %f2;\n"
+    "  st.global.b32 [%rd6+12], %f3;\n"
+    "  st.global.b32 [%rd6+16], %f4;\n"
+    "  st.global.b32 [%rd6+20], %f5;\n"
+    "  st.global.b32 [%rd6+24], %f6;\n"
+    "  st.global.b32 [%rd6+28], %f7;\n"
+    "  ret;\n"
+    "}\n";
+
+// The number of entries in a 16x16 accumulator, and the number of registers
+// each lane of the warp holds it in.
+constexpr int wmma_entries = 256;
+constexpr int wmma_regs_per_lane = 8;
+
+// Which lane of the warp holds each entry of a 16x16 single precision
+// accumulator, and which of that lane's registers it sits in. Measured once
+// per context, because it is a property of the hardware rather than of the
+// module being loaded.
+WEAK uint8_t wmma_entry_lane[wmma_entries];
+WEAK uint8_t wmma_entry_reg[wmma_entries];
+WEAK CUcontext wmma_layout_context = nullptr;
+WEAK halide_mutex wmma_layout_lock;
+
+WEAK int measure_wmma_layout(void *user_context, CUcontext ctx) {
+    ScopedMutexLock lock(&wmma_layout_lock);
+    if (wmma_layout_context == ctx) {
+        return halide_error_code_success;
+    }
+
+    CUmodule module = nullptr;
+    CUfunction probe = nullptr;
+    CUdeviceptr src = 0, dst = 0;
+    float entries[wmma_entries], held[wmma_entries];
+    for (int i = 0; i < wmma_entries; i++) {
+        entries[i] = (float)i;
+    }
+
+    // Anything that goes wrong here leaves the layout unmeasured, which the
+    // caller reports. The allocations are freed on the way out either way.
+    CUresult err = cuModuleLoadData(&module, wmma_probe_ptx);
+    if (!err) {
+        err = cuModuleGetFunction(&probe, module, "halide_wmma_probe");
+    }
+    if (!err) {
+        err = cuMemAlloc(&src, sizeof(entries));
+    }
+    if (!err) {
+        err = cuMemAlloc(&dst, sizeof(held));
+    }
+    if (!err) {
+        err = cuMemcpyHtoD(src, entries, sizeof(entries));
+    }
+    if (!err) {
+        void *args[] = {&src, &dst};
+        err = cuLaunchKernel(probe, 1, 1, 1, 32, 1, 1, 0, nullptr, args, nullptr);
+    }
+    if (!err) {
+        err = cuCtxSynchronize();
+    }
+    if (!err) {
+        err = cuMemcpyDtoH(held, dst, sizeof(held));
+    }
+    if (src) {
+        (void)cuMemFree(src);
+    }
+    if (dst) {
+        (void)cuMemFree(dst);
+    }
+    if (module) {
+        (void)cuModuleUnload(module);
+    }
+    if (err) {
+        return error_cuda(user_context, err,
+                          "measuring the tensor core accumulator layout");
+    }
+
+    // Each lane reported which entry it holds in each register, so every entry
+    // should have been reported exactly once.
+    bool found[wmma_entries] = {};
+    for (int lane = 0; lane < 32; lane++) {
+        for (int reg = 0; reg < wmma_regs_per_lane; reg++) {
+            float f = held[lane * wmma_regs_per_lane + reg];
+            int entry = (int)f;
+            if ((float)entry != f || entry < 0 || entry >= wmma_entries || found[entry]) {
+                error(user_context) << "CUDA: the tensor core accumulator layout "
+                                       "measured on this device is not a permutation "
+                                       "of the entries of the matrix. Lane "
+                                    << lane << " register " << reg << " holds " << f << ".";
+                return halide_error_code_gpu_device_error;
+            }
+            found[entry] = true;
+            wmma_entry_lane[entry] = (uint8_t)lane;
+            wmma_entry_reg[entry] = (uint8_t)reg;
+        }
+    }
+
+    wmma_layout_context = ctx;
+    return halide_error_code_success;
+}
+
+// Print a non-negative integer into buf, returning how many characters it took.
+WEAK int print_int(char *buf, int value) {
+    int digits = 1;
+    for (int v = value; v >= 10; v /= 10) {
+        digits++;
+    }
+    for (int i = digits - 1; i >= 0; i--) {
+        buf[i] = (char)('0' + value % 10);
+        value /= 10;
+    }
+    return digits;
+}
+
+// Read a non-negative integer, advancing the cursor past it. Returns -1 if
+// there isn't one.
+WEAK int parse_int(const char **cursor) {
+    const char *p = *cursor;
+    if (*p < '0' || *p > '9') {
+        return -1;
+    }
+    int value = 0;
+    while (*p >= '0' && *p <= '9') {
+        value = value * 10 + (*p++ - '0');
+    }
+    *cursor = p;
+    return value;
+}
+
+// Skip over the given text, returning false if it isn't what comes next.
+WEAK bool skip_over(const char **cursor, const char *text) {
+    size_t len = strlen(text);
+    if (strncmp(*cursor, text, len)) {
+        return false;
+    }
+    *cursor += len;
+    return true;
+}
+
+// Rewrite every accumulator read marker in a copy of a PTX module into a real
+// shuffle. Returns the copy, which the caller frees, or nullptr on failure,
+// having reported why.
+WEAK char *patch_wmma_gets(void *user_context, const char *ptx_src) {
+    size_t len = strlen(ptx_src);
+    char *patched = (char *)malloc(len + 1);
+    if (!patched) {
+        error(user_context) << "CUDA: out of memory patching a PTX module";
+        return nullptr;
+    }
+    memcpy(patched, ptx_src, len + 1);
+
+    auto fail = [&](const char *why, const char *where) {
+        error(user_context) << "CUDA: could not rewrite a read of a tensor core "
+                               "accumulator into a shuffle. "
+                            << why << ":\n"
+                            << where;
+        free(patched);
+        return (char *)nullptr;
+    };
+
+    size_t offset = 0;
+    while (const char *marker = strstr(patched + offset, wmma_get_element_marker)) {
+        // The marker sits in a comment, which the shuffle to replace it with
+        // is written over the top of.
+        size_t start = marker - patched;
+        while (start > 0 && patched[start - 1] != '\n') {
+            start--;
+        }
+
+        const char *cursor = marker + strlen(wmma_get_element_marker);
+        int row = -1, col = -1;
+        if (!skip_over(&cursor, " row=") || (row = parse_int(&cursor)) < 0 ||
+            !skip_over(&cursor, " col=") || (col = parse_int(&cursor)) < 0 ||
+            !skip_over(&cursor, " regs=")) {
+            return fail("The marker is malformed", patched + start);
+        }
+        if (row >= 16 || col >= 16) {
+            return fail("Only 16x16 accumulators are supported", patched + start);
+        }
+
+        // The registers the fragment lives in, in the order the lane holds them.
+        const char *regs[wmma_regs_per_lane];
+        int reg_lengths[wmma_regs_per_lane];
+        int num_regs = 0;
+        while (*cursor != '\n') {
+            if (num_regs == wmma_regs_per_lane) {
+                return fail("The marker names too many registers", patched + start);
+            }
+            regs[num_regs] = cursor;
+            while (*cursor && *cursor != ',' && *cursor != '\n') {
+                cursor++;
+            }
+            reg_lengths[num_regs] = (int)(cursor - regs[num_regs]);
+            num_regs++;
+            if (*cursor == ',') {
+                cursor++;
+            }
+        }
+
+        // The placeholder shuffle that follows says where the entry should
+        // end up.
+        while (*cursor == '\n' || *cursor == '\t' || *cursor == ' ') {
+            cursor++;
+        }
+        if (!skip_over(&cursor, "shfl.sync.idx.b32 ")) {
+            return fail("The marker is not followed by a placeholder shuffle", patched + start);
+        }
+        const char *result = cursor;
+        while (*cursor && *cursor != ',') {
+            cursor++;
+        }
+        int result_length = (int)(cursor - result);
+        while (*cursor && *cursor != ';') {
+            cursor++;
+        }
+        if (*cursor != ';') {
+            return fail("The placeholder shuffle does not end", patched + start);
+        }
+        size_t end = (cursor - patched) + 1;
+
+        const int entry = row * 16 + col;
+        const int lane = wmma_entry_lane[entry];
+        const int reg = wmma_entry_reg[entry];
+        if (reg >= num_regs) {
+            return fail("The entry is held in a register the marker doesn't name",
+                        patched + start);
+        }
+
+        // Both lines are replaced by the one shuffle, and the room they leave
+        // over is blanked out. The marker alone names every register, so it is
+        // always the longer of the two.
+        char shuffle[256];
+        char *out = shuffle;
+        memcpy(out, "shfl.sync.idx.b32 ", 18);
+        out += 18;
+        memcpy(out, result, result_length);
+        out += result_length;
+        memcpy(out, ", ", 2);
+        out += 2;
+        memcpy(out, regs[reg], reg_lengths[reg]);
+        out += reg_lengths[reg];
+        memcpy(out, ", ", 2);
+        out += 2;
+        out += print_int(out, lane);
+        memcpy(out, ", 31, -1;", 9);
+        out += 9;
+
+        size_t shuffle_length = out - shuffle;
+        if (shuffle_length > end - start) {
+            return fail("There is not enough room for the shuffle", patched + start);
+        }
+        memcpy(patched + start, shuffle, shuffle_length);
+        for (size_t i = start + shuffle_length; i < end; i++) {
+            patched[i] = ' ';
+        }
+        offset = end;
+    }
+
+    return patched;
+}
+
+WEAK CUmodule compile_kernel(void *user_context, CUcontext ctx, const char *ptx_src, int size) {
     debug(user_context) << "CUDA: compile_kernel cuModuleLoadData " << (void *)ptx_src << ", " << size << " -> ";
+
+    // Reads of tensor core accumulators are left for the runtime to fill in,
+    // because how the hardware lays a fragment out over the lanes of a warp is
+    // only discoverable by trying it.
+    char *patched = nullptr;
+    if (strstr(ptx_src, wmma_get_element_marker)) {
+        if (measure_wmma_layout(user_context, ctx)) {
+            return nullptr;
+        }
+        patched = patch_wmma_gets(user_context, ptx_src);
+        if (!patched) {
+            return nullptr;
+        }
+        ptx_src = patched;
+    }
 
     // Use driver defaults for all JIT options.
     CUmodule loaded_module;
     CUresult err = cuModuleLoadData(&loaded_module, ptx_src);
+    free(patched);
 
     if (err != CUDA_SUCCESS) {
         error(user_context) << "CUDA: cuModuleLoadData failed: "
@@ -563,7 +870,7 @@ WEAK int halide_cuda_initialize_kernels(void *user_context, void **state_ptr, co
 
     CUmodule loaded_module;
     if (!compilation_cache.kernel_state_setup(user_context, state_ptr, ctx.context, loaded_module,
-                                              compile_kernel, user_context, ptx_src, size)) {
+                                              compile_kernel, user_context, ctx.context, ptx_src, size)) {
         return halide_error_code_generic_error;
     }
     halide_abort_if_false(user_context, loaded_module != nullptr);

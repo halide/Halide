@@ -22,6 +22,7 @@
 #include "Solve.h"
 #include "Substitute.h"
 #include "Target.h"
+#include "runtime/constants.h"
 
 #include <fstream>
 #include <set>
@@ -40,10 +41,7 @@ using namespace llvm;
 
 namespace {
 
-/** Marks a read of one entry of a tensor core accumulator, for the CUDA
- * runtime to rewrite once it knows how the hardware lays fragments out. Must
- * match the string the runtime looks for in src/runtime/cuda.cpp. */
-constexpr const char *wmma_get_element_marker = "halide_wmma_get";
+using Halide::Runtime::Internal::Constants::wmma_get_element_marker;
 
 /** A code generator that emits GPU code from a given Halide stmt. */
 class CodeGen_PTX_Dev : public CodeGen_LLVM, public CodeGen_GPU_Dev {
@@ -489,7 +487,12 @@ llvm::Value *CodeGen_PTX_Dev::codegen_wmma_get_element(const Call *op, int row, 
     llvm::InlineAsm *asm_call =
         llvm::InlineAsm::get(fn_type, asm_text.str(), constraints.str(),
                              /* hasSideEffects */ false);
-    return builder->CreateCall(asm_call, regs);
+    llvm::CallInst *call = builder->CreateCall(asm_call, regs);
+    // It reads the registers of other lanes, so it must stay where the whole
+    // warp reaches it. Leaving it free of side effects still lets an entry
+    // nothing reads be dropped.
+    call->addFnAttr(llvm::Attribute::Convergent);
+    return call;
 }
 
 void CodeGen_PTX_Dev::visit(const Shuffle *op) {
