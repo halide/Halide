@@ -598,8 +598,10 @@ WEAK const char *wmma_probe_ptx =
     "  ret;\n"
     "}\n";
 
-// The number of entries in a 16x16 matrix.
+// The number of entries in a 16x16 matrix. A marker's entry field covers
+// exactly this many, so the patcher doesn't have to range check what it reads.
 constexpr int wmma_entries = 256;
+static_assert(wmma_entries == 1 << (4 * wmma_get_entry_digits));
 
 // Half precision for the small non-negative integers the A probe labels its
 // entries with, which are exact in both directions.
@@ -776,9 +778,9 @@ WEAK int measure_wmma_layout(void *user_context, CUcontext ctx) {
 }
 
 // Finish off every accumulator read marker in a copy of a PTX module, by
-// keeping the shuffle of the register that holds the entry and blanking the
-// rest. Returns the copy, which the caller frees, or nullptr on failure,
-// having reported why.
+// telling its shuffle which register and lane hold the entry it wants.
+// Returns the copy, which the caller frees, or nullptr on failure, having
+// reported why.
 WEAK char *patch_wmma_gets(void *user_context, const char *ptx_src) {
     size_t len = strlen(ptx_src);
     char *patched = (char *)malloc(len + 1);
@@ -797,7 +799,14 @@ WEAK char *patch_wmma_gets(void *user_context, const char *ptx_src) {
         return (char *)nullptr;
     };
 
-    const size_t tail_length = strlen(wmma_get_shuffle_tail);
+    // Overwrite a field of fixed width with a number, right aligned, because a
+    // leading zero would make PTX read it as octal.
+    auto write_number = [&](size_t at, int width, int value) {
+        for (int i = width - 1; i >= 0; i--, value /= 10) {
+            patched[at + i] = (value || i == width - 1) ? (char)('0' + value % 10) : ' ';
+        }
+    };
+
     size_t offset = 0;
     while (const char *marker = strstr(patched + offset, wmma_get_element_marker)) {
         size_t cursor = (marker - patched) + strlen(wmma_get_element_marker);
@@ -810,54 +819,45 @@ WEAK char *patch_wmma_gets(void *user_context, const char *ptx_src) {
         int entry = 0;
         for (int i = 0; i < wmma_get_entry_digits; i++) {
             char c = patched[cursor++];
-            if (c < '0' || c > '9') {
+            int digit = (c >= '0' && c <= '9')   ? c - '0' :
+                        (c >= 'a' && c <= 'f') ? c - 'a' + 10 :
+                                                 -1;
+            if (digit < 0) {
                 return fail("The entry the marker asks for is not a number", cursor);
             }
-            entry = entry * 10 + (c - '0');
+            entry = entry * 16 + digit;
         }
-        if (entry >= wmma_entries) {
-            return fail("The entry the marker asks for is off the end of the matrix",
-                        cursor);
-        }
-        const int lane = wmma_entry_lane[entry];
-        const int reg = wmma_entry_reg[entry];
 
-        // One shuffle per register the entry could be in. Blank all but the
-        // one it is in, and give that one the lane holding it.
-        for (int i = 0; i < wmma_accumulator_registers; i++) {
-            size_t start = cursor;
-            while (patched[cursor] && patched[cursor] != ';') {
+        // Its shuffle is the next one, and takes the destination, the source
+        // register and the source lane in that order.
+        const char *shuffle = strstr(patched + cursor, "shfl.sync.idx.b32");
+        if (!shuffle) {
+            return fail("The marker has no shuffle after it", cursor);
+        }
+        cursor = shuffle - patched;
+        size_t comma[3];
+        for (auto &c : comma) {
+            while (patched[cursor] && patched[cursor] != ',' && patched[cursor] != ';') {
                 cursor++;
             }
-            if (!patched[cursor]) {
-                return fail("The marker has fewer shuffles after it than registers",
-                            start);
+            if (patched[cursor] != ',') {
+                return fail("A shuffle does not take the operands it should",
+                            shuffle - patched);
             }
-            cursor++;
-            if (i == reg) {
-                // The lane sits just before the fixed tail of the instruction,
-                // written to the same width as any lane number, so it can be
-                // overwritten where it is.
-                if (cursor - start < tail_length + wmma_get_lane_digits ||
-                    strncmp(patched + cursor - tail_length, wmma_get_shuffle_tail,
-                            tail_length)) {
-                    return fail("A shuffle does not end the way it should", start);
-                }
-                size_t at = cursor - tail_length - wmma_get_lane_digits;
-                for (int d = wmma_get_lane_digits - 1, l = lane; d >= 0; d--, l /= 10) {
-                    // Right aligned, because a leading zero would make PTX
-                    // read the lane as octal.
-                    patched[at + d] = (l || d == wmma_get_lane_digits - 1) ?
-                                          (char)('0' + l % 10) :
-                                          ' ';
-                }
-            } else {
-                for (size_t j = start; j < cursor; j++) {
-                    patched[j] = ' ';
-                }
-            }
+            c = cursor++;
         }
-        offset = cursor;
+
+        // The source register is the digit ending the second operand, and the
+        // lane is the whole of the third.
+        if (strncmp(patched + comma[2], wmma_get_shuffle_tail,
+                    strlen(wmma_get_shuffle_tail)) ||
+            comma[2] - comma[1] < (size_t)wmma_get_lane_digits) {
+            return fail("A shuffle does not end the way it should", shuffle - patched);
+        }
+        write_number(comma[1] - 1, 1, wmma_entry_reg[entry]);
+        write_number(comma[2] - wmma_get_lane_digits, wmma_get_lane_digits,
+                     wmma_entry_lane[entry]);
+        offset = comma[2];
     }
 
     return patched;

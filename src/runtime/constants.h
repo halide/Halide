@@ -25,28 +25,34 @@ static constexpr int wmma_accumulator_registers = 8;
  * architecturally specified, so the CUDA runtime measures it and finishes
  * these off before handing the module to the driver. A marker looks like
  *
- *   // halide_wmma_get 057
- *   shfl.sync.idx.b32 %r20, %r7,  0, 31, -1;
- *   shfl.sync.idx.b32 %r20, %r8,  0, 31, -1;
+ *   // halide_wmma_get 39
+ *   { .reg .f32 %hget<8>;
+ *   mov.f32 %hget0, %r7;
  *   ... one per register the accumulator lives in ...
+ *   shfl.sync.idx.b32 %r20, %hget0,  0, 31, -1; }
  *
- * The number is the entry wanted, as a row-major index into the matrix,
- * written to a fixed width. Every register the fragment could be holding it in
- * gets its own shuffle, so that the runtime picks one rather than composing an
- * instruction out of register names only the compiler knows. It blanks out the
- * ones it doesn't want and writes the lane that holds the entry over the one
- * it keeps, so nothing changes length. */
+ * The number is the entry wanted, as a row-major index into the matrix, in
+ * hex - so for a 16x16 matrix its two digits read as the row and the column,
+ * and every value it can take is a real entry. The
+ * fragment is copied into a nested scope so that the shuffle can name its
+ * source by an index the compiler chose rather than one only the register
+ * allocator knows, which leaves the runtime two fields to fill in: the
+ * register holding the entry, and the lane holding it. Both are written over
+ * what is already there, so nothing changes length, and ptxas folds away the
+ * copies it didn't use. */
 static constexpr const char *wmma_get_element_marker = "halide_wmma_get";
 
-/** The entry index in a marker is written to this many digits, zero padded,
- * and the lane in each of its shuffles to this many, right aligned and padded
- * with spaces, so that patching one in doesn't change the length of anything.
- * A lane can't be zero padded because PTX reads a leading zero as octal. */
-static constexpr int wmma_get_entry_digits = 3;
+/** How the fields of a marker are written, so that patching one in doesn't
+ * change the length of anything. The entry is zero padded hex, which the
+ * runtime reads. The lane is decimal, because PTX reads it, and right aligned
+ * and padded with spaces rather than zeroes, because a leading zero would make
+ * PTX take it as octal. The source register is a single digit, so a fragment
+ * can't live in more than ten registers. */
+static constexpr int wmma_get_entry_digits = 2;
 static constexpr int wmma_get_lane_digits = 2;
 
-/** What follows the source lane in a marker's shuffle. The runtime finds the
- * lane to overwrite by measuring back from the end of the instruction. */
+/** What follows the source lane in a marker's shuffle. The runtime checks for
+ * this to make sure it has found the operand it means to overwrite. */
 static constexpr const char *wmma_get_shuffle_tail = ", 31, -1;";
 
 }  // namespace Constants

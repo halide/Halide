@@ -473,24 +473,29 @@ llvm::Value *CodeGen_PTX_Dev::codegen_wmma_get_element(const Call *op, int entry
     split_fragment(fragment, regs);
     internal_assert((int)regs.size() == wmma_accumulator_registers);
 
-    // Which register holds the entry is only known once the runtime has
-    // measured the layout, so give it a shuffle of each and let it keep the
-    // one it wants. $0 is the result, and $1 onwards are the registers. The
-    // shuffles are real instructions, so an unpatched module still assembles.
+    // Which register holds the entry, and which lane, is only known once the
+    // runtime has measured the layout. Copy the fragment into registers this
+    // end names, so that the shuffle can be left naming one of those and the
+    // runtime only has to overwrite an index rather than compose an
+    // instruction out of names the register allocator chose. $0 is the result,
+    // and $1 onwards are the registers.
+    internal_assert(entry >= 0 && entry < (1 << (4 * wmma_get_entry_digits)));
     string digits(wmma_get_entry_digits, '0');
-    internal_assert(entry >= 0 && entry < 1000);
-    for (int i = wmma_get_entry_digits - 1, rest = entry; i >= 0; i--, rest /= 10) {
-        digits[i] = (char)('0' + rest % 10);
+    for (int i = wmma_get_entry_digits - 1, rest = entry; i >= 0; i--, rest >>= 4) {
+        digits[i] = "0123456789abcdef"[rest & 15];
     }
 
     std::ostringstream asm_text, constraints;
-    asm_text << "// " << wmma_get_element_marker << " " << digits;
+    asm_text << "// " << wmma_get_element_marker << " " << digits
+             << "\n\t{ .reg .f32 %hget<" << regs.size() << ">;";
     constraints << "=f";
     for (size_t i = 0; i < regs.size(); i++) {
-        asm_text << "\n\tshfl.sync.idx.b32 $0, $" << (i + 1) << ", "
-                 << string(wmma_get_lane_digits - 1, ' ') << "0" << wmma_get_shuffle_tail;
+        asm_text << "\n\tmov.f32 %hget" << i << ", $" << (i + 1) << ";";
         constraints << ",f";
     }
+    asm_text << "\n\tshfl.sync.idx.b32 $0, %hget0, "
+             << string(wmma_get_lane_digits - 1, ' ') << "0"
+             << wmma_get_shuffle_tail << " }";
 
     vector<llvm::Type *> arg_types(regs.size(), f32_t);
     llvm::FunctionType *fn_type = llvm::FunctionType::get(f32_t, arg_types, false);
