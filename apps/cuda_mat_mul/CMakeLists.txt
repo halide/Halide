@@ -1,6 +1,15 @@
 cmake_minimum_required(VERSION 3.28)
 project(cuda_mat_mul)
 
+# These schedules are for CUDA - the half precision ones use tensor cores - and
+# the results are checked against cuBLAS, so there is nothing here to build for
+# any other device API. CI builds every app under each of its GPU targets, and
+# adding cuda on top of one of those emits the kernels for whichever API wins.
+if (NOT Halide_TARGET MATCHES "cuda")
+    message(STATUS "Skipping cuda_mat_mul: Halide_TARGET is not a CUDA target")
+    return()
+endif ()
+
 # This just checks whether CUDA is available ahead of time to allow
 # skipping this app when CUDA/cuBLAS are not installed on the system.
 find_package(CUDAToolkit)
