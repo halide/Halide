@@ -88,6 +88,7 @@ tests(
     lerp_float_weight_out_of_range.cpp
     lerp_mismatch.cpp
     lerp_signed_weight.cpp
+    load_plugin_not_found.cpp
     memoize_different_compute_store.cpp
     memoize_output_invalid.cpp
     memoize_redefine_eviction_key.cpp

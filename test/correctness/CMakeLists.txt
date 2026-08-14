@@ -55,6 +55,8 @@ tests(
     compile_to_bitcode.cpp
     compile_to_lowered_stmt.cpp
     compile_to_multitarget.cpp
+    compiler_stack_size.cpp
+    compiler_stack_size_invalid_env.cpp
     compute_at_innermost.cpp
     compute_at_reordered_update_stage.cpp
     compute_at_split_rvar.cpp
@@ -386,6 +388,11 @@ tests(
     unsafe_promises.cpp
     unused_func.cpp
     update_chunk.cpp
+    util_bit_counting.cpp
+    util_file_io.cpp
+    util_overflow.cpp
+    util_process.cpp
+    util_strings.cpp
     vector_bounds_inference.cpp
     vector_extern.cpp
     vector_print_bug.cpp
