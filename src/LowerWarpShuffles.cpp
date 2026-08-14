@@ -288,6 +288,26 @@ public:
         return is_const_one(simplify(e, bounds));
     }
 
+    // Whether nothing about how this allocation is accessed depends on the
+    // lane, in which case it isn't spread across the warp at all and every
+    // lane can just keep its own whole copy. Writing the same address from
+    // every lane of a parallel loop is only legal if they all write the same
+    // value, so the copies agree.
+    bool is_replicated() {
+        if (stores.empty() || !single_stores.empty()) {
+            return false;
+        }
+        for (const vector<Expr> *v : {&stores, &loads}) {
+            for (const Expr &e : *v) {
+                Expr s = warp_stride(e);
+                if (!s.defined() || !is_const_zero(simplify(s))) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     Expr get_stride() {
         bool ok = true;
         Expr stride;
@@ -365,6 +385,9 @@ class LowerWarpShuffles : public IRMutator {
     struct AllocInfo {
         int size;
         Expr stride;
+        // Held whole by every lane rather than striped across them, so its
+        // accesses are left alone.
+        bool replicated = false;
     };
     Scope<AllocInfo> allocation_info;
     Scope<Interval> bounds;
@@ -410,15 +433,22 @@ class LowerWarpShuffles : public IRMutator {
                 // size required per-lane is the old size divided by
                 // the number of lanes (rounded up).
                 Expr extent = op->extent();
-                Expr new_size = (alloc->extents[0] + extent - 1) / extent;
+                DetermineAllocStride stride(alloc->name, op->name, warp_size);
+                body.accept(&stride);
+                // An allocation no access to which mentions the lane is held
+                // whole by every lane, at its full size.
+                const bool replicated = stride.is_replicated();
+                Expr new_size = replicated ?
+                                    alloc->extents[0] :
+                                    (alloc->extents[0] + extent - 1) / extent;
                 new_size = simplify(new_size, bounds);
                 new_size = find_constant_bound(new_size, Direction::Upper, bounds);
                 auto sz = as_const_int(new_size);
                 user_assert(sz) << "Warp-level allocation with non-constant size: "
                                 << alloc->extents[0] << ". Use Func::bound_extent.";
-                DetermineAllocStride stride(alloc->name, op->name, warp_size);
-                body.accept(&stride);
-                allocation_info.push(alloc->name, {(int)(*sz), stride.get_stride()});
+                allocation_info.push(
+                    alloc->name,
+                    {(int)(*sz), replicated ? Expr() : stride.get_stride(), replicated});
             }
 
             body = mutate(op->body);
@@ -486,7 +516,7 @@ class LowerWarpShuffles : public IRMutator {
     }
 
     Stmt visit(const Store *op) override {
-        if (const auto *alloc = allocation_info.find(op->name)) {
+        if (const auto *alloc = allocation_info.find(op->name); alloc && !alloc->replicated) {
             Expr idx = mutate(op->index);
             Expr value = mutate(op->value);
             Expr stride = alloc->stride;
@@ -636,7 +666,7 @@ class LowerWarpShuffles : public IRMutator {
     }
 
     Expr visit(const Load *op) override {
-        if (const auto *alloc = allocation_info.find(op->name)) {
+        if (const auto *alloc = allocation_info.find(op->name); alloc && !alloc->replicated) {
             Expr idx = mutate(op->index);
             Expr stride = alloc->stride;
 
