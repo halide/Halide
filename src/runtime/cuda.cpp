@@ -530,14 +530,16 @@ WEAK int validate_device_pointer(void *user_context, halide_buffer_t *buf, size_
 #endif
 }
 
-// A kernel that loads a 16x16 accumulator out of memory and has every lane
-// report what it holds in each of its registers. Run on a matrix whose entries
-// say where they are, this measures the whole layout.
+// Kernels that load a 16x16 matrix out of memory as a fragment and have every
+// lane report what it holds in each of its registers. Run on a matrix whose
+// entries say where they are, these measure the whole layout. One takes the
+// matrix as an accumulator and the other as an A operand, because a fused
+// chain has to turn the first into the second.
 WEAK const char *wmma_probe_ptx =
     ".version 6.3\n"
     ".target sm_70\n"
     ".address_size 64\n"
-    ".visible .entry halide_wmma_probe(\n"
+    ".visible .entry halide_wmma_probe_c(\n"
     "  .param .u64 src,\n"
     "  .param .u64 dst\n"
     ")\n"
@@ -565,19 +567,111 @@ WEAK const char *wmma_probe_ptx =
     "  st.global.b32 [%rd6+24], %f6;\n"
     "  st.global.b32 [%rd6+28], %f7;\n"
     "  ret;\n"
+    "}\n"
+    ".visible .entry halide_wmma_probe_a(\n"
+    "  .param .u64 src,\n"
+    "  .param .u64 dst\n"
+    ")\n"
+    ".maxntid 32, 1, 1\n"
+    "{\n"
+    "  .reg .b32 %f<8>;\n"
+    "  .reg .b32 %r<4>;\n"
+    "  .reg .b64 %rd<8>;\n"
+    "  ld.param.u64 %rd1, [src];\n"
+    "  ld.param.u64 %rd2, [dst];\n"
+    "  cvta.to.global.u64 %rd3, %rd1;\n"
+    "  cvta.to.global.u64 %rd4, %rd2;\n"
+    "  mov.u32 %r1, 16;\n"
+    "  wmma.load.a.sync.aligned.row.m16n16k16.global.f16\n"
+    "    {%f0, %f1, %f2, %f3, %f4, %f5, %f6, %f7}, [%rd3], %r1;\n"
+    "  mov.u32 %r2, %laneid;\n"
+    "  mul.wide.u32 %rd5, %r2, 32;\n"
+    "  add.s64 %rd6, %rd4, %rd5;\n"
+    "  st.global.b32 [%rd6], %f0;\n"
+    "  st.global.b32 [%rd6+4], %f1;\n"
+    "  st.global.b32 [%rd6+8], %f2;\n"
+    "  st.global.b32 [%rd6+12], %f3;\n"
+    "  st.global.b32 [%rd6+16], %f4;\n"
+    "  st.global.b32 [%rd6+20], %f5;\n"
+    "  st.global.b32 [%rd6+24], %f6;\n"
+    "  st.global.b32 [%rd6+28], %f7;\n"
+    "  ret;\n"
     "}\n";
 
-// The number of entries in a 16x16 accumulator.
+// The number of entries in a 16x16 matrix.
 constexpr int wmma_entries = 256;
 
+// Half precision for the small non-negative integers the A probe labels its
+// entries with, which are exact in both directions.
+WEAK uint16_t half_of_small_int(int value) {
+    if (value == 0) {
+        return 0;
+    }
+    int exponent = 25;
+    while (value < 0x400) {
+        value <<= 1;
+        exponent--;
+    }
+    return (uint16_t)((exponent << 10) | (value & 0x3ff));
+}
+
+// The inverse, or -1 if the half doesn't hold such an integer.
+WEAK int small_int_of_half(uint16_t h) {
+    if (h == 0) {
+        return 0;
+    }
+    int exponent = (h >> 10) & 0x1f;
+    if (exponent < 15 || exponent > 25) {
+        return -1;
+    }
+    return ((h & 0x3ff) | 0x400) >> (25 - exponent);
+}
+
 // Which lane of the warp holds each entry of a 16x16 single precision
-// accumulator, and which of that lane's registers it sits in. Measured once
-// per context, because it is a property of the hardware rather than of the
-// module being loaded.
+// accumulator, and which of that lane's registers it sits in.
 WEAK uint8_t wmma_entry_lane[wmma_entries];
 WEAK uint8_t wmma_entry_reg[wmma_entries];
+
+// Which accumulator registers of the same lane feed the two halves of each
+// register of an A operand built out of one. Only meaningful when the layouts
+// line up lane for lane, which is what wmma_relayout_is_lane_local says.
+WEAK uint8_t wmma_a_src_low[wmma_accumulator_registers];
+WEAK uint8_t wmma_a_src_high[wmma_accumulator_registers];
+WEAK bool wmma_relayout_is_lane_local = false;
+
 WEAK CUcontext wmma_layout_context = nullptr;
 WEAK halide_mutex wmma_layout_lock;
+
+// Work out how an A operand would be built from an accumulator holding the
+// same matrix. Both are measured, so this only records what it finds, and
+// leaves wmma_relayout_is_lane_local false if a lane would have to reach
+// outside itself.
+WEAK void find_wmma_relayout(const uint16_t *a_held) {
+    for (int reg = 0; reg < wmma_accumulator_registers; reg++) {
+        for (int lane = 0; lane < 32; lane++) {
+            // The two halves of this register of this lane, and where the
+            // accumulator keeps them.
+            const int halves[2] = {
+                small_int_of_half(a_held[(lane * wmma_accumulator_registers + reg) * 2]),
+                small_int_of_half(a_held[(lane * wmma_accumulator_registers + reg) * 2 + 1])};
+            uint8_t *src[2] = {wmma_a_src_low, wmma_a_src_high};
+            for (int half = 0; half < 2; half++) {
+                const int entry = halves[half];
+                if (entry < 0 || entry >= wmma_entries ||
+                    wmma_entry_lane[entry] != lane) {
+                    return;
+                }
+                if (lane == 0) {
+                    src[half][reg] = wmma_entry_reg[entry];
+                } else if (src[half][reg] != wmma_entry_reg[entry]) {
+                    // Which register to take it from would depend on the lane.
+                    return;
+                }
+            }
+        }
+    }
+    wmma_relayout_is_lane_local = true;
+}
 
 WEAK int measure_wmma_layout(void *user_context, CUcontext ctx) {
     ScopedMutexLock lock(&wmma_layout_lock);
@@ -586,37 +680,60 @@ WEAK int measure_wmma_layout(void *user_context, CUcontext ctx) {
     }
 
     CUmodule module = nullptr;
-    CUfunction probe = nullptr;
+    CUfunction probe_c = nullptr, probe_a = nullptr;
     CUdeviceptr src = 0, dst = 0;
-    float entries[wmma_entries], held[wmma_entries];
+
+    // The same matrix in both precisions, with every entry labelled with where
+    // it is, and room for what one warp reports back about it.
+    float c_entries[wmma_entries], c_held[wmma_entries];
+    uint16_t a_entries[wmma_entries], a_held[wmma_entries * 2];
     for (int i = 0; i < wmma_entries; i++) {
-        entries[i] = (float)i;
+        c_entries[i] = (float)i;
+        a_entries[i] = half_of_small_int(i);
     }
 
     // Anything that goes wrong here leaves the layout unmeasured, which the
     // caller reports. The allocations are freed on the way out either way.
     CUresult err = cuModuleLoadData(&module, wmma_probe_ptx);
     if (!err) {
-        err = cuModuleGetFunction(&probe, module, "halide_wmma_probe");
+        err = cuModuleGetFunction(&probe_c, module, "halide_wmma_probe_c");
     }
     if (!err) {
-        err = cuMemAlloc(&src, sizeof(entries));
+        err = cuModuleGetFunction(&probe_a, module, "halide_wmma_probe_a");
     }
     if (!err) {
-        err = cuMemAlloc(&dst, sizeof(held));
+        err = cuMemAlloc(&src, sizeof(c_entries));
     }
     if (!err) {
-        err = cuMemcpyHtoD(src, entries, sizeof(entries));
+        // An A operand holds each entry twice, so it reports back twice as
+        // much as an accumulator does.
+        err = cuMemAlloc(&dst, sizeof(a_held));
+    }
+    if (!err) {
+        err = cuMemcpyHtoD(src, c_entries, sizeof(c_entries));
     }
     if (!err) {
         void *args[] = {&src, &dst};
-        err = cuLaunchKernel(probe, 1, 1, 1, 32, 1, 1, 0, nullptr, args, nullptr);
+        err = cuLaunchKernel(probe_c, 1, 1, 1, 32, 1, 1, 0, nullptr, args, nullptr);
     }
     if (!err) {
         err = cuCtxSynchronize();
     }
     if (!err) {
-        err = cuMemcpyDtoH(held, dst, sizeof(held));
+        err = cuMemcpyDtoH(c_held, dst, sizeof(c_held));
+    }
+    if (!err) {
+        err = cuMemcpyHtoD(src, a_entries, sizeof(a_entries));
+    }
+    if (!err) {
+        void *args[] = {&src, &dst};
+        err = cuLaunchKernel(probe_a, 1, 1, 1, 32, 1, 1, 0, nullptr, args, nullptr);
+    }
+    if (!err) {
+        err = cuCtxSynchronize();
+    }
+    if (!err) {
+        err = cuMemcpyDtoH(a_held, dst, sizeof(a_held));
     }
     if (src) {
         (void)cuMemFree(src);
@@ -629,7 +746,7 @@ WEAK int measure_wmma_layout(void *user_context, CUcontext ctx) {
     }
     if (err) {
         return error_cuda(user_context, err,
-                          "measuring the tensor core accumulator layout");
+                          "measuring the tensor core fragment layout");
     }
 
     // Each lane reported which entry it holds in each register, so every entry
@@ -637,7 +754,7 @@ WEAK int measure_wmma_layout(void *user_context, CUcontext ctx) {
     bool found[wmma_entries] = {};
     for (int lane = 0; lane < 32; lane++) {
         for (int reg = 0; reg < wmma_accumulator_registers; reg++) {
-            float f = held[lane * wmma_accumulator_registers + reg];
+            float f = c_held[lane * wmma_accumulator_registers + reg];
             int entry = (int)f;
             if ((float)entry != f || entry < 0 || entry >= wmma_entries || found[entry]) {
                 error(user_context) << "CUDA: the tensor core accumulator layout "
@@ -651,6 +768,8 @@ WEAK int measure_wmma_layout(void *user_context, CUcontext ctx) {
             wmma_entry_reg[entry] = (uint8_t)reg;
         }
     }
+
+    find_wmma_relayout(a_held);
 
     wmma_layout_context = ctx;
     return halide_error_code_success;
