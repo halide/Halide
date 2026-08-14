@@ -271,7 +271,7 @@ string unique_name(const std::string &prefix) {
             // follow it, so don't let it trip the checks below.
             continue;
         }
-        if (i > 0 && !isdigit(sanitized[i])) {
+        if (i > 0 && !isdigit((unsigned char)sanitized[i])) {
             // Found a non-digit after the first char
             matches_char_pattern = false;
             if (num_dollars) {
@@ -830,7 +830,7 @@ std::string c_print_name(const std::string &name,
     ostringstream oss;
 
     // Prefix an underscore to avoid reserved words (e.g. a variable named "while")
-    if (prefix_underscore && isalpha(name[0])) {
+    if (prefix_underscore && !name.empty() && isalpha((unsigned char)name[0])) {
         oss << "_";
     }
 
@@ -839,7 +839,7 @@ std::string c_print_name(const std::string &name,
             oss << "_";
         } else if (c == '$') {
             oss << "__";
-        } else if (c != '_' && !isalnum(c)) {
+        } else if (c != '_' && !isalnum((unsigned char)c)) {
             oss << "___";
         } else {
             oss << c;
