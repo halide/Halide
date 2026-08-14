@@ -1275,7 +1275,13 @@ public:
     }
 
     Stmt operator()(const Stmt &stmt) {
-        return IRMutator::operator()(stmt);
+        Stmt s = IRMutator::operator()(stmt);
+        if (target.has_feature(Target::Profile)) {
+            for (const auto &func : funcs) {
+                s = declare_box(s, func, Call::declare_box_required_at_root);
+            }
+        }
+        return s;
     }
 
 protected:
@@ -1293,7 +1299,19 @@ protected:
     // substitute names of in-scope buffers (most notably box_touched
     // analysis itself) follow that name.
     Stmt declare_box(const Stmt &stmt, const Function &f, Call::IntrinsicOp intrin) {
-        Expr name_arg = Variable::make(Handle(), f.name());
+        Expr name_arg;
+        if (intrin == Call::declare_box_touched) {
+            // This intrinsic refers to a property of a named object in scope
+            // (the Realize node), so it carries a Variable: if that object
+            // were renamed, the reference should follow it to the new name.
+            name_arg = Variable::make(Handle(), f.name());
+        } else {
+            // The profiler markers (declare_box_required_at_root,
+            // declare_stage) don't refer to anything in scope — the name is
+            // just a user-friendly label for printing — so a StringImm
+            // suffices, and also won't be caught by variable substitution.
+            name_arg = Expr(f.name());
+        }
         std::vector<Expr> args;
         args.reserve(2 * f.dimensions() + 1);
         args.push_back(std::move(name_arg));
@@ -1896,6 +1914,18 @@ private:
 
             Stmt produce_def = build_produce_definition(f, def_prefix, def, func_stage.second > 0,
                                                         replacements, add_lets, aliases);
+            if (target.has_feature(Target::Profile)) {
+                // Mark the start of this Func's stage so InjectCounters can
+                // distinguish pure-def stores from update-def stores even
+                // when there's no surrounding For loop with a stage-named
+                // var to key off (zero-dimensional or fully-unrolled Funcs,
+                // or stages of Funcs whose pure def has no Vars).
+                Expr marker = Call::make(Int(32), Call::declare_stage,
+                                         {Expr(f.name()),
+                                          make_const(Int(32), func_stage.second)},
+                                         Call::Intrinsic);
+                produce_def = Block::make(Evaluate::make(marker), produce_def);
+            }
             producer = inject_stmt(producer, produce_def, def.schedule().fuse_level().level);
         }
 
