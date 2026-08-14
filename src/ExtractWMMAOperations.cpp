@@ -268,7 +268,8 @@ bool is_accumulation(const Store *op) {
     return load && load->name == op->name && equal(load->index, op->index);
 }
 
-MatmulInfo analyze_matmul(const Store *op) {
+MatmulInfo analyze_matmul(const Store *op,
+                          const std::function<bool(const string &)> &is_accumulator) {
     // We expect the pattern:
     //
     // out[idx] = reduce_add(widen(lhs[multiramp]) * widen(rhs[multiramp])) + out[idx]
@@ -344,8 +345,19 @@ MatmulInfo analyze_matmul(const Store *op) {
     if (!is_const_one(info.lhs.load->predicate) || !is_const_one(info.rhs.load->predicate)) {
         return fail("the matrix multiply operands are predicated loads");
     }
-    const Type operand_type = info.lhs.load->type.element_of();
-    if (info.rhs.load->type.element_of() != operand_type) {
+    // An operand that is the accumulator of an earlier matrix multiply is not
+    // stored as the type it is multiplied as - the relayout that takes it out
+    // of the accumulator converts it. So the other operand says what type this
+    // multiply is in.
+    const bool lhs_fused = is_accumulator(info.lhs.load->name);
+    const bool rhs_fused = is_accumulator(info.rhs.load->name);
+    if (lhs_fused && rhs_fused) {
+        return fail("both operands are accumulators of earlier matrix multiplies");
+    }
+    const Type operand_type =
+        (lhs_fused ? info.rhs : info.lhs).load->type.element_of();
+    if (!lhs_fused && !rhs_fused &&
+        info.rhs.load->type.element_of() != operand_type) {
         return fail("the matrix multiply operands do not have the same type");
     }
     if (!wmma_types_supported(operand_type, info.accumulator_type)) {
@@ -624,7 +636,7 @@ class ExtractWMMAOperations : public IRMutator {
                        Layout layout, const Expr &stride, const Expr &lane) {
         if (Fragment *f = find_fragment(operand.load->name)) {
             if (is_fused_operand(f, role)) {
-                return make_fused_operand(f, operand, shape, lane);
+                return make_fused_operand(f, operand, shape, layout, stride, lane);
             }
             const int lanes = f->value_type().lanes();
             const string name =
@@ -639,21 +651,18 @@ class ExtractWMMAOperations : public IRMutator {
     // the matrix in different layouts, so this is a relayout, but both of them
     // are register layouts and the backend does it in place.
     Expr make_fused_operand(Fragment *f, const Operand &operand, const Shape &shape,
-                            const Expr &lane) {
+                            Layout layout, const Expr &stride, const Expr &lane) {
         user_assert(shape.K == f->shape.N)
             << "The result of a tensor core matrix multiply is fed straight into "
             << "another as its a operand, but it is " << f->shape.M << "x"
             << f->shape.N << " and the second one wants an a operand with "
             << shape.K << " columns.\n";
 
-        vector<int> indices;
-        int subtile = containing_subtile(f, operand.load->index, &indices);
-        user_assert(subtile >= 0 && is_whole_tile(f, indices))
-            << "A tensor core accumulator fed straight into another matrix "
-            << "multiply must be used a whole tile at a time.\n"
-            << Expr(operand.load);
-
-        const string name = f->fragment_name + std::to_string(subtile);
+        // An operand covers M x N x K, not the tile, because it is replicated
+        // along the axis it doesn't depend on. So ask for the tile by the
+        // address it starts at, the way an operand in memory is asked for.
+        const string name =
+            operand_subtile_name(f, operand.mr.base, Role::A, shape, layout, stride);
         Expr acc = Load::make(f->value_type(), name,
                               Ramp::make(0, 1, f->value_type().lanes()));
         Expr matrix = Call::make(f->element_type.with_lanes(shape.M * shape.K),
@@ -1159,7 +1168,10 @@ class ExtractWMMAOperations : public IRMutator {
             return convert_to_elementwise(op, f);
         }
 
-        MatmulInfo info = analyze_matmul(op);
+        MatmulInfo info = analyze_matmul(op, [&](const string &name) {
+            const Fragment *operand = find_fragment(name);
+            return operand && operand->role == Role::Accumulator;
+        });
         if (pass == 0) {
             set_role(f, Role::Accumulator);
             set_shape(f, info.shape);
