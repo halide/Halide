@@ -88,6 +88,14 @@ Parameter::Parameter(const Type &t, int dimensions, const std::string &name,
                      const Buffer<void> &buffer, int host_alignment, const std::vector<BufferConstraint> &buffer_constraints,
                      MemoryType memory_type)
     : contents(new Internal::ParameterContents(t, /*is_buffer*/ true, dimensions, name)) {
+    // Every other constructor keeps buffer_constraints sized to the
+    // dimensionality, and check_dim_ok() relies on that when indexing it. This
+    // reconstruction path takes the vector verbatim, so a serialized pipeline
+    // claiming more dimensions than it carries constraints for would let the
+    // constraint accessors read past the vector.
+    user_assert(buffer_constraints.size() == (size_t)std::max(0, dimensions))
+        << "Buffer Parameter " << name << " has " << dimensions
+        << " dimensions but " << buffer_constraints.size() << " dimension constraints\n";
     contents->buffer = buffer;
     contents->host_alignment = host_alignment;
     contents->buffer_constraints = buffer_constraints;
