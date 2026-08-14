@@ -9,6 +9,7 @@
 #include "Error.h"
 #include <atomic>
 #include <chrono>
+#include <cstdio>
 #include <fstream>
 #include <iomanip>
 #include <map>
@@ -17,10 +18,12 @@
 #include <string>
 
 #ifdef _MSC_VER
+#include <fcntl.h>
 #include <io.h>
 #include <process.h>  // For _spawnvp
 #else
 #include <cstdlib>
+#include <fcntl.h>
 #include <spawn.h>
 #include <sys/mman.h>  // For mmap
 #include <sys/wait.h>
@@ -509,6 +512,10 @@ void write_entire_file(const std::string &pathname, const void *source, size_t s
 }
 
 int run_process(std::vector<std::string> args) {
+    return run_process(std::move(args), "", "");
+}
+
+int run_process(std::vector<std::string> args, const std::string &stdout_path, const std::string &stderr_path) {
     internal_assert(!args.empty()) << "run_process called with empty args\n";
 
     std::vector<char *> argv;
@@ -521,12 +528,84 @@ int run_process(std::vector<std::string> args) {
     debug(2) << "Running process: " << PrintSpan(args) << "\n";
 
 #ifdef _WIN32
-    // Wait for completion; return the child's exit code.
+    // _spawnvp() has no redirection parameter, so temporarily point the
+    // calling process's own stdout/stderr at the requested files, spawn
+    // synchronously, then restore them. This is safe only because the
+    // call blocks (_P_WAIT) -- there's no window where another thread
+    // could observe the redirected fds.
+    int saved_stdout = -1, saved_stderr = -1;
+    if (!stdout_path.empty()) {
+        saved_stdout = _dup(_fileno(stdout));
+        int fd = _open(stdout_path.c_str(), _O_WRONLY | _O_CREAT | _O_TRUNC | _O_BINARY, _S_IWRITE);
+        if (fd == -1) {
+            if (saved_stdout != -1) {
+                _close(saved_stdout);
+            }
+            return -1;
+        }
+        _dup2(fd, _fileno(stdout));
+        _close(fd);
+    }
+    if (!stderr_path.empty()) {
+        saved_stderr = _dup(_fileno(stderr));
+        if (stderr_path == stdout_path) {
+            // Share the fd stdout was just redirected to, rather than
+            // opening the same path again: two independent opens would
+            // give stdout/stderr independent file offsets, so interleaved
+            // writes would clobber each other instead of concatenating.
+            _dup2(_fileno(stdout), _fileno(stderr));
+        } else {
+            int fd = _open(stderr_path.c_str(), _O_WRONLY | _O_CREAT | _O_TRUNC | _O_BINARY, _S_IWRITE);
+            if (fd == -1) {
+                if (saved_stdout != -1) {
+                    _dup2(saved_stdout, _fileno(stdout));
+                    _close(saved_stdout);
+                }
+                if (saved_stderr != -1) {
+                    _close(saved_stderr);
+                }
+                return -1;
+            }
+            _dup2(fd, _fileno(stderr));
+            _close(fd);
+        }
+    }
+
     int rc = _spawnvp(_P_WAIT, argv[0], argv.data());
+
+    if (saved_stdout != -1) {
+        _dup2(saved_stdout, _fileno(stdout));
+        _close(saved_stdout);
+    }
+    if (saved_stderr != -1) {
+        _dup2(saved_stderr, _fileno(stderr));
+        _close(saved_stderr);
+    }
+
     return (rc >= 0) ? rc : -1;
 #else
+    posix_spawn_file_actions_t actions;
+    posix_spawn_file_actions_init(&actions);
+    if (!stdout_path.empty()) {
+        posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, stdout_path.c_str(),
+                                         O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    }
+    if (!stderr_path.empty()) {
+        if (stderr_path == stdout_path) {
+            // Share stdout's fd (as shell `2>&1` does) instead of opening
+            // the same path again: two independent opens would give
+            // stdout/stderr independent file offsets, so interleaved
+            // writes would clobber each other instead of concatenating.
+            posix_spawn_file_actions_adddup2(&actions, STDOUT_FILENO, STDERR_FILENO);
+        } else {
+            posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, stderr_path.c_str(),
+                                             O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        }
+    }
+
     pid_t pid = 0;
-    int status = posix_spawnp(&pid, argv[0], nullptr, nullptr, argv.data(), environ);
+    int status = posix_spawnp(&pid, argv[0], &actions, nullptr, argv.data(), environ);
+    posix_spawn_file_actions_destroy(&actions);
     if (status != 0 || waitpid(pid, &status, 0) == -1) {
         return -1;
     }

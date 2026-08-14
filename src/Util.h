@@ -398,6 +398,12 @@ public:
  * could not be started. */
 int run_process(std::vector<std::string> args);
 
+/** As above, but redirect the child's stdout and/or stderr to the given
+ * files instead of inheriting the caller's. Pass an empty string for
+ * either path to leave that stream untouched. Passing the same path for
+ * both combines them into a single file, as with the shell's `2>&1`. */
+int run_process(std::vector<std::string> args, const std::string &stdout_path, const std::string &stderr_path);
+
 /** Routines to test if math would overflow for signed integers with
  * the given number of bits. */
 // @{
