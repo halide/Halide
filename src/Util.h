@@ -325,9 +325,6 @@ void assert_file_exists(const std::string &name);
 /** assert-fail if the file DOES exist. useful primarily for testing purposes. */
 void assert_no_file_exists(const std::string &name);
 
-/** Wrapper for unlink(). Asserts upon error. */
-void file_unlink(const std::string &name);
-
 /** Wrapper for unlink(). Quietly ignores errors. */
 void file_unlink(const std::string &name);
 
