@@ -8,6 +8,7 @@
 #include "Debug.h"
 #include "Error.h"
 #include <atomic>
+#include <charconv>
 #include <chrono>
 #include <fstream>
 #include <iomanip>
@@ -726,24 +727,39 @@ namespace {
 
 struct CompilerStackSize {
     CompilerStackSize() {
-        std::string stack_size = Internal::get_env_variable("HL_COMPILER_STACK_SIZE");
-        if (stack_size.empty()) {
+        std::string env = Internal::get_env_variable("HL_COMPILER_STACK_SIZE");
+        if (env.empty()) {
             size = default_compiler_stack_size;
-        } else {
-            size = std::atoi(stack_size.c_str());
+            return;
         }
+        size_t parsed = 0;
+        auto result = std::from_chars(env.data(), env.data() + env.size(), parsed);
+        user_assert(result.ec == std::errc() && result.ptr == env.data() + env.size())
+            << "HL_COMPILER_STACK_SIZE must be a non-negative integer; got \"" << env << "\"\n";
+        size = parsed;
     }
-    size_t size;
-} stack_size;
+    // May be read and written concurrently with compilation via
+    // set_compiler_stack_size()/get_compiler_stack_size().
+    std::atomic<size_t> size;
+};
+
+// A function-local static defers parsing (and any resulting user_error) to
+// first use, rather than running during global static initialization
+// (i.e. before main()), where a thrown exception can't be caught by any
+// user code.
+CompilerStackSize &compiler_stack_size() {
+    static CompilerStackSize instance;
+    return instance;
+}
 
 }  // namespace
 
 void set_compiler_stack_size(size_t sz) {
-    stack_size.size = sz;
+    compiler_stack_size().size = sz;
 }
 
 size_t get_compiler_stack_size() {
-    return stack_size.size;
+    return compiler_stack_size().size;
 }
 
 namespace Internal {
@@ -771,7 +787,10 @@ thread_local void *run_with_large_stack_arg = nullptr;
 #endif
 
 void run_with_large_stack(const std::function<void()> &action) {
-    if (stack_size.size == 0) {
+    // Snapshot once so the whole call sees a consistent value, even if
+    // set_compiler_stack_size() is racing with us on another thread.
+    const size_t requested_stack_size = compiler_stack_size().size;
+    if (requested_stack_size == 0) {
         // User has requested no stack swapping
         action();
         return;
@@ -785,8 +804,8 @@ void run_with_large_stack(const std::function<void()> &action) {
     GetCurrentThreadStackLimits(&stack_low, &stack_high);
     ptrdiff_t stack_remaining = (char *)&approx_stack_pos - (char *)stack_low;
 
-    if (stack_remaining < stack_size.size) {
-        debug(1) << "Insufficient stack space (" << stack_remaining << " bytes). Switching to fiber with " << stack_size.size << "-byte stack.\n";
+    if (stack_remaining < requested_stack_size) {
+        debug(1) << "Insufficient stack space (" << stack_remaining << " bytes). Switching to fiber with " << requested_stack_size << "-byte stack.\n";
 
         auto was_a_fiber = IsThreadAFiber();
 
@@ -794,7 +813,7 @@ void run_with_large_stack(const std::function<void()> &action) {
         internal_assert(main_fiber) << "ConvertThreadToFiber failed with code: " << GetLastError() << "\n";
 
         GenericFiberArgs fiber_args{action, main_fiber};
-        auto *lower_fiber = CreateFiber(stack_size.size, generic_fiber_entry_point, &fiber_args);
+        auto *lower_fiber = CreateFiber(requested_stack_size, generic_fiber_entry_point, &fiber_args);
         internal_assert(lower_fiber) << "CreateFiber failed with code: " << GetLastError() << "\n";
 
         SwitchToFiber(lower_fiber);
@@ -876,10 +895,10 @@ void run_with_large_stack(const std::function<void()> &action) {
     };
 
     size_t usable_size = 0, guard_band = 0;
-    bool ok = round_up_to_page(stack_size.size, &usable_size) &&
+    bool ok = round_up_to_page(requested_stack_size, &usable_size) &&
               round_up_to_page(min_guard_band, &guard_band) &&
               usable_size <= std::numeric_limits<size_t>::max() - 2 * guard_band;
-    internal_assert(ok) << "Requested compiler stack size overflows: " << stack_size.size;
+    internal_assert(ok) << "Requested compiler stack size overflows: " << requested_stack_size;
     const size_t total_size = usable_size + 2 * guard_band;
 
     void *stack = mmap(nullptr, total_size, PROT_READ | PROT_WRITE,
