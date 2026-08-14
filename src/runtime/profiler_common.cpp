@@ -490,6 +490,14 @@ enum {
     counter_parallel_tasks = 3,
     counter_points_required_at_root = 4,
     counter_points_computed = 5,
+    counter_scalar_loads = 6,
+    counter_vector_loads = 7,
+    counter_gathers = 8,
+    counter_bytes_loaded = 9,
+    counter_scalar_stores = 10,
+    counter_vector_stores = 11,
+    counter_scatters = 12,
+    counter_bytes_stored = 13,
 };
 
 ALWAYS_INLINE bool counter_is_approximate(const halide_profiler_func_stats *fs, int counter) {
@@ -988,6 +996,11 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             warning_too_few_parallel_tasks,
             warning_not_parallelized,
             warning_high_recompute,
+            warning_no_vector_ops,
+            warning_more_gathers_than_vector_loads,
+            warning_more_scatters_than_vector_stores,
+            warning_many_scalar_stores,
+            warning_narrow_vector_stores,
             warning_approximated_counters,
             warning_device_bouncing,
             num_warning_kinds
@@ -1010,6 +1023,10 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                                   (fs->points_computed / (float)fs->points_required_at_root) :
                                   0.f;
             float ms_per_task = (cs->time / (fs->parallel_tasks + 1e-10f)) * 1e-6f;
+            uint64_t total_vector_loads = fs->vector_loads + fs->gathers;
+            uint64_t total_vector_stores = fs->vector_stores + fs->scatters;
+            uint64_t total_stores = fs->scalar_stores + fs->vector_stores + fs->scatters;
+            bool vector_loads_or_stores = total_vector_loads + total_vector_stores != 0;
 
             // Rules we want to check for *every* Func, even cheap ones.
             switch (w) {
@@ -1173,6 +1190,69 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                              << "further outwards in the parent's loop nest, check whether "
                              << "sliding-window optimization failed, or reduce the split "
                              << "factors used in its schedule.";
+                    }
+                    return true;
+                }
+                return false;
+            case warning_no_vector_ops:
+                if (!vector_loads_or_stores) {
+                    if (emit) {
+                        sstr << fs->name << " performs no vector loads or stores. Ensure it is"
+                             << " vectorized.";
+                    }
+                    return true;
+                }
+                return false;
+            case warning_more_gathers_than_vector_loads:
+                if (fs->gathers > fs->vector_loads) {
+                    if (emit) {
+                        sstr << fs->name << " performs more vector gathers than dense vector "
+                             << "loads (";
+                        emit_si(fs->gathers);
+                        sstr << " vs ";
+                        emit_si(fs->vector_loads);
+                        sstr << "). It may be possible to improve performance by vectorizing "
+                             << "a different Var, precomputing boundary conditions, or by "
+                             << "reordering the storage layout of Funcs that this one calls.";
+                    }
+                    return true;
+                }
+                return false;
+            case warning_more_scatters_than_vector_stores:
+                if (fs->scatters > fs->vector_stores) {
+                    if (emit) {
+                        sstr << fs->name << " performs more vector scatters than dense vector "
+                             << "stores (";
+                        emit_si(fs->scatters);
+                        sstr << " vs ";
+                        emit_si(fs->vector_stores);
+                        sstr << "). It may be possible to improve performance by vectorizing a "
+                             << "different Var, or by reordering the storage layout of this Func.";
+                    }
+                    return true;
+                }
+                return false;
+            case warning_many_scalar_stores:
+                if (vector_loads_or_stores &&
+                    total_vector_stores <= fs->scalar_stores * 10) {
+                    if (emit) {
+                        sstr << "A significant fraction of the stores to " << fs->name << " are scalar: ";
+                        emit_si(fs->scalar_stores);
+                        sstr << " out of ";
+                        emit_si(total_vector_stores + fs->scalar_stores);
+                        sstr << ". There may be an update definition that was not vectorized.";
+                    }
+                    return true;
+                }
+                return false;
+            case warning_narrow_vector_stores:
+                if (total_vector_stores > fs->scalar_stores * 10 &&
+                    fs->bytes_stored < total_vector_stores * p->native_vector_bytes) {
+                    if (emit) {
+                        sstr << "Stores to " << fs->name << " only write an average of "
+                             << fs->bytes_stored / total_stores << " bytes each. "
+                             << "This is less than the machine native vector width. Consider "
+                             << "using wider vectors.";
                     }
                     return true;
                 }
@@ -1594,7 +1674,15 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     field_u64("          ", "parallel_loops", fs->parallel_loops);
                     field_u64("          ", "parallel_tasks", fs->parallel_tasks);
                     field_u64("          ", "points_required_at_root", fs->points_required_at_root);
-                    field_u64("          ", "points_computed", fs->points_computed, true);
+                    field_u64("          ", "points_computed", fs->points_computed);
+                    field_u64("          ", "scalar_loads", fs->scalar_loads);
+                    field_u64("          ", "vector_loads", fs->vector_loads);
+                    field_u64("          ", "gathers", fs->gathers);
+                    field_u64("          ", "bytes_loaded", fs->bytes_loaded);
+                    field_u64("          ", "scalar_stores", fs->scalar_stores);
+                    field_u64("          ", "vector_stores", fs->vector_stores);
+                    field_u64("          ", "scatters", fs->scatters);
+                    field_u64("          ", "bytes_stored", fs->bytes_stored, true);
                     json << "        }";
 
                     // Flush periodically so we don't overflow the buffer for

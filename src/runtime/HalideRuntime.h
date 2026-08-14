@@ -2097,6 +2097,17 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
      * stores keeps update definitions from being conflated as
      * "recompute". */
     uint64_t points_computed;
+
+    /** The number of loads of various kinds done while computing this Func,
+     * classified by the index expression: scalar (a scalar index),
+     * vector (a unit-stride ramp), or gather (anything else). bytes_loaded
+     * is the total number of bytes loaded across all three. */
+    uint64_t scalar_loads, vector_loads, gathers, bytes_loaded;
+
+    /** The number of stores of various kinds done while computing this Func,
+     * classified the same way (scalar / unit-stride vector / scatter), plus
+     * the total bytes stored. */
+    uint64_t scalar_stores, vector_stores, scatters, bytes_stored;
 };
 
 /** Per-pipeline state tracked by the sampling profiler. These exist
