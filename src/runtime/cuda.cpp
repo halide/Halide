@@ -13,7 +13,11 @@ namespace Runtime {
 namespace Internal {
 namespace Cuda {
 
+using Halide::Runtime::Internal::Constants::wmma_accumulator_registers;
 using Halide::Runtime::Internal::Constants::wmma_get_element_marker;
+using Halide::Runtime::Internal::Constants::wmma_get_entry_digits;
+using Halide::Runtime::Internal::Constants::wmma_get_lane_digits;
+using Halide::Runtime::Internal::Constants::wmma_get_shuffle_tail;
 
 // Define the function pointers for the CUDA API.
 
@@ -563,10 +567,8 @@ WEAK const char *wmma_probe_ptx =
     "  ret;\n"
     "}\n";
 
-// The number of entries in a 16x16 accumulator, and the number of registers
-// each lane of the warp holds it in.
+// The number of entries in a 16x16 accumulator.
 constexpr int wmma_entries = 256;
-constexpr int wmma_regs_per_lane = 8;
 
 // Which lane of the warp holds each entry of a 16x16 single precision
 // accumulator, and which of that lane's registers it sits in. Measured once
@@ -634,8 +636,8 @@ WEAK int measure_wmma_layout(void *user_context, CUcontext ctx) {
     // should have been reported exactly once.
     bool found[wmma_entries] = {};
     for (int lane = 0; lane < 32; lane++) {
-        for (int reg = 0; reg < wmma_regs_per_lane; reg++) {
-            float f = held[lane * wmma_regs_per_lane + reg];
+        for (int reg = 0; reg < wmma_accumulator_registers; reg++) {
+            float f = held[lane * wmma_accumulator_registers + reg];
             int entry = (int)f;
             if ((float)entry != f || entry < 0 || entry >= wmma_entries || found[entry]) {
                 error(user_context) << "CUDA: the tensor core accumulator layout "
@@ -654,46 +656,9 @@ WEAK int measure_wmma_layout(void *user_context, CUcontext ctx) {
     return halide_error_code_success;
 }
 
-// Print a non-negative integer into buf, returning how many characters it took.
-WEAK int print_int(char *buf, int value) {
-    int digits = 1;
-    for (int v = value; v >= 10; v /= 10) {
-        digits++;
-    }
-    for (int i = digits - 1; i >= 0; i--) {
-        buf[i] = (char)('0' + value % 10);
-        value /= 10;
-    }
-    return digits;
-}
-
-// Read a non-negative integer, advancing the cursor past it. Returns -1 if
-// there isn't one.
-WEAK int parse_int(const char **cursor) {
-    const char *p = *cursor;
-    if (*p < '0' || *p > '9') {
-        return -1;
-    }
-    int value = 0;
-    while (*p >= '0' && *p <= '9') {
-        value = value * 10 + (*p++ - '0');
-    }
-    *cursor = p;
-    return value;
-}
-
-// Skip over the given text, returning false if it isn't what comes next.
-WEAK bool skip_over(const char **cursor, const char *text) {
-    size_t len = strlen(text);
-    if (strncmp(*cursor, text, len)) {
-        return false;
-    }
-    *cursor += len;
-    return true;
-}
-
-// Rewrite every accumulator read marker in a copy of a PTX module into a real
-// shuffle. Returns the copy, which the caller frees, or nullptr on failure,
+// Finish off every accumulator read marker in a copy of a PTX module, by
+// keeping the shuffle of the register that holds the entry and blanking the
+// rest. Returns the copy, which the caller frees, or nullptr on failure,
 // having reported why.
 WEAK char *patch_wmma_gets(void *user_context, const char *ptx_src) {
     size_t len = strlen(ptx_src);
@@ -704,111 +669,76 @@ WEAK char *patch_wmma_gets(void *user_context, const char *ptx_src) {
     }
     memcpy(patched, ptx_src, len + 1);
 
-    auto fail = [&](const char *why, const char *where) {
-        error(user_context) << "CUDA: could not rewrite a read of a tensor core "
-                               "accumulator into a shuffle. "
+    auto fail = [&](const char *why, size_t where) {
+        error(user_context) << "CUDA: could not finish a read of a tensor core "
+                               "accumulator. "
                             << why << ":\n"
-                            << where;
+                            << patched + where;
         free(patched);
         return (char *)nullptr;
     };
 
+    const size_t tail_length = strlen(wmma_get_shuffle_tail);
     size_t offset = 0;
     while (const char *marker = strstr(patched + offset, wmma_get_element_marker)) {
-        // The marker sits in a comment, which the shuffle to replace it with
-        // is written over the top of.
-        size_t start = marker - patched;
-        while (start > 0 && patched[start - 1] != '\n') {
-            start--;
-        }
+        size_t cursor = (marker - patched) + strlen(wmma_get_element_marker);
 
-        const char *cursor = marker + strlen(wmma_get_element_marker);
-        int row = -1, col = -1;
-        if (!skip_over(&cursor, " row=") || (row = parse_int(&cursor)) < 0 ||
-            !skip_over(&cursor, " col=") || (col = parse_int(&cursor)) < 0 ||
-            !skip_over(&cursor, " regs=")) {
-            return fail("The marker is malformed", patched + start);
+        // Which entry of the matrix the read wants, as a fixed width row-major
+        // index.
+        if (patched[cursor++] != ' ') {
+            return fail("The marker has no entry after it", cursor);
         }
-        if (row >= 16 || col >= 16) {
-            return fail("Only 16x16 accumulators are supported", patched + start);
-        }
-
-        // The registers the fragment lives in, in the order the lane holds them.
-        const char *regs[wmma_regs_per_lane];
-        int reg_lengths[wmma_regs_per_lane];
-        int num_regs = 0;
-        while (*cursor != '\n') {
-            if (num_regs == wmma_regs_per_lane) {
-                return fail("The marker names too many registers", patched + start);
+        int entry = 0;
+        for (int i = 0; i < wmma_get_entry_digits; i++) {
+            char c = patched[cursor++];
+            if (c < '0' || c > '9') {
+                return fail("The entry the marker asks for is not a number", cursor);
             }
-            regs[num_regs] = cursor;
-            while (*cursor && *cursor != ',' && *cursor != '\n') {
-                cursor++;
-            }
-            reg_lengths[num_regs] = (int)(cursor - regs[num_regs]);
-            num_regs++;
-            if (*cursor == ',') {
-                cursor++;
-            }
+            entry = entry * 10 + (c - '0');
         }
-
-        // The placeholder shuffle that follows says where the entry should
-        // end up.
-        while (*cursor == '\n' || *cursor == '\t' || *cursor == ' ') {
-            cursor++;
+        if (entry >= wmma_entries) {
+            return fail("The entry the marker asks for is off the end of the matrix",
+                        cursor);
         }
-        if (!skip_over(&cursor, "shfl.sync.idx.b32 ")) {
-            return fail("The marker is not followed by a placeholder shuffle", patched + start);
-        }
-        const char *result = cursor;
-        while (*cursor && *cursor != ',') {
-            cursor++;
-        }
-        int result_length = (int)(cursor - result);
-        while (*cursor && *cursor != ';') {
-            cursor++;
-        }
-        if (*cursor != ';') {
-            return fail("The placeholder shuffle does not end", patched + start);
-        }
-        size_t end = (cursor - patched) + 1;
-
-        const int entry = row * 16 + col;
         const int lane = wmma_entry_lane[entry];
         const int reg = wmma_entry_reg[entry];
-        if (reg >= num_regs) {
-            return fail("The entry is held in a register the marker doesn't name",
-                        patched + start);
-        }
 
-        // Both lines are replaced by the one shuffle, and the room they leave
-        // over is blanked out. The marker alone names every register, so it is
-        // always the longer of the two.
-        char shuffle[256];
-        char *out = shuffle;
-        memcpy(out, "shfl.sync.idx.b32 ", 18);
-        out += 18;
-        memcpy(out, result, result_length);
-        out += result_length;
-        memcpy(out, ", ", 2);
-        out += 2;
-        memcpy(out, regs[reg], reg_lengths[reg]);
-        out += reg_lengths[reg];
-        memcpy(out, ", ", 2);
-        out += 2;
-        out += print_int(out, lane);
-        memcpy(out, ", 31, -1;", 9);
-        out += 9;
-
-        size_t shuffle_length = out - shuffle;
-        if (shuffle_length > end - start) {
-            return fail("There is not enough room for the shuffle", patched + start);
+        // One shuffle per register the entry could be in. Blank all but the
+        // one it is in, and give that one the lane holding it.
+        for (int i = 0; i < wmma_accumulator_registers; i++) {
+            size_t start = cursor;
+            while (patched[cursor] && patched[cursor] != ';') {
+                cursor++;
+            }
+            if (!patched[cursor]) {
+                return fail("The marker has fewer shuffles after it than registers",
+                            start);
+            }
+            cursor++;
+            if (i == reg) {
+                // The lane sits just before the fixed tail of the instruction,
+                // written to the same width as any lane number, so it can be
+                // overwritten where it is.
+                if (cursor - start < tail_length + wmma_get_lane_digits ||
+                    strncmp(patched + cursor - tail_length, wmma_get_shuffle_tail,
+                            tail_length)) {
+                    return fail("A shuffle does not end the way it should", start);
+                }
+                size_t at = cursor - tail_length - wmma_get_lane_digits;
+                for (int d = wmma_get_lane_digits - 1, l = lane; d >= 0; d--, l /= 10) {
+                    // Right aligned, because a leading zero would make PTX
+                    // read the lane as octal.
+                    patched[at + d] = (l || d == wmma_get_lane_digits - 1) ?
+                                          (char)('0' + l % 10) :
+                                          ' ';
+                }
+            } else {
+                for (size_t j = start; j < cursor; j++) {
+                    patched[j] = ' ';
+                }
+            }
         }
-        memcpy(patched + start, shuffle, shuffle_length);
-        for (size_t i = start + shuffle_length; i < end; i++) {
-            patched[i] = ' ';
-        }
-        offset = end;
+        offset = cursor;
     }
 
     return patched;

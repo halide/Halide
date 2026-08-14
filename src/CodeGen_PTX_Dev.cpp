@@ -41,7 +41,11 @@ using namespace llvm;
 
 namespace {
 
+using Halide::Runtime::Internal::Constants::wmma_accumulator_registers;
 using Halide::Runtime::Internal::Constants::wmma_get_element_marker;
+using Halide::Runtime::Internal::Constants::wmma_get_entry_digits;
+using Halide::Runtime::Internal::Constants::wmma_get_lane_digits;
+using Halide::Runtime::Internal::Constants::wmma_get_shuffle_tail;
 
 /** A code generator that emits GPU code from a given Halide stmt. */
 class CodeGen_PTX_Dev : public CodeGen_LLVM, public CodeGen_GPU_Dev {
@@ -157,7 +161,7 @@ protected:
      * alongside a marker saying which entry was wanted and which registers hold
      * the fragment, and let the CUDA runtime rewrite the pair into a real
      * shuffle once it has measured the layout. */
-    llvm::Value *codegen_wmma_get_element(const Call *fragment_to_matrix, int row, int col);
+    llvm::Value *codegen_wmma_get_element(const Call *fragment_to_matrix, int entry);
     void visit(const Shuffle *) override;
 
     /** A fragment is a fixed number of 32-bit registers per lane. Keeping it in
@@ -456,7 +460,7 @@ bool wmma_reg_is_packed_i32(Type t) {
     return t.bits() < 32 && t.element_of() != Float(16);
 }
 
-llvm::Value *CodeGen_PTX_Dev::codegen_wmma_get_element(const Call *op, int row, int col) {
+llvm::Value *CodeGen_PTX_Dev::codegen_wmma_get_element(const Call *op, int entry) {
     internal_assert(op->args.size() == 5);
     const Expr &fragment = op->args[3];
     Type t = fragment.type();
@@ -467,20 +471,26 @@ llvm::Value *CodeGen_PTX_Dev::codegen_wmma_get_element(const Call *op, int row, 
 
     vector<Value *> regs;
     split_fragment(fragment, regs);
+    internal_assert((int)regs.size() == wmma_accumulator_registers);
 
-    // The marker names every register of the fragment, because which one holds
-    // the entry is decided later. $0 is the result; $1 onwards are the
-    // registers. The placeholder shuffle keeps the unpatched module
-    // assemblable, and reads register zero from lane zero.
+    // Which register holds the entry is only known once the runtime has
+    // measured the layout, so give it a shuffle of each and let it keep the
+    // one it wants. $0 is the result, and $1 onwards are the registers. The
+    // shuffles are real instructions, so an unpatched module still assembles.
+    string digits(wmma_get_entry_digits, '0');
+    internal_assert(entry >= 0 && entry < 1000);
+    for (int i = wmma_get_entry_digits - 1, rest = entry; i >= 0; i--, rest /= 10) {
+        digits[i] = (char)('0' + rest % 10);
+    }
+
     std::ostringstream asm_text, constraints;
-    asm_text << "// " << wmma_get_element_marker << " row=" << row << " col=" << col
-             << " regs=";
+    asm_text << "// " << wmma_get_element_marker << " " << digits;
     constraints << "=f";
     for (size_t i = 0; i < regs.size(); i++) {
-        asm_text << (i ? "," : "") << "$" << (i + 1);
+        asm_text << "\n\tshfl.sync.idx.b32 $0, $" << (i + 1) << ", "
+                 << string(wmma_get_lane_digits - 1, ' ') << "0" << wmma_get_shuffle_tail;
         constraints << ",f";
     }
-    asm_text << "\n\tshfl.sync.idx.b32 $0, $1, 0, 31, -1;";
 
     vector<llvm::Type *> arg_types(regs.size(), f32_t);
     llvm::FunctionType *fn_type = llvm::FunctionType::get(f32_t, arg_types, false);
@@ -504,20 +514,12 @@ void CodeGen_PTX_Dev::visit(const Shuffle *op) {
         return;
     }
 
-    auto get_int_arg = [&](int i) {
-        auto v = as_const_int(frag->args[i]);
-        internal_assert(v);
-        return (int)*v;
-    };
-    const int N = get_int_arg(1);
-
     // The matrix the fragment inflates to is in row-major order, so an index
-    // into it says which entry of it was asked for.
+    // into it is already the entry asked for.
     llvm::Type *result_type = llvm_type_of(op->type);
     value = UndefValue::get(result_type);
     for (int i = 0; i < (int)op->indices.size(); i++) {
-        const int idx = op->indices[i];
-        Value *element = codegen_wmma_get_element(frag, idx / N, idx % N);
+        Value *element = codegen_wmma_get_element(frag, op->indices[i]);
         value = op->type.lanes() == 1 ?
                     element :
                     builder->CreateInsertElement(value, element, i);
