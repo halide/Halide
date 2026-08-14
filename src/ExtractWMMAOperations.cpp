@@ -730,11 +730,90 @@ class ExtractWMMAOperations : public IRMutator {
         return ProducerConsumer::make(f->fragment_name, op->is_producer, mutate(op->body));
     }
 
+    // A read of a fragment that isn't part of a tensor core instruction. The
+    // entries wanted are spread across the lanes of the warp, so gather them.
     Expr visit(const Load *op) override {
-        user_assert(!find_fragment(op->name))
-            << "The tensor core fragment " << op->name
-            << " is used outside a tensor core instruction.\n";
-        return IRMutator::visit(op);
+        Fragment *f = find_fragment(op->name);
+        if (!f) {
+            return IRMutator::visit(op);
+        }
+        if (pass == 0) {
+            subtile_name(f, op->index);
+            return op;
+        }
+
+        auto fail = [&](const char *reason) {
+            user_error << "Read of a tensor core accumulator not supported. "
+                       << reason << ".\n"
+                       << Expr(op);
+            return Expr{};
+        };
+
+        user_assert(f->role == Role::Accumulator)
+            << "The tensor core fragment " << f->name << " is read outside a tensor "
+            << "core instruction, but it holds " << role_name(f->role) << " of a matrix "
+            << "multiply. Only an accumulator can be read that way.\n";
+        if (!is_const_one(op->predicate)) {
+            return fail("The read has a predicate");
+        }
+
+        const string name = subtile_name(f, op->index);
+        const Shape &shape = f->shape;
+        Expr within = index_within_thread(op->index);
+        MultiRamp read;
+        if (!is_multiramp(within, Scope<Expr>::empty_scope(), &read)) {
+            return fail("The index is not affine");
+        }
+        // Where the entries sit relative to the start of the tile, together
+        // with how the tile is laid out, says which entry each lane wants.
+        const MultiRamp &tile = f->subtiles[get_subtile(within, "tensor core fragment",
+                                                        &f->subtiles)];
+        WMMAMatrixLayout mem;
+        if (!wmma_matrix_layout(tile, shape.M, shape.N, &mem)) {
+            return fail("The tile it belongs to is not a dense matrix of the deduced shape");
+        }
+        auto stride = as_const_int(mem.stride);
+        auto start = as_const_int(simplify(read.base - tile.base));
+        if (!stride || !start) {
+            return fail("The entries read are not at a fixed place in the tile");
+        }
+
+        // Enumerate the entries the way a multiramp orders its lanes.
+        vector<int> offsets{(int)*start};
+        for (size_t d = 0; d < read.strides.size(); d++) {
+            auto s = as_const_int(read.strides[d]);
+            if (!s) {
+                return fail("The entries read are not evenly spaced");
+            }
+            vector<int> next;
+            for (int i = 0; i < read.lanes[d]; i++) {
+                for (int o : offsets) {
+                    next.push_back(o + i * (int)*s);
+                }
+            }
+            offsets.swap(next);
+        }
+
+        // The matrix a fragment inflates to is in row-major order.
+        vector<int> indices;
+        for (int o : offsets) {
+            const int row = mem.row_major ? o / (int)*stride : o % (int)*stride;
+            const int col = mem.row_major ? o % (int)*stride : o / (int)*stride;
+            if (row < 0 || row >= shape.M || col < 0 || col >= shape.N) {
+                return fail("An entry read lies outside the tile");
+            }
+            indices.push_back(row * shape.N + col);
+        }
+
+        Type element_type = op->type.element_of();
+        Expr frag = Load::make(element_type.with_lanes(accumulator_elements), name,
+                               Ramp::make(0, 1, accumulator_elements));
+        Expr lane = make_lane(unique_name("wmma_lane") + gpu_thread_name(0));
+        Expr matrix = Call::make(element_type.with_lanes(shape.M * shape.N),
+                                 Call::wmma_fragment_to_matrix_d,
+                                 {shape.M, shape.N, shape.K, std::move(frag), lane},
+                                 Call::Intrinsic);
+        return Shuffle::make({std::move(matrix)}, indices);
     }
 
     Stmt visit(const Store *op) override {
