@@ -12,7 +12,6 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
-#include <iomanip>
 #include <limits>
 #include <map>
 #include <mutex>
@@ -527,22 +526,7 @@ std::string dir_make_temp() {
     // CoCreateGuid() to create a probably-unique name.
     // Add a limit on the number of tries just in case.
     for (int tries = 0; tries < 100; ++tries) {
-        GUID guid;
-        HRESULT hr = CoCreateGuid(&guid);
-        internal_assert(hr == S_OK);
-        std::ostringstream name;
-        name << std::hex
-             << std::setfill('0')
-             << std::setw(8)
-             << guid.Data1
-             << std::setw(4)
-             << guid.Data2
-             << guid.Data3
-             << std::setw(2);
-        for (int i = 0; i < 8; i++) {
-            name << (int)guid.Data4[i];
-        }
-        std::string dir = tmp_dir + name.str();
+        std::string dir = tmp_dir + from_utf16(format_new_guid().c_str());
         std::wstring wdir = from_utf8(dir);
         BOOL success = CreateDirectoryW(wdir.c_str(), nullptr);
         if (success) {
