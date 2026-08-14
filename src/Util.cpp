@@ -813,8 +813,14 @@ void run_with_large_stack(const std::function<void()> &action) {
         internal_assert(main_fiber) << "ConvertThreadToFiber failed with code: " << GetLastError() << "\n";
 
         GenericFiberArgs fiber_args{action, main_fiber};
-        auto *lower_fiber = CreateFiber(requested_stack_size, generic_fiber_entry_point, &fiber_args);
-        internal_assert(lower_fiber) << "CreateFiber failed with code: " << GetLastError() << "\n";
+        // Use CreateFiberEx() rather than CreateFiber() so that the stack
+        // size is only reserved, not fully committed up front; Windows
+        // grows the committed portion on demand as it's used.
+        // FIBER_FLAG_FLOAT_SWITCH is required on x86 to avoid corrupting
+        // floating-point state when switching into this fiber.
+        auto *lower_fiber = CreateFiberEx(0, requested_stack_size, FIBER_FLAG_FLOAT_SWITCH,
+                                          generic_fiber_entry_point, &fiber_args);
+        internal_assert(lower_fiber) << "CreateFiberEx failed with code: " << GetLastError() << "\n";
 
         SwitchToFiber(lower_fiber);
         DeleteFiber(lower_fiber);
