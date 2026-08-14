@@ -17,6 +17,7 @@
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <type_traits>
 
 #ifdef _MSC_VER
 #include <io.h>
@@ -561,26 +562,43 @@ std::vector<char> read_entire_file(const std::string &pathname) {
 #else
     std::ifstream f(pathname, std::ios::in | std::ios::binary);
 #endif
-    std::vector<char> result;
+    internal_assert(f.is_open()) << "Unable to open file: " << pathname;
 
     f.seekg(0, std::ifstream::end);
-    size_t size = f.tellg();
-    result.resize(size);
+    internal_assert(f.good()) << "Unable to seek in file: " << pathname;
+
+    std::streamoff pos = f.tellg();
+    internal_assert(pos >= 0) << "Unable to determine size of file: " << pathname;
+    internal_assert((std::make_unsigned_t<std::streamoff>)pos <= std::numeric_limits<size_t>::max())
+        << "File too large to read: " << pathname;
+    size_t size = (size_t)pos;
+
+    std::vector<char> result(size);
     f.seekg(0, std::ifstream::beg);
-    f.read(result.data(), result.size());
-    internal_assert(f.good()) << "Unable to read file: " << pathname;
+    internal_assert(f.good()) << "Unable to seek in file: " << pathname;
+
+    if (size > 0) {
+        internal_assert(size <= (size_t)std::numeric_limits<std::streamsize>::max())
+            << "File too large to read: " << pathname;
+        f.read(result.data(), (std::streamsize)size);
+        internal_assert((size_t)f.gcount() == size) << "Unable to read entire file: " << pathname;
+    }
     f.close();
     return result;
 }
 
 void write_entire_file(const std::string &pathname, const void *source, size_t source_len) {
+    internal_assert(source_len <= (size_t)std::numeric_limits<std::streamsize>::max())
+        << "File too large to write: " << pathname;
+
 #ifdef _MSC_VER
     std::ofstream f(std::filesystem::path(from_utf8(pathname)), std::ios::out | std::ios::binary);
 #else
     std::ofstream f(pathname, std::ios::out | std::ios::binary);
 #endif
+    internal_assert(f.is_open()) << "Unable to open file: " << pathname;
 
-    f.write(reinterpret_cast<const char *>(source), source_len);
+    f.write(reinterpret_cast<const char *>(source), (std::streamsize)source_len);
     f.flush();
     internal_assert(f.good()) << "Unable to write file: " << pathname;
     f.close();
