@@ -4,6 +4,12 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (!target.has_gpu_feature()) {
+        printf("[SKIP] No GPU target enabled.\n");
+        return 0;
+    }
+
     Func g("g"), f("f");
     Var x("x"), y("y"), xi("xi"), yi("yi");
 
@@ -16,7 +22,7 @@ int main(int argc, char **argv) {
     // it. Each of the others would read its own copy, which it never wrote.
     g.compute_at(f, x).store_in(MemoryType::Register).gpu_threads(x);
 
-    f.compile_jit(Target{"host-cuda"});
+    f.compile_jit(target);
 
     printf("Success!\n");
     return 0;
