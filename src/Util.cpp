@@ -10,6 +10,7 @@
 #include <atomic>
 #include <charconv>
 #include <chrono>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <limits>
@@ -78,27 +79,38 @@ extern char **environ;
 namespace {
 
 std::string from_utf16(LPCWSTR pStr) {
-    int len = wcslen(pStr);
+    int len = (int)wcslen(pStr);
+    if (len == 0) {
+        return std::string();
+    }
 
-    int mblen = WideCharToMultiByte(CP_UTF8, 0, pStr, len, nullptr, 0, nullptr, nullptr);
-    internal_assert(mblen) << "WideCharToMultiByte() failed; error " << GetLastError() << "\n";
+    // WC_ERR_INVALID_CHARS makes the conversion fail explicitly on
+    // malformed UTF-16 input rather than silently substituting characters.
+    int mblen = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, pStr, len, nullptr, 0, nullptr, nullptr);
+    internal_assert(mblen > 0) << "WideCharToMultiByte() failed; error " << GetLastError() << "\n";
 
     std::string str(mblen, 0);
 
-    mblen = WideCharToMultiByte(CP_UTF8, 0, pStr, len, &str[0], (int)str.size(), nullptr, nullptr);
-    internal_assert(mblen) << "WideCharToMultiByte() failed; error " << GetLastError() << "\n";
+    mblen = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, pStr, len, &str[0], (int)str.size(), nullptr, nullptr);
+    internal_assert(mblen > 0) << "WideCharToMultiByte() failed; error " << GetLastError() << "\n";
 
     return str;
 }
 
 std::wstring from_utf8(const std::string &str) {
-    int wlen = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), nullptr, 0);
-    internal_assert(wlen) << "MultiByteToWideChar() failed; error " << GetLastError() << "\n";
+    if (str.empty()) {
+        return std::wstring();
+    }
+
+    // MB_ERR_INVALID_CHARS makes the conversion fail explicitly on
+    // malformed UTF-8 input rather than silently substituting characters.
+    int wlen = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, str.c_str(), (int)str.size(), nullptr, 0);
+    internal_assert(wlen > 0) << "MultiByteToWideChar() failed; error " << GetLastError() << "\n";
 
     std::wstring wstr(wlen, 0);
 
-    wlen = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), &wstr[0], (int)wstr.size());
-    internal_assert(wlen) << "MultiByteToWideChar() failed; error " << GetLastError() << "\n";
+    wlen = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, str.c_str(), (int)str.size(), &wstr[0], (int)wstr.size());
+    internal_assert(wlen > 0) << "MultiByteToWideChar() failed; error " << GetLastError() << "\n";
 
     return wstr;
 }
@@ -315,7 +327,7 @@ std::string strip_namespaces(const std::string &name) {
 
 bool file_exists(const std::string &name) {
 #ifdef _MSC_VER
-    return _access(name.c_str(), 0) == 0;
+    return _waccess(from_utf8(name).c_str(), 0) == 0;
 #else
     return ::access(name.c_str(), F_OK) == 0;
 #endif
@@ -331,7 +343,7 @@ void assert_no_file_exists(const std::string &name) {
 
 void file_unlink(const std::string &name) {
 #ifdef _MSC_VER
-    _unlink(name.c_str());
+    _wunlink(from_utf8(name).c_str());
 #else
     ::unlink(name.c_str());
 #endif
@@ -357,8 +369,9 @@ void dir_rmdir(const std::string &name) {
 
 FileStat file_stat(const std::string &name) {
 #ifdef _MSC_VER
-    struct _stat a;
-    if (_stat(name.c_str(), &a) != 0) {
+    // _wstat64() avoids the legacy 32-bit size/timestamp limitations of _stat().
+    struct __stat64 a;
+    if (_wstat64(from_utf8(name).c_str(), &a) != 0) {
         user_error << "Could not stat " << name << "\n";
     }
 #else
@@ -488,7 +501,11 @@ std::string dir_make_temp() {
 }
 
 std::vector<char> read_entire_file(const std::string &pathname) {
+#ifdef _MSC_VER
+    std::ifstream f(std::filesystem::path(from_utf8(pathname)), std::ios::in | std::ios::binary);
+#else
     std::ifstream f(pathname, std::ios::in | std::ios::binary);
+#endif
     std::vector<char> result;
 
     f.seekg(0, std::ifstream::end);
@@ -502,7 +519,11 @@ std::vector<char> read_entire_file(const std::string &pathname) {
 }
 
 void write_entire_file(const std::string &pathname, const void *source, size_t source_len) {
+#ifdef _MSC_VER
+    std::ofstream f(std::filesystem::path(from_utf8(pathname)), std::ios::out | std::ios::binary);
+#else
     std::ofstream f(pathname, std::ios::out | std::ios::binary);
+#endif
 
     f.write(reinterpret_cast<const char *>(source), source_len);
     f.flush();
