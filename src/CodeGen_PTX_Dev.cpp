@@ -46,6 +46,7 @@ using Halide::Runtime::Internal::Constants::wmma_get_element_marker;
 using Halide::Runtime::Internal::Constants::wmma_get_entry_digits;
 using Halide::Runtime::Internal::Constants::wmma_get_lane_digits;
 using Halide::Runtime::Internal::Constants::wmma_get_shuffle_tail;
+using Halide::Runtime::Internal::Constants::wmma_pack_element_marker;
 
 /** A code generator that emits GPU code from a given Halide stmt. */
 class CodeGen_PTX_Dev : public CodeGen_LLVM, public CodeGen_GPU_Dev {
@@ -162,6 +163,16 @@ protected:
      * the fragment, and let the CUDA runtime rewrite the pair into a real
      * shuffle once it has measured the layout. */
     llvm::Value *codegen_wmma_get_element(const Call *fragment_to_matrix, int entry);
+
+    /** Build an A operand out of an accumulator holding the same matrix,
+     * without either of them going near memory. */
+    void codegen_wmma_relayout(const Call *to_fragment, const Call *fragment_to_matrix);
+
+    /** The copies of a fragment into registers this end names, which a marker
+     * is patched to pick between. */
+    std::string wmma_named_registers(const std::string &marker, int index,
+                                     const std::vector<llvm::Value *> &regs,
+                                     std::ostringstream &constraints);
     void visit(const Shuffle *) override;
 
     /** A fragment is a fixed number of 32-bit registers per lane. Keeping it in
@@ -460,6 +471,64 @@ bool wmma_reg_is_packed_i32(Type t) {
     return t.bits() < 32 && t.element_of() != Float(16);
 }
 
+string CodeGen_PTX_Dev::wmma_named_registers(const std::string &marker, int index,
+                                             const vector<Value *> &regs,
+                                             std::ostringstream &constraints) {
+    // Which register of a fragment holds what is only known once the runtime
+    // has measured the layout. Copy them into registers this end names, so
+    // that what follows can be left naming one of those and the runtime only
+    // has to overwrite an index rather than compose an instruction out of
+    // names the register allocator chose. $0 is the result, and $1 onwards are
+    // the registers.
+    internal_assert(index >= 0 && index < (1 << (4 * wmma_get_entry_digits)));
+    std::ostringstream asm_text;
+    asm_text << "// " << marker << " ";
+    for (int i = wmma_get_entry_digits - 1; i >= 0; i--) {
+        asm_text << "0123456789abcdef"[(index >> (4 * i)) & 15];
+    }
+    asm_text << "\n\t{ .reg .f32 %hget<" << regs.size() << ">;";
+    for (size_t i = 0; i < regs.size(); i++) {
+        asm_text << "\n\tmov.f32 %hget" << i << ", $" << (i + 1) << ";";
+        constraints << ",f";
+    }
+    return asm_text.str();
+}
+
+void CodeGen_PTX_Dev::codegen_wmma_relayout(const Call *to_fragment,
+                                            const Call *fragment_to_matrix) {
+    const Expr &fragment = fragment_to_matrix->args[3];
+    user_assert(fragment.type().element_of() == Float(32) &&
+                to_fragment->type.element_of() == Float(16))
+        << "Feeding the result of one tensor core matrix multiply straight into "
+        << "another is only implemented for a single precision accumulator and a "
+        << "half precision operand, but this one goes from "
+        << fragment.type().element_of() << " to " << to_fragment->type.element_of()
+        << ".\n";
+
+    vector<Value *> regs;
+    split_fragment(fragment, regs);
+
+    // One register of the operand per pair of registers of the accumulator.
+    // Which pair is the runtime's to decide.
+    const int num_regs = to_fragment->type.bits() * to_fragment->type.lanes() / 32;
+    llvm::Type *half2 = get_vector_type(llvm_type_of(Float(16)), 2);
+    vector<llvm::Type *> arg_types(regs.size(), f32_t);
+    llvm::FunctionType *fn_type = llvm::FunctionType::get(i32_t, arg_types, false);
+    vector<Value *> packed;
+    for (int i = 0; i < num_regs; i++) {
+        std::ostringstream constraints;
+        constraints << "=r";
+        std::ostringstream asm_text;
+        asm_text << wmma_named_registers(wmma_pack_element_marker, i, regs, constraints)
+                 << "\n\tcvt.rn.f16x2.f32 $0, %hget0, %hget0; }";
+        llvm::InlineAsm *asm_call =
+            llvm::InlineAsm::get(fn_type, asm_text.str(), constraints.str(),
+                                 /* hasSideEffects */ false);
+        packed.push_back(builder->CreateBitCast(builder->CreateCall(asm_call, regs), half2));
+    }
+    value = concat_vectors(packed);
+}
+
 llvm::Value *CodeGen_PTX_Dev::codegen_wmma_get_element(const Call *op, int entry) {
     internal_assert(op->args.size() == 5);
     const Expr &fragment = op->args[3];
@@ -479,21 +548,11 @@ llvm::Value *CodeGen_PTX_Dev::codegen_wmma_get_element(const Call *op, int entry
     // runtime only has to overwrite an index rather than compose an
     // instruction out of names the register allocator chose. $0 is the result,
     // and $1 onwards are the registers.
-    internal_assert(entry >= 0 && entry < (1 << (4 * wmma_get_entry_digits)));
-    string digits(wmma_get_entry_digits, '0');
-    for (int i = wmma_get_entry_digits - 1, rest = entry; i >= 0; i--, rest >>= 4) {
-        digits[i] = "0123456789abcdef"[rest & 15];
-    }
-
-    std::ostringstream asm_text, constraints;
-    asm_text << "// " << wmma_get_element_marker << " " << digits
-             << "\n\t{ .reg .f32 %hget<" << regs.size() << ">;";
+    std::ostringstream constraints;
     constraints << "=f";
-    for (size_t i = 0; i < regs.size(); i++) {
-        asm_text << "\n\tmov.f32 %hget" << i << ", $" << (i + 1) << ";";
-        constraints << ",f";
-    }
-    asm_text << "\n\tshfl.sync.idx.b32 $0, %hget0, "
+    std::ostringstream asm_text;
+    asm_text << wmma_named_registers(wmma_get_element_marker, entry, regs, constraints)
+             << "\n\tshfl.sync.idx.b32 $0, %hget0, "
              << string(wmma_get_lane_digits - 1, ' ') << "0"
              << wmma_get_shuffle_tail << " }";
 
@@ -568,6 +627,21 @@ Value *CodeGen_PTX_Dev::call_wmma_intrinsic(const std::string &name,
 }
 
 void CodeGen_PTX_Dev::codegen_wmma(const Call *op) {
+    // An operand taken straight out of an accumulator, rather than out of
+    // memory, is a relayout between two register layouts.
+    if (op->is_intrinsic({Call::wmma_matrix_to_fragment_a,
+                          Call::wmma_matrix_to_fragment_b,
+                          Call::wmma_matrix_to_fragment_c})) {
+        const Call *from = op->args[wmma_matrix_arg(op)].as<Call>();
+        if (from && from->is_intrinsic(Call::wmma_fragment_to_matrix_d)) {
+            user_assert(op->is_intrinsic(Call::wmma_matrix_to_fragment_a))
+                << "Only the a operand of a tensor core matrix multiply can be "
+                << "taken straight out of an accumulator.\n";
+            codegen_wmma_relayout(op, from);
+            return;
+        }
+    }
+
     Value *result = codegen_wmma_raw(op);
 
     // Reassemble the returned struct into a Halide vector.

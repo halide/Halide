@@ -18,6 +18,7 @@ using Halide::Runtime::Internal::Constants::wmma_get_element_marker;
 using Halide::Runtime::Internal::Constants::wmma_get_entry_digits;
 using Halide::Runtime::Internal::Constants::wmma_get_lane_digits;
 using Halide::Runtime::Internal::Constants::wmma_get_shuffle_tail;
+using Halide::Runtime::Internal::Constants::wmma_pack_element_marker;
 
 // Define the function pointers for the CUDA API.
 
@@ -777,11 +778,10 @@ WEAK int measure_wmma_layout(void *user_context, CUcontext ctx) {
     return halide_error_code_success;
 }
 
-// Finish off every accumulator read marker in a copy of a PTX module, by
-// telling its shuffle which register and lane hold the entry it wants.
-// Returns the copy, which the caller frees, or nullptr on failure, having
-// reported why.
-WEAK char *patch_wmma_gets(void *user_context, const char *ptx_src) {
+// Finish off the markers codegen left in a copy of a PTX module, now that the
+// layout they depend on has been measured. Returns the copy, which the caller
+// frees, or nullptr on failure, having reported why.
+WEAK char *patch_wmma_markers(void *user_context, const char *ptx_src) {
     size_t len = strlen(ptx_src);
     char *patched = (char *)malloc(len + 1);
     if (!patched) {
@@ -790,13 +790,13 @@ WEAK char *patch_wmma_gets(void *user_context, const char *ptx_src) {
     }
     memcpy(patched, ptx_src, len + 1);
 
+    bool failed = false;
     auto fail = [&](const char *why, size_t where) {
-        error(user_context) << "CUDA: could not finish a read of a tensor core "
-                               "accumulator. "
+        error(user_context) << "CUDA: could not finish a tensor core instruction. "
                             << why << ":\n"
                             << patched + where;
-        free(patched);
-        return (char *)nullptr;
+        failed = true;
+        return false;
     };
 
     // Overwrite a field of fixed width with a number, right aligned, because a
@@ -807,52 +807,67 @@ WEAK char *patch_wmma_gets(void *user_context, const char *ptx_src) {
         }
     };
 
-    size_t offset = 0;
-    while (const char *marker = strstr(patched + offset, wmma_get_element_marker)) {
-        size_t cursor = (marker - patched) + strlen(wmma_get_element_marker);
-
-        // Which entry of the matrix the read wants, as a fixed width row-major
-        // index.
+    // What the marker asks for, as a fixed width hex number.
+    auto read_index = [&](size_t &cursor) {
         if (patched[cursor++] != ' ') {
-            return fail("The marker has no entry after it", cursor);
+            return fail("The marker has nothing after it", cursor);
         }
-        int entry = 0;
+        int index = 0;
         for (int i = 0; i < wmma_get_entry_digits; i++) {
             char c = patched[cursor++];
             int digit = (c >= '0' && c <= '9')   ? c - '0' :
                         (c >= 'a' && c <= 'f') ? c - 'a' + 10 :
                                                  -1;
             if (digit < 0) {
-                return fail("The entry the marker asks for is not a number", cursor);
+                return fail("What the marker asks for is not a number", cursor);
             }
-            entry = entry * 16 + digit;
+            index = index * 16 + digit;
         }
+        cursor = (size_t)index;
+        return true;
+    };
 
-        // Its shuffle is the next one, and takes the destination, the source
-        // register and the source lane in that order.
-        const char *shuffle = strstr(patched + cursor, "shfl.sync.idx.b32");
-        if (!shuffle) {
-            return fail("The marker has no shuffle after it", cursor);
-        }
-        cursor = shuffle - patched;
-        size_t comma[3];
-        for (auto &c : comma) {
+    // The operands of the instruction the marker is finished off by, given
+    // where its opcode starts.
+    auto find_operands = [&](size_t opcode, int n, size_t *comma) {
+        size_t cursor = opcode;
+        for (int i = 0; i < n; i++) {
             while (patched[cursor] && patched[cursor] != ',' && patched[cursor] != ';') {
                 cursor++;
             }
-            if (patched[cursor] != ',') {
-                return fail("A shuffle does not take the operands it should",
-                            shuffle - patched);
+            if (!patched[cursor]) {
+                return fail("An instruction does not end", opcode);
             }
-            c = cursor++;
+            comma[i] = cursor++;
         }
+        return true;
+    };
 
-        // The source register is the digit ending the second operand, and the
-        // lane is the whole of the third.
+    // A read of one entry, which becomes a shuffle of the register holding it
+    // from the lane holding it.
+    size_t offset = 0;
+    while (const char *marker = strstr(patched + offset, wmma_get_element_marker)) {
+        size_t cursor = (marker - patched) + strlen(wmma_get_element_marker);
+        if (!read_index(cursor)) {
+            return free(patched), nullptr;
+        }
+        const int entry = (int)cursor;
+
+        const char *shuffle = strstr(marker, "shfl.sync.idx.b32");
+        if (!shuffle) {
+            fail("The marker has no shuffle after it", marker - patched);
+            return free(patched), nullptr;
+        }
+        // The destination, the source register, and the source lane.
+        size_t comma[3];
+        if (!find_operands(shuffle - patched, 3, comma)) {
+            return free(patched), nullptr;
+        }
         if (strncmp(patched + comma[2], wmma_get_shuffle_tail,
                     strlen(wmma_get_shuffle_tail)) ||
             comma[2] - comma[1] < (size_t)wmma_get_lane_digits) {
-            return fail("A shuffle does not end the way it should", shuffle - patched);
+            fail("A shuffle does not end the way it should", shuffle - patched);
+            return free(patched), nullptr;
         }
         write_number(comma[1] - 1, 1, wmma_entry_reg[entry]);
         write_number(comma[2] - wmma_get_lane_digits, wmma_get_lane_digits,
@@ -860,6 +875,55 @@ WEAK char *patch_wmma_gets(void *user_context, const char *ptx_src) {
         offset = comma[2];
     }
 
+    // A register of an A operand, which becomes a convert and pack of the two
+    // registers of the accumulator that feed it.
+    offset = 0;
+    while (const char *marker = strstr(patched + offset, wmma_pack_element_marker)) {
+        size_t cursor = (marker - patched) + strlen(wmma_pack_element_marker);
+        if (!read_index(cursor)) {
+            return free(patched), nullptr;
+        }
+        const int reg = (int)cursor;
+        if (reg >= wmma_accumulator_registers) {
+            fail("The register the marker asks for is not one the operand has",
+                 marker - patched);
+            return free(patched), nullptr;
+        }
+        if (!wmma_relayout_is_lane_local) {
+            fail("This device spreads an accumulator and an A operand over the "
+                 "lanes of a warp differently, so one can't be built from the "
+                 "other in place. Stage it through shared memory instead",
+                 marker - patched);
+            return free(patched), nullptr;
+        }
+
+        const char *convert = strstr(marker, "cvt.rn.f16x2.f32");
+        if (!convert) {
+            fail("The marker has no convert after it", marker - patched);
+            return free(patched), nullptr;
+        }
+        // The destination and the source of the high half; the source of the
+        // low half runs to the end.
+        size_t comma[2];
+        if (!find_operands(convert - patched, 2, comma)) {
+            return free(patched), nullptr;
+        }
+        size_t cursor_end = comma[1];
+        while (patched[cursor_end] && patched[cursor_end] != ';') {
+            cursor_end++;
+        }
+        if (!patched[cursor_end]) {
+            fail("A convert does not end", convert - patched);
+            return free(patched), nullptr;
+        }
+        write_number(comma[1] - 1, 1, wmma_a_src_high[reg]);
+        write_number(cursor_end - 1, 1, wmma_a_src_low[reg]);
+        offset = cursor_end;
+    }
+
+    if (failed) {
+        return free(patched), nullptr;
+    }
     return patched;
 }
 
@@ -870,11 +934,12 @@ WEAK CUmodule compile_kernel(void *user_context, CUcontext ctx, const char *ptx_
     // because how the hardware lays a fragment out over the lanes of a warp is
     // only discoverable by trying it.
     char *patched = nullptr;
-    if (strstr(ptx_src, wmma_get_element_marker)) {
+    if (strstr(ptx_src, wmma_get_element_marker) ||
+        strstr(ptx_src, wmma_pack_element_marker)) {
         if (measure_wmma_layout(user_context, ctx)) {
             return nullptr;
         }
-        patched = patch_wmma_gets(user_context, ptx_src);
+        patched = patch_wmma_markers(user_context, ptx_src);
         if (!patched) {
             return nullptr;
         }

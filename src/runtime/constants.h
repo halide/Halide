@@ -51,6 +51,24 @@ static constexpr const char *wmma_get_element_marker = "halide_wmma_get";
 static constexpr int wmma_get_entry_digits = 2;
 static constexpr int wmma_get_lane_digits = 2;
 
+/** Marks the building of an A operand out of an accumulator holding the same
+ * matrix, which a fused chain of matrix multiplies needs. Measured on sm_120
+ * the two layouts line up lane for lane, so this is a convert and a pack with
+ * no cross-lane traffic, and all the runtime fills in is which two registers
+ * of the accumulator feed each register of the operand. A marker looks like
+ *
+ *   // halide_wmma_pack 3
+ *   { .reg .f32 %hget<8>;
+ *   mov.f32 %hget0, %r7;
+ *   ... one per register the accumulator lives in ...
+ *   cvt.rn.f16x2.f32 %r30, %hget0, %hget0; }
+ *
+ * The number is which register of the operand is being built, in hex. The
+ * convert takes the high half first, so the runtime overwrites the first index
+ * with the register feeding the high half and the second with the one feeding
+ * the low half. */
+static constexpr const char *wmma_pack_element_marker = "halide_wmma_pack";
+
 /** What follows the source lane in a marker's shuffle. The runtime checks for
  * this to make sure it has found the operand it means to overwrite. */
 static constexpr const char *wmma_get_shuffle_tail = ", 31, -1;";

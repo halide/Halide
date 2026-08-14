@@ -4,6 +4,7 @@
 #include "FindIntrinsics.h"
 #include "IREquality.h"
 #include "IRMutator.h"
+#include "IRVisitor.h"
 #include "IROperator.h"
 #include "MultiRamp.h"
 #include "Simplify.h"
@@ -250,6 +251,22 @@ struct MatmulInfo {
     Type accumulator_type;
     vector<std::pair<string, Expr>> peeled_lets;
 };
+
+// Whether a store accumulates into the allocation it writes, which is the
+// shape a matrix multiply arrives in. Anything else that isn't a fill is an
+// elementwise op on the tile.
+bool is_accumulation(const Store *op) {
+    Expr value = op->value;
+    while (const Let *let = value.as<Let>()) {
+        value = let->body;
+    }
+    const Add *add = value.as<Add>();
+    if (!add || !add->a.as<VectorReduce>()) {
+        return false;
+    }
+    const Load *load = add->b.as<Load>();
+    return load && load->name == op->name && equal(load->index, op->index);
+}
 
 MatmulInfo analyze_matmul(const Store *op) {
     // We expect the pattern:
@@ -502,6 +519,28 @@ class ExtractWMMAOperations : public IRMutator {
         return nullptr;
     }
 
+    // The fragments a value reads, in the order they appear.
+    vector<const Fragment *> fragments_read(const Expr &e) {
+        class Reads : public IRVisitor {
+            using IRVisitor::visit;
+            ExtractWMMAOperations *self;
+            void visit(const Load *op) override {
+                IRVisitor::visit(op);
+                if (const Fragment *f = self->find_fragment(op->name)) {
+                    found.push_back(f);
+                }
+            }
+
+        public:
+            vector<const Fragment *> found;
+            Reads(ExtractWMMAOperations *self)
+                : self(self) {
+            }
+        } reads(this);
+        e.accept(&reads);
+        return reads.found;
+    }
+
     // A fragment allocation may sit outside the loops over GPU threads, in
     // which case each thread gets its own copy of it and only ever touches its
     // own slice. Any dependence of the index on the thread is selecting between
@@ -558,9 +597,21 @@ class ExtractWMMAOperations : public IRMutator {
     // Note what a matrix multiply tells us about an operand staged in a
     // fragment. An operand read straight out of memory tells us nothing,
     // because its load gets synthesized at the multiply.
+    // Whether an operand is the accumulator of an earlier matrix multiply,
+    // used without ever being written out. It keeps the layout it was
+    // accumulated in, so it is turned into an operand where it sits rather
+    // than being read as one.
+    bool is_fused_operand(const Fragment *f, Role role) const {
+        return f->role == Role::Accumulator && role == Role::A;
+    }
+
     void record_operand(const Operand &operand, Role role, const Shape &shape,
                         Layout layout, const Expr &stride) {
         if (Fragment *f = find_fragment(operand.load->name)) {
+            if (is_fused_operand(f, role)) {
+                set_shape(f, shape);
+                return;
+            }
             set_role(f, role);
             set_shape(f, shape);
             operand_subtile_name(f, operand.mr.base, role, shape, layout, stride);
@@ -572,6 +623,9 @@ class ExtractWMMAOperations : public IRMutator {
     Expr operand_value(const Operand &operand, Role role, const Shape &shape,
                        Layout layout, const Expr &stride, const Expr &lane) {
         if (Fragment *f = find_fragment(operand.load->name)) {
+            if (is_fused_operand(f, role)) {
+                return make_fused_operand(f, operand, shape, lane);
+            }
             const int lanes = f->value_type().lanes();
             const string name =
                 operand_subtile_name(f, operand.mr.base, role, shape, layout, stride);
@@ -579,6 +633,148 @@ class ExtractWMMAOperations : public IRMutator {
         }
         return make_matrix_to_fragment(role, shape, layout, operand.load,
                                        operand.mr.base, stride, lane);
+    }
+
+    // An a operand taken out of the accumulator it was left in. The two hold
+    // the matrix in different layouts, so this is a relayout, but both of them
+    // are register layouts and the backend does it in place.
+    Expr make_fused_operand(Fragment *f, const Operand &operand, const Shape &shape,
+                            const Expr &lane) {
+        user_assert(shape.K == f->shape.N)
+            << "The result of a tensor core matrix multiply is fed straight into "
+            << "another as its a operand, but it is " << f->shape.M << "x"
+            << f->shape.N << " and the second one wants an a operand with "
+            << shape.K << " columns.\n";
+
+        vector<int> indices;
+        int subtile = containing_subtile(f, operand.load->index, &indices);
+        user_assert(subtile >= 0 && is_whole_tile(f, indices))
+            << "A tensor core accumulator fed straight into another matrix "
+            << "multiply must be used a whole tile at a time.\n"
+            << Expr(operand.load);
+
+        const string name = f->fragment_name + std::to_string(subtile);
+        Expr acc = Load::make(f->value_type(), name,
+                              Ramp::make(0, 1, f->value_type().lanes()));
+        Expr matrix = Call::make(f->element_type.with_lanes(shape.M * shape.K),
+                                 Call::wmma_fragment_to_matrix_d,
+                                 {shape.M, shape.K, shape.K, std::move(acc), lane},
+                                 Call::Intrinsic);
+        Type operand_type =
+            Float(16).with_lanes(elements_per_lane(Role::A, shape, Float(16)));
+        return Call::make(operand_type, Call::wmma_matrix_to_fragment_a,
+                          {shape.M, shape.N, shape.K, std::move(matrix), lane},
+                          Call::Intrinsic);
+    }
+
+    // Restrict a value covering the whole matrix to the part of it this lane
+    // holds, by pushing the restriction inward until it meets something that
+    // is already a fragment. Elementwise ops don't care how the matrix is
+    // spread over the warp, so they let it through; anything that does care
+    // has to be recognized here or reported.
+    Expr to_fragment(const Expr &e, const Fragment *dest) {
+        const int lanes = dest->value_type().lanes();
+        const Type t = e.type().element_of().with_lanes(lanes);
+        auto pair = [&](const Expr &a, const Expr &b) {
+            return std::make_pair(to_fragment(a, dest), to_fragment(b, dest));
+        };
+        if (const Add *op = e.as<Add>()) {
+            auto [a, b] = pair(op->a, op->b);
+            return Add::make(a, b);
+        } else if (const Sub *op = e.as<Sub>()) {
+            auto [a, b] = pair(op->a, op->b);
+            return Sub::make(a, b);
+        } else if (const Mul *op = e.as<Mul>()) {
+            auto [a, b] = pair(op->a, op->b);
+            return Mul::make(a, b);
+        } else if (const Div *op = e.as<Div>()) {
+            auto [a, b] = pair(op->a, op->b);
+            return Div::make(a, b);
+        } else if (const Min *op = e.as<Min>()) {
+            auto [a, b] = pair(op->a, op->b);
+            return Min::make(a, b);
+        } else if (const Max *op = e.as<Max>()) {
+            auto [a, b] = pair(op->a, op->b);
+            return Max::make(a, b);
+        } else if (const Cast *op = e.as<Cast>()) {
+            return Cast::make(t, to_fragment(op->value, dest));
+        } else if (const Select *op = e.as<Select>()) {
+            auto [a, b] = pair(op->true_value, op->false_value);
+            return Select::make(to_fragment(op->condition, dest), a, b);
+        } else if (const Broadcast *op = e.as<Broadcast>()) {
+            // The same value at every entry, so which entries this lane holds
+            // doesn't matter.
+            if (op->value.type().is_scalar()) {
+                return Broadcast::make(op->value, lanes);
+            }
+        } else if (const Shuffle *op = e.as<Shuffle>()) {
+            // A read of a whole tile, which the load visitor turned into a
+            // gather. Taking this lane's share of it gives back the fragment
+            // it was gathered from.
+            const Call *c = op->vectors.size() == 1 ? op->vectors[0].as<Call>() : nullptr;
+            if (c && c->is_intrinsic(Call::wmma_fragment_to_matrix_d) &&
+                is_identity_shuffle(op) && same_shape(c, dest)) {
+                return c->args[3];
+            }
+        }
+        user_error << "This value is computed into a tensor core fragment, but how "
+                   << "it is spread over the lanes of a warp doesn't follow from how "
+                   << "the fragments it is built from are:\n"
+                   << e << "\n";
+        return Expr{};
+    }
+
+    static bool is_identity_shuffle(const Shuffle *op) {
+        for (int i = 0; i < (int)op->indices.size(); i++) {
+            if (op->indices[i] != i) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static bool same_shape(const Call *fragment_to_matrix, const Fragment *dest) {
+        auto arg = [&](int i) { return as_const_int(fragment_to_matrix->args[i]); };
+        return arg(0) && arg(1) && *arg(0) == dest->shape.M && *arg(1) == dest->shape.N;
+    }
+
+    // An elementwise op on whole tiles, which happens where the fragments sit.
+    Stmt convert_to_elementwise(const Store *op, Fragment *f) {
+        vector<int> indices;
+        int subtile = containing_subtile(f, op->index, &indices);
+        user_assert(subtile >= 0 && is_whole_tile(f, indices))
+            << "A tensor core fragment computed elementwise must be written a "
+            << "whole tile at a time.\n"
+            << Stmt(op);
+        Expr value = to_fragment(mutate(op->value), f);
+        return Store::make(f->fragment_name + std::to_string(subtile), std::move(value),
+                           Ramp::make(0, 1, f->value_type().lanes()), op->param,
+                           const_true(f->value_type().lanes()), ModulusRemainder(),
+                           op->is_streaming);
+    }
+
+    // What an elementwise op tells us about the fragment it writes: it holds
+    // the matrix the same way the fragments it is built from do.
+    void record_elementwise(const Store *op, Fragment *f) {
+        const Fragment *src = nullptr;
+        for (const Fragment *read : fragments_read(op->value)) {
+            if (read->found_shape) {
+                src = read;
+                break;
+            }
+        }
+        user_assert(src)
+            << "The tensor core fragment " << f->name << " is computed from "
+            << "something other than another fragment, so there is nothing to say "
+            << "how it should be spread over the lanes of a warp.\n"
+            << Stmt(op);
+        user_assert(src->role == Role::Accumulator)
+            << "The tensor core fragment " << f->name << " is computed from "
+            << role_name(src->role) << " of a matrix multiply. Only an accumulator "
+            << "can be used that way.\n";
+        set_role(f, Role::Accumulator);
+        set_shape(f, src->shape);
+        subtile_name(f, op->index);
     }
 
     Stmt convert_to_fill(const Store *op, Fragment *f) {
@@ -897,11 +1093,19 @@ class ExtractWMMAOperations : public IRMutator {
             return IRMutator::visit(op);
         }
 
-        if (is_fill(op)) {
-            // A fill needs to know the role and the shape, so it waits for the
-            // second pass. It tells us neither, so there's nothing to record in
-            // the first.
-            return pass == 0 ? Stmt(op) : convert_to_fill(op, f);
+        if (!is_accumulation(op)) {
+            // A fill from a matrix in memory needs to know the role and the
+            // shape, so it waits for the second pass, and tells us neither.
+            // Anything else that isn't a matrix multiply is an elementwise op
+            // on the tile, which takes its layout from what it reads.
+            if (is_fill(op) && fragments_read(op->value).empty()) {
+                return pass == 0 ? Stmt(op) : convert_to_fill(op, f);
+            }
+            if (pass == 0) {
+                record_elementwise(op, f);
+                return op;
+            }
+            return convert_to_elementwise(op, f);
         }
 
         MatmulInfo info = analyze_matmul(op);
