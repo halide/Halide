@@ -1342,8 +1342,6 @@ Stmt bounds_inference(Stmt s,
         stmts.push_back(Evaluate::make(marker));
     }
 
-
-
     // Add a note in the IR for where assertions on input images
     // should go. Those are handled by a later lowering pass.
     marker = Call::make(Int(32), Call::add_image_checks_marker, {}, Call::Intrinsic);

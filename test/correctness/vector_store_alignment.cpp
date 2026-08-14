@@ -24,7 +24,6 @@ public:
 
 }  // namespace
 
-
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment()
                         //.with_feature(Target::NoAsserts)
@@ -46,7 +45,6 @@ int main(int argc, char **argv) {
             .align_extent(y, 4)
             .tile(x, y, xi, yi, 32, 4)
             .vectorize(xi);
-
 
         output.output_buffer().set_host_alignment(64);
         if (i == 0) {
