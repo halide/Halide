@@ -204,6 +204,7 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
          rewrite(max(z, select(x, y, min(z, w))), select(x, max(z, y), z)) ||
 
          rewrite(max(select(x, y, z), select(x, w, u)), select(x, max(y, w), max(z, u))) ||
+         rewrite(max(select(x, y, z), select(x, w, u) / c0), select(x, max(y, w / c0), max(z, u / c0))) ||
          rewrite(max(select(x, max(z, y), w), z), max(select(x, y, w), z)) ||
          rewrite(max(select(x, max(z, y), w), y), max(select(x, z, w), y)) ||
          rewrite(max(select(x, w, max(z, y)), z), max(select(x, w, y), z)) ||

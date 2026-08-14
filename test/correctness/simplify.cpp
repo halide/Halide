@@ -1144,6 +1144,7 @@ void check_bounds() {
     check(select(x < y, (select(x < y, w, x) + 3) / 2, z), select(x < y, (w + 3) / 2, z));
     check(select(x < y, z, select(x < y, w, x) / 2), select(x < y, z, x / 2));
     check(min(select(x < y, z, w), select(x < y, x, z) / 2), select(x < y, min(x / 2, z), min(z / 2, w)));
+    check(max(select(x < y, z, w), select(x < y, x, z) / 2), select(x < y, max(x / 2, z), max(z / 2, w)));
 
     check(min(x + 1, y) - min(x, y - 1), 1);
     check(max(x + 1, y) - max(x, y - 1), 1);
