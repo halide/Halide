@@ -20,6 +20,9 @@
 namespace Halide {
 
 namespace Internal {
+
+struct Call;
+
 /** Is the expression either an IntImm, a FloatImm, a StringImm, or a
  * Cast of the same, or a Ramp or Broadcast of the same. Doesn't do
  * any constant folding. */
@@ -78,6 +81,12 @@ bool is_no_op(const Stmt &s);
  * 2) Evaluating it has no side-effects
  */
 bool is_pure(const Expr &e);
+
+/** Is each lane of this call's result a function of only the corresponding
+ * lanes of its arguments? True of vector calls in general, but not of the
+ * tensor core intrinsics, whose value is spread across the lanes of a warp, so
+ * that a single lane of one can't be evaluated on its own. */
+bool is_lanewise(const Call *op);
 
 /** Construct an immediate of the given type from any numeric C++ type. */
 // @{

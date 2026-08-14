@@ -348,12 +348,18 @@ private:
         // Don't mutate scalars
         if (op->type.is_scalar()) {
             return op;
+        } else if (!is_lanewise(op)) {
+            // The lanes we want can't be computed without the ones we don't,
+            // so keep the call whole and shuffle out of it.
+            std::vector<int> indices(new_lanes);
+            for (int i = 0; i < new_lanes; i++) {
+                indices[i] = starting_lane + i * lane_stride;
+            }
+            return Shuffle::make({op}, indices);
         } else {
 
             // Vector calls are always parallel across the lanes, so we
             // can just deinterleave the args.
-
-            // Beware of intrinsics for which this is not true!
             auto args = mutate(op->args);
             return Call::make(t, op->name, args, op->call_type,
                               op->func, op->value_index, op->image, op->param);

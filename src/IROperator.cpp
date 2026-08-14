@@ -181,6 +181,15 @@ bool is_pure(const Expr &e) {
     return pure.result;
 }
 
+bool is_lanewise(const Call *op) {
+    return !op->is_intrinsic({Call::wmma_fragment_to_matrix_d,
+                              Call::wmma_lane_owns,
+                              Call::wmma_matrix_to_fragment_a,
+                              Call::wmma_matrix_to_fragment_b,
+                              Call::wmma_matrix_to_fragment_c,
+                              Call::wmma_mma});
+}
+
 std::optional<int64_t> as_const_int(const Expr &e) {
     if (!e.defined()) {
         return std::nullopt;

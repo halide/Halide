@@ -474,6 +474,25 @@ class ExtractWMMAOperations : public IRMutator {
     // The loops over GPU blocks, threads, and lanes we're inside of.
     vector<string> gpu_loop_vars;
 
+    // The lane a gather in the statement currently being mutated reads as. A
+    // gather is a warp-wide operation, so the statement it appears in has to be
+    // run by every lane of the warp.
+    Expr gather_lane;
+
+    // Every gather is wrapped in a loop over the lanes of a warp by the
+    // innermost statement that contains it. Statements nest, so the innermost
+    // one is the one whose mutation finishes first.
+    Stmt mutate(const Stmt &s) override {
+        ScopedValue<Expr> outer(gather_lane, Expr());
+        Stmt result = IRMutator::mutate(s);
+        if (gather_lane.defined()) {
+            result = in_lane_loop(gather_lane, std::move(result));
+        }
+        return result;
+    }
+
+    using IRMutator::mutate;
+
     Fragment *find_fragment(const string &name) {
         for (const string &n : in_scope) {
             if (n == name) {
@@ -738,7 +757,9 @@ class ExtractWMMAOperations : public IRMutator {
             return IRMutator::visit(op);
         }
         if (pass == 0) {
-            subtile_name(f, op->index);
+            // A read tells us nothing about the fragment, and it lands inside a
+            // subtile some other access already established, so there's nothing
+            // to record.
             return op;
         }
 
@@ -757,29 +778,16 @@ class ExtractWMMAOperations : public IRMutator {
             return fail("The read has a predicate");
         }
 
-        const string name = subtile_name(f, op->index);
         const Shape &shape = f->shape;
         Expr within = index_within_thread(op->index);
         MultiRamp read;
         if (!is_multiramp(within, Scope<Expr>::empty_scope(), &read)) {
             return fail("The index is not affine");
         }
-        // Where the entries sit relative to the start of the tile, together
-        // with how the tile is laid out, says which entry each lane wants.
-        const MultiRamp &tile = f->subtiles[get_subtile(within, "tensor core fragment",
-                                                        &f->subtiles)];
-        WMMAMatrixLayout mem;
-        if (!wmma_matrix_layout(tile, shape.M, shape.N, &mem)) {
-            return fail("The tile it belongs to is not a dense matrix of the deduced shape");
-        }
-        auto stride = as_const_int(mem.stride);
-        auto start = as_const_int(simplify(read.base - tile.base));
-        if (!stride || !start) {
-            return fail("The entries read are not at a fixed place in the tile");
-        }
 
-        // Enumerate the entries the way a multiramp orders its lanes.
-        vector<int> offsets{(int)*start};
+        // Enumerate where the entries sit relative to the start of the read, in
+        // the order a multiramp puts its lanes in.
+        vector<int> offsets{0};
         for (size_t d = 0; d < read.strides.size(); d++) {
             auto s = as_const_int(read.strides[d]);
             if (!s) {
@@ -794,24 +802,54 @@ class ExtractWMMAOperations : public IRMutator {
             offsets.swap(next);
         }
 
-        // The matrix a fragment inflates to is in row-major order.
+        // A read may be of part of a tile - one row of it, say - so rather than
+        // being a subtile in its own right it lies within one written by some
+        // other access. Find which, by trying each in turn until the entries
+        // read all land inside it. The subtiles are disjoint, so at most one
+        // can hold them.
         vector<int> indices;
-        for (int o : offsets) {
-            const int row = mem.row_major ? o / (int)*stride : o % (int)*stride;
-            const int col = mem.row_major ? o % (int)*stride : o / (int)*stride;
-            if (row < 0 || row >= shape.M || col < 0 || col >= shape.N) {
-                return fail("An entry read lies outside the tile");
+        int found = -1;
+        for (int i = 0; found < 0 && i < (int)f->subtiles.size(); i++) {
+            const MultiRamp &tile = f->subtiles[i];
+            WMMAMatrixLayout mem;
+            auto start = as_const_int(simplify(read.base - tile.base));
+            if (!start || !wmma_matrix_layout(tile, shape.M, shape.N, &mem)) {
+                continue;
             }
-            indices.push_back(row * shape.N + col);
+            auto stride = as_const_int(mem.stride);
+            if (!stride) {
+                continue;
+            }
+            // The matrix a fragment inflates to is in row-major order.
+            indices.clear();
+            for (int o : offsets) {
+                const int e = o + (int)*start;
+                const int row = mem.row_major ? e / (int)*stride : e % (int)*stride;
+                const int col = mem.row_major ? e % (int)*stride : e / (int)*stride;
+                if (row < 0 || row >= shape.M || col < 0 || col >= shape.N) {
+                    indices.clear();
+                    break;
+                }
+                indices.push_back(row * shape.N + col);
+            }
+            if (indices.size() == offsets.size()) {
+                found = i;
+            }
         }
+        if (found < 0) {
+            return fail("The entries read do not all lie within a single tile");
+        }
+        const string name = f->fragment_name + std::to_string(found);
 
         Type element_type = op->type.element_of();
         Expr frag = Load::make(element_type.with_lanes(accumulator_elements), name,
                                Ramp::make(0, 1, accumulator_elements));
-        Expr lane = make_lane(unique_name("wmma_lane") + gpu_thread_name(0));
+        if (!gather_lane.defined()) {
+            gather_lane = make_lane(unique_name("wmma_lane") + gpu_thread_name(0));
+        }
         Expr matrix = Call::make(element_type.with_lanes(shape.M * shape.N),
                                  Call::wmma_fragment_to_matrix_d,
-                                 {shape.M, shape.N, shape.K, std::move(frag), lane},
+                                 {shape.M, shape.N, shape.K, std::move(frag), gather_lane},
                                  Call::Intrinsic);
         return Shuffle::make({std::move(matrix)}, indices);
     }
