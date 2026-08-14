@@ -858,7 +858,7 @@ void run_with_large_stack(const std::function<void()> &action) {
     const size_t guard_band = 64 * 1024;
 
     void *stack = mmap(nullptr, stack_size.size + guard_band, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
-    internal_assert(stack) << "mmap failed with error " << strerror(errno);
+    internal_assert(stack != MAP_FAILED) << "mmap failed with error " << strerror(errno);
 
     int err = mprotect((char *)stack + stack_size.size, guard_band, PROT_NONE);
     internal_assert(err == 0) << "mprotect failed with error " << strerror(errno);
