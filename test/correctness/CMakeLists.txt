@@ -402,6 +402,7 @@ tests(
     vectorized_reduction_bug.cpp
     widening_reduction.cpp
     wmma_matmul.cpp
+    wmma_row_max.cpp
     x86_cpu_detect.cpp
     # keep-sorted end
 )
