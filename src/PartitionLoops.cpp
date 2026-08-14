@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <set>
 #include <utility>
 
 #include "CSE.h"
@@ -530,11 +531,93 @@ bool contains_warp_synchronous_logic(const Stmt &s) {
     return c.result;
 }
 
+// Which of a set of target nodes appear inside an IR fragment.
+class FindTargets : public IRGraphVisitor {
+    const std::set<const IRNode *> &targets;
+
+    using IRGraphVisitor::include;
+
+    void include(const Expr &e) override {
+        if (e.defined() && targets.count(e.get())) {
+            found.insert(e.get());
+        }
+        IRGraphVisitor::include(e);
+    }
+
+public:
+    std::set<const IRNode *> found;
+
+    FindTargets(const std::set<const IRNode *> &targets)
+        : targets(targets) {
+    }
+};
+
+// The Stmt children of a Stmt that we're willing to sink a guard into. We stop
+// at loops, because the guard condition is loop-invariant with respect to any
+// loop nested inside the one being partitioned, so sinking it inside would just
+// introduce a branch in an inner loop. We also stop at nodes with parallel or
+// atomic semantics.
+void guardable_children(const Stmt &s, vector<Stmt> &result) {
+    if (const LetStmt *op = s.as<LetStmt>()) {
+        result.push_back(op->body);
+    } else if (const ProducerConsumer *op = s.as<ProducerConsumer>()) {
+        result.push_back(op->body);
+    } else if (const Allocate *op = s.as<Allocate>()) {
+        result.push_back(op->body);
+    } else if (const Realize *op = s.as<Realize>()) {
+        result.push_back(op->body);
+    } else if (const HoistedStorage *op = s.as<HoistedStorage>()) {
+        result.push_back(op->body);
+    } else if (const Block *op = s.as<Block>()) {
+        result.push_back(op->first);
+        result.push_back(op->rest);
+    } else if (const IfThenElse *op = s.as<IfThenElse>()) {
+        result.push_back(op->then_case);
+        if (op->else_case.defined()) {
+            result.push_back(op->else_case);
+        }
+    }
+}
+
+// The innermost Stmt within s that contains all of the target nodes.
+Stmt innermost_enclosing_stmt(Stmt s, const std::set<const IRNode *> &targets) {
+    while (true) {
+        vector<Stmt> children;
+        guardable_children(s, children);
+        Stmt next;
+        for (const Stmt &c : children) {
+            FindTargets f(targets);
+            f(c);
+            if (f.found.size() == targets.size()) {
+                next = c;
+                break;
+            }
+        }
+        if (!next.defined()) {
+            return s;
+        }
+        s = next;
+    }
+}
+
 class PartitionLoops : public IRMutator {
+    using IRMutator::mutate;
     using IRMutator::visit;
 
     bool in_gpu_loop = false;
     bool in_tail = false;
+
+    // Used to splice an already-constructed guarded Stmt back into the loop
+    // body at the point it came from.
+    const IRNode *anchor = nullptr;
+    Stmt anchor_replacement;
+
+    Stmt mutate(const Stmt &s) override {
+        if (anchor && s.get() == anchor) {
+            return anchor_replacement;
+        }
+        return IRMutator::mutate(s);
+    }
 
     Stmt visit(const For *op) override {
         // Do not partition if the schedule explicitly forbids, or if it's set
@@ -698,10 +781,27 @@ class PartitionLoops : public IRMutator {
             }
         }
 
+        // Find the innermost Stmt in the loop body that contains all of the
+        // simplification sites. If that's the entire body, we partition the
+        // loop into prologue, steady state, and epilogue as usual. If it's
+        // some smaller Stmt, we instead guard just that Stmt with an if, which
+        // avoids duplicating the rest of the loop body.
+        std::set<const IRNode *> sites;
+        for (const auto &s : middle_simps) {
+            sites.insert(s.old_expr.get());
+        }
+        // Loops explicitly scheduled to always partition get partitioned,
+        // rather than just guarded.
+        Stmt target = body;
+        if (op->partition_policy != Partition::Always) {
+            target = innermost_enclosing_stmt(body, sites);
+        }
+        const bool whole_body = target.same_as(body);
+
         // Simplify each section of the loop.
-        Stmt simpler_body = MakeSimplifications(middle_simps).mutate(body);
-        Stmt prologue = MakeSimplifications(prologue_simps).mutate(body);
-        Stmt epilogue = MakeSimplifications(epilogue_simps).mutate(body);
+        Stmt simpler_body = MakeSimplifications(middle_simps).mutate(target);
+        Stmt prologue = MakeSimplifications(prologue_simps).mutate(target);
+        Stmt epilogue = MakeSimplifications(epilogue_simps).mutate(target);
 
         const bool make_prologue = !equal(prologue, simpler_body);
         const bool make_epilogue = !equal(epilogue, simpler_body);
@@ -756,7 +856,7 @@ class PartitionLoops : public IRMutator {
 
         Stmt stmt;
         // Bust simple serial for loops up into three.
-        if (op->for_type == ForType::Serial && !op->body.as<Acquire>()) {
+        if (whole_body && op->for_type == ForType::Serial && !op->body.as<Acquire>()) {
             stmt = op->with(min_steady, max_steady - 1, simpler_body);
 
             if (make_prologue) {
@@ -782,6 +882,10 @@ class PartitionLoops : public IRMutator {
             // into the task system as a single entity, but Block
             // nodes do not, so we get a flatter task graph if we do
             // the same trick.
+            //
+            // We also end up here when the simplifications only apply to part
+            // of the loop body. In that case the if-then-else wraps just that
+            // part, rather than the entire body.
             Expr loop_var = Variable::make(Int(32), op->name);
             stmt = simpler_body;
             if (make_epilogue && make_prologue && equal(prologue, epilogue)) {
@@ -797,7 +901,15 @@ class PartitionLoops : public IRMutator {
                     mutated = true;
                 }
             }
-            stmt = op->with(op->min, op->max, stmt);
+            if (whole_body) {
+                stmt = op->with(op->min, op->max, stmt);
+            } else {
+                // Splice the guarded Stmt back in where it came from, and
+                // partition any loops in the rest of the body.
+                ScopedValue<const IRNode *> old_anchor(anchor, target.get());
+                ScopedValue<Stmt> old_replacement(anchor_replacement, stmt);
+                stmt = op->with(op->min, op->max, mutate(body));
+            }
         }
 
         if (make_epilogue) {
