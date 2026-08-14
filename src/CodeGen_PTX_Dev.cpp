@@ -40,6 +40,11 @@ using namespace llvm;
 
 namespace {
 
+/** Marks a read of one entry of a tensor core accumulator, for the CUDA
+ * runtime to rewrite once it knows how the hardware lays fragments out. Must
+ * match the string the runtime looks for in src/runtime/cuda.cpp. */
+constexpr const char *wmma_get_element_marker = "halide_wmma_get";
+
 /** A code generator that emits GPU code from a given Halide stmt. */
 class CodeGen_PTX_Dev : public CodeGen_LLVM, public CodeGen_GPU_Dev {
 public:
@@ -147,6 +152,15 @@ protected:
     void codegen_wmma_store(const Store *op);
     void split_fragment(const Expr &e, std::vector<llvm::Value *> &args);
     // @}
+
+    /** Read one entry out of a tensor core accumulator. Which lane holds an
+     * entry, and which of that lane's registers, is a property of the hardware
+     * that isn't known until the module is loaded. Emit a placeholder shuffle
+     * alongside a marker saying which entry was wanted and which registers hold
+     * the fragment, and let the CUDA runtime rewrite the pair into a real
+     * shuffle once it has measured the layout. */
+    llvm::Value *codegen_wmma_get_element(const Call *fragment_to_matrix, int row, int col);
+    void visit(const Shuffle *) override;
 
     /** A fragment is a fixed number of 32-bit registers per lane. Keeping it in
      * that form all the way to and from its allocation matters, because NVPTX
@@ -442,6 +456,69 @@ WMMAMatrixLayout matrix_in_memory(const string &name, const MultiRamp &mr, int r
 // type in the signature - those intrinsics take the lanes packed into an i32.
 bool wmma_reg_is_packed_i32(Type t) {
     return t.bits() < 32 && t.element_of() != Float(16);
+}
+
+llvm::Value *CodeGen_PTX_Dev::codegen_wmma_get_element(const Call *op, int row, int col) {
+    internal_assert(op->args.size() == 5);
+    const Expr &fragment = op->args[3];
+    Type t = fragment.type();
+    user_assert(t.element_of() == Float(32))
+        << "Reading an entry out of a tensor core accumulator is only "
+        << "implemented for single precision accumulators, but this one holds "
+        << t.element_of() << "\n";
+
+    vector<Value *> regs;
+    split_fragment(fragment, regs);
+
+    // The marker names every register of the fragment, because which one holds
+    // the entry is decided later. $0 is the result; $1 onwards are the
+    // registers. The placeholder shuffle keeps the unpatched module
+    // assemblable, and reads register zero from lane zero.
+    std::ostringstream asm_text, constraints;
+    asm_text << "// " << wmma_get_element_marker << " row=" << row << " col=" << col
+             << " regs=";
+    constraints << "=f";
+    for (size_t i = 0; i < regs.size(); i++) {
+        asm_text << (i ? "," : "") << "$" << (i + 1);
+        constraints << ",f";
+    }
+    asm_text << "\n\tshfl.sync.idx.b32 $0, $1, 0, 31, -1;";
+
+    vector<llvm::Type *> arg_types(regs.size(), f32_t);
+    llvm::FunctionType *fn_type = llvm::FunctionType::get(f32_t, arg_types, false);
+    llvm::InlineAsm *asm_call =
+        llvm::InlineAsm::get(fn_type, asm_text.str(), constraints.str(),
+                             /* hasSideEffects */ false);
+    return builder->CreateCall(asm_call, regs);
+}
+
+void CodeGen_PTX_Dev::visit(const Shuffle *op) {
+    // Taking entries out of a tensor core accumulator. Anything else is an
+    // ordinary shuffle.
+    const Call *frag = op->vectors.size() == 1 ? op->vectors[0].as<Call>() : nullptr;
+    if (!frag || !frag->is_intrinsic(Call::wmma_fragment_to_matrix_d)) {
+        CodeGen_LLVM::visit(op);
+        return;
+    }
+
+    auto get_int_arg = [&](int i) {
+        auto v = as_const_int(frag->args[i]);
+        internal_assert(v);
+        return (int)*v;
+    };
+    const int N = get_int_arg(1);
+
+    // The matrix the fragment inflates to is in row-major order, so an index
+    // into it says which entry of it was asked for.
+    llvm::Type *result_type = llvm_type_of(op->type);
+    value = UndefValue::get(result_type);
+    for (int i = 0; i < (int)op->indices.size(); i++) {
+        const int idx = op->indices[i];
+        Value *element = codegen_wmma_get_element(frag, idx / N, idx % N);
+        value = op->type.lanes() == 1 ?
+                    element :
+                    builder->CreateInsertElement(value, element, i);
+    }
 }
 
 void CodeGen_PTX_Dev::split_fragment(const Expr &e, vector<Value *> &args) {
