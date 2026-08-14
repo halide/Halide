@@ -710,9 +710,11 @@ Stmt add_image_checks_inner(Stmt s,
     // all in reverse order compared to execution, as we incrementally
     // prepending code.
 
-    // Inject the code that checks the constraints are correct.
-    prepend_stmts(&asserts_constrained);
+    // Inject the buffer constraints before the required-region checks so that
+    // simplification can use the constraints when reasoning about the checks.
+    // These calls are in reverse execution order because they prepend stmts.
     prepend_stmts(&asserts_required);
+    prepend_stmts(&asserts_constrained);
     prepend_stmts(&asserts_type_checks);
 
     // Inject the code that returns early for inference mode.
