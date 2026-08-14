@@ -36,7 +36,6 @@ extern char **environ;
 #include <sys/types.h>
 
 #ifdef __linux__
-#define CAN_GET_RUNNING_PROGRAM_NAME
 #include <linux/limits.h>  // For PATH_MAX
 #include <ucontext.h>      // For swapcontext
 #endif
@@ -54,7 +53,6 @@ extern char **environ;
 #endif
 
 #ifdef __APPLE__
-#define CAN_GET_RUNNING_PROGRAM_NAME
 #include <mach-o/dyld.h>
 
 // Get swapcontext/makecontext etc.
@@ -154,28 +152,65 @@ std::string get_env_variable(char const *env_var_name) {
 #endif
 }
 
+namespace {
+string basename_of(const string &path) {
+    size_t pos = path.find_last_of('/');
+    return pos == string::npos ? path : path.substr(pos + 1);
+}
+}  // namespace
+
 string running_program_name() {
-#ifndef CAN_GET_RUNNING_PROGRAM_NAME
-    return "";
-#else
-    string program_name;
-    char path[PATH_MAX] = {0};
-    uint32_t size = sizeof(path);
-#if defined(__linux__)
-    ssize_t len = ::readlink("/proc/self/exe", path, size - 1);
+#if defined(_WIN32)
+    // GetModuleFileNameW() reports truncation by filling the buffer
+    // completely rather than by any other signal, so grow the buffer and
+    // retry until it clearly fits.
+    std::vector<wchar_t> buf(MAX_PATH);
+    for (;;) {
+        DWORD len = GetModuleFileNameW(nullptr, buf.data(), (DWORD)buf.size());
+        if (len == 0) {
+            return "";
+        }
+        if (len < buf.size()) {
+            return basename_of(replace_all(from_utf16(buf.data()), "\\", "/"));
+        }
+        if (buf.size() > (1 << 20)) {
+            return "";
+        }
+        buf.resize(buf.size() * 2);
+    }
+#elif defined(__linux__)
+    // readlink() doesn't NUL-terminate, and silently truncates if the
+    // buffer is too small; grow the buffer and retry until the result
+    // clearly fits.
+    std::vector<char> buf(PATH_MAX);
+    for (;;) {
+        ssize_t len = ::readlink("/proc/self/exe", buf.data(), buf.size());
+        if (len < 0) {
+            return "";
+        }
+        if ((size_t)len < buf.size()) {
+            return basename_of(string(buf.data(), (size_t)len));
+        }
+        if (buf.size() > (1 << 20)) {
+            return "";
+        }
+        buf.resize(buf.size() * 2);
+    }
 #elif defined(__APPLE__)
-    ssize_t len = ::_NSGetExecutablePath(path, &size);
-#endif
-    if (len != -1) {
-#if defined(__linux__)
-        path[len] = '\0';
-#endif
-        string tmp = std::string(path);
-        program_name = tmp.substr(tmp.find_last_of('/') + 1);
-    } else {
+    // _NSGetExecutablePath() reports the required buffer size (including
+    // the NUL terminator) via `size` when the buffer is too small.
+    uint32_t size = 0;
+    ::_NSGetExecutablePath(nullptr, &size);
+    if (size == 0) {
         return "";
     }
-    return program_name;
+    std::vector<char> buf(size);
+    if (::_NSGetExecutablePath(buf.data(), &size) != 0) {
+        return "";
+    }
+    return basename_of(string(buf.data()));
+#else
+    return "";
 #endif
 }
 
