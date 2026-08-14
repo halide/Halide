@@ -42,6 +42,9 @@ using namespace llvm;
 namespace {
 
 using Halide::Runtime::Internal::Constants::wmma_accumulator_registers;
+using Halide::Runtime::Internal::Constants::wmma_build_element_marker;
+using Halide::Runtime::Internal::Constants::wmma_build_index_bits;
+using Halide::Runtime::Internal::Constants::wmma_build_mask_digits;
 using Halide::Runtime::Internal::Constants::wmma_get_element_marker;
 using Halide::Runtime::Internal::Constants::wmma_get_entry_digits;
 using Halide::Runtime::Internal::Constants::wmma_get_lane_digits;
@@ -167,6 +170,10 @@ protected:
     /** Build an A operand out of an accumulator holding the same matrix,
      * without either of them going near memory. */
     void codegen_wmma_relayout(const Call *to_fragment, const Call *fragment_to_matrix);
+
+    /** Build an accumulator fragment out of a vector every lane holds a copy
+     * of, indexed by the row or the column of the matrix. */
+    void codegen_wmma_build(const Call *op);
 
     /** The copies of a fragment into registers this end names, which a marker
      * is patched to pick between. */
@@ -529,6 +536,83 @@ void CodeGen_PTX_Dev::codegen_wmma_relayout(const Call *to_fragment,
     value = concat_vectors(packed);
 }
 
+void CodeGen_PTX_Dev::codegen_wmma_build(const Call *op) {
+    internal_assert(op->args.size() == 4);
+    const int M = *as_const_int(op->args[0]);
+    const int N = *as_const_int(op->args[1]);
+    const int axis = *as_const_int(op->args[2]);
+    const Expr &vec = op->args[3];
+    const int width = axis ? N : M;
+    user_assert(op->type.element_of() == Float(32) && vec.type() == Float(32, width) &&
+                width == (1 << wmma_build_index_bits))
+        << "Building a tensor core accumulator out of a broadcast vector is only "
+        << "implemented for a 16 wide single precision one, but this one is "
+        << vec.type() << ".\n";
+
+    Value *v = codegen(vec);
+    vector<Value *> lanes;
+    for (int i = 0; i < width; i++) {
+        lanes.push_back(builder->CreateExtractElement(v, i));
+    }
+
+    // Which entry of the vector this lane wants varies from lane to lane, so
+    // unlike the other markers this one can't be patched down to a single
+    // instruction. Select over the whole vector instead, and leave the runtime
+    // to say which bit of the lane index drives each level of the tree. The
+    // levels it makes constant cost nothing once ptxas has folded them.
+    vector<llvm::Type *> arg_types(width, f32_t);
+    llvm::FunctionType *fn_type = llvm::FunctionType::get(f32_t, arg_types, false);
+    vector<Value *> regs;
+    for (int reg = 0; reg < wmma_accumulator_registers; reg++) {
+        std::ostringstream asm_text;
+        asm_text << "{ .reg .u32 %hbl; .reg .u32 %hbm<" << wmma_build_index_bits
+                 << ">; .reg .pred %hbp<" << wmma_build_index_bits
+                 << ">; .reg .f32 %hb<" << (2 * width - 1) << ">;"
+                 << "\n\tmov.u32 %hbl, %laneid;"
+                 << "\n\t// " << wmma_build_element_marker << " ";
+        // Which register, and which way round the vector is spread, both fit
+        // in a digit of the index the marker already has room for.
+        const int index = (axis << 4) | reg;
+        for (int i = wmma_get_entry_digits - 1; i >= 0; i--) {
+            asm_text << "0123456789abcdef"[(index >> (4 * i)) & 15];
+        }
+        for (int b = 0; b < wmma_build_index_bits; b++) {
+            asm_text << "\n\tand.b32 %hbm" << b << ", %hbl, "
+                     << string(wmma_build_mask_digits - 1, ' ') << "0;"
+                     << "\n\tsetp.ne.u32 %hbp" << b << ", %hbm" << b << ", 0;";
+        }
+        for (int i = 0; i < width; i++) {
+            asm_text << "\n\tmov.f32 %hb" << i << ", $" << (i + 1) << ";";
+        }
+        // A balanced tree, taking the entries pairwise on the low bit of the
+        // index first. selp takes the operand for a true predicate first.
+        int src = 0, dst = width;
+        for (int b = 0; b < wmma_build_index_bits; b++) {
+            for (int i = 0; i < width >> (b + 1); i++) {
+                asm_text << "\n\tselp.f32 %hb" << dst++ << ", %hb" << (src + 2 * i + 1)
+                         << ", %hb" << (src + 2 * i) << ", %hbp" << b << ";";
+            }
+            src += width >> b;
+        }
+        asm_text << "\n\tmov.f32 $0, %hb" << (dst - 1) << "; }";
+
+        std::ostringstream constraints;
+        constraints << "=f";
+        for (int i = 0; i < width; i++) {
+            constraints << ",f";
+        }
+        llvm::InlineAsm *asm_call =
+            llvm::InlineAsm::get(fn_type, asm_text.str(), constraints.str(),
+                                 /* hasSideEffects */ false);
+        regs.push_back(builder->CreateCall(asm_call, lanes));
+    }
+
+    value = UndefValue::get(llvm_type_of(op->type));
+    for (int reg = 0; reg < wmma_accumulator_registers; reg++) {
+        value = builder->CreateInsertElement(value, regs[reg], reg);
+    }
+}
+
 llvm::Value *CodeGen_PTX_Dev::codegen_wmma_get_element(const Call *op, int entry) {
     internal_assert(op->args.size() == 5);
     const Expr &fragment = op->args[3];
@@ -627,6 +711,11 @@ Value *CodeGen_PTX_Dev::call_wmma_intrinsic(const std::string &name,
 }
 
 void CodeGen_PTX_Dev::codegen_wmma(const Call *op) {
+    if (op->is_intrinsic(Call::wmma_vector_to_fragment)) {
+        codegen_wmma_build(op);
+        return;
+    }
+
     // An operand taken straight out of an accumulator, rather than out of
     // memory, is a relayout between two register layouts.
     if (op->is_intrinsic({Call::wmma_matrix_to_fragment_a,

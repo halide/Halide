@@ -73,6 +73,50 @@ static constexpr const char *wmma_pack_element_marker = "halide_wmma_pack";
  * this to make sure it has found the operand it means to overwrite. */
 static constexpr const char *wmma_get_shuffle_tail = ", 31, -1;";
 
+/** Marks the building of one register of an accumulator out of a vector that
+ * every lane holds a whole copy of, indexed by the row or the column of the
+ * matrix. This is what a value like `prod(x, y) - m(y)` needs: the subtrahend
+ * covers the tile, but as a vector broadcast along one axis rather than as a
+ * fragment, so which entry of it a lane wants varies from lane to lane.
+ *
+ * That rules out patching to a single instruction, since one instruction
+ * stream serves all 32 lanes. Instead the marker is a select tree over the
+ * whole vector, driven by four predicates, and all the runtime fills in is
+ * which bit of the lane index drives each one. A marker looks like
+ *
+ *   { .reg .u32 %hbl; .reg .u32 %hbm<4>; .reg .pred %hbp<4>; .reg .f32 %hb<31>;
+ *   mov.u32 %hbl, %laneid;
+ *   // halide_wmma_build 03
+ *   and.b32 %hbm0, %hbl, 16;
+ *   setp.ne.u32 %hbp0, %hbm0, 0;
+ *   ... one pair per bit of the index ...
+ *   mov.f32 %hb0, $1;
+ *   ... one per entry of the vector ...
+ *   selp.f32 %hb16, %hb1, %hb0, %hbp0;
+ *   ... the tree ...
+ *   mov.f32 $0, %hb30; }
+ *
+ * The number is in hex, and reads as which axis of the matrix indexes the
+ * vector (zero for the row) and which register of the accumulator is being
+ * built.
+ * The fields are the last thing on their statement, so the runtime finds them by
+ * counting semicolons rather than parsing: the mask picks out the lane bit
+ * that drives that predicate, and a mask of zero with a comparand of one makes
+ * the predicate constant, which is how an index bit that doesn't vary with the
+ * lane is said. ptxas folds away the halves of the tree that a constant
+ * predicate makes unreachable. */
+static constexpr const char *wmma_build_element_marker = "halide_wmma_build";
+
+/** The width of a vector a fragment can be built out of, as a number of bits
+ * of index. Four, because the tile is 16x16. */
+static constexpr int wmma_build_index_bits = 4;
+
+/** How the fields of a build marker are written. The mask is decimal and right
+ * aligned with a space rather than a zero, because a leading zero would make
+ * PTX read it as octal. The comparand is a single digit. */
+static constexpr int wmma_build_mask_digits = 2;
+static constexpr int wmma_build_compare_digits = 1;
+
 }  // namespace Constants
 }  // namespace Internal
 }  // namespace Runtime

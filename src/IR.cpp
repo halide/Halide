@@ -913,6 +913,7 @@ constexpr const char *intrinsic_op_names[] = {
     "wmma_matrix_to_fragment_b",
     "wmma_matrix_to_fragment_c",
     "wmma_mma",
+    "wmma_vector_to_fragment",
     // keep-sorted end
 };
 

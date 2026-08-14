@@ -187,7 +187,8 @@ bool is_lanewise(const Call *op) {
                               Call::wmma_matrix_to_fragment_a,
                               Call::wmma_matrix_to_fragment_b,
                               Call::wmma_matrix_to_fragment_c,
-                              Call::wmma_mma});
+                              Call::wmma_mma,
+                              Call::wmma_vector_to_fragment});
 }
 
 std::optional<int64_t> as_const_int(const Expr &e) {

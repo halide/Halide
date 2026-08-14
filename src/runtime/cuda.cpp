@@ -14,6 +14,10 @@ namespace Internal {
 namespace Cuda {
 
 using Halide::Runtime::Internal::Constants::wmma_accumulator_registers;
+using Halide::Runtime::Internal::Constants::wmma_build_compare_digits;
+using Halide::Runtime::Internal::Constants::wmma_build_element_marker;
+using Halide::Runtime::Internal::Constants::wmma_build_index_bits;
+using Halide::Runtime::Internal::Constants::wmma_build_mask_digits;
 using Halide::Runtime::Internal::Constants::wmma_get_element_marker;
 using Halide::Runtime::Internal::Constants::wmma_get_entry_digits;
 using Halide::Runtime::Internal::Constants::wmma_get_lane_digits;
@@ -603,6 +607,8 @@ WEAK const char *wmma_probe_ptx =
 // exactly this many, so the patcher doesn't have to range check what it reads.
 constexpr int wmma_entries = 256;
 static_assert(wmma_entries == 1 << (4 * wmma_get_entry_digits));
+constexpr int wmma_tile_width = 16;
+constexpr int warp_lanes = 32;
 
 // Half precision for the small non-negative integers the A probe labels its
 // entries with, which are exact in both directions.
@@ -921,6 +927,81 @@ WEAK char *patch_wmma_markers(void *user_context, const char *ptx_src) {
         offset = cursor_end;
     }
 
+    // A register of an accumulator built out of a vector spread along one axis
+    // of the matrix. Which entry of the vector a lane wants varies from lane to
+    // lane, so what gets filled in is which bit of the lane index drives each
+    // level of the select tree.
+    offset = 0;
+    while (const char *marker = strstr(patched + offset, wmma_build_element_marker)) {
+        size_t cursor = (marker - patched) + strlen(wmma_build_element_marker);
+        if (!read_index(cursor)) {
+            return free(patched), nullptr;
+        }
+        const int reg = (int)cursor & 15, axis = (int)cursor >> 4;
+        if (reg >= wmma_accumulator_registers) {
+            fail("The register the marker asks for is not one the accumulator has",
+                 marker - patched);
+            return free(patched), nullptr;
+        }
+
+        // Which entry of the vector each lane holds in that register. Every
+        // lane holds exactly one entry of the matrix per register.
+        int index[warp_lanes];
+        for (int e = 0; e < wmma_entries; e++) {
+            if (wmma_entry_reg[e] == reg) {
+                index[wmma_entry_lane[e]] =
+                    axis ? e % wmma_tile_width : e / wmma_tile_width;
+            }
+        }
+
+        size_t semicolon = marker - patched;
+        for (int b = 0; b < wmma_build_index_bits; b++) {
+            // Either a bit of the lane index drives this level of the tree, or
+            // the same half of it is taken whatever the lane.
+            int mask = 0, compare = index[0] >> b & 1;
+            for (int s = 0; s < 5 && mask == 0; s++) {
+                bool matches = true;
+                for (int lane = 0; lane < warp_lanes; lane++) {
+                    matches &= (index[lane] >> b & 1) == (lane >> s & 1);
+                }
+                mask = matches ? 1 << s : 0;
+            }
+            if (mask == 0) {
+                for (int lane = 0; lane < warp_lanes; lane++) {
+                    if ((index[lane] >> b & 1) != compare) {
+                        fail("This device spreads an accumulator over the lanes of "
+                             "a warp in a way that doesn't let a value broadcast "
+                             "along one axis of the matrix be selected lane by "
+                             "lane. Stage it through shared memory instead",
+                             marker - patched);
+                        return free(patched), nullptr;
+                    }
+                }
+            } else {
+                compare = 0;
+            }
+
+            // The mask ends the and, and the comparand the setp that follows.
+            const int width[2] = {wmma_build_mask_digits, wmma_build_compare_digits};
+            const int value[2] = {mask, compare};
+            for (int half = 0; half < 2; half++) {
+                while (patched[semicolon] && patched[semicolon] != ';') {
+                    semicolon++;
+                }
+                if (!patched[semicolon] ||
+                    semicolon < (size_t)width[half] ||
+                    patched[semicolon - 1] != '0') {
+                    fail("A select tree is not shaped the way it should be",
+                         marker - patched);
+                    return free(patched), nullptr;
+                }
+                write_number(semicolon - width[half], width[half], value[half]);
+                semicolon++;
+            }
+        }
+        offset = semicolon;
+    }
+
     if (failed) {
         return free(patched), nullptr;
     }
@@ -935,7 +1016,8 @@ WEAK CUmodule compile_kernel(void *user_context, CUcontext ctx, const char *ptx_
     // only discoverable by trying it.
     char *patched = nullptr;
     if (strstr(ptx_src, wmma_get_element_marker) ||
-        strstr(ptx_src, wmma_pack_element_marker)) {
+        strstr(ptx_src, wmma_pack_element_marker) ||
+        strstr(ptx_src, wmma_build_element_marker)) {
         if (measure_wmma_layout(user_context, ctx)) {
             return nullptr;
         }

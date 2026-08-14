@@ -717,10 +717,61 @@ class ExtractWMMAOperations : public IRMutator {
                 return c->args[3];
             }
         }
+        // A vector spread over the tile along one axis, such as a row
+        // statistic a softmax subtracts. Every lane holds the whole vector, so
+        // this becomes a per-lane selection out of it.
+        int axis = 0;
+        Expr vec = broadcast_along_axis(e, dest->shape, &axis);
+        if (vec.defined()) {
+            return Call::make(t, Call::wmma_vector_to_fragment,
+                              {dest->shape.M, dest->shape.N, axis, std::move(vec)},
+                              Call::Intrinsic);
+        }
         user_error << "This value is computed into a tensor core fragment, but how "
                    << "it is spread over the lanes of a warp doesn't follow from how "
                    << "the fragments it is built from are:\n"
                    << e << "\n";
+        return Expr{};
+    }
+
+    // Recognize a value covering the whole matrix that is really a vector
+    // spread along one of its axes: entry (r, c) is v[r] if the axis is zero,
+    // or v[c] if it is one. Vectorization leaves this as a broadcast of the
+    // vector, possibly under a transpose, so ask where each entry comes from
+    // rather than trying to match the shape.
+    static Expr broadcast_along_axis(const Expr &e, const Shape &shape, int *axis) {
+        const Shuffle *shuffle = e.as<Shuffle>();
+        const Broadcast *b = (shuffle && shuffle->vectors.size() == 1 ?
+                                  shuffle->vectors[0] :
+                                  e)
+                                 .as<Broadcast>();
+        if (!b || !b->value.type().is_vector()) {
+            return Expr{};
+        }
+        const int width = b->value.type().lanes();
+        auto source = [&](int i) {
+            return (shuffle ? shuffle->indices[i] : i) % width;
+        };
+        if (e.type().lanes() != shape.M * shape.N ||
+            (width != shape.M && width != shape.N)) {
+            return Expr{};
+        }
+        // Axis zero is indexed by the row, axis one by the column.
+        for (int a = 0; a < 2; a++) {
+            if (width != (a ? shape.N : shape.M)) {
+                continue;
+            }
+            bool ok = true;
+            for (int r = 0; r < shape.M && ok; r++) {
+                for (int c = 0; c < shape.N; c++) {
+                    ok &= source(r * shape.N + c) == (a ? c : r);
+                }
+            }
+            if (ok) {
+                *axis = a;
+                return b->value;
+            }
+        }
         return Expr{};
     }
 
@@ -1142,7 +1193,8 @@ bool is_wmma_intrinsic(const Call *op) {
     return (op->is_intrinsic(Call::wmma_matrix_to_fragment_a) ||
             op->is_intrinsic(Call::wmma_matrix_to_fragment_b) ||
             op->is_intrinsic(Call::wmma_matrix_to_fragment_c) ||
-            op->is_intrinsic(Call::wmma_mma));
+            op->is_intrinsic(Call::wmma_mma) ||
+            op->is_intrinsic(Call::wmma_vector_to_fragment));
 }
 
 Expr peel_store_permutations(const Store *op, Expr *index) {

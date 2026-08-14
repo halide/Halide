@@ -931,6 +931,16 @@ struct Call : public ExprNode<Call> {
         // layout doesn't depend on how it was loaded, so it isn't a parameter.
         // wmma_mma(M, N, K, a_layout, b_layout, a, b, c, lane)
         wmma_mma,
+        // Take this lane's share of an M x N tensor core accumulator out of a
+        // vector that every lane holds a whole copy of, indexed by the row of
+        // the matrix if axis is zero and by the column if it is one. This is
+        // what a value spread over the tile by a broadcast rather than by a
+        // fragment needs, such as the row maximum a softmax subtracts.
+        // Unlike the others it needs no lane argument, because it is only ever
+        // reached inside the loop over GPU threads, where the lane is the
+        // thread's own.
+        // wmma_vector_to_fragment(M, N, axis, vector)
+        wmma_vector_to_fragment,
         // keep-sorted end
         IntrinsicOpCount  // Sentinel: keep last.
     };
