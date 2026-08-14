@@ -1146,6 +1146,14 @@ void check_bounds() {
     check(min(select(x < y, z, w), select(x < y, x, z) / 2), select(x < y, min(x / 2, z), min(z / 2, w)));
 
     check(min(x + 1, y) - min(x, y - 1), 1);
+
+    // A clamp at one bound and a shifted clamp at the same effective bound.
+    // The clamps coincide, so the shift can be pushed inside.
+    check(min(max(x, 3), max(y, -1) + 4), max(min(y + 4, x), 3));
+    check(max(min(x, 3), min(y, -1) + 4), min(max(y + 4, x), 3));
+    // The condition c0 == c1 + c2 is necessary; these must not fire.
+    check(min(max(x, 3), max(y, -1) + 5), min(max(x, 3), max(y, -1) + 5));
+    check(max(min(x, 3), min(y, -1) + 5), max(min(x, 3), min(y, -1) + 5));
     check(max(x + 1, y) - max(x, y - 1), 1);
     check(min(x + 1, y) - min(y - 1, x), 1);
     check(max(x + 1, y) - max(y - 1, x), 1);
