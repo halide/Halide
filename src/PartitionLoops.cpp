@@ -531,73 +531,54 @@ bool contains_warp_synchronous_logic(const Stmt &s) {
     return c.result;
 }
 
-// Which of a set of target nodes appear inside an IR fragment.
-class FindTargets : public IRGraphVisitor {
+// Find the innermost Stmt containing all occurrences of a set of target Exprs.
+// Takes an argmax over Stmts of the number of targets contained, preferring
+// inner Stmts on ties. Nothing is actually mutated.
+class FindInnermostEnclosingStmt : public IRMutator {
+    using IRMutator::visit;
+
     const std::set<const IRNode *> &targets;
+    int count = 0;
+    int loop_depth = 0;
+    int best_count = 0;
 
-    using IRGraphVisitor::include;
-
-    void include(const Expr &e) override {
-        if (e.defined() && targets.count(e.get())) {
-            found.insert(e.get());
-        }
-        IRGraphVisitor::include(e);
+    Stmt visit(const For *op) override {
+        ScopedValue<int> bind(loop_depth, loop_depth + 1);
+        return IRMutator::visit(op);
     }
 
 public:
-    std::set<const IRNode *> found;
+    Stmt result;
 
-    FindTargets(const std::set<const IRNode *> &targets)
+    Expr mutate(const Expr &e) override {
+        if (targets.count(e.get())) {
+            count++;
+        }
+        return IRMutator::mutate(e);
+    }
+
+    Stmt mutate(const Stmt &s) override {
+        const int before = count;
+        IRMutator::mutate(s);
+        // Don't sink a guard into an inner loop. The condition is invariant to
+        // any loop nested inside the one being partitioned, so that would just
+        // put a branch in an inner loop.
+        if (loop_depth == 0 && count - before > best_count) {
+            best_count = count - before;
+            result = s;
+        }
+        return s;
+    }
+
+    FindInnermostEnclosingStmt(const std::set<const IRNode *> &targets)
         : targets(targets) {
     }
 };
 
-// The Stmt children of a Stmt that we're willing to sink a guard into. We stop
-// at loops, because the guard condition is loop-invariant with respect to any
-// loop nested inside the one being partitioned, so sinking it inside would just
-// introduce a branch in an inner loop. We also stop at nodes with parallel or
-// atomic semantics.
-void guardable_children(const Stmt &s, vector<Stmt> &result) {
-    if (const LetStmt *op = s.as<LetStmt>()) {
-        result.push_back(op->body);
-    } else if (const ProducerConsumer *op = s.as<ProducerConsumer>()) {
-        result.push_back(op->body);
-    } else if (const Allocate *op = s.as<Allocate>()) {
-        result.push_back(op->body);
-    } else if (const Realize *op = s.as<Realize>()) {
-        result.push_back(op->body);
-    } else if (const HoistedStorage *op = s.as<HoistedStorage>()) {
-        result.push_back(op->body);
-    } else if (const Block *op = s.as<Block>()) {
-        result.push_back(op->first);
-        result.push_back(op->rest);
-    } else if (const IfThenElse *op = s.as<IfThenElse>()) {
-        result.push_back(op->then_case);
-        if (op->else_case.defined()) {
-            result.push_back(op->else_case);
-        }
-    }
-}
-
-// The innermost Stmt within s that contains all of the target nodes.
-Stmt innermost_enclosing_stmt(Stmt s, const std::set<const IRNode *> &targets) {
-    while (true) {
-        vector<Stmt> children;
-        guardable_children(s, children);
-        Stmt next;
-        for (const Stmt &c : children) {
-            FindTargets f(targets);
-            f(c);
-            if (f.found.size() == targets.size()) {
-                next = c;
-                break;
-            }
-        }
-        if (!next.defined()) {
-            return s;
-        }
-        s = next;
-    }
+Stmt innermost_enclosing_stmt(const Stmt &s, const std::set<const IRNode *> &targets) {
+    FindInnermostEnclosingStmt finder(targets);
+    finder.mutate(s);
+    return finder.result.defined() ? finder.result : s;
 }
 
 class PartitionLoops : public IRMutator {
