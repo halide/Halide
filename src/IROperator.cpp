@@ -1137,9 +1137,11 @@ Expr unwrap_tags(const Expr &e) {
 }
 
 Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args) {
+    std::stringstream cond_str;
+    cond_str << condition;
     return Call::make(Int(32),
                       "halide_error_requirement_failed",
-                      {stringify({std::move(condition)}), combine_strings(args)},
+                      {cond_str.str(), combine_strings(args)},
                       Call::Extern);
 }
 
