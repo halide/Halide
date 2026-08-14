@@ -174,10 +174,10 @@ target_sources(
     Parameter.h
     PartitionLoops.h
     Pipeline.h
-    PromoteGPURegisters.h
     Prefetch.h
     PrefetchDirective.h
     Profiling.h
+    PromoteGPURegisters.h
     PurifyIndexMath.h
     PythonExtensionGen.h
     Qualify.h
@@ -354,10 +354,10 @@ target_sources(
     Parameter.cpp
     PartitionLoops.cpp
     Pipeline.cpp
-    PromoteGPURegisters.cpp
     Prefetch.cpp
     PrintLoopNest.cpp
     Profiling.cpp
+    PromoteGPURegisters.cpp
     PurifyIndexMath.cpp
     PythonExtensionGen.cpp
     Qualify.cpp

@@ -559,10 +559,10 @@ SOURCE_FILES = \
   Parameter.cpp \
   PartitionLoops.cpp \
   Pipeline.cpp \
-  PromoteGPURegisters.cpp \
   Prefetch.cpp \
   PrintLoopNest.cpp \
   Profiling.cpp \
+  PromoteGPURegisters.cpp \
   PurifyIndexMath.cpp \
   PythonExtensionGen.cpp \
   Qualify.cpp \
@@ -768,10 +768,10 @@ HEADER_FILES = \
   Parameter.h \
   PartitionLoops.h \
   Pipeline.h \
-  PromoteGPURegisters.h \
   Prefetch.h \
   PrefetchDirective.h \
   Profiling.h \
+  PromoteGPURegisters.h \
   PurifyIndexMath.h \
   PythonExtensionGen.h \
   Qualify.h \
