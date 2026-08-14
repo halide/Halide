@@ -11,6 +11,7 @@
 #include <chrono>
 #include <fstream>
 #include <iomanip>
+#include <limits>
 #include <map>
 #include <mutex>
 #include <sstream>
@@ -850,24 +851,59 @@ void run_with_large_stack(const std::function<void()> &action) {
 
     ucontext_t context, calling_context;
 
-    // We'll allocate some protected guard pages at the end of the
-    // stack we're making to catch stack overflows when they happen,
-    // as opposed to having them cause silent corruption. We pick an
-    // amount of memory that should be comfortably larger than most
-    // stack frames - 64k.
-    const size_t guard_band = 64 * 1024;
+    // We allocate protected guard pages on both sides of the usable
+    // stack, since the stack-growth direction shouldn't be assumed, and
+    // this catches overflow in either direction rather than silently
+    // corrupting adjacent memory. We pick an amount of memory that
+    // should be comfortably larger than most stack frames - 64k.
+    const size_t min_guard_band = 64 * 1024;
 
-    void *stack = mmap(nullptr, stack_size.size + guard_band, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+    const size_t page_size = (size_t)sysconf(_SC_PAGESIZE);
+    internal_assert(page_size > 0 && (page_size & (page_size - 1)) == 0)
+        << "sysconf(_SC_PAGESIZE) returned an invalid value: " << page_size;
+
+    // mprotect() requires page-aligned addresses and sizes, so round the
+    // usable stack size and guard band up to whole pages, and check for
+    // overflow at every step.
+    auto round_up_to_page = [=](size_t n, size_t *out) -> bool {
+        size_t rem = n % page_size;
+        size_t pad = rem == 0 ? 0 : page_size - rem;
+        if (n > std::numeric_limits<size_t>::max() - pad) {
+            return false;
+        }
+        *out = n + pad;
+        return true;
+    };
+
+    size_t usable_size = 0, guard_band = 0;
+    bool ok = round_up_to_page(stack_size.size, &usable_size) &&
+              round_up_to_page(min_guard_band, &guard_band) &&
+              usable_size <= std::numeric_limits<size_t>::max() - 2 * guard_band;
+    internal_assert(ok) << "Requested compiler stack size overflows: " << stack_size.size;
+    const size_t total_size = usable_size + 2 * guard_band;
+
+    void *stack = mmap(nullptr, total_size, PROT_READ | PROT_WRITE,
+                       MAP_ANONYMOUS | MAP_PRIVATE
+#ifdef MAP_STACK
+                           | MAP_STACK
+#endif
+                       ,
+                       -1, 0);
     internal_assert(stack != MAP_FAILED) << "mmap failed with error " << strerror(errno);
 
-    int err = mprotect((char *)stack + stack_size.size, guard_band, PROT_NONE);
+    char *usable_stack = (char *)stack + guard_band;
+
+    int err = mprotect(stack, guard_band, PROT_NONE);
+    internal_assert(err == 0) << "mprotect failed with error " << strerror(errno);
+
+    err = mprotect(usable_stack + usable_size, guard_band, PROT_NONE);
     internal_assert(err == 0) << "mprotect failed with error " << strerror(errno);
 
     err = getcontext(&context);
     internal_assert(err == 0) << "getcontext failed with error " << strerror(errno);
 
-    context.uc_stack.ss_sp = stack;
-    context.uc_stack.ss_size = stack_size.size;
+    context.uc_stack.ss_sp = usable_stack;
+    context.uc_stack.ss_size = usable_size;
     context.uc_stack.ss_flags = 0;
     context.uc_link = &calling_context;
 
@@ -877,7 +913,7 @@ void run_with_large_stack(const std::function<void()> &action) {
     err = swapcontext(&calling_context, &context);
     internal_assert(err == 0) << "swapcontext failed with error " << strerror(errno);
 
-    err = munmap(stack, stack_size.size + guard_band);
+    err = munmap(stack, total_size);
     internal_assert(err == 0) << "munmap failed with error " << strerror(errno);
 
 #ifdef HALIDE_WITH_EXCEPTIONS
