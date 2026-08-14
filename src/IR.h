@@ -846,6 +846,13 @@ struct Call : public ExprNode<Call> {
         sliding_window_marker,
         // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
         sorted_avg,
+        // Single string-literal arg uniquely identifying a specialize()
+        // branch. Injected by mark_specialization_branch()
+        // (ScheduleFunctions.cpp) so sibling branches that are still
+        // textually identical this early in lowering aren't merged by
+        // Simplify before they've had a chance to diverge; stripped by
+        // remove_specialization_branch_markers() (StorageFlattening.cpp).
+        specialization_branch_marker,
         // Emits a target-specific memory fence after a Stage that
         // contains non-temporal (streaming) stores.
         stream_store_fence,

@@ -273,6 +273,7 @@ tests(
     parameter_constraints.cpp
     partial_application.cpp
     partial_realization.cpp
+    partition_clamped_extent_guard.cpp
     partition_loops.cpp
     partition_loops_bug.cpp
     partition_max_filter.cpp
@@ -329,6 +330,7 @@ tests(
     solve.cpp
     sort_exprs.cpp
     specialize.cpp
+    specialize_stride_lowering.cpp
     specialize_to_gpu.cpp
     specialize_trim_condition.cpp
     spirv_ir.cpp
@@ -390,6 +392,7 @@ tests(
     vector_extern.cpp
     vector_print_bug.cpp
     vector_shuffle.cpp
+    vector_store_alignment.cpp
     vector_tile.cpp
     vectorize_guard_with_if.cpp
     vectorize_mixed_widths.cpp

@@ -183,12 +183,39 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
         const Mod *m = eq->a.as<Mod>();
         auto modulus = m ? as_const_int(m->b) : std::nullopt;
         auto remainder = m ? as_const_int(eq->b) : std::nullopt;
+        // TODO(mcourteaux): A lot of the logic below is hard-coded to let information
+        // propagate either from the LHS to the RHS or the other way. There is also
+        // special case for when varA == varB is given, to let the info cross-propagate.
+        // All of this feels a little conflated and might get clearer if we figure out a
+        // neat way to write this down where info can just transparently flow
+        // in whichever direction is relevant without having to list all these cases.
         if (v) {
-            if (is_const(eq->b) || eq->b.as<Variable>()) {
+            if (is_const(eq->b)) {
+                info.replacement = eq->b;
+                simplify->var_info.push(v->name, info);
+                pop_list.push_back(v);
+            } else if (const auto *vb = eq->b.as<Variable>()) {
                 // TODO: consider other cases where we might want to entirely substitute
                 info.replacement = eq->b;
                 simplify->var_info.push(v->name, info);
                 pop_list.push_back(v);
+
+                // Cross-merge the expression info of both variables.
+                Simplify::ExprInfo expr_info;
+                if (const auto *info = simplify->bounds_and_alignment_info.find(v->name)) {
+                    // We already know something about the variable on the LHS
+                    expr_info = *info;
+                }
+                if (const auto *info = simplify->bounds_and_alignment_info.find(vb->name)) {
+                    // We already know something about the variable on the RHS
+                    expr_info.intersect(*info);
+                }
+
+                simplify->bounds_and_alignment_info.push(v->name, expr_info);
+                simplify->bounds_and_alignment_info.push(vb->name, expr_info);
+
+                bounds_pop_list.push_back(v);
+                bounds_pop_list.push_back(vb);
             } else if (v->type.is_int()) {
                 // Visit the rhs again to get bounds and alignment info to propagate to the LHS
                 // TODO: Visiting it again is inefficient
@@ -202,7 +229,7 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
                 bounds_pop_list.push_back(v);
             }
         } else if (const Variable *vb = eq->b.as<Variable>()) {
-            // y % 2 == x
+            // ... == x
             // We know that LHS is not a const due to
             // canonicalization, and that the LHS is not a variable or
             // the case above would have triggered. Learn from the
