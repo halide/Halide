@@ -390,6 +390,22 @@ FileStat file_stat(const std::string &name) {
 #ifdef _WIN32
 namespace {
 
+// GetTempPath2W() is the modern, preferred way to find a writable temp
+// directory (in particular, it works correctly for SYSTEM processes), but
+// its baseline OS availability (Windows 11 / Server 2022+) is newer than
+// what we require to build, so it may not even be declared by the SDK
+// headers we're compiling against. Resolve it dynamically so this keeps
+// working (falling back below) on older systems and toolchains alike.
+using GetTempPath2WFn = DWORD(WINAPI *)(DWORD, LPWSTR);
+
+GetTempPath2WFn resolve_get_temp_path2w() {
+    HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
+    if (!kernel32) {
+        return nullptr;
+    }
+    return reinterpret_cast<GetTempPath2WFn>(GetProcAddress(kernel32, "GetTempPath2W"));
+}
+
 // GetTempPath() will fail rudely if env vars aren't set properly,
 // which is the case when we run under a tool in Bazel. Instead,
 // look for the current user's AppData/Local/Temp path, which
@@ -403,20 +419,55 @@ std::string get_windows_tmp_dir() {
     // requiring this sort of band-aid if possible.)
     std::string tmp_dir = get_env_variable("HL_WINDOWS_TMP_DIR");
     if (!tmp_dir.empty()) {
+        char back = tmp_dir.back();
+        if (back != '/' && back != '\\') {
+            tmp_dir += '/';
+        }
         return tmp_dir;
     }
 
-    PWSTR wlocal_path;
-    HRESULT ret = SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &wlocal_path);
-    internal_assert(ret == S_OK) << "Unable to get Local AppData folder; error " << GetLastError() << "\n";
+    if (GetTempPath2WFn get_temp_path2w = resolve_get_temp_path2w()) {
+        DWORD len = get_temp_path2w(0, nullptr);
+        if (len > 0) {
+            std::wstring wpath(len, 0);
+            DWORD len2 = get_temp_path2w(len, &wpath[0]);
+            if (len2 > 0 && len2 < len) {
+                wpath.resize(len2);
+                return replace_all(from_utf16(wpath.c_str()), "\\", "/");
+            }
+        }
+    }
 
-    std::string tmp = from_utf16(wlocal_path);
+    // Fall back to looking up Local AppData directly; this is used when
+    // GetTempPath2W() isn't available (older OS) or fails.
+    PWSTR wlocal_path = nullptr;
+    HRESULT ret = SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &wlocal_path);
+    std::string tmp;
+    if (SUCCEEDED(ret)) {
+        tmp = from_utf16(wlocal_path);
+    }
     CoTaskMemFree(wlocal_path);
+    internal_assert(SUCCEEDED(ret)) << "Unable to get Local AppData folder; HRESULT " << ret << "\n";
 
     tmp = replace_all(std::move(tmp), "\\", "/");
     if (tmp.back() != '/') tmp += '/';
     tmp += "Temp/";
     return tmp;
+}
+
+// CoCreateGuid()-derived names are preferred over GetTempFileNameW()'s
+// 3-character prefix and 65535-name-per-prefix namespace, which performs
+// poorly under heavy use.
+std::wstring format_new_guid() {
+    GUID guid;
+    HRESULT hr = CoCreateGuid(&guid);
+    internal_assert(hr == S_OK) << "CoCreateGuid() failed; HRESULT " << hr << "\n";
+
+    wchar_t buf[64];
+    int n = StringFromGUID2(guid, buf, (int)(sizeof(buf) / sizeof(buf[0])));
+    internal_assert(n > 2) << "StringFromGUID2() failed\n";
+    // Strip the enclosing braces ("{...}") that StringFromGUID2() always emits.
+    return std::wstring(buf + 1, n - 3);
 }
 
 }  //  namespace
@@ -431,16 +482,33 @@ std::string file_make_temp(const std::string &prefix, const std::string &suffix)
     // Windows implementations of mkstemp() try to create the file in the root
     // directory Unfortunately, that requires ADMIN privileges, which are not
     // guaranteed here.
-    std::wstring tmp_dir = from_utf8(get_windows_tmp_dir());
-    std::wstring wprefix = from_utf8(prefix);
+    std::string tmp_dir = get_windows_tmp_dir();
 
-    WCHAR tmp_file[MAX_PATH];
-    // Note that GetTempFileNameW() actually creates the file.
-    DWORD ret = GetTempFileNameW(tmp_dir.c_str(), wprefix.c_str(), 0, tmp_file);
-    internal_assert(ret != 0) << "GetTempFileNameW() failed; error " << GetLastError() << "\n";
-    return from_utf16(tmp_file);
+    // Use a GUID-derived name rather than GetTempFileNameW(), which only
+    // uses a 3-character prefix and has just a 65535-name namespace per
+    // (path, prefix) pair; both perform poorly under heavy use.
+    for (int tries = 0; tries < 100; ++tries) {
+        std::string name = tmp_dir + prefix + from_utf16(format_new_guid().c_str()) + suffix;
+        std::wstring wname = from_utf8(name);
+        HANDLE h = CreateFileW(wname.c_str(), GENERIC_WRITE, 0, nullptr,
+                               CREATE_NEW, FILE_ATTRIBUTE_TEMPORARY, nullptr);
+        if (h != INVALID_HANDLE_VALUE) {
+            CloseHandle(h);
+            return name;
+        }
+        // If name already existed, just loop and try again.
+        // Any other error, break from loop and fail.
+        if (GetLastError() != ERROR_FILE_EXISTS) {
+            break;
+        }
+    }
+    internal_error << "Unable to create temp file in " << tmp_dir << "\n";
+    return "";
 #else
-    std::string templ = "/tmp/" + prefix + "XXXXXX" + suffix;
+    std::error_code ec;
+    std::filesystem::path tmp_dir = std::filesystem::temp_directory_path(ec);
+    internal_assert(!ec) << "Unable to determine temp directory: " << ec.message() << "\n";
+    std::string templ = (tmp_dir / (prefix + "XXXXXX" + suffix)).string();
     // Copy into a temporary buffer, since mkstemp modifies the buffer in place.
     std::vector<char> buf(templ.size() + 1);
     strcpy(&buf[0], templ.c_str());
@@ -490,7 +558,10 @@ std::string dir_make_temp() {
     internal_error << "Unable to create temp directory in " << tmp_dir << "\n";
     return "";
 #else
-    std::string templ = "/tmp/XXXXXX";
+    std::error_code ec;
+    std::filesystem::path tmp_dir = std::filesystem::temp_directory_path(ec);
+    internal_assert(!ec) << "Unable to determine temp directory: " << ec.message() << "\n";
+    std::string templ = (tmp_dir / "XXXXXX").string();
     // Copy into a temporary buffer, since mkdtemp modifies the buffer in place.
     std::vector<char> buf(templ.size() + 1);
     strcpy(&buf[0], templ.c_str());
