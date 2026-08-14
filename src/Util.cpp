@@ -1178,7 +1178,28 @@ void load_plugin(const std::string &lib_name) {
     }
 
     std::wstring wide_lib = from_utf8(lib_path);
-    HMODULE library = LoadLibraryW(wide_lib.c_str());
+
+    // A bare filename passed to LoadLibraryW() is subject to the default
+    // DLL search order, which can include attacker-influenced locations
+    // (see "Dynamic-link library security" on MSDN). If the caller didn't
+    // supply a path, resolve it via the same search semantics ourselves
+    // with SearchPathW() (preserving lookup through PATH for compatibility),
+    // then always load the result by its resolved path with a restricted
+    // search order that excludes the current directory.
+    std::wstring load_path = wide_lib;
+    if (lib_path.find_first_of("/\\") == std::string::npos) {
+        DWORD needed = SearchPathW(nullptr, wide_lib.c_str(), nullptr, 0, nullptr, nullptr);
+        if (needed > 0) {
+            std::wstring resolved(needed, 0);
+            DWORD got = SearchPathW(nullptr, wide_lib.c_str(), nullptr, needed, &resolved[0], nullptr);
+            if (got > 0 && got < needed) {
+                resolved.resize(got);
+                load_path = resolved;
+            }
+        }
+    }
+
+    HMODULE library = LoadLibraryExW(load_path.c_str(), nullptr, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
     if (!library) {
         DWORD error = GetLastError();
         LPWSTR message = nullptr;
@@ -1187,13 +1208,13 @@ void load_plugin(const std::string &lib_name) {
 
         user_assert(message)
             << "Failed to load: " << lib_path << ".\n"
-            << "FormatMessage failed while processing error in LoadLibraryW (errno "
+            << "FormatMessage failed while processing error in LoadLibraryExW (errno "
             << error << ").\n";
 
         std::string err_msg = from_utf16(message);
         LocalFree(message);
         user_error << "Failed to load: " << lib_path << ";\n"
-                   << "LoadLibraryW failed with error " << error << ": "
+                   << "LoadLibraryExW failed with error " << error << ": "
                    << err_msg << "\n";
     }
 #else
@@ -1201,7 +1222,10 @@ void load_plugin(const std::string &lib_name) {
     if (lib_path.find('.') == std::string::npos) {
         lib_path = "lib" + lib_path + ".so";
     }
-    if (dlopen(lib_path.c_str(), RTLD_LAZY) == nullptr) {
+    // RTLD_NOW (rather than RTLD_LAZY) surfaces unresolved symbols at load
+    // time, which produces much more useful diagnostics for plugins than
+    // deferring the failure until first use.
+    if (dlopen(lib_path.c_str(), RTLD_NOW) == nullptr) {
         user_error << "Failed to load: " << lib_path << ": " << dlerror() << "\n";
     }
 #endif
