@@ -324,6 +324,11 @@ bool ends_with(const string &str, const string &suffix) {
 }
 
 string replace_all(string str, const string &find, const string &replace) {
+    if (find.empty()) {
+        // Searching for an empty string would match at every position,
+        // looping forever.
+        return str;
+    }
     size_t pos = 0;
     while ((pos = str.find(find, pos)) != string::npos) {
         str.replace(pos, find.length(), replace);
@@ -334,6 +339,12 @@ string replace_all(string str, const string &find, const string &replace) {
 
 std::vector<std::string> split_string(const std::string &source, const std::string &delim) {
     std::vector<std::string> elements;
+    if (delim.empty()) {
+        // An empty delimiter would match at every position, looping forever;
+        // treat it as "no delimiter found".
+        elements.push_back(source);
+        return elements;
+    }
     size_t start = 0;
     size_t found = 0;
     while ((found = source.find(delim, start)) != std::string::npos) {
