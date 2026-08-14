@@ -682,6 +682,20 @@ protected:
     }
 };
 
+// Strips the markers mark_specialization_branch() (ScheduleFunctions.cpp)
+// brackets each specialize() branch with. Safe here because by the time
+// storage flattening has run, sibling branches have diverged for real (e.g.
+// a stride-1 specialization now has literal contiguous Store/Load nodes
+// where the generic fallback has stride-multiplied ones).
+Stmt remove_specialization_branch_markers(const Stmt &s) {
+    return mutate_with(s, [](auto *self, const Call *op) -> Expr {
+        if (op->is_intrinsic(Call::specialization_branch_marker)) {
+            return make_zero(op->type);
+        }
+        return self->visit_base(op);
+    });
+}
+
 }  // namespace
 
 Stmt storage_flattening(Stmt s,
@@ -706,6 +720,7 @@ Stmt storage_flattening(Stmt s,
     s = FlattenDimensions(tuple_env, outputs, target)(s);
     s = HoistStorage()(s);
     s = PromoteToMemoryType()(s);
+    s = remove_specialization_branch_markers(s);
 
     return s;
 }
