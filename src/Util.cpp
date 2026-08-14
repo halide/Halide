@@ -8,6 +8,7 @@
 #include "Debug.h"
 #include "Error.h"
 #include <atomic>
+#include <cerrno>
 #include <charconv>
 #include <chrono>
 #include <filesystem>
@@ -607,6 +608,27 @@ void write_entire_file(const std::string &pathname, const void *source, size_t s
 int run_process(std::vector<std::string> args) {
     internal_assert(!args.empty()) << "run_process called with empty args\n";
 
+    debug(2) << "Running process: " << PrintSpan(args) << "\n";
+
+#ifdef _WIN32
+    // Use _wspawnvp() rather than _spawnvp() so that non-ASCII program
+    // paths and arguments survive intact.
+    std::vector<std::wstring> wargs;
+    wargs.reserve(args.size());
+    for (const auto &a : args) {
+        wargs.push_back(from_utf8(a));
+    }
+    std::vector<const wchar_t *> wargv;
+    wargv.reserve(wargs.size() + 1);
+    for (auto &w : wargs) {
+        wargv.push_back(w.c_str());
+    }
+    wargv.push_back(nullptr);
+
+    // Wait for completion; return the child's exit code.
+    int rc = _wspawnvp(_P_WAIT, wargv[0], wargv.data());
+    return (rc >= 0) ? rc : -1;
+#else
     std::vector<char *> argv;
     argv.reserve(args.size() + 1);
     for (auto &a : args) {
@@ -614,16 +636,16 @@ int run_process(std::vector<std::string> args) {
     }
     argv.push_back(nullptr);
 
-    debug(2) << "Running process: " << PrintSpan(args) << "\n";
-
-#ifdef _WIN32
-    // Wait for completion; return the child's exit code.
-    int rc = _spawnvp(_P_WAIT, argv[0], argv.data());
-    return (rc >= 0) ? rc : -1;
-#else
     pid_t pid = 0;
     int status = posix_spawnp(&pid, argv[0], nullptr, nullptr, argv.data(), environ);
-    if (status != 0 || waitpid(pid, &status, 0) == -1) {
+    if (status != 0) {
+        return -1;
+    }
+    pid_t wait_result;
+    do {
+        wait_result = waitpid(pid, &status, 0);
+    } while (wait_result == -1 && errno == EINTR);
+    if (wait_result == -1) {
         return -1;
     }
     return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
