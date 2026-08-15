@@ -745,41 +745,28 @@ class ExtractWMMAOperations : public IRMutator {
 
     // Recognize a value covering the whole matrix that is really a vector
     // spread along one of its axes: entry (r, c) is v[r] if the axis is zero,
-    // or v[c] if it is one. Vectorization leaves this as a broadcast of the
-    // vector, possibly under a transpose, so ask where each entry comes from
-    // rather than trying to match the shape.
+    // or v[c] if it is one. A vector repeated once per row of the matrix is
+    // the one indexed by the column, and transposing that gives the one
+    // indexed by the row.
     static Expr broadcast_along_axis(const Expr &e, const Shape &shape, int *axis) {
-        const Shuffle *shuffle = e.as<Shuffle>();
-        const Broadcast *b = (shuffle && shuffle->vectors.size() == 1 ?
-                                  shuffle->vectors[0] :
-                                  e)
-                                 .as<Broadcast>();
-        if (!b || !b->value.type().is_vector()) {
+        if (e.type().lanes() != shape.M * shape.N) {
             return Expr{};
         }
-        const int width = b->value.type().lanes();
-        auto source = [&](int i) {
-            return (shuffle ? shuffle->indices[i] : i) % width;
-        };
-        if (e.type().lanes() != shape.M * shape.N ||
-            (width != shape.M && width != shape.N)) {
-            return Expr{};
+        Expr value = e;
+        *axis = 1;
+        if (const Shuffle *op = value.as<Shuffle>()) {
+            // The transpose factor is the width of the matrix underneath it,
+            // which is the one whose columns index the vector.
+            if (!op->is_transpose() || op->transpose_factor() != shape.M) {
+                return Expr{};
+            }
+            value = op->vectors[0];
+            *axis = 0;
         }
-        // Axis zero is indexed by the row, axis one by the column.
-        for (int a = 0; a < 2; a++) {
-            if (width != (a ? shape.N : shape.M)) {
-                continue;
-            }
-            bool ok = true;
-            for (int r = 0; r < shape.M && ok; r++) {
-                for (int c = 0; c < shape.N; c++) {
-                    ok &= source(r * shape.N + c) == (a ? c : r);
-                }
-            }
-            if (ok) {
-                *axis = a;
-                return b->value;
-            }
+        const int copies = *axis ? shape.M : shape.N;
+        const Broadcast *op = value.as<Broadcast>();
+        if (op && op->lanes == copies) {
+            return op->value;
         }
         return Expr{};
     }
