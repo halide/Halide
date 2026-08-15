@@ -634,6 +634,29 @@ void test_solve_far_side_min_max() {
                          Interval::neg_inf(), 11);
 }
 
+void test_solve_no_var_polarity() {
+    // A condition that doesn't mention the variable being solved for still has
+    // to respect the polarity we're solving for. Under a negation we want the
+    // region where the condition is false, so a provably-true subcondition
+    // contributes nothing rather than everything.
+    //
+    // All of these are tautologies, since a remainder mod 2 is always 0 or 1,
+    // so every value of x satisfies them.
+    Expr y = Variable::make(Int(32), "y");
+
+    // Only the outer interval is checked. An inner interval may always be
+    // conservatively empty, but an outer one that's empty claims the condition
+    // is nowhere true, which here would be wrong.
+    check_outer_interval(((y % 2) == 0) || ((y % 2) == 1),
+                         Interval::neg_inf(), Interval::pos_inf());
+
+    // The De Morgan dual of the above. The Not flips the polarity, and the
+    // comparisons underneath it are provable, so this used to come back as an
+    // empty interval.
+    check_outer_interval(!(((y % 2) != 1) && ((y % 2) != 0)),
+                         Interval::neg_inf(), Interval::pos_inf());
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -668,6 +691,7 @@ int main(int argc, char **argv) {
     test_float_select_condition_not_simplified();
     test_outer_interval_max_min();
     test_solve_far_side_min_max();
+    test_solve_no_var_polarity();
     std::printf("Success!\n");
     return 0;
 }
