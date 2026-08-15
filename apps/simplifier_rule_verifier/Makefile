@@ -26,6 +26,7 @@ test: $(BIN)/filter_rewrite_rules $(BIN)/super_simplify
 	$(BIN)/filter_rewrite_rules test/narrow_int_rules.txt
 	$(BIN)/filter_rewrite_rules test/rules_needing_predicates.txt
 	$(BIN)/super_simplify test/exprs.txt 4
+	$(BIN)/super_simplify test/float_exprs.txt 1 | grep -q "super_simplify(2500.000000f)"
 
 clean:
 	rm -rf $(BIN)

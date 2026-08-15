@@ -106,6 +106,18 @@ set_tests_properties(
 )
 
 add_test(
+    NAME rule_verifier_float_literals
+    COMMAND super_simplify ${CMAKE_CURRENT_SOURCE_DIR}/test/float_exprs.txt 1
+)
+set_tests_properties(
+    rule_verifier_float_literals
+    PROPERTIES
+    ENVIRONMENT "HL_Z3=${Z3_EXECUTABLE}"
+    LABELS simplifier_rule_verifier
+    PASS_REGULAR_EXPRESSION "super_simplify\\(2500\\.000000f\\)"
+)
+
+add_test(
     NAME rule_verifier_super_simplify
     COMMAND super_simplify ${CMAKE_CURRENT_SOURCE_DIR}/test/exprs.txt 4
 )

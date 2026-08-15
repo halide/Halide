@@ -2,6 +2,7 @@
 
 #include "debug.h"
 
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -89,6 +90,15 @@ Expr consume_float(const char **cursor, const char *end) {
         }
     }
     double d = integer_part + double(fractional_part) / denom;
+    // An exponent, as in 1.000000e-16f
+    if (consume(cursor, end, "e") || consume(cursor, end, "E")) {
+        bool exponent_negative = consume(cursor, end, "-");
+        if (!exponent_negative) {
+            consume(cursor, end, "+");
+        }
+        int64_t exponent = consume_int(cursor, end);
+        d *= std::pow(10.0, (double)(exponent_negative ? -exponent : exponent));
+    }
     if (negative) {
         d = -d;
     }
