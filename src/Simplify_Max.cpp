@@ -219,7 +219,9 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
          rewrite(max(transpose(x, c0), transpose(y, c0)), transpose(max(x, y), c0)) ||
 
          (no_overflow(op->type) &&
-          (rewrite(max(max(x, y) + c0, x), max(x, y + c0), c0 < 0) ||
+          (rewrite(max(min(x, c0), min(y, c1) + c2), min(max(x, y + c2), c0), c0 == c1 + c2) ||
+
+           rewrite(max(max(x, y) + c0, x), max(x, y + c0), c0 < 0) ||
            rewrite(max(max(x, y) + c0, x), max(x, y) + c0, c0 > 0) ||
            rewrite(max(max(y, x) + c0, x), max(y + c0, x), c0 < 0) ||
            rewrite(max(max(y, x) + c0, x), max(y, x) + c0, c0 > 0) ||
