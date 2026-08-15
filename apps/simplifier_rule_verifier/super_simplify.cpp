@@ -201,6 +201,18 @@ Expr super_simplify(Expr e, int size) {
     e.accept(&leaf_counter);
 
     auto vars = find_vars(e);
+
+    // The interpreter below only represents Int(32) and Bool leaves, so
+    // there's nothing to search for if the expression has any others.
+    for (const auto &v : vars) {
+        Type t = v.second.first.type();
+        if (t != Int(32) && !t.is_bool()) {
+            debug(1) << "Can't synthesize an equivalent to " << e
+                     << ": wildcard " << v.first << " has type " << t << "\n";
+            return Expr();
+        }
+    }
+
     vector<Expr> leaves, leaves8, use_counts, use_counts8;
     for (const auto &v : vars) {
         leaves.push_back(v.second.first);
