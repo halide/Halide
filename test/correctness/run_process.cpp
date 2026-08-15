@@ -10,6 +10,11 @@
 #include <iostream>
 #include <string>
 
+#ifdef _MSC_VER
+#include <fcntl.h>
+#include <io.h>
+#endif
+
 using namespace Halide;
 
 namespace {
@@ -35,6 +40,13 @@ const std::string kStderrMarker = "hello from stderr\n";
 // unbuffered by default) so that when both streams share a single file, the
 // resulting order is deterministic.
 int run_child() {
+#ifdef _MSC_VER
+    // Markers are compared byte-for-byte against a Unix-style '\n'; without
+    // this, the CRT's default text-mode translation would write '\r\n'
+    // instead.
+    _setmode(_fileno(stdout), _O_BINARY);
+    _setmode(_fileno(stderr), _O_BINARY);
+#endif
     std::fputs(kStdoutMarker.c_str(), stdout);
     std::fflush(stdout);
     std::fputs(kStderrMarker.c_str(), stderr);
