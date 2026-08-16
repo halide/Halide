@@ -4,12 +4,11 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    // The check happens when the pipeline is compiled, so it needs a GPU API
-    // but not a GPU. Use the one the environment names, and pick one if it
-    // names none, so that this is still tested on a machine without a GPU.
     Target target = get_jit_target_from_environment();
     if (!target.has_gpu_feature()) {
-        target.set_feature(Target::CUDA);
+        printf("[SKIP] No GPU target enabled.\n");
+        // An error test has to report an error even when it skips.
+        _halide_user_assert(0);
     }
 
     Func f("f"), g("g");
