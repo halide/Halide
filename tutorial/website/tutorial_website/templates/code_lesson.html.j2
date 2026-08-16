@@ -1,0 +1,9 @@
+{% extends "base.html.j2" %}
+{% from "blocks.html.j2" import render as render_block %}
+
+{% block content %}
+<h1>{{ page.heading }}</h1>
+{% for block in page.blocks %}
+{{ render_block(block) }}
+{% endfor %}
+{% endblock %}

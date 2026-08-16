@@ -23,6 +23,14 @@ set(Halide_INSTALL_TOOLSDIR "${CMAKE_INSTALL_DATADIR}/tools"
     CACHE STRING "Path to Halide build-time tools and sources"
 )
 
+set(Halide_INSTALL_TUTORIALDIR "${CMAKE_INSTALL_DATADIR}/tutorial"
+    CACHE STRING "Path to Halide's generated tutorial website"
+)
+
+set(Halide_INSTALL_DOXYGENDIR "${CMAKE_INSTALL_DOCDIR}/html"
+    CACHE STRING "Path to Halide's generated Doxygen documentation"
+)
+
 ##
 # RPATH patching helper
 ##
@@ -187,6 +195,14 @@ if (WITH_TUTORIALS)
     )
 endif ()
 
+if (WITH_TUTORIAL_WEBSITE)
+    install(
+        DIRECTORY ${Halide_BINARY_DIR}/tutorial/website/site/
+        DESTINATION ${Halide_INSTALL_TUTORIALDIR}
+        COMPONENT Halide_Tutorial
+    )
+endif ()
+
 ##
 # CMake scripts
 ##
@@ -335,7 +351,11 @@ _Halide_install_pkgdeps(
 ##
 
 if (WITH_DOCS)
-    install(DIRECTORY ${Halide_BINARY_DIR}/doc/html TYPE DOC COMPONENT Halide_Documentation)
+    install(
+        DIRECTORY ${Halide_BINARY_DIR}/doc/html/
+        DESTINATION ${Halide_INSTALL_DOXYGENDIR}
+        COMPONENT Halide_Doxygen
+    )
 endif ()
 
 ##
@@ -404,4 +424,16 @@ cpack_add_component(
     Halide_Documentation
     DISPLAY_NAME "Halide documentation"
     DESCRIPTION "Documentation for Halide"
+)
+
+cpack_add_component(
+    Halide_Doxygen
+    DISPLAY_NAME "Halide Doxygen documentation"
+    DESCRIPTION "Generated Doxygen API documentation (WITH_DOCS)"
+)
+
+cpack_add_component(
+    Halide_Tutorial
+    DISPLAY_NAME "Halide tutorial website"
+    DESCRIPTION "Generated HTML tutorial website (WITH_TUTORIAL_WEBSITE)"
 )

@@ -87,6 +87,12 @@ tools = [
   "ruff>=0.12",
   "tbump>=6.11",
 ]
+tutorial-website = [
+  # for tutorial/website -- generates the tutorials website via gdb/lldb
+  "jinja2>=3.1",
+  "markupsafe>=3.0",
+  "pygments>=2.17",
+]
 
 ci-base = [
   { include-group = "dev" },

@@ -1,0 +1,14 @@
+{% macro render(block) %}
+{% if block.kind == "code" %}
+{{ block.source | highlight(block.lexer) }}
+{% elif block.kind == "output" %}
+<details class="output">
+<summary>Show output</summary>
+<pre>{{ block.text }}</pre>
+</details>
+{% elif block.kind == "image" %}
+<div class="figure"><img src="{{ block.src }}" alt="{{ block.alt }}"></div>
+{% elif block.kind == "video" %}
+<div class="figure"><video src="{{ block.src }}" controls autoplay loop muted playsinline></video></div>
+{% endif %}
+{% endmacro %}

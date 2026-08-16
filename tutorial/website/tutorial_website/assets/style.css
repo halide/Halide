@@ -1,0 +1,156 @@
+/* Minimal, dependency-free styling for the Halide tutorials website.
+   Built around Pygments' "monokai" style (see highlight.py) so the page
+   chrome, code blocks, output blocks, and figures all read as one theme
+   instead of a page-editor-generated pile of mismatched panels. */
+
+:root {
+  --bg: #272822; /* matches monokai's own background exactly */
+  --bg-panel: #2d2e28;
+  --fg: #f8f8f2;
+  --muted: #9d9d8f;
+  --border: #49483e; /* monokai's highlight/selection color, doubling as a border */
+  --accent: #a6e22e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.sidebar {
+  flex: 0 0 260px;
+  padding: 1rem;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  background: var(--bg-panel);
+}
+
+.sidebar ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sidebar li a {
+  display: block;
+  padding: 0.35rem 0.6rem;
+  border-radius: 4px;
+  text-decoration: none;
+  color: var(--muted);
+}
+
+.sidebar li a:hover {
+  background: var(--border);
+  color: var(--fg);
+}
+
+.sidebar li.current a {
+  background: var(--border);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.sidebar .group-title {
+  display: block;
+  padding: 0.35rem 0.6rem;
+  color: var(--muted);
+}
+
+.sidebar .lesson-group ul {
+  margin-left: 0.75rem;
+  border-left: 1px solid var(--border);
+}
+
+main {
+  flex: 1;
+  min-width: 0;
+  padding: 1rem 2rem 3rem;
+  max-width: 60rem;
+}
+
+/* Code blocks, output blocks, and figures all share the same framing
+   (border, radius, spacing) so they read as one continuous flow. */
+.highlight,
+details.output,
+.figure {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin: 0.75rem 0;
+}
+
+.highlight pre {
+  margin: 0;
+  overflow-x: auto;
+  padding: 0.75rem 1rem;
+}
+
+details.output {
+  background: var(--bg-panel);
+}
+
+details.output summary {
+  cursor: pointer;
+  color: var(--muted);
+  padding: 0.5rem 1rem;
+}
+
+details.output summary:hover {
+  color: var(--fg);
+}
+
+details.output pre {
+  margin: 0;
+  overflow-x: auto;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--border);
+  color: var(--fg);
+}
+
+.figure {
+  background: var(--bg-panel);
+  padding: 1rem;
+  display: flex;
+  justify-content: center;
+}
+
+.figure img,
+.figure video {
+  max-width: 70%;
+  display: block;
+}
+
+.scroll-top {
+  position: fixed;
+  right: 1.5rem;
+  bottom: 1.5rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  text-decoration: none;
+  font-size: 1.25rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.scroll-top:hover {
+  background: var(--border);
+  color: var(--accent);
+}

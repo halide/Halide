@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ page.title }} - Halide tutorials</title>
+<link rel="stylesheet" href="{{ root }}style.css">
+</head>
+<body id="top">
+<nav class="sidebar">
+<ul>
+<li{% if page.current_href == "index.html" %} class="current"{% endif %}><a href="{{ root }}index.html">Introduction</a></li>
+{% for item in navigation %}
+{% if item.children %}
+<li class="lesson-group"><span class="group-title">{{ item.label }}</span>
+<ul>
+{% for child in item.children %}
+<li{% if child.href == page.current_href %} class="current"{% endif %}><a href="{{ root }}{{ child.href }}">{{ child.label }}</a></li>
+{% endfor %}
+</ul>
+</li>
+{% else %}
+<li{% if item.href == page.current_href %} class="current"{% endif %}><a href="{{ root }}{{ item.href }}">{{ item.label }}</a></li>
+{% endif %}
+{% endfor %}
+</ul>
+</nav>
+<main>
+{% block content %}{% endblock %}
+</main>
+<a href="#top" class="scroll-top" aria-label="Scroll to top" title="Scroll to top">&#8593;</a>
+</body>
+</html>
