@@ -4,7 +4,7 @@
 // g++ lesson_09*.cpp -g -std=c++17 -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide `libpng-config --cflags --ldflags` -ljpeg -lpthread -ldl -o lesson_09
 // LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_09
 
-// On macOS (will only work if you actually have g++, not Apple's pretend g++ which is actually clang):
+// On macOS:
 // g++ lesson_09*.cpp -g -std=c++17 -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide `libpng-config --cflags --ldflags` -ljpeg -o lesson_09
 // DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_09
 
@@ -782,8 +782,7 @@ int main() {
 
         Buffer<uint8_t> halide_result = spread.realize({input.width(), input.height()});
 
-// The C equivalent is almost too horrible to contemplate (and
-// took me a long time to debug). This time I want to time
+// The C equivalent is fairly involved. This time I want to time
 // both the Halide version and the C version, so I'll use ARM
 // Neon intrinsics for the vectorization, and std::thread to do
 // the parallel for loop.

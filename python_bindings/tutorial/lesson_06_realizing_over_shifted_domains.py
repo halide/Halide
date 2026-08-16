@@ -74,7 +74,8 @@ def main():
     # fact read out-of-bounds and probably crash.
 
     # What if we want to evaluate our hl.Func over some region that
-    # isn't rectangular? Too bad. Halide only does rectangles :)
+    # isn't rectangular? Unfortunately, we can't. Halide only supports
+    # rectangular domains.
 
     print("Success!")
     return 0

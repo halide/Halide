@@ -281,8 +281,6 @@ def find_gpu_target():
             features_to_try.append(hl.TargetFeature.D3D12Compute)
         features_to_try.append(hl.TargetFeature.OpenCL)
     elif target.os == hl.TargetOS.OSX:
-        # macOS doesn't update its OpenCL drivers, so they tend to be broken.
-        # CUDA would also be a fine choice on machines with NVidia GPUs.
         features_to_try.append(hl.TargetFeature.Metal)
     else:
         features_to_try.append(hl.TargetFeature.OpenCL)

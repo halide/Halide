@@ -88,7 +88,7 @@ def main():
         print("Created blurry_parrot_1.png")
 
         # This is usually the fastest way to deal with boundaries:
-        # don't write code that reads out of bounds :) The more
+        # avoid reading out of bounds in the first place. The more
         # general solution is our next example.
 
     # The same pipeline, with a boundary condition on the input.
