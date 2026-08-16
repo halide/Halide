@@ -83,7 +83,7 @@ jobs:
           -DHalide_INSTALL_DOXYGENDIR=docs
           -DHalide_INSTALL_TUTORIALDIR=tutorials
           -DWITH_TESTS=NO
-          -DWITH_PYTHON_BINDINGS=NO
+          -DWITH_PYTHON_BINDINGS=YES
           -DWITH_UTILS=NO
 
       - name: Build docs and tutorials website

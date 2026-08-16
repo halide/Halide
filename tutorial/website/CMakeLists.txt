@@ -69,6 +69,35 @@ endif ()
 string(TOLOWER "${Halide_TUTORIAL_WEBSITE_DEBUGGER}" _debugger_preference)
 
 set(_output_dir "${CMAKE_CURRENT_BINARY_DIR}/site")
+
+##
+# WITH_TUTORIAL_WEBSITE DEPENDS on WITH_PYTHON_BINDINGS (see the top-level
+# CMakeLists.txt), so Halide::Python is always available here: tell the
+# generator where it can `import halide`, so it can capture output from the
+# Python lessons (lessons 1-14 only) the same way it captures C++ output via
+# gdb/lldb.
+#
+# python_bindings/CMakeLists.txt does its own find_package(Python ...) and
+# defines Python::Interpreter, but that's scoped to its own directory
+# subtree (tutorial/ is a sibling of python_bindings/, added separately from
+# the top-level CMakeLists.txt, so it can't see that target) -- and isn't
+# necessarily the same interpreter anyway if this Python3 lookup resolved
+# differently. Reusing Python3_EXECUTABLE (found above, required already for
+# jinja2/pygments) instead relies on the same assumption as that lookup: a
+# single project venv is active for the whole configure, so it's also the
+# interpreter `halide` was built against.
+#
+# The PYTHONPATH entry mirrors python_bindings/cmake/AddPythonTest.cmake's
+# add_python_test() exactly, since that's what makes `import halide` work
+# for the Python bindings' own tests.
+##
+
+set(_python_manifest_file "${CMAKE_CURRENT_BINARY_DIR}/python_manifest.json")
+file(GENERATE
+    OUTPUT "${_python_manifest_file}"
+    CONTENT "{\n  \"python_executable\": \"${Python3_EXECUTABLE}\",\n  \"pythonpath\": [\"$<PATH:NORMAL_PATH,$<TARGET_FILE_DIR:Halide::Python>/..>\"]\n}\n"
+)
+
 set(_generator_script "${CMAKE_CURRENT_SOURCE_DIR}/generate_tutorial_website.py")
 
 # Every rendering process (sitemap/assets/each lesson) imports the same
@@ -87,8 +116,10 @@ set(_tutorial_website_pkg_files
     "${CMAKE_CURRENT_SOURCE_DIR}/tutorial_website/highlight.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/tutorial_website/lesson.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/tutorial_website/manifest.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tutorial_website/py_capture_runner.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/tutorial_website/render.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/tutorial_website/sitemap.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tutorial_website/assets/lang-switch.js"
     "${CMAKE_CURRENT_SOURCE_DIR}/tutorial_website/assets/style.css"
     "${CMAKE_CURRENT_SOURCE_DIR}/tutorial_website/templates/base.html.j2"
     "${CMAKE_CURRENT_SOURCE_DIR}/tutorial_website/templates/blocks.html.j2"
@@ -105,12 +136,12 @@ set(_tutorial_website_pkg_files
 ##
 
 ##
-# sitemap.json: cheap {number, slug, title} metadata for every lesson, shared
-# by every page's navigation sidebar. Kept separate from each lesson's own
-# render so that rendering lesson N doesn't require rescanning every *other*
-# lesson's source file for its title -- but every lesson page still needs to
-# be rebuilt if a title changes (or a lesson is added or removed), hence
-# ${_lesson_source_files} below.
+# sitemap.json: cheap {number, slug, title, has_python} metadata for every
+# lesson, shared by every page's navigation sidebar. Kept separate from each
+# lesson's own render so that rendering lesson N doesn't require rescanning
+# every *other* lesson's source file for its title -- but every lesson page
+# still needs to be rebuilt if a title changes (or a lesson is added or
+# removed), hence ${_lesson_source_files} below.
 ##
 
 set(_sitemap_file "${CMAKE_CURRENT_BINARY_DIR}/sitemap.json")
@@ -127,9 +158,9 @@ add_custom_command(
 )
 
 ##
-# Shared assets (style.css, figures/) plus index.html. Also its own rule,
-# separate from any lesson: unlike lesson pages, these aren't safe to
-# produce from several concurrent per-lesson render processes, since
+# Shared assets (style.css, lang-switch.js, figures/) plus index.html. Also
+# its own rule, separate from any lesson: unlike lesson pages, these aren't
+# safe to produce from several concurrent per-lesson render processes, since
 # concurrent writes/copies into the same shared output paths would race.
 #
 # tutorial/figures isn't tracked as a DEPENDS here (also to avoid
@@ -142,12 +173,18 @@ add_custom_command(
     OUTPUT
         "${_output_dir}/index.html"
         "${_output_dir}/style.css"
+        "${_output_dir}/lang-switch.js"
     COMMAND
         "${Python3_EXECUTABLE}" "${_generator_script}" assets
         --tutorial-dir "${Halide_SOURCE_DIR}/tutorial"
         --sitemap "${_sitemap_file}"
         --output-dir "${_output_dir}"
-    DEPENDS "${_sitemap_file}" ${_tutorial_website_pkg_files}
+        --python-manifest "${_python_manifest_file}"
+    DEPENDS
+        "${_sitemap_file}"
+        ${_tutorial_website_pkg_files}
+        Halide::Python
+        "${_python_manifest_file}"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     COMMENT "Generating Halide tutorials website assets"
     VERBATIM
@@ -186,6 +223,13 @@ foreach (_source_file IN LISTS _lesson_source_files)
         endif ()
     endforeach ()
 
+    # Mirrors lesson.py's _python_source(): a same-stem file under
+    # python_bindings/tutorial/ is that lesson's Python translation.
+    set(_python_source "${Halide_SOURCE_DIR}/python_bindings/tutorial/${_slug}.py")
+    if (EXISTS "${_python_source}")
+        list(APPEND _lesson_depends "${_python_source}")
+    endif ()
+
     set(_lesson_html "${_output_dir}/${_slug}.html")
     add_custom_command(
         OUTPUT "${_lesson_html}"
@@ -199,7 +243,8 @@ foreach (_source_file IN LISTS _lesson_source_files)
             --output-dir "${_output_dir}"
             --prefer "${_debugger_preference}"
             ${_debugger_args}
-        DEPENDS ${_lesson_depends}
+            --python-manifest "${_python_manifest_file}"
+        DEPENDS ${_lesson_depends} Halide::Python "${_python_manifest_file}"
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         COMMENT "Generating tutorial page: ${_slug}.html"
         VERBATIM

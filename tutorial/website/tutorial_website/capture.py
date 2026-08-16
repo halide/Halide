@@ -26,6 +26,7 @@ work identically under LLDB.
 
 from __future__ import annotations
 
+import os
 import platform
 import shutil
 import subprocess
@@ -37,6 +38,8 @@ _BEGIN = "BEGIN_SNIPPET_{}_"
 _END = "END_SNIPPET_{}_"
 
 _TIMEOUT_SECS = 300
+
+_PY_CAPTURE_RUNNER = Path(__file__).parent / "py_capture_runner.py"
 
 
 @dataclass(frozen=True)
@@ -207,6 +210,12 @@ def capture_snippets(
         stdout_text = stdout_path.read_text() if stdout_path.exists() else ""
         stderr_text = stderr_path.read_text() if stderr_path.exists() else ""
 
+    return _merge_marker_chunks(stdout_text, stderr_text, lines)
+
+
+def _merge_marker_chunks(
+    stdout_text: str, stderr_text: str, lines: list[int]
+) -> dict[int, str]:
     stdout_chunks = _slice_markers(stdout_text, lines)
     stderr_chunks = _slice_markers(stderr_text, lines)
 
@@ -218,15 +227,74 @@ def capture_snippets(
     return result
 
 
-def capture_env_output(binary: Path, cwd: Path, env_overrides: dict[str, str]) -> str:
-    """Runs the whole binary with extra environment variables set and returns
-    stderr -- used for lesson 3's HL_DEBUG_CODEGEN=1 walkthrough, which has
-    no single interesting line to break at."""
-    import os
+def _merged_pythonpath(pythonpath: list[Path] | None) -> str | None:
+    if not pythonpath:
+        return None
+    parts = [str(p) for p in pythonpath]
+    existing = os.environ.get("PYTHONPATH")
+    if existing:
+        parts.append(existing)
+    return os.pathsep.join(parts)
 
+
+def capture_python_snippets(
+    python_executable: Path,
+    script_path: Path,
+    cwd: Path,
+    lines: list[int],
+    pythonpath: list[Path] | None = None,
+) -> dict[int, str]:
+    """Same idea as capture_snippets, but for a Python lesson: rather than
+    driving gdb/lldb against a compiled binary, py_capture_runner.py uses
+    sys.settrace (run in-process, in a subprocess of its own so the target
+    script's own stdout/stderr can be redirected to files same as the
+    debugger path) to bracket each requested line with the same
+    BEGIN_SNIPPET_{}_/END_SNIPPET_{}_ markers, so _merge_marker_chunks can be
+    shared between both paths unchanged."""
+    if not lines:
+        return {}
+
+    env = dict(os.environ)
+    merged_pythonpath = _merged_pythonpath(pythonpath)
+    if merged_pythonpath is not None:
+        env["PYTHONPATH"] = merged_pythonpath
+
+    with tempfile.TemporaryDirectory() as tmp:
+        stdout_path = Path(tmp) / "stdout.txt"
+        stderr_path = Path(tmp) / "stderr.txt"
+        with (
+            open(stdout_path, "wb") as stdout_file,
+            open(stderr_path, "wb") as stderr_file,
+        ):
+            subprocess.run(
+                [
+                    str(python_executable),
+                    str(_PY_CAPTURE_RUNNER),
+                    str(script_path),
+                    *(str(line) for line in lines),
+                ],
+                cwd=cwd,
+                env=env,
+                stdout=stdout_file,
+                stderr=stderr_file,
+                timeout=_TIMEOUT_SECS,
+                check=False,
+            )
+        stdout_text = stdout_path.read_text() if stdout_path.exists() else ""
+        stderr_text = stderr_path.read_text() if stderr_path.exists() else ""
+
+    return _merge_marker_chunks(stdout_text, stderr_text, lines)
+
+
+def capture_env_output(
+    argv: list[str], cwd: Path, env_overrides: dict[str, str]
+) -> str:
+    """Runs a whole program (or script) with extra environment variables set
+    and returns stderr -- used for lesson 3's HL_DEBUG_CODEGEN=1 walkthrough,
+    which has no single interesting line to break at."""
     env = {**os.environ, **env_overrides}
     proc = subprocess.run(
-        [str(binary)],
+        argv,
         cwd=cwd,
         env=env,
         capture_output=True,
@@ -234,6 +302,22 @@ def capture_env_output(binary: Path, cwd: Path, env_overrides: dict[str, str]) -
         timeout=_TIMEOUT_SECS,
     )
     return proc.stderr
+
+
+def capture_python_env_output(
+    python_executable: Path,
+    script_path: Path,
+    cwd: Path,
+    env_overrides: dict[str, str],
+    pythonpath: list[Path] | None = None,
+) -> str:
+    overrides = dict(env_overrides)
+    merged_pythonpath = _merged_pythonpath(pythonpath)
+    if merged_pythonpath is not None:
+        overrides["PYTHONPATH"] = merged_pythonpath
+    return capture_env_output(
+        [str(python_executable), str(script_path)], cwd, overrides
+    )
 
 
 def debugger_available(name: str) -> bool:

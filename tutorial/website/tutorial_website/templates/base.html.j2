@@ -4,6 +4,45 @@
 <meta charset="utf-8">
 <title>{{ page.title }} - Halide tutorials</title>
 <link rel="stylesheet" href="{{ root }}style.css">
+<script>
+// Applied before the body renders so a remembered (or linked) Python
+// preference doesn't flash the C++ source first. A "?lang=cpp" or
+// "?lang=python" query param -- e.g. from a link someone shared -- wins over
+// the stored preference and updates it, so following a Python link and then
+// clicking on to the next lesson stays on Python.
+//
+// halideSyncLangURL keeps the address bar's "lang" param in sync with
+// whichever language is actually showing: it's called here on every plain
+// navigation (not just pages reached via "?lang=..."), and again from
+// lang-switch.js whenever the toggle is clicked. Without this, following a
+// "?lang=python" link and then clicking a sidebar link to the next lesson
+// would keep showing Python (the stored preference) while the URL silently
+// went back to unqualified/C++, so copying it would mislink whoever it's
+// shared with.
+try {
+  var params = new URLSearchParams(location.search);
+  var linked = params.get("lang");
+  if (linked === "cpp" || linked === "python") {
+    localStorage.setItem("halide-tutorial-lang", linked);
+  }
+  var stored = localStorage.getItem("halide-tutorial-lang");
+  if (stored === "python") {
+    document.documentElement.classList.add("pref-python");
+  }
+  window.halideSyncLangURL = function (lang) {
+    try {
+      var url = new URL(location.href);
+      if (url.searchParams.get("lang") !== lang) {
+        url.searchParams.set("lang", lang);
+        history.replaceState(null, "", url);
+      }
+    } catch (e) {}
+  };
+  if (stored === "cpp" || stored === "python") {
+    window.halideSyncLangURL(stored);
+  }
+} catch (e) {}
+</script>
 </head>
 <body id="top">
 <nav class="sidebar">
@@ -28,5 +67,6 @@
 {% block content %}{% endblock %}
 </main>
 <a href="#top" class="scroll-top" aria-label="Scroll to top" title="Scroll to top">&#8593;</a>
+<script src="{{ root }}lang-switch.js"></script>
 </body>
 </html>

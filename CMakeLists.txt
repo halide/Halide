@@ -241,7 +241,7 @@ Halide_feature(
     WITH_TUTORIAL_WEBSITE
     "Generate the Halide tutorials website (requires gdb or lldb, and Python's pygments)"
     OFF
-    DEPENDS WITH_TUTORIALS
+    DEPENDS WITH_TUTORIALS AND WITH_PYTHON_BINDINGS
 )
 Halide_feature(
     WITH_UTILS "Optional utility programs for Halide, including HalideTraceViz" TOP_LEVEL

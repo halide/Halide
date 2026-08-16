@@ -1,5 +1,5 @@
-"""The cheap subset of lesson metadata (number, slug, title) needed to render
-the shared navigation sidebar on every page.
+"""The cheap subset of lesson metadata (number, slug, title, language
+availability) needed to render the shared navigation sidebar on every page.
 
 Every lesson page's nav includes links to *all* lessons, but rendering one
 lesson's page shouldn't require rescanning every other lesson's source file
@@ -21,14 +21,20 @@ class SitemapEntry:
     number: int
     slug: str
     title: str
+    has_python: bool
 
 
 def build_sitemap(tutorial_dir: Path) -> list[SitemapEntry]:
-    # No binary manifest is needed: only number/slug/title are used for
-    # navigation, none of which depend on a lesson's built binary.
+    # No binary manifest is needed: only number/slug/title/has_python are
+    # used for navigation, none of which depend on a lesson's built binary.
     lessons = discover_lessons(tutorial_dir, manifest={})
     return [
-        SitemapEntry(number=lesson.number, slug=lesson.slug, title=lesson.title)
+        SitemapEntry(
+            number=lesson.number,
+            slug=lesson.slug,
+            title=lesson.title,
+            has_python=lesson.python is not None,
+        )
         for lesson in lessons
     ]
 

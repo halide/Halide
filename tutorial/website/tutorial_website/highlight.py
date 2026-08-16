@@ -9,11 +9,12 @@ from __future__ import annotations
 
 from pygments import highlight as _pygments_highlight
 from pygments.formatters import HtmlFormatter
-from pygments.lexers import BashLexer, CppLexer
+from pygments.lexers import BashLexer, CppLexer, PythonLexer
 
 _LEXERS = {
     "cpp": CppLexer(stripnl=False, stripall=False, ensurenl=True),
     "bash": BashLexer(stripnl=False, stripall=False, ensurenl=True),
+    "python": PythonLexer(stripnl=False, stripall=False, ensurenl=True),
 }
 # The default Pygments style only sets a background color, leaving
 # unstyled/plain tokens (identifiers, punctuation, ...) to inherit whatever

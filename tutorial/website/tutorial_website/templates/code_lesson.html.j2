@@ -3,7 +3,24 @@
 
 {% block content %}
 <h1>{{ page.heading }}</h1>
+<div class="lesson-source{% if page.python_blocks %} has-python{% endif %}">
+{% if page.python_blocks %}
+<div class="lang-switch" role="group" aria-label="Source language">
+<button type="button" data-lang="cpp">C++</button>
+<button type="button" data-lang="python">Python</button>
+</div>
+{% endif %}
+<div class="lang-cpp">
 {% for block in page.blocks %}
 {{ render_block(block) }}
 {% endfor %}
+</div>
+{% if page.python_blocks %}
+<div class="lang-python">
+{% for block in page.python_blocks %}
+{{ render_block(block) }}
+{% endfor %}
+</div>
+{% endif %}
+</div>
 {% endblock %}
