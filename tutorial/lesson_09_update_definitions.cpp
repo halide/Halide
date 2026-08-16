@@ -4,7 +4,7 @@
 // g++ lesson_09*.cpp -g -std=c++17 -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide `libpng-config --cflags --ldflags` -ljpeg -lpthread -ldl -fopenmp -o lesson_09
 // LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_09
 
-// On macOS (will only work if you actually have g++, not Apple's pretend g++ which is actually clang):
+// On macOS:
 // g++ lesson_09*.cpp -g -std=c++17 -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide `libpng-config --cflags --ldflags` -ljpeg -fopenmp -o lesson_09
 // DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_09
 
@@ -781,12 +781,10 @@ int main() {
 
         Buffer<uint8_t> halide_result = spread.realize({input.width(), input.height()});
 
-// The C equivalent is almost too horrible to contemplate (and
-// took me a long time to debug). This time I want to time
-// both the Halide version and the C version, so I'll use sse
-// intrinsics for the vectorization, and openmp to do the
-// parallel for loop (you'll need to compile with -fopenmp or
-// similar to get correct timing).
+// The C equivalent is fairly involved. This time I want to time
+// both the Halide version and the C version, so I'll use Intel
+// SSE2 intrinsics for the vectorization, and OpenMP to do
+// the parallel for loop.
 #ifdef __SSE2__
         // Don't include the time required to allocate the output buffer.
         Buffer<uint8_t> c_result(input.width(), input.height());

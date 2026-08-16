@@ -87,7 +87,7 @@ int main() {
         save_image(result, "blurry_parrot_1.png");
 
         // This is usually the fastest way to deal with boundaries:
-        // don't write code that reads out of bounds :) The more
+        // avoid reading out of bounds in the first place. The more
         // general solution is our next example.
     }
 

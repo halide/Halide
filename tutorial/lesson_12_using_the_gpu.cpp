@@ -290,8 +290,6 @@ Target find_gpu_target() {
         }
         features_to_try.push_back(Target::OpenCL);
     } else if (target.os == Target::OSX) {
-        // macOS doesn't update its OpenCL drivers, so they tend to be broken.
-        // CUDA would also be a fine choice on machines with NVidia GPUs.
         features_to_try.push_back(Target::Metal);
     } else {
         features_to_try.push_back(Target::OpenCL);
