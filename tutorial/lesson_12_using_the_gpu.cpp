@@ -14,8 +14,8 @@
 
 #include <cstdio>
 
-// Include a clock to do performance testing.
-#include "clock.h"
+// Include halide_benchmark.h to do performance testing.
+#include "halide_benchmark.h"
 
 // Include some support code for loading pngs.
 #include "halide_image_io.h"
@@ -199,7 +199,7 @@ public:
         double best_time = 0.0;
         for (int i = 0; i < 3; i++) {
 
-            double t1 = current_time();
+            auto t1 = benchmark_now();
 
             // Run the filter 100 times.
             for (int j = 0; j < 100; j++) {
@@ -209,9 +209,9 @@ public:
             // Force any GPU code to finish by copying the buffer back to the CPU.
             output.copy_to_host();
 
-            double t2 = current_time();
+            auto t2 = benchmark_now();
 
-            double elapsed = (t2 - t1) / 100;
+            double elapsed = 1000 * benchmark_duration_seconds(t1, t2) / 100;
             if (i == 0 || elapsed < best_time) {
                 best_time = elapsed;
             }
