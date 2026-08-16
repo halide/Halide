@@ -1,10 +1,8 @@
-find_package(OpenMP)
-
 configure_file(images/gray.png images/gray.png COPYONLY)
 configure_file(images/rgb.png images/rgb.png COPYONLY)
 
 function(add_tutorial source_file)
-    set(options WITH_IMAGE_IO WITH_OPENMP)
+    set(options WITH_IMAGE_IO)
     set(oneValueArgs)
     set(multiValueArgs SRCS GROUPS)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
@@ -34,20 +32,6 @@ function(add_tutorial source_file)
     if (args_WITH_IMAGE_IO)
         target_link_libraries(${name} PRIVATE Halide::ImageIO)
     endif ()
-
-    if (args_WITH_OPENMP)
-        if (TARGET OpenMP::OpenMP_CXX)
-            target_link_libraries(${name} PRIVATE OpenMP::OpenMP_CXX)
-        else ()
-            # Compile anyway but suppress warnings about unrecognised pragmas
-            target_compile_options(
-                "${name}"
-                PRIVATE
-                $<$<CXX_COMPILER_ID:MSVC>:/Wd4068>
-                $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wno-unknown-pragmas>
-            )
-        endif ()
-    endif ()
 endfunction()
 
 # Declare tutorials
@@ -73,8 +57,8 @@ endif ()
 
 add_tutorial(lesson_06_realizing_over_shifted_domains.cpp)
 add_tutorial(lesson_07_multi_stage_pipelines.cpp WITH_IMAGE_IO)
-add_tutorial(lesson_08_scheduling_2.cpp WITH_IMAGE_IO WITH_OPENMP GROUPS multithreaded)
-add_tutorial(lesson_09_update_definitions.cpp WITH_IMAGE_IO WITH_OPENMP GROUPS multithreaded)
+add_tutorial(lesson_08_scheduling_2.cpp WITH_IMAGE_IO GROUPS multithreaded)
+add_tutorial(lesson_09_update_definitions.cpp WITH_IMAGE_IO GROUPS multithreaded)
 
 if ("NVPTX" IN_LIST Halide_LLVM_COMPONENTS)
     if (Halide_TARGET MATCHES "wasm")
