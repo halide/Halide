@@ -4,12 +4,12 @@
 // them.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_02*.cpp -g -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide `libpng-config --cflags --ldflags` -ljpeg -lpthread -ldl -o lesson_02 -std=c++17
-// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_02
+// g++ lesson_02*.cpp -g -I <path/to/include> -I <path/to/tools> -L <path/to/lib> -lHalide $(pkg-config --cflags --libs libpng libjpeg) -lpthread -ldl -o lesson_02 -std=c++17
+// LD_LIBRARY_PATH=<path/to/lib> ./lesson_02
 
 // On macOS:
-// g++ lesson_02*.cpp -g -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide `libpng-config --cflags --ldflags` -ljpeg -o lesson_02 -std=c++17
-// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_02
+// g++ lesson_02*.cpp -g -I <path/to/include> -I <path/to/tools> -L <path/to/lib> -lHalide $(pkg-config --cflags --libs libpng libjpeg) -o lesson_02 -std=c++17
+// DYLD_LIBRARY_PATH=<path/to/lib> ./lesson_02
 
 // The only Halide header file you need is Halide.h. It includes all of Halide.
 #include "Halide.h"

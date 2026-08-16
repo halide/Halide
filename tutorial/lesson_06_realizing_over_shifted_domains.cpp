@@ -4,12 +4,12 @@
 // does not start at (0, 0).
 
 // On linux, you can compile and run it like so:
-// g++ lesson_06*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_06 -std=c++17
-// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_06
+// g++ lesson_06*.cpp -g -I <path/to/include> -L <path/to/lib> -lHalide -lpthread -ldl -o lesson_06 -std=c++17
+// LD_LIBRARY_PATH=<path/to/lib> ./lesson_06
 
 // On macOS:
-// g++ lesson_06*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_06 -std=c++17
-// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_06
+// g++ lesson_06*.cpp -g -I <path/to/include> -L <path/to/lib> -lHalide -o lesson_06 -std=c++17
+// DYLD_LIBRARY_PATH=<path/to/lib> ./lesson_06
 
 #include "Halide.h"
 #include <cstdio>

@@ -4,12 +4,12 @@
 // various Halide methods of doing "Just-In-Time" compilation.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_22*.cpp -g -I <path/to/Halide.h> -I <path/to/tools/halide_benchmark.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_22 -std=c++17
-// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_22
+// g++ lesson_22*.cpp -g -I <path/to/include> -I <path/to/tools> -L <path/to/lib> -lHalide -lpthread -ldl -o lesson_22 -std=c++17
+// LD_LIBRARY_PATH=<path/to/lib> ./lesson_22
 
 // On macOS:
-// g++ lesson_22*.cpp -g -I <path/to/Halide.h> -I <path/to/tools/halide_benchmark.h> -L <path/to/libHalide.so> -lHalide -o lesson_22 -std=c++17
-// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_22
+// g++ lesson_22*.cpp -g -I <path/to/include> -I <path/to/tools> -L <path/to/lib> -lHalide -o lesson_22 -std=c++17
+// DYLD_LIBRARY_PATH=<path/to/lib> ./lesson_22
 
 #include "Halide.h"
 #include "halide_benchmark.h"

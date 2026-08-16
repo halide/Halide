@@ -4,11 +4,11 @@
 // reusable components called generators.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_15*.cpp <path/to/tools/halide_image_io.h>/GenGen.cpp -g -std=c++17 -fno-rtti -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_15_generate
+// g++ lesson_15*.cpp <path/to/tools>/GenGen.cpp -g -std=c++17 -fno-rtti -I <path/to/include> -L <path/to/lib> -lHalide -lpthread -ldl -o lesson_15_generate
 // bash lesson_15_generators_usage.sh
 
 // On macOS:
-// g++ lesson_15*.cpp <path/to/tools/halide_image_io.h>/GenGen.cpp -g -std=c++17 -fno-rtti -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_15_generate
+// g++ lesson_15*.cpp <path/to/tools>/GenGen.cpp -g -std=c++17 -fno-rtti -I <path/to/include> -L <path/to/lib> -lHalide -o lesson_15_generate
 // bash lesson_15_generators_usage.sh
 
 #include "Halide.h"

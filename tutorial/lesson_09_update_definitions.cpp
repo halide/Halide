@@ -1,12 +1,12 @@
 // Halide tutorial lesson 9: Multi-pass Funcs, update definitions, and reductions
 
 // On linux, you can compile and run it like so:
-// g++ lesson_09*.cpp -g -std=c++17 -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide `libpng-config --cflags --ldflags` -ljpeg -lpthread -ldl -o lesson_09
-// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_09
+// g++ lesson_09*.cpp -g -std=c++17 -I <path/to/include> -I <path/to/tools> -L <path/to/lib> -lHalide $(pkg-config --cflags --libs libpng libjpeg) -lpthread -ldl -o lesson_09
+// LD_LIBRARY_PATH=<path/to/lib> ./lesson_09
 
 // On macOS:
-// g++ lesson_09*.cpp -g -std=c++17 -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide `libpng-config --cflags --ldflags` -ljpeg -o lesson_09
-// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_09
+// g++ lesson_09*.cpp -g -std=c++17 -I <path/to/include> -I <path/to/tools> -L <path/to/lib> -lHalide $(pkg-config --cflags --libs libpng libjpeg) -o lesson_09
+// DYLD_LIBRARY_PATH=<path/to/lib> ./lesson_09
 
 #include "Halide.h"
 #include <cmath>

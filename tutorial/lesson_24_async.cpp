@@ -4,12 +4,12 @@
 // using scheduling directives 'async' and 'ring_buffer'.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_24*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_24 -std=c++17
-// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_24
+// g++ lesson_24*.cpp -g -I <path/to/include> -L <path/to/lib> -lHalide -lpthread -ldl -o lesson_24 -std=c++17
+// LD_LIBRARY_PATH=<path/to/lib> ./lesson_24
 
 // On macOS:
-// g++ lesson_24*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_24 -std=c++17
-// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_24
+// g++ lesson_24*.cpp -g -I <path/to/include> -L <path/to/lib> -lHalide -o lesson_24 -std=c++17
+// DYLD_LIBRARY_PATH=<path/to/lib> ./lesson_24
 
 #include "Halide.h"
 #include <cstdio>
