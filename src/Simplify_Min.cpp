@@ -220,6 +220,9 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
          rewrite(min(transpose(x, c0), transpose(y, c0)), transpose(min(x, y), c0)) ||
          (no_overflow(op->type) &&
           (rewrite(min(min(x, y) + c0, x), min(x, y + c0), c0 > 0) ||
+           rewrite(min(min(x, y + z), (w + z) + u), min(x, min(y, w + u) + z)) ||
+           rewrite(min(min(y + z, x), (w + z) + u), min(x, min(y, w + u) + z)) ||
+
            rewrite(min(min(x, y) + c0, x), min(x, y) + c0, c0 < 0) ||
            rewrite(min(min(y, x) + c0, x), min(y + c0, x), c0 > 0) ||
            rewrite(min(min(y, x) + c0, x), min(y, x) + c0, c0 < 0) ||
