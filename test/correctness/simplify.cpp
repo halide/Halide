@@ -440,6 +440,12 @@ void check_algebra() {
     check((x * 8 - y) % 4, (-y) % 4);
     check((x + 31) % 32 == 31, x % 32 == 0);
     check((x - 1) % 32 == 31, x % 32 == 0);
+    // A remainder lies in [0, |c|), for negative divisors too
+    check((x + 3) % 14 == 1, x % 14 == 12);
+    check((x + 3) % -14 == 1, x % -14 == 12);
+    check((x + 3) % 14 == -1, f);
+    check((x + 3) % 14 == 20, f);
+    check((x + 3) % -14 == -1, f);
 
     // Check an optimization important for fusing dimensions
     check((x / 3) * 3 + x % 3, x);
