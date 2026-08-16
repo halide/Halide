@@ -1,9 +1,8 @@
 import { type Edge } from "@xyflow/react";
 import { useSetAtom } from "jotai";
-import { Checkbox } from "radix-ui";
 import * as React from "react";
 
-import CheckIcon from "@/components/icons/CheckIcon";
+import Checkbox from "@/components/shared/Checkbox";
 import { edgesAtom } from "@/state/graph";
 
 function hideEdge(hidden: boolean) {
@@ -25,18 +24,12 @@ function GraphDisplay() {
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <Checkbox.Root
-        className="bg-ps-border-primary border-ps-border-tertiary flex h-4 w-4 items-center justify-center rounded-xs border"
-        checked={visible}
-        onCheckedChange={onEdgeVisibilityChange}
-      >
-        <Checkbox.Indicator>
-          <CheckIcon />
-        </Checkbox.Indicator>
-      </Checkbox.Root>
-      <label className="text-ps-text-primary/60">Show Graph Edges</label>
-    </div>
+    <Checkbox
+      id="graph-edge"
+      checked={visible}
+      onCheckedChange={onEdgeVisibilityChange}
+      label="Show Graph Edges"
+    />
   );
 }
 
