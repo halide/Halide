@@ -223,6 +223,7 @@ void define_func(py::module &m) {
             .def("eager_inline", [](Func &func, const py::args &args) -> Func & {
                 return func.eager_inline(args_to_vector<Func>(args));
             })
+            .def("change_type", &Func::change_type, py::arg("type"), py::arg("unsafe") = false)
             .def("compute_root", &Func::compute_root)
             .def("store_root", &Func::store_root)
 

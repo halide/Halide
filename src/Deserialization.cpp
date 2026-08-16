@@ -1035,6 +1035,15 @@ FuncSchedule Deserializer::deserialize_func_schedule(const Serialize::FuncSchedu
     const auto async = func_schedule->async();
     const auto ring_buffer = deserialize_expr(func_schedule->ring_buffer_type(), func_schedule->ring_buffer());
     const auto memoize_eviction_key = deserialize_expr(func_schedule->memoize_eviction_key_type(), func_schedule->memoize_eviction_key());
+    std::vector<std::pair<Expr, std::string>> type_change_checks;
+    if (func_schedule->type_change_checks() != nullptr) {
+        type_change_checks.reserve(func_schedule->type_change_checks()->size());
+        for (const auto *check : *func_schedule->type_change_checks()) {
+            type_change_checks.emplace_back(
+                deserialize_expr(check->condition_type(), check->condition()),
+                deserialize_string(check->message()));
+        }
+    }
     auto hl_func_schedule = FuncSchedule();
     hl_func_schedule.store_level() = store_level;
     hl_func_schedule.compute_level() = compute_level;
@@ -1048,6 +1057,7 @@ FuncSchedule Deserializer::deserialize_func_schedule(const Serialize::FuncSchedu
     hl_func_schedule.async() = async;
     hl_func_schedule.ring_buffer() = ring_buffer;
     hl_func_schedule.memoize_eviction_key() = memoize_eviction_key;
+    hl_func_schedule.type_change_checks() = std::move(type_change_checks);
     return hl_func_schedule;
 }
 
