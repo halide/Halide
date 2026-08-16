@@ -13,9 +13,9 @@
 #include <cstdio>
 #include <vector>
 
-// We're going to be using x86 SSE intrinsics later on in this lesson.
-#ifdef __SSE2__
-#include <emmintrin.h>
+// We're going to be using ARM Neon intrinsics later on in this lesson.
+#ifdef __ARM_NEON
+#include <arm_neon.h>
 #endif
 
 // We'll also need a clock to do performance testing at the end.
@@ -783,11 +783,11 @@ int main() {
 
 // The C equivalent is almost too horrible to contemplate (and
 // took me a long time to debug). This time I want to time
-// both the Halide version and the C version, so I'll use sse
-// intrinsics for the vectorization, and openmp to do the
+// both the Halide version and the C version, so I'll use ARM
+// Neon intrinsics for the vectorization, and openmp to do the
 // parallel for loop (you'll need to compile with -fopenmp or
 // similar to get correct timing).
-#ifdef __SSE2__
+#ifdef __ARM_NEON
         // Don't include the time required to allocate the output buffer.
         Buffer<uint8_t> c_result(input.width(), input.height());
 
@@ -842,44 +842,39 @@ int main() {
 
                         // Allocate storage for the minimum and maximum
                         // helpers. One vector is enough.
-                        __m128i minimum_storage, maximum_storage;
+                        uint8x16_t minimum_storage, maximum_storage;
 
                         // The pure step for the maximum is a vector of zeros
-                        maximum_storage = _mm_setzero_si128();
+                        maximum_storage = vdupq_n_u8(0);
 
                         // The update step for maximum
                         for (int max_y = y - 2; max_y <= y + 2; max_y++) {
                             uint8_t *clamped_row =
                                 &clamped_storage[(max_y & 7) * clamped_width];
                             for (int max_x = x_base - 2; max_x <= x_base + 2; max_x++) {
-                                __m128i v = _mm_loadu_si128(
-                                    (__m128i const *)(clamped_row + max_x + 2));
-                                maximum_storage = _mm_max_epu8(maximum_storage, v);
+                                uint8x16_t v = vld1q_u8(clamped_row + max_x + 2);
+                                maximum_storage = vmaxq_u8(maximum_storage, v);
                             }
                         }
 
-                        // The pure step for the minimum is a vector of
-                        // ones. Create it by comparing something to
-                        // itself.
-                        minimum_storage = _mm_cmpeq_epi32(_mm_setzero_si128(),
-                                                          _mm_setzero_si128());
+                        // The pure step for the minimum is a vector of ones.
+                        minimum_storage = vdupq_n_u8(0xff);
 
                         // The update step for minimum.
                         for (int min_y = y - 2; min_y <= y + 2; min_y++) {
                             uint8_t *clamped_row =
                                 &clamped_storage[(min_y & 7) * clamped_width];
                             for (int min_x = x_base - 2; min_x <= x_base + 2; min_x++) {
-                                __m128i v = _mm_loadu_si128(
-                                    (__m128i const *)(clamped_row + min_x + 2));
-                                minimum_storage = _mm_min_epu8(minimum_storage, v);
+                                uint8x16_t v = vld1q_u8(clamped_row + min_x + 2);
+                                minimum_storage = vminq_u8(minimum_storage, v);
                             }
                         }
 
                         // Now compute the spread.
-                        __m128i spread = _mm_sub_epi8(maximum_storage, minimum_storage);
+                        uint8x16_t spread = vsubq_u8(maximum_storage, minimum_storage);
 
                         // Store it.
-                        _mm_storeu_si128((__m128i *)(output_row + x_base), spread);
+                        vst1q_u8(output_row + x_base, spread);
                     }
                 }
             }
@@ -919,7 +914,7 @@ int main() {
             }
         }
 
-#endif  // __SSE2__
+#endif  // __ARM_NEON
     }
 
     printf("Success!\n");
