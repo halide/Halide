@@ -643,6 +643,33 @@ int main(int argc, char **argv) {
         output.realize({50, 50});
     }
 
+    {
+        // Hoisting into the loops of a Func with update definitions. Each
+        // stage of the consumer gets a hoisted storage node, but only the
+        // stages that use the producer realize it.
+        Func f("f"), g("g"), h("h");
+        Var x("x"), y("y");
+        f(x, y) = x + y;
+        g(x, y) = f(x, y);
+        RDom r(0, 3);
+        g(r, y) += 2;
+        h(x, y) = g(x, y);
+
+        f.hoist_storage(g, Var::outermost()).store_at(g, y).compute_at(g, x);
+        g.compute_at(h, y);
+
+        Buffer<int> im = h.realize({8, 8});
+        for (int y = 0; y < im.height(); y++) {
+            for (int x = 0; x < im.width(); x++) {
+                int correct = x + y + (x < 3 ? 2 : 0);
+                if (im(x, y) != correct) {
+                    printf("h(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
+                    return 1;
+                }
+            }
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }
