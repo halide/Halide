@@ -16,12 +16,6 @@
 // g++ lesson_16_rgb_run.cpp brighten_*.o -ldl -lpthread -o lesson_16_run
 // ./lesson_16_run
 
-// If you have the entire Halide source tree, you can also build it by
-// running:
-//    make tutorial_lesson_16_rgb_run
-// in a shell with the current directory at the top of the halide
-// source tree.
-
 #include "Halide.h"
 #include <cstdio>
 

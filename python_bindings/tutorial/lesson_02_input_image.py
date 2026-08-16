@@ -2,10 +2,6 @@
 
 # This lesson demonstrates how to pass in input images.
 
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_02_input_image
-# in a shell with the current directory at python_bindings/
-
 import halide as hl
 import numpy as np
 import halide.imageio

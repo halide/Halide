@@ -4,10 +4,6 @@
 
 # This lesson demonstrates how schedule multi-stage pipelines.
 
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_08_scheduling_2
-# in a shell with the current directory at python_bindings/
-
 import halide as hl
 import numpy as np
 import math

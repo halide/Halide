@@ -11,11 +11,6 @@
 // g++ lesson_22*.cpp -g -I <path/to/Halide.h> -I <path/to/tools/halide_benchmark.h> -L <path/to/libHalide.so> -lHalide -o lesson_22 -std=c++17
 // DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_22
 
-// If you have the entire Halide source tree, you can also build it by
-// running:
-//    make tutorial_lesson_22_jit_performance
-// in a shell at the top of the halide source tree.
-
 #include "Halide.h"
 #include "halide_benchmark.h"
 #include <cstdio>

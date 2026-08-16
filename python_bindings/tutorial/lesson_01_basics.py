@@ -4,10 +4,6 @@
 
 # This lesson demonstrates basic usage of Halide as a JIT compiler for imaging.
 
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_01_basics
-# in a shell with the current directory at python_bindings/
-
 import halide as hl
 
 

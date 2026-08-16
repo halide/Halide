@@ -4,10 +4,6 @@
 
 # This lesson demonstrates how to follow what Halide is doing at runtime.
 
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_04_debugging_2
-# in a shell with the current directory at python_bindings/
-
 import halide as hl
 
 

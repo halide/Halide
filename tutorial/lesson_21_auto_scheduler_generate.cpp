@@ -15,12 +15,6 @@
 // g++ lesson_21_auto_scheduler_run.cpp -std=c++17 -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> auto_schedule_false.a auto_schedule_true.a -ldl -lpthread -o lesson_21_run
 // ./lesson_21_run
 
-// If you have the entire Halide source tree, you can also build it by
-// running:
-//    make tutorial_lesson_21_auto_scheduler_run
-// in a shell with the current directory at the top of the halide
-// source tree.
-
 #include "Halide.h"
 #include <cstdio>
 

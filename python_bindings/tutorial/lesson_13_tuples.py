@@ -5,10 +5,6 @@
 # This lesson describes how to write Funcs that evaluate to multiple
 # values.
 
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_13_tuples
-# in a shell with the current directory at python_bindings/
-
 import math
 
 import halide as hl

@@ -11,12 +11,6 @@
 // g++ lesson_11*.cpp -g -std=c++17 -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_11
 // DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_11
 
-// If you have the entire Halide source tree, you can also build it by
-// running:
-//    make tutorial_lesson_11_cross_compilation
-// in a shell with the current directory at the top of the halide
-// source tree.
-
 #include "Halide.h"
 #include <cstdio>
 #include <fstream>

@@ -25,12 +25,6 @@
 // - Doesn't do any jit compilation at runtime, so it's fast.
 // - Doesn't depend on libHalide at all, so it's a small, easy-to-deploy binary.
 
-// If you have the entire Halide source tree, you can also build it by
-// running:
-//    make tutorial_lesson_10_aot_compilation_run
-// in a shell with the current directory at the top of the halide
-// source tree.
-
 #include "Halide.h"
 #include <cstdio>
 using namespace Halide;

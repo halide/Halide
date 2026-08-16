@@ -4,10 +4,6 @@
 
 # This lesson demonstrates how to use Halide to run code on a GPU.
 
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_12_using_the_gpu
-# in a shell with the current directory at python_bindings/
-
 import halide as hl
 
 import halide.imageio

@@ -12,12 +12,6 @@
 // g++ lesson_05*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_05 -std=c++17
 // DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_05
 
-// If you have the entire Halide source tree, you can also build it by
-// running:
-//    make tutorial_lesson_05_scheduling_1
-// in a shell with the current directory at the top of the halide
-// source tree.
-
 #include "Halide.h"
 #include <algorithm>
 #include <cstdio>
