@@ -1,7 +1,7 @@
 import { useAtom } from "jotai";
-import { Checkbox, RadioGroup } from "radix-ui";
+import { RadioGroup } from "radix-ui";
 
-import CheckIcon from "@/components/icons/CheckIcon";
+import Checkbox from "@/components/shared/Checkbox";
 import { livenessAtom, type LivenessMode } from "@/state/liveness";
 
 function LivenessControls() {
@@ -9,20 +9,12 @@ function LivenessControls() {
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-2">
-        <Checkbox.Root
-          className="bg-ps-border-primary border-ps-border-tertiary flex h-4 w-4 items-center justify-center rounded-xs border"
-          checked={liveness.active}
-          onCheckedChange={(checked) => {
-            setLiveness({ ...liveness, active: !!checked });
-          }}
-        >
-          <Checkbox.Indicator>
-            <CheckIcon />
-          </Checkbox.Indicator>
-        </Checkbox.Root>
-        <label className="text-ps-text-primary/60">Highlight Liveness</label>
-      </div>
+      <Checkbox
+        checked={liveness.active}
+        id="highlight-liveness-checkbox"
+        label="Highlight Liveness"
+        onCheckedChange={(active) => setLiveness({ ...liveness, active })}
+      />
       {liveness.active ? (
         <RadioGroup.Root
           className="ml-4 flex flex-col gap-2"
