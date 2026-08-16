@@ -12,12 +12,12 @@
 // change; we recommend that you avoid relying on it for production work at this time.
 
 // On linux, you can compile this tutorial and run it like so:
-// g++ lesson_23*.cpp -g -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_23 -std=c++17
-// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_23
+// g++ lesson_23*.cpp -g -I <path/to/include> -I <path/to/tools> -L <path/to/lib> -lHalide $(pkg-config --cflags --libs libpng libjpeg) -lpthread -ldl -o lesson_23 -std=c++17
+// LD_LIBRARY_PATH=<path/to/lib> ./lesson_23
 
 // On macOS:
-// g++ lesson_23*.cpp -g -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide -o lesson_23 -std=c++17
-// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_23
+// g++ lesson_23*.cpp -g -I <path/to/include> -I <path/to/tools> -L <path/to/lib> -lHalide $(pkg-config --cflags --libs libpng libjpeg) -o lesson_23 -std=c++17
+// DYLD_LIBRARY_PATH=<path/to/lib> ./lesson_23
 
 #include "Halide.h"
 #include <algorithm>

@@ -6,14 +6,14 @@
 
 // On linux or macOS, you can compile and run it like so:
 
-// g++ lesson_16_rgb_generate.cpp <path/to/tools/halide_image_io.h>/GenGen.cpp -g -std=c++17 -fno-rtti -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_16_generate
-// export LD_LIBRARY_PATH=<path/to/libHalide.so>   # For linux
-// export DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> # For macOS
+// g++ lesson_16_rgb_generate.cpp <path/to/tools>/GenGen.cpp -g -std=c++17 -fno-rtti -I <path/to/include> -L <path/to/lib> -lHalide -lpthread -ldl -o lesson_16_generate
+// export LD_LIBRARY_PATH=<path/to/lib>   # For linux
+// export DYLD_LIBRARY_PATH=<path/to/lib> # For macOS
 // ./lesson_16_generate -g brighten -o . -f brighten_planar      target=host layout=planar
 // ./lesson_16_generate -g brighten -o . -f brighten_interleaved target=host layout=interleaved
 // ./lesson_16_generate -g brighten -o . -f brighten_either      target=host layout=either
 // ./lesson_16_generate -g brighten -o . -f brighten_specialized target=host layout=specialized
-// g++ lesson_16_rgb_run.cpp brighten_*.o -ldl -lpthread -o lesson_16_run
+// g++ lesson_16_rgb_run.cpp brighten_*.a -std=c++17 -I <path/to/include> -I <path/to/tools> -ldl -lpthread -o lesson_16_run
 // ./lesson_16_run
 
 #include "Halide.h"
