@@ -1,7 +1,7 @@
 #include "Simplify_Internal.h"
 #include "Substitute.h"
 
-#include <unordered_set>
+#include <unordered_map>
 
 namespace Halide {
 namespace Internal {
@@ -12,33 +12,51 @@ using std::vector;
 namespace {
 
 class FindVarUses : public IRVisitor {
-    std::unordered_set<std::string> &unused_vars;
+    // Tracks how often each name of interest is used. An entry that's still
+    // false has not been used at all. An entry that's true has been used
+    // exactly once. A name that's been erased is used more than once.
+    std::unordered_map<std::string, bool> &var_uses;
 
-    void visit(const Variable *var) override {
-        unused_vars.erase(var->name);
+    void note(const std::string &name) {
+        auto it = var_uses.find(name);
+        if (it == var_uses.end()) {
+            return;
+        }
+        if (!it->second) {
+            it->second = true;
+        } else {
+            var_uses.erase(it);
+        }
     }
 
+    void visit(const Variable *var) override {
+        note(var->name);
+    }
+
+    // Loads and stores name a buffer, not a Variable, so there's no node to
+    // substitute a value into. Erase such names entirely - they're used, and
+    // they can't be inlined.
     void visit(const Load *op) override {
-        if (!unused_vars.empty()) {
-            unused_vars.erase(op->name);
+        if (!var_uses.empty()) {
+            var_uses.erase(op->name);
             IRVisitor::visit(op);
         }
     }
 
     void visit(const Store *op) override {
-        if (!unused_vars.empty()) {
-            unused_vars.erase(op->name);
+        if (!var_uses.empty()) {
+            var_uses.erase(op->name);
             IRVisitor::visit(op);
         }
     }
 
     void visit(const Block *op) override {
-        // Early out at Block nodes if we've already seen every name we're
-        // interested in. In principle we could early-out at every node, but
-        // blocks, loads, and stores seem to be enough.
-        if (!unused_vars.empty()) {
+        // Early out at Block nodes if there's nothing left to learn. In
+        // principle we could early-out at every node, but blocks, loads, and
+        // stores seem to be enough.
+        if (!var_uses.empty()) {
             op->first.accept(this);
-            if (!unused_vars.empty()) {
+            if (!var_uses.empty()) {
                 op->rest.accept(this);
             }
         }
@@ -47,16 +65,17 @@ class FindVarUses : public IRVisitor {
     using IRVisitor::visit;
 
 public:
-    FindVarUses(std::unordered_set<std::string> &unused_vars)
-        : unused_vars(unused_vars) {
+    FindVarUses(std::unordered_map<std::string, bool> &var_uses)
+        : var_uses(var_uses) {
     }
 };
 
 template<typename StmtOrExpr>
-void find_var_uses(const StmtOrExpr &x, std::unordered_set<std::string> &unused_vars) {
-    FindVarUses counter(unused_vars);
+void find_var_uses(const StmtOrExpr &x, std::unordered_map<std::string, bool> &var_uses) {
+    FindVarUses counter(var_uses);
     x.accept(&counter);
 }
+
 
 }  // namespace
 
@@ -249,16 +268,17 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *info) {
 
     result = mutate_let_body(result, info);
 
-    // TODO: var_info and unused_vars are pretty redundant; however, at the time
+    // TODO: var_info and var_uses are pretty redundant; however, at the time
     // of writing, both cover cases that the other does not:
     // - var_info prevents duplicate lets from being generated, even
     //   from different Frame objects.
-    // - unused_vars avoids dead lets being generated in cases where vars are
+    // - var_uses avoids dead lets being generated in cases where vars are
     //   seen as used by var_info, and then later removed.
 
-    std::unordered_set<std::string> unused_vars(frames.size());
-    // Insert everything we think *might* be used, and then visit the body,
-    // removing things from the set as we find uses of them.
+    std::unordered_map<std::string, bool> var_uses(frames.size());
+    // Insert everything we think *might* be used, and then visit the body.
+    // A name still mapping to false is unused, one mapping to true is used
+    // exactly once, and one that's been erased is used more than that.
     for (auto &f : frames) {
         f.info = var_info.get(f.op->name);
         // Drop any reference to new_var held by the replacement expression so
@@ -272,14 +292,50 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *info) {
         var_info.pop(f.op->name);
         if (f.info.old_uses) {
             internal_assert(f.info.new_uses == 0);
-            unused_vars.insert(f.op->name);
+            var_uses.emplace(f.op->name, false);
         } else if (f.info.new_uses && f.new_value.defined()) {
-            unused_vars.insert(f.new_name);
+            var_uses.emplace(f.new_name, false);
         }
     }
-    find_var_uses(result, unused_vars);
+    // Substituting into a Stmt would move the value's evaluation later, past
+    // whatever happens in between, so only Exprs get substituted.
+    constexpr bool substitute_single_uses = std::is_same_v<Body, Expr>;
 
-    for (const auto &frame : reverse_view(frames)) {
+    find_var_uses(result, var_uses);
+
+    // Bindings for the lets we dropped in favour of inlining the value. They
+    // stay in scope until this function returns.
+    vector<ScopedBinding<VarInfo>> substituted;
+
+    // An entry that's absent from var_uses is used more than once, one mapping
+    // to true is used exactly once, and one mapping to false is unused. Inner
+    // frames have already been dealt with, and a let value can only refer to
+    // names bound outside it, so by the time a frame is reached its counts are
+    // final.
+    //
+    // An unused name loses its let. A name used exactly once loses it too, and
+    // gets inlined at that single use instead.
+    auto handle_let = [&](const std::string &name, const Expr &value) {
+        auto it = var_uses.find(name);
+        if (it != var_uses.end() && !it->second) {
+            // Unused. The value doesn't survive, so the names it uses don't
+            // count as used.
+            return;
+        }
+        if (substitute_single_uses && it != var_uses.end()) {
+            VarInfo replacement_info;
+            replacement_info.old_uses = 0;
+            replacement_info.new_uses = 0;
+            replacement_info.replacement = value;
+            substituted.emplace_back(var_info, name, std::move(replacement_info));
+        } else {
+            result = LetOrLetStmt::make(name, value, result);
+        }
+        // The value survives, so the names it uses are used.
+        find_var_uses(value, var_uses);
+    };
+
+    for (auto &frame : reverse_view(frames)) {
         if (frame.value_bounds_tracked) {
             bounds_and_alignment_info.pop(frame.op->name);
         }
@@ -287,16 +343,12 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *info) {
             bounds_and_alignment_info.pop(frame.new_name);
         }
 
-        if (frame.new_value.defined() && (frame.info.new_uses > 0 && !unused_vars.count(frame.new_name))) {
-            // The new name/value may be used
-            result = LetOrLetStmt::make(frame.new_name, frame.new_value, result);
-            find_var_uses(frame.new_value, unused_vars);
+        if (frame.new_value.defined() && frame.info.new_uses > 0) {
+            handle_let(frame.new_name, frame.new_value);
         }
 
-        if (frame.info.old_uses > 0 && !unused_vars.count(frame.op->name)) {
-            // The old name is still in use. We'd better keep it as well.
-            result = LetOrLetStmt::make(frame.op->name, frame.value, result);
-            find_var_uses(frame.value, unused_vars);
+        if (frame.info.old_uses > 0) {
+            handle_let(frame.op->name, frame.value);
         }
 
         const LetOrLetStmt *new_op = result.template as<LetOrLetStmt>();
@@ -305,6 +357,17 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *info) {
             new_op->body.same_as(frame.op->body) &&
             new_op->value.same_as(frame.op->value)) {
             result = frame.op;
+        }
+    }
+
+    if constexpr (substitute_single_uses) {
+        if (!substituted.empty()) {
+            // One re-mutation resolves every replacement, chains included,
+            // because visit(Variable) re-mutates each replacement as it
+            // injects it. The lets that survived are remutated too, because
+            // their values are where some of the uses are. This is the
+            // result we return, so it's the mutation that fills in info.
+            result = mutate(result, info);
         }
     }
 

@@ -2264,8 +2264,29 @@ void check_lets() {
     check(Let::make("x", 0, 0), 0);
 
     // Check that lets inside an evaluate node get lifted
-    check(Evaluate::make(Let::make("x", Call::make(Int(32), "dummy", {3, x, 4}, Call::Extern), Let::make("y", 10, x + y + 2))),
-          LetStmt::make("x", Call::make(Int(32), "dummy", {3, x, 4}, Call::Extern), Evaluate::make(x + 12)));
+    check(Evaluate::make(Let::make("x", Call::make(Int(32), "dummy", {3, b, 4}, Call::Extern), Let::make("y", 10, x * x + y))),
+          LetStmt::make("x", Call::make(Int(32), "dummy", {3, b, 4}, Call::Extern), Evaluate::make(x * x + 10)));
+
+    // A let with a single use is substituted in, even when the value isn't of
+    // a shape that gets pushed inwards piecewise.
+    check(Let::make("a", min(x, y), a + 1), min(x, y) + 1);
+    // Values that get peeled apart are bound under a new name, and that name
+    // gets substituted too when it's only used once.
+    check(Let::make("a", min(x, y) * b, a + 1), min(x, y) * b + 1);
+
+    // Substituting can expose simplifications that were hidden behind the name
+    check(Let::make("a", min(x, y), (min(x, y) + 5) - a), 5);
+
+    // A let with more than one use is kept
+    check(Let::make("a", min(x, y), a * a), Let::make("a", min(x, y), a * a));
+
+    {
+        // Single-use LetStmts are not substituted in. Doing so would move the
+        // value's evaluation later, past whatever happens in between.
+        Expr t = Variable::make(Int(32), "t");
+        Stmt sink = Evaluate::make(Call::make(Int(32), "dummy", {t + 1}, Call::Extern));
+        check(LetStmt::make("t", min(x, y), sink), LetStmt::make("t", min(x, y), sink));
+    }
 }
 
 void check_inv(Expr before) {
