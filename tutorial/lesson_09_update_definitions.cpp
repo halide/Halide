@@ -19,8 +19,8 @@
 #include <arm_neon.h>
 #endif
 
-// We'll also need a clock to do performance testing at the end.
-#include "clock.h"
+// We'll also need a way to time performance at the end.
+#include "halide_benchmark.h"
 
 using namespace Halide;
 
@@ -790,7 +790,7 @@ int main() {
         // Don't include the time required to allocate the output buffer.
         Buffer<uint8_t> c_result(input.width(), input.height());
 
-        double t1 = current_time();
+        auto t1 = benchmark_now();
 
         // Run this one hundred times so we can average the timing results.
         for (int iters = 0; iters < 100; iters++) {
@@ -885,7 +885,7 @@ int main() {
             }
         }
 
-        double t2 = current_time();
+        auto t2 = benchmark_now();
 
         // Now run the Halide version again without the
         // jit-compilation overhead. Also run it one hundred times.
@@ -893,7 +893,7 @@ int main() {
             spread.realize(halide_result);
         }
 
-        double t3 = current_time();
+        auto t3 = benchmark_now();
 
         // Report the timings. On my machine they both take about 3ms
         // for the 4-megapixel input (fast!), which makes sense,
@@ -901,7 +901,8 @@ int main() {
         // parallelization strategy. However I find the Halide easier
         // to read, write, debug, modify, and port.
         printf("Halide spread took %f ms. C equivalent took %f ms\n",
-               (t3 - t2) / 100, (t2 - t1) / 100);
+               1000 * benchmark_duration_seconds(t2, t3) / 100,
+               1000 * benchmark_duration_seconds(t1, t2) / 100);
 
         // Check the results match:
         for (int y = 0; y < input.height(); y++) {
