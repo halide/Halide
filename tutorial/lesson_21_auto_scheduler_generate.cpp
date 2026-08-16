@@ -1,4 +1,4 @@
-// Halide tutorial lesson 21: Auto-Scheduler
+// Halide tutorial lesson 21: Auto-Scheduler: generating a schedule
 
 // So far we have written Halide schedules by hand, but it is also possible to
 // ask Halide to suggest a reasonable schedule. We call this auto-scheduling.

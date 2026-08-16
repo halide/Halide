@@ -1,4 +1,4 @@
-// Halide tutorial lesson 16: RGB images and memory layouts part 1
+// Halide tutorial lesson 16: RGB images and memory layouts: compiling the pipeline
 
 // This lesson demonstrates how to feed Halide RGB images in
 // interleaved or planar format, and how to write code optimized for

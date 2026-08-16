@@ -1,4 +1,4 @@
-// Halide tutorial lesson 15: Generators part 1
+// Halide tutorial lesson 15: Generators: writing a generator
 
 // This lesson demonstrates how to encapsulate Halide pipelines into
 // reusable components called generators.
