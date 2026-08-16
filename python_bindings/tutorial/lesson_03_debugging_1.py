@@ -5,10 +5,6 @@
 # This lesson demonstrates how to inspect what the Halide compiler is
 # producing.
 
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_03_debugging_1
-# in a shell with the current directory at python_bindings/
-
 import halide as hl
 
 

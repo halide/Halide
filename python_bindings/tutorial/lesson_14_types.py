@@ -4,11 +4,6 @@
 
 # This lesson more precisely describes Halide's type system.
 
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_14_types
-# in a shell with the current directory at python_bindings/
-
-
 import halide as hl
 
 

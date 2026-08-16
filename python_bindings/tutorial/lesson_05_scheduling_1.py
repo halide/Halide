@@ -6,9 +6,6 @@
 # evaluate pixels in a hl.Func, including vectorization,
 # parallelization, unrolling, and tiling.
 
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_05_scheduling_1
-# in a shell with the current directory at python_bindings/
 import halide as hl
 
 

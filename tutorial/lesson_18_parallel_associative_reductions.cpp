@@ -11,12 +11,6 @@
 // g++ lesson_18*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_18 -std=c++17
 // DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_18
 
-// If you have the entire Halide source tree, you can also build it by
-// running:
-//    make tutorial_lesson_18_parallel_associative_reductions
-// in a shell with the current directory at the top of the halide
-// source tree.
-
 #include "Halide.h"
 #include <cstdio>
 #include <random>

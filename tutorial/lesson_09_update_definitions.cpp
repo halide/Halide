@@ -8,12 +8,6 @@
 // g++ lesson_09*.cpp -g -std=c++17 -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide `libpng-config --cflags --ldflags` -ljpeg -fopenmp -o lesson_09
 // DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_09
 
-// If you have the entire Halide source tree, you can also build it by
-// running:
-//    make tutorial_lesson_09_update_definitions
-// in a shell with the current directory at the top of the halide
-// source tree.
-
 #include "Halide.h"
 #include <cmath>
 #include <cstdio>

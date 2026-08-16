@@ -5,10 +5,6 @@
 # This lesson demonstrates how to evaluate a hl.Func over a domain that
 # does not start at (0, 0).
 
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_06_realizing_over_shifted_domains
-# in a shell with the current directory at python_bindings/
-
 import halide as hl
 
 

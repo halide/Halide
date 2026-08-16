@@ -11,12 +11,6 @@
 // g++ lesson_15*.cpp <path/to/tools/halide_image_io.h>/GenGen.cpp -g -std=c++17 -fno-rtti -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_15_generate
 // bash lesson_15_generators_usage.sh
 
-// If you have the entire Halide source tree, you can also build it by
-// running:
-//    make tutorial_lesson_15_generators
-// in a shell with the current directory at the top of the halide
-// source tree.
-
 #include "Halide.h"
 #include <cstdio>
 

@@ -4,10 +4,6 @@
 
 # This lesson demonstrates how to use Halide as a cross-compiler.
 
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_11_cross_compilation
-# in a shell with the current directory at python_bindings/
-
 import halide as hl
 from struct import unpack
 

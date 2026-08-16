@@ -11,11 +11,6 @@
 // g++ lesson_20*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_20 -std=c++17
 // DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_20
 
-// If you have the entire Halide source tree, you can also build it by
-// running:
-//    make tutorial_lesson_20_cloning_funcs
-// in a shell at the top of the halide source tree.
-
 // The only Halide header file you need is Halide.h. It includes all of Halide.
 #include "Halide.h"
 

@@ -4,10 +4,6 @@
 
 # This lesson demonstrates how express multi-stage pipelines.
 
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_07_multi_stage_pipelines
-# in a shell with the current directory at python_bindings/
-
 import halide as hl
 
 import halide.imageio
