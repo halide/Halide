@@ -15,7 +15,7 @@
 // g++ lesson_23*.cpp -g -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_23 -std=c++17
 // LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_23
 
-// On os x:
+// On macOS:
 // g++ lesson_23*.cpp -g -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide -o lesson_23 -std=c++17
 // DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_23
 
