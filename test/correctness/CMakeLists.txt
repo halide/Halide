@@ -45,6 +45,7 @@ tests(
     cascaded_filters.cpp
     cast.cpp
     cast_handle.cpp
+    change_type.cpp
     chunk.cpp
     chunk_sharing.cpp
     circular_reference_leak.cpp
@@ -306,6 +307,7 @@ tests(
     respect_input_constraint_in_bounds_inference.cpp
     reuse_stack_alloc.cpp
     round.cpp
+    run_process.cpp
     runtime_prefixes.cpp
     saturating_casts.cpp
     scatter.cpp

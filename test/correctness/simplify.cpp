@@ -440,6 +440,12 @@ void check_algebra() {
     check((x * 8 - y) % 4, (-y) % 4);
     check((x + 31) % 32 == 31, x % 32 == 0);
     check((x - 1) % 32 == 31, x % 32 == 0);
+    // A remainder lies in [0, |c|), for negative divisors too
+    check((x + 3) % 14 == 1, x % 14 == 12);
+    check((x + 3) % -14 == 1, x % -14 == 12);
+    check((x + 3) % 14 == -1, f);
+    check((x + 3) % 14 == 20, f);
+    check((x + 3) % -14 == -1, f);
 
     // Check an optimization important for fusing dimensions
     check((x / 3) * 3 + x % 3, x);
@@ -1144,8 +1150,17 @@ void check_bounds() {
     check(select(x < y, (select(x < y, w, x) + 3) / 2, z), select(x < y, (w + 3) / 2, z));
     check(select(x < y, z, select(x < y, w, x) / 2), select(x < y, z, x / 2));
     check(min(select(x < y, z, w), select(x < y, x, z) / 2), select(x < y, min(x / 2, z), min(z / 2, w)));
+    check(max(select(x < y, z, w), select(x < y, x, z) / 2), select(x < y, max(x / 2, z), max(z / 2, w)));
 
     check(min(x + 1, y) - min(x, y - 1), 1);
+
+    // A clamp at one bound and a shifted clamp at the same effective bound.
+    // The clamps coincide, so the shift can be pushed inside.
+    check(min(max(x, 3), max(y, -1) + 4), max(min(y + 4, x), 3));
+    check(max(min(x, 3), min(y, -1) + 4), min(max(y + 4, x), 3));
+    // The condition c0 == c1 + c2 is necessary; these must not fire.
+    check(min(max(x, 3), max(y, -1) + 5), min(max(x, 3), max(y, -1) + 5));
+    check(max(min(x, 3), min(y, -1) + 5), max(min(x, 3), min(y, -1) + 5));
     check(max(x + 1, y) - max(x, y - 1), 1);
     check(min(x + 1, y) - min(y - 1, x), 1);
     check(max(x + 1, y) - max(y - 1, x), 1);

@@ -10,7 +10,9 @@
 #include <cmath>
 #include <map>
 #include <optional>
+#include <utility>
 
+#include "Bounds.h"
 #include "ConstantInterval.h"
 #include "Expr.h"
 #include "Scope.h"
@@ -49,6 +51,13 @@ std::optional<int> is_const_power_of_two_integer(const Expr &e);
 std::optional<int> is_const_power_of_two_integer(uint64_t);
 std::optional<int> is_const_power_of_two_integer(int64_t);
 // @}
+
+/** If `e` is a binary operator, return its two operands; otherwise return std::nullopt. */
+std::optional<std::pair<Expr, Expr>> as_binary_operands(const Expr &e);
+
+/** Build a binary expression of node type `t` from operands `a` and `b`, using
+ * the corresponding Op::make function. */
+Expr make_binary_op(IRNodeType t, const Expr &a, const Expr &b);
 
 /** Is the expression a const (as defined by is_const), and also
  * strictly greater than zero (in all lanes, if a vector expression) */
@@ -152,16 +161,19 @@ Expr const_false(int lanes = 1);
 /** Attempt to cast an expression to a smaller type while provably not losing
  * information. If it can't be done, return an undefined Expr.
  *
- * Optionally accepts a scope giving the constant bounds of any variables, and a
+ * Optionally accepts a scope giving the constant bounds of any variables, a
  * map that gives the constant bounds of exprs already analyzed to avoid redoing
- * work across many calls to lossless_cast. It is not safe to use this optional
- * map in contexts where the same Expr object may take on a different value. For
- * example: (let x = 4 in some_expr_object) + (let x = 5 in
+ * work across many calls to lossless_cast, and previously-computed
+ * FuncValueBounds for any Halide Call nodes encountered (see
+ * constant_integer_bounds() in ConstantBounds.h). It is not safe to use the
+ * cache map in contexts where the same Expr object may take on a different
+ * value. For example: (let x = 4 in some_expr_object) + (let x = 5 in
  * the_same_expr_object)).  It is safe to use it after uniquify_variable_names
  * has been run. */
 Expr lossless_cast(Type t, Expr e,
                    const Scope<ConstantInterval> &scope = Scope<ConstantInterval>::empty_scope(),
-                   std::map<Expr, ConstantInterval, ExprCompare> *cache = nullptr);
+                   std::map<Expr, ConstantInterval, ExprCompare> *cache = nullptr,
+                   const FuncValueBounds *func_bounds = nullptr);
 
 /** Attempt to negate x without introducing new IR and without overflow.
  * If it can't be done, return an undefined Expr. */
