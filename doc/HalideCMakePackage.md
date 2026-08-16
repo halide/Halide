@@ -10,33 +10,7 @@ in all its examples. To learn more about CMake, consult the
 [documentation][cmake-docs] and engage with the community on the
 [CMake Discourse][cmake-discourse].
 
-<!-- TOC -->
-
-- [Using Halide from your CMake build](#using-halide-from-your-cmake-build)
-- [A basic CMake project](#a-basic-cmake-project)
-  - [JIT mode](#jit-mode)
-  - [AOT mode](#aot-mode)
-    - [Autoschedulers](#autoschedulers)
-    - [RunGenMain](#rungenmain)
-- [Halide package documentation](#halide-package-documentation)
-  - [Components](#components)
-  - [Variables](#variables)
-  - [Imported targets](#imported-targets)
-  - [Functions](#functions)
-    - [`add_halide_generator`](#add_halide_generator)
-    - [`add_halide_library`](#add_halide_library)
-    - [`add_halide_python_extension_library`](#add_halide_python_extension_library)
-    - [`add_halide_runtime`](#add_halide_runtime)
-- [Cross compiling](#cross-compiling)
-  - [Use `add_halide_generator`](#use-add_halide_generator)
-  - [Use a super-build](#use-a-super-build)
-  - [Use `ExternalProject` directly](#use-externalproject-directly)
-  - [Use an emulator or run on device](#use-an-emulator-or-run-on-device)
-  - [Bypass CMake](#bypass-cmake)
-
-<!-- TOC -->
-
-# A basic CMake project
+## A basic CMake project
 
 There are two main ways to use Halide in your application: as a **JIT compiler**
 for dynamic pipelines or an **ahead-of-time (AOT) compiler** for static
@@ -85,7 +59,7 @@ $ cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=%V
 If `find_package` cannot find Halide, set `CMAKE_PREFIX_PATH` to the Halide
 installation directory.
 
-## JIT mode
+### JIT mode
 
 To use Halide in JIT mode (like the [tutorials][halide-tutorials] do, for
 example), you can simply link to `Halide::Halide`.
@@ -99,7 +73,7 @@ target_link_libraries(my_halide_app PRIVATE Halide::Halide)
 Then `Halide.h` will be available to your code and everything should just work.
 That's it!
 
-## AOT mode
+### AOT mode
 
 Using Halide in AOT mode is more complicated so we'll walk through it step by
 step. Note that this only applies to Halide generators, so it might be useful to
@@ -175,7 +149,7 @@ This will even work correctly when different combinations of targets are
 specified for each halide library. A "greatest common denominator" target will
 be chosen that is compatible with all of them (or the build will fail).
 
-### Autoschedulers
+#### Autoschedulers
 
 When the autoschedulers are included in the release package, they are very
 simple to apply to your own generators. For example, we could update the
@@ -187,7 +161,7 @@ add_halide_library(my_second_generator FROM my_generators
                    AUTOSCHEDULER Halide::Adams2019)
 ```
 
-### RunGenMain
+#### RunGenMain
 
 Halide provides a generic driver for generators to be used during development
 for benchmarking and debugging. Suppose you have a generator executable called
@@ -209,14 +183,14 @@ Then you can run, debug, and benchmark your generator through the `runner`
 executable. Learn how to interact with these executables in
 [RunGen.md](./RunGen.md).
 
-# Halide package documentation
+## Halide package documentation
 
 Halide provides a CMake _package configuration_ module. The intended way to use
 the CMake build is to run `find_package(Halide ...)` in your `CMakeLists.txt`
 file. Closely read the [`find_package` documentation][find_package] before
 proceeding.
 
-## Components
+### Components
 
 The Halide package script understands a handful of optional components when
 loading the package.
@@ -293,7 +267,7 @@ conflict (CMake can only load one flavor of `Halide::Halide` per directory
 scope) and fails cleanly with a descriptive error rather than silently keeping
 whichever flavor loaded first.
 
-## Variables
+### Variables
 
 Variables that control package loading:
 
@@ -326,7 +300,7 @@ Variables that control package behavior:
 | `Halide_NO_DEFAULT_FLAGS` | Off by default. When enabled, suppresses recommended compiler flags that would be added by `add_halide_generator`                                                                                              |
 | `Halide_CACHE_DIR`        | Defaults to `$ENV{HL_CACHE_DIR}`. When set, routes `HL_CACHE_DIR` to every generator/GenRT invocation so it can reuse cached artifacts instead of recompiling. See [doc/GeneratorCache.md](GeneratorCache.md). |
 
-## Imported targets
+### Imported targets
 
 Halide defines the following targets that are available to users:
 
@@ -361,12 +335,12 @@ These come from a separate `HalideAutoschedulers` package (distinct from
 `add_halide_library(... AUTOSCHEDULER ...)` needs one -- including while
 cross-compiling.
 
-## Functions
+### Functions
 
 The Halide package provides several useful functions for dealing with AOT
 compilation steps.
 
-### `add_halide_generator`
+#### `add_halide_generator`
 
 This function aids in creating cross-compilable builds that use Halide
 generators.
@@ -427,7 +401,7 @@ will be a shared library of the form `<target>_pystub.<soabi>.so`, where
 `cpython-310-darwin` for Python 3.10 on macOS). See [Python.md](Python.md) for
 examples of use.
 
-### `add_halide_library`
+#### `add_halide_library`
 
 This is the main function for managing generators in AOT compilation. The full
 signature follows:
@@ -567,7 +541,7 @@ When `NO_THREADS` is passed, the library targets will not depend on
 When `NO_DL_LIBS` is passed, the library targets will not depend on
 `${CMAKE_DL_LIBS}`. It is your responsibility to link to an equivalent library.
 
-### `add_halide_python_extension_library`
+#### `add_halide_python_extension_library`
 
 This function wraps the outputs of one or more `add_halide_library` targets with
 glue code to produce a Python Extension library.
@@ -589,7 +563,7 @@ The result will be a shared library of the form `<target>.<soabi>.so`, where
 `<soabi>` describes the specific Python version and platform (e.g.,
 `cpython-310-darwin` for Python 3.10 on macOS.)
 
-### `add_halide_runtime`
+#### `add_halide_runtime`
 
 This function generates a library containing a Halide runtime. Most user code
 will never need to use this, as `add_halide_library()` will call it for you if
@@ -610,7 +584,7 @@ The `TARGETS`, `NO_THREADS`, and `NO_DL_LIBS` arguments have identical semantics
 to the argument of the same name for
 [ `add_halide_library`](#add_halide_library).
 
-# Cross compiling
+## Cross compiling
 
 Cross-compiling in CMake can be tricky, since CMake doesn't easily support
 compiling for both the host platform and the cross platform within the same
@@ -619,7 +593,7 @@ designed to run on the host platform. Each project will be set up differently
 and have different requirements, but here are some suggestions for effective use
 of CMake in these scenarios.
 
-## Use `add_halide_generator`
+### Use `add_halide_generator`
 
 If you are writing new programs that use Halide, you might wish to use
 `add_halide_generator`. When using this helper, you are expected to build your
@@ -645,7 +619,7 @@ $ cmake -G Ninja -S . -B build-target --toolchain /path/to/target-tc.cmake \
 $ cmake --build build-target
 ```
 
-## Use a super-build
+### Use a super-build
 
 A CMake super-build consists of breaking down a project into subprojects that
 are isolated by [toolchain][cmake-toolchains]. The basic structure is to have an
@@ -661,7 +635,7 @@ increase in complexity over a typical CMake project.
 
 This is very compatible with the `add_halide_generator` strategy above.
 
-## Use `ExternalProject` directly
+### Use `ExternalProject` directly
 
 A lighter weight alternative to the above is to use
 [`ExternalProject`][externalproject] directly in your parent build. Configure
@@ -675,7 +649,7 @@ is difficult since predicting the names and locations of your binaries across
 all possible platform and CMake project generators is difficult. In particular,
 it is hard to predict executable extensions in cross-OS builds.
 
-## Use an emulator or run on device
+### Use an emulator or run on device
 
 The [`CMAKE_CROSSCOMPILING_EMULATOR`][cmake_crosscompiling_emulator] variable
 allows one to specify a command _prefix_ to run a target-system binary on the
@@ -685,7 +659,7 @@ generator executable, runs it on the device and copies back the results.
 Another option is to install `qemu-user-static` to transparently emulate the
 cross-built generator.
 
-## Bypass CMake
+### Bypass CMake
 
 The previous two options ensure that the targets generated by
 `add_halide_library` will be _normal_ static libraries. This approach does not

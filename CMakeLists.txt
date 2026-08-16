@@ -222,7 +222,6 @@ Halide_feature(Halide_ENABLE_EXCEPTIONS "Enable exceptions in Halide" ON)
 Halide_feature(Halide_ENABLE_RTTI "Enable RTTI in Halide" ON DEPENDS LLVM_ENABLE_RTTI)
 
 Halide_feature(WITH_AUTOSCHEDULERS "Build the Halide autoschedulers" ON DEPENDS BUILD_SHARED_LIBS)
-Halide_feature(WITH_DOCS "Halide's Doxygen documentation" OFF)
 Halide_feature(WITH_PACKAGING "Halide's CMake package install rules" TOP_LEVEL)
 Halide_feature(
     WITH_PYTHON_BINDINGS "Halide's native Python module (not the whole pip package)" ON
@@ -237,6 +236,11 @@ Halide_feature(
 )
 Halide_feature(WITH_TESTS "Halide's unit test suite" TOP_LEVEL)
 Halide_feature(WITH_TUTORIALS "Halide's tutorial code" TOP_LEVEL)
+Halide_feature(
+    WITH_DOCS "Halide's documentation (Sphinx, with Breathe for the Doxygen-derived API reference)"
+    OFF
+    DEPENDS WITH_TUTORIALS AND WITH_PYTHON_BINDINGS
+)
 Halide_feature(
     WITH_UTILS "Optional utility programs for Halide, including HalideTraceViz" TOP_LEVEL
 )
