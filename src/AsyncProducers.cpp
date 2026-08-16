@@ -507,11 +507,7 @@ protected:
             body = mutate(op->body);
             // Peel off any enclosing let expressions from the value
             vector<pair<string, Expr>> lets;
-            Expr value = op->value;
-            while (const Let *l = value.as<Let>()) {
-                lets.emplace_back(l->name, l->value);
-                value = l->body;
-            }
+            Expr value = peel_lets(op->value, &lets);
             const Call *call = value.as<Call>();
             if (call && call->name == "halide_make_semaphore") {
                 internal_assert(call->args.size() == 1);
@@ -525,9 +521,7 @@ protected:
                 body = op->with(sema_allocate, body);
 
                 // Re-wrap any other lets
-                for (const auto &[var, value] : reverse_view(lets)) {
-                    body = LetStmt::make(var, value, std::move(body));
-                }
+                body = rewrap_all_lets(body, lets);
             }
         } else {
             body = mutate(frames.back()->body);

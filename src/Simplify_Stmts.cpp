@@ -471,21 +471,14 @@ Stmt Simplify::visit(const Evaluate *op) {
 
     // Rewrite Lets inside an evaluate as LetStmts outside the Evaluate.
     vector<pair<string, Expr>> lets;
-    while (const Let *let = value.as<Let>()) {
-        lets.emplace_back(let->name, let->value);
-        value = let->body;
-    }
+    value = peel_lets(value, &lets);
 
     if (value.same_as(op->value)) {
         internal_assert(lets.empty());
         return op;
     } else {
         // Rewrap the lets outside the evaluate node
-        Stmt stmt = Evaluate::make(value);
-        for (const auto &[var, value] : reverse_view(lets)) {
-            stmt = LetStmt::make(var, value, stmt);
-        }
-        return stmt;
+        return rewrap_all_lets(Evaluate::make(value), lets);
     }
 }
 

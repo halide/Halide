@@ -332,14 +332,36 @@ inline double div_imp<double>(double a, double b) {
     return a / b;
 }
 
-/** Strip any Let nodes off the front of an Expr, appending the name and value
- * of each to `lets` from outermost to innermost, and return what they wrapped.
- * Analysing an Expr that CSE or LICM has lifted subexpressions out of means
- * getting past the Lets first. Substituting them back in also does that, but it
- * repeats each value at every use, which is what lifting them out avoided.
- * Callers rewrap the Lets around whatever they build, or, in codegen, put them
- * in scope while they build it. */
+/** Strip any Let nodes off the front of an Expr, or LetStmt nodes off the front
+ * of a Stmt, appending the name and value of each to `lets` from outermost to
+ * innermost, and return what they wrapped. Analysing an Expr or Stmt that CSE
+ * or LICM has lifted subexpressions out of means getting past the Lets first.
+ * Substituting them back in also does that, but it repeats each value at every
+ * use, which is what lifting them out avoided. Callers rewrap the Lets around
+ * whatever they build (see rewrap_used_lets and rewrap_all_lets), or, in
+ * codegen, put them in scope while they build it. */
+// @{
 Expr peel_lets(const Expr &e, std::vector<std::pair<std::string, Expr>> *lets);
+Stmt peel_lets(const Stmt &s, std::vector<std::pair<std::string, Expr>> *lets);
+// @}
+
+/** Rewrap a list of lets produced by peel_lets around a new body, skipping any
+ * the body doesn't use. Conservatively treats every name the body mentions as a
+ * possible reference to a peeled let, even where an inner let shadows it.
+ * Gathers those names once and updates them as it goes, so it takes time
+ * linearithmic in the size of the result rather than the quadratic time taken
+ * by testing each let in turn with expr_uses_var. */
+// @{
+Expr rewrap_used_lets(const Expr &body, const std::vector<std::pair<std::string, Expr>> &lets);
+Stmt rewrap_used_lets(const Stmt &body, const std::vector<std::pair<std::string, Expr>> &lets);
+// @}
+
+/** Rewrap a list of lets produced by peel_lets around a new body, without
+ * checking whether the body uses them. */
+// @{
+Expr rewrap_all_lets(const Expr &body, const std::vector<std::pair<std::string, Expr>> &lets);
+Stmt rewrap_all_lets(const Stmt &body, const std::vector<std::pair<std::string, Expr>> &lets);
+// @}
 
 /** Return an Expr that is identical to the input Expr, but with
  * all calls to likely() and likely_if_innermost() removed. */
