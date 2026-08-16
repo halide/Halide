@@ -9,9 +9,10 @@
 // DYLD_LIBRARY_PATH=<path/to/lib> ./lesson_09
 
 #include "Halide.h"
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
-#include <thread>
+#include <future>
 #include <vector>
 
 // We're going to be using ARM Neon intrinsics later on in this lesson.
@@ -21,6 +22,9 @@
 
 // We'll also need a way to time performance at the end.
 #include "halide_benchmark.h"
+
+// And a thread pool to run the C equivalent's parallel for loop.
+#include "halide_thread_pool.h"
 
 using namespace Halide;
 
@@ -784,105 +788,113 @@ int main() {
 
 // The C equivalent is fairly involved. This time I want to time
 // both the Halide version and the C version, so I'll use ARM
-// Neon intrinsics for the vectorization, and std::thread to do
-// the parallel for loop.
+// Neon intrinsics for the vectorization, and Halide::Tools::ThreadPool
+// to do the parallel for loop.
 #ifdef __ARM_NEON
         // Don't include the time required to allocate the output buffer.
         Buffer<uint8_t> c_result(input.width(), input.height());
+
+        int y_tiles = (input.height() + 31) / 32;
+
+        // The body of the parallel for loop over y tiles, run once per
+        // (iteration, tile) pair by whichever pool thread picks up that job.
+        auto run_tile = [&](int yo) {
+            int y_base = std::min(yo * 32, input.height() - 32);
+
+            // Compute clamped in a circular buffer of size 8
+            // (smallest power of two greater than 5). Each thread
+            // needs its own allocation, so it must occur here.
+
+            size_t clamped_width = input.width() + 4;
+            std::vector<uint8_t> clamped_storage(clamped_width * 8);
+
+            for (int yi = 0; yi < 32; yi++) {
+                int y = y_base + yi;
+
+                uint8_t *output_row = &c_result(0, y);
+
+                // Compute clamped for this scanline, skipping rows
+                // already computed within this slice.
+                int min_y_clamped = (yi == 0) ? (y - 2) : (y + 2);
+                int max_y_clamped = (y + 2);
+                for (int cy = min_y_clamped; cy <= max_y_clamped; cy++) {
+                    // Figure out which row of the circular buffer
+                    // we're filling in using bitmasking:
+                    uint8_t *clamped_row =
+                        &clamped_storage[(cy & 7) * clamped_width];
+
+                    // Figure out which row of the input we're reading
+                    // from by clamping the y coordinate:
+                    int clamped_y = std::min(std::max(cy, 0), input.height() - 1);
+                    uint8_t *input_row = &input(0, clamped_y);
+
+                    // Fill it in with the padding.
+                    for (int x = -2; x < input.width() + 2; x++) {
+                        int clamped_x = std::min(std::max(x, 0), input.width() - 1);
+                        *clamped_row++ = input_row[clamped_x];
+                    }
+                }
+
+                // Now iterate over vectors of x for the pure step of the output.
+                for (int x_vec = 0; x_vec < (input.width() + 15) / 16; x_vec++) {
+                    int x_base = std::min(x_vec * 16, input.width() - 16);
+
+                    // Allocate storage for the minimum and maximum
+                    // helpers. One vector is enough.
+                    uint8x16_t minimum_storage, maximum_storage;
+
+                    // The pure step for the maximum is a vector of zeros
+                    maximum_storage = vdupq_n_u8(0);
+
+                    // The update step for maximum
+                    for (int max_y = y - 2; max_y <= y + 2; max_y++) {
+                        uint8_t *clamped_row =
+                            &clamped_storage[(max_y & 7) * clamped_width];
+                        for (int max_x = x_base - 2; max_x <= x_base + 2; max_x++) {
+                            uint8x16_t v = vld1q_u8(clamped_row + max_x + 2);
+                            maximum_storage = vmaxq_u8(maximum_storage, v);
+                        }
+                    }
+
+                    // The pure step for the minimum is a vector of ones.
+                    minimum_storage = vdupq_n_u8(0xff);
+
+                    // The update step for minimum.
+                    for (int min_y = y - 2; min_y <= y + 2; min_y++) {
+                        uint8_t *clamped_row =
+                            &clamped_storage[(min_y & 7) * clamped_width];
+                        for (int min_x = x_base - 2; min_x <= x_base + 2; min_x++) {
+                            uint8x16_t v = vld1q_u8(clamped_row + min_x + 2);
+                            minimum_storage = vminq_u8(minimum_storage, v);
+                        }
+                    }
+
+                    // Now compute the spread.
+                    uint8x16_t spread = vsubq_u8(maximum_storage, minimum_storage);
+
+                    // Store it.
+                    vst1q_u8(output_row + x_base, spread);
+                }
+            }
+        };
+
+        // The pool's worker threads are created here, once, so that
+        // spawning them isn't included in the timing below.
+        ThreadPool<void> pool;
+        std::vector<std::future<void>> futures;
+        futures.reserve(y_tiles);
 
         auto t1 = benchmark_now();
 
         // Run this one hundred times so we can average the timing results.
         for (int iters = 0; iters < 100; iters++) {
-            int y_tiles = (input.height() + 31) / 32;
-            unsigned num_threads = std::max(1u, std::thread::hardware_concurrency());
-            std::vector<std::thread> workers;
-            for (unsigned t = 0; t < num_threads; t++) {
-                workers.emplace_back([&, t]() {
-                    for (int yo = t; yo < y_tiles; yo += num_threads) {
-                        int y_base = std::min(yo * 32, input.height() - 32);
-
-                        // Compute clamped in a circular buffer of size 8
-                        // (smallest power of two greater than 5). Each thread
-                        // needs its own allocation, so it must occur here.
-
-                        size_t clamped_width = input.width() + 4;
-                        std::vector<uint8_t> clamped_storage(clamped_width * 8);
-
-                        for (int yi = 0; yi < 32; yi++) {
-                            int y = y_base + yi;
-
-                            uint8_t *output_row = &c_result(0, y);
-
-                            // Compute clamped for this scanline, skipping rows
-                            // already computed within this slice.
-                            int min_y_clamped = (yi == 0) ? (y - 2) : (y + 2);
-                            int max_y_clamped = (y + 2);
-                            for (int cy = min_y_clamped; cy <= max_y_clamped; cy++) {
-                                // Figure out which row of the circular buffer
-                                // we're filling in using bitmasking:
-                                uint8_t *clamped_row =
-                                    &clamped_storage[(cy & 7) * clamped_width];
-
-                                // Figure out which row of the input we're reading
-                                // from by clamping the y coordinate:
-                                int clamped_y = std::min(std::max(cy, 0), input.height() - 1);
-                                uint8_t *input_row = &input(0, clamped_y);
-
-                                // Fill it in with the padding.
-                                for (int x = -2; x < input.width() + 2; x++) {
-                                    int clamped_x = std::min(std::max(x, 0), input.width() - 1);
-                                    *clamped_row++ = input_row[clamped_x];
-                                }
-                            }
-
-                            // Now iterate over vectors of x for the pure step of the output.
-                            for (int x_vec = 0; x_vec < (input.width() + 15) / 16; x_vec++) {
-                                int x_base = std::min(x_vec * 16, input.width() - 16);
-
-                                // Allocate storage for the minimum and maximum
-                                // helpers. One vector is enough.
-                                uint8x16_t minimum_storage, maximum_storage;
-
-                                // The pure step for the maximum is a vector of zeros
-                                maximum_storage = vdupq_n_u8(0);
-
-                                // The update step for maximum
-                                for (int max_y = y - 2; max_y <= y + 2; max_y++) {
-                                    uint8_t *clamped_row =
-                                        &clamped_storage[(max_y & 7) * clamped_width];
-                                    for (int max_x = x_base - 2; max_x <= x_base + 2; max_x++) {
-                                        uint8x16_t v = vld1q_u8(clamped_row + max_x + 2);
-                                        maximum_storage = vmaxq_u8(maximum_storage, v);
-                                    }
-                                }
-
-                                // The pure step for the minimum is a vector of ones.
-                                minimum_storage = vdupq_n_u8(0xff);
-
-                                // The update step for minimum.
-                                for (int min_y = y - 2; min_y <= y + 2; min_y++) {
-                                    uint8_t *clamped_row =
-                                        &clamped_storage[(min_y & 7) * clamped_width];
-                                    for (int min_x = x_base - 2; min_x <= x_base + 2; min_x++) {
-                                        uint8x16_t v = vld1q_u8(clamped_row + min_x + 2);
-                                        minimum_storage = vminq_u8(minimum_storage, v);
-                                    }
-                                }
-
-                                // Now compute the spread.
-                                uint8x16_t spread = vsubq_u8(maximum_storage, minimum_storage);
-
-                                // Store it.
-                                vst1q_u8(output_row + x_base, spread);
-                            }
-                        }
-                    }
-                });
+            for (int yo = 0; yo < y_tiles; yo++) {
+                futures.push_back(pool.async(run_tile, yo));
             }
-            for (auto &worker : workers) {
-                worker.join();
+            for (auto &f : futures) {
+                f.get();
             }
+            futures.clear();
         }
 
         auto t2 = benchmark_now();
