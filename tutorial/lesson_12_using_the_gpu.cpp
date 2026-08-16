@@ -6,7 +6,7 @@
 // g++ lesson_12*.cpp -g -std=c++17 -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide `libpng-config --cflags --ldflags` -ljpeg -lpthread -ldl -o lesson_12
 // LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_12
 
-// On os x:
+// On macOS:
 // g++ lesson_12*.cpp -g -std=c++17 -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide `libpng-config --cflags --ldflags` -ljpeg -o lesson_12
 // DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_12
 
@@ -290,7 +290,7 @@ Target find_gpu_target() {
         }
         features_to_try.push_back(Target::OpenCL);
     } else if (target.os == Target::OSX) {
-        // OS X doesn't update its OpenCL drivers, so they tend to be broken.
+        // macOS doesn't update its OpenCL drivers, so they tend to be broken.
         // CUDA would also be a fine choice on machines with NVidia GPUs.
         features_to_try.push_back(Target::Metal);
     } else {

@@ -15,7 +15,7 @@
 // g++ lesson_10*run.cpp lesson_10_halide.a -std=c++17 -I <path/to/Halide.h> -lpthread -ldl -o lesson_10_run
 // ./lesson_10_run
 
-// On os x:
+// On macOS:
 // g++ lesson_10*generate.cpp -g -std=c++17 -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_10_generate
 // DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_10_generate
 // g++ lesson_10*run.cpp lesson_10_halide.a -o lesson_10_run -I <path/to/Halide.h>

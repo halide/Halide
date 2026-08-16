@@ -6,7 +6,7 @@
 // g++ lesson_04*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_04 -std=c++17
 // LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_04
 
-// On os x:
+// On macOS:
 // g++ lesson_04*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_04 -std=c++17
 // DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_04
 
@@ -51,7 +51,7 @@ int main() {
 
         // Now we tell Halide to use a parallel for loop over the y
         // coordinate. On Linux we run this using a thread pool and a task
-        // queue. On OS X we call into grand central dispatch, which does
+        // queue. On macOS we call into grand central dispatch, which does
         // the same thing for us.
         parallel_gradient.parallel(y);
 

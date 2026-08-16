@@ -41,7 +41,7 @@ def main():
 
     # Now we tell Halide to use a parallel for loop over the y
     # coordinate. On linux we run this using a thread pool and a task
-    # queue. On os x we call into grand central dispatch, which does
+    # queue. On macOS we call into grand central dispatch, which does
     # the same thing for us.
     parallel_gradient.parallel(y)
 

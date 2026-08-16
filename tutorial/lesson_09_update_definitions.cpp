@@ -4,7 +4,7 @@
 // g++ lesson_09*.cpp -g -std=c++17 -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide `libpng-config --cflags --ldflags` -ljpeg -lpthread -ldl -fopenmp -o lesson_09
 // LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_09
 
-// On os x (will only work if you actually have g++, not Apple's pretend g++ which is actually clang):
+// On macOS (will only work if you actually have g++, not Apple's pretend g++ which is actually clang):
 // g++ lesson_09*.cpp -g -std=c++17 -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide `libpng-config --cflags --ldflags` -ljpeg -fopenmp -o lesson_09
 // DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_09
 

@@ -7,7 +7,7 @@
 // g++ lesson_15*.cpp <path/to/tools/halide_image_io.h>/GenGen.cpp -g -std=c++17 -fno-rtti -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_15_generate
 // bash lesson_15_generators_usage.sh
 
-// On os x:
+// On macOS:
 // g++ lesson_15*.cpp <path/to/tools/halide_image_io.h>/GenGen.cpp -g -std=c++17 -fno-rtti -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_15_generate
 // bash lesson_15_generators_usage.sh
 

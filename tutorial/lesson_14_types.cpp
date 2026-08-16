@@ -6,7 +6,7 @@
 // g++ lesson_14*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_14 -std=c++17
 // LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_14
 
-// On os x:
+// On macOS:
 // g++ lesson_14*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_14 -std=c++17
 // DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_14
 
