@@ -508,6 +508,10 @@ class ExtractWMMAOperations : public IRMutator {
     // run by every lane of the warp.
     Expr gather_lane;
 
+    // Lets whose value to_fragment has restricted to this lane's share of the
+    // matrix, so that uses of them must be restricted too.
+    Scope<> matrix_lets;
+
     // Every gather is wrapped in a loop over the lanes of a warp by the
     // innermost statement that contains it. Statements nest, so the innermost
     // one is the one whose mutation finishes first.
@@ -707,9 +711,41 @@ class ExtractWMMAOperations : public IRMutator {
             return Max::make(a, b);
         } else if (const Cast *op = e.as<Cast>()) {
             return Cast::make(t, to_fragment(op->value, dest));
+        } else if (const Reinterpret *op = e.as<Reinterpret>()) {
+            // Reinterpreting is per lane, so long as it keeps the lane count.
+            if (op->value.type().lanes() == e.type().lanes()) {
+                return Reinterpret::make(t, to_fragment(op->value, dest));
+            }
         } else if (const Select *op = e.as<Select>()) {
             auto [a, b] = pair(op->true_value, op->false_value);
             return Select::make(to_fragment(op->condition, dest), a, b);
+        } else if (const Call *op = e.as<Call>(); op && is_lanewise(op)) {
+            // A call that computes each lane of its result from the same lane
+            // of its arguments doesn't care either. Arguments that don't cover
+            // the matrix aren't a share of it to take.
+            vector<Expr> args;
+            args.reserve(op->args.size());
+            for (const Expr &arg : op->args) {
+                args.push_back(arg.type().lanes() == e.type().lanes() ?
+                                   to_fragment(arg, dest) :
+                                   arg);
+            }
+            return Call::make(t, op->name, args, op->call_type, op->func,
+                              op->value_index, op->image, op->param);
+        } else if (const Let *op = e.as<Let>()) {
+            // Something the body uses more than once, which the expansion of a
+            // transcendental is full of. If it covers the matrix, take this
+            // lane's share of it here rather than at every use of it.
+            if (op->value.type().lanes() != e.type().lanes()) {
+                return Let::make(op->name, op->value, to_fragment(op->body, dest));
+            }
+            Expr value = to_fragment(op->value, dest);
+            ScopedBinding<> bind(matrix_lets, op->name);
+            return Let::make(op->name, std::move(value), to_fragment(op->body, dest));
+        } else if (const Variable *op = e.as<Variable>();
+                   op && matrix_lets.contains(op->name)) {
+            // A let whose value was restricted above.
+            return Variable::make(t, op->name);
         } else if (const Broadcast *op = e.as<Broadcast>()) {
             // The same value at every entry, so which entries this lane holds
             // doesn't matter.
