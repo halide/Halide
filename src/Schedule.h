@@ -334,6 +334,7 @@ struct ReductionVariable;
 struct Split {
     std::string old_var, outer, inner;
     Expr factor;
+    Expr align;
     bool exact;  // Is it required that the factor divides the extent
                  // of the old var. True for splits of RVars. Forces
                  // tail strategy to be GuardWithIf.
