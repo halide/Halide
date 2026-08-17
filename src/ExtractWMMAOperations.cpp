@@ -4,6 +4,7 @@
 #include "FindIntrinsics.h"
 #include "IREquality.h"
 #include "IRMutator.h"
+#include "ExprUsesVar.h"
 #include "IRVisitor.h"
 #include "IROperator.h"
 #include "MultiRamp.h"
@@ -503,28 +504,9 @@ class ExtractWMMAOperations : public IRMutator {
     // The loops over GPU blocks, threads, and lanes we're inside of.
     vector<string> gpu_loop_vars;
 
-    // The lane a gather in the statement currently being mutated reads as. A
-    // gather is a warp-wide operation, so the statement it appears in has to be
-    // run by every lane of the warp.
-    Expr gather_lane;
-
     // Lets whose value to_fragment has restricted to this lane's share of the
     // matrix, so that uses of them must be restricted too.
     Scope<> matrix_lets;
-
-    // Every gather is wrapped in a loop over the lanes of a warp by the
-    // innermost statement that contains it. Statements nest, so the innermost
-    // one is the one whose mutation finishes first.
-    Stmt mutate(const Stmt &s) override {
-        ScopedValue<Expr> outer(gather_lane, Expr());
-        Stmt result = IRMutator::mutate(s);
-        if (gather_lane.defined()) {
-            result = in_lane_loop(gather_lane, std::move(result));
-        }
-        return result;
-    }
-
-    using IRMutator::mutate;
 
     Fragment *find_fragment(const string &name) {
         for (const string &n : in_scope) {
@@ -830,10 +812,15 @@ class ExtractWMMAOperations : public IRMutator {
             << "whole tile at a time.\n"
             << Stmt(op);
         Expr value = to_fragment(mutate(op->value), f);
-        return Store::make(f->fragment_name + std::to_string(subtile), std::move(value),
-                           Ramp::make(0, 1, f->value_type().lanes()), op->param,
-                           const_true(f->value_type().lanes()), ModulusRemainder(),
-                           op->is_streaming);
+        // The tile lives in the registers of a whole warp, so every lane has
+        // to run the store to write the share of it that it holds.
+        Expr lane = make_lane(unique_name("wmma_lane") + gpu_thread_name(0));
+        return in_lane_loop(
+            lane,
+            Store::make(f->fragment_name + std::to_string(subtile), std::move(value),
+                        Ramp::make(0, 1, f->value_type().lanes()), op->param,
+                        const_true(f->value_type().lanes()), ModulusRemainder(),
+                        op->is_streaming));
     }
 
     // What an elementwise op tells us about the fragment it writes: it holds
@@ -1126,6 +1113,21 @@ class ExtractWMMAOperations : public IRMutator {
             << "predicate.\n"
             << Expr(op);
 
+        // Which entry each lane wants is patched into the shuffle by the
+        // runtime, so it has to be the same in every lane. containing_subtile
+        // asks where an access lands within a tile, which it does by taking the
+        // GPU loop variables to be zero, so a read that varies with one of them
+        // would quietly be read as some other lane's.
+        for (const string &v : gpu_loop_vars) {
+            user_assert(!expr_uses_var(op->index, v))
+                << "Read of a tensor core accumulator not supported. Which entry "
+                << "is read varies with " << v << ", so the lanes of the warp do "
+                << "not all read the same one. How a fragment is spread over the "
+                << "lanes is only known once the pipeline is running, so an entry "
+                << "has to be named the same way by every lane.\n"
+                << Expr(op);
+        }
+
         vector<int> indices;
         int found = containing_subtile(f, op->index, &indices);
         user_assert(found >= 0)
@@ -1138,12 +1140,13 @@ class ExtractWMMAOperations : public IRMutator {
         Type element_type = op->type.element_of();
         Expr frag = Load::make(element_type.with_lanes(accumulator_elements), name,
                                Ramp::make(0, 1, accumulator_elements));
-        if (!gather_lane.defined()) {
-            gather_lane = make_lane(unique_name("wmma_lane") + gpu_thread_name(0));
-        }
+        // No lane argument: reading an entry doesn't demote a matrix-wide
+        // operation to a per-fragment one, so it introduces no loop over lanes
+        // for the lane to come from. Whichever lane runs it reads the same
+        // entry, which the runtime fills in.
         Expr matrix = Call::make(element_type.with_lanes(shape.M * shape.N),
                                  Call::wmma_fragment_to_matrix_d,
-                                 {shape.M, shape.N, shape.K, std::move(frag), gather_lane},
+                                 {shape.M, shape.N, shape.K, std::move(frag)},
                                  Call::Intrinsic);
         return Shuffle::make({std::move(matrix)}, indices);
     }

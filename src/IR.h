@@ -902,7 +902,10 @@ struct Call : public ExprNode<Call> {
         //
         // Permute this lane's tensor core accumulator (d) fragment up into a
         // whole matrix, leaving the entries this lane doesn't hold undefined.
-        // wmma_fragment_to_matrix_d(M, N, K, fragment, lane)
+        // The lane is given where a loop over lanes is what demotes a
+        // matrix-wide store to a per-fragment one, and omitted where entries
+        // are read out of a fragment, which introduces no such loop.
+        // wmma_fragment_to_matrix_d(M, N, K, fragment[, lane])
         wmma_fragment_to_matrix_d,
         // Whether this lane holds each entry of an M x N tensor core
         // accumulator in its fragment. Used as the predicate of the store that

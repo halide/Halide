@@ -614,7 +614,9 @@ void CodeGen_PTX_Dev::codegen_wmma_build(const Call *op) {
 }
 
 llvm::Value *CodeGen_PTX_Dev::codegen_wmma_get_element(const Call *op, int entry) {
-    internal_assert(op->args.size() == 5);
+    // A read of one entry has no lane argument, because it introduces no loop
+    // over lanes for one to come from.
+    internal_assert(op->args.size() == 4);
     const Expr &fragment = op->args[3];
     Type t = fragment.type();
     user_assert(t.element_of() == Float(32))
