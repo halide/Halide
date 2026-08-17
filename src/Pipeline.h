@@ -532,7 +532,7 @@ public:
      * instrumentation (once with full tracing enabled, once with the
      * profiler enabled), write the resulting trace and profile artifacts to
      * a temporary directory, and open them in the Halidoscope GUI
-     * (https://github.com/halide/Halide, apps/halidoscope). The
+     * (https://github.com/halide/Halide, tools/halidoscope). The
      * `halidoscope` executable is looked up on $PATH by default; pass a
      * HalidoscopeOptions with halidoscope_path set to override
      * that.
