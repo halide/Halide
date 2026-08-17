@@ -108,4 +108,14 @@
   .accordion-content[data-state="closed"] {
     animation: slideUp 300ms cubic-bezier(0.87, 0, 0.13, 1);
   }
+
+  /* Observable Plot tooltips, styled to match the Radix Treemap tooltip. */
+  .scatterplot g[aria-label="tip"] path {
+    fill: var(--color-ps-primary) !important;
+    stroke: none !important;
+  }
+
+  .scatterplot g[aria-label="tip"] text {
+    fill: var(--color-ps-text-primary) !important;
+  }
 }
