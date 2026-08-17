@@ -101,6 +101,9 @@ void check_unrolled_pure_update(const halide_profiler_pipeline_stats *p) {
     auto fs = entries_of(p, "unrolled_pu");
     REQUIRE(fs.size() == 1);
     REQUIRE(fs[0]->points_computed == 4);
+    // Total stores = pure-def + update-def = 8.
+    uint64_t total_stores = fs[0]->scalar_stores + fs[0]->vector_stores + fs[0]->scatters;
+    REQUIRE(total_stores == 8);
 }
 
 // compute_with: two Funcs share a loop nest, so their stage stores
