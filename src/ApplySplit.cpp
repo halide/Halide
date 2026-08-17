@@ -26,7 +26,13 @@ vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
 
         dim_extent_alignment[split.inner] = split.factor;
 
-        Expr base = outer * split.factor + old_min;
+        Expr base;
+        if (split.align.defined()) {
+            base = outer * split.factor;
+        } else {
+            base = outer * split.factor + old_min;
+        }
+
         string base_name = prefix + split.inner + ".base";
         Expr base_var = Variable::make(Int(32), base_name);
         string old_var_name = prefix + split.old_var;
@@ -58,14 +64,16 @@ vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
             // extent divides the factor. Use predication to guard
             // the calls and/or provides.
 
-            // Bounds inference has trouble exploiting an if
-            // condition. We'll directly tell it that the loop
-            // variable is bounded above by the original loop max by
-            // replacing the variable with a promise-clamped version
-            // of it. We don't also use the original loop min because
-            // it needlessly complicates the expressions and doesn't
-            // actually communicate anything new.
-            Expr guarded = promise_clamped(old_var, old_var, old_max);
+            Expr guarded;
+            if (split.align.defined()) {
+                // Because the un-rebased base block can start before old_min,
+                // we must clamp both the minimum and maximum boundaries.
+                guarded = promise_clamped(old_var, old_min, old_max);
+            } else {
+                // Legacy: structurally guaranteed to be >= old_min
+                guarded = promise_clamped(old_var, old_var, old_max);
+            }
+
             string guarded_var_name = prefix + split.old_var + ".guarded";
             Expr guarded_var = Variable::make(Int(32), guarded_var_name);
 
@@ -76,8 +84,6 @@ vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
                 predicate_type = ApplySplitResult::Predicate;
                 break;
             case TailStrategy::Predicate:
-                // This is identical to GuardWithIf, but maybe it makes
-                // sense to keep it anyways?
                 substitution_type = ApplySplitResult::Substitution;
                 predicate_type = ApplySplitResult::Predicate;
                 break;
@@ -97,30 +103,44 @@ vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
             // for the guarded version.
             result.emplace_back(prefix + split.old_var, guarded_var, substitution_type);
             result.emplace_back(guarded_var_name, guarded, ApplySplitResult::LetStmt);
-            result.emplace_back(likely(old_var <= old_max), predicate_type);
+
+            Expr guard_cond = likely(old_var <= old_max);
+            if (split.align.defined()) {
+                guard_cond = likely(old_var >= old_min && old_var <= old_max);
+            }
+            result.emplace_back(guard_cond, predicate_type);
 
         } else if (tail == TailStrategy::ShiftInwards) {
             // Adjust the base downwards to not compute off the
             // end of the realization.
 
-            // We'll only mark the base as likely (triggering a loop
-            // partition) if we're at or inside the innermost
-            // non-trivial loop.
-            base = likely_if_innermost(base);
-            base = Min::make(base, old_max + (1 - split.factor));
+            base = likely(base);
+            if (split.align.defined()) {
+                base = Max::make(base, old_min - split.align);
+                base = Min::make(base, old_max + (1 - split.factor) - split.align);
+            } else {
+                base = Min::make(base, old_max + (1 - split.factor));
+            }
         } else if (tail == TailStrategy::ShiftInwardsAndBlend) {
             Expr old_base = base;
             base = likely(base);
-            base = Min::make(base, old_max + (1 - split.factor));
+            if (split.align.defined()) {
+                base = Max::make(base, old_min - split.align);
+                base = Min::make(base, old_max + (1 - split.factor) - split.align);
+            } else {
+                base = Min::make(base, old_max + (1 - split.factor));
+            }
             // Make a mask which will be a loop invariant if inner gets
             // vectorized, and apply it if we're in the tail.
             Expr unwanted_elems = (-old_extent) % split.factor;
-            Expr mask = inner >= unwanted_elems;
+            Expr zero_based_inner = split.align.defined() ? (inner - split.align) : inner;
+            Expr mask = zero_based_inner >= unwanted_elems;
             mask = select(base == old_base, likely(const_true()), mask);
             result.emplace_back(mask, ApplySplitResult::BlendProvides);
         } else if (tail == TailStrategy::RoundUpAndBlend) {
             Expr unwanted_elems = (-old_extent) % split.factor;
-            Expr mask = inner < split.factor - unwanted_elems;
+            Expr zero_based_inner = split.align.defined() ? (inner - split.align) : inner;
+            Expr mask = zero_based_inner < split.factor - unwanted_elems;
             mask = select(outer < outer_max, likely(const_true()), mask);
             result.emplace_back(mask, ApplySplitResult::BlendProvides);
         } else {
@@ -173,12 +193,22 @@ vector<std::pair<string, Expr>> compute_loop_bounds_after_split(const Split &spl
     Expr old_var_min = Variable::make(Int(32), prefix + split.old_var + ".loop_min");
     switch (split.split_type) {
     case Split::SplitVar: {
-        Expr inner_extent = split.factor;
-        Expr outer_extent = (old_var_max - old_var_min + split.factor) / split.factor;
-        let_stmts.emplace_back(prefix + split.inner + ".loop_min", 0);
-        let_stmts.emplace_back(prefix + split.inner + ".loop_max", inner_extent - 1);
-        let_stmts.emplace_back(prefix + split.outer + ".loop_min", 0);
-        let_stmts.emplace_back(prefix + split.outer + ".loop_max", outer_extent - 1);
+        if (split.align.defined()) {
+            Expr align = split.align;
+            Expr outer_min = (old_var_min - align) / split.factor;
+            Expr outer_max = (old_var_max - align) / split.factor;
+            let_stmts.emplace_back(prefix + split.inner + ".loop_min", align);
+            let_stmts.emplace_back(prefix + split.inner + ".loop_max", align + split.factor - 1);
+            let_stmts.emplace_back(prefix + split.outer + ".loop_min", outer_min);
+            let_stmts.emplace_back(prefix + split.outer + ".loop_max", outer_max);
+        } else {
+            Expr inner_extent = split.factor;
+            Expr outer_extent = (old_var_max - old_var_min + split.factor) / split.factor;
+            let_stmts.emplace_back(prefix + split.inner + ".loop_min", 0);
+            let_stmts.emplace_back(prefix + split.inner + ".loop_max", inner_extent - 1);
+            let_stmts.emplace_back(prefix + split.outer + ".loop_min", 0);
+            let_stmts.emplace_back(prefix + split.outer + ".loop_max", outer_extent - 1);
+        }
     } break;
     case Split::FuseVars: {
         // Define bounds on the fused var using the bounds on the inner and outer
