@@ -3,6 +3,13 @@ if (Halide_TARGET MATCHES "webgpu")
     return()
 endif ()
 
+# None of this directory's targets should build as part of a plain
+# `cmake --build .` -- tutorial code should only run when its own test asks
+# for it (mirroring the intent of lesson 10's EXCLUDE_FROM_ALL below, applied
+# directory-wide so lessons 15/16/21's add_halide_library()-based targets get
+# the same treatment without needing the same manual dummy-command dance).
+set_property(DIRECTORY PROPERTY EXCLUDE_FROM_ALL TRUE)  # nolint: no per-target alternative that covers add_halide_library()'s several targets per lesson
+
 set(tests
     # keep-sorted start
     lesson_01_basics.py
@@ -20,6 +27,13 @@ set(tests
     lesson_12_using_the_gpu.py
     lesson_13_tuples.py
     lesson_14_types.py
+    lesson_17_predicated_rdom.py
+    lesson_18_parallel_associative_reductions.py
+    lesson_19_wrapper_funcs.py
+    lesson_20_cloning_funcs.py
+    lesson_22_jit_performance.py
+    lesson_23_serialization.py
+    lesson_24_async.py
     # keep-sorted end
 )
 
@@ -111,4 +125,173 @@ else ()
         PROPERTIES
         FIXTURES_REQUIRED py_lesson_10
     )
+
+    ## Lessons 15, 16, and 21 use Generator classes, so unlike the plain
+    ## scripts above, they need add_halide_generator()/add_halide_library()
+    ## to actually run the generator (mirroring tutorial/CMakeLists.txt's
+    ## C++ versions and python_bindings/apps/CMakeLists.txt's use of the same
+    ## machinery). The directory-wide EXCLUDE_FROM_ALL above keeps these
+    ## targets from building as a side effect of a plain `cmake --build .`;
+    ## each lesson's own test explicitly builds what it needs (via `cmake
+    ## --build --target`), the same trick lesson 10 uses above, just without
+    ## needing a dummy placeholder command since these go through the real
+    ## generator machinery. Target names are prefixed with `python_` to
+    ## avoid colliding with the identically-named C++ targets that
+    ## tutorial/CMakeLists.txt already defines for the same lessons.
+
+    # Lesson 15: two Generators, with no companion "run" script (matching
+    # the C++ source, which only builds the generators and checks that the
+    # expected outputs exist).
+    add_halide_generator(python_gen_lesson_15 SOURCES lesson_15_generators.py)
+
+    add_halide_library(
+        python_my_first_generator
+        FROM python_gen_lesson_15
+        GENERATOR my_first_generator
+    )
+
+    add_halide_library(
+        python_my_second_generator_1
+        FROM python_gen_lesson_15
+        GENERATOR my_second_generator
+        PARAMS parallel=false scale=3.0 rotation=ccw output.type=uint16
+    )
+    add_halide_library(
+        python_my_second_generator_2
+        FROM python_gen_lesson_15
+        GENERATOR my_second_generator
+        PARAMS scale=9.0 rotation=ccw output.type=float32
+    )
+    add_halide_library(
+        python_my_second_generator_3
+        FROM python_gen_lesson_15
+        GENERATOR my_second_generator
+        PARAMS parallel=false output.type=float64
+    )
+
+    add_custom_target(python_lesson_15_targets)
+    add_dependencies(
+        python_lesson_15_targets
+        python_my_first_generator
+        python_my_second_generator_1
+        python_my_second_generator_2
+        python_my_second_generator_3
+    )
+
+    add_test(
+        NAME python_tutorial_lesson_15_build_gens
+        COMMAND
+            "${CMAKE_COMMAND}" --build "${CMAKE_BINARY_DIR}" --target python_lesson_15_targets
+            --config $<CONFIG>
+    )
+    set_tests_properties(python_tutorial_lesson_15_build_gens PROPERTIES LABELS python_tutorial)
+
+    # Lesson 16: one Generator compiled 4 ways (one per memory layout), each
+    # wrapped as its own importable Python extension module so that
+    # lesson_16_rgb_run.py can exercise all four.
+    add_halide_generator(python_gen_lesson_16 SOURCES lesson_16_rgb_generate.py)
+
+    foreach (layout IN ITEMS planar interleaved either specialized)
+        add_halide_library(
+            python_brighten_${layout}
+            FROM python_gen_lesson_16
+            GENERATOR brighten
+            FUNCTION_NAME brighten_${layout}
+            PARAMS layout=${layout}
+            PYTHON_EXTENSION _ignored_result
+        )
+        add_halide_python_extension_library(
+            python_ext_brighten_${layout}
+            MODULE_NAME brighten_${layout}
+            HALIDE_LIBRARIES python_brighten_${layout}
+        )
+    endforeach ()
+
+    add_python_test(
+        FILE lesson_16_rgb_run.py
+        LABEL python_tutorial
+        PYTHONPATH "$<TARGET_FILE_DIR:python_ext_brighten_planar>"
+    )
+
+    add_test(
+        NAME python_tutorial_lesson_16_compile
+        COMMAND
+            "${CMAKE_COMMAND}" --build "${CMAKE_BINARY_DIR}" --config $<CONFIG>
+            --target
+            python_ext_brighten_planar python_ext_brighten_interleaved
+            python_ext_brighten_either python_ext_brighten_specialized
+    )
+    set_tests_properties(
+        python_tutorial_lesson_16_compile
+        PROPERTIES
+        LABELS python_tutorial
+        FIXTURES_SETUP py_lesson_16
+    )
+    set_tests_properties(
+        python_tutorial_lesson_16_rgb_run
+        PROPERTIES
+        FIXTURES_REQUIRED py_lesson_16
+    )
+
+    # Lesson 21: one Generator compiled with and without the Mullapudi2016
+    # autoscheduler, matching the C++ source's own guard on that target's
+    # availability.
+    if (TARGET Halide::Mullapudi2016)
+        add_halide_generator(python_gen_lesson_21 SOURCES lesson_21_auto_scheduler_generate.py)
+
+        add_halide_library(
+            python_auto_schedule_false
+            FROM python_gen_lesson_21
+            GENERATOR auto_schedule_gen
+            FUNCTION_NAME auto_schedule_false
+            PYTHON_EXTENSION _ignored_result
+        )
+        add_halide_library(
+            python_auto_schedule_true
+            FROM python_gen_lesson_21
+            GENERATOR auto_schedule_gen
+            FUNCTION_NAME auto_schedule_true
+            AUTOSCHEDULER Halide::Mullapudi2016
+            PARAMS
+                autoscheduler.parallelism=32
+                autoscheduler.last_level_cache_size=16777216
+                autoscheduler.balance=40
+            PYTHON_EXTENSION _ignored_result
+        )
+
+        add_halide_python_extension_library(
+            python_ext_auto_schedule_false
+            MODULE_NAME auto_schedule_false
+            HALIDE_LIBRARIES python_auto_schedule_false
+        )
+        add_halide_python_extension_library(
+            python_ext_auto_schedule_true
+            MODULE_NAME auto_schedule_true
+            HALIDE_LIBRARIES python_auto_schedule_true
+        )
+
+        add_python_test(
+            FILE lesson_21_auto_scheduler_run.py
+            LABEL python_tutorial
+            PYTHONPATH "$<TARGET_FILE_DIR:python_ext_auto_schedule_false>"
+        )
+
+        add_test(
+            NAME python_tutorial_lesson_21_compile
+            COMMAND
+                "${CMAKE_COMMAND}" --build "${CMAKE_BINARY_DIR}" --config $<CONFIG>
+                --target python_ext_auto_schedule_false python_ext_auto_schedule_true
+        )
+        set_tests_properties(
+            python_tutorial_lesson_21_compile
+            PROPERTIES
+            LABELS python_tutorial
+            FIXTURES_SETUP py_lesson_21
+        )
+        set_tests_properties(
+            python_tutorial_lesson_21_auto_scheduler_run
+            PROPERTIES
+            FIXTURES_REQUIRED py_lesson_21
+        )
+    endif ()
 endif ()
