@@ -973,7 +973,12 @@ struct Surface {
     void do_fill_realization(uint32_t *dst, uint32_t color,
                              const FuncInfo &fi, const halide_trace_packet_t &p,
                              int current_dimension = 0, int x_off = 0, int y_off = 0) {
-        if (2 * current_dimension == p.dimensions) {
+        // Each dimension consumes a (min, extent) pair of coordinates. A
+        // realization packet from an untrusted trace can declare an odd number
+        // of coordinates, in which case an == test never matches and the
+        // recursion walks off the end of coordinates(); stop once fewer than a
+        // full pair remains.
+        if (2 * current_dimension + 1 >= p.dimensions) {
             const int x_min = x_off * fi.config.zoom + fi.config.pos.x;
             const int y_min = y_off * fi.config.zoom + fi.config.pos.y;
             const int izoom = (int)std::ceil(fi.config.zoom);
