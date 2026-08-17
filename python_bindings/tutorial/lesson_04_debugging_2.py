@@ -40,16 +40,15 @@ def main():
     # that describes the algorithm.
 
     # Now we tell Halide to use a parallel for loop over the y
-    # coordinate. On linux we run this using a thread pool and a task
-    # queue. On macOS we call into grand central dispatch, which does
-    # the same thing for us.
+    # coordinate. Halide's runtime maintains its own pool of worker
+    # threads and a task queue.
     parallel_gradient.parallel(y)
 
     # This time the printfs should come out of order, because each
     # scanline is potentially being processed in a different
     # thread. The number of threads should adapt to your system, but
-    # on linux you can control it manually using the environment
-    # variable HL_NUMTHREADS.
+    # you can control it manually using the environment variable
+    # HL_NUM_THREADS.
     print("\nEvaluating parallel_gradient")
     parallel_gradient.realize([8, 8])
 
