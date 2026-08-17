@@ -7,7 +7,8 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
     if (!target.has_gpu_feature()) {
         printf("[SKIP] No GPU target enabled.\n");
-        return 0;
+        // An error test has to report an error even when it skips.
+        _halide_user_assert(0);
     }
 
     Func f("f"), g("g");
