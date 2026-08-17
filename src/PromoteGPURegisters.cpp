@@ -19,101 +19,73 @@ using std::vector;
 namespace {
 
 // Every access to the allocation, in the order they appear.
-class FindAccesses : public IRVisitor {
-    using IRVisitor::visit;
-
-    void visit(const Store *op) override {
-        if (op->name == alloc) {
-            indices.push_back(op->index);
-        }
-        IRVisitor::visit(op);
-    }
-
-    void visit(const Load *op) override {
-        if (op->name == alloc) {
-            indices.push_back(op->index);
-        }
-        IRVisitor::visit(op);
-    }
-
-    const string &alloc;
-
-public:
+vector<Expr> find_accesses(const Stmt &s, const string &alloc) {
     vector<Expr> indices;
-
-    FindAccesses(const string &alloc)
-        : alloc(alloc) {
-    }
-};
+    auto note = [&](auto *self, const auto *op) {
+        if (op->name == alloc) {
+            indices.push_back(op->index);
+        }
+        self->visit_base(op);
+    };
+    visit_with(
+        s, [&](auto *self, const Store *op) { note(self, op); },
+        [&](auto *self, const Load *op) { note(self, op); });
+    return indices;
+}
 
 // Which kinds of loop over the threads of a block appear in some IR.
-class LoopKinds : public IRVisitor {
-    using IRVisitor::visit;
-
-    void visit(const For *op) override {
-        threads = threads || op->for_type == ForType::GPUThread;
-        lanes = lanes || op->for_type == ForType::GPULane;
-        IRVisitor::visit(op);
-    }
-
-public:
+struct LoopKinds {
     bool threads = false, lanes = false;
 };
 
+LoopKinds loop_kinds(const Stmt &s) {
+    LoopKinds kinds;
+    visit_with(s, [&](auto *self, const For *op) {
+        kinds.threads = kinds.threads || op->for_type == ForType::GPUThread;
+        kinds.lanes = kinds.lanes || op->for_type == ForType::GPULane;
+        self->visit_base(op);
+    });
+    return kinds;
+}
+
 // Replace each access with the one worked out for it below.
-class RewriteAccesses : public IRMutator {
-public:
-    using IRMutator::mutate;
-
-private:
-    using IRMutator::visit;
-
-    Expr index_for(const Expr &index) const {
+Stmt rewrite_accesses(const Stmt &s, const string &alloc,
+                      const map<Expr, Expr, IRDeepCompare> &rewritten) {
+    auto index_for = [&](const Expr &index) {
         auto it = rewritten.find(index);
         internal_assert(it != rewritten.end());
         return it->second;
-    }
-
-    Stmt visit(const Store *op) override {
-        Stmt s = IRMutator::visit(op);
-        if (op->name == alloc) {
-            op = s.as<Store>();
-            s = op->with(op->value, index_for(op->index), op->predicate, ModulusRemainder());
-        }
-        return s;
-    }
-
-    Expr visit(const Load *op) override {
-        Expr e = IRMutator::visit(op);
-        if (op->name == alloc) {
-            op = e.as<Load>();
-            e = op->with(index_for(op->index), op->predicate, ModulusRemainder());
-        }
-        return e;
-    }
-
-    const string &alloc;
-    const map<Expr, Expr, IRDeepCompare> &rewritten;
-
-public:
-    RewriteAccesses(const string &alloc, const map<Expr, Expr, IRDeepCompare> &rewritten)
-        : alloc(alloc), rewritten(rewritten) {
-    }
-};
+    };
+    return mutate_with(
+        s,
+        [&](auto *self, const Store *op) {
+            Stmt s = self->visit_base(op);
+            if (op->name == alloc) {
+                const Store *store = s.as<Store>();
+                s = store->with(store->value, index_for(store->index), store->predicate,
+                                ModulusRemainder());
+            }
+            return s;
+        },
+        [&](auto *self, const Load *op) {
+            Expr e = self->visit_base(op);
+            if (op->name == alloc) {
+                const Load *load = e.as<Load>();
+                e = load->with(index_for(load->index), load->predicate, ModulusRemainder());
+            }
+            return e;
+        });
+}
 
 class PromoteGPURegisters : public IRMutator {
-public:
-    using IRMutator::mutate;
-
-private:
+protected:
     using IRMutator::visit;
 
     bool in_threads = false;
     vector<const Allocate *> pending;
 
     Stmt visit(const Allocate *op) override {
-        LoopKinds kinds;
-        op->body.accept(&kinds);
+        LoopKinds kinds = loop_kinds(op->body);
         // An allocation with a loop over lanes inside it is warp-level
         // storage, which LowerWarpShuffles stripes across the lanes. Leave it
         // alone. Without a loop over threads there is nowhere to put this one,
@@ -154,8 +126,7 @@ private:
     // Give each site its own registers, and wrap the body in the smaller
     // allocation.
     Stmt promote(const Allocate *op, Stmt body) {
-        FindAccesses finder(op->name);
-        body.accept(&finder);
+        vector<Expr> accesses = find_accesses(body, op->name);
 
         // Each access covers a set of elements, and get_subtile partitions the
         // accesses between the distinct sets. Nothing about the layout of a set
@@ -166,7 +137,7 @@ private:
         string description = "the allocation " + op->name +
                              ", which is scheduled to live in Register memory outside the "
                              "loops over GPU threads";
-        for (const Expr &index : finder.indices) {
+        for (const Expr &index : accesses) {
             int subtile = get_subtile(index, description, &subtiles);
             // Every subtile has the same shape, and so the same number of
             // lanes, because get_subtile rejects accesses that don't.
@@ -177,7 +148,7 @@ private:
         }
 
         int size = subtiles.empty() ? 0 : (int)subtiles.size() * subtiles[0].total_lanes();
-        body = RewriteAccesses(op->name, rewritten).mutate(body);
+        body = rewrite_accesses(body, op->name, rewritten);
 
         return op->with({make_const(Int(32), size)}, op->condition, body);
     }
@@ -186,7 +157,7 @@ private:
 }  // namespace
 
 Stmt promote_gpu_registers(const Stmt &s) {
-    return PromoteGPURegisters().mutate(s);
+    return PromoteGPURegisters()(s);
 }
 
 }  // namespace Internal
