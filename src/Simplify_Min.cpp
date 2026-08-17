@@ -285,6 +285,14 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
 
            rewrite(min(y - x, z - x), min(y, z) - x) ||
            rewrite(min(x - y, x - z), x - max(y, z)) ||
+           rewrite(min(x - y, x + z), x - max(y, 0 - z)) ||
+           rewrite(min(min(x, y) - x, 0), min(y - x, 0)) ||
+           rewrite(min(min(x, y) - y, 0), min(x - y, 0)) ||
+           rewrite(min(min(x, y) - min(z, x), 0), min(y - min(z, x), 0)) ||
+           rewrite(min(min(x, y) - min(z, y), 0), min(x - min(z, y), 0)) ||
+           rewrite(min(min(x, y) - min(x, z), 0), min(y - min(x, z), 0)) ||
+           rewrite(min(min(x, y) - min(y, z), 0), min(x - min(y, z), 0)) ||
+           rewrite(min(min(x, c0) - min(y, c1), c2), min(x - min(y, c1), c2), c0 >= c1 + c2) ||
            rewrite(min(x - y, (z - y) + w), min(x, z + w) - y) ||
            rewrite(min(x - y, w + (z - y)), min(x, w + z) - y) ||
 

@@ -283,6 +283,14 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
 
            rewrite(max(y - x, z - x), max(y, z) - x) ||
            rewrite(max(x - y, x - z), x - min(y, z)) ||
+           rewrite(max(x - y, x + z), x - min(y, 0 - z)) ||
+           rewrite(max(max(x, y) - x, 0), max(y - x, 0)) ||
+           rewrite(max(max(x, y) - y, 0), max(x - y, 0)) ||
+           rewrite(max(max(x, y) - max(z, x), 0), max(y - max(z, x), 0)) ||
+           rewrite(max(max(x, y) - max(z, y), 0), max(x - max(z, y), 0)) ||
+           rewrite(max(max(x, y) - max(x, z), 0), max(y - max(x, z), 0)) ||
+           rewrite(max(max(x, y) - max(y, z), 0), max(x - max(y, z), 0)) ||
+           rewrite(max(max(x, c0) - max(y, c1), c2), max(x - max(y, c1), c2), c0 <= c1 + c2) ||
            rewrite(max(x - y, (z - y) + w), max(x, z + w) - y) ||
            rewrite(max(x - y, w + (z - y)), max(x, w + z) - y) ||
 
