@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <iostream>
 #include <mutex>
 #include <sstream>
 #include <utility>
@@ -1240,6 +1241,7 @@ void Pipeline::halidoscope_impl(const std::function<void(Pipeline &, const Targe
             // of letting each realize() reset them; see ProfilerScope.
             ProfilerScope guard(profiled);
             for (int i = 0; i < options.halidoscope_profile_runs; i++) {
+                std::cout << "Halidoscope profiling run " << i + 1 << " of " << options.halidoscope_profile_runs << "\n";
                 do_realize(profiled, profile_target);
             }
         }
