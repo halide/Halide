@@ -927,16 +927,20 @@ void Pipeline::flush_profiler_state(JITUserContext *context) {
 
 namespace {
 
-// State for the custom_trace callbacks below. custom_trace is a plain C
-// function pointer (see JITHandlers in JITModule.h), so it can't capture
-// anything -- this mirrors the approach taken by
-// test/performance/profiler.cpp. The pointers/target are not thread-safe to
-// mutate, but Pipeline::halidoscope() is documented as non-reentrant (i.e.
-// not to be called concurrently with itself), so that's fine; the trace
-// writer below does still need to support *this* pipeline's own worker
-// threads emitting trace events concurrently during a single run.
-Target halidoscope_profile_target;
-std::string *halidoscope_profile_json = nullptr;
+// State for the halidoscope_capture_trace callback below. custom_trace is a
+// plain C function pointer (see JITHandlers in JITModule.h), so it can't
+// capture anything -- this mirrors the approach taken by
+// test/performance/profiler.cpp.
+//
+// halidoscope_trace_stream is not thread-safe to mutate, but
+// Pipeline::halidoscope() is documented as non-reentrant (i.e. not to be called
+// concurrently with itself), so that's fine; the trace writer below does still
+// need to support *this* pipeline's own worker threads emitting trace events
+// concurrently during a single run.
+
+std::ofstream *halidoscope_trace_stream = nullptr;
+std::mutex halidoscope_trace_mutex;
+std::atomic<int32_t> halidoscope_trace_next_id{1};
 
 // Writes the same on-disk packet format as halide_default_trace's
 // HL_TRACE_FILE path (src/runtime/tracing.cpp), but owns the output stream
@@ -947,10 +951,6 @@ std::string *halidoscope_profile_json = nullptr;
 // be safely reopened for a second trace within the same process -- writing
 // packets ourselves sidesteps that entirely and works for any number of
 // halidoscope() calls in one process.
-std::ofstream *halidoscope_trace_stream = nullptr;
-std::mutex halidoscope_trace_mutex;
-std::atomic<int32_t> halidoscope_trace_next_id{1};
-
 int32_t halidoscope_capture_trace(JITUserContext *, const halide_trace_event_t *e) {
     // The return value becomes the parent_id of any trace events nested
     // inside this one (see halide_default_trace's use of `my_id`), so this
@@ -1002,74 +1002,71 @@ int32_t halidoscope_capture_trace(JITUserContext *, const halide_trace_event_t *
 }
 
 void halidoscope_append_func_stats(std::ostringstream &out,
-                                   const halide_profiler_func_stats &static_stats,
-                                   const halide_profiler_func_stats &live_stats) {
+                                   const halide_profiler_func_stats &stats) {
     out << "{"
-        << "\"name\":\"" << static_stats.name << "\","
-        << "\"parent\":" << static_stats.parent << ","
-        << "\"canonical_id\":" << static_stats.canonical_id << ","
-        << "\"kind\":" << (int)static_stats.kind << ","
-        << "\"buffer_func_id\":" << static_stats.buffer_func_id << ","
-        << "\"time_ns\":" << live_stats.time << ","
-        << "\"memory_current\":" << live_stats.memory_current << ","
-        << "\"memory_peak\":" << live_stats.memory_peak << ","
-        << "\"memory_total\":" << live_stats.memory_total << ","
-        << "\"stack_peak\":" << live_stats.stack_peak << ","
-        << "\"active_threads_numerator\":" << live_stats.active_threads_numerator << ","
-        << "\"active_threads_denominator\":" << live_stats.active_threads_denominator << ","
-        << "\"num_allocs\":" << live_stats.num_allocs
+        << "\"name\":\"" << stats.name << "\","
+        << "\"parent\":" << stats.parent << ","
+        << "\"canonical_id\":" << stats.canonical_id << ","
+        << "\"kind\":" << (int)stats.kind << ","
+        << "\"buffer_func_id\":" << stats.buffer_func_id << ","
+        << "\"time_ns\":" << stats.time << ","
+        << "\"memory_current\":" << stats.memory_current << ","
+        << "\"memory_peak\":" << stats.memory_peak << ","
+        << "\"memory_total\":" << stats.memory_total << ","
+        << "\"stack_peak\":" << stats.stack_peak << ","
+        << "\"active_threads_numerator\":" << stats.active_threads_numerator << ","
+        << "\"active_threads_denominator\":" << stats.active_threads_denominator << ","
+        << "\"num_allocs\":" << stats.num_allocs
         << "}";
 }
 
-// Fires on every trace event emitted by the profile run. We only care
-// about halide_trace_end_pipeline, which fires from inside the pipeline
-// call, while the halide_profiler_instance_state for this run is still
-// alive (JITCache::finish_profiling resets profiler state immediately
-// after Pipeline::realize returns, so this is the only place to snapshot
-// it from).
-int32_t halidoscope_capture_profile(JITUserContext *, const halide_trace_event_t *e) {
-    if (e->event != halide_trace_end_pipeline || !halidoscope_profile_json) {
-        return 0;
-    }
-
+// Snapshots the profiler's pipeline-level stats into `profile_json`. Must be
+// called after the profiling loop has finished (i.e. every profiled
+// realize() call has returned) but before the stats are reset -- each
+// realize() call's halide_profiler_instance_end runs (and merges that run's
+// counters into halide_profiler_pipeline_stats) before the call returns to
+// this C++ code, so by the time the loop finishes, the pipeline stats
+// reflect all of the runs merged together, with per-Func times correctly
+// averaged across billed_runs. (Pipeline::flush_profiler_state(), called via
+// DeferredProfileFlush's destructor once this scope ends, is what resets
+// them, so this needs to run before that.)
+void halidoscope_write_profile_json(const Target &target, std::string &profile_json) {
     using GetStateFn = halide_profiler_state *(*)();
-    auto get_state = (GetStateFn)JITSharedRuntime::find_symbol(halidoscope_profile_target, "halide_profiler_get_state");
+    auto get_state = (GetStateFn)JITSharedRuntime::find_symbol(target, "halide_profiler_get_state");
     if (!get_state) {
-        return 0;
+        return;
     }
 
     // halidoscope() only ever has one instrumented pipeline running at a
-    // time, so the head of the instance list is always ours.
-    halide_profiler_instance_state *inst = get_state()->instances;
-    if (!inst || !inst->pipeline_stats) {
-        return 0;
+    // time, so the head of the pipeline list is always ours.
+    halide_profiler_pipeline_stats *ps = get_state()->pipelines;
+    if (!ps) {
+        return;
     }
-    const halide_profiler_pipeline_stats &ps = *inst->pipeline_stats;
 
     std::ostringstream out;
     out << "{\"pipelines\":[{"
-        << "\"name\":\"" << ps.name << "\","
-        << "\"runs\":" << ps.runs << ","
-        << "\"billed_runs\":" << ps.billed_runs << ","
-        << "\"samples\":" << ps.samples << ","
-        << "\"num_allocs\":" << ps.num_allocs << ","
-        << "\"time_ns\":" << inst->billed_time << ","
-        << "\"memory_current\":" << inst->memory_current << ","
-        << "\"memory_peak\":" << inst->memory_peak << ","
-        << "\"memory_total\":" << inst->memory_total << ","
-        << "\"active_threads_numerator\":" << inst->active_threads_numerator << ","
-        << "\"active_threads_denominator\":" << inst->active_threads_denominator << ","
+        << "\"name\":\"" << ps->name << "\","
+        << "\"runs\":" << ps->runs << ","
+        << "\"billed_runs\":" << ps->billed_runs << ","
+        << "\"samples\":" << ps->samples << ","
+        << "\"num_allocs\":" << ps->num_allocs << ","
+        << "\"time_ns\":" << ps->time << ","
+        << "\"memory_current\":" << ps->memory_current << ","
+        << "\"memory_peak\":" << ps->memory_peak << ","
+        << "\"memory_total\":" << ps->memory_total << ","
+        << "\"active_threads_numerator\":" << ps->active_threads_numerator << ","
+        << "\"active_threads_denominator\":" << ps->active_threads_denominator << ","
         << "\"funcs\":[";
-    for (int i = 0; i < ps.num_funcs; i++) {
+    for (int i = 0; i < ps->num_funcs; i++) {
         if (i > 0) {
             out << ",";
         }
-        halidoscope_append_func_stats(out, ps.funcs[i], inst->funcs[i]);
+        halidoscope_append_func_stats(out, ps->funcs[i]);
     }
     out << "]}]}";
 
-    *halidoscope_profile_json = out.str();
-    return 0;
+    profile_json = out.str();
 }
 
 // Builds a fresh, independent view over the same underlying output storage
@@ -1168,13 +1165,9 @@ void Pipeline::halidoscope_impl(const std::function<void(Pipeline &, const Targe
 
     if (options.halidoscope_profile_runs > 0) {
         Pipeline profiled = deserialize_pipeline(data, external_params);
-        profiled.trace_pipeline();
         Target profile_target = base_target.with_feature(Target::Profile);
 
         std::string profile_json;
-        halidoscope_profile_target = profile_target;
-        halidoscope_profile_json = &profile_json;
-        profiled.jit_handlers().custom_trace = halidoscope_capture_profile;
 
         {
             DeferredProfileFlush guard(profiled);
@@ -1182,9 +1175,11 @@ void Pipeline::halidoscope_impl(const std::function<void(Pipeline &, const Targe
                 std::cout << "Halidoscope profiling run " << i + 1 << " of " << options.halidoscope_profile_runs << "\n";
                 do_realize(profiled, profile_target);
             }
+            // Snapshot the merged stats now, while the guard is still
+            // deferring the flush that would otherwise reset them.
+            halidoscope_write_profile_json(profile_target, profile_json);
         }
 
-        halidoscope_profile_json = nullptr;
         write_entire_file(profile_path, profile_json.data(), profile_json.size());
     }
 
