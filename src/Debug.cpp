@@ -3,8 +3,18 @@
 #include "Util.h"
 
 #include <algorithm>
+#include <cerrno>
 #include <climits>
+#include <iostream>
 #include <optional>
+
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#else
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 namespace Halide::Internal {
 
@@ -127,7 +137,105 @@ bool rules_accept(const std::vector<DebugRule> &rules, const int verbosity,
     });
 }
 
+enum class DebugSinkKind { Cerr,
+                           Cout,
+                           File };
+
+struct DebugSink {
+    DebugSinkKind kind = DebugSinkKind::Cerr;
+    int fd = -1;  // Valid only when kind == File.
+};
+
+// Opened directly at the OS level (rather than via std::ofstream) so that
+// DebugStream's destructor can write each debug() statement's output with a
+// single raw write() call: on a file opened O_APPEND, the kernel appends the
+// bytes of a single write() atomically, so concurrent processes/threads
+// sharing this log file can't tear each other's output mid-statement.
+// Buffered iostream writes give no such guarantee -- a large debug() dump
+// can be split across several underlying write() calls, letting another
+// writer's output land in the middle of it.
+int open_append_only(const std::string &path) {
+#ifdef _WIN32
+    // _O_BINARY avoids CRLF translation, which would corrupt byte counts.
+    return _open(path.c_str(), _O_WRONLY | _O_CREAT | _O_APPEND | _O_BINARY, _S_IWRITE);
+#else
+    return ::open(path.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0644);
+#endif
+}
+
+DebugSink make_debug_sink() {
+    const std::string log_file = get_env_variable("HL_DEBUG_CODEGEN_LOG_FILE");
+    // /dev/stdout and /dev/stderr are handled explicitly (rather than just
+    // opening them as ordinary paths) because Windows has no /dev
+    // filesystem, so opening them as ordinary paths would simply fail there.
+    if (log_file.empty() || log_file == "/dev/stderr") {
+        return {DebugSinkKind::Cerr};
+    }
+    if (log_file == "/dev/stdout") {
+        return {DebugSinkKind::Cout};
+    }
+    const int fd = open_append_only(log_file);
+    if (fd < 0) {
+        issue_warning(("Warning: Could not open HL_DEBUG_CODEGEN_LOG_FILE: " + log_file +
+                       "; falling back to stderr\n")
+                          .c_str());
+        return {DebugSinkKind::Cerr};
+    }
+    return {DebugSinkKind::File, fd};
+}
+
+const DebugSink &debug_sink() {
+    static const DebugSink sink = make_debug_sink();
+    return sink;
+}
+
+// Writes as much of [data, data + size) as the OS accepts in one call. A
+// single write() to a regular file normally consumes the whole request; the
+// loop only guards against the rare partial write (e.g. an EINTR-interrupted
+// call), at the cost of the atomicity guarantee above in that rare case.
+void write_all(int fd, const char *data, size_t size) {
+    while (size > 0) {
+#ifdef _WIN32
+        const int n = _write(fd, data, (unsigned int)std::min<size_t>(size, INT_MAX));
+        if (n <= 0) {
+            break;
+        }
+#else
+        const ssize_t n = ::write(fd, data, size);
+        if (n < 0 && errno == EINTR) {
+            continue;
+        }
+        if (n <= 0) {
+            break;
+        }
+#endif
+        data += n;
+        size -= (size_t)n;
+    }
+}
+
 }  // namespace
+
+DebugStream::~DebugStream() {
+    const std::string s = str();
+    if (s.empty()) {
+        return;
+    }
+    const DebugSink &sink = debug_sink();
+    switch (sink.kind) {
+    case DebugSinkKind::Cerr:
+        std::cerr << s;
+        std::cerr.flush();
+        break;
+    case DebugSinkKind::Cout:
+        std::cout << s;
+        std::cout.flush();
+        break;
+    case DebugSinkKind::File:
+        write_all(sink.fd, s.data(), s.size());
+        break;
+    }
+}
 
 bool debug_is_active_impl(const int verbosity, const char *file, const char *function,
                           const int line) {

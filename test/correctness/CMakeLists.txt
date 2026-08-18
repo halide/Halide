@@ -85,6 +85,7 @@ tests(
     d3d12compute_strict_float.cpp
     dead_realization_in_specialization.cpp
     debug_helpers.cpp
+    debug_log_file.cpp
     debug_to_file.cpp
     debug_to_file_multiple_outputs.cpp
     debug_to_file_reorder.cpp
