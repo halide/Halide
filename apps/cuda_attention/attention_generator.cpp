@@ -39,16 +39,18 @@ void set_bounds(OutputImageParam p, int extent_0, int extent_1) {
 // times for the same problem rather than a fraction of what the part can do.
 //
 //     keys depth out_depth    fused          unfused    of which softmax
-//       64    64        64   60.0us   17884  236.3us     4544      92.1us
-//      128    64        64  104.7us   20520  324.0us     6628     107.3us
-//       64   128        64   86.5us   18610  256.7us     6274      92.1us
+//       64    64        64   59.8us   17961  164.7us     6519      19.2us
+//      128    64        64  105.7us   20320  331.0us     6487     105.0us
+//       64   128        64   86.4us   18635  184.6us     8723      19.3us
 //
 // The last column is why. The softmax reads a queries x keys matrix that the
 // multiply before it just wrote, and writes another one for the multiply after
 // it to read, and those two matrices are larger than everything else in the
 // problem put together. The filter above never writes either of them: the
 // scores are a tensor core accumulator from the moment they are computed to
-// the moment they are consumed.
+// the moment they are consumed. The softmax below is held in tensor core
+// registers too, so what separates the two columns is that traffic and
+// nothing else.
 //
 // There is no third column for the two multiplies without the softmax, though
 // it is the obvious thing to want. They cannot be run as a pair: the second
@@ -222,49 +224,28 @@ private:
 // baseline computes the same thing as the filter above, rather than being two
 // multiplies with the interesting part left out.
 //
-// A warp takes a row, with the lanes walking consecutive columns, so that
-// every read of the scores and every write of the result is coalesced. The
-// two reductions then run across the lanes rather than within one, which is
-// what the rfactor below says: each lane reduces the columns it holds, and the
-// lanes combine through warp shuffles. Each lane keeps the columns it walks,
-// so the scores are read once rather than once per pass over them.
+// It is held in tensor core registers, the same as the fused filter, which is
+// worth doing even with no matrix multiply in sight. A tile load and a tile
+// store are warp-wide and coalesced by construction, and the two reductions
+// along the rows become butterflies where the fragments already sit, rather
+// than each lane walking every other lane's partial. Narrowing to half
+// precision on the way out costs nothing beyond the convert: an entry sits in
+// the same lane whichever precision holds it, so it is a repack within each
+// lane and no lane has to reach outside itself.
 //
-// Getting there took three goes, and the two that were rejected are the point
-// of this comment. A row per thread reading straight out of global memory has
-// the lanes of a warp starting a row apart, and measured 303us where this
-// measures 92. Staging the block's rows through shared memory first fixed the
-// read but not the write, and measured 114us. Neither would have been a
-// baseline worth comparing against.
+// The block holds whole rows, because the reductions run along them.
 //
-// Each lane keeps the exponentials of the columns it holds, so each is
-// evaluated once, rather than once where it is summed and once where it is
-// divided by that sum. Leaving them inline measures the same to a tenth of a
-// microsecond, but that says nothing: ptxas will happily common up two
-// identical calls on the same value, so the two schedules may well be the
-// same code. Asking for the work once is the honest way to write it either
-// way.
+// Measured on an RTX 5060 Ti at queries=65536, this takes 19.2us at keys=64
+// where a warp per row with the reductions written as rfactor onto the lane
+// index took 92.1. That idiom lowers to a serial gather - each lane walks all
+// thirty two lanes fetching their partial, sixty four shuffles per row for the
+// two reductions - where a tile reduction is a butterfly, ten. The tile load
+// and store are also warp wide by construction, which a row per thread is not.
 //
-// Nor does fast_exp change anything, and here the measurement does say
-// something, because ncu says what this waits on: the load/store pipe at 98%
-// of what it can issue, every arithmetic pipeline under-utilised, and the SMs
-// busy 37% of the time. It is bound by memory instructions rather than by
-// bandwidth - DRAM is at 36%.
-//
-// Wider accesses are the obvious thing to reach for and they do not help.
-// Giving each lane a contiguous run of columns rather than one column in every
-// thirty two gets the loads and stores as wide as the hardware has: at
-// keys=128 the kernel issues one ld.global.nc.v2.b64 and one st.global.v2.b32
-// per thread where this issues four and four, and 140 instructions where this
-// issues 152. It measures 111.4us against 107.9. At keys=64 it wins instead,
-// 89.0 against 92.1.
-//
-// Both sit at 96% of what the L1 can do, with the same occupancy and much the
-// same register count, which is the reason: what crosses the L1 is the same
-// either way. Thirty two lanes reading sixteen bytes each and four
-// instructions of thirty two lanes reading four bytes each are the same four
-// transactions. The instruction count is not what this is short of, so
-// widening the accesses moves it by a few percent in whichever direction the
-// shape happens to favour, and costs arithmetic in the schedule to do it.
+// At keys=128 the two come out level, 105.0us against 107.3. There the scores
+// and the result are 48MB against a 32MB cache, so both are waiting on memory
+// and how many instructions it takes to ask stops mattering.
+
 class AttentionSoftmax : public Halide::Generator<AttentionSoftmax> {
 public:
     GeneratorParam<int> queries{"queries", 16384};
@@ -272,21 +253,25 @@ public:
 
     Input<Buffer<float, 2>> scores{"scores"};
     // Half precision, because that is what the multiply that follows takes,
-    // and what the fused filter rounds to at the same point.
+    // and what the fused filter narrows to at the same point.
     Output<Buffer<float16_t, 2>> p{"p"};
 
     void generate() {
         r = RDom(0, keys, "r");
 
-        m(y) = -1e30f;
-        m(y) = max(m(y), scores(r, y));
+        s(x, y) = scores(x, y);
 
-        e(x, y) = exp(scores(x, y) - m(y));
+        m(y) = -1e30f;
+        m(y) = max(m(y), s(r, y));
+
+        e(x, y) = exp(s(x, y) - m(y));
 
         total(y) = 0.f;
         total(y) += e(r, y);
 
-        p(x, y) = cast<float16_t>(e(x, y) / total(y));
+        soft(x, y) = cast<float16_t>(e(x, y) / total(y));
+
+        p(x, y) = soft(x, y);
     }
 
     void schedule() {
@@ -299,61 +284,58 @@ public:
         set_bounds(scores, keys, queries);
         set_bounds(p, keys, queries);
 
-        // A warp per row, with the lanes walking consecutive columns, so
-        // that both the read of the scores and the write of the result are
-        // coalesced. What that costs is that the two reductions now run
-        // across the lanes rather than within one, which rfactor expresses:
-        // each lane reduces the columns it holds, and the lanes then combine
-        // through warp shuffles.
-        const int lanes = 32;
-        const int rows = 8;
-        Var xo("xo"), xi("xi"), yo("yo"), yi("yi"), u("u"), v("v");
-        RVar ri("ri"), ro("ro");
+        const int tile = 16;
+        // How many rows of scores one block takes. A block holds every key for
+        // the rows it has, so widening this multiplies what it keeps in
+        // registers.
+        const int rows = 16;
+
+        Var xo("xo"), yo("yo"), xio("xio"), yio("yio"), xi("xi"), yi("yi");
+        Var rxi("rxi"), ryi("ryi");
 
         p.bound(x, 0, keys)
             .bound(y, 0, queries)
-            .split(x, xo, xi, lanes)
-            .split(y, yo, yi, rows)
-            .reorder(xi, xo, yi, yo)
-            .gpu_blocks(yo)
-            .gpu_threads(yi)
-            .gpu_lanes(xi)
-            .unroll(xo);
+            .tile(x, y, xo, yo, xi, yi, keys, rows)
+            .tile(xi, yi, xio, yio, xi, yi, tile, tile)
+            .gpu_blocks(xo, yo)
+            .unroll(xio)
+            .unroll(yio)
+            .tile_store(xi, yi);
 
-        // Each lane holds the columns it walks, so the scores are read once
-        // rather than once per pass over them.
-        Var so("so"), si("si");
-        scores.in()
-            .compute_at(p, yi)
-            .store_in(MemoryType::Register)
-            .split(_0, so, si, lanes)
-            .gpu_lanes(si)
-            .unroll(so);
+        for (Func f : {s, e, soft}) {
+            f.compute_at(p, xo)
+                .store_in(MemoryType::Tile)
+                .tile(x, y, rxi, ryi, tile, tile)
+                .unroll(x)
+                .unroll(y);
+        }
+        // The scores arrive from memory, which is a tile load; the rest are
+        // computed where they sit.
+        s.tile_load(rxi, ryi);
+        e.tile_init(rxi, ryi);
+        soft.tile_init(rxi, ryi);
 
-        // Each lane keeps the exponentials of the columns it holds, so each is
-        // evaluated once rather than once to sum and once to normalise.
-        Var eo("eo"), ei("ei");
-        e.compute_at(p, yi)
-            .store_in(MemoryType::Register)
-            .split(x, eo, ei, lanes)
-            .gpu_lanes(ei)
-            .unroll(eo);
-
-        Func mi = m.update().split(r, ri, ro, lanes).reorder(ri, ro).rfactor(ro, u);
-        mi.compute_at(p, yi).gpu_lanes(u);
-        mi.update().gpu_lanes(u);
-        m.compute_at(p, yi).store_in(MemoryType::Register);
-
-        Func ti = total.update().split(r, ri, ro, lanes).reorder(ri, ro).rfactor(ro, v);
-        ti.compute_at(p, yi).gpu_lanes(v);
-        ti.update().gpu_lanes(v);
-        total.compute_at(p, yi).store_in(MemoryType::Register);
+        // The row statistics are one value per row, held as whole tiles with
+        // that value repeated along the row, which is what a reduction along
+        // an axis leaves behind and what makes reading them back alongside the
+        // scores cost nothing.
+        for (Func f : {m, total}) {
+            f.store_in(MemoryType::Tile)
+                .compute_at(p, xo)
+                .split(y, y, ryi, tile)
+                .unroll(y)
+                .vectorize(ryi);
+            f.update()
+                .split(y, y, ryi, tile)
+                .unroll(y)
+                .tile_reduce(r, ryi);
+        }
     }
 
 private:
     Var x{"x"}, y{"y"};
     RDom r;
-    Func e{"e"}, m{"m"}, total{"total"};
+    Func s{"s"}, m{"m"}, e{"e"}, total{"total"}, soft{"soft"};
 };
 
 }  // namespace
