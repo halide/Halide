@@ -692,6 +692,11 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         Scope<Interval> bounds;
         bounds.push(op->name, Interval(op->min, op->max));
 
+        // The same bounds with the first iteration excluded, for reasoning
+        // about what an inductive Func needs live once it is under way.
+        Scope<Interval> steady_bounds;
+        steady_bounds.push(op->name, Interval(simplify(op->min + 1), op->max));
+
         HasExternConsumer has_extern_consumer(func.name());
         body.accept(&has_extern_consumer);
 

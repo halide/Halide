@@ -402,7 +402,6 @@ enum class MemoryType {
      * on Hexagon */
     VTCM,
 
-<<<<<<< HEAD
     /** Storage for a matrix tile, in whatever form the target's matrix unit
      * keeps one: an AMX tile register on x86, or an NVIDIA tensor core
      * fragment striped across the registers of the 32 lanes of a warp. Either
@@ -415,11 +414,6 @@ enum class MemoryType {
      * Schedule these with tile_init, tile_load, tile_store and tile_matmul,
      * which set this memory type where it is needed. */
     Tile,
-=======
-    /** AMX Tile register for X86. Any data that would be used in an AMX matrix
-     * multiplication must first be loaded into an AMX tile register. */
-    AMXTile,
->>>>>>> slide_rewrite
 
     /** GPU shared memory, written by an asynchronous copy instruction that
      * moves data straight from global memory without routing it through
@@ -428,13 +422,10 @@ enum class MemoryType {
      * global buffer, because that is all the hardware can do. On GPU APIs with
      * no such instruction this is ordinary shared memory. */
     GPUSharedAsync,
-<<<<<<< HEAD
 
     /** Deprecated alias for Tile, which covers the tile storage of every
      * target's matrix unit rather than just x86's. */
     AMXTile = Tile,
-=======
->>>>>>> slide_rewrite
 };
 
 /** Whether a MemoryType places an allocation in GPU shared memory. */
