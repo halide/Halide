@@ -20,6 +20,13 @@ static constexpr int maximum_stack_allocation_bytes = 16384;
  * tensor core accumulator in. */
 static constexpr int wmma_accumulator_registers = 8;
 
+/** What a field the runtime has to fill in looks like before it does. Every
+ * field is written over in place, so it starts out as many of these as the
+ * value that replaces it will be wide. It is not a digit, so a module that
+ * reached the driver unpatched is rejected rather than quietly meaning
+ * something else. */
+static constexpr char wmma_field_placeholder = '?';
+
 /** Marks a read of one entry of a tensor core accumulator in generated PTX.
  * How the hardware spreads a fragment across the registers of a warp isn't
  * architecturally specified, so the CUDA runtime measures it and finishes
@@ -29,7 +36,7 @@ static constexpr int wmma_accumulator_registers = 8;
  *   { .reg .f32 %hget<8>;
  *   mov.f32 %hget0, %r7;
  *   ... one per register the accumulator lives in ...
- *   shfl.sync.idx.b32 %r20, %hget0,  0, 31, -1; }
+ *   shfl.sync.idx.b32 %r20, %hget?, ??, 31, -1; }
  *
  * The number is the entry wanted, as a row-major index into the matrix, in
  * hex - so for a 16x16 matrix its two digits read as the row and the column,
@@ -61,7 +68,7 @@ static constexpr int wmma_get_lane_digits = 2;
  *   { .reg .f32 %hget<8>;
  *   mov.f32 %hget0, %r7;
  *   ... one per register the accumulator lives in ...
- *   cvt.rn.f16x2.f32 %r30, %hget0, %hget0; }
+ *   cvt.rn.f16x2.f32 %r30, %hget?, %hget?; }
  *
  * The number is which register of the operand is being built, in hex. The
  * convert takes the high half first, so the runtime overwrites the first index
@@ -87,8 +94,8 @@ static constexpr const char *wmma_get_shuffle_tail = ", 31, -1;";
  *   { .reg .u32 %hbl; .reg .u32 %hbm<4>; .reg .pred %hbp<4>; .reg .f32 %hb<31>;
  *   mov.u32 %hbl, %laneid;
  *   // halide_wmma_build 03
- *   and.b32 %hbm0, %hbl, 16;
- *   setp.ne.u32 %hbp0, %hbm0, 0;
+ *   and.b32 %hbm0, %hbl, ??;
+ *   setp.ne.u32 %hbp0, %hbm0, ?;
  *   ... one pair per bit of the index ...
  *   mov.f32 %hb0, $1;
  *   ... one per entry of the vector ...
@@ -134,7 +141,7 @@ static constexpr int wmma_build_compare_digits = 1;
  *   { .reg .f32 %hget<8>;
  *   mov.f32 %hget0, %r7;
  *   ... one per register the accumulator lives in ...
- *   shfl.sync.bfly.b32 %r20, %hget0,  0, 31, -1; }
+ *   shfl.sync.bfly.b32 %r20, %hget?, ??, 31, -1; }
  *
  * The number is in hex, and reads as which register of the result is being
  * built, which bit of the index is flipped, and which axis it indexes - zero

@@ -44,13 +44,22 @@ namespace {
 using Halide::Runtime::Internal::Constants::wmma_accumulator_registers;
 using Halide::Runtime::Internal::Constants::wmma_build_element_marker;
 using Halide::Runtime::Internal::Constants::wmma_build_index_bits;
+using Halide::Runtime::Internal::Constants::wmma_build_compare_digits;
 using Halide::Runtime::Internal::Constants::wmma_build_mask_digits;
+using Halide::Runtime::Internal::Constants::wmma_field_placeholder;
 using Halide::Runtime::Internal::Constants::wmma_get_element_marker;
 using Halide::Runtime::Internal::Constants::wmma_get_entry_digits;
 using Halide::Runtime::Internal::Constants::wmma_get_lane_digits;
 using Halide::Runtime::Internal::Constants::wmma_get_shuffle_tail;
 using Halide::Runtime::Internal::Constants::wmma_pack_element_marker;
 using Halide::Runtime::Internal::Constants::wmma_xor_element_marker;
+
+// A field for the runtime to fill in, as wide as the value that will replace
+// it. Nothing else in the module looks like this, and it isn't valid PTX, so a
+// module that reaches the driver with one still in it gets rejected.
+string wmma_field(int width) {
+    return string(width, wmma_field_placeholder);
+}
 
 /** A code generator that emits GPU code from a given Halide stmt. */
 class CodeGen_PTX_Dev : public CodeGen_LLVM, public CodeGen_GPU_Dev {
@@ -535,7 +544,8 @@ void CodeGen_PTX_Dev::codegen_wmma_relayout(const Call *to_fragment,
         constraints << "=r";
         std::ostringstream asm_text;
         asm_text << wmma_named_registers(wmma_pack_element_marker, i, regs, constraints)
-                 << "\n\tcvt.rn.f16x2.f32 $0, %hget0, %hget0; }";
+                 << "\n\tcvt.rn.f16x2.f32 $0, %hget" << wmma_field(1)
+                 << ", %hget" << wmma_field(1) << "; }";
         llvm::InlineAsm *asm_call =
             llvm::InlineAsm::get(fn_type, asm_text.str(), constraints.str(),
                                  /* hasSideEffects */ false);
@@ -586,8 +596,9 @@ void CodeGen_PTX_Dev::codegen_wmma_build(const Call *op) {
         }
         for (int b = 0; b < wmma_build_index_bits; b++) {
             asm_text << "\n\tand.b32 %hbm" << b << ", %hbl, "
-                     << string(wmma_build_mask_digits - 1, ' ') << "0;"
-                     << "\n\tsetp.ne.u32 %hbp" << b << ", %hbm" << b << ", 0;";
+                     << wmma_field(wmma_build_mask_digits) << ";"
+                     << "\n\tsetp.ne.u32 %hbp" << b << ", %hbm" << b << ", "
+                     << wmma_field(wmma_build_compare_digits) << ";";
         }
         for (int i = 0; i < width; i++) {
             asm_text << "\n\tmov.f32 %hb" << i << ", $" << (i + 1) << ";";
@@ -646,9 +657,8 @@ void CodeGen_PTX_Dev::codegen_wmma_axis_xor(const Call *op) {
         constraints << "=f";
         std::ostringstream asm_text;
         asm_text << wmma_named_registers(wmma_xor_element_marker, index, regs, constraints)
-                 << "\n\tshfl.sync.bfly.b32 $0, %hget0, "
-                 << string(wmma_get_lane_digits - 1, ' ') << "0"
-                 << wmma_get_shuffle_tail << " }";
+                 << "\n\tshfl.sync.bfly.b32 $0, %hget" << wmma_field(1) << ", "
+                 << wmma_field(wmma_get_lane_digits) << wmma_get_shuffle_tail << " }";
 
         llvm::InlineAsm *asm_call =
             llvm::InlineAsm::get(fn_type, asm_text.str(), constraints.str(),
@@ -686,9 +696,8 @@ llvm::Value *CodeGen_PTX_Dev::codegen_wmma_get_element(const Call *op, int entry
     constraints << "=f";
     std::ostringstream asm_text;
     asm_text << wmma_named_registers(wmma_get_element_marker, entry, regs, constraints)
-             << "\n\tshfl.sync.idx.b32 $0, %hget0, "
-             << string(wmma_get_lane_digits - 1, ' ') << "0"
-             << wmma_get_shuffle_tail << " }";
+             << "\n\tshfl.sync.idx.b32 $0, %hget" << wmma_field(1) << ", "
+             << wmma_field(wmma_get_lane_digits) << wmma_get_shuffle_tail << " }";
 
     vector<llvm::Type *> arg_types(regs.size(), f32_t);
     llvm::FunctionType *fn_type = llvm::FunctionType::get(f32_t, arg_types, false);

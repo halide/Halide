@@ -18,6 +18,7 @@ using Halide::Runtime::Internal::Constants::wmma_build_compare_digits;
 using Halide::Runtime::Internal::Constants::wmma_build_element_marker;
 using Halide::Runtime::Internal::Constants::wmma_build_index_bits;
 using Halide::Runtime::Internal::Constants::wmma_build_mask_digits;
+using Halide::Runtime::Internal::Constants::wmma_field_placeholder;
 using Halide::Runtime::Internal::Constants::wmma_get_element_marker;
 using Halide::Runtime::Internal::Constants::wmma_get_entry_digits;
 using Halide::Runtime::Internal::Constants::wmma_get_lane_digits;
@@ -806,12 +807,19 @@ WEAK char *patch_wmma_markers(void *user_context, const char *ptx_src) {
         return false;
     };
 
-    // Overwrite a field of fixed width with a number, right aligned, because a
-    // leading zero would make PTX read it as octal.
-    auto write_number = [&](size_t at, int width, int value) {
+    // Fill in a field the marker left blank, right aligned, because a leading
+    // zero would make PTX read it as octal. Checking that it is blank first
+    // catches a marker whose shape has drifted from what this expects.
+    auto write_field = [&](size_t at, int width, int value) {
+        for (int i = 0; i < width; i++) {
+            if (patched[at + i] != wmma_field_placeholder) {
+                return fail("A field to fill in is not where it should be", at);
+            }
+        }
         for (int i = width - 1; i >= 0; i--, value /= 10) {
             patched[at + i] = (value || i == width - 1) ? (char)('0' + value % 10) : ' ';
         }
+        return true;
     };
 
     // What the marker asks for, as a fixed width hex number.
@@ -876,9 +884,11 @@ WEAK char *patch_wmma_markers(void *user_context, const char *ptx_src) {
             fail("A shuffle does not end the way it should", shuffle - patched);
             return free(patched), nullptr;
         }
-        write_number(comma[1] - 1, 1, wmma_entry_reg[entry]);
-        write_number(comma[2] - wmma_get_lane_digits, wmma_get_lane_digits,
-                     wmma_entry_lane[entry]);
+        if (!write_field(comma[1] - 1, 1, wmma_entry_reg[entry]) ||
+            !write_field(comma[2] - wmma_get_lane_digits, wmma_get_lane_digits,
+                         wmma_entry_lane[entry])) {
+            return free(patched), nullptr;
+        }
         offset = comma[2];
     }
 
@@ -923,8 +933,10 @@ WEAK char *patch_wmma_markers(void *user_context, const char *ptx_src) {
             fail("A convert does not end", convert - patched);
             return free(patched), nullptr;
         }
-        write_number(comma[1] - 1, 1, wmma_a_src_high[reg]);
-        write_number(cursor_end - 1, 1, wmma_a_src_low[reg]);
+        if (!write_field(comma[1] - 1, 1, wmma_a_src_high[reg]) ||
+            !write_field(cursor_end - 1, 1, wmma_a_src_low[reg])) {
+            return free(patched), nullptr;
+        }
         offset = cursor_end;
     }
 
@@ -989,14 +1001,14 @@ WEAK char *patch_wmma_markers(void *user_context, const char *ptx_src) {
                 while (patched[semicolon] && patched[semicolon] != ';') {
                     semicolon++;
                 }
-                if (!patched[semicolon] ||
-                    semicolon < (size_t)width[half] ||
-                    patched[semicolon - 1] != '0') {
+                if (!patched[semicolon] || semicolon < (size_t)width[half]) {
                     fail("A select tree is not shaped the way it should be",
                          marker - patched);
                     return free(patched), nullptr;
                 }
-                write_number(semicolon - width[half], width[half], value[half]);
+                if (!write_field(semicolon - width[half], width[half], value[half])) {
+                    return free(patched), nullptr;
+                }
                 semicolon++;
             }
         }
@@ -1067,8 +1079,10 @@ WEAK char *patch_wmma_markers(void *user_context, const char *ptx_src) {
             fail("A shuffle does not end the way it should", shuffle - patched);
             return free(patched), nullptr;
         }
-        write_number(comma[1] - 1, 1, src_reg);
-        write_number(comma[2] - wmma_get_lane_digits, wmma_get_lane_digits, mask);
+        if (!write_field(comma[1] - 1, 1, src_reg) ||
+            !write_field(comma[2] - wmma_get_lane_digits, wmma_get_lane_digits, mask)) {
+            return free(patched), nullptr;
+        }
         offset = comma[2];
     }
 
