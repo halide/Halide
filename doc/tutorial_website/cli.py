@@ -6,9 +6,14 @@ import sys
 from pathlib import Path
 
 from . import capture
-from .lesson import discover_lessons
+from .lesson import Lesson, discover_lessons
 from .manifest import load_manifest, load_python_env
-from .render import render_assets, render_index, render_lesson_page
+from .render import (
+    copy_lesson_assets,
+    lesson_asset_paths,
+    render_index,
+    render_lesson_page,
+)
 from .sitemap import build_sitemap, load_sitemap, write_sitemap
 
 
@@ -26,7 +31,7 @@ def main(argv: list[str] | None = None) -> int:
 
     assets_parser = subparsers.add_parser(
         "assets",
-        help="materialize figures/ and index.md (plus multi-part lesson groups)",
+        help="materialize index.md (plus multi-part lesson groups)",
     )
     assets_parser.add_argument("--tutorial-dir", type=Path, required=True)
     assets_parser.add_argument("--sitemap", type=Path, required=True)
@@ -57,6 +62,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     lesson_parser.add_argument(
         "--output-dir", type=Path, required=True, help="output site directory"
+    )
+    lesson_parser.add_argument(
+        "--depfile",
+        type=Path,
+        required=True,
+        help="write this lesson's referenced figure assets as dependencies",
     )
     lesson_parser.add_argument(
         "--prefer", default="auto", choices=["auto", "gdb", "lldb"]
@@ -104,9 +115,21 @@ def _import_check_env(python_env) -> dict[str, str]:
     return env
 
 
+def _escape_depfile_path(path: Path) -> str:
+    return str(path).replace("\\", "\\\\").replace(" ", "\\ ").replace("#", "\\#")
+
+
+def _write_lesson_depfile(args: argparse.Namespace, lesson: Lesson) -> None:
+    dependencies = lesson_asset_paths(lesson, args.tutorial_dir / "figures")
+    args.depfile.parent.mkdir(parents=True, exist_ok=True)
+    args.depfile.write_text(
+        f"{_escape_depfile_path(args.output_dir / f'{lesson.slug}.md')}: "
+        f"{' '.join(_escape_depfile_path(path) for path in dependencies)}\n"
+    )
+
+
 def _main_assets(args: argparse.Namespace) -> int:
     sitemap = load_sitemap(args.sitemap)
-    render_assets(args.tutorial_dir / "figures", args.output_dir)
     render_index(sitemap, args.output_dir)
 
     # Checked once, here, rather than inferred after the fact from every
@@ -137,6 +160,8 @@ def _main_lesson(args: argparse.Namespace) -> int:
     if lesson is None:
         print(f"error: no lesson found with slug {args.slug!r}", file=sys.stderr)
         return 1
+
+    copy_lesson_assets(lesson, args.tutorial_dir / "figures", args.output_dir)
 
     python_env = load_python_env(args.python_manifest)
 
@@ -190,6 +215,7 @@ def _main_lesson(args: argparse.Namespace) -> int:
                 python_snippets[lesson.python.env_capture_line] = output.strip()
 
     render_lesson_page(lesson, snippets, python_snippets, args.output_dir)
+    _write_lesson_depfile(args, lesson)
     return 0
 
 

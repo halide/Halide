@@ -80,8 +80,12 @@ set(DOXYGEN_SORT_MEMBER_DOCS NO)
 set(DOXYGEN_SOURCE_BROWSER YES)
 set(DOXYGEN_STRIP_CODE_COMMENTS NO)
 
+get_target_property(_doxygen_inputs Halide HEADER_SET_private_headers)
+get_target_property(_doxygen_runtime_headers Halide_Runtime HEADER_SET_HEADERS)
+list(APPEND _doxygen_inputs ${_doxygen_runtime_headers})
+list(REMOVE_DUPLICATES _doxygen_inputs)
 doxygen_add_docs(
-    doc_doxygen "src/"
+    doc_doxygen ${_doxygen_inputs} USE_STAMP_FILE
     WORKING_DIRECTORY "${Halide_SOURCE_DIR}"
     COMMENT "Generate Doxygen XML for Breathe"
 )
@@ -323,10 +327,7 @@ add_custom_command(
 )
 
 ##
-# index.md (plus multi-part-lesson group pages) and figures/: must run once,
-# from a single process -- unlike lesson pages, these aren't safe to produce
-# from several concurrent per-lesson processes, since concurrent writes/
-# copies into the same shared paths would race.
+# Build index.md and the multi-part-lesson group pages.
 ##
 
 set(_tutorial_index_file "${_tutorial_output_dir}/index.md")
@@ -340,10 +341,12 @@ add_custom_command(
         --output-dir "${_tutorial_output_dir}"
         --python-manifest "${_python_manifest_file}"
     DEPENDS
-        "${_tutorial_sitemap_file}" ${_tutorial_website_pkg_files} Halide::Python
+        Halide::Python
+        "${_tutorial_sitemap_file}"
+        ${_tutorial_website_pkg_files}
         "${_python_manifest_file}"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    COMMENT "Generating tutorial index and figures"
+    COMMENT "Generating tutorial index"
     VERBATIM
 )
 
@@ -390,6 +393,7 @@ foreach (_source_file IN LISTS _tutorial_source_files)
     endforeach ()
 
     set(_tutorial_page "${_tutorial_output_dir}/${_slug}.md")
+    set(_tutorial_page_depfile "${CMAKE_CURRENT_BINARY_DIR}/tutorial_${_slug}.d")
     add_custom_command(
         OUTPUT "${_tutorial_page}"
         COMMAND
@@ -399,12 +403,14 @@ foreach (_source_file IN LISTS _tutorial_source_files)
             --tutorial-dir "${Halide_SOURCE_DIR}/tutorial"
             --run-cwd "${Halide_BINARY_DIR}/tutorial"
             --output-dir "${_tutorial_output_dir}"
+            --depfile "${_tutorial_page_depfile}"
             --prefer "${_tutorial_debugger_preference}"
             ${_tutorial_debugger_args}
             --python-manifest "${_python_manifest_file}"
         DEPENDS ${_tutorial_lesson_depends}
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         COMMENT "Generating tutorial page: ${_slug}.md"
+        DEPFILE "${_tutorial_page_depfile}"
         VERBATIM
     )
     list(APPEND _tutorial_pages "${_tutorial_page}")

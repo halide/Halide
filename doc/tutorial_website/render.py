@@ -18,7 +18,9 @@ from __future__ import annotations
 
 import html
 import itertools
+import os
 import shutil
+import tempfile
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -57,10 +59,9 @@ def _build_insertions(
 
 
 def _render_figure(figure_ref: str, output_dir: Path) -> ContentBlock | None:
-    # Figures are materialized into output_dir/figures once, up front, by
-    # render_assets -- not here, since this runs as one of many concurrent
-    # per-lesson render processes and can't safely copy into a shared
-    # directory itself (concurrent "does it exist yet" checks would race).
+    # Each lesson materializes its referenced figures into output_dir/figures
+    # before rendering, using atomic replacements so concurrent lesson
+    # commands can safely copy the same asset.
     name = Path(figure_ref).name
     if not (output_dir / "figures" / name).exists():
         return None
@@ -134,17 +135,49 @@ def _block_to_myst(block: ContentBlock) -> str:
     raise ValueError(f"unknown content block kind: {block.kind!r}")
 
 
-def render_assets(figures_dir: Path, output_dir: Path) -> None:
-    """Materializes the figures/ directory shared across lesson pages. Run
-    once, up front, from a single process -- unlike lesson pages, this isn't
-    safe to run from several concurrent per-lesson render processes
-    (concurrent copies into the same shared directory would race)."""
-    output_dir.mkdir(parents=True, exist_ok=True)
+def lesson_asset_paths(lesson: Lesson, figures_dir: Path) -> list[Path]:
+    """Return this lesson's referenced source assets, including missing ones.
+
+    Keeping a missing referenced path in the depfile lets Ninja retry that
+    page after the asset is later added, without depending on the whole
+    figures directory.
+    """
+    variants = [lesson.cpp]
+    if lesson.python is not None:
+        variants.append(lesson.python)
+    return sorted(
+        {
+            figures_dir / Path(figure_ref).name
+            for variant in variants
+            for figure_refs in variant.figure_lines.values()
+            for figure_ref in figure_refs
+        }
+    )
+
+
+def copy_lesson_assets(lesson: Lesson, figures_dir: Path, output_dir: Path) -> None:
+    """Atomically copy the figures referenced by one lesson into the site.
+
+    Multiple lesson commands may copy the same figure concurrently. Each copy
+    uses a private temporary file in the destination directory, then replaces
+    the destination atomically, so concurrent writers cannot leave a partial
+    asset behind.
+    """
     dest_figures = output_dir / "figures"
-    if dest_figures.exists():
-        shutil.rmtree(dest_figures)
-    if figures_dir.exists():
-        shutil.copytree(figures_dir, dest_figures)
+    dest_figures.mkdir(parents=True, exist_ok=True)
+    for source in lesson_asset_paths(lesson, figures_dir):
+        if not source.is_file():
+            continue
+        destination = dest_figures / source.name
+        with tempfile.NamedTemporaryFile(
+            dir=dest_figures, prefix=f".{source.name}.", delete=False
+        ) as tmp:
+            tmp_path = Path(tmp.name)
+        try:
+            shutil.copy2(source, tmp_path)
+            os.replace(tmp_path, destination)
+        finally:
+            tmp_path.unlink(missing_ok=True)
 
 
 def _group_by_number(
