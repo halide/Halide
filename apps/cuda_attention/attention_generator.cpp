@@ -236,17 +236,22 @@ private:
 // read but not the write, and measured 114us. Neither would have been a
 // baseline worth comparing against.
 //
-// The exponentials are left inline, so each one is evaluated twice, once to
-// sum it and once to normalise by that sum. Keeping them in the lanes that
-// hold them instead, so each is evaluated once, measures the same to a tenth
-// of a microsecond, and so does swapping exp for fast_exp. Neither is what
-// this waits on: ncu puts the load/store pipe at 98% of what it can issue
-// while every arithmetic pipeline is under-utilised and the SMs are busy 37%
-// of the time. It is bound by memory instructions rather than by bandwidth -
-// DRAM is at 36% - so the way to speed it up is fewer, wider accesses, not
-// cheaper arithmetic. Each lane holding two adjacent columns rather than two
-// a warp apart would make the stores full width, which is the next thing to
-// try here.
+// Each lane keeps the exponentials of the columns it holds, so each is
+// evaluated once, rather than once where it is summed and once where it is
+// divided by that sum. Leaving them inline measures the same to a tenth of a
+// microsecond, but that says nothing: ptxas will happily common up two
+// identical calls on the same value, so the two schedules may well be the
+// same code. Asking for the work once is the honest way to write it either
+// way.
+//
+// Nor does fast_exp change anything, and here the measurement does say
+// something, because ncu says what this waits on: the load/store pipe at 98%
+// of what it can issue, every arithmetic pipeline under-utilised, and the SMs
+// busy 37% of the time. It is bound by memory instructions rather than by
+// bandwidth - DRAM is at 36% - so the way to speed it up is fewer and wider
+// accesses, not cheaper arithmetic. Each lane holding two adjacent columns
+// rather than two a warp apart would make the stores full width, which is the
+// next thing to try here.
 class AttentionSoftmax : public Halide::Generator<AttentionSoftmax> {
 public:
     GeneratorParam<int> queries{"queries", 16384};
@@ -311,6 +316,15 @@ public:
             .split(_0, so, si, lanes)
             .gpu_lanes(si)
             .unroll(so);
+
+        // Each lane keeps the exponentials of the columns it holds, so each is
+        // evaluated once rather than once to sum and once to normalise.
+        Var eo("eo"), ei("ei");
+        e.compute_at(p, yi)
+            .store_in(MemoryType::Register)
+            .split(x, eo, ei, lanes)
+            .gpu_lanes(ei)
+            .unroll(eo);
 
         Func mi = m.update().split(r, ri, ro, lanes).reorder(ri, ro).rfactor(ro, u);
         mi.compute_at(p, yi).gpu_lanes(u);
