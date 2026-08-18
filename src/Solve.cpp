@@ -1064,10 +1064,12 @@ class SolveForInterval : public IRVisitor {
         // and the rule for && will intersect the LHS with everything,
         // leaving the LHS as the final result.
         if (Expr cond = le; !expr_uses_var(cond, var)) {
+            // Respect the polarity we're solving for: under a negation we want
+            // the region where the condition is false.
             if (can_prove(cond)) {
-                result = Interval::everything();
+                result = target ? Interval::everything() : Interval::nothing();
             } else if (can_prove(!cond)) {
-                result = Interval::nothing();
+                result = target ? Interval::nothing() : Interval::everything();
             } else {
                 fail();
             }
@@ -1168,9 +1170,9 @@ class SolveForInterval : public IRVisitor {
         // See the analogous check in visit(const LE *).
         if (Expr cond = ge; !expr_uses_var(ge, var)) {
             if (can_prove(cond)) {
-                result = Interval::everything();
+                result = target ? Interval::everything() : Interval::nothing();
             } else if (can_prove(!cond)) {
-                result = Interval::nothing();
+                result = target ? Interval::nothing() : Interval::everything();
             } else {
                 fail();
             }

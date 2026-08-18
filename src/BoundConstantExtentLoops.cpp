@@ -62,9 +62,7 @@ protected:
             if (e == nullptr) {
                 // We're about to hard fail. Get really aggressive
                 // with the simplifier.
-                for (const auto &[var, value] : reverse_view(lets)) {
-                    extent = Let::make(var, value, extent);
-                }
+                extent = rewrap_used_lets(extent, lets);
                 extent = remove_likelies(extent);
                 extent = substitute_in_all_lets(extent);
                 extent = simplify(extent,

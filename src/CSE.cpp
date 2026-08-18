@@ -233,10 +233,7 @@ protected:
         Expr dummy = Call::make(Int(32), Call::bundle, {op->value, op->index}, Call::PureIntrinsic);
         dummy = common_subexpression_elimination(dummy, lift_all);
         vector<pair<string, Expr>> lets;
-        while (const Let *let = dummy.as<Let>()) {
-            lets.emplace_back(let->name, let->value);
-            dummy = let->body;
-        }
+        dummy = peel_lets(dummy, &lets);
         const Call *bundle = Call::as_intrinsic(dummy, {Call::bundle});
         internal_assert(bundle && bundle->args.size() == 2);
 

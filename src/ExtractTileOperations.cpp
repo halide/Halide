@@ -67,11 +67,7 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
 
     // Peel lets
     std::vector<std::pair<std::string, Expr>> peeled_lets;
-    Expr value = op->value;
-    while (const Let *let = value.as<Let>()) {
-        peeled_lets.emplace_back(let->name, let->value);
-        value = let->body;
-    }
+    Expr value = peel_lets(op->value, &peeled_lets);
 
     // The RHS must be an add
     const auto *add = value.as<Add>();
@@ -317,10 +313,8 @@ Matmul convert_to_matmul(const Store *op, const string &new_name) {
     auto matmul = Call::make(res_type, "tile_matmul",
                              {I, col_bytes, K, out_load, lhs_call, rhs_call},
                              Call::Intrinsic);
-    auto store = Store::make(new_name, matmul, std::move(subtile_idx));
-    for (auto &[name, value] : reverse_view(peeled_lets)) {
-        store = LetStmt::make(name, std::move(value), store);
-    }
+    Stmt store = Store::make(new_name, matmul, std::move(subtile_idx));
+    store = rewrap_all_lets(store, peeled_lets);
     return {true, std::move(store), I, J, K};
 }
 

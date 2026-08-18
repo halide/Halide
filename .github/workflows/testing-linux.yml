@@ -161,7 +161,7 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Point Gradle at a CMake >= 3.28
         # AGP's own bundled/SDK-managed CMake package defaults to an older

@@ -2653,6 +2653,44 @@ public:
      */
     Func &compute_inline();
 
+    /** Change the type at which this Func computes and stores its values,
+     * subject to a reduction-aware safety check.
+     *
+     * This splits the Func in two: a new intermediate Func (returned) that
+     * copies this Func's definitions but accumulates at the requested type `t`
+     * (with the appropriate casts inserted, preferring integer forms such as
+     * widening_mul over float round-trips), and this Func, which is rewritten in
+     * place into an inline wrapper that casts the intermediate's result back to
+     * the original type. Every existing consumer therefore keeps seeing the
+     * original type, while the returned intermediate can be scheduled to exploit
+     * the new type (e.g. an Int(32) accumulator eligible for dot-product
+     * instructions). Schedule the returned Func to control the retyped
+     * computation.
+     *
+     * The change is validated with the bounds machinery: for an integer or
+     * floating-point target, change_type() proves the accumulation cannot
+     * overflow (or, for a float target, lose precision) by combining the
+     * per-term value range with the reduction extent. A float target is
+     * checked against the largest integer it can represent exactly (e.g. 2048
+     * for float16), not its full dynamic range, so an integer accumulation
+     * retyped to it stays exact rather than merely finite. If it can only be
+     * guaranteed under a runtime precondition (e.g. the RDom extent isn't too
+     * wide), that precondition is injected into the pipeline's assertion block
+     * (and removed by the no_asserts target feature). If safety cannot be
+     * established, change_type() errors unless `unsafe` is true, which bypasses
+     * the check entirely.
+     *
+     * Translating a min/max identity that does not round-trip through `t`
+     * additionally requires the first update to be dense and unpredicated. Its
+     * reduction extents must be statically positive or satisfy an injected
+     * runtime precondition that they are positive.
+     *
+     * Currently supports single-output Funcs whose update definitions use a
+     * binary operator with one operand that is a direct call to the accumulator
+     * and one self-reference-free term. Difference reductions must have the
+     * accumulator as the left operand. */
+    Func change_type(Type t, bool unsafe = false);
+
     /** Immediately inline direct calls to each of the given Funcs into this
      * Func's initial (pure) definition. The Funcs are inlined in dependency
      * order regardless of the order they are passed, so if one inlined Func's
