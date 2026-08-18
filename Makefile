@@ -837,6 +837,7 @@ RUNTIME_CPP_COMPONENTS = \
   cache \
   can_use_target \
   cuda \
+  cuda_wmma \
   destructors \
   device_interface \
   errors \

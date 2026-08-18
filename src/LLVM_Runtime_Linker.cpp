@@ -120,6 +120,7 @@ DECLARE_CPP_INITMOD(android_io)
 DECLARE_CPP_INITMOD(cache)
 DECLARE_CPP_INITMOD(can_use_target)
 DECLARE_CPP_INITMOD(cuda)
+DECLARE_CPP_INITMOD(cuda_wmma)
 DECLARE_CPP_INITMOD(destructors)
 DECLARE_CPP_INITMOD(device_interface)
 DECLARE_CPP_INITMOD(errors)
@@ -1316,6 +1317,9 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             } else {
                 modules.push_back(get_initmod_cuda(c, bits_64, debug));
             }
+            // Where a module is loaded is where the tensor core instructions
+            // it was left with get finished off.
+            modules.push_back(get_initmod_cuda_wmma(c, bits_64, debug));
         }
         if (t.has_feature(Target::OpenCL)) {
             if (t.os == Target::Windows) {

@@ -14,6 +14,7 @@ set(RUNTIME_CPP
     cache
     can_use_target
     cuda
+    cuda_wmma
     destructors
     device_interface
     errors

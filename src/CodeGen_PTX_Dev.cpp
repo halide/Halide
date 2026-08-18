@@ -48,9 +48,6 @@ using Halide::Runtime::Internal::Constants::wmma_build_compare_digits;
 using Halide::Runtime::Internal::Constants::wmma_build_mask_digits;
 using Halide::Runtime::Internal::Constants::wmma_field_placeholder;
 using Halide::Runtime::Internal::Constants::wmma_get_element_marker;
-using Halide::Runtime::Internal::Constants::wmma_get_entry_digits;
-using Halide::Runtime::Internal::Constants::wmma_get_lane_digits;
-using Halide::Runtime::Internal::Constants::wmma_get_shuffle_tail;
 using Halide::Runtime::Internal::Constants::wmma_pack_element_marker;
 using Halide::Runtime::Internal::Constants::wmma_xor_element_marker;
 
@@ -192,11 +189,12 @@ protected:
      * finish: a butterfly by zero is a lane reading itself. */
     void codegen_wmma_axis_xor(const Call *op);
 
-    /** The copies of a fragment into registers this end names, which a marker
-     * is patched to pick between. */
-    std::string wmma_named_registers(const std::string &marker, int index,
-                                     const std::vector<llvm::Value *> &regs,
-                                     std::ostringstream &constraints);
+    /** A pretend instruction naming every register a fragment lives in and
+     * what is wanted out of them, which the runtime rewrites into the real
+     * instruction once it knows where in them that is. */
+    std::string wmma_marker(const std::string &marker, int index,
+                            const std::vector<llvm::Value *> &regs,
+                            std::ostringstream &constraints);
     void visit(const Shuffle *) override;
 
     /** A fragment is a fixed number of 32-bit registers per lane. Keeping it in
@@ -495,26 +493,23 @@ bool wmma_reg_is_packed_i32(Type t) {
     return t.bits() < 32 && t.element_of() != Float(16);
 }
 
-string CodeGen_PTX_Dev::wmma_named_registers(const std::string &marker, int index,
-                                             const vector<Value *> &regs,
-                                             std::ostringstream &constraints) {
+string CodeGen_PTX_Dev::wmma_marker(const std::string &marker, int index,
+                                    const vector<Value *> &regs,
+                                    std::ostringstream &constraints) {
     // Which register of a fragment holds what is only known once the runtime
-    // has measured the layout. Copy them into registers this end names, so
-    // that what follows can be left naming one of those and the runtime only
-    // has to overwrite an index rather than compose an instruction out of
-    // names the register allocator chose. $0 is the result, and $1 onwards are
-    // the registers.
-    internal_assert(index >= 0 && index < (1 << (4 * wmma_get_entry_digits)));
+    // has measured the layout, so name all of them and let it pick. What is
+    // wanted out of them comes first, so that the runtime knows which ones to
+    // keep by the time they go past, then the result, then the registers. The
+    // runtime writes the real instruction over this one, which fits because
+    // that one names two of the registers where this names them all.
+    internal_assert(index >= 0);
     std::ostringstream asm_text;
-    asm_text << "// " << marker << " ";
-    for (int i = wmma_get_entry_digits - 1; i >= 0; i--) {
-        asm_text << "0123456789abcdef"[(index >> (4 * i)) & 15];
-    }
-    asm_text << "\n\t{ .reg .f32 %hget<" << regs.size() << ">;";
+    asm_text << marker << " " << index << ", $0";
     for (size_t i = 0; i < regs.size(); i++) {
-        asm_text << "\n\tmov.f32 %hget" << i << ", $" << (i + 1) << ";";
+        asm_text << ", $" << (i + 1);
         constraints << ",f";
     }
+    asm_text << ";";
     return asm_text.str();
 }
 
@@ -542,12 +537,9 @@ void CodeGen_PTX_Dev::codegen_wmma_relayout(const Call *to_fragment,
     for (int i = 0; i < num_regs; i++) {
         std::ostringstream constraints;
         constraints << "=r";
-        std::ostringstream asm_text;
-        asm_text << wmma_named_registers(wmma_pack_element_marker, i, regs, constraints)
-                 << "\n\tcvt.rn.f16x2.f32 $0, %hget" << wmma_field(1)
-                 << ", %hget" << wmma_field(1) << "; }";
+        string asm_text = wmma_marker(wmma_pack_element_marker, i, regs, constraints);
         llvm::InlineAsm *asm_call =
-            llvm::InlineAsm::get(fn_type, asm_text.str(), constraints.str(),
+            llvm::InlineAsm::get(fn_type, asm_text, constraints.str(),
                                  /* hasSideEffects */ false);
         packed.push_back(builder->CreateBitCast(builder->CreateCall(asm_call, regs), half2));
     }
@@ -590,10 +582,7 @@ void CodeGen_PTX_Dev::codegen_wmma_build(const Call *op) {
                  << "\n\t// " << wmma_build_element_marker << " ";
         // Which register, and which way round the vector is spread, both fit
         // in a digit of the index the marker already has room for.
-        const int index = (axis << 4) | reg;
-        for (int i = wmma_get_entry_digits - 1; i >= 0; i--) {
-            asm_text << "0123456789abcdef"[(index >> (4 * i)) & 15];
-        }
+        asm_text << ((axis << 4) | reg);
         for (int b = 0; b < wmma_build_index_bits; b++) {
             asm_text << "\n\tand.b32 %hbm" << b << ", %hbl, "
                      << wmma_field(wmma_build_mask_digits) << ";"
@@ -651,17 +640,13 @@ void CodeGen_PTX_Dev::codegen_wmma_axis_xor(const Call *op) {
     value = UndefValue::get(llvm_type_of(op->type));
     for (int reg = 0; reg < (int)regs.size(); reg++) {
         // Which register of the result, which bit of the index, and which axis
-        // it indexes all fit in the two digits the marker has room for.
+        // it indexes, packed into the one number the marker carries.
         const int index = (axis << 7) | (bit << 4) | reg;
         std::ostringstream constraints;
         constraints << "=f";
-        std::ostringstream asm_text;
-        asm_text << wmma_named_registers(wmma_xor_element_marker, index, regs, constraints)
-                 << "\n\tshfl.sync.bfly.b32 $0, %hget" << wmma_field(1) << ", "
-                 << wmma_field(wmma_get_lane_digits) << wmma_get_shuffle_tail << " }";
-
+        string asm_text = wmma_marker(wmma_xor_element_marker, index, regs, constraints);
         llvm::InlineAsm *asm_call =
-            llvm::InlineAsm::get(fn_type, asm_text.str(), constraints.str(),
+            llvm::InlineAsm::get(fn_type, asm_text, constraints.str(),
                                  /* hasSideEffects */ false);
         llvm::CallInst *call = builder->CreateCall(asm_call, regs);
         // It reads the registers of other lanes, so it must stay where the
@@ -686,23 +671,14 @@ llvm::Value *CodeGen_PTX_Dev::codegen_wmma_get_element(const Call *op, int entry
     split_fragment(fragment, regs);
     internal_assert((int)regs.size() == wmma_accumulator_registers);
 
-    // Which register holds the entry, and which lane, is only known once the
-    // runtime has measured the layout. Copy the fragment into registers this
-    // end names, so that the shuffle can be left naming one of those and the
-    // runtime only has to overwrite an index rather than compose an
-    // instruction out of names the register allocator chose. $0 is the result,
-    // and $1 onwards are the registers.
     std::ostringstream constraints;
     constraints << "=f";
-    std::ostringstream asm_text;
-    asm_text << wmma_named_registers(wmma_get_element_marker, entry, regs, constraints)
-             << "\n\tshfl.sync.idx.b32 $0, %hget" << wmma_field(1) << ", "
-             << wmma_field(wmma_get_lane_digits) << wmma_get_shuffle_tail << " }";
+    string asm_text = wmma_marker(wmma_get_element_marker, entry, regs, constraints);
 
     vector<llvm::Type *> arg_types(regs.size(), f32_t);
     llvm::FunctionType *fn_type = llvm::FunctionType::get(f32_t, arg_types, false);
     llvm::InlineAsm *asm_call =
-        llvm::InlineAsm::get(fn_type, asm_text.str(), constraints.str(),
+        llvm::InlineAsm::get(fn_type, asm_text, constraints.str(),
                              /* hasSideEffects */ false);
     llvm::CallInst *call = builder->CreateCall(asm_call, regs);
     // It reads the registers of other lanes, so it must stay where the whole
