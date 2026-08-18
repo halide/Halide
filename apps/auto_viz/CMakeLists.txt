@@ -49,15 +49,14 @@ endif ()
 
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgb_small.png)
 if (EXISTS ${IMAGE})
-    configure_file(${IMAGE} rgb_small.png COPYONLY)
     foreach (schedule IN ITEMS naive lessnaive complex)
         add_test(
             NAME auto_viz_demo_${schedule}_up
-            COMMAND auto_viz_demo rgb_small.png out_${schedule}_up.png -s ${schedule} -f 4.0
+            COMMAND auto_viz_demo ${IMAGE} out_${schedule}_up.png -s ${schedule} -f 4.0
         )
         add_test(
             NAME auto_viz_demo_${schedule}_down
-            COMMAND auto_viz_demo rgb_small.png out_${schedule}_down.png -s ${schedule} -f 0.25
+            COMMAND auto_viz_demo ${IMAGE} out_${schedule}_down.png -s ${schedule} -f 0.25
         )
         set_tests_properties(
             auto_viz_demo_${schedule}_up auto_viz_demo_${schedule}_down

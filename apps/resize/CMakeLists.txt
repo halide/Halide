@@ -65,11 +65,9 @@ target_link_libraries(resize PRIVATE Halide::ImageIO ${FILTERS})
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgb.png)
 if (EXISTS ${IMAGE})
-    configure_file(${IMAGE} rgb.png COPYONLY)
-
     add_test(
         NAME resize_initial_downsample
-        COMMAND resize rgb.png rgb_small.png -i lanczos -t float32 -f 0.125
+        COMMAND resize ${IMAGE} rgb_small.png -i lanczos -t float32 -f 0.125
     )
 
     set_tests_properties(
@@ -91,7 +89,7 @@ if (EXISTS ${IMAGE})
             set(INPUT rgb_small.png)
         else ()
             set(F 0.5)
-            set(INPUT rgb.png)
+            set(INPUT ${IMAGE})
         endif ()
         add_test(
             NAME resize_${VARIANT}

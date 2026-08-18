@@ -44,8 +44,7 @@ if (EXISTS ${IMAGE})
         # Error: OpenCL error: CL_INVALID_COMMAND_QUEUE clFinish failed
         message(WARNING "Skipping Mullapudi2016's GPU auto-schedules for OpenCL target.")
     else ()
-        configure_file(${IMAGE} rgb.png COPYONLY)
-        add_test(NAME iir_blur_filter COMMAND iir_blur_filter rgb.png out.png)
+        add_test(NAME iir_blur_filter COMMAND iir_blur_filter ${IMAGE} out.png)
         set_tests_properties(
             iir_blur_filter
             PROPERTIES
