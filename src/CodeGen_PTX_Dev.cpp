@@ -194,7 +194,8 @@ protected:
      * instruction once it knows where in them that is. */
     std::string wmma_marker(const std::string &marker, int index,
                             const std::vector<llvm::Value *> &regs,
-                            std::ostringstream &constraints);
+                            std::ostringstream &constraints,
+                            const char *reg_constraint = "f");
     void visit(const Shuffle *) override;
 
     /** A fragment is a fixed number of 32-bit registers per lane. Keeping it in
@@ -495,7 +496,8 @@ bool wmma_reg_is_packed_i32(Type t) {
 
 string CodeGen_PTX_Dev::wmma_marker(const std::string &marker, int index,
                                     const vector<Value *> &regs,
-                                    std::ostringstream &constraints) {
+                                    std::ostringstream &constraints,
+                                    const char *reg_constraint) {
     // Which register of a fragment holds what is only known once the runtime
     // has measured the layout, so name all of them and let it pick. What is
     // wanted out of them comes first, so that the runtime knows which ones to
@@ -507,7 +509,7 @@ string CodeGen_PTX_Dev::wmma_marker(const std::string &marker, int index,
     asm_text << marker << " " << index << ", $0";
     for (size_t i = 0; i < regs.size(); i++) {
         asm_text << ", $" << (i + 1);
-        constraints << ",f";
+        constraints << "," << reg_constraint;
     }
     asm_text << ";";
     return asm_text.str();
@@ -626,33 +628,60 @@ void CodeGen_PTX_Dev::codegen_wmma_axis_xor(const Call *op) {
     const int axis = *as_const_int(op->args[2]);
     const int bit = *as_const_int(op->args[3]);
     const Expr &fragment = op->args[4];
-    user_assert(fragment.type().element_of() == Float(32))
+    const Type element = fragment.type().element_of();
+    user_assert(element == Float(32) || element == Float(16))
         << "Reducing along an axis of a tensor core accumulator is only "
-        << "implemented for single precision accumulators, but this one holds "
-        << fragment.type().element_of() << "\n";
+        << "implemented for single and half precision accumulators, but this "
+        << "one holds " << element << "\n";
 
+    // A half precision accumulator packs two entries into each register, so
+    // its registers are pairs rather than floats, and a marker over them names
+    // half as many.
+    const bool half = element == Float(16);
     vector<Value *> regs;
     split_fragment(fragment, regs);
-    internal_assert((int)regs.size() == wmma_accumulator_registers);
+    const int num_regs = (int)regs.size();
+    llvm::Type *reg_type = half ? i32_t : f32_t;
+    const char *reg_constraint = half ? "r" : "f";
+    if (half) {
+        for (Value *&reg : regs) {
+            reg = builder->CreateBitCast(reg, i32_t);
+        }
+    }
 
-    vector<llvm::Type *> arg_types(regs.size(), f32_t);
-    llvm::FunctionType *fn_type = llvm::FunctionType::get(f32_t, arg_types, false);
-    value = UndefValue::get(llvm_type_of(op->type));
-    for (int reg = 0; reg < (int)regs.size(); reg++) {
-        // Which register of the result, which bit of the index, and which axis
-        // it indexes, packed into the one number the marker carries.
-        const int index = (axis << 7) | (bit << 4) | reg;
+    vector<llvm::Type *> arg_types(num_regs, reg_type);
+    llvm::FunctionType *fn_type = llvm::FunctionType::get(reg_type, arg_types, false);
+    vector<Value *> results;
+    for (int reg = 0; reg < num_regs; reg++) {
+        // Which register of the result, which bit of the index, which axis it
+        // indexes, and which precision, packed into the one number the marker
+        // carries.
+        const int index = (half << 8) | (axis << 7) | (bit << 4) | reg;
         std::ostringstream constraints;
-        constraints << "=f";
-        string asm_text = wmma_marker(wmma_xor_element_marker, index, regs, constraints);
+        constraints << "=" << reg_constraint;
+        string asm_text = wmma_marker(wmma_xor_element_marker, index, regs,
+                                      constraints, reg_constraint);
         llvm::InlineAsm *asm_call =
             llvm::InlineAsm::get(fn_type, asm_text, constraints.str(),
                                  /* hasSideEffects */ false);
         llvm::CallInst *call = builder->CreateCall(asm_call, regs);
-        // It reads the registers of other lanes, so it must stay where the
+        // It may read the registers of other lanes, so it must stay where the
         // whole warp reaches it.
         call->addFnAttr(llvm::Attribute::Convergent);
-        value = builder->CreateInsertElement(value, call, reg);
+        results.push_back(call);
+    }
+
+    if (half) {
+        llvm::Type *half2 = get_vector_type(llvm_type_of(Float(16)), 2);
+        for (Value *&result : results) {
+            result = builder->CreateBitCast(result, half2);
+        }
+        value = concat_vectors(results);
+    } else {
+        value = UndefValue::get(llvm_type_of(op->type));
+        for (int reg = 0; reg < num_regs; reg++) {
+            value = builder->CreateInsertElement(value, results[reg], reg);
+        }
     }
 }
 

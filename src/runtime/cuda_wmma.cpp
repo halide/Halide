@@ -227,20 +227,26 @@ WEAK void find_wmma_relayout(const uint16_t *a_held) {
 // holding the same value, which makes the shuffles that follow identical to
 // each other, and identical shuffles cost one between them.
 WEAK uint8_t wmma_xor_order[2][wmma_axis_bits];
+WEAK uint8_t wmma_xor_order_f16[2][wmma_axis_bits];
 
 WEAK void find_wmma_xor_order() {
-    for (int axis = 0; axis < 2; axis++) {
-        // The row is the high half of an entry's index and the column the low.
-        const int flip = axis ? 0 : wmma_axis_bits;
-        int round = 0;
-        for (int within_lane = 1; within_lane >= 0; within_lane--) {
-            for (int bit = 0; bit < wmma_axis_bits; bit++) {
-                bool stays = true;
-                for (int e = 0; e < wmma_entries; e++) {
-                    stays &= wmma_entry_lane[e ^ (1 << (bit + flip))] == wmma_entry_lane[e];
-                }
-                if (stays == (within_lane != 0)) {
-                    wmma_xor_order[axis][round++] = (uint8_t)bit;
+    for (int precision = 0; precision < 2; precision++) {
+        const uint8_t *lane_of = precision ? wmma_entry_lane_f16 : wmma_entry_lane;
+        uint8_t(*order)[wmma_axis_bits] = precision ? wmma_xor_order_f16 : wmma_xor_order;
+        for (int axis = 0; axis < 2; axis++) {
+            // The row is the high half of an entry's index and the column the
+            // low.
+            const int flip = axis ? 0 : wmma_axis_bits;
+            int round = 0;
+            for (int within_lane = 1; within_lane >= 0; within_lane--) {
+                for (int bit = 0; bit < wmma_axis_bits; bit++) {
+                    bool stays = true;
+                    for (int e = 0; e < wmma_entries; e++) {
+                        stays &= lane_of[e ^ (1 << (bit + flip))] == lane_of[e];
+                    }
+                    if (stays == (within_lane != 0)) {
+                        order[axis][round++] = (uint8_t)bit;
+                    }
                 }
             }
         }
@@ -511,12 +517,14 @@ WEAK char *patch_wmma_markers(void *user_context, const char *ptx_src) {
             }
             // Operand -1 is the number the marker asks with, which the caller
             // has already read.
-            const int slot = operand < 0             ? -1 :
-                             operand == 0            ? 0 :
-                             operand == keep_a       ? 1 :
-                             operand == keep_b       ? 2 :
-                                                       -1;
-            if (slot >= 0) {
+            // An operand can be kept twice - prmt names the register it
+            // permutes as both of its sources - so these are separate tests
+            // rather than one choice.
+            for (int slot = 0; slot < 3; slot++) {
+                const int wanted = slot == 0 ? 0 : (slot == 1 ? keep_a : keep_b);
+                if (operand < 0 || operand != wanted) {
+                    continue;
+                }
                 if (end - begin > (int)sizeof(kept[0])) {
                     return fail("A marker names a register that is too long to be one",
                                 marker - patched);
@@ -716,43 +724,51 @@ WEAK char *patch_wmma_markers(void *user_context, const char *ptx_src) {
     if (!each_marker(
             wmma_xor_element_marker,
             [&](char *marker, int packed) {
-                const int reg = packed & 15, round = (packed >> 4) & 7, axis = packed >> 7;
-                if (reg >= wmma_accumulator_registers) {
-                    return fail("The register the marker asks for is not one the "
-                                "accumulator has",
-                                marker - patched);
-                }
-                if (round >= wmma_axis_bits) {
-                    return fail("The marker asks for a round of a reduction that is "
-                                "longer than an axis of the tile is",
+                const int reg = packed & 15, round = (packed >> 4) & 7;
+                const int axis = (packed >> 7) & 1;
+                const bool half = (packed >> 8) & 1;
+                const int registers = half ? wmma_accumulator_registers_f16 :
+                                             wmma_accumulator_registers;
+                if (reg >= registers || round >= wmma_axis_bits) {
+                    return fail("The marker asks for a register or a round that "
+                                "the accumulator does not have",
                                 marker - patched);
                 }
                 // Which bit each round flips is this end's to choose.
-                const int bit = wmma_xor_order[axis][round];
+                const int bit = half ? wmma_xor_order_f16[axis][round] :
+                                       wmma_xor_order[axis][round];
+                // The row is the high half of an entry's index and the column
+                // the low.
+                const int flip = axis ? 0 : wmma_axis_bits;
 
-                // Where the entry each lane holds in that register comes from.
-                // For this to be one instruction every lane has to find it in
-                // the same register of the lane it swaps with, and every pair
-                // of lanes has to differ by the same amount, which is what
-                // makes the swap a butterfly. The row is the high half of an
-                // entry's index and the column the low.
-                const int flip = axis ? 0 : 4;
-                int src_reg = -1, mask = -1;
+                const uint8_t *lane_of = half ? wmma_entry_lane_f16 : wmma_entry_lane;
+                const uint8_t *reg_of = half ? wmma_entry_reg_f16 : wmma_entry_reg;
+
+                // Where the entries this register holds are exchanged from.
+                // For this to be one instruction every lane has to find them in
+                // the same register of the lane it swaps with, every pair of
+                // lanes has to differ by the same amount, and the halves have
+                // to move together or swap together.
+                int src_reg = -1, mask = -1, swaps_halves = -1;
                 for (int e = 0; e < wmma_entries; e++) {
-                    if (wmma_entry_reg[e] != reg) {
+                    if (reg_of[e] != reg) {
                         continue;
                     }
                     const int from = e ^ (1 << (bit + flip));
-                    const int swap = wmma_entry_lane[e] ^ wmma_entry_lane[from];
+                    const int swap = lane_of[e] ^ lane_of[from];
+                    const int flipped_half =
+                        half ? wmma_entry_half_f16[e] ^ wmma_entry_half_f16[from] : 0;
                     if (src_reg < 0) {
-                        src_reg = wmma_entry_reg[from];
+                        src_reg = reg_of[from];
                         mask = swap;
-                    } else if (src_reg != wmma_entry_reg[from] || mask != swap) {
+                        swaps_halves = flipped_half;
+                    } else if (src_reg != reg_of[from] || mask != swap ||
+                               swaps_halves != flipped_half) {
                         src_reg = -1;
                         break;
                     }
                 }
-                if (src_reg < 0) {
+                if (src_reg < 0 || (swaps_halves && (mask || src_reg != reg))) {
                     return fail("This device spreads an accumulator over the lanes "
                                 "of a warp in a way that doesn't let entries be "
                                 "exchanged along an axis of the matrix in one step, "
@@ -762,10 +778,16 @@ WEAK char *patch_wmma_markers(void *user_context, const char *ptx_src) {
                                 marker - patched);
                 }
 
-                // A mask of zero means the entry to combine with is one this
-                // lane already holds, in another of its own registers, so the
-                // exchange is a move and no lanes need to meet to do it.
+                if (swaps_halves) {
+                    // The entry to combine with is the other half of this
+                    // lane's own register, so the exchange is a permute of the
+                    // two halves and nothing moves anywhere. The selector
+                    // names the bytes of the result from the low end.
+                    return rewrite(marker, wmma_xor_element_marker, "prmt.b32",
+                                   1 + src_reg, 1 + src_reg, 0x1032, ";");
+                }
                 if (mask == 0) {
+                    // A register of this lane's own, so a move.
                     return rewrite(marker, wmma_xor_element_marker, "mov.b32",
                                    1 + src_reg, -1, -1, ";");
                 }
