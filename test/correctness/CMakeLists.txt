@@ -406,6 +406,7 @@ tests(
     vectorized_initialization.cpp
     vectorized_load_from_vectorized_allocation.cpp
     vectorized_reduction_bug.cpp
+    wasm_jit_externs.cpp
     widening_reduction.cpp
     x86_cpu_detect.cpp
     # keep-sorted end
