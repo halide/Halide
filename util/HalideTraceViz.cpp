@@ -926,16 +926,20 @@ struct Surface {
         }
     }
 
-    // TODO this doesn't bounds-check against frame_size
     void do_draw_pixel(const float zoom, const int x, const int y, const uint32_t color, uint32_t *dst) {
         const int izoom = (int)std::ceil(zoom);
-        const int y_advance = frame_size.x - izoom;
-        dst += frame_size.x * y + x;
-        for (int dy = 0; dy < izoom; dy++) {
-            for (int dx = 0; dx < izoom; dx++) {
-                *dst++ = color;
+        // Callers gate (x, y) against frame_size using the float zoom, but the
+        // filled block spans ceil(zoom) pixels, so a fractional zoom can reach
+        // one row/column past the frame. Clamp to frame_size like fill_rect.
+        const int x_min = std::max(x, 0);
+        const int x_end = std::min(x + izoom, frame_size.x);
+        const int y_min = std::max(y, 0);
+        const int y_end = std::min(y + izoom, frame_size.y);
+        for (int py = y_min; py < y_end; py++) {
+            uint32_t *row = dst + py * frame_size.x;
+            for (int px = x_min; px < x_end; px++) {
+                row[px] = color;
             }
-            dst += y_advance;
         }
     }
 
