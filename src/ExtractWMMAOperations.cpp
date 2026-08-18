@@ -494,6 +494,13 @@ struct Fragment {
     Role role = Role::Unknown;
     Shape shape{};
     bool found_shape = false;
+    // The shape a fill from memory says this could be, for a fragment that
+    // nothing else says the shape of. It isn't taken up until something reads
+    // the fragment in a way that needs it, because a fill says nothing about
+    // which role the fragment plays and an operand's role comes from the
+    // multiply that reads it.
+    Shape fill_shape{};
+    bool found_fill_shape = false;
     // A fragment may hold a value that is uniform along one axis of the
     // matrix, such as the row maximum a softmax subtracts. It is held as a
     // whole tile with the value repeated along that axis, which is what makes
@@ -1012,14 +1019,52 @@ class ExtractWMMAOperations : public IRMutator {
                         op->is_streaming));
     }
 
+    // A tile filled from a matrix in memory, with the shape that says. A fill
+    // is the one access that doesn't have to know the shape to be written, so
+    // for a tile that is only filled, worked on elementwise and copied back
+    // out, this is the only thing that knows it.
+    void record_fill_shape(const Store *op, Fragment *f) {
+        MultiRamp dest, src;
+        const Load *matrix =
+            is_load_of_multiramp(op->value, Scope<Expr>::empty_scope(), &src);
+        if (!matrix || find_fragment(matrix->name) ||
+            !is_multiramp(op->index, Scope<Expr>::empty_scope(), &dest)) {
+            return;
+        }
+        for (const Shape &candidate : supported_shapes) {
+            WMMAMatrixLayout in_fragment, in_memory;
+            if (wmma_matrix_layout(dest, candidate.M, candidate.N, &in_fragment) &&
+                wmma_matrix_layout(src, candidate.M, candidate.N, &in_memory)) {
+                f->fill_shape = candidate;
+                f->found_fill_shape = true;
+                return;
+            }
+        }
+    }
+
     // What an elementwise op tells us about the fragment it writes: it holds
     // the matrix the same way the fragments it is built from do.
     void record_elementwise(const Store *op, Fragment *f) {
-        const Fragment *src = nullptr;
+        Fragment *src = nullptr;
         for (const Fragment *read : fragments_read(op->value)) {
             if (read->found_shape) {
-                src = read;
+                src = const_cast<Fragment *>(read);
                 break;
+            }
+        }
+        if (!src) {
+            // Nothing read here has a shape yet, so take one from a fill if
+            // one of them was filled from memory. Only a fragment read outside
+            // a matrix multiply can be settled this way, which is why it waits
+            // until here: an operand's role comes from the multiply that reads
+            // it, and this would be the wrong answer for one.
+            for (const Fragment *read : fragments_read(op->value)) {
+                if (read->found_fill_shape) {
+                    src = const_cast<Fragment *>(read);
+                    set_role(src, Role::Accumulator);
+                    set_shape(src, src->fill_shape);
+                    break;
+                }
             }
         }
         user_assert(src)
@@ -1486,7 +1531,11 @@ class ExtractWMMAOperations : public IRMutator {
             // Anything else that isn't a matrix multiply is an elementwise op
             // on the tile, which takes its layout from what it reads.
             if (is_fill(op) && fragments_read(op->value).empty()) {
-                return pass == 0 ? Stmt(op) : convert_to_fill(op, f);
+                if (pass == 0) {
+                    record_fill_shape(op, f);
+                    return op;
+                }
+                return convert_to_fill(op, f);
             }
             if (pass == 0) {
                 record_elementwise(op, f);
