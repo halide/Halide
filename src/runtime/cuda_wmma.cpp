@@ -37,9 +37,9 @@ WEAK const char *get_cuda_error_name(CUresult error);
 
 // Kernels that load a 16x16 matrix out of memory as a fragment and have every
 // lane report what it holds in each of its registers. Run on a matrix whose
-// entries say where they are, these measure the whole layout. One takes the
-// matrix as an accumulator and the other as an A operand, because a fused
-// chain has to turn the first into the second.
+// entries say where they are, these measure the whole layout. There is one per
+// form a fragment can take: an accumulator in each precision, and an A
+// operand, because a fused chain has to turn an accumulator into one.
 WEAK const char *wmma_probe_ptx =
     ".version 6.3\n"
     ".target sm_70\n"
@@ -71,6 +71,31 @@ WEAK const char *wmma_probe_ptx =
     "  st.global.b32 [%rd6+20], %f5;\n"
     "  st.global.b32 [%rd6+24], %f6;\n"
     "  st.global.b32 [%rd6+28], %f7;\n"
+    "  ret;\n"
+    "}\n"
+    ".visible .entry halide_wmma_probe_c16(\n"
+    "  .param .u64 src,\n"
+    "  .param .u64 dst\n"
+    ")\n"
+    ".maxntid 32, 1, 1\n"
+    "{\n"
+    "  .reg .b32 %f<4>;\n"
+    "  .reg .b32 %r<4>;\n"
+    "  .reg .b64 %rd<8>;\n"
+    "  ld.param.u64 %rd1, [src];\n"
+    "  ld.param.u64 %rd2, [dst];\n"
+    "  cvta.to.global.u64 %rd3, %rd1;\n"
+    "  cvta.to.global.u64 %rd4, %rd2;\n"
+    "  mov.u32 %r1, 16;\n"
+    "  wmma.load.c.sync.aligned.row.m16n16k16.global.f16\n"
+    "    {%f0, %f1, %f2, %f3}, [%rd3], %r1;\n"
+    "  mov.u32 %r2, %laneid;\n"
+    "  mul.wide.u32 %rd5, %r2, 16;\n"
+    "  add.s64 %rd6, %rd4, %rd5;\n"
+    "  st.global.b32 [%rd6], %f0;\n"
+    "  st.global.b32 [%rd6+4], %f1;\n"
+    "  st.global.b32 [%rd6+8], %f2;\n"
+    "  st.global.b32 [%rd6+12], %f3;\n"
     "  ret;\n"
     "}\n"
     ".visible .entry halide_wmma_probe_a(\n"
@@ -142,6 +167,16 @@ WEAK int small_int_of_half(uint16_t h) {
 WEAK uint8_t wmma_entry_lane[wmma_entries];
 WEAK uint8_t wmma_entry_reg[wmma_entries];
 
+// The same for a half precision accumulator, which holds two entries per
+// register, so where an entry sits takes a third number: which half of the
+// register it is. A shuffle moves a whole register, so that third number is
+// the one index bit a shuffle cannot reach - moving along it is a permute
+// within the lane rather than any kind of exchange.
+WEAK uint8_t wmma_entry_lane_f16[wmma_entries];
+WEAK uint8_t wmma_entry_reg_f16[wmma_entries];
+WEAK uint8_t wmma_entry_half_f16[wmma_entries];
+constexpr int wmma_accumulator_registers_f16 = wmma_accumulator_registers / 2;
+
 // Which accumulator registers of the same lane feed the two halves of each
 // register of an A operand built out of one. Only meaningful when the layouts
 // line up lane for lane, which is what wmma_relayout_is_lane_local says.
@@ -212,6 +247,42 @@ WEAK void find_wmma_xor_order() {
     }
 }
 
+// What the probes found, for anyone working on a layout aware operation. The
+// tables are the only description of it there is, so being able to read them
+// out is the difference between deriving an operation and guessing at one.
+WEAK void dump_wmma_layout(void *user_context) {
+    const char *dump = getenv("HL_DUMP_WMMA_LAYOUT");
+    if (!dump || dump[0] != '1' || dump[1] != 0) {
+        return;
+    }
+    StringStreamPrinter<16384> out(user_context);
+    out << "Tensor core accumulator layout, as (lane, register) per entry.\n";
+    for (int precision = 0; precision < 2; precision++) {
+        const bool half = precision != 0;
+        out << (half ? "\nhalf precision, four registers of two entries:\n" :
+                       "single precision, eight registers of one entry:\n")
+            << "     col:";
+        for (int col = 0; col < wmma_tile_width; col++) {
+            out << (col < 10 ? "    " : "   ") << col;
+        }
+        out << "\n";
+        for (int row = 0; row < wmma_tile_width; row++) {
+            out << "row " << (row < 10 ? " " : "") << row << ":";
+            for (int col = 0; col < wmma_tile_width; col++) {
+                const int e = row * wmma_tile_width + col;
+                const int lane = half ? wmma_entry_lane_f16[e] : wmma_entry_lane[e];
+                const int reg = half ? wmma_entry_reg_f16[e] : wmma_entry_reg[e];
+                out << (lane < 10 ? "  " : " ") << lane << "." << reg;
+                if (half) {
+                    out << (int)wmma_entry_half_f16[e];
+                }
+            }
+            out << "\n";
+        }
+    }
+    halide_print(user_context, out.str());
+}
+
 WEAK int measure_wmma_layout(void *user_context, CUcontext ctx) {
     ScopedMutexLock lock(&wmma_layout_lock);
     if (wmma_layout_context == ctx) {
@@ -219,13 +290,14 @@ WEAK int measure_wmma_layout(void *user_context, CUcontext ctx) {
     }
 
     CUmodule module = nullptr;
-    CUfunction probe_c = nullptr, probe_a = nullptr;
+    CUfunction probe_c = nullptr, probe_c16 = nullptr, probe_a = nullptr;
     CUdeviceptr src = 0, dst = 0;
 
     // The same matrix in both precisions, with every entry labelled with where
     // it is, and room for what one warp reports back about it.
     float c_entries[wmma_entries], c_held[wmma_entries];
     uint16_t a_entries[wmma_entries], a_held[wmma_entries * 2];
+    uint16_t c16_held[wmma_entries];
     for (int i = 0; i < wmma_entries; i++) {
         c_entries[i] = (float)i;
         a_entries[i] = half_of_small_int(i);
@@ -236,6 +308,9 @@ WEAK int measure_wmma_layout(void *user_context, CUcontext ctx) {
     CUresult err = cuModuleLoadData(&module, wmma_probe_ptx);
     if (!err) {
         err = cuModuleGetFunction(&probe_c, module, "halide_wmma_probe_c");
+    }
+    if (!err) {
+        err = cuModuleGetFunction(&probe_c16, module, "halide_wmma_probe_c16");
     }
     if (!err) {
         err = cuModuleGetFunction(&probe_a, module, "halide_wmma_probe_a");
@@ -262,7 +337,19 @@ WEAK int measure_wmma_layout(void *user_context, CUcontext ctx) {
         err = cuMemcpyDtoH(c_held, dst, sizeof(c_held));
     }
     if (!err) {
+        // The half precision matrix serves both the accumulator probe and the
+        // operand one, which want the same labels in the same places.
         err = cuMemcpyHtoD(src, a_entries, sizeof(a_entries));
+    }
+    if (!err) {
+        void *args[] = {&src, &dst};
+        err = cuLaunchKernel(probe_c16, 1, 1, 1, 32, 1, 1, 0, nullptr, args, nullptr);
+    }
+    if (!err) {
+        err = cuCtxSynchronize();
+    }
+    if (!err) {
+        err = cuMemcpyDtoH(c16_held, dst, sizeof(c16_held));
     }
     if (!err) {
         void *args[] = {&src, &dst};
@@ -309,8 +396,34 @@ WEAK int measure_wmma_layout(void *user_context, CUcontext ctx) {
         }
     }
 
+    // The same for a half precision accumulator, which reports two entries per
+    // register. The halves of a register arrive in it little end first.
+    bool found16[wmma_entries] = {};
+    for (int lane = 0; lane < 32; lane++) {
+        for (int reg = 0; reg < wmma_accumulator_registers_f16; reg++) {
+            for (int half = 0; half < 2; half++) {
+                const int i = (lane * wmma_accumulator_registers_f16 + reg) * 2 + half;
+                const int entry = small_int_of_half(c16_held[i]);
+                if (entry < 0 || entry >= wmma_entries || found16[entry]) {
+                    error(user_context)
+                        << "CUDA: the half precision tensor core accumulator layout "
+                           "measured on this device is not a permutation of the "
+                           "entries of the matrix. Lane "
+                        << lane << " register " << reg << " half " << half
+                        << " holds the bits " << (int)c16_held[i] << ".";
+                    return halide_error_code_gpu_device_error;
+                }
+                found16[entry] = true;
+                wmma_entry_lane_f16[entry] = (uint8_t)lane;
+                wmma_entry_reg_f16[entry] = (uint8_t)reg;
+                wmma_entry_half_f16[entry] = (uint8_t)half;
+            }
+        }
+    }
+
     find_wmma_relayout(a_held);
     find_wmma_xor_order();
+    dump_wmma_layout(user_context);
 
     wmma_layout_context = ctx;
     return halide_error_code_success;
