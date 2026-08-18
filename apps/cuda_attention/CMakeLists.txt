@@ -69,7 +69,7 @@ target_link_libraries(
     runner
     PRIVATE
     attention attention_softmax Halide::Halide Halide::Tools
-    CUDA::cudart CUDA::cublas
+    CUDA::cuda_driver CUDA::cudart CUDA::cublas
 )
 
 # Test that the app actually works!

@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cublas_v2.h>
+#include <cuda.h>
 #include <cuda_runtime.h>
 #include <vector>
 
@@ -113,6 +114,21 @@ bool check(Buffer<float16_t, 2> &Q, Buffer<float16_t, 2> &K,
 
 cublasHandle_t handle;
 
+// Halide makes a CUDA context of its own unless it is given one. Handing it
+// the one the runtime API and cublas use puts every kernel on the same
+// timeline, so one synchronize covers all of them and events recorded between
+// them mean something.
+void *shared_context = nullptr;
+
+int acquire_context(void *user_context, void **ctx, bool create) {
+    *ctx = shared_context;
+    return 0;
+}
+
+int release_context(void *user_context) {
+    return 0;
+}
+
 // cublas reports an unsupported combination by returning an error rather than
 // by failing to run, and a call that did nothing still synchronizes cleanly,
 // so every call has to be checked or it can quietly be timed as free.
@@ -138,6 +154,16 @@ int main(int argc, char **argv) {
                major, minor);
         return 0;
     }
+
+    // Make the runtime API bring up its primary context, then give it to
+    // Halide before anything is allocated on either side.
+    cudaFree(nullptr);
+    if (cuCtxGetCurrent((CUcontext *)&shared_context) != CUDA_SUCCESS || !shared_context) {
+        printf("could not get the CUDA context\n");
+        return 1;
+    }
+    halide_set_cuda_acquire_context(acquire_context);
+    halide_set_cuda_release_context(release_context);
 
     Buffer<float16_t, 2> Q(depth, queries), K(depth, keys), V(out_depth, keys);
     Buffer<float, 2> O(out_depth, queries);
@@ -219,24 +245,42 @@ int main(int argc, char **argv) {
     if (!cublas_ok || !check(Q, K, V, O, "unfused")) {
         failures++;
     } else {
-        // Halide and cublas queue onto different streams, so this has to wait
-        // for both.
-        double t = bench(unfused, [&]() { O.device_sync(); cudaDeviceSynchronize(); });
+        double t = bench(unfused, []() { cudaDeviceSynchronize(); });
         printf("  cublas + softmax + cublas     %9.0f GFlop/s %8.1f us\n",
                gflops(t), t * 1e6);
-        // What the two multiplies cost on their own. There is no way to run
-        // them as a pair without the softmax between: the second takes half
-        // precision operands, and the softmax needs the scores in single
-        // precision to exponentiate them accurately, so a runnable pair would
-        // either carry half the bytes or do different arithmetic. Timing each
-        // where it sits says the same thing without pretending otherwise.
-        double t1 = bench([&]() { gemm_scores(Sd, CUDA_R_32F); },
-                          []() { cudaDeviceSynchronize(); });
-        double t2 = bench([&]() { attention_softmax(S.raw_buffer(), P.raw_buffer()); },
-                          [&]() { P.device_sync(); });
-        double t3 = bench([&]() { gemm_out(Pd); }, []() { cudaDeviceSynchronize(); });
+        // Where the time goes, measured between the kernels of one pass
+        // rather than by running each on its own. Running one on its own in a
+        // loop leaves whatever it touches in cache for its next go, which is
+        // not the state it runs in here: the softmax reads a scores matrix the
+        // multiply before it just wrote, and writes one the multiply after it
+        // has yet to read.
+        cudaEvent_t ev[4];
+        for (auto &e : ev) {
+            cudaEventCreate(&e);
+        }
+        double phase[3] = {0, 0, 0};
+        const int passes = 20;
+        for (int i = 0; i < passes; i++) {
+            cudaEventRecord(ev[0]);
+            gemm_scores(Sd, CUDA_R_32F);
+            cudaEventRecord(ev[1]);
+            S.set_device_dirty();
+            attention_softmax(S.raw_buffer(), P.raw_buffer());
+            cudaEventRecord(ev[2]);
+            gemm_out(Pd);
+            cudaEventRecord(ev[3]);
+            cudaDeviceSynchronize();
+            for (int j = 0; j < 3; j++) {
+                float ms = 0;
+                cudaEventElapsedTime(&ms, ev[j], ev[j + 1]);
+                phase[j] += ms * 1e3 / passes;
+            }
+        }
+        for (auto &e : ev) {
+            cudaEventDestroy(e);
+        }
         printf("    phases: gemm1 %.1fus  softmax %.1fus  gemm2 %.1fus  (sum %.1f, whole %.1f)\n",
-               t1 * 1e6, t2 * 1e6, t3 * 1e6, (t1 + t2 + t3) * 1e6, t * 1e6);
+               phase[0], phase[1], phase[2], phase[0] + phase[1] + phase[2], t * 1e6);
     }
 
     cublasDestroy(handle);

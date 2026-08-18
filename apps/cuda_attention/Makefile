@@ -35,7 +35,7 @@ $(BIN)/%/attention_softmax.a: $(GENERATOR_BIN)/attention.generator
 
 $(BIN)/%/runner: runner.cpp $(BIN)/%/attention.a $(BIN)/%/attention_softmax.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) $(LIBHALIDE_LDFLAGS) -lcudart -lcublas
+	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) $(LIBHALIDE_LDFLAGS) -lcuda -lcudart -lcublas
 
 test: $(BIN)/$(HL_TARGET)/runner
 	$^

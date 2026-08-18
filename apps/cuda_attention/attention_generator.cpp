@@ -39,9 +39,9 @@ void set_bounds(OutputImageParam p, int extent_0, int extent_1) {
 // times for the same problem rather than a fraction of what the part can do.
 //
 //     keys depth out_depth    fused          unfused    of which softmax
-//       64    64        64   59.8us   17961  164.7us     6519      19.2us
-//      128    64        64  105.7us   20320  331.0us     6487     105.0us
-//       64   128        64   86.4us   18635  184.6us     8723      19.3us
+//       64    64        64   59.9us   17921  125.9us     8525      29.3us
+//      128    64        64  105.7us   20311  272.4us     7884     124.8us
+//       64   128        64   86.4us   18635  147.9us    10890      28.5us
 //
 // The last column is why. The softmax reads a queries x keys matrix that the
 // multiply before it just wrote, and writes another one for the multiply after
@@ -242,19 +242,15 @@ private:
 // two reductions - where a tile reduction is a butterfly, ten. The tile load
 // and store are also warp wide by construction, which a row per thread is not.
 //
-// At keys=128 the two come out level, 105.0us against 107.3, and the gap
-// between the two rows is not the whole story of what changed. The scores and
-// the result are 24MB at keys=64, which fits the 32MB cache, so a benchmark
-// that runs the same call over and over is reading them back out of it - 24MB
-// in 19.2us is 1250 GB/s, well past what the memory can do. At keys=128 they
-// are 48MB and it is reading them for real. So the first row is a cached
-// number and the second is not, and what the second says is that once this is
-// waiting on memory, how many instructions it takes to ask stops mattering.
+// Measured in place, between the two multiplies, it is 29.3us at keys=64 and
+// 124.8us at keys=128. Doubling the keys doubles the scores it reads and the
+// result it writes, and takes it from 24MB against a 32MB cache to 48MB, so
+// four times the time for twice the data is what falling out of the cache
+// looks like rather than anything the kernel does differently.
 //
-// The kernel itself has nothing spare in it at either size: eight tile loads
-// and eight tile stores for eight columns of tiles, one butterfly per
-// reduction rather than one per tile, every narrowing convert paired, and no
-// spills.
+// The kernel itself has nothing spare in it at either size: one tile load and
+// one tile store per column of tiles, one butterfly per reduction rather than
+// one per tile, every narrowing convert paired, and no spills.
 
 class AttentionSoftmax : public Halide::Generator<AttentionSoftmax> {
 public:
