@@ -33,15 +33,15 @@ void set_bounds(OutputImageParam p, int extent_0, int extent_1) {
 // GFlop/s on an RTX 5060 Ti, counting both multiplies, at queries=65536:
 //
 //     keys depth out_depth   fused   unfused   two gemms, no softmax
-//       64    64        64   17887      4056                   19610
-//      128    64        64   20527      4718                   20088
-//       64   128        64   18611      5794                   17585
+//       64    64        64   17886      4456                   19939
+//      128    64        64   20534      6520                   20067
+//       64   128        64   18570      6263                   17735
 //
 // The unfused column is the same attention, computed the same way and checked
 // the same way, with the scores going through global memory: cublas multiplies
 // into them, the softmax below normalises them there, and cublas multiplies
 // again. The runner prints where its time goes; at the first row it is 25us in
-// the first multiply, 114us in the softmax, and 30us in the second.
+// the first multiply, 92us in the softmax, and 30us in the second.
 //
 // So the softmax is two thirds of it, and it is not doing any arithmetic worth
 // that. It is reading a queries x keys matrix that the multiply before it just
@@ -218,17 +218,19 @@ private:
 // baseline computes the same thing as the filter above, rather than being two
 // multiplies with the interesting part left out.
 //
-// It walks each row three times - once for the row maximum, once for the row
-// sum, and once to normalise - so the block stages its rows into shared memory
-// first and walks them there. Reading them straight out of global memory
-// instead would have each lane of a warp start a row apart, which measured 2.6
-// times slower and would have made this a strawman rather than a baseline.
+// A warp takes a row, with the lanes walking consecutive columns, so that
+// every read of the scores and every write of the result is coalesced. The
+// two reductions then run across the lanes rather than within one, which is
+// what the rfactor below says: each lane reduces the columns it holds, and the
+// lanes combine through warp shuffles. Each lane keeps the columns it walks,
+// so the scores are read once rather than once per pass over them.
 //
-// What it does not do is write its output coalesced: one thread owns a row, so
-// the lanes of a warp write a row apart. Fixing that means a warp per row and
-// cross-lane reductions, which is what a hand written softmax does. As it
-// stands it moves 24MB in 114us, or 210 GB/s against a part that peaks near
-// 360, so there is perhaps another third to be had here.
+// Getting there took three goes, and the two that were rejected are the point
+// of this comment. A row per thread reading straight out of global memory has
+// the lanes of a warp starting a row apart, and measured 303us where this
+// measures 92. Staging the block's rows through shared memory first fixed the
+// read but not the write, and measured 114us. Neither would have been a
+// baseline worth comparing against.
 //
 // The exponentials are left inline, so each one is evaluated twice, once to
 // sum it and once to normalise by that sum. Computing them at the row instead
@@ -268,39 +270,46 @@ public:
         set_bounds(scores, keys, queries);
         set_bounds(p, keys, queries);
 
-        // One thread per row: the reductions run along a row, and a row is
-        // short enough for one thread to walk. Reading the rows straight out
-        // of global memory that way would have each lane of a warp start a row
-        // apart, so the block stages its rows through shared memory first,
-        // where the copy can be coalesced and the three passes over them cost
-        // nothing.
-        const int threads = 64;
-        const int vec = 4;
-        Var yo("yo"), yi("yi"), xo("xo"), xv("xv"), t("t"), ti("ti");
+        // A warp per row, with the lanes walking consecutive columns, so
+        // that both the read of the scores and the write of the result are
+        // coalesced. What that costs is that the two reductions now run
+        // across the lanes rather than within one, which rfactor expresses:
+        // each lane reduces the columns it holds, and the lanes then combine
+        // through warp shuffles.
+        const int lanes = 32;
+        const int rows = 8;
+        Var xo("xo"), xi("xi"), yo("yo"), yi("yi"), u("u"), v("v");
+        RVar ri("ri"), ro("ro");
+
         p.bound(x, 0, keys)
             .bound(y, 0, queries)
-            .reorder(x, y)
-            .split(y, yo, yi, threads)
+            .split(x, xo, xi, lanes)
+            .split(y, yo, yi, rows)
+            .reorder(xi, xo, yi, yo)
             .gpu_blocks(yo)
             .gpu_threads(yi)
-            .vectorize(x, vec);
+            .gpu_lanes(xi)
+            .unroll(xo);
 
+        // Each lane holds the columns it walks, so the scores are read once
+        // rather than once per pass over them.
+        Var so("so"), si("si");
         scores.in()
-            .compute_at(p, yo)
-            .store_in(MemoryType::GPUSharedAsync)
-            .split(_0, xo, xv, vec)
-            .fuse(xo, _1, t)
-            .split(t, t, ti, threads)
-            .gpu_threads(ti)
-            .vectorize(xv);
+            .compute_at(p, yi)
+            .store_in(MemoryType::Register)
+            .split(_0, so, si, lanes)
+            .gpu_lanes(si)
+            .unroll(so);
 
-        for (Func f : {m, total}) {
-            f.compute_at(p, yi);
-            f.update().reorder(r, y);
-        }
-        // e is left inline, so it is evaluated once where it is summed and
-        // once where it is divided by that sum. Computing it at p, yi instead
-        // keeps a row of it and evaluates it once, and measures the same.
+        Func mi = m.update().split(r, ri, ro, lanes).reorder(ri, ro).rfactor(ro, u);
+        mi.compute_at(p, yi).gpu_lanes(u);
+        mi.update().gpu_lanes(u);
+        m.compute_at(p, yi).store_in(MemoryType::Register);
+
+        Func ti = total.update().split(r, ri, ro, lanes).reorder(ri, ro).rfactor(ro, v);
+        ti.compute_at(p, yi).gpu_lanes(v);
+        ti.update().gpu_lanes(v);
+        total.compute_at(p, yi).store_in(MemoryType::Register);
     }
 
 private:
