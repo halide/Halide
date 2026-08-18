@@ -51,18 +51,18 @@ def main():
         # what this did, below.
 
         # The equivalent Python is:
-        c_result = [[x + y for x in range(7)] for y in range(7)]
+        py_result = [[x + y for x in range(7)] for y in range(7)]
         for r_y in range(7):
             for r_x in range(7):
                 # Update is only performed if the predicate evaluates to true.
                 if (r_x - 3) * (r_x - 3) + (r_y - 3) * (r_y - 3) <= 10:
-                    c_result[r_y][r_x] *= 2
+                    py_result[r_y][r_x] *= 2
 
         # Check the results match:
         for y in range(7):
             for x in range(7):
-                assert halide_result[x, y] == c_result[y][x], (
-                    f"halide_result({x}, {y}) = {halide_result[x, y]} instead of {c_result[y][x]}"
+                assert halide_result[x, y] == py_result[y][x], (
+                    f"halide_result({x}, {y}) = {halide_result[x, y]} instead of {py_result[y][x]}"
                 )
 
     if True:
@@ -94,18 +94,18 @@ def main():
         # visualization of what this did, below.
 
         # The equivalent Python is:
-        c_result = [[x + y for x in range(10)] for y in range(10)]
+        py_result = [[x + y for x in range(10)] for y in range(10)]
         for r_y in range(10):
             for r_x in range(8):
                 # Update is only performed if the predicate evaluates to true.
                 if r_x + r_y > 5 and 3 * r_y - 2 * r_x < 15 and 4 * r_x - r_y < 20:
-                    c_result[r_y][r_x] *= 2
+                    py_result[r_y][r_x] *= 2
 
         # Check the results match:
         for y in range(10):
             for x in range(10):
-                assert halide_result[x, y] == c_result[y][x], (
-                    f"halide_result({x}, {y}) = {halide_result[x, y]} instead of {c_result[y][x]}"
+                assert halide_result[x, y] == py_result[y][x], (
+                    f"halide_result({x}, {y}) = {halide_result[x, y]} instead of {py_result[y][x]}"
                 )
 
     if True:
@@ -137,26 +137,26 @@ def main():
         # visualization of what this did, below.
 
         # The equivalent Python for 'f' is:
-        c_result_f = [[2 * x + y for x in range(5)] for y in range(5)]
+        py_result_f = [[2 * x + y for x in range(5)] for y in range(5)]
         for r1_y in range(5):
             for r1_x in range(5):
                 # Update is only performed if the predicate evaluates to true.
-                if 4 <= c_result_f[r1_y][r1_x] <= 7:
-                    c_result_f[r1_y][r1_x] //= 10
+                if 4 <= py_result_f[r1_y][r1_x] <= 7:
+                    py_result_f[r1_y][r1_x] //= 10
 
         # And, the equivalent Python for 'g' is:
-        c_result_g = [[x + y for x in range(5)] for y in range(5)]
+        py_result_g = [[x + y for x in range(5)] for y in range(5)]
         for r2_y in range(1, 4):
             for r1_x in range(1, 4):
                 # Update is only performed if the predicate evaluates to true.
-                if c_result_f[r2_y][r1_x] < 1:
-                    c_result_g[r2_y][r1_x] += 17
+                if py_result_f[r2_y][r1_x] < 1:
+                    py_result_g[r2_y][r1_x] += 17
 
         # Check the results match:
         for y in range(5):
             for x in range(5):
-                assert halide_result_g[x, y] == c_result_g[y][x], (
-                    f"halide_result_g({x}, {y}) = {halide_result_g[x, y]} instead of {c_result_g[y][x]}"
+                assert halide_result_g[x, y] == py_result_g[y][x], (
+                    f"halide_result_g({x}, {y}) = {halide_result_g[x, y]} instead of {py_result_g[y][x]}"
                 )
 
     print("Success!")

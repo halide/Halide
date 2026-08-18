@@ -52,7 +52,7 @@ class MyFirstGenerator:
 # that tells us whether or not to parallelize in our schedule, and
 # another representing a constant scale factor to use. You can define
 # GeneratorParams of all the basic scalar types (str, bool, int,
-# float). For numeric types, Halide's C++ Generator API lets you
+# float). For numeric types, Halide's Generator API lets you
 # optionally provide a minimum and maximum value; the Python bindings
 # don't support that directly, so we just document the expected range
 # in a comment instead.

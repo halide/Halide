@@ -63,8 +63,8 @@ def main():
     # evaluating gradient over an arbitrary rectangle.
     gradient.realize(shifted)
 
-    # From C++, we also access the image object using coordinates
-    # that start at (100, 50).
+    # We also access the image object using coordinates that start
+    # at (100, 50).
     for yy in range(50, 57):
         for xx in range(100, 105):
             assert shifted[xx, yy] == xx + yy, "Something went wrong!"

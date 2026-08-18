@@ -88,9 +88,9 @@ class AutoScheduled:
         g.output1[x, y] = harris[x, y]
         g.output2[x, y] = g.factor * harris[x, y]
 
-        # Unlike the C++ Generator API, Python generators don't have a
-        # separate schedule() method -- there's just generate(), so the
-        # scheduling below runs immediately after the algorithm above.
+        # Python generators don't have a separate schedule() method --
+        # there's just generate(), so the scheduling below runs
+        # immediately after the algorithm above.
         if g.using_autoscheduler():
             # The autoscheduler requires estimates on all the input/output
             # sizes and parameter values in order to compare different
@@ -156,87 +156,77 @@ class AutoScheduled:
             # SCHEDULE <outvar> to add_halide_library(). See
             # doc/HalideCMakePackage.md for more detail.
 
-            # The generated schedule that is dumped to file is an actual
-            # Halide C++ source, which is readily copy-pasteable back into
-            # this very same source file with few modifications. Programmers
-            # can use this as a starting schedule and iteratively improve
-            # the schedule. Note that the current autoscheduler is only able
+            # The generated schedule that is dumped to file is actual
+            # Halide C++ source -- the autoscheduler always emits C++,
+            # regardless of the language the pipeline itself was
+            # written in. Translating it to the equivalent Python
+            # schedule calls is straightforward, and programmers can
+            # use it as a starting schedule and iteratively improve
+            # it. Note that the current autoscheduler is only able
             # to generate CPU schedules and only does tiling, simple
             # vectorization and parallelization. It doesn't deal with line
             # buffering, storage reordering, or factoring reductions.
 
             # At the time of writing, the autoscheduler will produce the
             # following schedule for the estimates and machine parameters
-            # declared above when run on this pipeline:
+            # declared above when run on this pipeline (translated here
+            # into the equivalent Python calls):
             #
-            # Var x_i("x_i")
-            # Var x_i_vi("x_i_vi")
-            # Var x_i_vo("x_i_vo")
-            # Var x_o("x_o")
-            # Var x_vi("x_vi")
-            # Var x_vo("x_vo")
-            # Var y_i("y_i")
-            # Var y_o("y_o")
+            # x_i = hl.Var("x_i")
+            # x_i_vi = hl.Var("x_i_vi")
+            # x_i_vo = hl.Var("x_i_vo")
+            # x_o = hl.Var("x_o")
+            # x_vi = hl.Var("x_vi")
+            # x_vo = hl.Var("x_vo")
+            # y_i = hl.Var("y_i")
+            # y_o = hl.Var("y_o")
             #
-            # Func Ix = pipeline.get_func(4)
-            # Func Iy = pipeline.get_func(7)
-            # Func gray = pipeline.get_func(3)
-            # Func harris = pipeline.get_func(14)
-            # Func output1 = pipeline.get_func(15)
-            # Func output2 = pipeline.get_func(16)
+            # Ix = pipeline.get_func(4)
+            # Iy = pipeline.get_func(7)
+            # gray = pipeline.get_func(3)
+            # harris = pipeline.get_func(14)
+            # output1 = pipeline.get_func(15)
+            # output2 = pipeline.get_func(16)
             #
-            # {
-            #     Var x = Ix.args()[0]
-            #     Ix
-            #         .compute_at(harris, x_o)
-            #         .split(x, x_vo, x_vi, 8)
-            #         .vectorize(x_vi)
-            # }
-            # {
-            #     Var x = Iy.args()[0]
-            #     Iy
-            #         .compute_at(harris, x_o)
-            #         .split(x, x_vo, x_vi, 8)
-            #         .vectorize(x_vi)
-            # }
-            # {
-            #     Var x = gray.args()[0]
-            #     gray
-            #         .compute_at(harris, x_o)
-            #         .split(x, x_vo, x_vi, 8)
-            #         .vectorize(x_vi)
-            # }
-            # {
-            #     Var x = harris.args()[0]
-            #     Var y = harris.args()[1]
-            #     harris
-            #         .compute_root()
-            #         .split(x, x_o, x_i, 256)
-            #         .split(y, y_o, y_i, 128)
-            #         .reorder(x_i, y_i, x_o, y_o)
-            #         .split(x_i, x_i_vo, x_i_vi, 8)
-            #         .vectorize(x_i_vi)
-            #         .parallel(y_o)
-            #         .parallel(x_o)
-            # }
-            # {
-            #     Var x = output1.args()[0]
-            #     Var y = output1.args()[1]
-            #     output1
-            #         .compute_root()
-            #         .split(x, x_vo, x_vi, 8)
-            #         .vectorize(x_vi)
-            #         .parallel(y)
-            # }
-            # {
-            #     Var x = output2.args()[0]
-            #     Var y = output2.args()[1]
-            #     output2
-            #         .compute_root()
-            #         .split(x, x_vo, x_vi, 8)
-            #         .vectorize(x_vi)
-            #         .parallel(y)
-            # }
+            # x = Ix.args()[0]
+            # Ix.compute_at(harris, x_o).split(x, x_vo, x_vi, 8).vectorize(x_vi)
+            #
+            # x = Iy.args()[0]
+            # Iy.compute_at(harris, x_o).split(x, x_vo, x_vi, 8).vectorize(x_vi)
+            #
+            # x = gray.args()[0]
+            # gray.compute_at(harris, x_o).split(x, x_vo, x_vi, 8).vectorize(x_vi)
+            #
+            # x = harris.args()[0]
+            # y = harris.args()[1]
+            # (
+            #     harris.compute_root()
+            #     .split(x, x_o, x_i, 256)
+            #     .split(y, y_o, y_i, 128)
+            #     .reorder(x_i, y_i, x_o, y_o)
+            #     .split(x_i, x_i_vo, x_i_vi, 8)
+            #     .vectorize(x_i_vi)
+            #     .parallel(y_o)
+            #     .parallel(x_o)
+            # )
+            #
+            # x = output1.args()[0]
+            # y = output1.args()[1]
+            # (
+            #     output1.compute_root()
+            #     .split(x, x_vo, x_vi, 8)
+            #     .vectorize(x_vi)
+            #     .parallel(y)
+            # )
+            #
+            # x = output2.args()[0]
+            # y = output2.args()[1]
+            # (
+            #     output2.compute_root()
+            #     .split(x, x_vo, x_vi, 8)
+            #     .vectorize(x_vi)
+            #     .parallel(y)
+            # )
 
         else:
             # This is where you would declare the schedule you have written
@@ -248,11 +238,11 @@ class AutoScheduled:
             Ix.compute_root()
 
             # As discussed earlier, the generated schedule that is dumped to
-            # file is an actual Halide C++ source, which is readily
-            # copy-pasteable back into this very same source file with few
-            # modifications. Or, developers can save the generated schedules
-            # to the source directory, and then include the generated
-            # schedule here.
+            # file is actual Halide C++ source, which needs a straightforward
+            # translation to Python before it can be pasted back into this
+            # very same source file. Or, developers can save the generated
+            # schedules to the source directory, and then include the
+            # generated schedule here.
             #
             # import tutorial_schedule
             # tutorial_schedule.apply_schedule_auto_schedule_true(g.get_pipeline(), g.target())

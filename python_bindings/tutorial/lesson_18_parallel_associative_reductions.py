@@ -152,20 +152,20 @@ def main():
         # visualization of what this does, below.
 
         # The equivalent Python is:
-        c_intm = [[0 for _ in range(8)] for _ in range(input.height())]
+        py_intm = [[0 for _ in range(8)] for _ in range(input.height())]
         for yy in range(input.height()):  # parallel
             for r_x in range(input.width()):
-                c_intm[yy][input[r_x, yy] // 32] += 1
+                py_intm[yy][input[r_x, yy] // 32] += 1
 
-        c_result = [0] * 8
+        py_result = [0] * 8
         for xx in range(8):
             for r_y in range(input.height()):
-                c_result[xx] += c_intm[r_y][xx]
+                py_result[xx] += py_intm[r_y][xx]
 
         # Check the answers agree:
         for xx in range(8):
-            assert c_result[xx] == halide_result[xx], (
-                f"halide_result({xx}) = {halide_result[xx]} instead of {c_result[xx]}"
+            assert py_result[xx] == halide_result[xx], (
+                f"halide_result({xx}) = {halide_result[xx]} instead of {py_result[xx]}"
             )
 
     if True:
@@ -203,21 +203,21 @@ def main():
         # visualization of what this does, below.
 
         # The equivalent Python is:
-        c_intm = [[0 for _ in range(8)] for _ in range(input.width())]
+        py_intm = [[0 for _ in range(8)] for _ in range(input.width())]
         for r_y in range(input.height()):
             for uu in range(input.width() // 8):
                 for u_i in range(8):  # vectorize
-                    c_intm[uu * 8 + u_i][input[uu * 8 + u_i, r_y] // 32] += 1
+                    py_intm[uu * 8 + u_i][input[uu * 8 + u_i, r_y] // 32] += 1
 
-        c_result = [0] * 8
+        py_result = [0] * 8
         for xx in range(8):
             for r_x in range(input.width()):
-                c_result[xx] += c_intm[r_x][xx]
+                py_result[xx] += py_intm[r_x][xx]
 
         # Check the answers agree:
         for xx in range(8):
-            assert c_result[xx] == halide_result[xx], (
-                f"halide_result({xx}) = {halide_result[xx]} instead of {c_result[xx]}"
+            assert py_result[xx] == halide_result[xx], (
+                f"halide_result({xx}) = {halide_result[xx]} instead of {py_result[xx]}"
             )
 
     if True:
@@ -257,23 +257,23 @@ def main():
         # what this does, below.
 
         # The equivalent Python is:
-        c_intm = [[[0 for _ in range(8)] for _ in range(4)] for _ in range(4)]
+        py_intm = [[[0 for _ in range(8)] for _ in range(4)] for _ in range(4)]
         for vv in range(input.height() // 2):  # parallel
             for uu in range(input.width() // 2):  # parallel
                 for r_yi in range(2):
                     for r_xi in range(2):
-                        c_intm[vv][uu][input[uu * 2 + r_xi, vv * 2 + r_yi] // 32] += 1
+                        py_intm[vv][uu][input[uu * 2 + r_xi, vv * 2 + r_yi] // 32] += 1
 
-        c_result = [0] * 8
+        py_result = [0] * 8
         for xx in range(8):
             for r_y_outer in range(input.height() // 2):
                 for r_x_outer in range(input.width() // 2):
-                    c_result[xx] += c_intm[r_y_outer][r_x_outer][xx]
+                    py_result[xx] += py_intm[r_y_outer][r_x_outer][xx]
 
         # Check the answers agree:
         for xx in range(8):
-            assert c_result[xx] == halide_result[xx], (
-                f"halide_result({xx}) = {halide_result[xx]} instead of {c_result[xx]}"
+            assert py_result[xx] == halide_result[xx], (
+                f"halide_result({xx}) = {halide_result[xx]} instead of {py_result[xx]}"
             )
 
     print("Success!")
