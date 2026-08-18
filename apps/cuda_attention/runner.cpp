@@ -19,6 +19,16 @@
 using Halide::float16_t;
 using Halide::Runtime::Buffer;
 
+// The filter accumulates its second multiply in whatever its output type is,
+// so the two are chosen together, by the generator param the Makefile passes.
+#ifdef OUT_HALF
+using out_t = float16_t;
+constexpr cudaDataType out_cuda_type = CUDA_R_16F;
+#else
+using out_t = float;
+constexpr cudaDataType out_cuda_type = CUDA_R_32F;
+#endif
+
 namespace {
 
 // The shape the filters were built for. The schedule is built around it, so it
@@ -78,7 +88,7 @@ void fill(Buffer<float16_t, 2> &b, int modulus) {
 // because the scores go through a half precision operand on the way into the
 // second multiply, which is what the filter does too.
 bool check(Buffer<float16_t, 2> &Q, Buffer<float16_t, 2> &K,
-           Buffer<float16_t, 2> &V, Buffer<float, 2> &O, const char *name) {
+           Buffer<float16_t, 2> &V, Buffer<out_t, 2> &O, const char *name) {
     std::vector<float> score(keys);
     // A stride coprime with the rows per block, so the samples land at varying
     // offsets within a block.
@@ -102,7 +112,11 @@ bool check(Buffer<float16_t, 2> &Q, Buffer<float16_t, 2> &K,
                 correct += (float)float16_t(score[j]) * (float)V(x, j);
             }
             correct /= total;
-            if (std::abs(O(x, y) - correct) > 2e-3f * std::abs(correct) + 1e-5f) {
+            // A half precision accumulator carries about three decimal
+            // digits, so it needs a looser tolerance than a single precision
+            // one does.
+            const float tol = sizeof(out_t) == 2 ? 2e-2f : 2e-3f;
+            if (std::abs((float)O(x, y) - correct) > tol * std::abs(correct) + 1e-5f) {
                 printf("%s: bad result at %d %d: %f != %f\n", name, x, y,
                        (double)O(x, y), correct);
                 return false;
@@ -166,7 +180,7 @@ int main(int argc, char **argv) {
     halide_set_cuda_release_context(release_context);
 
     Buffer<float16_t, 2> Q(depth, queries), K(depth, keys), V(out_depth, keys);
-    Buffer<float, 2> O(out_depth, queries);
+    Buffer<out_t, 2> O(out_depth, queries);
     // Small integers, so that the scores are exact and the only rounding is
     // the one the filter itself does going into the second multiply.
     fill(Q, 3);
@@ -225,7 +239,7 @@ int main(int argc, char **argv) {
     auto gemm_out = [&](void *lhs) {
         return ok(cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_N, out_depth,
                                queries, keys, &alpha, Vd, CUDA_R_16F, out_depth,
-                               lhs, CUDA_R_16F, keys, &beta, Od, CUDA_R_32F,
+                               lhs, CUDA_R_16F, keys, &beta, Od, out_cuda_type,
                                out_depth, CUBLAS_COMPUTE_32F,
                                CUBLAS_GEMM_DEFAULT),
                   "out");
