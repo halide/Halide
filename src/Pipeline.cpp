@@ -994,7 +994,7 @@ int32_t halidoscope_capture_trace(JITUserContext *, const halide_trace_event_t *
     memcpy(packet->trace_tag(), e->trace_tag ? e->trace_tag : "", trace_tag_bytes);
 
     {
-        std::lock_guard<std::mutex> lock(halidoscope_trace_mutex);
+        std::scoped_lock<std::mutex> lock(halidoscope_trace_mutex);
         halidoscope_trace_stream->write(reinterpret_cast<const char *>(buf.data()), total_size);
     }
 
@@ -1188,8 +1188,8 @@ void Pipeline::halidoscope_impl(const std::function<void(Pipeline &, const Targe
 
     std::vector<std::string> halidoscope_args = {binary, "--trace", trace_path};
     if (options.halidoscope_profile_runs > 0) {
-        halidoscope_args.push_back("--profile");
-        halidoscope_args.push_back(profile_path);
+        halidoscope_args.emplace_back("--profile");
+        halidoscope_args.emplace_back(profile_path);
     }
 
     int halidoscope_rc = run_process(halidoscope_args);
@@ -1214,11 +1214,11 @@ void Pipeline::halidoscope_impl(const std::function<void(Pipeline &, const Targe
            "HalidoscopeOptions::halidoscope_path to point at it directly.\n";
 }
 
-void Pipeline::halidoscope(std::vector<int32_t> sizes, HalidoscopeOptions options, const Target &target) {
+void Pipeline::halidoscope(std::vector<int32_t> sizes, const HalidoscopeOptions &options, const Target &target) {
     halidoscope_impl([&sizes](Pipeline &p, const Target &t) { p.realize(sizes, t); }, options, target);
 }
 
-void Pipeline::halidoscope(RealizationArg output, HalidoscopeOptions options, const Target &target) {
+void Pipeline::halidoscope(RealizationArg output, const HalidoscopeOptions &options, const Target &target) {
     halidoscope_impl([&output](Pipeline &p, const Target &t) {
         p.realize(halidoscope_clone_output(output), t);
     },

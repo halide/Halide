@@ -546,8 +546,8 @@ public:
      * Not reentrant/thread-safe; do not call this concurrently with itself
      * or with another Halide JIT realization in the same process. */
     // @{
-    void halidoscope(std::vector<int32_t> sizes = {}, HalidoscopeOptions options = HalidoscopeOptions(), const Target &target = Target());
-    void halidoscope(RealizationArg output, HalidoscopeOptions options = HalidoscopeOptions(), const Target &target = Target());
+    void halidoscope(std::vector<int32_t> sizes = {}, const HalidoscopeOptions &options = HalidoscopeOptions(), const Target &target = Target());
+    void halidoscope(RealizationArg output, const HalidoscopeOptions &options = HalidoscopeOptions(), const Target &target = Target());
     // @}
 
     /** Set a flag to defer automatically flushing profiler state when calling
