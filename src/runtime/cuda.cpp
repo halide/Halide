@@ -23,6 +23,7 @@ using Halide::Runtime::Internal::Constants::wmma_get_entry_digits;
 using Halide::Runtime::Internal::Constants::wmma_get_lane_digits;
 using Halide::Runtime::Internal::Constants::wmma_get_shuffle_tail;
 using Halide::Runtime::Internal::Constants::wmma_pack_element_marker;
+using Halide::Runtime::Internal::Constants::wmma_xor_element_marker;
 
 // Define the function pointers for the CUDA API.
 
@@ -1002,6 +1003,75 @@ WEAK char *patch_wmma_markers(void *user_context, const char *ptx_src) {
         offset = semicolon;
     }
 
+    // A step of a reduction along an axis of the matrix, which becomes a
+    // butterfly shuffle of the register holding the entry to combine with. If
+    // that entry is one this lane already holds, the mask is zero, which makes
+    // the shuffle a read of the lane's own register.
+    offset = 0;
+    while (const char *marker = strstr(patched + offset, wmma_xor_element_marker)) {
+        size_t cursor = (marker - patched) + strlen(wmma_xor_element_marker);
+        if (!read_index(cursor)) {
+            return free(patched), nullptr;
+        }
+        const int reg = (int)cursor & 15, bit = ((int)cursor >> 4) & 7,
+                  axis = (int)cursor >> 7;
+        if (reg >= wmma_accumulator_registers) {
+            fail("The register the marker asks for is not one the accumulator has",
+                 marker - patched);
+            return free(patched), nullptr;
+        }
+
+        // Where the entry each lane holds in that register comes from. For this
+        // to be one instruction every lane has to find it in the same register
+        // of the lane it swaps with, and every pair of lanes has to differ by
+        // the same amount, which is what makes the swap a butterfly.
+        // The row is the high half of an entry's index and the column the low.
+        const int flip = axis ? 0 : 4;
+        int src_reg = -1, mask = -1;
+        for (int e = 0; e < wmma_entries; e++) {
+            if (wmma_entry_reg[e] != reg) {
+                continue;
+            }
+            const int from = e ^ (1 << (bit + flip));
+            const int swap = wmma_entry_lane[e] ^ wmma_entry_lane[from];
+            if (src_reg < 0) {
+                src_reg = wmma_entry_reg[from];
+                mask = swap;
+            } else if (src_reg != wmma_entry_reg[from] || mask != swap) {
+                src_reg = -1;
+                break;
+            }
+        }
+        if (src_reg < 0) {
+            fail("This device spreads an accumulator over the lanes of a warp in a "
+                 "way that doesn't let entries be exchanged along an axis of the "
+                 "matrix in one step, so a reduction along one can't happen where "
+                 "the fragments sit. Stage it through shared memory instead",
+                 marker - patched);
+            return free(patched), nullptr;
+        }
+
+        const char *shuffle = strstr(marker, "shfl.sync.bfly.b32");
+        if (!shuffle) {
+            fail("The marker has no shuffle after it", marker - patched);
+            return free(patched), nullptr;
+        }
+        // The destination, the source register, and the lanes to swap with.
+        size_t comma[3];
+        if (!find_operands(shuffle - patched, 3, comma)) {
+            return free(patched), nullptr;
+        }
+        if (strncmp(patched + comma[2], wmma_get_shuffle_tail,
+                    strlen(wmma_get_shuffle_tail)) ||
+            comma[2] - comma[1] < (size_t)wmma_get_lane_digits) {
+            fail("A shuffle does not end the way it should", shuffle - patched);
+            return free(patched), nullptr;
+        }
+        write_number(comma[1] - 1, 1, src_reg);
+        write_number(comma[2] - wmma_get_lane_digits, wmma_get_lane_digits, mask);
+        offset = comma[2];
+    }
+
     if (failed) {
         return free(patched), nullptr;
     }
@@ -1017,7 +1087,8 @@ WEAK CUmodule compile_kernel(void *user_context, CUcontext ctx, const char *ptx_
     char *patched = nullptr;
     if (strstr(ptx_src, wmma_get_element_marker) ||
         strstr(ptx_src, wmma_pack_element_marker) ||
-        strstr(ptx_src, wmma_build_element_marker)) {
+        strstr(ptx_src, wmma_build_element_marker) ||
+        strstr(ptx_src, wmma_xor_element_marker)) {
         if (measure_wmma_layout(user_context, ctx)) {
             return nullptr;
         }

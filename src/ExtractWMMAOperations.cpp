@@ -269,6 +269,19 @@ bool is_accumulation(const Store *op) {
     return load && load->name == op->name && equal(load->index, op->index);
 }
 
+// An accumulation whose reduction is of a fragment rather than of a product of
+// two matrices. That is a reduction along an axis of the tile, which happens
+// where the fragments sit rather than in the matrix unit.
+const VectorReduce *reduction_of_a_fragment(const Store *op) {
+    Expr value = op->value;
+    while (const Let *let = value.as<Let>()) {
+        value = let->body;
+    }
+    const Add *add = value.as<Add>();
+    const VectorReduce *reduce = add ? add->a.as<VectorReduce>() : nullptr;
+    return reduce && reduce->value.as<Load>() ? reduce : nullptr;
+}
+
 MatmulInfo analyze_matmul(const Store *op,
                           const std::function<bool(const string &)> &is_accumulator) {
     // We expect the pattern:
@@ -419,6 +432,10 @@ bool is_fill(const Store *op) {
     if (is_const_zero(op->value)) {
         return true;
     }
+    if (const Broadcast *b = op->value.as<Broadcast>(); b && b->value.type().is_scalar()) {
+        // The same value at every entry, which doesn't depend on the layout.
+        return true;
+    }
     MultiRamp mr;
     const Load *load = is_load_of_multiramp(op->value, Scope<Expr>::empty_scope(), &mr);
     return load && load->name != op->name;
@@ -477,6 +494,13 @@ struct Fragment {
     Role role = Role::Unknown;
     Shape shape{};
     bool found_shape = false;
+    // A fragment may hold a value that is uniform along one axis of the
+    // matrix, such as the row maximum a softmax subtracts. It is held as a
+    // whole tile with the value repeated along that axis, which is what makes
+    // reading it elementwise with a tile free, but it is written and read as a
+    // vector indexed by the other axis: zero if the row indexes it and one if
+    // the column does. A whole tile is -1.
+    int axis = -1;
     // An allocation may hold several fragments as disjoint sub-tiles, each of
     // which becomes its own allocation.
     vector<MultiRamp> subtiles;
@@ -484,6 +508,15 @@ struct Fragment {
     Type value_type() const {
         return element_type.with_lanes(
             elements_per_lane(role, shape, element_type));
+    }
+
+    // How many entries the value stored here has, before it is spread over the
+    // lanes of the warp. A fragment uniform along an axis is written and read
+    // as just the axis that indexes it.
+    int logical_lanes() const {
+        int rows, cols;
+        fragment_matrix_shape(role, shape, &rows, &cols);
+        return axis < 0 ? rows * cols : (axis == 0 ? rows : cols);
     }
 };
 
@@ -501,12 +534,21 @@ class ExtractWMMAOperations : public IRMutator {
     // rewrite everything, which needs to know both.
     int pass = 0;
 
-    // The loops over GPU blocks, threads, and lanes we're inside of.
+    // The loops over GPU blocks, threads, and lanes we're inside of, and the
+    // subset of them that are over threads, which the lanes of a warp differ
+    // in and the blocks around it do not.
     vector<string> gpu_loop_vars;
+    vector<string> gpu_thread_vars;
 
     // Lets whose value to_fragment has restricted to this lane's share of the
     // matrix, so that uses of them must be restricted too.
     Scope<> matrix_lets;
+
+    // Whether we are rewriting the value of a store to a fragment. A read of a
+    // fragment that holds a value spread along an axis of the tile only means
+    // something there, where to_fragment can match it against the axis the
+    // value being computed is spread along.
+    bool in_fragment_value = false;
 
     Fragment *find_fragment(const string &name) {
         for (const string &n : in_scope) {
@@ -542,10 +584,12 @@ class ExtractWMMAOperations : public IRMutator {
     // A fragment allocation may sit outside the loops over GPU threads, in
     // which case each thread gets its own copy of it and only ever touches its
     // own slice. Any dependence of the index on the thread is selecting between
-    // those copies, not between subtiles within one, so drop it.
+    // those copies, not between subtiles within one, so drop it. Blocks are not
+    // like that: an allocation is inside the kernel, so a block can only ever
+    // touch its own, and any dependence on the block picks a subtile for real.
     Expr index_within_thread(const Expr &index) {
         Expr idx = index;
-        for (const string &v : gpu_loop_vars) {
+        for (const string &v : gpu_thread_vars) {
             idx = substitute(v, 0, idx);
         }
         return simplify(idx);
@@ -743,13 +787,25 @@ class ExtractWMMAOperations : public IRMutator {
                 is_identity_shuffle(op) && same_shape(c, dest)) {
                 return c->args[3];
             }
+        } else if (Fragment *src = uniform_fragment_read(e, dest->axis)) {
+            // A read of a fragment that is itself uniform along the same axis,
+            // so it is already held the way the one being written is.
+            return load_fragment(src, e.as<Load>()->index);
+        } else if (const VectorReduce *op = e.as<VectorReduce>()) {
+            return reduce_along_axis(op, dest);
         }
         // A vector spread over the tile along one axis, such as a row
-        // statistic a softmax subtracts. Every lane holds the whole vector, so
-        // this becomes a per-lane selection out of it.
+        // statistic a softmax subtracts.
         int axis = 0;
         Expr vec = broadcast_along_axis(e, dest->shape, &axis);
         if (vec.defined()) {
+            if (Fragment *src = uniform_fragment_read(vec, axis)) {
+                // A fragment that already holds the vector spread that way, so
+                // the broadcast has happened already.
+                return load_fragment(src, vec.as<Load>()->index);
+            }
+            // Every lane holds the whole vector, so this becomes a per-lane
+            // selection out of it.
             return Call::make(t, Call::wmma_vector_to_fragment,
                               {dest->shape.M, dest->shape.N, axis, std::move(vec)},
                               Call::Intrinsic);
@@ -759,6 +815,78 @@ class ExtractWMMAOperations : public IRMutator {
                    << "the fragments it is built from are:\n"
                    << e << "\n";
         return Expr{};
+    }
+
+    // A read of a fragment that holds a value uniform along one axis of the
+    // matrix, indexed by the axis given.
+    Fragment *uniform_fragment_read(const Expr &e, int axis) {
+        const Load *op = e.as<Load>();
+        Fragment *f = op ? find_fragment(op->name) : nullptr;
+        return (f && f->axis >= 0 && f->axis == axis) ? f : nullptr;
+    }
+
+    Expr load_fragment(Fragment *f, const Expr &index) {
+        return Load::make(f->value_type(), subtile_name(f, index),
+                          Ramp::make(0, 1, f->value_type().lanes()));
+    }
+
+    static Expr combine(VectorReduce::Operator op, const Expr &a, const Expr &b) {
+        switch (op) {
+        case VectorReduce::Add:
+            return Add::make(a, b);
+        case VectorReduce::Mul:
+            return Mul::make(a, b);
+        case VectorReduce::Min:
+            return Min::make(a, b);
+        case VectorReduce::Max:
+            return Max::make(a, b);
+        case VectorReduce::And:
+            return And::make(a, b);
+        case VectorReduce::Or:
+            return Or::make(a, b);
+        default:
+            return Expr{};
+        }
+    }
+
+    // A reduction along one axis of a tile. The entries being reduced together
+    // are spread over the lanes of the warp, so this is a butterfly: exchange
+    // entries with the ones a power of two away along the axis and combine,
+    // once per bit of it. That leaves every entry holding the whole row's or
+    // column's worth, which is how a fragment uniform along an axis is held,
+    // so the result needs nothing further doing to it.
+    Expr reduce_along_axis(const VectorReduce *op, const Fragment *dest) {
+        const Shape &shape = dest->shape;
+        // A matrix value has its entries in row-major order, so a reduction
+        // over adjacent entries reduces a row, leaving a value indexed by the
+        // row.
+        const int width = shape.N;
+        const int factor = op->value.type().lanes() / op->type.lanes();
+        Expr combined = combine(op->op, make_zero(Float(32)), make_zero(Float(32)));
+        user_assert(dest->axis == 0 && factor == width && op->type.lanes() == shape.M &&
+                    combined.defined())
+            << "Reduction into a tensor core fragment not supported. Only a "
+            << "reduction of a whole " << shape.M << "x" << shape.N << " tile down "
+            << "to one value per row is, and this one takes " << op->value.type().lanes()
+            << " entries to " << op->type.lanes() << ".\n"
+            << Expr(op);
+
+        Expr v = to_fragment(op->value, dest);
+        vector<std::pair<string, Expr>> lets;
+        for (int bit = 0; (1 << bit) < width; bit++) {
+            // Each round reads the one before it twice, so name it rather than
+            // leaving it to be recomputed.
+            lets.emplace_back(unique_name("wmma_reduce"), v);
+            Expr var = Variable::make(v.type(), lets.back().first);
+            Expr swapped = Call::make(var.type(), Call::wmma_axis_xor,
+                                      {shape.M, shape.N, 1 - dest->axis, bit, var},
+                                      Call::Intrinsic);
+            v = combine(op->op, var, std::move(swapped));
+        }
+        for (const auto &[name, value] : reverse_view(lets)) {
+            v = Let::make(name, value, v);
+        }
+        return v;
     }
 
     // Recognize a value covering the whole matrix that is really a vector
@@ -805,19 +933,32 @@ class ExtractWMMAOperations : public IRMutator {
 
     // An elementwise op on whole tiles, which happens where the fragments sit.
     Stmt convert_to_elementwise(const Store *op, Fragment *f) {
-        vector<int> indices;
-        int subtile = containing_subtile(f, op->index, &indices);
-        user_assert(subtile >= 0 && is_whole_tile(f, indices))
-            << "A tensor core fragment computed elementwise must be written a "
-            << "whole tile at a time.\n"
-            << Stmt(op);
-        Expr value = to_fragment(mutate(op->value), f);
+        string name;
+        if (f->axis >= 0) {
+            // A value spread along an axis is written as just that axis.
+            name = subtile_name(f, op->index);
+        } else {
+            vector<int> indices;
+            int subtile = containing_subtile(f, op->index, &indices);
+            user_assert(subtile >= 0 && is_whole_tile(f, indices))
+                << "A tensor core fragment computed elementwise must be written a "
+                << "whole tile at a time.\n"
+                << Stmt(op);
+            name = f->fragment_name + std::to_string(subtile);
+        }
+        Expr value;
+        {
+            // Reads of a fragment spread along an axis mean something here and
+            // nowhere else, so the load visitor leaves them for to_fragment.
+            ScopedValue<bool> bind(in_fragment_value, true);
+            value = to_fragment(mutate(op->value), f);
+        }
         // The tile lives in the registers of a whole warp, so every lane has
         // to run the store to write the share of it that it holds.
         Expr lane = make_lane(unique_name("wmma_lane") + gpu_thread_name(0));
         return in_lane_loop(
             lane,
-            Store::make(f->fragment_name + std::to_string(subtile), std::move(value),
+            Store::make(name, std::move(value),
                         Ramp::make(0, 1, f->value_type().lanes()), op->param,
                         const_true(f->value_type().lanes()), ModulusRemainder(),
                         op->is_streaming));
@@ -844,10 +985,49 @@ class ExtractWMMAOperations : public IRMutator {
             << "can be used that way.\n";
         set_role(f, Role::Accumulator);
         set_shape(f, src->shape);
+
+        // A store narrower than the tile writes a value that is uniform along
+        // one axis of it, such as a row maximum. The other axis indexes it.
+        const int lanes = op->value.type().lanes();
+        const Shape &shape = f->shape;
+        if (lanes != shape.M * shape.N) {
+            user_assert(lanes == shape.M || lanes == shape.N)
+                << "The tensor core fragment " << f->name << " is written " << lanes
+                << " entries at a time, which is neither the whole " << shape.M << "x"
+                << shape.N << " tile nor one of its axes.\n"
+                << Stmt(op);
+            const int axis = lanes == shape.M ? 0 : 1;
+            user_assert(f->axis < 0 || f->axis == axis)
+                << "The tensor core fragment " << f->name << " is written both as a "
+                << "value along the rows of the tile and as one along its columns.\n"
+                << Stmt(op);
+            f->axis = axis;
+        }
         subtile_name(f, op->index);
     }
 
     Stmt convert_to_fill(const Store *op, Fragment *f) {
+        const int lanes = f->value_type().lanes();
+        Expr lane = make_lane(unique_name("wmma_lane") + gpu_thread_name(0));
+        // A value that is the same at every entry doesn't care which entries a
+        // lane holds, so it needs no instruction: the registers just get set.
+        const Broadcast *uniform = op->value.as<Broadcast>();
+        if (uniform && !uniform->value.type().is_scalar()) {
+            uniform = nullptr;
+        }
+
+        if (f->axis >= 0) {
+            user_assert(uniform)
+                << "A tensor core fragment that holds a value spread along an axis "
+                << "of the tile can only be filled with one that is the same "
+                << "everywhere.\n"
+                << Stmt(op);
+            return in_lane_loop(
+                lane, Store::make(subtile_name(f, op->index),
+                                  Broadcast::make(uniform->value, lanes),
+                                  Ramp::make(0, 1, lanes)));
+        }
+
         int rows, cols;
         fragment_matrix_shape(f->role, f->shape, &rows, &cols);
         MultiRamp dest_mr;
@@ -861,12 +1041,10 @@ class ExtractWMMAOperations : public IRMutator {
         const string name = subtile_name(
             f, make_matrix_index(dest.base, rows, cols,
                                  dest.row_major ? Layout::Row : Layout::Col, dest.stride));
-        const int lanes = f->value_type().lanes();
-        Expr lane = make_lane(unique_name("wmma_lane") + gpu_thread_name(0));
         Expr value;
-        if (is_const_zero(op->value)) {
-            // Zeroing a fragment is layout-independent, so it doesn't need an
-            // instruction - the registers just get set to zero.
+        if (uniform) {
+            value = Broadcast::make(uniform->value, lanes);
+        } else if (is_const_zero(op->value)) {
             value = make_zero(f->value_type());
         } else {
             auto fail = [&](const char *reason) {
@@ -880,8 +1058,6 @@ class ExtractWMMAOperations : public IRMutator {
             const Load *matrix =
                 is_load_of_multiramp(op->value, Scope<Expr>::empty_scope(), &mr);
             internal_assert(matrix);  // is_fill checked this
-            int rows, cols;
-            fragment_matrix_shape(f->role, f->shape, &rows, &cols);
             WMMAMatrixLayout mem;
             if (find_fragment(matrix->name)) {
                 value = fail("A fragment can only be filled from a matrix in memory, "
@@ -933,8 +1109,16 @@ class ExtractWMMAOperations : public IRMutator {
         if (!is_gpu(op->for_type)) {
             return IRMutator::visit(op);
         }
+        const bool thread = op->for_type == ForType::GPUThread ||
+                            op->for_type == ForType::GPULane;
         gpu_loop_vars.push_back(op->name);
+        if (thread) {
+            gpu_thread_vars.push_back(op->name);
+        }
         Stmt s = IRMutator::visit(op);
+        if (thread) {
+            gpu_thread_vars.pop_back();
+        }
         gpu_loop_vars.pop_back();
         return s;
     }
@@ -1104,6 +1288,20 @@ class ExtractWMMAOperations : public IRMutator {
             return op;
         }
 
+        if (f->axis >= 0) {
+            // What is in the registers is the whole tile with this value
+            // repeated along an axis, not the vector this reads like, so the
+            // read only means anything where to_fragment can match it against
+            // the value being computed. Leave it for there.
+            user_assert(in_fragment_value)
+                << "The tensor core fragment " << f->name << " holds a value spread "
+                << "along an axis of the tile. It can only be read to compute "
+                << "another fragment, because how it is spread over the lanes of a "
+                << "warp only matches a fragment spread the same way.\n"
+                << Expr(op);
+            return op;
+        }
+
         user_assert(f->role == Role::Accumulator)
             << "The tensor core fragment " << f->name << " is read outside a tensor "
             << "core instruction, but it holds " << role_name(f->role) << " of a matrix "
@@ -1114,11 +1312,11 @@ class ExtractWMMAOperations : public IRMutator {
             << Expr(op);
 
         // Which entry each lane wants is patched into the shuffle by the
-        // runtime, so it has to be the same in every lane. containing_subtile
-        // asks where an access lands within a tile, which it does by taking the
-        // GPU loop variables to be zero, so a read that varies with one of them
-        // would quietly be read as some other lane's.
-        for (const string &v : gpu_loop_vars) {
+        // runtime, so it has to be the same in every lane of the warp. The
+        // blocks and warps around it may differ, because that only picks
+        // between whole fragments, which is what containing_subtile takes the
+        // GPU loop variables to be zero for.
+        for (const string &v : gpu_thread_vars) {
             user_assert(!expr_uses_var(op->index, v))
                 << "Read of a tensor core accumulator not supported. Which entry "
                 << "is read varies with " << v << ", so the lanes of the warp do "
@@ -1179,7 +1377,12 @@ class ExtractWMMAOperations : public IRMutator {
             return IRMutator::visit(op);
         }
 
-        if (!is_accumulation(op)) {
+        // A reduction along an axis of the tile accumulates, but it is not a
+        // matrix multiply: what it reduces is a fragment rather than a product.
+        const VectorReduce *reduce = reduction_of_a_fragment(op);
+        const bool axis_reduction = reduce && find_fragment(reduce->value.as<Load>()->name);
+
+        if (!is_accumulation(op) || axis_reduction) {
             // A fill from a matrix in memory needs to know the role and the
             // shape, so it waits for the second pass, and tells us neither.
             // Anything else that isn't a matrix multiply is an elementwise op
@@ -1228,7 +1431,8 @@ Stmt extract_wmma_operations(const Stmt &s) {
 }
 
 bool is_wmma_intrinsic(const Call *op) {
-    return (op->is_intrinsic(Call::wmma_matrix_to_fragment_a) ||
+    return (op->is_intrinsic(Call::wmma_axis_xor) ||
+            op->is_intrinsic(Call::wmma_matrix_to_fragment_a) ||
             op->is_intrinsic(Call::wmma_matrix_to_fragment_b) ||
             op->is_intrinsic(Call::wmma_matrix_to_fragment_c) ||
             op->is_intrinsic(Call::wmma_mma) ||

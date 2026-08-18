@@ -182,7 +182,8 @@ bool is_pure(const Expr &e) {
 }
 
 bool is_lanewise(const Call *op) {
-    return !op->is_intrinsic({Call::wmma_fragment_to_matrix_d,
+    return !op->is_intrinsic({Call::wmma_axis_xor,
+                              Call::wmma_fragment_to_matrix_d,
                               Call::wmma_lane_owns,
                               Call::wmma_matrix_to_fragment_a,
                               Call::wmma_matrix_to_fragment_b,

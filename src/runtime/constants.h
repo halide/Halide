@@ -117,6 +117,32 @@ static constexpr int wmma_build_index_bits = 4;
 static constexpr int wmma_build_mask_digits = 2;
 static constexpr int wmma_build_compare_digits = 1;
 
+/** Marks an exchange of the entries of an accumulator with the entries some
+ * distance away along one axis of the matrix, which is the step a reduction
+ * along that axis is built out of. Entry (row, col) takes the value of the
+ * entry whose index along the axis is its own with one bit flipped, so
+ * repeating it once per bit leaves every entry holding the whole row or
+ * column's worth combined.
+ *
+ * Where the two entries live decides what the step costs, and only the runtime
+ * knows: if that bit of the index picks the register then the exchange happens
+ * within a lane, and if it picks the lane then it is a butterfly shuffle. Both
+ * are the same instruction with the mask filled in differently, because a
+ * butterfly by zero returns the lane its own value. A marker looks like
+ *
+ *   // halide_wmma_xor 13
+ *   { .reg .f32 %hget<8>;
+ *   mov.f32 %hget0, %r7;
+ *   ... one per register the accumulator lives in ...
+ *   shfl.sync.bfly.b32 %r20, %hget0,  0, 31, -1; }
+ *
+ * The number is in hex, and reads as which register of the result is being
+ * built, which bit of the index is flipped, and which axis it indexes - zero
+ * for the row. The fields filled in are the same two the get marker has: which
+ * register the value comes from, and which lane, except that here the lane is
+ * relative rather than absolute. */
+static constexpr const char *wmma_xor_element_marker = "halide_wmma_xor";
+
 }  // namespace Constants
 }  // namespace Internal
 }  // namespace Runtime

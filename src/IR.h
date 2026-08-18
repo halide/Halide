@@ -902,6 +902,16 @@ struct Call : public ExprNode<Call> {
         //
         // Permute this lane's tensor core accumulator (d) fragment up into a
         // whole matrix, leaving the entries this lane doesn't hold undefined.
+        // Exchange the entries of an M x N tensor core accumulator with the
+        // ones whose index along an axis differs from theirs in one bit: entry
+        // (row, col) takes the value of entry (row ^ (1 << bit), col) if the
+        // axis is zero, or (row, col ^ (1 << bit)) if it is one. Doing this
+        // once per bit of an axis and combining as it goes reduces along that
+        // axis, leaving every entry holding the result for its row or column.
+        // Needs no lane argument, because it is only ever reached inside a loop
+        // over lanes that something else introduced.
+        // wmma_axis_xor(M, N, axis, bit, fragment)
+        wmma_axis_xor,
         // The lane is given where a loop over lanes is what demotes a
         // matrix-wide store to a per-fragment one, and omitted where entries
         // are read out of a fragment, which introduces no such loop.

@@ -2,7 +2,9 @@
 // leaving the registers it was computed in: the row maximum, the exponential,
 // the row sum, and the division all happen where the fragments sit. The
 // exponential is what makes this need calls, lets and reinterprets to be
-// restricted to a lane's share of the tile, which fast_exp expands into.
+// restricted to a lane's share of the tile, which fast_exp expands into. The
+// two reductions are what make it need the lanes of the warp to exchange
+// entries along a row.
 
 #include "Halide.h"
 #include <cstdio>
@@ -12,7 +14,7 @@ using namespace Halide;
 int run(bool fast) {
     Target target = get_jit_target_from_environment();
 
-    const int M = 16, N = 16, K = 16;
+    const int M = 32, N = 32, K = 32;
     const int tile = 16;
 
     Buffer<float16_t> A(K, M), B(N, K);
@@ -35,8 +37,10 @@ int run(bool fast) {
     prod(x, y) = 0.f;
     prod(x, y) += cast<float>(A(k, y)) * cast<float>(B(x, k));
 
-    // Nothing here says how m is spread over the lanes of a warp, and it isn't
-    // spread the way prod is: every lane ends up holding the whole of it.
+    // The row statistics are one value per row, but they are stored as whole
+    // tiles with that value repeated along the row. That is what a reduction
+    // along an axis leaves behind anyway, and it makes reading them back
+    // alongside the tile they came from cost nothing.
     m(y) = -1e30f;
     m(y) = max(m(y), prod(r, y));
 
@@ -48,42 +52,68 @@ int run(bool fast) {
     soft(x, y) = e(x, y) / sum_e(y);
     out(x, y) = soft(x, y);
 
-    Var xo("xo"), yo("yo"), xt("xt"), xi("xi"), yi("yi");
+    Var xo("xo"), yo("yo"), xio("xio"), yio("yio"), xt("xt"), xi("xi"), yi("yi");
     Var rxi("rxi"), ryi("ryi");
-    RVar rro("rro"), rri("rri");
+    RVar rro("rro"), rri("rri"), ry("ry");
 
-    // One warp owns the whole tile.
+    // One warp owns the whole matrix. A softmax reduces along the rows, so a
+    // block has to hold whole ones.
     out.bound(x, 0, N)
         .bound(y, 0, M)
-        .tile(x, y, xo, yo, xi, yi, tile, tile)
-        .split(xo, xo, xt, 1)
-        .reorder(xi, yi, xt, xo, yo)
+        .tile(x, y, xo, yo, xi, yi, N, M)
+        .tile(xi, yi, xio, yio, xi, yi, tile, tile)
         .gpu_blocks(xo, yo)
-        .gpu_threads(xt)
-        .unroll(xi)
-        .unroll(yi);
+        .unroll(xio)
+        .unroll(yio)
+        .tile_store(xi, yi);
 
-    soft.compute_at(out, xt)
+    soft.compute_at(out, xo)
         .store_in(MemoryType::Tile)
         .tile(x, y, rxi, ryi, tile, tile)
         .unroll(x)
         .unroll(y)
         .tile_init(rxi, ryi);
 
-    m.compute_at(out, xt).unroll(y);
-    m.update().unroll(r).unroll(y);
+    m.store_in(MemoryType::Tile)
+        .compute_at(out, xo)
+        .split(y, y, ryi, tile)
+        .unroll(y)
+        .vectorize(ryi);
 
-    e.compute_at(out, xt)
+    m.update()
+        .split(y, y, ryi, tile)
+        .split(r, rro, rri, tile)
+        .reorder(rri, ryi, y, rro)
+        .unroll(y)
+        .unroll(rro)
+        .atomic()
+        .vectorize(rri)
+        .vectorize(ryi);
+
+    e.compute_at(out, xo)
         .store_in(MemoryType::Tile)
         .tile(x, y, rxi, ryi, tile, tile)
         .unroll(x)
         .unroll(y)
         .tile_init(rxi, ryi);
 
-    sum_e.compute_at(out, xt).unroll(y);
-    sum_e.update().unroll(r).unroll(y);
+    sum_e.store_in(MemoryType::Tile)
+        .compute_at(out, xo)
+        .split(y, y, ryi, tile)
+        .unroll(y)
+        .vectorize(ryi);
 
-    prod.compute_at(out, xt)
+    sum_e.update()
+        .split(y, y, ryi, tile)
+        .split(r, rro, rri, tile)
+        .reorder(rri, ryi, y, rro)
+        .unroll(y)
+        .unroll(rro)
+        .atomic()
+        .vectorize(rri)
+        .vectorize(ryi);
+
+    prod.compute_at(out, xo)
         .store_in(MemoryType::Tile)
         .tile(x, y, rxi, ryi, tile, tile)
         .unroll(x)

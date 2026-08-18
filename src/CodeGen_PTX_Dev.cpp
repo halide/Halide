@@ -50,6 +50,7 @@ using Halide::Runtime::Internal::Constants::wmma_get_entry_digits;
 using Halide::Runtime::Internal::Constants::wmma_get_lane_digits;
 using Halide::Runtime::Internal::Constants::wmma_get_shuffle_tail;
 using Halide::Runtime::Internal::Constants::wmma_pack_element_marker;
+using Halide::Runtime::Internal::Constants::wmma_xor_element_marker;
 
 /** A code generator that emits GPU code from a given Halide stmt. */
 class CodeGen_PTX_Dev : public CodeGen_LLVM, public CodeGen_GPU_Dev {
@@ -174,6 +175,13 @@ protected:
     /** Build an accumulator fragment out of a vector every lane holds a copy
      * of, indexed by the row or the column of the matrix. */
     void codegen_wmma_build(const Call *op);
+
+    /** Exchange the entries of an accumulator with the ones a power of two
+     * away along one axis of the matrix. Whether that is a move between the
+     * registers of a lane or a butterfly shuffle between lanes depends on the
+     * layout, so either way it is left as one shuffle for the runtime to
+     * finish: a butterfly by zero is a lane reading itself. */
+    void codegen_wmma_axis_xor(const Call *op);
 
     /** The copies of a fragment into registers this end names, which a marker
      * is patched to pick between. */
@@ -613,6 +621,46 @@ void CodeGen_PTX_Dev::codegen_wmma_build(const Call *op) {
     }
 }
 
+void CodeGen_PTX_Dev::codegen_wmma_axis_xor(const Call *op) {
+    internal_assert(op->args.size() == 5);
+    const int axis = *as_const_int(op->args[2]);
+    const int bit = *as_const_int(op->args[3]);
+    const Expr &fragment = op->args[4];
+    user_assert(fragment.type().element_of() == Float(32))
+        << "Reducing along an axis of a tensor core accumulator is only "
+        << "implemented for single precision accumulators, but this one holds "
+        << fragment.type().element_of() << "\n";
+
+    vector<Value *> regs;
+    split_fragment(fragment, regs);
+    internal_assert((int)regs.size() == wmma_accumulator_registers);
+
+    vector<llvm::Type *> arg_types(regs.size(), f32_t);
+    llvm::FunctionType *fn_type = llvm::FunctionType::get(f32_t, arg_types, false);
+    value = UndefValue::get(llvm_type_of(op->type));
+    for (int reg = 0; reg < (int)regs.size(); reg++) {
+        // Which register of the result, which bit of the index, and which axis
+        // it indexes all fit in the two digits the marker has room for.
+        const int index = (axis << 7) | (bit << 4) | reg;
+        std::ostringstream constraints;
+        constraints << "=f";
+        std::ostringstream asm_text;
+        asm_text << wmma_named_registers(wmma_xor_element_marker, index, regs, constraints)
+                 << "\n\tshfl.sync.bfly.b32 $0, %hget0, "
+                 << string(wmma_get_lane_digits - 1, ' ') << "0"
+                 << wmma_get_shuffle_tail << " }";
+
+        llvm::InlineAsm *asm_call =
+            llvm::InlineAsm::get(fn_type, asm_text.str(), constraints.str(),
+                                 /* hasSideEffects */ false);
+        llvm::CallInst *call = builder->CreateCall(asm_call, regs);
+        // It reads the registers of other lanes, so it must stay where the
+        // whole warp reaches it.
+        call->addFnAttr(llvm::Attribute::Convergent);
+        value = builder->CreateInsertElement(value, call, reg);
+    }
+}
+
 llvm::Value *CodeGen_PTX_Dev::codegen_wmma_get_element(const Call *op, int entry) {
     // A read of one entry has no lane argument, because it introduces no loop
     // over lanes for one to come from.
@@ -715,6 +763,11 @@ Value *CodeGen_PTX_Dev::call_wmma_intrinsic(const std::string &name,
 void CodeGen_PTX_Dev::codegen_wmma(const Call *op) {
     if (op->is_intrinsic(Call::wmma_vector_to_fragment)) {
         codegen_wmma_build(op);
+        return;
+    }
+
+    if (op->is_intrinsic(Call::wmma_axis_xor)) {
+        codegen_wmma_axis_xor(op);
         return;
     }
 
