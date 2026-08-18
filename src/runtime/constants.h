@@ -117,15 +117,18 @@ static constexpr int wmma_build_compare_digits = 1;
  * leaves every entry holding the whole row or column's worth combined.
  *
  * Where the two entries live decides what the step costs, and only the runtime
- * knows: if that bit of the index picks the register then the exchange happens
- * within a lane, and if it picks the lane then it is a butterfly shuffle. Both
- * come out as
+ * knows. If that bit of the index picks the lane, it is a butterfly shuffle
  *
  *   shfl.sync.bfly.b32 %r20, %r9, 2, 31, -1;
  *
- * because a butterfly by zero returns the lane its own value. The number the
- * marker carries packs which register of the result is being built, which bit
- * of the index is flipped, and which axis it indexes - zero for the row. */
+ * and if it picks the register, the entry to combine with is one the lane
+ * already holds, so no lanes have to meet and it is just
+ *
+ *   mov.b32 %r20, %r9;
+ *
+ * The number the marker carries packs which register of the result is being
+ * built, which bit of the index is flipped, and which axis it indexes - zero
+ * for the row. */
 static constexpr const char *wmma_xor_element_marker = "halide_wmma_xor";
 
 }  // namespace Constants

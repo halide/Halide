@@ -609,6 +609,13 @@ WEAK char *patch_wmma_markers(void *user_context, const char *ptx_src) {
                                 marker - patched);
                 }
 
+                // A mask of zero means the entry to combine with is one this
+                // lane already holds, in another of its own registers, so the
+                // exchange is a move and no lanes need to meet to do it.
+                if (mask == 0) {
+                    return rewrite(marker, wmma_xor_element_marker, "mov.b32",
+                                   1 + src_reg, -1, -1, ";");
+                }
                 return rewrite(marker, wmma_xor_element_marker, "shfl.sync.bfly.b32",
                                1 + src_reg, -1, mask, ", 31, -1;");
             })) {
