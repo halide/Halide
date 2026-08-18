@@ -101,6 +101,45 @@ void check_unrolled_pure_update(const halide_profiler_pipeline_stats *p) {
     auto fs = entries_of(p, "unrolled_pu");
     REQUIRE(fs.size() == 1);
     REQUIRE(fs[0]->points_computed == 4);
+    // Fully unrolled, so every store is scalar: pure-def + update-def = 8.
+    REQUIRE(fs[0]->scalar_stores == 8);
+    REQUIRE(fs[0]->vector_stores == 0);
+    REQUIRE(fs[0]->scatters == 0);
+}
+
+// The load/store op-profile counters classify each access by its index:
+// scalar, dense unit-stride vector (ls_n/8 = 8 wide ops over the 64-wide
+// domain), or gather/scatter. The generator's ls_* Funcs each exercise one
+// classification with exactly-known counts. Every element is a 4-byte int.
+void check_load_store_counters(const halide_profiler_pipeline_stats *p) {
+    struct Expected {
+        const char *name;
+        uint64_t scalar_loads, vector_loads, gathers, bytes_loaded;
+        uint64_t scalar_stores, vector_stores, scatters, bytes_stored;
+    };
+    const Expected expected[] = {
+        // Dense and vectorized: 8 unit-stride vector loads and stores.
+        {"ls_vec", 0, 8, 0, 256, 0, 8, 0, 256},
+        // Unvectorized: 64 scalar loads and stores.
+        {"ls_scalar", 64, 0, 0, 256, 64, 0, 0, 256},
+        // Data-dependent load index: 8 gathers, plus the dense inner load.
+        {"ls_gather", 0, 8, 8, 512, 0, 8, 0, 256},
+        // Non-unit-stride (strided) vector store: 32 scatters.
+        {"ls_scatter", 0, 0, 0, 0, 0, 0, 32, 1024},
+    };
+    for (const auto &e : expected) {
+        auto fs = entries_of(p, e.name);
+        REQUIRE(fs.size() == 1);
+        const halide_profiler_func_stats *f = fs[0];
+        REQUIRE(f->scalar_loads == e.scalar_loads);
+        REQUIRE(f->vector_loads == e.vector_loads);
+        REQUIRE(f->gathers == e.gathers);
+        REQUIRE(f->bytes_loaded == e.bytes_loaded);
+        REQUIRE(f->scalar_stores == e.scalar_stores);
+        REQUIRE(f->vector_stores == e.vector_stores);
+        REQUIRE(f->scatters == e.scatters);
+        REQUIRE(f->bytes_stored == e.bytes_stored);
+    }
 }
 
 // compute_with: two Funcs share a loop nest, so their stage stores
@@ -377,6 +416,7 @@ int main(int argc, char **argv) {
     check_roundup_overstores_bytes(target);
     check_guardwithif_no_overstore(target);
     check_unrolled_pure_update(target);
+    check_load_store_counters(target);
     check_compute_with(target);
 
     // Only present when the pipeline was built with a GPU feature — the
