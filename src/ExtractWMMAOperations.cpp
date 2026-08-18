@@ -551,6 +551,13 @@ class ExtractWMMAOperations : public IRMutator {
     // own, so the two are not interchangeable here.
     vector<string> gpu_lane_vars;
 
+    // The values of the LetStmts we are inside. Lowering hoists a stored value
+    // out of the loops it does not vary in, which for a fragment holding
+    // something uniform along an axis is most of them, and what is left at the
+    // store is a bare variable that says nothing about which fragments went
+    // into it.
+    vector<std::pair<string, Expr>> let_values;
+
     // Lets whose value to_fragment has restricted to this lane's share of the
     // matrix, so that uses of them must be restricted too.
     Scope<> matrix_lets;
@@ -607,6 +614,27 @@ class ExtractWMMAOperations : public IRMutator {
             idx = substitute(v, 0, idx);
         }
         return simplify(idx);
+    }
+
+    // An expression with the LetStmts around it substituted back in, so that
+    // the fragments it reads can be found.
+    Expr without_lets(const Expr &e) {
+        Expr result = e;
+        // Innermost first, so that a let referring to an earlier one is
+        // resolved before that one is substituted.
+        for (const auto &[name, value] : reverse_view(let_values)) {
+            if (expr_uses_var(result, name)) {
+                result = substitute(name, value, result);
+            }
+        }
+        return result;
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        let_values.emplace_back(op->name, op->value);
+        Stmt s = IRMutator::visit(op);
+        let_values.pop_back();
+        return s;
     }
 
     string subtile_name(Fragment *f, const Expr &index) {
@@ -1053,7 +1081,8 @@ class ExtractWMMAOperations : public IRMutator {
     // the matrix the same way the fragments it is built from do.
     void record_elementwise(const Store *op, Fragment *f) {
         Fragment *src = nullptr;
-        for (const Fragment *read : fragments_read(op->value)) {
+        const Expr value = without_lets(op->value);
+        for (const Fragment *read : fragments_read(value)) {
             if (read->found_shape) {
                 src = const_cast<Fragment *>(read);
                 break;
@@ -1065,7 +1094,7 @@ class ExtractWMMAOperations : public IRMutator {
             // a matrix multiply can be settled this way, which is why it waits
             // until here: an operand's role comes from the multiply that reads
             // it, and this would be the wrong answer for one.
-            for (const Fragment *read : fragments_read(op->value)) {
+            for (const Fragment *read : fragments_read(value)) {
                 if (read->found_fill_shape) {
                     src = const_cast<Fragment *>(read);
                     set_role(src, Role::Accumulator);
