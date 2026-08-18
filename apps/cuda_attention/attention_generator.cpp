@@ -242,9 +242,19 @@ private:
 // two reductions - where a tile reduction is a butterfly, ten. The tile load
 // and store are also warp wide by construction, which a row per thread is not.
 //
-// At keys=128 the two come out level, 105.0us against 107.3. There the scores
-// and the result are 48MB against a 32MB cache, so both are waiting on memory
-// and how many instructions it takes to ask stops mattering.
+// At keys=128 the two come out level, 105.0us against 107.3, and the gap
+// between the two rows is not the whole story of what changed. The scores and
+// the result are 24MB at keys=64, which fits the 32MB cache, so a benchmark
+// that runs the same call over and over is reading them back out of it - 24MB
+// in 19.2us is 1250 GB/s, well past what the memory can do. At keys=128 they
+// are 48MB and it is reading them for real. So the first row is a cached
+// number and the second is not, and what the second says is that once this is
+// waiting on memory, how many instructions it takes to ask stops mattering.
+//
+// The kernel itself has nothing spare in it at either size: eight tile loads
+// and eight tile stores for eight columns of tiles, one butterfly per
+// reduction rather than one per tile, every narrowing convert paired, and no
+// spills.
 
 class AttentionSoftmax : public Halide::Generator<AttentionSoftmax> {
 public:
