@@ -53,21 +53,6 @@ void set_bounds(OutputImageParam p, int extent_0, int extent_1) {
 //      128    64        64   65.5us   32791  105.7us   273.6us     7850     120.6us
 //       64   128        64   49.4us   32604   86.4us   147.2us    10944      28.6us
 //
-// Asking for a half precision output accumulates the second multiply in half
-// precision too, which is 12% to 14% faster - 29.6us, 56.6us and 43.0us for
-// the three rows. That is a different computation, not a faster way to do the
-// same one, and the scores are left in single precision either way: they get
-// exponentiated, and accumulating them in half precision measured slower
-// anyway, because widening them back for the softmax costs more than the
-// cheaper multiply saves.
-//
-// The attention libraries all accumulate their scores in single precision, so
-// the rows above are what to compare against them. Probing torch's three
-// backends with scores of 640000, past what half precision holds, gets finite
-// and correct answers out of all of them rather than the nans an overflowing
-// accumulator would give, and against a float64 reference they land six times
-// nearer than rounding the scores to half precision would put them.
-//
 // The first row reaches 60% of the 51541 GFlop/s that apps/cuda_mat_mul
 // measures for back to back half precision multiplies into single precision
 // accumulators, and ncu puts the tensor pipe at 58% of peak and names it the
@@ -76,6 +61,15 @@ void set_bounds(OutputImageParam p, int extent_0, int extent_1) {
 // integer pipe at 9%. So the softmax is close to free, and what is left on the
 // table is the tensor cores waiting - for DRAM, at 63% of peak, and for the
 // 23% the load/store pipe spends fetching operands out of shared memory.
+//
+// Everything accumulates in single precision, and there is no knob to do
+// otherwise, because that is what attention is: torch's flash, cuDNN and
+// memory-efficient backends all carry scores of 640000 - past what half
+// precision holds - without producing the nans an overflowing accumulator
+// would, and all sit six times nearer a float64 reference than rounding the
+// scores to half precision would put them. A half precision accumulator for
+// the second multiply measured 12% to 14% faster, but it computes something
+// else, and something no attention library offers.
 //
 // The last column is why. The softmax reads a queries x keys matrix that the
 // multiply before it just wrote, and writes another one for the multiply after
@@ -131,19 +125,9 @@ public:
     Input<Buffer<float16_t, 2>> K{"K"};
     Input<Buffer<float16_t, 2>> V{"V"};
 
-    // The output type also picks the accumulator for the second multiply,
-    // because that accumulator is what gets stored. A half precision one is
-    // half the registers and runs at twice the rate, and asking for a half
-    // precision output is asking for it.
-    Output<Buffer<void, 2>> out{"out"};
+    Output<Buffer<float, 2>> out{"out"};
 
     void generate() {
-        _halide_user_assert(out.type() == Float(32) || out.type() == Float(16))
-            << "The output of this filter is the accumulator of its second "
-            << "matrix multiply, so it has to be float32 or float16, but a "
-            << out.type() << " one was asked for.\n";
-        Type acc_type = out.type();
-
         k = RDom(0, depth, "k");
         r = RDom(0, keys, "r");
         rv = RDom(0, keys, "rv");
@@ -166,13 +150,10 @@ public:
         // answer, and there it is one pass over the output tile rather than
         // over the scores, which is the larger of the two whenever there are
         // more keys than there are columns of V.
-        acc(x, y) = cast(acc_type, 0);
-        acc(x, y) += cast(acc_type, e(rv, y)) * cast(acc_type, V(x, rv));
+        acc(x, y) = 0.f;
+        acc(x, y) += cast<float>(e(rv, y)) * cast<float>(V(x, rv));
 
-        // The divide happens in single precision whatever the accumulator is,
-        // because sum_e is a sum over every key and a half precision one would
-        // be the least accurate thing here.
-        soft(x, y) = cast(acc_type, cast<float>(acc(x, y)) / sum_e(y));
+        soft(x, y) = acc(x, y) / sum_e(y);
 
         out(x, y) = soft(x, y);
     }

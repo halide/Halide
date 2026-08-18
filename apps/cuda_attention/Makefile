@@ -18,16 +18,10 @@ TILES_Y ?= 0
 WARPS ?= 0
 STAGE ?= true
 PAD ?= 0
-# The output type, which also picks the accumulator of the second multiply.
-OUT_TYPE ?= float32
 
 SHAPE = queries=$(QUERIES) keys=$(KEYS) depth=$(DEPTH) out_depth=$(OUT_DEPTH)
 SHAPE += tiles_y=$(TILES_Y) warps=$(WARPS) stage=$(STAGE) pad=$(PAD)
-SHAPE += out.type=$(OUT_TYPE)
 CXXFLAGS += -DQUERIES=$(QUERIES) -DKEYS=$(KEYS) -DDEPTH=$(DEPTH) -DOUT_DEPTH=$(OUT_DEPTH)
-ifeq ($(OUT_TYPE),float16)
-CXXFLAGS += -DOUT_HALF
-endif
 
 all: $(BIN)/$(HL_TARGET)/runner
 
