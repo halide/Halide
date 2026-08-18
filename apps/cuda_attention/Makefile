@@ -26,14 +26,9 @@ $(GENERATOR_BIN)/attention.generator: attention_generator.cpp $(GENERATOR_DEPS)
 $(BIN)/%/attention.a: $(GENERATOR_BIN)/attention.generator
 	@mkdir -p $(@D)
 	$^ -g attention -f attention -e $(GENERATOR_OUTPUTS) -o $(@D) \
-	    target=$(TARGET) $(SHAPE) fast=false
+	    target=$(TARGET) $(SHAPE)
 
-$(BIN)/%/attention_fast.a: $(GENERATOR_BIN)/attention.generator
-	@mkdir -p $(@D)
-	$^ -g attention -f attention_fast -e $(GENERATOR_OUTPUTS) -o $(@D) \
-	    target=$(TARGET) $(SHAPE) fast=true
-
-$(BIN)/%/runner: runner.cpp $(BIN)/%/attention.a $(BIN)/%/attention_fast.a
+$(BIN)/%/runner: runner.cpp $(BIN)/%/attention.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) $(LIBHALIDE_LDFLAGS) -lcudart -lcublas
 

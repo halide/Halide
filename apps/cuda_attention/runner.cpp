@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "attention.h"
-#include "attention_fast.h"
 
 using Halide::float16_t;
 using Halide::Runtime::Buffer;
@@ -130,29 +129,22 @@ int main(int argc, char **argv) {
     fill(V, 4);
 
     int failures = 0;
-    struct {
-        const char *name;
-        int (*filter)(halide_buffer_t *, halide_buffer_t *, halide_buffer_t *,
-                      halide_buffer_t *);
-    } variants[] = {{"exp", attention}, {"fast_exp", attention_fast}};
-
-    for (auto &v : variants) {
-        if (v.filter(Q.raw_buffer(), K.raw_buffer(), V.raw_buffer(), O.raw_buffer()) != 0) {
-            printf("%s: filter returned an error\n", v.name);
-            failures++;
-            continue;
-        }
+    if (attention(Q.raw_buffer(), K.raw_buffer(), V.raw_buffer(), O.raw_buffer()) != 0) {
+        printf("filter returned an error\n");
+        failures++;
+    } else {
         O.copy_to_host();
-        if (!check(Q, K, V, O, v.name)) {
+        if (check(Q, K, V, O, "attention")) {
+            double t = bench(
+                [&]() {
+                    attention(Q.raw_buffer(), K.raw_buffer(), V.raw_buffer(),
+                              O.raw_buffer());
+                },
+                [&]() { O.device_sync(); });
+            printf("  Halide fused attention        %9.0f GFlop/s\n", gflops(t));
+        } else {
             failures++;
-            continue;
         }
-        double t = bench(
-            [&]() {
-                v.filter(Q.raw_buffer(), K.raw_buffer(), V.raw_buffer(), O.raw_buffer());
-            },
-            [&]() { O.device_sync(); });
-        printf("  Halide fused %-10s %9.0f GFlop/s\n", v.name, gflops(t));
     }
 
     // The two multiplies on their own, through a scores matrix in global
