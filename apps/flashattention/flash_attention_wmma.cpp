@@ -4,16 +4,18 @@
 // that reads them. A block owns a strip of queries and walks the key tiles,
 // carrying everything in tensor core fragments.
 //
-// This does not compile yet. Sliding window gives the inductive Funcs a
-// storage fold of two in t and computes one new t per step, which is what is
-// wanted, but it leaves their producers with a t extent of two across the
-// peeled first step. Fragments are registers, so the extractor needs the tile
-// offset to be a constant, and
+// This does not compile yet. The running maximum folds down to two tiles and
+// slides to one new tile per step, which is what is wanted, but its producers
+// are still asked for the whole prefix. The scan reads the maximum one tile
+// back, and has to clamp that index because the tile before the first does not
+// exist, so the region required of the maximum reads as
 //
-//   (score.s0.t - score.t.min_realized)*512
+//   [min(min(max(rt, 1) + -1, rt), 0), max(rt, 0)]
 //
-// is not one. Making an inductive Func's producers land in a single tile per
-// step is what this needs from the compiler.
+// whose lower bound is 0 rather than rt - 1. Storage folding case-splits on
+// whether this is the first iteration and so proves the footprint is two;
+// sliding does not, and hands score and tile_max a t extent that grows with
+// the scan. Fragments are registers, so their offsets have to be constants.
 
 #include "Halide.h"
 #include <algorithm>
@@ -91,7 +93,9 @@ int main(int argc, char **argv) {
     tile_max(i, t) = -1e30f;
     tile_max(i, t) = max(tile_max(i, t), score(rj_max, i, t));
 
-    // The running maximum depends on nothing but itself.
+    // The running maximum depends on nothing but itself. Asked for one tile
+    // before the first, it gives the same answer as the first, so the rescaling
+    // below is by exp(0) on the step that has nothing to rescale.
     m(i, t) = select(t <= 0, tile_max(i, t),
                      likely(max(m(i, t - 1), tile_max(i, t))));
 

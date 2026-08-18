@@ -742,8 +742,15 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             // Take the difference before CSE, so that the terms the two ends
             // have in common cancel rather than being hidden behind lets.
             Expr diff = max - min;
+            // The loop variable takes only one value in the case where the
+            // steady state condition is false, because it says the variable is
+            // no greater than the loop min. Saying so lets the two ends cancel
+            // in that case too, rather than leaving a footprint that appears to
+            // grow with the loop.
+            Expr initial_diff = substitute(loop_var, op->min,
+                                           substitute(steady_state, const_false(), diff));
             Expr extent = (Max::make(substitute(steady_state, const_true(), diff),
-                                     substitute(steady_state, const_false(), diff)) +
+                                     initial_diff) +
                            1);
             extent = simplify(common_subexpression_elimination(extent), bounds);
 
