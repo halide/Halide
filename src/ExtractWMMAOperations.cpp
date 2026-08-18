@@ -546,6 +546,10 @@ class ExtractWMMAOperations : public IRMutator {
     // in and the blocks around it do not.
     vector<string> gpu_loop_vars;
     vector<string> gpu_thread_vars;
+    // The subset of those that are over the lanes of a warp rather than over
+    // warps. The lanes of a warp share a fragment, where warps each have their
+    // own, so the two are not interchangeable here.
+    vector<string> gpu_lane_vars;
 
     // Lets whose value to_fragment has restricted to this lane's share of the
     // matrix, so that uses of them must be restricted too.
@@ -594,6 +598,9 @@ class ExtractWMMAOperations : public IRMutator {
     // those copies, not between subtiles within one, so drop it. Blocks are not
     // like that: an allocation is inside the kernel, so a block can only ever
     // touch its own, and any dependence on the block picks a subtile for real.
+    // The lanes of a warp are not like that either - they share one fragment
+    // rather than having one each - so a dependence on the lane is rejected
+    // where it would mean something.
     Expr index_within_thread(const Expr &index) {
         Expr idx = index;
         for (const string &v : gpu_thread_vars) {
@@ -1207,9 +1214,15 @@ class ExtractWMMAOperations : public IRMutator {
         gpu_loop_vars.push_back(op->name);
         if (thread) {
             gpu_thread_vars.push_back(op->name);
+            if (op->for_type == ForType::GPULane) {
+                gpu_lane_vars.push_back(op->name);
+            }
         }
         Stmt s = IRMutator::visit(op);
         if (thread) {
+            if (op->for_type == ForType::GPULane) {
+                gpu_lane_vars.pop_back();
+            }
             gpu_thread_vars.pop_back();
         }
         gpu_loop_vars.pop_back();
@@ -1439,11 +1452,12 @@ class ExtractWMMAOperations : public IRMutator {
             << Expr(op);
 
         // Which entry each lane wants is patched into the shuffle by the
-        // runtime, so it has to be the same in every lane of the warp. The
-        // blocks and warps around it may differ, because that only picks
-        // between whole fragments, which is what containing_subtile takes the
-        // GPU loop variables to be zero for.
-        for (const string &v : gpu_thread_vars) {
+        // runtime, so it has to be the same in every lane of the warp. A loop
+        // over warps around it may differ, because warps each have their own
+        // copy of the fragment and that only picks between those, which is
+        // what index_within_thread takes the thread loop variables to be zero
+        // for.
+        for (const string &v : gpu_lane_vars) {
             user_assert(!expr_uses_var(op->index, v))
                 << "Read of a tensor core accumulator not supported. Which entry "
                 << "is read varies with " << v << ", so the lanes of the warp do "
