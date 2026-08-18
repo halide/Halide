@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include <algorithm>
 #include <stdio.h>
 
 using namespace Halide;
@@ -394,6 +395,55 @@ int main(int argc, char **argv) {
     }
 
     {
+        // Sliding in registers over two loops at once. A rolled register array
+        // only carries values across the innermost loop it lives in, so f can
+        // roll over x but not also over yi. If it tries to do both, the values
+        // it expects to still be there from the previous yi were overwritten
+        // by the sweep of the x loop.
+        Var yo, yi;
+        Func f, g;
+        f(x, y) = x * 3 + y;
+        g(x, y) = f(x, y) + f(x - 1, y) + f(x, y - 1);
+
+        g.split(y, yo, yi, 4);
+        f.store_at(g, yo).compute_at(g, x).store_in(MemoryType::Register);
+
+        Buffer<int> im = g.realize({12, 12});
+        for (int y = 0; y < im.height(); y++) {
+            for (int x = 0; x < im.width(); x++) {
+                int c = (x * 3 + y) + ((x - 1) * 3 + y) + (x * 3 + y - 1);
+                if (im(x, y) != c) {
+                    printf("g(%d, %d) = %d instead of %d\n", x, y, im(x, y), c);
+                    return 1;
+                }
+            }
+        }
+    }
+
+    {
+        // A consumer that clamps its coordinate, so that the region required
+        // of the producer is flat for a while and then starts moving. The loop
+        // can't be rewound to warm this up, because rewinding it doesn't move
+        // the window; it has to warm up on the first iteration instead.
+        Func f, g;
+        f(x, y) = x * 3 + y;
+        g(x, y) = f(max(x, 4), y) + f(max(x, 4) + 2, y);
+
+        f.store_root().compute_at(g, x);
+
+        Buffer<int> im = g.realize({15, 15});
+        for (int y = 0; y < im.height(); y++) {
+            for (int x = 0; x < im.width(); x++) {
+                int c = std::max(x, 4) * 3 + y + (std::max(x, 4) + 2) * 3 + y;
+                if (im(x, y) != c) {
+                    printf("g(%d, %d) = %d instead of %d\n", x, y, im(x, y), c);
+                    return 1;
+                }
+            }
+        }
+    }
+
+    {
         // Sliding a producer along the outer loop of a pair of outputs fused
         // together with compute_with. Previously triggered an internal compiler
         // error referencing a missing .loop_min symbol on the fused loop.
@@ -436,6 +486,84 @@ int main(int argc, char **argv) {
         if (count != 10) {
             printf("f1 was called %d times instead of %d times\n", count, 10);
             return 1;
+        }
+    }
+
+    {
+        // Two funcs sliding over the same loop, where one consumes the other,
+        // and the outer func also consumes both. Both need to warm up their
+        // windows, but over different numbers of iterations.
+        // Sliding warms up its window by computing a little more than is
+        // required at the edges, so give the input some slack.
+        Buffer<int> input(9, 9);
+        input.set_min(-4, -4);
+        input.fill([](int x, int y) { return x * 100 + y; });
+
+        Var yo, yi;
+        Func f, g, h;
+        f(x, y) = input(x, y);
+        g(x, y) = (f(x + 1, y) + f(x - 1, y)) * 2;
+        h(x, y) = (f(x + 1, y) + f(x - 1, y)) + (g(x + 1, y) + g(x - 1, y));
+
+        h.never_partition_all().split(y, yo, yi, 1, TailStrategy::RoundUp);
+        h.output_buffer().dim(0).set_bounds(0, 1).dim(1).set_bounds(0, 1);
+        f.never_partition_all().store_at(h, yo).compute_at(h, x);
+        g.never_partition_all().store_root().compute_at(h, x);
+
+        Buffer<int> im = h.realize({1, 1});
+        // f(x, y) = 100x + y, so g(x, y) = 400x + 4y, and
+        // h(0, 0) = (100 + -100) + (400 + -400) = 0. Any coordinate mix-up
+        // moves this, unlike a constant input.
+        int correct = 0;
+        if (im(0, 0) != correct) {
+            printf("h(0, 0) = %d instead of %d\n", im(0, 0), correct);
+            return 1;
+        }
+    }
+
+    {
+        // g is computed inside h's production and slides over the outermost
+        // loop, while f and h both slide over yi and warm up their windows by
+        // rewinding it. g has to start when h's warm-up does - any earlier and
+        // it runs extra times, which corrupts its own sliding. Unlike the cases
+        // above this one also passes without the fix; it's here for coverage of
+        // the nesting, not as a regression test.
+        const int size = 15;
+        Var yo, yi;
+        Buffer<int> ref;
+        for (int slide = 0; slide < 2; slide++) {
+            Func f, g, h, out;
+            f(x, y) = x * 3 + y;
+            g(x, y) = f(x * 2 - 1, y * 2 - 1) + f(x * 2, y * 2 + 2);
+            h(x, y) = (f(x, y + 1) + f(x, y - 2)) +
+                      (g(x / 2 + 2, y / 2 - 2) + g(x / 2 - 2, y / 2 + 2));
+            out(x, y) = h(x * 2 + 1, y * 2 - 2) + h(x * 2 + 1, y * 2 + 2);
+
+            if (slide) {
+                out.split(y, yo, yi, 4, TailStrategy::RoundUp);
+                f.store_at(out, yo).compute_at(out, yi);
+                g.store_at(out, Var::outermost()).compute_at(h, Var::outermost());
+                h.store_at(out, yo).compute_at(out, yi);
+            } else {
+                f.compute_root();
+                g.compute_root();
+                h.compute_root();
+            }
+
+            Buffer<int> im = out.realize({size, size});
+            if (!slide) {
+                ref = im;
+            } else {
+                for (int y = 0; y < size; y++) {
+                    for (int x = 0; x < size; x++) {
+                        if (im(x, y) != ref(x, y)) {
+                            printf("out(%d, %d) = %d instead of %d\n",
+                                   x, y, im(x, y), ref(x, y));
+                            return 1;
+                        }
+                    }
+                }
+            }
         }
     }
 

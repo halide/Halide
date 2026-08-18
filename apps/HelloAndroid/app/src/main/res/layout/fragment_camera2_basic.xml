@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <SurfaceView
+        android:id="@+id/surface_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!--
+     Square so that a 90-degree-multiple rotation (see Camera2BasicFragment's
+     OrientationEventListener) doesn't change its bounding box and clip offscreen.
+    -->
+    <Button
+        android:id="@+id/toggle"
+        android:layout_width="72dp"
+        android:layout_height="72dp"
+        android:layout_gravity="top|end"
+        android:layout_margin="16dp"
+        android:padding="4dp"
+        android:textSize="12sp"
+        android:text="@string/toggle" />
+
+</FrameLayout>

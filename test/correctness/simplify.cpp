@@ -438,6 +438,8 @@ void check_algebra() {
     check((y - 8) % 4, y % 4);
     check((y - x * 8) % 4, y % 4);
     check((x * 8 - y) % 4, (-y) % 4);
+    check((x + 31) % 32 == 31, x % 32 == 0);
+    check((x - 1) % 32 == 31, x % 32 == 0);
 
     // Check an optimization important for fusing dimensions
     check((x / 3) * 3 + x % 3, x);
@@ -1132,6 +1134,16 @@ void check_bounds() {
 
     check(select(x < y, x + y, x), select(x < y, y, 0) + x);
     check(select(x < y, x, x + y), select(x < y, 0, y) + x);
+
+    // A select nested in a branch of a select on the same condition, under
+    // some affine arithmetic. The inner select's outcome is known.
+    check(select(x < y, z, select(x < y, w, x) + 3), select(x < y, z, x + 3));
+    check(select(x < y, select(x < y, w, x) + 3, z), select(x < y, w + 3, z));
+    check(select(x < y, z, 3 - select(x < y, w, x)), select(x < y, z, 3 - x));
+    check(select(x < y, z, (select(x < y, w, x) + 3) / 2), select(x < y, z, (x + 3) / 2));
+    check(select(x < y, (select(x < y, w, x) + 3) / 2, z), select(x < y, (w + 3) / 2, z));
+    check(select(x < y, z, select(x < y, w, x) / 2), select(x < y, z, x / 2));
+    check(min(select(x < y, z, w), select(x < y, x, z) / 2), select(x < y, min(x / 2, z), min(z / 2, w)));
 
     check(min(x + 1, y) - min(x, y - 1), 1);
     check(max(x + 1, y) - max(x, y - 1), 1);

@@ -310,8 +310,13 @@ function(_Halide_library_from_generator TARGET)
         message(FATAL_ERROR "`${ARG_TYPE}` not among: c_source, object, static_library")
     endif ()
 
-    ## Validate plugins
+    ## Validate plugins, lazily loading autoscheduler plugins that live in
+    # their own package (e.g. when named directly via PLUGINS instead of the
+    # add_halide_library(... AUTOSCHEDULER ...) convenience keyword).
     foreach (plugin IN LISTS ARG_PLUGINS)
+        if (NOT TARGET "${plugin}" AND "${plugin}" MATCHES "::")
+            find_package(HalideAutoschedulers QUIET)
+        endif ()
         if (NOT TARGET "${plugin}")
             message(FATAL_ERROR "Plugin `${plugin}` is not a target.")
         endif ()

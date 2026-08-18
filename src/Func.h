@@ -210,10 +210,7 @@ public:
 
     template<typename... Args>
     HALIDE_NO_USER_CODE_INLINE std::enable_if_t<Internal::all_are_convertible<Func, Args...>::value, Stage &>
-    eager_inline(const Func &first, Args &&...args) {
-        std::vector<Func> collected_args{first, std::forward<Args>(args)...};
-        return eager_inline(collected_args);
-    }
+    eager_inline(const Func &first, Args &&...args);
     // @}
 
     /** Schedule the iteration over this stage to be fused with another
@@ -2848,6 +2845,13 @@ public:
         return Stage(*this).get_schedule();
     }
 };
+
+template<typename... Args>
+HALIDE_NO_USER_CODE_INLINE std::enable_if_t<Internal::all_are_convertible<Func, Args...>::value, Stage &>
+Stage::eager_inline(const Func &first, Args &&...args) {
+    std::vector<Func> collected_args{first, std::forward<Args>(args)...};
+    return eager_inline(collected_args);
+}
 
 namespace Internal {
 

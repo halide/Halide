@@ -329,6 +329,15 @@ inline double div_imp<double>(double a, double b) {
     return a / b;
 }
 
+/** Strip any Let nodes off the front of an Expr, appending the name and value
+ * of each to `lets` from outermost to innermost, and return what they wrapped.
+ * Analysing an Expr that CSE or LICM has lifted subexpressions out of means
+ * getting past the Lets first. Substituting them back in also does that, but it
+ * repeats each value at every use, which is what lifting them out avoided.
+ * Callers rewrap the Lets around whatever they build, or, in codegen, put them
+ * in scope while they build it. */
+Expr peel_lets(const Expr &e, std::vector<std::pair<std::string, Expr>> *lets);
+
 /** Return an Expr that is identical to the input Expr, but with
  * all calls to likely() and likely_if_innermost() removed. */
 Expr remove_likelies(const Expr &e);

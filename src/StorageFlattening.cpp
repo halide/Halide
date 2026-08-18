@@ -546,8 +546,14 @@ protected:
         // Record index in the stack.
         hoisted_storages_map[op->name] = hoisted_storages.size() - 1;
         Stmt body = mutate(op->body);
-        internal_assert(!hoisted_storages.back().hoisted_allocations.empty())
-            << "Couldn't find a matching Allocate node for hoisted storage " << op->name << "\n";
+        if (hoisted_storages.back().hoisted_allocations.empty()) {
+            // Nothing in here allocates it. A Func hoisted into the loops of a
+            // Func with update definitions gets one of these nodes per stage,
+            // but is only realized inside the stages that use it.
+            hoisted_storages_map.erase(op->name);
+            hoisted_storages.pop_back();
+            return body;
+        }
         const auto &alloc_info = hoisted_storages.back().hoisted_allocations.front();
         vector<Expr> extents = alloc_info.extents;
         Expr condition = alloc_info.condition;
@@ -682,6 +688,20 @@ protected:
     }
 };
 
+// Strips the markers mark_specialization_branch() (ScheduleFunctions.cpp)
+// brackets each specialize() branch with. Safe here because by the time
+// storage flattening has run, sibling branches have diverged for real (e.g.
+// a stride-1 specialization now has literal contiguous Store/Load nodes
+// where the generic fallback has stride-multiplied ones).
+Stmt remove_specialization_branch_markers(const Stmt &s) {
+    return mutate_with(s, [](auto *self, const Call *op) -> Expr {
+        if (op->is_intrinsic(Call::specialization_branch_marker)) {
+            return make_zero(op->type);
+        }
+        return self->visit_base(op);
+    });
+}
+
 }  // namespace
 
 Stmt storage_flattening(Stmt s,
@@ -706,6 +726,7 @@ Stmt storage_flattening(Stmt s,
     s = FlattenDimensions(tuple_env, outputs, target)(s);
     s = HoistStorage()(s);
     s = PromoteToMemoryType()(s);
+    s = remove_specialization_branch_markers(s);
 
     return s;
 }

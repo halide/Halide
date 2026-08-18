@@ -883,6 +883,7 @@ constexpr const char *intrinsic_op_names[] = {
     "skip_stages_marker",
     "sliding_window_marker",
     "sorted_avg",
+    "specialization_branch_marker",
     "stream_store_fence",
     "strict_add",
     "strict_cast",

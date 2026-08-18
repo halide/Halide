@@ -19,6 +19,7 @@
 #include "Solve.h"
 #include "Substitute.h"
 #include "Target.h"
+#include "Util.h"
 #include "Var.h"
 
 namespace Halide {
@@ -488,6 +489,44 @@ bool any_specialization_requests_streaming(const Definition &def) {
     return false;
 }
 
+// Brackets a specialize() branch's body with a pair of uniquely-named
+// Call::specialization_branch_marker Evaluates, inside any leading LetStmt
+// chain rather than outside it.
+//
+// Sibling branches are often identical until the specialize() guard's
+// implications simplify them apart, so without markers Simplify's
+// branch-merging rules treat "identical" as "redundant" and merge them.
+// Both ends need marking, since a shared prefix or suffix can still get
+// hoisted out even when the marked ends differ.
+//
+// Markers go inside the leading LetStmt chain, not outside it, because
+// build_produce_definition()'s compute_with/fused-loop path peels that
+// chain off the result to hoist per-dimension loop bound bindings into a
+// scope shared with any fused Func. A Block wrapping the whole result
+// would hide those lets from that peel, so we peel them off here
+// ourselves and rewrap them around the marked body.
+//
+// remove_specialization_branch_markers() (StorageFlattening.cpp) strips
+// these back out once branches have actually diverged for real.
+Stmt mark_specialization_branch(Stmt body) {
+    vector<pair<string, Expr>> lets;
+    while (const LetStmt *let = body.as<LetStmt>()) {
+        lets.emplace_back(let->name, let->value);
+        body = let->body;
+    }
+
+    Expr front_marker = Call::make(Int(32), Call::specialization_branch_marker,
+                                   {StringImm::make(unique_name('s'))}, Call::Intrinsic);
+    Expr back_marker = Call::make(Int(32), Call::specialization_branch_marker,
+                                  {StringImm::make(unique_name('s'))}, Call::Intrinsic);
+    body = Block::make({Evaluate::make(front_marker), std::move(body), Evaluate::make(back_marker)});
+
+    for (const auto &[name, value] : reverse_view(lets)) {
+        body = LetStmt::make(name, value, body);
+    }
+    return body;
+}
+
 // Build a loop nest about a provide node using a schedule
 Stmt build_provide_loop_nest(const map<string, Function> &env,
                              const string &prefix,
@@ -551,12 +590,22 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     Stmt stmt = build_loop_nest(body, prefix, start_fuse, func, def);
     stmt = inject_placeholder_prefetch(stmt, env, prefix, def.schedule().prefetches());
 
-    // Make any specialized copies
+    // Make any specialized copies. Mark every sibling branch at this level
+    // (this base case, and each then_case below) so equal() can't merge two
+    // of them once they've simplified to look alike. Funcs with no
+    // specializations are left untouched: no siblings to disambiguate, so
+    // marking would just be needless overhead.
     const vector<Specialization> &specializations = def.specializations();
+    if (!specializations.empty()) {
+        stmt = mark_specialization_branch(stmt);
+    }
     for (size_t i = specializations.size(); i > 0; i--) {
         const Specialization &s = specializations[i - 1];
         if (s.failure_message.empty()) {
             Stmt then_case = build_provide_loop_nest(env, prefix, func, s.definition, start_fuse, is_update);
+            // Only marks s.definition's own nested specializations, if any --
+            // doesn't know it's also our sibling here, so we mark it too.
+            then_case = mark_specialization_branch(then_case);
             stmt = IfThenElse::make(s.condition, then_case, stmt);
         } else {
             internal_assert(is_const_one(s.condition));

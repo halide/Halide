@@ -89,16 +89,59 @@ class MarkAsyncCopies : public IRMutator {
                            mutate(op->predicate), op->alignment, op->is_streaming);
     }
 
+<<<<<<< HEAD
+=======
+    // Waiting for a copy is something each thread does for the copies it
+    // issued itself, so the wait belongs inside the loops over threads. Put it
+    // at the end of the innermost one, which is still before the barrier that
+    // publishes the data to the rest of the block and before any of it is
+    // read. Leaving it after them would make it a statement outside the loops
+    // over threads, which is a thing only the first thread does.
+    class AwaitInEachThread : public IRMutator {
+        using IRMutator::visit;
+
+        Stmt visit(const For *op) override {
+            Stmt body = mutate(op->body);
+            if ((op->for_type == ForType::GPUThread || op->for_type == ForType::GPULane) &&
+                body.same_as(op->body)) {
+                // Placing the wait is the only thing this does, so a body that
+                // comes back unchanged is one with no loop over threads inside
+                // it, and this is the innermost one.
+                body = Block::make(body, Evaluate::make(wait));
+            }
+            return op->with(op->min, op->max, body);
+        }
+
+        const Expr &wait;
+
+    public:
+        using IRMutator::mutate;
+
+        AwaitInEachThread(const Expr &wait)
+            : wait(wait) {
+        }
+    };
+
+>>>>>>> slide_rewrite
     Stmt visit(const ProducerConsumer *op) override {
         Stmt body = mutate(op->body);
         auto it = groups.find(op->name);
         if (op->is_producer && it != groups.end() && device_api == DeviceAPI::CUDA) {
+<<<<<<< HEAD
             // At the end of the producer, which is before the barrier that
             // publishes the data to the rest of the block, and before any of
             // it is read.
             Expr wait = Call::make(Int(32), Call::cuda_await_copies,
                                    {it->second}, Call::Intrinsic);
             body = Block::make(body, Evaluate::make(wait));
+=======
+            Expr wait = Call::make(Int(32), Call::cuda_await_copies,
+                                   {it->second}, Call::Intrinsic);
+            Stmt with_wait = AwaitInEachThread(wait).mutate(body);
+            // Unchanged means there was no loop over threads to put it in,
+            // because only one thread runs this producer.
+            body = with_wait.same_as(body) ? Block::make(body, Evaluate::make(wait)) : with_wait;
+>>>>>>> slide_rewrite
         }
         return op->with(body);
     }
@@ -110,6 +153,7 @@ public:
 // The copy engine moves up to 16 bytes at a time, and needs its destination
 // aligned to the width of the copy. Allocations are packed one after another,
 // so a group has to end on a 16-byte boundary for whatever follows it to be
+<<<<<<< HEAD
 // copyable into. Round a group's size up accordingly, given the size in bytes
 // of the units it is measured in.
 Expr round_up_group_size(const Expr &size, int unit_bytes) {
@@ -119,6 +163,13 @@ Expr round_up_group_size(const Expr &size, int unit_bytes) {
     }
     return align_up(size, alignment / unit_bytes);
 }
+=======
+// copyable into. Group sizes are counted in units of the type they are
+// allocated as, so dividing gives the number of those units to align to. Units
+// of 16 bytes or more are big enough already and give zero, which align_up
+// takes to mean no alignment at all.
+const int async_copy_alignment = 16;
+>>>>>>> slide_rewrite
 
 class ExtractBlockSize : public IRVisitor {
 protected:
@@ -971,7 +1022,20 @@ public:
                 int ratio = alloc.widest_type.bytes() / alloc_type.bytes();
                 internal_assert(ratio != 0)
                     << "alloc_type should have been at most as wide as the widest type in group\n";
+<<<<<<< HEAD
                 total_size += round_up_group_size(alloc.max_size * ratio, alloc_type.bytes());
+=======
+                // Sizes here are counted in units of one type or another, and
+                // are converted between them by dividing, so the types have to
+                // be whole multiples of each other.
+                internal_assert(is_power_of_two(alloc_type.bytes()) &&
+                                is_power_of_two(alloc.widest_type.bytes()))
+                    << "Allocation types must be a power of two bytes wide, but these "
+                    << "are " << alloc_type.bytes() << " and "
+                    << alloc.widest_type.bytes() << "\n";
+                total_size += align_up(alloc.max_size * ratio,
+                                       async_copy_alignment / alloc_type.bytes());
+>>>>>>> slide_rewrite
             }
 
             // Upgrade the alloc type to the widest type found, and
@@ -1046,8 +1110,13 @@ public:
                         offset = Variable::make(Int(32), name + "." + std::to_string(i - 1) + ".offset");
                         int ratio = (widest_type.bytes() / cluster[i - 1].widest_type.bytes());
                         internal_assert(ratio != 0);
+<<<<<<< HEAD
                         offset += simplify(round_up_group_size(
                             (cluster[i - 1].max_size + ratio - 1) / ratio, widest_type.bytes()));
+=======
+                        offset += simplify(align_up((cluster[i - 1].max_size + ratio - 1) / ratio,
+                                                    async_copy_alignment / widest_type.bytes()));
+>>>>>>> slide_rewrite
                     } else {
                         if (memory_type == MemoryType::Heap) {
                             // One slice of a larger global allocation

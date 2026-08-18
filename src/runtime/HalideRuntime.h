@@ -1605,13 +1605,22 @@ typedef enum halide_target_processor_t {
  * if the current execution environment can support the given set of
  * halide_target_feature_t flags. The implementation must do the following:
  *
- * -- If there are flags set in features that the function knows *cannot* be supported, return 0.
- * -- Otherwise, return 1.
+ * -- If there are flags set in features that the function knows *cannot* be supported, return 0 (never) or 2 (not right now).
+ * -- Otherwise, return 1 (always) or 3 (for the moment).
  * -- Note that any flags set in features that the function doesn't know how to test should be ignored;
- * this implies that a return value of 1 means "not known to be bad" rather than "known to be good".
+ * this implies that a return value of 1 or 3 means "not known to be bad" rather than "known to be good".
  *
- * In other words: a return value of 0 means "It is not safe to use code compiled with these features",
- * while a return value of 1 means "It is not obviously unsafe to use code compiled with these features".
+ * In other words: a return value of 0 or 2 means "It is not safe to use code compiled with these features",
+ * while a return value of 1 or 3 means "It is not obviously unsafe to use code compiled with these features".
+ *
+ * Notice that there are four values to chose from: permanent decisions (0:never and 1:always) and temporary
+ * decisions (2:not_right_now and 3:for_the_moment). Halide multi-target pipeline wrappers select which version
+ * of the pipeline can be run based on halide_can_use_target_features. Historically, they would cache this
+ * decision in a global variable. With the introduction of the two non-permanent decision values, one can
+ * control the whether or not this procedure will be called again next invocation of a pipeline to determine
+ * which version is eligible for calling.
+ *
+ * You may use the convenience enum below to write your return statements.
  *
  * The default implementation simply calls halide_default_can_use_target_features.
  *
@@ -1619,6 +1628,12 @@ typedef enum halide_target_processor_t {
  * bits to represent all the currently known features. Any excess bits must be set to zero.
  */
 // @{
+enum {
+    halide_can_use_target_never = 0,
+    halide_can_use_target_always = 1,
+    halide_can_use_target_not_right_now = 2,
+    halide_can_use_target_for_the_moment = 3,
+};
 extern int halide_can_use_target_features(int count, const uint64_t *features);
 typedef int (*halide_can_use_target_features_t)(int count, const uint64_t *features);
 extern halide_can_use_target_features_t halide_set_custom_can_use_target_features(halide_can_use_target_features_t);
@@ -1632,7 +1647,7 @@ extern halide_can_use_target_features_t halide_set_custom_can_use_target_feature
  *     int halide_can_use_target_features(int count, const uint64_t *features) {
  *          if (features[halide_target_somefeature >> 6] & (1LL << (halide_target_somefeature & 63))) {
  *              if (!can_use_somefeature()) {
- *                  return 0;
+ *                  return halide_can_use_target_never;
  *              }
  *          }
  *          return halide_default_can_use_target_features(count, features);

@@ -105,14 +105,32 @@ struct DoubleToExprCheck {
     }
 };
 
+// Wrapping int64_t values in an Expr before applying the operator (rather
+// than calling e.g. self_t::operator+(int64_t) directly) sidesteps a C++
+// overload-resolution ambiguity: Halide's operators are only overloaded for
+// (Expr, int) and (Expr, float), so a bare int64_t argument is ambiguous
+// between the two. Every self_t already supports the (self_t, Expr) form.
+struct Int64ToExprCheck {
+    const Expr e;
+    explicit Int64ToExprCheck(int64_t v)
+        : e(Expr(v)) {
+    }
+    operator Expr() const {
+        return e;
+    }
+};
+
 template<typename other_t, typename PythonClass>
 void add_binary_operators_with(PythonClass &class_instance) {
     using self_t = typename PythonClass::type;
-    // If 'other_t' is double, we want to wrap it as an Expr() prior to calling the binary op
-    // (so that double literals that lose precision when converted to float issue warnings).
-    // For any other type, we just want to leave it as-is.
+    // If 'other_t' is double or int64_t, we want to wrap it as an Expr()
+    // prior to calling the binary op (so that double literals that lose
+    // precision when converted to float issue warnings, and so that
+    // int64_t doesn't hit ambiguous overload resolution). For any other
+    // type, we just want to leave it as-is.
     using Promote = std::conditional_t<
-        std::is_same_v<other_t, double>, DoubleToExprCheck, other_t>;
+        std::is_same_v<other_t, double>, DoubleToExprCheck,
+        std::conditional_t<std::is_same_v<other_t, int64_t>, Int64ToExprCheck, other_t>>;
 
 #define BINARY_OP(op, method)                                   \
     do {                                                        \
@@ -209,14 +227,21 @@ template<typename PythonClass>
 void add_binary_operators(PythonClass &class_instance) {
     using self_t = typename PythonClass::type;
 
-    // The order of definitions matters.
-    // Python first will try input value as int, then double, then self_t
-    // (note that we skip 'float' because we should never encounter that in python;
-    // all floating-point literals should be double)
+    // The order of definitions matters: pybind11 tries overloads in
+    // registration order, and (as of pybind11 3.1) a Python int is an
+    // acceptable non-converting match for a C++ double parameter (per PEP
+    // 484 numeric tower rules), not just for int/int64_t. So int and
+    // int64_t must both be registered before double, or a plain Python int
+    // (e.g. from a GeneratorParam<int>, or one too large to fit in an
+    // int32) silently binds to the double overload and produces a float
+    // Expr instead of an Int(32) or Int(64) one.
+    // (We skip 'float' because we should never encounter that in python;
+    // all floating-point literals should be double.)
     add_binary_operators_with<self_t>(class_instance);
     add_binary_operators_with<Expr>(class_instance);
-    add_binary_operators_with<double>(class_instance);
     add_binary_operators_with<int>(class_instance);
+    add_binary_operators_with<int64_t>(class_instance);
+    add_binary_operators_with<double>(class_instance);
 
     // Halide::pow() has only an Expr, Expr variant
     class_instance

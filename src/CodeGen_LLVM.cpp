@@ -2231,19 +2231,29 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, con
                 // We want to find the smallest aligned width and offset
                 // that contains this ramp.
                 int64_t stride = *pstride;
-                base = *pbase;
-                internal_assert(base >= 0);
-                width = next_power_of_two(ramp->lanes * stride);
-
-                while (base % width) {
-                    base -= base % width;
-                    width *= 2;
+                int64_t lo = *pbase;
+                int64_t hi = lo + (ramp->lanes - 1) * stride;
+                if (stride < 0) {
+                    std::swap(lo, hi);
                 }
-                constant_index = true;
+                // Indices below zero can only come from lanes masked off by
+                // a predicate. The blocks below are aligned relative to the
+                // start of the buffer, so they can't describe a range that
+                // straddles it. Fall back to just the buffer-level node.
+                if (lo >= 0) {
+                    base = lo;
+                    width = next_power_of_two(hi - lo + 1);
+
+                    while (base % width) {
+                        base -= base % width;
+                        width *= 2;
+                    }
+                    constant_index = true;
+                }
             }
         } else {
             auto pbase = as_const_int(index);
-            if (pbase) {
+            if (pbase && *pbase >= 0) {
                 base = *pbase;
                 constant_index = true;
             }
@@ -3601,29 +3611,57 @@ void CodeGen_LLVM::visit(const Call *op) {
         //    ...
         //    cond_N, "sub_function_name_N"
         //
+        // Unlike standard boolean conditions, these evaluate to one of four integer states:
+        //    0: Stable False   (Skip this function, try the next one)
+        //    1: Stable True    (Use this function, and cache the result)
+        //    2: Volatile False (Skip this function, but disable caching)
+        //    3: Volatile True  (Use this function, but disable caching)
+        //
         // This will generate code that corresponds (roughly) to
         //
-        //    static FunctionPtr f = []{
-        //      if (cond_1) return sub_function_name_1;
-        //      if (cond_2) return sub_function_name_2;
-        //      ...
-        //      if (cond_N) return sub_function_name_N;
+        //    static FunctionPtr cached_f = nullptr;
+        //    if (cached_f != nullptr) return cached_f(args);
+        //
+        //    FunctionPtr selected_f = nullptr;
+        //    bool should_cache = true;
+        //
+        //    int c1 = cond_1;
+        //    if (c1 == 2 || c1 == 3) should_cache = false;
+        //    if (c1 == 1 || c1 == 3) {
+        //        selected_f = sub_function_name_1;
+        //    } else {
+        //        int c2 = cond_2;
+        //        if (c2 == 2 || c2 == 3) should_cache = false;
+        //        if (c2 == 1 || c2 == 3) {
+        //            selected_f = sub_function_name_2;
+        //        } else {
+        //            ...
+        //        }
         //    }
-        //    return f(args)
         //
-        // i.e.: the conditions will be evaluated *in order*; the first one
-        // evaluating to true will have its corresponding function cached,
-        // which will be used to complete this (and all subsequent) calls.
+        //    if (should_cache) cached_f = selected_f;
+        //    return selected_f(args);
         //
-        // The final condition (cond_N) must evaluate to a constant TRUE
-        // value (so that the final function will be selected if all others
+        // i.e.: the conditions conceptually evaluate *in order*; the first one
+        // evaluating to True (1 or 3) will have its corresponding function selected.
+        // However, if the selected condition is Volatile True (3), or if *any*
+        // preceding skipped condition evaluated to Volatile False (2), the
+        // caching mechanism is bypassed for the current invocation.
+        //
+        // (Note: In the actual emitted LLVM IR, all conditions are evaluated
+        // unconditionally using `select` instructions to avoid basic-block explosion,
+        // but the semantic result is identical to short-circuiting.)
+        //
+        // The final condition (cond_N) must evaluate to a constant Stable True (1)
+        // value (so that the final function will be selected and cached if all others
         // fail); failure to do so will cause unpredictable results.
         //
-        // There is currently no way to clear the cached function pointer.
+        // There is currently no way to clear the cached function pointer manually.
         //
-        // It is assumed/required that all of the conditions are "pure"; each
-        // must evaluate to the same value (within a given runtime environment)
-        // across multiple evaluations.
+        // It is assumed/required that all of the conditions are side-effect free.
+        // Conditions returning 0 or 1 must be "pure" (evaluating to the same value
+        // across multiple evaluations within a given runtime environment), while
+        // conditions returning 2 or 3 are expected to be dynamic/volatile.
         //
         // It is assumed/required that all of the sub-functions have arguments
         // (and return values) that are identical to those of this->function.
@@ -3707,15 +3745,40 @@ void CodeGen_LLVM::visit(const Call *op) {
 
         // Build the not-already-inited case
         builder->SetInsertPoint(global_not_inited_bb);
-        llvm::Value *selected_value = nullptr;
+        Value *selected_value = nullptr;
+        // Keep track of whether any of the results was marked as a non-cacheable value (2 or 3).
+        Value *should_cache = builder->getInt1(true);
         for (const auto &sub_fn : reverse_view(sub_fns)) {
             if (!selected_value) {
                 selected_value = sub_fn.fn_ptr;
             } else {
                 Value *c = codegen(sub_fn.cond);
-                selected_value = builder->CreateSelect(c, sub_fn.fn_ptr, selected_value);
+                Value *c_ext = builder->CreateZExtOrTrunc(c, builder->getInt32Ty());
+                // Check the lower bit: 0:no or 1:yes
+                Value *is_true = builder->CreateICmpNE(
+                    builder->CreateAnd(c_ext, builder->getInt32(1)),
+                    builder->getInt32(0));
+                // Check the upper bit: 0:cacheable or 1:volatile
+                Value *is_volatile = builder->CreateICmpNE(
+                    builder->CreateAnd(c_ext, builder->getInt32(2)),
+                    builder->getInt32(0));
+
+                // Update the selected function to the current one under test, as it passes
+                // the test, and is earlier in the list.
+                selected_value = builder->CreateSelect(is_true, sub_fn.fn_ptr, selected_value);
+
+                // Update should_cache.
+                Value *stable_true = builder->CreateAnd(is_true, builder->CreateNot(is_volatile));
+                Value *new_should_cache = builder->CreateSelect(stable_true, builder->getInt1(true), should_cache);
+                should_cache = builder->CreateSelect(is_volatile, builder->getInt1(false), new_should_cache);
             }
         }
+        // Create a basic block for storing
+        BasicBlock *store_bb = BasicBlock::Create(*context, "store_bb", function);
+        builder->CreateCondBr(should_cache, store_bb, call_fn_bb);
+
+        // Build the store bb
+        builder->SetInsertPoint(store_bb);
         builder->CreateStore(selected_value, global);
         builder->CreateBr(call_fn_bb);
 
@@ -3724,9 +3787,10 @@ void CodeGen_LLVM::visit(const Call *op) {
         builder->CreateBr(call_fn_bb);
 
         builder->SetInsertPoint(call_fn_bb);
-        PHINode *phi = builder->CreatePHI(selected_value->getType(), 2);
-        phi->addIncoming(selected_value, global_not_inited_bb);
-        phi->addIncoming(loaded_value, global_inited_bb);
+        PHINode *phi = builder->CreatePHI(selected_value->getType(), 3);
+        phi->addIncoming(selected_value, global_not_inited_bb);  // Selected it, but not cached it.
+        phi->addIncoming(selected_value, store_bb);              // Selected and cached it.
+        phi->addIncoming(loaded_value, global_inited_bb);        // It was already cached.
 
         std::vector<llvm::Value *> call_args;
         for (auto &arg : function->args()) {

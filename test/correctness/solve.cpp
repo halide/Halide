@@ -606,6 +606,34 @@ void test_outer_interval_max_min() {
     check_outer_interval(expr2, 2, Interval::pos_inf());
 }
 
+void test_solve_far_side_min_max() {
+    // Handle min/max on the far side of a comparison, as emitted by
+    // extent-clamped vector guards. Some decomposed terms no longer contain x.
+
+    // c <= min(a, b)  <=>  c <= a && c <= b
+    check_inner_interval(x * 8 + 7 <= min((x + 1) * 8, 100), Interval::neg_inf(), 11);
+    check_outer_interval(x * 8 + 7 <= min((x + 1) * 8, 100), Interval::neg_inf(), 11);
+
+    // c <= max(a, b)  <=>  c <= a || c <= b
+    check_inner_interval(x * 8 + 7 <= max((x - 1) * 8, 100), Interval::neg_inf(), 11);
+    check_outer_interval(x * 8 + 7 <= max((x - 1) * 8, 100), Interval::neg_inf(), 11);
+
+    // c >= min(a, b)  <=>  c >= a || c >= b
+    check_inner_interval(x * 8 >= min((x + 1) * 8, 100), 13, Interval::pos_inf());
+    check_outer_interval(x * 8 >= min((x + 1) * 8, 100), 13, Interval::pos_inf());
+
+    // c >= max(a, b)  <=>  c >= a && c >= b
+    check_inner_interval(x * 8 >= max((x - 1) * 8, 100), 13, Interval::pos_inf());
+    check_outer_interval(x * 8 >= max((x - 1) * 8, 100), 13, Interval::pos_inf());
+
+    // The same guard through a let binding.
+    Expr bound = Variable::make(Int(32), "b");
+    check_inner_interval(Let::make("b", min((x + 1) * 8, 100), x * 8 + 7 <= bound),
+                         Interval::neg_inf(), 11);
+    check_outer_interval(Let::make("b", min((x + 1) * 8, 100), x * 8 + 7 <= bound),
+                         Interval::neg_inf(), 11);
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -639,6 +667,7 @@ int main(int argc, char **argv) {
     test_float_mul_eq_zero_divisor_not_rewritten();
     test_float_select_condition_not_simplified();
     test_outer_interval_max_min();
+    test_solve_far_side_min_max();
     std::printf("Success!\n");
     return 0;
 }
