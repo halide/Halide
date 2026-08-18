@@ -237,9 +237,16 @@ private:
 // baseline worth comparing against.
 //
 // The exponentials are left inline, so each one is evaluated twice, once to
-// sum it and once to normalise by that sum. Computing them at the row instead
-// is a one line change to the schedule and measures the same, because this
-// waits on memory rather than on the arithmetic.
+// sum it and once to normalise by that sum. Keeping them in the lanes that
+// hold them instead, so each is evaluated once, measures the same to a tenth
+// of a microsecond, and so does swapping exp for fast_exp. Neither is what
+// this waits on: ncu puts the load/store pipe at 98% of what it can issue
+// while every arithmetic pipeline is under-utilised and the SMs are busy 37%
+// of the time. It is bound by memory instructions rather than by bandwidth -
+// DRAM is at 36% - so the way to speed it up is fewer, wider accesses, not
+// cheaper arithmetic. Each lane holding two adjacent columns rather than two
+// a warp apart would make the stores full width, which is the next thing to
+// try here.
 class AttentionSoftmax : public Halide::Generator<AttentionSoftmax> {
 public:
     GeneratorParam<int> queries{"queries", 16384};
