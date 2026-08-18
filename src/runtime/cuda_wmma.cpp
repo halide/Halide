@@ -107,6 +107,9 @@ constexpr int wmma_tile_width = 16;
 // The number of entries in a 16x16 matrix.
 constexpr int wmma_entries = wmma_tile_width * wmma_tile_width;
 constexpr int warp_lanes = 32;
+// How many bits an index along one axis of the tile takes.
+constexpr int wmma_axis_bits = 4;
+static_assert(wmma_tile_width == 1 << wmma_axis_bits);
 
 // Half precision for the small non-negative integers the A probe labels its
 // entries with, which are exact in both directions.
@@ -178,6 +181,35 @@ WEAK void find_wmma_relayout(const uint16_t *a_held) {
         }
     }
     wmma_relayout_is_lane_local = true;
+}
+
+// Which bit of an index along each axis to flip in each round of a reduction
+// along it. Any order reduces correctly, because what matters is only that
+// every bit gets flipped once, so this puts the cheap rounds first: flipping a
+// bit that moves an entry between the registers of a lane is a move, and
+// flipping one that moves it between lanes is a shuffle. Doing the moves first
+// leaves the registers of a lane holding entries of the same row (or column)
+// holding the same value, which makes the shuffles that follow identical to
+// each other, and identical shuffles cost one between them.
+WEAK uint8_t wmma_xor_order[2][wmma_axis_bits];
+
+WEAK void find_wmma_xor_order() {
+    for (int axis = 0; axis < 2; axis++) {
+        // The row is the high half of an entry's index and the column the low.
+        const int flip = axis ? 0 : wmma_axis_bits;
+        int round = 0;
+        for (int within_lane = 1; within_lane >= 0; within_lane--) {
+            for (int bit = 0; bit < wmma_axis_bits; bit++) {
+                bool stays = true;
+                for (int e = 0; e < wmma_entries; e++) {
+                    stays &= wmma_entry_lane[e ^ (1 << (bit + flip))] == wmma_entry_lane[e];
+                }
+                if (stays == (within_lane != 0)) {
+                    wmma_xor_order[axis][round++] = (uint8_t)bit;
+                }
+            }
+        }
+    }
 }
 
 WEAK int measure_wmma_layout(void *user_context, CUcontext ctx) {
@@ -278,6 +310,7 @@ WEAK int measure_wmma_layout(void *user_context, CUcontext ctx) {
     }
 
     find_wmma_relayout(a_held);
+    find_wmma_xor_order();
 
     wmma_layout_context = ctx;
     return halide_error_code_success;
@@ -570,12 +603,19 @@ WEAK char *patch_wmma_markers(void *user_context, const char *ptx_src) {
     if (!each_marker(
             wmma_xor_element_marker,
             [&](char *marker, int packed) {
-                const int reg = packed & 15, bit = (packed >> 4) & 7, axis = packed >> 7;
+                const int reg = packed & 15, round = (packed >> 4) & 7, axis = packed >> 7;
                 if (reg >= wmma_accumulator_registers) {
                     return fail("The register the marker asks for is not one the "
                                 "accumulator has",
                                 marker - patched);
                 }
+                if (round >= wmma_axis_bits) {
+                    return fail("The marker asks for a round of a reduction that is "
+                                "longer than an axis of the tile is",
+                                marker - patched);
+                }
+                // Which bit each round flips is this end's to choose.
+                const int bit = wmma_xor_order[axis][round];
 
                 // Where the entry each lane holds in that register comes from.
                 // For this to be one instruction every lane has to find it in
