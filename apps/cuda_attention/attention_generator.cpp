@@ -1,7 +1,5 @@
 #include "Halide.h"
 
-#include <algorithm>
-
 using namespace Halide;
 
 namespace {
@@ -250,10 +248,15 @@ private:
 // something, because ncu says what this waits on: the load/store pipe at 98%
 // of what it can issue, every arithmetic pipeline under-utilised, and the SMs
 // busy 37% of the time. It is bound by memory instructions rather than by
-// bandwidth - DRAM is at 36% - so the way to speed it up is fewer and wider
-// accesses, not cheaper arithmetic. Each lane holding two adjacent columns
-// rather than two a warp apart would make the stores full width, which is the
-// next thing to try here.
+// bandwidth - DRAM is at 36% - so the way to speed it up would be fewer and
+// wider accesses, not cheaper arithmetic.
+//
+// Giving each lane two adjacent columns rather than two a warp apart does make
+// the accesses wider, and measures slightly slower: 94.6us against 92.1. The
+// stores go from half a transaction to a whole one, but the conversion to half
+// precision has to be done a lane at a time on this backend, so what the wider
+// stores save the extra converts spend. That is worth knowing before trying it
+// again.
 class AttentionSoftmax : public Halide::Generator<AttentionSoftmax> {
 public:
     GeneratorParam<int> queries{"queries", 16384};
@@ -288,33 +291,46 @@ public:
         set_bounds(scores, keys, queries);
         set_bounds(p, keys, queries);
 
-        // A warp per row, with each lane taking a contiguous run of columns
-        // rather than one column in every thirty two. Both give the warp a
-        // coalesced row, but this way each lane moves several values in one
-        // instruction, and what this kernel runs out of is memory
-        // instructions rather than bandwidth.
+        // A warp per row, with the lanes walking consecutive columns, so
+        // that both the read of the scores and the write of the result are
+        // coalesced. What that costs is that the two reductions now run
+        // across the lanes rather than within one, which rfactor expresses:
+        // each lane reduces the columns it holds, and the lanes then combine
+        // through warp shuffles.
         const int lanes = 32;
         const int rows = 8;
-        // As wide an access as the row divides into. Sixteen bytes is the
-        // widest the hardware has, which is four of the scores it reads or
-        // eight of the halves it writes.
-        const int per_lane = std::max(1, (int)keys / lanes);
-        Var xi("xi"), xv("xv"), yo("yo"), yi("yi"), u("u"), v("v");
+        Var xo("xo"), xi("xi"), yo("yo"), yi("yi"), u("u"), v("v");
         RVar ri("ri"), ro("ro");
 
         p.bound(x, 0, keys)
             .bound(y, 0, queries)
-            .split(x, xi, xv, per_lane)
+            .split(x, xo, xi, lanes)
             .split(y, yo, yi, rows)
-            .reorder(xv, xi, yi, yo)
+            .reorder(xi, xo, yi, yo)
             .gpu_blocks(yo)
             .gpu_threads(yi)
             .gpu_lanes(xi)
-            .unroll(xv);
+            .unroll(xo);
 
-        // The two reductions run across the lanes, which rfactor expresses:
-        // each lane reduces the columns it holds, and the lanes then combine
-        // through warp shuffles.
+        // Each lane holds the columns it walks, so the scores are read once
+        // rather than once per pass over them.
+        Var so("so"), si("si");
+        scores.in()
+            .compute_at(p, yi)
+            .store_in(MemoryType::Register)
+            .split(_0, so, si, lanes)
+            .gpu_lanes(si)
+            .unroll(so);
+
+        // Each lane keeps the exponentials of the columns it holds, so each is
+        // evaluated once rather than once to sum and once to normalise.
+        Var eo("eo"), ei("ei");
+        e.compute_at(p, yi)
+            .store_in(MemoryType::Register)
+            .split(x, eo, ei, lanes)
+            .gpu_lanes(ei)
+            .unroll(eo);
+
         Func mi = m.update().split(r, ri, ro, lanes).reorder(ri, ro).rfactor(ro, u);
         mi.compute_at(p, yi).gpu_lanes(u);
         mi.update().gpu_lanes(u);

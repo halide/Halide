@@ -10,6 +10,30 @@
 //
 // Bfloats are not covered: a vectorized cast to one asserts inside LLVM
 // before it gets anywhere near this, which is a separate bug.
+//
+// The underlying bug reproduces in llc with no Halide involved. Compiled with
+// llc -mcpu=sm_80, the second of these emits no cvt at all - it loads eight
+// bytes and stores four of them - while the first and third are correct:
+//
+//     target triple = "nvptx64--"
+//     define ptx_kernel void @scalar(ptr addrspace(1) %in, ptr addrspace(1) %out) {
+//       %v = load float, ptr addrspace(1) %in, align 4
+//       %t = fptrunc float %v to half
+//       store half %t, ptr addrspace(1) %out, align 2
+//       ret void
+//     }
+//     define ptx_kernel void @v2(ptr addrspace(1) %in, ptr addrspace(1) %out) {
+//       %v = load <2 x float>, ptr addrspace(1) %in, align 8
+//       %t = fptrunc <2 x float> %v to <2 x half>
+//       store <2 x half> %t, ptr addrspace(1) %out, align 4
+//       ret void
+//     }
+//     define ptx_kernel void @v4(ptr addrspace(1) %in, ptr addrspace(1) %out) {
+//       %v = load <4 x float>, ptr addrspace(1) %in, align 16
+//       %t = fptrunc <4 x float> %v to <4 x half>
+//       store <4 x half> %t, ptr addrspace(1) %out, align 8
+//       ret void
+//     }
 
 #include "Halide.h"
 #include <cstdio>
@@ -18,7 +42,9 @@ using namespace Halide;
 
 namespace {
 
-// Cast a float buffer to T and back, vectorized `vec` lanes at a time.
+// Cast a float buffer to T, vectorized `vec` lanes at a time. The output has
+// to be a buffer of T rather than a round trip back to float, because what
+// goes wrong is the conversion feeding a store of the narrow type.
 template<typename T>
 int test(const char *name, int vec, bool lanes) {
     const int W = 32 * vec, rows = 8, H = rows * 16;
@@ -34,10 +60,9 @@ int test(const char *name, int vec, bool lanes) {
     in.set_host_dirty();
 
     Var x("x"), y("y"), xi("xi"), xv("xv"), yo("yo"), yi("yi");
-    Func narrow("narrow"), out("out");
+    Func out("out");
 
-    narrow(x, y) = cast<T>(in(x, y));
-    out(x, y) = cast<float>(narrow(x, y));
+    out(x, y) = cast<T>(in(x, y));
 
     out.bound(x, 0, W)
         .bound(y, 0, H)
@@ -51,20 +76,19 @@ int test(const char *name, int vec, bool lanes) {
     } else {
         out.gpu_threads(xi, yi);
     }
-    narrow.compute_at(out, xi).vectorize(x);
 
-    Buffer<float> result(W, H);
+    Buffer<T> result(W, H);
     out.realize(result, get_jit_target_from_environment());
     result.copy_to_host();
 
     int bad = 0;
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            if (result(x, y) != in(x, y)) {
+            if ((float)result(x, y) != in(x, y)) {
                 if (bad++ < 3) {
                     printf("%s vec=%d %s: result(%d, %d) = %f instead of %f\n",
                            name, vec, lanes ? "gpu_lanes" : "gpu_threads",
-                           x, y, result(x, y), in(x, y));
+                           x, y, (float)result(x, y), in(x, y));
                 }
             }
         }
