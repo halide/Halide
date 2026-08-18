@@ -224,6 +224,12 @@ int main(int argc, char **argv) {
         double t = bench(unfused, [&]() { O.device_sync(); cudaDeviceSynchronize(); });
         printf("  cublas + softmax + cublas     %9.0f GFlop/s %8.1f us\n",
                gflops(t), t * 1e6);
+        // What the two multiplies cost on their own. There is no way to run
+        // them as a pair without the softmax between: the second takes half
+        // precision operands, and the softmax needs the scores in single
+        // precision to exponentiate them accurately, so a runnable pair would
+        // either carry half the bytes or do different arithmetic. Timing each
+        // where it sits says the same thing without pretending otherwise.
         double t1 = bench([&]() { gemm_scores(Sd, CUDA_R_32F); },
                           []() { cudaDeviceSynchronize(); });
         double t2 = bench([&]() { attention_softmax(S.raw_buffer(), P.raw_buffer()); },
@@ -233,25 +239,6 @@ int main(int argc, char **argv) {
                t1 * 1e6, t2 * 1e6, t3 * 1e6, (t1 + t2 + t3) * 1e6, t * 1e6);
     }
 
-    // The two multiplies with the softmax left out, as a ceiling: the scores
-    // still go through memory, but nothing happens to them on the way. They
-    // are written in half precision here, because that is what the multiply
-    // that reads them takes, so this moves less than the unfused path above
-    // even before counting what the softmax rereads.
-    auto two_gemms = [&]() {
-        cublas_ok &= gemm_scores(Pd, CUDA_R_16F);
-        cublas_ok &= gemm_out(Pd);
-    };
-    cublas_ok = true;
-    two_gemms();
-    if (cudaDeviceSynchronize() != cudaSuccess || !cublas_ok) {
-        printf("  (the two gemm reference did not run)\n");
-        failures++;
-    } else {
-        double t = bench(two_gemms, []() { cudaDeviceSynchronize(); });
-        printf("  cublas two gemms, no softmax  %9.0f GFlop/s %8.1f us  (less work)\n",
-               gflops(t), t * 1e6);
-    }
     cublasDestroy(handle);
 
     if (failures) {

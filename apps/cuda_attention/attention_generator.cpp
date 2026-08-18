@@ -30,33 +30,34 @@ void set_bounds(OutputImageParam p, int extent_0, int extent_1) {
 // many keys this can do at once - flash attention's trick of walking the keys
 // in chunks and rescaling as it goes is what lifts that, and is not done here.
 //
-// GFlop/s on an RTX 5060 Ti at queries=65536. The count is the two multiplies
-// and nothing else: the exponential per score, the two reductions along each
-// row and the divide are all uncounted, so this is a way of comparing times
-// for the same problem rather than a fraction of what the part can do.
+// On an RTX 5060 Ti at queries=65536, against the same attention computed
+// unfused - cublas multiplies into a scores matrix in global memory, the
+// softmax below normalises it there, and cublas multiplies again. Both are
+// checked against the host the same way. The GFlop/s count is the two
+// multiplies and nothing else: the exponential per score, the two reductions
+// along each row and the divide are all uncounted, so it is a way of comparing
+// times for the same problem rather than a fraction of what the part can do.
 //
-//     keys depth out_depth   fused   unfused   two gemms, no softmax
-//       64    64        64   17886      4456                   19939
-//      128    64        64   20534      6520                   20067
-//       64   128        64   18570      6263                   17735
+//     keys depth out_depth    fused          unfused    of which softmax
+//       64    64        64   60.0us   17884  236.3us     4544      92.1us
+//      128    64        64  104.7us   20520  324.0us     6628     107.3us
+//       64   128        64   86.5us   18610  256.7us     6274      92.1us
 //
-// The unfused column is the same attention, computed the same way and checked
-// the same way, with the scores going through global memory: cublas multiplies
-// into them, the softmax below normalises them there, and cublas multiplies
-// again. The runner prints where its time goes; at the first row it is 25us in
-// the first multiply, 92us in the softmax, and 30us in the second.
+// The last column is why. The softmax reads a queries x keys matrix that the
+// multiply before it just wrote, and writes another one for the multiply after
+// it to read, and those two matrices are larger than everything else in the
+// problem put together. The filter above never writes either of them: the
+// scores are a tensor core accumulator from the moment they are computed to
+// the moment they are consumed.
 //
-// So the softmax is two thirds of it, and it is not doing any arithmetic worth
-// that. It is reading a queries x keys matrix that the multiply before it just
-// wrote and writing another one for the multiply after it to read. Those two
-// matrices are larger than everything else in the problem put together, and
-// the filter above never writes either of them.
-//
-// The last column is cublas doing only the two multiplies, with no softmax at
-// all: the scores still go through memory, but nothing happens to them on the
-// way. This filter is within a tenth of it at every shape above and past it at
-// two of them, which is the useful way to read these numbers - what it costs
-// to do a softmax here is about what it costs to do nothing.
+// There is no third column for the two multiplies without the softmax, though
+// it is the obvious thing to want. They cannot be run as a pair: the second
+// takes half precision operands, and the softmax needs the scores in single
+// precision, because it exponentiates them and half precision scores of this
+// size lose enough to matter. A runnable pair would either carry half the
+// bytes or do different arithmetic, and comparing against either flatters this
+// filter. Timing each multiply where it sits says the same thing honestly -
+// they are 25us and 30us of the 236 in the first row.
 //
 // The exponential is not worth economising on. Halide's fast_exp measured the
 // same to within noise at every shape above, because the kernel issues one
