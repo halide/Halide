@@ -97,6 +97,7 @@ protected:
     /** Nodes for which we need to override default behavior for the GPU runtime */
     // @{
     void visit(const Call *) override;
+    void visit(const Cast *) override;
     void visit(const For *) override;
     void visit(const Allocate *) override;
     void visit(const Free *) override;
@@ -411,6 +412,34 @@ void CodeGen_PTX_Dev::init_module() {
     } else {
         set_fast_fp_math();
     }
+}
+
+void CodeGen_PTX_Dev::visit(const Cast *op) {
+    // Narrowing a float to a half two lanes at a time is miscompiled by the
+    // NVPTX backend as of LLVM 21: the conversion is dropped entirely and the
+    // wider values' bits are stored instead, on every architecture. Wider
+    // vectors get cut into pairs on the way down, so they are wrong too. One
+    // lane at a time is correct, so do that and let ptxas put them back
+    // together.
+    //
+    // Bfloats are not covered because a vectorized cast to one does not reach
+    // here: it asserts inside LLVM first, which is a separate bug, and a loud
+    // one rather than a wrong answer.
+    const Type &dst = op->type;
+    const Type &src = op->value.type();
+    const int lanes = dst.lanes();
+    if (dst.is_float() && dst.bits() == 16 &&
+        src.is_float() && src.bits() > 16 && lanes > 1) {
+        vector<Expr> scalars;
+        scalars.reserve(lanes);
+        for (int i = 0; i < lanes; i++) {
+            scalars.push_back(Cast::make(dst.element_of(),
+                                         Shuffle::make({op->value}, {i})));
+        }
+        value = codegen(Shuffle::make_concat(scalars));
+        return;
+    }
+    CodeGen_LLVM::visit(op);
 }
 
 void CodeGen_PTX_Dev::visit(const Call *op) {
