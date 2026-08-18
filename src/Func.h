@@ -539,6 +539,10 @@ public:
      *   reduction dimension first. Its operands come either from memory, in
      *   which case they are staged into tiles implicitly, or from Funcs held
      *   in MemoryType::Tile.
+     * - tile_reduce reduces a tile along one of its axes into this one, taking
+     *   the reduction dimension first. What it writes is one value per row or
+     *   column, so this Func is one dimensional, but it still lives in
+     *   MemoryType::Tile, and what reads it must be a tile too.
      *
      * The dimensions passed are the ones that make up a tile, innermost
      * first. They are reordered into that order and vectorized. That is all
@@ -563,6 +567,7 @@ public:
     Stage &tile_load(const VarOrRVar &x, const VarOrRVar &y);
     Stage &tile_store(const VarOrRVar &x, const VarOrRVar &y);
     Stage &tile_matmul(const VarOrRVar &r, const VarOrRVar &x, const VarOrRVar &y);
+    Stage &tile_reduce(const VarOrRVar &r, const VarOrRVar &x);
     // @}
 
     /** Get the Vars and RVars of this definition, from innermost out, with
@@ -1600,6 +1605,7 @@ public:
     Func &tile_load(const VarOrRVar &x, const VarOrRVar &y);
     Func &tile_store(const VarOrRVar &x, const VarOrRVar &y);
     Func &tile_matmul(const VarOrRVar &r, const VarOrRVar &x, const VarOrRVar &y);
+    Func &tile_reduce(const VarOrRVar &r, const VarOrRVar &x);
     // @}
 
     /** Mark a dimension to be completely unrolled. The dimension

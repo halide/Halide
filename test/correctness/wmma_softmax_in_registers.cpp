@@ -83,12 +83,9 @@ int run(bool fast) {
     m.update()
         .split(y, y, ryi, tile)
         .split(r, rro, rri, tile)
-        .reorder(rri, ryi, y, rro)
         .unroll(y)
         .unroll(rro)
-        .atomic()
-        .vectorize(rri)
-        .vectorize(ryi);
+        .tile_reduce(rri, ryi);
 
     e.compute_at(out, xo)
         .store_in(MemoryType::Tile)
@@ -106,12 +103,9 @@ int run(bool fast) {
     sum_e.update()
         .split(y, y, ryi, tile)
         .split(r, rro, rri, tile)
-        .reorder(rri, ryi, y, rro)
         .unroll(y)
         .unroll(rro)
-        .atomic()
-        .vectorize(rri)
-        .vectorize(ryi);
+        .tile_reduce(rri, ryi);
 
     prod.compute_at(out, xo)
         .store_in(MemoryType::Tile)

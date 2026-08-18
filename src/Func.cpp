@@ -1760,6 +1760,13 @@ Stage &Stage::tile_matmul(const VarOrRVar &r, const VarOrRVar &x, const VarOrRVa
     return reorder_innermost(atomic(), {r, x, y}).vectorize(r).vectorize(x).vectorize(y);
 }
 
+Stage &Stage::tile_reduce(const VarOrRVar &r, const VarOrRVar &x) {
+    // As with a multiply, vectorizing the reduction dimension is asking to
+    // reassociate the reduction rather than asking for atomic memory
+    // operations. A matrix unit reassociates it anyway.
+    return reorder_innermost(atomic(), {r, x}).vectorize(r).vectorize(x);
+}
+
 Stage &Stage::unroll(const VarOrRVar &var) {
     set_dim_type(var, ForType::Unrolled);
     return *this;
@@ -2711,6 +2718,13 @@ Func &Func::tile_matmul(const VarOrRVar &r, const VarOrRVar &x, const VarOrRVar 
     invalidate_cache();
     store_in(MemoryType::Tile);
     Stage(func, func.definition(), 0).tile_matmul(r, x, y);
+    return *this;
+}
+
+Func &Func::tile_reduce(const VarOrRVar &r, const VarOrRVar &x) {
+    invalidate_cache();
+    store_in(MemoryType::Tile);
+    Stage(func, func.definition(), 0).tile_reduce(r, x);
     return *this;
 }
 
