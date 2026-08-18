@@ -204,6 +204,7 @@ tests(
     indexing_access_undef.cpp
     inductive.cpp
     inductive_folding.cpp
+    inductive_ring_buffer.cpp
     infer_arguments.cpp
     inline_reduction.cpp
     inlined_generator.cpp

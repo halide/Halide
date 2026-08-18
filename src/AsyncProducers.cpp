@@ -704,16 +704,21 @@ protected:
 
     Stmt visit(const Provide *op) override {
         if (op->name == func_name) {
-            std::vector<Expr> args = op->args;
+            // A Func defined in terms of itself calls itself in the values it
+            // stores, and those calls need the ring index as much as the store
+            // does, so mutate them rather than passing them through.
+            std::vector<Expr> values = mutate(op->values);
+            std::vector<Expr> args = mutate(op->args);
+            Expr predicate = mutate(op->predicate);
             args.push_back(ring_buffer_index);
-            return op->with(op->values, args, op->predicate);
+            return op->with(values, args, predicate);
         }
         return IRMutator::visit(op);
     }
 
     Expr visit(const Call *op) override {
         if (op->call_type == Call::Halide && op->name == func_name) {
-            std::vector<Expr> args = op->args;
+            std::vector<Expr> args = mutate(op->args);
             args.push_back(ring_buffer_index);
             return op->with(args);
         }
