@@ -54,7 +54,7 @@ int run(bool fast) {
 
     Var xo("xo"), yo("yo"), xio("xio"), yio("yio"), xt("xt"), xi("xi"), yi("yi");
     Var rxi("rxi"), ryi("ryi");
-    RVar rro("rro"), rri("rri"), ry("ry");
+    RVar rro("rro"), rri("rri");
 
     // One warp owns the whole matrix. A softmax reduces along the rows, so a
     // block has to hold whole ones.
@@ -82,10 +82,8 @@ int run(bool fast) {
 
     m.update()
         .split(y, y, ryi, tile)
-        .split(r, rro, rri, tile)
         .unroll(y)
-        .unroll(rro)
-        .tile_reduce(rri, ryi);
+        .tile_reduce(r, ryi);
 
     e.compute_at(out, xo)
         .store_in(MemoryType::Tile)
@@ -102,10 +100,8 @@ int run(bool fast) {
 
     sum_e.update()
         .split(y, y, ryi, tile)
-        .split(r, rro, rri, tile)
         .unroll(y)
-        .unroll(rro)
-        .tile_reduce(rri, ryi);
+        .tile_reduce(r, ryi);
 
     prod.compute_at(out, xo)
         .store_in(MemoryType::Tile)

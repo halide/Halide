@@ -849,6 +849,39 @@ class ExtractWMMAOperations : public IRMutator {
         }
     }
 
+    // Several tiles read side by side along one axis, which the load visitor
+    // turned into a gather out of one inflated fragment per tile. Gives back
+    // the fragments, in the order the tiles run along the axis.
+    bool wide_matrix_fragments(const Expr &e, const Fragment *dest, int tiles,
+                               vector<Expr> *pieces) {
+        const Shuffle *op = e.as<Shuffle>();
+        const Shape &shape = dest->shape;
+        const int width = tiles * shape.N;
+        if (!op || (int)op->vectors.size() != tiles ||
+            (int)op->indices.size() != shape.M * width) {
+            return false;
+        }
+        // Entry (row, col) of the wide matrix is entry (row, col mod N) of the
+        // tile that column falls in.
+        for (int i = 0; i < shape.M * width; i++) {
+            const int row = i / width, col = i % width;
+            const int want = (col / shape.N) * shape.M * shape.N + row * shape.N +
+                             col % shape.N;
+            if (op->indices[i] != want) {
+                return false;
+            }
+        }
+        for (const Expr &v : op->vectors) {
+            const Call *c = v.as<Call>();
+            if (!c || !c->is_intrinsic(Call::wmma_fragment_to_matrix_d) ||
+                !same_shape(c, dest)) {
+                return false;
+            }
+            pieces->push_back(c->args[3]);
+        }
+        return true;
+    }
+
     // A reduction along one axis of a tile. The entries being reduced together
     // are spread over the lanes of the warp, so this is a butterfly: exchange
     // entries with the ones a power of two away along the axis and combine,
@@ -862,16 +895,31 @@ class ExtractWMMAOperations : public IRMutator {
         // row.
         const int width = shape.N;
         const int factor = op->value.type().lanes() / op->type.lanes();
+        const int tiles = factor / width;
         Expr combined = combine(op->op, make_zero(Float(32)), make_zero(Float(32)));
-        user_assert(dest->axis == 0 && factor == width && op->type.lanes() == shape.M &&
-                    combined.defined())
+        user_assert(dest->axis == 0 && factor == tiles * width && tiles >= 1 &&
+                    op->type.lanes() == shape.M && combined.defined())
             << "Reduction into a tensor core fragment not supported. Only a "
-            << "reduction of a whole " << shape.M << "x" << shape.N << " tile down "
+            << "reduction of whole " << shape.M << "x" << shape.N << " tiles down "
             << "to one value per row is, and this one takes " << op->value.type().lanes()
             << " entries to " << op->type.lanes() << ".\n"
             << Expr(op);
 
-        Expr v = to_fragment(op->value, dest);
+        // A reduction along more than a tile's worth of an axis reads several
+        // tiles side by side. They hold the matrix the same way as each other,
+        // so combining them takes no cross-lane traffic and leaves one tile's
+        // worth to reduce. Doing that first is what keeps the butterfly below
+        // to one, rather than one per tile.
+        vector<Expr> pieces;
+        user_assert(tiles == 1 || wide_matrix_fragments(op->value, dest, tiles, &pieces))
+            << "Reduction into a tensor core fragment not supported. It runs "
+            << "across " << tiles << " tiles, but they are not read as whole tiles "
+            << "side by side along the axis being reduced.\n"
+            << Expr(op);
+        Expr v = tiles == 1 ? to_fragment(op->value, dest) : pieces[0];
+        for (int i = 1; i < (int)pieces.size(); i++) {
+            v = combine(op->op, v, pieces[i]);
+        }
         vector<std::pair<string, Expr>> lets;
         for (int bit = 0; (1 << bit) < width; bit++) {
             // Each round reads the one before it twice, so name it rather than
@@ -1199,15 +1247,18 @@ class ExtractWMMAOperations : public IRMutator {
         return ProducerConsumer::make(f->fragment_name, op->is_producer, mutate(op->body));
     }
 
-    // Which subtile of a fragment a read lies in, and which entries of it the
-    // read wants, as indices into the M x N matrix in row-major order. A read
-    // may be of only part of a tile - one row of it, say - so rather than being
-    // a subtile in its own right it lies within one that some other access
-    // established. Returns -1 if it doesn't lie within any of them.
-    int containing_subtile(Fragment *f, const Expr &index, vector<int> *indices) {
+    // Which subtile of a fragment each entry of a read lies in, and which entry
+    // of that subtile it is, as an index into the M x N matrix in row-major
+    // order. A read may be of only part of a tile - one row of it, say - so
+    // rather than being a subtile in its own right it lies within ones that
+    // other accesses established. It may also run across several of them, which
+    // is what reducing along an axis longer than a tile does. Fails if any
+    // entry lies outside all of them.
+    bool read_entries(Fragment *f, const Expr &index, vector<int> *subtile,
+                      vector<int> *entry) {
         MultiRamp read;
         if (!is_multiramp(index_within_thread(index), Scope<Expr>::empty_scope(), &read)) {
-            return -1;
+            return false;
         }
 
         // Enumerate where the entries sit relative to the start of the read, in
@@ -1216,7 +1267,7 @@ class ExtractWMMAOperations : public IRMutator {
         for (size_t d = 0; d < read.strides.size(); d++) {
             auto s = as_const_int(read.strides[d]);
             if (!s) {
-                return -1;
+                return false;
             }
             vector<int> next;
             for (int i = 0; i < read.lanes[d]; i++) {
@@ -1227,37 +1278,68 @@ class ExtractWMMAOperations : public IRMutator {
             offsets.swap(next);
         }
 
-        // Try each subtile in turn. They are disjoint, so at most one can hold
-        // all the entries read.
+        // Where each subtile starts relative to the read, and how it is laid
+        // out. They are disjoint, so at most one holds any given entry.
         const Shape &shape = f->shape;
-        for (int i = 0; i < (int)f->subtiles.size(); i++) {
+        const int subtiles = (int)f->subtiles.size();
+        vector<int> start(subtiles), stride(subtiles);
+        vector<bool> row_major(subtiles), usable(subtiles, false);
+        for (int i = 0; i < subtiles; i++) {
             const MultiRamp &tile = f->subtiles[i];
             WMMAMatrixLayout mem;
-            auto start = as_const_int(simplify(read.base - tile.base));
-            if (!start || !wmma_matrix_layout(tile, shape.M, shape.N, &mem)) {
+            auto base = as_const_int(simplify(read.base - tile.base));
+            if (!base || !wmma_matrix_layout(tile, shape.M, shape.N, &mem)) {
                 continue;
             }
-            auto stride = as_const_int(mem.stride);
-            if (!stride) {
+            auto s = as_const_int(mem.stride);
+            if (!s) {
                 continue;
             }
-            // The matrix a fragment inflates to is in row-major order.
-            indices->clear();
-            for (int o : offsets) {
-                const int e = o + (int)*start;
-                const int row = mem.row_major ? e / (int)*stride : e % (int)*stride;
-                const int col = mem.row_major ? e % (int)*stride : e / (int)*stride;
-                if (row < 0 || row >= shape.M || col < 0 || col >= shape.N) {
-                    indices->clear();
-                    break;
+            start[i] = (int)*base;
+            stride[i] = (int)*s;
+            row_major[i] = mem.row_major;
+            usable[i] = true;
+        }
+
+        subtile->clear();
+        entry->clear();
+        for (int o : offsets) {
+            int found = -1, index_in_tile = 0;
+            for (int i = 0; i < subtiles && found < 0; i++) {
+                if (!usable[i]) {
+                    continue;
                 }
-                indices->push_back(row * shape.N + col);
+                // The matrix a fragment inflates to is in row-major order.
+                const int e = o + start[i];
+                const int row = row_major[i] ? e / stride[i] : e % stride[i];
+                const int col = row_major[i] ? e % stride[i] : e / stride[i];
+                if (row >= 0 && row < shape.M && col >= 0 && col < shape.N) {
+                    found = i;
+                    index_in_tile = row * shape.N + col;
+                }
             }
-            if (indices->size() == offsets.size()) {
-                return i;
+            if (found < 0) {
+                return false;
+            }
+            subtile->push_back(found);
+            entry->push_back(index_in_tile);
+        }
+        return true;
+    }
+
+    // The same, for a read that has to lie within a single subtile. Returns -1
+    // if it doesn't.
+    int containing_subtile(Fragment *f, const Expr &index, vector<int> *indices) {
+        vector<int> subtile;
+        if (!read_entries(f, index, &subtile, indices)) {
+            return -1;
+        }
+        for (int s : subtile) {
+            if (s != subtile[0]) {
+                return -1;
             }
         }
-        return -1;
+        return subtile.empty() ? -1 : subtile[0];
     }
 
     // Whether a read takes a whole tile in row-major order, which is what the
@@ -1326,27 +1408,43 @@ class ExtractWMMAOperations : public IRMutator {
                 << Expr(op);
         }
 
-        vector<int> indices;
-        int found = containing_subtile(f, op->index, &indices);
-        user_assert(found >= 0)
+        vector<int> subtile, entry;
+        user_assert(read_entries(f, op->index, &subtile, &entry))
             << "Read of a tensor core accumulator not supported. The entries read "
-            << "do not all lie within a single tile.\n"
+            << "do not all lie within tiles of it.\n"
             << Expr(op);
-        const string name = f->fragment_name + std::to_string(found);
-        const Shape &shape = f->shape;
 
-        Type element_type = op->type.element_of();
-        Expr frag = Load::make(element_type.with_lanes(accumulator_elements), name,
+        // One inflated fragment per subtile the read touches, in the order it
+        // reaches them, and indices into them laid end to end.
+        const Shape &shape = f->shape;
+        const int lanes = shape.M * shape.N;
+        vector<Expr> matrices;
+        vector<int> position(f->subtiles.size(), -1);
+        vector<int> indices;
+        for (int i = 0; i < (int)subtile.size(); i++) {
+            if (position[subtile[i]] < 0) {
+                position[subtile[i]] = (int)matrices.size();
+                matrices.push_back(inflate_subtile(f, subtile[i], op->type.element_of()));
+            }
+            indices.push_back(position[subtile[i]] * lanes + entry[i]);
+        }
+        return Shuffle::make(matrices, indices);
+    }
+
+    // A fragment as the whole matrix it holds, with its entries in row-major
+    // order. No lane argument: reading entries doesn't demote a matrix-wide
+    // operation to a per-fragment one, so it introduces no loop over lanes for
+    // the lane to come from. Whichever lane runs it reads the same entries,
+    // which the runtime fills in.
+    Expr inflate_subtile(Fragment *f, int subtile, Type element_type) {
+        const Shape &shape = f->shape;
+        Expr frag = Load::make(element_type.with_lanes(accumulator_elements),
+                               f->fragment_name + std::to_string(subtile),
                                Ramp::make(0, 1, accumulator_elements));
-        // No lane argument: reading an entry doesn't demote a matrix-wide
-        // operation to a per-fragment one, so it introduces no loop over lanes
-        // for the lane to come from. Whichever lane runs it reads the same
-        // entry, which the runtime fills in.
-        Expr matrix = Call::make(element_type.with_lanes(shape.M * shape.N),
-                                 Call::wmma_fragment_to_matrix_d,
-                                 {shape.M, shape.N, shape.K, std::move(frag)},
-                                 Call::Intrinsic);
-        return Shuffle::make({std::move(matrix)}, indices);
+        return Call::make(element_type.with_lanes(shape.M * shape.N),
+                          Call::wmma_fragment_to_matrix_d,
+                          {shape.M, shape.N, shape.K, std::move(frag)},
+                          Call::Intrinsic);
     }
 
     Stmt visit(const Store *op) override {
