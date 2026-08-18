@@ -33,26 +33,30 @@ void set_bounds(OutputImageParam p, int extent_0, int extent_1) {
 // GFlop/s on an RTX 5060 Ti, counting both multiplies, at queries=65536:
 //
 //     keys depth out_depth   fused   unfused   two gemms, no softmax
-//       64    64        64   17907      2353                   43504
-//      128    64        64   20559      2487                   18848
-//       64   128        64   18618      3402                   42485
+//       64    64        64   17887      4056                   19610
+//      128    64        64   20527      4718                   20088
+//       64   128        64   18611      5794                   17585
 //
 // The unfused column is the same attention, computed the same way and checked
 // the same way, with the scores going through global memory: cublas multiplies
 // into them, the softmax below normalises them there, and cublas multiplies
-// again. It is seven times slower. That is not because any one of those three
-// is slow - each is close to what the hardware can do - but because the scores
-// are a queries x keys matrix and it writes and reads them four times over.
+// again. The runner prints where its time goes; at the first row it is 25us in
+// the first multiply, 114us in the softmax, and 30us in the second.
+//
+// So the softmax is two thirds of it, and it is not doing any arithmetic worth
+// that. It is reading a queries x keys matrix that the multiply before it just
+// wrote and writing another one for the multiply after it to read. Those two
+// matrices are larger than everything else in the problem put together, and
+// the filter above never writes either of them.
 //
 // The last column is cublas doing only the two multiplies, with no softmax at
-// all, as a ceiling: the same traffic in the scores but none of the work
-// between. Where the scores are small it is twice as fast as this filter,
-// which is what a matrix multiply that never stops to do anything else looks
-// like. Doubling the keys doubles the scores, and it falls to less than half
-// its own speed while this filter gets faster and passes it.
+// all: the scores still go through memory, but nothing happens to them on the
+// way. This filter is within a tenth of it at every shape above and past it at
+// two of them, which is the useful way to read these numbers - what it costs
+// to do a softmax here is about what it costs to do nothing.
 //
-// The exponential is not worth economising on here. Halide's fast_exp measured
-// the same to within noise at every shape above, because the kernel issues one
+// The exponential is not worth economising on. Halide's fast_exp measured the
+// same to within noise at every shape above, because the kernel issues one
 // exponential per score against depth + out_depth multiply-accumulates per
 // score across the two multiplies.
 class Attention : public Halide::Generator<Attention> {
@@ -214,14 +218,22 @@ private:
 // baseline computes the same thing as the filter above, rather than being two
 // multiplies with the interesting part left out.
 //
-// It reads the scores three times over - once for the row maximum, once for
-// the row sum, and once to normalise - which is what makes an unfused
-// attention cost what it does. The exponentials are left inline, so each one
-// is evaluated twice, once to sum it and once to normalise by that sum.
-// Computing them at the row instead is a one line change to the schedule and
-// measures the same, because this waits on the scores rather than on the
-// arithmetic: at queries=16384, keys=64 it moves 26MB in 75us, which is
-// 347 GB/s on a part that peaks near 360.
+// It walks each row three times - once for the row maximum, once for the row
+// sum, and once to normalise - so the block stages its rows into shared memory
+// first and walks them there. Reading them straight out of global memory
+// instead would have each lane of a warp start a row apart, which measured 2.6
+// times slower and would have made this a strawman rather than a baseline.
+//
+// What it does not do is write its output coalesced: one thread owns a row, so
+// the lanes of a warp write a row apart. Fixing that means a warp per row and
+// cross-lane reductions, which is what a hand written softmax does. As it
+// stands it moves 24MB in 114us, or 210 GB/s against a part that peaks near
+// 360, so there is perhaps another third to be had here.
+//
+// The exponentials are left inline, so each one is evaluated twice, once to
+// sum it and once to normalise by that sum. Computing them at the row instead
+// is a one line change to the schedule and measures the same, because this
+// waits on memory rather than on the arithmetic.
 class AttentionSoftmax : public Halide::Generator<AttentionSoftmax> {
 public:
     GeneratorParam<int> queries{"queries", 16384};
@@ -256,17 +268,31 @@ public:
         set_bounds(scores, keys, queries);
         set_bounds(p, keys, queries);
 
-        // One thread per row. The reductions run along a row, and a row is
-        // short enough for one thread to walk.
+        // One thread per row: the reductions run along a row, and a row is
+        // short enough for one thread to walk. Reading the rows straight out
+        // of global memory that way would have each lane of a warp start a row
+        // apart, so the block stages its rows through shared memory first,
+        // where the copy can be coalesced and the three passes over them cost
+        // nothing.
         const int threads = 64;
-        Var yo("yo"), yi("yi");
+        const int vec = 4;
+        Var yo("yo"), yi("yi"), xo("xo"), xv("xv"), t("t"), ti("ti");
         p.bound(x, 0, keys)
             .bound(y, 0, queries)
             .reorder(x, y)
             .split(y, yo, yi, threads)
             .gpu_blocks(yo)
             .gpu_threads(yi)
-            .vectorize(x, 4);
+            .vectorize(x, vec);
+
+        scores.in()
+            .compute_at(p, yo)
+            .store_in(MemoryType::GPUSharedAsync)
+            .split(_0, xo, xv, vec)
+            .fuse(xo, _1, t)
+            .split(t, t, ti, threads)
+            .gpu_threads(ti)
+            .vectorize(xv);
 
         for (Func f : {m, total}) {
             f.compute_at(p, yi);
