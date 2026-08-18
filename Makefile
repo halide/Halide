@@ -427,7 +427,6 @@ BIN_DIR     = bin
 DISTRIB_DIR = distrib
 INCLUDE_DIR = include
 SHARE_DIR   = share
-DOC_DIR     = $(SHARE_DIR)/doc/Halide
 BUILD_DIR   = $(BIN_DIR)/build
 FILTERS_DIR = $(BIN_DIR)/$(TARGET)/build
 TMP_DIR     = $(BUILD_DIR)/tmp
@@ -2584,58 +2583,3 @@ clang-tidy:
 .PHONY: clang-tidy-fix
 clang-tidy-fix:
 	@CLANG_TIDY_LLVM_INSTALL_DIR=$(CLANG_TIDY_LLVM_INSTALL_DIR) ${ROOT_DIR}/run-clang-tidy.sh -fix
-
-# Build the documentation. Be sure to keep this synchronized with doc/CMakeLists.txt
-# if you choose to edit it.
-
-# Copy ROOT_DIR to keep the following Doxyfile closer to CMake
-Halide_SOURCE_DIR=${ROOT_DIR}
-
-define Doxyfile
-# Keep the following in sync with doc/CMakeLists.txt
-ALPHABETICAL_INDEX     = NO
-BUILTIN_STL_SUPPORT    = YES
-CASE_SENSE_NAMES       = NO
-CLASS_DIAGRAMS         = NO
-DISTRIBUTE_GROUP_DOC   = YES
-EXAMPLE_PATH           = "${Halide_SOURCE_DIR}/tutorial"
-EXCLUDE                = bin
-EXCLUDE_PATTERNS       = README.md
-EXTRACT_ALL            = YES
-EXTRACT_LOCAL_CLASSES  = NO
-FILE_PATTERNS          = *.h *.md
-GENERATE_TREEVIEW      = YES
-HIDE_FRIEND_COMPOUNDS  = YES
-HIDE_IN_BODY_DOCS      = YES
-HIDE_UNDOC_CLASSES     = YES
-HIDE_UNDOC_MEMBERS     = YES
-JAVADOC_AUTOBRIEF      = YES
-MARKDOWN_ID_STYLE      = GITHUB
-QT_AUTOBRIEF           = YES
-QUIET                  = YES
-RECURSIVE              = YES
-REFERENCED_BY_RELATION = YES
-REFERENCES_RELATION    = YES
-SORT_BY_SCOPE_NAME     = YES
-SORT_MEMBER_DOCS       = NO
-SOURCE_BROWSER         = YES
-STRIP_CODE_COMMENTS    = NO
-
-# Makefile-specific options
-GENERATE_LATEX         = NO
-HAVE_DOT               = NO
-HTML_OUTPUT            = .
-INPUT                  = "${Halide_SOURCE_DIR}/doc" "${Halide_SOURCE_DIR}/src" "${Halide_SOURCE_DIR}/test"
-OUTPUT_DIRECTORY       = ${DOC_DIR}
-PROJECT_NAME           = Halide
-endef
-
-# Make the above Doxyfile variable available to the doc target.
-export Doxyfile
-
-.PHONY: doc
-doc:
-	@-mkdir -p $(TMP_DIR)
-	echo "$$Doxyfile" > $(TMP_DIR)/Doxyfile
-	@-mkdir -p ${DOC_DIR}
-	doxygen $(TMP_DIR)/Doxyfile
