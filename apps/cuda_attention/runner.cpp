@@ -37,8 +37,15 @@ namespace {
 #endif
 constexpr int queries = QUERIES, keys = KEYS, depth = DEPTH, out_depth = OUT_DEPTH;
 
-// Both multiplies, which is what the fused filter does. The softmax is a few
-// operations per score on top, and is not counted.
+// The two multiplies, and only those: an exponential per score, the two
+// reductions along each row and the divide are all real work that this does
+// not count. It is the usual way attention is reported, and it compares like
+// with like here because every row below has the same numerator and the same
+// answer to produce, so the ratios between them are ratios of time. What it is
+// not is a fraction of what the hardware can do, and the row that skips the
+// softmax gets to keep the same numerator for less work, which is why it reads
+// high. The time is printed alongside for anyone who wants a number with no
+// convention in it.
 double gflops(double seconds) {
     double flops = 2.0 * queries * keys * depth + 2.0 * queries * out_depth * keys;
     return flops / seconds * 1e-9;
@@ -153,7 +160,8 @@ int main(int argc, char **argv) {
                               O.raw_buffer());
                 },
                 [&]() { O.device_sync(); });
-            printf("  Halide fused attention        %9.0f GFlop/s\n", gflops(t));
+            printf("  Halide fused attention        %9.0f GFlop/s %8.1f us\n",
+                   gflops(t), t * 1e6);
         } else {
             failures++;
         }
@@ -214,7 +222,8 @@ int main(int argc, char **argv) {
         // Halide and cublas queue onto different streams, so this has to wait
         // for both.
         double t = bench(unfused, [&]() { O.device_sync(); cudaDeviceSynchronize(); });
-        printf("  cublas + softmax + cublas     %9.0f GFlop/s\n", gflops(t));
+        printf("  cublas + softmax + cublas     %9.0f GFlop/s %8.1f us\n",
+               gflops(t), t * 1e6);
         double t1 = bench([&]() { gemm_scores(Sd, CUDA_R_32F); },
                           []() { cudaDeviceSynchronize(); });
         double t2 = bench([&]() { attention_softmax(S.raw_buffer(), P.raw_buffer()); },
@@ -240,7 +249,8 @@ int main(int argc, char **argv) {
         failures++;
     } else {
         double t = bench(two_gemms, []() { cudaDeviceSynchronize(); });
-        printf("  cublas two gemms, no softmax  %9.0f GFlop/s\n", gflops(t));
+        printf("  cublas two gemms, no softmax  %9.0f GFlop/s %8.1f us  (less work)\n",
+               gflops(t), t * 1e6);
     }
     cublasDestroy(handle);
 

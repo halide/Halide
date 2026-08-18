@@ -30,7 +30,10 @@ void set_bounds(OutputImageParam p, int extent_0, int extent_1) {
 // many keys this can do at once - flash attention's trick of walking the keys
 // in chunks and rescaling as it goes is what lifts that, and is not done here.
 //
-// GFlop/s on an RTX 5060 Ti, counting both multiplies, at queries=65536:
+// GFlop/s on an RTX 5060 Ti at queries=65536. The count is the two multiplies
+// and nothing else: the exponential per score, the two reductions along each
+// row and the divide are all uncounted, so this is a way of comparing times
+// for the same problem rather than a fraction of what the part can do.
 //
 //     keys depth out_depth   fused   unfused   two gemms, no softmax
 //       64    64        64   17886      4456                   19939
