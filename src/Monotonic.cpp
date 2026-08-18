@@ -517,7 +517,7 @@ ConstantInterval derivative_bounds(const Expr &e, const std::string &var, const 
         return ConstantInterval::everything();
     }
     DerivativeBounds m(var, scope);
-    remove_likelies(remove_promises(e)).accept(&m);
+    simplify(remove_likelies(remove_promises(e))).accept(&m);
     return m.result;
 }
 
