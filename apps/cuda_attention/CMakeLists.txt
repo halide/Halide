@@ -50,6 +50,14 @@ add_halide_library(
     PARAMS ${SHAPE}
 )
 
+add_halide_library(
+    attention_softmax
+    FROM attention.generator
+    GENERATOR attention_softmax
+    FEATURES cuda cuda_capability_80
+    PARAMS queries=${QUERIES} keys=${KEYS}
+)
+
 # Main executable
 add_executable(runner runner.cpp)
 target_compile_definitions(
@@ -60,7 +68,7 @@ target_compile_definitions(
 target_link_libraries(
     runner
     PRIVATE
-    attention Halide::Halide Halide::Tools
+    attention attention_softmax Halide::Halide Halide::Tools
     CUDA::cudart CUDA::cublas
 )
 

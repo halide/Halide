@@ -28,7 +28,12 @@ $(BIN)/%/attention.a: $(GENERATOR_BIN)/attention.generator
 	$^ -g attention -f attention -e $(GENERATOR_OUTPUTS) -o $(@D) \
 	    target=$(TARGET) $(SHAPE)
 
-$(BIN)/%/runner: runner.cpp $(BIN)/%/attention.a
+$(BIN)/%/attention_softmax.a: $(GENERATOR_BIN)/attention.generator
+	@mkdir -p $(@D)
+	$^ -g attention_softmax -f attention_softmax -e $(GENERATOR_OUTPUTS) -o $(@D) \
+	    target=$(TARGET) queries=$(QUERIES) keys=$(KEYS)
+
+$(BIN)/%/runner: runner.cpp $(BIN)/%/attention.a $(BIN)/%/attention_softmax.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) $(LIBHALIDE_LDFLAGS) -lcudart -lcublas
 

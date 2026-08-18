@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "attention.h"
+#include "attention_softmax.h"
 
 using Halide::float16_t;
 using Halide::Runtime::Buffer;
@@ -147,39 +148,69 @@ int main(int argc, char **argv) {
         }
     }
 
-    // The two multiplies on their own, through a scores matrix in global
-    // memory, with no softmax between them. It does less arithmetic than the
-    // filters above but pays for the scores twice, so it is a throughput
-    // reference rather than a baseline: the traffic it spends is the traffic
-    // keeping the scores in registers exists to avoid.
+    // The same attention, unfused: cublas multiplies into a scores matrix in
+    // global memory, a kernel normalises it there, and cublas multiplies
+    // again. Same arithmetic, same answer - the only difference is that the
+    // scores are written out and read back rather than staying in registers.
     cublasCreate(&handle);
-    float *scores = nullptr;
-    cudaMalloc(&scores, (size_t)queries * keys * sizeof(float));
+    Buffer<float, 2> S(keys, queries);
+    Buffer<float16_t, 2> P(keys, queries);
+    S.device_malloc(halide_cuda_device_interface());
+    P.device_malloc(halide_cuda_device_interface());
     void *Qd = (void *)halide_cuda_get_device_ptr(nullptr, Q.raw_buffer());
     void *Kd = (void *)halide_cuda_get_device_ptr(nullptr, K.raw_buffer());
     void *Vd = (void *)halide_cuda_get_device_ptr(nullptr, V.raw_buffer());
     void *Od = (void *)halide_cuda_get_device_ptr(nullptr, O.raw_buffer());
+    void *Sd = (void *)halide_cuda_get_device_ptr(nullptr, S.raw_buffer());
+    void *Pd = (void *)halide_cuda_get_device_ptr(nullptr, P.raw_buffer());
     static float alpha = 1.0f, beta = 0.0f;
-    auto two_gemms = [&]() {
-        // scores = K' Q, in the column major cublas sees Halide's buffers as.
+
+    // Halide's buffers are dense in their first dimension, which is what
+    // cublas calls column major, so neither multiply needs a transpose beyond
+    // the one attention itself asks for.
+    auto gemm_scores = [&]() {
         cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, keys, queries, depth,
                      &alpha, Kd, CUDA_R_16F, depth, Qd, CUDA_R_16F, depth,
-                     &beta, scores, CUDA_R_32F, keys, CUBLAS_COMPUTE_32F,
+                     &beta, Sd, CUDA_R_32F, keys, CUBLAS_COMPUTE_32F,
                      CUBLAS_GEMM_DEFAULT);
-        // out = V scores.
+    };
+    auto gemm_out = [&](void *lhs, cudaDataType lhs_type) {
         cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_N, out_depth, queries, keys,
-                     &alpha, Vd, CUDA_R_16F, out_depth, scores, CUDA_R_32F, keys,
+                     &alpha, Vd, CUDA_R_16F, out_depth, lhs, lhs_type, keys,
                      &beta, Od, CUDA_R_32F, out_depth, CUBLAS_COMPUTE_32F,
                      CUBLAS_GEMM_DEFAULT);
     };
-    two_gemms();
-    if (cudaDeviceSynchronize() != cudaSuccess) {
-        printf("  (cublas reference did not run)\n");
+    auto unfused = [&]() {
+        gemm_scores();
+        S.set_device_dirty();
+        attention_softmax(S.raw_buffer(), P.raw_buffer());
+        gemm_out(Pd, CUDA_R_16F);
+    };
+
+    unfused();
+    O.device_sync();
+    O.set_device_dirty();
+    O.copy_to_host();
+    if (!check(Q, K, V, O, "unfused")) {
+        failures++;
     } else {
+        // Halide and cublas queue onto different streams, so this has to wait
+        // for both.
+        double t = bench(unfused, [&]() { O.device_sync(); cudaDeviceSynchronize(); });
+        printf("  cublas + softmax + cublas     %9.0f GFlop/s\n", gflops(t));
+    }
+
+    // The two multiplies with the softmax left out, as a ceiling: it is the
+    // same traffic in the scores but none of the work between.
+    auto two_gemms = [&]() {
+        gemm_scores();
+        gemm_out(Sd, CUDA_R_32F);
+    };
+    two_gemms();
+    if (cudaDeviceSynchronize() == cudaSuccess) {
         double t = bench(two_gemms, []() { cudaDeviceSynchronize(); });
         printf("  cublas two gemms, no softmax  %9.0f GFlop/s\n", gflops(t));
     }
-    cudaFree(scores);
     cublasDestroy(handle);
 
     if (failures) {

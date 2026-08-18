@@ -32,21 +32,24 @@ void set_bounds(OutputImageParam p, int extent_0, int extent_1) {
 //
 // GFlop/s on an RTX 5060 Ti, counting both multiplies, at queries=65536:
 //
-//     keys depth out_depth   Halide   two gemms, no softmax
-//       64    64        64    17925                   43773
-//      128    64        64    20575                   18895
-//       64   128        64    18620                   43155
+//     keys depth out_depth   fused   unfused   two gemms, no softmax
+//       64    64        64   17907      2353                   43504
+//      128    64        64   20559      2487                   18848
+//       64   128        64   18618      3402                   42485
 //
-// The last column is cublas doing only the two multiplies, into and out of a
-// scores matrix in global memory, with no softmax at all. It does less
-// arithmetic than this filter, so the first and third rows being twice as fast
-// is what a matrix multiply that doesn't stop to do anything else looks like.
+// The unfused column is the same attention, computed the same way and checked
+// the same way, with the scores going through global memory: cublas multiplies
+// into them, the softmax below normalises them there, and cublas multiplies
+// again. It is seven times slower. That is not because any one of those three
+// is slow - each is close to what the hardware can do - but because the scores
+// are a queries x keys matrix and it writes and reads them four times over.
 //
-// The middle row is the interesting one. Doubling the keys doubles the scores
-// matrix, which is what cublas has to write and read back, and it drops to
-// less than half the speed of the other two rows while this filter gets
-// faster. Past that shape the traffic in the scores is what an unfused
-// attention spends its time on, and not having any is what this is for.
+// The last column is cublas doing only the two multiplies, with no softmax at
+// all, as a ceiling: the same traffic in the scores but none of the work
+// between. Where the scores are small it is twice as fast as this filter,
+// which is what a matrix multiply that never stops to do anything else looks
+// like. Doubling the keys doubles the scores, and it falls to less than half
+// its own speed while this filter gets faster and passes it.
 //
 // The exponential is not worth economising on here. Halide's fast_exp measured
 // the same to within noise at every shape above, because the kernel issues one
@@ -205,6 +208,82 @@ private:
     Func s{"s"}, m{"m"}, e{"e"}, sum_e{"sum_e"}, acc{"acc"}, soft{"soft"};
 };
 
+// The softmax on its own, over a scores matrix that is already in memory. This
+// is the middle of an unfused attention: cublas multiplies into the scores,
+// this normalises them, and cublas multiplies again. It exists so that the
+// baseline computes the same thing as the filter above, rather than being two
+// multiplies with the interesting part left out.
+//
+// It reads the scores three times over - once for the row maximum, once for
+// the row sum, and once to normalise - which is what makes an unfused
+// attention cost what it does. The exponentials are left inline, so each one
+// is evaluated twice, once to sum it and once to normalise by that sum.
+// Computing them at the row instead is a one line change to the schedule and
+// measures the same, because this waits on the scores rather than on the
+// arithmetic: at queries=16384, keys=64 it moves 26MB in 75us, which is
+// 347 GB/s on a part that peaks near 360.
+class AttentionSoftmax : public Halide::Generator<AttentionSoftmax> {
+public:
+    GeneratorParam<int> queries{"queries", 16384};
+    GeneratorParam<int> keys{"keys", 64};
+
+    Input<Buffer<float, 2>> scores{"scores"};
+    // Half precision, because that is what the multiply that follows takes,
+    // and what the fused filter rounds to at the same point.
+    Output<Buffer<float16_t, 2>> p{"p"};
+
+    void generate() {
+        r = RDom(0, keys, "r");
+
+        m(y) = -1e30f;
+        m(y) = max(m(y), scores(r, y));
+
+        e(x, y) = exp(scores(x, y) - m(y));
+
+        total(y) = 0.f;
+        total(y) += e(r, y);
+
+        p(x, y) = cast<float16_t>(e(x, y) / total(y));
+    }
+
+    void schedule() {
+        if (using_autoscheduler()) {
+            scores.dim(0).set_estimate(0, keys).dim(1).set_estimate(0, queries);
+            p.bound(x, 0, keys).bound(y, 0, queries);
+            return;
+        }
+
+        set_bounds(scores, keys, queries);
+        set_bounds(p, keys, queries);
+
+        // One thread per row. The reductions run along a row, and a row is
+        // short enough for one thread to walk.
+        const int threads = 64;
+        Var yo("yo"), yi("yi");
+        p.bound(x, 0, keys)
+            .bound(y, 0, queries)
+            .reorder(x, y)
+            .split(y, yo, yi, threads)
+            .gpu_blocks(yo)
+            .gpu_threads(yi)
+            .vectorize(x, 4);
+
+        for (Func f : {m, total}) {
+            f.compute_at(p, yi);
+            f.update().reorder(r, y);
+        }
+        // e is left inline, so it is evaluated once where it is summed and
+        // once where it is divided by that sum. Computing it at p, yi instead
+        // keeps a row of it and evaluates it once, and measures the same.
+    }
+
+private:
+    Var x{"x"}, y{"y"};
+    RDom r;
+    Func e{"e"}, m{"m"}, total{"total"};
+};
+
 }  // namespace
 
 HALIDE_REGISTER_GENERATOR(Attention, attention)
+HALIDE_REGISTER_GENERATOR(AttentionSoftmax, attention_softmax)
