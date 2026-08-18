@@ -251,12 +251,11 @@ private:
 // bandwidth - DRAM is at 36% - so the way to speed it up would be fewer and
 // wider accesses, not cheaper arithmetic.
 //
-// Giving each lane two adjacent columns rather than two a warp apart does make
-// the accesses wider, and measures slightly slower: 94.6us against 92.1. The
-// stores go from half a transaction to a whole one, but the conversion to half
-// precision has to be done a lane at a time on this backend, so what the wider
-// stores save the extra converts spend. That is worth knowing before trying it
-// again.
+// Giving each lane a contiguous run of columns rather than one column in every
+// thirty two does make the accesses wider, and it is a wash: 89.0us against
+// 92.1 at keys=64, and 111.4 against 107.9 at keys=128. Three percent either
+// way depending on the shape is not worth the arithmetic in the schedule that
+// it takes, so this stays as it is.
 class AttentionSoftmax : public Halide::Generator<AttentionSoftmax> {
 public:
     GeneratorParam<int> queries{"queries", 16384};
