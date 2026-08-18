@@ -191,24 +191,25 @@ If common properties need to be grouped together, use an INTERFACE target
 
 There are also several functions that are disallowed for other reasons:
 
-| Command                         | Reason                                                      | Alternative                                                                    |
-| ------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `aux_source_directory`          | Interacts poorly with incremental builds and Git            | List source files explicitly                                                   |
-| `build_command`                 | CTest internal function                                     | Use CTest build-and-test mode via [`CMAKE_CTEST_COMMAND`][cmake_ctest_command] |
-| `cmake_host_system_information` | Usually misleading information.                             | Inspect [toolchain][cmake-toolchains] variables and use generator expressions. |
-| `cmake_policy(... OLD)`         | OLD policies are deprecated by definition.                  | Instead, fix the code to work with the new policy.                             |
-| `create_test_sourcelist`        | We use our own unit testing solution                        | See the [adding tests](#adding-tests) section.                                 |
-| `define_property`               | Adds unnecessary complexity                                 | Use a cache variable. Exceptions under special circumstances.                  |
-| `enable_language`               | Halide is C/C++ only                                        | [`FindCUDAToolkit`][findcudatoolkit], appropriately guarded.                   |
-| `file(GLOB ...)`                | Interacts poorly with incremental builds and Git            | List source files explicitly. Allowed if not globbing for source files.        |
-| `fltk_wrap_ui`                  | Halide does not use FLTK                                    | None                                                                           |
-| `include_external_msproject`    | Halide must remain portable                                 | Write a CMake package config file or find module.                              |
-| `include_guard`                 | Use of recursive inclusion is not allowed                   | Write (recursive) functions.                                                   |
-| `include_regular_expression`    | Changes default dependency checking behavior                | None                                                                           |
-| `load_cache`                    | Superseded by [`ExternalProject`][externalproject]          | Write a vcpkg port or present a case for an exception.                         |
-| `macro`                         | CMake macros are not hygienic and are therefore error-prone | Use functions instead.                                                         |
-| `site_name`                     | Privacy: do not want leak host name information             | Provide a cache variable, generate a unique name.                              |
-| `variable_watch`                | Debugging helper                                            | None. Not needed in production.                                                |
+| Command                         | Reason                                                      | Alternative                                                                                                                                                                   |
+| ------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `aux_source_directory`          | Interacts poorly with incremental builds and Git            | List source files explicitly                                                                                                                                                  |
+| `build_command`                 | CTest internal function                                     | Use CTest build-and-test mode via [`CMAKE_CTEST_COMMAND`][cmake_ctest_command]                                                                                                |
+| `cmake_host_system_information` | Usually misleading information.                             | Inspect [toolchain][cmake-toolchains] variables and use generator expressions.                                                                                                |
+| `cmake_policy(... OLD)`         | OLD policies are deprecated by definition.                  | Instead, fix the code to work with the new policy.                                                                                                                            |
+| `configure_file(... COPYONLY)`  | Forces a reconfigure whenever the copied file changes       | `file(COPY_FILE ...)` (one-shot, e.g. install scripts) or `add_custom_command` + `copy_if_different` (build-time); or reference the source path directly if no copy is needed |
+| `create_test_sourcelist`        | We use our own unit testing solution                        | See the [adding tests](#adding-tests) section.                                                                                                                                |
+| `define_property`               | Adds unnecessary complexity                                 | Use a cache variable. Exceptions under special circumstances.                                                                                                                 |
+| `enable_language`               | Halide is C/C++ only                                        | [`FindCUDAToolkit`][findcudatoolkit], appropriately guarded.                                                                                                                  |
+| `file(GLOB ...)`                | Interacts poorly with incremental builds and Git            | List source files explicitly. Allowed if not globbing for source files.                                                                                                       |
+| `fltk_wrap_ui`                  | Halide does not use FLTK                                    | None                                                                                                                                                                          |
+| `include_external_msproject`    | Halide must remain portable                                 | Write a CMake package config file or find module.                                                                                                                             |
+| `include_guard`                 | Use of recursive inclusion is not allowed                   | Write (recursive) functions.                                                                                                                                                  |
+| `include_regular_expression`    | Changes default dependency checking behavior                | None                                                                                                                                                                          |
+| `load_cache`                    | Superseded by [`ExternalProject`][externalproject]          | Write a vcpkg port or present a case for an exception.                                                                                                                        |
+| `macro`                         | CMake macros are not hygienic and are therefore error-prone | Use functions instead.                                                                                                                                                        |
+| `site_name`                     | Privacy: do not want leak host name information             | Provide a cache variable, generate a unique name.                                                                                                                             |
+| `variable_watch`                | Debugging helper                                            | None. Not needed in production.                                                                                                                                               |
 
 Do not introduce new dependencies without broader approval. Once approved, add
 dependencies to `vcpkg.json` or create a custom port, and consume them with
