@@ -639,7 +639,17 @@ WEAK const char *finish_wmma_markers(void *user_context, CUcontext ctx,
     if (measure_wmma_layout(user_context, ctx)) {
         return nullptr;
     }
-    return patch_wmma_markers(user_context, ptx_src);
+    const char *patched = patch_wmma_markers(user_context, ptx_src);
+
+    // What a tensor core instruction turned into is decided here rather than
+    // at compile time, so this is the only place the module can be read in the
+    // form the driver sees it. Printed rather than traced through debug()
+    // because a module is far longer than a debug message may be.
+    const char *dump = getenv("HL_DUMP_PATCHED_PTX");
+    if (patched && dump && dump[0] == '1' && dump[1] == 0) {
+        halide_print(user_context, patched);
+    }
+    return patched;
 }
 
 }  // namespace Cuda

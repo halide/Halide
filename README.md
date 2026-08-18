@@ -458,6 +458,13 @@ default, the number of cores on the host is used.)
 output can be parsed programmatically by starting from the code in
 `utils/HalideTraceViz.cpp`.
 
+`HL_DUMP_PATCHED_PTX=1` prints each CUDA module after the runtime has finished
+off the tensor core instructions in it. What those become depends on how the
+hardware spreads a fragment over the lanes of a warp, which isn't known until
+the pipeline runs, so this is the only way to see a module in the form the
+driver gets it. Modules with no tensor core instructions in them are not
+printed.
+
 `HL_CACHE_DIR=...` enables the opt-in generator compile cache, restoring a
 generator's previously emitted artifacts instead of recompiling when its inputs
 are unchanged. See [Generator cache](doc/GeneratorCache.md).
