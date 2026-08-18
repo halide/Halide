@@ -14,7 +14,13 @@ LDFLAGS += -L $(CUDA_SDK)/lib64 -Wl,-rpath,$(CUDA_SDK)/lib64
 # capability 7.0 or above.
 TARGET ?= host-cuda-cuda_capability_80
 
+TILES_Y ?= 0
+WARPS ?= 0
+STAGE ?= true
+PAD ?= 0
+
 SHAPE = queries=$(QUERIES) keys=$(KEYS) depth=$(DEPTH) out_depth=$(OUT_DEPTH)
+SHAPE += tiles_y=$(TILES_Y) warps=$(WARPS) stage=$(STAGE) pad=$(PAD)
 CXXFLAGS += -DQUERIES=$(QUERIES) -DKEYS=$(KEYS) -DDEPTH=$(DEPTH) -DOUT_DEPTH=$(OUT_DEPTH)
 
 all: $(BIN)/$(HL_TARGET)/runner
@@ -42,3 +48,8 @@ test: $(BIN)/$(HL_TARGET)/runner
 
 clean:
 	rm -rf $(BIN)
+
+# The generated libraries depend on generator params that make cannot see, so
+# keep them around rather than having make delete them as intermediates and
+# then judge the runner up to date without them.
+.SECONDARY:

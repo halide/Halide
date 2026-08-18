@@ -30,6 +30,14 @@ void set_bounds(OutputImageParam p, int extent_0, int extent_1) {
 // many keys this can do at once - flash attention's trick of walking the keys
 // in chunks and rescaling as it goes is what lifts that, and is not done here.
 //
+// Every warp in a block reduces over every key, so they all read the whole of
+// K and V. Those are staged into shared memory with asynchronous copies and
+// shared by the block, which is what the warp count is for: with one warp
+// there is nothing to share the staging with, and the tensor core loads come
+// from global memory instead. That is worth 1.7x to 1.8x, and it is the only
+// thing the warp count buys - warps without the staging measure the same as
+// one warp, because there is nothing else for them to share.
+//
 // On an RTX 5060 Ti at queries=65536, against the same attention computed
 // unfused - cublas multiplies into a scores matrix in global memory, the
 // softmax below normalises it there, and cublas multiplies again. Both are
@@ -37,11 +45,22 @@ void set_bounds(OutputImageParam p, int extent_0, int extent_1) {
 // multiplies and nothing else: the exponential per score, the two reductions
 // along each row and the divide are all uncounted, so it is a way of comparing
 // times for the same problem rather than a fraction of what the part can do.
+// The column before it is the same schedule with one warp per block and
+// nothing staged, which is what this did before.
 //
-//     keys depth out_depth    fused          unfused    of which softmax
-//       64    64        64   59.9us   17921  125.9us     8525      29.3us
-//      128    64        64  105.7us   20311  272.4us     7884     124.8us
-//       64   128        64   86.4us   18635  147.9us    10890      28.5us
+//     keys depth out_depth    fused        one warp      unfused    of which softmax
+//       64    64        64   34.7us   30975   59.9us   124.6us     8619      27.4us
+//      128    64        64   65.5us   32791  105.7us   273.6us     7850     120.6us
+//       64   128        64   49.4us   32604   86.4us   147.2us    10944      28.6us
+//
+// The first row reaches 60% of the 51541 GFlop/s that apps/cuda_mat_mul
+// measures for back to back half precision multiplies into single precision
+// accumulators, and ncu puts the tensor pipe at 58% of peak and names it the
+// limit. The rest of the machine is idle beside it: the FMA pipe is at 14%,
+// the special function unit that computes the exponentials at 14%, and the
+// integer pipe at 9%. So the softmax is close to free, and what is left on the
+// table is the tensor cores waiting - for DRAM, at 63% of peak, and for the
+// 23% the load/store pipe spends fetching operands out of shared memory.
 //
 // The last column is why. The softmax reads a queries x keys matrix that the
 // multiply before it just wrote, and writes another one for the multiply after
@@ -59,12 +78,13 @@ void set_bounds(OutputImageParam p, int extent_0, int extent_1) {
 // size lose enough to matter. A runnable pair would either carry half the
 // bytes or do different arithmetic, and comparing against either flatters this
 // filter. Timing each multiply where it sits says the same thing honestly -
-// they are 25us and 30us of the 236 in the first row.
+// they are 64us and 34us of the 125 in the first row.
 //
 // The exponential is not worth economising on. Halide's fast_exp measured the
-// same to within noise at every shape above, because the kernel issues one
-// exponential per score against depth + out_depth multiply-accumulates per
-// score across the two multiplies.
+// same to within noise at every shape above, which the profile agrees with:
+// the kernel issues one exponential per score against depth + out_depth
+// multiply-accumulates per score across the two multiplies, and the unit that
+// computes them sits at 14%.
 class Attention : public Halide::Generator<Attention> {
 public:
     // The shape is compile time, because the schedule is built around it: the
@@ -74,6 +94,19 @@ public:
     GeneratorParam<int> keys{"keys", 64};
     GeneratorParam<int> depth{"depth", 64};
     GeneratorParam<int> out_depth{"out_depth", 64};
+
+    // How many tensor core tiles of queries each warp takes, and how many
+    // warps a block has. Every warp in a block reduces over all the keys, so
+    // they all read the same K and V, which is the reuse staging them gets.
+    // Zero means use the measured shapes below.
+    GeneratorParam<int> tiles_y{"tiles_y", 0};
+    GeneratorParam<int> warps{"warps", 0};
+    // Whether to stage K and V into shared memory for the block to share.
+    GeneratorParam<bool> stage{"stage", true};
+    // Extra elements per row of the staged panels, to spread consecutive rows
+    // across banks. Zero means sixteen bytes, the least that keeps each row
+    // aligned for both the widest asynchronous copy and the tensor core loads.
+    GeneratorParam<int> pad{"pad", 0};
 
     // Q is depth-major, so each query's vector is contiguous, and K and V are
     // the same way. That is the layout attention is usually handed, and it
@@ -131,18 +164,37 @@ public:
         set_bounds(out, out_depth, queries);
 
         const int tile = 16;
-        // How many rows of queries one block takes. One tile's worth: a block
-        // holds every key for the rows it has, so widening this multiplies
-        // what it has to keep in registers.
-        const int rows = 16;
+        int ty = tiles_y, wy = warps;
+        if (ty == 0 || wy == 0) {
+            // Measured on an RTX 5060 Ti. Four warps is the shape that suits
+            // most of these: fewer leaves too little to spread the cost of
+            // staging K and V over, and more runs the block out of registers,
+            // because every warp keeps all of its keys in them. What moves is
+            // which way to spend a bigger block - more keys per warp wants
+            // more rows per warp, and a deeper reduction wants more warps.
+            ty = 1;
+            wy = 4;
+            if ((int)keys > 64) {
+                ty = 2;
+            } else if ((int)depth > 64) {
+                wy = 8;
+            }
+        }
+        // How many rows of queries one warp takes, and how many the block
+        // does. A warp holds every key for the rows it has, so widening the
+        // first multiplies what it keeps in registers, where widening the
+        // second only adds warps.
+        const int rows = tile * ty;
+        const int block_rows = rows * wy;
 
         Var xo("xo"), yo("yo"), xio("xio"), yio("yio"), xi("xi"), yi("yi");
-        Var rxi("rxi"), ryi("ryi");
+        Var yw("yw"), rxi("rxi"), ryi("ryi");
         RVar rro("rro"), rri("rri");
 
         out.bound(x, 0, out_depth)
             .bound(y, 0, queries)
-            .tile(x, y, xo, yo, xi, yi, out_depth, rows)
+            .tile(x, y, xo, yo, xi, yi, out_depth, block_rows)
+            .split(yi, yw, yi, rows)
             .tile(xi, yi, xio, yio, xi, yi, tile, tile)
             .gpu_blocks(xo, yo)
             .unroll(xio)
@@ -150,8 +202,12 @@ public:
             .tile_store(xi, yi);
 
         // Everything below lives in tensor core registers for the whole block.
+        // The allocations sit at block level so that the staged panels can be
+        // filled once above the warps, but a tile allocation is per-lane
+        // already, so each warp still gets its own.
         soft.compute_at(out, xo)
             .store_in(MemoryType::Tile)
+            .split(y, yw, y, rows)
             .tile(x, y, rxi, ryi, tile, tile)
             .unroll(x)
             .unroll(y)
@@ -159,14 +215,16 @@ public:
 
         acc.compute_at(out, xo)
             .store_in(MemoryType::Tile)
+            .split(y, yw, y, rows)
             .tile(x, y, rxi, ryi, tile, tile)
             .unroll(x)
             .unroll(y)
             .tile_init(rxi, ryi);
         acc.update()
+            .split(y, yw, y, rows)
             .tile(x, y, rxi, ryi, tile, tile)
             .split(rv, rro, rri, tile)
-            .reorder(x, y, rro)
+            .reorder(x, y, rro, yw)
             .unroll(x)
             .unroll(y)
             // This operand comes out of a fragment rather than out of memory,
@@ -176,6 +234,7 @@ public:
 
         e.compute_at(out, xo)
             .store_in(MemoryType::Tile)
+            .split(y, yw, y, rows)
             .tile(x, y, rxi, ryi, tile, tile)
             .unroll(x)
             .unroll(y)
@@ -188,10 +247,12 @@ public:
         for (Func f : {m, sum_e}) {
             f.store_in(MemoryType::Tile)
                 .compute_at(out, xo)
+                .split(y, yw, y, rows)
                 .split(y, y, ryi, tile)
                 .unroll(y)
                 .vectorize(ryi);
             f.update()
+                .split(y, yw, y, rows)
                 .split(y, y, ryi, tile)
                 .unroll(y)
                 .tile_reduce(r, ryi);
@@ -199,17 +260,73 @@ public:
 
         s.compute_at(out, xo)
             .store_in(MemoryType::Tile)
+            .split(y, yw, y, rows)
             .tile(x, y, rxi, ryi, tile, tile)
             .unroll(x)
             .unroll(y)
             .tile_init(rxi, ryi);
         s.update()
+            .split(y, yw, y, rows)
             .tile(x, y, rxi, ryi, tile, tile)
             .split(k, rro, rri, tile)
-            .reorder(x, y, rro)
+            .reorder(x, y, rro, yw)
             .unroll(x)
             .unroll(y)
             .tile_matmul(rri, rxi, ryi);
+
+        if (wy > 1) {
+            // With one warp there is nothing for a loop over warps to do, and
+            // leaving it serial lets Halide drop it.
+            out.gpu_threads(yw);
+            for (Func f : {soft, acc, e, s, m, sum_e}) {
+                f.gpu_threads(yw);
+            }
+            for (Func f : {acc, s, m, sum_e}) {
+                f.update().gpu_threads(yw);
+            }
+        }
+
+        if (stage) {
+            // K and V are the whole of what the warps of a block share: every
+            // warp reduces over every key, so each reads all of both. Staging
+            // them turns one global load per tensor core operand into one
+            // shared load, and spreads what it costs to fetch them over the
+            // warps. They are the same for every block too, but there is
+            // nowhere above a block to put them.
+            //
+            // Each thread moves sixteen bytes at a time along the dense
+            // dimension, so that the reads from global memory coalesce and the
+            // writes to shared memory can be done as asynchronous copies.
+            const int vec = 8;
+            const int p = pad ? (int)pad : vec;
+            Var ko("ko"), kv("kv"), t("t"), ti("ti"), to("to"), tw("tw");
+
+            // K is dense in the reduction dimension, which is its _0.
+            K.in()
+                .compute_at(out, xo)
+                .store_in(MemoryType::GPUSharedAsync)
+                .align_storage(_0, depth + p)
+                .split(_0, ko, kv, vec)
+                .fuse(ko, _1, t)
+                .split(t, t, ti, 32)
+                .split(t, to, tw, wy)
+                .gpu_lanes(ti)
+                .gpu_threads(tw)
+                .vectorize(kv);
+
+            // V is dense in the free dimension, which is its _0.
+            V.in()
+                .compute_at(out, xo)
+                .store_in(MemoryType::GPUSharedAsync)
+                .align_storage(_0, out_depth + p)
+                .split(_0, ko, kv, vec)
+                .fuse(ko, _1, t)
+                .split(t, t, ti, 32)
+                .split(t, to, tw, wy)
+                .gpu_lanes(ti)
+                .gpu_threads(tw)
+                .vectorize(kv);
+        }
     }
 
 private:
