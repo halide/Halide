@@ -248,14 +248,23 @@ private:
 // something, because ncu says what this waits on: the load/store pipe at 98%
 // of what it can issue, every arithmetic pipeline under-utilised, and the SMs
 // busy 37% of the time. It is bound by memory instructions rather than by
-// bandwidth - DRAM is at 36% - so the way to speed it up would be fewer and
-// wider accesses, not cheaper arithmetic.
+// bandwidth - DRAM is at 36%.
 //
+// Wider accesses are the obvious thing to reach for and they do not help.
 // Giving each lane a contiguous run of columns rather than one column in every
-// thirty two does make the accesses wider, and it is a wash: 89.0us against
-// 92.1 at keys=64, and 111.4 against 107.9 at keys=128. Three percent either
-// way depending on the shape is not worth the arithmetic in the schedule that
-// it takes, so this stays as it is.
+// thirty two gets the loads and stores as wide as the hardware has: at
+// keys=128 the kernel issues one ld.global.nc.v2.b64 and one st.global.v2.b32
+// per thread where this issues four and four, and 140 instructions where this
+// issues 152. It measures 111.4us against 107.9. At keys=64 it wins instead,
+// 89.0 against 92.1.
+//
+// Both sit at 96% of what the L1 can do, with the same occupancy and much the
+// same register count, which is the reason: what crosses the L1 is the same
+// either way. Thirty two lanes reading sixteen bytes each and four
+// instructions of thirty two lanes reading four bytes each are the same four
+// transactions. The instruction count is not what this is short of, so
+// widening the accesses moves it by a few percent in whichever direction the
+// shape happens to favour, and costs arithmetic in the schedule to do it.
 class AttentionSoftmax : public Halide::Generator<AttentionSoftmax> {
 public:
     GeneratorParam<int> queries{"queries", 16384};
