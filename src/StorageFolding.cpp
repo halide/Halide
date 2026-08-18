@@ -692,11 +692,6 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         Scope<Interval> bounds;
         bounds.push(op->name, Interval(op->min, op->max));
 
-        // The same bounds with the first iteration excluded, for reasoning
-        // about what an inductive Func needs live once it is under way.
-        Scope<Interval> steady_bounds;
-        steady_bounds.push(op->name, Interval(simplify(op->min + 1), op->max));
-
         HasExternConsumer has_extern_consumer(func.name());
         body.accept(&has_extern_consumer);
 
@@ -789,12 +784,12 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             if (single_inductive_store && dim < (int)box_external.size() && box_external[dim].is_bounded() && func.outputs() == 1 && !func.has_extern_definition()) {
                 Expr min_e = simplify(common_subexpression_elimination(box_external[dim].min));
                 Expr max_e = simplify(common_subexpression_elimination(box_external[dim].max));
-                Expr min_e_steady = simplify(substitute(steady_state, const_true(), min_e), steady_bounds);
-                Expr max_e_steady = simplify(substitute(steady_state, const_true(), max_e), steady_bounds);
+                Expr min_e_steady = simplify(substitute(steady_state, const_true(), min_e), bounds);
+                Expr max_e_steady = simplify(substitute(steady_state, const_true(), max_e), bounds);
                 Expr min_e_initial = simplify(substitute(steady_state, const_false(), min_e), bounds);
                 Expr max_e_initial = simplify(substitute(steady_state, const_false(), max_e), bounds);
                 Expr extent_e_initial = simplify(substitute(loop_var, op->min, max_e_initial - min_e_initial + 1), bounds);
-                Expr extent_e_steady = simplify(max_e_steady - min_e_steady + 1, steady_bounds);
+                Expr extent_e_steady = simplify(max_e_steady - min_e_steady + 1, bounds);
                 Expr extent_no_self = simplify(common_subexpression_elimination(Max::make(extent_e_initial, extent_e_steady)), bounds);
 
                 Expr max_step = simplify(substitute(op->name, loop_var + 1, max) - max, bounds);
