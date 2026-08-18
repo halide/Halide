@@ -295,6 +295,7 @@ file(GENERATE
 
 set(_tutorial_generator_script "${CMAKE_CURRENT_SOURCE_DIR}/generate_tutorial_website.py")
 set(_tutorial_output_dir "${_sphinx_src_dir}/tutorial")
+set(_tutorial_run_dir "${CMAKE_CURRENT_BINARY_DIR}/tutorial-run")
 
 # Every rendering process (sitemap/assets/each lesson) imports the same
 # package, so a change to any of its source files must invalidate every
@@ -401,7 +402,7 @@ foreach (_source_file IN LISTS _tutorial_source_files)
             --slug "${_slug}"
             --manifest "${_tutorial_manifest_file}"
             --tutorial-dir "${Halide_SOURCE_DIR}/tutorial"
-            --run-cwd "${Halide_BINARY_DIR}/tutorial"
+            --run-cwd "${_tutorial_run_dir}"
             --output-dir "${_tutorial_output_dir}"
             --depfile "${_tutorial_page_depfile}"
             --prefer "${_tutorial_debugger_preference}"
@@ -433,3 +434,20 @@ add_custom_command(
 )
 
 add_custom_target(doc ALL DEPENDS "${_sphinx_output_dir}/index.html")
+
+# Most documentation generators produce a tree of files whose members are
+# only known after inspecting their inputs (Doxygen XML, API reference pages,
+# tutorial group pages/assets, and Sphinx's HTML/doctrees).  Their marker
+# outputs above are sufficient for incremental builds, but CMake/Ninja cannot
+# otherwise remove the unlisted members.  Keep a clean build equivalent to a
+# fresh documentation build, including the manifests made by file(GENERATE).
+set_property(TARGET doc
+    APPEND
+    PROPERTY
+    ADDITIONAL_CLEAN_FILES
+    "${_sphinx_src_dir}"
+    "${CMAKE_CURRENT_BINARY_DIR}/sphinx"
+    "${_tutorial_run_dir}"
+    "${_tutorial_manifest_file}"
+    "${_python_manifest_file}"
+)

@@ -11,6 +11,7 @@ from .manifest import load_manifest, load_python_env
 from .render import (
     copy_lesson_assets,
     lesson_asset_paths,
+    lesson_input_paths,
     render_index,
     render_lesson_page,
 )
@@ -120,7 +121,10 @@ def _escape_depfile_path(path: Path) -> str:
 
 
 def _write_lesson_depfile(args: argparse.Namespace, lesson: Lesson) -> None:
-    dependencies = lesson_asset_paths(lesson, args.tutorial_dir / "figures")
+    dependencies = [
+        *lesson_asset_paths(lesson, args.tutorial_dir),
+        *lesson_input_paths(lesson, args.tutorial_dir),
+    ]
     args.depfile.parent.mkdir(parents=True, exist_ok=True)
     args.depfile.write_text(
         f"{_escape_depfile_path(args.output_dir / f'{lesson.slug}.md')}: "
@@ -161,7 +165,7 @@ def _main_lesson(args: argparse.Namespace) -> int:
         print(f"error: no lesson found with slug {args.slug!r}", file=sys.stderr)
         return 1
 
-    copy_lesson_assets(lesson, args.tutorial_dir / "figures", args.output_dir)
+    copy_lesson_assets(lesson, args.tutorial_dir, args.output_dir, args.run_cwd)
 
     python_env = load_python_env(args.python_manifest)
 

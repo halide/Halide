@@ -19,6 +19,7 @@ from __future__ import annotations
 import html
 import itertools
 import os
+import re
 import shutil
 import tempfile
 from collections import defaultdict
@@ -27,6 +28,15 @@ from pathlib import Path
 
 from .lesson import Lesson, SourceVariant
 from .sitemap import SitemapEntry
+
+
+# The C++ lessons use paths such as "images/rgb.png" from tutorial/'s build
+# directory; their Python translations refer to the same files relative to
+# python_bindings/tutorial/. Both spellings identify inputs whose contents can
+# affect captured output, so include them in the lesson command's depfile.
+_TUTORIAL_INPUT_IMAGE_RE = re.compile(
+    r"(?:\.\./\.\./tutorial/)?images/([A-Za-z0-9_.-]+)"
+)
 
 
 @dataclass
@@ -135,7 +145,7 @@ def _block_to_myst(block: ContentBlock) -> str:
     raise ValueError(f"unknown content block kind: {block.kind!r}")
 
 
-def lesson_asset_paths(lesson: Lesson, figures_dir: Path) -> list[Path]:
+def lesson_asset_paths(lesson: Lesson, asset_root: Path) -> list[Path]:
     """Return this lesson's referenced source assets, including missing ones.
 
     Keeping a missing referenced path in the depfile lets Ninja retry that
@@ -147,7 +157,7 @@ def lesson_asset_paths(lesson: Lesson, figures_dir: Path) -> list[Path]:
         variants.append(lesson.python)
     return sorted(
         {
-            figures_dir / Path(figure_ref).name
+            asset_root / figure_ref
             for variant in variants
             for figure_refs in variant.figure_lines.values()
             for figure_ref in figure_refs
@@ -155,22 +165,42 @@ def lesson_asset_paths(lesson: Lesson, figures_dir: Path) -> list[Path]:
     )
 
 
-def copy_lesson_assets(lesson: Lesson, figures_dir: Path, output_dir: Path) -> None:
-    """Atomically copy the figures referenced by one lesson into the site.
+def lesson_input_paths(lesson: Lesson, asset_root: Path) -> list[Path]:
+    """Return runtime image inputs referenced by this lesson's source.
+
+    These aren't rendered site assets: they are read while lesson binaries or
+    Python translations run to capture their output. Keep missing paths too,
+    so Ninja retries a page when a newly referenced image is added.
+    """
+    variants = [lesson.cpp]
+    if lesson.python is not None:
+        variants.append(lesson.python)
+    return sorted(
+        {
+            asset_root / "images" / name
+            for variant in variants
+            for name in _TUTORIAL_INPUT_IMAGE_RE.findall(
+                variant.source_path.read_text()
+            )
+        }
+    )
+
+
+def _copy_assets(sources: list[Path], destination_dir: Path) -> None:
+    """Atomically copy assets into one directory.
 
     Multiple lesson commands may copy the same figure concurrently. Each copy
     uses a private temporary file in the destination directory, then replaces
     the destination atomically, so concurrent writers cannot leave a partial
     asset behind.
     """
-    dest_figures = output_dir / "figures"
-    dest_figures.mkdir(parents=True, exist_ok=True)
-    for source in lesson_asset_paths(lesson, figures_dir):
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    for source in sources:
         if not source.is_file():
             continue
-        destination = dest_figures / source.name
+        destination = destination_dir / source.name
         with tempfile.NamedTemporaryFile(
-            dir=dest_figures, prefix=f".{source.name}.", delete=False
+            dir=destination_dir, prefix=f".{source.name}.", delete=False
         ) as tmp:
             tmp_path = Path(tmp.name)
         try:
@@ -178,6 +208,14 @@ def copy_lesson_assets(lesson: Lesson, figures_dir: Path, output_dir: Path) -> N
             os.replace(tmp_path, destination)
         finally:
             tmp_path.unlink(missing_ok=True)
+
+
+def copy_lesson_assets(
+    lesson: Lesson, asset_root: Path, output_dir: Path, run_dir: Path
+) -> None:
+    """Stage a lesson's figures for Sphinx and images for capture execution."""
+    _copy_assets(lesson_asset_paths(lesson, asset_root), output_dir / "figures")
+    _copy_assets(lesson_input_paths(lesson, asset_root), run_dir / "images")
 
 
 def _group_by_number(

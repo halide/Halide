@@ -1,6 +1,3 @@
-configure_file(images/gray.png images/gray.png COPYONLY)
-configure_file(images/rgb.png images/rgb.png COPYONLY)
-
 function(add_tutorial source_file)
     set(options WITH_IMAGE_IO)
     set(oneValueArgs)
@@ -31,6 +28,13 @@ function(add_tutorial source_file)
 
     if (args_WITH_IMAGE_IO)
         target_link_libraries(${name} PRIVATE Halide::ImageIO)
+        # Image-I/O tutorials use paths relative to tutorial/. Keep tests
+        # independent of copied build-tree assets.
+        set_tests_properties(
+            tutorial_${name}
+            PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        )
     endif ()
 
     _Halide_register_tutorial_website_target("${source_file}" "${name}")
