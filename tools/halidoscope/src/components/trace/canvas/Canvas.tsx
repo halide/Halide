@@ -27,12 +27,12 @@ const EDGE_TYPES = {
   funcEdge: FuncEdge,
 };
 
-interface CanvasProps {
+interface Props {
   funcs: Record<string, FuncMeta>;
   dagEdges: Record<string, string[]>;
 }
 
-function Canvas({ funcs, dagEdges }: CanvasProps) {
+function Canvas({ funcs, dagEdges }: Props) {
   const { nodes: initialNodes, edges: initialEdges } = React.useMemo(() => {
     return getLayoutedElements(
       buildNodes(funcs, "funcNode"),

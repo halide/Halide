@@ -1,8 +1,8 @@
 import { Separator } from "radix-ui";
 
-import PanelSection from "@/components/trace/panels/PanelSection";
 import GraphDisplay from "@/components/trace/controls/GraphDisplay";
 import PlaybackRate from "@/components/trace/controls/PlaybackRate";
+import PanelSection from "@/components/trace/panels/PanelSection";
 
 function DisplayPanel() {
   return (
