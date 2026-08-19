@@ -1,33 +1,70 @@
-import { clsx, type ClassValue } from "clsx";
+import { clsx } from "clsx";
 import * as d3 from "d3";
 import { Tooltip } from "radix-ui";
 import * as React from "react";
 
-export type BarDatum = {
-  name: string;
-  value: number;
-};
+import { useProfileContext } from "@/hooks/profile";
+import { ProfilePipeline, type ProfileFunc } from "@/types/profile";
 
-interface Props<T extends BarDatum> {
-  barClassname?: (datum: T) => ClassValue;
-  data: T[];
+interface SegmentLabelProps {
+  billed_runs: ProfilePipeline["billed_runs"];
+  kind: ProfileFunc["kind"];
+  name: ProfileFunc["name"];
+  sampledTotal: number;
+  value: number;
+}
+
+function SegmentLabel({
+  billed_runs,
+  kind,
+  name,
+  sampledTotal,
+  value,
+}: SegmentLabelProps) {
+  return (
+    <div
+      className={clsx("flex flex-col", {
+        "text-ps-text-primary": kind !== 0,
+      })}
+    >
+      <span>{name}</span>
+      <span>
+        <span className="font-semibold">
+          {(value * 1e-6).toFixed(2)}&thinsp;ms
+        </span>{" "}
+        ({((value / billed_runs / sampledTotal) * 100).toFixed(1)}
+        %)
+      </span>
+    </div>
+  );
+}
+
+interface Props {
   dimensions: {
     width: number;
     height: number;
   };
-  renderLabel: (datum: T) => React.ReactNode;
 }
 
 const PADDING = 16;
 const BAR_HEIGHT = 64;
 const LABEL_THRESHOLD = 80;
 
-function StackedBarChart<T extends BarDatum>({
-  dimensions,
-  data,
-  renderLabel,
-  barClassname,
-}: Props<T>) {
+function RuntimeChart({ dimensions }: Props) {
+  const { pipelines } = useProfileContext();
+
+  const { funcs, billed_runs } = pipelines[0];
+
+  const data = React.useMemo(() => {
+    return funcs
+      .filter((func) => func.time_ns > 0)
+      .map((func) => ({
+        name: func.name,
+        kind: func.kind,
+        value: func.time_ns / billed_runs,
+      }));
+  }, [billed_runs, funcs]);
+
   const segments = React.useMemo(() => {
     const sorted = [...data].sort((a, b) => b.value - a.value);
     const total = d3.sum(sorted, (d) => d.value)!;
@@ -46,6 +83,11 @@ function StackedBarChart<T extends BarDatum>({
       return { datum, x: start, width: x(ends[index]) - start };
     });
   }, [data, dimensions.width]);
+
+  const sampledTotal = React.useMemo(
+    () => data.reduce((acc, datum) => acc + datum.value / billed_runs, 0),
+    [billed_runs, data],
+  );
 
   return (
     <Tooltip.Provider>
@@ -67,8 +109,13 @@ function StackedBarChart<T extends BarDatum>({
                   height={BAR_HEIGHT}
                   strokeWidth={1}
                   className={clsx(
-                    "fill-oxide-blue/75 stroke-oxide-blue",
-                    barClassname?.(datum),
+                    {
+                      "fill-oxide-blue/75 stroke-oxide-blue": datum.kind === 0,
+                    },
+                    {
+                      "fill-ps-text-secondary/50 stroke-ps-text-secondary":
+                        datum.kind !== 0,
+                    },
                   )}
                 />
               </Tooltip.Trigger>
@@ -77,7 +124,13 @@ function StackedBarChart<T extends BarDatum>({
                   className="bg-ps-primary text-ps-text-primary rounded-xs px-2 py-1 text-xs"
                   sideOffset={5}
                 >
-                  <div className="flex flex-col">{renderLabel(datum)}</div>
+                  <SegmentLabel
+                    billed_runs={billed_runs}
+                    kind={datum.kind}
+                    name={datum.name}
+                    sampledTotal={sampledTotal}
+                    value={datum.value}
+                  />
                   <Tooltip.Arrow className="fill-ps-primary" />
                 </Tooltip.Content>
               </Tooltip.Portal>
@@ -94,7 +147,13 @@ function StackedBarChart<T extends BarDatum>({
                 pointerEvents="none"
               >
                 <div className="text-ps-secondary flex h-full w-full flex-col items-center justify-center overflow-hidden px-1 text-center text-xs leading-tight whitespace-nowrap">
-                  {renderLabel(datum)}
+                  <SegmentLabel
+                    billed_runs={billed_runs}
+                    kind={datum.kind}
+                    name={datum.name}
+                    sampledTotal={sampledTotal}
+                    value={datum.value}
+                  />
                 </div>
               </foreignObject>
             ) : null,
@@ -105,4 +164,4 @@ function StackedBarChart<T extends BarDatum>({
   );
 }
 
-export default StackedBarChart;
+export default RuntimeChart;

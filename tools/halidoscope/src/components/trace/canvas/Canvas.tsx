@@ -10,9 +10,9 @@ import {
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import * as React from "react";
 
-import FuncEdge from "@/components/canvas/FuncEdge";
-import FuncNode from "@/components/canvas/FuncNode";
-import Overlay from "@/components/canvas/Overlay";
+import FuncEdge from "@/components/trace/canvas/FuncEdge";
+import FuncNode from "@/components/trace/canvas/FuncNode";
+import Overlay from "@/components/trace/canvas/Overlay";
 import { funcAtom } from "@/state/func";
 import { edgesAtom } from "@/state/graph";
 import { livenessAtom } from "@/state/liveness";

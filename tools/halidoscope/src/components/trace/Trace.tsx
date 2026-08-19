@@ -1,9 +1,9 @@
 import { ReactFlowProvider } from "@xyflow/react";
 
-import Canvas from "@/components/canvas/Canvas";
-import TraceTimeline from "@/components/views/trace/TraceTimeline";
+import Canvas from "@/components/trace/canvas/Canvas";
+import PanelsTabs from "@/components/trace/panels/PanelsTabs";
+import TraceTimeline from "@/components/trace/controls/Timeline";
 import { useTraceContext } from "@/hooks/trace";
-import ControlTabs from "@/components/controls/ControlTabs";
 
 function Trace() {
   const { funcs, dagEdges, packetCount } = useTraceContext();
@@ -14,7 +14,7 @@ function Trace() {
         <ReactFlowProvider>
           <Canvas funcs={funcs} dagEdges={dagEdges} />
         </ReactFlowProvider>
-        <ControlTabs funcs={funcs} />
+        <PanelsTabs funcs={funcs} />
       </div>
       <TraceTimeline packetCount={packetCount} />
     </div>
