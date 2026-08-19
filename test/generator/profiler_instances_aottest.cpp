@@ -333,7 +333,6 @@ void check_inwards_counter(const halide_profiler_pipeline_stats *p) {
     // some slack but require it to be clearly above the realization.
     REQUIRE(g_at_y[0]->points_required_inwards >
             g_at_y[0]->points_required_at_realization * 4);
-
 }
 
 // tab is an inlined Func whose root box is `ux * ux` for
