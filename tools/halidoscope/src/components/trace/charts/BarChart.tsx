@@ -2,7 +2,7 @@ import * as Plot from "@observablehq/plot";
 import * as d3 from "d3";
 import * as React from "react";
 
-interface BarChartProps {
+interface Props {
   data: { x: string; y: number }[];
   domain: string[];
   range: string[];
@@ -13,7 +13,7 @@ interface BarChartProps {
   highlight?: (x: string) => boolean;
 }
 
-function BarChart({ data, domain, range, labels, highlight }: BarChartProps) {
+function BarChart({ data, domain, range, labels, highlight }: Props) {
   const ref = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {

@@ -1,9 +1,9 @@
 import AllocationChurnChart from "@/components/profile/charts/AllocationChurnChart";
 import MemoryTreemap from "@/components/profile/charts/MemoryTreemap";
+import RuntimeChart from "@/components/profile/charts/RuntimeChart";
 import ProfileOverview from "@/components/profile/panels/ProfileOverview";
 import ProfilePanel from "@/components/profile/panels/ProfilePanel";
 import ProfilerTable from "@/components/profile/panels/ProfileTable";
-import RuntimeChart from "@/components/profile/charts/RuntimeChart";
 import type { Profile } from "@/types/profile";
 
 function Profile() {

@@ -1,9 +1,9 @@
 import { Separator } from "radix-ui";
 
-import PanelSection from "@/components/trace/panels/PanelSection";
 import InfControls from "@/components/trace/controls/InfControls";
 import LivenessControls from "@/components/trace/controls/LivenessControls";
 import NaNControls from "@/components/trace/controls/NaNControls";
+import PanelSection from "@/components/trace/panels/PanelSection";
 
 function DebugPanel() {
   return (
