@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "attention.h"
+#include "attention_flash.h"
 #include "attention_softmax.h"
 
 using Halide::float16_t;
@@ -112,6 +113,15 @@ bool check(Buffer<float16_t, 2> &Q, Buffer<float16_t, 2> &K,
     return true;
 }
 
+// The default handler aborts, which would take the rest of the comparison down
+// with whichever filter failed. Holding a block's worth of scores in registers
+// is what bounds how many keys the fused filter can do, so it not launching at
+// a large key count is a result rather than a crash, and the row that walks the
+// keys instead still has a number to print.
+extern "C" void halide_error(void *user_context, const char *msg) {
+    printf("  %s\n", msg);
+}
+
 cublasHandle_t handle;
 
 // Halide makes a CUDA context of its own unless it is given one. Handing it
@@ -187,6 +197,31 @@ int main(int argc, char **argv) {
                 },
                 [&]() { O.device_sync(); });
             printf("  Halide fused attention        %9.0f GFlop/s %8.1f us\n",
+                   gflops(t), t * 1e6);
+        } else {
+            failures++;
+        }
+    }
+
+    // The same attention again, with the keys walked in tiles and the softmax
+    // rescaled as it goes.
+    // Its own output buffer, so that a filter that failed to write cannot be
+    // checked against what the one before it left behind.
+    Buffer<float, 2> OF(out_depth, queries);
+    if (attention_flash(Q.raw_buffer(), K.raw_buffer(), V.raw_buffer(),
+                        OF.raw_buffer()) != 0) {
+        printf("flash filter returned an error\n");
+        failures++;
+    } else {
+        OF.copy_to_host();
+        if (check(Q, K, V, OF, "attention_flash")) {
+            double t = bench(
+                [&]() {
+                    attention_flash(Q.raw_buffer(), K.raw_buffer(),
+                                    V.raw_buffer(), OF.raw_buffer());
+                },
+                [&]() { OF.device_sync(); });
+            printf("  Halide flash attention        %9.0f GFlop/s %8.1f us\n",
                    gflops(t), t * 1e6);
         } else {
             failures++;

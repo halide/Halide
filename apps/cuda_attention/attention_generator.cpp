@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include <algorithm>
 
 using namespace Halide;
 
@@ -470,7 +471,337 @@ private:
     Func s{"s"}, m{"m"}, e{"e"}, total{"total"}, soft{"soft"};
 };
 
+// The same attention, with the keys walked in tiles and the softmax rescaled
+// as it goes, which is what flash attention is. The filter above holds every
+// key of a row at once, because a softmax needs a whole row to normalise it;
+// this one holds one key tile at a time and carries three things across the
+// walk - the largest score seen so far, the sum of the exponentials so far,
+// and the output so far - rescaling the latter two whenever the maximum moves.
+//
+// The carried state is what makes this interesting to schedule. It is two
+// values per query, held in tensor core fragments the same way the row
+// statistics above are, and each step reads the step before it. So it wants to
+// slide: two tiles of it are live, and the walk should keep those two rather
+// than the whole prefix. A fragment is registers, which cannot be indexed at
+// run time, so which of the two slots a step reads has to be a constant where
+// the code is generated. Unrolling the walk by two gives that, and naming the
+// dimension the state slides along keeps the split from widening the window to
+// the pair of steps.
+//
+// The running maximum and the running normalizer are inductive Funcs: each is
+// defined by what it was one step ago, with the first step given separately.
+// Written that way the compiler can see that only the last step is live, which
+// is what lets the storage fold to two tiles. Asked for one tile before the
+// first, the maximum gives the same answer as the first, so the rescaling on
+// that step is by exp(0) and costs nothing to leave in.
+//
+// Normalising rides along on the last step of the walk rather than being a
+// pass of its own, which is also what makes the normalizer a producer of the
+// accumulator and so gives it a loop to be computed in.
+//
+// On an RTX 5060 Ti at queries=65536, depth=out_depth=64, against the filter
+// above and against the unfused pair:
+//
+//     keys    flash        fused          unfused
+//       64   46.7us  23008   37.3us  28817   124.5us   8623
+//      128   83.9us  25590   75.6us  28393   274.2us   7832
+//      256  150.6us  28527   would not launch  563.7us   7619
+//      512  422.4us  20334   would not launch 1168.0us   7354
+//     1024  765.4us  22445   would not launch 5353.5us   3209
+//
+// The point of the table is the middle column running out. The filter above
+// holds a block's worth of scores in registers, so the key count sets how many
+// tensor core tiles a warp keeps, and past 128 keys the launch is rejected for
+// wanting more registers than a thread has. This one keeps a step's worth
+// whatever the key count is, so it goes on running, while the unfused pair
+// falls away as the scores matrix it writes and reads back outgrows the cache -
+// most of the last row is its softmax, at 4.3ms of the 5.4.
+//
+// Where the time goes at the shapes it does win: ncu puts the tensor pipe at
+// 53% and names register spilling as the limit, at 1.9 active warps per
+// scheduler out of 12. A step keeps its scores, its weights, the accumulator
+// and the step's own accumulator live at once, which at the shape that measures
+// best comes to about 450 registers against the 255 a thread has. Cutting that
+// is what is left. Two things would: computing the weights one operand tile at
+// a time inside the multiply that reads them rather than a step's worth at
+// once, and accumulating the multiply straight into the carried output instead
+// of into a second accumulator that is then added on. The first needs the row
+// sum to stop being a consumer of the same Func, and so needs a tile reduction
+// over an expression rather than over a bare fragment - the extractor now
+// classifies that correctly, but its multi-tile path still wants whole
+// fragments read side by side. The second needs a matrix multiply to accumulate
+// into an inductive Func's storage.
+class AttentionFlash : public Halide::Generator<AttentionFlash> {
+public:
+    GeneratorParam<int> queries{"queries", 16384};
+    GeneratorParam<int> keys{"keys", 64};
+    GeneratorParam<int> depth{"depth", 64};
+    GeneratorParam<int> out_depth{"out_depth", 64};
+
+    // How many tensor core tiles of queries each warp takes, and how many
+    // warps a block has. Unlike the filter above, what a warp keeps in
+    // registers here does not grow with the number of keys, so the shape that
+    // suits is one tile of queries per warp and as many warps as the staging
+    // will feed.
+    GeneratorParam<int> tiles_y{"tiles_y", 0};
+    GeneratorParam<int> warps{"warps", 0};
+    // How many keys one step of the walk takes. Zero means as many as the
+    // measurements below want, or half the keys if there are too few for that.
+    GeneratorParam<int> chunk{"chunk", 0};
+    // Whether to stage K and V into shared memory for the block to share.
+    GeneratorParam<bool> stage{"stage", true};
+    // Extra elements per row of the staged panels, to spread consecutive rows
+    // across banks.
+    GeneratorParam<int> pad{"pad", 0};
+
+    Input<Buffer<float16_t, 2>> Q{"Q"};
+    Input<Buffer<float16_t, 2>> K{"K"};
+    Input<Buffer<float16_t, 2>> V{"V"};
+
+    Output<Buffer<float, 2>> out{"out"};
+
+    void generate() {
+        // How many keys a step of the walk takes. Everything that is per step
+        // rather than per key - the two reductions along a row, and rescaling
+        // the carried state and the accumulator - is paid once per step, so a
+        // wider step amortises it. What it costs is the scores, which are the
+        // one thing here that grows with it.
+        key_tile = chunk ? (int)chunk : std::min(128, (int)keys / 2);
+        _halide_user_assert(key_tile % 16 == 0 && keys % key_tile == 0 &&
+                            keys / key_tile >= 2)
+            << "chunk must be a multiple of 16 that divides keys at least twice";
+        num_tiles = keys / key_tile;
+
+        k = RDom(0, depth, "k");
+        rj_max = RDom(0, key_tile, "rj_max");
+        rj = RDom(0, key_tile, "rj");
+        rt = RDom(0, num_tiles, "rt");
+
+        // One key tile's worth of scores.
+        s(x, y, t) = 0.f;
+        s(x, y, t) += cast<float>(Q(k, y)) * cast<float>(K(k, t * key_tile + x));
+
+        tile_max(y, t) = -1e30f;
+        tile_max(y, t) = max(tile_max(y, t), s(rj_max, y, t));
+
+        // The largest score up to and including this tile. It depends on
+        // nothing but itself and the tile maximum.
+        m(y, t) = select(t <= 0, tile_max(y, t),
+                         likely(max(m(y, t - 1), tile_max(y, t))));
+
+        // The weights are taken against the running maximum, so what this step
+        // produces is already on the right scale and only what is carried has
+        // to be rescaled.
+        //
+        e(x, y, t) = exp(s(x, y, t) - m(y, t));
+
+        tile_l(y, t) = 0.f;
+        tile_l(y, t) += e(rj, y, t);
+
+        l(y, t) = select(t <= 0, tile_l(y, t),
+                         likely(l(y, t - 1) * exp(m(y, max(t - 1, 0)) - m(y, t)) +
+                                tile_l(y, t)));
+
+        tile_acc(x, y, t) = 0.f;
+        tile_acc(x, y, t) +=
+            cast<float>(e(rj, y, t)) * cast<float>(V(x, t * key_tile + rj));
+
+        acc(x, y) = 0.f;
+        acc(x, y) = (acc(x, y) * exp(m(y, max(rt - 1, 0)) - m(y, rt)) +
+                     tile_acc(x, y, rt)) /
+                    select(rt < num_tiles - 1, 1.f, l(y, rt));
+
+        out(x, y) = acc(x, y);
+    }
+
+    void schedule() {
+        if (using_autoscheduler()) {
+            Q.dim(0).set_estimate(0, depth).dim(1).set_estimate(0, queries);
+            K.dim(0).set_estimate(0, depth).dim(1).set_estimate(0, keys);
+            V.dim(0).set_estimate(0, out_depth).dim(1).set_estimate(0, keys);
+            out.bound(x, 0, out_depth).bound(y, 0, queries);
+            return;
+        }
+
+        set_bounds(Q, depth, queries);
+        set_bounds(K, depth, keys);
+        set_bounds(V, out_depth, keys);
+        set_bounds(out, out_depth, queries);
+
+        const int tile = 16;
+        // Staging holds all of K and V, so it only fits while the key count is
+        // small, and it is what the warp count buys. Whether it is on is what
+        // decides the shape: staged, the warps have something to share and are
+        // worth having; unstaged, they measure no better than one, and one warp
+        // per block leaves the most registers for the walk to keep the scores
+        // in, which is what is scarce there.
+        const int vec = 8;
+        const int p = pad ? (int)pad : vec;
+        const int staged_bytes = 2 * (int)keys * ((int)depth + (int)out_depth + 2 * p);
+        const bool staging = stage && staged_bytes <= 40 * 1024;
+
+        int ty = tiles_y, wy = warps;
+        if (ty == 0 || wy == 0) {
+            // Measured on an RTX 5060 Ti at queries=65536.
+            ty = 2;
+            wy = staging ? 4 : 1;
+            if (key_tile <= 32) {
+                // Too few keys for a step to be worth much, so spend the block
+                // on warps rather than on rows per warp.
+                ty = 1;
+                wy = 8;
+            }
+        }
+        const int rows = tile * ty;
+        const int block_rows = rows * wy;
+
+        Var xo("xo"), yo("yo"), xio("xio"), yio("yio"), xi("xi"), yi("yi");
+        Var yw("yw"), rxi("rxi"), ryi("ryi");
+        RVar rro("rro"), rri("rri"), rto("rto"), rti("rti");
+
+        // A block owns a strip of queries and every column of the output.
+        out.bound(x, 0, out_depth)
+            .bound(y, 0, queries)
+            .tile(x, y, xo, yo, xi, yi, out_depth, block_rows)
+            .split(yi, yw, yi, rows)
+            .tile(xi, yi, xio, yio, xi, yi, tile, tile)
+            .gpu_blocks(xo, yo)
+            .unroll(xio)
+            .unroll(yio)
+            .tile_store(xi, yi);
+
+        acc.compute_at(out, xo)
+            .store_in(MemoryType::Tile)
+            .split(y, yw, y, rows)
+            .tile(x, y, rxi, ryi, tile, tile)
+            .unroll(x)
+            .unroll(y)
+            .tile_init(rxi, ryi);
+        // Two steps at a time, so that which of the two live slots of the
+        // carried state a step reads is a constant here.
+        acc.update()
+            .split(y, yw, y, rows)
+            .tile(x, y, rxi, ryi, tile, tile)
+            .split(rt, rto, rti, 2)
+            .reorder(x, y, rti, rto, yw)
+            .unroll(x)
+            .unroll(y)
+            .unroll(rti)
+            .tile_init(rxi, ryi);
+
+        // Everything below is per key tile, so it lives inside the walk.
+        s.compute_at(acc, rti)
+            .store_in(MemoryType::Tile)
+            .tile(x, y, rxi, ryi, tile, tile)
+            .unroll(x)
+            .unroll(y)
+            .tile_init(rxi, ryi);
+        e.compute_at(acc, rti)
+            .store_in(MemoryType::Tile)
+            .tile(x, y, rxi, ryi, tile, tile)
+            .unroll(x)
+            .unroll(y)
+            .tile_init(rxi, ryi);
+        tile_acc.compute_at(acc, rti)
+            .store_in(MemoryType::Tile)
+            .tile(x, y, rxi, ryi, tile, tile)
+            .unroll(x)
+            .unroll(y)
+            .tile_init(rxi, ryi);
+
+        s.update()
+            .tile(x, y, rxi, ryi, tile, tile)
+            .split(k, rro, rri, tile)
+            .reorder(x, y, rro)
+            .unroll(x)
+            .unroll(y)
+            .tile_matmul(rri, rxi, ryi);
+        tile_acc.update()
+            .tile(x, y, rxi, ryi, tile, tile)
+            .split(rj, rro, rri, tile)
+            .reorder(x, y, rro)
+            .unroll(x)
+            .unroll(y)
+            // This operand comes out of a fragment rather than out of memory,
+            // so which tile of it each step reads has to be known here.
+            .unroll(rro)
+            .tile_matmul(rri, rxi, ryi);
+
+        for (Func f : {tile_max, tile_l}) {
+            f.store_in(MemoryType::Tile)
+                .compute_at(acc, rti)
+                .split(y, y, ryi, tile)
+                .unroll(y)
+                .vectorize(ryi);
+        }
+        tile_max.update().split(y, y, ryi, tile).unroll(y).tile_reduce(rj_max, ryi);
+        tile_l.update().split(y, y, ryi, tile).unroll(y).tile_reduce(rj, ryi);
+
+        // The carried state. It is stored for the whole walk but computed one
+        // step at a time, and folded down to the two tiles that are live. Each
+        // warp carries the state for its own rows, so it is stored inside the
+        // loop over warps rather than above it.
+        for (Func f : {m, l}) {
+            f.store_in(MemoryType::Tile)
+                .store_at(acc, yw)
+                .compute_at(acc, rti)
+                .slide(acc, rt)
+                .fold_storage(t, 2)
+                .split(y, y, ryi, tile)
+                .unroll(y)
+                .vectorize(ryi);
+        }
+
+        if (wy > 1) {
+            // Only the two stages that sit at block level need a loop over
+            // warps of their own. Everything else is computed inside the walk,
+            // which is already within one.
+            out.gpu_threads(yw);
+            acc.gpu_threads(yw);
+            acc.update().gpu_threads(yw);
+        }
+
+        // Every warp walks every key tile, so they all read the same K and V.
+        // Staging them into shared memory turns one global load per tensor core
+        // operand into one shared load, and spreads what it costs to fetch them
+        // over the warps, which is the only thing the warp count buys.
+        //
+        // They are staged whole rather than a tile at a time, so this only
+        // applies while both panels fit in shared memory. A per-tile panel
+        // would be the thing to want at a larger key count, but it would have
+        // to be filled above the loop over warps, and the carried state has to
+        // live inside it. Past the point where they fit, the walk reads its
+        // operands from global memory, which is what the numbers above measure.
+        if (staging) {
+            Var ko("ko"), kv("kv"), tt("tt"), ti("ti"), to("to"), tw("tw");
+
+            for (Func f : {K.in(), V.in()}) {
+                f.compute_at(out, xo)
+                    .store_in(MemoryType::GPUSharedAsync)
+                    .split(_0, ko, kv, vec)
+                    .fuse(ko, _1, tt)
+                    .split(tt, tt, ti, 32)
+                    .split(tt, to, tw, wy)
+                    .gpu_lanes(ti)
+                    .gpu_threads(tw)
+                    .vectorize(kv);
+            }
+            K.in().align_storage(_0, depth + p);
+            V.in().align_storage(_0, out_depth + p);
+        }
+    }
+
+private:
+    Var x{"x"}, y{"y"}, t{"t"};
+    RDom k, rj_max, rj, rt;
+    int num_tiles = 0, key_tile = 0;
+    Func s{"s"}, tile_max{"tile_max"}, e{"e"}, tile_l{"tile_l"};
+    Func tile_acc{"tile_acc"}, acc{"acc"};
+    Func m{Float(32), "m"}, l{Float(32), "l"};
+};
+
 }  // namespace
 
 HALIDE_REGISTER_GENERATOR(Attention, attention)
 HALIDE_REGISTER_GENERATOR(AttentionSoftmax, attention_softmax)
+HALIDE_REGISTER_GENERATOR(AttentionFlash, attention_flash)
