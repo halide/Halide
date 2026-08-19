@@ -7,6 +7,35 @@ using namespace Halide;
 // sliding window analysis pick a loop. This file is a set of worked examples
 // of when you would want that.
 
+// A lowering pass that counts the moduli in the indices where the consumer
+// loads from a producer. Sliding window folds the producer's storage down to a
+// couple of elements, and indexing into it costs a modulus unless the index is
+// known at compile time. That's the cost the examples below are chasing, and
+// it isn't visible in the output values, so we go and look for it in the IR.
+class CountModsInLoadsFrom : public Internal::IRMutator {
+    const std::string producer;
+
+    using IRMutator::visit;
+
+    Expr visit(const Internal::Load *op) override {
+        if (op->name == producer) {
+            Internal::visit_with(op->index,
+                                 [&](auto *self, const Internal::Mod *op) {
+                                     count++;
+                                     self->visit_base(op);
+                                 });
+        }
+        return IRMutator::visit(op);
+    }
+
+public:
+    int count = 0;
+
+    CountModsInLoadsFrom(std::string producer)
+        : producer(std::move(producer)) {
+    }
+};
+
 int call_count = 0;
 extern "C" HALIDE_EXPORT_SYMBOL int counted(int x) {
     call_count++;
@@ -40,15 +69,23 @@ int main(int argc, char **argv) {
         // is g's x, and each iteration computes just the one new value of f.
         // Storage folds to two elements, which costs a modulus on every
         // access, because x is not known at compile time.
-        Func f, g;
+        Func f("f"), g("g");
         Var x;
         f(x) = counted(x);
         g(x) = f(x) + f(x - 1);
         f.store_root().compute_at(g, x);
 
+        CountModsInLoadsFrom mods(f.name());
+        g.add_custom_lowering_pass(&mods, nullptr);
+
         int n = evaluations(g, size);
         if (n != ideal) {
             printf("Sliding over a loop: f ran %d times, expected %d\n", n, ideal);
+            return 1;
+        }
+        if (mods.count == 0) {
+            printf("Sliding over a loop did not cost a modulus, so this example "
+                   "no longer motivates anything\n");
             return 1;
         }
     }
@@ -60,7 +97,7 @@ int main(int argc, char **argv) {
         // to slide along - there is an xo loop and an xi loop, and sliding
         // picks one of them. Sliding over xo advances the window two elements
         // at a time, so it computes more than it needs to.
-        Func f, g;
+        Func f("f"), g("g");
         Var x, xo, xi;
         f(x) = counted(x);
         g(x) = f(x) + f(x - 1);
@@ -84,16 +121,25 @@ int main(int argc, char **argv) {
         // split - it just isn't a loop any more, it's a value computed from xo
         // and xi - and the window can slide along it. Each unrolled body then
         // knows its index into the folded buffer, so the modulus goes away.
-        Func f, g;
+        Func f("f"), g("g");
         Var x, xo, xi;
         f(x) = counted(x);
         g(x) = f(x) + f(x - 1);
         g.align_bounds(x, 2).split(x, xo, xi, 2).unroll(xi);
         f.store_root().compute_at(g, xi).slide(g, x);
 
+        CountModsInLoadsFrom mods(f.name());
+        g.add_custom_lowering_pass(&mods, nullptr);
+
         int n = evaluations(g, size);
         if (n != ideal) {
             printf("Sliding over the dimension: f ran %d times, expected %d\n", n, ideal);
+            return 1;
+        }
+        if (mods.count != 0) {
+            printf("Sliding over the dimension left %d moduli in the loads from "
+                   "f, expected none\n",
+                   mods.count);
             return 1;
         }
     }
@@ -103,7 +149,7 @@ int main(int argc, char **argv) {
         // Vars. Split x twice and the loops are xoo, xoi and xi, while xo is
         // neither an original Var nor a loop. It's still a dimension the
         // window can slide along. Compute f at xoi, which is where xo changes.
-        Func f, g;
+        Func f("f"), g("g");
         Var x, xo, xi, xoo, xoi;
         f(x) = counted(x);
         g(x) = f(x) + f(x - 4);
