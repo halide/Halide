@@ -19,10 +19,13 @@
 ################################################################################
 ## Halide-specific exclusions
 
-# Images only allowed in apps and directories named "images"
+# Images only allowed in apps, directories named "images", and Halidoscope's
+# icon set
 *.png
 !apps/**/*.png
 !**/images/**/*.png
+!tools/halidoscope/src-tauri/icons/*.png
+
 
 # Pre-trained weights only allowed in autoscheduler directories
 *.weights
