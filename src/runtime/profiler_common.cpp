@@ -513,6 +513,21 @@ ALWAYS_INLINE bool counter_is_approximate(const halide_profiler_func_stats *fs, 
 WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_state *s) {
     StringStreamPrinter<1024> sstr(user_context);
 
+    // When JSON output is requested, we render each pipeline's warnings into
+    // a "[...]" array string here (in pipeline-list order) as we print the
+    // report below, and emit them in the JSON pass. Null means no warnings.
+    const char *json_path = getenv("HL_PROFILER_JSON_OUTPUT");
+    int num_pipelines = 0;
+    for (halide_profiler_pipeline_stats *p = s->pipelines; p;
+         p = (halide_profiler_pipeline_stats *)(p->next)) {
+        num_pipelines++;
+    }
+    char **pipeline_warnings = nullptr;
+    if (json_path && num_pipelines) {
+        pipeline_warnings = (char **)malloc(num_pipelines * sizeof(char *));
+        __builtin_memset(pipeline_warnings, 0, num_pipelines * sizeof(char *));
+    }
+
     // Emit ANSI color escapes only when the report is going to an actual
     // color-capable terminal. Checking TERM alone isn't enough: CI and other
     // redirected environments often set TERM=xterm-256color while stdout is a
@@ -715,8 +730,12 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
     constexpr const char *column_legend_row_2 =
         "                         |                  |threads| loops| tasks|allocs|  mem |  mem |  ratio  |     |";
 
+    int pipeline_pos = -1;
     for (halide_profiler_pipeline_stats *p = s->pipelines; p;
          p = (halide_profiler_pipeline_stats *)(p->next)) {
+        // Position in the pipeline list, matched by the JSON pass below.
+        // Incremented before any `continue` so the two passes stay aligned.
+        pipeline_pos++;
         if (!p->runs) {
             continue;
         }
@@ -1635,14 +1654,50 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             support_colors = old;
         }
 
+        // Render this pipeline's warnings as a JSON array of message strings
+        // for the JSON pass below. Kept separate from the text formatting
+        // above, and bounded: if the messages don't fit, the rest are
+        // dropped rather than producing a truncated (invalid) array.
+        if (pipeline_warnings && num_warnings) {
+            StringStreamPrinter<16384> wjson(user_context);
+            wjson << "[";
+            bool first = true;
+            for (int w = 0; w < num_warnings; w++) {
+                sstr.clear();
+                int cid = warnings[w].canonical_id;
+                rule(&canon_fs[cid], &canon_cs[cid], (WarningKind)warnings[w].rule_id, /*emit=*/true);
+                const char *msg = sstr.str();
+                // Bound the array so it never overflows wjson mid-string:
+                // reserve room for the escaped message (worst case 2x) plus
+                // the quotes, separator, and closing bracket.
+                if (wjson.size() + 2 * strlen(msg) + 8 >= 16384) {
+                    break;
+                }
+                wjson << (first ? "\"" : ", \"");
+                first = false;
+                char one[2] = {0, 0};
+                for (const char *c = msg; *c; c++) {
+                    if (*c == '"' || *c == '\\') {
+                        wjson << "\\";
+                    }
+                    one[0] = *c;
+                    wjson << one;
+                }
+                wjson << "\"";
+            }
+            wjson << "]";
+            pipeline_warnings[pipeline_pos] = (char *)malloc(wjson.size() + 1);
+            memcpy(pipeline_warnings[pipeline_pos], wjson.str(), wjson.size() + 1);
+        }
+
         sstr.clear();
         emit_dim(horiz_rule);
         halide_print(user_context, sstr.str());
     }
 
-    if (const char *raw_str = getenv("HL_PROFILER_JSON_OUTPUT")) {
+    if (json_path) {
         // Dump the raw stats to a JSON file for offline analysis.
-        void *f = halide_fopen(raw_str, "w");
+        void *f = halide_fopen(json_path, "w");
         if (f) {
             StringStreamPrinter<4096> json(user_context);
 
@@ -1687,11 +1742,19 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 str(v);
                 json << (last ? "\n" : ",\n");
             };
+            auto field_float = [&](const char *indent, const char *name, float v, bool last = false) {
+                json << indent;
+                str(name);
+                json << ": " << v;
+                json << (last ? "\n" : ",\n");
+            };
 
             json << "{\n  \"pipelines\": [";
             bool first_pipeline = true;
+            int json_pipeline_pos = -1;
             for (halide_profiler_pipeline_stats *pp = s->pipelines; pp;
                  pp = (halide_profiler_pipeline_stats *)(pp->next)) {
+                json_pipeline_pos++;
                 json << (first_pipeline ? "\n" : ",\n");
                 first_pipeline = false;
 
@@ -1745,7 +1808,15 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     field_u64("          ", "points_required_at_realization", fs->points_required_at_realization);
                     field_u64("          ", "points_required_at_production", fs->points_required_at_production);
                     field_u64("          ", "points_required_inwards", fs->points_required_inwards);
-                    field_u64("          ", "productions_if_inwards", fs->productions_if_inwards, true);
+                    field_u64("          ", "productions_if_inwards", fs->productions_if_inwards);
+                    // The recompute ratio shown in the report's recompute
+                    // column: points computed / points required at root
+                    // (billed to the canonical entry).
+                    {
+                        uint64_t at_root = pp->funcs[fs->canonical_id].points_required_at_root;
+                        float recompute = at_root ? (float)fs->points_computed / at_root : 0.0f;
+                        field_float("          ", "recompute", recompute, /*last=*/true);
+                    }
                     json << "        }";
 
                     // Flush periodically so we don't overflow the buffer for
@@ -1754,13 +1825,33 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                         flush();
                     }
                 }
-                json << "\n      ]\n";
+                json << "\n      ],\n";
+                // The full text of the performance warnings that fired, one
+                // string per warning, so consumers don't have to parse the
+                // report table. Rendered while the report above was printed.
+                // Written straight to the file (it can exceed json's buffer).
+                json << "      \"warnings\": ";
+                flush();
+                const char *pw = pipeline_warnings[json_pipeline_pos];
+                if (pw) {
+                    fwrite(pw, strlen(pw), 1, f);
+                } else {
+                    fwrite("[]", 2, 1, f);
+                }
+                json << "\n";
                 json << "    }";
             }
             json << (first_pipeline ? "" : "\n") << "  ]\n}\n";
             flush();
             fclose(f);
         }
+    }
+
+    if (pipeline_warnings) {
+        for (int i = 0; i < num_pipelines; i++) {
+            free(pipeline_warnings[i]);
+        }
+        free(pipeline_warnings);
     }
 }
 
