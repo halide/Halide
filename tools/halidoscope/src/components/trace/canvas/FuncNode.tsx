@@ -2,13 +2,13 @@ import {
   getIncomers,
   getOutgoers,
   Handle,
-  type Node,
-  type NodeProps,
   NodeToolbar,
   Position,
   useEdges,
   useNodes,
   useViewport,
+  type Node,
+  type NodeProps,
 } from "@xyflow/react";
 import { clsx } from "clsx";
 import { useAtomValue, useSetAtom } from "jotai";
@@ -17,8 +17,8 @@ import * as React from "react";
 import HandleCircle from "@/components/trace/canvas/HandleCircle";
 import { useTraceContext } from "@/hooks/trace";
 import { funcAtom } from "@/state/func";
-import { infAtom, nanAtom } from "@/state/nan-inf";
 import { livenessAtom } from "@/state/liveness";
+import { infAtom, nanAtom } from "@/state/nan-inf";
 import { packetAtom } from "@/state/packet";
 import { renderAtom } from "@/state/render";
 import { tabularDataAtom } from "@/state/tabularData";
@@ -26,16 +26,16 @@ import { threadAtom } from "@/state/thread";
 import type { FuncMeta } from "@/types/trace";
 import {
   renderGrayscale,
-  renderRgb,
-  renderStoreFrequency,
   renderLoadFrequency,
   renderRedundantStores,
   renderReuseDistance,
+  renderRgb,
+  renderStoreFrequency,
   renderThread,
   type RenderFuncParams,
   type RenderFuncResponse,
 } from "@/utils/api";
-import { isFuncBufferLive, isEdgeLive } from "@/utils/liveness";
+import { isEdgeLive, isFuncBufferLive } from "@/utils/liveness";
 
 function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
   const { name, width, height, buffer_liveness, max_store_count } = data;

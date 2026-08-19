@@ -4,7 +4,7 @@ import * as React from "react";
 
 import type { Scale } from "@/state/tabularData";
 
-interface HistogramProps {
+interface Props {
   data: { x1: number; x2: number; y0: number; y1: number; color: string }[];
   domain: [number, number];
   scale: Scale;
@@ -23,7 +23,7 @@ function Histogram({
   labels,
   renderLegend,
   interval,
-}: HistogramProps) {
+}: Props) {
   const ref = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
