@@ -79,7 +79,8 @@ void find_var_uses(const StmtOrExpr &x, std::unordered_map<std::string, bool> &v
 }  // namespace
 
 template<typename LetOrLetStmt, typename Body>
-Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *info) {
+HALIDE_NEVER_INLINE Body Simplify::simplify_let_inner(const LetOrLetStmt *op, ExprInfo *info,
+                                                      vector<ScopedBinding<VarInfo>> &substituted) {
 
     // Lets are often deeply nested. Get the intermediate state off
     // the call stack where it could overflow onto an explicit stack.
@@ -94,9 +95,9 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *info) {
             : op(op) {
         }
     };
+    Body result;
 
     vector<Frame> frames;
-    Body result;
 
     while (op) {
         frames.emplace_back(op);
@@ -300,10 +301,6 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *info) {
 
     find_var_uses(result, var_uses);
 
-    // Bindings for the lets we dropped in favour of inlining the value. They
-    // stay in scope until this function returns.
-    vector<ScopedBinding<VarInfo>> substituted;
-
     // Inner frames have already been dealt with, and a let value can only refer
     // to names bound outside it, so by the time a frame is reached its counts
     // are final.
@@ -355,16 +352,24 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *info) {
         }
     }
 
-    if constexpr (substitute_single_uses) {
-        if (!substituted.empty()) {
-            // One re-mutation resolves every replacement, chains included,
-            // because visit(Variable) re-mutates each replacement as it
-            // injects it. This is the result we return, so it fills in info.
-            result = mutate(result, info);
-        }
-    }
-
     return result;
+}
+
+template<typename LetOrLetStmt, typename Body>
+Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *info) {
+    // Bindings for the lets we dropped in favour of inlining the value. They
+    // stay in scope until this function returns.
+    vector<ScopedBinding<VarInfo>> substituted;
+
+    Body result;
+    bool remutate = true;
+    while (remutate && op) {
+        size_t old = substituted.size();
+        result = simplify_let_inner<LetOrLetStmt, Body>(op, info, substituted);
+        op = result.template as<LetOrLetStmt>();
+        remutate = (substituted.size() > old);
+    }
+    return remutate ? mutate_let_body(result, info) : result;
 }
 
 Expr Simplify::visit(const Let *op, ExprInfo *info) {
