@@ -48,7 +48,7 @@ public:
     DebugStream() = default;
     DebugStream(const DebugStream &) = delete;
     DebugStream &operator=(const DebugStream &) = delete;
-    ~DebugStream();
+    ~DebugStream() override;
 
     /** Exposes this object as a plain std::ostream&, so every `<<` in a
      * debug(n) statement resolves exactly as it would against std::cerr,

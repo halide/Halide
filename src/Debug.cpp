@@ -8,11 +8,11 @@
 #include <iostream>
 #include <optional>
 
-#ifdef _WIN32
 #include <fcntl.h>
+
+#ifdef _WIN32
 #include <io.h>
 #else
-#include <fcntl.h>
 #include <unistd.h>
 #endif
 
@@ -151,9 +151,6 @@ struct DebugSink {
 // single raw write() call: on a file opened O_APPEND, the kernel appends the
 // bytes of a single write() atomically, so concurrent processes/threads
 // sharing this log file can't tear each other's output mid-statement.
-// Buffered iostream writes give no such guarantee -- a large debug() dump
-// can be split across several underlying write() calls, letting another
-// writer's output land in the middle of it.
 int open_append_only(const std::string &path) {
 #ifdef _WIN32
     // _O_BINARY avoids CRLF translation, which would corrupt byte counts.
@@ -165,9 +162,8 @@ int open_append_only(const std::string &path) {
 
 DebugSink make_debug_sink() {
     const std::string log_file = get_env_variable("HL_DEBUG_CODEGEN_LOG_FILE");
-    // /dev/stdout and /dev/stderr are handled explicitly (rather than just
-    // opening them as ordinary paths) because Windows has no /dev
-    // filesystem, so opening them as ordinary paths would simply fail there.
+    // /dev/stdout and /dev/stderr are handled explicitly both for compatibility
+    // with Windows and for consistency with interleaved std::cout and std::cerr.
     if (log_file.empty() || log_file == "/dev/stderr") {
         return {DebugSinkKind::Cerr};
     }
@@ -194,21 +190,20 @@ const DebugSink &debug_sink() {
 // loop only guards against the rare partial write (e.g. an EINTR-interrupted
 // call), at the cost of the atomicity guarantee above in that rare case.
 void write_all(int fd, const char *data, size_t size) {
+    int n_retries = 16;
     while (size > 0) {
 #ifdef _WIN32
         const int n = _write(fd, data, (unsigned int)std::min<size_t>(size, INT_MAX));
-        if (n <= 0) {
-            break;
-        }
 #else
         const ssize_t n = ::write(fd, data, size);
         if (n < 0 && errno == EINTR) {
+            internal_assert(n_retries-- > 0) << "write_all() failed with EINTR too many times";
             continue;
         }
+#endif
         if (n <= 0) {
             break;
         }
-#endif
         data += n;
         size -= (size_t)n;
     }
