@@ -3,11 +3,11 @@ import { useAtomValue } from "jotai";
 import { Separator } from "radix-ui";
 import * as React from "react";
 
-import ControlSection from "@/components/controls/ControlSection";
-import BarChart from "@/components/controls/charts/BarChart";
-import Histogram from "@/components/controls/charts/Histogram";
-import RenderMode from "@/components/controls/render/RenderMode";
-import RenderModeParameters from "@/components/controls/render/RenderModeParameters";
+import RenderMode from "@/components/trace/controls/RenderMode";
+import RenderModeParameters from "@/components/trace/controls/RenderModeParameters";
+import BarChart from "@/components/trace/charts/BarChart";
+import Histogram from "@/components/trace/charts/Histogram";
+import PanelSection from "@/components/trace/panels/PanelSection";
 import { useTraceContext } from "@/hooks/trace";
 import { funcAtom } from "@/state/func";
 import { type RenderMode as RM, renderAtom } from "@/state/render";
@@ -348,14 +348,14 @@ function VisualizationPanel() {
 
   return (
     <div className="flex flex-col gap-4 px-3 py-4">
-      <ControlSection title="Render Mode">
+      <PanelSection title="Render Mode">
         <RenderMode />
-      </ControlSection>
+      </PanelSection>
       <Separator.Root className="bg-ps-border-tertiary h-px" />
-      <ControlSection title="Stats">
+      <PanelSection title="Stats">
         <RenderModeParameters />
         {renderChart()}
-      </ControlSection>
+      </PanelSection>
       <Separator.Root className="bg-ps-border-tertiary h-px" />
     </div>
   );

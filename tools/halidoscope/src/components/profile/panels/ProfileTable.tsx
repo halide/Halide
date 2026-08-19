@@ -1,7 +1,8 @@
 import { clsx } from "clsx";
 import * as React from "react";
 
-import type { ProfileFunc, ProfilePipeline } from "@/types/profile";
+import { useProfileContext } from "@/hooks/profile";
+import type { ProfileFunc } from "@/types/profile";
 
 // Mirrors the `ProfileFunc.kind` tags documented in `@/types/profile`.
 const KIND_OVERHEAD = 1;
@@ -193,11 +194,10 @@ function NameCell({ func, funcs, idx, depth, isLastSibling }: NameCellProps) {
 
 interface HeaderCellProps {
   label: string;
-  sublabel?: string;
   className?: string;
 }
 
-function HeaderCell({ label, sublabel, className }: HeaderCellProps) {
+function HeaderCell({ label, className }: HeaderCellProps) {
   return (
     <th
       className={clsx(
@@ -206,13 +206,8 @@ function HeaderCell({ label, sublabel, className }: HeaderCellProps) {
       )}
     >
       <div>{label}</div>
-      {sublabel && <div>{sublabel}</div>}
     </th>
   );
-}
-
-interface ProfilerTableProps {
-  pipeline: ProfilePipeline;
 }
 
 /**
@@ -220,8 +215,9 @@ interface ProfilerTableProps {
  * to stdout (see `halide_profiler_report_unlocked` in `profiler_common.cpp`),
  * as an HTML table.
  */
-function ProfilerTable({ pipeline }: ProfilerTableProps) {
-  const { funcs, runs, billed_runs, time_ns, num_allocs } = pipeline;
+function ProfileTable() {
+  const { pipelines } = useProfileContext();
+  const { funcs, runs, billed_runs, time_ns, num_allocs } = pipelines[0];
 
   const { order, depth, isLastSibling } = React.useMemo(
     () => buildTree(funcs),
@@ -261,14 +257,10 @@ function ProfilerTable({ pipeline }: ProfilerTableProps) {
           <HeaderCell label="name" />
           <HeaderCell label="time" className="text-right" />
           <HeaderCell label="percent" className="text-right" />
-          <HeaderCell
-            label="active"
-            sublabel="threads"
-            className="text-right"
-          />
-          <HeaderCell label="heap" sublabel="allocs" className="text-right" />
-          <HeaderCell label="peak" sublabel="mem" className="text-right" />
-          <HeaderCell label="avg" sublabel="mem" className="text-right" />
+          <HeaderCell label="active threads" className="text-right" />
+          <HeaderCell label="heap allocs" className="text-right" />
+          <HeaderCell label="peak mem" className="text-right" />
+          <HeaderCell label="avg mem" className="text-right" />
         </tr>
       </thead>
       <tbody>
@@ -333,6 +325,4 @@ function ProfilerTable({ pipeline }: ProfilerTableProps) {
   );
 }
 
-ProfilerTable.displayName = "Profile.ProfilerTable";
-
-export default ProfilerTable;
+export default ProfileTable;

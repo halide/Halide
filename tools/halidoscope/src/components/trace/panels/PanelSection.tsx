@@ -1,14 +1,11 @@
 import { Label } from "radix-ui";
 import type * as React from "react";
 
-interface ControlSectionProps {
+interface Props {
   title: string;
 }
 
-function ControlSection({
-  title,
-  children,
-}: React.PropsWithChildren<ControlSectionProps>) {
+function PanelSection({ title, children }: React.PropsWithChildren<Props>) {
   return (
     <div className="flex flex-col gap-2">
       <Label.Root className="text-ps-text-primary font-semibold tracking-widest uppercase">
@@ -19,4 +16,4 @@ function ControlSection({
   );
 }
 
-export default ControlSection;
+export default PanelSection;

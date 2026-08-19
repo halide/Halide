@@ -14,7 +14,7 @@ import { clsx } from "clsx";
 import { useAtomValue, useSetAtom } from "jotai";
 import * as React from "react";
 
-import HandleCircle from "@/components/canvas/HandleCircle";
+import HandleCircle from "@/components/trace/canvas/HandleCircle";
 import { useTraceContext } from "@/hooks/trace";
 import { funcAtom } from "@/state/func";
 import { infAtom, nanAtom } from "@/state/nan-inf";
