@@ -534,6 +534,7 @@ table FuncSchedule {
     ring_buffer: Expr;
     memoize_eviction_key: Expr;
     type_change_checks: [TypeChangeCheck];
+    slide_level: LoopLevel;
 }
 
 table Specialization {

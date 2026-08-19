@@ -1030,9 +1030,26 @@ class StorageFolding : public IRMutator {
         body = folder(body);
 
         // Sliding window slid this func over a dimension rather than a loop,
-        // and told us how wide the window is. The dimension no longer exists
-        // in the IR for us to analyze, so apply the fold it asked for.
+        // and told us how wide the window is.
+        //
+        // We take its word for it. The dimension is a let by the time sliding
+        // window sees it and is gone by the time we run, because the
+        // simplifier substitutes it away, so there's nothing here to measure.
+        // Measuring the footprint over any of the loops the dimension is
+        // spread across doesn't answer the question either - it counts values
+        // that are never simultaneously live, which is why an explicit
+        // fold_storage of the right factor gets rejected on such a schedule.
+        //
+        // The cost of that trust is that a wrong width here is an allocation
+        // that is too small rather than an error. Sliding window checks the
+        // two things that would make it wrong before emitting the marker: that
+        // the storage lives across every loop the dimension varies over, and
+        // that the region required doesn't move with a loop between the
+        // dimension and the producer.
         if (folder.slid_width > 0 && folder.slid_dim >= 0) {
+            internal_assert(folder.slid_width > 0 && folder.slid_dim < func.dimensions())
+                << "Sliding window asked to fold " << op->name << " dimension "
+                << folder.slid_dim << " by " << folder.slid_width << "\n";
             Expr factor = (int)next_power_of_two((uint64_t)folder.slid_width);
             body = FoldStorageOfFunction(op->name, folder.slid_dim, factor, "")(body);
             folder.dims_folded.push_back({folder.slid_dim, factor});
