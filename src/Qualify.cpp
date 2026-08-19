@@ -1,42 +1,13 @@
 #include "Qualify.h"
-#include "IRMutator.h"
+#include "Rename.h"
 
 namespace Halide {
 namespace Internal {
 
 using std::string;
 
-namespace {
-
-// Prefix all names in an expression with some string.
-class QualifyExpr : public IRMutator {
-    using IRMutator::visit;
-
-    const string &prefix;
-
-    Expr visit(const Variable *v) override {
-        if (v->param.defined()) {
-            return v;
-        } else {
-            return Variable::make(v->type, prefix + v->name, v->reduction_domain);
-        }
-    }
-    Expr visit(const Let *op) override {
-        Expr value = mutate(op->value);
-        Expr body = mutate(op->body);
-        return Let::make(prefix + op->name, value, body);
-    }
-
-public:
-    QualifyExpr(const string &p)
-        : prefix(p) {
-    }
-};
-
-}  // namespace
-
 Expr qualify(const string &prefix, const Expr &value) {
-    return QualifyExpr(prefix)(value);
+    return rename_ir(value, [&](const string &name) { return prefix + name; });
 }
 
 }  // namespace Internal

@@ -14,6 +14,7 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Monotonic.h"
+#include "Rename.h"
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
@@ -1302,30 +1303,9 @@ protected:
         Stmt body = op->body;
         if (block_alloc_names.count(op->name)) {
             name = unique_name(op->name);
-            const string &from = op->name;
-            const string &to = name;
-            body = mutate_with(
-                body,
-                [&](auto *self, const Load *load) -> Expr {
-                    if (load->name == from) {
-                        return Load::make(load->type, to, self->mutate(load->index), load->image, load->param,
-                                          self->mutate(load->predicate), load->alignment, load->is_streaming);
-                    }
-                    return self->visit_base(load);
-                },
-                [&](auto *self, const Store *store) -> Stmt {
-                    if (store->name == from) {
-                        return Store::make(to, self->mutate(store->value), self->mutate(store->index), store->param,
-                                           self->mutate(store->predicate), store->alignment, store->is_streaming);
-                    }
-                    return self->visit_base(store);
-                },
-                [&](auto *, const Free *free) -> Stmt {
-                    if (free->name == from) {
-                        return Free::make(to);
-                    }
-                    return free;
-                });
+            body = rename_ir(body, [&](const string &n) {
+                return n == op->name ? name : n;
+            });
         }
 
         RegisterAllocation alloc;

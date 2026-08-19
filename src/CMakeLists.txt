@@ -190,6 +190,7 @@ target_sources(
     RemoveDeadAllocations.h
     RemoveExternLoops.h
     RemoveUndef.h
+    Rename.h
     runtime/HalideBuffer.h
     runtime/HalideRuntime.h
     Schedule.h
