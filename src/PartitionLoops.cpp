@@ -878,12 +878,8 @@ class RenormalizeGPULoops : public IRMutator {
 
         if (in_gpu_loop && !old_in_gpu_loop) {
             // This was the outermost GPU loop. Dump any lifted lets here.
-            while (!lifted_lets.empty()) {
-                stmt = LetStmt::make(lifted_lets.back().first,
-                                     lifted_lets.back().second,
-                                     stmt);
-                lifted_lets.pop_back();
-            }
+            stmt = rewrap_all_lets(stmt, lifted_lets);
+            lifted_lets.clear();
         }
 
         in_gpu_loop = old_in_gpu_loop;

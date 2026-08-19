@@ -31,8 +31,7 @@ target_link_libraries(max_filter_filter PRIVATE Halide::ImageIO max_filter max_f
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgba.png)
 if (EXISTS ${IMAGE})
-    configure_file(${IMAGE} rgba.png COPYONLY)
-    add_test(NAME max_filter_filter COMMAND max_filter_filter rgba.png out.png)
+    add_test(NAME max_filter_filter COMMAND max_filter_filter ${IMAGE} out.png)
     set_tests_properties(
         max_filter_filter
         PROPERTIES

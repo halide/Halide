@@ -21,11 +21,12 @@ class StoreCollector : public IRMutator {
 public:
     const std::string store_name;
     const int store_stride, max_stores;
-    std::vector<Stmt> &let_stmts;
+    std::vector<std::pair<std::string, Expr>> &let_stmts;
     std::vector<Stmt> &stores;
 
     StoreCollector(const std::string &name, int stride, int ms,
-                   std::vector<Stmt> &lets, std::vector<Stmt> &ss)
+                   std::vector<std::pair<std::string, Expr>> &lets,
+                   std::vector<Stmt> &ss)
         : store_name(name), store_stride(stride), max_stores(ms),
           let_stmts(lets), stores(ss) {
     }
@@ -59,7 +60,7 @@ private:
     // These are lets that we've encountered since the last collected
     // store. If we collect another store, these "potential" lets
     // become lets used by the collected stores.
-    std::vector<Stmt> potential_lets;
+    std::vector<std::pair<std::string, Expr>> potential_lets;
 
     Expr visit(const Load *op) override {
         if (!collecting) {
@@ -143,11 +144,7 @@ private:
 
         // If we're still collecting, we need to save the entire let chain as potential lets.
         if (collecting) {
-            Stmt body;
-            do {
-                potential_lets.emplace_back(op);
-                body = op->body;
-            } while ((op = body.as<LetStmt>()));
+            peel_lets(op, &potential_lets);
         }
         return stmt;
     }
@@ -168,7 +165,8 @@ private:
 };
 
 Stmt collect_strided_stores(const Stmt &stmt, const std::string &name, int stride, int max_stores,
-                            std::vector<Stmt> lets, std::vector<Stmt> &stores) {
+                            std::vector<std::pair<std::string, Expr>> lets,
+                            std::vector<Stmt> &stores) {
 
     return StoreCollector(name, stride, max_stores, lets, stores)(stmt);
 }
@@ -649,16 +647,9 @@ class Interleaver : public IRMutator {
     }
 
     HALIDE_NEVER_INLINE Stmt gather_stores(const Block *op) {
-        const LetStmt *let = op->first.as<LetStmt>();
-        const Store *store = op->first.as<Store>();
-
         // Gather all the let stmts surrounding the first.
-        std::vector<Stmt> let_stmts;
-        while (let) {
-            let_stmts.emplace_back(let);
-            store = let->body.as<Store>();
-            let = let->body.as<LetStmt>();
-        }
+        std::vector<std::pair<std::string, Expr>> let_stmts;
+        const Store *store = peel_lets(op->first, &let_stmts).as<Store>();
 
         // There was no inner store.
         if (!store) {
@@ -775,11 +766,7 @@ class Interleaver : public IRMutator {
         Stmt new_store = store->with(value, index, predicate, ModulusRemainder());
 
         // Rewrap the let statements we pulled off.
-        while (!let_stmts.empty()) {
-            const LetStmt *let = let_stmts.back().as<LetStmt>();
-            new_store = let->with(let->value, new_store);
-            let_stmts.pop_back();
-        }
+        new_store = rewrap_all_lets(new_store, let_stmts);
 
         // Continue recursively into the stuff that
         // collect_strided_stores didn't collect.

@@ -279,6 +279,44 @@ public:
         inwards_red_at_y(x) = 0;
         inwards_red_at_y(x) += inwards_f_at_y(r_inwards, x);
 
+        // Load/store op-profile counters. Each Func exercises one access
+        // classification over a 64-wide domain (a multiple of the vector
+        // width, so no tail), giving exactly-known counts. ls_sum samples
+        // them at x % ls_n so the output's extent doesn't constrain theirs.
+        const int ls_n = 64;
+        Var lsx("lsx");
+        Func ls_data("ls_data");
+        ls_data(lsx) = lsx * 2 + 1;
+        ls_data.compute_root();
+
+        // Dense and vectorized: ls_n/8 vector loads (of ls_data) and stores.
+        Func ls_vec("ls_vec");
+        ls_vec(lsx) = ls_data(lsx) + 3;
+        ls_vec.compute_root().vectorize(lsx, 8);
+
+        // Unvectorized: ls_n scalar loads and scalar stores.
+        Func ls_scalar("ls_scalar");
+        ls_scalar(lsx) = ls_data(lsx) * 5;
+        ls_scalar.compute_root();
+
+        // Data-dependent load index in a vectorized Func: gathers.
+        Func ls_gather("ls_gather");
+        ls_gather(lsx) = ls_data(clamp(ls_data(lsx), 0, ls_n - 1));
+        ls_gather.compute_root().vectorize(lsx, 8);
+
+        // Non-unit-stride vector store: scatters. Vectorizing the outer
+        // storage dim makes each vector store stride by the inner extent,
+        // so its index is a non-unit-stride ramp rather than a dense one.
+        Func ls_scatter("ls_scatter");
+        Var ssx("ssx"), ssy("ssy");
+        ls_scatter(ssx, ssy) = ssx + ssy;
+        ls_scatter.compute_root().vectorize(ssy, 8);
+
+        Func ls_sum("ls_sum");
+        ls_sum(x) = ls_vec(x % ls_n) + ls_scalar(x % ls_n) +
+                    ls_gather(x % ls_n) + ls_scatter(x % 4, x % ls_n);
+        ls_sum.compute_root();
+
         Func caller_g("caller_g"), caller_h("caller_h");
         caller_g(x) = update_f(x);
         caller_h(x) = update_f(x) * 2;
@@ -287,7 +325,7 @@ public:
                          roundup_outer(x) + guard_outer(x) +
                          stencil_out(x) + unrolled_pu(x % 4) + cw_a(x) + cw_b(x) +
                          slide_out(x) + slide_fail_f(x) + extern_stage_e(x) +
-                         inwards_red_root(x) + inwards_red_at_y(x);
+                         inwards_red_root(x) + inwards_red_at_y(x) + ls_sum(x);
         if (get_target().has_gpu_feature()) {
             out_value = out_value + approx_out(x) + xfer_out(x) + mixed_sched(x) +
                         shared_out(x) + dev_only_out(x);

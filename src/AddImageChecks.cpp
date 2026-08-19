@@ -681,14 +681,6 @@ Stmt add_image_checks_inner(Stmt s,
         }
     };
 
-    auto prepend_lets = [&](vector<pair<string, Expr>> *lets) {
-        while (!lets->empty()) {
-            auto &p = lets->back();
-            s = LetStmt::make(p.first, std::move(p.second), s);
-            lets->pop_back();
-        }
-    };
-
     // After all asserts, set host dirty on outputs if this is a CPU-only
     // pipeline
     prepend_stmts(&set_host_dirty);
@@ -698,7 +690,7 @@ Stmt add_image_checks_inner(Stmt s,
     prepend_stmts(&asserts_host_alignment);
     prepend_stmts(&asserts_device_not_dirty);
     prepend_stmts(&dims_no_overflow_asserts);
-    prepend_lets(&lets_overflow);
+    s = rewrap_all_lets(s, lets_overflow);
 
     // Replace uses of the var with the constrained versions in the
     // rest of the program. We also need to respect the existence of
@@ -726,13 +718,13 @@ Stmt add_image_checks_inner(Stmt s,
     prepend_stmts(&asserts_proposed);
 
     // Inject the code that defines the proposed sizes.
-    prepend_lets(&lets_proposed);
+    s = rewrap_all_lets(s, lets_proposed);
 
     // Inject the code that defines the constrained sizes.
-    prepend_lets(&lets_constrained);
+    s = rewrap_all_lets(s, lets_constrained);
 
     // Inject the code that defines the required sizes produced by bounds inference.
-    prepend_lets(&lets_required);
+    s = rewrap_all_lets(s, lets_required);
 
     // Inject the code that checks that does msan checks. (Note that this ignores no_asserts.)
     prepend_stmts(&msan_checks);

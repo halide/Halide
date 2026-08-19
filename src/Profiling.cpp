@@ -356,9 +356,17 @@ protected:
            ParallelLoops,
            ParallelTasks,
            PointsRequiredAtRoot,
-           PointsComputed };
+           PointsComputed,
+           ScalarLoads,
+           VectorLoads,
+           Gathers,
+           BytesLoaded,
+           ScalarStores,
+           VectorStores,
+           Scatters,
+           BytesStored };
 
-    static constexpr int num_counters = PointsComputed + 1;
+    static constexpr int num_counters = BytesStored + 1;
 
     struct Counters {
 
@@ -706,6 +714,10 @@ protected:
     bool is_real_data_buffer(const Store *op) const {
         return op->param.defined() || is_func(names.prefix(op->name));
     }
+    bool is_real_data_buffer(const Load *op) const {
+        return op->param.defined() || op->image.defined() ||
+               is_func(names.prefix(op->name));
+    }
 
     Stmt visit(const Store *op) override {
         if (is_real_data_buffer(op)) {
@@ -718,6 +730,17 @@ protected:
                          names.id_for_name(f);
             Counters &c = counters[id];
             int lanes = op->value.type().lanes();
+            // Classify the store by its index: scalar, unit-stride vector, or
+            // scatter. Drives the vectorization performance warnings.
+            if (op->index.type().is_scalar()) {
+                c.count(ScalarStores);
+            } else if (const Ramp *r = op->index.as<Ramp>();
+                       r && is_const_one(r->stride)) {
+                c.count(VectorStores);
+            } else {
+                c.count(Scatters);
+            }
+            c.count(BytesStored, make_const(UInt(64), op->value.type().bytes() * lanes));
             // Only the pure def (stage 0) contributes to "points computed";
             // update-def stores are a separate kind of work and shouldn't
             // show up as recompute. For Tuple-valued Funcs each output
@@ -733,6 +756,25 @@ protected:
                     c.count(PointsComputed, make_const(UInt(64), lanes));
                 }
             }
+        }
+        return IRMutator::visit(op);
+    }
+
+    Expr visit(const Load *op) override {
+        // We bill these to the Func we're producing, not the Func being
+        // loaded. These counters are about what kinds of loads we do while
+        // computing a given Func.
+        if (producer_id >= 0 && is_real_data_buffer(op)) {
+            Counters &c = counters[producer_id];
+            if (op->index.type().is_scalar()) {
+                c.count(ScalarLoads);
+            } else if (const Ramp *r = op->index.as<Ramp>();
+                       r && is_const_one(r->stride)) {
+                c.count(VectorLoads);
+            } else {
+                c.count(Gathers);
+            }
+            c.count(BytesLoaded, make_const(UInt(64), op->type.bytes() * op->type.lanes()));
         }
         return IRMutator::visit(op);
     }

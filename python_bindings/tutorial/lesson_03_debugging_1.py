@@ -5,10 +5,6 @@
 # This lesson demonstrates how to inspect what the Halide compiler is
 # producing.
 
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_03_debugging_1
-# in a shell with the current directory at python_bindings/
-
 import halide as hl
 
 
@@ -16,11 +12,12 @@ def main():
     # We'll start by defining the simple single-stage imaging
     # pipeline from lesson 1.
 
-    # This lesson will be about debugging, but unfortunately in C++,
-    # objects don't know their own names, which makes it hard for us
-    # to understand the generated code. To get around this, you can
-    # pass a string to the hl.Func and hl.Var constructors to give them a
-    # name for debugging purposes.
+    # This lesson will be about debugging, but unfortunately Halide
+    # objects don't know the name of the Python variable they're
+    # assigned to, which makes it hard for us to understand the
+    # generated code. To get around this, you can pass a string to
+    # the hl.Func and hl.Var constructors to give them a name for
+    # debugging purposes.
     gradient = hl.Func("gradient")
     x, y = hl.Var("x"), hl.Var("y")
     gradient[x, y] = x + y

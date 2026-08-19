@@ -40,10 +40,9 @@ target_link_libraries(
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/bayer_raw.png)
 if (EXISTS ${IMAGE})
-    configure_file(${IMAGE} bayer_raw.png COPYONLY)
     add_test(
         NAME camera_pipe_process
-        COMMAND camera_pipe_process bayer_raw.png 3700 2.0 50 1.0 5 out.png
+        COMMAND camera_pipe_process ${IMAGE} 3700 2.0 50 1.0 5 out.png
     )
     set_tests_properties(
         camera_pipe_process

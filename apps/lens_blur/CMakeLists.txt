@@ -45,11 +45,7 @@ if (EXISTS ${IMAGE})
         # threads per block because of the register pressure in lens_blur's GPU kernel.
         message ("Pipeline lens_blur_auto_schedule skipped for target host-metal")
     else ()
-        configure_file(${IMAGE} rgb_small.png COPYONLY)
-        add_test(
-            NAME lens_blur_filter
-            COMMAND lens_blur_filter rgb_small.png 32 13 0.5 32 3 out.png
-        )
+        add_test(NAME lens_blur_filter COMMAND lens_blur_filter ${IMAGE} 32 13 0.5 32 3 out.png)
         set_tests_properties(
             lens_blur_filter
             PROPERTIES

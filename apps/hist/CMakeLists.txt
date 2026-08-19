@@ -31,8 +31,7 @@ target_link_libraries(hist_filter PRIVATE Halide::ImageIO Halide::Tools hist his
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgba.png)
 if (EXISTS ${IMAGE})
-    configure_file(${IMAGE} rgba.png COPYONLY)
-    add_test(NAME hist_filter COMMAND hist_filter rgba.png out.png)
+    add_test(NAME hist_filter COMMAND hist_filter ${IMAGE} out.png)
     set_tests_properties(
         hist_filter
         PROPERTIES

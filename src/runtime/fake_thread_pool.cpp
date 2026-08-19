@@ -126,6 +126,11 @@ WEAK int halide_set_num_threads(int n) {
     return 1;
 }
 
+WEAK int halide_get_num_threads() {
+    // This thread pool never runs work on any thread but the caller.
+    return 1;
+}
+
 WEAK halide_do_task_t halide_set_custom_do_task(halide_do_task_t f) {
     halide_do_task_t result = custom_do_task;
     custom_do_task = f;
