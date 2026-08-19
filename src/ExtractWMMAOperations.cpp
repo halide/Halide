@@ -558,6 +558,10 @@ class ExtractWMMAOperations : public IRMutator {
     // into it.
     vector<std::pair<string, Expr>> let_values;
 
+    // The range of every enclosing loop, so that a loop that runs once can be
+    // recognized as one.
+    Scope<Interval> loop_bounds;
+
     // Lets whose value to_fragment has restricted to this lane's share of the
     // matrix, so that uses of them must be restricted too.
     Scope<> matrix_lets;
@@ -630,6 +634,17 @@ class ExtractWMMAOperations : public IRMutator {
         return result;
     }
 
+    // An index with the lets substituted back in and simplified knowing what
+    // the enclosing loops bound its variables to, which is what settles
+    // questions like whether an offset into a fragment is really zero. Likely
+    // markers say which side of a branch to generate good code for rather than
+    // anything about the value, and loop partitioning has not consumed them
+    // yet, so they only get in the way here.
+    Expr index_for_analysis(const Expr &index) {
+        return simplify(remove_likelies(index_within_thread(without_lets(index))),
+                        loop_bounds);
+    }
+
     Stmt visit(const LetStmt *op) override {
         let_values.emplace_back(op->name, op->value);
         Stmt s = IRMutator::visit(op);
@@ -638,7 +653,10 @@ class ExtractWMMAOperations : public IRMutator {
     }
 
     string subtile_name(Fragment *f, const Expr &index) {
-        int idx = get_subtile(index_within_thread(index),
+        // Which tile an access lands in has to be settled here, so the index
+        // needs the surrounding lets substituted back in for the same reason
+        // the stored value does.
+        int idx = get_subtile(index_for_analysis(index),
                               "tensor core fragment", &f->subtiles);
         internal_assert(idx >= 0);  // errors handled already
         return f->fragment_name + std::to_string(idx);
@@ -1235,6 +1253,20 @@ class ExtractWMMAOperations : public IRMutator {
     }
 
     Stmt visit(const For *op) override {
+        ScopedBinding<Interval> bind_bounds(loop_bounds, op->name,
+                                            Interval(op->min, op->max));
+
+        // A loop that runs once names the same value throughout, so treat its
+        // variable like a let. Sliding window leaves loops in this shape once
+        // the likely markers that loop partitioning has yet to consume are set
+        // aside, which can_prove does for itself.
+        if (can_prove(without_lets(op->min == op->max), loop_bounds)) {
+            let_values.emplace_back(op->name, op->min);
+            Stmt s = IRMutator::visit(op);
+            let_values.pop_back();
+            return s;
+        }
+
         if (!is_gpu(op->for_type)) {
             return IRMutator::visit(op);
         }
@@ -1344,7 +1376,7 @@ class ExtractWMMAOperations : public IRMutator {
     bool read_entries(Fragment *f, const Expr &index, vector<int> *subtile,
                       vector<int> *entry) {
         MultiRamp read;
-        if (!is_multiramp(index_within_thread(index), Scope<Expr>::empty_scope(), &read)) {
+        if (!is_multiramp(index_for_analysis(index), Scope<Expr>::empty_scope(), &read)) {
             return false;
         }
 
