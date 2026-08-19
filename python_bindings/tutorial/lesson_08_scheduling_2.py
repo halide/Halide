@@ -4,10 +4,6 @@
 
 # This lesson demonstrates how schedule multi-stage pipelines.
 
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_08_scheduling_2
-# in a shell with the current directory at python_bindings/
-
 import halide as hl
 import numpy as np
 import math
@@ -441,7 +437,7 @@ def main():
     # iterations are lying around for us to reuse. This assumes that
     # previous values of x or y happened earlier in time and have
     # finished. This is not true if you parallelize or vectorize
-    # either loop. Darn. If you parallelize, Halide won't inject the
+    # either loop. If you parallelize, Halide won't inject the
     # optimizations that skip work already done if there's a parallel
     # loop in between the store_at level and the compute_at level,
     # and won't fold the storage down into a circular buffer either,
@@ -659,8 +655,6 @@ def main():
         consumer.print_loop_nest()
         print()
 
-        # Look on my code, ye mighty, and despair!
-
         # Let's check the C result against the Halide result. Doing
         # this I found several bugs in my C implementation, which
         # should tell you something.
@@ -675,7 +669,7 @@ def main():
     # This stuff is hard. We ended up in a three-way trade-off
     # between memory bandwidth, redundant work, and
     # parallelism. Halide can't make the correct choice for you
-    # automatically (sorry). Instead it tries to make it easier for
+    # automatically. Instead it tries to make it easier for
     # you to explore various options, without messing up your
     # program. In fact, Halide promises that scheduling calls like
     # compute_root won't change the meaning of your algorithm -- you

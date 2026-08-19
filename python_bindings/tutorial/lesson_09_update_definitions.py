@@ -5,9 +5,6 @@
 # This lesson demonstrates how to define a hl.Func in multiple passes,
 # including scattering.
 
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_09_update_definitions
-# in a shell with the current directory at python_bindings/
 import halide as hl
 
 import halide.imageio

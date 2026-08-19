@@ -1,4 +1,4 @@
-// Halide tutorial lesson 10: AOT compilation part 2
+// Halide tutorial lesson 10: AOT compilation: running the compiled pipeline
 
 // Before reading this file, see lesson_10_aot_compilation_generate.cpp
 

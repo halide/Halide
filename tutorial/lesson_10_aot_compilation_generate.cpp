@@ -1,4 +1,4 @@
-// Halide tutorial lesson 10: AOT compilation part 1
+// Halide tutorial lesson 10: AOT compilation: compiling the pipeline
 
 // This lesson demonstrates how to use Halide as an more traditional
 // ahead-of-time (AOT) compiler.
@@ -10,26 +10,20 @@
 // compiling this code is a multi-step process.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_10*generate.cpp -g -std=c++17 -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_10_generate
-// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_10_generate
-// g++ lesson_10*run.cpp lesson_10_halide.a -std=c++17 -I <path/to/Halide.h> -lpthread -ldl -o lesson_10_run
+// g++ lesson_10*generate.cpp -g -std=c++17 -I <path/to/include> -L <path/to/lib> -lHalide -lpthread -ldl -o lesson_10_generate
+// LD_LIBRARY_PATH=<path/to/lib> ./lesson_10_generate
+// g++ lesson_10*run.cpp lesson_10_halide.a -std=c++17 -I <path/to/include> -lpthread -ldl -o lesson_10_run
 // ./lesson_10_run
 
-// On os x:
-// g++ lesson_10*generate.cpp -g -std=c++17 -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_10_generate
-// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_10_generate
-// g++ lesson_10*run.cpp lesson_10_halide.a -o lesson_10_run -I <path/to/Halide.h>
+// On macOS:
+// g++ lesson_10*generate.cpp -g -std=c++17 -I <path/to/include> -L <path/to/lib> -lHalide -o lesson_10_generate
+// DYLD_LIBRARY_PATH=<path/to/lib> ./lesson_10_generate
+// g++ lesson_10*run.cpp lesson_10_halide.a -std=c++17 -o lesson_10_run -I <path/to/include>
 // ./lesson_10_run
 
 // The benefits of this approach are that the final program:
 // - Doesn't do any jit compilation at runtime, so it's fast.
 // - Doesn't depend on libHalide at all, so it's a small, easy-to-deploy binary.
-
-// If you have the entire Halide source tree, you can also build it by
-// running:
-//    make tutorial_lesson_10_aot_compilation_run
-// in a shell with the current directory at the top of the halide
-// source tree.
 
 #include "Halide.h"
 #include <cstdio>

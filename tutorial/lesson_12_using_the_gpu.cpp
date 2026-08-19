@@ -3,25 +3,19 @@
 // This lesson demonstrates how to use Halide to run code on a GPU using OpenCL.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_12*.cpp -g -std=c++17 -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide `libpng-config --cflags --ldflags` -ljpeg -lpthread -ldl -o lesson_12
-// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_12
+// g++ lesson_12*.cpp -g -std=c++17 -I <path/to/include> -I <path/to/tools> -L <path/to/lib> -lHalide $(pkg-config --cflags --libs libpng libjpeg) -lpthread -ldl -o lesson_12
+// LD_LIBRARY_PATH=<path/to/lib> ./lesson_12
 
-// On os x:
-// g++ lesson_12*.cpp -g -std=c++17 -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide `libpng-config --cflags --ldflags` -ljpeg -o lesson_12
-// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_12
-
-// If you have the entire Halide source tree, you can also build it by
-// running:
-//    make tutorial_lesson_12_using_the_gpu
-// in a shell with the current directory at the top of the halide
-// source tree.
+// On macOS:
+// g++ lesson_12*.cpp -g -std=c++17 -I <path/to/include> -I <path/to/tools> -L <path/to/lib> -lHalide $(pkg-config --cflags --libs libpng libjpeg) -o lesson_12
+// DYLD_LIBRARY_PATH=<path/to/lib> ./lesson_12
 
 #include "Halide.h"
 
 #include <cstdio>
 
-// Include a clock to do performance testing.
-#include "clock.h"
+// Include halide_benchmark.h to do performance testing.
+#include "halide_benchmark.h"
 
 // Include some support code for loading pngs.
 #include "halide_image_io.h"
@@ -205,7 +199,7 @@ public:
         double best_time = 0.0;
         for (int i = 0; i < 3; i++) {
 
-            double t1 = current_time();
+            auto t1 = benchmark_now();
 
             // Run the filter 100 times.
             for (int j = 0; j < 100; j++) {
@@ -215,9 +209,9 @@ public:
             // Force any GPU code to finish by copying the buffer back to the CPU.
             output.copy_to_host();
 
-            double t2 = current_time();
+            auto t2 = benchmark_now();
 
-            double elapsed = (t2 - t1) / 100;
+            double elapsed = 1000 * benchmark_duration_seconds(t1, t2) / 100;
             if (i == 0 || elapsed < best_time) {
                 best_time = elapsed;
             }
@@ -296,8 +290,6 @@ Target find_gpu_target() {
         }
         features_to_try.push_back(Target::OpenCL);
     } else if (target.os == Target::OSX) {
-        // OS X doesn't update its OpenCL drivers, so they tend to be broken.
-        // CUDA would also be a fine choice on machines with NVidia GPUs.
         features_to_try.push_back(Target::Metal);
     } else {
         features_to_try.push_back(Target::OpenCL);
