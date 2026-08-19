@@ -294,23 +294,27 @@ private:
         } else {
 
             Type t = op->type.with_lanes(new_lanes);
-            if (external_lets.contains(op->name) &&
+            // These lets are defined by the mutator below, which splits a
+            // vector let into exactly two halves or exactly three thirds. A
+            // partial extract doesn't correspond to any of them.
+            const bool whole = new_lanes * lane_stride == op->type.lanes();
+            if (whole && external_lets.contains(op->name) &&
                 starting_lane == 0 &&
                 lane_stride == 2) {
                 return Variable::make(t, op->name + ".even_lanes", op->image, op->param, op->reduction_domain);
-            } else if (external_lets.contains(op->name) &&
+            } else if (whole && external_lets.contains(op->name) &&
                        starting_lane == 1 &&
                        lane_stride == 2) {
                 return Variable::make(t, op->name + ".odd_lanes", op->image, op->param, op->reduction_domain);
-            } else if (external_lets.contains(op->name) &&
+            } else if (whole && external_lets.contains(op->name) &&
                        starting_lane == 0 &&
                        lane_stride == 3) {
                 return Variable::make(t, op->name + ".lanes_0_of_3", op->image, op->param, op->reduction_domain);
-            } else if (external_lets.contains(op->name) &&
+            } else if (whole && external_lets.contains(op->name) &&
                        starting_lane == 1 &&
                        lane_stride == 3) {
                 return Variable::make(t, op->name + ".lanes_1_of_3", op->image, op->param, op->reduction_domain);
-            } else if (external_lets.contains(op->name) &&
+            } else if (whole && external_lets.contains(op->name) &&
                        starting_lane == 2 &&
                        lane_stride == 3) {
                 return Variable::make(t, op->name + ".lanes_2_of_3", op->image, op->param, op->reduction_domain);
