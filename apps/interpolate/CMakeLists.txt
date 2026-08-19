@@ -36,8 +36,7 @@ target_link_libraries(
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgba.png)
 if (EXISTS ${IMAGE})
-    configure_file(${IMAGE} rgba.png COPYONLY)
-    add_test(NAME interpolate_filter COMMAND interpolate_filter rgba.png out.png)
+    add_test(NAME interpolate_filter COMMAND interpolate_filter ${IMAGE} out.png)
     set_tests_properties(
         interpolate_filter
         PROPERTIES
