@@ -113,7 +113,7 @@ HALIDE_NEVER_INLINE Body Simplify::simplify_let_inner(const LetOrLetStmt *op, Ex
 
         // Iteratively peel off certain operations from the let value and push them inside.
         f.new_value = f.value;
-        f.new_name = op->name + ".s";
+        f.new_name = unique_name('t');
         Expr new_var = Variable::make(f.new_value.type(), f.new_name);
         Expr replacement = new_var;
 
