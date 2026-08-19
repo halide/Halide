@@ -61,6 +61,19 @@ enum IndexMode {
     NUM_INDEX_MODES
 };
 constexpr bool generate_index_modes = true;
+// Whether every stage from `i` onwards indexes its producer normally. Sliding
+// a stage over y as well as x needs the region required of it in y to depend
+// only on y, and that's a property of the whole chain of consumers between it
+// and the output, not just of the stage itself.
+template<typename Stages>
+bool all_normal_downstream(const Stages &stages, int i) {
+    for (int j = i; j < (int)stages.size(); j++) {
+        if (stages[j].index_mode != NORMAL) {
+            return false;
+        }
+    }
+    return true;
+}
 // Give some stages update definitions. A Func with updates slides differently:
 // the bounds of every stage have to move together, and the region computed has
 // to cover what the earlier stages wrote. An update that scatters along the
@@ -595,7 +608,19 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
                                         consumer->level == first_consumer->level &&
                                         consumer->compute_at == first_consumer->compute_at;
                 }
+                // Rolling a register array only shrinks the dimension it
+                // rolls, which is the one that moves with the innermost loop.
+                // Every other dimension keeps whatever extent the store level
+                // gives it, so a store level outside the output's loops over y
+                // leaves an extent that grows with the output, and a register
+                // allocation has to have a fixed size.
+                const Loop &st = producer->store_at;
+                bool store_level_bounds_the_other_dimensions =
+                    !st.is_root() &&
+                    !(st.func == num_stages - 1 && st.var == 0);
+
                 bool small_enough_for_registers =
+                    store_level_bounds_the_other_dimensions &&
                     !c.is_root() &&
                     c.var == (int)stages[c.func].vars.size() - 1 &&
                     !producer->bent &&
@@ -745,9 +770,10 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
                            // x and y are dimensions the window can advance
                            // along from here.
                            compute_at.var == 3 &&
-                           // Any other index mode can make the region required
-                           // in y move with the x loop, which is rejected.
-                           stages[i].index_mode == NORMAL) {
+                           // Any other index mode anywhere between here and
+                           // the output can make the region required in y
+                           // move with the x loop, which is rejected.
+                           all_normal_downstream(stages, i)) {
                     stages[i].f.slide(stages.back().f, x).slide(stages.back().f, y);
                     source << ".slide(f[" << (num_stages - 1) << "], x)"
                            << ".slide(f[" << (num_stages - 1) << "], y)";
