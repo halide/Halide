@@ -52,6 +52,16 @@ Expr Simplify::visit(const Or *op, ExprInfo *info) {
          rewrite((y || x) || (neg(x) || z), true) ||
          rewrite((y || x) || (z || neg(x)), true) ||
          rewrite(!((x && z) && y) || x, true) ||
+         // The same absorptions, but where the term that survives is the
+         // second operand of the conjunction rather than the first.
+         rewrite(x || !(y && x), true) ||
+         rewrite(x || !((y && x) && z), true) ||
+         rewrite(x || !(y && (z && x)), true) ||
+         rewrite(x || !(y && (x && z)), true) ||
+         rewrite(!(x && y) || y, true) ||
+         rewrite(!((x && y) && z) || y, true) ||
+         rewrite(!(x && (y && z)) || y, true) ||
+         rewrite(!(x && (y && z)) || z, true) ||
          rewrite((!(x && z) || y) || x, true) ||
          rewrite((y || !(x && z)) || x, true) ||
          rewrite((!(z && x) || y) || x, true) ||
