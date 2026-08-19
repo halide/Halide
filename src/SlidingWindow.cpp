@@ -386,9 +386,17 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     Scope<Interval> &bounds_scope;
 
     // Whether the thing being slid over can have iterations prepended to it.
-    // A loop can; a let that names a dimension spread across several loops
-    // can't, so those warm up with a select instead.
+    // A loop can. A dimension spread across several loops can too, by
+    // prepending them to the outermost loop it depends on, but only if that
+    // loop moves it by a fixed amount. Anything else warms up with a select.
     bool can_rewind = true;
+
+    // Whether we're sliding over a dimension rather than a loop. The warm-up
+    // iterations then come from a loop that moves the dimension in steps, so
+    // they can reach further back than asked for. The producer is guarded
+    // instead of having its bounds clamped, which keeps the region it computes
+    // the plain steady state.
+    bool over_dimension = false;
 
     // For loops strictly between the loop being slid over and the current
     // node (not including the loop being slid over itself).
@@ -619,12 +627,21 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // warming up a sliding window of its own. The region this func
             // must retain has to cover what those warm-up iterations ask
             // for too.
-            if (can_slide_up) {
-                Expr min_required_at_loop_min = substitute(loop_var, loop_min, min_required);
-                new_min = max(new_min, min_required_at_loop_min);
-            } else {
-                Expr max_required_at_loop_min = substitute(loop_var, loop_min, max_required);
-                new_max = min(new_max, max_required_at_loop_min);
+            // Sliding over a loop clamps the region here, so that the
+            // rewound iterations stay empty until they have something to
+            // contribute. That leaves the producer's bounds depending on how
+            // far through the warm-up we are, and only loop partitioning takes
+            // it back out. Sliding over a dimension guards the producer
+            // instead, so its bounds stay the steady state and nothing has to
+            // be peeled to see that.
+            if (!over_dimension) {
+                if (can_slide_up) {
+                    Expr min_required_at_loop_min = substitute(loop_var, loop_min, min_required);
+                    new_min = max(new_min, min_required_at_loop_min);
+                } else {
+                    Expr max_required_at_loop_min = substitute(loop_var, loop_min, max_required);
+                    new_max = min(new_max, max_required_at_loop_min);
+                }
             }
         } else {
             // We couldn't find a suitable new loop min, so we can't assume
@@ -763,9 +780,11 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
 public:
     SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min, set<int> &slid_dimensions,
-                                   Scope<Interval> &bounds_scope, bool can_rewind = true)
+                                   Scope<Interval> &bounds_scope, bool can_rewind = true,
+                                   bool over_dimension = false)
         : func(std::move(f)), loop_var(std::move(v)), loop_min(std::move(v_min)),
-          slid_dimensions(slid_dimensions), bounds_scope(bounds_scope), can_rewind(can_rewind) {
+          slid_dimensions(slid_dimensions), bounds_scope(bounds_scope),
+          can_rewind(can_rewind), over_dimension(over_dimension) {
         decision.func_name = func.name();
         decision.slide_over = loop_var;
     }
@@ -828,6 +847,14 @@ class InjectWarmupGuards : public IRMutator {
     // The loop min before anything rewound it.
     const Expr &orig_loop_min;
     FuncDependencies &deps;
+    // Whether the thing guarded on is the innermost loop. When it's a
+    // dimension spread across several loops it isn't, and asking only for
+    // innermost partitioning would leave the warm-up folded into the steady
+    // state as a clamp on the region required, which keeps the producer's
+    // trip count data-dependent.
+    bool innermost;
+    // Whether a producer that is warming up needs a guard of its own.
+    bool guard_warming_producers;
 
     // Memoized, because answering the question requires a traversal. An
     // undefined Expr means the func's producer needs no guard.
@@ -839,8 +866,13 @@ class InjectWarmupGuards : public IRMutator {
             return cached->second;
         }
         Expr start = orig_loop_min;
-        if (warmup_starts.count(func)) {
-            start = Expr();
+        auto w = warmup_starts.find(func);
+        if (w != warmup_starts.end()) {
+            // A producer warming up needs no guard when the loop was rewound
+            // to exactly where it starts, because its bounds are empty until
+            // it has work. Rewinding a dimension moves in steps and can
+            // overshoot, so it gets a guard saying where its work begins.
+            start = guard_warming_producers ? w->second : Expr();
         } else {
             for (const auto &w : warmup_starts) {
                 if (deps.depends_on(func, w.first)) {
@@ -880,7 +912,8 @@ class InjectWarmupGuards : public IRMutator {
         if (!current_start.defined()) {
             return s;
         }
-        Expr guard = likely_if_innermost(current_start <= Variable::make(Int(32), loop_var));
+        Expr cond = current_start <= Variable::make(Int(32), loop_var);
+        Expr guard = innermost ? likely_if_innermost(cond) : likely(cond);
         debug(3) << "Guarding body " << guard << "\n";
         return IfThenElse::make(guard, s);
     }
@@ -921,9 +954,12 @@ class InjectWarmupGuards : public IRMutator {
 
 public:
     InjectWarmupGuards(const map<string, Expr> &warmup_starts, const string &loop_var,
-                       const Expr &orig_loop_min, FuncDependencies &deps)
+                       const Expr &orig_loop_min, FuncDependencies &deps,
+                       bool innermost = true, bool guard_warming_producers = false)
         : warmup_starts(warmup_starts), loop_var(loop_var),
-          orig_loop_min(orig_loop_min), deps(deps), current_start(orig_loop_min) {
+          orig_loop_min(orig_loop_min), deps(deps), innermost(innermost),
+          guard_warming_producers(guard_warming_producers),
+          current_start(orig_loop_min) {
     }
 };
 // Update the loop variable referenced by prefetch directives.
@@ -965,6 +1001,11 @@ class SlidingWindow : public IRMutator {
     // For funcs told which dimensions to slide over, which of those claimed
     // each dimension of the func's storage. Only used to explain errors.
     map<string, map<int, string>> slid_over_by;
+    // A dimension slides at the let that carries it, but the iterations that
+    // warm its window up have to come from a loop. This maps that loop to the
+    // number of its iterations to prepend. The loop reads it on the way back
+    // out, once the let inside has worked out how far back it needs to reach.
+    map<string, Expr> rewind_requests;
 
     // Keep track of realizations we want to slide, from innermost to
     // outermost.
@@ -1111,18 +1152,37 @@ class SlidingWindow : public IRMutator {
                 let_bounds.max = simplify(let_bounds.max);
             }
         }
-        // Simplify the ends before they go into scope. Anything that consults
-        // them has to recognize a constant to be able to use it, and the
-        // bounds of a dimension assembled from several loops arrive as
-        // unsimplified arithmetic on their mins and extents.
         ScopedBinding<Interval> bind(bounds_scope, op->name, let_bounds);
         ScopedBinding<Expr> bind_value(let_values, op->name, op->value);
 
-        // Anything told to slide over this dimension slides here rather than
-        // over some loop. The let can't have iterations prepended to it, so
-        // these warm up with a select instead of by rewinding.
+        // The window warms up by prepending iterations to the outermost loop
+        // the dimension depends on. One iteration of that loop moves the
+        // dimension by this much, which is what turns a distance to reach back
+        // along the dimension into a number of iterations to prepend.
+        string rewind_loop;
+        Expr stride;
+        {
+            Expr v = expand_expr(op->value, let_values);
+            for (const string &loop : loop_stack) {
+                if (expr_uses_var(v, loop)) {
+                    rewind_loop = loop;
+                    break;
+                }
+            }
+            if (!rewind_loop.empty()) {
+                Expr var = Variable::make(Int(32), rewind_loop);
+                stride = simplify(substitute(rewind_loop, var + 1, v) - v);
+            }
+        }
+        // Without a fixed stride there's no way to say how many iterations
+        // reach back far enough, so those warm up with a select instead.
+        const bool can_rewind = stride.defined() && is_positive_const(stride);
+
         Stmt body = op->body;
         bool slid_any = false;
+        // For each func warming up here, the value of the dimension it starts
+        // at. Everything else waits for the dimension to reach its real min.
+        map<string, Expr> warming_up;
         for (const Function &func : consumers_first(sliding)) {
             if (!slides_over(func, op->name)) {
                 continue;
@@ -1134,12 +1194,23 @@ class SlidingWindow : public IRMutator {
             set<int> &slid_dims = slid_dimensions[func.name()];
             SlidingWindowOnFunctionAndLoop slider(func, op->name, let_bounds.min,
                                                   slid_dims, bounds_scope,
-                                                  /* can_rewind */ false);
+                                                  can_rewind, /* over_dimension */ true);
             body = slider(body);
             debug(3) << slider.decision;
             check_not_entangled(func, op->name, slider.decision);
             if (slider.decision.slid()) {
                 slid_over_by[func.name()][slider.decision.dim_idx] = op->name;
+            }
+            if (slider.decision.warmup_start.defined()) {
+                // Reaching back to here along the dimension takes this many
+                // iterations of the loop, rounded up. Rewinding further than
+                // asked for is harmless: the extra iterations are guarded off
+                // below, and the window is empty until it has work to do.
+                Expr steps = simplify(
+                    (let_bounds.min - slider.decision.warmup_start + stride - 1) / stride);
+                Expr &request = rewind_requests[rewind_loop];
+                request = request.defined() ? simplify(max(request, steps)) : steps;
+                warming_up[func.name()] = slider.decision.warmup_start;
             }
             slid_any = true;
 
@@ -1184,6 +1255,15 @@ class SlidingWindow : public IRMutator {
                     body = Block::make(Evaluate::make(marker), body);
                 }
             }
+        }
+        if (!warming_up.empty()) {
+            // The dimension now starts before its real min. Everything the
+            // extra iterations aren't there to warm up has to be skipped over.
+            // The guard is on the dimension, not on a loop var, because no
+            // single loop corresponds to it.
+            body = InjectWarmupGuards(warming_up, op->name, let_bounds.min, deps,
+                                      /* innermost */ false,
+                                      /* guard_warming_producers */ true)(body);
         }
         if (slid_any) {
             return LetStmt::make(op->name, op->value, mutate(body));
@@ -1418,6 +1498,20 @@ class SlidingWindow : public IRMutator {
             loop_stack.push_back(name);
             body = mutate(body);
             loop_stack.pop_back();
+        }
+
+        {
+            // A let inside this loop slid a dimension over it and needs
+            // iterations prepended to warm the window up. How many wasn't
+            // known until we descended, so the count is a symbol here and
+            // gets its value below, outside the loop.
+            auto it = rewind_requests.find(name);
+            if (it != rewind_requests.end()) {
+                string steps_name = name + ".warmup_steps";
+                loop_min = loop_min - Variable::make(Int(32), steps_name);
+                new_lets.emplace_front(steps_name, simplify(max(it->second, 0)));
+                rewind_requests.erase(it);
+            }
         }
 
         if (body.same_as(op->body) && loop_min.same_as(op->min) && loop_max.same_as(op->max) && name == op->name) {
