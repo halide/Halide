@@ -46,8 +46,6 @@ bool debug_is_active_impl(int verbosity, const char *file, const char *function,
 class DebugStream : public std::ostringstream {
 public:
     DebugStream() = default;
-    DebugStream(const DebugStream &) = delete;
-    DebugStream &operator=(const DebugStream &) = delete;
     ~DebugStream() override;
 
     /** Exposes this object as a plain std::ostream&, so every `<<` in a

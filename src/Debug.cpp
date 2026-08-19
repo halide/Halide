@@ -5,8 +5,10 @@
 #include <algorithm>
 #include <cerrno>
 #include <climits>
+#include <functional>
 #include <iostream>
 #include <optional>
+#include <variant>
 
 #include <fcntl.h>
 
@@ -137,14 +139,9 @@ bool rules_accept(const std::vector<DebugRule> &rules, const int verbosity,
     });
 }
 
-enum class DebugSinkKind { Cerr,
-                           Cout,
-                           File };
-
-struct DebugSink {
-    DebugSinkKind kind = DebugSinkKind::Cerr;
-    int fd = -1;  // Valid only when kind == File.
-};
+// Either a std::ostream to write to (cerr/cout) or a raw fd to write to (an
+// HL_DEBUG_CODEGEN_LOG_FILE opened via open_append_only).
+using DebugSink = std::variant<std::reference_wrapper<std::ostream>, int>;
 
 // Opened directly at the OS level (rather than via std::ofstream) so that
 // DebugStream's destructor can write each debug() statement's output with a
@@ -165,19 +162,19 @@ DebugSink make_debug_sink() {
     // /dev/stdout and /dev/stderr are handled explicitly both for compatibility
     // with Windows and for consistency with interleaved std::cout and std::cerr.
     if (log_file.empty() || log_file == "/dev/stderr") {
-        return {DebugSinkKind::Cerr};
+        return std::ref(std::cerr);
     }
     if (log_file == "/dev/stdout") {
-        return {DebugSinkKind::Cout};
+        return std::ref(std::cout);
     }
     const int fd = open_append_only(log_file);
     if (fd < 0) {
         issue_warning(("Warning: Could not open HL_DEBUG_CODEGEN_LOG_FILE: " + log_file +
                        "; falling back to stderr\n")
                           .c_str());
-        return {DebugSinkKind::Cerr};
+        return std::ref(std::cerr);
     }
-    return {DebugSinkKind::File, fd};
+    return fd;
 }
 
 const DebugSink &debug_sink() {
@@ -190,7 +187,9 @@ const DebugSink &debug_sink() {
 // loop only guards against the rare partial write (e.g. an EINTR-interrupted
 // call), at the cost of the atomicity guarantee above in that rare case.
 void write_all(int fd, const char *data, size_t size) {
+#ifndef _WIN32
     int n_retries = 16;
+#endif
     while (size > 0) {
 #ifdef _WIN32
         const int n = _write(fd, data, (unsigned int)std::min<size_t>(size, INT_MAX));
@@ -212,23 +211,12 @@ void write_all(int fd, const char *data, size_t size) {
 }  // namespace
 
 DebugStream::~DebugStream() {
-    const std::string s = str();
-    if (s.empty()) {
-        return;
-    }
-    const DebugSink &sink = debug_sink();
-    switch (sink.kind) {
-    case DebugSinkKind::Cerr:
-        std::cerr << s;
-        std::cerr.flush();
-        break;
-    case DebugSinkKind::Cout:
-        std::cout << s;
-        std::cout.flush();
-        break;
-    case DebugSinkKind::File:
-        write_all(sink.fd, s.data(), s.size());
-        break;
+    if (std::string s = str(); !s.empty()) {
+        std::visit(LambdaOverloads{
+                       [&](int fd) { write_all(fd, s.data(), s.size()); },
+                       [&](auto osr) { osr.get() << s << std::flush; },
+                   },
+                   debug_sink());
     }
 }
 
