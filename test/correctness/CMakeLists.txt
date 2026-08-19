@@ -92,6 +92,7 @@ tests(
     deep_inline_chain.cpp
     deferred_loop_level.cpp
     deinterleave4.cpp
+    deinterleave_lets.cpp
     deinterleave_vector.cpp
     device_buffer_copies_with_profile.cpp
     device_buffer_copy.cpp

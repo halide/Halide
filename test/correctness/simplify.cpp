@@ -575,6 +575,22 @@ void check_algebra() {
     // The condition is enough to imply that y == 21, x == 339
     check(require(complex_cond, select(x % 2 == 0, 1237, y)),
           require(complex_cond, 21));
+
+    // Regrouping a shared addend
+    check(min(min(x, y + z), (w + z) + v), min(min(v + w, y) + z, x));
+    check(max(max(x, y + z), (w + z) + v), max(max(v + w, y) + z, x));
+
+    // A shared term that appears with both signs
+    check(min(x - y, x + z), x - max(0 - z, y));
+    check(max(x - y, x + z), x - min(0 - z, y));
+
+    // Clamped differences
+    check(min(min(x, y) - x, 0), min(y - x, 0));
+    check(max(max(x, y) - x, 0), max(y - x, 0));
+    check(min(min(x, 5) - min(y, 3), 2), min(x - min(y, 3), 2));
+    check(max(max(x, 3) - max(y, 5), 2), max(x - max(y, 5), 2));
+    check(max(min(x + (-3), y), x), x);
+    check(max(max((y + (-2)) / 4, x) * 4, y + 1), max(x * 4, y + 1));
 }
 
 void check_vectors() {
@@ -2037,6 +2053,21 @@ void check_boolean() {
         internal_assert(!can_prove(!likely(t)));
         internal_assert(!can_prove(!likely(x == 2)));
     }
+
+    // Comparing divisions with a rounded offset on both sides
+    check((x + 5) / 4 < (x + 2) / 4, f);
+    check(max((x + 5) / 4, y) < max((x + 2) / 4, y), f);
+
+    // Two equalities on the same variable, in different halves of a conjunction
+    check(((x == 1) && b1) && ((x == 2) && b2), f);
+
+    // Absorption through a negated conjunction
+    check(!(b1 && b2) || b2, t);
+    check((x < 5) || (x != 3), t);
+
+    // De Morgan collects negations into the smaller form
+    check(!b1 || !b2, !(b1 && b2));
+    check(!b1 && !b2, !(b1 || b2));
 }
 
 void check_math() {
