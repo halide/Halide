@@ -283,6 +283,22 @@ public:
 // is the entire output of the analysis - the rewrite consumes it and makes no
 // decisions of its own, and the guards injected afterwards are derived from
 // the decisions for all the Funcs around a loop.
+// The name the schedule used for the dimension a loop or let carries. Loop
+// and let names in the IR are mangled, so error messages use this instead.
+string slide_level_name(const Function &f, const string &loop) {
+    for (const LoopLevel &l : f.schedule().slide_levels()) {
+        if (l.defined() && !l.is_inlined() && !l.is_root() && l.match(loop)) {
+            return l.to_string();
+        }
+    }
+    return loop;
+}
+
+// A window can only slide over one schedule dimension per dimension of the
+// Func's storage. Naming two that move the same one is a scheduling error, so
+// this rejection reason gets compared against by pointer.
+constexpr const char *already_slid = "this dimension has already been slid over";
+
 struct SlideDecision {
     // What we were asked to consider. Today we always slide a Func over a
     // serial loop that we picked ourselves, but the schedule will eventually
@@ -466,7 +482,9 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         }
 
         if (!dim.empty() && slid_dimensions.count(dim_idx)) {
-            return result.reject("this dimension has already been slid over");
+            result.dim = dim;
+            result.dim_idx = dim_idx;
+            return result.reject(already_slid);
         }
         if (func.schedule().memory_type() == MemoryType::Register &&
             enclosing_real_loops > 0) {
@@ -491,7 +509,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // have been passed over by then.
             user_error
                 << "Func " << func.name() << " was told to slide over "
-                << func.schedule().slide_level().to_string() << ", but the "
+                << slide_level_name(func, loop_var) << ", but the "
                 << "region of it required also depends on a loop between that "
                 << "dimension and where " << func.name() << " is computed, so "
                 << "the window would have to move within a single value of "
@@ -944,6 +962,9 @@ class SlidingWindow : public IRMutator {
 
     // A map of which dimensions we've already slid over, by Func name.
     map<string, set<int>> slid_dimensions;
+    // For funcs told which dimensions to slide over, which of those claimed
+    // each dimension of the func's storage. Only used to explain errors.
+    map<string, map<int, string>> slid_over_by;
 
     // Keep track of realizations we want to slide, from innermost to
     // outermost.
@@ -977,7 +998,7 @@ class SlidingWindow : public IRMutator {
             if (expr_uses_var(expanded, loop_stack[i])) {
                 user_error
                     << "Func " << f.name() << " was told to slide over "
-                    << f.schedule().slide_level().to_string() << ", but that "
+                    << slide_level_name(f, let_name) << ", but that "
                     << "dimension varies over the loop " << loop_stack[i]
                     << ", which is outside " << f.name() << "'s storage. Sliding "
                     << "would read values from a previous iteration of that "
@@ -988,12 +1009,32 @@ class SlidingWindow : public IRMutator {
         }
     }
 
+    // Two dimensions a func was told to slide over move the same dimension of
+    // its storage. The window can only advance along that dimension once, so
+    // one of the two requests would be silently dropped.
+    void check_not_entangled(const Function &f, const string &dim,
+                             const SlideDecision &decision) {
+        if (decision.rejected != already_slid) {
+            return;
+        }
+        const string &other = slid_over_by[f.name()][decision.dim_idx];
+        user_error
+            << "Func " << f.name() << " was told to slide over both "
+            << slide_level_name(f, other) << " and " << slide_level_name(f, dim)
+            << ", but both of those move the same dimension ("
+            << decision.dim << ") of " << f.name() << ", so the window would "
+            << "have to advance along it twice. Slide over dimensions that "
+            << "move different dimensions of " << f.name() << ".\n";
+    }
+
     // Was this func told to slide over the dimension this let carries? After
     // splitting there's no loop with this name, but there is a let, because
     // the original var still has to be computed to evaluate the func's args.
     static bool slides_over(const Function &f, const string &let_name) {
-        const LoopLevel &l = f.schedule().slide_level();
-        return l.defined() && !l.is_inlined() && !l.is_root() && l.match(let_name);
+        const auto &levels = f.schedule().slide_levels();
+        return std::any_of(levels.begin(), levels.end(), [&](const LoopLevel &l) {
+            return l.defined() && !l.is_inlined() && !l.is_root() && l.match(let_name);
+        });
     }
 
     Stmt visit(const LetStmt *op) override {
@@ -1019,6 +1060,10 @@ class SlidingWindow : public IRMutator {
                                                   /* can_rewind */ false);
             body = slider(body);
             debug(3) << slider.decision;
+            check_not_entangled(func, op->name, slider.decision);
+            if (slider.decision.slid()) {
+                slid_over_by[func.name()][slider.decision.dim_idx] = op->name;
+            }
             slid_any = true;
 
             // Storage folding can't work this out for itself. The dimension
@@ -1157,10 +1202,11 @@ class SlidingWindow : public IRMutator {
         Expr orig_loop_min = Variable::make(Int(32), orig_loop_min_name);
 
         for (const Function &func : consumers_first(sliding)) {
-            if (func.schedule().slide_level().defined() &&
-                !func.schedule().slide_level().is_inlined()) {
-                // Told explicitly which dimension to slide over. That happens
-                // at the let that names it, not here.
+            if (!func.schedule().slide_levels().empty() &&
+                !slides_over(func, op->name)) {
+                // Told explicitly which dimensions to slide over, and this
+                // loop isn't one of them. A named dimension that no loop
+                // corresponds to slides at the let that carries it instead.
                 continue;
             }
             debug(3) << "Doing sliding window analysis on function " << func.name() << "\n";
@@ -1190,6 +1236,12 @@ class SlidingWindow : public IRMutator {
 
             body = slider(body);
             const SlideDecision &decision = slider.decision;
+            if (!func.schedule().slide_levels().empty()) {
+                check_not_entangled(func, op->name, decision);
+                if (decision.slid()) {
+                    slid_over_by[func.name()][decision.dim_idx] = op->name;
+                }
+            }
             if (decision.considered) {
                 plan.push_back(decision);
             }

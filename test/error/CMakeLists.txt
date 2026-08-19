@@ -120,6 +120,7 @@ tests(
     run_with_large_stack_throws.cpp
     rvar_fuse_reorder.cpp
     shift_inwards_and_blend_race.cpp
+    slide_entangled_dimensions.cpp
     slide_region_moves_with_inner_loop.cpp
     slide_storage_too_narrow.cpp
     sme_streaming_without_target_feature.cpp

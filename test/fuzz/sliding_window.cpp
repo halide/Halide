@@ -714,6 +714,10 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
                 // time sliding window runs. Draw unconditionally to keep the
                 // rng stream the same when this is turned off.
                 bool want_slide_directive = (rng() % 3) == 0;
+                // Sometimes name x too. Unlike y it is still a loop by the
+                // time sliding window runs, and naming both dimensions slides
+                // the window along both at once.
+                bool want_slide_x = (rng() % 3) == 0;
                 // Only legal if the storage lives across every loop y spans.
                 // y is split into yo and yi, so the storage has to be outside
                 // both of them.
@@ -732,6 +736,21 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
                     compute_at.var == 2) {
                     stages[i].f.slide(stages.back().f, y);
                     source << ".slide(f[" << (num_stages - 1) << "], y)";
+                } else if (generate_slide_directive && want_slide_x &&
+                           store_at != compute_at &&
+                           storage_outlives_y &&
+                           !compute_at.is_root() &&
+                           compute_at.func == num_stages - 1 &&
+                           // Computed at the output's innermost loop, so both
+                           // x and y are dimensions the window can advance
+                           // along from here.
+                           compute_at.var == 3 &&
+                           // Any other index mode can make the region required
+                           // in y move with the x loop, which is rejected.
+                           stages[i].index_mode == NORMAL) {
+                    stages[i].f.slide(stages.back().f, x).slide(stages.back().f, y);
+                    source << ".slide(f[" << (num_stages - 1) << "], x)"
+                           << ".slide(f[" << (num_stages - 1) << "], y)";
                 }
 
                 // Vectorizing or unrolling the producer's own loops changes

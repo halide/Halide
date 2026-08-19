@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include "expect_user_error.h"
 #include <stdio.h>
 
 using namespace Halide;
@@ -174,6 +175,103 @@ int main(int argc, char **argv) {
             return 1;
         }
     }
+
+    {
+        // A window can slide over more than one dimension at once, which
+        // sliding window analysis already does when it picks loops for
+        // itself. Naming dimensions doesn't give that up - the calls
+        // accumulate, and each named dimension advances the window along a
+        // different dimension of the producer.
+        Func f("f"), g("g");
+        Var x, y;
+        f(x, y) = counted(x + y);
+        g(x, y) = f(x, y) + f(x - 1, y) + f(x, y - 1) + f(x - 1, y - 1);
+        f.store_root().compute_at(g, x).slide(g, x).slide(g, y);
+
+        call_count = 0;
+        Buffer<int> out = g.realize({size, size});
+        for (int yy = 0; yy < size; yy++) {
+            for (int xx = 0; xx < size; xx++) {
+                int correct = (xx + yy) + (xx - 1 + yy) +
+                              (xx + yy - 1) + (xx - 1 + yy - 1);
+                if (out(xx, yy) != correct) {
+                    printf("g(%d, %d) = %d instead of %d\n", xx, yy,
+                           out(xx, yy), correct);
+                    return 1;
+                }
+            }
+        }
+        // One value of f per output, plus a row and a column to warm up.
+        const int ideal_2d = (size + 1) * (size + 1);
+        if (call_count != ideal_2d) {
+            printf("Sliding over two dimensions: f ran %d times, expected %d\n",
+                   call_count, ideal_2d);
+            return 1;
+        }
+    }
+
+    // The rest of this file is the scheduling mistakes the directive rejects.
+    // Each of them would otherwise slide a window over values that aren't
+    // there any more, or quietly not slide at all.
+#if HALIDE_WITH_EXCEPTIONS
+    if (!Halide::exceptions_enabled()) {
+        printf("[SKIP] the error cases need exceptions.\n");
+        printf("Success!\n");
+        return 0;
+    }
+
+    int failures = 0;
+
+    failures += !expect_user_error(
+        "storage_too_narrow", "have been thrown away", [] {
+            Func f("f"), g("g");
+            Var x("x"), y("y"), yo("yo"), yi("yi");
+            f(x, y) = x + y;
+            g(x, y) = f(x, y) + f(x, y - 1);
+            g.split(y, yo, yi, 4);
+            // y is spread across yo and yi, but f's storage only lives for
+            // one iteration of yo. Sliding over y would expect values from a
+            // previous iteration of yo, and the allocation holding them has
+            // been remade by then.
+            f.store_at(g, yo).compute_at(g, x).slide(g, y);
+            g.realize({8, 16});
+        });
+
+    failures += !expect_user_error(
+        "region_moves_with_inner_loop", "within a single value", [] {
+            Func f("f"), g("g");
+            Var x("x"), y("y"), yo("yo"), yi("yi");
+            f(x, y) = x + y;
+            // A shear: the region of f required moves with x as well as y.
+            g(x, y) = f(x, x + y) + f(x, x + y - 1);
+            g.split(y, yo, yi, 4);
+            // Sliding over y advances the window once per value of y, but x
+            // moves the region required too, so the window would have to
+            // advance within a single value of y as well.
+            f.store_root().compute_at(g, x).slide(g, y);
+            g.realize({8, 16});
+        });
+
+    failures += !expect_user_error(
+        "entangled_dimensions", "move the same dimension", [] {
+            Func f("f"), g("g");
+            Var x("x"), y("y"), xo("xo"), xi("xi");
+            f(x, y) = x + y;
+            g(x, y) = f(x, y) + f(x - 1, y);
+            g.split(x, xo, xi, 4);
+            // Sliding over several dimensions at once is fine, but these two
+            // aren't independent - xo is a split of x, so both of them move
+            // the window along f's first dimension, and it can only advance
+            // along that dimension once.
+            f.store_root().compute_at(g, xi).slide(g, x).slide(g, xo);
+            g.realize({16, 16});
+        });
+
+    if (failures != 0) {
+        printf("%d bad schedule(s) were not rejected\n", failures);
+        return 1;
+    }
+#endif
 
     printf("Success!\n");
     return 0;

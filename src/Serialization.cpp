@@ -1121,7 +1121,10 @@ Offset<Serialize::FuncSchedule> Serializer::serialize_func_schedule(FlatBufferBu
     const auto store_level_serialized = serialize_loop_level(builder, func_schedule.store_level());
     const auto compute_level_serialized = serialize_loop_level(builder, func_schedule.compute_level());
     const auto hoist_storage_level_serialized = serialize_loop_level(builder, func_schedule.hoist_storage_level());
-    const auto slide_level_serialized = serialize_loop_level(builder, func_schedule.slide_level());
+    std::vector<Offset<Serialize::LoopLevel>> slide_levels_serialized;
+    for (const auto &slide_level : func_schedule.slide_levels()) {
+        slide_levels_serialized.push_back(serialize_loop_level(builder, slide_level));
+    }
     std::vector<Offset<Serialize::StorageDim>> storage_dims_serialized;
     for (const auto &storage_dim : func_schedule.storage_dims()) {
         storage_dims_serialized.push_back(serialize_storage_dim(builder, storage_dim));
@@ -1161,7 +1164,7 @@ Offset<Serialize::FuncSchedule> Serializer::serialize_func_schedule(FlatBufferBu
                                          ring_buffer.first, ring_buffer.second,
                                          memoize_eviction_key_serialized.first, memoize_eviction_key_serialized.second,
                                          builder.CreateVector(type_change_checks_serialized),
-                                         slide_level_serialized);
+                                         builder.CreateVector(slide_levels_serialized));
 }
 
 Offset<Serialize::Specialization> Serializer::serialize_specialization(FlatBufferBuilder &builder, const Specialization &specialization) {

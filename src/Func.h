@@ -2633,11 +2633,22 @@ public:
      f.store_root().compute_at(g, xoi).slide(g, xo);
      \endcode
      *
+     * A window can slide over several dimensions at once, so calls
+     * accumulate. Naming a dimension that a loop does correspond to is
+     * allowed, and just pins sliding to that loop:
+     \code
+     f.store_root().compute_at(g, x).slide(g, x).slide(g, y);
+     \endcode
+     * Naming no dimensions at all leaves the choice to sliding window
+     * analysis, which is the default.
+     *
      * It is an error to slide over a dimension whose storage does not live
      * across every loop that dimension varies over, or one where the region
      * required also moves with a loop between the dimension and where this
      * Func is computed. In both cases the window would have to reach values
-     * that are no longer there. */
+     * that are no longer there. It is also an error to name two dimensions
+     * that move the same dimension of this Func, such as a Var and a split of
+     * it, because the window can only advance along that dimension once. */
     Func &slide(const Func &f, const Var &var);
 
     /** Equivalent to the version of hoist_storage that takes a Var, but

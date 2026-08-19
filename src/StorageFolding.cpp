@@ -965,19 +965,27 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                          [&](const Stmt &b) { return op->with(op->min, op->max, b); });
     }
 
-    // Was this func told to slide over a particular dimension?
+    // Was this func told to slide over particular dimensions?
     bool slides_over_a_dimension() const {
-        const LoopLevel &l = func.schedule().slide_level();
-        return l.defined() && !l.is_inlined() && !l.is_root();
+        const auto &levels = func.schedule().slide_levels();
+        return std::any_of(levels.begin(), levels.end(), [](const LoopLevel &l) {
+            return l.defined() && !l.is_inlined() && !l.is_root();
+        });
+    }
+
+    // Was this func told to slide over the dimension this let carries?
+    bool slides_over(const std::string &let_name) const {
+        const auto &levels = func.schedule().slide_levels();
+        return std::any_of(levels.begin(), levels.end(), [&](const LoopLevel &l) {
+            return l.defined() && !l.is_inlined() && !l.is_root() && l.match(let_name);
+        });
     }
 
     Stmt visit(const LetStmt *op) override {
         Interval let_bounds = bounds_of_expr_in_scope(op->value, enclosing_bounds);
         ScopedBinding<Interval> bind(enclosing_bounds, op->name, let_bounds);
 
-        if (slides_over_a_dimension() &&
-            func.schedule().slide_level().match(op->name) &&
-            let_bounds.is_bounded()) {
+        if (slides_over(op->name) && let_bounds.is_bounded()) {
             return fold_over(op->name, let_bounds, op->body, op,
                              [&](const Stmt &b) { return LetStmt::make(op->name, op->value, b); });
         }
