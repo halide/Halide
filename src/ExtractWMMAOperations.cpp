@@ -278,8 +278,17 @@ const VectorReduce *reduction_of_a_fragment(const Store *op) {
         value = let->body;
     }
     const Add *add = value.as<Add>();
-    const VectorReduce *reduce = add ? add->a.as<VectorReduce>() : nullptr;
-    return reduce && reduce->value.as<Load>() ? reduce : nullptr;
+    return add ? add->a.as<VectorReduce>() : nullptr;
+}
+
+// Whether a reduced value is a product of two operands, which is what a matrix
+// multiply reduces and a reduction along an axis of a tile does not. Widening
+// casts sit between the multiply and the reduction.
+bool is_product(Expr e) {
+    while (const Cast *op = e.as<Cast>()) {
+        e = op->value;
+    }
+    return e.as<Mul>() != nullptr;
 }
 
 MatmulInfo analyze_matmul(const Store *op,
@@ -1666,9 +1675,12 @@ class ExtractWMMAOperations : public IRMutator {
         }
 
         // A reduction along an axis of the tile accumulates, but it is not a
-        // matrix multiply: what it reduces is a fragment rather than a product.
+        // matrix multiply: what it reduces is something already held in
+        // fragments rather than a product of two operands. It need not be a
+        // fragment on its own - a softmax reduces an expression over one.
         const VectorReduce *reduce = reduction_of_a_fragment(op);
-        const bool axis_reduction = reduce && find_fragment(reduce->value.as<Load>()->name);
+        const bool axis_reduction = reduce && !is_product(reduce->value) &&
+                                    !fragments_read(reduce->value).empty();
 
         if (!is_accumulation(op) || axis_reduction) {
             // A fill from a matrix in memory needs to know the role and the
