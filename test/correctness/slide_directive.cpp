@@ -342,6 +342,35 @@ int main(int argc, char **argv) {
         });
 
     failures += !expect_user_error(
+        "non_monotonic_dimension", "does not increase", [] {
+            Func f("f"), g("g");
+            Var x("x"), xo("xo"), xi("xi");
+            f(x) = x;
+            g(x) = f(x) + f(x - 1);
+            // Reordering the split puts the small term on the outer loop, so
+            // x runs 0, 8, 16, ... and then 1, 9, 17, ... A window can only
+            // move forwards, so there is nothing sensible to slide here.
+            g.split(x, xo, xi, 8).reorder(xo, xi);
+            f.store_root().compute_at(g, xo).slide(g, x);
+            g.realize({32});
+        });
+
+    failures += !expect_user_error(
+        "shift_inwards_moves_backwards", "does not always increase", [] {
+            Func f("f"), g("g");
+            Var x("x"), xo("xo"), xi("xi");
+            f(x) = x;
+            g(x) = f(x) + f(x - 1);
+            // ShiftInwards pulls the last iteration back so it fits, so with
+            // an extent of 10 and a factor of 4, x runs 0-3, 4-7, then 6-9.
+            // Aligning the bounds to a multiple of the factor makes this
+            // legal, because then the tail never has to shift.
+            g.split(x, xo, xi, 4, TailStrategy::ShiftInwards);
+            f.store_root().compute_at(g, xi).slide(g, x);
+            g.realize({10});
+        });
+
+    failures += !expect_user_error(
         "entangled_dimensions", "move the same dimension", [] {
             Func f("f"), g("g");
             Var x("x"), y("y"), xo("xo"), xi("xi");

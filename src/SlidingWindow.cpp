@@ -979,6 +979,62 @@ class SlidingWindow : public IRMutator {
 
     using IRMutator::visit;
 
+    // A window only ever moves forwards, so a dimension can only be slid over
+    // if it increases as the loop nest runs. A dimension reassembled from
+    // several loops has no such guarantee. Reordering the loops of a split
+    // makes the outer one carry the small term, and the dimension lurches
+    // backwards every time it advances. A tail strategy that shifts the last
+    // iteration back so it fits does the same thing once, at the end.
+    //
+    // The condition is the one that makes a mixed-radix number count upwards.
+    // Each contributing loop has to advance the dimension by at least as much
+    // as the loops inside it can take back when they wrap around.
+    void check_dimension_is_monotonic(const Function &f, const string &let_name,
+                                      const Expr &value) {
+        Expr v = expand_expr(value, let_values);
+
+        vector<string> contributing;
+        for (const string &loop : loop_stack) {
+            if (expr_uses_var(v, loop)) {
+                contributing.push_back(loop);
+            }
+        }
+
+        for (size_t i = 0; i < contributing.size(); i++) {
+            const string &outer = contributing[i];
+            Expr var = Variable::make(Int(32), outer);
+            // The dimension just after this loop advances, with everything
+            // inside it wrapped back to the start...
+            Expr next = substitute(outer, var + 1, v);
+            // ...against the largest it reaches before that happens.
+            Expr prev = v;
+            for (size_t j = i + 1; j < contributing.size(); j++) {
+                const Interval *b = bounds_scope.find(contributing[j]);
+                if (!b || !b->is_bounded()) {
+                    next = Expr();
+                    break;
+                }
+                next = substitute(contributing[j], b->min, next);
+                prev = substitute(contributing[j], b->max, prev);
+            }
+            if (next.defined() && can_prove(next >= prev, bounds_scope)) {
+                continue;
+            }
+            user_error
+                << "Func " << f.name() << " was told to slide over "
+                << slide_level_name(f, let_name) << ", but that dimension does "
+                << "not always increase as the loop nest runs: the loop "
+                << outer << " advances it by less than the loops inside it "
+                << "take back when they wrap around. A window only moves "
+                << "forwards, so sliding would read values it has already "
+                << "passed over. Reordering the loops of a split puts the "
+                << "smaller term on the outer loop, and ShiftInwards moves the "
+                << "last iteration backwards unless the extent is a multiple "
+                << "of the split factor. Slide over a dimension that counts "
+                << "upwards instead.\n";
+        }
+    }
+
     // A window can only slide over a dimension if the storage lives across
     // every loop that dimension varies over. Sliding assumes the previous
     // iteration's values are still there, and an allocation inside one of
@@ -1039,6 +1095,16 @@ class SlidingWindow : public IRMutator {
 
     Stmt visit(const LetStmt *op) override {
         Interval let_bounds = bounds_of_expr_in_scope(op->value, bounds_scope);
+        // Simplify the ends before they go into scope. Anything that consults
+        // them has to recognize a constant to be able to use it, and the
+        // bounds of a dimension assembled from several loops arrive as
+        // unsimplified arithmetic on their mins and extents.
+        if (let_bounds.has_lower_bound()) {
+            let_bounds.min = simplify(let_bounds.min);
+        }
+        if (let_bounds.has_upper_bound()) {
+            let_bounds.max = simplify(let_bounds.max);
+        }
         ScopedBinding<Interval> bind(bounds_scope, op->name, let_bounds);
         ScopedBinding<Expr> bind_value(let_values, op->name, op->value);
 
@@ -1051,6 +1117,7 @@ class SlidingWindow : public IRMutator {
             if (!slides_over(func, op->name)) {
                 continue;
             }
+            check_dimension_is_monotonic(func, op->name, op->value);
             check_storage_outlives_dimension(func, op->name, op->value);
             debug(3) << "Sliding " << func.name() << " over dimension "
                      << op->name << "\n";
@@ -1082,8 +1149,13 @@ class SlidingWindow : public IRMutator {
                 // those to reach the constant behind them. An upper bound is
                 // enough, and erring large just folds to a larger power of
                 // two.
+                // An upper bound, not the exact width. Simplify in the
+                // bounds scope first: the two ends of the window are
+                // correlated, and cancelling them needs what we know about
+                // the dimension, which interval arithmetic on the ends
+                // separately would throw away.
                 Expr width = find_constant_bound(
-                    expand_expr(d.old_bounds.max - d.old_bounds.min + 1, let_values),
+                    simplify(d.old_bounds.max - d.old_bounds.min + 1, bounds_scope),
                     Direction::Upper, bounds_scope);
                 if (width.defined()) {
                     Expr marker = Call::make(Int(32), Call::sliding_window_marker,
