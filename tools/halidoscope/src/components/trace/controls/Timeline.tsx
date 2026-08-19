@@ -12,7 +12,7 @@ interface Props {
   packetCount: number;
 }
 
-function TraceTimeline({ packetCount }: Props) {
+function Timeline({ packetCount }: Props) {
   // Local slider position, for a smooth thumb independent of render cadence.
   const [packetIndex, setPacketIndex] = React.useState<number>(0);
   const [playing, setPlaying] = React.useState<boolean>(false);
@@ -169,4 +169,4 @@ function TraceTimeline({ packetCount }: Props) {
   );
 }
 
-export default TraceTimeline;
+export default Timeline;

@@ -1,7 +1,7 @@
 import * as d3 from "d3";
 import { useAtom } from "jotai";
 
-import ColorInput from "@/components/controls/color/ColorInput";
+import ColorInput from "@/components/trace/controls/ColorInput";
 import Checkbox from "@/components/shared/Checkbox";
 import Select from "@/components/shared/Select";
 import {

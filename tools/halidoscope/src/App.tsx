@@ -5,10 +5,10 @@ import { useSetAtom } from "jotai";
 import { Tabs } from "radix-ui";
 import * as React from "react";
 
-import Profile from "@/components/views/profile/Profile";
-import Trace from "@/components/views/trace/Trace";
-import TraceUpload from "@/components/views/trace/TraceUpload";
-import TraceLoading from "@/components/views/trace/TraceLoading";
+import Profile from "@/components/profile/Profile";
+import Trace from "@/components/trace/Trace";
+import TraceUpload from "@/components/trace/TraceUpload";
+import TraceLoading from "@/components/trace/TraceLoading";
 import { ProfileContextProvider } from "@/hooks/profile";
 import { TraceContextProvider } from "@/hooks/trace";
 import { funcAtom } from "@/state/func";
