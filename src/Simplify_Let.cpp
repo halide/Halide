@@ -76,7 +76,6 @@ void find_var_uses(const StmtOrExpr &x, std::unordered_map<std::string, bool> &v
     x.accept(&counter);
 }
 
-
 }  // namespace
 
 template<typename LetOrLetStmt, typename Body>

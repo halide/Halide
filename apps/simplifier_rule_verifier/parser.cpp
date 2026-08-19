@@ -407,7 +407,6 @@ public:
             return ~parse_primary();
         }
 
-
         // Constants
         if ((peek() >= '0' && peek() <= '9') || peek() == '-') {
             const char *tmp = cursor;
