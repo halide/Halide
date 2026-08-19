@@ -2618,10 +2618,26 @@ public:
      * this when the dimension has been split, so that it survives only as a
      * combination of several loops:
      \code
+     g.split(x, xo, xi, 2).unroll(xi);
      f.store_root().compute_at(g, xi).slide(g, x);
      \endcode
-     * The window then advances once per value of x, so folded storage is
-     * indexed by x and unrolling the inner loop can resolve the modulus. */
+     * The window then advances once per value of x rather than once per xo,
+     * so folded storage is indexed by x, and unrolling the inner loop lets
+     * each unrolled body resolve the modulus that folding introduces.
+     *
+     * The dimension need not be one of the consumer's original Vars. After
+     * splitting twice the loops are xoo, xoi and xi, and xo is neither an
+     * original Var nor a loop, but the window can still slide along it:
+     \code
+     g.split(x, xo, xi, 4).split(xo, xoo, xoi, 2);
+     f.store_root().compute_at(g, xoi).slide(g, xo);
+     \endcode
+     *
+     * It is an error to slide over a dimension whose storage does not live
+     * across every loop that dimension varies over, or one where the region
+     * required also moves with a loop between the dimension and where this
+     * Func is computed. In both cases the window would have to reach values
+     * that are no longer there. */
     Func &slide(const Func &f, const Var &var);
 
     /** Equivalent to the version of hoist_storage that takes a Var, but

@@ -323,6 +323,7 @@ tests(
     skip_stages_cse_bug.cpp
     skip_stages_external_array_functions.cpp
     skip_stages_memoize.cpp
+    slide_directive.cpp
     sliding_backwards.cpp
     sliding_over_guard_with_if.cpp
     sliding_reduction.cpp

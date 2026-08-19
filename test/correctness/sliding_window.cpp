@@ -567,41 +567,6 @@ int main(int argc, char **argv) {
         }
     }
 
-    {
-        // Slide over a dimension that has been split, so that no loop
-        // corresponds to it. Unrolling the inner half then resolves the
-        // modulus storage folding introduces, which is the point of naming
-        // the dimension rather than letting sliding window pick a loop.
-        count = 0;
-        Func f, g;
-        Var xo, xi;
-
-        // call_counter returns zero, so add x to give the values something
-        // to be wrong about as well as the call count.
-        f(x) = call_counter(x, 0) + x;
-        g(x) = f(x) + f(x - 1);
-
-        g.align_bounds(x, 2).split(x, xo, xi, 2).unroll(xi);
-        f.store_root().compute_at(g, xi).slide(g, x);
-
-        Buffer<int> im = g.realize({100});
-
-        // Sliding has to be as good as it is without the split. Checking the
-        // values isn't enough - a version of this that did no sliding at all
-        // still produced the right answers.
-        if (count != 101) {
-            printf("f was called %d times instead of %d times\n", count, 101);
-            return 1;
-        }
-        for (int i = 0; i < im.width(); i++) {
-            int correct = 2 * i - 1;
-            if (im(i) != correct) {
-                printf("im(%d) = %d instead of %d\n", i, im(i), correct);
-                return 1;
-            }
-        }
-    }
-
     printf("Success!\n");
     return 0;
 }
