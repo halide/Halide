@@ -354,6 +354,11 @@ void lower_impl(const vector<Function> &output_funcs,
     s = simplify(s);
     log("Lowering after vectorizing:", s);
 
+    debug(1) << "Partitioning loops to simplify boundary conditions...\n";
+    s = partition_loops(s);
+    s = simplify(s);
+    log("Lowering after partitioning loops:", s);
+
     if (t.has_feature(Target::CUDA)) {
         debug(1) << "Extracting tensor core operations...\n";
         s = extract_wmma_operations(s);
@@ -371,11 +376,6 @@ void lower_impl(const vector<Function> &output_funcs,
     s = rewrite_interleavings(s);
     s = simplify(s);
     log("Lowering after rewriting vector interleavings:", s);
-
-    debug(1) << "Partitioning loops to simplify boundary conditions...\n";
-    s = partition_loops(s);
-    s = simplify(s);
-    log("Lowering after partitioning loops:", s);
 
     debug(1) << "Staging strided loads...\n";
     s = stage_strided_loads(s, t);
