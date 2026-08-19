@@ -2717,6 +2717,12 @@ public:
      f.store_root().compute_at(g, ri).slide(g, r);
      \endcode
      *
+     * It is an error to slide over a dimension that doesn't count upwards as
+     * the loop nest runs, because a window only moves forwards. Reordering
+     * the loops of a split puts the smaller term on the outer loop, and
+     * ShiftInwards moves the last iteration backwards unless the extent is a
+     * multiple of the split factor, so both of those are rejected.
+     *
      * It is an error to slide over a dimension whose storage does not live
      * across every loop that dimension varies over, or one where the region
      * required also moves with a loop between the dimension and where this
