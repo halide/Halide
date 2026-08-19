@@ -2709,6 +2709,14 @@ public:
      * Naming no dimensions at all leaves the choice to sliding window
      * analysis, which is the default.
      *
+     * The dimension can belong to an update stage, in which case it is an
+     * RVar:
+     \code
+     g(r) = f(r) + f(r - 1);
+     g.update().split(r, ro, ri, 2).unroll(ri);
+     f.store_root().compute_at(g, ri).slide(g, r);
+     \endcode
+     *
      * It is an error to slide over a dimension whose storage does not live
      * across every loop that dimension varies over, or one where the region
      * required also moves with a loop between the dimension and where this
@@ -2716,7 +2724,7 @@ public:
      * that are no longer there. It is also an error to name two dimensions
      * that move the same dimension of this Func, such as a Var and a split of
      * it, because the window can only advance along that dimension once. */
-    Func &slide(const Func &f, const Var &var);
+    Func &slide(const Func &f, const VarOrRVar &var);
 
     /** Equivalent to the version of hoist_storage that takes a Var, but
      * schedules storage within the loop over a dimension of a

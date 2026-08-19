@@ -3347,7 +3347,7 @@ Func &Func::hoist_storage(const Func &f, const Var &var) {
     return hoist_storage(LoopLevel(f, var));
 }
 
-Func &Func::slide(const Func &f, const Var &var) {
+Func &Func::slide(const Func &f, const VarOrRVar &var) {
     invalidate_cache();
     // The dimension is named rather than the loop, because after splitting
     // there may be no single loop that corresponds to it. Calls accumulate,
