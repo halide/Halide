@@ -1,12 +1,12 @@
 import { Tabs } from "radix-ui";
 
-import DebugPanel from "@/components/controls/DebugPanel";
-import DisplayPanel from "@/components/controls/DisplayPanel";
-import FuncsPanel from "@/components/controls/FuncsPanel";
-import VisualizationPanel from "@/components/controls/VisualizationPanel";
+import DebugPanel from "@/components/trace/panels/DebugPanel";
+import DisplayPanel from "@/components/trace/panels/DisplayPanel";
+import FuncsPanel from "@/components/trace/panels/FuncsPanel";
+import VisualizationPanel from "@/components/trace/panels/VisualizationPanel";
 import { FuncMeta } from "@/types/trace";
 
-function ControlTabs({ funcs }: { funcs: Record<string, FuncMeta> }) {
+function PanelsTabs({ funcs }: { funcs: Record<string, FuncMeta> }) {
   return (
     <div className="flex w-120">
       <div className="bg-ps-border-secondary h-full w-px" />
@@ -67,4 +67,4 @@ function ControlTabs({ funcs }: { funcs: Record<string, FuncMeta> }) {
   );
 }
 
-export default ControlTabs;
+export default PanelsTabs;
