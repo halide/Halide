@@ -147,11 +147,10 @@ Expr Simplify::visit(const And *op, ExprInfo *info) {
 
     if (EVAL_IN_LAMBDA  //
         (rewrite(broadcast(x, c0) && broadcast(y, c0), broadcast(x && y, c0)) ||
-         // Collect negations, which is the smaller form.
-         rewrite(!x && !y, !(x || y)) ||
          rewrite((x && broadcast(y, c0)) && broadcast(z, c0), x && broadcast(y && z, c0)) ||
          rewrite((broadcast(x, c0) && y) && broadcast(z, c0), broadcast(x && z, c0) && y) ||
 
+         // Collect negations, which is the smaller form.
          rewrite(!x && !y, !(x || y)) ||
 
          rewrite(x && !(x && y), !y && x) ||

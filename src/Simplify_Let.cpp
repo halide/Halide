@@ -276,8 +276,6 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *info) {
 
     std::unordered_map<std::string, bool> var_uses(frames.size());
     // Insert everything we think *might* be used, and then visit the body.
-    // A name still mapping to false is unused, one mapping to true is used
-    // exactly once, and one that's been erased is used more than that.
     for (auto &f : frames) {
         f.info = var_info.get(f.op->name);
         // Drop any reference to new_var held by the replacement expression so
@@ -306,11 +304,9 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *info) {
     // stay in scope until this function returns.
     vector<ScopedBinding<VarInfo>> substituted;
 
-    // An entry that's absent from var_uses is used more than once, one mapping
-    // to true is used exactly once, and one mapping to false is unused. Inner
-    // frames have already been dealt with, and a let value can only refer to
-    // names bound outside it, so by the time a frame is reached its counts are
-    // final.
+    // Inner frames have already been dealt with, and a let value can only refer
+    // to names bound outside it, so by the time a frame is reached its counts
+    // are final.
     //
     // An unused name loses its let. A name used exactly once loses it too, and
     // gets inlined at that single use instead.
@@ -363,9 +359,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *info) {
         if (!substituted.empty()) {
             // One re-mutation resolves every replacement, chains included,
             // because visit(Variable) re-mutates each replacement as it
-            // injects it. The lets that survived are remutated too, because
-            // their values are where some of the uses are. This is the
-            // result we return, so it's the mutation that fills in info.
+            // injects it. This is the result we return, so it fills in info.
             result = mutate(result, info);
         }
     }
