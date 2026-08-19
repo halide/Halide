@@ -369,6 +369,11 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     Scope<Expr> scope;
     Scope<Interval> &bounds_scope;
 
+    // Whether the thing being slid over can have iterations prepended to it.
+    // A loop can; a let that names a dimension spread across several loops
+    // can't, so those warm up with a select instead.
+    bool can_rewind = true;
+
     // For loops strictly between the loop being slid over and the current
     // node (not including the loop being slid over itself).
     Scope<> enclosing_loops;
@@ -560,7 +565,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         // correctness condition for rewinding: the warm-up iterations tile the
         // region with copies of the steady state, and reach back far enough to
         // cover what's required at the loop min.
-        bool solved = (solve_result.has_upper_bound() &&
+        bool solved = (can_rewind &&
+                       solve_result.has_upper_bound() &&
                        can_prove(substitute(new_loop_min_name, solve_result.max,
                                             new_loop_min_eq)));
         if (solved &&
@@ -714,9 +720,9 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
 public:
     SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min, set<int> &slid_dimensions,
-                                   Scope<Interval> &bounds_scope)
+                                   Scope<Interval> &bounds_scope, bool can_rewind = true)
         : func(std::move(f)), loop_var(std::move(v)), loop_min(std::move(v_min)),
-          slid_dimensions(slid_dimensions), bounds_scope(bounds_scope) {
+          slid_dimensions(slid_dimensions), bounds_scope(bounds_scope), can_rewind(can_rewind) {
         decision.func_name = func.name();
         decision.slide_over = loop_var;
     }
@@ -921,9 +927,40 @@ class SlidingWindow : public IRMutator {
 
     using IRMutator::visit;
 
+    // Was this func told to slide over the dimension this let carries? After
+    // splitting there's no loop with this name, but there is a let, because
+    // the original var still has to be computed to evaluate the func's args.
+    static bool slides_over(const Function &f, const string &let_name) {
+        const LoopLevel &l = f.schedule().slide_level();
+        return l.defined() && !l.is_inlined() && !l.is_root() && l.match(let_name);
+    }
+
     Stmt visit(const LetStmt *op) override {
-        ScopedBinding<Interval> bind(bounds_scope, op->name,
-                                     bounds_of_expr_in_scope(op->value, bounds_scope));
+        Interval let_bounds = bounds_of_expr_in_scope(op->value, bounds_scope);
+        ScopedBinding<Interval> bind(bounds_scope, op->name, let_bounds);
+
+        // Anything told to slide over this dimension slides here rather than
+        // over some loop. The let can't have iterations prepended to it, so
+        // these warm up with a select instead of by rewinding.
+        Stmt body = op->body;
+        bool slid_any = false;
+        for (const Function &func : consumers_first(sliding)) {
+            if (!slides_over(func, op->name)) {
+                continue;
+            }
+            debug(3) << "Sliding " << func.name() << " over dimension "
+                     << op->name << "\n";
+            set<int> &slid_dims = slid_dimensions[func.name()];
+            SlidingWindowOnFunctionAndLoop slider(func, op->name, let_bounds.min,
+                                                  slid_dims, bounds_scope,
+                                                  /* can_rewind */ false);
+            body = slider(body);
+            debug(3) << slider.decision;
+            slid_any = true;
+        }
+        if (slid_any) {
+            return LetStmt::make(op->name, op->value, mutate(body));
+        }
         return IRMutator::visit(op);
     }
 
@@ -1038,6 +1075,12 @@ class SlidingWindow : public IRMutator {
         Expr orig_loop_min = Variable::make(Int(32), orig_loop_min_name);
 
         for (const Function &func : consumers_first(sliding)) {
+            if (func.schedule().slide_level().defined() &&
+                !func.schedule().slide_level().is_inlined()) {
+                // Told explicitly which dimension to slide over. That happens
+                // at the let that names it, not here.
+                continue;
+            }
             debug(3) << "Doing sliding window analysis on function " << func.name() << "\n";
 
             // Figure out the first iteration at which this func is consumed.

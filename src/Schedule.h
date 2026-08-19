@@ -669,9 +669,15 @@ public:
     const LoopLevel &store_level() const;
     const LoopLevel &compute_level() const;
     const LoopLevel &hoist_storage_level() const;
+
+    /** The dimension of a consumer that this Func slides over, if the schedule
+     * asked for that explicitly with \ref Func::slide. Unset means sliding
+     * window analysis should pick a loop itself. */
+    const LoopLevel &slide_level() const;
     LoopLevel &store_level();
     LoopLevel &compute_level();
     LoopLevel &hoist_storage_level();
+    LoopLevel &slide_level();
     // @}
 
     /** Pass an IRVisitor through to all Exprs referenced in the

@@ -2613,6 +2613,17 @@ public:
      */
     Func &hoist_storage(const Func &f, const Var &var);
 
+    /** Slide this Func's window over a dimension of a consumer, rather than
+     * over whichever loop sliding window analysis would otherwise pick. Use
+     * this when the dimension has been split, so that it survives only as a
+     * combination of several loops:
+     \code
+     f.store_root().compute_at(g, xi).slide(g, x);
+     \endcode
+     * The window then advances once per value of x, so folded storage is
+     * indexed by x and unrolling the inner loop can resolve the modulus. */
+    Func &slide(const Func &f, const Var &var);
+
     /** Equivalent to the version of hoist_storage that takes a Var, but
      * schedules storage within the loop over a dimension of a
      * reduction domain */
