@@ -639,11 +639,21 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
     bool found_sliding_marker = false;
     Expr visit(const Call *op) override {
         if (op->is_intrinsic(Call::sliding_window_marker)) {
-            internal_assert(op->args.size() == 2);
+            internal_assert(op->args.size() == 2 || op->args.size() == 4);
             const StringImm *name = op->args[0].as<StringImm>();
             internal_assert(name);
             if (name->value == func.name()) {
                 found_sliding_marker = true;
+                if (op->args.size() == 4) {
+                    // Sliding window slid over a dimension rather than a loop,
+                    // and worked out how wide the window is. We can't rederive
+                    // that here, so take its word for it.
+                    auto dim = as_const_int(op->args[2]);
+                    auto width = as_const_int(op->args[3]);
+                    internal_assert(dim && width);
+                    slid_dim = (int)*dim;
+                    slid_width = (int)*width;
+                }
             }
         }
         return op;
@@ -658,19 +668,19 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         }
     }
 
-    Stmt visit(const For *op) override {
-        if (op->for_type != ForType::Serial && op->for_type != ForType::Unrolled) {
-            // We can't proceed into a parallel for loop.
+    // Enclosing loop and let bounds, so that a let carrying a dimension can be
+    // bounded when we come to fold over it.
+    Scope<Interval> enclosing_bounds;
 
-            // TODO: If there's no overlap between the region touched
-            // by the threads as this loop counter varies
-            // (i.e. there's no cross-talk between threads), then it's
-            // safe to proceed.
-            return op;
-        }
+    // Fold the storage of func over a monotonically increasing quantity. That
+    // is usually a loop variable, but may be a let carrying a dimension of a
+    // consumer that has been split across several loops.
+    Stmt fold_over(const string &name, const Interval &var_bounds,
+                   const Stmt &orig_body, const Stmt &orig,
+                   const std::function<Stmt(const Stmt &)> &rebuild) {
 
         Stmt stmt;
-        Stmt body = op->body;
+        Stmt body = orig_body;
 
         Box provided = box_provided(body, func.name());
         Box required = box_required(body, func.name());
@@ -685,12 +695,12 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         external_required.used = Expr();
         Box box_external = box_union(provided, external_required);
 
-        Expr loop_var = Variable::make(Int(32), op->name);
+        Expr loop_var = Variable::make(Int(32), name);
 
         string dynamic_footprint;
 
         Scope<Interval> bounds;
-        bounds.push(op->name, Interval(op->min, op->max));
+        bounds.push(name, var_bounds);
 
         HasExternConsumer has_extern_consumer(func.name());
         body.accept(&has_extern_consumer);
@@ -712,7 +722,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
             if (is_const(min) || is_const(max)) {
                 debug(3) << "\nNot considering folding " << func.name()
-                         << " over for loop over " << op->name
+                         << " over for loop over " << name
                          << " dimension " << i - 1 << "\n"
                          << " because the min or max are constants."
                          << "Min: " << min << "\n"
@@ -736,18 +746,18 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
             // Consider the initial iteration and steady state
             // separately for all these proofs.
-            Expr loop_var = Variable::make(Int(32), op->name);
-            Expr steady_state = (op->min < loop_var);
+            Expr loop_var = Variable::make(Int(32), name);
+            Expr steady_state = (var_bounds.min < loop_var);
 
             // Take the difference before CSE, so that the terms the two ends
             // have in common cancel rather than being hidden behind lets.
             Expr diff = max - min;
-            // The loop variable takes only one value in the case where the
-            // steady state condition is false, because it says the variable is
-            // no greater than the loop min. Saying so lets the two ends cancel
-            // in that case too, rather than leaving a footprint that appears to
-            // grow with the loop.
-            Expr initial_diff = substitute(loop_var, op->min,
+            // The quantity folded over takes only one value in the case where
+            // the steady state condition is false, because it says the
+            // quantity is no greater than its min. Saying so lets the two ends
+            // cancel in that case too, rather than leaving a footprint that
+            // appears to grow with the loop.
+            Expr initial_diff = substitute(loop_var, var_bounds.min,
                                            substitute(steady_state, const_false(), diff));
             Expr extent = (Max::make(substitute(steady_state, const_true(), diff),
                                      initial_diff) +
@@ -774,18 +784,18 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             // (i.e. the store indices are identical to the recursive self-call indices).
             //
             // single_write checks that f(x) is the only value that is stored.
-            // inductive_only_in_dim(op->body, func.name(), dim) checks that the
+            // inductive_only_in_dim(orig_body, func.name(), dim) checks that the
             // recurrence only recurses in the fold dimension, so all other arguments
             // of f can be treated as pure variables.
-            // one_store_per_iteration(op->body, func.name())
+            // one_store_per_iteration(orig_body, func.name())
             // checks that f(x) is written exactly once per iteration.
             // We also check that f is not tuple-valued and has no external definition.
             // Storing a tuple value lowers down to multiple store operations, which could
             // all use depend on same element of f(x-k).
 
             bool single_inductive_store =
-                inductive_only_in_dim(op->body, func.name(), dim) &&
-                one_store_per_iteration(op->body, func.name());
+                inductive_only_in_dim(orig_body, func.name(), dim) &&
+                one_store_per_iteration(orig_body, func.name());
 
             bool can_inplace = false;
             if (single_inductive_store && dim < (int)box_external.size() && box_external[dim].is_bounded() && func.outputs() == 1 && !func.has_extern_definition()) {
@@ -795,12 +805,12 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 Expr max_e_steady = simplify(substitute(steady_state, const_true(), max_e), bounds);
                 Expr min_e_initial = simplify(substitute(steady_state, const_false(), min_e), bounds);
                 Expr max_e_initial = simplify(substitute(steady_state, const_false(), max_e), bounds);
-                Expr extent_e_initial = simplify(substitute(loop_var, op->min, max_e_initial - min_e_initial + 1), bounds);
+                Expr extent_e_initial = simplify(substitute(loop_var, var_bounds.min, max_e_initial - min_e_initial + 1), bounds);
                 Expr extent_e_steady = simplify(max_e_steady - min_e_steady + 1, bounds);
                 Expr extent_no_self = simplify(common_subexpression_elimination(Max::make(extent_e_initial, extent_e_steady)), bounds);
 
-                Expr max_step = simplify(substitute(op->name, loop_var + 1, max) - max, bounds);
-                Expr min_step = simplify(substitute(op->name, loop_var + 1, min) - min, bounds);
+                Expr max_step = simplify(substitute(name, loop_var + 1, max) - max, bounds);
+                Expr min_step = simplify(substitute(name, loop_var + 1, min) - min, bounds);
                 bool unit_advance =
                     (can_prove(max_step == 1, bounds)) ||
                     (can_prove(min_step == -1, bounds));
@@ -827,8 +837,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             if (!is_pure(min) ||
                 !is_pure(max) ||
                 has_extern_consumer.result ||
-                expr_uses_var(min, op->name) ||
-                expr_uses_var(max, op->name)) {
+                expr_uses_var(min, name) ||
+                expr_uses_var(max, name)) {
                 // We only use the explicit fold factor if the fold is
                 // relevant for this loop. If the fold isn't relevant
                 // for this loop, the added asserts will be too
@@ -837,7 +847,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             }
 
             debug(3) << "\nConsidering folding " << func.name()
-                     << " over for loop over " << op->name
+                     << " over for loop over " << name
                      << " dimension " << i - 1 << "\n"
                      << "Min: " << min << "\n"
                      << "Max: " << max << "\n"
@@ -857,16 +867,16 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 // dead. Either way the live values occupy extent distinct
                 // residues, and the other end is free to wander backwards
                 // within the window without aliasing anything live.
-                can_fold_forwards = (is_monotonic(min, op->name) == Monotonic::Increasing) ||
-                                    (is_monotonic(max, op->name) == Monotonic::Increasing);
-                can_fold_backwards = (is_monotonic(max, op->name) == Monotonic::Decreasing) ||
-                                     (is_monotonic(min, op->name) == Monotonic::Decreasing);
+                can_fold_forwards = (is_monotonic(min, name) == Monotonic::Increasing) ||
+                                    (is_monotonic(max, name) == Monotonic::Increasing);
+                can_fold_backwards = (is_monotonic(max, name) == Monotonic::Decreasing) ||
+                                     (is_monotonic(min, name) == Monotonic::Decreasing);
                 if (func.schedule().async()) {
                     // Our semaphore acquire primitive can't take
                     // negative values, so we can't un-acquire slots
                     // in the circular buffer.
-                    can_fold_forwards &= (is_monotonic(max_provided, op->name) == Monotonic::Increasing);
-                    can_fold_backwards &= (is_monotonic(min_provided, op->name) == Monotonic::Decreasing);
+                    can_fold_forwards &= (is_monotonic(max_provided, name) == Monotonic::Increasing);
+                    can_fold_backwards &= (is_monotonic(min_provided, name) == Monotonic::Decreasing);
                     // We need to be able to analyze the required footprint to
                     // know how much to release, and the amount released each
                     // iteration can't be negative either. Checking the ends
@@ -875,9 +885,9 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     // max_provided alone, which is why only that end is
                     // checked just above.
                     can_fold_forwards &= min_required.defined() &&
-                                         is_monotonic(min_required, op->name) == Monotonic::Increasing;
+                                         is_monotonic(min_required, name) == Monotonic::Increasing;
                     can_fold_backwards &= max_required.defined() &&
-                                          is_monotonic(max_required, op->name) == Monotonic::Decreasing;
+                                          is_monotonic(max_required, name) == Monotonic::Decreasing;
                 }
             }
 
@@ -912,17 +922,17 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                         // consumer wants to move the counter, it must
                         // also acquire or release the semaphore to
                         // prevent them from diverging too far.
-                        dynamic_footprint = func.name() + ".folding_semaphore." + op->name + unique_name('_');
+                        dynamic_footprint = unique_name("fold") + "." + func.name() + "." + name + ".semaphore";
                         head = dynamic_footprint + ".head";
                         tail = dynamic_footprint + ".tail";
                     } else {
-                        dynamic_footprint = func.name() + "." + op->name + unique_name('_') + ".head";
+                        dynamic_footprint = unique_name("fold") + "." + func.name() + "." + name + ".head";
                         head = tail = dynamic_footprint;
                     }
 
                     body = InjectFoldingCheck(func,
                                               head, tail,
-                                              op->name,
+                                              name,
                                               sema_var,
                                               dim,
                                               storage_dim,
@@ -957,7 +967,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     // it will simplify away. For async schedules
                     // it gets dynamically tracked anyway.
                     Expr error = Call::make(Int(32), "halide_error_fold_factor_too_small",
-                                            {func.name(), storage_dim.var, explicit_factor, op->name, extent},
+                                            {func.name(), storage_dim.var, explicit_factor, name, extent},
                                             Call::Extern);
                     body = Block::make(AssertStmt::make(extent <= explicit_factor, error), body);
                 }
@@ -965,9 +975,9 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             } else {
                 // The max of the extent over all values of the loop variable must be a constant
                 Scope<Interval> scope;
-                scope.push(op->name, Interval(op->min, op->max));
+                scope.push(name, var_bounds);
                 Expr max_extent = find_constant_bound(extent, Direction::Upper, scope);
-                scope.pop(op->name);
+                scope.pop(name);
 
                 const int max_fold = 1024;
                 auto const_max_extent = as_const_int(max_extent);
@@ -1040,14 +1050,14 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     // Do the analysis of how much to acquire and release statically
                     Expr to_acquire, to_release;
                     if (can_fold_forwards) {
-                        Expr max_provided_prev = substitute(op->name, loop_var - 1, max_provided);
-                        Expr min_required_next = substitute(op->name, loop_var + 1, min_required);
+                        Expr max_provided_prev = substitute(name, loop_var - 1, max_provided);
+                        Expr min_required_next = substitute(name, loop_var + 1, min_required);
                         to_acquire = max_provided - max_provided_prev;  // This is the first time we use these entries
                         to_release = min_required_next - min_required;  // This is the last time we use these entries
                     } else {
                         internal_assert(can_fold_backwards);
-                        Expr min_provided_prev = substitute(op->name, loop_var - 1, min_provided);
-                        Expr max_required_next = substitute(op->name, loop_var + 1, max_required);
+                        Expr min_provided_prev = substitute(name, loop_var - 1, min_provided);
+                        Expr max_required_next = substitute(name, loop_var + 1, max_required);
                         to_acquire = min_provided_prev - min_provided;  // This is the first time we use these entries
                         to_release = max_required - max_required_next;  // This is the last time we use these entries
                     }
@@ -1055,8 +1065,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     // On the first iteration, we need to acquire the extent of the region shared
                     // between the producer and consumer, and we need to release it on the last
                     // iteration.
-                    to_acquire = select(loop_var > op->min, to_acquire, extent);
-                    to_release = select(loop_var < op->max, to_release, extent);
+                    to_acquire = select(loop_var > var_bounds.min, to_acquire, extent);
+                    to_release = select(loop_var < var_bounds.max, to_release, extent);
 
                     // We may need dynamic assertions that a positive
                     // amount of the semaphore is acquired/released,
@@ -1070,7 +1080,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
                     Expr bad_fold_error =
                         Call::make(Int(32), "halide_error_bad_fold",
-                                   {func.name(), storage_dim.var, op->name},
+                                   {func.name(), storage_dim.var, name},
                                    Call::Extern);
 
                     Expr release_producer =
@@ -1103,18 +1113,18 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 dims_folded.back().fold_forward = storage_dim.fold_forward;
             }
 
-            Expr min_next = substitute(op->name, loop_var + 1, min);
+            Expr min_next = substitute(name, loop_var + 1, min);
 
             if (can_prove(max < min_next)) {
                 // There's no overlapping usage between loop
                 // iterations, so we can continue to search
                 // for further folding opportunities
                 // recursively.
-            } else if (!body.same_as(op->body)) {
-                stmt = op->with(op->min, op->max, body);
+            } else if (!body.same_as(orig_body)) {
+                stmt = rebuild(body);
                 break;
             } else {
-                stmt = op;
+                stmt = orig;
                 debug(3) << "Not folding because loop min or max not monotonic in the loop variable\n"
                          << "min = " << min << "\n"
                          << "max = " << max << "\n";
@@ -1127,7 +1137,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         // marker.
         body = mutate(body);
 
-        stmt = op->with(op->min, op->max, body);
+        stmt = rebuild(body);
 
         if (func.schedule().async() && !dynamic_footprint.empty()) {
             // Step the counters backwards over the entire extent of
@@ -1151,7 +1161,63 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         return stmt;
     }
 
+    Stmt visit(const For *op) override {
+        if (op->for_type != ForType::Serial && op->for_type != ForType::Unrolled) {
+            // We can't proceed into a parallel for loop.
+
+            // TODO: If there's no overlap between the region touched
+            // by the threads as this loop counter varies
+            // (i.e. there's no cross-talk between threads), then it's
+            // safe to proceed.
+            return op;
+        }
+        ScopedBinding<Interval> bind(enclosing_bounds, op->name, Interval(op->min, op->max));
+
+        if (slides_over_a_dimension()) {
+            // Folding happens over the dimension the schedule named, at the
+            // let that carries it, not over the loops it's spread across.
+            // Folding here too would measure the footprint over a whole
+            // iteration of this loop, which is more than is ever live.
+            return IRMutator::visit(op);
+        }
+
+        return fold_over(op->name, Interval(op->min, op->max), op->body, op,
+                         [&](const Stmt &b) { return op->with(op->min, op->max, b); });
+    }
+
+    // Was this func told to slide over particular dimensions?
+    bool slides_over_a_dimension() const {
+        const auto &levels = func.schedule().slide_levels();
+        return std::any_of(levels.begin(), levels.end(), [](const LoopLevel &l) {
+            return l.defined() && !l.is_inlined() && !l.is_root();
+        });
+    }
+
+    // Was this func told to slide over the dimension this let carries?
+    bool slides_over(const std::string &let_name) const {
+        const auto &levels = func.schedule().slide_levels();
+        return std::any_of(levels.begin(), levels.end(), [&](const LoopLevel &l) {
+            return l.defined() && !l.is_inlined() && !l.is_root() && l.match(let_name);
+        });
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        Interval let_bounds = bounds_of_expr_in_scope(op->value, enclosing_bounds);
+        ScopedBinding<Interval> bind(enclosing_bounds, op->name, let_bounds);
+
+        if (slides_over(op->name) && let_bounds.is_bounded()) {
+            return fold_over(op->name, let_bounds, op->body, op,
+                             [&](const Stmt &b) { return LetStmt::make(op->name, op->value, b); });
+        }
+
+        return IRMutator::visit(op);
+    }
+
 public:
+    // Set when sliding window slid over a dimension and told us how wide the
+    // window is, because the dimension is gone from the IR by the time we run.
+    int slid_dim = -1, slid_width = 0;
+
     struct Fold {
         int dim;
         Expr factor;
@@ -1190,6 +1256,34 @@ class StorageFolding : public IRMutator {
             debug(3) << "Attempting to fold " << op->name << " automatically or explicitly\n";
         }
         body = folder(body);
+
+        // Sliding window slid this func over a dimension rather than a loop,
+        // and told us how wide the window is.
+        //
+        // We take its word for it. The dimension is a let by the time sliding
+        // window sees it and is gone by the time we run, because the
+        // simplifier substitutes it away, so there's nothing here to measure.
+        // Measuring the footprint over any of the loops the dimension is
+        // spread across doesn't answer the question either - it counts values
+        // that are never simultaneously live, which is why an explicit
+        // fold_storage of the right factor gets rejected on such a schedule.
+        //
+        // The cost of that trust is that a wrong width here is an allocation
+        // that is too small rather than an error. Sliding window checks the
+        // two things that would make it wrong before emitting the marker: that
+        // the storage lives across every loop the dimension varies over, and
+        // that the region required doesn't move with a loop between the
+        // dimension and the producer.
+        if (folder.slid_width > 0 && folder.slid_dim >= 0) {
+            internal_assert(folder.slid_width > 0 && folder.slid_dim < func.dimensions())
+                << "Sliding window asked to fold " << op->name << " dimension "
+                << folder.slid_dim << " by " << folder.slid_width << "\n";
+            Expr factor = (int)next_power_of_two((uint64_t)folder.slid_width);
+            body = FoldStorageOfFunction(op->name, folder.slid_dim, factor, "")(body);
+            folder.dims_folded.push_back({folder.slid_dim, factor});
+            debug(3) << "Folding " << op->name << " dimension " << folder.slid_dim
+                     << " by " << factor << ", as sliding window requested\n";
+        }
 
         // If the user explicitly requested storage folding via Func::fold_storage,
         // storage folding may have bailed out before reaching the correct loop.

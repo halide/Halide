@@ -617,6 +617,16 @@ public:
     Expr &ring_buffer();
     Expr &ring_buffer() const;
 
+    /** Static preconditions injected by Func::change_type() that guarantee the
+     * retyped accumulation cannot overflow. Each entry is a (condition, message)
+     * pair; a lowering pass (add_type_change_checks) asserts them in the
+     * pipeline's initial assertion block, and they are removed by the no_asserts
+     * target feature. */
+    // @{
+    const std::vector<std::pair<Expr, std::string>> &type_change_checks() const;
+    std::vector<std::pair<Expr, std::string>> &type_change_checks();
+    // @}
+
     /** The list and order of dimensions used to store this
      * function. The first dimension in the vector corresponds to the
      * innermost dimension for storage (i.e. which dimension is
@@ -668,9 +678,16 @@ public:
     const LoopLevel &store_level() const;
     const LoopLevel &compute_level() const;
     const LoopLevel &hoist_storage_level() const;
+
+    /** The dimensions of consumers that this Func slides over, if the
+     * schedule asked for that explicitly with \ref Func::slide. A window can
+     * slide over more than one dimension at once, so this is a list. Empty
+     * means sliding window analysis should pick loops itself. */
+    const std::vector<LoopLevel> &slide_levels() const;
     LoopLevel &store_level();
     LoopLevel &compute_level();
     LoopLevel &hoist_storage_level();
+    std::vector<LoopLevel> &slide_levels();
     // @}
 
     /** Pass an IRVisitor through to all Exprs referenced in the

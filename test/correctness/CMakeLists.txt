@@ -46,6 +46,7 @@ tests(
     cascaded_filters.cpp
     cast.cpp
     cast_handle.cpp
+    change_type.cpp
     chunk.cpp
     chunk_sharing.cpp
     circular_reference_leak.cpp
@@ -310,6 +311,7 @@ tests(
     respect_input_constraint_in_bounds_inference.cpp
     reuse_stack_alloc.cpp
     round.cpp
+    run_process.cpp
     runtime_prefixes.cpp
     saturating_casts.cpp
     scatter.cpp
@@ -325,6 +327,7 @@ tests(
     skip_stages_cse_bug.cpp
     skip_stages_external_array_functions.cpp
     skip_stages_memoize.cpp
+    slide_directive.cpp
     sliding_backwards.cpp
     sliding_over_guard_with_if.cpp
     sliding_reduction.cpp

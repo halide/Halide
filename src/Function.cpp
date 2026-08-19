@@ -746,6 +746,21 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     }
 }
 
+void Function::clear_definition() {
+    contents->output_types.clear();
+    contents->args.clear();
+    contents->func_schedule = FuncSchedule();
+    contents->init_def = Definition();
+    contents->updates.clear();
+    contents->output_buffers.clear();
+    contents->extern_arguments.clear();
+    contents->extern_function_name.clear();
+    contents->extern_mangling = NameMangling::Default;
+    contents->extern_function_device_api = DeviceAPI::Host;
+    contents->extern_proxy_expr = Expr();
+    contents->frozen = false;
+}
+
 void Function::create_output_buffers(const std::vector<Type> &types, int dims) const {
     internal_assert(contents->output_buffers.empty());
     internal_assert(!types.empty() && dims != AnyDims);
@@ -1365,6 +1380,9 @@ void Function::lock_loop_levels() {
     schedule.compute_level().lock();
     schedule.store_level().lock();
     schedule.hoist_storage_level().lock();
+    for (auto &l : schedule.slide_levels()) {
+        l.lock();
+    }
     // If store_level is inlined, use the compute_level instead.
     // (Note that we deliberately do *not* do the same if store_level
     // is undefined.)

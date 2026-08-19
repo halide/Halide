@@ -234,6 +234,7 @@ struct FuncScheduleContents {
     mutable RefCount ref_count;
 
     LoopLevel store_level, compute_level, hoist_storage_level;
+    std::vector<LoopLevel> slide_levels;
     std::vector<StorageDim> storage_dims;
     std::vector<Bound> bounds;
     std::vector<Bound> estimates;
@@ -244,6 +245,11 @@ struct FuncScheduleContents {
     // This is an extent of the ring buffer and expected to be a positive integer.
     Expr ring_buffer;
     Expr memoize_eviction_key;
+    // Static preconditions injected by change_type() that must hold for the
+    // retyped accumulation not to overflow. Each is a (condition, message) pair;
+    // a lowering pass turns them into assertions in the pipeline's initial
+    // assertion block (removed by the no_asserts target feature).
+    std::vector<std::pair<Expr, std::string>> type_change_checks;
 
     FuncScheduleContents()
         : store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()), hoist_storage_level(LoopLevel::inlined()) {
@@ -277,6 +283,11 @@ struct FuncScheduleContents {
             }
             if (b.remainder.defined()) {
                 b.remainder = mutator(b.remainder);
+            }
+        }
+        for (auto &check : type_change_checks) {
+            if (check.first.defined()) {
+                check.first = mutator(check.first);
             }
         }
     }
@@ -361,6 +372,11 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->store_level.set(contents->store_level);
     copy.contents->compute_level.set(contents->compute_level);
     copy.contents->hoist_storage_level.set(contents->hoist_storage_level);
+    copy.contents->slide_levels.clear();
+    for (const auto &l : contents->slide_levels) {
+        copy.contents->slide_levels.emplace_back();
+        copy.contents->slide_levels.back().set(l);
+    }
     copy.contents->storage_dims = contents->storage_dims;
     copy.contents->bounds = contents->bounds;
     copy.contents->estimates = contents->estimates;
@@ -369,6 +385,7 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->memoize_eviction_key = contents->memoize_eviction_key;
     copy.contents->async = contents->async;
     copy.contents->ring_buffer = contents->ring_buffer;
+    copy.contents->type_change_checks = contents->type_change_checks;
 
     // Deep-copy wrapper functions. In a partial deep-copy (e.g. cloning a
     // single Func via clone_in), the wrapper Funcs may not be among the Funcs
@@ -423,6 +440,14 @@ Expr &FuncSchedule::ring_buffer() const {
     return contents->ring_buffer;
 }
 
+const std::vector<std::pair<Expr, std::string>> &FuncSchedule::type_change_checks() const {
+    return contents->type_change_checks;
+}
+
+std::vector<std::pair<Expr, std::string>> &FuncSchedule::type_change_checks() {
+    return contents->type_change_checks;
+}
+
 std::vector<StorageDim> &FuncSchedule::storage_dims() {
     return contents->storage_dims;
 }
@@ -474,6 +499,14 @@ LoopLevel &FuncSchedule::store_level() {
 
 LoopLevel &FuncSchedule::compute_level() {
     return contents->compute_level;
+}
+
+std::vector<LoopLevel> &FuncSchedule::slide_levels() {
+    return contents->slide_levels;
+}
+
+const std::vector<LoopLevel> &FuncSchedule::slide_levels() const {
+    return contents->slide_levels;
 }
 
 LoopLevel &FuncSchedule::hoist_storage_level() {

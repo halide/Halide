@@ -276,10 +276,7 @@ protected:
 
             // Peel off containing lets. These will be lifted.
             vector<pair<string, Expr>> lets;
-            while (const Let *let = dummy_call.as<Let>()) {
-                lets.emplace_back(let->name, let->value);
-                dummy_call = let->body;
-            }
+            dummy_call = peel_lets(dummy_call, &lets);
 
             // Track the set of variables used by the inner loop
             set<string> vars;
@@ -327,12 +324,7 @@ protected:
             }
 
             // Wrap the lets pulled out by CSE
-            while (!lets.empty()) {
-                new_stmt = LetStmt::make(lets.back().first, lets.back().second, new_stmt);
-                lets.pop_back();
-            }
-
-            return new_stmt;
+            return rewrap_all_lets(new_stmt, lets);
         }
     }
 };

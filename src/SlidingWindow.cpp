@@ -283,6 +283,22 @@ public:
 // is the entire output of the analysis - the rewrite consumes it and makes no
 // decisions of its own, and the guards injected afterwards are derived from
 // the decisions for all the Funcs around a loop.
+// The name the schedule used for the dimension a loop or let carries. Loop
+// and let names in the IR are mangled, so error messages use this instead.
+string slide_level_name(const Function &f, const string &loop) {
+    for (const LoopLevel &l : f.schedule().slide_levels()) {
+        if (l.defined() && !l.is_inlined() && !l.is_root() && l.match(loop)) {
+            return l.to_string();
+        }
+    }
+    return loop;
+}
+
+// A window can only slide over one schedule dimension per dimension of the
+// Func's storage. Naming two that move the same one is a scheduling error, so
+// this rejection reason gets compared against by pointer.
+constexpr const char *already_slid = "this dimension has already been slid over";
+
 struct SlideDecision {
     // What we were asked to consider. Today we always slide a Func over a
     // serial loop that we picked ourselves, but the schedule will eventually
@@ -368,6 +384,11 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     set<int> &slid_dimensions;
     Scope<Expr> scope;
     Scope<Interval> &bounds_scope;
+
+    // Whether the thing being slid over can have iterations prepended to it.
+    // A loop can; a let that names a dimension spread across several loops
+    // can't, so those warm up with a select instead.
+    bool can_rewind = true;
 
     // For loops strictly between the loop being slid over and the current
     // node (not including the loop being slid over itself).
@@ -461,7 +482,9 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         }
 
         if (!dim.empty() && slid_dimensions.count(dim_idx)) {
-            return result.reject("this dimension has already been slid over");
+            result.dim = dim;
+            result.dim_idx = dim_idx;
+            return result.reject(already_slid);
         }
         if (func.schedule().memory_type() == MemoryType::Register &&
             enclosing_real_loops > 0) {
@@ -474,6 +497,25 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         }
         if (!min_required.defined()) {
             return result.reject("more than one dimension depends on the loop var");
+        }
+
+        if (!can_rewind &&
+            (expr_uses_vars(min_required, enclosing_loops) ||
+             expr_uses_vars(max_required, enclosing_loops))) {
+            // Sliding over a dimension only advances the window once per value
+            // of that dimension. If the region required also moves with a loop
+            // between here and the producer, the window would have to advance
+            // within an iteration too, and the values a later iteration wants
+            // have been passed over by then.
+            user_error
+                << "Func " << func.name() << " was told to slide over "
+                << slide_level_name(func, loop_var) << ", but the "
+                << "region of it required also depends on a loop between that "
+                << "dimension and where " << func.name() << " is computed, so "
+                << "the window would have to move within a single value of "
+                << "that dimension. Compute " << func.name() << " at a "
+                << "coarser level, or slide over a dimension the region "
+                << "required moves with.\n";
         }
 
         // If the function is not pure in the given dimension, give up. We also
@@ -560,7 +602,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         // correctness condition for rewinding: the warm-up iterations tile the
         // region with copies of the steady state, and reach back far enough to
         // cover what's required at the loop min.
-        bool solved = (solve_result.has_upper_bound() &&
+        bool solved = (can_rewind &&
+                       solve_result.has_upper_bound() &&
                        can_prove(substitute(new_loop_min_name, solve_result.max,
                                             new_loop_min_eq)));
         if (solved &&
@@ -588,10 +631,16 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // every iteration has a previous iteration. The first iteration
             // will warm up the loop instead.
             Expr need_explicit_warmup = loop_var_expr <= loop_min;
+            // When sliding over a dimension, the condition is on loops outside
+            // the innermost one, so likely_if_innermost wouldn't get the
+            // warm-up peeled off. Ask for the loop to be partitioned instead.
+            auto mark = [&](const Expr &e) {
+                return can_rewind ? likely_if_innermost(e) : likely(e);
+            };
             if (can_slide_up) {
-                new_min = select(need_explicit_warmup, min_required, likely_if_innermost(new_min));
+                new_min = select(need_explicit_warmup, min_required, mark(new_min));
             } else {
-                new_max = select(need_explicit_warmup, max_required, likely_if_innermost(new_max));
+                new_max = select(need_explicit_warmup, max_required, mark(new_max));
             }
         }
 
@@ -714,9 +763,9 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
 public:
     SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min, set<int> &slid_dimensions,
-                                   Scope<Interval> &bounds_scope)
+                                   Scope<Interval> &bounds_scope, bool can_rewind = true)
         : func(std::move(f)), loop_var(std::move(v)), loop_min(std::move(v_min)),
-          slid_dimensions(slid_dimensions), bounds_scope(bounds_scope) {
+          slid_dimensions(slid_dimensions), bounds_scope(bounds_scope), can_rewind(can_rewind) {
         decision.func_name = func.name();
         decision.slide_over = loop_var;
     }
@@ -913,17 +962,141 @@ class SlidingWindow : public IRMutator {
 
     // A map of which dimensions we've already slid over, by Func name.
     map<string, set<int>> slid_dimensions;
+    // For funcs told which dimensions to slide over, which of those claimed
+    // each dimension of the func's storage. Only used to explain errors.
+    map<string, map<int, string>> slid_over_by;
 
     // Keep track of realizations we want to slide, from innermost to
     // outermost.
     list<Function> sliding;
+    // For each of those, how many loops we were already inside when we
+    // reached its Realize. Loops outside that point don't have its storage
+    // live across them.
+    list<size_t> sliding_loop_depth;
+    vector<string> loop_stack;
+    Scope<Expr> let_values;
     Scope<Interval> bounds_scope;
 
     using IRMutator::visit;
 
+    // A window can only slide over a dimension if the storage lives across
+    // every loop that dimension varies over. Sliding assumes the previous
+    // iteration's values are still there, and an allocation inside one of
+    // those loops is thrown away and remade as they run.
+    void check_storage_outlives_dimension(const Function &f, const string &let_name,
+                                          const Expr &value) {
+        size_t depth = 0;
+        auto d = sliding_loop_depth.begin();
+        for (auto it = sliding.begin(); it != sliding.end(); it++, d++) {
+            if (it->name() == f.name()) {
+                depth = *d;
+                break;
+            }
+        }
+        Expr expanded = expand_expr(value, let_values);
+        for (size_t i = 0; i < depth; i++) {
+            if (expr_uses_var(expanded, loop_stack[i])) {
+                user_error
+                    << "Func " << f.name() << " was told to slide over "
+                    << slide_level_name(f, let_name) << ", but that "
+                    << "dimension varies over the loop " << loop_stack[i]
+                    << ", which is outside " << f.name() << "'s storage. Sliding "
+                    << "would read values from a previous iteration of that "
+                    << "loop, which have been thrown away by then. Store "
+                    << f.name() << " at a coarser level, or slide over a "
+                    << "dimension that doesn't span that loop.\n";
+            }
+        }
+    }
+
+    // Two dimensions a func was told to slide over move the same dimension of
+    // its storage. The window can only advance along that dimension once, so
+    // one of the two requests would be silently dropped.
+    void check_not_entangled(const Function &f, const string &dim,
+                             const SlideDecision &decision) {
+        if (decision.rejected != already_slid) {
+            return;
+        }
+        const string &other = slid_over_by[f.name()][decision.dim_idx];
+        user_error
+            << "Func " << f.name() << " was told to slide over both "
+            << slide_level_name(f, other) << " and " << slide_level_name(f, dim)
+            << ", but both of those move the same dimension ("
+            << decision.dim << ") of " << f.name() << ", so the window would "
+            << "have to advance along it twice. Slide over dimensions that "
+            << "move different dimensions of " << f.name() << ".\n";
+    }
+
+    // Was this func told to slide over the dimension this let carries? After
+    // splitting there's no loop with this name, but there is a let, because
+    // the original var still has to be computed to evaluate the func's args.
+    static bool slides_over(const Function &f, const string &let_name) {
+        const auto &levels = f.schedule().slide_levels();
+        return std::any_of(levels.begin(), levels.end(), [&](const LoopLevel &l) {
+            return l.defined() && !l.is_inlined() && !l.is_root() && l.match(let_name);
+        });
+    }
+
     Stmt visit(const LetStmt *op) override {
-        ScopedBinding<Interval> bind(bounds_scope, op->name,
-                                     bounds_of_expr_in_scope(op->value, bounds_scope));
+        Interval let_bounds = bounds_of_expr_in_scope(op->value, bounds_scope);
+        ScopedBinding<Interval> bind(bounds_scope, op->name, let_bounds);
+        ScopedBinding<Expr> bind_value(let_values, op->name, op->value);
+
+        // Anything told to slide over this dimension slides here rather than
+        // over some loop. The let can't have iterations prepended to it, so
+        // these warm up with a select instead of by rewinding.
+        Stmt body = op->body;
+        bool slid_any = false;
+        for (const Function &func : consumers_first(sliding)) {
+            if (!slides_over(func, op->name)) {
+                continue;
+            }
+            check_storage_outlives_dimension(func, op->name, op->value);
+            debug(3) << "Sliding " << func.name() << " over dimension "
+                     << op->name << "\n";
+            set<int> &slid_dims = slid_dimensions[func.name()];
+            SlidingWindowOnFunctionAndLoop slider(func, op->name, let_bounds.min,
+                                                  slid_dims, bounds_scope,
+                                                  /* can_rewind */ false);
+            body = slider(body);
+            debug(3) << slider.decision;
+            check_not_entangled(func, op->name, slider.decision);
+            if (slider.decision.slid()) {
+                slid_over_by[func.name()][slider.decision.dim_idx] = op->name;
+            }
+            slid_any = true;
+
+            // Storage folding can't work this out for itself. The dimension
+            // is gone by the time it runs, because the simplifier substitutes
+            // the let away, and measuring the footprint over any of the loops
+            // the dimension is spread across counts values that are never
+            // simultaneously live. Tell it the window width we just derived.
+            const SlideDecision &d = slider.decision;
+            if (d.slid()) {
+                // An upper bound, not the exact width. The window spans the
+                // loops the dimension is split across, so its width is often
+                // written in terms of their bounds rather than as a literal.
+                // Erring large just folds to a larger power of two.
+                // The window spans the loops the dimension was split across,
+                // so its width is written in terms of their bounds. Expand
+                // those to reach the constant behind them. An upper bound is
+                // enough, and erring large just folds to a larger power of
+                // two.
+                Expr width = find_constant_bound(
+                    expand_expr(d.old_bounds.max - d.old_bounds.min + 1, let_values),
+                    Direction::Upper, bounds_scope);
+                if (width.defined()) {
+                    Expr marker = Call::make(Int(32), Call::sliding_window_marker,
+                                             {func.name(), Variable::make(Int(32), op->name),
+                                              d.dim_idx, width},
+                                             Call::Intrinsic);
+                    body = Block::make(Evaluate::make(marker), body);
+                }
+            }
+        }
+        if (slid_any) {
+            return LetStmt::make(op->name, op->value, mutate(body));
+        }
         return IRMutator::visit(op);
     }
 
@@ -947,8 +1120,10 @@ class SlidingWindow : public IRMutator {
         // We want to slide innermost first, so put it on the front of
         // the list.
         sliding.push_front(iter->second);
+        sliding_loop_depth.push_front(loop_stack.size());
         Stmt new_body = mutate(op->body);
         sliding.pop_front();
+        sliding_loop_depth.pop_front();
         // Remove tracking of slid dimensions when we're done realizing
         // it in case a realization appears elsewhere.
         auto slid_it = slid_dimensions.find(iter->second.name());
@@ -1038,6 +1213,13 @@ class SlidingWindow : public IRMutator {
         Expr orig_loop_min = Variable::make(Int(32), orig_loop_min_name);
 
         for (const Function &func : consumers_first(sliding)) {
+            if (!func.schedule().slide_levels().empty() &&
+                !slides_over(func, op->name)) {
+                // Told explicitly which dimensions to slide over, and this
+                // loop isn't one of them. A named dimension that no loop
+                // corresponds to slides at the let that carries it instead.
+                continue;
+            }
             debug(3) << "Doing sliding window analysis on function " << func.name() << "\n";
 
             // Figure out the first iteration at which this func is consumed.
@@ -1065,6 +1247,12 @@ class SlidingWindow : public IRMutator {
 
             body = slider(body);
             const SlideDecision &decision = slider.decision;
+            if (!func.schedule().slide_levels().empty()) {
+                check_not_entangled(func, op->name, decision);
+                if (decision.slid()) {
+                    slid_over_by[func.name()][decision.dim_idx] = op->name;
+                }
+            }
             if (decision.considered) {
                 plan.push_back(decision);
             }
@@ -1129,7 +1317,17 @@ class SlidingWindow : public IRMutator {
             body = InjectWarmupGuards(warming_up, name, orig_loop_min, deps)(body);
         }
 
-        body = mutate(body);
+        {
+            // Keep this loop's range in scope while we descend, so that a let
+            // carrying a dimension spread across several loops can be bounded
+            // when we come to slide over it.
+            Interval lo = bounds_of_expr_in_scope(loop_min, bounds_scope);
+            Interval hi = bounds_of_expr_in_scope(loop_max, bounds_scope);
+            ScopedBinding<Interval> bind(bounds_scope, name, Interval(lo.min, hi.max));
+            loop_stack.push_back(name);
+            body = mutate(body);
+            loop_stack.pop_back();
+        }
 
         if (body.same_as(op->body) && loop_min.same_as(op->min) && loop_max.same_as(op->max) && name == op->name) {
             return op;

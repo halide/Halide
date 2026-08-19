@@ -1577,12 +1577,8 @@ void CodeGen_ARM::visit(const Store *op) {
     }
 
     // First dig through let expressions
-    Expr rhs = op->value;
     vector<pair<string, Expr>> lets;
-    while (const Let *let = rhs.as<Let>()) {
-        rhs = let->body;
-        lets.emplace_back(let->name, let->value);
-    }
+    Expr rhs = peel_lets(op->value, &lets);
     const Shuffle *shuffle = rhs.as<Shuffle>();
 
     // Interleaving store instructions only exist for certain types.
@@ -1690,11 +1686,7 @@ void CodeGen_ARM::visit(const Store *op) {
             // And we make sure the deinterleaved predicates are all the same.
 
             // Dig through let expressions
-            Expr rhs = op->predicate;
-            while (const Let *let = rhs.as<Let>()) {
-                rhs = let->body;
-                lets_pred.emplace_back(let->name, let->value);
-            }
+            Expr rhs = peel_lets(op->predicate, &lets_pred);
 
             Expr vpred_predicated_store;
             bool predicates_are_same = true;
