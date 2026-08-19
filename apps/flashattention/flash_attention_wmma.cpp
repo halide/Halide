@@ -4,18 +4,26 @@
 // that reads them. A block owns a strip of queries and walks the key tiles,
 // carrying everything in tensor core fragments.
 //
-// This does not compile yet. The running maximum folds down to two tiles and
-// slides to one new tile per step, which is what is wanted, but its producers
-// are still asked for the whole prefix. The scan reads the maximum one tile
-// back, and has to clamp that index because the tile before the first does not
-// exist, so the region required of the maximum reads as
+// This does not compile yet, but everything except the carried state does.
+// The scores, the two row reductions and both matrix multiplies all land in
+// fragments, one key tile per step.
 //
-//   [min(min(max(rt, 1) + -1, rt), 0), max(rt, 0)]
+// What is left is the state itself. The running maximum is read by the scan at
+// both rt - 1 and rt, so two tiles of it are live, and storage folding gives it
+// two slots indexed by t % 2. A fragment lives in registers, which cannot be
+// indexed at run time, so that index has to be a constant. The two ways of
+// getting one both cost more than they give:
 //
-// whose lower bound is 0 rather than rt - 1. Storage folding case-splits on
-// whether this is the first iteration and so proves the footprint is two;
-// sliding does not, and hands score and tile_max a t extent that grows with
-// the scan. Fragments are registers, so their offsets have to be constants.
+//  - Rolling the state between iterations rather than folding it, which is what
+//    MemoryType::Register does, keeps the region written full width by design
+//    and relies on unrolling to make the copies free. That widens the window of
+//    every producer back to the whole prefix.
+//  - Unrolling the scan by two makes both t % 2 and (t - 1) % 2 constants, but
+//    the pair of steps then spans two key tiles, which widens the producers the
+//    same way and asks for a tile before the first.
+//
+// Reading a fragment at a folded index needs to become a choice between the
+// slots, made where the code is generated rather than at run time.
 
 #include "Halide.h"
 #include <algorithm>
