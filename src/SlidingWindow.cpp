@@ -1093,6 +1093,74 @@ class SlidingWindow : public IRMutator {
         });
     }
 
+    // How much of a Func has to be kept while sliding over a dimension.
+    //
+    // The region required per iteration is the obvious answer, and it is wrong
+    // for a recurrence. A Func defined in terms of itself one step back
+    // requires, transitively, everything it has ever computed, so the region
+    // reaches all the way to the base case and the window looks like the whole
+    // scan. Sliding itself is not fooled by this - it still computes one new
+    // value per step - but the width handed to storage folding would be.
+    //
+    // What has to be kept is what will still be read once this step's value
+    // has been written: the values the consumers ask for, and the value the
+    // recurrence reaches back to.
+    Interval window_for(const Function &func, const SlideDecision &d,
+                        const string &dim_name, const Stmt &body) {
+        // The step the recurrence reaches back by, as a number of values of
+        // the dimension. Zero if the Func does not read itself, in which case
+        // the region required was the right answer already. The Func's own
+        // definition names the dimension by its pure Var.
+        int reach_back = 0;
+        Expr pure_var = Variable::make(Int(32), d.dim);
+        auto note_self_calls = [&](const Definition &def) {
+            for (const Expr &v : def.values()) {
+                visit_with(v, [&](auto *self, const Call *op) {
+                    if (op->name == func.name() && op->call_type == Call::Halide &&
+                        d.dim_idx < (int)op->args.size()) {
+                        auto step = as_const_int(simplify(pure_var - op->args[d.dim_idx]));
+                        // A step we can't pin down means we can't say how wide
+                        // the window is either.
+                        reach_back = step ? std::max(reach_back, (int)*step) : -1;
+                    }
+                    self->visit_base(op);
+                });
+            }
+        };
+        note_self_calls(func.definition());
+        for (const Definition &def : func.updates()) {
+            note_self_calls(def);
+        }
+        if (reach_back <= 0) {
+            return d.old_bounds;
+        }
+
+        // What the consumers ask for at one value of the dimension. Pinning it
+        // to itself keeps it symbolic: left to the enclosing bounds it would
+        // be replaced by its whole range, which is the union over every step
+        // rather than the region at any one of them.
+        Expr dim_var = Variable::make(Int(32), dim_name);
+        Scope<Interval> one_step;
+        one_step.set_containing_scope(&bounds_scope);
+        one_step.push(dim_name, Interval::single_point(dim_var));
+        // Scrub the self-references of everything sliding here, not just the
+        // Func being measured. Another recurrence sliding over the same
+        // dimension has the same whole-scan region, and if it reads this Func
+        // it drags this Func's region back to the start with it.
+        Stmt scrubbed = body;
+        for (const Function &other : sliding) {
+            scrubbed = scrub_self_reads(scrubbed, other.name());
+        }
+        Box ext = box_required(scrubbed, func.name(), one_step);
+        if (d.dim_idx >= (int)ext.size() || !ext[d.dim_idx].is_bounded()) {
+            return d.old_bounds;
+        }
+
+        Interval live(simplify(min(ext[d.dim_idx].min, dim_var - reach_back), one_step),
+                      simplify(max(ext[d.dim_idx].max, dim_var), one_step));
+        return live;
+    }
+
     Stmt visit(const LetStmt *op) override {
         Interval let_bounds = bounds_of_expr_in_scope(op->value, bounds_scope);
         // Simplify the ends before they go into scope. Anything that consults
@@ -1154,8 +1222,9 @@ class SlidingWindow : public IRMutator {
                 // correlated, and cancelling them needs what we know about
                 // the dimension, which interval arithmetic on the ends
                 // separately would throw away.
+                Interval window = window_for(func, d, op->name, body);
                 Expr width = find_constant_bound(
-                    simplify(d.old_bounds.max - d.old_bounds.min + 1, bounds_scope),
+                    simplify(window.max - window.min + 1, bounds_scope),
                     Direction::Upper, bounds_scope);
                 if (width.defined()) {
                     Expr marker = Call::make(Int(32), Call::sliding_window_marker,

@@ -53,27 +53,6 @@ int count_producers(const Stmt &in, const std::string &name) {
     return counter.count;
 }
 
-Stmt scrub_self_reads(const Stmt &s, const string &func) {
-    return mutate_with(s, [&](auto *self, const Provide *op) {
-        debug(3) << "Scrubbing self reads in Provide: " << Stmt(op) << " func name: " << func << "\n";
-        if (op->name == func) {
-            vector<Expr> values;
-            values.reserve(op->values.size());
-            for (const Expr &v : op->values) {
-                values.push_back(mutate_with(v, [&](auto *self, const Call *op) {
-                    if (op->name == func && op->call_type == Call::Halide) {
-                        return make_zero(op->type);
-                    }
-                    return Call::make(op->type, op->name, self->mutate(op->args), op->call_type,
-                                      op->func, op->value_index, op->image, op->param);
-                }));
-            }
-            return Provide::make(op->name, values, op->args, op->predicate);
-        }
-        return Provide::make(op->name, self->mutate(op->values), self->mutate(op->args), self->mutate(op->predicate));
-    });
-}
-
 // True if every self-call of func (inside func's own Provide) matches the
 // store index in all dimensions except dim, and strictly differs from it in dim.
 bool inductive_only_in_dim(const Stmt &body, const string &func, int dim) {

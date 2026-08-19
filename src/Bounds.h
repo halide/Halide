@@ -176,6 +176,13 @@ Box box_provided(Stmt s, const std::string &fn,
                  const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
                  const FuncValueBounds &func_bounds = empty_func_value_bounds());
 
+/** Replace a Func's references to itself, inside its own definition, with
+ * zero. The region required of a recurrence includes everything its own
+ * definition reaches back to, and transitively that is every value it has ever
+ * computed. Scrubbing the self-references leaves the region its consumers ask
+ * for, which is what says how much of it has to be kept. */
+Stmt scrub_self_reads(const Stmt &s, const std::string &fn);
+
 Box box_touched(const Expr &e, const std::string &fn,
                 const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
                 const FuncValueBounds &func_bounds = empty_func_value_bounds());

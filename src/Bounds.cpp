@@ -3212,6 +3212,27 @@ map<string, Box> boxes_required(const Expr &e, const Scope<Interval> &scope, con
     return boxes_touched(e, Stmt(), true, false, "", scope, fb);
 }
 
+Stmt scrub_self_reads(const Stmt &s, const string &fn) {
+    return mutate_with(s, [&](auto *self, const Provide *op) {
+        debug(3) << "Scrubbing self reads in Provide: " << Stmt(op) << " fn name: " << fn << "\n";
+        if (op->name == fn) {
+            vector<Expr> values;
+            values.reserve(op->values.size());
+            for (const Expr &v : op->values) {
+                values.push_back(mutate_with(v, [&](auto *self, const Call *op) {
+                    if (op->name == fn && op->call_type == Call::Halide) {
+                        return make_zero(op->type);
+                    }
+                    return Call::make(op->type, op->name, self->mutate(op->args), op->call_type,
+                                      op->func, op->value_index, op->image, op->param);
+                }));
+            }
+            return Provide::make(op->name, values, op->args, op->predicate);
+        }
+        return Provide::make(op->name, self->mutate(op->values), self->mutate(op->args), self->mutate(op->predicate));
+    });
+}
+
 Box box_required(const Expr &e, const string &fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
     return box_touched(e, Stmt(), true, false, fn, scope, fb);
 }
