@@ -4,11 +4,11 @@ import { Accordion } from "radix-ui";
 import { funcAtom } from "@/state/func";
 import type { FuncMeta } from "@/types/trace";
 
-interface FuncsPanelProps {
+interface Props {
   funcs: Record<string, FuncMeta>;
 }
 
-function FuncsPanel({ funcs }: FuncsPanelProps) {
+function FuncsPanel({ funcs }: Props) {
   const [func, setFunc] = useAtom(funcAtom);
 
   return (

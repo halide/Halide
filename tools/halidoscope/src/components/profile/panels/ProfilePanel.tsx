@@ -1,6 +1,6 @@
 import { clsx } from "clsx";
 
-interface ProfilePanelProps {
+interface Props {
   label: string;
   className?: string;
   contentClassName?: string;
@@ -11,7 +11,7 @@ function ProfilePanel({
   className = "",
   contentClassName = "items-center justify-center p-4",
   children,
-}: React.PropsWithChildren<ProfilePanelProps>) {
+}: React.PropsWithChildren<Props>) {
   return (
     <div
       className={clsx(
