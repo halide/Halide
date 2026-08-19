@@ -1194,25 +1194,35 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     if (emit) {
                         sstr << fs->name << " redundantly recomputes each value " << recompute
                              << " times on average. ";
-                        // Attribute the recompute to the largest of the three
-                        // stages: root->realization, realization->production
-                        // (sliding-window), or production->computed (split
-                        // factors / tail strategies).
-                        float a = (float)fs->points_required_at_realization / fs->points_required_at_root;
-                        float b = (float)fs->points_required_at_production / fs->points_required_at_realization;
-                        float c = (float)fs->points_computed / fs->points_required_at_production;
-                        if (a > b && a > c) {
-                            sstr << "Consider a store_at/compute_at location further outwards "
-                                 << "in the parent's loop nest. ";
+                        // The recompute factorizes into three independent
+                        // stages whose product is the total: root->realization
+                        // (redundant realizations), realization->production
+                        // (sliding-window failure), and production->computed
+                        // (tail strategy / split factors). Name each stage that
+                        // contributes meaningfully, so the advice points only at
+                        // causes that are actually present.
+                        uint64_t at_root = fs->points_required_at_root;
+                        uint64_t at_real = fs->points_required_at_realization;
+                        uint64_t at_prod = fs->points_required_at_production;
+                        float a = at_root ? (float)at_real / at_root : 1.0f;
+                        float b = at_real ? (float)at_prod / at_real : 1.0f;
+                        float c = at_prod ? (float)fs->points_computed / at_prod : 1.0f;
+                        const float significant = 1.1f;
+                        if (a > significant) {
+                            sstr << "The region realized across all store_at sites is " << a
+                                 << "x the root footprint; consider a store_at/compute_at "
+                                 << "location further outwards in the parent's loop nest. ";
                         }
-                        if (b > c) {
-                            sstr << "The points required at the compute_at site is " << b
-                                 << " times larger than the points required at the store_at "
-                                 << "site. Sliding window optimization may have failed.";
-                        } else {
-                            sstr << "The number of points actually computed is " << c
-                                 << " times larger than the points required at the compute_at site."
-                                 << " The schedule may be using excessively large split factors.";
+                        if (b > significant) {
+                            sstr << "The points required at the compute_at site are " << b
+                                 << "x those at the store_at site; sliding window optimization "
+                                 << "may have failed. ";
+                        }
+                        if (c > significant) {
+                            sstr << "The points actually computed are " << c
+                                 << "x those required at the compute_at site; the schedule may "
+                                 << "be using excessively large split factors or a wasteful tail "
+                                 << "strategy. ";
                         }
                     }
                     return true;
