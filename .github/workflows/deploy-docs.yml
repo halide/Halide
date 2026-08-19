@@ -43,7 +43,23 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libpng-dev libjpeg-dev doxygen gdb
+          sudo apt-get install -y libpng-dev libjpeg-dev gdb
+
+      - name: Install Doxygen
+        env:
+          DOXYGEN_VERSION: 1.18.0
+          DOXYGEN_SHA256: 14fa81bdc34171edb5f1f02b1d60e74802f0439b77fa44e592565d517d72df90
+        run: |
+          # Ubuntu 24.04's apt package is stuck on Doxygen 1.9.8, which
+          # emits an empty <name/> for anonymous enums instead of a
+          # synthetic "@N" name -- generate_api_reference.py only handles
+          # the latter. Install upstream's official prebuilt binary
+          # instead of waiting on the distro package to catch up.
+          curl -fsSL -o doxygen.tar.gz \
+            "https://github.com/doxygen/doxygen/releases/download/Release_${DOXYGEN_VERSION//./_}/doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz"
+          echo "${DOXYGEN_SHA256}  doxygen.tar.gz" | sha256sum -c -
+          tar xzf doxygen.tar.gz
+          echo "${GITHUB_WORKSPACE}/doxygen-${DOXYGEN_VERSION}/bin" >> "$GITHUB_PATH"
 
       - name: Sync CI environment
         run: |
