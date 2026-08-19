@@ -1163,16 +1163,26 @@ class SlidingWindow : public IRMutator {
 
     Stmt visit(const LetStmt *op) override {
         Interval let_bounds = bounds_of_expr_in_scope(op->value, bounds_scope);
+        // For a dimension we're about to slide over, simplify the ends before
+        // they go into scope. Cancelling the two ends of the window needs what
+        // we know about the dimension, and that arrives as unsimplified
+        // arithmetic on loop mins and extents - a min of ((0*2) + 0) + 0
+        // rather than 0 - which nothing downstream can use. Only worth doing
+        // for those lets: the bounds of every let in the program nest, and
+        // simplifying all of them costs more than the whole rest of the pass.
+        if (std::any_of(sliding.begin(), sliding.end(),
+                        [&](const Function &f) { return slides_over(f, op->name); })) {
+            if (let_bounds.has_lower_bound()) {
+                let_bounds.min = simplify(let_bounds.min);
+            }
+            if (let_bounds.has_upper_bound()) {
+                let_bounds.max = simplify(let_bounds.max);
+            }
+        }
         // Simplify the ends before they go into scope. Anything that consults
         // them has to recognize a constant to be able to use it, and the
         // bounds of a dimension assembled from several loops arrive as
         // unsimplified arithmetic on their mins and extents.
-        if (let_bounds.has_lower_bound()) {
-            let_bounds.min = simplify(let_bounds.min);
-        }
-        if (let_bounds.has_upper_bound()) {
-            let_bounds.max = simplify(let_bounds.max);
-        }
         ScopedBinding<Interval> bind(bounds_scope, op->name, let_bounds);
         ScopedBinding<Expr> bind_value(let_values, op->name, op->value);
 
@@ -1208,24 +1218,24 @@ class SlidingWindow : public IRMutator {
             // simultaneously live. Tell it the window width we just derived.
             const SlideDecision &d = slider.decision;
             if (d.slid()) {
-                // An upper bound, not the exact width. The window spans the
-                // loops the dimension is split across, so its width is often
-                // written in terms of their bounds rather than as a literal.
-                // Erring large just folds to a larger power of two.
-                // The window spans the loops the dimension was split across,
-                // so its width is written in terms of their bounds. Expand
-                // those to reach the constant behind them. An upper bound is
-                // enough, and erring large just folds to a larger power of
-                // two.
-                // An upper bound, not the exact width. Simplify in the
-                // bounds scope first: the two ends of the window are
-                // correlated, and cancelling them needs what we know about
-                // the dimension, which interval arithmetic on the ends
-                // separately would throw away.
+                // An upper bound, not the exact width. Two forms of the same
+                // difference are worth trying, because they fail for
+                // different reasons. Written in terms of the dimension, the
+                // two ends of the window cancel against each other, which is
+                // what a consumer that clamps its index needs. Written in
+                // terms of the loops the dimension was split across, it
+                // reaches the constants in their bounds. Take whichever gives
+                // a bound, or the tighter of the two.
                 Interval window = window_for(func, d, op->name, body);
-                Expr width = find_constant_bound(
-                    simplify(window.max - window.min + 1, bounds_scope),
-                    Direction::Upper, bounds_scope);
+                Expr raw = window.max - window.min + 1;
+                Expr width;
+                for (const Expr &form : {simplify(raw, bounds_scope),
+                                         expand_expr(raw, let_values)}) {
+                    Expr bound = find_constant_bound(form, Direction::Upper, bounds_scope);
+                    if (bound.defined() && (!width.defined() || can_prove(bound < width))) {
+                        width = bound;
+                    }
+                }
                 if (width.defined()) {
                     Expr marker = Call::make(Int(32), Call::sliding_window_marker,
                                              {func.name(), Variable::make(Int(32), op->name),
