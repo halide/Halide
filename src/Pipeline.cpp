@@ -6,6 +6,7 @@
 #include "CodeGen_Internal.h"
 #include "Deserialization.h"
 #include "FindCalls.h"
+#include "FreeVariables.h"
 #include "Func.h"
 #include "IRVisitor.h"
 #include "InferArguments.h"
@@ -866,30 +867,12 @@ void Pipeline::add_requirement(const Expr &condition, const std::vector<Expr> &e
     user_assert(defined()) << "Pipeline is undefined\n";
 
     // It is an error for a requirement to reference a Func or a Var
-    class Checker : public IRGraphVisitor {
-        using IRGraphVisitor::visit;
-
-        void visit(const Variable *op) override {
-            if (!op->param.defined()) {
-                user_error << "Requirement " << condition << " refers to Var or RVar " << op->name << "\n";
-            }
-        }
-
-        void visit(const Call *op) override {
-            if (op->call_type == Call::Halide) {
-                user_error << "Requirement " << condition << " calls Func " << op->name << "\n";
-            }
-            IRGraphVisitor::visit(op);
-        }
-
-        const Expr &condition;
-
-    public:
-        Checker(const Expr &c)
-            : condition(c) {
-            c.accept(this);
-        }
-    } checker(condition);
+    Internal::UnboundVarChecker checker(/*check_func_calls=*/true);
+    condition.accept(&checker);
+    user_assert(checker.offending_func.empty())
+        << "Requirement " << condition << " calls Func " << checker.offending_func << "\n";
+    user_assert(checker.offending_var.empty())
+        << "Requirement " << condition << " refers to Var or RVar " << checker.offending_var << "\n";
 
     Expr error = Internal::requirement_failed_error(condition, error_args);
     contents->requirements.emplace_back(Internal::AssertStmt::make(condition, error));

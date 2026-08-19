@@ -2,6 +2,7 @@
 #include "Simplify_Internal.h"
 
 #include "CSE.h"
+#include "FreeVariables.h"
 #include "IRMutator.h"
 #include "Rename.h"
 #include "Substitute.h"
@@ -455,34 +456,14 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
             });
 
             // Collect the free variables of the renamed expression, for
-            // the random probing below. Needs its own scope-tracking, since
-            // renaming can (harmlessly) reuse a name across unrelated
-            // bindings that were never simultaneously live.
-            struct FindFreeVars : public IRVisitor {
-                using IRVisitor::visit;
-
-                void visit(const Variable *op) override {
-                    if (!lets.contains(op->name)) {
-                        free_vars[op->name] = op->type;
-                    }
-                }
-
-                void visit(const Let *op) override {
-                    op->value.accept(this);
-                    ScopedBinding<> bind(lets, op->name);
-                    op->body.accept(this);
-                }
-
-                Scope<> lets;
-                map<string, Type> free_vars;
-            } finder;
-            renamed.accept(&finder);
+            // the random probing below.
+            map<string, Type> free_vars = find_free_vars(renamed);
 
             // Look for a concrete counter-example with random probing
             static std::mt19937 rng(0);
             for (int i = 0; i < 100; i++) {
                 map<string, Expr> s;
-                for (const auto &p : finder.free_vars) {
+                for (const auto &p : free_vars) {
                     if (p.second.is_handle()) {
                         // This aint gonna work
                         return "";

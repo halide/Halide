@@ -377,6 +377,7 @@ tests(
     tuple_update_ops.cpp
     two_vector_args.cpp
     typed_func.cpp
+    unbound_var_checker_let_shadowing.cpp
     undef.cpp
     uninitialized_read.cpp
     unique_func_image.cpp

@@ -123,6 +123,7 @@ target_sources(
     FindIntrinsics.h
     FlattenNestedRamps.h
     Float16.h
+    FreeVariables.h
     Func.h
     Function.h
     FunctionPtr.h
@@ -307,6 +308,7 @@ target_sources(
     FindIntrinsics.cpp
     FlattenNestedRamps.cpp
     Float16.cpp
+    FreeVariables.cpp
     Func.cpp
     Function.cpp
     FuseGPUThreadLoops.cpp
