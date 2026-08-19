@@ -19,20 +19,7 @@ When contributing new CMake code to Halide, keep in mind that the minimum
 version is 3.28. Therefore, it is not only possible, but _required_, to use
 modern CMake best practices.
 
-<!-- TOC -->
-
-- [Contributing CMake code to Halide](#contributing-cmake-code-to-halide)
-- [General guidelines and best practices](#general-guidelines-and-best-practices)
-  - [Prohibited modules list](#prohibited-modules-list)
-    - [FetchContent](#fetchcontent)
-  - [Prohibited commands list](#prohibited-commands-list)
-  - [Prohibited variables list](#prohibited-variables-list)
-- [Adding tests](#adding-tests)
-- [Adding apps](#adding-apps)
-
-<!-- TOC -->
-
-# General guidelines and best practices
+## General guidelines and best practices
 
 The following are some common mistakes that lead to subtly broken builds.
 
@@ -69,13 +56,13 @@ The following are some common mistakes that lead to subtly broken builds.
   `if (${varA} STREQUAL ${varB})` since that will fail (in the best case) if
   either variable's value contains a semicolon (due to argument expansion).
 
-## Prohibited modules list
+### Prohibited modules list
 
 All deprecated, legacy, and "miscellaneous" (internal) modules are prohibited.
 The list of these may be found in the upstream documentation:
 https://cmake.org/cmake/help/latest/manual/cmake-modules.7.html#deprecated-modules
 
-### FetchContent
+#### FetchContent
 
 At the moment, only one supported module is prohibited: `FetchContent`. There
 are many reasons to avoid its use:
@@ -146,7 +133,7 @@ from source. We use vcpkg in CI to manage our dependencies. If vcpkg lacks a
 port, you must write a custom port in `cmake/vcpkg-ports` (for the main Halide
 build) or `apps/vcpkg/ports` (for the apps).
 
-## Prohibited commands list
+### Prohibited commands list
 
 As mentioned above, using directory properties is brittle, and they are
 therefore _not allowed_. The following functions may not appear in any new CMake
@@ -227,7 +214,7 @@ Do not introduce new dependencies without broader approval. Once approved, add
 dependencies to `vcpkg.json` or create a custom port, and consume them with
 [`find_package`][find_package] rather than `FetchContent`.
 
-## Prohibited variables list
+### Prohibited variables list
 
 Any variables that are specific to languages that are not enabled should, of
 course, be avoided. But of greater concern are variables that are easy to misuse
@@ -269,7 +256,7 @@ their use must be motivated:
 
 Any use of these functions or variables will block a PR.
 
-# Adding tests
+## Adding tests
 
 When adding a file to any of the folders under `test`, be aware that CI expects
 that every `.c` and `.cpp` appears in the `CMakeLists.txt` file _on its own
@@ -280,7 +267,7 @@ For most test types, it should be as simple as adding to the existing lists.
 Generator tests are trickier, but following the existing examples is a safe way
 to go.
 
-# Adding apps
+## Adding apps
 
 If you're contributing a new app to Halide: great! Thank you! There are a few
 guidelines you should follow when writing a new app.

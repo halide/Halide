@@ -10,6 +10,13 @@ endif ()
 # the same treatment without needing the same manual dummy-command dance).
 set_property(DIRECTORY PROPERTY EXCLUDE_FROM_ALL TRUE)  # nolint: no per-target alternative that covers add_halide_library()'s several targets per lesson
 
+# Since none of these targets build by default, generated sources like the
+# lesson 10/16/21 Python extension module definitions never get prepared for
+# a plain build either. There's no directory-level equivalent of the
+# EXPORT_COMPILE_COMMANDS target property, so each target below that compiles
+# a generated source sets it individually to keep clang-tidy from choking on
+# sources that don't exist yet.
+
 set(tests
     # keep-sorted start
     lesson_01_basics.py
@@ -85,9 +92,6 @@ else ()
         MODULE
         EXCLUDE_FROM_ALL lesson_10_halide.py.cpp lesson_10_halide.o
     )
-
-    # TODO: the EXCLUDE_FROM_ALL above is a bit of a hack - even a normal build won't
-    #   prepare this file for linting. Disable export of compile commands for this target.
     set_target_properties(lesson_10_halide PROPERTIES EXPORT_COMPILE_COMMANDS OFF)
 
     target_link_libraries(lesson_10_halide PRIVATE Halide::Runtime)
@@ -205,6 +209,7 @@ else ()
             MODULE_NAME brighten_${layout}
             HALIDE_LIBRARIES python_brighten_${layout}
         )
+        set_target_properties(python_ext_brighten_${layout} PROPERTIES EXPORT_COMPILE_COMMANDS OFF)
     endforeach ()
 
     add_python_test(
@@ -268,6 +273,10 @@ else ()
             python_ext_auto_schedule_true
             MODULE_NAME auto_schedule_true
             HALIDE_LIBRARIES python_auto_schedule_true
+        )
+        set_target_properties(python_ext_auto_schedule_false python_ext_auto_schedule_true
+            PROPERTIES
+            EXPORT_COMPILE_COMMANDS OFF
         )
 
         add_python_test(

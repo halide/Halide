@@ -16,7 +16,7 @@ some limitations. Some of the most important:
 - Halide's JIT for Wasm is extremely limited and really useful only for internal
   testing purposes.
 
-# Additional Tooling Requirements:
+## Additional Tooling Requirements:
 
 - In additional to the usual install of LLVM and clang, you'll need lld.
 - Locally-installed version of Emscripten, 1.39.19+
@@ -24,7 +24,7 @@ some limitations. Some of the most important:
 Note that for all of the above, earlier versions might work, but have not been
 tested.
 
-# AOT Limitations
+## AOT Limitations
 
 Halide outputs a Wasm object (.o) or static library (.a) file, much like any
 other architecture; to use it, of course, you must link it to suitable calling
@@ -37,7 +37,7 @@ of at this time.
   and available on your system, with the `EMSDK` environment variable set
   properly.
 
-# JIT Limitations
+## JIT Limitations
 
 It's important to reiterate that the WebAssembly JIT mode is not (and will never
 be) appropriate for anything other than limited self tests, for a number of
@@ -81,7 +81,7 @@ environment and are disabled).
 In sum: don't plan on using Halide JIT mode with Wasm unless you are working on
 the Halide library itself.
 
-## Using V8 as the interpreter
+### Using V8 as the interpreter
 
 There is experimental support for using V8 as the interpreter in JIT mode,
 rather than WABT. This is enabled by the CMake command line options
@@ -136,7 +136,7 @@ $ cmake --build .
 $ ctest -L "correctness|generator" -j
 ```
 
-# To Use Halide For WebAssembly:
+## To Use Halide For WebAssembly:
 
 - Ensure WebAssembly is in LLVM_TARGETS_TO_BUILD; if you use the default
   (`"all"`) then it's already present, but otherwise, add it explicitly:
@@ -145,7 +145,7 @@ $ ctest -L "correctness|generator" -j
 -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;PowerPC;Hexagon;WebAssembly
 ```
 
-## Enabling wasm JIT
+### Enabling wasm JIT
 
 If you want to run `test_correctness` and other interesting parts of the Halide
 test suite (and you almost certainly will), you'll need to ensure that LLVM is
@@ -161,7 +161,7 @@ cmake -DLLVM_ENABLE_PROJECTS="clang;lld" ...
   `wasm_simd128`) and run CMake/CTest normally. Note that wasm testing is only
   supported under CMake (not via Make).
 
-## Enabling wasm AOT
+### Enabling wasm AOT
 
 If you want to test ahead-of-time code generation (and you almost certainly
 will), you need to install Emscripten locally.
@@ -173,7 +173,7 @@ will), you need to install Emscripten locally.
   `wasm_simd128`) and run CMake/CTest normally. Note that wasm testing is only
   supported under CMake (not via Make).
 
-# Running benchmarks
+## Running benchmarks
 
 The `test_performance` benchmarks are misleading (and thus useless) for Wasm, as
 they include JIT overhead as described elsewhere. Suitable benchmarks for Wasm
@@ -181,7 +181,7 @@ will be provided at a later date. (See
 https://github.com/halide/Halide/issues/5119 and
 https://github.com/halide/Halide/issues/5047 to track progress.)
 
-# Using Threads
+## Using Threads
 
 You can use the `wasm_threads` feature to enable use of a normal pthread-based
 thread pool in Halide code, but with some careful caveats:
@@ -201,7 +201,7 @@ thread pool in Halide code, but with some careful caveats:
 - There is no support for using threads in the Halide JIT environment, and no
   plans to add them anytime in the near-term future.
 
-# Known Limitations And Caveats
+## Known Limitations And Caveats
 
 - Current trunk LLVM (as of July 2020) doesn't reliably generate all of the Wasm
   SIMD ops that are available; see https://github.com/halide/Halide/issues/5130
@@ -216,7 +216,7 @@ thread pool in Halide code, but with some careful caveats:
   consider using Node or (better yet) headless Chrome instead (which is probably
   required to allow for using threads in AOT code).
 
-# Known TODO:
+## Known TODO:
 
 - There's some invasive hackiness in Codgen_LLVM to support the JIT trampolines;
   this really should be refactored to be less hacky.

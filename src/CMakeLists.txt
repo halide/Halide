@@ -159,7 +159,6 @@ target_sources(
     LowerParallelTasks.h
     LowerSMEStreamingTasks.h
     LowerWarpShuffles.h
-    MainPage.h
     Memoization.h
     Module.h
     ModulusRemainder.h

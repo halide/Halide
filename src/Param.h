@@ -28,7 +28,7 @@ class Param {
     // without explicit types.
     struct DynamicParamType;
 
-    /** T unless T is (const) void, in which case pointer-to-useless-type.` */
+    /** T unless T is (const) void, in which case pointer-to-useless-type. */
     using not_void_T = std::conditional_t<std::is_void_v<T>, DynamicParamType *, T>;
 
     void check_name() const {
@@ -125,35 +125,27 @@ public:
         set<not_void_T>(val);
     }
 
-    /** Construct a Param<void> from any other Param. */
-    template<typename OTHER_TYPE, typename T2 = T, std::enable_if_t<std::is_void_v<T2>> * = nullptr>
+    /** Construct a Param<T> from a Param with matching type (or from any
+     * Param, if T is void). The check is done at runtime so that we can
+     * construct from Param<void> if the types are compatible. */
+    template<typename OTHER_TYPE>
     Param(const Param<OTHER_TYPE> &other)
         : param(other.param) {
-        // empty
+        if constexpr (!std::is_void_v<T>) {
+            user_assert(other.type() == type_of<T>())
+                << "Param<" << type_of<T>() << "> cannot be constructed from a Param with type " << other.type();
+        }
     }
 
-    /** Construct a Param<non-void> from a Param with matching type.
-     * (Do the check at runtime so that we can assign from Param<void> if the types are compatible.) */
-    template<typename OTHER_TYPE, typename T2 = T, std::enable_if_t<!std::is_void_v<T2>> * = nullptr>
-    Param(const Param<OTHER_TYPE> &other)
-        : param(other.param) {
-        user_assert(other.type() == type_of<T>())
-            << "Param<" << type_of<T>() << "> cannot be constructed from a Param with type " << other.type();
-    }
-
-    /** Copy a Param<void> from any other Param. */
-    template<typename OTHER_TYPE, typename T2 = T, std::enable_if_t<std::is_void_v<T2>> * = nullptr>
+    /** Copy a Param<T> from a Param with matching type (or from any Param,
+     * if T is void). The check is done at runtime so that we can assign
+     * from Param<void> if the types are compatible. */
+    template<typename OTHER_TYPE>
     Param<T> &operator=(const Param<OTHER_TYPE> &other) {
-        param = other.param;
-        return *this;
-    }
-
-    /** Copy a Param<non-void> from a Param with matching type.
-     * (Do the check at runtime so that we can assign from Param<void> if the types are compatible.) */
-    template<typename OTHER_TYPE, typename T2 = T, std::enable_if_t<!std::is_void_v<T2>> * = nullptr>
-    Param<T> &operator=(const Param<OTHER_TYPE> &other) {
-        user_assert(other.type() == type_of<T>())
-            << "Param<" << type_of<T>() << "> cannot be copied from a Param with type " << other.type();
+        if constexpr (!std::is_void_v<T>) {
+            user_assert(other.type() == type_of<T>())
+                << "Param<" << type_of<T>() << "> cannot be copied from a Param with type " << other.type();
+        }
         param = other.param;
         return *this;
     }
