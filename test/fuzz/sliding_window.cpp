@@ -79,6 +79,7 @@ constexpr bool generate_vectorize = true;
 constexpr bool generate_unroll = true;
 constexpr bool generate_specialize = true;
 constexpr bool generate_prefetch = true;
+constexpr bool generate_slide_directive = true;
 // Bend some coordinates into monotonic but non-affine functions of themselves,
 // which is what a stencil over something with a boundary condition looks like.
 constexpr bool generate_piecewise_affine = true;
@@ -705,6 +706,28 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
                         stages[i].f.compute_at(f, v);
                         source << ".compute_at(f[" << compute_at.func << "], " << var_name(v) << ")";
                     }
+                }
+
+                // Sometimes name the dimension to slide over instead of
+                // letting sliding window pick a loop. Only the output's y is
+                // split, so it's the only dimension that isn't a loop by the
+                // time sliding window runs. Draw unconditionally to keep the
+                // rng stream the same when this is turned off.
+                bool want_slide_directive = (rng() % 3) == 0;
+                // Only legal if the storage lives across every loop y spans.
+                // y is split into yo and yi, so the storage has to be outside
+                // both of them.
+                bool storage_outlives_y =
+                    store_at.is_root() ||
+                    (store_at.func == num_stages - 1 && store_at.var == 0);
+                if (generate_slide_directive && want_slide_directive &&
+                    store_at != compute_at &&
+                    storage_outlives_y &&
+                    !compute_at.is_root() &&
+                    compute_at.func == num_stages - 1 &&
+                    compute_at.var >= 2) {
+                    stages[i].f.slide(stages.back().f, y);
+                    source << ".slide(f[" << (num_stages - 1) << "], y)";
                 }
 
                 // Vectorizing or unrolling the producer's own loops changes

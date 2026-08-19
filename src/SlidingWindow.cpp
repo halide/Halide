@@ -594,10 +594,16 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // every iteration has a previous iteration. The first iteration
             // will warm up the loop instead.
             Expr need_explicit_warmup = loop_var_expr <= loop_min;
+            // When sliding over a dimension, the condition is on loops outside
+            // the innermost one, so likely_if_innermost wouldn't get the
+            // warm-up peeled off. Ask for the loop to be partitioned instead.
+            auto mark = [&](const Expr &e) {
+                return can_rewind ? likely_if_innermost(e) : likely(e);
+            };
             if (can_slide_up) {
-                new_min = select(need_explicit_warmup, min_required, likely_if_innermost(new_min));
+                new_min = select(need_explicit_warmup, min_required, mark(new_min));
             } else {
-                new_max = select(need_explicit_warmup, max_required, likely_if_innermost(new_max));
+                new_max = select(need_explicit_warmup, max_required, mark(new_max));
             }
         }
 
@@ -923,9 +929,45 @@ class SlidingWindow : public IRMutator {
     // Keep track of realizations we want to slide, from innermost to
     // outermost.
     list<Function> sliding;
+    // For each of those, how many loops we were already inside when we
+    // reached its Realize. Loops outside that point don't have its storage
+    // live across them.
+    list<size_t> sliding_loop_depth;
+    vector<string> loop_stack;
+    Scope<Expr> let_values;
     Scope<Interval> bounds_scope;
 
     using IRMutator::visit;
+
+    // A window can only slide over a dimension if the storage lives across
+    // every loop that dimension varies over. Sliding assumes the previous
+    // iteration's values are still there, and an allocation inside one of
+    // those loops is thrown away and remade as they run.
+    void check_storage_outlives_dimension(const Function &f, const string &let_name,
+                                          const Expr &value) {
+        size_t depth = 0;
+        auto d = sliding_loop_depth.begin();
+        for (auto it = sliding.begin(); it != sliding.end(); it++, d++) {
+            if (it->name() == f.name()) {
+                depth = *d;
+                break;
+            }
+        }
+        Expr expanded = expand_expr(value, let_values);
+        for (size_t i = 0; i < depth; i++) {
+            if (expr_uses_var(expanded, loop_stack[i])) {
+                user_error
+                    << "Func " << f.name() << " was told to slide over "
+                    << f.schedule().slide_level().to_string() << ", but that "
+                    << "dimension varies over the loop " << loop_stack[i]
+                    << ", which is outside " << f.name() << "'s storage. Sliding "
+                    << "would read values from a previous iteration of that "
+                    << "loop, which have been thrown away by then. Store "
+                    << f.name() << " at a coarser level, or slide over a "
+                    << "dimension that doesn't span that loop.\n";
+            }
+        }
+    }
 
     // Was this func told to slide over the dimension this let carries? After
     // splitting there's no loop with this name, but there is a let, because
@@ -938,6 +980,7 @@ class SlidingWindow : public IRMutator {
     Stmt visit(const LetStmt *op) override {
         Interval let_bounds = bounds_of_expr_in_scope(op->value, bounds_scope);
         ScopedBinding<Interval> bind(bounds_scope, op->name, let_bounds);
+        ScopedBinding<Expr> bind_value(let_values, op->name, op->value);
 
         // Anything told to slide over this dimension slides here rather than
         // over some loop. The let can't have iterations prepended to it, so
@@ -948,6 +991,7 @@ class SlidingWindow : public IRMutator {
             if (!slides_over(func, op->name)) {
                 continue;
             }
+            check_storage_outlives_dimension(func, op->name, op->value);
             debug(3) << "Sliding " << func.name() << " over dimension "
                      << op->name << "\n";
             set<int> &slid_dims = slid_dimensions[func.name()];
@@ -957,6 +1001,23 @@ class SlidingWindow : public IRMutator {
             body = slider(body);
             debug(3) << slider.decision;
             slid_any = true;
+
+            // Storage folding can't work this out for itself. The dimension
+            // is gone by the time it runs, because the simplifier substitutes
+            // the let away, and measuring the footprint over any of the loops
+            // the dimension is spread across counts values that are never
+            // simultaneously live. Tell it the window width we just derived.
+            const SlideDecision &d = slider.decision;
+            if (d.slid()) {
+                Expr width = simplify(d.old_bounds.max - d.old_bounds.min + 1);
+                if (is_const(width)) {
+                    Expr marker = Call::make(Int(32), Call::sliding_window_marker,
+                                             {func.name(), Variable::make(Int(32), op->name),
+                                              d.dim_idx, width},
+                                             Call::Intrinsic);
+                    body = Block::make(Evaluate::make(marker), body);
+                }
+            }
         }
         if (slid_any) {
             return LetStmt::make(op->name, op->value, mutate(body));
@@ -984,8 +1045,10 @@ class SlidingWindow : public IRMutator {
         // We want to slide innermost first, so put it on the front of
         // the list.
         sliding.push_front(iter->second);
+        sliding_loop_depth.push_front(loop_stack.size());
         Stmt new_body = mutate(op->body);
         sliding.pop_front();
+        sliding_loop_depth.pop_front();
         // Remove tracking of slid dimensions when we're done realizing
         // it in case a realization appears elsewhere.
         auto slid_it = slid_dimensions.find(iter->second.name());
@@ -1172,7 +1235,17 @@ class SlidingWindow : public IRMutator {
             body = InjectWarmupGuards(warming_up, name, orig_loop_min, deps)(body);
         }
 
-        body = mutate(body);
+        {
+            // Keep this loop's range in scope while we descend, so that a let
+            // carrying a dimension spread across several loops can be bounded
+            // when we come to slide over it.
+            Interval lo = bounds_of_expr_in_scope(loop_min, bounds_scope);
+            Interval hi = bounds_of_expr_in_scope(loop_max, bounds_scope);
+            ScopedBinding<Interval> bind(bounds_scope, name, Interval(lo.min, hi.max));
+            loop_stack.push_back(name);
+            body = mutate(body);
+            loop_stack.pop_back();
+        }
 
         if (body.same_as(op->body) && loop_min.same_as(op->min) && loop_max.same_as(op->max) && name == op->name) {
             return op;

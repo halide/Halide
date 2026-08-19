@@ -496,11 +496,21 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
     bool found_sliding_marker = false;
     Expr visit(const Call *op) override {
         if (op->is_intrinsic(Call::sliding_window_marker)) {
-            internal_assert(op->args.size() == 2);
+            internal_assert(op->args.size() == 2 || op->args.size() == 4);
             const StringImm *name = op->args[0].as<StringImm>();
             internal_assert(name);
             if (name->value == func.name()) {
                 found_sliding_marker = true;
+                if (op->args.size() == 4) {
+                    // Sliding window slid over a dimension rather than a loop,
+                    // and worked out how wide the window is. We can't rederive
+                    // that here, so take its word for it.
+                    auto dim = as_const_int(op->args[2]);
+                    auto width = as_const_int(op->args[3]);
+                    internal_assert(dim && width);
+                    slid_dim = (int)*dim;
+                    slid_width = (int)*width;
+                }
             }
         }
         return op;
@@ -976,6 +986,10 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
     }
 
 public:
+    // Set when sliding window slid over a dimension and told us how wide the
+    // window is, because the dimension is gone from the IR by the time we run.
+    int slid_dim = -1, slid_width = 0;
+
     struct Fold {
         int dim;
         Expr factor;
@@ -1014,6 +1028,17 @@ class StorageFolding : public IRMutator {
             debug(3) << "Attempting to fold " << op->name << " automatically or explicitly\n";
         }
         body = folder(body);
+
+        // Sliding window slid this func over a dimension rather than a loop,
+        // and told us how wide the window is. The dimension no longer exists
+        // in the IR for us to analyze, so apply the fold it asked for.
+        if (folder.slid_width > 0 && folder.slid_dim >= 0) {
+            Expr factor = (int)next_power_of_two((uint64_t)folder.slid_width);
+            body = FoldStorageOfFunction(op->name, folder.slid_dim, factor, "")(body);
+            folder.dims_folded.push_back({folder.slid_dim, factor});
+            debug(3) << "Folding " << op->name << " dimension " << folder.slid_dim
+                     << " by " << factor << ", as sliding window requested\n";
+        }
 
         // If the user explicitly requested storage folding via Func::fold_storage,
         // storage folding may have bailed out before reaching the correct loop.
