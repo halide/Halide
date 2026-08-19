@@ -481,6 +481,25 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             return result.reject("more than one dimension depends on the loop var");
         }
 
+        if (!can_rewind &&
+            (expr_uses_vars(min_required, enclosing_loops) ||
+             expr_uses_vars(max_required, enclosing_loops))) {
+            // Sliding over a dimension only advances the window once per value
+            // of that dimension. If the region required also moves with a loop
+            // between here and the producer, the window would have to advance
+            // within an iteration too, and the values a later iteration wants
+            // have been passed over by then.
+            user_error
+                << "Func " << func.name() << " was told to slide over "
+                << func.schedule().slide_level().to_string() << ", but the "
+                << "region of it required also depends on a loop between that "
+                << "dimension and where " << func.name() << " is computed, so "
+                << "the window would have to move within a single value of "
+                << "that dimension. Compute " << func.name() << " at a "
+                << "coarser level, or slide over a dimension the region "
+                << "required moves with.\n";
+        }
+
         // If the function is not pure in the given dimension, give up. We also
         // need to make sure that it is pure in all the specializations
         for (const Definition &def : func.updates()) {

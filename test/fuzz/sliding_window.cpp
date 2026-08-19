@@ -725,7 +725,11 @@ FUZZ_TEST(sliding_window, FuzzingContext &fuzz) {
                     storage_outlives_y &&
                     !compute_at.is_root() &&
                     compute_at.func == num_stages - 1 &&
-                    compute_at.var >= 2) {
+                    // Computing further in than yi is only legal if the region
+                    // required doesn't move with the loops in between, which
+                    // depends on the index expressions rather than the
+                    // schedule, so we can't tell from here.
+                    compute_at.var == 2) {
                     stages[i].f.slide(stages.back().f, y);
                     source << ".slide(f[" << (num_stages - 1) << "], y)";
                 }
