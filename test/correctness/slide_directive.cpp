@@ -259,6 +259,46 @@ int main(int argc, char **argv) {
         }
     }
 
+    {
+        // The dimension can belong to an update stage, in which case it is an
+        // RVar rather than a Var. Nothing else changes: split it, unroll the
+        // inner loop, and name the RVar to slide along it.
+        Func f("f"), g("g");
+        Var x;
+        RVar ro("ro"), ri("ri");
+        f(x) = counted(x);
+        g(x) = 0;
+        RDom r(1, size - 1);
+        g(r) = f(r) + f(r - 1);
+        g.update().split(r, ro, ri, 2).unroll(ri);
+        f.store_root().compute_at(g, ri).slide(g, r);
+
+        AllocationSizeOf alloc(f.name());
+        g.add_custom_lowering_pass(&alloc, nullptr);
+
+        call_count = 0;
+        Buffer<int> out = g.realize({size});
+        for (int i = 1; i < size; i++) {
+            int correct = i + (i - 1);
+            if (out(i) != correct) {
+                printf("g(%d) = %d instead of %d\n", i, out(i), correct);
+                return 1;
+            }
+        }
+        // One value of f per output, plus one to warm the window up.
+        if (call_count != size) {
+            printf("Sliding over an RVar: f ran %d times, expected %d\n",
+                   call_count, size);
+            return 1;
+        }
+        if (alloc.size != 2) {
+            printf("Sliding over an RVar gave f an allocation of %d, "
+                   "expected 2\n",
+                   alloc.size);
+            return 1;
+        }
+    }
+
     // The rest of this file is the scheduling mistakes the directive rejects.
     // Each of them would otherwise slide a window over values that aren't
     // there any more, or quietly not slide at all.
