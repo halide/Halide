@@ -1073,8 +1073,19 @@ class SlidingWindow : public IRMutator {
             // simultaneously live. Tell it the window width we just derived.
             const SlideDecision &d = slider.decision;
             if (d.slid()) {
-                Expr width = simplify(d.old_bounds.max - d.old_bounds.min + 1);
-                if (is_const(width)) {
+                // An upper bound, not the exact width. The window spans the
+                // loops the dimension is split across, so its width is often
+                // written in terms of their bounds rather than as a literal.
+                // Erring large just folds to a larger power of two.
+                // The window spans the loops the dimension was split across,
+                // so its width is written in terms of their bounds. Expand
+                // those to reach the constant behind them. An upper bound is
+                // enough, and erring large just folds to a larger power of
+                // two.
+                Expr width = find_constant_bound(
+                    expand_expr(d.old_bounds.max - d.old_bounds.min + 1, let_values),
+                    Direction::Upper, bounds_scope);
+                if (width.defined()) {
                     Expr marker = Call::make(Int(32), Call::sliding_window_marker,
                                              {func.name(), Variable::make(Int(32), op->name),
                                               d.dim_idx, width},

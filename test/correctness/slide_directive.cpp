@@ -37,6 +37,33 @@ public:
     }
 };
 
+// A lowering pass that reports the size of a producer's allocation, or 0 if
+// it doesn't have a constant size. Sliding is what makes the allocation small,
+// and storage folding is what makes it constant.
+class AllocationSizeOf : public Internal::IRMutator {
+    const std::string producer;
+
+    using IRMutator::visit;
+
+    Internal::Stmt visit(const Internal::Allocate *op) override {
+        if (op->name == producer) {
+            int64_t total = 1;
+            for (const auto &e : op->extents) {
+                total *= Internal::as_const_int(e).value_or(0);
+            }
+            size = (int)total;
+        }
+        return IRMutator::visit(op);
+    }
+
+public:
+    int size = 0;
+
+    AllocationSizeOf(std::string producer)
+        : producer(std::move(producer)) {
+    }
+};
+
 int call_count = 0;
 extern "C" HALIDE_EXPORT_SYMBOL int counted(int x) {
     call_count++;
@@ -131,6 +158,8 @@ int main(int argc, char **argv) {
 
         CountModsInLoadsFrom mods(f.name());
         g.add_custom_lowering_pass(&mods, nullptr);
+        AllocationSizeOf alloc(f.name());
+        g.add_custom_lowering_pass(&alloc, nullptr);
 
         int n = evaluations(g, size);
         if (n != ideal) {
@@ -141,6 +170,13 @@ int main(int argc, char **argv) {
             printf("Sliding over the dimension left %d moduli in the loads from "
                    "f, expected none\n",
                    mods.count);
+            return 1;
+        }
+        // Two taps, so the window is two elements wide.
+        if (alloc.size != 2) {
+            printf("Sliding over the dimension gave f an allocation of %d, "
+                   "expected 2\n",
+                   alloc.size);
             return 1;
         }
     }
@@ -157,6 +193,9 @@ int main(int argc, char **argv) {
         g.align_bounds(x, 8).split(x, xo, xi, 4).split(xo, xoo, xoi, 2);
         f.store_root().compute_at(g, xoi).slide(g, xo);
 
+        AllocationSizeOf alloc(f.name());
+        g.add_custom_lowering_pass(&alloc, nullptr);
+
         call_count = 0;
         Buffer<int> out = g.realize({size});
         for (int i = 0; i < size; i++) {
@@ -172,6 +211,16 @@ int main(int argc, char **argv) {
             printf("Sliding over an intermediate Var: f ran %d times, which is "
                    "no better than not sliding\n",
                    call_count);
+            return 1;
+        }
+        // The window spans xi as well as one step of xo, so it is five wide,
+        // and folding rounds that up to a power of two. Sliding window works
+        // this out and leaves it behind for storage folding, which can't see
+        // the dimension any more by the time it runs.
+        if (alloc.size != 8) {
+            printf("Sliding over an intermediate Var gave f an allocation of "
+                   "%d, expected 8\n",
+                   alloc.size);
             return 1;
         }
     }
