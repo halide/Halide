@@ -1135,6 +1135,16 @@ void check_bounds() {
     check(select(x < y, x + y, x), select(x < y, y, 0) + x);
     check(select(x < y, x, x + y), select(x < y, 0, y) + x);
 
+    // A max or min in a branch the condition has already decided, which then
+    // exposes the rules that turn a select into a max or a min.
+    check(select(0 < x, max(x, 1), 0), max(x, 0));
+    check(select(x < 0, min(x, -1), 0), min(x, 0));
+    check(select(0 < x, 5, min(x, 0)), select(0 < x, 5, x));
+    check(select(x < 0, 5, max(x, 0)), select(x < 0, 5, x));
+    // The bound the condition gives has to actually cover the max or min for
+    // these to fire. Here x can be 4, where max(x, 7) is not x.
+    check(select(4 < x, max(x, 7), 0), select(4 < x, max(x, 7), 0));
+
     // A select nested in a branch of a select on the same condition, under
     // some affine arithmetic. The inner select's outcome is known.
     check(select(x < y, z, select(x < y, w, x) + 3), select(x < y, z, x + 3));

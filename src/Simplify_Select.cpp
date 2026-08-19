@@ -236,6 +236,13 @@ Expr Simplify::visit(const Select *op, ExprInfo *info) {
            rewrite(select(x, c0, y * c1), select(x, fold(c0 / c1), y) * c1, c0 % c1 == 0) ||
            rewrite(select(x, y + c0, c1), select(x, y, fold(c1 - c0)) + c0) ||
 
+           // A max or min in a branch that the condition has already decided.
+           // Dropping it exposes the rules below.
+           rewrite(select(c0 < x, max(x, c1), y), select(c0 < x, x, y), c1 <= c0 + 1) ||
+           rewrite(select(x < c0, min(x, c1), y), select(x < c0, x, y), c0 <= c1 + 1) ||
+           rewrite(select(c0 < x, y, min(x, c1)), select(c0 < x, y, x), c0 <= c1) ||
+           rewrite(select(x < c0, y, max(x, c1)), select(x < c0, y, x), c1 <= c0) ||
+
            // Selects that are equivalent to mins/maxes
            rewrite(select(c0 < x, x + c1, c2), max(x + c1, c2), c2 == c0 + c1 || c2 == c0 + c1 + 1) ||
            rewrite(select(x < c0, c1, x + c2), max(x + c2, c1), c1 == c0 + c2 || c1 + 1 == c0 + c2) ||
