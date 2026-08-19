@@ -44,9 +44,9 @@ function Treemap({ dimensions, hierarchy, rectClassname, renderLabel }: Props) {
         height="100%"
       >
         {root.leaves().map((leaf, index) => (
-          <Tooltip.Root delayDuration={0}>
+          <Tooltip.Root delayDuration={0} key={leaf.data.name}>
             <g transform={`translate(${leaf.x0}, ${leaf.y0})`}>
-              <Tooltip.Trigger key={leaf.data.name} asChild>
+              <Tooltip.Trigger asChild>
                 <rect
                   id={`rect-${index}`}
                   x="0"
@@ -65,7 +65,7 @@ function Treemap({ dimensions, hierarchy, rectClassname, renderLabel }: Props) {
                     ></use>
                   </clipPath>
                   <text
-                    className="fill-ps-secondary text-tiny font-mono"
+                    className="fill-ps-secondary text-tiny"
                     clipPath={`url(#clip-${index})`}
                   >
                     <tspan x="8" y="20">
@@ -80,7 +80,7 @@ function Treemap({ dimensions, hierarchy, rectClassname, renderLabel }: Props) {
             </g>
             <Tooltip.Portal>
               <Tooltip.Content
-                className="bg-ps-primary text-ps-text-primary rounded-xs px-2 py-1 font-mono text-xs"
+                className="bg-ps-primary text-ps-text-primary text-tiny rounded-xs px-2 py-1"
                 sideOffset={5}
               >
                 <p>{leaf.data.name}</p>
