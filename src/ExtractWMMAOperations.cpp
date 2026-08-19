@@ -864,6 +864,13 @@ class ExtractWMMAOperations : public IRMutator {
                 // the broadcast has happened already.
                 return load_fragment(src, vec.as<Load>()->index);
             }
+            // A vector computed elementwise from other vectors, which the
+            // simplifier lifted the broadcast out of. Broadcasting each of
+            // them instead puts the cases above back within reach of the
+            // fragments underneath.
+            if (Expr sunk = sink_broadcast(e, vec); sunk.defined()) {
+                return to_fragment(sunk, dest);
+            }
             // Every lane holds the whole vector, so this becomes a per-lane
             // selection out of it.
             return Call::make(t, Call::wmma_vector_to_fragment,
@@ -1021,6 +1028,69 @@ class ExtractWMMAOperations : public IRMutator {
         const Broadcast *op = value.as<Broadcast>();
         if (op && op->lanes == copies) {
             return op->value;
+        }
+        return Expr{};
+    }
+
+    // Spread a different vector along the same axis as an expression
+    // broadcast_along_axis matched. That was either a broadcast or a transpose
+    // of one, and the vector given has the lane count of the one it was built
+    // from, so the wrappers are rebuilt as they were: nothing moves across the
+    // transpose, and its indices go on meaning what they meant.
+    static Expr broadcast_like(const Expr &model, const Expr &v) {
+        if (const Shuffle *op = model.as<Shuffle>()) {
+            return Shuffle::make({broadcast_like(op->vectors[0], v)}, op->indices);
+        }
+        return Broadcast::make(v, model.as<Broadcast>()->lanes);
+    }
+
+    // Sink a broadcast along an axis past an elementwise op, so that a value
+    // covering the whole matrix which was computed by broadcasting an
+    // elementwise combination of vectors becomes the same combination of
+    // separately broadcast vectors. Undefined if the vector broadcast is not
+    // an elementwise combination, which is where the recursion stops.
+    Expr sink_broadcast(const Expr &model, const Expr &vec) {
+        // An operand as wide as the vector is broadcast the same way. A
+        // narrower one is a scalar or a broadcast of one, which is already the
+        // same at every entry.
+        auto in = [&](const Expr &e) {
+            return e.type().lanes() == vec.type().lanes() ? broadcast_like(model, e) : e;
+        };
+        auto pair = [&](const Expr &a, const Expr &b) {
+            return std::make_pair(in(a), in(b));
+        };
+        if (const Add *op = vec.as<Add>()) {
+            auto [a, b] = pair(op->a, op->b);
+            return Add::make(a, b);
+        } else if (const Sub *op = vec.as<Sub>()) {
+            auto [a, b] = pair(op->a, op->b);
+            return Sub::make(a, b);
+        } else if (const Mul *op = vec.as<Mul>()) {
+            auto [a, b] = pair(op->a, op->b);
+            return Mul::make(a, b);
+        } else if (const Div *op = vec.as<Div>()) {
+            auto [a, b] = pair(op->a, op->b);
+            return Div::make(a, b);
+        } else if (const Min *op = vec.as<Min>()) {
+            auto [a, b] = pair(op->a, op->b);
+            return Min::make(a, b);
+        } else if (const Max *op = vec.as<Max>()) {
+            auto [a, b] = pair(op->a, op->b);
+            return Max::make(a, b);
+        } else if (const Cast *op = vec.as<Cast>()) {
+            return Cast::make(op->type.with_lanes(model.type().lanes()), in(op->value));
+        } else if (const Select *op = vec.as<Select>()) {
+            auto [a, b] = pair(op->true_value, op->false_value);
+            return Select::make(in(op->condition), a, b);
+        } else if (const Call *op = vec.as<Call>(); op && is_lanewise(op)) {
+            vector<Expr> args;
+            args.reserve(op->args.size());
+            for (const Expr &arg : op->args) {
+                args.push_back(in(arg));
+            }
+            return Call::make(op->type.with_lanes(model.type().lanes()), op->name,
+                              args, op->call_type, op->func, op->value_index,
+                              op->image, op->param);
         }
         return Expr{};
     }
