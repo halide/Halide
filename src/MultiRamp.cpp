@@ -570,8 +570,13 @@ bool is_multiramp_impl(const Expr &e, const Scope<Expr> &scope, MultiRamp *resul
 bool is_multiramp(const Expr &e, const Scope<Expr> &scope, MultiRamp *result) {
     // Wrap the impl so that callers get a clean "untouched on failure"
     // contract regardless of how the impl leaves its scratch space.
+    //
+    // Likely markers say which side of a branch is worth generating good code
+    // for. They don't change the value, and everything downstream of here
+    // proves things about values, so drop them here rather than teach every
+    // proof to see through them.
     MultiRamp tmp;
-    if (is_multiramp_impl(e, scope, &tmp)) {
+    if (is_multiramp_impl(simplify(remove_likelies(e)), scope, &tmp)) {
         *result = std::move(tmp);
         return true;
     }
