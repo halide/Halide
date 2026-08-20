@@ -9,7 +9,7 @@ authors = [
 ]
 maintainers = [{ name = "Alex Reinking", email = "areinking@adobe.com" }]
 description = "Python-independent binary components for Halide (libHalide, autoschedulers, generator tools, headers, CMake package files)."
-license = { file = "../../LICENSE.txt" }
+license = "MIT"
 requires-python = ">=3.10"
 dynamic = ['version']
 classifiers = [

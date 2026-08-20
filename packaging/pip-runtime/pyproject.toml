@@ -13,7 +13,7 @@ authors = [
 ]
 maintainers = [{ name = "Alex Reinking", email = "areinking@adobe.com" }]
 description = "Standalone Halide runtime: load and call precompiled Halide AOT kernels without depending on libHalide (no compiler, no LLVM)."
-license = { file = "../../LICENSE.txt" }
+license = "MIT"
 readme = "README.md"
 requires-python = ">=3.10"
 dynamic = ['version']

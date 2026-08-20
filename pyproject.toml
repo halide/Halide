@@ -13,7 +13,7 @@ authors = [
 ]
 maintainers = [{ name = "Alex Reinking", email = "areinking@adobe.com" }]
 description = "Halide is a programming language designed to make it easier to write high-performance image and array processing code."
-license = { file = "LICENSE.txt" }
+license = "MIT"
 readme = "./packaging/pip/README.md"
 requires-python = ">=3.10"
 dynamic = ['version', 'dependencies']
