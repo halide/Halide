@@ -23,6 +23,7 @@ vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
         Expr old_max = Variable::make(Int(32), prefix + split.old_var + ".loop_max");
         Expr old_min = Variable::make(Int(32), prefix + split.old_var + ".loop_min");
         Expr old_extent = (old_max - old_min) + 1;
+        Expr outer_min = Variable::make(Int(32), prefix + split.outer + ".loop_min");
 
         dim_extent_alignment[split.inner] = split.factor;
 
@@ -131,26 +132,90 @@ vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
                 base = Min::make(base, old_max + (1 - split.factor));
             }
         } else if (tail == TailStrategy::ShiftInwardsAndBlend) {
+            // Unclamped base, saved before the Min/Max below adjust it. Used
+            // to figure out how much (if at all) the boundary tile got
+            // shifted, so we know which elements of it are redundant with a
+            // neighboring tile and must be masked out rather than
+            // recomputed (to avoid double-counting in a reduction).
             Expr old_base = base;
             base = likely(base);
-            if (split.align.defined()) {
-                base = Max::make(base, old_min - split.align);
-                base = Min::make(base, old_max + (1 - split.factor) - split.align);
-            } else {
-                base = Min::make(base, old_max + (1 - split.factor));
-            }
-            // Make a mask which will be a loop invariant if inner gets
-            // vectorized, and apply it if we're in the tail.
-            Expr unwanted_elems = (-old_extent) % split.factor;
             Expr zero_based_inner = split.align.defined() ? (inner - split.align) : inner;
-            Expr mask = zero_based_inner >= unwanted_elems;
-            mask = select(base == old_base, likely(const_true()), mask);
+            Expr mask;
+            if (split.align.defined()) {
+                // Because base is anchored to align instead of old_min, the
+                // boundary tile can now be shifted at either end (whereas
+                // without align only the max end is reachable, since base
+                // is structurally >= old_min already). Elements shifted in
+                // from the low end overlap the tile above (mask out the
+                // last shift_low of them); elements shifted in from the
+                // high end overlap the tile below (mask out the first
+                // shift_high of them).
+                Expr low_bound = old_min - split.align;
+                Expr high_bound = old_max + (1 - split.factor) - split.align;
+                Expr shift_low = low_bound - old_base;
+                Expr shift_high = old_base - high_bound;
+                base = Max::make(base, low_bound);
+                base = Min::make(base, high_bound);
+                Expr mask_low = zero_based_inner < split.factor - shift_low;
+                Expr mask_high = zero_based_inner >= shift_high;
+                mask = select(old_base < low_bound, mask_low,
+                              select(old_base > high_bound, mask_high, likely(const_true())));
+            } else {
+                // Without align, base is structurally >= old_min (outer
+                // starts at 0), so only the max end can ever be shifted.
+                base = Min::make(base, old_max + (1 - split.factor));
+                Expr unwanted_elems = (-old_extent) % split.factor;
+                mask = zero_based_inner >= unwanted_elems;
+                mask = select(base == old_base, likely(const_true()), mask);
+            }
             result.emplace_back(mask, ApplySplitResult::BlendProvides);
         } else if (tail == TailStrategy::RoundUpAndBlend) {
-            Expr unwanted_elems = (-old_extent) % split.factor;
             Expr zero_based_inner = split.align.defined() ? (inner - split.align) : inner;
-            Expr mask = zero_based_inner < split.factor - unwanted_elems;
-            mask = select(outer < outer_max, likely(const_true()), mask);
+            Expr mask;
+            if (split.align.defined()) {
+                // Unlike ShiftInwardsAndBlend, the max end is intentionally
+                // left unclamped here (RoundUp relies on padding, not on
+                // shifting, to handle overrun at the max end) -- but the min
+                // end still needs clamping: align can make the min-end tile
+                // start before old_min, and unlike ShiftInwards/blend at the
+                // max end, there's no padding below old_min to absorb an
+                // underrun into, so it has to be prevented outright.
+                //
+                // The mask below compares old_base (the unclamped base)
+                // against low_bound/high_bound directly, rather than
+                // comparing outer against outer_min/outer_max: the latter
+                // needs loop partitioning to split the loop into three
+                // pieces (prologue/steady-state/epilogue) to stay correct,
+                // and partition_loops doesn't reliably do that here when
+                // both boundaries are data-dependent, silently dropping the
+                // last tile. Comparing old_base against the bounds directly
+                // is correct regardless of how (or whether) the loop gets
+                // partitioned, matching the approach already proven correct
+                // above for ShiftInwardsAndBlend.
+                Expr old_base = base;
+                Expr low_bound = old_min - split.align;
+                Expr high_bound = old_max + (1 - split.factor) - split.align;
+                Expr shift_low = low_bound - old_base;
+                Expr shift_high = old_base - high_bound;
+                base = Max::make(likely(base), low_bound);
+                // The min end is clamped (shifted forward), so its overlap
+                // is with the tile *above* -- same geometry as
+                // ShiftInwardsAndBlend, mask out the trailing shift_low
+                // elements. The max end is left unclamped, so shift_high
+                // counts a genuine overrun past old_max with no
+                // neighboring tile to defer to -- mask out the trailing
+                // shift_high elements too (the opposite convention from
+                // ShiftInwardsAndBlend's clamped max end, which instead
+                // masks out the *leading* elements of a shifted-back tile).
+                Expr mask_low = zero_based_inner < split.factor - shift_low;
+                Expr mask_high = zero_based_inner < split.factor - shift_high;
+                mask = select(old_base < low_bound, mask_low,
+                              select(old_base > high_bound, mask_high, likely(const_true())));
+            } else {
+                Expr unwanted_elems = (-old_extent) % split.factor;
+                Expr fresh_high = zero_based_inner < split.factor - unwanted_elems;
+                mask = select(outer < outer_max, likely(const_true()), fresh_high);
+            }
             result.emplace_back(mask, ApplySplitResult::BlendProvides);
         } else {
             internal_assert(tail == TailStrategy::RoundUp);
