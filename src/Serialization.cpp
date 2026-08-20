@@ -1259,10 +1259,12 @@ Offset<Serialize::Split> Serializer::serialize_split(FlatBufferBuilder &builder,
     const auto exact = split.exact;
     const auto tail_serialized = serialize_tail_strategy(split.tail);
     const auto split_type_serialized = serialize_split_type(split.split_type);
+    const auto align_serialized = serialize_expr(builder, split.align);
     return Serialize::CreateSplit(builder, old_var_serialized,
                                   outer_serialized, inner_serialized,
                                   factor_serialized.first, factor_serialized.second,
-                                  exact, tail_serialized, split_type_serialized);
+                                  exact, tail_serialized, split_type_serialized,
+                                  align_serialized.first, align_serialized.second);
 }
 
 Offset<Serialize::Dim> Serializer::serialize_dim(FlatBufferBuilder &builder, const Dim &dim) {
