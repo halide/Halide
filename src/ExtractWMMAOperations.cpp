@@ -928,10 +928,7 @@ class ExtractWMMAOperations : public IRMutator {
     // Several tiles read side by side along one axis, which the load visitor
     // turned into a gather out of one inflated fragment per tile. Gives back
     // the fragments, in the order the tiles run along the axis.
-    bool wide_matrix_fragments(const Expr &e, const Fragment *dest, int tiles,
-                               vector<Expr> *pieces) {
-        const Shuffle *op = e.as<Shuffle>();
-        const Shape &shape = dest->shape;
+    static bool is_wide_tile_shuffle(const Shuffle *op, const Shape &shape, int tiles) {
         const int width = tiles * shape.N;
         if (!op || (int)op->vectors.size() != tiles ||
             (int)op->indices.size() != shape.M * width) {
@@ -947,15 +944,113 @@ class ExtractWMMAOperations : public IRMutator {
                 return false;
             }
         }
-        for (const Expr &v : op->vectors) {
-            const Call *c = v.as<Call>();
-            if (!c || !c->is_intrinsic(Call::wmma_fragment_to_matrix_d) ||
-                !same_shape(c, dest)) {
-                return false;
-            }
-            pieces->push_back(c->args[3]);
-        }
         return true;
+    }
+
+    // One tile's worth of a value covering several tiles of the matrix side by
+    // side. Taking a slice is per entry, so it passes through elementwise ops
+    // the same way taking a lane's share does; where it meets the shuffle that
+    // laid the tiles out it picks one of them, and where it meets a vector
+    // spread along an axis it narrows the spread. Undefined if the value is not
+    // built out of things a slice can be pushed into.
+    Expr slice_tile(const Expr &e, const Shape &shape, int tiles, int i) {
+        const int narrow = shape.M * shape.N;
+        if (e.type().lanes() != narrow * tiles) {
+            // Not a share of the matrix, so it is the same at every entry.
+            return e;
+        }
+        const Type t = e.type().element_of().with_lanes(narrow);
+        auto in = [&](const Expr &a) { return slice_tile(a, shape, tiles, i); };
+        auto pair = [&](const Expr &a, const Expr &b) {
+            Expr sa = in(a), sb = in(b);
+            return std::make_pair(sa, sb);
+        };
+        auto defined = [](const std::pair<Expr, Expr> &p) {
+            return p.first.defined() && p.second.defined();
+        };
+        if (const Shuffle *op = e.as<Shuffle>()) {
+            if (is_wide_tile_shuffle(op, shape, tiles)) {
+                // Read one of the tiles as a whole tile, which is the form
+                // to_fragment turns back into the fragment it came from.
+                vector<int> identity(narrow);
+                for (int j = 0; j < narrow; j++) {
+                    identity[j] = j;
+                }
+                return Shuffle::make({op->vectors[i]}, identity);
+            }
+            // A vector indexed by the row, spread along it. Every tile sees
+            // the whole of it, so only the width of the spread changes.
+            const Broadcast *b = op->is_transpose() && op->transpose_factor() == shape.M ?
+                                     op->vectors[0].as<Broadcast>() :
+                                     nullptr;
+            if (b && b->lanes == shape.N * tiles &&
+                b->value.type().lanes() == shape.M) {
+                return Shuffle::make_transpose(Broadcast::make(b->value, shape.N),
+                                               shape.M);
+            }
+            return Expr{};
+        } else if (const Broadcast *op = e.as<Broadcast>()) {
+            if (op->value.type().is_scalar()) {
+                return Broadcast::make(op->value, narrow);
+            }
+            // A vector indexed by the column, spread down the rows. Each tile
+            // sees its own part of it.
+            if (op->lanes == shape.M && op->value.type().lanes() == shape.N * tiles) {
+                return Broadcast::make(
+                    Shuffle::make_slice(op->value, i * shape.N, 1, shape.N), shape.M);
+            }
+            return Expr{};
+        } else if (const Add *op = e.as<Add>()) {
+            auto p = pair(op->a, op->b);
+            return defined(p) ? Add::make(p.first, p.second) : Expr{};
+        } else if (const Sub *op = e.as<Sub>()) {
+            auto p = pair(op->a, op->b);
+            return defined(p) ? Sub::make(p.first, p.second) : Expr{};
+        } else if (const Mul *op = e.as<Mul>()) {
+            auto p = pair(op->a, op->b);
+            return defined(p) ? Mul::make(p.first, p.second) : Expr{};
+        } else if (const Div *op = e.as<Div>()) {
+            auto p = pair(op->a, op->b);
+            return defined(p) ? Div::make(p.first, p.second) : Expr{};
+        } else if (const Min *op = e.as<Min>()) {
+            auto p = pair(op->a, op->b);
+            return defined(p) ? Min::make(p.first, p.second) : Expr{};
+        } else if (const Max *op = e.as<Max>()) {
+            auto p = pair(op->a, op->b);
+            return defined(p) ? Max::make(p.first, p.second) : Expr{};
+        } else if (const Cast *op = e.as<Cast>()) {
+            Expr v = in(op->value);
+            return v.defined() ? Cast::make(t, v) : Expr{};
+        } else if (const Reinterpret *op = e.as<Reinterpret>();
+                   op && op->value.type().lanes() == e.type().lanes()) {
+            Expr v = in(op->value);
+            return v.defined() ? Reinterpret::make(t, v) : Expr{};
+        } else if (const Select *op = e.as<Select>()) {
+            Expr c = in(op->condition);
+            auto p = pair(op->true_value, op->false_value);
+            return c.defined() && defined(p) ? Select::make(c, p.first, p.second) :
+                                               Expr{};
+        } else if (const Call *op = e.as<Call>(); op && is_lanewise(op)) {
+            vector<Expr> args;
+            args.reserve(op->args.size());
+            for (const Expr &arg : op->args) {
+                Expr a = in(arg);
+                if (!a.defined()) {
+                    return Expr{};
+                }
+                args.push_back(std::move(a));
+            }
+            return Call::make(t, op->name, args, op->call_type, op->func,
+                              op->value_index, op->image, op->param);
+        } else if (const Let *op = e.as<Let>();
+                   op && op->value.type().lanes() != e.type().lanes()) {
+            // A let of something that isn't a share of the matrix means the
+            // same thing in every tile. One that is would have to be named
+            // once per tile, which is not worth doing here.
+            Expr body = in(op->body);
+            return body.defined() ? Let::make(op->name, op->value, body) : Expr{};
+        }
+        return Expr{};
     }
 
     // A reduction along one axis of a tile. The entries being reduced together
@@ -987,11 +1082,15 @@ class ExtractWMMAOperations : public IRMutator {
         // worth to reduce. Doing that first is what keeps the butterfly below
         // to one, rather than one per tile.
         vector<Expr> pieces;
-        user_assert(tiles == 1 || wide_matrix_fragments(op->value, dest, tiles, &pieces))
-            << "Reduction into a tensor core fragment not supported. It runs "
-            << "across " << tiles << " tiles, but they are not read as whole tiles "
-            << "side by side along the axis being reduced.\n"
-            << Expr(op);
+        for (int i = 0; tiles > 1 && i < tiles; i++) {
+            Expr piece = slice_tile(op->value, shape, tiles, i);
+            user_assert(piece.defined())
+                << "Reduction into a tensor core fragment not supported. It runs "
+                << "across " << tiles << " tiles, but it is not built out of whole "
+                << "tiles side by side along the axis being reduced.\n"
+                << Expr(op);
+            pieces.push_back(to_fragment(piece, dest));
+        }
         Expr v = tiles == 1 ? to_fragment(op->value, dest) : pieces[0];
         for (int i = 1; i < (int)pieces.size(); i++) {
             v = combine(op->op, v, pieces[i]);
