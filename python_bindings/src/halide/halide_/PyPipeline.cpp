@@ -70,9 +70,9 @@ void define_pipeline(py::module &m) {
         .def_readwrite("halidoscope_output_dir", &HalidoscopeOptions::halidoscope_output_dir)
         .def_readwrite("halidoscope_profile_runs", &HalidoscopeOptions::halidoscope_profile_runs)
         .def("__repr__", [](const HalidoscopeOptions &o) -> std::string {
-            return "<halide.HalidoscopeOptions halidoscope_path='" + o.halidoscope_path +
+            return "<halide.HalidoscopeOptions halidoscope_path='" + o.halidoscope_path.value_or("halidoscope") +
                    "' halidoscope_output_dir='" + o.halidoscope_output_dir.value_or("") +
-                   "' halidoscope_profile_runs=" + std::to_string(o.halidoscope_profile_runs) + ">";
+                   "' halidoscope_profile_runs=" + std::to_string(o.halidoscope_profile_runs.value_or(1)) + ">";
         });
 
     auto pipeline_class =
