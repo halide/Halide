@@ -1522,6 +1522,33 @@ public:
      * factor does not provably divide the extent. */
     Func &split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
 
+    /** A version of split() that additionally takes a runtime-valued
+     * phase, 'align', which need not be known at compile time. Instead
+     * of the inner dimension always iterating over [0, factor-1], it
+     * iterates over [align, align+factor-1]. This may increase the
+     * number of iterations over the outer loop by 1 compared to an
+     * unaligned split.
+     *
+     * This is useful when an algorithm selects between cases using an
+     * expression like ``(x - offset) % factor``, where 'offset' is a
+     * value only known at runtime (e.g. a Param). Passing that same
+     * 'offset' as 'align' makes ``(x - offset) % factor`` a
+     * compile-time constant on each unrolled iteration of the inner
+     * loop, so that a mux() indexed by it can be resolved statically
+     * instead of compiling to a runtime select:
+     \code
+     Var x, xo, xi;
+     Param<int> offset;
+     f(x) = mux((x - offset) % 4, {a(x), b(x), c(x), d(x)});
+     f.split(x, xo, xi, 4, offset, TailStrategy::GuardWithIf)
+      .unroll(xi);
+     \endcode
+     * Without 'align', the compiler can't tell at compile time which of
+     * the four mux() cases applies to a given unrolled value of 'xi',
+     * because that depends on the runtime value of 'offset'. With it,
+     * ``(x - offset) % 4`` simplifies to a distinct compile-time
+     * constant for each unrolled value of 'xi', and each mux() call
+     * collapses to its selected case. */
     Func &split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, const Expr &align, TailStrategy tail = TailStrategy::Auto);
 
     /** Join two dimensions into a single fused dimension. The fused dimension
