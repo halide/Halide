@@ -568,6 +568,21 @@ struct FunctionContents;
  * applied to all stages of the Function. Right now this interface is
  * basically a struct, offering mutable access to its innards.
  * In the future it may become more encapsulated. */
+/** A dimension of a consumer that a Func's window slides over, and how far
+ * ahead of the consumer to run. A depth of zero computes each sliver in the
+ * iteration that consumes it. A larger depth computes it that many iterations
+ * early, so that a long-latency producer - an asynchronous copy into shared
+ * memory, say - has that many iterations to finish. */
+struct SlideLevel {
+    LoopLevel level;
+    int depth = 0;
+
+    SlideLevel() = default;
+    SlideLevel(LoopLevel level, int depth)
+        : level(std::move(level)), depth(depth) {
+    }
+};
+
 class FuncSchedule {
     IntrusivePtr<FuncScheduleContents> contents;
 
@@ -674,11 +689,11 @@ public:
      * schedule asked for that explicitly with \ref Func::slide. A window can
      * slide over more than one dimension at once, so this is a list. Empty
      * means sliding window analysis should pick loops itself. */
-    const std::vector<LoopLevel> &slide_levels() const;
+    const std::vector<SlideLevel> &slide_levels() const;
     LoopLevel &store_level();
     LoopLevel &compute_level();
     LoopLevel &hoist_storage_level();
-    std::vector<LoopLevel> &slide_levels();
+    std::vector<SlideLevel> &slide_levels();
     // @}
 
     /** Pass an IRVisitor through to all Exprs referenced in the

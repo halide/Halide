@@ -283,10 +283,23 @@ public:
 // is the entire output of the analysis - the rewrite consumes it and makes no
 // decisions of its own, and the guards injected afterwards are derived from
 // the decisions for all the Funcs around a loop.
+// How many iterations ahead of its consumer this Func was told to run when
+// sliding over the given loop or let.
+int slide_depth(const Function &f, const string &loop) {
+    for (const SlideLevel &s : f.schedule().slide_levels()) {
+        const LoopLevel &l = s.level;
+        if (l.defined() && !l.is_inlined() && !l.is_root() && l.match(loop)) {
+            return s.depth;
+        }
+    }
+    return 0;
+}
+
 // The name the schedule used for the dimension a loop or let carries. Loop
 // and let names in the IR are mangled, so error messages use this instead.
 string slide_level_name(const Function &f, const string &loop) {
-    for (const LoopLevel &l : f.schedule().slide_levels()) {
+    for (const SlideLevel &s : f.schedule().slide_levels()) {
+        const LoopLevel &l = s.level;
         if (l.defined() && !l.is_inlined() && !l.is_root() && l.match(loop)) {
             return l.to_string();
         }
@@ -397,6 +410,13 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     // instead of having its bounds clamped, which keeps the region it computes
     // the plain steady state.
     bool over_dimension = false;
+
+    // How many iterations ahead of the iteration that consumes it to compute
+    // each sliver. Zero computes it in the iteration that consumes it.
+    int depth = 0;
+    // The last iteration of the thing being slid over, so that a producer
+    // running ahead can be stopped before it runs off the end.
+    Expr loop_max;
 
     // For loops strictly between the loop being slid over and the current
     // node (not including the loop being slid over itself).
@@ -781,10 +801,12 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 public:
     SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min, set<int> &slid_dimensions,
                                    Scope<Interval> &bounds_scope, bool can_rewind = true,
-                                   bool over_dimension = false)
+                                   bool over_dimension = false, int depth = 0,
+                                   Expr slid_loop_max = Expr())
         : func(std::move(f)), loop_var(std::move(v)), loop_min(std::move(v_min)),
           slid_dimensions(slid_dimensions), bounds_scope(bounds_scope),
-          can_rewind(can_rewind), over_dimension(over_dimension) {
+          can_rewind(can_rewind), over_dimension(over_dimension), depth(depth),
+          loop_max(std::move(slid_loop_max)) {
         decision.func_name = func.name();
         decision.slide_over = loop_var;
     }
@@ -1129,7 +1151,8 @@ class SlidingWindow : public IRMutator {
     // the original var still has to be computed to evaluate the func's args.
     static bool slides_over(const Function &f, const string &let_name) {
         const auto &levels = f.schedule().slide_levels();
-        return std::any_of(levels.begin(), levels.end(), [&](const LoopLevel &l) {
+        return std::any_of(levels.begin(), levels.end(), [&](const SlideLevel &s) {
+            const LoopLevel &l = s.level;
             return l.defined() && !l.is_inlined() && !l.is_root() && l.match(let_name);
         });
     }
@@ -1414,7 +1437,10 @@ class SlidingWindow : public IRMutator {
             ScopedBinding<Interval> bind_bounds(bounds_scope, op->name,
                                                 Interval(min_bounds.min, max_bounds.max));
 
-            SlidingWindowOnFunctionAndLoop slider(func, name, consumed_from, slid_dims, bounds_scope);
+            SlidingWindowOnFunctionAndLoop slider(func, name, consumed_from, slid_dims,
+                                                  bounds_scope, /* can_rewind */ true,
+                                                  /* over_dimension */ false,
+                                                  slide_depth(func, op->name), loop_max);
 
             body = slider(body);
             const SlideDecision &decision = slider.decision;
