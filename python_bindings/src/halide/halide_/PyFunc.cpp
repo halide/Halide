@@ -213,7 +213,7 @@ void define_func(py::module &m) {
             .def("store_at", (Func & (Func::*)(const Func &, const Var &)) & Func::store_at, py::arg("f"), py::arg("var"))
             .def("store_at", (Func & (Func::*)(const Func &, const RVar &)) & Func::store_at, py::arg("f"), py::arg("rvar"))
             .def("store_at", (Func & (Func::*)(LoopLevel)) & Func::store_at, py::arg("loop_level"))
-            .def("slide", (Func & (Func::*)(const Func &, const VarOrRVar &)) & Func::slide, py::arg("f"), py::arg("var"))
+            .def("slide", (Func & (Func::*)(const Func &, const VarOrRVar &, int)) & Func::slide, py::arg("f"), py::arg("var"), py::arg("depth") = 0)
 
             .def("async_", &Func::async)
             .def("ring_buffer", &Func::ring_buffer)

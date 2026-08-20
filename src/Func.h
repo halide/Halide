@@ -2662,8 +2662,23 @@ public:
      * Func is computed. In both cases the window would have to reach values
      * that are no longer there. It is also an error to name two dimensions
      * that move the same dimension of this Func, such as a Var and a split of
-     * it, because the window can only advance along that dimension once. */
-    Func &slide(const Func &f, const VarOrRVar &var);
+     * it, because the window can only advance along that dimension once.
+     *
+     * The optional depth software-pipelines the producer, computing each
+     * sliver that many iterations before the one that consumes it, so that a
+     * producer with a long latency has that many iterations to finish. The
+     * storage grows to hold what is in flight. This is what lets an
+     * asynchronous copy into shared memory overlap with the arithmetic that
+     * consumes the previous copy:
+     \code
+     A.in()
+         .store_in(MemoryType::GPUSharedAsync)
+         .store_at(consumer, block)
+         .compute_at(consumer, r)
+         .slide(consumer, r, 2);
+     \endcode
+     */
+    Func &slide(const Func &f, const VarOrRVar &var, int depth = 0);
 
     /** Equivalent to the version of hoist_storage that takes a Var, but
      * schedules storage within the loop over a dimension of a
