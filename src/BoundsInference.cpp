@@ -922,6 +922,41 @@ public:
                 }
             }
 
+            // A producer told to run ahead of this consumer needs everything
+            // the consumer will ask for between now and then. Ask again with
+            // the bounds of the loop var stretched by the depth, and merge, so
+            // the region required covers the whole span of iterations in
+            // flight. Stretching the query is not the same as shifting the
+            // answer: the consumer still wants what it wants at this
+            // iteration, and the leading edge is what moves ahead.
+            for (size_t j = 0; j < i; j++) {
+                const Function &pf = stages[j].func;
+                for (const SlideLevel &sl : pf.schedule().slide_levels()) {
+                    const LoopLevel &l = sl.level;
+                    if (sl.depth <= 0 || !l.defined() || l.is_inlined() || l.is_root()) {
+                        continue;
+                    }
+                    if (l.func_name() != consumer.func.name()) {
+                        continue;
+                    }
+                    Scope<Interval> ahead;
+                    consumer.populate_scope(ahead);
+                    const Interval *cur = ahead.find(l.var_name());
+                    if (!cur) {
+                        continue;
+                    }
+                    ahead.push(l.var_name(), Interval(cur->min, cur->max + sl.depth));
+                    for (const auto &cval : consumer.exprs) {
+                        map<string, Box> nb = boxes_required(cval.value, ahead, func_bounds);
+                        auto it = nb.find(pf.name());
+                        if (it != nb.end()) {
+                            it->second.used = cval.cond;
+                            merge_boxes(boxes[pf.name()], it->second);
+                        }
+                    }
+                }
+            }
+
             // Expand the bounds required of all the producers found
             // (and we are checking until i, because stages are topologically sorted).
             for (size_t j = 0; j < i; j++) {

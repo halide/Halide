@@ -750,7 +750,19 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             return op;
         }
 
-        return apply_slide(op);
+        Stmt result = apply_slide(op);
+        if (depth > 0 && loop_max.defined()) {
+            // The region required was inflated to cover the iterations in
+            // flight, which is what makes the window reach ahead. That reaches
+            // past the end of the domain in the last few iterations, so stop
+            // the producer once the sliver it would compute is one nobody
+            // asks for. Without this the pipeline quietly demands a larger
+            // input, and the depth is a scheduling choice that has no business
+            // changing what the algorithm reads.
+            Expr in_range = Variable::make(Int(32), loop_var) + depth <= loop_max;
+            result = IfThenElse::make(likely(in_range), result);
+        }
+        return result;
     }
 
     Stmt visit(const For *op) override {
