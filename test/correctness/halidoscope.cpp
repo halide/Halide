@@ -5,6 +5,10 @@
 // re-exec'd with the same "--trace <path> [--profile <path>]" argv shape
 // halidoscope_impl() would pass to the real thing -- mirroring
 // test/correctness/run_process.cpp.
+//
+// halidoscope() serializes and deserializes the pipeline internally, so it's
+// only meaningful when Halide was built with serialization support;
+// TEST_WITH_SERIALIZATION is defined by CMake in that case.
 
 #include "Halide.h"
 
@@ -16,6 +20,8 @@
 #include <vector>
 
 using namespace Halide;
+
+#ifdef TEST_WITH_SERIALIZATION
 
 namespace {
 
@@ -175,3 +181,12 @@ int main(int argc, char **argv) {
     std::cout << "Success!\n";
     return 0;
 }
+
+#else  // TEST_WITH_SERIALIZATION
+
+int main() {
+    std::cout << "[SKIP] halidoscope requires WITH_SERIALIZATION.\n";
+    return 0;
+}
+
+#endif  // TEST_WITH_SERIALIZATION

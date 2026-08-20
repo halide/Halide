@@ -744,6 +744,7 @@ if (WITH_SERIALIZATION)
     target_compile_definitions(correctness_streaming PRIVATE TEST_WITH_SERIALIZATION)
     target_compile_definitions(correctness_generator_cache PRIVATE TEST_WITH_SERIALIZATION)
     target_compile_definitions(correctness_serialization PRIVATE TEST_WITH_SERIALIZATION)
+    target_compile_definitions(correctness_halidoscope PRIVATE TEST_WITH_SERIALIZATION)
 endif ()
 
 if (WITH_AUTOSCHEDULERS)
