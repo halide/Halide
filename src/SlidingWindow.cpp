@@ -338,6 +338,13 @@ struct SlideDecision {
     // iteration didn't compute.
     Interval old_bounds, new_bounds;
 
+    // The sliver in the steady state, before any warm-up was folded into it.
+    // Storage has to hold this as well as the region required, and when the
+    // region required jumps rather than stepping the sliver is the wider of
+    // the two. Kept separately because new_bounds may carry a select that
+    // interval arithmetic can't see through.
+    Interval steady_bounds;
+
     // If defined, the iteration the loop should rewind to, so that the
     // steady-state new_bounds above are warmed up by the time the real work
     // starts. If undefined, new_bounds instead contains a select that computes
@@ -569,6 +576,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             new_min = min_required;
             new_max = prev_min_minus_one;
         }
+        result.steady_bounds = Interval(new_min, new_max);
 
         // See if we can find a new min for the loop that can warm up the
         // sliding window. We're going to do this by building an equation
@@ -1226,10 +1234,16 @@ class SlidingWindow : public IRMutator {
                 // written in terms of their bounds rather than as a literal.
                 // Erring large just folds to a larger power of two.
                 // The window spans the loops the dimension was split across,
-                // so its width is written in terms of their bounds. Expand
-                // those to reach the constant behind them. An upper bound is
-                // enough, and erring large just folds to a larger power of
-                // two.
+                // What has to be live is everything the consumer asks for
+                // this iteration together with everything the producer writes
+                // this iteration, which are not the same thing. Sliding
+                // computes from where the previous iteration stopped, and if
+                // the region required jumps rather than stepping - which a
+                // select in the consumer's index will do - the producer
+                // covers the gap, and writes a wider range than is asked for.
+                // Folding to the width asked for would alias those writes
+                // onto each other.
+                //
                 // An upper bound, not the exact width. Two forms of the same
                 // difference are worth trying, because they fail for
                 // different reasons. Written in terms of the dimension, the
@@ -1238,7 +1252,17 @@ class SlidingWindow : public IRMutator {
                 // terms of the loops the dimension was split across, it
                 // reaches the constants in their bounds. Take whichever gives
                 // a bound, or the tighter of the two.
-                Expr raw = d.old_bounds.max - d.old_bounds.min + 1;
+                // Sliding keeps one end of the window fixed and moves the
+                // other, so one of the two ranges contains the other and the
+                // wider of them is the span. Bound them separately rather
+                // than taking a min and a max of the ends: the ends move
+                // together, and pulling them apart loses that.
+                // The ends move together, and a promise the two of them
+                // carry about staying in range is not something the
+                // simplifier can cancel across, so drop those first.
+                Expr lo = remove_promises(min(d.old_bounds.min, d.steady_bounds.min));
+                Expr hi = remove_promises(max(d.old_bounds.max, d.steady_bounds.max));
+                Expr raw = hi - lo + 1;
                 Expr width;
                 for (const Expr &form : {simplify(raw, bounds_scope),
                                          expand_expr(raw, let_values)}) {
