@@ -1,9 +1,9 @@
-# Everything here is scheduled onto the tensor cores, which need compute
-# capability 7.0 or above, so this wants a target with them rather than the
-# plain host one the include below would otherwise default to. Set it here and
-# the build lands in bin/$(HL_TARGET), so changing the capability changes where
-# the output goes.
-HL_TARGET ?= host-cuda-cuda_capability_80
+# Everything here is scheduled onto the tensor cores, so this wants a target
+# with a GPU rather than the plain host one the include below would otherwise
+# default to. No capability is named, so it is detected from the host, which is
+# what you want: naming one can only pin it lower than the part actually is.
+# Tensor cores need 7.0 or above.
+HL_TARGET ?= host-cuda
 
 include ../support/Makefile.inc
 

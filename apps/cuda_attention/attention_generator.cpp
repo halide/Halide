@@ -503,11 +503,11 @@ private:
 // above and against the unfused pair:
 //
 //     keys    flash        fused          unfused
-//       64   46.7us  23008   37.3us  28817   124.5us   8623
-//      128   83.9us  25590   75.6us  28393   274.2us   7832
-//      256  150.6us  28527   would not launch  563.7us   7619
-//      512  422.4us  20334   would not launch 1168.0us   7354
-//     1024  765.4us  22445   would not launch 5353.5us   3209
+//       64   47.7us  22530   37.6us  28568   125.1us   8584
+//      128   79.9us  26866   71.0us  30232   274.9us   7811
+//      256  152.6us  28153   would not launch  563.4us   7623
+//      512  418.0us  20548   would not launch 1173.8us   7318
+//     1024  723.4us  23748   would not launch 5327.0us   3225
 //
 // The point of the table is the middle column running out. The filter above
 // holds a block's worth of scores in registers, so the key count sets how many
@@ -515,22 +515,26 @@ private:
 // wanting more registers than a thread has. This one keeps a step's worth
 // whatever the key count is, so it goes on running, while the unfused pair
 // falls away as the scores matrix it writes and reads back outgrows the cache -
-// most of the last row is its softmax, at 4.3ms of the 5.4.
+// most of the last row is its softmax, at 4.3ms of the 5.3.
 //
-// Where the time goes at the shapes it does win: ncu puts the tensor pipe at
-// 53% and names register spilling as the limit, at 1.9 active warps per
-// scheduler out of 12. A step keeps its scores, its weights, the accumulator
-// and the step's own accumulator live at once, which at the shape that measures
-// best comes to about 450 registers against the 255 a thread has. Cutting that
-// is what is left. Two things would: computing the weights one operand tile at
-// a time inside the multiply that reads them rather than a step's worth at
-// once, and accumulating the multiply straight into the carried output instead
-// of into a second accumulator that is then added on. The first needs the row
-// sum to stop being a consumer of the same Func, and so needs a tile reduction
-// over an expression rather than over a bare fragment - the extractor now
-// classifies that correctly, but its multi-tile path still wants whole
-// fragments read side by side. The second needs a matrix multiply to accumulate
-// into an inductive Func's storage.
+// For scale, torch's flash backend on the same part and the same shapes holds
+// about 45800 GFlop/s from 128 keys up, which is 89% of what apps/cuda_mat_mul
+// measures for back to back half precision multiplies. At 64 keys it does not
+// win: it takes the same time at 64 keys as at 128, so it is latency bound
+// there, and both filters here beat it.
+//
+// Where the time goes at the shapes this one wins: ncu puts L1 at 68% against
+// DRAM at 19% and the tensor pipe at 52%, and the L1 traffic is operand loads
+// using 16 of every 32 byte sector. Register spilling is not the limit, though
+// it is easy to read the profile as saying so - every local memory access is a
+// spill, but local memory is under 4% of the sectors. Two things point the same
+// way: a wider step measures far better than a narrow one despite keeping more
+// live, and computing the weights one operand tile at a time rather than a
+// step's worth - which the extractor now supports, and which does cut the
+// registers a step keeps by about a hundred - changes nothing measurable. What
+// is left is finding which operand load runs at half a sector, and staging a
+// key tile at a time rather than whole panels, which is what would let a block
+// share its operands at key counts where the panels no longer fit.
 class AttentionFlash : public Halide::Generator<AttentionFlash> {
 public:
     GeneratorParam<int> queries{"queries", 16384};
