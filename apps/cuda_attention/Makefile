@@ -1,3 +1,10 @@
+# Everything here is scheduled onto the tensor cores, which need compute
+# capability 7.0 or above, so this wants a target with them rather than the
+# plain host one the include below would otherwise default to. Set it here and
+# the build lands in bin/$(HL_TARGET), so changing the capability changes where
+# the output goes.
+HL_TARGET ?= host-cuda-cuda_capability_80
+
 include ../support/Makefile.inc
 
 QUERIES ?= 16384
@@ -9,10 +16,6 @@ CUDA_SDK ?= /usr/local/cuda
 
 CXXFLAGS += -I $(CUDA_SDK)/include
 LDFLAGS += -L $(CUDA_SDK)/lib64 -Wl,-rpath,$(CUDA_SDK)/lib64
-
-# The schedule is scheduled onto the tensor cores, which need compute
-# capability 7.0 or above.
-TARGET ?= host-cuda-cuda_capability_80
 
 TILES_Y ?= 0
 WARPS ?= 0
@@ -40,17 +43,17 @@ $(GENERATOR_BIN)/attention.generator: attention_generator.cpp $(GENERATOR_DEPS)
 $(BIN)/%/attention.a: $(GENERATOR_BIN)/attention.generator
 	@mkdir -p $(@D)
 	$^ -g attention -f attention -e $(GENERATOR_OUTPUTS) -o $(@D) \
-	    target=$(TARGET) $(SHAPE)
+	    target=$* $(SHAPE)
 
 $(BIN)/%/attention_flash.a: $(GENERATOR_BIN)/attention.generator
 	@mkdir -p $(@D)
 	$^ -g attention_flash -f attention_flash -e $(GENERATOR_OUTPUTS) -o $(@D) \
-	    target=$(TARGET) $(SHAPE_FLASH)
+	    target=$* $(SHAPE_FLASH)
 
 $(BIN)/%/attention_softmax.a: $(GENERATOR_BIN)/attention.generator
 	@mkdir -p $(@D)
 	$^ -g attention_softmax -f attention_softmax -e $(GENERATOR_OUTPUTS) -o $(@D) \
-	    target=$(TARGET) queries=$(QUERIES) keys=$(KEYS)
+	    target=$* queries=$(QUERIES) keys=$(KEYS)
 
 $(BIN)/%/runner: runner.cpp $(BIN)/%/attention.a $(BIN)/%/attention_flash.a $(BIN)/%/attention_softmax.a
 	@mkdir -p $(@D)
