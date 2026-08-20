@@ -486,6 +486,7 @@ tests(
     rfactor.cpp
     rfactor_split_aligned.cpp
     rfactor_split_aligned_2d.cpp
+    rfactor_split_aligned_nested.cpp
     rfactor_split_aligned_phases.cpp
     ring_buffer.cpp
     stream_compaction.cpp
