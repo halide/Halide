@@ -44,8 +44,17 @@ vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
         internal_assert(tail != TailStrategy::Auto)
             << "An explicit tail strategy should exist at this point\n";
 
+        // When align is defined, tiles are anchored to align instead of to
+        // old_min, so knowing that the factor divides the extent is not
+        // enough to prove no boundary guard is needed: we additionally need
+        // the tiling anchored at align to line up with the tiling anchored
+        // at old_min, i.e. old_min and align must be congruent mod factor.
+        bool alignment_matches_old_min = !split.align.defined() ||
+                                         is_const_zero(simplify((old_min - split.align) % split.factor));
+
         if ((iter != dim_extent_alignment.end()) &&
-            is_const_zero(simplify(iter->second % split.factor))) {
+            is_const_zero(simplify(iter->second % split.factor)) &&
+            alignment_matches_old_min) {
             // We have proved that the split factor divides the
             // old extent. No need to adjust the base or add an if
             // statement.
