@@ -188,6 +188,7 @@ tests(
     growing_stack.cpp
     half_native_interleave.cpp
     halide_buffer.cpp
+    halidoscope.cpp
     handle.cpp
     heap_cleanup.cpp
     hello_gpu.cpp
