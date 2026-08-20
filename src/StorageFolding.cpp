@@ -970,7 +970,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
     // Was this func told to slide over particular dimensions?
     bool slides_over_a_dimension() const {
         const auto &levels = func.schedule().slide_levels();
-        return std::any_of(levels.begin(), levels.end(), [](const LoopLevel &l) {
+        return std::any_of(levels.begin(), levels.end(), [](const SlideLevel &s) {
+            const LoopLevel &l = s.level;
             return l.defined() && !l.is_inlined() && !l.is_root();
         });
     }
@@ -985,7 +986,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             stripped.resize(stripped.size() - 3);
         }
         const auto &levels = func.schedule().slide_levels();
-        return std::any_of(levels.begin(), levels.end(), [&](const LoopLevel &l) {
+        return std::any_of(levels.begin(), levels.end(), [&](const SlideLevel &s) {
+            const LoopLevel &l = s.level;
             return l.defined() && !l.is_inlined() && !l.is_root() && l.match(stripped);
         });
     }
