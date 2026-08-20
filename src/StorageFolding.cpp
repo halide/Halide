@@ -1152,11 +1152,13 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         }
         ScopedBinding<Interval> bind(enclosing_bounds, op->name, Interval(op->min, op->max));
 
-        if (slides_over_a_dimension()) {
-            // Folding happens over the dimension the schedule named, at the
-            // let that carries it, not over the loops it's spread across.
-            // Folding here too would measure the footprint over a whole
-            // iteration of this loop, which is more than is ever live.
+        if (slides_over_a_dimension() && !slides_over(op->name)) {
+            // The schedule named a dimension, and it isn't this loop, so this
+            // is one of the loops it's spread across. Folding happens at the
+            // let that carries the dimension instead. Folding here would
+            // measure the footprint over a whole iteration of this loop,
+            // which is more than is ever live. A named dimension that is
+            // itself a loop falls through and folds here, like any other.
             return IRMutator::visit(op);
         }
 
@@ -1167,16 +1169,25 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
     // Was this func told to slide over particular dimensions?
     bool slides_over_a_dimension() const {
         const auto &levels = func.schedule().slide_levels();
-        return std::any_of(levels.begin(), levels.end(), [](const LoopLevel &l) {
+        return std::any_of(levels.begin(), levels.end(), [](const SlideLevel &s) {
+            const LoopLevel &l = s.level;
             return l.defined() && !l.is_inlined() && !l.is_root();
         });
     }
 
-    // Was this func told to slide over the dimension this let carries?
-    bool slides_over(const std::string &let_name) const {
+    // Was this func told to slide over the dimension this loop or let
+    // carries? Sliding window renames a loop it rewinds by appending ".$n",
+    // which a LoopLevel naming the original Var no longer matches, so undo
+    // that before asking.
+    bool slides_over(const std::string &name) const {
+        std::string stripped = name;
+        while (ends_with(stripped, ".$n")) {
+            stripped.resize(stripped.size() - 3);
+        }
         const auto &levels = func.schedule().slide_levels();
-        return std::any_of(levels.begin(), levels.end(), [&](const LoopLevel &l) {
-            return l.defined() && !l.is_inlined() && !l.is_root() && l.match(let_name);
+        return std::any_of(levels.begin(), levels.end(), [&](const SlideLevel &s) {
+            const LoopLevel &l = s.level;
+            return l.defined() && !l.is_inlined() && !l.is_root() && l.match(stripped);
         });
     }
 

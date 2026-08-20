@@ -119,6 +119,32 @@ int main(int argc, char **argv) {
     }
 
     {
+        // Naming a dimension that a loop does correspond to is allowed, and
+        // just pins sliding to that loop. It should be no worse than letting
+        // sliding window pick for itself - same number of evaluations, and
+        // the same folded allocation.
+        Func f("f"), g("g");
+        Var x;
+        f(x) = counted(x);
+        g(x) = f(x) + f(x - 1);
+        f.store_root().compute_at(g, x).slide(g, x);
+
+        AllocationSizeOf alloc(f.name());
+        g.add_custom_lowering_pass(&alloc, nullptr);
+
+        int n = evaluations(g, size);
+        if (n != ideal) {
+            printf("Naming a loop: f ran %d times, expected %d\n", n, ideal);
+            return 1;
+        }
+        if (alloc.size != 2) {
+            printf("Naming a loop gave f an allocation of %d, expected 2\n",
+                   alloc.size);
+            return 1;
+        }
+    }
+
+    {
         // The natural way to remove that modulus is to unroll by the fold
         // factor, so that each unrolled body knows its own index. But
         // splitting x means there is no longer a loop called x for the window

@@ -1024,9 +1024,15 @@ FuncSchedule Deserializer::deserialize_func_schedule(const Serialize::FuncSchedu
     const auto store_level = deserialize_loop_level(func_schedule->store_level());
     const auto compute_level = deserialize_loop_level(func_schedule->compute_level());
     const auto hoist_storage_level = deserialize_loop_level(func_schedule->hoist_storage_level());
-    const std::vector<LoopLevel> slide_levels =
+    const std::vector<LoopLevel> slide_level_levels =
         deserialize_vector<Serialize::LoopLevel, LoopLevel>(func_schedule->slide_levels(),
                                                             &Deserializer::deserialize_loop_level);
+    std::vector<SlideLevel> slide_levels;
+    for (size_t i = 0; i < slide_level_levels.size(); i++) {
+        const auto *depths = func_schedule->slide_depths();
+        int depth = (depths && i < depths->size()) ? depths->Get(i) : 0;
+        slide_levels.emplace_back(slide_level_levels[i], depth);
+    }
     const std::vector<StorageDim> storage_dims =
         deserialize_vector<Serialize::StorageDim, StorageDim>(func_schedule->storage_dims(),
                                                               &Deserializer::deserialize_storage_dim);

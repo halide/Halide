@@ -283,10 +283,23 @@ public:
 // is the entire output of the analysis - the rewrite consumes it and makes no
 // decisions of its own, and the guards injected afterwards are derived from
 // the decisions for all the Funcs around a loop.
+// How many iterations ahead of its consumer this Func was told to run when
+// sliding over the given loop or let.
+int slide_depth(const Function &f, const string &loop) {
+    for (const SlideLevel &s : f.schedule().slide_levels()) {
+        const LoopLevel &l = s.level;
+        if (l.defined() && !l.is_inlined() && !l.is_root() && l.match(loop)) {
+            return s.depth;
+        }
+    }
+    return 0;
+}
+
 // The name the schedule used for the dimension a loop or let carries. Loop
 // and let names in the IR are mangled, so error messages use this instead.
 string slide_level_name(const Function &f, const string &loop) {
-    for (const LoopLevel &l : f.schedule().slide_levels()) {
+    for (const SlideLevel &s : f.schedule().slide_levels()) {
+        const LoopLevel &l = s.level;
         if (l.defined() && !l.is_inlined() && !l.is_root() && l.match(loop)) {
             return l.to_string();
         }
@@ -398,6 +411,13 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     // the plain steady state.
     bool over_dimension = false;
 
+    // How many iterations ahead of the iteration that consumes it to compute
+    // each sliver. Zero computes it in the iteration that consumes it.
+    int depth = 0;
+    // The last iteration of the thing being slid over, so that a producer
+    // running ahead can be stopped before it runs off the end.
+    Expr loop_max;
+
     // For loops strictly between the loop being slid over and the current
     // node (not including the loop being slid over itself).
     Scope<> enclosing_loops;
@@ -410,10 +430,39 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     map<string, Expr> replacements;
 
     // The immediately-enclosing For node, and the one enclosing the target
-    // producer. Replacements are only applied to LetStmts directly inside
-    // producer_for.
+    // producer.
     const For *current_for = nullptr;
     Stmt producer_for;
+
+    // The LetStmts we're inside of, and the ones that turned out to enclose
+    // the producer. Bounds inference emits a .min/.max let per enclosing loop
+    // level, and sliding has to rewrite every one of them that the producer
+    // sits inside: a consumer staged at an outer level reads the outer copy,
+    // and an unrewritten copy still asks for the region required before the
+    // window slid. Only those, though. The traversal reaches lets in sibling
+    // subtrees too - declarations on the consumer side, visited after the
+    // producer - and rewriting one of those with an expression describing a
+    // single sliver would be wrong.
+    vector<const LetStmt *> let_stack;
+    set<const LetStmt *> producer_let_ancestors;
+
+    // The serial loops we're inside of, with their bounds, and how many of
+    // them each let we're inside of was entered under. An outer declaration
+    // has to describe the region required over everything between it and the
+    // producer, so the loops in between are the ones whose variables have to
+    // be bounded away before the replacement can be used there.
+    vector<pair<string, Interval>> loop_bounds_stack;
+    map<const LetStmt *, size_t> let_loop_depth;
+    vector<pair<string, Interval>> producer_loop_bounds;
+
+    // Every name bound between the loop being slid over and the producer, in
+    // the order we entered them, and how many of them each let we're inside of
+    // was entered under. Bounding away the loops in between isn't enough to
+    // make a replacement usable at an outer declaration: it can also mention
+    // lets from further in, which are not in scope out there.
+    vector<string> binding_stack;
+    map<const LetStmt *, size_t> let_binding_depth;
+    vector<string> producer_bindings;
 
     using IRMutator::visit;
 
@@ -671,7 +720,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         string prefix = func.name() + ".s" + std::to_string(func.updates().size()) + ".";
         const string &dim = decision.dim;
 
-        internal_assert(replacements.empty());
+        replacements.clear();
+        producer_let_ancestors.clear();
         if (decision.slide_up) {
             replacements[prefix + dim + ".min"] = decision.new_bounds.min;
         } else {
@@ -684,6 +734,9 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             replacements[n + ".max"] = Variable::make(Int(32), prefix + dim + ".max");
         }
         producer_for = Stmt(current_for);
+        producer_let_ancestors.insert(let_stack.begin(), let_stack.end());
+        producer_loop_bounds = loop_bounds_stack;
+        producer_bindings = binding_stack;
 
         // The lets that define the bounds required get rewritten on the way
         // back out (see visit(LetStmt)). Additionally, expand the bounds
@@ -730,7 +783,19 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             return op;
         }
 
-        return apply_slide(op);
+        Stmt result = apply_slide(op);
+        if (depth > 0 && loop_max.defined()) {
+            // The region required was inflated to cover the iterations in
+            // flight, which is what makes the window reach ahead. That reaches
+            // past the end of the domain in the last few iterations, so stop
+            // the producer once the sliver it would compute is one nobody
+            // asks for. Without this the pipeline quietly demands a larger
+            // input, and the depth is a scheduling choice that has no business
+            // changing what the algorithm reads.
+            Expr in_range = Variable::make(Int(32), loop_var) + depth <= loop_max;
+            result = IfThenElse::make(likely(in_range), result);
+        }
+        return result;
     }
 
     Stmt visit(const For *op) override {
@@ -756,8 +821,54 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             return op;
         } else {
             ScopedValue<int> bind_count(enclosing_real_loops, enclosing_real_loops + 1);
-            return IRMutator::visit(op);
+            loop_bounds_stack.emplace_back(op->name, Interval(min, max));
+            binding_stack.push_back(op->name);
+            Stmt s = IRMutator::visit(op);
+            binding_stack.pop_back();
+            loop_bounds_stack.pop_back();
+            return s;
         }
+    }
+
+    // The replacement expression describes the region required at the
+    // producer, so it can mention the loops between here and there. At an
+    // outer declaration those variables aren't in scope, and the region
+    // required there is the union over them, so bound them away: the low end
+    // of a min, the high end of a max. Returns an undefined Expr if that
+    // can't be done, in which case the declaration is left alone - too large a
+    // region required is wasteful, but a reference to a variable that isn't in
+    // scope is not valid IR.
+    Expr bound_over_inner_loops(const Expr &replacement, const string &let_name,
+                                size_t loop_depth, size_t binding_depth) {
+        Expr result = replacement;
+        if (loop_depth < producer_loop_bounds.size()) {
+            Scope<Interval> inner;
+            inner.set_containing_scope(&bounds_scope);
+            for (size_t i = loop_depth; i < producer_loop_bounds.size(); i++) {
+                inner.push(producer_loop_bounds[i].first, producer_loop_bounds[i].second);
+            }
+            Interval b = bounds_of_expr_in_scope(replacement, inner);
+            if (ends_with(let_name, ".min")) {
+                result = b.has_lower_bound() ? b.min : Expr();
+            } else {
+                result = b.has_upper_bound() ? b.max : Expr();
+            }
+            if (!result.defined()) {
+                return result;
+            }
+            result = simplify(result);
+        }
+
+        // Anything bound between here and the producer that survived is not in
+        // scope at this declaration, so the replacement can't be used here.
+        Scope<> inner_names;
+        for (size_t i = binding_depth; i < producer_bindings.size(); i++) {
+            inner_names.push(producer_bindings[i]);
+        }
+        if (expr_uses_vars(result, inner_names)) {
+            return Expr();
+        }
+        return result;
     }
 
     Stmt visit(const LetStmt *op) override {
@@ -765,14 +876,24 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                                             bounds_of_expr_in_scope(op->value, bounds_scope));
         ScopedBinding<Expr> bind(scope, op->name, simplify(expand_expr(op->value, scope), bounds_scope));
 
+        let_stack.push_back(op);
+        let_loop_depth[op] = loop_bounds_stack.size();
+        let_binding_depth[op] = binding_stack.size();
+        binding_stack.push_back(op->name);
         Stmt new_body = mutate(op->body);
+        binding_stack.pop_back();
+        let_stack.pop_back();
 
         Expr value = op->value;
 
         map<string, Expr>::iterator iter = replacements.find(op->name);
-        if (iter != replacements.end() && current_for == producer_for.get()) {
-            value = iter->second;
-            replacements.erase(iter);
+        if (iter != replacements.end() && producer_let_ancestors.count(op)) {
+            Expr replacement = bound_over_inner_loops(iter->second, op->name,
+                                                      let_loop_depth[op],
+                                                      let_binding_depth[op]);
+            if (replacement.defined()) {
+                value = replacement;
+            }
         }
 
         return op->with(value, new_body);
@@ -781,10 +902,12 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 public:
     SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min, set<int> &slid_dimensions,
                                    Scope<Interval> &bounds_scope, bool can_rewind = true,
-                                   bool over_dimension = false)
+                                   bool over_dimension = false, int depth = 0,
+                                   Expr slid_loop_max = Expr())
         : func(std::move(f)), loop_var(std::move(v)), loop_min(std::move(v_min)),
           slid_dimensions(slid_dimensions), bounds_scope(bounds_scope),
-          can_rewind(can_rewind), over_dimension(over_dimension) {
+          can_rewind(can_rewind), over_dimension(over_dimension), depth(depth),
+          loop_max(std::move(slid_loop_max)) {
         decision.func_name = func.name();
         decision.slide_over = loop_var;
     }
@@ -1129,7 +1252,8 @@ class SlidingWindow : public IRMutator {
     // the original var still has to be computed to evaluate the func's args.
     static bool slides_over(const Function &f, const string &let_name) {
         const auto &levels = f.schedule().slide_levels();
-        return std::any_of(levels.begin(), levels.end(), [&](const LoopLevel &l) {
+        return std::any_of(levels.begin(), levels.end(), [&](const SlideLevel &s) {
+            const LoopLevel &l = s.level;
             return l.defined() && !l.is_inlined() && !l.is_root() && l.match(let_name);
         });
     }
@@ -1474,7 +1598,10 @@ class SlidingWindow : public IRMutator {
             ScopedBinding<Interval> bind_bounds(bounds_scope, op->name,
                                                 Interval(min_bounds.min, max_bounds.max));
 
-            SlidingWindowOnFunctionAndLoop slider(func, name, consumed_from, slid_dims, bounds_scope);
+            SlidingWindowOnFunctionAndLoop slider(func, name, consumed_from, slid_dims,
+                                                  bounds_scope, /* can_rewind */ true,
+                                                  /* over_dimension */ false,
+                                                  slide_depth(func, op->name), loop_max);
 
             body = slider(body);
             const SlideDecision &decision = slider.decision;
