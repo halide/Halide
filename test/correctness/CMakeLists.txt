@@ -338,6 +338,7 @@ tests(
     spirv_ir.cpp
     split_aligned.cpp
     split_aligned_2d.cpp
+    split_aligned_nested.cpp
     split_by_non_factor.cpp
     split_factor_type.cpp
     split_fuse_rvar.cpp
