@@ -5,7 +5,8 @@ using namespace Halide;
 Var x, y;
 
 void check(Func f) {
-    Buffer<int> out = f.realize({256, 256});
+    Target target = get_jit_target_from_environment().with_feature(Target::EnableBacktraces);
+    Buffer<int> out = f.realize({256, 256}, target);
     out.for_each_element([&](int x, int y) {
         if (out(x, y) != x + y) {
             printf("out(%d, %d) = %d instead of %d\n", x, y, out(x, y), x + y);
