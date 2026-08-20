@@ -158,7 +158,10 @@ def _member_names(xml_dir: Path, container_refid: str, member_kinds, name_prefix
             continue
         for memberdef in sectiondef.findall("memberdef"):
             name = memberdef.find("name").text
-            if "@" in name:
+            # Anonymous enums get a synthetic "@N" name on newer Doxygen, but
+            # an empty <name/> (None here) on older ones (e.g. 1.9.8) -- both
+            # mean the same "no real name" thing and should be skipped.
+            if not name or "@" in name:
                 continue
             location = memberdef.find("location")
             file = location.get("file") if location is not None else "unknown"
