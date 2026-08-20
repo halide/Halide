@@ -117,15 +117,17 @@ struct AutoSchedulerResults {
 /** Options controlling how Pipeline::halidoscope() locates and launches the
  * Halidoscope GUI binary. */
 struct HalidoscopeOptions {
-    /** Path to the halidoscope executable, or just its name if it's on
-     * $PATH. Defaults to looking it up on $PATH. */
-    std::string halidoscope_path = "halidoscope";
+    /** (Optional) Path to the halidoscope executable, or just its name if
+     * it's on $PATH. If unset, defaults to looking up "halidoscope" on
+     * $PATH. */
+    std::optional<std::string> halidoscope_path = std::nullopt;
     /** (Optional) Path to the non-volatile directory for storing
      * Halidoscope-generated trace binaries and profiler output. */
     std::optional<std::string> halidoscope_output_dir = std::nullopt;
-    /** The number of runs for the profiler execution. Defaults to 1. A
-     * 0 value indicates that profiling should be skipped. */
-    int halidoscope_profile_runs = 1;
+    /** (Optional) The number of runs for the profiler execution. If unset,
+     * defaults to 1. A 0 value indicates that profiling should be
+     * skipped. */
+    std::optional<int> halidoscope_profile_runs = std::nullopt;
 };
 
 class Pipeline;
