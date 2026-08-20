@@ -7,6 +7,7 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <sstream>
 #include <string>
 
 namespace Halide {
@@ -34,6 +35,32 @@ std::ostream &operator<<(std::ostream &, const LoweredFunc &);
 
 bool debug_is_active_impl(int verbosity, const char *file, const char *function, int line);
 
+/** Backs the debug() macro. Buffers everything written to it in memory, then
+ * emits the whole statement's accumulated output as a single write when the
+ * temporary is destroyed (i.e. at the end of the debug(n) << ...; statement).
+ * This matters when HL_DEBUG_CODEGEN_LOG_FILE names a real file shared by
+ * multiple processes: writing statement-by-statement in one shot (rather
+ * than incrementally, as each `<<` arrives) keeps one process's debug dump
+ * from being interleaved mid-line with another's. Not for direct use --
+ * use the debug(n) macro. */
+class DebugStream : public std::ostringstream {
+public:
+    DebugStream() = default;
+    ~DebugStream() override;
+
+    /** Exposes this object as a plain std::ostream&, so every `<<` in a
+     * debug(n) statement resolves exactly as it would against std::cerr,
+     * rather than against DebugStream itself: some standard library
+     * implementations' rvalue-stream-insertion operator<< deduces the
+     * *exact* runtime type of its left operand, and the SFINAE trait it
+     * uses to test "is this ostreamable" can fail to find free-function
+     * operator<< overloads (e.g. for Halide's own IR types) once that type
+     * is something other than std::ostream itself. */
+    std::ostream &stream() {
+        return *this;
+    }
+};
+
 /** For optional debugging during codegen, use the debug macro as
  * follows:
  *
@@ -45,12 +72,13 @@ bool debug_is_active_impl(int verbosity, const char *file, const char *function,
  * stage, 2 should be used for more detail, and 3 should be used for
  * tracing everything that occurs. The verbosity with which to print
  * is determined by the value of the environment variable
- * HL_DEBUG_CODEGEN
+ * HL_DEBUG_CODEGEN. Output goes to stderr by default, but can be
+ * redirected via HL_DEBUG_CODEGEN_LOG_FILE (see DebugStream above).
  */
 
 #define debug(n)                                     \
     /* NOLINTNEXTLINE(bugprone-macro-parentheses) */ \
-    if (::Halide::Internal::debug_is_active_impl((n), __FILE__, __FUNCTION__, __LINE__)) std::cerr
+    if (::Halide::Internal::debug_is_active_impl((n), __FILE__, __FUNCTION__, __LINE__)) ::Halide::Internal::DebugStream().stream()
 
 /** Allow easily printing the contents of containers, or std::vector-like containers,
  *  in debug output. Used like so:

@@ -446,7 +446,11 @@ with rules separated by `;` and OR-ed together (filenames and function names are
 matched as suffixes). For example, `HL_DEBUG_CODEGEN=3,Simplify.cpp:100-180`
 prints verbosity-3 output only from lines 100–180 of `Simplify.cpp`. See
 [doc/Testing.md](doc/Testing.md) for more, including the LLDB/GDB debugger
-helpers.
+helpers. `HL_DEBUG_CODEGEN` output goes to stderr by default; set
+`HL_DEBUG_CODEGEN_LOG_FILE=<path>` to append it to a file instead (the file is
+never truncated). The values `/dev/stdout` and `/dev/stderr` are recognized
+explicitly and remapped to `std::cout`/`std::cerr` on all platforms, including
+Windows, which has no `/dev` filesystem to fall back on.
 
 `HL_NUM_THREADS=...` specifies the number of threads to create for the thread
 pool. When the async scheduling directive is used, more threads than this number
