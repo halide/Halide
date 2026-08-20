@@ -1410,7 +1410,12 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
                     // Convert to 8-bit color.
                     uint8_t int_value = (uint8_t)value;
 
-                    if (fi.config.color_dim < 0) {
+                    // color_dim comes from a trace tag or the command line and
+                    // is not bounded by the packet's dimensionality, so a value
+                    // past the coordinates in this packet renders as grayscale
+                    // rather than indexing coords out of range.
+                    if (fi.config.color_dim < 0 ||
+                        fi.config.color_dim >= p.dimensions / p.lanes) {
                         // Grayscale
                         image_color = (int_value * 0x00010101) | 0xff000000;
                     } else {
