@@ -114,7 +114,7 @@ vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
             // Adjust the base downwards to not compute off the
             // end of the realization.
 
-            base = likely(base);
+            base = likely_if_innermost(base);
             if (split.align.defined()) {
                 base = Max::make(base, old_min - split.align);
                 base = Min::make(base, old_max + (1 - split.factor) - split.align);

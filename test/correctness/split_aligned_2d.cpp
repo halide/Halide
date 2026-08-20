@@ -76,11 +76,11 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (checker.mux_count != 12) {
-        std::printf("Expected 12 muxes: %d\n", checker.mux_count);
+    if (checker.mux_count != 0) {
+        std::printf("Expected 0 muxes: %d\n", checker.mux_count);
         return 1;
     }
-    if (checker.for_count != 3) {
+    if (checker.for_count != 1) {
         std::printf("Expected 3 for loops: %d\n", checker.for_count);
         return 1;
     }
