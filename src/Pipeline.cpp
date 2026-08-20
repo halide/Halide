@@ -1165,9 +1165,13 @@ void Pipeline::halidoscope_impl(const std::function<void(Pipeline &, const Targe
                                 const HalidoscopeOptions &options,
                                 const Target &target_arg) {
     user_assert(defined()) << "Pipeline is undefined\n";
-    user_assert(options.halidoscope_profile_runs >= 0)
+
+    std::string halidoscope_path = options.halidoscope_path.value_or("halidoscope");
+    int profile_runs = options.halidoscope_profile_runs.value_or(1);
+
+    user_assert(profile_runs >= 0)
         << "halidoscope: HalidoscopeOptions::halidoscope_profile_runs must be a non-negative integer, got "
-        << options.halidoscope_profile_runs << ".\n";
+        << profile_runs << ".\n";
 
     // Fail fast if halidoscope_path looks like an explicit path (as opposed
     // to a bare name meant to be resolved via $PATH, e.g. the default
@@ -1176,10 +1180,10 @@ void Pipeline::halidoscope_impl(const std::function<void(Pipeline &, const Targe
     // name can't be checked this way (file_exists() just wraps access(),
     // which won't search $PATH), so that case is instead caught below, after
     // actually trying to launch it.
-    if (options.halidoscope_path.find('/') != std::string::npos) {
-        user_assert(file_exists(options.halidoscope_path))
+    if (halidoscope_path.find('/') != std::string::npos) {
+        user_assert(file_exists(halidoscope_path))
             << "halidoscope: no file found at HalidoscopeOptions::halidoscope_path='"
-            << options.halidoscope_path << "'.\n";
+            << halidoscope_path << "'.\n";
     }
 
     // Pipeline::compile_jit() discards the *entire* target (feature bits
@@ -1223,7 +1227,7 @@ void Pipeline::halidoscope_impl(const std::function<void(Pipeline &, const Targe
     }
 
     // --- Profile run: Halide's sampling profiler, captured into JSON. ---
-    if (options.halidoscope_profile_runs > 0) {
+    if (profile_runs > 0) {
         Pipeline profiled = deserialize_pipeline(data, external_params);
         Target profile_target = base_target.with_feature(Target::Profile);
 
@@ -1233,8 +1237,8 @@ void Pipeline::halidoscope_impl(const std::function<void(Pipeline &, const Targe
             // Accumulate profiler stats across all the runs below instead
             // of letting each realize() reset them; see ProfilerScope.
             ProfilerScope guard(profiled);
-            for (int i = 0; i < options.halidoscope_profile_runs; i++) {
-                std::cout << "Halidoscope profiling run " << i + 1 << " of " << options.halidoscope_profile_runs << "\n";
+            for (int i = 0; i < profile_runs; i++) {
+                std::cout << "Halidoscope profiling run " << i + 1 << " of " << profile_runs << "\n";
                 do_realize(profiled, profile_target);
             }
             // Snapshot the merged stats now, while the guard is still
@@ -1246,10 +1250,10 @@ void Pipeline::halidoscope_impl(const std::function<void(Pipeline &, const Targe
     }
 
     // --- Launch Halidoscope, blocking until the window is closed. ---
-    std::string binary = options.halidoscope_path;
+    std::string binary = halidoscope_path;
 
     std::vector<std::string> halidoscope_args = {binary, "--trace", trace_path};
-    if (options.halidoscope_profile_runs > 0) {
+    if (profile_runs > 0) {
         halidoscope_args.emplace_back("--profile");
         halidoscope_args.emplace_back(profile_path);
     }
@@ -1260,7 +1264,7 @@ void Pipeline::halidoscope_impl(const std::function<void(Pipeline &, const Targe
     // temporary directory storing trace and profile data.
     if (!options.halidoscope_output_dir) {
         file_unlink(trace_path);
-        if (options.halidoscope_profile_runs > 0) {
+        if (profile_runs > 0) {
             file_unlink(profile_path);
         }
         dir_rmdir(dir);
