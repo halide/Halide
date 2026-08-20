@@ -52,7 +52,7 @@ Pipeline make_test_pipeline(Func &f, Func &g) {
 bool exception_thrown(const std::function<void()> &fn) {
     try {
         fn();
-    } catch (const Error &e) {
+    } catch (const Error &) {
         return true;
     }
     return false;
