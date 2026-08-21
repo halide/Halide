@@ -42,7 +42,7 @@ def test(addconstant_impl_func, offset):
     input_float = numpy.array([3.14, 2.718, 1.618], dtype=numpy.float32)
     input_double = numpy.array([3.14, 2.718, 1.618], dtype=numpy.float64)
     input_half = numpy.array([3.14, 2.718, 1.618], dtype=numpy.float16)
-    input_2d = numpy.array([[1, 2, 3], [4, 5, 6]], dtype=numpy.int8, order="F")
+    input_2d = numpy.array([[1, 2, 3], [4, 5, 6]], dtype=numpy.int8)
     input_3d = numpy.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]]], dtype=numpy.int8)
 
     output_u8 = numpy.zeros((3,), dtype=numpy.uint8)
@@ -56,7 +56,7 @@ def test(addconstant_impl_func, offset):
     output_float = numpy.zeros((3,), dtype=numpy.float32)
     output_double = numpy.zeros((3,), dtype=numpy.float64)
     output_half = numpy.zeros((3,), dtype=numpy.float16)
-    output_2d = numpy.zeros((2, 3), dtype=numpy.int8, order="F")
+    output_2d = numpy.zeros((2, 3), dtype=numpy.int8)
     output_3d = numpy.zeros((2, 2, 2), dtype=numpy.int8)
 
     addconstant_impl_func(

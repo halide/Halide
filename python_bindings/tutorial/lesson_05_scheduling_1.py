@@ -6,9 +6,6 @@
 # evaluate pixels in a hl.Func, including vectorization,
 # parallelization, unrolling, and tiling.
 
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_05_scheduling_1
-# in a shell with the current directory at python_bindings/
 import halide as hl
 
 
@@ -32,8 +29,8 @@ def main():
         print("Evaluating gradient row-major")
         gradient.realize([4, 4])
 
-        # The equivalent C is:
-        print("Equivalent C:")
+        # The equivalent Python is:
+        print("Equivalent Python:")
         for yy in range(4):
             for xx in range(4):
                 print(f"Evaluating at x = {xx}, y = {yy}: {xx + yy}")
@@ -73,7 +70,7 @@ def main():
         print("Evaluating gradient column-major")
         gradient.realize([4, 4])
 
-        print("Equivalent C:")
+        print("Equivalent Python:")
         for xx in range(4):
             for yy in range(4):
                 print(f"Evaluating at x = {xx}, y = {yy}: {xx + yy}")
@@ -110,7 +107,7 @@ def main():
         print("Evaluating gradient with x split into x_outer and x_inner ")
         gradient.realize([4, 4])
 
-        print("Equivalent C:")
+        print("Equivalent Python:")
         for yy in range(4):
             for x_outer in range(2):
                 for x_inner in range(2):
@@ -145,7 +142,7 @@ def main():
         print("Evaluating gradient with x and y fused")
         gradient.realize([4, 4])
 
-        print("Equivalent C:")
+        print("Equivalent Python:")
         for fused in range(4 * 4):
             yy = fused / 4
             xx = fused % 4
@@ -184,7 +181,7 @@ def main():
         print("Evaluating gradient in 2x2 tiles")
         gradient.realize([4, 4])
 
-        print("Equivalent C:")
+        print("Equivalent Python:")
         for y_outer in range(2):
             for x_outer in range(2):
                 for y_inner in range(2):
@@ -236,7 +233,7 @@ def main():
         print("Evaluating gradient with x_inner vectorized ")
         gradient.realize([8, 4])
 
-        print("Equivalent C:")
+        print("Equivalent Python:")
         for yy in range(4):
             for x_outer in range(2):
                 # The loop over x_inner has gone away, and has been
@@ -288,7 +285,7 @@ def main():
         print("Evaluating gradient unrolled by a factor of two")
         result = gradient.realize([4, 4])
 
-        print("Equivalent C:")
+        print("Equivalent Python:")
         for yy in range(4):
             for x_outer in range(2):
                 # Instead of a for loop over x_inner, we get two
@@ -328,7 +325,7 @@ def main():
         print("Evaluating gradient over a 5x4 box with x split by two ")
         gradient.realize([5, 4])
 
-        print("Equivalent C:")
+        print("Equivalent Python:")
         for yy in range(4):
             for x_outer in range(3):  # Now runs from 0 to 3
                 for x_inner in range(2):
@@ -351,10 +348,10 @@ def main():
         # If you read the output, you'll see that some coordinates
         # were evaluated more than once! That's generally OK, because
         # pure Halide functions have no side-effects, so it's safe to
-        # evaluate the same point multiple times. If you're calling
-        # out to C functions like we are, it's your responsibility to
-        # make sure you can handle the same point being evaluated
-        # multiple times.
+        # evaluate the same point multiple times. If you're calling out to
+        # functions with side effects (like print) as we are here, it's
+        # your responsibility to make sure you can handle the same point
+        # being evaluated multiple times.
 
         # The general rule is: If we require x from x_min to x_min + x_extent, and
         # we split by a factor 'factor', then:
@@ -413,9 +410,9 @@ def main():
         # The tiles should occur in arbitrary order, but within each
         # tile the pixels will be traversed in row-major order.
 
-        print("Equivalent (serial) C:")
-        # This outermost loop should be a parallel for loop, but that's hard in
-        # C.
+        print("Equivalent (serial) Python:")
+        # This outermost loop should be a parallel for loop, but that's
+        # hard to express in plain Python.
         for tile_index in range(4):
             y_outer = tile_index / 2
             x_outer = tile_index % 2
@@ -472,10 +469,10 @@ def main():
 
         # If you like you can turn on tracing, but it's going to
         # produce a lot of prints. Instead we'll compute the answer
-        # both in C and Halide and see if the answers match.
+        # both in plain Python and Halide and see if the answers match.
         result = gradient_fast.realize([800, 600])
 
-        print("Checking Halide result against equivalent C...")
+        print("Checking Halide result against equivalent Python...")
         for tile_index in range(4 * 3):
             y_outer = tile_index // 4
             x_outer = tile_index % 4
@@ -530,13 +527,13 @@ def main():
 
         # Note that in the Halide version, the algorithm is specified
         # once at the top, separately from the optimizations, and there
-        # aren't that many lines of code total. Compare this to the C
-        # version. There's more code (and it isn't even parallelized or
-        # vectorized properly). More annoyingly, the statement of the
-        # algorithm (the result is x plus y) is buried in multiple places
-        # within the mess. This C code is hard to write, hard to read,
-        # hard to debug, and hard to optimize further. This is why Halide
-        # exists.
+        # aren't that many lines of code total. Compare this to the
+        # plain Python version above. There's more code (and it isn't
+        # even parallelized or vectorized properly). More annoyingly,
+        # the statement of the algorithm (the result is x plus y) is
+        # buried in multiple places within the mess. This plain Python
+        # code is hard to write, hard to read, hard to debug, and hard
+        # to optimize further. This is why Halide exists.
 
     print("Success!")
     return 0

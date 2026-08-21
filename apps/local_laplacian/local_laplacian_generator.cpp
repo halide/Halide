@@ -165,7 +165,8 @@ public:
                     .compute_root()
                     .reorder_storage(x, k, y)
                     .reorder(k, y)
-                    .parallel(y, 8)
+                    .split(y, yo, y, 8)
+                    .parallel(yo)
                     .vectorize(x, 8);
                 outGPyramid[j]
                     .store_at(output, yo)
@@ -180,6 +181,12 @@ public:
                     gPyramid[j].never_partition_all();
                 }
             }
+            gPyramid[0]
+                .clone_in(gPyramid[1])
+                .store_at(gPyramid[1], yo)
+                .compute_at(gPyramid[1], y)
+                .vectorize(x, 8);
+
             outGPyramid[0]
                 .compute_at(output, y)
                 .hoist_storage(output, yo)

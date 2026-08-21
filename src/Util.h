@@ -183,6 +183,26 @@ bool ends_with(const std::string &str, const std::string &suffix);
  * this function to return the same string without any copies being made. */
 std::string replace_all(std::string str, const std::string &find, const std::string &replace);
 
+/** Invoke `f(coord)` for each integer coordinate in the box
+ * `[0, sizes[0]) x [0, sizes[1]) x ...`, in lex order with the first
+ * axis varying fastest. `coord` is a `const std::vector<int> &` of the
+ * same length as `sizes`. The empty-sizes case invokes `f` once with an
+ * empty coord (a 0-dim box has one point). */
+template<typename F>
+void for_each_coordinate(const std::vector<int> &sizes, F &&f) {
+    std::vector<int> coord(sizes.size(), 0);
+    while (true) {
+        f(coord);
+        size_t k = 0;
+        while (k < sizes.size() && ++coord[k] == sizes[k]) {
+            coord[k++] = 0;
+        }
+        if (k == sizes.size()) {
+            return;
+        }
+    }
+}
+
 /** Split the source string using 'delim' as the divider. */
 std::vector<std::string> split_string(const std::string &source, const std::string &delim);
 
@@ -377,6 +397,12 @@ public:
  * in the PATH. Returns the exit code of the process, or -1 if the process
  * could not be started. */
 int run_process(std::vector<std::string> args);
+
+/** As above, but redirect the child's stdout and/or stderr to the given
+ * files instead of inheriting the caller's. Pass an empty string for
+ * either path to leave that stream untouched. Passing the same path for
+ * both combines them into a single file, as with the shell's `2>&1`. */
+int run_process(std::vector<std::string> args, const std::string &stdout_path, const std::string &stderr_path);
 
 /** Routines to test if math would overflow for signed integers with
  * the given number of bits. */
@@ -575,8 +601,23 @@ inline int64_t next_power_of_two(int64_t x) {
     return static_cast<int64_t>(1) << static_cast<int64_t>(std::ceil(std::log2(x)));
 }
 
+/** Returns the largest power of two which is a factor of the argument. */
+inline int64_t largest_power_of_two_factor(int64_t x) {
+    return x & -x;
+}
+
+/** Return whether or not an integer is a power of two. */
+inline bool is_power_of_two(int64_t x) {
+    return (x & (x - 1)) == 0;
+}
+
+/** Round x up to the next multiple of n. An n of zero imposes no alignment, and
+ * returns x unchanged. Works for integral types and for Expr. */
 template<typename T>
-inline T align_up(T x, int n) {
+inline T align_up(const T &x, int n) {
+    if (n == 0) {
+        return x;
+    }
     return (x + n - 1) / n * n;
 }
 

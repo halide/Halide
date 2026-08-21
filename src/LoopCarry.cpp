@@ -209,7 +209,7 @@ class LoopCarryOverLoop : public IRMutator {
             body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = LetStmt::make(op->name, value, body);
+            stmt = op->with(value, body);
         }
 
         containing_lets.pop_back();
@@ -430,23 +430,20 @@ class LoopCarryOverLoop : public IRMutator {
                 const Load *orig_load = loads[c[i]][0];
                 Expr scratch_idx = scratch_index(i, orig_load->type);
                 // Don't worry about alignment - the load is at a constant address.
-                Expr load_from_scratch = Load::make(orig_load->type, scratch, scratch_idx,
-                                                    Buffer<>(), Parameter(), const_true(orig_load->type.lanes()), ModulusRemainder());
+                Expr load_from_scratch = Load::make(orig_load->type, scratch, scratch_idx);
                 for (const Load *l : loads[c[i]]) {
                     core = graph_substitute(l, load_from_scratch, core);
                 }
 
                 if (i == c.size() - 1) {
-                    Stmt store_to_scratch = Store::make(scratch, orig_load, scratch_idx,
-                                                        Parameter(), const_true(orig_load->type.lanes()), ModulusRemainder());
+                    Stmt store_to_scratch = Store::make(scratch, orig_load, scratch_idx);
                     not_first_iteration_scratch_stores.push_back(store_to_scratch);
                 } else {
                     initial_scratch_values.emplace_back(orig_load);
                 }
                 if (i > 0) {
                     Stmt shuffle = Store::make(scratch, load_from_scratch,
-                                               scratch_index(i - 1, orig_load->type),
-                                               Parameter(), const_true(orig_load->type.lanes()), ModulusRemainder());
+                                               scratch_index(i - 1, orig_load->type));
                     scratch_shuffles.push_back(shuffle);
                 }
             }
@@ -460,10 +457,7 @@ class LoopCarryOverLoop : public IRMutator {
             // Run CSE
             call = simplify(common_subexpression_elimination(call));
             // Peel off lets
-            while (const Let *l = call.as<Let>()) {
-                initial_lets.emplace_back(l->name, l->value);
-                call = l->body;
-            }
+            call = peel_lets(call, &initial_lets);
             internal_assert(call.as<Call>());
             initial_scratch_values = call.as<Call>()->args;
 
@@ -472,25 +466,17 @@ class LoopCarryOverLoop : public IRMutator {
             for (size_t i = 0; i < c.size() - 1; i++) {
                 Expr scratch_idx = scratch_index(i, initial_scratch_values[i].type());
                 Stmt store_to_scratch = Store::make(scratch, initial_scratch_values[i],
-                                                    scratch_idx, Parameter(),
-                                                    const_true(scratch_idx.type().lanes()),
-                                                    ModulusRemainder());
+                                                    scratch_idx);
                 initial_scratch_stores.push_back(store_to_scratch);
             }
 
             Stmt initial_stores = Block::make(initial_scratch_stores);
 
             // Wrap them in the appropriate lets
-            for (const auto &[var, value] : reverse_view(initial_lets)) {
-                initial_stores = LetStmt::make(var, value, initial_stores);
-            }
+            initial_stores = rewrap_all_lets(initial_stores, initial_lets);
             // We may be lifting the initial stores out of let stmts,
             // so rewrap them in the necessary ones.
-            for (const auto &[var, value] : reverse_view(containing_lets)) {
-                if (stmt_uses_var(initial_stores, var)) {
-                    initial_stores = LetStmt::make(var, value, initial_stores);
-                }
-            }
+            initial_stores = rewrap_used_lets(initial_stores, containing_lets);
 
             allocs.push_back({scratch,
                               loads[c.front()][0]->type.element_of(),
@@ -545,7 +531,7 @@ class LoopCarry : public IRMutator {
         } else {
             ScopedBinding<> bind(in_consume, op->name);
             Stmt body = mutate(op->body);
-            return ProducerConsumer::make(op->name, op->is_producer, body);
+            return op->with(body);
         }
     }
 
@@ -555,11 +541,7 @@ class LoopCarry : public IRMutator {
             Stmt body = mutate(op->body);
             LoopCarryOverLoop carry(op->name, in_consume, max_carried_values);
             body = carry(body);
-            if (body.same_as(op->body)) {
-                stmt = op;
-            } else {
-                stmt = For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
-            }
+            stmt = op->with(op->min, op->max, body);
 
             // Inject the scratch buffer allocations.
             for (const auto &alloc : carry.allocs) {

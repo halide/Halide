@@ -145,18 +145,18 @@ public:
         return coeffs[0].size();
     }
 
-    OptionalRational operator()(int producer_storage_dim, int consumer_loop_dim) const {
+    OptionalRational operator()(size_t producer_storage_dim, size_t consumer_loop_dim) const {
         if (coeffs.empty()) {
             // The producer is scalar, so all strides are zero.
             return {true, 0, 1};
         }
-        internal_assert(producer_storage_dim < (int)coeffs.size());
+        internal_assert(producer_storage_dim < coeffs.size());
         const auto &p = coeffs[producer_storage_dim];
         if (p.empty()) {
             // The consumer is scalar, so all strides are zero.
             return {true, 0, 1};
         }
-        internal_assert(consumer_loop_dim < (int)p.size());
+        internal_assert(consumer_loop_dim < p.size());
         return p[consumer_loop_dim];
     }
 

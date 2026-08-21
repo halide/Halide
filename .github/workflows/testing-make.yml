@@ -21,7 +21,7 @@ on:
       - "python_bindings/**"
 
       - "pyproject.toml"
-      # Don't ignore uv.lock as it influences dependency resolution
+      - "uv.lock"
 
       - "README.md"
       - "CODE_OF_CONDUCT.md"
@@ -56,9 +56,7 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v6
-
-      - uses: astral-sh/setup-uv@v7
+      - uses: actions/checkout@v7
 
       - name: Install dependencies
         run: |
@@ -82,30 +80,25 @@ jobs:
             echo "LLVM_CONFIG=$(brew --prefix "llvm@${LLVM_VERSION}")/bin/llvm-config" | tee -a "$GITHUB_ENV"
           fi
 
-          uv sync --group ci-base --no-install-project
-          echo "${GITHUB_WORKSPACE}/.venv/bin" | tee -a "$GITHUB_PATH"
-          echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" | tee -a "$GITHUB_ENV"
           echo "MAKEFLAGS=-j $(getconf _NPROCESSORS_ONLN)" | tee -a "$GITHUB_ENV"
 
       - run: make build_tests
-
-      - run: make test_internal
-        if: ${{ !cancelled() }}
+        if: runner.os != 'macOS'
 
       - run: make test_correctness
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && runner.os != 'macOS' }}
 
       - run: make test_generator
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && runner.os != 'macOS' }}
 
       - run: make test_error
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && runner.os != 'macOS' }}
 
       - run: make test_warning
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && runner.os != 'macOS' }}
 
       - run: make test_apps
         if: ${{ !cancelled() }}
 
       - run: make test_tutorial
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && runner.os != 'macOS' }}

@@ -183,11 +183,6 @@ private:
                 }
             }
         }
-
-        // It also misses wrappers
-        for (const auto &p : func.wrappers()) {
-            Function(p.second).accept(this);
-        }
     }
 
     void include_parameter(const Parameter &p) {

@@ -25,6 +25,14 @@ void spawn_thread_helper(void *arg) {
 extern "C" {
 
 extern void *memalign(size_t, size_t);
+extern qurt_thread_t qurt_thread_get_id();
+
+static_assert(sizeof(qurt_thread_t) == sizeof(uint32_t), "qurt_thread_t is expected to be 32 bits.");
+
+WEAK int32_t halide_current_thread_id() {
+    const uint32_t id = qurt_thread_get_id();
+    return (int32_t)(id ? id : 1);
+}
 
 int halide_host_cpu_count() {
     // Assume a Snapdragon 820

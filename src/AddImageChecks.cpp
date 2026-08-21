@@ -39,7 +39,8 @@ public:
         op->max.accept(this);
         bool old = in_device_loop;
         if (op->device_api != DeviceAPI::None &&
-            op->device_api != DeviceAPI::Host) {
+            op->device_api != DeviceAPI::Host &&
+            op->device_api != DeviceAPI::SMEStreaming) {
             in_device_loop = true;
         }
         op->body.accept(this);
@@ -89,7 +90,6 @@ public:
             r.param = op->param;
             r.type = op->param.type();
             r.dimensions = op->param.dimensions();
-            r.used_on_host = false;
             buffers[op->param.name()] = r;
         } else if (op->reduction_domain.defined()) {
             // The bounds of reduction domains are not yet defined,
@@ -208,6 +208,7 @@ Stmt add_image_checks_inner(Stmt s,
     vector<Stmt> asserts_device_not_dirty;
     vector<Stmt> buffer_rewrites;
     vector<Stmt> msan_checks;
+    vector<Stmt> set_host_dirty;
 
     // Inject the code that conditionally returns if we're in inference mode
     Expr maybe_return_condition = const_false();
@@ -330,7 +331,7 @@ Stmt add_image_checks_inner(Stmt s,
         {
             string type_name = name + ".type";
             Expr type_var = Variable::make(UInt(32), type_name, image, param, rdom);
-            uint32_t correct_type_bits = ((halide_type_t)type).as_u32();
+            uint32_t correct_type_bits = type.to_abi();
             Expr correct_type_expr = make_const(UInt(32), correct_type_bits);
             Expr error = Call::make(Int(32), "halide_error_bad_type",
                                     {error_name, type_var, correct_type_expr},
@@ -649,6 +650,16 @@ Stmt add_image_checks_inner(Stmt s,
                 // If we have no device support, we can't handle
                 // device_dirty, so every buffer touched needs checking.
                 asserts_device_not_dirty.push_back(AssertStmt::make(!device_dirty, error));
+
+                // However, if it's an output, we do still need to set the host
+                // dirty bit in case the result is fed to a later GPU
+                // kernel.
+                if (is_output_buffer) {
+                    Expr set =
+                        Call::make(Int(32), Call::buffer_set_host_dirty,
+                                   {handle, const_true()}, Call::Extern);
+                    set_host_dirty.push_back(Evaluate::make(set));
+                }
             }
         }
 
@@ -670,20 +681,16 @@ Stmt add_image_checks_inner(Stmt s,
         }
     };
 
-    auto prepend_lets = [&](vector<pair<string, Expr>> *lets) {
-        while (!lets->empty()) {
-            auto &p = lets->back();
-            s = LetStmt::make(p.first, std::move(p.second), s);
-            lets->pop_back();
-        }
-    };
+    // After all asserts, set host dirty on outputs if this is a CPU-only
+    // pipeline
+    prepend_stmts(&set_host_dirty);
 
     // Inject the code that checks the host pointers.
     prepend_stmts(&asserts_host_non_null);
     prepend_stmts(&asserts_host_alignment);
     prepend_stmts(&asserts_device_not_dirty);
     prepend_stmts(&dims_no_overflow_asserts);
-    prepend_lets(&lets_overflow);
+    s = rewrap_all_lets(s, lets_overflow);
 
     // Replace uses of the var with the constrained versions in the
     // rest of the program. We also need to respect the existence of
@@ -695,9 +702,11 @@ Stmt add_image_checks_inner(Stmt s,
     // all in reverse order compared to execution, as we incrementally
     // prepending code.
 
-    // Inject the code that checks the constraints are correct.
-    prepend_stmts(&asserts_constrained);
+    // Inject the buffer constraints before the required-region checks so that
+    // simplification can use the constraints when reasoning about the checks.
+    // These calls are in reverse execution order because they prepend stmts.
     prepend_stmts(&asserts_required);
+    prepend_stmts(&asserts_constrained);
     prepend_stmts(&asserts_type_checks);
 
     // Inject the code that returns early for inference mode.
@@ -709,13 +718,13 @@ Stmt add_image_checks_inner(Stmt s,
     prepend_stmts(&asserts_proposed);
 
     // Inject the code that defines the proposed sizes.
-    prepend_lets(&lets_proposed);
+    s = rewrap_all_lets(s, lets_proposed);
 
     // Inject the code that defines the constrained sizes.
-    prepend_lets(&lets_constrained);
+    s = rewrap_all_lets(s, lets_constrained);
 
     // Inject the code that defines the required sizes produced by bounds inference.
-    prepend_lets(&lets_required);
+    s = rewrap_all_lets(s, lets_required);
 
     // Inject the code that checks that does msan checks. (Note that this ignores no_asserts.)
     prepend_stmts(&msan_checks);

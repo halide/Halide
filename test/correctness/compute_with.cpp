@@ -70,7 +70,7 @@ int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
         const auto &iter = stores.find(fname);
         if (iter != stores.end()) {
             const Bound &b = iter->second;
-            if (!check_coordinates(b, e->coordinates, e->dimensions, e->type.lanes, "store", fname)) {
+            if (!check_coordinates(b, e->coordinates, e->dimensions, e->lanes, "store", fname)) {
                 exit(1);
             }
         }
@@ -80,7 +80,7 @@ int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
         const auto &iter = loads.find(fname);
         if (iter != loads.end()) {
             const Bound &b = iter->second;
-            if (!check_coordinates(b, e->coordinates, e->dimensions, e->type.lanes, "load", fname)) {
+            if (!check_coordinates(b, e->coordinates, e->dimensions, e->lanes, "load", fname)) {
                 exit(1);
             }
         }
@@ -1016,7 +1016,7 @@ int multi_tile_mixed_tile_factor_test() {
     return 0;
 }
 
-int only_some_are_tiled_test() {
+[[maybe_unused]] int only_some_are_tiled_test() {
     const int size = 256;
     Buffer<int> f_im(size, size), g_im(size / 2, size / 2), h_im(size / 2, size / 2);
     Buffer<int> f_im_ref(size, size), g_im_ref(size / 2, size / 2), h_im_ref(size / 2, size / 2);
@@ -1527,7 +1527,7 @@ int update_stage_pairwise_test() {
     return 0;
 }
 
-int update_stage_pairwise_zigzag_test() {
+[[maybe_unused]] int update_stage_pairwise_zigzag_test() {
     const int f_size = 128;
     const int g_size = 128;
     const int base = 31;

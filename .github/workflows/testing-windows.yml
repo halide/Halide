@@ -50,7 +50,7 @@ jobs:
           #   python: cpython-3.10.20-windows-x86_64-none
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: astral-sh/setup-uv@v7
 

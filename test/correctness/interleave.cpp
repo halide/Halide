@@ -16,7 +16,7 @@ public:
     using IRVisitor::visit;
 
     void visit(const Shuffle *op) override {
-        if (op->is_interleave()) {
+        if (op->is_interleave() || op->is_transpose()) {
             result++;
         }
         IRVisitor::visit(op);

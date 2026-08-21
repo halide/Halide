@@ -153,20 +153,20 @@ Stmt Closure::unpack_from_struct(const Expr &e, const Stmt &s) const {
 
     const Call *c = packed.as<Call>();
 
-    Stmt result = s;
-    for (int idx = (int)c->args.size() - 1; idx >= 0; idx--) {
-        Expr arg = c->args[idx];
-        const Variable *var = arg.as<Variable>();
-        Expr val = Call::make(var->type,
-                              Call::load_typed_struct_member,
-                              {e, prototype_var, idx},
-                              Call::Intrinsic);
-        if (stmt_uses_var(result, var->name)) {
-            // If a closure is generated for multiple consuming blocks of IR,
-            // then some of those blocks might only need some of the field.
-            result = LetStmt::make(var->name, val, result);
-        }
+    // If a closure is generated for multiple consuming blocks of IR, then some
+    // of those blocks might only need some of the fields, so only bind the ones
+    // that are used.
+    std::vector<std::pair<std::string, Expr>> lets;
+    lets.reserve(c->args.size());
+    for (int idx = 0; idx < (int)c->args.size(); idx++) {
+        const Variable *var = c->args[idx].as<Variable>();
+        lets.emplace_back(var->name,
+                          Call::make(var->type,
+                                     Call::load_typed_struct_member,
+                                     {e, prototype_var, idx},
+                                     Call::Intrinsic));
     }
+    Stmt result = rewrap_used_lets(s, lets);
     result = LetStmt::make(prototype_name, prototype, result);
 
     return result;

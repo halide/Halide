@@ -1,6 +1,8 @@
 #include "HalideRuntime.h"
 #include "runtime_atomics.h"
 
+#include "printer.h"
+
 extern "C" {
 
 WEAK_INLINE int halide_profiler_set_current_func(halide_profiler_instance_state *instance, int func, int *sampling_token) {
@@ -57,5 +59,61 @@ WEAK_INLINE int halide_profiler_decr_active_threads(halide_profiler_instance_sta
     using namespace Halide::Runtime::Internal::Synchronization;
 
     return atomic_fetch_sub_sequentially_consistent(&(instance->active_threads), 1);
+}
+
+WEAK_INLINE int halide_profiler_update_counters(struct halide_profiler_instance_state *instance,
+                                                int id,
+                                                uint64_t memory_total,
+                                                uint64_t num_allocs,
+                                                uint64_t parallel_loops,
+                                                uint64_t parallel_tasks,
+                                                uint64_t points_required_at_root,
+                                                uint64_t points_computed,
+                                                uint64_t scalar_loads,
+                                                uint64_t vector_loads,
+                                                uint64_t gathers,
+                                                uint64_t bytes_loaded,
+                                                uint64_t scalar_stores,
+                                                uint64_t vector_stores,
+                                                uint64_t scatters,
+                                                uint64_t bytes_stored) {
+    using namespace Halide::Runtime::Internal::Synchronization;
+
+    halide_profiler_func_stats &stats = instance->funcs[id];
+
+    // This gets inlined. If this is in an inner loop, most of the args will be
+    // the constant zero. We therefore test for zero before adding to every
+    // counter so that unused counters compile to no code.
+#define UPDATE_COUNTER(X)                                        \
+    if (X) {                                                     \
+        atomic_fetch_add_sequentially_consistent(&(stats.X), X); \
+    }
+
+    UPDATE_COUNTER(memory_total);
+    UPDATE_COUNTER(num_allocs);
+    UPDATE_COUNTER(parallel_loops);
+    UPDATE_COUNTER(parallel_tasks);
+    UPDATE_COUNTER(points_required_at_root);
+    UPDATE_COUNTER(points_computed);
+    UPDATE_COUNTER(scalar_loads);
+    UPDATE_COUNTER(vector_loads);
+    UPDATE_COUNTER(gathers);
+    UPDATE_COUNTER(bytes_loaded);
+    UPDATE_COUNTER(scalar_stores);
+    UPDATE_COUNTER(vector_stores);
+    UPDATE_COUNTER(scatters);
+    UPDATE_COUNTER(bytes_stored);
+
+#undef UPDATE_COUNTER
+
+    // Mirror memory_total and num_allocs at the instance level.
+    if (memory_total) {
+        atomic_add_fetch_sequentially_consistent(&instance->memory_total, memory_total);
+    }
+    if (num_allocs) {
+        atomic_add_fetch_sequentially_consistent(&instance->num_allocs, (int)num_allocs);
+    }
+
+    return 0;
 }
 }

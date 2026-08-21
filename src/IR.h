@@ -5,6 +5,7 @@
  * Subtypes for Halide expressions (\ref Halide::Expr) and statements (\ref Halide::Internal::Stmt)
  */
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -33,10 +34,60 @@ struct LambdaOverloads : Ts... {
     }
 };
 
-/** The actual IR nodes begin here. Remember that all the Expr
- * nodes also have a public "type" property */
+/** The actual IR nodes begin here. Remember that all the Expr nodes
+ * also have a public "type" property. */
 
-/** Cast a node from one type to another. Can't change vector widths. */
+/** General notes on the semantics of Halide IR nodes:
+ *
+ * Signed integer types with at least 32 bits are treated as if
+ * overflow is impossible: the simplifier is free to apply
+ * unbounded-integer identities to them. Halide does not detect
+ * overflow at runtime, and the behavior on overflow is left
+ * unspecified. We call these (and floats) "no-overflow types". Signed
+ * integers with fewer than 32 bits, and unsigned integers of any
+ * width, are defined to wrap on overflow. We call these "overflow
+ * types".
+ *
+ * On vectors, all operations operate lane-wise, except for those that
+ * explicitly state otherwise (Ramp, Broadcast, Reinterpret, Shuffle,
+ * and VectorReduce). Most Call nodes operate lane-wise, with the
+ * exception of a few intrinsics that break these rules
+ * (e.g. dynamic_shuffle). These intrinsics must be used with care.
+ *
+ * Most IR nodes with child Exprs may evaluate those children in any
+ * order, re-evaluate them, or eliminate them entirely. The Expr a - a
+ * is treated as equivalent to zero, no matter what's hiding in a, and a
+ * + b is treated as the same as b + a. I.e. there are no sequence
+ * points between children, and while the children may have side-effects
+ * (e.g. a Load may fault), it is permissible for simplification to
+ * remove or duplicate these side effects. So be very careful with Call
+ * nodes with side-effects - if you multiply them by zero they may never
+ * happen. The exception is the Evaluate Stmt, which is guaranteed to
+ * evaluate its child Expr once, and of course the Store Stmt (when the
+ * predicate is true), which has a visible effect on memory. Control
+ * flow Stmts (in particular Block and For) provide sequencing, and
+ * IfThenElse must be used for conditional evaluation. AssertStmts also
+ * provide sequencing and conditional evaluation.
+ *
+ * Floating point operations use fast-math rules. They are assumed to
+ * never be NaN or Inf, and they are assumed to uphold the same
+ * identities as real numbers. So in the paragraph above, a - a really
+ * is treated as zero, even if a is Inf. If this is a problem, use the
+ * strict float intrinsics.
+ */
+
+/** Cast a node from one type to another. Can't change vector widths. If
+ * the destination type can't represent the value, the semantics are as
+ * follows:
+ *
+ * - Float to Int/UInt casts truncate towards zero.
+ * - Casts to no-overflow types (i.e. Int(32) and Int(64)) are assumed
+ *   to never overflow.
+ * - Float casts to other Int/UInt types saturate.
+ * - Casts to overflow types wrap.
+ *
+ * FIXME: The simplifier saturates overflowing float to int/uint casts, but the backends do not.
+ */
 struct Cast : public ExprNode<Cast> {
     Expr value;
 
@@ -53,7 +104,9 @@ struct Cast : public ExprNode<Cast> {
 };
 
 /** Reinterpret value as another type, without affecting any of the bits
- * (on little-endian systems). */
+ * (on little-endian systems). May change the number of vector lanes as
+ * long as the total number of bits of the entire vector is
+ * preserved. */
 struct Reinterpret : public ExprNode<Reinterpret> {
     Expr value;
 
@@ -62,7 +115,8 @@ struct Reinterpret : public ExprNode<Reinterpret> {
     static const IRNodeType _node_type = IRNodeType::Reinterpret;
 };
 
-/** The sum of two expressions */
+/** The sum of two expressions. Overflow is assumed impossible for no-overflow
+ * types, and wraps for overflow types. */
 struct Add : public ExprNode<Add> {
     Expr a, b;
 
@@ -71,7 +125,7 @@ struct Add : public ExprNode<Add> {
     static const IRNodeType _node_type = IRNodeType::Add;
 };
 
-/** The difference of two expressions */
+/** The difference of two expressions. Same overflow semantics as Add. */
 struct Sub : public ExprNode<Sub> {
     Expr a, b;
 
@@ -80,7 +134,7 @@ struct Sub : public ExprNode<Sub> {
     static const IRNodeType _node_type = IRNodeType::Sub;
 };
 
-/** The product of two expressions */
+/** The product of two expressions. Same overflow semantics as Add. */
 struct Mul : public ExprNode<Mul> {
     Expr a, b;
 
@@ -89,7 +143,14 @@ struct Mul : public ExprNode<Mul> {
     static const IRNodeType _node_type = IRNodeType::Mul;
 };
 
-/** The ratio of two expressions */
+/** The ratio of two expressions. For integers, rounds according to the
+ * sign of the denominator - down for positive denominators, and up for
+ * negative denominators. This is known as Euclidean division. Note
+ * that this is unlike C. For integers, division by zero evaluates to
+ * zero. For floats, division by zero is undefined - use the strict_div
+ * intrinsic if you need IEEE NaN/Inf behavior. For overflow types,
+ * dividing the most negative representable value by -1 wraps,
+ * returning that same most negative value. */
 struct Div : public ExprNode<Div> {
     Expr a, b;
 
@@ -98,9 +159,13 @@ struct Div : public ExprNode<Div> {
     static const IRNodeType _node_type = IRNodeType::Div;
 };
 
-/** The remainder of a / b. Mostly equivalent to '%' in C, except that
- * the result here is always positive. For floats, this is equivalent
- * to calling fmod. */
+/** The remainder of a / b. For integers, the result is never negative,
+ * and division by zero evaluates to zero. For non-zero b, the Euclidean
+ * identity is upheld: (a/b)*b + (a%b) == a. For floats, this is defined
+ * using floor division: a%b = a - floor(a/b)*b. Note that this may be
+ * negative.
+ *
+ * FIXME: Bounds inference treats float mod as always positive. */
 struct Mod : public ExprNode<Mod> {
     Expr a, b;
 
@@ -109,7 +174,7 @@ struct Mod : public ExprNode<Mod> {
     static const IRNodeType _node_type = IRNodeType::Mod;
 };
 
-/** The lesser of two values. */
+/** The lesser of two values */
 struct Min : public ExprNode<Min> {
     Expr a, b;
 
@@ -127,7 +192,7 @@ struct Max : public ExprNode<Max> {
     static const IRNodeType _node_type = IRNodeType::Max;
 };
 
-/** Is the first expression equal to the second */
+/** Whether the first expression is equal to the second */
 struct EQ : public ExprNode<EQ> {
     Expr a, b;
 
@@ -136,7 +201,7 @@ struct EQ : public ExprNode<EQ> {
     static const IRNodeType _node_type = IRNodeType::EQ;
 };
 
-/** Is the first expression not equal to the second */
+/** Whether the first expression is not equal to the second */
 struct NE : public ExprNode<NE> {
     Expr a, b;
 
@@ -145,7 +210,7 @@ struct NE : public ExprNode<NE> {
     static const IRNodeType _node_type = IRNodeType::NE;
 };
 
-/** Is the first expression less than the second. */
+/** Whether the first expression less than the second */
 struct LT : public ExprNode<LT> {
     Expr a, b;
 
@@ -154,7 +219,7 @@ struct LT : public ExprNode<LT> {
     static const IRNodeType _node_type = IRNodeType::LT;
 };
 
-/** Is the first expression less than or equal to the second. */
+/** Whether the first expression less than or equal to the second */
 struct LE : public ExprNode<LE> {
     Expr a, b;
 
@@ -163,7 +228,8 @@ struct LE : public ExprNode<LE> {
     static const IRNodeType _node_type = IRNodeType::LE;
 };
 
-/** Is the first expression greater than the second. */
+/** Whether the first expression greater than the second. Note that this gets
+ * normalized to LT by the simplifier. */
 struct GT : public ExprNode<GT> {
     Expr a, b;
 
@@ -172,7 +238,8 @@ struct GT : public ExprNode<GT> {
     static const IRNodeType _node_type = IRNodeType::GT;
 };
 
-/** Is the first expression greater than or equal to the second. */
+/** Whether the first expression greater than or equal to the second. Like GT,
+ * this gets normalized to LE by the simplifier. */
 struct GE : public ExprNode<GE> {
     Expr a, b;
 
@@ -190,7 +257,7 @@ struct And : public ExprNode<And> {
     static const IRNodeType _node_type = IRNodeType::And;
 };
 
-/** Logical or - is at least one of the expression true */
+/** Logical or - is at least one of the expressions true */
 struct Or : public ExprNode<Or> {
     Expr a, b;
 
@@ -208,9 +275,11 @@ struct Not : public ExprNode<Not> {
     static const IRNodeType _node_type = IRNodeType::Not;
 };
 
-/** A ternary operator. Evaluates 'true_value' and 'false_value',
- * then selects between them based on 'condition'. Equivalent to
- * the ternary operator in C. */
+/** A ternary operator. Evaluates 'true_value' and 'false_value', then
+ * selects between them based on 'condition'. Unlike the ternary
+ * operator in C, always evaluates both sides. Acts independently per
+ * vector lane, so the condition must have the same number of lanes as
+ * the true and false values. */
 struct Select : public ExprNode<Select> {
     Expr condition, true_value, false_value;
 
@@ -219,11 +288,12 @@ struct Select : public ExprNode<Select> {
     static const IRNodeType _node_type = IRNodeType::Select;
 };
 
-/** Load a value from a named symbol if predicate is true. The buffer
- * is treated as an array of the 'type' of this Load node. That is,
- * the buffer has no inherent type. The name may be the name of an
- * enclosing allocation, an input or output buffer, or any other
- * symbol of type Handle(). */
+/** Load a value from a named symbol if predicate is true. The buffer is
+ * treated as an array of the 'type' of this Load node. That is, the
+ * buffer has no inherent type. The name may be the name of an enclosing
+ * allocation, an input or output buffer, or any other symbol of type
+ * Handle(). A load from one name is assumed to never alias a store to a
+ * different name, and may be reordered with respect to such stores. */
 struct Load : public ExprNode<Load> {
     std::string name;
 
@@ -240,21 +310,36 @@ struct Load : public ExprNode<Load> {
     // the alignment of the first lane.
     ModulusRemainder alignment;
 
+    // Whether this access should bypass the cache when supported by the target.
+    bool is_streaming;
+
     static Expr make(Type type, const std::string &name,
                      Expr index, Buffer<> image,
                      Parameter param,
                      Expr predicate,
-                     ModulusRemainder alignment);
+                     ModulusRemainder alignment,
+                     bool is_streaming);
+
+    /** Make an unpredicated, non-streaming Load from an internal buffer, with
+     * no image or parameter and no known alignment. */
+    static Expr make(Type type, const std::string &name, Expr index);
+
+    /** Make a Load that loads from the same buffer as this one, but with new
+     * children. The type is the element type of this Load, with the lane count
+     * taken from the new index. Returns this Load unchanged if the new children
+     * are the same as the existing ones. */
+    Expr with(const Expr &index, const Expr &predicate, ModulusRemainder alignment) const;
 
     static const IRNodeType _node_type = IRNodeType::Load;
 };
 
-/** A linear ramp vector node. This is vector with 'lanes' elements, where
- * element i is 'base' + i*'stride'. This is a convenient way to pass around
- * vectors without busting them up into individual elements. E.g. a dense vector
- * load from a buffer can use a ramp node with stride 1 as the index. The base
- * and stride can also be vectors, in which case ramp(b, s, l) is the
- * concatenation of the vectors [b, b + s, b + 2 * s ... ]**/
+/** A linear ramp vector node. This is vector with 'lanes' elements,
+ * where element i is 'base' + i*'stride'. This is a convenient way to
+ * pass around vectors without busting them up into individual
+ * elements. E.g. a dense vector load from a buffer can use a ramp node
+ * with stride 1 as the index. The base and stride can also be vectors,
+ * in which case ramp(b, s, l) is the concatenation of the vectors [b, b
+ * + s, b + 2 * s ... ]**/
 struct Ramp : public ExprNode<Ramp> {
     Expr base, stride;
     int lanes;
@@ -264,10 +349,10 @@ struct Ramp : public ExprNode<Ramp> {
     static const IRNodeType _node_type = IRNodeType::Ramp;
 };
 
-/** A vector with 'lanes' elements, in which every element is 'value'. This is a
- * special case of the ramp node above, in which the stride is zero. If the
- * value is a vector, this is the concatenation of 'lanes' repeated copies of
- * that vector. */
+/** A vector with 'lanes' elements, in which every element is
+ * 'value'. This is a special case of the ramp node above, in which the
+ * stride is zero. If the value is a vector, this is the concatenation
+ * of 'lanes' repeated copies of that vector. */
 struct Broadcast : public ExprNode<Broadcast> {
     Expr value;
     int lanes;
@@ -286,6 +371,11 @@ struct Let : public ExprNode<Let> {
 
     static Expr make(const std::string &name, Expr value, Expr body);
 
+    /** Make a Let with the same name as this one, but with new children.
+     * Returns this Let unchanged if the new children are the same as the
+     * existing ones. */
+    Expr with(const Expr &value, const Expr &body) const;
+
     static const IRNodeType _node_type = IRNodeType::Let;
 };
 
@@ -298,11 +388,17 @@ struct LetStmt : public StmtNode<LetStmt> {
 
     static Stmt make(const std::string &name, Expr value, Stmt body);
 
+    /** Make a LetStmt with the same name as this one, but with new children.
+     * Returns this LetStmt unchanged if the new children are the same as the
+     * existing ones. */
+    Stmt with(const Expr &value, const Stmt &body) const;
+
     static const IRNodeType _node_type = IRNodeType::LetStmt;
 };
 
-/** If the 'condition' is false, then evaluate and return the message,
- * which should be a call to an error function. */
+/** If the 'condition' is false, then evaluate and return the message, which
+ * should be a call to an error function. The two child Exprs are evaluated in
+ * order, and the second is only evaluated if the first was false. */
 struct AssertStmt : public StmtNode<AssertStmt> {
     // if condition then val else error out with message
     Expr condition;
@@ -310,19 +406,26 @@ struct AssertStmt : public StmtNode<AssertStmt> {
 
     static Stmt make(Expr condition, Expr message);
 
+    /** Make an AssertStmt with new children. Returns this AssertStmt unchanged
+     * if the new children are the same as the existing ones. */
+    Stmt with(const Expr &condition, const Expr &message) const;
+
     static const IRNodeType _node_type = IRNodeType::AssertStmt;
 };
 
-/** This node is a helpful annotation to do with permissions. If 'is_produce' is
- * set to true, this represents a producer node which may also contain updates;
- * otherwise, this represents a consumer node. If the producer node contains
- * updates, the body of the node will be a block of 'produce' and 'update'
- * in that order. In a producer node, the access is read-write only (or write
- * only if it doesn't have updates). In a consumer node, the access is read-only.
- * None of this is actually enforced, the node is purely for informative purposes
- * to help out our analysis during lowering. For every unique ProducerConsumer,
- * there is an associated Realize node with the same name that creates the buffer
- * being read from or written to in the body of the ProducerConsumer.
+/** This node is a helpful annotation to do with permissions. If
+ * 'is_produce' is set to true, this represents a producer node which
+ * may also contain updates; otherwise, this represents a consumer
+ * node. If the producer node contains updates, the body of the node
+ * will be a block of 'produce' and 'update' in that order. In a
+ * producer node, the access is read-write only (or write only if it
+ * doesn't have updates). In a consumer node, the access is read-only.
+ * None of this is actually enforced, the node is purely for informative
+ * purposes to help out our analysis during lowering. For most
+ * ProducerConsumer nodes, there is an associated enclosing Realize node
+ * with the same name that creates the buffer being read from or written
+ * to in the body of the ProducerConsumer. The exception is output
+ * buffers, which are produced but have no Realize node.
  */
 struct ProducerConsumer : public StmtNode<ProducerConsumer> {
     std::string name;
@@ -330,6 +433,11 @@ struct ProducerConsumer : public StmtNode<ProducerConsumer> {
     Stmt body;
 
     static Stmt make(const std::string &name, bool is_producer, Stmt body);
+
+    /** Make a ProducerConsumer with the same name and producer/consumer flag as
+     * this one, but with a new body. Returns this ProducerConsumer unchanged if
+     * the new body is the same as the existing one. */
+    Stmt with(const Stmt &body) const;
 
     static Stmt make_produce(const std::string &name, Stmt body);
     static Stmt make_consume(const std::string &name, Stmt body);
@@ -341,7 +449,8 @@ struct ProducerConsumer : public StmtNode<ProducerConsumer> {
  * 'predicate' is true. The buffer is interpreted as an array of the
  * same type as 'value'. The name may be the name of an enclosing
  * Allocate node, an output buffer, or any other symbol of type
- * Handle(). */
+ * Handle(). Assumed to not alias with loads or stores to different
+ * names. */
 struct Store : public StmtNode<Store> {
     std::string name;
     Expr predicate, value, index;
@@ -352,8 +461,21 @@ struct Store : public StmtNode<Store> {
     // the alignment of the first lane.
     ModulusRemainder alignment;
 
+    // Whether this access should bypass the cache when supported by the target.
+    bool is_streaming;
+
     static Stmt make(const std::string &name, Expr value, Expr index,
-                     Parameter param, Expr predicate, ModulusRemainder alignment);
+                     Parameter param, Expr predicate, ModulusRemainder alignment,
+                     bool is_streaming);
+
+    /** Make an unpredicated, non-streaming Store to an internal buffer, with no
+     * parameter and no known alignment. */
+    static Stmt make(const std::string &name, Expr value, Expr index);
+
+    /** Make a Store to the same buffer as this one, but with new children.
+     * Returns this Store unchanged if the new children are the same as the
+     * existing ones. */
+    Stmt with(const Expr &value, const Expr &index, const Expr &predicate, ModulusRemainder alignment) const;
 
     static const IRNodeType _node_type = IRNodeType::Store;
 };
@@ -362,7 +484,9 @@ struct Store : public StmtNode<Store> {
  * location. You should think of it as a store to a multi-dimensional
  * array. It gets lowered to a conventional Store node. The name must
  * correspond to an output buffer or the name of an enclosing Realize
- * node. */
+ * node. Distinct coordinates are assumed to never alias (i.e. if this
+ * is lowered using strides to a single-dimensional store, those strides
+ * must not be zero.) */
 struct Provide : public StmtNode<Provide> {
     std::string name;
     std::vector<Expr> values;
@@ -370,6 +494,12 @@ struct Provide : public StmtNode<Provide> {
     Expr predicate;
 
     static Stmt make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args, const Expr &predicate);
+
+    /** Make a Provide to the same Func as this one, but with new children.
+     * Returns this Provide unchanged if the new children are the same as the
+     * existing ones. */
+    Stmt with(const std::vector<Expr> &values, const std::vector<Expr> &args,
+              const Expr &predicate) const;
 
     static const IRNodeType _node_type = IRNodeType::Provide;
 };
@@ -410,6 +540,18 @@ struct Allocate : public StmtNode<Allocate> {
                      Expr condition, Stmt body,
                      Expr new_expr = Expr(), const std::string &free_function = std::string(), int padding = 0);
 
+    /** Make an Allocate with the same name, type, memory type, custom
+     * new/free, and padding as this one, but with new children. Returns this
+     * Allocate unchanged if the new children are the same as the existing
+     * ones. */
+    Stmt with(const std::vector<Expr> &extents, const Expr &condition, const Stmt &body) const;
+
+    /** As above, but also replacing the custom new expression. There is no
+     * default for new_expr, because an undefined new_expr means "use the
+     * default allocator" rather than "leave it alone". */
+    Stmt with(const std::vector<Expr> &extents, const Expr &condition, const Stmt &body,
+              const Expr &new_expr) const;
+
     /** A routine to check if the extents are all constants, and if so verify
      * the total size is less than 2^31 - 1. If the result is constant, but
      * overflows, this routine asserts. This returns 0 if the extents are
@@ -446,15 +588,24 @@ struct Realize : public StmtNode<Realize> {
 
     static Stmt make(const std::string &name, const std::vector<Type> &types, MemoryType memory_type, const Region &bounds, Expr condition, Stmt body);
 
+    /** Make a Realize with the same name, types, and memory type as this one,
+     * but with new children. Returns this Realize unchanged if the new children
+     * are the same as the existing ones. */
+    Stmt with(const Region &bounds, const Expr &condition, const Stmt &body) const;
+
     static const IRNodeType _node_type = IRNodeType::Realize;
 };
 
 /** A sequence of statements to be executed in-order. 'first' is never
-    a Block, so this can be treated as a linked list. */
+ * a Block, so this can be treated as a linked list. */
 struct Block : public StmtNode<Block> {
     Stmt first, rest;
 
     static Stmt make(Stmt first, Stmt rest);
+
+    /** Make a Block with new children. Returns this Block unchanged if the new
+     * children are the same as the existing ones. */
+    Stmt with(const Stmt &first, const Stmt &rest) const;
 
     /** Construct zero or more Blocks to invoke a list of statements in order.
      * This method may not return a Block statement if stmts.size() <= 1. */
@@ -471,6 +622,10 @@ struct Fork : public StmtNode<Fork> {
 
     static Stmt make(Stmt first, Stmt rest);
 
+    /** Make a Fork with new children. Returns this Fork unchanged if the new
+     * children are the same as the existing ones. */
+    Stmt with(const Stmt &first, const Stmt &rest) const;
+
     static const IRNodeType _node_type = IRNodeType::Fork;
 };
 
@@ -481,6 +636,12 @@ struct IfThenElse : public StmtNode<IfThenElse> {
 
     static Stmt make(Expr condition, Stmt then_case, Stmt else_case = Stmt());
 
+    /** Make an IfThenElse with new children. Note that else_case has no default
+     * here, because an undefined else_case means "no else clause" rather than
+     * "leave it alone". Returns this IfThenElse unchanged if the new children
+     * are the same as the existing ones. */
+    Stmt with(const Expr &condition, const Stmt &then_case, const Stmt &else_case) const;
+
     static const IRNodeType _node_type = IRNodeType::IfThenElse;
 };
 
@@ -489,6 +650,10 @@ struct Evaluate : public StmtNode<Evaluate> {
     Expr value;
 
     static Stmt make(Expr v);
+
+    /** Make an Evaluate of a new value. Returns this Evaluate unchanged if the
+     * new value is the same as the existing one. */
+    Stmt with(const Expr &value) const;
 
     static const IRNodeType _node_type = IRNodeType::Evaluate;
 };
@@ -528,80 +693,97 @@ struct Call : public ExprNode<Call> {
     // Please keep this list sorted alphabetically; the specific enum values
     // are *not* guaranteed to be stable across time.
     enum IntrinsicOp {
-        abs,
+        // keep-sorted start sticky_comments=yes
 
+        abs,
         // Absolute difference between two values. absd(a, b) = abs(a - b), but
         // without overflow issues for integer types.
         absd,
-
         // Marks the point where assertions on input images should be inserted
         add_image_checks_marker,
-
         alloca,
         bitwise_and,
         bitwise_not,
         bitwise_or,
         bitwise_xor,
-
         // Converts a boolean to a mask. Scalar bools become -1 (all bits set) when true,
         // 0 when false. Vector bools are converted to proper vector masks.
         bool_to_mask,
-
         // Bundle multiple exprs together temporarily for analysis (e.g. CSE)
         bundle,
-
         // Takes a sequence of (condition, function) pairs, and calls the first
         // function for which the associated condition is true. Caches this
         // choice and directly calls the associated function on all subsequent
         // uses. Args to the containing function are passed through to the
         // callee. Used to implement multi-target switching.
         call_cached_indirect_function,
-
         // Casts a mask (boolean vector) to a different bit width
         cast_mask,
-
         // Concatenate bits of the args, with least significant bits as the
         // first arg (i.e. little-endian)
         concat_bits,
         count_leading_zeros,
         count_trailing_zeros,
+        // cuda_await_copies(group) waits for every asynchronous copy in the
+        // given group to have landed in shared memory. Appears in an Evaluate
+        // node at the point where the copied data is first read.
+        cuda_await_copies,
+        // cuda_bypass_registers(value, group, func_name) marks a value that must be moved
+        // to its destination without being materialized in registers, which the
+        // CUDA backend does with the copy engine. It is only valid as the whole
+        // value of a Store, and promises that the store is a copy the copy
+        // engine can make: a dense, aligned, unpredicated run of 4, 8 or 16
+        // bytes read from outside the kernel. `group` names a batch of such
+        // copies that are waited for together by cuda_await_copies, and
+        // `func_name` is the Func the store belonged to before the shared
+        // allocations were packed together, for error messages.
+        cuda_bypass_registers,
         debug_to_file,
-
+        // Emitted (when profiling) for a device-only allocation that has no
+        // host-side Allocate node: the buffer lives solely on the device, so
+        // InjectHostDevBufferCopies elides its host allocation. Lets the
+        // profiler, which tracks memory at host Allocate nodes, still see the
+        // allocation and bill its size to the Func.
+        // Args: (StringImm Func name, size in bytes, IntImm memory type).
+        declare_allocation,
+        // Declares that region required of a particular Func at this
+        // scope. Injected by ScheduleFunctions and used by the profiler.
+        declare_box_required_at_root,
         // Declares that a box region of an allocation has been touched (used by bounds inference)
         declare_box_touched,
-
+        // Declares that the following stmt computes a particular stage of
+        // a particular Func. Used by the profiler to bill points computed
+        // in the pure def separately from points computed in update defs.
+        // Args: (Variable<Handle> handle for the func, Int<32> stage_idx).
+        declare_stage,
         div_round_to_zero,
-
         // A shuffle operation with runtime-varying indices.
         dynamic_shuffle,
-
         // Extract some contiguous slice of bits from the argument starting at
         // the nth bit, counting from the least significant bit, with the number
         // of bits determined by the return type.
         extract_bits,
-
         // Extracts a single element from a mask vector
         extract_mask_element,
-
+        // Returns the runtime value of ARM SME streaming vscale (the vector length multiplier in streaming mode)
+        get_runtime_streaming_vscale,
+        // Returns the runtime value of ARM SVE vscale (the vector length multiplier)
+        get_runtime_vscale,
         get_user_context,
         gpu_thread_barrier,
         halving_add,
         halving_sub,
-
         // Hexagon HVX gather/scatter operations for indirect memory access
         hvx_gather,
         hvx_scatter,
         hvx_scatter_acc,
         hvx_scatter_release,
-
         if_then_else,
-
         // Vectorized if-then-else that operates on mask types
         if_then_else_mask,
         image_load,
         image_store,
         lerp,
-
         // Loop partitioning hints used to help identify the 'steady state' of
         // loops. likely marks an if condition expression as likely to be true,
         // or marks the side of a min or max node which dominates in the steady
@@ -609,75 +791,66 @@ struct Call : public ExprNode<Call> {
         // innermost loop.
         likely,
         likely_if_innermost,
-
         // Loads a member from a typed struct (used for halide_buffer_t and
         // related structures)
         load_typed_struct_member,
-
         make_struct,
-
         // Marks an expression to be memoized (computed once and cached)
         memoize_expr,
-
         mod_round_to_zero,
         mul_shift_right,
         mux,
+        // A pointer into a sub-range of another allocation.
+        // offset_pointer(base, offset) returns the base pointer of the
+        // allocation named by the Variable `base`, advanced by `offset`
+        // elements (in units of the aliasing allocation's element type). Used
+        // as the new_expr of an Allocate node to express that it aliases a
+        // sub-range of a larger backing allocation. GPU allocation fusing emits
+        // these so that per-Func names survive lowering (for the profiler and
+        // for a readable conceptual stmt); they are folded into the indices of
+        // loads and stores by inject_gpu_offload before GPU codegen.
+        offset_pointer,
         popcount,
         prefetch,
-
         // Marks the point where profiling should start counting pipeline instances
         // (used to exclude bounds queries from profiling)
         profiling_enable_instance_marker,
-
         // Promises that a value is clamped to the given range. This allows the compiler
         // to optimize based on this assumption. promise_clamped is safe (adds a runtime check),
         // unsafe_promise_clamped skips the check.
         promise_clamped,
-
         random,
-
         // Registers a destructor function to be called when an object goes out
         // of scope. Used internally in codegen.
         register_destructor,
-
         // Runtime assertions. require checks the condition and errors if false.
         // require_mask is the vectorized version that operates on masks.
         require,
         require_mask,
-
         // Evaluates both arguments but returns the second one. Used to sequence side effects.
         return_second,
-
         // Round a floating point value to nearest integer, with ties going to even
         round,
-
         rounding_halving_add,
         rounding_mul_shift_right,
         rounding_shift_left,
         rounding_shift_right,
         saturating_add,
-        saturating_sub,
         saturating_cast,
-
+        saturating_sub,
         // Used to implement scatter and gather (see IROperator.h)
         scatter_gather,
-
         // Vectorized select that operates on mask types (similar to if_then_else_mask)
         select_mask,
-
         shift_left,
         shift_right,
-
         // Represents a signed integer overflow that occurred. Used to mark overflow points
         // rather than producing undefined behavior.
         signed_integer_overflow,
-
         size_of_halide_buffer_t,
-
         // Marks the point in lowering where the outermost skip stages checks
         // should be introduced.
         skip_stages_marker,
-
         // Takes a realization name and a loop variable. Declares that values of
         // the realization that were stored on earlier loop iterations of the
         // given loop are potentially loaded in this loop iteration somewhere
@@ -686,10 +859,18 @@ struct Call : public ExprNode<Call> {
         // nodes. Communicates to storage folding that sliding window took
         // place.
         sliding_window_marker,
-
         // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
         sorted_avg,
-
+        // Single string-literal arg uniquely identifying a specialize()
+        // branch. Injected by mark_specialization_branch()
+        // (ScheduleFunctions.cpp) so sibling branches that are still
+        // textually identical this early in lowering aren't merged by
+        // Simplify before they've had a chance to diverge; stripped by
+        // remove_specialization_branch_markers() (StorageFlattening.cpp).
+        specialization_branch_marker,
+        // Emits a target-specific memory fence after a Stage that
+        // contains non-temporal (streaming) stores.
+        stream_store_fence,
         // strict floating point ops. These are floating point ops that we would
         // like to optimize around (or let llvm optimize around) by treating
         // them as reals and ignoring the existence of nan and inf. Using these
@@ -705,28 +886,22 @@ struct Call : public ExprNode<Call> {
         strict_min,
         strict_mul,
         strict_sub,
-
         // Convert a list of Exprs to a string
         stringify,
-
         // Query properties of the compiled-for target (resolved at compile-time)
         target_arch_is,
         target_bits,
         target_has_feature,
         target_natural_vector_size,
         target_os_is,
-
         // An undef is a magic value where storing it has no observable effect.
         undef,
-
         // Mark a code path as unreachable so that it can be dead-code eliminated.
         unreachable,
-
         // Promise an expression is bounded. Not checked. Injected by the
         // compiler itself during lowering when an early pass needs to
         // communicate boundedness to a later pass.
         unsafe_promise_clamped,
-
         // One-sided variants of widening_add, widening_mul, and widening_sub.
         // arg[0] + widen(arg[1])
         widen_right_add,
@@ -734,16 +909,12 @@ struct Call : public ExprNode<Call> {
         widen_right_mul,
         // arg[0] - widen(arg[1])
         widen_right_sub,
-
         widening_add,
         widening_mul,
         widening_shift_left,
         widening_shift_right,
         widening_sub,
-
-        // Returns the runtime value of ARM SVE vscale (the vector length multiplier)
-        get_runtime_vscale,
-
+        // keep-sorted end
         IntrinsicOpCount  // Sentinel: keep last.
     };
 
@@ -798,8 +969,16 @@ struct Call : public ExprNode<Call> {
                      FunctionPtr func = FunctionPtr(), int value_index = 0,
                      Buffer<> image = Buffer<>(), Parameter param = Parameter());
 
-    /** Convenience constructor for calls to other halide functions */
-    static Expr make(const Function &func, const std::vector<Expr> &args, int idx = 0);
+    /** Make the same call as this one, but with new args. Returns this Call
+     * unchanged if the new args are the same as the existing ones. */
+    Expr with(const std::vector<Expr> &args) const;
+
+    /** Convenience constructor for calls to other halide functions. Pass
+     * follow_global_wrappers = true when constructing a consumer's call to
+     * 'func', so that a global wrapper (Func::in()) redirects it; pass false
+     * only for a Func's reference to itself. */
+    static Expr make(const Function &func, const std::vector<Expr> &args, int idx,
+                     bool follow_global_wrappers);
 
     /** Convenience constructor for loads from concrete images */
     static Expr make(const Buffer<> &image, const std::vector<Expr> &args) {
@@ -924,16 +1103,21 @@ struct Variable : public ExprNode<Variable> {
     static const IRNodeType _node_type = IRNodeType::Variable;
 };
 
-/** A for loop. Execute the 'body' statement for all values of the variable
- * 'name' from 'min' to 'max' inclusive. There are four types of For nodes. A
- * 'Serial' for loop is a conventional one. In a 'Parallel' for loop, each
- * iteration of the loop happens in parallel or in some unspecified order. In a
- * 'Vectorized' for loop, each iteration maps to one SIMD lane, and the whole
- * loop is executed in one shot. For this case, the extent (max - min + 1) must
- * be some small integer constant (probably 4, 8, or 16). An 'Unrolled' for loop
- * compiles to a completely unrolled version of the loop. Each iteration becomes
- * its own statement. Again in this case, the extent should be a small integer
- * constant. */
+/** A for loop. Execute the 'body' statement for all values of the
+ * variable 'name' from 'min' to 'max' inclusive. There are four types
+ * of For nodes. A 'Serial' for loop is a conventional one. In a
+ * 'Parallel' for loop, each iteration of the loop happens in parallel
+ * or in some unspecified order. In a 'Vectorized' for loop, each
+ * iteration maps to one SIMD lane, and the whole loop is executed in
+ * one shot. To lower successfully, the extent (max - min + 1) must be a
+ * small integer constant (probably 4, 8, or 16), but this need not be
+ * the case when the For loop is constructed. The lower pass
+ * bound_constant_extent_loops will try to fix it. An 'Unrolled' for
+ * loop compiles to a completely unrolled version of the loop. Each
+ * iteration becomes its own statement. Again in this case, the extent
+ * must ultimately end up a small integer constant or it will fail to
+ * unroll.
+ */
 struct For : public StmtNode<For> {
     std::string name;
     Expr min, max;
@@ -947,6 +1131,11 @@ struct For : public StmtNode<For> {
                      ForType for_type, Partition partition_policy,
                      DeviceAPI device_api,
                      Stmt body);
+
+    /** Make a For loop with the same name, for type, partition policy, and
+     * device API as this one, but with new children. Returns this For unchanged
+     * if the new children are the same as the existing ones. */
+    Stmt with(const Expr &min, const Expr &max, const Stmt &body) const;
 
     bool is_unordered_parallel() const {
         return Halide::Internal::is_unordered_parallel(for_type);
@@ -970,6 +1159,10 @@ struct Acquire : public StmtNode<Acquire> {
 
     static Stmt make(Expr semaphore, Expr count, Stmt body);
 
+    /** Make an Acquire with new children. Returns this Acquire unchanged if the
+     * new children are the same as the existing ones. */
+    Stmt with(const Expr &semaphore, const Expr &count, const Stmt &body) const;
+
     static const IRNodeType _node_type = IRNodeType::Acquire;
 };
 
@@ -990,6 +1183,13 @@ struct Shuffle : public ExprNode<Shuffle> {
      * interleaving of vectors of the same length. */
     static Expr make_interleave(const std::vector<Expr> &vectors);
 
+    /** Convenience constructor for making a shuffle representing an in-place
+     * transpose of a row-major matrix with the given number of columns. The
+     * output, interpreted as a row-major matrix, therefore has than number of
+     * rows. For example, to turn the vector RGBRGBRGBRGB into RRRRGGGGBBBB cols
+     * would be 3, and to do the reverse cols would be 4. */
+    static Expr make_transpose(Expr e, int cols);
+
     /** Convenience constructor for making a shuffle representing a
      * concatenation of the vectors. */
     static Expr make_concat(const std::vector<Expr> &vectors);
@@ -1009,6 +1209,13 @@ struct Shuffle : public ExprNode<Shuffle> {
     /** Check if this shuffle is an interleaving of the vector
      * arguments. */
     bool is_interleave() const;
+
+    /** Check if this shuffle is an in-place transpose of a single vector. The
+     * factor is the number of columns of the source matrix, or equivalently,
+     * the number of rows of the destination matrix, interpreting a vector as a
+     * matrix stored row-major. */
+    bool is_transpose() const;
+    int transpose_factor() const;
 
     /** Check if this shuffle can be represented as a repeating pattern that
      * repeats the same shuffle of the single input vector some number of times.
@@ -1061,13 +1268,18 @@ struct Prefetch : public StmtNode<Prefetch> {
                      const PrefetchDirective &prefetch,
                      Expr condition, Stmt body);
 
+    /** Make a Prefetch of the same Func with the same directive as this one,
+     * but with new children. Returns this Prefetch unchanged if the new
+     * children are the same as the existing ones. */
+    Stmt with(const Region &bounds, const Expr &condition, const Stmt &body) const;
+
     static const IRNodeType _node_type = IRNodeType::Prefetch;
 };
 
 /**
- * Represents a location where storage will be hoisted to for a Func / Realize
- * node with a given name.
- *
+ * Represents a location where storage will be hoisted to for an
+ * enclosed Realize node with a given name. Removed during lowering when
+ * Realize nodes become Allocate nodes.
  */
 struct HoistedStorage : public StmtNode<HoistedStorage> {
     std::string name;
@@ -1076,15 +1288,23 @@ struct HoistedStorage : public StmtNode<HoistedStorage> {
     static Stmt make(const std::string &name,
                      Stmt body);
 
+    /** Make a HoistedStorage with the same name as this one, but with a new
+     * body. Returns this HoistedStorage unchanged if the new body is the same
+     * as the existing one. */
+    Stmt with(const Stmt &body) const;
+
     static const IRNodeType _node_type = IRNodeType::HoistedStorage;
 };
 
-/** Lock all the Store nodes in the body statement.
- *  Typically the lock is implemented by an atomic operation
- *  (e.g. atomic add or atomic compare-and-swap).
- *  However, if necessary, the node can access a mutex buffer through
- *  mutex_name and mutex_args, by lowering this node into
- *  calls to acquire and release the lock. */
+/** The body operates atomically with respect to any other threads or
+ *  any other vector lanes in enclosing parallel loops.  For enclosing
+ *  parallel loops, typically this is implemented by an atomic operation
+ *  (e.g. atomic add or atomic compare-and-swap).  However, if
+ *  necessary, the node can access a mutex buffer through mutex_name and
+ *  mutex_args, by lowering this node into calls to acquire and release
+ *  the lock. For enclosing vector loops this lowers to horizontal
+ *  reduction operators if possible (i.e. Shuffles and VectorReduce
+ *  nodes). */
 struct Atomic : public StmtNode<Atomic> {
     std::string producer_name;
     std::string mutex_name;  // empty string if not using mutex
@@ -1094,7 +1314,46 @@ struct Atomic : public StmtNode<Atomic> {
                      const std::string &mutex_name,
                      Stmt body);
 
+    /** Make an Atomic over the same producer and mutex as this one, but with a
+     * new body. Returns this Atomic unchanged if the new body is the same as
+     * the existing one. */
+    Stmt with(const Stmt &body) const;
+
     static const IRNodeType _node_type = IRNodeType::Atomic;
+};
+
+/** Marks the store(s) produced by the wrapped body as requesting
+ * non-temporal (streaming) stores, as scheduled via Stage::stream_stores.
+ * Created directly around a Provide node (or an Atomic node wrapping
+ * one) during scheduling and is never nested. Consumed by storage flattening,
+ * which uses it to set Store::is_streaming on the resulting Store node(s) and
+ * then discards it. */
+struct StreamingStore : public StmtNode<StreamingStore> {
+    std::string producer_name;
+    Stmt body;
+
+    static Stmt make(const std::string &producer_name,
+                     Stmt body);
+
+    static const IRNodeType _node_type = IRNodeType::StreamingStore;
+};
+
+/** Marks the Halide-Func loads made while evaluating the wrapped body as
+ * requesting non-temporal (streaming) loads, as scheduled via
+ * Stage::stream_loads. If `names` is nullopt, every direct load of another
+ * Func is streamed (except a self-load, which is never streamed);
+ * otherwise only loads of Funcs named in `*names` are streamed. Created
+ * directly around a Provide node during scheduling and is never nested.
+ * Consumed by storage flattening, which uses it to set Load::is_streaming
+ * on the resulting Load node(s) and then discards it. */
+struct StreamingLoads : public StmtNode<StreamingLoads> {
+    std::optional<std::vector<std::string>> names;
+    Stmt body;
+
+    static Stmt make(std::optional<std::vector<std::string>> names,
+                     Stmt body);
+
+    static const IRNodeType _node_type = IRNodeType::StreamingLoads;
 };
 
 /** Horizontally reduce a vector to a scalar or narrower vector using

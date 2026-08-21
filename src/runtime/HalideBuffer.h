@@ -2463,7 +2463,10 @@ private:
     template<typename Fn>
     HALIDE_ALWAYS_INLINE static void for_each_element(double, int dims, const for_each_element_task_dim *t, Fn &&f) {
         int args = num_args(0, std::forward<Fn>(f));
-        assert(dims >= args);
+        assert(args == dims &&
+               "Callable passed to for_each_element (or fill) must accept either a "
+               "const int *, or a number of int arguments equal to the dimensionality "
+               "of the buffer.");
         for_each_element_variadic(0, args - 1, t, std::forward<Fn>(f));
     }
 
@@ -2481,19 +2484,14 @@ private:
 public:
     /** Call a function at each site in a buffer. This is likely to be
      * much slower than using Halide code to populate a buffer, but is
-     * convenient for tests. If the function has more arguments than the
-     * buffer has dimensions, the remaining arguments will be zero. If it
-     * has fewer arguments than the buffer has dimensions then the last
-     * few dimensions of the buffer are not iterated over. For example,
-     * the following code exploits this to set a floating point RGB image
-     * to red:
+     * convenient for tests. The function must take a number of int
+     * arguments equal to the dimensionality of the buffer. For example,
+     * the following code sets a floating point RGB image to red:
 
      \code
      Buffer<float, 3> im(100, 100, 3);
-     im.for_each_element([&](int x, int y) {
-         im(x, y, 0) = 1.0f;
-         im(x, y, 1) = 0.0f;
-         im(x, y, 2) = 0.0f:
+     im.for_each_element([&](int x, int y, int c) {
+         im(x, y, c) = (c == 0) ? 1.0f : 0.0f;
      });
      \endcode
 
@@ -2572,13 +2570,25 @@ public:
     /** Fill a buffer by evaluating a callable at every site. The
      * callable should look much like a callable passed to
      * for_each_element, but it should return the value that should be
-     * stored to the coordinate corresponding to the arguments. */
+     * stored to the coordinate corresponding to the arguments. A callable
+     * that takes no arguments (for example a random number generator) is
+     * evaluated once per element, ignoring the coordinate. */
     template<typename Fn,
              typename = std::enable_if_t<!std::is_arithmetic_v<std::decay_t<Fn>>>>
     Buffer<T, Dims, InClassDimStorage> &fill(Fn &&f) {
-        // We'll go via for_each_element. We need a variadic wrapper lambda.
-        FillHelper<Fn> wrapper(std::forward<Fn>(f), this);
-        return for_each_element(wrapper);
+        if constexpr (std::is_invocable_v<Fn &>) {
+            // A callable that takes no coordinates has nothing to
+            // distinguish sites, so fill every value with its result.
+            // for_each_value writes through raw references, so it does not
+            // mark the host buffer dirty the way operator() does.
+            set_host_dirty();
+            for_each_value([&](T &v) { v = f(); });
+        } else {
+            // We'll go via for_each_element. We need a variadic wrapper lambda.
+            FillHelper<Fn> wrapper(std::forward<Fn>(f), this);
+            for_each_element(wrapper);
+        }
+        return *this;
     }
 
     /** Check if an input buffer passed extern stage is a querying

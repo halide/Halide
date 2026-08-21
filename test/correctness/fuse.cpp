@@ -44,6 +44,28 @@ int main(int argc, char **argv) {
         }
     }
 
+    {
+        Func f, g;
+        RDom r(0, 10);
+        RVar ro, ri, fused;
+        f(x, y) = 0;
+        f(x, y) += (x + y + r);
+        // swap the order when fusing
+        f.update().split(r, ro, ri, 8).fuse(ro, ri, fused);
+
+        g(x, y) = 0;
+        g(x, y) += (x + y + r);
+
+        RDom r2(-16, 32, -16, 32);
+        Func error;
+        error() = maximum(abs(f(r2.x, r2.y) - g(r2.x, r2.y)));
+        int err = evaluate_may_gpu<uint32_t>(error());
+        if (err != 0) {
+            printf("Fusion caused a difference in the output\n");
+            return 1;
+        }
+    }
+
     class CheckForMod : public Internal::IRMutator {
         using IRMutator::visit;
 

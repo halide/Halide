@@ -26,15 +26,9 @@ option(WITH_PACKAGING "Include install() rules" "${PROJECT_IS_TOP_LEVEL}")
 # installed Halide package.
 option(WITH_PYTHON_BINDINGS "Build Python bindings" ON)
 
-cmake_dependent_option(
-    WITH_PYTHON_STUBS "Build Python stubs" ON
-    WITH_PYTHON_BINDINGS OFF
-)
+cmake_dependent_option(WITH_PYTHON_STUBS "Build Python stubs" ON WITH_PYTHON_BINDINGS OFF)
 
-cmake_dependent_option(
-    WITH_TEST_PYTHON "Build Python tests" ON
-    WITH_TESTS OFF
-)
+cmake_dependent_option(WITH_TEST_PYTHON "Build Python tests" ON WITH_TESTS OFF)
 
 ##
 # Dependencies

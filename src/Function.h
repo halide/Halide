@@ -90,7 +90,9 @@ public:
                                      bool trace_realizations,
                                      const std::vector<std::string> &trace_tags,
                                      bool no_profiling,
-                                     bool frozen);
+                                     const std::string &profiler_display_name,
+                                     bool frozen,
+                                     const FunctionPtr &global_wrapper);
 
     /** Get a handle on the halide function contents that this Function
      * represents. */
@@ -117,6 +119,13 @@ public:
      * appear in the args list. 'value' must not depend on any
      * reduction domain */
     void define(const std::vector<std::string> &args, std::vector<Expr> values);
+
+    /** Reset this Function to an undefined state in place (clearing all pure,
+     * update, and extern definitions, output types/buffers, and schedule) while
+     * preserving the Function's object identity, so existing references to it
+     * remain valid and it can be given a fresh definition with define(). Used by
+     * Func::change_type() to turn the original Func into an inline wrapper. */
+    void clear_definition();
 
     /** Add an update definition to this function. It must already have a pure
      * definition but not an update definition, and the length of args must
@@ -298,6 +307,17 @@ public:
     /** Check if the function is marked as one that should not be profiled. */
     bool should_not_profile() const;
 
+    /** Override the name shown for this Function in the profiler. The
+     * Function's internal name (used in IR and as the wrapper-graph
+     * key) is unchanged. Used to display auto-generated wrapper Funcs
+     * with names that the user will recognize -- e.g. "foo (input)"
+     * for an input buffer wrapper, or "foo.in(bar)" for a Func::in()
+     * wrapper. */
+    void set_profiler_display_name(const std::string &);
+
+    /** Get the profiler display name; empty if not overridden. */
+    const std::string &profiler_display_name() const;
+
     /** Mark function as frozen, which means it cannot accept new
      * definitions. */
     void freeze();
@@ -321,6 +341,14 @@ public:
     // @{
     void add_wrapper(const std::string &f, Function &wrapper);
     const std::map<std::string, FunctionPtr> &wrappers() const;
+    // @}
+
+    /** Set / get this Func's global wrapper (created by Func::in()). Calls that
+     * follow global-wrapper links resolve through it. set_global_wrapper freezes
+     * the wrapper and weakens its back-reference to this Func. */
+    // @{
+    void set_global_wrapper(Function &wrapper);
+    Function global_wrapper() const;
     // @}
 
     /** Check if a Function is a trivial wrapper around another

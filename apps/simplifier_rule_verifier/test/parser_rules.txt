@@ -1,0 +1,23 @@
+# These rules are only true if the parser gets precedence and associativity
+# right, so they pin down the expression grammar.
+
+# Multiplicative binds tighter than additive
+rewrite(1 + 2*3, 7)
+rewrite((1 + 2)*3, 9)
+
+# Additive and multiplicative are left-associative
+rewrite(1 - 2 - 3, -4)
+rewrite(12 / 3 / 2, 2)
+rewrite(2 * 3 % 4, 2)
+
+# Comparisons bind looser than arithmetic
+rewrite(1 + 2 < 4, true)
+rewrite(2 * 3 == 6, true)
+
+# && binds tighter than ||
+rewrite(x < y && y < z || x < z, x < z)
+
+# Unary operators bind tighter than any binary one
+rewrite(-x + y, y - x)
+rewrite(-x * 2, x * -2)
+rewrite(!(x < y), y <= x)

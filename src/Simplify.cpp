@@ -2,7 +2,6 @@
 #include "Simplify_Internal.h"
 
 #include "CSE.h"
-#include "CompilerLogger.h"
 #include "IRMutator.h"
 #include "Substitute.h"
 
@@ -184,12 +183,39 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
         const Mod *m = eq->a.as<Mod>();
         auto modulus = m ? as_const_int(m->b) : std::nullopt;
         auto remainder = m ? as_const_int(eq->b) : std::nullopt;
+        // TODO(mcourteaux): A lot of the logic below is hard-coded to let information
+        // propagate either from the LHS to the RHS or the other way. There is also
+        // special case for when varA == varB is given, to let the info cross-propagate.
+        // All of this feels a little conflated and might get clearer if we figure out a
+        // neat way to write this down where info can just transparently flow
+        // in whichever direction is relevant without having to list all these cases.
         if (v) {
-            if (is_const(eq->b) || eq->b.as<Variable>()) {
+            if (is_const(eq->b)) {
+                info.replacement = eq->b;
+                simplify->var_info.push(v->name, info);
+                pop_list.push_back(v);
+            } else if (const auto *vb = eq->b.as<Variable>()) {
                 // TODO: consider other cases where we might want to entirely substitute
                 info.replacement = eq->b;
                 simplify->var_info.push(v->name, info);
                 pop_list.push_back(v);
+
+                // Cross-merge the expression info of both variables.
+                Simplify::ExprInfo expr_info;
+                if (const auto *info = simplify->bounds_and_alignment_info.find(v->name)) {
+                    // We already know something about the variable on the LHS
+                    expr_info = *info;
+                }
+                if (const auto *info = simplify->bounds_and_alignment_info.find(vb->name)) {
+                    // We already know something about the variable on the RHS
+                    expr_info.intersect(*info);
+                }
+
+                simplify->bounds_and_alignment_info.push(v->name, expr_info);
+                simplify->bounds_and_alignment_info.push(vb->name, expr_info);
+
+                bounds_pop_list.push_back(v);
+                bounds_pop_list.push_back(vb);
             } else if (v->type.is_int()) {
                 // Visit the rhs again to get bounds and alignment info to propagate to the LHS
                 // TODO: Visiting it again is inefficient
@@ -203,7 +229,7 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
                 bounds_pop_list.push_back(v);
             }
         } else if (const Variable *vb = eq->b.as<Variable>()) {
-            // y % 2 == x
+            // ... == x
             // We know that LHS is not a const due to
             // canonicalization, and that the LHS is not a variable or
             // the case above would have triggered. Learn from the
@@ -418,65 +444,63 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
 
     // Take a closer look at all failed proof attempts to hunt for
     // simplifier weaknesses
-    const bool check_failed_proofs = debug_is_active(1) || get_compiler_logger() != nullptr;
-    if (check_failed_proofs && !is_const(e)) {
-        struct RenameVariables : public IRMutator {
-            using IRMutator::visit;
+    if (!is_const(e)) {
+        debug(1) << [&]() -> std::string {
+            struct RenameVariables : public IRMutator {
+                using IRMutator::visit;
 
-            Expr visit(const Variable *op) override {
-                auto it = vars.find(op->name);
-                if (const std::string *n = lets.find(op->name)) {
-                    return Variable::make(op->type, *n);
-                } else if (it == vars.end()) {
+                Expr visit(const Variable *op) override {
+                    auto it = vars.find(op->name);
+                    if (const std::string *n = lets.find(op->name)) {
+                        return Variable::make(op->type, *n);
+                    } else if (it == vars.end()) {
+                        std::string name = "v" + std::to_string(count++);
+                        vars[op->name] = name;
+                        out_vars.emplace_back(op->type, name);
+                        return Variable::make(op->type, name);
+                    } else {
+                        return Variable::make(op->type, it->second);
+                    }
+                }
+
+                Expr visit(const Let *op) override {
                     std::string name = "v" + std::to_string(count++);
-                    vars[op->name] = name;
-                    out_vars.emplace_back(op->type, name);
-                    return Variable::make(op->type, name);
-                } else {
-                    return Variable::make(op->type, it->second);
+                    ScopedBinding<string> bind(lets, op->name, name);
+                    return Let::make(name, mutate(op->value), mutate(op->body));
+                }
+
+                int count = 0;
+                map<string, string> vars;
+                Scope<string> lets;
+                std::vector<pair<Type, string>> out_vars;
+            } renamer;
+
+            Expr renamed = renamer(e);
+
+            // Look for a concrete counter-example with random probing
+            static std::mt19937 rng(0);
+            for (int i = 0; i < 100; i++) {
+                map<string, Expr> s;
+                for (const auto &p : renamer.out_vars) {
+                    if (p.first.is_handle()) {
+                        // This aint gonna work
+                        return "";
+                    }
+                    s[p.second] = make_const(p.first, (int)(rng() & 0xffff) - 0x7fff);
+                }
+                Expr probe = unwrap_tags(simplify(substitute(s, renamed)));
+                if (!is_const_one(probe)) {
+                    // Found a counter-example, or something that fails to fold
+                    return "";
                 }
             }
 
-            Expr visit(const Let *op) override {
-                std::string name = "v" + std::to_string(count++);
-                ScopedBinding<string> bind(lets, op->name, name);
-                return Let::make(name, mutate(op->value), mutate(op->body));
-            }
-
-            int count = 0;
-            map<string, string> vars;
-            Scope<string> lets;
-            std::vector<pair<Type, string>> out_vars;
-        } renamer;
-
-        e = renamer(e);
-
-        // Look for a concrete counter-example with random probing
-        static std::mt19937 rng(0);
-        for (int i = 0; i < 100; i++) {
-            map<string, Expr> s;
-            for (const auto &p : renamer.out_vars) {
-                if (p.first.is_handle()) {
-                    // This aint gonna work
-                    return false;
-                }
-                s[p.second] = make_const(p.first, (int)(rng() & 0xffff) - 0x7fff);
-            }
-            Expr probe = unwrap_tags(simplify(substitute(s, e)));
-            if (!is_const_one(probe)) {
-                // Found a counter-example, or something that fails to fold
-                return false;
-            }
-        }
-
-        if (get_compiler_logger()) {
-            get_compiler_logger()->record_failed_to_prove(e, orig);
-        }
-
-        debug(1) << "Failed to prove, but could not find a counter-example:\n " << e << "\n"
-                 << "Original expression:\n"
-                 << orig << "\n";
-        return false;
+            ostringstream ss;
+            ss << "Failed to prove, but could not find a counter-example:\n " << renamed << "\n"
+               << "Original expression:\n"
+               << orig << "\n";
+            return ss.str();
+        }();
     }
 
     return is_const_one(e);

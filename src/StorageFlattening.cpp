@@ -12,6 +12,7 @@
 #include "Simplify.h"
 #include "Substitute.h"
 
+#include <optional>
 #include <sstream>
 
 namespace Halide {
@@ -43,6 +44,27 @@ public:
     const Target &target;
     Scope<> realizations;
     bool in_gpu = false;
+
+    // The name of the Function whose Provide node is currently being
+    // flattened, if any. Used to avoid streaming self-loads.
+    string current_provide_name;
+
+    // Whether the Provide node currently being flattened is wrapped in a
+    // StreamingStore node (see Stage::stream_stores), i.e. whether the Store
+    // node(s) it becomes should be marked non-temporal.
+    bool in_streaming_store = false;
+
+    // The stream_loads() request (see Stage::stream_loads) of the
+    // StreamingLoads node currently wrapping the Provide being flattened.
+    // The default (present, empty), used whenever no such node is in
+    // scope, means stream nothing; nullopt (only ever set by an active
+    // StreamingLoads scope) means every direct load of another Func should
+    // stream; otherwise only loads of the named Funcs should. Names
+    // actually matched are recorded in stream_loads_matched (when
+    // non-null) so we can warn about any requested name that never turned
+    // out to be a direct load.
+    std::optional<std::set<std::string>> stream_loads_names = std::set<std::string>{};
+    std::set<std::string> *stream_loads_matched = nullptr;
 
     Expr make_shape_var(string name, const string &field, size_t dim,
                         const Buffer<> &buf, const Parameter &param) {
@@ -241,6 +263,35 @@ public:
         return stmt;
     }
 
+    Stmt visit(const StreamingStore *op) override {
+        ScopedValue old_in_streaming_store(in_streaming_store, true);
+        return mutate(op->body);
+    }
+
+    Stmt visit(const StreamingLoads *op) override {
+        std::optional<std::set<std::string>> requested;
+        if (op->names) {
+            requested = std::set(op->names->begin(), op->names->end());
+        }
+        ScopedValue old_names(stream_loads_names, requested);
+        std::set<std::string> matched;
+        ScopedValue old_matched(stream_loads_matched, op->names ? &matched : nullptr);
+
+        Stmt result = mutate(op->body);
+
+        if (requested) {
+            for (const std::string &requested_name : *requested) {
+                if (!matched.count(requested_name)) {
+                    user_warning << "stream_loads({" << requested_name << "}) was requested, "
+                                 << "but no direct load of \"" << requested_name
+                                 << "\" was found; did you mean to call stream_loads on a "
+                                    "different Stage?\n";
+                }
+            }
+        }
+        return result;
+    }
+
     Stmt visit(const Provide *op) override {
         internal_assert(op->values.size() == 1);
 
@@ -266,6 +317,8 @@ public:
             }
         }
 
+        ScopedValue old_provide_name(current_provide_name, op->name);
+
         Expr value = mutate(op->values[0]);
         Expr predicate = mutate(op->predicate);
         if (in_gpu && textures.count(op->name)) {
@@ -288,7 +341,7 @@ public:
             return result;
         } else {
             Expr idx = mutate(flatten_args(op->name, op->args, Buffer<>(), output_buf));
-            return Store::make(op->name, value, idx, output_buf, predicate, ModulusRemainder());
+            return Store::make(op->name, value, idx, output_buf, predicate, ModulusRemainder(), in_streaming_store);
         }
     }
 
@@ -338,8 +391,17 @@ public:
                                   op->param);
             } else {
                 Expr idx = mutate(flatten_args(op->name, op->args, op->image, op->param));
+                bool is_streaming = false;
+                if ((op->call_type == Call::Halide || op->param.defined()) &&
+                    op->name != current_provide_name) {
+                    bool matches = !stream_loads_names || stream_loads_names->count(op->name) != 0;
+                    is_streaming |= matches;
+                    if (matches && stream_loads_matched) {
+                        stream_loads_matched->insert(op->name);
+                    }
+                }
                 return Load::make(op->type, op->name, idx, op->image, op->param,
-                                  const_true(op->type.lanes()), ModulusRemainder());
+                                  const_true(op->type.lanes()), ModulusRemainder(), is_streaming);
             }
 
         } else {
@@ -408,7 +470,7 @@ public:
     }
 
     Stmt visit(const For *op) override {
-        ScopedValue<bool> old_in_gpu(in_gpu, in_gpu || is_gpu(op->for_type));
+        ScopedValue old_in_gpu(in_gpu, in_gpu || is_gpu(op->for_type));
         return IRMutator::visit(op);
     }
 };
@@ -484,8 +546,14 @@ protected:
         // Record index in the stack.
         hoisted_storages_map[op->name] = hoisted_storages.size() - 1;
         Stmt body = mutate(op->body);
-        internal_assert(!hoisted_storages.back().hoisted_allocations.empty())
-            << "Couldn't find a matching Allocate node for hoisted storage " << op->name << "\n";
+        if (hoisted_storages.back().hoisted_allocations.empty()) {
+            // Nothing in here allocates it. A Func hoisted into the loops of a
+            // Func with update definitions gets one of these nodes per stage,
+            // but is only realized inside the stages that use it.
+            hoisted_storages_map.erase(op->name);
+            hoisted_storages.pop_back();
+            return body;
+        }
         const auto &alloc_info = hoisted_storages.back().hoisted_allocations.front();
         vector<Expr> extents = alloc_info.extents;
         Expr condition = alloc_info.condition;
@@ -592,7 +660,7 @@ protected:
         if (t != op->type) {
             return Cast::make(op->type,
                               Load::make(t, op->name, mutate(op->index),
-                                         op->image, op->param, mutate(op->predicate), ModulusRemainder()));
+                                         op->image, op->param, mutate(op->predicate), ModulusRemainder(), op->is_streaming));
         } else {
             return IRMutator::visit(op);
         }
@@ -601,8 +669,8 @@ protected:
     Stmt visit(const Store *op) override {
         Type t = upgrade(op->value.type());
         if (t != op->value.type()) {
-            return Store::make(op->name, Cast::make(t, mutate(op->value)), mutate(op->index),
-                               op->param, mutate(op->predicate), ModulusRemainder());
+            return op->with(Cast::make(t, mutate(op->value)), mutate(op->index),
+                            mutate(op->predicate), ModulusRemainder());
         } else {
             return IRMutator::visit(op);
         }
@@ -619,6 +687,20 @@ protected:
         }
     }
 };
+
+// Strips the markers mark_specialization_branch() (ScheduleFunctions.cpp)
+// brackets each specialize() branch with. Safe here because by the time
+// storage flattening has run, sibling branches have diverged for real (e.g.
+// a stride-1 specialization now has literal contiguous Store/Load nodes
+// where the generic fallback has stride-multiplied ones).
+Stmt remove_specialization_branch_markers(const Stmt &s) {
+    return mutate_with(s, [](auto *self, const Call *op) -> Expr {
+        if (op->is_intrinsic(Call::specialization_branch_marker)) {
+            return make_zero(op->type);
+        }
+        return self->visit_base(op);
+    });
+}
 
 }  // namespace
 
@@ -644,6 +726,7 @@ Stmt storage_flattening(Stmt s,
     s = FlattenDimensions(tuple_env, outputs, target)(s);
     s = HoistStorage()(s);
     s = PromoteToMemoryType()(s);
+    s = remove_specialization_branch_markers(s);
 
     return s;
 }

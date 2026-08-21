@@ -49,11 +49,15 @@ Expr Simplify::visit(const LT *op, ExprInfo *info) {
 
          rewrite(broadcast(x, c0) < broadcast(y, c0), broadcast(x < y, c0)) ||
 
-         // We can learn more from equality than less with mod.
-         rewrite(x % y < 1, x % y == 0) ||
-         rewrite(0 < x % y, x % y != 0) ||
-         rewrite(x % c0 < c1, x % c0 != fold(c0 - 1), c1 + 1 == c0 && c0 > 0) ||
-         rewrite(c0 < x % c1, x % c1 == fold(c1 - 1), c0 + 2 == c1 && c1 > 0)) ||
+         rewrite(c0 < select(x, c1, c2), select(x, fold(c0 < c1), fold(c0 < c2))) ||
+         rewrite(select(x, c1, c2) < c0, select(x, fold(c1 < c0), fold(c2 < c0))) ||
+
+         // We can learn more from equality than less with (Euclidean) mod.
+         (!ty.is_float() && EVAL_IN_LAMBDA  //
+          (rewrite(x % y < 1, x % y == 0) ||
+           rewrite(0 < x % y, x % y != 0) ||
+           rewrite(x % c0 < c1, x % c0 != fold(c0 - 1), c1 + 1 == c0 && c0 > 0) ||
+           rewrite(c0 < x % c1, x % c1 == fold(c1 - 1), c0 + 2 == c1 && c1 > 0)))) ||
 
         (no_overflow(ty) && EVAL_IN_LAMBDA  //
          (rewrite(ramp(x, y, c0) < ramp(z, y, c0), broadcast(x < z, c0)) ||
@@ -264,9 +268,6 @@ Expr Simplify::visit(const LT *op, ExprInfo *info) {
           rewrite(select(y, x + c0, z) < x + c1, y || (z < x + c1), c0 < c1) ||
           rewrite(select(y, z, x + c0) < x + c1, y && (z < x + c1), c0 >= c1) ||
           rewrite(select(y, z, x + c0) < x + c1, !y || (z < x + c1), c0 < c1) ||
-
-          rewrite(c0 < select(x, c1, c2), select(x, fold(c0 < c1), fold(c0 < c2))) ||
-          rewrite(select(x, c1, c2) < c0, select(x, fold(c1 < c0), fold(c2 < c0))) ||
 
           // Normalize comparison of ramps to a comparison of a ramp and a broadacst
           rewrite(ramp(x, y, lanes) < ramp(z, w, lanes), ramp(x - z, y - w, lanes) < 0) ||

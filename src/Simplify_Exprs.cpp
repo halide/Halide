@@ -1,5 +1,10 @@
 #include "Simplify_Internal.h"
 
+#include <algorithm>
+#include <numeric>
+
+#include "MultiRamp.h"
+
 using std::string;
 
 namespace Halide {
@@ -77,15 +82,35 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
 
     if (info && op->type.is_int_or_uint()) {
         switch (op->op) {
-        case VectorReduce::Add:
-            // Alignment of result is the alignment of the arg. Bounds
-            // of the result can grow according to the reduction
-            // factor.
-            info->bounds = cast(op->type, info->bounds * factor);
+        case VectorReduce::Add: {
+            // A horizontal add of `factor` lanes is the sum of `factor`
+            // (possibly distinct) values each in `info->bounds` with
+            // alignment `info->alignment`. Treating it as multiplication by
+            // `factor` would be wrong -- that would claim a tighter modulus
+            // than we actually have. Instead we add the per-lane alignment to
+            // itself `factor` times.
+            ModulusRemainder one_lane = info->alignment;
+            info->bounds = info->bounds * factor;
+            for (int i = 1; i < factor; i++) {
+                info->alignment = info->alignment + one_lane;
+            }
+            info->cast_to(op->type);
             break;
-        case VectorReduce::SaturatingAdd:
-            info->bounds = saturating_cast(op->type, info->bounds * factor);
+        }
+        case VectorReduce::SaturatingAdd: {
+            ConstantInterval unsaturated = info->bounds * factor;
+            if (op->type.can_represent(unsaturated)) {
+                ModulusRemainder one_lane = info->alignment;
+                info->bounds = unsaturated;
+                for (int i = 1; i < factor; i++) {
+                    info->alignment = info->alignment + one_lane;
+                }
+            } else {
+                info->bounds = saturating_cast(op->type, unsaturated);
+                info->alignment = ModulusRemainder{};
+            }
             break;
+        }
         case VectorReduce::Mul:
             // Don't try to infer anything about bounds. Leave the
             // alignment unchanged even though we could theoretically
@@ -132,7 +157,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
             rewrite(h_add(broadcast(x, arg_lanes) * y, lanes), h_add(y, lanes) * broadcast(x, lanes)) ||
             rewrite(h_add(broadcast(x, arg_lanes), lanes), broadcast(x * factor, lanes)) ||
             rewrite(h_add(broadcast(x, c0), lanes), broadcast(h_add(x, lanes / c0), c0), lanes % c0 == 0) ||
-            rewrite(h_add(broadcast(x, c0), lanes), broadcast(h_add(x, 1) * (c0 / lanes), lanes), c0 % lanes == 0) ||
+            rewrite(h_add(broadcast(x, c0), lanes), broadcast(h_add(x, 1) * cast(op->type.element_of(), (c0 / lanes)), lanes), c0 % lanes == 0) ||
             false) {
             return mutate(rewrite.result, info);
         }
@@ -147,7 +172,10 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
             rewrite(h_min(broadcast(x, arg_lanes), lanes), broadcast(x, lanes)) ||
             rewrite(h_min(broadcast(x, c0), 1), h_min(x, 1)) ||
             rewrite(h_min(broadcast(x, c0), lanes), broadcast(h_min(x, lanes / c0), c0), lanes % c0 == 0) ||
-            (lanes == 1 && rewrite(h_min(ramp(x, y, arg_lanes), lanes), x + min(y * (arg_lanes - 1), 0))) ||
+            rewrite(h_min(broadcast(x, c0), lanes), broadcast(h_min(x, 1), lanes), c0 % lanes == 0) ||
+            (no_overflow(op->type) &&
+             (rewrite(h_min(ramp(x, y, arg_lanes), 1), x + min(y * (arg_lanes - 1), 0)) ||
+              rewrite(h_min(ramp(x, y, arg_lanes), lanes), ramp(x + min(y * (factor - 1), 0), y * factor, lanes)))) ||
             false) {
             return mutate(rewrite.result, info);
         }
@@ -162,7 +190,10 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
             rewrite(h_max(broadcast(x, arg_lanes), lanes), broadcast(x, lanes)) ||
             rewrite(h_max(broadcast(x, c0), 1), h_max(x, 1)) ||
             rewrite(h_max(broadcast(x, c0), lanes), broadcast(h_max(x, lanes / c0), c0), lanes % c0 == 0) ||
-            (lanes == 1 && rewrite(h_max(ramp(x, y, arg_lanes), lanes), x + max(y * (arg_lanes - 1), 0))) ||
+            rewrite(h_max(broadcast(x, c0), lanes), broadcast(h_max(x, 1), lanes), c0 % lanes == 0) ||
+            (no_overflow(op->type) &&
+             (rewrite(h_max(ramp(x, y, arg_lanes), 1), x + max(y * (arg_lanes - 1), 0)) ||
+              rewrite(h_max(ramp(x, y, arg_lanes), lanes), ramp(x + max(y * (factor - 1), 0), y * factor, lanes)))) ||
             false) {
             return mutate(rewrite.result, info);
         }
@@ -177,14 +208,14 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
             rewrite(h_and(broadcast(x, arg_lanes), lanes), broadcast(x, lanes)) ||
             rewrite(h_and(broadcast(x, c0), lanes), broadcast(h_and(x, lanes / c0), c0), lanes % c0 == 0) ||
             rewrite(h_and(broadcast(x, c0), lanes), broadcast(h_and(x, 1), lanes), c0 >= lanes) ||
-            (lanes == 1 && rewrite(h_and(ramp(x, y, arg_lanes) < broadcast(z, arg_lanes), lanes),
-                                   x + max(y * (arg_lanes - 1), 0) < z)) ||
-            (lanes == 1 && rewrite(h_and(ramp(x, y, arg_lanes) <= broadcast(z, arg_lanes), lanes),
-                                   x + max(y * (arg_lanes - 1), 0) <= z)) ||
-            (lanes == 1 && rewrite(h_and(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), lanes),
-                                   x < y + min(z * (arg_lanes - 1), 0))) ||
-            (lanes == 1 && rewrite(h_and(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), lanes),
-                                   x <= y + min(z * (arg_lanes - 1), 0))) ||
+            rewrite(h_and(ramp(x, y, arg_lanes) < broadcast(z, arg_lanes), 1),
+                    x + max(y * (arg_lanes - 1), 0) < z) ||
+            rewrite(h_and(ramp(x, y, arg_lanes) <= broadcast(z, arg_lanes), 1),
+                    x + max(y * (arg_lanes - 1), 0) <= z) ||
+            rewrite(h_and(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), 1),
+                    x < y + min(z * (arg_lanes - 1), 0)) ||
+            rewrite(h_and(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), 1),
+                    x <= y + min(z * (arg_lanes - 1), 0)) ||
             false) {
             return mutate(rewrite.result, info);
         }
@@ -200,14 +231,14 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
             rewrite(h_or(broadcast(x, c0), lanes), broadcast(h_or(x, lanes / c0), c0), lanes % c0 == 0) ||
             rewrite(h_or(broadcast(x, c0), lanes), broadcast(h_or(x, 1), lanes), c0 >= lanes) ||
             // type of arg_lanes is somewhat indeterminate
-            (lanes == 1 && rewrite(h_or(ramp(x, y, arg_lanes) < broadcast(z, arg_lanes), lanes),
-                                   x + min(y * (arg_lanes - 1), 0) < z)) ||
-            (lanes == 1 && rewrite(h_or(ramp(x, y, arg_lanes) <= broadcast(z, arg_lanes), lanes),
-                                   x + min(y * (arg_lanes - 1), 0) <= z)) ||
-            (lanes == 1 && rewrite(h_or(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), lanes),
-                                   x < y + max(z * (arg_lanes - 1), 0))) ||
-            (lanes == 1 && rewrite(h_or(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), lanes),
-                                   x <= y + max(z * (arg_lanes - 1), 0))) ||
+            rewrite(h_or(ramp(x, y, arg_lanes) < broadcast(z, arg_lanes), 1),
+                    x + min(y * (arg_lanes - 1), 0) < z) ||
+            rewrite(h_or(ramp(x, y, arg_lanes) <= broadcast(z, arg_lanes), 1),
+                    x + min(y * (arg_lanes - 1), 0) <= z) ||
+            rewrite(h_or(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), 1),
+                    x < y + max(z * (arg_lanes - 1), 0)) ||
+            rewrite(h_or(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), 1),
+                    x <= y + max(z * (arg_lanes - 1), 0)) ||
             false) {
             return mutate(rewrite.result, info);
         }
@@ -341,13 +372,15 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
     }
 
     ExprInfo base_info;
-    if (const Ramp *r = index.as<Ramp>()) {
-        mutate(r->base, &base_info);
+    const Ramp *r_index = index.as<Ramp>();
+    if (r_index) {
+        mutate(r_index->base, &base_info);
     }
 
     base_info.alignment = ModulusRemainder::intersect(base_info.alignment, index_info.alignment);
 
     ModulusRemainder align = ModulusRemainder::intersect(op->alignment, base_info.alignment);
+    int A;
 
     const Broadcast *b_index = index.as<Broadcast>();
     const Shuffle *s_index = index.as<Shuffle>();
@@ -358,26 +391,56 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
         // Load of a broadcast should be broadcast of the load
         Expr new_index = b_index->value;
         int new_lanes = new_index.type().lanes();
-        Expr load = Load::make(op->type.with_lanes(new_lanes), op->name, b_index->value,
-                               op->image, op->param, const_true(new_lanes, nullptr), align);
+        Expr load = op->with(b_index->value, const_true(new_lanes, nullptr), align);
         return Broadcast::make(load, b_index->lanes);
     } else if (s_index &&
-               is_const_one(predicate) &&
                (s_index->is_concat() ||
                 s_index->is_interleave())) {
-        // Loads of concats/interleaves should be concats/interleaves of loads
+        // Loads of concats/interleaves should be concats/interleaves of
+        // loads. We'll need to slice up the predicate though.
         std::vector<Expr> loaded_vecs;
         for (const Expr &new_index : s_index->vectors) {
             int new_lanes = new_index.type().lanes();
-            Expr load = Load::make(op->type.with_lanes(new_lanes), op->name, new_index,
-                                   op->image, op->param, const_true(new_lanes, nullptr), ModulusRemainder{});
+            Expr predicate_slice =
+                is_const_one(predicate) ? const_true(new_lanes, nullptr) :
+                s_index->is_concat() ?
+                                          Shuffle::make_slice(predicate, (int)loaded_vecs.size() * new_lanes, 1, new_lanes) :
+                                          Shuffle::make_slice(predicate, (int)loaded_vecs.size(), op->type.lanes() / new_lanes, new_lanes);
+            predicate_slice = mutate(predicate_slice, nullptr);
+
+            Expr load = op->with(new_index, predicate_slice, ModulusRemainder{});
             loaded_vecs.emplace_back(std::move(load));
         }
         return Shuffle::make(loaded_vecs, s_index->indices);
-    } else if (predicate.same_as(op->predicate) && index.same_as(op->index) && align == op->alignment) {
-        return op;
+    } else if (MultiRamp mr;
+               index.type().is_vector() &&
+               // Don't do expensive analysis in the common case of a load of a ramp of scalars.
+               !(r_index && r_index->base.type().is_scalar()) &&
+               // It's a multi-dimensional multiramp.
+               is_multiramp(index, Scope<Expr>::empty_scope(), &mr) &&
+               mr.dimensions() > 1 &&
+               // The innermost stride isn't already one.
+               !is_const_one(mr.strides[0]) &&
+               // We can successfully rotate a stride one dimension innermost.
+               (A = mr.rotate_stride_one_innermost()) > 0) {
+        // Rotating the stride one dimension innermost made the load dense, but
+        // we must now transpose the predicate to match the transposed index,
+        // and inverse-transpose the loaded value to restore the original lane
+        // ordering.
+        Expr permuted_predicate;
+        const Broadcast *b_pred = predicate.as<Broadcast>();
+        if (b_pred && b_pred->value.type().is_scalar()) {
+            permuted_predicate = predicate;
+        } else {
+            permuted_predicate = Shuffle::make_transpose(predicate, A);
+        }
+
+        Expr permuted_load =
+            op->with(mr.to_expr(), permuted_predicate, align);
+        int B = op->type.lanes() / A;
+        return mutate(Shuffle::make_transpose(permuted_load, B), info);
     } else {
-        return Load::make(op->type, op->name, index, op->image, op->param, predicate, align);
+        return op->with(index, predicate, align);
     }
 }
 

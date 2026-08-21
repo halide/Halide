@@ -3,24 +3,13 @@ add_library(Halide::Plugin ALIAS Halide_Plugin)
 target_sources(
     Halide_Plugin
     INTERFACE
-    FILE_SET HEADERS
-    FILES
-    HalidePlugin.h
-    ParamParser.h
-    cmdline.h
-    PerfectHashMap.h
+    FILE_SET HEADERS FILES HalidePlugin.h ParamParser.h cmdline.h PerfectHashMap.h
 )
 target_link_libraries(Halide_Plugin INTERFACE Halide::Halide Halide::ASLog)
 
 add_library(Halide_ASLog STATIC)
 add_library(Halide::ASLog ALIAS Halide_ASLog)
-target_sources(
-    Halide_ASLog
-    PRIVATE ASLog.cpp
-    PUBLIC
-    FILE_SET HEADERS
-    FILES ASLog.h
-)
+target_sources(Halide_ASLog PRIVATE ASLog.cpp PUBLIC FILE_SET HEADERS FILES ASLog.h)
 set_property(TARGET Halide_ASLog PROPERTY POSITION_INDEPENDENT_CODE YES)
 
 if (WITH_UTILS)

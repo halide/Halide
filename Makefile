@@ -152,7 +152,7 @@ POWERPC_LLVM_CONFIG_LIB=$(if $(WITH_POWERPC), powerpc, )
 
 PTX_CXX_FLAGS=$(if $(WITH_NVPTX), -DWITH_NVPTX, )
 PTX_LLVM_CONFIG_LIB=$(if $(WITH_NVPTX), nvptx, )
-PTX_DEVICE_INITIAL_MODULES=$(if $(WITH_NVPTX), libdevice.compute_20.10.bc libdevice.compute_30.10.bc libdevice.compute_35.10.bc, )
+PTX_DEVICE_INITIAL_MODULES=$(if $(WITH_NVPTX), $(BUILD_DIR)/initmod_ptx.libdevice_ll.o, )
 
 OPENCL_CXX_FLAGS=$(if $(WITH_OPENCL), -DWITH_OPENCL, )
 OPENCL_LLVM_CONFIG_LIB=$(if $(WITH_OPENCL), , )
@@ -427,7 +427,6 @@ BIN_DIR     = bin
 DISTRIB_DIR = distrib
 INCLUDE_DIR = include
 SHARE_DIR   = share
-DOC_DIR     = $(SHARE_DIR)/doc/Halide
 BUILD_DIR   = $(BIN_DIR)/build
 FILTERS_DIR = $(BIN_DIR)/$(TARGET)/build
 TMP_DIR     = $(BUILD_DIR)/tmp
@@ -447,6 +446,7 @@ SOURCE_FILES = \
   AddImageChecks.cpp \
   AddParameterChecks.cpp \
   AddSplitFactorChecks.cpp \
+  AddTypeChangeChecks.cpp \
   AlignLoads.cpp \
   AllocationBoundsInference.cpp \
   ApplySplit.cpp \
@@ -463,10 +463,12 @@ SOURCE_FILES = \
   Buffer.cpp \
   Callable.cpp \
   CanonicalizeGPUVars.cpp \
+  CheckGPUCrossTalk.cpp \
   ClampUnsafeAccesses.cpp \
   Closure.cpp \
   CodeGen_ARM.cpp \
   CodeGen_C.cpp \
+  CodeGen_CPU.cpp \
   CodeGen_D3D12Compute_Dev.cpp \
   CodeGen_GPU_Dev.cpp \
   CodeGen_Hexagon.cpp \
@@ -474,7 +476,6 @@ SOURCE_FILES = \
   CodeGen_LLVM.cpp \
   CodeGen_Metal_Dev.cpp \
   CodeGen_OpenCL_Dev.cpp \
-  CodeGen_Posix.cpp \
   CodeGen_PowerPC.cpp \
   CodeGen_PTX_Dev.cpp \
   CodeGen_PyTorch.cpp \
@@ -483,7 +484,6 @@ SOURCE_FILES = \
   CodeGen_WebAssembly.cpp \
   CodeGen_WebGPU_Dev.cpp \
   CodeGen_X86.cpp \
-  CompilerLogger.cpp \
   ConstantBounds.cpp \
   ConstantInterval.cpp \
   CPlusPlusMangle.cpp \
@@ -518,6 +518,7 @@ SOURCE_FILES = \
   FuseGPUThreadLoops.cpp \
   FuzzFloatStores.cpp \
   Generator.cpp \
+  GeneratorCache.cpp \
   HexagonOffload.cpp \
   HexagonOptimize.cpp \
   ImageParam.cpp \
@@ -544,11 +545,13 @@ SOURCE_FILES = \
   LoopCarry.cpp \
   Lower.cpp \
   LowerParallelTasks.cpp \
+  LowerSMEStreamingTasks.cpp \
   LowerWarpShuffles.cpp \
   Memoization.cpp \
   Module.cpp \
   ModulusRemainder.cpp \
   Monotonic.cpp \
+  MultiRamp.cpp \
   ObjectInstanceRegistry.cpp \
   OffloadGPULoops.cpp \
   OptimizeShuffles.cpp \
@@ -627,7 +630,6 @@ SOURCE_FILES = \
   Var.cpp \
   VectorizeLoops.cpp \
   WasmExecutor.cpp \
-  WrapCalls.cpp
 # keep-sorted end
 
  C_TEMPLATE_FILES = \
@@ -649,6 +651,7 @@ HEADER_FILES = \
   AddImageChecks.h \
   AddParameterChecks.h \
   AddSplitFactorChecks.h \
+  AddTypeChangeChecks.h \
   AlignLoads.h \
   AllocationBoundsInference.h \
   ApplySplit.h \
@@ -665,22 +668,22 @@ HEADER_FILES = \
   Buffer.h \
   Callable.h \
   CanonicalizeGPUVars.h \
+  CheckGPUCrossTalk.h \
   ClampUnsafeAccesses.h \
   Closure.h \
   CodeGen_C.h \
+  CodeGen_CPU.h \
   CodeGen_D3D12Compute_Dev.h \
   CodeGen_GPU_Dev.h \
   CodeGen_Internal.h \
   CodeGen_LLVM.h \
   CodeGen_Metal_Dev.h \
   CodeGen_OpenCL_Dev.h \
-  CodeGen_Posix.h \
   CodeGen_PTX_Dev.h \
   CodeGen_PyTorch.h \
   CodeGen_Targets.h \
   CodeGen_Vulkan_Dev.h \
   CodeGen_WebGPU_Dev.h \
-  CompilerLogger.h \
   ConciseCasts.h \
   ConstantBounds.h \
   ConstantInterval.h \
@@ -721,6 +724,7 @@ HEADER_FILES = \
   FuseGPUThreadLoops.h \
   FuzzFloatStores.h \
   Generator.h \
+  GeneratorCache.h \
   HexagonOffload.h \
   HexagonOptimize.h \
   ImageParam.h \
@@ -749,12 +753,13 @@ HEADER_FILES = \
   LoopPartitioningDirective.h \
   Lower.h \
   LowerParallelTasks.h \
+  LowerSMEStreamingTasks.h \
   LowerWarpShuffles.h \
-  MainPage.h \
   Memoization.h \
   Module.h \
   ModulusRemainder.h \
   Monotonic.h \
+  MultiRamp.h \
   ObjectInstanceRegistry.h \
   OffloadGPULoops.h \
   OptimizeShuffles.h \
@@ -816,7 +821,6 @@ HEADER_FILES = \
   Var.h \
   VectorizeLoops.h \
   WasmExecutor.h \
-  WrapCalls.h
 # keep-sorted end
 
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
@@ -824,7 +828,6 @@ HEADERS = $(HEADER_FILES:%.h=$(SRC_DIR)/%.h)
 
 # keep-sorted start skip_lines=1
 RUNTIME_CPP_COMPONENTS = \
-  aarch64_cpu_features \
   alignment_128 \
   alignment_32 \
   alignment_64 \
@@ -847,6 +850,7 @@ RUNTIME_CPP_COMPONENTS = \
   force_include_types \
   fuchsia_clock \
   fuchsia_host_cpu_count \
+  fuchsia_thread_id \
   fuchsia_yield \
   gpu_device_selection \
   halide_buffer_t \
@@ -856,10 +860,14 @@ RUNTIME_CPP_COMPONENTS = \
   hexagon_dma_pool \
   hexagon_host \
   ios_io \
-  linux_aarch64_cpu_features \
   linux_arm_cpu_features \
+  linux_arm_thread_id \
   linux_clock \
   linux_host_cpu_count \
+  linux_powerpc_thread_id \
+  linux_riscv_thread_id \
+  linux_x86_cpu_features \
+  linux_x86_thread_id \
   linux_yield \
   metal \
   metal_objc_arm \
@@ -869,11 +877,11 @@ RUNTIME_CPP_COMPONENTS = \
   msan \
   msan_stubs \
   opencl \
-  osx_aarch64_cpu_features \
   osx_arm_cpu_features \
   osx_clock \
   osx_get_symbol \
   osx_host_cpu_count \
+  osx_thread_id \
   osx_yield \
   posix_aligned_alloc \
   posix_allocator \
@@ -904,6 +912,7 @@ RUNTIME_CPP_COMPONENTS = \
   tracing \
   vulkan \
   wasm_cpu_features \
+  wasm_thread_id \
   webgpu_dawn \
   webgpu_emscripten \
   windows_aarch64_cpu_features_arm \
@@ -965,7 +974,7 @@ INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
                   $(HTML_TEMPLATE_FILES:%=$(BUILD_DIR)/html_template.%.o) \
                   $(BUILD_DIR)/initmod.inlined_c.o \
                   $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o) \
-                  $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o)
+                  $(PTX_DEVICE_INITIAL_MODULES)
 
 TEST_DEPS = $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES)
 ifneq (,$(WITH_EXCEPTIONS))
@@ -986,7 +995,7 @@ endif
 endif
 
 .PHONY: all
-all: distrib test_internal
+all: distrib
 
 # Depending on which linker we're using,
 # we need a different invocation to get the
@@ -1230,8 +1239,8 @@ $(BUILD_DIR)/initmod.%_h.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/%.h
 $(BUILD_DIR)/initmod.inlined_c.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/halide_buffer_t.cpp
 	./$(BIN_DIR)/binary2cpp halide_internal_initmod_inlined_c < $(SRC_DIR)/runtime/halide_buffer_t.cpp > $@
 
-$(BUILD_DIR)/initmod_ptx.%_ll.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/nvidia_libdevice_bitcode/libdevice.%.bc
-	./$(BIN_DIR)/binary2cpp halide_internal_initmod_ptx_$(basename $*)_ll < $(SRC_DIR)/runtime/nvidia_libdevice_bitcode/libdevice.$*.bc > $@
+$(BUILD_DIR)/initmod_ptx.libdevice_ll.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/nvidia_libdevice_bitcode/libdevice.10.bc
+	./$(BIN_DIR)/binary2cpp halide_internal_initmod_ptx_libdevice_ll < $(SRC_DIR)/runtime/nvidia_libdevice_bitcode/libdevice.10.bc > $@
 
 $(BUILD_DIR)/c_template.%.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/%.template.cpp
 	./$(BIN_DIR)/binary2cpp halide_c_template_$* < $(SRC_DIR)/$*.template.cpp > $@
@@ -1288,7 +1297,10 @@ PERFORMANCE_TESTS = $(shell ls $(ROOT_DIR)/test/performance/*.cpp)
 ERROR_TESTS = $(shell ls $(ROOT_DIR)/test/error/*.cpp)
 WARNING_TESTS = $(shell ls $(ROOT_DIR)/test/warning/*.cpp)
 RUNTIME_TESTS = $(shell ls $(ROOT_DIR)/test/runtime/*.cpp)
-FUZZ_TESTS = $(filter-out %halide_fuzz_main.cpp, $(shell ls $(ROOT_DIR)/test/fuzz/*.cpp))
+FUZZ_TESTS = $(filter-out %halide_fuzz_main.cpp %IRGraphCXXPrinter.cpp, $(shell ls $(ROOT_DIR)/test/fuzz/*.cpp))
+# Match the args used by the CMake build: 1000 runs per test, and no more than
+# five minutes of total time.
+FUZZ_TEST_ARGS ?= -runs=1000 -max_total_time=300
 GENERATOR_EXTERNAL_TESTS := $(shell ls $(ROOT_DIR)/test/generator/*test.cpp)
 GENERATOR_EXTERNAL_TEST_GENERATOR := $(shell ls $(ROOT_DIR)/test/generator/*_generator.cpp)
 TUTORIALS = $(filter-out %_generate.cpp, $(shell ls $(ROOT_DIR)/tutorial/*.cpp))
@@ -1338,6 +1350,7 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_msan,$(GENERATOR_AOTCPP_
 
 # https://github.com/halide/Halide/issues/7272
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_memory_profiler_mandelbrot,$(GENERATOR_AOTCPP_TESTS))
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_profiler_instances,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/4916
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubtest,$(GENERATOR_AOTCPP_TESTS))
@@ -1345,6 +1358,11 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubuser,$(GENERATOR_AOT
 
 # Build requirements are finicky, testing non-C++ backend is good enough here
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_gpu_multi_context_threaded,$(GENERATOR_AOTCPP_TESTS))
+
+# runtime_prefixes_iso is a single combined test that already links both the
+# LLVM and C backends together (see the custom generator_aot rule below), so
+# there is no separate C++-backend-only variant.
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_runtime_prefixes_iso,$(GENERATOR_AOTCPP_TESTS))
 
 test_aotcpp_generator: $(GENERATOR_AOTCPP_TESTS)
 
@@ -1359,6 +1377,9 @@ GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/msan.rungen,$(GENERA
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/sanitizercoverage.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/multitarget.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/nested_externs.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
+# profiler_instances declares a test_extern_stage callback in its
+# aottest, which rungen doesn't link.
+GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/profiler_instances.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/tiled_blur.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/extern_output.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/gpu_multi_context_threaded.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
@@ -1376,7 +1397,7 @@ test_generator: $(GENERATOR_AOT_TESTS) $(GENERATOR_AOTCPP_TESTS) $(GENERATOR_JIT
 	$(FILTERS_DIR)/rungen_test
 	$(FILTERS_DIR)/registration_test
 
-ALL_TESTS = test_internal test_correctness test_error test_tutorial test_warning test_runtime test_generator
+ALL_TESTS = test_correctness test_error test_tutorial test_warning test_runtime test_generator
 
 # These targets perform timings of each test. For most tests this includes Halide JIT compile times, and run times.
 # For generator tests they time the compile time only. The times are recorded in CSV files.
@@ -1436,10 +1457,6 @@ $(BIN_DIR)/%/runtime.a: $(BIN_DIR)/runtime.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -r runtime -o $(CURDIR)/$(BIN_DIR)/$* target=$*
 
-$(BIN_DIR)/test_internal: $(ROOT_DIR)/test/internal.cpp $(TEST_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(TEST_CXX_FLAGS) $< -I$(SRC_DIR) $(TEST_LD_FLAGS) -o $@
-
 ifneq (,$(shell which flatc))
 $(BUILD_DIR)/Deserialization.o : $(BUILD_DIR)/halide_ir.fbs.h
 $(BUILD_DIR)/Serialization.o : $(BUILD_DIR)/halide_ir.fbs.h
@@ -1469,6 +1486,12 @@ $(BIN_DIR)/correctness_halide_buffer: $(ROOT_DIR)/test/correctness/halide_buffer
 $(BIN_DIR)/correctness_image_io: $(ROOT_DIR)/test/correctness/image_io.cpp $(TEST_DEPS)
 	$(CXX) $(TEST_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
+# The spirv_ir test needs access to the internal-only SpirvIR.h header and
+# the vendored SPIR-V headers used by the Vulkan backend.
+$(BIN_DIR)/correctness_spirv_ir: $(ROOT_DIR)/test/correctness/spirv_ir.cpp $(TEST_DEPS)
+	@mkdir -p $(@D)
+	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) -I$(SRC_DIR) $(SPIRV_CXX_FLAGS) $(TEST_LD_FLAGS) -o $@
+
 # OpenCL runtime correctness test requires runtime.a to be linked.
 $(BIN_DIR)/$(TARGET)/correctness_opencl_runtime: $(ROOT_DIR)/test/correctness/opencl_runtime.cpp $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
 	@mkdir -p $(@D)
@@ -1477,7 +1500,7 @@ $(BIN_DIR)/$(TARGET)/correctness_opencl_runtime: $(ROOT_DIR)/test/correctness/op
 $(BIN_DIR)/performance_%: $(ROOT_DIR)/test/performance/%.cpp $(TEST_DEPS)
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(TEST_LD_FLAGS) -o $@
 
-$(BIN_DIR)/fuzz_%: $(ROOT_DIR)/test/fuzz/%.cpp $(ROOT_DIR)/test/fuzz/halide_fuzz_main.cpp $(ROOT_DIR)/test/fuzz/fuzz_helpers.h $(ROOT_DIR)/test/fuzz/halide_fuzz_main.h $(TEST_DEPS)
+$(BIN_DIR)/fuzz_%: $(ROOT_DIR)/test/fuzz/%.cpp $(ROOT_DIR)/test/fuzz/halide_fuzz_main.cpp $(ROOT_DIR)/test/fuzz/fuzz_helpers.h $(ROOT_DIR)/test/fuzz/halide_fuzz_main.h $(ROOT_DIR)/test/fuzz/IRGraphCXXPrinter.cpp $(ROOT_DIR)/test/fuzz/IRGraphCXXPrinter.h $(TEST_DEPS)
 	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $(filter %.cpp,$^) -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@ -DHALIDE_FUZZER_BACKEND=0
 
 # Error tests that link against libHalide
@@ -1606,6 +1629,11 @@ $(FILTERS_DIR)/string_param.a: $(BIN_DIR)/string_param.generator
 $(FILTERS_DIR)/memory_profiler_mandelbrot.a: $(BIN_DIR)/memory_profiler_mandelbrot.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g memory_profiler_mandelbrot -f memory_profiler_mandelbrot $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-profile
+
+# profiler_instances needs profiler set; verifies the per-instance / canonical-id machinery.
+$(FILTERS_DIR)/profiler_instances.a: $(BIN_DIR)/profiler_instances.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g profiler_instances -f profiler_instances $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-profile
 
 $(FILTERS_DIR)/alias_with_offset_42.a: $(BIN_DIR)/alias.generator
 	@mkdir -p $(@D)
@@ -1825,6 +1853,69 @@ $(BIN_DIR)/$(TARGET)/generator_aot_nested_externs: $(ROOT_DIR)/test/generator/ne
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
 $(BIN_DIR)/$(TARGET)/generator_aotcpp_nested_externs: $(ROOT_DIR)/test/generator/nested_externs_aottest.cpp $(FILTERS_DIR)/nested_externs_root.halide_generated.cpp $(FILTERS_DIR)/nested_externs_inner.halide_generated.cpp $(FILTERS_DIR)/nested_externs_combine.halide_generated.cpp $(FILTERS_DIR)/nested_externs_leaf.halide_generated.cpp $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+	@mkdir -p $(@D)
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
+
+# runtime_prefixes_iso builds one AOT test that links three separately
+# namespaced runtimes (stock "halide_", "runtime_a_", "runtime_b_") together with
+# both LLVM- and C-backend kernels for each, and checks that their runtime state
+# stays independent. This needs custom rules: three namespaced standalone
+# runtimes, and six kernels (LLVM + C backend) with distinct function names and
+# matching import/internal prefixes. See test/generator/CMakeLists.txt.
+$(FILTERS_DIR)/rniso_rt_none.a: $(BIN_DIR)/runtime.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -r rniso_rt_none -e static_library -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)
+
+$(FILTERS_DIR)/rniso_rt_a.a: $(BIN_DIR)/runtime.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -r rniso_rt_a -e static_library -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET) runtime_prefixes.export=runtime_a_ runtime_prefixes.internal=runtime_ai_
+
+$(FILTERS_DIR)/rniso_rt_b.a: $(BIN_DIR)/runtime.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -r rniso_rt_b -e static_library -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET) runtime_prefixes.export=runtime_b_ runtime_prefixes.internal=runtime_bi_
+
+# LLVM-backend kernels (static_library + header). -n sets the output file base
+# name (which otherwise defaults to the -f function name) so the emitted files
+# match these targets.
+$(FILTERS_DIR)/rniso_none.a: $(BIN_DIR)/runtime_prefixes_iso.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g runtime_prefixes_iso -f pipe_none -n rniso_none -e static_library,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime
+
+$(FILTERS_DIR)/rniso_a.a: $(BIN_DIR)/runtime_prefixes_iso.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g runtime_prefixes_iso -f pipe_a -n rniso_a -e static_library,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime runtime_prefixes.import=runtime_a_ runtime_prefixes.internal=runtime_ai_
+
+$(FILTERS_DIR)/rniso_b.a: $(BIN_DIR)/runtime_prefixes_iso.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g runtime_prefixes_iso -f pipe_b -n rniso_b -e static_library,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime runtime_prefixes.import=runtime_b_ runtime_prefixes.internal=runtime_bi_
+
+# C-backend kernels (c_source + header). The .h is produced by the same command.
+$(FILTERS_DIR)/rniso_none_c.halide_generated.cpp: $(BIN_DIR)/runtime_prefixes_iso.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g runtime_prefixes_iso -f pipe_none_c -n rniso_none_c -e c_source,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime
+
+$(FILTERS_DIR)/rniso_a_c.halide_generated.cpp: $(BIN_DIR)/runtime_prefixes_iso.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g runtime_prefixes_iso -f pipe_a_c -n rniso_a_c -e c_source,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime runtime_prefixes.import=runtime_a_ runtime_prefixes.internal=runtime_ai_
+
+$(FILTERS_DIR)/rniso_b_c.halide_generated.cpp: $(BIN_DIR)/runtime_prefixes_iso.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g runtime_prefixes_iso -f pipe_b_c -n rniso_b_c -e c_source,c_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime runtime_prefixes.import=runtime_b_ runtime_prefixes.internal=runtime_bi_
+
+# The C-backend headers are emitted alongside the .cpp above (not from a .a).
+$(FILTERS_DIR)/rniso_none_c.h: $(FILTERS_DIR)/rniso_none_c.halide_generated.cpp
+	@echo $@ produced implicitly by $^
+$(FILTERS_DIR)/rniso_a_c.h: $(FILTERS_DIR)/rniso_a_c.halide_generated.cpp
+	@echo $@ produced implicitly by $^
+$(FILTERS_DIR)/rniso_b_c.h: $(FILTERS_DIR)/rniso_b_c.halide_generated.cpp
+	@echo $@ produced implicitly by $^
+
+RNISO_LLVM_LIBS = $(FILTERS_DIR)/rniso_none.a $(FILTERS_DIR)/rniso_a.a $(FILTERS_DIR)/rniso_b.a
+RNISO_C_SRCS = $(FILTERS_DIR)/rniso_none_c.halide_generated.cpp $(FILTERS_DIR)/rniso_a_c.halide_generated.cpp $(FILTERS_DIR)/rniso_b_c.halide_generated.cpp
+RNISO_RUNTIMES = $(FILTERS_DIR)/rniso_rt_none.a $(FILTERS_DIR)/rniso_rt_a.a $(FILTERS_DIR)/rniso_rt_b.a
+RNISO_HEADERS = $(FILTERS_DIR)/rniso_none.h $(FILTERS_DIR)/rniso_a.h $(FILTERS_DIR)/rniso_b.h $(FILTERS_DIR)/rniso_none_c.h $(FILTERS_DIR)/rniso_a_c.h $(FILTERS_DIR)/rniso_b_c.h
+
+$(BIN_DIR)/$(TARGET)/generator_aot_runtime_prefixes_iso: $(ROOT_DIR)/test/generator/runtime_prefixes_iso_aottest.cpp $(RNISO_LLVM_LIBS) $(RNISO_C_SRCS) $(RNISO_HEADERS) $(RNISO_RUNTIMES) $(RUNTIME_EXPORTED_INCLUDES)
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
@@ -2054,11 +2145,6 @@ $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_run: $(ROOT_DIR)/tutorial/lesson_21
         -lHalide $(TEST_LD_FLAGS) $(COMMON_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 	@-echo
 
-test_internal: $(BIN_DIR)/test_internal
-	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; $(CURDIR)/$<
-	@-echo
-
 correctness_%: $(BIN_DIR)/correctness_%
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR) ; $(CURDIR)/$<
@@ -2075,7 +2161,7 @@ quiet_correctness_%: $(BIN_DIR)/correctness_%
 
 fuzz_%: $(BIN_DIR)/fuzz_%
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; $(CURDIR)/$<
+	cd $(TMP_DIR) ; $(CURDIR)/$< $(FUZZ_TEST_ARGS)
 	@-echo
 
 valgrind_%: $(BIN_DIR)/correctness_%
@@ -2199,6 +2285,7 @@ TEST_APPS=\
 	camera_pipe \
 	conv_layer \
 	fft \
+	gaussian_blur \
 	hist \
 	interpolate \
 	lens_blur \
@@ -2314,7 +2401,6 @@ install: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR
 	cp $(ROOT_DIR)/tutorial/figures/*.jpg $(PREFIX)/share/halide/tutorial/figures
 	cp $(ROOT_DIR)/tutorial/figures/*.mp4 $(PREFIX)/share/halide/tutorial/figures
 	cp $(ROOT_DIR)/tutorial/*.cpp $(PREFIX)/share/halide/tutorial
-	cp $(ROOT_DIR)/tutorial/*.h $(PREFIX)/share/halide/tutorial
 	cp $(ROOT_DIR)/tutorial/*.sh $(PREFIX)/share/halide/tutorial
 	cp $(ROOT_DIR)/tools/GenGen.cpp $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/RunGen.h $(PREFIX)/share/halide/tools
@@ -2392,7 +2478,6 @@ $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT): \
 	cp $(ROOT_DIR)/tutorial/figures/*.jpg $(DISTRIB_DIR)/tutorial/figures
 	cp $(ROOT_DIR)/tutorial/figures/*.mp4 $(DISTRIB_DIR)/tutorial/figures
 	cp $(ROOT_DIR)/tutorial/*.cpp $(DISTRIB_DIR)/tutorial
-	cp $(ROOT_DIR)/tutorial/*.h $(DISTRIB_DIR)/tutorial
 	cp $(ROOT_DIR)/tutorial/*.sh $(DISTRIB_DIR)/tutorial
 	cp $(ROOT_DIR)/tools/GenGen.cpp $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/RunGen.h $(DISTRIB_DIR)/tools
@@ -2417,7 +2502,7 @@ ifeq ($(UNAME), Darwin)
 endif
 
 
-$(DISTRIB_DIR)/lib/libautoschedule_%.$(PLUGIN_EXT): $(BIN_DIR)/libautoschedule_%.$(PLUGIN_EXT)
+$(DISTRIB_DIR)/lib/libautoschedule_%.$(PLUGIN_EXT): $(BIN_DIR)/libautoschedule_%.$(PLUGIN_EXT) $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
 	@mkdir -p $(@D)
 	cp $< $(DISTRIB_DIR)/lib
 ifeq ($(UNAME), Darwin)
@@ -2502,58 +2587,3 @@ clang-tidy:
 .PHONY: clang-tidy-fix
 clang-tidy-fix:
 	@CLANG_TIDY_LLVM_INSTALL_DIR=$(CLANG_TIDY_LLVM_INSTALL_DIR) ${ROOT_DIR}/run-clang-tidy.sh -fix
-
-# Build the documentation. Be sure to keep this synchronized with doc/CMakeLists.txt
-# if you choose to edit it.
-
-# Copy ROOT_DIR to keep the following Doxyfile closer to CMake
-Halide_SOURCE_DIR=${ROOT_DIR}
-
-define Doxyfile
-# Keep the following in sync with doc/CMakeLists.txt
-ALPHABETICAL_INDEX     = NO
-BUILTIN_STL_SUPPORT    = YES
-CASE_SENSE_NAMES       = NO
-CLASS_DIAGRAMS         = NO
-DISTRIBUTE_GROUP_DOC   = YES
-EXAMPLE_PATH           = "${Halide_SOURCE_DIR}/tutorial"
-EXCLUDE                = bin
-EXCLUDE_PATTERNS       = README.md
-EXTRACT_ALL            = YES
-EXTRACT_LOCAL_CLASSES  = NO
-FILE_PATTERNS          = *.h *.md
-GENERATE_TREEVIEW      = YES
-HIDE_FRIEND_COMPOUNDS  = YES
-HIDE_IN_BODY_DOCS      = YES
-HIDE_UNDOC_CLASSES     = YES
-HIDE_UNDOC_MEMBERS     = YES
-JAVADOC_AUTOBRIEF      = YES
-MARKDOWN_ID_STYLE      = GITHUB
-QT_AUTOBRIEF           = YES
-QUIET                  = YES
-RECURSIVE              = YES
-REFERENCED_BY_RELATION = YES
-REFERENCES_RELATION    = YES
-SORT_BY_SCOPE_NAME     = YES
-SORT_MEMBER_DOCS       = NO
-SOURCE_BROWSER         = YES
-STRIP_CODE_COMMENTS    = NO
-
-# Makefile-specific options
-GENERATE_LATEX         = NO
-HAVE_DOT               = NO
-HTML_OUTPUT            = .
-INPUT                  = "${Halide_SOURCE_DIR}/doc" "${Halide_SOURCE_DIR}/src" "${Halide_SOURCE_DIR}/test"
-OUTPUT_DIRECTORY       = ${DOC_DIR}
-PROJECT_NAME           = Halide
-endef
-
-# Make the above Doxyfile variable available to the doc target.
-export Doxyfile
-
-.PHONY: doc
-doc:
-	@-mkdir -p $(TMP_DIR)
-	echo "$$Doxyfile" > $(TMP_DIR)/Doxyfile
-	@-mkdir -p ${DOC_DIR}
-	doxygen $(TMP_DIR)/Doxyfile

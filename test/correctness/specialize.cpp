@@ -16,9 +16,9 @@ void reset_trace() {
 int my_trace(JITUserContext *user_context, const halide_trace_event_t *ev) {
 
     if (ev->event == halide_trace_store) {
-        if (ev->type.lanes > 1) {
+        if (ev->lanes > 1) {
             vector_store = true;
-            vector_store_lanes = ev->type.lanes;
+            vector_store_lanes = ev->lanes;
         } else {
             scalar_store = true;
         }
@@ -322,6 +322,31 @@ int main(int argc, char **argv) {
         if (scalar_store || !vector_store) {
             printf("These stores were supposed to be vector.\n");
             return 1;
+        }
+    }
+
+    {
+        // Chained equality specializations against a consistent expr and
+        // distinct constants, including a negative one, compile down to a
+        // single switch statement in CodeGen_LLVM. The negative case value
+        // must be sign-extended correctly when building the LLVM constant.
+        Var x;
+        Param<int> p;
+
+        Func f;
+        f(x) = 0;
+        f.specialize(p == 1).vectorize(x, 4);
+        f.specialize(p == -1).unroll(x, 4);
+
+        for (int val : {-1, 0, 1, 2}) {
+            p.set(val);
+            Buffer<int> out = f.realize({16});
+            for (int i = 0; i < out.width(); i++) {
+                if (out(i) != 0) {
+                    printf("out(%d) = %d instead of 0 (p = %d)\n", i, out(i), val);
+                    return 1;
+                }
+            }
         }
     }
 

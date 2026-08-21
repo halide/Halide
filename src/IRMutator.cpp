@@ -123,12 +123,7 @@ Expr IRMutator::visit(const Select *op) {
 Expr IRMutator::visit(const Load *op) {
     Expr predicate = mutate(op->predicate);
     Expr index = mutate(op->index);
-    if (predicate.same_as(op->predicate) && index.same_as(op->index)) {
-        return op;
-    }
-    return Load::make(op->type, op->name, std::move(index),
-                      op->image, op->param, std::move(predicate),
-                      op->alignment);
+    return op->with(index, predicate, op->alignment);
 }
 
 Expr IRMutator::visit(const Ramp *op) {
@@ -150,85 +145,52 @@ Expr IRMutator::visit(const Broadcast *op) {
 }
 
 Expr IRMutator::visit(const Call *op) {
-    auto [new_args, changed] = mutate_with_changes(op->args);
-    if (!changed) {
-        return op;
-    }
-    return Call::make(op->type, op->name, new_args, op->call_type,
-                      op->func, op->value_index, op->image, op->param);
+    return op->with(mutate_with_changes(op->args).first);
 }
 
 Expr IRMutator::visit(const Let *op) {
     Expr value = mutate(op->value);
     Expr body = mutate(op->body);
-    if (value.same_as(op->value) &&
-        body.same_as(op->body)) {
-        return op;
-    }
-    return Let::make(op->name, std::move(value), std::move(body));
+    return op->with(value, body);
 }
 
 Stmt IRMutator::visit(const LetStmt *op) {
     Expr value = mutate(op->value);
     Stmt body = mutate(op->body);
-    if (value.same_as(op->value) &&
-        body.same_as(op->body)) {
-        return op;
-    }
-    return LetStmt::make(op->name, std::move(value), std::move(body));
+    return op->with(value, body);
 }
 
 Stmt IRMutator::visit(const AssertStmt *op) {
     Expr condition = mutate(op->condition);
     Expr message = mutate(op->message);
-
-    if (condition.same_as(op->condition) && message.same_as(op->message)) {
-        return op;
-    }
-    return AssertStmt::make(std::move(condition), std::move(message));
+    return op->with(condition, message);
 }
 
 Stmt IRMutator::visit(const ProducerConsumer *op) {
     Stmt body = mutate(op->body);
-    if (body.same_as(op->body)) {
-        return op;
-    }
-    return ProducerConsumer::make(op->name, op->is_producer, std::move(body));
+    return op->with(body);
 }
 
 Stmt IRMutator::visit(const For *op) {
     Expr min = mutate(op->min);
     Expr max = mutate(op->max);
     Stmt body = mutate(op->body);
-    if (min.same_as(op->min) &&
-        max.same_as(op->max) &&
-        body.same_as(op->body)) {
-        return op;
-    }
-    return For::make(op->name, std::move(min), std::move(max),
-                     op->for_type, op->partition_policy, op->device_api, std::move(body));
+    return op->with(min, max, body);
 }
 
 Stmt IRMutator::visit(const Store *op) {
     Expr predicate = mutate(op->predicate);
     Expr value = mutate(op->value);
     Expr index = mutate(op->index);
-    if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
-        return op;
-    }
-    return Store::make(op->name, std::move(value), std::move(index), op->param, std::move(predicate), op->alignment);
+    return op->with(value, index, predicate, op->alignment);
 }
 
 Stmt IRMutator::visit(const Provide *op) {
     // Mutate the args
-    auto [new_args, changed_args] = mutate_with_changes(op->args);
-    auto [new_values, changed_values] = mutate_with_changes(op->values);
+    std::vector<Expr> new_args = mutate_with_changes(op->args).first;
+    std::vector<Expr> new_values = mutate_with_changes(op->values).first;
     Expr new_predicate = mutate(op->predicate);
-
-    if (!(changed_args || changed_values) && new_predicate.same_as(op->predicate)) {
-        return op;
-    }
-    return Provide::make(op->name, new_values, new_args, new_predicate);
+    return op->with(new_values, new_args, new_predicate);
 }
 
 Stmt IRMutator::visit(const Allocate *op) {
@@ -256,17 +218,11 @@ Stmt IRMutator::visit(const Free *op) {
 
 Stmt IRMutator::visit(const Realize *op) {
     // Mutate the bounds
-    auto [new_bounds, bounds_changed] = mutate_region(this, op->bounds);
+    Region new_bounds = mutate_region(this, op->bounds).first;
 
     Stmt body = mutate(op->body);
     Expr condition = mutate(op->condition);
-    if (!bounds_changed &&
-        body.same_as(op->body) &&
-        condition.same_as(op->condition)) {
-        return op;
-    }
-    return Realize::make(op->name, op->types, op->memory_type, new_bounds,
-                         std::move(condition), std::move(body));
+    return op->with(new_bounds, condition, body);
 }
 
 Stmt IRMutator::visit(const Prefetch *op) {
@@ -274,45 +230,25 @@ Stmt IRMutator::visit(const Prefetch *op) {
     Expr condition = mutate(op->condition);
 
     // Mutate the bounds
-    auto [new_bounds, bounds_changed] = mutate_region(this, op->bounds);
-
-    if (!bounds_changed &&
-        body.same_as(op->body) &&
-        condition.same_as(op->condition)) {
-        return op;
-    }
-    return Prefetch::make(op->name, op->types, new_bounds, op->prefetch,
-                          std::move(condition), std::move(body));
+    Region new_bounds = mutate_region(this, op->bounds).first;
+    return op->with(new_bounds, condition, body);
 }
 
 Stmt IRMutator::visit(const Block *op) {
     Stmt first = mutate(op->first);
     Stmt rest = mutate(op->rest);
-    if (first.same_as(op->first) &&
-        rest.same_as(op->rest)) {
-        return op;
-    }
-    return Block::make(std::move(first), std::move(rest));
+    return op->with(first, rest);
 }
 
 Stmt IRMutator::visit(const IfThenElse *op) {
     Expr condition = mutate(op->condition);
     Stmt then_case = mutate(op->then_case);
     Stmt else_case = mutate(op->else_case);
-    if (condition.same_as(op->condition) &&
-        then_case.same_as(op->then_case) &&
-        else_case.same_as(op->else_case)) {
-        return op;
-    }
-    return IfThenElse::make(std::move(condition), std::move(then_case), std::move(else_case));
+    return op->with(condition, then_case, else_case);
 }
 
 Stmt IRMutator::visit(const Evaluate *op) {
-    Expr v = mutate(op->value);
-    if (v.same_as(op->value)) {
-        return op;
-    }
-    return Evaluate::make(std::move(v));
+    return op->with(mutate(op->value));
 }
 
 Expr IRMutator::visit(const Shuffle *op) {
@@ -334,46 +270,42 @@ Expr IRMutator::visit(const VectorReduce *op) {
 Stmt IRMutator::visit(const Fork *op) {
     Stmt first = mutate(op->first);
     Stmt rest = mutate(op->rest);
-    if (first.same_as(op->first) &&
-        rest.same_as(op->rest)) {
-        return op;
-    } else {
-        return Fork::make(first, rest);
-    }
+    return op->with(first, rest);
 }
 
 Stmt IRMutator::visit(const Acquire *op) {
     Expr sema = mutate(op->semaphore);
     Expr count = mutate(op->count);
     Stmt body = mutate(op->body);
-    if (sema.same_as(op->semaphore) &&
-        body.same_as(op->body) &&
-        count.same_as(op->count)) {
-        return op;
-    } else {
-        return Acquire::make(std::move(sema), std::move(count), std::move(body));
-    }
+    return op->with(sema, count, body);
 }
 
 Stmt IRMutator::visit(const Atomic *op) {
     Stmt body = mutate(op->body);
+    return op->with(body);
+}
+
+Stmt IRMutator::visit(const StreamingStore *op) {
+    Stmt body = mutate(op->body);
     if (body.same_as(op->body)) {
         return op;
     } else {
-        return Atomic::make(op->producer_name,
-                            op->mutex_name,
-                            std::move(body));
+        return StreamingStore::make(op->producer_name, std::move(body));
+    }
+}
+
+Stmt IRMutator::visit(const StreamingLoads *op) {
+    Stmt body = mutate(op->body);
+    if (body.same_as(op->body)) {
+        return op;
+    } else {
+        return StreamingLoads::make(op->names, std::move(body));
     }
 }
 
 Stmt IRMutator::visit(const HoistedStorage *op) {
     Stmt body = mutate(op->body);
-    if (body.same_as(op->body)) {
-        return op;
-    } else {
-        return HoistedStorage::make(op->name,
-                                    std::move(body));
-    }
+    return op->with(body);
 }
 
 Stmt IRGraphMutator::mutate(const Stmt &s) {

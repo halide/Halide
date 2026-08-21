@@ -1,7 +1,11 @@
 #include "Simplify_Internal.h"
 
+#include <algorithm>
+#include <numeric>
+
 #include "ExprUsesVar.h"
 #include "IRMutator.h"
+#include "MultiRamp.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -119,12 +123,10 @@ Stmt Simplify::visit(const IfThenElse *op) {
                else_pc &&
                then_pc->name == else_pc->name &&
                then_pc->is_producer == else_pc->is_producer) {
-        return ProducerConsumer::make(then_pc->name, then_pc->is_producer,
-                                      mutate(IfThenElse::make(condition, then_pc->body, else_pc->body)));
+        return then_pc->with(mutate(IfThenElse::make(condition, then_pc->body, else_pc->body)));
     } else if (then_pc &&
                is_no_op(else_case)) {
-        return ProducerConsumer::make(then_pc->name, then_pc->is_producer,
-                                      mutate(IfThenElse::make(condition, then_pc->body)));
+        return then_pc->with(mutate(IfThenElse::make(condition, then_pc->body)));
     } else if (then_block &&
                else_block &&
                equal(then_block->first, else_block->first)) {
@@ -292,13 +294,13 @@ Stmt Simplify::visit(const For *op) {
                !stmt_uses_var(new_body, op->name) &&
                !is_const_zero(new_min) &&
                is_const(shifted_max = mutate((new_max - new_min), nullptr))) {
-        return For::make(op->name, make_zero(Int(32)), shifted_max, op->for_type, op->partition_policy, op->device_api, new_body);
+        return op->with(make_zero(Int(32)), shifted_max, new_body);
     } else if (op->min.same_as(new_min) &&
                op->max.same_as(new_max) &&
                op->body.same_as(new_body)) {
         return op;
     } else {
-        return For::make(op->name, new_min, new_max, op->for_type, op->partition_policy, op->device_api, new_body);
+        return op->with(new_min, new_max, new_body);
     }
 }
 
@@ -313,7 +315,7 @@ Stmt Simplify::visit(const Provide *op) {
     if (!(changed_args || changed_values) && new_predicate.same_as(op->predicate)) {
         return op;
     } else {
-        return Provide::make(op->name, new_values, new_args, new_predicate);
+        return op->with(new_values, new_args, new_predicate);
     }
 }
 
@@ -342,12 +344,14 @@ Stmt Simplify::visit(const Store *op) {
     }
 
     ExprInfo base_info;
-    if (const Ramp *r = index.as<Ramp>()) {
-        mutate(r->base, &base_info);
+    const Ramp *r_index = index.as<Ramp>();
+    if (r_index) {
+        mutate(r_index->base, &base_info);
     }
     base_info.alignment = ModulusRemainder::intersect(base_info.alignment, index_info.alignment);
 
     const Load *load = value.as<Load>();
+    const Shuffle *shuf = index.as<Shuffle>();
     const Broadcast *scalar_pred = predicate.as<Broadcast>();
     if (scalar_pred && !scalar_pred->value.type().is_scalar()) {
         // Nested vectorization
@@ -355,20 +359,67 @@ Stmt Simplify::visit(const Store *op) {
     }
 
     ModulusRemainder align = ModulusRemainder::intersect(op->alignment, base_info.alignment);
+    int A;
 
     if (is_const_zero(predicate)) {
         // Predicate is always false
         return Evaluate::make(0);
     } else if (scalar_pred && !is_const_one(scalar_pred->value)) {
         return IfThenElse::make(scalar_pred->value,
-                                Store::make(op->name, value, index, op->param, const_true(value.type().lanes(), nullptr), align));
+                                op->with(value, index, const_true(value.type().lanes(), nullptr), align));
     } else if (is_undef(value) || (load && load->name == op->name && equal(load->index, index))) {
         // foo[x] = foo[x] or foo[x] = undef is a no-op
         return Evaluate::make(0);
-    } else if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index) && align == op->alignment) {
+    } else if (shuf && shuf->is_concat()) {
+        // Break a store of a concat of vector indices into separate stores. A
+        // concat index will result in a general scatter at codegen time. We
+        // should just break it up here, where there is a hope that the
+        // individual elements might be simplifiable to dense ramps.
+        std::string var_name = unique_name('t');
+        Expr var = Variable::make(value.type(), var_name);
+        std::vector<Stmt> stores;
+        int lanes = 0;
+        for (const Expr &idx : shuf->vectors) {
+            stores.push_back(op->with(Shuffle::make_slice(var, lanes, 1, idx.type().lanes()), idx, Shuffle::make_slice(predicate, lanes, 1, idx.type().lanes()), ModulusRemainder{}));
+            lanes += idx.type().lanes();
+        }
+        Stmt s = Block::make(stores);
+        s = LetStmt::make(var_name, value, s);
+        return mutate(s);
+    } else if (MultiRamp mr;
+               index.type().is_vector() &&
+               // Don't do expensive analysis in the common case of a load of a ramp of scalars.
+               !(r_index && r_index->base.type().is_scalar()) &&
+               // It's a multi-dimensional multiramp
+               is_multiramp(index, Scope<Expr>::empty_scope(), &mr) &&
+               mr.dimensions() > 1 &&
+               // The innermost stride isn't already one
+               !is_const_one(mr.strides[0]) &&
+               // We can successfully rotate a stride one dimension innermost
+               (A = mr.rotate_stride_one_innermost()) > 0) {
+
+        // Rotating the stride one dimension innermost in the index made the
+        // resulting store dense. Now permute the value and predicate to match
+        // the new lane order using a single make_transpose. Later in lowering,
+        // after flattening the nested ramps, this turns into a concat of dense
+        // ramps and hits the case above.
+
+        Expr permuted_value = Shuffle::make_transpose(value, A);
+        Expr permuted_predicate;
+        const Broadcast *b_pred = predicate.as<Broadcast>();
+        if (b_pred && b_pred->value.type().is_scalar()) {
+            permuted_predicate = predicate;
+        } else {
+            permuted_predicate = Shuffle::make_transpose(predicate, A);
+        }
+        return mutate(op->with(permuted_value, mr.to_expr(), permuted_predicate, align));
+    } else if (predicate.same_as(op->predicate) &&
+               value.same_as(op->value) &&
+               index.same_as(op->index) &&
+               align == op->alignment) {
         return op;
     } else {
-        return Store::make(op->name, value, index, op->param, predicate, align);
+        return op->with(value, index, predicate, align);
     }
 }
 
@@ -420,21 +471,14 @@ Stmt Simplify::visit(const Evaluate *op) {
 
     // Rewrite Lets inside an evaluate as LetStmts outside the Evaluate.
     vector<pair<string, Expr>> lets;
-    while (const Let *let = value.as<Let>()) {
-        lets.emplace_back(let->name, let->value);
-        value = let->body;
-    }
+    value = peel_lets(value, &lets);
 
     if (value.same_as(op->value)) {
         internal_assert(lets.empty());
         return op;
     } else {
         // Rewrap the lets outside the evaluate node
-        Stmt stmt = Evaluate::make(value);
-        for (const auto &[var, value] : reverse_view(lets)) {
-            stmt = LetStmt::make(var, value, stmt);
-        }
-        return stmt;
+        return rewrap_all_lets(Evaluate::make(value), lets);
     }
 }
 
@@ -446,7 +490,7 @@ Stmt Simplify::visit(const ProducerConsumer *op) {
     } else if (body.same_as(op->body)) {
         return op;
     } else {
-        return ProducerConsumer::make(op->name, op->is_producer, body);
+        return op->with(body);
     }
 }
 
@@ -634,8 +678,7 @@ Stmt Simplify::visit(const Realize *op) {
         condition.same_as(op->condition)) {
         return op;
     }
-    return Realize::make(op->name, op->types, op->memory_type, new_bounds,
-                         std::move(condition), std::move(body));
+    return op->with(new_bounds, condition, body);
 }
 
 Stmt Simplify::visit(const Prefetch *op) {
@@ -655,7 +698,7 @@ Stmt Simplify::visit(const Prefetch *op) {
         condition.same_as(op->condition)) {
         return op;
     } else {
-        return Prefetch::make(op->name, op->types, new_bounds, op->prefetch, std::move(condition), std::move(body));
+        return op->with(new_bounds, condition, body);
     }
 }
 
@@ -698,19 +741,35 @@ Stmt Simplify::visit(const Atomic *op) {
     } else if (body.same_as(op->body)) {
         return op;
     } else {
-        return Atomic::make(op->producer_name,
-                            op->mutex_name,
-                            std::move(body));
+        return op->with(body);
+    }
+}
+
+Stmt Simplify::visit(const StreamingStore *op) {
+    Stmt body = mutate(op->body);
+    if (is_no_op(body)) {
+        return Evaluate::make(0);
+    } else if (body.same_as(op->body)) {
+        return op;
+    } else {
+        return StreamingStore::make(op->producer_name, std::move(body));
+    }
+}
+
+Stmt Simplify::visit(const StreamingLoads *op) {
+    Stmt body = mutate(op->body);
+    if (is_no_op(body)) {
+        return Evaluate::make(0);
+    } else if (body.same_as(op->body)) {
+        return op;
+    } else {
+        return StreamingLoads::make(op->names, std::move(body));
     }
 }
 
 Stmt Simplify::visit(const HoistedStorage *op) {
     Stmt body = mutate(op->body);
-    if (body.same_as(op->body)) {
-        return op;
-    } else {
-        return HoistedStorage::make(op->name, body);
-    }
+    return op->with(body);
 }
 
 }  // namespace Internal

@@ -19,18 +19,7 @@ When contributing new CMake code to Halide, keep in mind that the minimum
 version is 3.28. Therefore, it is not only possible, but _required_, to use
 modern CMake best practices.
 
-<!-- TOC -->
-
-- [Contributing CMake code to Halide](#contributing-cmake-code-to-halide)
-- [General guidelines and best practices](#general-guidelines-and-best-practices)
-  - [Prohibited commands list](#prohibited-commands-list)
-  - [Prohibited variables list](#prohibited-variables-list)
-- [Adding tests](#adding-tests)
-- [Adding apps](#adding-apps)
-
-<!-- TOC -->
-
-# General guidelines and best practices
+## General guidelines and best practices
 
 The following are some common mistakes that lead to subtly broken builds.
 
@@ -67,7 +56,84 @@ The following are some common mistakes that lead to subtly broken builds.
   `if (${varA} STREQUAL ${varB})` since that will fail (in the best case) if
   either variable's value contains a semicolon (due to argument expansion).
 
-## Prohibited commands list
+### Prohibited modules list
+
+All deprecated, legacy, and "miscellaneous" (internal) modules are prohibited.
+The list of these may be found in the upstream documentation:
+https://cmake.org/cmake/help/latest/manual/cmake-modules.7.html#deprecated-modules
+
+#### FetchContent
+
+At the moment, only one supported module is prohibited: `FetchContent`. There
+are many reasons to avoid its use:
+
+01. It brings third-party CMake code into the build, which can cause all sorts
+    of issues. In the common case, third-party projects hard-code incompatible
+    build settings, which are tricky to work around in CMake. In the worst case,
+    they can set cache variables or directory properties that break the
+    including project's build. Worse still, those cache variables persist in
+    `CMakeCache.txt` even after the dependency is removed or replaced, so the
+    only reliable fix is a clean reconfigure. Because configuration is expected
+    to be idempotent, these failures can be difficult to diagnose.
+02. It is a poor fit for cross-compilation scenarios that require separate host
+    and target artifacts. FetchContent inlines the dependency's project into the
+    including build, so it is configured with the same toolchain as the rest of
+    that build. For instance, a project may need both the flatbuffers compiler
+    for the host system and the flatbuffers library for the target system. This
+    scenario is not supported by FetchContent's population model.
+03. It performs network access at configure time. This makes air-gapped and
+    offline builds awkward. `FETCHCONTENT_FULLY_DISCONNECTED=ON` only works
+    after a successful first configure and adds latency to every fresh
+    configure. Source pinning is also weak: only commit SHAs are truly
+    immutable, branch and tag refs can be moved server-side, and `URL_HASH` is
+    opt-in. Package managers like vcpkg require hash-pinned archives by default
+    and produce a baseline that can be locked.
+04. It does not maintain a persistent source or binary cache outside the build
+    tree. Populated sources and build products live under the build directory by
+    default, so deleting the build directory also deletes them. A fresh build
+    can therefore require another download and rebuild of dependencies, rather
+    than just rebuilding the top-level project. This also couples dependency
+    iteration to the parent project: tweaking a dependency's options forces a
+    parent reconfigure, and the dependency cannot be built or tested in
+    isolation.
+05. The above issues exacerbate diamond dependency problems. Even if a
+    consistent version happens to be chosen, different intermediate dependencies
+    along each branch might impose incompatible build settings. For instance,
+    one project might try to enable an optional feature while another project
+    disables it.
+06. Applying local fixes to dependencies is awkward. `FetchContent_Declare`'s
+    `PATCH_COMMAND` runs an arbitrary shell snippet that is hard to review,
+    version, or attribute. vcpkg ports keep patches as versioned `.patch` files
+    alongside the portfile, so they appear in code review and survive upstream
+    version bumps cleanly.
+07. It pollutes the cache and target environment, even when steps are taken to
+    exclude test and utility targets. This clutters both graphical IDE
+    interfaces and the diagnostic output of build tools like Ninja (e.g. its
+    dependency graph and build profiler).
+08. Targets created by FetchContent are considered _first-party_ targets,
+    meaning that special care must be taken when writing installation and
+    packaging rules. This complexity compounds when simultaneously supporting
+    other dependency resolution mechanisms that create third-party (i.e.
+    `IMPORTED`) targets.
+09. It produces no provenance, license, or SBOM metadata. Package managers like
+    vcpkg and Conan emit machine-readable manifests of versions, licenses, and
+    source hashes that compliance tooling can consume. FetchContent emits
+    nothing, so every audit becomes a manual exercise.
+10. FetchContent requests can be intercepted by a Dependency Provider which can
+    only be chosen by the top-level project. That means code that appears to
+    vendor a specific source tree can instead be redirected to some other
+    dependency resolution mechanism, such as a package manager. This makes the
+    resulting targets and build settings less predictable, and it compounds the
+    first-party versus imported-target packaging issues described above.
+
+After broader approval, third-party dependencies must be consumed with
+`find_package`. This also lets packagers and distributors substitute a system or
+pre-built copy, rather than forcing every downstream to rebuild dependencies
+from source. We use vcpkg in CI to manage our dependencies. If vcpkg lacks a
+port, you must write a custom port in `cmake/vcpkg-ports` (for the main Halide
+build) or `apps/vcpkg/ports` (for the apps).
+
+### Prohibited commands list
 
 As mentioned above, using directory properties is brittle, and they are
 therefore _not allowed_. The following functions may not appear in any new CMake
@@ -125,30 +191,31 @@ If common properties need to be grouped together, use an INTERFACE target
 
 There are also several functions that are disallowed for other reasons:
 
-| Command                         | Reason                                                                            | Alternative                                                                    |
-| ------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `aux_source_directory`          | Interacts poorly with incremental builds and Git                                  | List source files explicitly                                                   |
-| `build_command`                 | CTest internal function                                                           | Use CTest build-and-test mode via [`CMAKE_CTEST_COMMAND`][cmake_ctest_command] |
-| `cmake_host_system_information` | Usually misleading information.                                                   | Inspect [toolchain][cmake-toolchains] variables and use generator expressions. |
-| `cmake_policy(... OLD)`         | OLD policies are deprecated by definition.                                        | Instead, fix the code to work with the new policy.                             |
-| `create_test_sourcelist`        | We use our own unit testing solution                                              | See the [adding tests](#adding-tests) section.                                 |
-| `define_property`               | Adds unnecessary complexity                                                       | Use a cache variable. Exceptions under special circumstances.                  |
-| `enable_language`               | Halide is C/C++ only                                                              | [`FindCUDAToolkit`][findcudatoolkit], appropriately guarded.                   |
-| `file(GLOB ...)`                | Interacts poorly with incremental builds and Git                                  | List source files explicitly. Allowed if not globbing for source files.        |
-| `fltk_wrap_ui`                  | Halide does not use FLTK                                                          | None                                                                           |
-| `include_external_msproject`    | Halide must remain portable                                                       | Write a CMake package config file or find module.                              |
-| `include_guard`                 | Use of recursive inclusion is not allowed                                         | Write (recursive) functions.                                                   |
-| `include_regular_expression`    | Changes default dependency checking behavior                                      | None                                                                           |
-| `load_cache`                    | Superseded by [`FetchContent`][fetchcontent]/[`ExternalProject`][externalproject] | Write a vcpkg port or present a case for an exception.                         |
-| `macro`                         | CMake macros are not hygienic and are therefore error-prone                       | Use functions instead.                                                         |
-| `site_name`                     | Privacy: do not want leak host name information                                   | Provide a cache variable, generate a unique name.                              |
-| `variable_watch`                | Debugging helper                                                                  | None. Not needed in production.                                                |
+| Command                         | Reason                                                      | Alternative                                                                                                                                                                   |
+| ------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `aux_source_directory`          | Interacts poorly with incremental builds and Git            | List source files explicitly                                                                                                                                                  |
+| `build_command`                 | CTest internal function                                     | Use CTest build-and-test mode via [`CMAKE_CTEST_COMMAND`][cmake_ctest_command]                                                                                                |
+| `cmake_host_system_information` | Usually misleading information.                             | Inspect [toolchain][cmake-toolchains] variables and use generator expressions.                                                                                                |
+| `cmake_policy(... OLD)`         | OLD policies are deprecated by definition.                  | Instead, fix the code to work with the new policy.                                                                                                                            |
+| `configure_file(... COPYONLY)`  | Forces a reconfigure whenever the copied file changes       | `file(COPY_FILE ...)` (one-shot, e.g. install scripts) or `add_custom_command` + `copy_if_different` (build-time); or reference the source path directly if no copy is needed |
+| `create_test_sourcelist`        | We use our own unit testing solution                        | See the [adding tests](#adding-tests) section.                                                                                                                                |
+| `define_property`               | Adds unnecessary complexity                                 | Use a cache variable. Exceptions under special circumstances.                                                                                                                 |
+| `enable_language`               | Halide is C/C++ only                                        | [`FindCUDAToolkit`][findcudatoolkit], appropriately guarded.                                                                                                                  |
+| `file(GLOB ...)`                | Interacts poorly with incremental builds and Git            | List source files explicitly. Allowed if not globbing for source files.                                                                                                       |
+| `fltk_wrap_ui`                  | Halide does not use FLTK                                    | None                                                                                                                                                                          |
+| `include_external_msproject`    | Halide must remain portable                                 | Write a CMake package config file or find module.                                                                                                                             |
+| `include_guard`                 | Use of recursive inclusion is not allowed                   | Write (recursive) functions.                                                                                                                                                  |
+| `include_regular_expression`    | Changes default dependency checking behavior                | None                                                                                                                                                                          |
+| `load_cache`                    | Superseded by [`ExternalProject`][externalproject]          | Write a vcpkg port or present a case for an exception.                                                                                                                        |
+| `macro`                         | CMake macros are not hygienic and are therefore error-prone | Use functions instead.                                                                                                                                                        |
+| `site_name`                     | Privacy: do not want leak host name information             | Provide a cache variable, generate a unique name.                                                                                                                             |
+| `variable_watch`                | Debugging helper                                            | None. Not needed in production.                                                                                                                                               |
 
-Do not introduce any dependencies via [`find_package`][find_package] without
-broader approval. Importantly, never introduce a use of `FetchContent`. Add
-dependencies to `vcpkg.json` or create a custom port.
+Do not introduce new dependencies without broader approval. Once approved, add
+dependencies to `vcpkg.json` or create a custom port, and consume them with
+[`find_package`][find_package] rather than `FetchContent`.
 
-## Prohibited variables list
+### Prohibited variables list
 
 Any variables that are specific to languages that are not enabled should, of
 course, be avoided. But of greater concern are variables that are easy to misuse
@@ -190,7 +257,7 @@ their use must be motivated:
 
 Any use of these functions or variables will block a PR.
 
-# Adding tests
+## Adding tests
 
 When adding a file to any of the folders under `test`, be aware that CI expects
 that every `.c` and `.cpp` appears in the `CMakeLists.txt` file _on its own
@@ -201,7 +268,7 @@ For most test types, it should be as simple as adding to the existing lists.
 Generator tests are trickier, but following the existing examples is a safe way
 to go.
 
-# Adding apps
+## Adding apps
 
 If you're contributing a new app to Halide: great! Thank you! There are a few
 guidelines you should follow when writing a new app.

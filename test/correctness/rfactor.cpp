@@ -61,6 +61,53 @@ int simple_rfactor_test() {
 }
 
 template<bool compile_module>
+int rfactor_wrapper_test() {
+    // A global wrapper on an rfactor intermediate. The reducing Func's call to
+    // the intermediate must follow the wrapper (external edge), but the
+    // intermediate's self-reference in its own update must not (following would
+    // make intm -> wrapper -> intm a cycle).
+    Func f("f"), g("g");
+    Var x("x"), y("y");
+
+    f(x, y) = x + y;
+    f.compute_root();
+
+    g(x, y) = 40;
+    RDom r(10, 20, 30, 40);
+    g(r.x, r.y) = max(g(r.x, r.y) + f(r.x, r.y), g(r.x, r.y));
+    g.reorder_storage(y, x);
+
+    Var u("u");
+    Func intm = g.update(0).rfactor(r.y, u);
+    Func intm_w = intm.in();
+    intm.compute_root();
+    intm_w.compute_root();
+
+    if (compile_module) {
+        // g calls the wrapper (not intm directly); the wrapper calls intm; and
+        // intm still self-references intm rather than the wrapper.
+        CallGraphs expected = {
+            {g.name(), {intm_w.name(), g.name()}},
+            {intm_w.name(), {intm.name()}},
+            {intm.name(), {f.name(), intm.name()}},
+            {f.name(), {}},
+        };
+        if (check_call_graphs(g, expected) != 0) {
+            return 1;
+        }
+    } else {
+        Buffer<int> im = g.realize({80, 80});
+        auto func = [](int x, int y, int z) {
+            return (10 <= x && x <= 29) && (30 <= y && y <= 69) ? std::max(40 + x + y, 40) : 40;
+        };
+        if (check_image(im, func)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+template<bool compile_module>
 int reorder_split_rfactor_test() {
     Func f("f"), g("g");
     Var x("x"), y("y");
@@ -831,6 +878,59 @@ int argmin_rfactor_test() {
     return 0;
 }
 
+int saturating_add_rfactor_test() {
+    Func f("f"), g("g"), ref("ref");
+    Var x("x"), y("y"), z("z");
+
+    f(x) = cast<uint8_t>(x);
+    f.compute_root();
+
+    Param<int> inner_extent;
+    RDom r(10, inner_extent);
+    inner_extent.set(6);
+    uint8_t max_int = 255;
+
+    g() = Tuple(cast<uint8_t>(0), cast<uint8_t>(0));
+    g() = Tuple(select(g()[0] > max_int - 3 * f(r.x), max_int, g()[0] + 3 * f(r.x)),
+                select(g()[1] > max_int - 9 * f(r.x), max_int, 9 * f(r.x) + g()[1]));
+
+    RVar rxi("rxi"), rxo("rxo");
+    g.update(0).split(r.x, rxo, rxi, 2);
+
+    Var u("u");
+    Func intm = g.update(0).rfactor(rxo, u);
+    intm.compute_root();
+    intm.update(0).vectorize(u, 2);
+
+    Realization rn = g.realize();
+    Buffer<uint8_t> im1(rn[0]);
+    Buffer<uint8_t> im2(rn[1]);
+
+    auto func1 = [](int x, int y, int z) {
+        int ret = 0;
+        for (int i = 10; i < 16; i++) {
+            ret += 3 * i;
+        }
+        return std::min(ret, 255);
+    };
+    if (check_image(im1, func1)) {
+        return 1;
+    }
+
+    auto func2 = [](int x, int y, int z) {
+        int ret = 0;
+        for (int i = 10; i < 16; i++) {
+            ret += 9 * i;
+        }
+        return std::min(ret, 255);
+    };
+    if (check_image(im2, func2)) {
+        return 1;
+    }
+
+    return 0;
+}
+
 enum class InlineReductionVariant {
     ArgMin,
     ArgMax,
@@ -1257,6 +1357,8 @@ int main(int argc, char **argv) {
         {"self assignment rfactor test", self_assignment_rfactor_test},
         {"simple rfactor test: checking call graphs...", simple_rfactor_test<true>},
         {"simple rfactor test: checking output img correctness...", simple_rfactor_test<false>},
+        {"rfactor wrapper test: checking call graphs...", rfactor_wrapper_test<true>},
+        {"rfactor wrapper test: checking output img correctness...", rfactor_wrapper_test<false>},
         {"reorder split rfactor test: checking call graphs...", reorder_split_rfactor_test<true>},
         {"reorder split rfactor test: checking output img correctness...", reorder_split_rfactor_test<false>},
         {"multiple split rfactor test: checking call graphs...", multi_split_rfactor_test<true>},
@@ -1282,6 +1384,7 @@ int main(int argc, char **argv) {
         {"check allocation bound test", check_allocation_bound_test},
         {"rfactor tile reorder test: checking output img correctness...", rfactor_tile_reorder_test},
         {"complex multiply rfactor test", complex_multiply_rfactor_test},
+        {"saturating add rfactor test", saturating_add_rfactor_test},
         {"argmin rfactor test", argmin_rfactor_test},
         {"inline reductions test (argmin)", inline_reductions_test<InlineReductionVariant::ArgMin>},
         {"inline reductions test (argmax)", inline_reductions_test<InlineReductionVariant::ArgMax>},

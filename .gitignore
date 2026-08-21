@@ -249,6 +249,14 @@ tags
 TAGS
 
 ################################################################################
+## AI tooling
+
+# Claude Code user-specific overrides
+CLAUDE.local.md
+.claude/settings.local.json
+.claude/worktrees
+
+################################################################################
 ## Halide-specific rule overrides
 
 # Allow particular extension-less files
@@ -275,4 +283,4 @@ TAGS
 
 # TODO: these should become .cmake.in
 !packaging/common/HalideConfig.cmake
-!packaging/common/HalideHelpersConfig.cmake
+!packaging/common/HalideCompilerConfig.cmake

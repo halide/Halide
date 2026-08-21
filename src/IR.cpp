@@ -10,6 +10,34 @@
 namespace Halide {
 namespace Internal {
 
+namespace {
+
+bool all_same_as(const std::vector<Expr> &a, const std::vector<Expr> &b) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < a.size(); i++) {
+        if (!a[i].same_as(b[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool all_same_as(const Region &a, const Region &b) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < a.size(); i++) {
+        if (!a[i].min.same_as(b[i].min) || !a[i].extent.same_as(b[i].extent)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+}  // namespace
+
 Expr Cast::make(Type t, Expr v) {
     internal_assert(v.defined()) << "Cast of undefined\n";
     internal_assert(t.lanes() == v.type().lanes()) << "Cast may not change vector widths: " << v << " of type " << v.type() << " cannot be cast to " << t << "\n";
@@ -247,7 +275,7 @@ Expr Select::make(Expr condition, Expr true_value, Expr false_value) {
     return node;
 }
 
-Expr Load::make(Type type, const std::string &name, Expr index, Buffer<> image, Parameter param, Expr predicate, ModulusRemainder alignment) {
+Expr Load::make(Type type, const std::string &name, Expr index, Buffer<> image, Parameter param, Expr predicate, ModulusRemainder alignment, bool is_streaming) {
     internal_assert(predicate.defined()) << "Load with undefined predicate\n";
     internal_assert(index.defined()) << "Load of undefined\n";
     internal_assert(type.lanes() == index.type().lanes()) << "Vector lanes of Load must match vector lanes of index\n";
@@ -262,7 +290,26 @@ Expr Load::make(Type type, const std::string &name, Expr index, Buffer<> image, 
     node->image = std::move(image);
     node->param = std::move(param);
     node->alignment = alignment;
+    node->is_streaming = is_streaming;
     return node;
+}
+
+Expr Load::make(Type type, const std::string &name, Expr index) {
+    // Compute the lane count before moving out of index.
+    int lanes = type.lanes();
+    return make(type, name, std::move(index), Buffer<>(), Parameter(),
+                const_true(lanes), ModulusRemainder(), false);
+}
+
+Expr Load::with(const Expr &index, const Expr &predicate, ModulusRemainder alignment) const {
+    if (index.same_as(this->index) &&
+        predicate.same_as(this->predicate) &&
+        alignment == this->alignment) {
+        return this;
+    }
+    // The element type is inherited, but the lane count comes from the index.
+    Type t = type.with_lanes(index.type().lanes());
+    return make(t, name, index, image, param, predicate, alignment, is_streaming);
 }
 
 Expr Ramp::make(Expr base, Expr stride, int lanes) {
@@ -302,6 +349,13 @@ Expr Let::make(const std::string &name, Expr value, Expr body) {
     return node;
 }
 
+Expr Let::with(const Expr &value, const Expr &body) const {
+    if (value.same_as(this->value) && body.same_as(this->body)) {
+        return this;
+    }
+    return make(name, value, body);
+}
+
 Stmt LetStmt::make(const std::string &name, Expr value, Stmt body) {
     internal_assert(value.defined()) << "Let of undefined\n";
     internal_assert(body.defined()) << "Let of undefined\n";
@@ -311,6 +365,13 @@ Stmt LetStmt::make(const std::string &name, Expr value, Stmt body) {
     node->value = std::move(value);
     node->body = std::move(body);
     return node;
+}
+
+Stmt LetStmt::with(const Expr &value, const Stmt &body) const {
+    if (value.same_as(this->value) && body.same_as(this->body)) {
+        return this;
+    }
+    return make(name, value, body);
 }
 
 Stmt AssertStmt::make(Expr condition, Expr message) {
@@ -323,6 +384,13 @@ Stmt AssertStmt::make(Expr condition, Expr message) {
     return node;
 }
 
+Stmt AssertStmt::with(const Expr &condition, const Expr &message) const {
+    if (condition.same_as(this->condition) && message.same_as(this->message)) {
+        return this;
+    }
+    return make(condition, message);
+}
+
 Stmt ProducerConsumer::make(const std::string &name, bool is_producer, Stmt body) {
     internal_assert(body.defined()) << "ProducerConsumer of undefined\n";
 
@@ -331,6 +399,13 @@ Stmt ProducerConsumer::make(const std::string &name, bool is_producer, Stmt body
     node->is_producer = is_producer;
     node->body = std::move(body);
     return node;
+}
+
+Stmt ProducerConsumer::with(const Stmt &body) const {
+    if (body.same_as(this->body)) {
+        return this;
+    }
+    return make(name, is_producer, body);
 }
 
 Stmt ProducerConsumer::make_produce(const std::string &name, Stmt body) {
@@ -363,6 +438,16 @@ Stmt For::make(const std::string &name,
     return node;
 }
 
+Stmt For::with(const Expr &min, const Expr &max, const Stmt &body) const {
+    if (min.same_as(this->min) &&
+        max.same_as(this->max) &&
+        body.same_as(this->body)) {
+        return this;
+    }
+    return make(name, min, max, for_type, partition_policy,
+                device_api, body);
+}
+
 Stmt Acquire::make(Expr semaphore, Expr count, Stmt body) {
     internal_assert(semaphore.defined()) << "Acquire with undefined semaphore\n";
     internal_assert(body.defined()) << "Acquire with undefined body\n";
@@ -374,7 +459,16 @@ Stmt Acquire::make(Expr semaphore, Expr count, Stmt body) {
     return node;
 }
 
-Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter param, Expr predicate, ModulusRemainder alignment) {
+Stmt Acquire::with(const Expr &semaphore, const Expr &count, const Stmt &body) const {
+    if (semaphore.same_as(this->semaphore) &&
+        count.same_as(this->count) &&
+        body.same_as(this->body)) {
+        return this;
+    }
+    return make(semaphore, count, body);
+}
+
+Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter param, Expr predicate, ModulusRemainder alignment, bool is_streaming) {
     internal_assert(predicate.defined()) << "Store with undefined predicate\n";
     internal_assert(value.defined()) << "Store of undefined\n";
     internal_assert(index.defined()) << "Store of undefined\n";
@@ -389,7 +483,26 @@ Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter para
     node->index = std::move(index);
     node->param = std::move(param);
     node->alignment = alignment;
+    node->is_streaming = is_streaming;
     return node;
+}
+
+Stmt Store::make(const std::string &name, Expr value, Expr index) {
+    // Compute the lane count before moving out of value.
+    int lanes = value.type().lanes();
+    return make(name, std::move(value), std::move(index), Parameter(),
+                const_true(lanes), ModulusRemainder(), false);
+}
+
+Stmt Store::with(const Expr &value, const Expr &index, const Expr &predicate, ModulusRemainder alignment) const {
+    if (value.same_as(this->value) &&
+        index.same_as(this->index) &&
+        predicate.same_as(this->predicate) &&
+        alignment == this->alignment) {
+        return this;
+    }
+    return make(name, value, index, param,
+                predicate, alignment, is_streaming);
 }
 
 Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args, const Expr &predicate) {
@@ -408,6 +521,16 @@ Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, con
     node->args = args;
     node->predicate = predicate;
     return node;
+}
+
+Stmt Provide::with(const std::vector<Expr> &values, const std::vector<Expr> &args,
+                   const Expr &predicate) const {
+    if (all_same_as(values, this->values) &&
+        all_same_as(args, this->args) &&
+        predicate.same_as(this->predicate)) {
+        return this;
+    }
+    return make(name, values, args, predicate);
 }
 
 Stmt Allocate::make(const std::string &name, Type type, MemoryType memory_type,
@@ -435,6 +558,28 @@ Stmt Allocate::make(const std::string &name, Type type, MemoryType memory_type,
     node->padding = padding;
     node->body = std::move(body);
     return node;
+}
+
+Stmt Allocate::with(const std::vector<Expr> &extents, const Expr &condition, const Stmt &body,
+                    const Expr &new_expr) const {
+    if (all_same_as(extents, this->extents) &&
+        condition.same_as(this->condition) &&
+        body.same_as(this->body) &&
+        new_expr.same_as(this->new_expr)) {
+        return this;
+    }
+    return make(name, type, memory_type, extents, condition,
+                body, new_expr, free_function, padding);
+}
+
+Stmt Allocate::with(const std::vector<Expr> &extents, const Expr &condition, const Stmt &body) const {
+    if (all_same_as(extents, this->extents) &&
+        condition.same_as(this->condition) &&
+        body.same_as(this->body)) {
+        return this;
+    }
+    return make(name, type, memory_type, extents, condition,
+                body, new_expr, free_function, padding);
 }
 
 int32_t Allocate::constant_allocation_size(const std::vector<Expr> &extents, const std::string &name) {
@@ -500,6 +645,15 @@ Stmt Realize::make(const std::string &name, const std::vector<Type> &types, Memo
     return node;
 }
 
+Stmt Realize::with(const Region &bounds, const Expr &condition, const Stmt &body) const {
+    if (all_same_as(bounds, this->bounds) &&
+        condition.same_as(this->condition) &&
+        body.same_as(this->body)) {
+        return this;
+    }
+    return make(name, types, memory_type, bounds, condition, body);
+}
+
 Stmt Prefetch::make(const std::string &name, const std::vector<Type> &types,
                     const Region &bounds,
                     const PrefetchDirective &prefetch,
@@ -525,6 +679,15 @@ Stmt Prefetch::make(const std::string &name, const std::vector<Type> &types,
     node->condition = std::move(condition);
     node->body = std::move(body);
     return node;
+}
+
+Stmt Prefetch::with(const Region &bounds, const Expr &condition, const Stmt &body) const {
+    if (all_same_as(bounds, this->bounds) &&
+        condition.same_as(this->condition) &&
+        body.same_as(this->body)) {
+        return this;
+    }
+    return make(name, types, bounds, prefetch, condition, body);
 }
 
 Stmt Block::make(Stmt first, Stmt rest) {
@@ -556,6 +719,13 @@ Stmt Block::make(const std::vector<Stmt> &stmts) {
     return result;
 }
 
+Stmt Block::with(const Stmt &first, const Stmt &rest) const {
+    if (first.same_as(this->first) && rest.same_as(this->rest)) {
+        return this;
+    }
+    return make(first, rest);
+}
+
 Stmt Fork::make(Stmt first, Stmt rest) {
     internal_assert(first.defined()) << "Fork of undefined\n";
     internal_assert(rest.defined()) << "Fork of undefined\n";
@@ -574,6 +744,13 @@ Stmt Fork::make(Stmt first, Stmt rest) {
     return node;
 }
 
+Stmt Fork::with(const Stmt &first, const Stmt &rest) const {
+    if (first.same_as(this->first) && rest.same_as(this->rest)) {
+        return this;
+    }
+    return make(first, rest);
+}
+
 Stmt IfThenElse::make(Expr condition, Stmt then_case, Stmt else_case) {
     internal_assert(condition.defined() && then_case.defined()) << "IfThenElse of undefined\n";
     // else_case may be null.
@@ -587,6 +764,15 @@ Stmt IfThenElse::make(Expr condition, Stmt then_case, Stmt else_case) {
     return node;
 }
 
+Stmt IfThenElse::with(const Expr &condition, const Stmt &then_case, const Stmt &else_case) const {
+    if (condition.same_as(this->condition) &&
+        then_case.same_as(this->then_case) &&
+        else_case.same_as(this->else_case)) {
+        return this;
+    }
+    return make(condition, then_case, else_case);
+}
+
 Stmt Evaluate::make(Expr v) {
     internal_assert(v.defined()) << "Evaluate of undefined\n";
 
@@ -595,19 +781,30 @@ Stmt Evaluate::make(Expr v) {
     return node;
 }
 
-Expr Call::make(const Function &func, const std::vector<Expr> &args, int idx) {
+Stmt Evaluate::with(const Expr &value) const {
+    if (value.same_as(this->value)) {
+        return this;
+    }
+    return make(value);
+}
+
+Expr Call::make(const Function &func, const std::vector<Expr> &args, int idx,
+                bool follow_global_wrappers) {
     internal_assert(idx >= 0 &&
                     idx < func.outputs())
         << "Value index out of range in call to halide function\n";
     internal_assert(func.has_pure_definition() || func.has_extern_definition())
         << "Call to undefined halide function\n";
+    FunctionPtr fp = func.get_contents();
+    fp.follow_global_wrappers = follow_global_wrappers;
     return make(func.output_types()[(size_t)idx], func.name(), args, Halide,
-                func.get_contents(), idx, Buffer<>(), Parameter());
+                fp, idx, Buffer<>(), Parameter());
 }
 
 namespace {
 
-const char *const intrinsic_op_names[] = {
+constexpr const char *intrinsic_op_names[] = {
+    // keep-sorted start
     "abs",
     "absd",
     "add_image_checks_marker",
@@ -623,12 +820,19 @@ const char *const intrinsic_op_names[] = {
     "concat_bits",
     "count_leading_zeros",
     "count_trailing_zeros",
+    "cuda_await_copies",
+    "cuda_bypass_registers",
     "debug_to_file",
+    "declare_allocation",
+    "declare_box_required_at_root",
     "declare_box_touched",
+    "declare_stage",
     "div_round_to_zero",
     "dynamic_shuffle",
     "extract_bits",
     "extract_mask_element",
+    "get_runtime_streaming_vscale",
+    "get_runtime_vscale",
     "get_user_context",
     "gpu_thread_barrier",
     "halving_add",
@@ -650,6 +854,7 @@ const char *const intrinsic_op_names[] = {
     "mod_round_to_zero",
     "mul_shift_right",
     "mux",
+    "offset_pointer",
     "popcount",
     "prefetch",
     "profiling_enable_instance_marker",
@@ -665,8 +870,8 @@ const char *const intrinsic_op_names[] = {
     "rounding_shift_left",
     "rounding_shift_right",
     "saturating_add",
-    "saturating_sub",
     "saturating_cast",
+    "saturating_sub",
     "scatter_gather",
     "select_mask",
     "shift_left",
@@ -676,6 +881,8 @@ const char *const intrinsic_op_names[] = {
     "skip_stages_marker",
     "sliding_window_marker",
     "sorted_avg",
+    "specialization_branch_marker",
+    "stream_store_fence",
     "strict_add",
     "strict_cast",
     "strict_div",
@@ -704,10 +911,10 @@ const char *const intrinsic_op_names[] = {
     "widening_shift_left",
     "widening_shift_right",
     "widening_sub",
-    "get_runtime_vscale",
+    // keep-sorted end
 };
 
-static_assert(sizeof(intrinsic_op_names) / sizeof(intrinsic_op_names[0]) == Call::IntrinsicOpCount,
+static_assert(std::size(intrinsic_op_names) == Call::IntrinsicOpCount,
               "intrinsic_op_names needs attention");
 
 }  // namespace
@@ -757,6 +964,13 @@ Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &arg
     node->image = std::move(image);
     node->param = std::move(param);
     return node;
+}
+
+Expr Call::with(const std::vector<Expr> &args) const {
+    if (all_same_as(args, this->args)) {
+        return this;
+    }
+    return make(type, name, args, call_type, func, value_index, image, param);
 }
 
 Expr Variable::make(Type type, const std::string &name, Buffer<> image, Parameter param, ReductionDomain reduction_domain) {
@@ -813,6 +1027,21 @@ Expr Shuffle::make_interleave(const std::vector<Expr> &vectors) {
     }
 
     return make(vectors, indices);
+}
+
+Expr Shuffle::make_transpose(Expr e, int cols) {
+    internal_assert(e.type().lanes() % cols == 0)
+        << "Transpose cols must divide the number of lanes.\n";
+    int rows = e.type().lanes() / cols;
+
+    std::vector<int> indices(e.type().lanes());
+    for (int j = 0; j < cols; j++) {
+        for (int i = 0; i < rows; i++) {
+            indices[j * rows + i] = i * cols + j;
+        }
+    }
+
+    return make({std::move(e)}, indices);
 }
 
 Expr Shuffle::make_concat(const std::vector<Expr> &vectors) {
@@ -955,6 +1184,24 @@ Stmt Atomic::make(const std::string &producer_name,
     return node;
 }
 
+Stmt StreamingStore::make(const std::string &producer_name,
+                          Stmt body) {
+    internal_assert(body.defined()) << "StreamingStore must have a body statement.\n";
+    StreamingStore *node = new StreamingStore;
+    node->producer_name = producer_name;
+    node->body = std::move(body);
+    return node;
+}
+
+Stmt StreamingLoads::make(std::optional<std::vector<std::string>> names,
+                          Stmt body) {
+    internal_assert(body.defined()) << "StreamingLoads must have a body statement.\n";
+    StreamingLoads *node = new StreamingLoads;
+    node->names = std::move(names);
+    node->body = std::move(body);
+    return node;
+}
+
 Stmt HoistedStorage::make(const std::string &name,
                           Stmt body) {
     internal_assert(body.defined()) << "HoistedStorage must have a body statement.\n";
@@ -962,6 +1209,20 @@ Stmt HoistedStorage::make(const std::string &name,
     node->name = name;
     node->body = std::move(body);
     return node;
+}
+
+Stmt Atomic::with(const Stmt &body) const {
+    if (body.same_as(this->body)) {
+        return this;
+    }
+    return make(producer_name, mutex_name, body);
+}
+
+Stmt HoistedStorage::with(const Stmt &body) const {
+    if (body.same_as(this->body)) {
+        return this;
+    }
+    return make(name, body);
 }
 
 Expr VectorReduce::make(VectorReduce::Operator op,
@@ -1010,6 +1271,33 @@ bool Shuffle::is_concat() const {
     // A concat is a ramp where the output has the same number of
     // lanes as the input.
     return indices.size() == input_lanes && is_ramp(indices);
+}
+
+bool Shuffle::is_transpose() const {
+    if (vectors.size() > 1 ||
+        (int)indices.size() != vectors[0].type().lanes() ||
+        indices.size() < 2 ||
+        indices[0] != 0 ||
+        indices[1] <= 0) {
+        return false;
+    }
+    int cols = indices[1];
+    int rows = vectors[0].type().lanes() / cols;
+    if ((int)indices.size() != rows * cols) {
+        return false;
+    }
+    for (int row = 0; row < rows; row++) {
+        for (int col = 0; col < cols; col++) {
+            if (indices[col * rows + row] != row * cols + col) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+int Shuffle::transpose_factor() const {
+    return indices[1] - indices[0];
 }
 
 bool Shuffle::is_slice() const {
@@ -1216,6 +1504,14 @@ void StmtNode<Atomic>::accept(IRVisitor *v) const {
     v->visit((const Atomic *)this);
 }
 template<>
+void StmtNode<StreamingStore>::accept(IRVisitor *v) const {
+    v->visit((const StreamingStore *)this);
+}
+template<>
+void StmtNode<StreamingLoads>::accept(IRVisitor *v) const {
+    v->visit((const StreamingLoads *)this);
+}
+template<>
 void StmtNode<HoistedStorage>::accept(IRVisitor *v) const {
     v->visit((const HoistedStorage *)this);
 }
@@ -1408,6 +1704,14 @@ Stmt StmtNode<Fork>::mutate_stmt(IRMutator *v) const {
 template<>
 Stmt StmtNode<Atomic>::mutate_stmt(IRMutator *v) const {
     return v->visit((const Atomic *)this);
+}
+template<>
+Stmt StmtNode<StreamingStore>::mutate_stmt(IRMutator *v) const {
+    return v->visit((const StreamingStore *)this);
+}
+template<>
+Stmt StmtNode<StreamingLoads>::mutate_stmt(IRMutator *v) const {
+    return v->visit((const StreamingLoads *)this);
 }
 template<>
 Stmt StmtNode<HoistedStorage>::mutate_stmt(IRMutator *v) const {

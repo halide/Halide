@@ -35,6 +35,7 @@ Func ImageParam::create_func() const {
     }
     Func f(param.type(), param.dimensions(), name() + "_im");
     f(args) = Internal::Call::make(param, args_expr);
+    f.function().set_profiler_display_name(name() + " (input)");
     return f;
 }
 

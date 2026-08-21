@@ -28,7 +28,9 @@ function(target_export_script TARGET)
         # which by rights should work, and in fact Xcode prints a link line
         # that DOES work, but the aforementioned bug breaks the check. Going
         # through the "official" Xcode attribute is a reasonable workaround.
-        set_property(TARGET "${TARGET}" PROPERTY XCODE_ATTRIBUTE_EXPORTED_SYMBOLS_FILE "${ARG_APPLE_LD}")
+        set_property(TARGET "${TARGET}"
+            PROPERTY XCODE_ATTRIBUTE_EXPORTED_SYMBOLS_FILE "${ARG_APPLE_LD}"
+        )
         return()
     endif ()
 
@@ -43,7 +45,9 @@ function(target_export_script TARGET)
 
     ## The Apple linker expects a different flag.
     file(CONFIGURE OUTPUT _target_export_script.apple.ldscript CONTENT [[]])
-    set(EXPORTED_SYMBOLS_FLAG "LINKER:-exported_symbols_list,${CMAKE_CURRENT_BINARY_DIR}/_target_export_script.apple.ldscript")
+    set(EXPORTED_SYMBOLS_FLAG
+        "LINKER:-exported_symbols_list,${CMAKE_CURRENT_BINARY_DIR}/_target_export_script.apple.ldscript"
+    )
     check_linker_flag(CXX "${EXPORTED_SYMBOLS_FLAG}" LINKER_HAS_FLAG_EXPORTED_SYMBOLS_LIST)
     if (LINKER_HAS_FLAG_EXPORTED_SYMBOLS_LIST)
         target_link_options(${TARGET} PRIVATE "LINKER:-exported_symbols_list,${ARG_APPLE_LD}")
