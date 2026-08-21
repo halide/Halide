@@ -1,5 +1,5 @@
 [build-system]
-requires = ["scikit-build-core~=0.11.0", "setuptools-scm>=8.3.1"]
+requires = ["scikit-build-core~=1.0.3", "setuptools-scm>=8.3.1"]
 build-backend = "scikit_build_core.build"
 
 [project]
@@ -32,6 +32,9 @@ Documentation = "https://halide-lang.org/docs"
 Issues = "https://github.com/halide/Halide/issues"
 Repository = "https://github.com/halide/Halide.git"
 
+[[tool.dynamic-metadata]]
+provider = "scikit_build_core.metadata.setuptools_scm"
+
 [tool.scikit-build]
 minimum-version = "build-system.requires"
 cmake.version = ">=3.28"
@@ -41,7 +44,6 @@ wheel.packages = ["src/halide_bin"]
 wheel.install-dir = "halide_bin/data"
 # No Python extension modules in this package -- python-version-agnostic tag.
 wheel.py-api = "py3"
-metadata.version.provider = "scikit_build_core.metadata.setuptools_scm"
 
 [tool.scikit-build.cmake.define]
 CMAKE_DISABLE_FIND_PACKAGE_JPEG = true

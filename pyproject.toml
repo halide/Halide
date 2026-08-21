@@ -1,7 +1,7 @@
 [build-system]
 requires = [
   "pybind11>=2.11.1",
-  "scikit-build-core~=0.11.0",
+  "scikit-build-core>=1.0.3",
   "setuptools-scm>=8.3.1",
 ]
 build-backend = "scikit_build_core.build"
@@ -62,7 +62,7 @@ classifiers = [
 dev = [
   # Matches build-system.requires
   "pybind11>=2.11.1",
-  "scikit-build-core~=0.11.0",
+  "scikit-build-core>=1.0.3",
   "setuptools-scm>=8.3.1",
 ]
 apps = [
@@ -110,33 +110,39 @@ Documentation = "https://github.com/halide/Halide/blob/main/doc/Python.md"
 Issues = "https://github.com/halide/Halide/issues"
 Repository = "https://github.com/halide/Halide.git"
 
+[[tool.dynamic-metadata]]
+provider = "scikit_build_core.metadata.setuptools_scm"
+
+[[tool.dynamic-metadata]]
+provider = { path = "packaging/pip", module = "_dynamic_metadata" }
+
 [tool.scikit-build]
-# Required for in-tree dynamic-metadata plugins (packaging/pip/_dynamic_metadata.py).
-experimental = true
+minimum-version = "build-system.requires"
 cmake.version = ">=3.28"
 ninja.version = ">=1.11,!=1.13.0"
 wheel.install-dir = "halide"
-sdist.include = ["dependencies/"]
-sdist.exclude = [
-  ".github/",
-  "apps/",
-  "test/",
-  "tutorial/",
-  "dependencies/update-*.sh",
+sdist.inclusion-mode = "explicit"
+sdist.include = [
+  "cmake",
+  "dependencies",
+  "packaging",
+  "python_bindings",
+  "src",
+  "tools",
+  ".git_archival.txt",
+  "CMakeLists.txt",
+  "LICENSE.txt",
+  "pyproject.toml",
+  "README.md",
+  "uv.lock",
+  "vcpkg.json",
+  "vcpkg-configuration.json",
 ]
-
-[tool.scikit-build.metadata.version]
-provider = "_dynamic_metadata"
-provider-path = "packaging/pip"
-
-[tool.scikit-build.metadata.dependencies]
-provider = "_dynamic_metadata"
-provider-path = "packaging/pip"
+sdist.exclude = ["dependencies/update-*.sh"]
 
 [tool.scikit-build.cmake.define]
 CMAKE_DISABLE_FIND_PACKAGE_JPEG = true
 CMAKE_DISABLE_FIND_PACKAGE_PNG = true
-FETCHCONTENT_FULLY_DISCONNECTED = true
 Halide_ENABLE_EXCEPTIONS = true
 Halide_ENABLE_RTTI = true
 Halide_INSTALL_PYTHONDIR = "."
@@ -144,6 +150,7 @@ Halide_WASM_BACKEND = "wabt"
 WITH_PYTHON_BINDINGS = true
 WITH_TESTS = false
 WITH_TUTORIALS = false
+WITH_UTILS = false
 
 ##
 # Don't version libHalide.so/dylib -- wheels are zip files that do
