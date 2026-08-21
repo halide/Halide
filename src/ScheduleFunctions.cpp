@@ -2458,8 +2458,7 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
     // such a loop between where it is stored and where it is computed is not a
     // race - each thread gets its own copy, which is what the memory type
     // means. Whether each thread then keeps to its own copy is a different
-    // question, and check_gpu_cross_talk answers it later in lowering, once
-    // storage folding has had its say.
+    // question, and check_gpu_cross_talk answers it later in lowering.
     const bool thread_private = f.schedule().memory_type() == MemoryType::Register;
     const auto races = [&](int i) {
         return sites[i].is_parallel && !(thread_private && sites[i].is_gpu_thread);
