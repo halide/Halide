@@ -110,7 +110,12 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
             int first_lane_in_src = op->indices[0];
             int slice_stride = op->slice_stride();
             if (slice_stride >= 1) {
-                return mutate(Ramp::make(ramp->base + first_lane_in_src * ramp->stride,
+                Expr new_base = ramp->base + first_lane_in_src * ramp->stride;
+                if (op->indices.size() == 1) {
+                    // A single-lane "ramp" is just its base value.
+                    return mutate(new_base, nullptr);
+                }
+                return mutate(Ramp::make(new_base,
                                          ramp->stride * slice_stride,
                                          op->indices.size()),
                               nullptr);
