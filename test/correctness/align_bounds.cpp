@@ -258,7 +258,7 @@ int main(int argc, char **argv) {
         bool caught_error = false;
         try {
             f.realize(result);
-        } catch (const Halide::RuntimeError &e) {
+        } catch (const Halide::RuntimeError &) {
             caught_error = true;
         }
 
