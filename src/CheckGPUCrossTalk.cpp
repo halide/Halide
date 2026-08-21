@@ -254,20 +254,42 @@ class CheckCrossTalk : public IRVisitor {
         // load another thread's. It is the region that has to be asked, not
         // the index: a loop of a thread's own is written the same way by every
         // thread, and it is its bounds that say which part is whose.
+        // A dimension nothing could be bounded in stays in, so that failing
+        // to work out where an access reaches is still an error rather than a
+        // dimension that gets to sit the comparison out.
         vector<bool> separates_threads(finder.accesses[0].args.size(), false);
         for (const auto &region : regions) {
             for (size_t i = 0; i < region.size(); i++) {
+                if (!region[i].has_lower_bound() || !region[i].has_upper_bound()) {
+                    separates_threads[i] = true;
+                    continue;
+                }
                 for (int t = 0; t < 3; t++) {
                     const string &n = gpu_thread_name(t);
                     separates_threads[i] =
                         separates_threads[i] ||
-                        (region[i].has_lower_bound() &&
-                         stmt_or_expr_uses_var(region[i].min, n)) ||
-                        (region[i].has_upper_bound() &&
-                         stmt_or_expr_uses_var(region[i].max, n));
+                        stmt_or_expr_uses_var(region[i].min, n) ||
+                        stmt_or_expr_uses_var(region[i].max, n);
                 }
             }
         }
+
+        // Does store s reach every site load l does, along the dimensions
+        // that tell one thread's part from another's?
+        const auto covers = [&](size_t s, size_t l) {
+            for (size_t i = 0; i < regions[l].size(); i++) {
+                if (!separates_threads[i]) {
+                    continue;
+                }
+                const Interval &want = regions[l][i], &have = regions[s][i];
+                if (!(want.has_lower_bound() && want.has_upper_bound() &&
+                      have.has_lower_bound() && have.has_upper_bound() &&
+                      can_prove(have.min <= want.min && want.max <= have.max))) {
+                    return false;
+                }
+            }
+            return true;
+        };
 
         for (size_t l = 0; l < finder.accesses.size(); l++) {
             const Access &load = finder.accesses[l];
@@ -305,16 +327,36 @@ class CheckCrossTalk : public IRVisitor {
                         continue;
                     }
                 }
-                ok = true;
-                for (size_t i = 0; i < regions[l].size() && ok; i++) {
-                    if (!separates_threads[i]) {
-                        continue;
-                    }
-                    const Interval &want = regions[l][i], &have = regions[s][i];
-                    ok = (want.has_lower_bound() && want.has_upper_bound() &&
-                          have.has_lower_bound() && have.has_upper_bound() &&
-                          can_prove(have.min <= want.min && want.max <= have.max));
+                ok = covers(s, l);
+            }
+            // Finding one store of this thread's that covers the load is
+            // not enough. What a thread reads is what was written to the site
+            // last, so any store that might land on the same site has to be
+            // this thread's too. A store that cannot reach the site is no
+            // one's business, which is what the overlap test asks.
+            //
+            // Two ways a store that reaches it belongs to someone else: it
+            // runs in fewer loops over threads than the load, so one thread
+            // ran it on everyone's behalf; or it reaches the site from a
+            // different thread, which is what failing to cover the load along
+            // the dimensions that separate threads means.
+            for (size_t s = 0; s < finder.accesses.size() && ok; s++) {
+                const Access &store = finder.accesses[s];
+                if (!store.is_store) {
+                    continue;
                 }
+                if (store.thread_depth >= load.thread_depth && covers(s, l)) {
+                    continue;
+                }
+                bool disjoint = false;
+                for (size_t i = 0; i < regions[l].size() && !disjoint; i++) {
+                    const Interval &a = regions[l][i], &b = regions[s][i];
+                    disjoint = ((a.has_upper_bound() && b.has_lower_bound() &&
+                                 can_prove(a.max < b.min)) ||
+                                (b.has_upper_bound() && a.has_lower_bound() &&
+                                 can_prove(b.max < a.min)));
+                }
+                ok = disjoint;
             }
             if (!ok) {
                 report(op, finder.accesses, load);

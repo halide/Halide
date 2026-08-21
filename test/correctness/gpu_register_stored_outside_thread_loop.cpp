@@ -110,15 +110,69 @@ void reads_another_threads_copy() {
     g.compile_jit(compile_only_target());
 }
 
+// Finding one store of this thread's that covers a load is not enough: what a
+// thread reads is whatever was written to the site last. Here the c == 1 slice
+// is written by a stage with no loops over threads of its own, so one thread
+// writes it on everyone's behalf, while the c == 0 slice is written by all of
+// them. c is a constant in every access, so it cannot be what tells one
+// thread's part from another's, and the load of c == 1 must not be excused by
+// the store to c == 0.
+void one_thread_stands_in_for_all_in_a_slice() {
+    Func f("f"), g("g");
+    Var x("x"), y("y"), c("c"), xi("xi"), yi("yi");
+
+    f(x, y, c) = undef<int>();
+    f(x, y, 0) = x + y * 1000;
+    f(x, y, 1) = x + y * 1000 + 7;
+    g(x, y) = f(x, y, 0) + f(x, y, 1);
+
+    g.gpu_tile(x, y, x, y, xi, yi, 16, 16);
+    f.compute_at(g, x).store_in(MemoryType::Register).bound(c, 0, 2);
+    f.update(0).gpu_threads(x, y);
+    // f.update(1) is left serial, so one thread runs all of it.
+
+    g.compile_jit(compile_only_target());
+}
+
+// The same, with the stage that disagrees running in as many loops over
+// threads as the load but mapping them the other way round, so the site a
+// thread reads in the c == 1 slice was written by the thread with its
+// coordinates transposed.
+void stages_disagree_within_a_slice() {
+    Func f("f"), g("g");
+    Var x("x"), y("y"), c("c"), xi("xi"), yi("yi");
+
+    f(x, y, c) = undef<int>();
+    f(x, y, 0) = x + y * 1000;
+    f(x, y, 1) = x + y * 1000 + 7;
+    g(x, y) = f(x, y, 0) + f(x, y, 1);
+
+    g.gpu_tile(x, y, x, y, xi, yi, 16, 16);
+    f.compute_at(g, x).store_in(MemoryType::Register).bound(c, 0, 2);
+    f.update(0).gpu_threads(x, y);
+    f.update(1).reorder(y, x).gpu_threads(y, x);
+
+    g.compile_jit(compile_only_target());
+}
+
 #endif  // HALIDE_WITH_EXCEPTIONS
 
 }  // namespace
 
 int main(int argc, char **argv) {
 #if HALIDE_WITH_EXCEPTIONS
-    if (!expect_user_error("reads_another_threads_copy",
-                           "keeps to its own part",
-                           reads_another_threads_copy)) {
+    int failures = 0;
+    failures += !expect_user_error("reads_another_threads_copy",
+                                   "keeps to its own part",
+                                   reads_another_threads_copy);
+    failures += !expect_user_error("one_thread_stands_in_for_all_in_a_slice",
+                                   "keeps to its own part",
+                                   one_thread_stands_in_for_all_in_a_slice);
+    failures += !expect_user_error("stages_disagree_within_a_slice",
+                                   "keeps to its own part",
+                                   stages_disagree_within_a_slice);
+    if (failures != 0) {
+        printf("%d schedule(s) did not produce the expected user error\n", failures);
         return 1;
     }
 #else
