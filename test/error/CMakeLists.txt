@@ -74,6 +74,7 @@ tests(
     fuse_same_var.cpp
     fuse_vectorized_var_with_rvar.cpp
     gpu_register_crosstalk.cpp
+    gpu_register_crosstalk_stored_outside_thread_loop.cpp
     gpu_register_shifted_between_threads.cpp
     gpu_register_stages_disagree.cpp
     gpu_register_stored_by_one_thread.cpp
