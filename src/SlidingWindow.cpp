@@ -842,8 +842,13 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                                 size_t loop_depth, size_t binding_depth) {
         Expr result = replacement;
         if (loop_depth < producer_loop_bounds.size()) {
+            // Only the loops in between get widened. Anything else the
+            // replacement mentions is in scope at this declaration and means
+            // the same thing there, so it has to stay exact - chaining to the
+            // enclosing bounds would widen over the loop being slid over too,
+            // and the union of a per-step region over the whole walk is the
+            // whole walk.
             Scope<Interval> inner;
-            inner.set_containing_scope(&bounds_scope);
             for (size_t i = loop_depth; i < producer_loop_bounds.size(); i++) {
                 inner.push(producer_loop_bounds[i].first, producer_loop_bounds[i].second);
             }
