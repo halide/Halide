@@ -325,6 +325,7 @@ tests(
     skip_stages_memoize.cpp
     slide_directive.cpp
     slide_down_over_dimension.cpp
+    slide_staging_bounds.cpp
     sliding_backwards.cpp
     sliding_over_guard_with_if.cpp
     sliding_reduction.cpp
