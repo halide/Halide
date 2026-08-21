@@ -324,6 +324,7 @@ tests(
     skip_stages_external_array_functions.cpp
     skip_stages_memoize.cpp
     slide_directive.cpp
+    slide_down_over_dimension.cpp
     slide_pipelined.cpp
     slide_staging_bounds.cpp
     sliding_backwards.cpp
