@@ -5,9 +5,6 @@
 # This lesson demonstrates how to define a hl.Func in multiple passes,
 # including scattering.
 
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_09_update_definitions
-# in a shell with the current directory at python_bindings/
 import halide as hl
 
 import halide.imageio
@@ -124,16 +121,16 @@ def main():
         # Say we want an update that squares the first fifty rows. We
         # could do this by adding 50 update definitions:
 
-        # f[x, 0) = f[x, 0) * f[x, 0)
-        # f[x, 1) = f[x, 1) * f[x, 1)
-        # f[x, 2) = f[x, 2) * f[x, 2)
+        # f[x, 0] = f[x, 0] * f[x, 0]
+        # f[x, 1] = f[x, 1] * f[x, 1]
+        # f[x, 2] = f[x, 2] * f[x, 2]
         # ...
-        # f[x, 49) = f[x, 49) * f[x, 49)
+        # f[x, 49] = f[x, 49] * f[x, 49]
 
-        # Or equivalently using a compile-time loop in our C++:
-        # for (int i = 0 i < 50 i++) {
-        #   f[x, i) = f[x, i) * f[x, i)
-        #
+        # Or equivalently, using an ordinary Python for loop while we
+        # build the pipeline:
+        # for i in range(50):
+        #     f[x, i] = f[x, i] * f[x, i]
 
         # But it's more manageable and more flexible to put the loop
         # in the generated code. We do this by defining a "reduction
@@ -237,7 +234,7 @@ def main():
 
         halide_result = f.realize([16, 16])
 
-        # Here's the equivalent (serial) C:
+        # Here's the equivalent (serial) Python:
         py_result = np.empty((16, 16), dtype=np.int32)
 
         # Pure step. Vectorized in x and parallelized in y.
@@ -263,7 +260,7 @@ def main():
                 yy = yo * 4 + yi
                 py_result[yy][1] = py_result[yy][0] + 2
 
-        # Check the C and Halide results match:
+        # Check the Python and Halide results match:
         for yy in range(16):
             for xx in range(16):
                 assert halide_result[xx, yy] == py_result[yy][xx], (

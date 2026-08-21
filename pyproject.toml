@@ -87,6 +87,16 @@ tools = [
   "ruff>=0.12",
   "tbump>=6.11",
 ]
+docs = [
+  # for doc/ -- renders doc/*.md prose, the Breathe/Doxygen API reference,
+  # and the tutorial (captured via gdb/lldb, see doc/tutorial_website/)
+  "sphinx>=7.2",
+  "myst-parser>=3.0",
+  "breathe>=4.35",
+  "pydata-sphinx-theme>=0.15",
+  "sphinxcontrib-video>=0.4",
+  "sphinx-design>=0.6",
+]
 
 ci-base = [
   { include-group = "dev" },

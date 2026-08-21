@@ -23,6 +23,10 @@ set(Halide_INSTALL_TOOLSDIR "${CMAKE_INSTALL_DATADIR}/tools"
     CACHE STRING "Path to Halide build-time tools and sources"
 )
 
+set(Halide_INSTALL_DOXYGENDIR "${CMAKE_INSTALL_DOCDIR}/html"
+    CACHE STRING "Path to Halide's generated documentation website (API reference and tutorial)"
+)
+
 ##
 # RPATH patching helper
 ##
@@ -335,7 +339,11 @@ _Halide_install_pkgdeps(
 ##
 
 if (WITH_DOCS)
-    install(DIRECTORY ${Halide_BINARY_DIR}/doc/html TYPE DOC COMPONENT Halide_Documentation)
+    install(
+        DIRECTORY ${Halide_BINARY_DIR}/doc/sphinx/html/
+        DESTINATION ${Halide_INSTALL_DOXYGENDIR}
+        COMPONENT Halide_Doxygen
+    )
 endif ()
 
 ##
@@ -404,4 +412,10 @@ cpack_add_component(
     Halide_Documentation
     DISPLAY_NAME "Halide documentation"
     DESCRIPTION "Documentation for Halide"
+)
+
+cpack_add_component(
+    Halide_Doxygen
+    DISPLAY_NAME "Halide documentation website"
+    DESCRIPTION "Generated Sphinx documentation website, including the API reference and tutorial (WITH_DOCS)"
 )

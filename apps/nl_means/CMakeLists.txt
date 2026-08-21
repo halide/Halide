@@ -30,8 +30,7 @@ target_link_libraries(nl_means_process PRIVATE Halide::ImageIO nl_means nl_means
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgb.png)
 if (EXISTS ${IMAGE})
-    configure_file(${IMAGE} rgb.png COPYONLY)
-    add_test(NAME nl_means_process COMMAND nl_means_process rgb.png 7 7 0.12 10 out.png)
+    add_test(NAME nl_means_process COMMAND nl_means_process ${IMAGE} 7 7 0.12 10 out.png)
     set_tests_properties(
         nl_means_process
         PROPERTIES

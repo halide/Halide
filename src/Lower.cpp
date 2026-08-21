@@ -20,6 +20,7 @@
 #include "BoundsInference.h"
 #include "CSE.h"
 #include "CanonicalizeGPUVars.h"
+#include "CheckGPUCrossTalk.h"
 #include "ClampUnsafeAccesses.h"
 #include "Debug.h"
 #include "DebugArguments.h"
@@ -293,6 +294,12 @@ void lower_impl(const vector<Function> &output_funcs,
     s = simplify_correlated_differences(s);
     s = bound_small_allocations(s);
     log("Lowering after bounding small realizations:", s);
+
+    // After storage folding, which can make two threads touch the same part of
+    // an allocation, and before storage flattening, which makes the check much
+    // harder. See CheckGPUCrossTalk.h.
+    debug(1) << "Checking for GPU cross-talk...\n";
+    check_gpu_cross_talk(s);
 
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, outputs, env, t);

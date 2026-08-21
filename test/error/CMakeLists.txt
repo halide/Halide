@@ -73,6 +73,11 @@ tests(
     func_tuple_update_types_mismatch.cpp
     fuse_same_var.cpp
     fuse_vectorized_var_with_rvar.cpp
+    gpu_register_crosstalk.cpp
+    gpu_register_shifted_between_threads.cpp
+    gpu_register_stages_disagree.cpp
+    gpu_register_stored_by_one_thread.cpp
+    gpu_register_stored_by_one_warp.cpp
     hoist_storage_extern.cpp
     hoist_storage_root_without_compute_root.cpp
     hoist_storage_without_compute_at.cpp

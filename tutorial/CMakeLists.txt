@@ -1,10 +1,5 @@
-find_package(OpenMP)
-
-configure_file(images/gray.png images/gray.png COPYONLY)
-configure_file(images/rgb.png images/rgb.png COPYONLY)
-
 function(add_tutorial source_file)
-    set(options WITH_IMAGE_IO WITH_OPENMP)
+    set(options WITH_IMAGE_IO)
     set(oneValueArgs)
     set(multiValueArgs SRCS GROUPS)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
@@ -33,21 +28,35 @@ function(add_tutorial source_file)
 
     if (args_WITH_IMAGE_IO)
         target_link_libraries(${name} PRIVATE Halide::ImageIO)
+        # Image-I/O tutorials use paths relative to tutorial/. Keep tests
+        # independent of copied build-tree assets.
+        set_tests_properties(
+            tutorial_${name}
+            PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        )
     endif ()
 
-    if (args_WITH_OPENMP)
-        if (TARGET OpenMP::OpenMP_CXX)
-            target_link_libraries(${name} PRIVATE OpenMP::OpenMP_CXX)
-        else ()
-            # Compile anyway but suppress warnings about unrecognised pragmas
-            target_compile_options(
-                "${name}"
-                PRIVATE
-                $<$<CXX_COMPILER_ID:MSVC>:/Wd4068>
-                $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wno-unknown-pragmas>
-            )
-        endif ()
+    _Halide_register_tutorial_website_target("${source_file}" "${name}")
+endfunction()
+
+# Registers a lesson source file's corresponding executable target so that
+# doc/'s tutorial-page generator can locate its built binary (by way of a
+# generate-time manifest, since executable output paths aren't known until
+# then), and builds it unoptimized with debug info, regardless of build
+# type, so that single-line stepping/breakpoints are reliable (matches
+# test/debugger/CMakeLists.txt's debugger_fixture, which needs the same thing
+# for the same reason: at -O2/-O3, reordered/merged line-table entries make
+# `next`/one-shot breakpoints land on the wrong statement).
+function(_Halide_register_tutorial_website_target source_file target)
+    if (NOT WITH_DOCS)
+        return()
     endif ()
+    target_compile_options(
+        ${target}
+        PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-g;-O0;-fno-omit-frame-pointer>
+    )
+    set_property(GLOBAL APPEND PROPERTY HALIDE_TUTORIAL_SOURCE_TARGETS "${source_file}=${target}")
 endfunction()
 
 # Declare tutorials
@@ -73,8 +82,8 @@ endif ()
 
 add_tutorial(lesson_06_realizing_over_shifted_domains.cpp)
 add_tutorial(lesson_07_multi_stage_pipelines.cpp WITH_IMAGE_IO)
-add_tutorial(lesson_08_scheduling_2.cpp WITH_IMAGE_IO WITH_OPENMP GROUPS multithreaded)
-add_tutorial(lesson_09_update_definitions.cpp WITH_IMAGE_IO WITH_OPENMP GROUPS multithreaded)
+add_tutorial(lesson_08_scheduling_2.cpp WITH_IMAGE_IO GROUPS multithreaded)
+add_tutorial(lesson_09_update_definitions.cpp WITH_IMAGE_IO GROUPS multithreaded)
 
 if ("NVPTX" IN_LIST Halide_LLVM_COMPONENTS)
     if (Halide_TARGET MATCHES "wasm")
@@ -123,6 +132,10 @@ if ("NVPTX" IN_LIST Halide_LLVM_COMPONENTS)
             PRIVATE "${CMAKE_CURRENT_BINARY_DIR}"
         )
 
+        _Halide_register_tutorial_website_target(
+            lesson_10_aot_compilation_run.cpp lesson_10_aot_compilation_run
+        )
+
         add_test(NAME tutorial_lesson_10_aot_compilation_run COMMAND lesson_10_aot_compilation_run)
         set_tests_properties(
             tutorial_lesson_10_aot_compilation_run
@@ -141,6 +154,7 @@ add_tutorial(lesson_14_types.cpp)
 # Lesson 15
 add_executable(lesson_15_generate lesson_15_generators.cpp)
 target_link_libraries(lesson_15_generate PRIVATE Halide::Generator)
+_Halide_register_tutorial_website_target(lesson_15_generators.cpp lesson_15_generate)
 
 ## Hack to build the libraries
 
@@ -233,6 +247,7 @@ if (Halide_TARGET MATCHES "wasm")
 else ()
     add_executable(lesson_16_rgb_generate lesson_16_rgb_generate.cpp)
     target_link_libraries(lesson_16_rgb_generate PRIVATE Halide::Generator)
+    _Halide_register_tutorial_website_target(lesson_16_rgb_generate.cpp lesson_16_rgb_generate)
 
     add_halide_library(
         brighten_planar
@@ -270,6 +285,7 @@ else ()
         brighten_planar brighten_interleaved brighten_either brighten_specialized Halide::ImageIO
         Halide::Tools
     )
+    _Halide_register_tutorial_website_target(lesson_16_rgb_run.cpp lesson_16_rgb_run)
 
     add_test(NAME tutorial_lesson_16_rgb_run COMMAND lesson_16_rgb_run)
     set_tests_properties(tutorial_lesson_16_rgb_run PROPERTIES LABELS tutorial)
@@ -285,6 +301,9 @@ add_tutorial(lesson_20_cloning_funcs.cpp)
 if (TARGET Halide::Mullapudi2016)
     add_executable(lesson_21_auto_scheduler_generate lesson_21_auto_scheduler_generate.cpp)
     target_link_libraries(lesson_21_auto_scheduler_generate PRIVATE Halide::Generator)
+    _Halide_register_tutorial_website_target(
+        lesson_21_auto_scheduler_generate.cpp lesson_21_auto_scheduler_generate
+    )
 
     add_halide_library(
         auto_schedule_false
@@ -308,6 +327,9 @@ if (TARGET Halide::Mullapudi2016)
     target_link_libraries(
         lesson_21_auto_scheduler_run
         PRIVATE auto_schedule_false auto_schedule_true Halide::Tools
+    )
+    _Halide_register_tutorial_website_target(
+        lesson_21_auto_scheduler_run.cpp lesson_21_auto_scheduler_run
     )
 
     add_test(NAME tutorial_lesson_21_auto_scheduler_run COMMAND lesson_21_auto_scheduler_run)
