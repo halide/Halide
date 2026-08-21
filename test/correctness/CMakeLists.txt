@@ -464,6 +464,7 @@ tests(
     multiple_outputs_extern.cpp
     multiple_scatter.cpp
     named_updates.cpp
+    nested_parallel_stack.cpp
     nested_shiftinwards.cpp
     oddly_sized_output.cpp
     parallel.cpp

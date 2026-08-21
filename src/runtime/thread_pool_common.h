@@ -109,6 +109,26 @@ struct work {
     }
 };
 
+// A thread that stalls on a job it owns may start tasks belonging to other
+// parallel regions rather than idle, but doing so nests a new owned job inside
+// the one it is already waiting on, and that stack frame can't unwind until the
+// new job completes. Bounding how many jobs a thread may have stalled at once
+// lets it start one more instance of an outer loop it is already inside, but
+// not an unbounded number of them. Descending without stalling is already
+// bounded, because it can only go one level deeper into the loop nest.
+constexpr int max_stalled_jobs = 2;
+
+// Which entry of work_queue.stalled_jobs belongs to the calling thread. Thread
+// ids are dense on some platforms and multiples of four on others, so mix them
+// before taking the low bits. Two threads may share an entry, which can only
+// cause one of them to decline to start a job it could have run.
+ALWAYS_INLINE int stalled_jobs_slot() {
+    static_assert(MAX_THREADS <= 256 && (MAX_THREADS & (MAX_THREADS - 1)) == 0,
+                  "MAX_THREADS must be a power of two no greater than 256.");
+    const uint32_t id = (uint32_t)halide_current_thread_id();
+    return (int)(((id * (uint32_t)2654435761) >> 24) & (MAX_THREADS - 1));
+}
+
 ALWAYS_INLINE int clamp_num_threads(int threads) {
     if (threads > MAX_THREADS) {
         return MAX_THREADS;
@@ -177,6 +197,12 @@ struct work_queue_t {
     // the number of iterations of parallel for loops that are invoked so as
     // to prevent deadlock due to oversubscription of threads.
     int threads_reserved;
+
+    // For each thread, how many of the jobs it owns have stalled, indexed by
+    // stalled_jobs_slot(). Only maintained for jobs that stall, because
+    // finding the index can cost a syscall, and a stalled job has nothing
+    // better to do.
+    uint8_t stalled_jobs[MAX_THREADS];
 
     ALWAYS_INLINE bool running() const {
         return !shutdown;
@@ -262,6 +288,10 @@ WEAK void worker_thread_idle() {
 }
 
 WEAK void worker_thread_already_locked(work *owned_job) {
+    // Set the first time this job stalls. Threads that don't own a job are
+    // free to work on anything, so they never need it.
+    int slot = -1;
+
     while (owned_job ? owned_job->running() : !work_queue.shutdown) {
         work *job = work_queue.jobs;
         work **prev_ptr = &work_queue.jobs;
@@ -316,7 +346,19 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             if (!enough_threads) {
                 log_message("Not enough threads for job " << job->task.name << " available: " << threads_available << " min_threads: " << job->task.min_threads);
             }
-            bool can_use_this_thread_stack = !owned_job || (job->siblings == owned_job->siblings) || job->task.min_threads == 0;
+            // Starting a job from another parallel region leaves the job we
+            // own waiting on our stack, so only do it for jobs that can't
+            // block, and only if we aren't already holding one that way.
+            bool can_use_this_thread_stack =
+                !owned_job || (job->siblings == owned_job->siblings);
+            if (!can_use_this_thread_stack && job->task.min_threads == 0) {
+                if (slot < 0) {
+                    slot = stalled_jobs_slot();
+                    work_queue.stalled_jobs[slot]++;
+                }
+                can_use_this_thread_stack =
+                    work_queue.stalled_jobs[slot] < max_stalled_jobs;
+            }
             if (!can_use_this_thread_stack) {
                 log_message("Cannot run job " << job->task.name << " on this thread.");
             }
@@ -466,6 +508,10 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             // The job is done or some owned job failed via sibling linkage. Wake up the owner.
             work_queue.wake_owners.broadcast();
         }
+    }
+
+    if (slot >= 0) {
+        work_queue.stalled_jobs[slot]--;
     }
 }
 
