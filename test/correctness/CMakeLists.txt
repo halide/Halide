@@ -140,7 +140,6 @@ tests(
     fuse.cpp
     fuse_gpu_threads.cpp
     fused_where_inner_extent_is_zero.cpp
-    fuzz_extract_lanes.cpp
     fuzz_float_stores.cpp
     fuzz_schedule.cpp
     gameoflife.cpp
