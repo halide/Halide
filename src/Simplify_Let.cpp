@@ -327,7 +327,7 @@ HALIDE_NEVER_INLINE Body Simplify::simplify_let_inner(const LetOrLetStmt *op, Ex
         find_var_uses(value, var_uses);
     };
 
-    for (auto &frame : reverse_view(frames)) {
+    for (const auto &frame : reverse_view(frames)) {
         if (frame.value_bounds_tracked) {
             bounds_and_alignment_info.pop(frame.op->name);
         }
