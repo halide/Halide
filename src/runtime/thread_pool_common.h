@@ -161,9 +161,23 @@ struct work_queue_t {
     // must signal or broadcast the appropriate condition variable.
     halide_cond_with_spinning wake_a_team, wake_b_team, wake_owners;
 
+    // A separate channel for workers that found a job they could run but
+    // for an unavailable semaphore. This is distinct from the A/B teams,
+    // which model idle capacity (no runnable work): a worker here is
+    // blocked on an external event, not idle. Keeping it separate lets a
+    // semaphore release wake exactly the workers waiting on a semaphore,
+    // without a thundering herd of genuinely-idle workers waking only to
+    // rescan and go back to sleep.
+    halide_cond_with_spinning wake_from_semaphore;
+
     // The number of sleeping workers and owners. An over-estimate - a
     // waking-up thread may not have decremented this yet.
     int workers_sleeping, owners_sleeping;
+
+    // The number of workers parked on wake_from_semaphore. A subset of
+    // workers_sleeping (those threads are also counted there, so the A/B
+    // team bookkeeping is undisturbed).
+    int workers_parked_on_semaphore;
 
     // Keep track of threads so they can be joined at shutdown
     halide_thread *threads[MAX_THREADS];
@@ -261,10 +275,26 @@ WEAK void worker_thread_idle() {
     work_queue.workers_sleeping--;
 }
 
+// A worker that found runnable work blocked only on an unavailable
+// semaphore. Unlike an idle worker, it must be woken by a semaphore
+// release, so it waits on its own channel rather than the A/B teams.
+WEAK void worker_thread_blocked_on_semaphore() {
+    work_queue.workers_sleeping++;
+    work_queue.workers_parked_on_semaphore++;
+    work_queue.wake_from_semaphore.wait(&work_queue.mutex);
+    work_queue.workers_parked_on_semaphore--;
+    work_queue.workers_sleeping--;
+}
+
 WEAK void worker_thread_already_locked(work *owned_job) {
     while (owned_job ? owned_job->running() : !work_queue.shutdown) {
         work *job = work_queue.jobs;
         work **prev_ptr = &work_queue.jobs;
+
+        // Did we pass over a job that we could otherwise run, but for an
+        // unavailable semaphore? If so, a future semaphore release (not
+        // just newly-enqueued work) can make us runnable.
+        bool blocked_on_semaphore = false;
 
         if (owned_job) {
             if (owned_job->exit_status != halide_error_code_success) {
@@ -330,6 +360,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
                     break;
                 } else {
                     log_message("Cannot acquire semaphores for " << job->task.name);
+                    blocked_on_semaphore = true;
                 }
             }
             prev_ptr = &(job->next_job);
@@ -343,6 +374,8 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             // is very informative when profiling.
             if (owned_job) {
                 worker_thread_stall(owned_job);
+            } else if (blocked_on_semaphore) {
+                worker_thread_blocked_on_semaphore();
             } else {
                 worker_thread_idle();
             }
@@ -594,6 +627,13 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs, work *task_paren
         }
     }
 
+    // Workers blocked on a semaphore wait on their own channel, so the
+    // broadcasts above don't reach them. Wake them too: they may be able
+    // to steal this newly-enqueued work.
+    if (work_queue.workers_parked_on_semaphore) {
+        work_queue.wake_from_semaphore.broadcast();
+    }
+
     if (job_has_acquires || job_may_block) {
         if (task_parent != nullptr) {
             task_parent->threads_reserved--;
@@ -742,6 +782,7 @@ WEAK void halide_shutdown_thread_pool() {
         work_queue.wake_owners.broadcast();
         work_queue.wake_a_team.broadcast();
         work_queue.wake_b_team.broadcast();
+        work_queue.wake_from_semaphore.broadcast();
         halide_mutex_unlock(&work_queue.mutex);
 
         // Wait until they leave
@@ -767,12 +808,14 @@ WEAK int halide_default_semaphore_init(halide_semaphore_t *s, int n) {
 WEAK int halide_default_semaphore_release(halide_semaphore_t *s, int n) {
     halide_semaphore_impl_t *sem = (halide_semaphore_impl_t *)s;
     int old_val = Halide::Runtime::Internal::Synchronization::atomic_fetch_add_acquire_release(&sem->value, n);
-    // TODO(abadams|zvookin): Is this correct if an acquire can be for say count of 2 and the releases are 1 each?
-    if (old_val == 0 && n != 0) {  // Don't wake if nothing released.
-        // We may have just made a job runnable
+    if (n != 0) {
         halide_mutex_lock(&work_queue.mutex);
-        work_queue.wake_a_team.broadcast();
-        work_queue.wake_owners.broadcast();
+        if (work_queue.workers_parked_on_semaphore) {
+            work_queue.wake_from_semaphore.broadcast();
+        }
+        if (work_queue.owners_sleeping) {
+            work_queue.wake_owners.broadcast();
+        }
         halide_mutex_unlock(&work_queue.mutex);
     }
     return old_val + n;

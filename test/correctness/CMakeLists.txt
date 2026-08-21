@@ -444,6 +444,7 @@ tests(
     assertion_failure_in_parallel_for.cpp
     async.cpp
     async_copy_chain.cpp
+    async_deadlock.cpp
     async_order.cpp
     atomic_tuples.cpp
     atomics.cpp
