@@ -37,6 +37,7 @@ int max_lanes_for_device(DeviceAPI api, int parent_max_lanes) {
     case DeviceAPI::Hexagon:
     case DeviceAPI::HexagonDma:
     case DeviceAPI::Host:
+    case DeviceAPI::SMEStreaming:
         return 0;  // No max: LLVM based legalization
     case DeviceAPI::None:
         return parent_max_lanes;
@@ -292,7 +293,7 @@ class LegalizeVectors : public IRMutator {
 
                 assignments.push_back(Store::make(
                     op->name, std::move(rhs), std::move(index),
-                    op->param, std::move(predicate), alignment));
+                    op->param, std::move(predicate), alignment, op->is_streaming));
             }
 
             Stmt result = Block::make(assignments);

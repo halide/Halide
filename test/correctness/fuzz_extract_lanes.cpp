@@ -249,7 +249,7 @@ class InjectExpr : public IRMutator {
         internal_assert(idx < (int)replacements.size());
         if (op->name == func_name) {
             return Store::make(op->name, flatten_nested_ramps(replacements[idx++]),
-                               op->index, op->param, op->predicate, op->alignment);
+                               op->index, op->param, op->predicate, op->alignment, op->is_streaming);
         }
         return IRMutator::visit(op);
     }
@@ -287,7 +287,7 @@ bool evaluate_vector_exprs(const std::vector<Expr> &e,
     // The custom lowering pass replaces the dummy RHS
     InjectExpr injector(f.name(), e);
 
-    auto buf = Runtime::Buffer<>(t.element_of(), {lanes, (int)e.size()});
+    auto buf = Runtime::Buffer<>(t.element_of().to_abi(), {lanes, (int)e.size()});
 
     Pipeline p(f);
     p.add_custom_lowering_pass(&injector, nullptr);
