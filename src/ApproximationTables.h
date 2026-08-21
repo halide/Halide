@@ -8,7 +8,7 @@
 namespace Halide {
 namespace Internal {
 
-struct Approximation {
+struct MathFuncApproximation {
     struct Metrics {
         double mse;
         double mae{std::numeric_limits<double>::quiet_NaN()};
@@ -32,21 +32,21 @@ struct Approximation {
 };
 
 namespace ApproximationTables {
-const std::vector<Approximation> &get_table_atan();
-const std::vector<Approximation> &get_table_sin();
-const std::vector<Approximation> &get_table_cos();
-const std::vector<Approximation> &get_table_tan();
-const std::vector<Approximation> &get_table_expm1();
-const std::vector<Approximation> &get_table_exp();
-const std::vector<Approximation> &get_table_log();
+const std::vector<MathFuncApproximation> &get_table_atan();
+const std::vector<MathFuncApproximation> &get_table_sin();
+const std::vector<MathFuncApproximation> &get_table_cos();
+const std::vector<MathFuncApproximation> &get_table_tan();
+const std::vector<MathFuncApproximation> &get_table_expm1();
+const std::vector<MathFuncApproximation> &get_table_exp();
+const std::vector<MathFuncApproximation> &get_table_log();
 
-const Approximation *best_atan_approximation(Halide::ApproximationPrecision precision, Type type);
-const Approximation *best_sin_approximation(Halide::ApproximationPrecision precision, Type type);
-const Approximation *best_cos_approximation(Halide::ApproximationPrecision precision, Type type);
-const Approximation *best_tan_approximation(Halide::ApproximationPrecision precision, Type type);
-const Approximation *best_log_approximation(Halide::ApproximationPrecision precision, Type type);
-const Approximation *best_exp_approximation(Halide::ApproximationPrecision precision, Type type);
-const Approximation *best_expm1_approximation(Halide::ApproximationPrecision precision, Type type);
+const MathFuncApproximation *best_atan_approximation(Halide::ApproximationPrecision precision, Type type);
+const MathFuncApproximation *best_sin_approximation(Halide::ApproximationPrecision precision, Type type);
+const MathFuncApproximation *best_cos_approximation(Halide::ApproximationPrecision precision, Type type);
+const MathFuncApproximation *best_tan_approximation(Halide::ApproximationPrecision precision, Type type);
+const MathFuncApproximation *best_log_approximation(Halide::ApproximationPrecision precision, Type type);
+const MathFuncApproximation *best_exp_approximation(Halide::ApproximationPrecision precision, Type type);
+const MathFuncApproximation *best_expm1_approximation(Halide::ApproximationPrecision precision, Type type);
 }  // namespace ApproximationTables
 
 }  // namespace Internal

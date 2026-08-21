@@ -140,7 +140,7 @@ struct FunctionToTest {
     Call::IntrinsicOp fast_op;
     std::function<Expr(Expr x, Expr y)> make_reference;
     std::function<Expr(Expr x, Expr y, Halide::ApproximationPrecision)> make_approximation;
-    const Halide::Internal::Approximation *(*obtain_approximation)(Halide::ApproximationPrecision, Halide::Type);
+    const Halide::Internal::MathFuncApproximation *(*obtain_approximation)(Halide::ApproximationPrecision, Halide::Type);
     std::vector<RangedAccuracyTest> ranged_tests;
 } functions_to_test[] = {
     // clang-format off
@@ -578,8 +578,8 @@ int main(int argc, char **argv) {
                     if (ftt.obtain_approximation && test.precision.force_halide_polynomial > 0 &&
                         (!rat.requires_strict_float || target_has_proper_strict_float_support)) {
                         // We have tabular data indicating expected precision.
-                        const Halide::Internal::Approximation *approx = ftt.obtain_approximation(prec, arg_x.type());
-                        const Halide::Internal::Approximation::Metrics &metrics = approx->metrics_for(arg_x.type());
+                        const Halide::Internal::MathFuncApproximation *approx = ftt.obtain_approximation(prec, arg_x.type());
+                        const Halide::Internal::MathFuncApproximation::Metrics &metrics = approx->metrics_for(arg_x.type());
                         rat.max_ulp.eval("MaxUlp", metrics.mulpe, em.max_ulp_error, num_tests, num_tests_passed);
                         rat.mean_ulp.eval("MeanUlp", metrics.mulpe, em.mean_ulp_error, num_tests, num_tests_passed);
                         rat.max_abs.eval("MaxAbs", metrics.mae, em.max_abs_error, num_tests, num_tests_passed);

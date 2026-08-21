@@ -15,7 +15,7 @@ constexpr double nan = std::numeric_limits<double>::quiet_NaN();
 // NOLINTBEGIN
 // Generate this table with:
 //   python3 tools/polynomial_optimizer.py atan --order 1 2 3 4 5 6 7 8 --loss mulpe --formula
-const std::vector<Approximation> table_atan = {
+const std::vector<MathFuncApproximation> table_atan = {
   /* MULPE optimized */
   { /* Polynomial degree 3: 0.9891527115034*x + -0.2145409767037*x^3 */
     /* f16 */ {2.110004e-05, nan, 0},
@@ -114,7 +114,7 @@ const std::vector<Approximation> table_atan = {
 
 };
 
-const std::vector<Approximation> table_sin = {
+const std::vector<MathFuncApproximation> table_sin = {
   /* MULPE optimized */
 #if 0 // Disabled poly-1 to get cos and sin closer together in worst-case accuracy
   { /* Polynomial degree 2: 1*x + -0.2049090779222*x^2 */
@@ -222,7 +222,7 @@ const std::vector<Approximation> table_sin = {
 
 };
 
-const std::vector<Approximation> table_cos = {
+const std::vector<MathFuncApproximation> table_cos = {
   // No MULPE-optimized terms as the optimizer goes haywire on the zero at pi/2.
 
   /* MAE-optimized */
@@ -328,7 +328,7 @@ const std::vector<Approximation> table_cos = {
 #endif
 };
 
-const std::vector<Approximation> table_tan = {
+const std::vector<MathFuncApproximation> table_tan = {
   // We prefer Padé approximants for tan, as we also rely on tan(x) = 1/tan(pi/2-x).
   // As such, we can simply swap the numerator and denominator for higher precision.
 
@@ -503,7 +503,7 @@ const std::vector<Approximation> table_tan = {
   },
 };
 
-const std::vector<Approximation> table_expm1 = {
+const std::vector<MathFuncApproximation> table_expm1 = {
   /* MULPE optimized */
   { /* Polynomial degree 2: 1*x + 0.5006693548784*x^2 */
     /* f16 */ {6.973743e-06, nan, 0},
@@ -605,7 +605,7 @@ const std::vector<Approximation> table_expm1 = {
   },
 };
 
-const std::vector<Approximation> table_exp = {
+const std::vector<MathFuncApproximation> table_exp = {
   /* MULPE optimized (with fixed x⁰ and x¹ coefficients 1 and 1). */
   { /* Polynomial degree 1: 1 + 1*x */
     /* f16 */ {1.733398e-02, nan, 0},
@@ -759,7 +759,7 @@ const std::vector<Approximation> table_exp = {
 
 };
 
-const std::vector<Approximation> table_log = {
+const std::vector<MathFuncApproximation> table_log = {
   /* MAE optimized */
   { /* Polynomial degree 2: 1.0216308552414*x + -0.4403990932151*x^2 */
     /* f16 */ {7.867813e-06, nan, 0},
@@ -863,22 +863,22 @@ const std::vector<Approximation> table_log = {
 
 // clang-format on
 // NOLINTEND
-const Approximation *find_best_approximation(const char *name, const std::vector<Approximation> &table,
-                                             ApproximationPrecision precision, Type type) {
+const MathFuncApproximation *find_best_approximation(const char *name, const std::vector<MathFuncApproximation> &table,
+                                                     ApproximationPrecision precision, Type type) {
     // We will find the approximation that is as fast as possible, while satisfying the constraints.
     // Speed is determined by the number of terms. There might be more than one approximation that has
     // a certain number of terms, but is optimized for a different loss.
     // We will try to select the approximation that scores best on the metric the user wants to minimize.
 
-    Approximation::Metrics Approximation::*metrics_ptr = nullptr;
+    MathFuncApproximation::Metrics MathFuncApproximation::*metrics_ptr = nullptr;
     if (type == Float(16)) {
         user_warning << "Fast math function approximations are not measured in f16 precision. Will assume f32 precision data.";
-        // TODO(mcourteaux): Measure and use: metrics_ptr = &Approximation::metrics_f16;
-        metrics_ptr = &Approximation::metrics_f32;
+        // TODO(mcourteaux): Measure and use: metrics_ptr = &MathFuncApproximation::metrics_f16;
+        metrics_ptr = &MathFuncApproximation::metrics_f32;
     } else if (type == Float(32)) {
-        metrics_ptr = &Approximation::metrics_f32;
+        metrics_ptr = &MathFuncApproximation::metrics_f32;
     } else if (type == Float(64)) {
-        metrics_ptr = &Approximation::metrics_f64;
+        metrics_ptr = &MathFuncApproximation::metrics_f64;
     } else {
         internal_error << "Cannot find approximation for type " << type;
     }
@@ -889,7 +889,7 @@ const Approximation *find_best_approximation(const char *name, const std::vector
         return &table[slot];
     }
 
-    const Approximation *best = nullptr;
+    const MathFuncApproximation *best = nullptr;
 
     int force_num = precision.force_halide_polynomial;
     int force_denom = 0;
@@ -904,7 +904,7 @@ const Approximation *find_best_approximation(const char *name, const std::vector
         // Pass 2 will also ignore the number of terms.
         best = nullptr;
         for (size_t i = 0; i < table.size(); ++i) {
-            const Approximation &e = table[i];
+            const MathFuncApproximation &e = table[i];
 
             int num_num = 0;
             int num_denom = 0;
@@ -927,7 +927,7 @@ const Approximation *find_best_approximation(const char *name, const std::vector
                 num_constraints_satisfied++;
             }
 
-            const Approximation::Metrics &metrics = e.*metrics_ptr;
+            const MathFuncApproximation::Metrics &metrics = e.*metrics_ptr;
 
             // Check if precision is satisfactory.
             if (precision.constraint_max_absolute_error != 0) {
@@ -950,7 +950,7 @@ const Approximation *find_best_approximation(const char *name, const std::vector
                 } else {
                     // Figure out if we found better for the same number of terms (or less).
                     if (best->p.size() + best->q.size() >= e.p.size() + e.q.size()) {
-                        const Approximation::Metrics &best_metrics = best->*metrics_ptr;
+                        const MathFuncApproximation::Metrics &best_metrics = best->*metrics_ptr;
                         if (precision.optimized_for == OO::MULPE) {
                             if (best_metrics.mulpe > metrics.mulpe) {
                                 debug(4) << "better mulpe best = " << i << "\n";
@@ -980,7 +980,7 @@ const Approximation *find_best_approximation(const char *name, const std::vector
     if (!best) {
         best = &table.back();
     }
-    const Approximation::Metrics &best_metrics = best->*metrics_ptr;
+    const MathFuncApproximation::Metrics &best_metrics = best->*metrics_ptr;
 
     user_warning << [&] {
         std::stringstream ss;
@@ -999,55 +999,55 @@ const Approximation *find_best_approximation(const char *name, const std::vector
     return best;
 }
 
-const Approximation *best_atan_approximation(Halide::ApproximationPrecision precision, Type type) {
+const MathFuncApproximation *best_atan_approximation(Halide::ApproximationPrecision precision, Type type) {
     return find_best_approximation("atan", table_atan, precision, type);
 }
 
-const Approximation *best_sin_approximation(Halide::ApproximationPrecision precision, Type type) {
+const MathFuncApproximation *best_sin_approximation(Halide::ApproximationPrecision precision, Type type) {
     return find_best_approximation("sin", table_sin, precision, type);
 }
 
-const Approximation *best_cos_approximation(Halide::ApproximationPrecision precision, Type type) {
+const MathFuncApproximation *best_cos_approximation(Halide::ApproximationPrecision precision, Type type) {
     return find_best_approximation("cos", table_cos, precision, type);
 }
 
-const Approximation *best_tan_approximation(Halide::ApproximationPrecision precision, Type type) {
+const MathFuncApproximation *best_tan_approximation(Halide::ApproximationPrecision precision, Type type) {
     return find_best_approximation("tan", table_tan, precision, type);
 }
 
-const Approximation *best_expm1_approximation(Halide::ApproximationPrecision precision, Type type) {
+const MathFuncApproximation *best_expm1_approximation(Halide::ApproximationPrecision precision, Type type) {
     return find_best_approximation("expm1", table_expm1, precision, type);
 }
 
-const Approximation *best_exp_approximation(Halide::ApproximationPrecision precision, Type type) {
+const MathFuncApproximation *best_exp_approximation(Halide::ApproximationPrecision precision, Type type) {
     return find_best_approximation("exp", table_exp, precision, type);
 }
 
-const Approximation *best_log_approximation(Halide::ApproximationPrecision precision, Type type) {
+const MathFuncApproximation *best_log_approximation(Halide::ApproximationPrecision precision, Type type) {
     return find_best_approximation("log", table_log, precision, type);
 }
 
 // ====
 
-const std::vector<Approximation> &get_table_atan() {
+const std::vector<MathFuncApproximation> &get_table_atan() {
     return table_atan;
 }
-const std::vector<Approximation> &get_table_sin() {
+const std::vector<MathFuncApproximation> &get_table_sin() {
     return table_sin;
 }
-const std::vector<Approximation> &get_table_cos() {
+const std::vector<MathFuncApproximation> &get_table_cos() {
     return table_cos;
 }
-const std::vector<Approximation> &get_table_tan() {
+const std::vector<MathFuncApproximation> &get_table_tan() {
     return table_tan;
 }
-const std::vector<Approximation> &get_table_expm1() {
+const std::vector<MathFuncApproximation> &get_table_expm1() {
     return table_expm1;
 }
-const std::vector<Approximation> &get_table_exp() {
+const std::vector<MathFuncApproximation> &get_table_exp() {
     return table_exp;
 }
-const std::vector<Approximation> &get_table_log() {
+const std::vector<MathFuncApproximation> &get_table_log() {
     return table_log;
 }
 

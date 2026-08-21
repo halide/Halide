@@ -197,7 +197,7 @@ Expr eval_poly(const std::vector<double> &coefs, const Expr &x) {
     return eval_poly_horner(coefs, x);
 }
 
-Expr eval_approx(const Approximation *approx, const Expr &x) {
+Expr eval_approx(const MathFuncApproximation *approx, const Expr &x) {
     Expr eval_p = eval_poly(approx->p, x);
     if (approx->q.empty()) {
         return eval_p;
@@ -228,7 +228,7 @@ Expr fast_sin(const Expr &x_full, ApproximationPrecision precision) {
     }
     x = select(mirror, pi_over_two_minus_x, x);
 
-    const Internal::Approximation *approx = Internal::ApproximationTables::best_sin_approximation(precision, type);
+    const Internal::MathFuncApproximation *approx = Internal::ApproximationTables::best_sin_approximation(precision, type);
     Expr result = eval_approx(approx, x);
     result = select(flip_sign, -result, result);
     result = common_subexpression_elimination(result, true);
@@ -265,10 +265,10 @@ Expr fast_cos(const Expr &x_full, ApproximationPrecision precision) {
     Expr result;
     if (use_sin) {
         // Approximating cos(x) as sin(pi/2 - x).
-        const Internal::Approximation *approx = Internal::ApproximationTables::best_sin_approximation(precision, type);
+        const Internal::MathFuncApproximation *approx = Internal::ApproximationTables::best_sin_approximation(precision, type);
         result = eval_approx(approx, x);
     } else {
-        const Internal::Approximation *approx = Internal::ApproximationTables::best_cos_approximation(precision, type);
+        const Internal::MathFuncApproximation *approx = Internal::ApproximationTables::best_cos_approximation(precision, type);
         result = eval_approx(approx, x);
     }
     result = select(flip_sign, -result, result);
@@ -290,7 +290,7 @@ Expr fast_tan(const Expr &x_full, ApproximationPrecision precision) {
     }
 
     // When polynomial: x is assumed to be reduced to [-pi/2, pi/2]!
-    const Internal::Approximation *approx = Internal::ApproximationTables::best_tan_approximation(precision, type);
+    const Internal::MathFuncApproximation *approx = Internal::ApproximationTables::best_tan_approximation(precision, type);
 
     Expr abs_x = abs(x);
     Expr flip = x < make_const(type, 0.0);
@@ -328,7 +328,7 @@ Expr fast_atan_helper(const Expr &x_full, ApproximationPrecision precision, bool
     } else {
         x = select(x_gt_1, make_const(type, 1.0) / x_full, x_full);
     }
-    const Internal::Approximation *approx = Internal::ApproximationTables::best_atan_approximation(precision, type);
+    const Internal::MathFuncApproximation *approx = Internal::ApproximationTables::best_atan_approximation(precision, type);
     Expr result = eval_approx(approx, x);
 
     if (!between_m1_and_p1) {
@@ -398,7 +398,7 @@ Expr fast_exp(const Expr &x_full, ApproximationPrecision prec) {
     //   x = K*log(2) - K*log(2) + x
     //   x = x
 
-    const Internal::Approximation *approx = Internal::ApproximationTables::best_exp_approximation(prec, type);
+    const Internal::MathFuncApproximation *approx = Internal::ApproximationTables::best_exp_approximation(prec, type);
     Expr result = eval_approx(approx, x);
 
     // Compute 2^k.
@@ -424,7 +424,7 @@ Expr fast_expm1(const Expr &x_full, ApproximationPrecision prec) {
     Expr k = cast<int>(k_real);
     Expr x = x_full - k_real * log2;
 
-    const Internal::Approximation *approx = Internal::ApproximationTables::best_expm1_approximation(prec, type);
+    const Internal::MathFuncApproximation *approx = Internal::ApproximationTables::best_expm1_approximation(prec, type);
     Expr result = eval_approx(approx, x);
 
     // Compute 2^k.
@@ -449,7 +449,7 @@ Expr fast_log(const Expr &x, ApproximationPrecision prec) {
     Internal::range_reduce_log(x, &reduced, &exponent);
 
     Expr x1 = reduced - 1.0f;
-    const Internal::Approximation *approx = Internal::ApproximationTables::best_log_approximation(prec, type);
+    const Internal::MathFuncApproximation *approx = Internal::ApproximationTables::best_log_approximation(prec, type);
     Expr result = eval_approx(approx, x1);
 
     result = result + cast<float>(exponent) * log2;
@@ -471,7 +471,7 @@ Expr fast_tanh(const Expr &x, ApproximationPrecision prec) {
         // Positive arguments to exp() have preciser ULP.
         // So, we will rewrite the expression to always use exp(2*x)
         // instead of exp(-2*x) when we are close to zero.
-        // Rewriting it like this is slighlty more expensive, hence the branch
+        // Rewriting it like this is slightly more expensive, hence the branch
         // to only pay this extra cost in case we need MULPE-optimized approximations.
         Expr flip_exp = abs_x > make_const(type, 4);
         Expr arg_exp = select(flip_exp, -abs_x, abs_x);
@@ -480,7 +480,7 @@ Expr fast_tanh(const Expr &x, ApproximationPrecision prec) {
         tanh = select(flip_exp != flip_sign, -tanh, tanh);
         return common_subexpression_elimination(tanh, true);
 #else
-        // expm1 is devloped around 0 and is ULP accurate in [-ln(2)/2, ln(2)/2].
+        // expm1 is developed around 0 and is ULP accurate in [-ln(2)/2, ln(2)/2].
         Expr exp2xm1 = Halide::fast_expm1(-2 * abs_x, prec);
         Expr tanh = (exp2xm1) / (exp2xm1 + make_const(type, 2));
         tanh = select(flip_sign, tanh, -tanh);
@@ -1050,7 +1050,7 @@ public:
                 return append_type_suffix(op);
             }
 
-            // Expand using defintion in terms of exp(2x), and recurse.
+            // Expand using definition in terms of exp(2x), and recurse.
             // Note: no adjustment of precision, as the recursed mutation will take care of that!
             return mutate(ApproxImpl::fast_tanh(op->args[0], prec));
         } else if (op->is_intrinsic(Call::fast_pow)) {
@@ -1113,7 +1113,7 @@ public:
 };
 
 Stmt lower_fast_math_functions(const Stmt &s, const Target &t) {
-    return LowerFastMathFunctions(t).mutate(s);
+    return LowerFastMathFunctions(t)(s);
 }
 
 }  // namespace Internal

@@ -80,8 +80,8 @@ struct FunctionToTest {
     OO oo;
     std::function<Expr(Expr x, Expr y)> make_reference;
     std::function<Expr(Expr x, Expr y, Halide::ApproximationPrecision)> make_approximation;
-    const Halide::Internal::Approximation *(*obtain_approximation)(Halide::ApproximationPrecision, Halide::Type);
-    const std::vector<Halide::Internal::Approximation> &table;
+    const Halide::Internal::MathFuncApproximation *(*obtain_approximation)(Halide::ApproximationPrecision, Halide::Type);
+    const std::vector<Halide::Internal::MathFuncApproximation> &table;
     TestRange range_x{0.0f, 0.0f};
     TestRange range_y{0.0f, 0.0f};
 } functions_to_test[] = {
@@ -214,16 +214,16 @@ int main(int argc, char **argv) {
 
         // Approximations:
         int table_entry_idx = 0;
-        for (const Halide::Internal::Approximation &approx : ftt.table) {
-            Approximation::Metrics metrics = approx.metrics_for(type);
+        for (const Halide::Internal::MathFuncApproximation &approx : ftt.table) {
+            MathFuncApproximation::Metrics metrics = approx.metrics_for(type);
             Halide::ApproximationPrecision prec;
             prec.optimized_for = ftt.oo;
             prec.force_halide_polynomial = (table_entry_idx++) | (1 << 31);  // Special code to request a particular entry by index.
 
-            const Halide::Internal::Approximation *selected_approx = ftt.obtain_approximation(prec, type);
+            const Halide::Internal::MathFuncApproximation *selected_approx = ftt.obtain_approximation(prec, type);
             if (selected_approx != &approx) {
                 auto &sel = *selected_approx;
-                printf("Approximation selection algorithm did not select approximation we expected!\n");
+                printf("MathFuncApproximation selection algorithm did not select approximation we expected!\n");
                 printf("Requested: p=%zu, q=%zu, mae=%.5e, mulpe=%" PRIu64 "\n", approx.p.size(), approx.q.size(), approx.metrics_f32.mae, approx.metrics_f32.mulpe);
                 printf("Received : p=%zu, q=%zu, mae=%.5e, mulpe=%" PRIu64 "\n", sel.p.size(), sel.q.size(), sel.metrics_f32.mae, sel.metrics_f32.mulpe);
                 abort();
