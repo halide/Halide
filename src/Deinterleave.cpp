@@ -257,9 +257,10 @@ private:
             int type_lanes = *as_const_int(op->args[5]);
             const Expr &event = op->args[6];
             const Expr &parent_id = op->args[7];
-            const Expr &idx = op->args[8];
-            int size = *as_const_int(op->args[9]);
-            const Expr &tag = op->args[10];
+            const Expr &tid = op->args[8];
+            const Expr &idx = op->args[9];
+            int size = *as_const_int(op->args[10]);
+            const Expr &tag = op->args[11];
 
             int num_vecs = op->args[2].as<Call>()->args.size();
             internal_assert(size == type_lanes * num_vecs) << Expr(op);
@@ -267,7 +268,7 @@ private:
                 func,
                 values, coords,
                 type_code, type_bits, Expr(new_lanes),
-                event, parent_id, idx, Expr(new_lanes * num_vecs),
+                event, parent_id, tid, idx, Expr(new_lanes * num_vecs),
                 tag};
             Expr result = Call::make(Int(32), Call::trace, args, Call::Extern);
             debug(4) << "  => " << result << "\n";
