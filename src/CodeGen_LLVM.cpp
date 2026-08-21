@@ -1397,7 +1397,7 @@ void CodeGen_LLVM::optimize_module() {
         // than accept a compiler crash (or, in a no-asserts LLVM build, a
         // silently bogus stride).
         pic.registerShouldRunOptionalPassCallback(
-            [](llvm::StringRef pass_name, llvm::Any) {
+            [](llvm::StringRef pass_name, const llvm::Any &) {
                 return pass_name != "LoopLoadEliminationPass";
             });
     }
