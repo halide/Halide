@@ -1,0 +1,7 @@
+{
+  "name": "farmhash",
+  "version": "1.1",
+  "description": "FarmHash hash functions (source provider for TFLite in-tree build)",
+  "homepage": "https://github.com/google/farmhash",
+  "license": "MIT"
+}

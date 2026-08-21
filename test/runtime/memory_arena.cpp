@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
         HALIDE_CHECK(user_context, get_allocated_system_memory() == 0);
     }
 
-    // test dyanmic construction
+    // test dynamic construction
     {
         SystemMemoryAllocatorFns test_allocator = {allocate_system, deallocate_system};
 

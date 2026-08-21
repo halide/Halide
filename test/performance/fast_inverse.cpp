@@ -12,11 +12,33 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (target.arch == Target::X86 && target.bits == 32) {
+        // The 32-bit x86 ABI only exposes 8 XMM registers, but this
+        // benchmark's vectorized recurrence needs 9 live values at once
+        // (8 independent lane groups plus the shared "+1" constant). That
+        // forces a stack spill/reload into the tightly-coupled loop-carried
+        // dependency chain every iteration, adding enough latency to erase
+        // rcpps's tiny edge over divps.
+        printf("[SKIP] x86-32 doesn't have enough XMM registers to avoid spilling.\n");
+        return 0;
+    }
+
     if (target.arch == Target::ARM &&
         target.os == Target::OSX) {
         // vrecpe, vrecps, fmul have inverse throughputs of 1, 0.25, 0.25
         // respectively, while fdiv has inverse throughput of 1.
         printf("[SKIP] Apple M1 chips have division performance roughly on par with the reciprocal instruction\n");
+        return 0;
+    }
+
+    // SVE2-capable cores (e.g. Neoverse V1/V2, Ampere Altra) have fast
+    // enough fdiv that the frecpe+frecps approximation used by fast_inverse
+    // is not reliably faster. Additionally, Halide generates wide scalable
+    // vectors (e.g. <vscale x 32 x float>) that LLVM (at time of writing)
+    // cannot optimize through llvm.vector.insert/extract, causing register
+    // spilling and overhead that does not occur with fixed NEON vectors.
+    if (target.has_feature(Target::SVE2)) {
+        printf("[SKIP] SVE2-capable cores typically have fast division; fast_inverse is not expected to win.\n");
         return 0;
     }
 

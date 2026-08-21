@@ -45,7 +45,7 @@ Func constant_exterior(const Func &source, const Tuple &value,
         << ") than dimensions (" << args.size()
         << ") Func " << source.name() << " has.\n";
 
-    Expr out_of_bounds = cast<bool>(false);
+    Expr out_of_bounds = Halide::Internal::make_zero(Bool());
     for (size_t i = 0; i < bounds.size(); i++) {
         const Var &arg_var = args[i];
         Expr min = bounds[i].min;

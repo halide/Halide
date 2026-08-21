@@ -1,10 +1,5 @@
-find_package(OpenMP)
-
-configure_file(images/gray.png images/gray.png COPYONLY)
-configure_file(images/rgb.png images/rgb.png COPYONLY)
-
 function(add_tutorial source_file)
-    set(options WITH_IMAGE_IO WITH_OPENMP)
+    set(options WITH_IMAGE_IO)
     set(oneValueArgs)
     set(multiValueArgs SRCS GROUPS)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
@@ -13,29 +8,55 @@ function(add_tutorial source_file)
 
     add_executable("${name}" "${source_file}")
     target_link_libraries("${name}" PRIVATE Halide::Halide Halide::Tools)
+    if (TARGET Halide::TerminateHandler)
+        target_link_libraries("${name}" PRIVATE Halide::TerminateHandler)
+    endif ()
     target_compile_options(${name} PRIVATE "$<$<CXX_COMPILER_ID:GNU>:-Wno-unused-but-set-variable>")
 
+    string(REGEX REPLACE "^cmake" "${Halide_CMAKE_TARGET}" _resolved_target "${Halide_TARGET}")
+
     add_test(NAME tutorial_${name} COMMAND ${name})
-    set_tests_properties(tutorial_${name}
-                         PROPERTIES
-                         ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET}"
-                         LABELS "tutorial;${args_GROUPS}")
+    set_tests_properties(
+        tutorial_${name}
+        PROPERTIES
+        ENVIRONMENT "HL_TARGET=${_resolved_target};HL_JIT_TARGET=${_resolved_target}"
+        LABELS "tutorial;${args_GROUPS}"
+    )
+    if ("multithreaded" IN_LIST args_GROUPS)
+        set_tests_properties(tutorial_${name} PROPERTIES RUN_SERIAL TRUE)
+    endif ()
 
     if (args_WITH_IMAGE_IO)
         target_link_libraries(${name} PRIVATE Halide::ImageIO)
+        # Image-I/O tutorials use paths relative to tutorial/. Keep tests
+        # independent of copied build-tree assets.
+        set_tests_properties(
+            tutorial_${name}
+            PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        )
     endif ()
 
-    if (args_WITH_OPENMP)
-        if (TARGET OpenMP::OpenMP_CXX)
-            target_link_libraries(${name} PRIVATE OpenMP::OpenMP_CXX)
-        else ()
-            # Compile anyway but suppress warnings about unrecognised pragmas
-            target_compile_options("${name}"
-                                   PRIVATE
-                                   $<$<CXX_COMPILER_ID:MSVC>:/Wd4068>
-                                   $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wno-unknown-pragmas>)
-        endif ()
+    _Halide_register_tutorial_website_target("${source_file}" "${name}")
+endfunction()
+
+# Registers a lesson source file's corresponding executable target so that
+# doc/'s tutorial-page generator can locate its built binary (by way of a
+# generate-time manifest, since executable output paths aren't known until
+# then), and builds it unoptimized with debug info, regardless of build
+# type, so that single-line stepping/breakpoints are reliable (matches
+# test/debugger/CMakeLists.txt's debugger_fixture, which needs the same thing
+# for the same reason: at -O2/-O3, reordered/merged line-table entries make
+# `next`/one-shot breakpoints land on the wrong statement).
+function(_Halide_register_tutorial_website_target source_file target)
+    if (NOT WITH_DOCS)
+        return()
     endif ()
+    target_compile_options(
+        ${target}
+        PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-g;-O0;-fno-omit-frame-pointer>
+    )
+    set_property(GLOBAL APPEND PROPERTY HALIDE_TUTORIAL_SOURCE_TARGETS "${source_file}=${target}")
 endfunction()
 
 # Declare tutorials
@@ -43,11 +64,26 @@ add_tutorial(lesson_01_basics.cpp)
 add_tutorial(lesson_02_input_image.cpp WITH_IMAGE_IO)
 add_tutorial(lesson_03_debugging_1.cpp)
 add_tutorial(lesson_04_debugging_2.cpp GROUPS multithreaded)
-add_tutorial(lesson_05_scheduling_1.cpp GROUPS multithreaded)
+
+if (
+    Halide_BUILDING_IN_CI
+    AND Halide_LLVM_VERSION VERSION_LESS 22
+    AND Halide_HOST_TARGET MATCHES "arm-64-linux"
+)
+    # We can't reliably detect SVE2 without having first built Halide, but the
+    # SVE2 backend has the below LLVM issue which has been fixed in LLVM 22.
+    # This issue breaks lesson 5 on the GitHub Actions ARM64 runners, which have
+    # SVE2 support.
+    # "Request for a fixed element count on a scalable object"
+    # See: https://github.com/llvm/llvm-project/issues/160127
+else ()
+    add_tutorial(lesson_05_scheduling_1.cpp GROUPS multithreaded)
+endif ()
+
 add_tutorial(lesson_06_realizing_over_shifted_domains.cpp)
 add_tutorial(lesson_07_multi_stage_pipelines.cpp WITH_IMAGE_IO)
-add_tutorial(lesson_08_scheduling_2.cpp WITH_IMAGE_IO WITH_OPENMP GROUPS multithreaded)
-add_tutorial(lesson_09_update_definitions.cpp WITH_IMAGE_IO WITH_OPENMP GROUPS multithreaded)
+add_tutorial(lesson_08_scheduling_2.cpp WITH_IMAGE_IO GROUPS multithreaded)
+add_tutorial(lesson_09_update_definitions.cpp WITH_IMAGE_IO GROUPS multithreaded)
 
 if ("NVPTX" IN_LIST Halide_LLVM_COMPONENTS)
     if (Halide_TARGET MATCHES "wasm")
@@ -59,32 +95,54 @@ if ("NVPTX" IN_LIST Halide_LLVM_COMPONENTS)
         add_tutorial(lesson_10_aot_compilation_generate.cpp)
 
         set(FILTER_LIB "lesson_10_halide${CMAKE_STATIC_LIBRARY_SUFFIX}")
-        add_custom_command(OUTPUT lesson_10_halide.h "${FILTER_LIB}"
-                           DEPENDS lesson_10_aot_compilation_generate
-                           COMMAND lesson_10_aot_compilation_generate
-                           VERBATIM)
+        add_custom_command(
+            OUTPUT
+                lesson_10_halide.h
+                "${FILTER_LIB}"
+            DEPENDS lesson_10_aot_compilation_generate
+            COMMAND lesson_10_aot_compilation_generate
+            VERBATIM
+        )
         add_custom_target(exec_lesson_10_aot_compilation_generate
-                          DEPENDS lesson_10_halide.h "${FILTER_LIB}")
+            DEPENDS
+            lesson_10_halide.h
+            "${FILTER_LIB}"
+        )
 
         # This will be linked with the code generated by
         # the generator (lesson_10_aot_compilation_generate)
         add_executable(lesson_10_aot_compilation_run lesson_10_aot_compilation_run.cpp)
         add_dependencies(lesson_10_aot_compilation_run exec_lesson_10_aot_compilation_generate)
-        target_link_libraries(lesson_10_aot_compilation_run PRIVATE
-                              "${CMAKE_CURRENT_BINARY_DIR}/${FILTER_LIB}"
-                              Halide::Runtime
-                              Threads::Threads
-                              ${CMAKE_DL_LIBS})
+        target_link_libraries(
+            lesson_10_aot_compilation_run
+            PRIVATE
+            "${CMAKE_CURRENT_BINARY_DIR}/${FILTER_LIB}"
+            Halide::Runtime
+            Threads::Threads
+            ${CMAKE_DL_LIBS}
+        )
 
         # Undocumented function in HalideGeneratorHelpers. Do not call in external code.
         # Users of the AOT functions (as opposed to Generators) should link to the relevant
         # GPU libraries manually.
         _Halide_target_link_gpu_libs(lesson_10_aot_compilation_run PRIVATE ${Halide_TARGET})
 
-        target_include_directories(lesson_10_aot_compilation_run PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+        target_include_directories(
+            lesson_10_aot_compilation_run
+            PRIVATE "${CMAKE_CURRENT_BINARY_DIR}"
+        )
+
+        _Halide_register_tutorial_website_target(
+            lesson_10_aot_compilation_run.cpp lesson_10_aot_compilation_run
+        )
 
         add_test(NAME tutorial_lesson_10_aot_compilation_run COMMAND lesson_10_aot_compilation_run)
-        set_tests_properties(tutorial_lesson_10_aot_compilation_run PROPERTIES LABELS "tutorial;multithreaded")
+        set_tests_properties(
+            tutorial_lesson_10_aot_compilation_run
+            PROPERTIES
+            LABELS "tutorial;multithreaded"
+            RUN_SERIAL TRUE
+        )
     endif ()
 endif ()
 
@@ -96,6 +154,7 @@ add_tutorial(lesson_14_types.cpp)
 # Lesson 15
 add_executable(lesson_15_generate lesson_15_generators.cpp)
 target_link_libraries(lesson_15_generate PRIVATE Halide::Generator)
+_Halide_register_tutorial_website_target(lesson_15_generators.cpp lesson_15_generate)
 
 ## Hack to build the libraries
 
@@ -103,55 +162,83 @@ add_custom_target(lesson_15_targets)
 set(LESSON_15_EXPECTED_FILES "")
 
 ##
-add_halide_library(my_first_generator_win32 FROM lesson_15_generate
-                   GENERATOR my_first_generator
-                   TARGETS x86-32-windows)
+add_halide_library(
+    my_first_generator_win32
+    FROM lesson_15_generate
+    GENERATOR my_first_generator
+    TARGETS x86-32-windows
+)
 
-list(APPEND LESSON_15_EXPECTED_FILES $<TARGET_FILE:my_first_generator_win32> my_first_generator_win32.h)
+list(APPEND LESSON_15_EXPECTED_FILES
+    $<TARGET_FILE:my_first_generator_win32> my_first_generator_win32.h
+)
 add_dependencies(lesson_15_targets my_first_generator_win32)
 
 ##
-add_halide_library(my_first_generator FROM lesson_15_generate
-                   STMT my_first_generator_STMT)
+add_halide_library(my_first_generator FROM lesson_15_generate STMT my_first_generator_STMT)
 
 list(APPEND LESSON_15_EXPECTED_FILES ${my_first_generator_STMT})
 add_dependencies(lesson_15_targets my_first_generator)
 
 ##
-add_halide_library(my_second_generator_1 FROM lesson_15_generate
-                   GENERATOR my_second_generator
-                   PARAMS parallel=false scale=3.0 rotation=ccw output.type=uint16)
-add_halide_library(my_second_generator_2 FROM lesson_15_generate
-                   GENERATOR my_second_generator
-                   PARAMS scale=9.0 rotation=ccw output.type=float32)
-add_halide_library(my_second_generator_3 FROM lesson_15_generate
-                   GENERATOR my_second_generator
-                   PARAMS parallel=false output.type=float64)
+add_halide_library(
+    my_second_generator_1
+    FROM lesson_15_generate
+    GENERATOR my_second_generator
+    PARAMS parallel=false scale=3.0 rotation=ccw output.type=uint16
+)
+add_halide_library(
+    my_second_generator_2
+    FROM lesson_15_generate
+    GENERATOR my_second_generator
+    PARAMS scale=9.0 rotation=ccw output.type=float32
+)
+add_halide_library(
+    my_second_generator_3
+    FROM lesson_15_generate
+    GENERATOR my_second_generator
+    PARAMS parallel=false output.type=float64
+)
 
 list(APPEND LESSON_15_EXPECTED_FILES
-     $<TARGET_FILE:my_second_generator_1> my_second_generator_1.h
-     $<TARGET_FILE:my_second_generator_2> my_second_generator_2.h
-     $<TARGET_FILE:my_second_generator_3> my_second_generator_3.h)
+    $<TARGET_FILE:my_second_generator_1> my_second_generator_1.h
+    $<TARGET_FILE:my_second_generator_2> my_second_generator_2.h
+    $<TARGET_FILE:my_second_generator_3> my_second_generator_3.h
+)
 
-add_dependencies(lesson_15_targets
-                 my_second_generator_1
-                 my_second_generator_2
-                 my_second_generator_3)
+add_dependencies(
+    lesson_15_targets
+    my_second_generator_1
+    my_second_generator_2
+    my_second_generator_3
+)
 
 ##
-add_test(NAME tutorial_lesson_15_build_gens
-         COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target lesson_15_targets --config $<CONFIG>)
-set_tests_properties(tutorial_lesson_15_build_gens PROPERTIES
-                     LABELS tutorial
-                     FIXTURES_SETUP tutorial_lesson_15)
+add_test(
+    NAME tutorial_lesson_15_build_gens
+    COMMAND
+        ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target lesson_15_targets --config $<CONFIG>
+)
+set_tests_properties(
+    tutorial_lesson_15_build_gens
+    PROPERTIES
+    LABELS tutorial
+    FIXTURES_SETUP tutorial_lesson_15
+)
 
-add_test(NAME tutorial_lesson_15_check_files
-         COMMAND ${CMAKE_COMMAND}
-         "-DFILES_TO_CHECK=$<JOIN:${LESSON_15_EXPECTED_FILES},$<SEMICOLON>>"
-         -P "${Halide_SOURCE_DIR}/cmake/CheckFilesExist.cmake")
-set_tests_properties(tutorial_lesson_15_check_files PROPERTIES
-                     LABELS tutorial
-                     FIXTURES_REQUIRED tutorial_lesson_15)
+add_test(
+    NAME tutorial_lesson_15_check_files
+    COMMAND
+        ${CMAKE_COMMAND}
+        "-DFILES_TO_CHECK=$<JOIN:${LESSON_15_EXPECTED_FILES},$<SEMICOLON>>"
+        -P "${Halide_SOURCE_DIR}/cmake/CheckFilesExist.cmake"
+)
+set_tests_properties(
+    tutorial_lesson_15_check_files
+    PROPERTIES
+    LABELS tutorial
+    FIXTURES_REQUIRED tutorial_lesson_15
+)
 
 # Lesson 16
 if (Halide_TARGET MATCHES "wasm")
@@ -160,21 +247,45 @@ if (Halide_TARGET MATCHES "wasm")
 else ()
     add_executable(lesson_16_rgb_generate lesson_16_rgb_generate.cpp)
     target_link_libraries(lesson_16_rgb_generate PRIVATE Halide::Generator)
+    _Halide_register_tutorial_website_target(lesson_16_rgb_generate.cpp lesson_16_rgb_generate)
 
-    add_halide_library(brighten_planar FROM lesson_16_rgb_generate
-                       TARGETS cmake GENERATOR brighten PARAMS layout=planar)
-    add_halide_library(brighten_interleaved FROM lesson_16_rgb_generate
-                       TARGETS cmake GENERATOR brighten PARAMS layout=interleaved)
-    add_halide_library(brighten_either FROM lesson_16_rgb_generate
-                       TARGETS cmake GENERATOR brighten PARAMS layout=either)
-    add_halide_library(brighten_specialized FROM lesson_16_rgb_generate
-                       TARGETS cmake GENERATOR brighten PARAMS layout=specialized)
+    add_halide_library(
+        brighten_planar
+        FROM lesson_16_rgb_generate
+        TARGETS cmake
+        GENERATOR brighten
+        PARAMS layout=planar
+    )
+    add_halide_library(
+        brighten_interleaved
+        FROM lesson_16_rgb_generate
+        TARGETS cmake
+        GENERATOR brighten
+        PARAMS layout=interleaved
+    )
+    add_halide_library(
+        brighten_either
+        FROM lesson_16_rgb_generate
+        TARGETS cmake
+        GENERATOR brighten
+        PARAMS layout=either
+    )
+    add_halide_library(
+        brighten_specialized
+        FROM lesson_16_rgb_generate
+        TARGETS cmake
+        GENERATOR brighten
+        PARAMS layout=specialized
+    )
 
     add_executable(lesson_16_rgb_run lesson_16_rgb_run.cpp)
-    target_link_libraries(lesson_16_rgb_run PRIVATE
-                          brighten_planar brighten_interleaved brighten_either brighten_specialized
-                          Halide::ImageIO
-                          Halide::Tools)
+    target_link_libraries(
+        lesson_16_rgb_run
+        PRIVATE
+        brighten_planar brighten_interleaved brighten_either brighten_specialized Halide::ImageIO
+        Halide::Tools
+    )
+    _Halide_register_tutorial_website_target(lesson_16_rgb_run.cpp lesson_16_rgb_run)
 
     add_test(NAME tutorial_lesson_16_rgb_run COMMAND lesson_16_rgb_run)
     set_tests_properties(tutorial_lesson_16_rgb_run PROPERTIES LABELS tutorial)
@@ -190,27 +301,47 @@ add_tutorial(lesson_20_cloning_funcs.cpp)
 if (TARGET Halide::Mullapudi2016)
     add_executable(lesson_21_auto_scheduler_generate lesson_21_auto_scheduler_generate.cpp)
     target_link_libraries(lesson_21_auto_scheduler_generate PRIVATE Halide::Generator)
+    _Halide_register_tutorial_website_target(
+        lesson_21_auto_scheduler_generate.cpp lesson_21_auto_scheduler_generate
+    )
 
-    add_halide_library(auto_schedule_false FROM lesson_21_auto_scheduler_generate
-                       TARGETS cmake
-                       GENERATOR auto_schedule_gen)
-    add_halide_library(auto_schedule_true FROM lesson_21_auto_scheduler_generate
-                       TARGETS cmake
-                       AUTOSCHEDULER Halide::Mullapudi2016
-                       GENERATOR auto_schedule_gen
-                       PARAMS autoscheduler.parallelism=32
-                              autoscheduler.last_level_cache_size=16777216
-                              autoscheduler.balance=40)
+    add_halide_library(
+        auto_schedule_false
+        FROM lesson_21_auto_scheduler_generate
+        TARGETS cmake
+        GENERATOR auto_schedule_gen
+    )
+    add_halide_library(
+        auto_schedule_true
+        FROM lesson_21_auto_scheduler_generate
+        TARGETS cmake
+        AUTOSCHEDULER Halide::Mullapudi2016
+        GENERATOR auto_schedule_gen
+        PARAMS
+        autoscheduler.parallelism=32
+        autoscheduler.last_level_cache_size=16777216
+        autoscheduler.balance=40
+    )
 
     add_executable(lesson_21_auto_scheduler_run lesson_21_auto_scheduler_run.cpp)
-    target_link_libraries(lesson_21_auto_scheduler_run PRIVATE
-                          auto_schedule_false auto_schedule_true Halide::Tools)
+    target_link_libraries(
+        lesson_21_auto_scheduler_run
+        PRIVATE auto_schedule_false auto_schedule_true Halide::Tools
+    )
+    _Halide_register_tutorial_website_target(
+        lesson_21_auto_scheduler_run.cpp lesson_21_auto_scheduler_run
+    )
 
     add_test(NAME tutorial_lesson_21_auto_scheduler_run COMMAND lesson_21_auto_scheduler_run)
-    set_tests_properties(tutorial_lesson_21_auto_scheduler_run PROPERTIES LABELS "tutorial;multithreaded")
+    set_tests_properties(
+        tutorial_lesson_21_auto_scheduler_run
+        PROPERTIES
+        LABELS "tutorial;multithreaded"
+        RUN_SERIAL TRUE
+    )
 endif ()
 
 # Lessons 22-24
 add_tutorial(lesson_22_jit_performance.cpp)
 add_tutorial(lesson_23_serialization.cpp WITH_IMAGE_IO)
-add_tutorial(lesson_24_async.cpp)
+add_tutorial(lesson_24_async.cpp GROUPS multithreaded)

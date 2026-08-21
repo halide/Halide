@@ -2,6 +2,7 @@
 #include "IRPrinter.h"
 
 #include <mutex>
+#include <tuple>
 
 namespace Halide {
 namespace Internal {
@@ -93,21 +94,17 @@ struct TableKey {
         return (types == other.types) && (root == other.root) && (dim == other.dim);
     }
     bool operator<(const TableKey &other) const {
-        if (types < other.types) {
-            return true;
-        } else if (types > other.types) {
-            return false;
-        }
-        if (root < other.root) {
-            return true;
-        } else if (root > other.root) {
-            return false;
-        }
-        return (dim < other.dim);
+        return std::tie(types, root, dim) <
+               std::tie(other.types, other.root, other.dim);
     }
 };
 
 map<TableKey, vector<AssociativePattern>> pattern_tables;
+
+std::mutex &ops_table_lock() {
+    static std::mutex lock;
+    return lock;
+}
 
 #define declare_vars(t, index)                                        \
     Expr x##index = Variable::make((t), "x" + std::to_string(index)); \
@@ -203,6 +200,16 @@ void populate_ops_table_double_general_sub(const vector<Type> &types, vector<Ass
 
 void populate_ops_table_double_general_select(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_double(types);
+    // Argmax with index as first tuple element
+    table.push_back({{select(x1 > y1, x0, y0), max(x1, y1)}, {zero_0, tmin_1}, true});
+    table.push_back({{select(x1 >= y1, x0, y0), max(x1, y1)}, {zero_0, tmin_1}, true});
+    table.push_back({{select(y1 < x1, x0, y0), max(x1, y1)}, {zero_0, tmin_1}, true});
+    table.push_back({{select(y1 <= x1, x0, y0), max(x1, y1)}, {zero_0, tmin_1}, true});
+    // Argmin with index as first tuple element
+    table.push_back({{select(x1 < y1, x0, y0), min(x1, y1)}, {zero_0, tmax_1}, true});
+    table.push_back({{select(x1 <= y1, x0, y0), min(x1, y1)}, {zero_0, tmax_1}, true});
+    table.push_back({{select(y1 > x1, x0, y0), min(x1, y1)}, {zero_0, tmax_1}, true});
+    table.push_back({{select(y1 >= x1, x0, y0), min(x1, y1)}, {zero_0, tmax_1}, true});
 }
 
 void populate_ops_table_single_uint1_and(const vector<Type> &types, vector<AssociativePattern> &table) {
@@ -227,8 +234,10 @@ void populate_ops_table_single_uint8_cast(const vector<Type> &types, vector<Asso
 
 void populate_ops_table_single_uint8_select(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_single(types);
-    table.emplace_back(select(x0 > tmax_0 - y0, tmax_0, y0), zero_0, true);  // Saturating add
-    table.emplace_back(select(x0 < -y0, y0, tmax_0), zero_0, true);          // Saturating add
+    table.emplace_back(select(x0 < tmax_0 - y0, x0 + y0, tmax_0), zero_0, true);   // Saturating add
+    table.emplace_back(select(x0 < ~y0, x0 + y0, tmax_0), zero_0, true);           // Saturating add
+    table.emplace_back(select(x0 <= tmax_0 - y0, x0 + y0, tmax_0), zero_0, true);  // Saturating add
+    table.emplace_back(select(x0 <= ~y0, x0 + y0, tmax_0), zero_0, true);          // Saturating add
 }
 
 void populate_ops_table_single_uint16_cast(const vector<Type> &types, vector<AssociativePattern> &table) {
@@ -241,8 +250,10 @@ void populate_ops_table_single_uint16_cast(const vector<Type> &types, vector<Ass
 
 void populate_ops_table_single_uint16_select(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_single(types);
-    table.emplace_back(select(x0 > tmax_0 - y0, tmax_0, y0), zero_0, true);  // Saturating add
-    table.emplace_back(select(x0 < -y0, y0, tmax_0), zero_0, true);          // Saturating add
+    table.emplace_back(select(x0 < tmax_0 - y0, x0 + y0, tmax_0), zero_0, true);   // Saturating add
+    table.emplace_back(select(x0 < ~y0, x0 + y0, tmax_0), zero_0, true);           // Saturating add
+    table.emplace_back(select(x0 <= tmax_0 - y0, x0 + y0, tmax_0), zero_0, true);  // Saturating add
+    table.emplace_back(select(x0 <= ~y0, x0 + y0, tmax_0), zero_0, true);          // Saturating add
 }
 
 void populate_ops_table_single_uint32_cast(const vector<Type> &types, vector<AssociativePattern> &table) {
@@ -253,8 +264,10 @@ void populate_ops_table_single_uint32_cast(const vector<Type> &types, vector<Ass
 
 void populate_ops_table_single_uint32_select(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_single(types);
-    table.emplace_back(select(x0 > tmax_0 - y0, tmax_0, y0), zero_0, true);  // Saturating add
-    table.emplace_back(select(x0 < -y0, y0, tmax_0), zero_0, true);          // Saturating add
+    table.emplace_back(select(x0 < tmax_0 - y0, x0 + y0, tmax_0), zero_0, true);   // Saturating add
+    table.emplace_back(select(x0 < ~y0, x0 + y0, tmax_0), zero_0, true);           // Saturating add
+    table.emplace_back(select(x0 <= tmax_0 - y0, x0 + y0, tmax_0), zero_0, true);  // Saturating add
+    table.emplace_back(select(x0 <= ~y0, x0 + y0, tmax_0), zero_0, true);          // Saturating add
 }
 
 void populate_ops_table_single_float_select(const vector<Type> &types, vector<AssociativePattern> &table) {
@@ -326,19 +339,6 @@ const vector<AssociativePattern> &get_ops_table_helper(const vector<Type> &types
     return table_it->second;
 }
 
-std::string print_types(const vector<Type> &types) {
-    std::ostringstream stream;
-    stream << "{";
-    for (size_t i = 0; i < types.size(); ++i) {
-        if (i > 0) {
-            stream << ", ";
-        }
-        stream << types[i];
-    }
-    stream << "}";
-    return stream.str();
-}
-
 }  // anonymous namespace
 
 const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
@@ -359,8 +359,7 @@ const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
     const vector<AssociativePattern> &table = [&]() -> decltype(auto) {
         // get_ops_table_helper() lazily initializes the table, so ensure
         // that multiple threads can't try to do so at the same time.
-        static std::mutex ops_table_lock;
-        std::scoped_lock lock_guard(ops_table_lock);
+        std::scoped_lock lock_guard(ops_table_lock());
 
         return get_ops_table_helper(types, exprs[0].node_type(), exprs.size());
     }();
@@ -371,6 +370,24 @@ const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
     }
 
     return table;
+}
+
+Expr get_associative_identity(Type type, IRNodeType root) {
+    std::scoped_lock lock_guard(ops_table_lock());
+
+    const vector<AssociativePattern> &table = get_ops_table_helper({type}, root, 1);
+    if (table.empty()) {
+        return Expr();
+    }
+
+    const Expr &identity = table.front().identities.front();
+    for (const AssociativePattern &pattern : table) {
+        internal_assert(pattern.size() == 1);
+        if (!equal(pattern.identities.front(), identity)) {
+            return Expr();
+        }
+    }
+    return identity;
 }
 
 }  // namespace Internal

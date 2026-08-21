@@ -16,6 +16,6 @@ int main(int argc, char **argv) {
         }
         t = t.without_feature(f);
     }
-    printf("%s", t.to_string().c_str());
+    printf("%s\n", t.to_string().c_str());
     return 0;
 }

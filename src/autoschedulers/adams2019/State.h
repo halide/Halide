@@ -6,7 +6,7 @@
 #include "CostModel.h"
 #include "DefaultCostModel.h"
 #include "Featurization.h"
-#include "Halide.h"
+#include "HalidePlugin.h"
 #include "LoopNest.h"
 #include "PerfectHashMap.h"
 #include <map>

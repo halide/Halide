@@ -1,6 +1,9 @@
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <iostream>
+#include <limits>
+#include <sstream>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -12,22 +15,29 @@
 #include "ApplySplit.h"
 #include "Argument.h"
 #include "Associativity.h"
+#include "Bounds.h"
 #include "Callable.h"
 #include "CodeGen_LLVM.h"
+#include "ConstantBounds.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
+#include "FindCalls.h"
 #include "Func.h"
 #include "Function.h"
 #include "IR.h"
 #include "IREquality.h"
+#include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "IRVisitor.h"
 #include "ImageParam.h"
+#include "Inline.h"
 #include "LLVM_Output.h"
 #include "Lower.h"
 #include "Param.h"
 #include "PrintLoopNest.h"
+#include "RealizationOrder.h"
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
@@ -592,7 +602,10 @@ class SubstituteSelfReference : public IRMutator {
             vector<Expr> args;
             args.insert(args.end(), c->args.begin(), c->args.end());
             args.insert(args.end(), new_args.begin(), new_args.end());
-            expr = Call::make(substitute, args, c->value_index);
+            // This rewrites a Func's self-reference into a self-reference of
+            // the rfactor intermediate, so it must not follow global wrappers.
+            expr = Call::make(substitute, args, c->value_index,
+                              /*follow_global_wrappers=*/false);
         }
         return expr;
     }
@@ -614,7 +627,7 @@ vector<Expr> substitute_self_reference(const vector<Expr> &values, const string 
     vector<Expr> result;
     result.reserve(values.size());
     for (const auto &val : values) {
-        result.push_back(subs.mutate(val));
+        result.push_back(subs(val));
     }
     return result;
 }
@@ -755,6 +768,24 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
         add_let(dim_projection, dims[i].var, RVar(new_rdom, i));
     }
     return {new_rdom, dim_projection};
+}
+
+// If `e` is a binary op of node type `op` and exactly one of its two operands
+// satisfies `is_selected`, returns {selected operand, other operand}. Returns
+// nullopt if `e` isn't a binary `op`, or if neither/both operands match.
+template<typename Predicate>
+optional<pair<Expr, Expr>> select_binary_operand(const Expr &e, IRNodeType op, Predicate &&is_selected) {
+    if (e.node_type() != op) {
+        return std::nullopt;
+    }
+    // `op` is always a binary op, so this is guaranteed to have a value.
+    auto [a, b] = *as_binary_operands(e);
+    const bool a_sel = is_selected(a);
+    const bool b_sel = is_selected(b);
+    if (a_sel == b_sel) {
+        return std::nullopt;
+    }
+    return a_sel ? std::make_pair(a, b) : std::make_pair(b, a);
 }
 
 }  // namespace
@@ -1072,9 +1103,19 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
     return intm;
 }
 
-void Stage::split(const string &old, const string &outer, const string &inner, const Expr &factor, bool exact, TailStrategy tail) {
+void Stage::split(const string &old, const string &outer, const string &inner, const Expr &factor_arg, bool exact, TailStrategy tail) {
     debug(4) << "In schedule for " << name() << ", split " << old << " into "
-             << outer << " and " << inner << " with factor of " << factor << "\n";
+             << outer << " and " << inner << " with factor of " << factor_arg << "\n";
+
+    user_assert(factor_arg.defined())
+        << "In schedule for " << name() << ", split factor for splitting "
+        << old << " is undefined.\n";
+    user_assert(Int(32).can_represent(factor_arg.type()))
+        << "In schedule for " << name() << ", split factor for splitting "
+        << old << " has type " << factor_arg.type()
+        << ", which is not representable as int32.\n";
+    Expr factor = cast<int32_t>(factor_arg);
+
     vector<Dim> &dims = definition.schedule().dims();
 
     definition.schedule().touched() = true;
@@ -1306,58 +1347,70 @@ Stage &Stage::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRV
     debug(4) << "In schedule for " << name() << ", fuse " << outer.name()
              << " and " << inner.name() << " into " << fused.name() << "\n";
 
-    // Replace the old dimensions with the new dimension in the dims list
-    bool found_outer = false, found_inner = false;
-    string inner_name, outer_name, fused_name;
     vector<Dim> &dims = definition.schedule().dims();
-
-    DimType outer_type = DimType::PureRVar;
-    for (size_t i = 0; (!found_outer) && i < dims.size(); i++) {
-        if (dim_match(dims[i], outer)) {
-            found_outer = true;
-            outer_name = dims[i].var;
-            outer_type = dims[i].dim_type;
-            dims.erase(dims.begin() + i);
-        }
-    }
-    if (!found_outer) {
-        user_error << "In schedule for " << name()
-                   << ", could not find outer fuse dimension: "
-                   << outer.name()
-                   << "\n"
-                   << dump_argument_list();
-    }
-
-    for (size_t i = 0; (!found_inner) && i < dims.size(); i++) {
+    int inner_pos = -1, outer_pos = -1;
+    for (int i = 0; i < (int)dims.size(); i++) {
         if (dim_match(dims[i], inner)) {
-            found_inner = true;
-            inner_name = dims[i].var;
-            fused_name = inner_name + "." + fused.name();
-            dims[i].var = fused_name;
-
-            if (dims[i].dim_type == DimType::ImpureRVar ||
-                outer_type == DimType::ImpureRVar) {
-                dims[i].dim_type = DimType::ImpureRVar;
-            } else if (dims[i].dim_type == DimType::PureRVar ||
-                       outer_type == DimType::PureRVar) {
-                dims[i].dim_type = DimType::PureRVar;
-            } else {
-                dims[i].dim_type = DimType::PureVar;
-            }
-            // We just changed the dim_type without checking the
-            // for_type. Redundantly re-set the for type on the fused var just
-            // to trigger validation of the existing for_type.
-            set_dim_type(fused, dims[i].for_type);
+            inner_pos = i;
+        }
+        if (dim_match(dims[i], outer)) {
+            outer_pos = i;
         }
     }
+    user_assert(inner_pos >= 0) << "In schedule for " << name()
+                                << ", could not find inner fuse dimension: "
+                                << inner.name() << "\n"
+                                << dump_argument_list();
+    user_assert(outer_pos >= 0) << "In schedule for " << name()
+                                << ", could not find outer fuse dimension: "
+                                << outer.name() << "\n"
+                                << dump_argument_list();
+    user_assert(inner_pos != outer_pos) << "In schedule for " << name()
+                                        << ", inner and outer fuse dimensions must be distinct, both are: "
+                                        << inner.name() << "\n";
 
-    if (!found_inner) {
-        user_error << "In schedule for " << name()
-                   << ", could not find inner fuse dimension: "
-                   << inner.name()
-                   << "\n"
-                   << dump_argument_list();
+    // The dimensions need to be adjacent before fusing. Verify the reordering is safe.
+    if (outer_pos != inner_pos + 1) {
+        vector<VarOrRVar> order;
+        order.reserve(dims.size() - 1);
+        for (int i = 0; i < (int)dims.size() - 1; i++) {
+            if (i == outer_pos) {
+                continue;
+            }
+            order.emplace_back(split_string(dims[i].var, ".").back(), dims[i].is_rvar());
+            if (i == inner_pos) {
+                order.emplace_back(split_string(dims[outer_pos].var, ".").back(), dims[outer_pos].is_rvar());
+            }
+        }
+        reorder(order);
+        for (int i = 0; i < (int)dims.size(); i++) {
+            if (dim_match(dims[i], inner)) {
+                inner_pos = i;
+                break;
+            }
+        }
+        outer_pos = inner_pos + 1;
     }
+
+    string inner_name = dims[inner_pos].var;
+    string outer_name = dims[outer_pos].var;
+    string fused_name = inner_name + "." + fused.name();
+
+    DimType outer_type = dims[outer_pos].dim_type;
+    dims.erase(dims.begin() + outer_pos);
+
+    dims[inner_pos].var = fused_name;
+    if (dims[inner_pos].dim_type == DimType::ImpureRVar || outer_type == DimType::ImpureRVar) {
+        dims[inner_pos].dim_type = DimType::ImpureRVar;
+    } else if (dims[inner_pos].dim_type == DimType::PureRVar || outer_type == DimType::PureRVar) {
+        dims[inner_pos].dim_type = DimType::PureRVar;
+    } else {
+        dims[inner_pos].dim_type = DimType::PureVar;
+    }
+    // We just changed the dim_type without checking the for_type. Redundantly
+    // re-set the for type on the fused var just to trigger validation of the
+    // existing for_type.
+    set_dim_type(fused, dims[inner_pos].for_type);
 
     // Add the fuse to the splits list
     Split split = {fused_name, outer_name, inner_name, Expr(), true, TailStrategy::RoundUp, Split::FuseVars};
@@ -1628,6 +1681,49 @@ Stage &Stage::atomic(bool override_associativity_test) {
     definition.schedule().touched() = true;
     definition.schedule().atomic() = true;
     definition.schedule().override_atomic_associativity_test() = override_associativity_test;
+    return *this;
+}
+
+Stage &Stage::stream_stores() {
+    for (const Dim &d : definition.schedule().dims()) {
+        if (d.is_rvar() && !d.is_pure()) {
+            user_error << "Can't stream stores for " << name()
+                       << " because it has a reduction variable that Halide "
+                          "cannot prove is safe to parallelize. A self-load in "
+                          "this Stage could observe a value it streamed earlier "
+                          "in the same Stage, before the fence that makes "
+                          "streamed stores visible.\n";
+        }
+    }
+    definition.schedule().touched() = true;
+    definition.schedule().stream_stores() = true;
+    return *this;
+}
+
+Stage &Stage::stream_loads() {
+    definition.schedule().touched() = true;
+    definition.schedule().stream_loads_names() = std::nullopt;
+    return *this;
+}
+
+Stage &Stage::stream_loads(const std::vector<Func> &funcs) {
+    std::vector<string> names;
+    for (const Func &f : funcs) {
+        std::string target_name = f.name();
+        if (const Call *call = f.function().is_wrapper(); call && call->param.defined()) {
+            // A pure wrapper around an ImageParam/Buffer Parameter (e.g. as
+            // returned by ImageParam's implicit conversion to Func): the
+            // wrapper itself is inlined away before storage flattening
+            // ever runs, so match the underlying Parameter directly.
+            target_name = call->param.name();
+        }
+        user_assert(target_name != function.name())
+            << "Can't stream loads of \"" << target_name << "\" in " << name()
+            << " because a Stage cannot stream its own self-loads.\n";
+        names.push_back(target_name);
+    }
+    definition.schedule().stream_loads_names() = std::move(names);
+    definition.schedule().touched() = true;
     return *this;
 }
 
@@ -2052,6 +2148,16 @@ Stage &Stage::hexagon(const VarOrRVar &x) {
     return *this;
 }
 
+Stage &Stage::sme_streaming(const VarOrRVar &x) {
+    set_dim_device_api(x, DeviceAPI::SMEStreaming);
+    return *this;
+}
+
+Stage &Stage::host(const VarOrRVar &x) {
+    set_dim_device_api(x, DeviceAPI::Host);
+    return *this;
+}
+
 Stage &Stage::prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
     definition.schedule().touched() = true;
     PrefetchDirective prefetch = {f.name(), at.name(), from.name(), std::move(offset), strategy, Parameter()};
@@ -2159,6 +2265,9 @@ Func create_in_wrapper(Function wrapped_fn, const string &wrapper_name) {
     Func wrapper(wrapped_fn.new_function_in_same_group(wrapper_name));
     vector<Var> args = Func(wrapped_fn).args();
     wrapper(args) = Func(wrapped_fn)(args);
+    // The body's calls to wrapped_fn must not follow its global wrapper (or the
+    // wrapper would call itself); add_wrapper -> WeakenFunctionPtrs clears the
+    // follow flag on them.
     return wrapper;
 }
 
@@ -2176,40 +2285,171 @@ Func create_clone_wrapper(Function wrapped_fn, const string &wrapper_name) {
     return wrapper;
 }
 
-Func get_wrapper(Function wrapped_fn, string wrapper_name, const vector<Func> &fs, bool clone) {
-    // Either all Funcs in 'fs' have the same wrapper or they don't already
-    // have any wrappers. Otherwise, throw an error. If 'fs' is empty, then
-    // it is a global wrapper.
+// The set of Func names that count as "reaching" the wrapped Func during
+// custom-wrapper resolution: the wrapped Func itself plus all of its existing
+// custom wrappers/clones. Because in()/clone_in() rewrite consumers eagerly, a
+// Func that has already been wrapped calls the wrapper rather than the original,
+// so a call to any existing custom wrapper must be treated as equivalent to a
+// call to the original. The global wrapper (the "" entry) is deliberately
+// excluded: custom wraps are independent of it.
+std::set<std::string> wrapper_stop_names(const Function &target) {
+    std::set<std::string> names;
+    names.insert(target.name());
+    for (const auto &w : target.wrappers()) {
+        if (!w.first.empty()) {
+            names.insert(Function(w.second).name());
+        }
+    }
+    return names;
+}
+
+// Walk down the call graph from 'start'. Whenever we find a Func that directly
+// calls the wrapped Func (or an existing wrapper of it, per 'stop_names'),
+// record it and stop descending that branch — we don't want to pick up
+// unrelated direct callers that happen to live deeper in the subtree.
+void collect_direct_callers_of(const std::set<std::string> &stop_names,
+                               const Function &start,
+                               std::set<std::string> &visited,
+                               std::map<std::string, Function> &result) {
+    if (stop_names.count(start.name())) {
+        // 'start' is the wrapped Func itself or one of its existing wrappers;
+        // don't record it or descend through it.
+        return;
+    }
+    if (!visited.insert(start.name()).second) {
+        return;
+    }
+    std::map<std::string, Function> direct = find_direct_calls(start);
+    for (const std::string &name : stop_names) {
+        if (direct.count(name)) {
+            result.emplace(start.name(), start);
+            return;
+        }
+    }
+    for (const auto &kv : direct) {
+        collect_direct_callers_of(stop_names, kv.second, visited, result);
+    }
+}
+
+// Expand a user-supplied list of caller Funcs to the set of *direct* callers of
+// 'target' (through any existing wrappers) that lie on a path from any of those
+// callers down to 'target'. If a Func has no static path to 'target' at all,
+// leave it alone.
+vector<Func> resolve_transitive_callers(const Function &target, const vector<Func> &fs) {
+    std::set<std::string> stop_names = wrapper_stop_names(target);
+    vector<Func> out;
+    std::set<std::string> emitted;
+    auto emit = [&](const Function &g) {
+        if (emitted.insert(g.name()).second) {
+            out.emplace_back(g);
+        }
+    };
+    for (const Func &f : fs) {
+        std::map<std::string, Function> direct_callers;
+        std::set<std::string> visited;
+        collect_direct_callers_of(stop_names, f.function(), visited, direct_callers);
+        if (direct_callers.empty()) {
+            // No transitive path was found. That's legitimate only if 'f' itself
+            // directly calls the wrapped Func (e.g. 'f' is an existing wrapper of
+            // it); then we wrap 'f' directly. Otherwise 'f' does not use the
+            // wrapped Func at all, which is a user error.
+            user_assert(find_direct_calls(f.function()).count(target.name()))
+                << "Cannot wrap Func \"" << target.name() << "\" in \"" << f.name()
+                << "\" because \"" << f.name() << "\" does not call \""
+                << target.name() << "\".\n";
+            emit(f.function());
+        } else {
+            for (const auto &kv : direct_callers) {
+                emit(kv.second);
+            }
+        }
+    }
+    return out;
+}
+
+Func get_wrapper(Function wrapped_fn, string wrapper_name, const vector<Func> &fs_in, bool clone) {
+    vector<Func> fs = fs_in.empty() ? fs_in : resolve_transitive_callers(wrapped_fn, fs_in);
     const map<string, FunctionPtr> &wrappers = wrapped_fn.wrappers();
     wrapper_name += ("$" + std::to_string(wrappers.size()));
-    const auto &iter = fs.empty() ? wrappers.find("") : wrappers.find(fs[0].name());
-    if (iter == wrappers.end()) {
-        // Make sure the other Funcs also don't have any wrappers
+
+    if (fs.empty()) {
+        // Global wrapper (Func::in()). Idempotent: return the existing one, if
+        // any. Unlike custom wrappers it lives in a dedicated global_wrapper
+        // link rather than the wrappers map.
+        Function existing = wrapped_fn.global_wrapper();
+        if (existing.get_contents().defined()) {
+            return Func(existing);
+        }
+    } else {
+        // Either all Funcs in 'fs' already share the same wrapper, or none of
+        // them have one. Otherwise it's an error.
+        const auto &iter = wrappers.find(fs[0].name());
+        if (iter != wrappers.end()) {
+            internal_assert(iter->second.defined());
+            validate_wrapper(wrapped_fn.name(), wrappers, fs, iter->second);
+            Function wrapper(iter->second);
+            internal_assert(wrapper.frozen());
+            return Func(wrapper);
+        }
         for (size_t i = 1; i < fs.size(); ++i) {
             user_assert(wrappers.count(fs[i].name()) == 0)
                 << "Cannot define the wrapper since " << fs[i].name()
                 << " already has a wrapper while " << fs[0].name() << " doesn't \n";
         }
-        Func wrapper = clone ? create_clone_wrapper(wrapped_fn, wrapper_name) : create_in_wrapper(wrapped_fn, wrapper_name);
-        Function wrapper_fn = wrapper.function();
-        if (fs.empty()) {
-            // Add global wrapper
-            wrapped_fn.add_wrapper("", wrapper_fn);
-        } else {
-            for (const Func &f : fs) {
-                user_assert(wrapped_fn.name() != f.name())
-                    << "Cannot create wrapper of itself (\"" << wrapped_fn.name() << "\")\n";
-                wrapped_fn.add_wrapper(f.name(), wrapper_fn);
-            }
-        }
-        return wrapper;
     }
-    internal_assert(iter->second.defined());
-    validate_wrapper(wrapped_fn.name(), wrappers, fs, iter->second);
 
-    Function wrapper(iter->second);
-    internal_assert(wrapper.frozen());
-    return Func(wrapper);
+    Func wrapper = clone ? create_clone_wrapper(wrapped_fn, wrapper_name) : create_in_wrapper(wrapped_fn, wrapper_name);
+    Function wrapper_fn = wrapper.function();
+
+    // Build a profiler display name like "<wrapped>.in()" or
+    // "<wrapped>.in(<c1>, <c2>)" using the wrapped Func's display
+    // name and the consumers' display names (falling back to the
+    // IR-level name in each case). For .clone_in() use "clone_in".
+    auto display = [](const Function &f) {
+        return f.profiler_display_name().empty() ? f.name() : f.profiler_display_name();
+    };
+    std::string profiler_name = display(wrapped_fn) + (clone ? ".clone_in(" : ".in(");
+    for (size_t i = 0; i < fs.size(); i++) {
+        if (i > 0) {
+            profiler_name += ", ";
+        }
+        profiler_name += display(fs[i].function());
+    }
+    profiler_name += ")";
+    wrapper_fn.set_profiler_display_name(profiler_name);
+
+    if (fs.empty()) {
+        // Global wrapper. Calls to wrapped_fn follow global-wrapper links (see
+        // FuncRef::operator Expr and FunctionPtr::get), so all consumers --
+        // present and future -- resolve to it, and deep_copy materializes that
+        // at the start of lowering.
+        wrapped_fn.set_global_wrapper(wrapper_fn);
+    } else {
+        for (const Func &f : fs) {
+            user_assert(wrapped_fn.name() != f.name())
+                << "Cannot create wrapper of itself (\"" << wrapped_fn.name() << "\")\n";
+            wrapped_fn.add_wrapper(f.name(), wrapper_fn);
+
+            // Eagerly redirect this consumer's calls to wrapped_fn to the new
+            // wrapper.
+            Function consumer(f.function());
+            FunctionPtr replacement = wrapper_fn.get_contents();
+            replacement.follow_global_wrappers = true;
+            if (consumer.get_contents().group() == wrapper_fn.get_contents().group()) {
+                // References within a FunctionGroup must be weak.
+                replacement.weaken();
+            }
+            std::map<FunctionPtr, FunctionPtr> subs;
+            subs[wrapped_fn.get_contents()] = replacement;
+            consumer.substitute_calls(subs);
+
+            // The rewrite only touched the definitions that existed at this
+            // point, so freeze the consumer: adding more definitions to it
+            // afterwards would silently fail to be wrapped.
+            consumer.freeze();
+        }
+    }
+    return wrapper;
 }
 
 }  // anonymous namespace
@@ -2225,12 +2465,12 @@ Func Func::in(const vector<Func> &fs) {
         user_error << "Could not create a in wrapper for an empty list of Funcs\n";
     }
     invalidate_cache();
-    return get_wrapper(func, name() + "_wrapper", fs, false);
+    return get_wrapper(func, name() + "_in", fs, false);
 }
 
 Func Func::in() {
     invalidate_cache();
-    return get_wrapper(func, name() + "_global_wrapper", {}, false);
+    return get_wrapper(func, name() + "_in", {}, false);
 }
 
 Func Func::clone_in(const Func &f) {
@@ -2372,6 +2612,24 @@ Func &Func::memoize(const EvictionKey &eviction_key) {
 Func &Func::store_in(MemoryType t) {
     invalidate_cache();
     func.schedule().memory_type() = t;
+    return *this;
+}
+
+Func &Func::stream_loads() {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).stream_loads();
+    return *this;
+}
+
+Func &Func::stream_loads(const std::vector<Func> &funcs) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).stream_loads(funcs);
+    return *this;
+}
+
+Func &Func::stream_stores() {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).stream_stores();
     return *this;
 }
 
@@ -2791,6 +3049,18 @@ Func &Func::hexagon(const VarOrRVar &x) {
     return *this;
 }
 
+Func &Func::sme_streaming(const VarOrRVar &x) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).sme_streaming(x);
+    return *this;
+}
+
+Func &Func::host(const VarOrRVar &x) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).host(x);
+    return *this;
+}
+
 Func &Func::prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
     invalidate_cache();
     Stage(func, func.definition(), 0).prefetch(f, at, from, std::move(offset), strategy);
@@ -2987,6 +3257,613 @@ Func &Func::hoist_storage_root() {
 
 Func &Func::compute_inline() {
     return compute_at(LoopLevel::inlined());
+}
+
+Stage &Stage::eager_inline(const std::vector<Func> &fs) {
+    vector<Function> funcs;
+    map<string, Func> by_name;
+    for (const Func &f : fs) {
+        user_assert(f.defined())
+            << "eager_inline() was passed an undefined Func.\n";
+        user_assert(f.function().can_be_inlined())
+            << "eager_inline() cannot inline " << f.name()
+            << ": it must be a pure Func with no update or extern definition and "
+            << "no specializations.\n";
+        funcs.push_back(f.function());
+        by_name.emplace(f.name(), f);
+    }
+
+    // Inlining rewrites this stage's definition in place, replacing every direct
+    // call to f with f's body. A call to g inside f's body only becomes visible
+    // to us after f is inlined, so a caller must be inlined before its callees.
+    // topological_order() gives realization order (callees before callers);
+    // reverse it to inline callers first, so passing fs in any order works.
+    map<string, Function> env = Internal::build_environment(funcs);
+    vector<string> order = Internal::topological_order(funcs, env);
+    std::reverse(order.begin(), order.end());
+
+    for (const string &name : order) {
+        auto it = by_name.find(name);
+        if (it != by_name.end()) {
+            Internal::inline_function(definition, it->second.function());
+        }
+    }
+    return *this;
+}
+
+Func &Func::eager_inline(const std::vector<Func> &fs) {
+    invalidate_cache();
+    // Target the initial (pure) definition, mirroring other Func-level scheduling
+    // shorthands; use f.update(n).eager_inline(...) to inline into an update.
+    Stage(func, func.definition(), 0).eager_inline(fs);
+    return *this;
+}
+
+// Helpers for change_type implementation
+namespace {
+
+// Does `e` contain a direct Halide call to `fname` (a self-reference)?
+bool contains_self_reference(const Expr &e, const string &fname) {
+    class Finder : public IRGraphVisitor {
+        using IRGraphVisitor::visit;
+        const string &fname;
+        void visit(const Call *c) override {
+            if (c->call_type == Call::Halide && c->name == fname) {
+                found = true;
+            }
+            IRGraphVisitor::visit(c);
+        }
+
+    public:
+        bool found = false;
+        explicit Finder(const string &f)
+            : fname(f) {
+        }
+    } finder(fname);
+    e.accept(&finder);
+    return finder.found;
+}
+
+// Is `e` itself a direct call to `fname`?
+bool is_self_reference(const Expr &e, const string &fname) {
+    if (const Call *c = e.as<Call>()) {
+        return c->call_type == Call::Halide && c->name == fname;
+    }
+    return false;
+}
+
+// Rewrite a factor-free leaf expression `e` to type `t`
+Expr retype_leaf(const Expr &e, Type t, const FuncValueBounds &fvb) {
+    if (e.type() == t) {
+        return e;
+    }
+
+    // Expose a single promotion cast for a sum, difference, or product of two
+    // integer operands that are exactly representable in the float result type,
+    // e.g. cast<f32>(a) * cast<f32>(b) == cast<f32>(widening_mul(a, b)). When a and
+    // b round-trip through the float losslessly, the float op rounds the true
+    // result identically to casting the exact widening op, so this is exact for
+    // any width and signedness the float can hold (int8/int16 under f32, up to
+    // int32 under f64, ...). Exposing the widening form lets lossless_cast() below
+    // carry it to the target integer type as an integer dot-product term.
+    Expr folded = e;
+    if (folded.type().is_float() &&
+        (folded.node_type() == IRNodeType::Add ||
+         folded.node_type() == IRNodeType::Sub ||
+         folded.node_type() == IRNodeType::Mul)) {
+        auto operands = as_binary_operands(folded);
+        const Cast *ca = operands->first.as<Cast>();
+        const Cast *cb = operands->second.as<Cast>();
+        if (ca && cb && ca->value.type() == cb->value.type() &&
+            ca->value.type().is_int_or_uint() &&
+            folded.type().can_represent(ca->value.type())) {
+            const Expr &x = ca->value, &y = cb->value;
+            folded = cast(folded.type(),
+                          folded.node_type() == IRNodeType::Add ? widening_add(x, y) :
+                          folded.node_type() == IRNodeType::Sub ? widening_sub(x, y) :
+                                                                  widening_mul(x, y));
+        }
+    }
+
+    // lossless_cast uses Type::can_represent to decide if it can strip an outer
+    // cast, which uses strict, not fast-math semantics. When accumulating at an
+    // integer type, we peel a redundant int-to-float promotion here according to
+    // fast-math semantics. This exposes an integer form that lossless_cast can
+    // retype. A strict_cast is a Call, not a Cast, and is left alone.
+    if (t.is_int_or_uint()) {
+        if (const Cast *c = folded.as<Cast>()) {
+            if (folded.type().is_float() && c->value.type().is_int_or_uint()) {
+                folded = c->value;
+            }
+        }
+    }
+
+    // Retype via lossless_cast() when it can prove the cast exact, pushing it down
+    // through widening intrinsics so integer forms survive to instruction
+    // selection. Passing fvb lets it succeed for casts that are only exact under
+    // a producer's proven value range (e.g. narrowing a clamped producer). This
+    // is a no-op-or-improvement for any target type: a float target just takes
+    // lossless_cast()'s representable-widening path, and anything it can't
+    // prove falls through to the plain cast below.
+    std::map<Expr, ConstantInterval, ExprCompare> cache;
+    if (Expr r = lossless_cast(t, folded, Scope<ConstantInterval>::empty_scope(), &cache, &fvb);
+        r.defined()) {
+        return r;
+    }
+
+    return cast(t, folded);
+}
+
+// Retype a whole definition value to type `t`, retargeting a direct self-reference
+// from `fname` to `dst` and retyping the other operand as the increment. We only
+// recognize values in a few simple forms:
+//
+// 1. A bare self-reference: f(..) = f(..)  (e.g. transpose or copy)
+// 2. A direct reduction: f(..) = f(..) OP increment (or increment OP f(..))
+//    where `increment` contains no self-references.
+// 3. An expression with no self-references.
+//
+// This constraint keeps the recurrence visible to the overflow proof.
+Expr retype_value(const Expr &e, const string &fname, const Function &dst, Type t,
+                  const FuncValueBounds &fvb) {
+    auto retype_self_reference = [&](const Expr &expr) {
+        if (const Call *c = expr.as<Call>(); c && c->call_type == Call::Halide && c->name == fname) {
+            return Call::make(dst, c->args, c->value_index, /*follow_global_wrappers=*/false);
+        }
+        return Expr();
+    };
+
+    if (Expr self = retype_self_reference(e); self.defined()) {
+        return self;
+    }
+
+    if (contains_self_reference(e, fname)) {
+        optional<pair<Expr, Expr>> operands = as_binary_operands(e);
+        user_assert(operands) << "change_type() only supports update definitions "
+                                 "built from a binary operator with a direct call to "
+                              << fname << " as one operand.\n";
+        const bool a_is_self = is_self_reference(operands->first, fname);
+        const bool b_is_self = is_self_reference(operands->second, fname);
+        user_assert(a_is_self != b_is_self &&
+                    !contains_self_reference(a_is_self ? operands->second : operands->first, fname))
+            << "change_type() requires the accumulator operand of every update to "
+               "be a single direct call to "
+            << fname << ".\n";
+        user_assert(e.node_type() != IRNodeType::Sub || a_is_self)
+            << "change_type() only supports difference reductions of the form "
+            << fname << "(...) - term.\n";
+        Expr a = a_is_self ? retype_self_reference(operands->first) : retype_leaf(operands->first, t, fvb);
+        Expr b = b_is_self ? retype_self_reference(operands->second) : retype_leaf(operands->second, t, fvb);
+        return make_binary_op(e.node_type(), a, b);
+    }
+
+    return retype_leaf(e, t, fvb);
+}
+
+// The top-level associative combiner of a (let-stripped) reduction update value,
+// i.e. the node type of the binary op whose operands are a direct self-reference
+// and a self-reference-free increment. Returns nullopt if `val` isn't such a
+// shape.
+optional<IRNodeType> reduction_op(const Expr &val, const string &fname) {
+    optional<pair<Expr, Expr>> operands = as_binary_operands(val);
+    if (!operands) {
+        return std::nullopt;
+    }
+    const bool a_is_self = is_self_reference(operands->first, fname);
+    const bool b_is_self = is_self_reference(operands->second, fname);
+    if (a_is_self == b_is_self) {
+        return std::nullopt;
+    }
+    const Expr &increment = a_is_self ? operands->second : operands->first;
+    if (contains_self_reference(increment, fname) ||
+        (val.node_type() == IRNodeType::Sub && !a_is_self)) {
+        return std::nullopt;
+    }
+    return val.node_type();
+}
+
+// Given a current accumulator interval, a per-step contribution interval, and
+// the target type's limits, return the largest non-negative term count that is
+// guaranteed not to overflow. Safety is monotonic in the term count, so use
+// ConstantInterval's overflow-aware arithmetic in a binary search rather than
+// duplicating its endpoint math here.
+int64_t maximum_safe_term_count(const ConstantInterval &accumulator,
+                                const ConstantInterval &step,
+                                const ConstantInterval &limit) {
+    internal_assert(accumulator.is_bounded() && limit.is_bounded());
+    internal_assert(limit.contains(accumulator));
+
+    uint64_t min_safe = 0;
+    uint64_t max_possible = std::numeric_limits<int64_t>::max();
+    while (min_safe < max_possible) {
+        const uint64_t midpoint =
+            min_safe + (max_possible - min_safe + 1) / 2;
+        const ConstantInterval contribution =
+            step * ConstantInterval(0, (int64_t)midpoint);
+        if (limit.contains(accumulator + contribution)) {
+            min_safe = midpoint;
+        } else {
+            max_possible = midpoint - 1;
+        }
+    }
+    return (int64_t)min_safe;
+}
+
+// Build an overflow-free runtime predicate that the product of all reduction
+// extents is non-negative and at most `limit`. `product` is kept valid by a
+// select whenever a factor would exceed the remaining budget, so no wrapping
+// multiplication feeds a later comparison.
+Expr reduction_cardinality_fits(const Definition &def, int64_t limit) {
+    Expr product = make_const(Int(64), 1);
+    Expr all_non_negative = const_true();
+    Expr any_zero = const_false();
+    Expr product_fits = const_true();
+    const Expr max_terms = make_const(Int(64), limit);
+    for (const auto &rv : def.schedule().rvars()) {
+        Expr extent = cast(Int(64), rv.extent);
+        Expr positive_extent = max(extent, 1);
+        Expr factor_ok = product <= max_terms / positive_extent;
+        all_non_negative = all_non_negative && (extent >= 0);
+        any_zero = any_zero || (extent == 0);
+        product_fits = product_fits && factor_ok;
+        product = select(factor_ok, product * extent, max_terms);
+    }
+    return simplify(all_non_negative && (any_zero || product_fits));
+}
+
+// Prove that the first update runs at least once for every pure coordinate.
+// This is needed when an identity can't safely round-trip through the result type,
+// so symbolic extents become a runtime precondition. Example: a min-histogram can
+// use a sentinel like inf in float, but not in int, because int cannot distinguish
+// "untouched" from the minimum possible value.
+std::optional<std::string> nonempty_dense_update_precondition(const Function &fn,
+                                                              Expr *condition) {
+    *condition = Expr();
+    internal_assert(fn.has_update_definition());
+    const Definition &def = fn.update(0);
+
+    if (def.args().size() != fn.args().size()) {
+        return "the first update does not cover every pure coordinate";
+    }
+    for (size_t i = 0; i < def.args().size(); i++) {
+        const Variable *arg = def.args()[i].as<Variable>();
+        if (!arg || arg->name != fn.args()[i] ||
+            arg->param.defined() || arg->image.defined() ||
+            arg->reduction_domain.defined()) {
+            return "the first update does not cover every pure coordinate";
+        }
+    }
+
+    if (!is_const_one(simplify(def.predicate()))) {
+        return "the first update is predicated";
+    }
+
+    Expr positive_extents = const_true();
+    for (const auto &rv : def.schedule().rvars()) {
+        Expr extent = simplify(rv.extent);
+        if (optional<int64_t> ext = as_const_int(extent)) {
+            if (*ext <= 0) {
+                return "the first update has an empty reduction domain";
+            }
+        } else {
+            positive_extents =
+                positive_extents && (cast(Int(64), extent) > 0);
+        }
+    }
+
+    positive_extents = simplify(positive_extents);
+    if (!is_const_one(positive_extents)) {
+        *condition = positive_extents;
+    }
+    return std::nullopt;
+}
+
+// The largest (and, by symmetry, most negative) integer exactly representable
+// in floating-point type `t`: 2^(significant bits), where significant bits
+// counts the mantissa plus its implicit leading one. Bounding a reduction by
+// this range instead of `t`'s full dynamic range ensures an integer
+// accumulation retyped to `t` is exact, not merely finite.
+ConstantInterval float_exact_integer_bounds(Type t) {
+    int significant_bits;
+    if (t.is_bfloat()) {
+        internal_assert(t.bits() == 16) << "Unhandled bfloat width in change_type()\n";
+        significant_bits = 8;  // 7 explicit mantissa bits + 1 implicit
+    } else {
+        switch (t.bits()) {
+        case 16:
+            significant_bits = 11;
+            break;
+        case 32:
+            significant_bits = 24;
+            break;
+        case 64:
+            significant_bits = 53;
+            break;
+        default:
+            internal_error << "Unhandled float width in change_type()\n";
+            significant_bits = 0;
+        }
+    }
+    const int64_t bound = (int64_t)1 << significant_bits;
+    return ConstantInterval(-bound, bound);
+}
+
+// Prove that computing `typed`'s reduction at type `t` cannot overflow. Returns
+// true if it is safe; if safety can only be guaranteed under a runtime
+// precondition, that condition is returned in *condition. Returns an error
+// message if it cannot be proven.
+std::optional<std::string> change_type_prove_safe(
+    const Func &typed, Type t, const FuncValueBounds &fvb, Expr *condition  //
+) {
+    *condition = Expr();
+    const Function fn = typed.function();
+    // A float target's bounds machinery limit is the largest exactly
+    // representable integer, not its full dynamic range: an accumulation that
+    // overflows that range would silently round instead of erroring, so it
+    // must be caught here just like integer overflow is.
+    ConstantInterval limit = t.is_float() ?
+                                 float_exact_integer_bounds(t) :
+                                 ConstantInterval::bounds_of_type(t);
+    if (!limit.max_defined) {
+        // ConstantInterval cannot represent UInt(64)'s true upper bound. Use the
+        // largest representable conservative subset rather than treating an
+        // unbounded upper range as safe.
+        internal_assert(t.is_uint() && t.bits() == 64);
+        limit.max_defined = true;
+        limit.max = std::numeric_limits<int64_t>::max();
+    }
+
+    // Bound `e` using constant integer bounds, refined by the proven value ranges
+    // of any producer Funcs it references (e.g. a clamp upstream). retype_leaf()
+    // wraps a leaf in a cast to t when it can't prove the cast lossless; we bound
+    // the pre-cast value so a truncating narrowing shows its true range instead of
+    // being hidden by the cast clamping to t. (lossless_cast() never introduces a
+    // narrowing outer cast, so stripping one here only ever exposes that fallback.)
+    auto bounds_of = [&](const Expr &e) {
+        Expr v = e;
+        if (const Cast *c = v.as<Cast>()) {
+            v = c->value;
+        }
+        // retype_leaf() may have folded a leaf directly into a float constant
+        // (e.g. a literal seed retyped to a float target) rather than leaving
+        // a Cast to strip. constant_integer_bounds() only reasons about
+        // integer-typed expressions, so recover such a leaf's exact integer
+        // value here; a non-integer float constant falls through to the
+        // type-based (unbounded) fallback below, same as before this check
+        // was added.
+        if (v.type().is_float()) {
+            if (optional<double> fv = as_const_float(v); fv && std::floor(*fv) == *fv) {
+                return ConstantInterval::single_point((int64_t)*fv);
+            }
+        }
+        return constant_integer_bounds(v, Scope<ConstantInterval>::empty_scope(), nullptr, &fvb);
+    };
+
+    // The initial accumulator value must be representable at the new type. Carry
+    // its interval through every update so each stage is checked against all
+    // preceding work rather than against an implicit zero.
+    internal_assert(fn.values().size() == 1);
+    ConstantInterval accumulator = bounds_of(fn.values()[0]);
+    if (!limit.contains(accumulator)) {
+        return "the initial value may not be representable in the target type";
+    }
+
+    for (const Definition &def : fn.updates()) {
+        Expr val = substitute_in_all_lets(def.values()[0]);
+        optional<IRNodeType> op = reduction_op(val, fn.name());
+
+        // The increment is the non-self-reference operand of the combiner.
+        Expr increment = val;
+        if (op) {
+            optional<pair<Expr, Expr>> split = select_binary_operand(val, *op, [&](const Expr &e) {
+                return contains_self_reference(e, fn.name());
+            });
+            if (split) {
+                increment = split->second;
+            }
+        }
+        const ConstantInterval term = bounds_of(increment);
+
+        // Each term must itself be representable at the new type. Otherwise the
+        // cast retype_leaf() wrapped this leaf in truncates it, silently changing
+        // the result. This also rejects a term with unbounded magnitude, which no
+        // reduction extent could make safe.
+        if (!limit.contains(term)) {
+            return "a term may not be representable in the target type";
+        }
+
+        // min and max leave the result within the union of the previous
+        // accumulator and a term. and/or are closed over the target type, but
+        // use its full interval for any later update.
+        if (op && (*op == IRNodeType::Min || *op == IRNodeType::Max)) {
+            accumulator = ConstantInterval::make_union(accumulator, term);
+            continue;
+        }
+        if (op && (*op == IRNodeType::And || *op == IRNodeType::Or)) {
+            accumulator = limit;
+            continue;
+        }
+
+        // Sum and difference both grow the accumulator additively and are bounded
+        // below; every other combiner can grow it faster than a single term's
+        // range in a way we don't model -- a product reduction most importantly,
+        // or an unrecognized shape -- so reject it rather than silently overflow.
+        // TODO: add saturating_add/sub to match VectorReduce support?
+        if (!op || (*op != IRNodeType::Add && *op != IRNodeType::Sub)) {
+            return "change_type() only supports sum, difference, min, max, and, "
+                   "and or reductions; this reduction's accumulator could overflow "
+                   "the target type";
+        }
+
+        // Each reduction step adds (Add) or subtracts (Sub) a term, so bound the
+        // accumulator by (number of terms) x (per-step contribution).
+        const ConstantInterval step = (*op == IRNodeType::Sub) ? -term : term;
+        ConstantInterval cardinality = ConstantInterval::single_point(1);
+        bool symbolic = false;
+        for (const auto &rv : def.schedule().rvars()) {
+            // Only a literal extent is known at compile time; a symbolic extent
+            // (e.g. an ImageParam dimension) gets only type-based bounds, which we
+            // must not treat as a static bound.
+            if (optional<int64_t> ext = as_const_int(simplify(rv.extent)); ext && *ext >= 0) {
+                cardinality *= *ext;
+                if (!cardinality.is_single_point()) {
+                    return "the reduction extent exceeds the range of Int(64)";
+                }
+            } else {
+                symbolic = true;
+            }
+        }
+
+        if (!symbolic) {
+            ConstantInterval next =
+                accumulator + step * ConstantInterval(0, cardinality.max);
+            if (!limit.contains(next)) {
+                return "the accumulated sum may exceed the target type's range";
+            }
+            accumulator = next;
+            continue;
+        }
+
+        // Symbolic term count: constrain the cardinality directly rather than
+        // multiplying it by a range endpoint, since either product could itself
+        // overflow while evaluating the guard.
+        const int64_t max_terms =
+            maximum_safe_term_count(accumulator, step, limit);
+        Expr cond = reduction_cardinality_fits(def, max_terms);
+        *condition = condition->defined() ? (*condition && cond) : cond;
+        // Under the runtime condition the result fits, but without retaining a
+        // symbolic interval its tightest conservative range is the whole target.
+        accumulator = limit;
+    }
+    return std::nullopt;
+}
+
+}  // namespace
+
+Func Func::change_type(Type t, bool unsafe) {
+    user_assert(defined()) << "change_type() called on undefined Func.\n";
+    user_assert(!func.has_extern_definition())
+        << "change_type() cannot be applied to the extern Func " << name() << ".\n";
+    user_assert(outputs() == 1)
+        << "change_type() currently supports only single-output Funcs, but "
+        << name() << " has " << outputs() << " outputs.\n";
+
+    invalidate_cache();
+
+    const Type old_t = func.output_types()[0];
+    if (old_t == t) {
+        return *this;
+    }
+
+    const string fname = func.name();
+    const vector<Var> pure_vars = args();
+    const vector<Expr> pure_arg_exprs(pure_vars.begin(), pure_vars.end());
+
+    // Proven value ranges for this Func's producers. Retyping references the same
+    // producers (only self-references and casts are rewritten), so bounds keyed
+    // by the original Funcs line up with the calls in the retyped clone. This
+    // lets a clamped producer tighten both the cast rewrites and the overflow proof.
+    FuncValueBounds func_bounds = [&] {
+        const map<string, Function> env = find_transitive_calls(func);
+        return compute_function_value_bounds(topological_order({func}, env), env);
+    }();
+
+    // Determine the reduction op (if any), so min/max accumulations get the
+    // right identity at the new type rather than a lossy cast of e.g. +inf.
+    optional<IRNodeType> op;
+    if (func.has_update_definition()) {
+        op = reduction_op(substitute_in_all_lets(func.update(0).values()[0]), fname);
+    }
+    const bool is_min_max = op && (*op == IRNodeType::Min || *op == IRNodeType::Max);
+
+    Expr translated_identity;
+    Expr identity_precondition;
+    if (is_min_max) {
+        const Expr &initial = func.values()[0];
+        const Expr old_id = get_associative_identity(old_t, *op);
+        if (old_id.defined() && can_prove(initial == old_id)) {
+            translated_identity = get_associative_identity(t, *op);
+            user_assert(translated_identity.defined())
+                << "change_type() could not find an identity for "
+                << IRNodeType_string(*op) << " at type " << t << ".\n";
+
+            const Expr round_tripped = cast(old_t, translated_identity);
+            if (!unsafe && !can_prove(round_tripped == old_id)) {
+                const auto err =
+                    nonempty_dense_update_precondition(func, &identity_precondition);
+                user_assert(!err)
+                    << "change_type(" << t << ") on " << fname
+                    << " cannot safely translate its " << IRNodeType_string(*op)
+                    << " identity because " << *err << ".\n"
+                    << "Pass unsafe=true to bypass this check.\n";
+            }
+        }
+    }
+
+    // Build the retyped clone.
+    Func typed(fname + "_typed");
+
+    // Pure definition.
+    typed(pure_vars) = translated_identity.defined() ?
+                           translated_identity :
+                           retype_leaf(value(), t, func_bounds);
+
+    // Update definitions. The retyped values still reference the original
+    // reduction domain, so pass a default domain and let define_update discover
+    // it from the values (passing a freshly-built one would trip its identity
+    // check).
+    for (size_t u = 0; u < func.updates().size(); u++) {
+        const Definition &def = func.update(u);
+        vector<Expr> vals;
+        vals.reserve(def.values().size());
+        for (const Expr &v : def.values()) {
+            vals.push_back(retype_value(substitute_in_all_lets(v), fname, typed.function(), t, func_bounds));
+        }
+        typed.function().define_update(def.args(), vals);
+        typed.function().update(u).schedule() = def.schedule().get_copy();
+    }
+
+    // Retyping an already-retyped Func must not discard the preconditions that
+    // made the earlier cast-back wrapper safe.
+    typed.function().schedule().type_change_checks() =
+        func.schedule().type_change_checks();
+
+    if (identity_precondition.defined()) {
+        std::ostringstream msg;
+        msg << "change_type(" << t << ") on " << fname
+            << " requires a non-empty reduction domain to translate its "
+            << IRNodeType_string(*op) << " identity";
+        typed.function().schedule().type_change_checks().emplace_back(
+            identity_precondition, msg.str());
+    }
+
+    // Safety check.
+    if (!unsafe && (t.is_int_or_uint() || t.is_float())) {
+        Expr condition;
+        const auto err = change_type_prove_safe(typed, t, func_bounds, &condition);
+        user_assert(!err)
+            << "change_type(" << t << ") on " << fname << " may overflow: " << *err << ".\n"
+            << "Pass unsafe=true to change_type() to bypass this check.\n";
+        if (condition.defined()) {
+            std::ostringstream msg;
+            msg << "change_type(" << t << ") on " << fname
+                << " requires the reduction extent to be small enough not to overflow";
+            typed.function().schedule().type_change_checks().emplace_back(condition, msg.str());
+        }
+    }
+
+    // Rewrite this Func into an inline cast-back wrapper of the retyped clone, so
+    // that every existing consumer keeps seeing the original type.
+    const Expr wrapped = cast(old_t, Call::make(typed.function(), pure_arg_exprs, 0, /*follow_global_wrappers=*/true));
+    vector<string> arg_names;
+    arg_names.reserve(pure_vars.size());
+    for (const Var &v : pure_vars) {
+        arg_names.push_back(v.name());
+    }
+    func.clear_definition();
+    func.define(arg_names, {wrapped});
+
+    return typed;
 }
 
 Func &Func::trace_loads() {
@@ -3190,7 +4067,7 @@ Func define_base_case(const Internal::Function &func, const vector<Expr> &a, con
     // Reuse names of existing pure args
     for (size_t i = 0; i < a.size(); i++) {
         if (const Variable *v = a[i].as<Variable>()) {
-            if (!v->param.defined()) {
+            if (!v->param.defined() && !v->reduction_domain.defined()) {
                 pure_args[i] = Var(v->name);
             }
         } else {
@@ -3331,7 +4208,7 @@ FuncRef::operator Expr() const {
         << "Can't convert a reference Func \"" << func.name()
         << "\" to an Expr, because " << func.name() << " returns a Tuple.\n";
 
-    return Call::make(func, args);
+    return Call::make(func, args, 0, /*follow_global_wrappers=*/true);
 }
 
 FuncTupleElementRef FuncRef::operator[](int i) const {
@@ -3439,7 +4316,7 @@ Stage FuncTupleElementRef::operator=(const FuncRef &e) {
 }
 
 FuncTupleElementRef::operator Expr() const {
-    return Internal::Call::make(func_ref.function(), args, idx);
+    return Internal::Call::make(func_ref.function(), args, idx, /*follow_global_wrappers=*/true);
 }
 
 Realization Func::realize(std::vector<int32_t> sizes, const Target &target) {

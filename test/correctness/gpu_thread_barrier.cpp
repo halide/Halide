@@ -129,7 +129,7 @@ int main(int argc, char **argv) {
         f.update(1).gpu_threads(x, y);
         f.update(2).gpu_threads(x, y);
 
-        // There should be three thread barriers: one after the intial
+        // There should be three thread barriers: one after the initial
         // pure definition, one in between the
         // non-undef definitions, and one between f and g.
         g.add_custom_lowering_pass(new CheckBarrierCount(3));

@@ -24,7 +24,7 @@ struct device_handle_wrapper {
 // halide_copy_to_host, halide_copy_to_device, and halide_buffer_copy
 // are atomic with respect to each other. halide_device_malloc and
 // halide_device_free are also candidates, but to do so they likely
-// need to be able to do a copy internaly as well.
+// need to be able to do a copy internally as well.
 WEAK halide_mutex device_copy_mutex;
 
 WEAK int copy_to_host_already_locked(void *user_context, struct halide_buffer_t *buf) {
@@ -115,7 +115,7 @@ ALWAYS_INLINE int debug_log_and_validate_buf(void *user_context, const halide_bu
      * and:
      *     (buf.host != nullptr || !host_dirty)
      * but these conditions can occur when freeing a buffer.
-     * It is perhaps prudent to mandate reseting the dirty bit when freeing
+     * It is perhaps prudent to mandate resetting the dirty bit when freeing
      * the host field and setting it to nullptr, I am not convinced all code
      * does that at present. The same could occur on the device side, though
      * it is much more unlikely as halide_device_free does clear device_dirty.
@@ -509,7 +509,7 @@ WEAK int halide_buffer_copy_already_locked(void *user_context, struct halide_buf
     //          go through host memory, the src buffer may be left in device dirty state
     //          with the data copied through the destination host buffer to reduce the size
     //          of the copy.
-    // The device specifc runtime routine may return an error for the
+    // The device specific runtime routine may return an error for the
     // device to device case with separate devices. This code will attempt
     // to decompose the call via bouncing through host memory.
     //

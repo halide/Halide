@@ -9,6 +9,7 @@ namespace Internal {
 namespace {
 
 class RemoveDeadAllocations : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Scope<int> allocs;
@@ -56,14 +57,19 @@ class RemoveDeadAllocations : public IRMutator {
         allocs.push(op->name, 1);
         Stmt body = mutate(op->body);
 
+        // An aliasing allocation's new_expr may reference the backing
+        // allocation (e.g. offset_pointer(backing, offset)). Mutating it marks
+        // that backing as used, so it isn't mistaken for dead.
+        Expr new_expr = op->new_expr;
+        if (new_expr.defined()) {
+            new_expr = mutate(new_expr);
+        }
+
         if (allocs.contains(op->name) && op->free_function.empty()) {
             allocs.pop(op->name);
             return body;
-        } else if (body.same_as(op->body)) {
-            return op;
         } else {
-            return Allocate::make(op->name, op->type, op->memory_type, op->extents, op->condition,
-                                  body, op->new_expr, op->free_function, op->padding);
+            return op->with(op->extents, op->condition, body, new_expr);
         }
     }
 
@@ -88,7 +94,7 @@ class RemoveDeadAllocations : public IRMutator {
 }  // namespace
 
 Stmt remove_dead_allocations(const Stmt &s) {
-    return RemoveDeadAllocations().mutate(s);
+    return RemoveDeadAllocations()(s);
 }
 
 }  // namespace Internal

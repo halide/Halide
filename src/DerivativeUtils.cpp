@@ -115,23 +115,14 @@ map<string, ReductionVariableInfo> gather_rvariables(const Expr &expr) {
 Expr add_let_expression(const Expr &expr,
                         const map<string, Expr> &let_var_mapping,
                         const vector<string> &let_variables) {
-    // TODO: find a faster way to do this
-    Expr ret = StripLets().mutate(expr);
-    bool changed = true;
-    vector<bool> injected(let_variables.size(), false);
-    while (changed) {
-        changed = false;
-        for (size_t i = 0; i < let_variables.size(); i++) {
-            const auto &let_variable = let_variables[i];
-            if (!injected[i] && expr_uses_var(ret, let_variable)) {
-                auto value = let_var_mapping.find(let_variable)->second;
-                ret = Let::make(let_variable, value, ret);
-                injected[i] = true;
-                changed = true;
-            }
-        }
+    // sort_expressions lists Lets innermost first, so reverse them to get the
+    // outermost-to-innermost order rewrap_used_lets expects.
+    vector<pair<string, Expr>> lets;
+    lets.reserve(let_variables.size());
+    for (const auto &let_variable : reverse_view(let_variables)) {
+        lets.emplace_back(let_variable, let_var_mapping.find(let_variable)->second);
     }
-    return ret;
+    return rewrap_used_lets(StripLets()(expr), lets);
 }
 
 namespace {
@@ -580,7 +571,7 @@ protected:
         if (op->name == f.name()) {
             vector<Expr> args = op->args;
             args[variable_id] = f.args()[variable_id];
-            return Call::make(op->type, op->name, args, op->call_type, op->func, op->value_index, op->image, op->param);
+            return op->with(args);
         } else {
             return IRMutator::visit(op);
         }
@@ -593,7 +584,7 @@ protected:
 }  // namespace
 
 Expr substitute_call_arg_with_pure_arg(Func f, int variable_id, const Expr &e) {
-    return simplify(SubstituteCallArgWithPureArg(std::move(f), variable_id).mutate(e));
+    return simplify(SubstituteCallArgWithPureArg(std::move(f), variable_id)(e));
 }
 
 }  // namespace Internal

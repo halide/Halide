@@ -4,10 +4,6 @@
 
 # This lesson demonstrates basic usage of Halide as a JIT compiler for imaging.
 
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_01_basics
-# in a shell with the current directory at python_bindings/
-
 import halide as hl
 
 
@@ -53,7 +49,7 @@ def main():
     # That line of code defined the hl.Func, but it didn't actually
     # compute the output image yet. At this stage it's just Funcs,
     # Exprs, and Vars in memory, representing the structure of our
-    # imaging pipeline. We're meta-programming. This C++ program is
+    # imaging pipeline. We're meta-programming. This Python program is
     # constructing a Halide program in memory. Actually computing
     # pixel data comes next.
 
@@ -61,9 +57,9 @@ def main():
     # implements the pipeline we've defined, and then runs it.  We
     # also need to tell Halide the domain over which to evaluate the
     # hl.Func, which determines the range of x and y above, and the
-    # resolution of the output image. Halide.h also provides a basic
-    # templatized image type we can use. We'll make an 800 x 600
-    # image.
+    # resolution of the output image. The halide module also provides
+    # a basic hl.Buffer type we can use to hold the result. We'll make
+    # an 800 x 600 image.
     output = gradient.realize([800, 600])
     assert output.type() == hl.Int(32)
 
@@ -71,8 +67,8 @@ def main():
     # 32-bit integers, so the hl.Expr object 'x + y' also represents a
     # 32-bit integer, and so 'gradient' defines a 32-bit image, and
     # so we got a 32-bit signed integer image out when we call
-    # 'realize'. Halide types and type-casting rules are equivalent
-    # to C.
+    # 'realize'. Halide's types and type-casting rules use fixed-width
+    # integer semantics, unlike Python's own arbitrary-precision ints.
 
     # Let's check everything worked, and we got the output we were
     # expecting:

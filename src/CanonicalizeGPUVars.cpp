@@ -363,10 +363,8 @@ class ValidateGPUSchedule : public IRVisitor {
 }  // anonymous namespace
 
 Stmt canonicalize_gpu_vars(Stmt s) {
-    ValidateGPUSchedule validator;
-    s.accept(&validator);
-    CanonicalizeGPUVars canonicalizer;
-    s = canonicalizer.mutate(s);
+    ValidateGPUSchedule()(s);
+    s = CanonicalizeGPUVars()(s);
     return s;
 }
 

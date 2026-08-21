@@ -128,6 +128,17 @@ void check_casts() {
     check(cast(UInt(16), 65) < cast(UInt(16), 66), const_true());
     check(cast(UInt(16), 123.4f), make_const(UInt(16), 123));
     check(cast(Float(32), cast(UInt(16), 123456.0f)), 57920.0f);
+
+    // Regression test for float-to-integer casts preserving stale integer
+    // alignment. Float-to-integer casts saturate, so uint1(float64(-27))
+    // is false, not true due to the source integer's odd alignment.
+    Expr neg_i32 = IntImm::make(Int(32), -27);
+    Expr neg_f64 = Cast::make(Float(64), neg_i32);
+    Expr neg_to_u1 = Cast::make(UInt(1), neg_f64);
+    check(neg_to_u1, const_false());
+    check(Cast::make(Int(32), neg_to_u1) > 0, const_false());
+    check(select(Cast::make(Int(32), neg_to_u1) > 0, -27, 37), 37);
+
     // Specific checks for 32 bit unsigned expressions - ensure simplifications are actually unsigned.
     // 4000000000 (4 billion) is less than 2^32 but more than 2^31.  As an int, it is negative.
     check(cast(UInt(32), (int)4000000000UL) + cast(UInt(32), 5), make_const(UInt(32), (int)4000000005UL));
@@ -213,6 +224,14 @@ void check_algebra() {
     check(x * y + z * x, (y + z) * x);
     check(y * x + x * z, (y + z) * x);
     check(y * x + z * x, (y + z) * x);
+    check((x - y) * z + (y * z + w), x * z + w);
+    check((x - y) * z + (w + y * z), x * z + w);
+    check((x - y) * z + (y * z - w), x * z - w);
+    // The same cancellation reached by hoisting the common factor instead.
+    check((x - y) * z + y * z, x * z);
+    // The shape this comes up in: an index whose dimensions have a term
+    // shuffled between them, which cancels once the factors are distributed.
+    check(((y * 8 - z) * 16 + (z * 16 + x)) * 4, (y * 128 + x) * 4);
 
     check(x - 0, x);
     check((x / y) - (x / y), 0);
@@ -419,6 +438,14 @@ void check_algebra() {
     check((y - 8) % 4, y % 4);
     check((y - x * 8) % 4, y % 4);
     check((x * 8 - y) % 4, (-y) % 4);
+    check((x + 31) % 32 == 31, x % 32 == 0);
+    check((x - 1) % 32 == 31, x % 32 == 0);
+    // A remainder lies in [0, |c|), for negative divisors too
+    check((x + 3) % 14 == 1, x % 14 == 12);
+    check((x + 3) % -14 == 1, x % -14 == 12);
+    check((x + 3) % 14 == -1, f);
+    check((x + 3) % 14 == 20, f);
+    check((x + 3) % -14 == -1, f);
 
     // Check an optimization important for fusing dimensions
     check((x / 3) * 3 + x % 3, x);
@@ -595,6 +622,26 @@ void check_vectors() {
     check(ramp(ramp(cast<uint8_t>(x), cast<uint8_t>(-1), 4), cast(UInt(8, 4), -4), 3),
           ramp(cast<uint8_t>(x), cast<uint8_t>(-1), 12));
 
+    // Dividing a nested vector by a broadcast should give the same answer as
+    // dividing the equivalent flat one, even though the lanes are laid out
+    // differently.
+    check(ramp(broadcast(x * 16, 16), broadcast(1, 16), 16) / broadcast(16, 256),
+          broadcast(x, 256));
+    check(broadcast(ramp(broadcast(x * 16, 16), broadcast(1, 16), 16), 16) / broadcast(16, 4096),
+          broadcast(x, 4096));
+    check(broadcast(ramp(x, 1, 4), 2) / broadcast(y, 8),
+          broadcast(ramp(x, 1, 4) / broadcast(y, 4), 2));
+
+    // An affine base works too, as long as the offset leaves room within its
+    // own multiple of the denominator for the rest of the ramp.
+    check(ramp(x * 16 + 4, 1, 4) / broadcast(16, 4), broadcast(x, 4));
+    check(ramp(x * 16 - 4, 1, 4) / broadcast(16, 4), broadcast(x + (-1), 4));
+    check(ramp(broadcast(x * 16 + 4, 16), broadcast(1, 16), 4) / broadcast(16, 64),
+          broadcast(x, 64));
+    // ... but not when it spills over into the next one.
+    check(ramp(x * 16 + 14, 1, 4) / broadcast(16, 4),
+          ramp(x * 16 + 14, 1, 4) / broadcast(16, 4));
+
     // Any linear combination of simple ramps and broadcasts should
     // reduce to a single ramp or broadcast.
     std::mt19937 rng(0);
@@ -696,9 +743,9 @@ void check_vectors() {
 
     // Now check that an interleave of some collapsible loads collapses into a single dense load
     {
-        Expr load1 = Load::make(Float(32, 4), "buf", ramp(x, 2, 4), Buffer<>(), Parameter(), const_true(4), ModulusRemainder());
-        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x + 1, 2, 4), Buffer<>(), Parameter(), const_true(4), ModulusRemainder());
-        Expr load12 = Load::make(Float(32, 8), "buf", ramp(x, 1, 8), Buffer<>(), Parameter(), const_true(8), ModulusRemainder());
+        Expr load1 = Load::make(Float(32, 4), "buf", ramp(x, 2, 4));
+        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x + 1, 2, 4));
+        Expr load12 = Load::make(Float(32, 8), "buf", ramp(x, 1, 8));
         check(interleave_vectors({load1, load2}), load12);
 
         // They don't collapse in the other order
@@ -706,7 +753,7 @@ void check_vectors() {
         check(e, e);
 
         // Or if the buffers are different
-        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x + 1, 2, 4), Buffer<>(), Parameter(), const_true(4), ModulusRemainder());
+        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x + 1, 2, 4));
         e = interleave_vectors({load1, load3});
         check(e, e);
     }
@@ -716,10 +763,10 @@ void check_vectors() {
         int lanes = 4;
         std::vector<Expr> loads;
         for (int i = 0; i < lanes; i++) {
-            loads.push_back(Load::make(Float(32), "buf", 4 * x + i, Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
+            loads.push_back(Load::make(Float(32), "buf", 4 * x + i));
         }
 
-        check(concat_vectors(loads), Load::make(Float(32, lanes), "buf", ramp(x * 4, 1, lanes), Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder(4, 0)));
+        check(concat_vectors(loads), Load::make(Float(32, lanes), "buf", ramp(x * 4, 1, lanes), Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder(4, 0), false));
     }
 
     // Check that concatenated loads of adjacent vectors collapse into a vector load, with appropriate alignment.
@@ -728,10 +775,10 @@ void check_vectors() {
         int vectors = 4;
         std::vector<Expr> loads;
         for (int i = 0; i < vectors; i++) {
-            loads.push_back(Load::make(Float(32, lanes), "buf", ramp(i * lanes, 1, lanes), Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder(4, 0)));
+            loads.push_back(Load::make(Float(32, lanes), "buf", ramp(i * lanes, 1, lanes), Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder(4, 0), false));
         }
 
-        check(concat_vectors(loads), Load::make(Float(32, lanes * vectors), "buf", ramp(0, 1, lanes * vectors), Buffer<>(), Parameter(), const_true(vectors * lanes), ModulusRemainder(0, 0)));
+        check(concat_vectors(loads), Load::make(Float(32, lanes * vectors), "buf", ramp(0, 1, lanes * vectors), Buffer<>(), Parameter(), const_true(vectors * lanes), ModulusRemainder(0, 0), false));
     }
 
     {
@@ -755,8 +802,8 @@ void check_vectors() {
         // A predicated store with a provably-false predicate.
         Expr pred = ramp(x * y + x * z, 2, 8) > 2;
         Expr index = ramp(x + y, 1, 8);
-        Expr value = Load::make(index.type(), "f", index, Buffer<>(), Parameter(), const_true(index.type().lanes()), ModulusRemainder());
-        Stmt stmt = Store::make("f", value, index, Parameter(), pred, ModulusRemainder());
+        Expr value = Load::make(index.type(), "f", index);
+        Stmt stmt = Store::make("f", value, index, Parameter(), pred, ModulusRemainder(), false);
         check(stmt, Evaluate::make(0));
     }
 
@@ -768,7 +815,7 @@ void check_vectors() {
         // A store completely out of bounds.
         Expr index = ramp(-8, 1, 8);
         Expr value = Broadcast::make(0, 8);
-        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(8, 0));
+        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(8, 0), false);
         stmt = make_allocation("f", value.type(), stmt);
         check(stmt, Evaluate::make(unreachable()));
     }
@@ -777,7 +824,7 @@ void check_vectors() {
         // A store with one lane in bounds at the min.
         Expr index = ramp(-7, 1, 8);
         Expr value = Broadcast::make(0, 8);
-        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(0, -7));
+        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(0, -7), false);
         stmt = make_allocation("f", value.type(), stmt);
         check(stmt, stmt);
     }
@@ -786,7 +833,7 @@ void check_vectors() {
         // A store with one lane in bounds at the max.
         Expr index = ramp(7, 1, 8);
         Expr value = Broadcast::make(0, 8);
-        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(0, 7));
+        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(0, 7), false);
         stmt = make_allocation("f", value.type(), stmt);
         check(stmt, stmt);
     }
@@ -795,7 +842,7 @@ void check_vectors() {
         // A store completely out of bounds.
         Expr index = ramp(8, 1, 8);
         Expr value = Broadcast::make(0, 8);
-        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(8, 0));
+        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(8, 0), false);
         stmt = make_allocation("f", value.type(), stmt);
         check(stmt, Evaluate::make(unreachable()));
     }
@@ -805,11 +852,101 @@ void check_vectors() {
     check(VectorReduce::make(VectorReduce::And, Broadcast::make(bool_vector, 4), 1),
           VectorReduce::make(VectorReduce::And, bool_vector, 1));
     check(VectorReduce::make(VectorReduce::Or, Broadcast::make(bool_vector, 4), 2),
-          VectorReduce::make(VectorReduce::Or, bool_vector, 2));
+          Broadcast::make(VectorReduce::make(VectorReduce::Or, bool_vector, 1), 2));
     check(VectorReduce::make(VectorReduce::Min, Broadcast::make(int_vector, 4), 4),
-          int_vector);
+          Broadcast::make(VectorReduce::make(VectorReduce::Min, int_vector, 1), 4));
     check(VectorReduce::make(VectorReduce::Max, Broadcast::make(int_vector, 4), 8),
-          VectorReduce::make(VectorReduce::Max, Broadcast::make(int_vector, 4), 8));
+          Broadcast::make(VectorReduce::make(VectorReduce::Max, int_vector, 2), 4));
+
+    {
+        Expr x = Variable::make(Int(32), "x");
+        Expr y = Variable::make(Int(32), "y");
+
+        // == Symbolic Strides ==
+
+        // 1. Min: Scalar Reduction (arg_lanes=4, lanes=1 -> factor=4)
+        check(VectorReduce::make(VectorReduce::Min, Ramp::make(x, y, 4), 1),
+              min(y, 0) * 3 + x);
+
+        // 2. Min: Vector Reduction (arg_lanes=6, lanes=2 -> factor=3)
+        check(VectorReduce::make(VectorReduce::Min, Ramp::make(x, y, 6), 2),
+              Ramp::make(min(y, 0) * 2 + x, y * 3, 2));
+
+        // 3. Max: Scalar Reduction (arg_lanes=4, lanes=1 -> factor=4)
+        check(VectorReduce::make(VectorReduce::Max, Ramp::make(x, y, 4), 1),
+              max(y, 0) * 3 + x);
+
+        // 4. Max: Vector Reduction (arg_lanes=6, lanes=2 -> factor=3)
+        check(VectorReduce::make(VectorReduce::Max, Ramp::make(x, y, 6), 2),
+              Ramp::make(max(y, 0) * 2 + x, y * 3, 2));
+
+        // == Constant Strides (Positive & Negative) ==
+
+        // 5. Min: Positive Stride (arg_lanes=8, lanes=2 -> factor=4, stride=2)
+        // Block 1: min(x, x+2, x+4, x+6) -> x
+        // Expected Base: x + min(2 * 3, 0) -> x + 0 -> x
+        // Expected Stride: 2 * 4 = 8
+        check(VectorReduce::make(VectorReduce::Min, Ramp::make(x, 2, 8), 2),
+              Ramp::make(x, 8, 2));
+
+        // 6. Max: Positive Stride (arg_lanes=8, lanes=2 -> factor=4, stride=2)
+        // Block 1: max(x, x+2, x+4, x+6) -> x+6
+        // Expected Base: x + max(2 * 3, 0) -> x + 6
+        // Expected Stride: 2 * 4 = 8
+        check(VectorReduce::make(VectorReduce::Max, Ramp::make(x, 2, 8), 2),
+              Ramp::make(x + 6, 8, 2));
+
+        // 7. Min: Negative Stride (arg_lanes=8, lanes=2 -> factor=4, stride=-2)
+        // Block 1: min(x, x-2, x-4, x-6) -> x-6
+        // Expected Base: x + min(-2 * 3, 0) -> x - 6
+        // Expected Stride: -2 * 4 = -8
+        check(VectorReduce::make(VectorReduce::Min, Ramp::make(x, -2, 8), 2),
+              Ramp::make(x + -6, -8, 2));
+
+        // 8. Max: Negative Stride (arg_lanes=8, lanes=2 -> factor=4, stride=-2)
+        // Block 1: max(x, x-2, x-4, x-6) -> x
+        // Expected Base: x + max(-2 * 3, 0) -> x + 0 -> x
+        // Expected Stride: -2 * 4 = -8
+        check(VectorReduce::make(VectorReduce::Max, Ramp::make(x, -2, 8), 2),
+              Ramp::make(x, -8, 2));
+    }
+
+    {
+        // h_add(broadcast(x, 8), 4) should simplify to broadcast(x * 2, 4)
+        check(VectorReduce::make(VectorReduce::Add, broadcast(x, 8), 4),
+              broadcast(x * 2, 4));
+    }
+
+    {
+        Expr const_u8 = cast(UInt(8), 3);
+        check(VectorReduce::make(VectorReduce::Add, broadcast(const_u8, 9), 3), broadcast(cast(UInt(8), 9), 3));
+    }
+
+    {
+        // Test VectorReduce::Add on a variable of unsigned type to ensure the multiplied factor
+        // keeps the correct type and avoids type-mismatch assertion failures.
+        Expr u8_x = Variable::make(UInt(8), "u8_x");
+        check(VectorReduce::make(VectorReduce::Add, broadcast(u8_x, 9), 3), broadcast(u8_x * cast(UInt(8), 3), 3));
+    }
+
+    {
+        // Regression test for https://github.com/halide/Halide/issues/9100.
+        // Horizontal add of `factor` lanes, each `r (mod m)`, has alignment
+        // `(factor * r) (mod m)` -- the modulus does NOT scale up, because
+        // the lanes are summed, not multiplied. Previously the simplifier
+        // failed to update alignment at all across horizontal add, so a
+        // cast<uint1> of the result could be folded to the wrong constant.
+        // A select of broadcasts (which does not rewrite further) is the
+        // cheapest way to exercise the VectorReduce::Add info-update path.
+        Expr cond = Variable::make(Bool(), "cond");
+        Expr lhs = cast(UInt(16), 12203);  // odd
+        Expr rhs = cast(UInt(16), 10637);  // odd
+        Expr inner = Select::make(Broadcast::make(cond, 2),
+                                  Broadcast::make(lhs, 2),
+                                  Broadcast::make(rhs, 2));
+        check(cast(UInt(1), VectorReduce::make(VectorReduce::Add, inner, 1)),
+              cast(UInt(1), 0));
+    }
 }
 
 void check_bounds() {
@@ -1004,7 +1141,26 @@ void check_bounds() {
     check(select(x < y, x + y, x), select(x < y, y, 0) + x);
     check(select(x < y, x, x + y), select(x < y, 0, y) + x);
 
+    // A select nested in a branch of a select on the same condition, under
+    // some affine arithmetic. The inner select's outcome is known.
+    check(select(x < y, z, select(x < y, w, x) + 3), select(x < y, z, x + 3));
+    check(select(x < y, select(x < y, w, x) + 3, z), select(x < y, w + 3, z));
+    check(select(x < y, z, 3 - select(x < y, w, x)), select(x < y, z, 3 - x));
+    check(select(x < y, z, (select(x < y, w, x) + 3) / 2), select(x < y, z, (x + 3) / 2));
+    check(select(x < y, (select(x < y, w, x) + 3) / 2, z), select(x < y, (w + 3) / 2, z));
+    check(select(x < y, z, select(x < y, w, x) / 2), select(x < y, z, x / 2));
+    check(min(select(x < y, z, w), select(x < y, x, z) / 2), select(x < y, min(x / 2, z), min(z / 2, w)));
+    check(max(select(x < y, z, w), select(x < y, x, z) / 2), select(x < y, max(x / 2, z), max(z / 2, w)));
+
     check(min(x + 1, y) - min(x, y - 1), 1);
+
+    // A clamp at one bound and a shifted clamp at the same effective bound.
+    // The clamps coincide, so the shift can be pushed inside.
+    check(min(max(x, 3), max(y, -1) + 4), max(min(y + 4, x), 3));
+    check(max(min(x, 3), min(y, -1) + 4), min(max(y + 4, x), 3));
+    // The condition c0 == c1 + c2 is necessary; these must not fire.
+    check(min(max(x, 3), max(y, -1) + 5), min(max(x, 3), max(y, -1) + 5));
+    check(max(min(x, 3), min(y, -1) + 5), max(min(x, 3), min(y, -1) + 5));
     check(max(x + 1, y) - max(x, y - 1), 1);
     check(min(x + 1, y) - min(y - 1, x), 1);
     check(max(x + 1, y) - max(y - 1, x), 1);
@@ -1371,6 +1527,12 @@ void check_boolean() {
 
     check(select(x > 5, 2, 3) + select(x > 5, 6, 2), select(5 < x, 8, 5));
     check(select(x > 5, 8, 3) - select(x > 5, 6, 2), select(5 < x, 2, 1));
+
+    // A comparison of a constant against a select of constants folds for
+    // any type, including unsigned ones (which don't satisfy no_overflow).
+    check(0 < select(x < 5, 4, 0), x < 5);
+    check(make_zero(UInt(32)) < select(x < 5, make_const(UInt(32), 4), make_const(UInt(32), 0)), x < 5);
+    check(select(x < 5, make_const(UInt(32), 0), make_const(UInt(32), 4)) < make_const(UInt(32), 1), x < 5);
 
     check(select(x < 5, select(x < 5, 0, 1), 2), select(x < 5, 0, 2));
     check(select(x < 5, 0, select(x < 5, 1, 2)), select(x < 5, 0, 2));
@@ -2003,30 +2165,30 @@ void check_overflow() {
 
 template<typename T>
 void check_clz(uint64_t value, uint64_t result) {
-    Expr x = Variable::make(halide_type_of<T>(), "x");
+    Expr x = Variable::make(type_of<T>(), "x");
     check(Let::make("x", cast<T>(Expr(value)), count_leading_zeros(x)), cast<T>(Expr(result)));
 
-    Type vt = halide_type_of<T>().with_lanes(4);
+    Type vt = type_of<T>().with_lanes(4);
     Expr xv = Variable::make(vt, "x");
     check(Let::make("x", cast(vt, broadcast(Expr(value), 4)), count_leading_zeros(xv)), cast(vt, broadcast(Expr(result), 4)));
 }
 
 template<typename T>
 void check_ctz(uint64_t value, uint64_t result) {
-    Expr x = Variable::make(halide_type_of<T>(), "x");
+    Expr x = Variable::make(type_of<T>(), "x");
     check(Let::make("x", cast<T>(Expr(value)), count_trailing_zeros(x)), cast<T>(Expr(result)));
 
-    Type vt = halide_type_of<T>().with_lanes(4);
+    Type vt = type_of<T>().with_lanes(4);
     Expr xv = Variable::make(vt, "x");
     check(Let::make("x", cast(vt, broadcast(Expr(value), 4)), count_trailing_zeros(xv)), cast(vt, broadcast(Expr(result), 4)));
 }
 
 template<typename T>
 void check_popcount(uint64_t value, uint64_t result) {
-    Expr x = Variable::make(halide_type_of<T>(), "x");
+    Expr x = Variable::make(type_of<T>(), "x");
     check(Let::make("x", cast<T>(Expr(value)), popcount(x)), cast<T>(Expr(result)));
 
-    Type vt = halide_type_of<T>().with_lanes(4);
+    Type vt = type_of<T>().with_lanes(4);
     Expr xv = Variable::make(vt, "x");
     check(Let::make("x", cast(vt, broadcast(Expr(value), 4)), popcount(xv)), cast(vt, broadcast(Expr(result), 4)));
 }
@@ -2334,7 +2496,7 @@ int main(int argc, char **argv) {
     {
         using ConciseCasts::i32;
 
-        // Wrap all in i32() to ensure C++ won't optimize our multiplies away at compiletime
+        // Wrap all in i32() to ensure C++ won't optimize our multiplies away at compile time
         Expr e = max(max(max(i32(-1074233344) * i32(-32767), i32(-32783) * i32(32783)), i32(32767) * i32(-32767)), i32(1074200561) * i32(32783)) / i32(64);
         Expr e2 = e / i32(2);
         check_is_sio(e2);

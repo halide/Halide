@@ -3,6 +3,10 @@
 
 extern "C" {
 
+WEAK int32_t halide_current_thread_id() {
+    return 1;
+}
+
 // Fake mutex array. We still define a pointer to halide_mutex since empty struct leads
 // to compile error (empty struct has size 0 in C, size 1 in C++).
 struct halide_mutex_array {
@@ -119,6 +123,11 @@ WEAK int halide_set_num_threads(int n) {
     if (n != 1) {
         halide_error(nullptr, "halide_set_num_threads: only supports a value of 1 on this platform.");
     }
+    return 1;
+}
+
+WEAK int halide_get_num_threads() {
+    // This thread pool never runs work on any thread but the caller.
     return 1;
 }
 

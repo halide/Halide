@@ -14,7 +14,9 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "InjectHostDevBufferCopies.h"
+#include "ModulusRemainder.h"
 #include "OffloadGPULoops.h"
+#include "Scope.h"
 #include "Simplify.h"
 #include "Util.h"
 
@@ -44,7 +46,7 @@ public:
         }
     }
 
-private:
+protected:
     bool found_shared = false;
 
     using IRVisitor::visit;
@@ -77,7 +79,7 @@ private:
         user_assert(!allocate->new_expr.defined()) << "Allocate node inside GPU kernel has custom new expression.\n"
                                                    << "(Memoization is not supported inside GPU kernels at present.)\n";
 
-        if (allocate->memory_type == MemoryType::GPUShared) {
+        if (is_gpu_shared(allocate->memory_type)) {
             internal_assert(allocate->extents.size() == 1);
             shared_mem_size += allocate->extents[0] * allocate->type.bytes();
             found_shared = true;
@@ -87,6 +89,7 @@ private:
 };
 
 class InjectGpuOffload : public IRMutator {
+protected:
     /** Child code generator for device kernels. */
     map<DeviceAPI, unique_ptr<CodeGen_GPU_Dev>> cgdev;
 
@@ -97,8 +100,7 @@ class InjectGpuOffload : public IRMutator {
     Expr get_state_var(const string &name) {
         // Expr v = Variable::make(type_of<void *>(), name);
         state_needed[name] = true;
-        return Load::make(type_of<void *>(), name, 0,
-                          Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+        return Load::make(type_of<void *>(), name, 0);
     }
 
     Expr make_state_var(const string &name) {
@@ -131,7 +133,7 @@ class InjectGpuOffload : public IRMutator {
             << "A concrete device API should have been selected before codegen.";
 
         ExtractBounds bounds;
-        loop->accept(&bounds);
+        bounds(loop);
         debug(2) << "Kernel bounds: ("
                  << bounds.num_threads[0] << ", "
                  << bounds.num_threads[1] << ", "
@@ -195,23 +197,23 @@ class InjectGpuOffload : public IRMutator {
             args.emplace_back(val);
 
             if (runtime_run_takes_types) {
-                arg_types_or_sizes.emplace_back(((halide_type_t)i.type).as_u32());
+                arg_types_or_sizes.emplace_back(i.type.to_abi());
             } else {
                 arg_types_or_sizes.emplace_back(cast(target_size_t_type, i.is_buffer ? 8 : i.type.bytes()));
             }
 
-            arg_is_buffer.emplace_back(cast<uint8_t>(i.is_buffer));
+            arg_is_buffer.emplace_back(make_const(UInt(8), (int)i.is_buffer));
         }
 
         // nullptr-terminate the lists
-        args.emplace_back(reinterpret(Handle(), cast<uint64_t>(0)));
+        args.emplace_back(reinterpret(Handle(), make_zero(UInt(64))));
         if (runtime_run_takes_types) {
             internal_assert(sizeof(halide_type_t) == sizeof(uint32_t));
-            arg_types_or_sizes.emplace_back(cast<uint32_t>(0));
+            arg_types_or_sizes.emplace_back(make_zero(UInt(32)));
         } else {
             arg_types_or_sizes.emplace_back(cast(target_size_t_type, 0));
         }
-        arg_is_buffer.emplace_back(cast<uint8_t>(0));
+        arg_is_buffer.emplace_back(make_zero(UInt(8)));
 
         debug(3) << "bounds.num_blocks[0] = " << bounds.num_blocks[0] << "\n";
         debug(3) << "bounds.num_blocks[1] = " << bounds.num_blocks[1] << "\n";
@@ -245,7 +247,7 @@ class InjectGpuOffload : public IRMutator {
     }
 
 public:
-    InjectGpuOffload(const Target &target)
+    InjectGpuOffload(const Target &target, bool any_strict_float)
         : target(target) {
         Target device_target = target;
         // For the GPU target we just want to pass the flags, to avoid the
@@ -266,10 +268,14 @@ public:
             cgdev[DeviceAPI::D3D12Compute] = new_CodeGen_D3D12Compute_Dev(device_target);
         }
         if (target.has_feature(Target::Vulkan)) {
-            cgdev[DeviceAPI::Vulkan] = new_CodeGen_Vulkan_Dev(target);
+            cgdev[DeviceAPI::Vulkan] = new_CodeGen_Vulkan_Dev(device_target);
         }
         if (target.has_feature(Target::WebGPU)) {
             cgdev[DeviceAPI::WebGPU] = new_CodeGen_WebGPU_Dev(device_target);
+        }
+
+        for (auto &i : cgdev) {
+            i.second->set_any_strict_float(any_strict_float);
         }
 
         internal_assert(!cgdev.empty()) << "Requested unknown GPU target: " << target.to_string() << "\n";
@@ -313,10 +319,73 @@ public:
     }
 };
 
+// Fold the aliasing allocations left behind by GPU allocation fusing back into
+// direct offset accesses of their backing allocation, and drop the aliasing
+// Allocate nodes. This reproduces the flat representation the device code
+// generators expect, and runs just before them so that everything upstream
+// (the profiler, the conceptual stmt) still sees per-Func allocation names.
+class FlattenAliasedAllocations : public IRMutator {
+    using IRMutator::visit;
+
+    struct Alias {
+        std::string backing;
+        Expr offset;
+    };
+    Scope<Alias> aliases;
+
+    Stmt visit(const Allocate *op) override {
+        // offset_pointer is a (non-pure) Intrinsic specifically so CSE/LICM
+        // won't lift it out of new_expr, so it's still a direct call here.
+        const Call *c = op->new_expr.defined() ? op->new_expr.as<Call>() : nullptr;
+        if (c && c->is_intrinsic(Call::offset_pointer)) {
+            const Variable *base = c->args[0].as<Variable>();
+            internal_assert(base) << "offset_pointer base must be a Variable\n";
+            ScopedBinding<Alias> bind(aliases, op->name, Alias{base->name, c->args[1]});
+            return mutate(op->body);
+        }
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const Free *op) override {
+        if (aliases.contains(op->name)) {
+            return Evaluate::make(0);
+        }
+        return IRMutator::visit(op);
+    }
+
+    // Adding the offset into the backing allocation shifts the index, so the
+    // load/store alignment relative to the backing base must be recomputed from
+    // the original alignment and the alignment of the offset.
+    ModulusRemainder shift_alignment(const ModulusRemainder &alignment, const Expr &offset) {
+        return alignment + modulus_remainder(offset);
+    }
+
+    Expr visit(const Load *op) override {
+        if (aliases.contains(op->name)) {
+            const Alias &a = aliases.get(op->name);
+            return Load::make(op->type, a.backing, mutate(op->index) + a.offset,
+                              op->image, op->param, mutate(op->predicate),
+                              shift_alignment(op->alignment, a.offset), false);
+        }
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const Store *op) override {
+        if (aliases.contains(op->name)) {
+            const Alias &a = aliases.get(op->name);
+            return Store::make(a.backing, mutate(op->value), mutate(op->index) + a.offset,
+                               op->param, mutate(op->predicate),
+                               shift_alignment(op->alignment, a.offset), false);
+        }
+        return IRMutator::visit(op);
+    }
+};
+
 }  // namespace
 
-Stmt inject_gpu_offload(const Stmt &s, const Target &host_target) {
-    return InjectGpuOffload(host_target).inject(s);
+Stmt inject_gpu_offload(const Stmt &s, const Target &host_target, bool any_strict_float) {
+    Stmt flattened = FlattenAliasedAllocations()(s);
+    return InjectGpuOffload(host_target, any_strict_float).inject(flattened);
 }
 
 }  // namespace Internal

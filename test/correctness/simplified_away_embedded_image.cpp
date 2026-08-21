@@ -5,7 +5,7 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
 
-    // What happens if an emedded image gets simplified away?
+    // What happens if an embedded image gets simplified away?
     Buffer<float> input(32, 32);
 
     Var x("x"), y("y");

@@ -6,15 +6,15 @@ cd -- "$(dirname -- "$0")" || exit 1
 
 GIT_BRANCH="$1"
 if [ -z "$GIT_BRANCH" ]; then
-  echo "error: usage: $0 <git-branch>"
-  echo "remark: the current <git-branch> is vulkan-sdk-1.3.296"
-  exit 1
+    echo "error: usage: $0 <git-branch>"
+    echo "remark: the current <git-branch> is vulkan-sdk-1.3.296"
+    exit 1
 fi
 
 mkdir -p vulkan
 
-cleanup () {
-  rm -rf Vulkan-Headers
+cleanup() {
+    rm -rf Vulkan-Headers
 }
 
 trap cleanup SIGINT SIGTERM EXIT

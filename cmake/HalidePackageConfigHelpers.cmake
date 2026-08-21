@@ -35,7 +35,16 @@
 # Helper for registering package dependencies
 
 function(_Halide_pkgdep PKG)
-    cmake_parse_arguments(PARSE_ARGV 1 ARG "" "" "PACKAGE_VARS")
+    # NAMESPACE lets the target-namespace substring match (below, in
+    # _Halide_install_pkgdeps) differ from the name used to find_package()
+    # this dependency -- some packages export targets under a namespace with
+    # different casing than their own package name (e.g. FlatBuffers exports
+    # flatbuffers::flatbuffers).
+    cmake_parse_arguments(PARSE_ARGV 1 ARG "" "NAMESPACE" "PACKAGE_VARS")
+
+    if (NOT ARG_NAMESPACE)
+        set(ARG_NAMESPACE "${PKG}")
+    endif ()
 
     set(code "")
     foreach (var IN LISTS ARG_PACKAGE_VARS)
@@ -46,14 +55,18 @@ function(_Halide_pkgdep PKG)
         string(APPEND code "find_dependency(${PKG} ${${PKG}_VERSION})")
     else ()
         string(APPEND code
-               "find_dependency(\n"
-               "    ${PKG} ${${PKG}_VERSION}\n"
-               "    COMPONENTS ${${PKG}_COMPONENTS}\n"
-               ")")
+            "find_dependency(\n"
+            "    ${PKG} ${${PKG}_VERSION}\n"
+            "    COMPONENTS ${${PKG}_COMPONENTS}\n"
+            ")"
+        )
     endif ()
 
-    set_property(DIRECTORY "${PROJECT_SOURCE_DIR}" APPEND PROPERTY pkgdeps "${PKG}")
-    set_property(DIRECTORY "${PROJECT_SOURCE_DIR}" PROPERTY "pkgdeps[${PKG}]" "${code}")
+    set(key "pkgdeps_namespace[${PKG}]")
+
+    set_property(DIRECTORY "${PROJECT_SOURCE_DIR}" APPEND PROPERTY pkgdeps "${PKG}")  # nolint
+    set_property(DIRECTORY "${PROJECT_SOURCE_DIR}" PROPERTY "pkgdeps[${PKG}]" "${code}")  # nolint
+    set_property(DIRECTORY "${PROJECT_SOURCE_DIR}" PROPERTY "${key}" "${ARG_NAMESPACE}")  # nolint
 endfunction()
 
 ##
@@ -73,9 +86,7 @@ function(_Halide_install_code)
 endfunction()
 
 function(_Halide_install_pkgdeps)
-    cmake_parse_arguments(
-        PARSE_ARGV 0 ARG "" "COMPONENT;DESTINATION;FILE_NAME;EXPORT_FILE" ""
-    )
+    cmake_parse_arguments(PARSE_ARGV 0 ARG "" "COMPONENT;DESTINATION;FILE_NAME;EXPORT_FILE" "")
 
     set(depFile "${CMAKE_CURRENT_BINARY_DIR}/${ARG_FILE_NAME}")
     set(installPrefix "$<$<PATH:IS_RELATIVE,${ARG_DESTINATION}>:\${CMAKE_INSTALL_PREFIX}/>")
@@ -88,21 +99,16 @@ function(_Halide_install_pkgdeps)
     get_property(pkgdeps DIRECTORY "${PROJECT_SOURCE_DIR}" PROPERTY pkgdeps)
     foreach (dep IN LISTS pkgdeps)
         get_property(pkgcode DIRECTORY "${PROJECT_SOURCE_DIR}" PROPERTY "pkgdeps[${dep}]")
+        get_property(pkgns DIRECTORY "${PROJECT_SOURCE_DIR}" PROPERTY "pkgdeps_namespace[${dep}]")
         _Halide_install_code(
-            "if (target_cmake MATCHES \"${dep}::\")"
+            "if (target_cmake MATCHES \"${pkgns}::\")"
             "  file(APPEND \"${depFile}.in\""
             "       [===[${pkgcode}]===] \"\\n\")"
             "endif ()"
         )
     endforeach ()
 
-    _Halide_install_code(
-        "configure_file(\"${depFile}.in\" \"${depFile}\" COPYONLY)"
-    )
+    _Halide_install_code("file(COPY_FILE \"${depFile}.in\" \"${depFile}\" ONLY_IF_DIFFERENT)")
 
-    install(
-        FILES "${depFile}"
-        DESTINATION "${ARG_DESTINATION}"
-        COMPONENT "${ARG_COMPONENT}"
-    )
+    install(FILES "${depFile}" DESTINATION "${ARG_DESTINATION}" COMPONENT "${ARG_COMPONENT}")
 endfunction()

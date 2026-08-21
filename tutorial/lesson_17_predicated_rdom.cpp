@@ -4,18 +4,12 @@
 // subsets of a reduction domain using predicates.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_17*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_17 -std=c++17
-// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_17
+// g++ lesson_17*.cpp -g -I <path/to/include> -L <path/to/lib> -lHalide -lpthread -ldl -o lesson_17 -std=c++17
+// LD_LIBRARY_PATH=<path/to/lib> ./lesson_17
 
-// On os x:
-// g++ lesson_17*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_17 -std=c++17
-// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_17
-
-// If you have the entire Halide source tree, you can also build it by
-// running:
-//    make tutorial_lesson_17_predicated_rdom
-// in a shell with the current directory at the top of the halide
-// source tree.
+// On macOS:
+// g++ lesson_17*.cpp -g -I <path/to/include> -L <path/to/lib> -lHalide -o lesson_17 -std=c++17
+// DYLD_LIBRARY_PATH=<path/to/lib> ./lesson_17
 
 #include "Halide.h"
 #include <cstdio>

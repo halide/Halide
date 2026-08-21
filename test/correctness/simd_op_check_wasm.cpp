@@ -538,7 +538,7 @@ private:
 
 int main(int argc, char **argv) {
 #ifdef HALIDE_INTERNAL_USING_ASAN
-    printf("[SKIP] This test causes an ASAN crash relating to ASAN's use of sigaltstack. It doesn't seem to be due to a bug in the test itself (see https://github.com/halide/Halide/pull/8078#issuecomment-1935407878)");
+    printf("[SKIP-WITH-ISSUE-8078] This test causes an ASAN crash relating to ASAN's use of sigaltstack. It doesn't seem to be due to a bug in the test itself (see https://github.com/halide/Halide/pull/8078#issuecomment-1935407878)");
     return 0;
 #endif
 

@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
     }
     if (target.has_feature(Target::D3D12Compute)) {
         // https://github.com/halide/Halide/issues/5000
-        printf("[SKIP] Allocation cache not yet implemented for D3D12Compute.\n");
+        printf("[SKIP-WITH-ISSUE-5000] Allocation cache not yet implemented for D3D12Compute.\n");
         return 0;
     }
     if (target.has_feature(Target::Vulkan) && ((target.os == Target::IOS) || target.os == Target::OSX)) {

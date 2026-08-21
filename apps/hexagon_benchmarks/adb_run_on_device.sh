@@ -17,23 +17,20 @@ BIN=bin
 APP_TARGET=arm-64-android
 
 # Build the app.
-make bin/${APP_TARGET}/process
-
-# Make a folder on device for the app and our dependencies.
-if [ $? == 0 ]
-then
+if make "bin/${APP_TARGET}/process"; then
+    # Make a folder on device for the app and our dependencies.
     adb shell mkdir -p ${DEVICE_PATH}
 
-# Push the Hexagon runtime to $DEVICE_PATH.
+    # Push the Hexagon runtime to $DEVICE_PATH.
     adb push ${HEXAGON_RUNTIME_PATH}/bin/${APP_TARGET}/libhalide_hexagon_host.so ${DEVICE_PATH}
     adb push ${HEXAGON_RUNTIME_PATH}/bin/v60/signed_by_debug/libhalide_hexagon_remote_skel.so ${DEVICE_PATH}
 
-# If there's a testsig installed in the usual location, copy it to
-# $DEVICE_PATH so it is visible to our modified $ASDP_LIBRARY_PATH.
-    adb shell cp /system/lib/rfsa/adsp/testsig* ${DEVICE_PATH} > /dev/null || true
+    # If there's a testsig installed in the usual location, copy it to
+    # $DEVICE_PATH so it is visible to our modified $ASDP_LIBRARY_PATH.
+    adb shell cp /system/lib/rfsa/adsp/testsig* ${DEVICE_PATH} >/dev/null || true
 
-# Push and run the app!
+    # Push and run the app!
     adb push ${BIN}/${APP_TARGET}/process ${DEVICE_PATH}
     adb shell chmod +x ${DEVICE_PATH}/process
-    adb shell ${DEVICE_ENV} ${DEVICE_PATH}/process
+    adb shell "${DEVICE_ENV}" ${DEVICE_PATH}/process
 fi

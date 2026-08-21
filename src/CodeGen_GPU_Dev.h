@@ -77,6 +77,15 @@ struct CodeGen_GPU_Dev {
         Device = 1,  // Device/global memory fence
         Shared = 2   // Threadgroup/shared memory fence
     };
+
+    /** Some GPU APIs need to know what floating point mode we're in at kernel
+     * emission time, to emit appropriate pragmas. */
+    bool any_strict_float = false;
+
+public:
+    void set_any_strict_float(bool any_strict_float) {
+        this->any_strict_float = any_strict_float;
+    }
 };
 
 /** A base class for GPU backends that require C-like shader output.
@@ -99,6 +108,7 @@ protected:
     using CodeGen_C::visit;
     void visit(const Shuffle *op) override;
     void visit(const Call *op) override;
+    void visit(const Mod *op) override;
 
     std::string print_extern_call(const Call *op) override;
 

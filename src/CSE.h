@@ -20,7 +20,7 @@ namespace Internal {
  * test/code_explosion.cpp
  *
  * The last parameter determines whether all common subexpressions are
- * lifted, or only those that the simplifier would not subsitute back
+ * lifted, or only those that the simplifier would not substitute back
  * in (e.g. addition of a constant).
  */
 Expr common_subexpression_elimination(const Expr &, bool lift_all = false);
@@ -28,8 +28,6 @@ Expr common_subexpression_elimination(const Expr &, bool lift_all = false);
 /** Do common-subexpression-elimination on each expression in a
  * statement. Does not introduce let statements. */
 Stmt common_subexpression_elimination(const Stmt &, bool lift_all = false);
-
-void cse_test();
 
 }  // namespace Internal
 }  // namespace Halide

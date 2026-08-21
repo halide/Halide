@@ -195,6 +195,7 @@ Expr Simplify::visit(const EQ *op, ExprInfo *info) {
                  slice(x - y, c0, c1, c2) == z, c2 > 1 && lanes_of(x) == lanes_of(y)) ||
          rewrite(slice(x, c0, c1, c2) == slice(y, c0, c1, c2) + z,
                  slice(x - y, c0, c1, c2) == z, c2 > 1 && lanes_of(x) == lanes_of(y)) ||
+         rewrite(transpose(x, c0) == transpose(y, c0), transpose(x == y, c0)) ||
          false) ||
         (no_overflow(a.type()) && EVAL_IN_LAMBDA  //
          (rewrite(x * y == 0, (x == 0) || (y == 0)) ||
@@ -307,7 +308,9 @@ Expr Simplify::visit(const EQ *op, ExprInfo *info) {
           false)) ||
 
         (no_overflow_int(a.type()) &&
-         (rewrite(x == x % c0, x / c0 == 0, c0 != 0) ||
+         (rewrite((x + c0) % c1 == c2, x % c1 == fold((c2 - c0) % c1),
+                  0 <= c2 && c2 < max(c1, -c1)) ||
+          rewrite(x == x % c0, x / c0 == 0, c0 != 0) ||
           rewrite(x % c0 == x, x / c0 == 0, c0 != 0) ||
           rewrite(x == (x / c0) * c0, x % c0 == 0, c0 != 0) ||
           rewrite((x / c0) * c0 == x, x % c0 == 0, c0 != 0) ||

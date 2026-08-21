@@ -10,7 +10,9 @@
 #include <cmath>
 #include <map>
 #include <optional>
+#include <utility>
 
+#include "Bounds.h"
 #include "ConstantInterval.h"
 #include "Expr.h"
 #include "Scope.h"
@@ -49,6 +51,13 @@ std::optional<int> is_const_power_of_two_integer(const Expr &e);
 std::optional<int> is_const_power_of_two_integer(uint64_t);
 std::optional<int> is_const_power_of_two_integer(int64_t);
 // @}
+
+/** If `e` is a binary operator, return its two operands; otherwise return std::nullopt. */
+std::optional<std::pair<Expr, Expr>> as_binary_operands(const Expr &e);
+
+/** Build a binary expression of node type `t` from operands `a` and `b`, using
+ * the corresponding Op::make function. */
+Expr make_binary_op(IRNodeType t, const Expr &a, const Expr &b);
 
 /** Is the expression a const (as defined by is_const), and also
  * strictly greater than zero (in all lanes, if a vector expression) */
@@ -152,16 +161,19 @@ Expr const_false(int lanes = 1);
 /** Attempt to cast an expression to a smaller type while provably not losing
  * information. If it can't be done, return an undefined Expr.
  *
- * Optionally accepts a scope giving the constant bounds of any variables, and a
+ * Optionally accepts a scope giving the constant bounds of any variables, a
  * map that gives the constant bounds of exprs already analyzed to avoid redoing
- * work across many calls to lossless_cast. It is not safe to use this optional
- * map in contexts where the same Expr object may take on a different value. For
- * example: (let x = 4 in some_expr_object) + (let x = 5 in
+ * work across many calls to lossless_cast, and previously-computed
+ * FuncValueBounds for any Halide Call nodes encountered (see
+ * constant_integer_bounds() in ConstantBounds.h). It is not safe to use the
+ * cache map in contexts where the same Expr object may take on a different
+ * value. For example: (let x = 4 in some_expr_object) + (let x = 5 in
  * the_same_expr_object)).  It is safe to use it after uniquify_variable_names
  * has been run. */
 Expr lossless_cast(Type t, Expr e,
                    const Scope<ConstantInterval> &scope = Scope<ConstantInterval>::empty_scope(),
-                   std::map<Expr, ConstantInterval, ExprCompare> *cache = nullptr);
+                   std::map<Expr, ConstantInterval, ExprCompare> *cache = nullptr,
+                   const FuncValueBounds *func_bounds = nullptr);
 
 /** Attempt to negate x without introducing new IR and without overflow.
  * If it can't be done, return an undefined Expr. */
@@ -226,7 +238,7 @@ void split_into_ands(const Expr &cond, std::vector<Expr> &result);
  * some stack memory for the buffer. If the shape_memory field is
  * undefined, it similarly uses stack memory for the shape. If the
  * shape_memory field is null, it uses the dim field already in the
- * buffer. Other unitialized fields will take on a value of zero in
+ * buffer. Other uninitialized fields will take on a value of zero in
  * the constructed buffer. */
 struct BufferBuilder {
     Expr buffer_memory, shape_memory;
@@ -244,7 +256,7 @@ Expr strided_ramp_base(const Expr &e, int stride = 1);
 
 /** Implementations of division and mod that are specific to Halide.
  * Use these implementations; do not use native C division or mod to
- * simplify Halide expressions. Halide division and modulo satisify
+ * simplify Halide expressions. Halide division and modulo satisfy
  * the Euclidean definition of division for integers a and b:
  *
  /code
@@ -322,6 +334,37 @@ template<>
 inline double div_imp<double>(double a, double b) {
     return a / b;
 }
+
+/** Strip any Let nodes off the front of an Expr, or LetStmt nodes off the front
+ * of a Stmt, appending the name and value of each to `lets` from outermost to
+ * innermost, and return what they wrapped. Analysing an Expr or Stmt that CSE
+ * or LICM has lifted subexpressions out of means getting past the Lets first.
+ * Substituting them back in also does that, but it repeats each value at every
+ * use, which is what lifting them out avoided. Callers rewrap the Lets around
+ * whatever they build (see rewrap_used_lets and rewrap_all_lets), or, in
+ * codegen, put them in scope while they build it. */
+// @{
+Expr peel_lets(const Expr &e, std::vector<std::pair<std::string, Expr>> *lets);
+Stmt peel_lets(const Stmt &s, std::vector<std::pair<std::string, Expr>> *lets);
+// @}
+
+/** Rewrap a list of lets produced by peel_lets around a new body, skipping any
+ * the body doesn't use. Conservatively treats every name the body mentions as a
+ * possible reference to a peeled let, even where an inner let shadows it.
+ * Gathers those names once and updates them as it goes, so it takes time
+ * linearithmic in the size of the result rather than the quadratic time taken
+ * by testing each let in turn with expr_uses_var. */
+// @{
+Expr rewrap_used_lets(const Expr &body, const std::vector<std::pair<std::string, Expr>> &lets);
+Stmt rewrap_used_lets(const Stmt &body, const std::vector<std::pair<std::string, Expr>> &lets);
+// @}
+
+/** Rewrap a list of lets produced by peel_lets around a new body, without
+ * checking whether the body uses them. */
+// @{
+Expr rewrap_all_lets(const Expr &body, const std::vector<std::pair<std::string, Expr>> &lets);
+Stmt rewrap_all_lets(const Stmt &body, const std::vector<std::pair<std::string, Expr>> &lets);
+// @}
 
 /** Return an Expr that is identical to the input Expr, but with
  * all calls to likely() and likely_if_innermost() removed. */
@@ -671,7 +714,7 @@ inline Expr max(Expr a, float b) {
 }
 
 /** Returns an expression representing the greater of an expressions
- * vector, after doing any necessary type coersion using
+ * vector, after doing any necessary type coercion using
  * \ref Internal::match_types. Vectorizes cleanly on most platforms
  * (with the exception of integer types on x86 without SSE4).
  * The expressions are folded from right ie. max(.., max(.., ..)).
@@ -706,7 +749,7 @@ inline Expr min(Expr a, float b) {
 }
 
 /** Returns an expression representing the lesser of an expressions
- * vector, after doing any necessary type coersion using
+ * vector, after doing any necessary type coercion using
  * \ref Internal::match_types. Vectorizes cleanly on most platforms
  * (with the exception of integer types on x86 without SSE4).
  * The expressions are folded from right ie. min(.., min(.., ..)).
@@ -860,7 +903,7 @@ inline Expr select(const Expr &c0, const FuncRef &v0, const Expr &c1, const Func
  *                       c == 1, 50,  // Green
  *                               25); // Blue
  * This is tedious when the list is long. The following function
- * provide convinent syntax that allow one to write:
+ * provide convenient syntax that allow one to write:
  * img(x, y, c) = mux(c, {100, 50, 25});
  *
  * As with the select equivalent, if the first argument (the index) is
@@ -981,17 +1024,24 @@ Expr pow(Expr x, Expr y);
  * mantissa. Vectorizes cleanly. */
 Expr erf(const Expr &x);
 
+/** Fused multiply-add. fma(a, b, c) is equivalent to a * b + c, but only
+ * rounded once at the end. For most targets, when not in a strict_float
+ * context, Halide will already generate fma instructions from a * b + c. This
+ * intrinsic's main purpose is to request a true fma inside a strict_float
+ * context. A true fma will be emulated on targets without one. */
+Expr fma(const Expr &, const Expr &, const Expr &);
+
 /** Struct that allows the user to specify precision requirements for functions
  * that are approximated. Several functions can be approximated using specialized
  * hardware instructions. If no hardware instructions are available, approximations
  * are implemented in Halide using polynomials or potentially Padé approximants.
  * Both the hardware instructions and the in-house approximations have a certain behavior
  * and precision. This struct allows you to specify which behavior and precision you
- * are interested in. Halide will select an appropriate implemenation that satisfies
+ * are interested in. Halide will select an appropriate implementation that satisfies
  * these requirements.
  *
  * There are two main aspects of specifying the precision:
- *  1. The objective for which the approximation is optimzed. This can be to reduce the
+ *  1. The objective for which the approximation is optimized. This can be to reduce the
  *     maximal absolute error (MAE), or to reduce the maximal error measured in
  *     units in last place (ULP). Some applications tend to naturally require low
  *     absolute error, whereas others might favor low relative error (for which maximal ULP
@@ -1319,7 +1369,7 @@ Expr operator>>(Expr x, int y);
  * Some examples:
  * \code
  *
- *     // Since Halide does not have direct type delcarations, casts
+ *     // Since Halide does not have direct type declarations, casts
  *     // below are used to indicate the types of the parameters.
  *     // Such casts not required or expected in actual code where types
  *     // are inferred.
@@ -1516,14 +1566,14 @@ inline Expr unreachable() {
  * computed value, or one or more other expressions in the cache key
  * instead of the parameter dependencies of the computation. The
  * single argument version is completely safe in that the cache key
- * will use the actual computed value -- it is difficult or imposible
+ * will use the actual computed value -- it is difficult or impossible
  * to produce erroneous caching this way. The more-than-one argument
  * version allows generating cache keys that do not uniquely identify
  * the computation and thus can result in caching errors.
  *
  * A potential use for the single argument version is to handle a
  * floating-point parameter that is quantized to a small
- * integer. Mutliple values of the float will produce the same integer
+ * integer. Multiple values of the float will produce the same integer
  * and moving the caching to using the integer for the key is more
  * efficient.
  *

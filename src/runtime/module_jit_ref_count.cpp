@@ -13,7 +13,7 @@
  * The reference count is increased when a new device allocation is
  * made through the device interface part of the runtime and decreased
  * when such an allocation is freed. The mechanism could be used in
- * other palces however.
+ * other places however.
  */
 
 extern "C" {

@@ -100,13 +100,31 @@ std::vector<DebugRule> parse_rules(const std::string &env) {
         if (auto rule = DebugRule::parse(spec)) {
             rules.push_back(*rule);
         } else if (!spec.empty()) {
-            user_warning
-                << "Ignoring malformed HL_DEBUG_CODEGEN entry: [" << spec << "]\n"
-                << "The expected format is:\n    "
-                << "verbosity[,filename[:line_low[-line_high]]][@func]";
+            // Don't use user_warning here: it consults debug_is_active_impl(),
+            // which would recurse while this function-local static is initializing.
+            const std::string warning =
+                "Warning: Ignoring malformed HL_DEBUG_CODEGEN entry: [" + spec + "]\n" +
+                "Expected rule format:\n"
+                "    verbosity[,filename[:line_low[-line_high]]][@func]\n"
+                "Rules are separated by ';' and are OR-ed together.\n"
+                "Matching for filename and function uses suffix matching.\n"
+                "Examples:\n"
+                "    HL_DEBUG_CODEGEN=2\n"
+                "    HL_DEBUG_CODEGEN=4,CodeGen_LLVM.cpp\n"
+                "    HL_DEBUG_CODEGEN=3,Simplify.cpp:100-180\n"
+                "    HL_DEBUG_CODEGEN=2@visit\n"
+                "    HL_DEBUG_CODEGEN=1;4,CodeGen_LLVM.cpp@compile\n";
+            issue_warning(warning.c_str());
         }
     }
     return rules;
+}
+
+bool rules_accept(const std::vector<DebugRule> &rules, const int verbosity,
+                  const char *file, const char *function, const int line) {
+    return std::any_of(rules.begin(), rules.end(), [&](const auto &rule) {
+        return rule.accepts(verbosity, file, function, line);
+    });
 }
 
 }  // namespace
@@ -114,9 +132,12 @@ std::vector<DebugRule> parse_rules(const std::string &env) {
 bool debug_is_active_impl(const int verbosity, const char *file, const char *function,
                           const int line) {
     static const std::vector<DebugRule> rules = parse_rules(get_env_variable("HL_DEBUG_CODEGEN"));
-    return std::any_of(rules.begin(), rules.end(), [&](const auto &rule) {
-        return rule.accepts(verbosity, file, function, line);
-    });
+    return rules_accept(rules, verbosity, file, function, line);
+}
+
+bool debug_spec_accepts(const std::string &spec, const int verbosity,
+                        const char *file, const char *function, const int line) {
+    return rules_accept(parse_rules(spec), verbosity, file, function, line);
 }
 
 }  // namespace Halide::Internal

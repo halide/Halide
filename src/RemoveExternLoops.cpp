@@ -22,7 +22,7 @@ private:
 }  // namespace
 
 Stmt remove_extern_loops(const Stmt &s) {
-    return RemoveExternLoops().mutate(s);
+    return RemoveExternLoops()(s);
 }
 
 }  // namespace Internal

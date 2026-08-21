@@ -670,7 +670,7 @@ class ReplaceParams : public IRMutator {
         auto i = replacements.find(op->name);
         if (i != replacements.end()) {
             return Load::make(op->type, op->name, mutate(op->index), op->image,
-                              i->second, mutate(op->predicate), op->alignment);
+                              i->second, mutate(op->predicate), op->alignment, op->is_streaming);
         } else {
             return IRMutator::visit(op);
         }
@@ -680,7 +680,7 @@ class ReplaceParams : public IRMutator {
         auto i = replacements.find(op->name);
         if (i != replacements.end()) {
             return Store::make(op->name, mutate(op->value), mutate(op->index),
-                               i->second, mutate(op->predicate), op->alignment);
+                               i->second, mutate(op->predicate), op->alignment, op->is_streaming);
         } else {
             return IRMutator::visit(op);
         }
@@ -693,7 +693,7 @@ public:
 };
 
 Stmt replace_params(const Stmt &s, const std::map<std::string, Parameter> &replacements) {
-    return ReplaceParams(replacements).mutate(s);
+    return ReplaceParams(replacements)(s);
 }
 
 class InjectHexagonRpc : public IRMutator {
@@ -781,9 +781,8 @@ class InjectHexagonRpc : public IRMutator {
             if (i->second == scalars_buffer_type) {
                 int index = scalars_buffer_init.size();
                 scalars_buffer_init.push_back(Store::make(scalars_buffer_name, Variable::make(scalars_buffer_type, i->first),
-                                                          index, Parameter(), const_true(), ModulusRemainder()));
-                Expr replacement = Load::make(scalars_buffer_type, scalars_buffer_name, index, Buffer<>(),
-                                              Parameter(), const_true(), ModulusRemainder());
+                                                          index));
+                Expr replacement = Load::make(scalars_buffer_type, scalars_buffer_name, index);
                 body = LetStmt::make(i->first, replacement, body);
 
                 i = c.vars.erase(i);
@@ -1100,12 +1099,11 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
 
         write_entire_file(input.pathname(), shared_object);
 
-        debug(1) << "Signing tool: (" << signer << ")\n";
-        std::string cmd = signer + " " + input.pathname() + " " + output.pathname();
-        int result = system(cmd.c_str());
-        internal_assert(result == 0)
-            << "HL_HEXAGON_CODE_SIGNER failed: result = " << result
-            << " for cmd (" << cmd << ")";
+        auto sign_cmd = split_string(signer, " ");
+        sign_cmd.insert(sign_cmd.end(), {input.pathname(), output.pathname()});
+
+        int result = run_process(std::move(sign_cmd));
+        internal_assert(result == 0) << "HL_HEXAGON_CODE_SIGNER failed: result = " << result;
 
         shared_object = read_entire_file(output.pathname());
     }

@@ -4,7 +4,7 @@
 #include "Expr.h"
 
 /** \file
- * Defines a lowering pass that elides stores that depend on unitialized values.
+ * Defines a lowering pass that elides stores that depend on uninitialized values.
  */
 
 namespace Halide {

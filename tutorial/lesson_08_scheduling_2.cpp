@@ -1,18 +1,12 @@
 // Halide tutorial lesson 8: Scheduling multi-stage pipelines
 
 // On linux, you can compile and run it like so:
-// g++ lesson_08*.cpp -g -std=c++17 -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_08
-// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_08
+// g++ lesson_08*.cpp -g -std=c++17 -I <path/to/include> -L <path/to/lib> -lHalide -lpthread -ldl -o lesson_08
+// LD_LIBRARY_PATH=<path/to/lib> ./lesson_08
 
-// On os x:
-// g++ lesson_08*.cpp -g -std=c++17 -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_08
-// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_08
-
-// If you have the entire Halide source tree, you can also build it by
-// running:
-//    make tutorial_lesson_08_scheduling_2
-// in a shell with the current directory at the top of the halide
-// source tree.
+// On macOS:
+// g++ lesson_08*.cpp -g -std=c++17 -I <path/to/include> -L <path/to/lib> -lHalide -o lesson_08
+// DYLD_LIBRARY_PATH=<path/to/lib> ./lesson_08
 
 #include "Halide.h"
 #include <cstdio>
@@ -169,7 +163,7 @@ int main() {
     // memory and memory bandwidth, but did a whole bunch of redundant
     // expensive math (calling sin). It evaluated most points in
     // 'producer' four times. The second schedule,
-    // producer.compute_root(), did the mimimum number of calls to
+    // producer.compute_root(), did the minimum number of calls to
     // sin, but used more temporary memory and more memory bandwidth.
 
     // In any given situation the correct choice can be difficult to
@@ -459,7 +453,7 @@ int main() {
     // iterations are lying around for us to reuse. This assumes that
     // previous values of x or y happened earlier in time and have
     // finished. This is not true if you parallelize or vectorize
-    // either loop. Darn. If you parallelize, Halide won't inject the
+    // either loop. If you parallelize, Halide won't inject the
     // optimizations that skip work already done if there's a parallel
     // loop in between the store_at level and the compute_at level,
     // and won't fold the storage down into a circular buffer either,
@@ -665,8 +659,6 @@ int main() {
         consumer.print_loop_nest();
         printf("\n");
 
-        // Look on my code, ye mighty, and despair!
-
         // Let's check the C result against the Halide result. Doing
         // this I found several bugs in my C implementation, which
         // should tell you something.
@@ -686,7 +678,7 @@ int main() {
     // This stuff is hard. We ended up in a three-way trade-off
     // between memory bandwidth, redundant work, and
     // parallelism. Halide can't make the correct choice for you
-    // automatically (sorry). Instead it tries to make it easier for
+    // automatically. Instead it tries to make it easier for
     // you to explore various options, without messing up your
     // program. In fact, Halide promises that scheduling calls like
     // compute_root won't change the meaning of your algorithm -- you

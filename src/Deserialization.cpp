@@ -47,7 +47,7 @@ public:
     std::map<std::string, Parameter> deserialize_parameters(const std::vector<uint8_t> &data);
 
 private:
-    // Helper function to deserialize a homogenous vector from a flatbuffer vector,
+    // Helper function to deserialize a homogeneous vector from a flatbuffer vector,
     // does not apply to union types like Stmt and Expr or enum types like MemoryType
     template<typename src, typename dst>
     std::vector<dst> deserialize_vector(const flatbuffers::Vector<::flatbuffers::Offset<src>> *flatbuffer_vec,
@@ -180,6 +180,8 @@ MemoryType Deserializer::deserialize_memory_type(Serialize::MemoryType memory_ty
         return MemoryType::Register;
     case Serialize::MemoryType::GPUShared:
         return MemoryType::GPUShared;
+    case Serialize::MemoryType::GPUSharedAsync:
+        return MemoryType::GPUSharedAsync;
     case Serialize::MemoryType::GPUTexture:
         return MemoryType::GPUTexture;
     case Serialize::MemoryType::LockedCache:
@@ -256,6 +258,8 @@ DeviceAPI Deserializer::deserialize_device_api(Serialize::DeviceAPI device_api) 
         return DeviceAPI::Vulkan;
     case Serialize::DeviceAPI::WebGPU:
         return DeviceAPI::WebGPU;
+    case Serialize::DeviceAPI::SMEStreaming:
+        return DeviceAPI::SMEStreaming;
     default:
         user_error << "unknown device api " << (int)device_api << "\n";
         return DeviceAPI::None;
@@ -503,13 +507,26 @@ void Deserializer::deserialize_function(const Serialize::Func *function, Functio
         deserialize_vector<flatbuffers::String, std::string>(function->trace_tags(),
                                                              &Deserializer::deserialize_string);
     const bool no_profiling = function->no_profiling();
+    const std::string profiler_display_name = deserialize_string(function->profiler_display_name());
     const bool frozen = function->frozen();
+
+    FunctionPtr global_wrapper;
+    if (const auto *global_wrapper_ref = function->global_wrapper()) {
+        const int32_t func_index = global_wrapper_ref->func_index();
+        if (auto it = this->reverse_function_mappings.find(func_index); it != this->reverse_function_mappings.end() && func_index != -1) {
+            global_wrapper = it->second;
+            // Global-wrapper links are weak (same-group) and are followed
+            // during call resolution (see FunctionPtr::get).
+            global_wrapper.follow_global_wrappers = true;
+        }
+    }
+
     hl_function.update_with_deserialization(name, origin_name, output_types, required_types,
                                             required_dim, args, func_schedule, init_def, updates,
                                             debug_file, output_buffers, extern_arguments, extern_function_name,
                                             name_mangling, extern_function_device_api, extern_proxy_expr,
                                             trace_loads, trace_stores, trace_realizations, trace_tags,
-                                            no_profiling, frozen);
+                                            no_profiling, profiler_display_name, frozen, global_wrapper);
 }
 
 Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt) {
@@ -564,7 +581,7 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
             user_error << "unknown parameter used in pipeline '" << param_name << "'\n";
         }
         const auto alignment = deserialize_modulus_remainder(store_stmt->alignment());
-        return Store::make(name, value, index, param, predicate, alignment);
+        return Store::make(name, value, index, param, predicate, alignment, store_stmt->is_streaming());
     }
     case Serialize::Stmt::Provide: {
         const auto *provide_stmt = (const Serialize::Provide *)stmt;
@@ -832,7 +849,7 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
         }
         const auto alignment = deserialize_modulus_remainder(load_expr->alignment());
         const auto type = deserialize_type(load_expr->type());
-        return Load::make(type, name, index, image, param, predicate, alignment);
+        return Load::make(type, name, index, image, param, predicate, alignment, load_expr->is_streaming());
     }
     case Serialize::Expr::Ramp: {
         const auto *ramp_expr = (const Serialize::Ramp *)expr;
@@ -941,6 +958,7 @@ std::vector<Expr> Deserializer::deserialize_expr_vector(const flatbuffers::Vecto
                                                         const flatbuffers::Vector<flatbuffers::Offset<void>> *exprs_serialized) {
     user_assert(exprs_types != nullptr);
     user_assert(exprs_serialized != nullptr);
+    user_assert(exprs_types->size() == exprs_serialized->size()) << "malformed pipeline: expression type and value counts do not match\n";
     std::vector<Expr> result;
     result.reserve(exprs_serialized->size());
     for (size_t i = 0; i < exprs_serialized->size(); ++i) {
@@ -1017,6 +1035,15 @@ FuncSchedule Deserializer::deserialize_func_schedule(const Serialize::FuncSchedu
     const auto async = func_schedule->async();
     const auto ring_buffer = deserialize_expr(func_schedule->ring_buffer_type(), func_schedule->ring_buffer());
     const auto memoize_eviction_key = deserialize_expr(func_schedule->memoize_eviction_key_type(), func_schedule->memoize_eviction_key());
+    std::vector<std::pair<Expr, std::string>> type_change_checks;
+    if (func_schedule->type_change_checks() != nullptr) {
+        type_change_checks.reserve(func_schedule->type_change_checks()->size());
+        for (const auto *check : *func_schedule->type_change_checks()) {
+            type_change_checks.emplace_back(
+                deserialize_expr(check->condition_type(), check->condition()),
+                deserialize_string(check->message()));
+        }
+    }
     auto hl_func_schedule = FuncSchedule();
     hl_func_schedule.store_level() = store_level;
     hl_func_schedule.compute_level() = compute_level;
@@ -1030,17 +1057,18 @@ FuncSchedule Deserializer::deserialize_func_schedule(const Serialize::FuncSchedu
     hl_func_schedule.async() = async;
     hl_func_schedule.ring_buffer() = ring_buffer;
     hl_func_schedule.memoize_eviction_key() = memoize_eviction_key;
+    hl_func_schedule.type_change_checks() = std::move(type_change_checks);
     return hl_func_schedule;
 }
 
 Specialization Deserializer::deserialize_specialization(const Serialize::Specialization *specialization) {
     user_assert(specialization != nullptr);
     const auto condition = deserialize_expr(specialization->condition_type(), specialization->condition());
-    const auto defintion = deserialize_definition(specialization->definition());
+    const auto definition = deserialize_definition(specialization->definition());
     const auto failure_message = deserialize_string(specialization->failure_message());
     Specialization hl_specialization;
     hl_specialization.condition = condition;
-    hl_specialization.definition = defintion;
+    hl_specialization.definition = definition;
     hl_specialization.failure_message = failure_message;
     return hl_specialization;
 }
@@ -1162,6 +1190,7 @@ FuseLoopLevel Deserializer::deserialize_fuse_loop_level(const Serialize::FuseLoo
     for (const auto &align_strategy : *fuse_loop_level->align_strategies()) {
         align_strategies.push_back(deserialize_loop_align_strategy((Serialize::LoopAlignStrategy)align_strategy));
     }
+    user_assert(align_dimension_names.size() == align_strategies.size()) << "malformed pipeline: fused loop level dimension and strategy counts do not match\n";
     std::map<std::string, LoopAlignStrategy> align;
     for (size_t i = 0; i < align_dimension_names.size(); ++i) {
         align[align_dimension_names[i]] = align_strategies[i];
@@ -1199,8 +1228,16 @@ StageSchedule Deserializer::deserialize_stage_schedule(const Serialize::StageSch
     const bool allow_race_conditions = stage_schedule->allow_race_conditions();
     const bool atomic = stage_schedule->atomic();
     const bool override_atomic_associativity_test = stage_schedule->override_atomic_associativity_test();
+    const bool stream_stores = stage_schedule->stream_stores();
+    std::optional<std::vector<std::string>> stream_loads_names;
+    if (!stage_schedule->stream_loads_all()) {
+        stream_loads_names =
+            deserialize_vector<flatbuffers::String, std::string>(stage_schedule->stream_loads_names(),
+                                                                 &Deserializer::deserialize_string);
+    }
     return StageSchedule(rvars, splits, dims, prefetches, fuse_level, fused_pairs, touched,
-                         allow_race_conditions, atomic, override_atomic_associativity_test);
+                         allow_race_conditions, atomic, override_atomic_associativity_test,
+                         stream_stores, stream_loads_names);
 }
 
 BufferConstraint Deserializer::deserialize_buffer_constraint(const Serialize::BufferConstraint *buffer_constraint) {
@@ -1310,6 +1347,7 @@ Buffer<> Deserializer::deserialize_buffer(const Serialize::Buffer *buffer) {
     const std::string name = deserialize_string(buffer->name());
     const auto type = deserialize_type(buffer->type());
     const int32_t dimensions = buffer->dimensions();
+    user_assert(dimensions >= 0 && (size_t)dimensions <= buffer->dims()->size()) << "malformed pipeline: buffer dimension count does not match the serialized dimensions\n";
     std::vector<halide_dimension_t> hl_buffer_dimensions;
     std::vector<halide_dimension_t> dense_buffer_dimensions;
     hl_buffer_dimensions.reserve(dimensions);
@@ -1334,10 +1372,15 @@ Buffer<> Deserializer::deserialize_buffer(const Serialize::Buffer *buffer) {
         dense_buffer_dimensions.push_back(dense_dim);
     }
     // To handle cropped buffer, we create a dense buffer and serialize into it,
-    // then create a (potential sparse) buffer with orignal dimension infos and copy from the dense buffer
+    // then create a (potential sparse) buffer with original dimension infos and copy from the dense buffer
     auto fake_dense_buffer = Buffer<>(type, nullptr, dimensions, dense_buffer_dimensions.data(), name + "_dense_fake");
     auto dense_buffer = Buffer<>::make_with_shape_of(fake_dense_buffer, nullptr, nullptr, name + "_dense_tmp");
-    memcpy(dense_buffer.data(), buffer->data()->data(), buffer->data()->size());
+    const auto *buffer_data = buffer->data();
+    user_assert(buffer_data != nullptr) << "deserialized buffer " << name << " has no data\n";
+    user_assert(buffer_data->size() == dense_buffer.size_in_bytes())
+        << "deserialized buffer " << name << " carries " << buffer_data->size()
+        << " bytes of data, but its dimensions require " << dense_buffer.size_in_bytes() << "\n";
+    memcpy(dense_buffer.data(), buffer_data->data(), buffer_data->size());
     auto fake_buffer = Buffer<>(type, nullptr, dimensions, hl_buffer_dimensions.data(), name + "_fake");
     auto hl_buffer = Buffer<>::make_with_shape_of(fake_buffer, nullptr, nullptr, name);
     hl_buffer.copy_from(dense_buffer);
@@ -1467,6 +1510,7 @@ Pipeline Deserializer::deserialize(const std::vector<uint8_t> &data) {
     }
 
     std::vector<Func> funcs;
+    user_assert(pipeline_obj->funcs()->size() == functions.size()) << "malformed pipeline: serialized function count does not match the number of function names\n";
     for (size_t i = 0; i < pipeline_obj->funcs()->size(); ++i) {
         deserialize_function(pipeline_obj->funcs()->Get(i), functions[i]);
         funcs.emplace_back(functions[i]);
@@ -1486,6 +1530,7 @@ Pipeline Deserializer::deserialize(const std::vector<uint8_t> &data) {
 
     const auto *requirements_objs = pipeline_obj->requirements();
     const auto *requirement_type_objs = pipeline_obj->requirements_type();
+    user_assert(requirements_objs->size() == requirement_type_objs->size()) << "malformed pipeline: requirement type and value counts do not match\n";
 
     std::vector<Stmt> requirements;
     requirements.reserve(requirements_objs->size());

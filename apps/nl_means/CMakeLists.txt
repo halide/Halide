@@ -15,26 +15,37 @@ find_package(Halide REQUIRED)
 add_halide_generator(nl_means.generator SOURCES nl_means_generator.cpp)
 
 # Filters
-add_halide_library(nl_means FROM nl_means.generator)
-add_halide_library(nl_means_auto_schedule FROM nl_means.generator
-                   GENERATOR nl_means
-                   AUTOSCHEDULER Halide::Mullapudi2016)
+add_halide_library(nl_means FROM nl_means.generator REGISTRATION nl_means_registration)
+add_halide_library(
+    nl_means_auto_schedule
+    FROM nl_means.generator
+    GENERATOR nl_means
+    AUTOSCHEDULER Halide::Mullapudi2016
+)
 
 # Main executable
 add_executable(nl_means_process process.cpp)
-target_link_libraries(nl_means_process
-                      PRIVATE
-                      Halide::ImageIO
-                      nl_means
-                      nl_means_auto_schedule)
+target_link_libraries(nl_means_process PRIVATE Halide::ImageIO nl_means nl_means_auto_schedule)
 
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgb.png)
 if (EXISTS ${IMAGE})
-    configure_file(${IMAGE} rgb.png COPYONLY)
-    add_test(NAME nl_means_process COMMAND nl_means_process rgb.png 7 7 0.12 10 out.png)
-    set_tests_properties(nl_means_process PROPERTIES
-                         LABELS nl_means
-                         PASS_REGULAR_EXPRESSION "Success!"
-                         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
+    add_test(NAME nl_means_process COMMAND nl_means_process ${IMAGE} 7 7 0.12 10 out.png)
+    set_tests_properties(
+        nl_means_process
+        PROPERTIES
+        LABELS nl_means
+        PASS_REGULAR_EXPRESSION "Success!"
+        SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
+    )
 endif ()
+
+# RunGen-based benchmark. Run every app benchmark at once with
+# `ctest -L benchmark_apps`.
+add_executable(nl_means_rungen ${nl_means_registration})
+target_link_libraries(nl_means_rungen PRIVATE Halide::RunGenMain nl_means)
+add_test(
+    NAME nl_means_benchmark
+    COMMAND nl_means_rungen --benchmarks=all --estimate_all --parsable_output
+)
+set_tests_properties(nl_means_benchmark PROPERTIES LABELS "nl_means;benchmark_apps")

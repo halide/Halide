@@ -1,7 +1,7 @@
 #include <functional>
 #include <sstream>
 
-#include "CodeGen_Posix.h"
+#include "CodeGen_CPU.h"
 #include "ConciseCasts.h"
 #include "ConstantBounds.h"
 #include "IRMatch.h"
@@ -23,12 +23,12 @@ using namespace Halide::ConciseCasts;
 namespace {
 
 /** A code generator that emits WebAssembly code from a given Halide stmt. */
-class CodeGen_WebAssembly : public CodeGen_Posix {
+class CodeGen_WebAssembly : public CodeGen_CPU {
 public:
     CodeGen_WebAssembly(const Target &);
 
 protected:
-    using CodeGen_Posix::visit;
+    using CodeGen_CPU::visit;
 
     void init_module() override;
 
@@ -42,19 +42,21 @@ protected:
     void visit(const Cast *) override;
     void visit(const Call *) override;
     void codegen_vector_reduce(const VectorReduce *, const Expr &) override;
+
+    llvm::Value *optimization_fence(llvm::Value *v) override;
 };
 
 CodeGen_WebAssembly::CodeGen_WebAssembly(const Target &t)
-    : CodeGen_Posix(t) {
+    : CodeGen_CPU(t) {
 }
 
 constexpr int max_intrinsic_args = 4;
 
 struct WasmIntrinsic {
     const char *intrin_name;
-    halide_type_t ret_type;
+    Type ret_type;
     const char *name;
-    halide_type_t arg_types[max_intrinsic_args];
+    Type arg_types[max_intrinsic_args];
     Target::Feature feature = Target::FeatureEnd;
 };
 
@@ -112,7 +114,7 @@ const WasmIntrinsic intrinsic_defs[] = {
 };
 
 void CodeGen_WebAssembly::init_module() {
-    CodeGen_Posix::init_module();
+    CodeGen_CPU::init_module();
 
     for (const WasmIntrinsic &i : intrinsic_defs) {
         if (i.feature != Target::FeatureEnd && !target.has_feature(i.feature)) {
@@ -122,8 +124,8 @@ void CodeGen_WebAssembly::init_module() {
         Type ret_type = i.ret_type;
         vector<Type> arg_types;
         arg_types.reserve(max_intrinsic_args);
-        for (halide_type_t i : i.arg_types) {
-            if (i.bits == 0) {
+        for (const Type &i : i.arg_types) {
+            if (i.bits() == 0) {
                 break;
             }
             arg_types.emplace_back(i);
@@ -177,9 +179,40 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
             codegen(equiv);
             return;
         }
+
+        // Work around an LLVM bug where
+        // WebAssemblyTargetLowering::isVectorLoadExtDesirable assumes the
+        // operand of a vector extend is always a load, but LLVM's optimizer may
+        // insert a freeze node between the load and the extend, causing a
+        // cast<LoadSDNode> assertion failure. Use an optimization fence to
+        // prevent the DAG combiner from seeing through to the load. See
+        // https://github.com/halide/Halide/issues/8928 and
+        // https://github.com/llvm/llvm-project/issues/184676
+        if (op->type.is_int_or_uint() &&
+            op->value.type().is_int_or_uint() &&
+            op->type.bits() > op->value.type().bits()) {
+            // Check if the value is a Load. Loads are sometimes hiding behind
+            // let bindings.
+            bool is_load = op->value.as<Load>();
+            if (const Variable *var = op->value.as<Variable>()) {
+                llvm::Value *v = sym_get(var->name, false);
+                is_load = v && llvm::isa<llvm::LoadInst>(v);
+            }
+            if (is_load) {
+                llvm::Value *v = codegen(op->value);
+                // In general we don't emit optimization fences in the
+                // webassembly backend, because they cause LLVM internal
+                // errors. However in this specific case it's necessary as a
+                // workaround, so we call the base class version explicitly.
+                v = CodeGen_LLVM::optimization_fence(v);
+                value = builder->CreateIntCast(v, llvm_type_of(op->type),
+                                               op->value.type().is_int());
+                return;
+            }
+        }
     }
 
-    CodeGen_Posix::visit(op);
+    CodeGen_CPU::visit(op);
 }
 
 void CodeGen_WebAssembly::visit(const Call *op) {
@@ -270,7 +303,7 @@ void CodeGen_WebAssembly::visit(const Call *op) {
         }
     }
 
-    CodeGen_Posix::visit(op);
+    CodeGen_CPU::visit(op);
 }
 
 void CodeGen_WebAssembly::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
@@ -342,7 +375,13 @@ void CodeGen_WebAssembly::codegen_vector_reduce(const VectorReduce *op, const Ex
         }
     }
 
-    CodeGen_Posix::codegen_vector_reduce(op, init);
+    CodeGen_CPU::codegen_vector_reduce(op, init);
+}
+
+llvm::Value *CodeGen_WebAssembly::optimization_fence(llvm::Value *v) {
+    // As of llvm 23, using an arithmetic fence intrinsic causes all kinds of
+    // errors in LLVM's webassembly backend.
+    return v;
 }
 
 string CodeGen_WebAssembly::mcpu_target() const {
@@ -373,7 +412,7 @@ string CodeGen_WebAssembly::mattrs() const {
     }
     // PIC implies +mutable-globals because the PIC ABI used by the linker
     // depends on importing and exporting mutable globals. Also -pthread implies
-    // mutable-globals too, so quitely enable it if either of these are specified.
+    // mutable-globals too, so quietly enable it if either of these are specified.
     if (use_pic() || target.has_feature(Target::WasmThreads)) {
         attrs.emplace_back("+mutable-globals");
     }
@@ -407,14 +446,14 @@ int CodeGen_WebAssembly::native_vector_bits() const {
 
 }  // namespace
 
-std::unique_ptr<CodeGen_Posix> new_CodeGen_WebAssembly(const Target &target) {
+std::unique_ptr<CodeGen_CPU> new_CodeGen_WebAssembly(const Target &target) {
     user_assert(target.bits == 32) << "Only wasm32 is supported.";
     return std::make_unique<CodeGen_WebAssembly>(target);
 }
 
 #else  // WITH_WEBASSEMBLY
 
-std::unique_ptr<CodeGen_Posix> new_CodeGen_WebAssembly(const Target &target) {
+std::unique_ptr<CodeGen_CPU> new_CodeGen_WebAssembly(const Target &target) {
     user_error << "WebAssembly not enabled for this build of Halide.\n";
     return nullptr;
 }

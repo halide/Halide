@@ -84,7 +84,7 @@ class local_laplacian:
 
         # Make the processed Gaussian pyramid.
         gPyramid = _func_list("gPyramid", J)
-        # Do a lookup into a lut with 256 entires per intensity level
+        # Do a lookup into a lut with 256 entries per intensity level
         level = k * (1.0 / (g.levels - 1))
         idx = gray[x, y] * hl.f32(g.levels - 1) * 256.0
         idx = hl.clamp(hl.i32(idx), 0, (g.levels - 1) * 256)

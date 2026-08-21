@@ -426,7 +426,7 @@ struct LowerParallelTasks : public IRMutator {
 Stmt lower_parallel_tasks(const Stmt &s, std::vector<LoweredFunc> &closure_implementations,
                           const std::string &name, const Target &t) {
     LowerParallelTasks lowering_mutator(name, t);
-    Stmt result = lowering_mutator.mutate(s);
+    Stmt result = lowering_mutator(s);
 
     // Main body will be dumped as part of standard lowering debugging, but closures will not be.
     debug(2) << [&] {

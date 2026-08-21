@@ -7,13 +7,9 @@ project(hannk_superbuild LANGUAGES NONE)
 # in the corresponding build. All other non-INTERNAL or STATIC cache
 # variables are set in the cross build, too.
 
-set(host_args
-    -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
-    -DHANNK_AOT_HOST_ONLY:BOOL=ON)
+set(host_args -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE} -DHANNK_AOT_HOST_ONLY:BOOL=ON)
 
-set(cross_args
-    -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
-    -DHANNK_BUILD_TFLITE:BOOL=OFF)
+set(cross_args -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE} -DHANNK_BUILD_TFLITE:BOOL=OFF)
 
 get_property(cache DIRECTORY PROPERTY CACHE_VARIABLES)
 foreach (entry IN LISTS cache)
@@ -43,11 +39,12 @@ endforeach ()
 # Common ExternalProject options
 
 set(ep_opts
-    SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../.."
-    BUILD_ALWAYS YES
-    USES_TERMINAL_CONFIGURE YES
-    USES_TERMINAL_BUILD YES
-    CONFIGURE_HANDLED_BY_BUILD TRUE)
+    SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../.."  #
+    BUILD_ALWAYS YES  #
+    USES_TERMINAL_CONFIGURE YES  #
+    USES_TERMINAL_BUILD YES  #
+    CONFIGURE_HANDLED_BY_BUILD TRUE  #
+)
 
 ##
 # Define host and target builds
@@ -60,9 +57,11 @@ foreach (entry IN LISTS host_args)
     message(STATUS "\t${entry}")
 endforeach ()
 
-ExternalProject_Add(hannk_host ${ep_opts}
-                    INSTALL_COMMAND ""  # Disables install stage
-                    CMAKE_ARGS ${host_args})
+ExternalProject_Add(
+    hannk_host ${ep_opts}
+    INSTALL_COMMAND ""  # Disables install stage
+    CMAKE_ARGS ${host_args}
+)
 
 ExternalProject_Get_Property(hannk_host BINARY_DIR)
 list(APPEND cross_args "-Dhannk-halide_generators_ROOT:FILEPATH=${BINARY_DIR}")
@@ -73,9 +72,11 @@ foreach (entry IN LISTS cross_args)
     message(STATUS "\t${entry}")
 endforeach ()
 
-ExternalProject_Add(hannk ${ep_opts}
-                    INSTALL_COMMAND ""  # Disables install stage
-                    CMAKE_ARGS ${cross_args})
+ExternalProject_Add(
+    hannk ${ep_opts}
+    INSTALL_COMMAND ""  # Disables install stage
+    CMAKE_ARGS ${cross_args}
+)
 
 ExternalProject_Add_StepDependencies(hannk configure hannk_host)
 
@@ -86,14 +87,11 @@ ExternalProject_Add_StepDependencies(hannk configure hannk_host)
 set(CMAKE_SKIP_INSTALL_RULES YES)
 
 ExternalProject_Get_Property(hannk BINARY_DIR)
-file(GENERATE OUTPUT "cmake_install.cmake"
-     CONTENT "include(\"${BINARY_DIR}/cmake_install.cmake\")")
+file(GENERATE OUTPUT "cmake_install.cmake" CONTENT "include(\"${BINARY_DIR}/cmake_install.cmake\")")
 
 
 # Don't let CMake generate a CTestTestfile.cmake file (don't uncomment!)
 # enable_testing()
 
 file(RELATIVE_PATH ctest_dir "${CMAKE_CURRENT_BINARY_DIR}" "${BINARY_DIR}")
-file(GENERATE OUTPUT "CTestTestfile.cmake"
-     CONTENT "subdirs(\"${ctest_dir}\")")
-
+file(GENERATE OUTPUT "CTestTestfile.cmake" CONTENT "subdirs(\"${ctest_dir}\")")

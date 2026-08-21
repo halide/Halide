@@ -67,7 +67,7 @@ protected:
             if (bounds_smaller_than_type(bounds, call->type)) {
                 // TODO(#6297): check that the clamped function's allocation bounds might be wider than its compute bounds
                 auto [new_args, changed] = mutate_with_changes(call->args);
-                Expr new_call = !changed ? call : Call::make(call->type, call->name, new_args, call->call_type, call->func, call->value_index, call->image, call->param);
+                Expr new_call = !changed ? call : call->with(new_args);
                 return Max::make(Min::make(new_call, std::move(bounds.max)), std::move(bounds.min));
             }
         }
@@ -88,7 +88,7 @@ private:
         ScopedValue<bool> s(is_inside_indexing, is_inside_indexing || let_var_inside_indexing.get(op->name));
         Expr value = mutate(op->value);
 
-        return LetOrLetStmt::make(op->name, std::move(value), std::move(body));
+        return op->with(value, body);
     }
 
     bool bounds_smaller_than_type(const Interval &bounds, Type type) {
@@ -107,7 +107,7 @@ private:
 }  // namespace
 
 Stmt clamp_unsafe_accesses(const Stmt &s, const std::map<std::string, Function> &env, FuncValueBounds &func_bounds) {
-    return ClampUnsafeAccesses(env, func_bounds).mutate(s);
+    return ClampUnsafeAccesses(env, func_bounds)(s);
 }
 
 }  // namespace Halide::Internal

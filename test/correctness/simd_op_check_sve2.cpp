@@ -21,37 +21,46 @@ using CastFuncTy = function<Expr(Expr)>;
 
 class SimdOpCheckArmSve : public SimdOpCheckTest {
 public:
-    SimdOpCheckArmSve(Target t, int w = 384, int h = 32)
+    SimdOpCheckArmSve(Target t, int w = 512, int h = 16)
         : SimdOpCheckTest(t, w, h), debug_mode(Internal::get_env_variable("HL_DEBUG_SIMDOPCHECK")) {
 
         // Determine and hold can_run_the_code
-        // TODO: Since features of Arm CPU cannot be obtained automatically from get_host_target(),
-        // it is necessary to set some feature (e.g. "arm_fp16") explicitly to HL_JIT_TARGET.
-        // Halide throws error if there is unacceptable mismatch between jit_target and host_target.
-
         Target host = get_host_target();
         Target jit_target = get_jit_target_from_environment();
         cout << "host is:          " << host.to_string() << endl;
         cout << "HL_TARGET is:     " << target.to_string() << endl;
         cout << "HL_JIT_TARGET is: " << jit_target.to_string() << endl;
 
-        auto is_same_triple = [](const Target &t1, const Target &t2) -> bool {
-            return t1.arch == t2.arch && t1.bits == t2.bits && t1.os == t2.os && t1.vector_bits == t2.vector_bits;
+        auto is_runtime_compatible = [](const Target &t1, const Target &t2,
+                                        const vector<Target::Feature> features = {Target::SVE2}) -> bool {
+            bool yes = true;
+            yes &= (t1.arch == t2.arch && t1.bits == t2.bits && t1.os == t2.os);
+            yes &= (t1.vector_bits == t2.vector_bits);
+
+            // A bunch of feature flags also need to match between the
+            // compiled code and the host in order to run the code.
+            for (Target::Feature f : features) {
+                yes &= (t1.has_feature(f) == t2.has_feature(f));
+            }
+            return yes;
         };
 
-        can_run_the_code = is_same_triple(host, target) && is_same_triple(jit_target, target);
-
-        // A bunch of feature flags also need to match between the
-        // compiled code and the host in order to run the code.
-        for (Target::Feature f : {Target::ARMv7s, Target::ARMFp16, Target::NoNEON, Target::SVE2}) {
-            if (target.has_feature(f) != jit_target.has_feature(f)) {
-                can_run_the_code = false;
-            }
+        if (target.has_feature(Target::SME2)) {
+            // In this case, we run tests for streaming mode in SME2 but not for SVE2.
+            // At the moment, host with native SME2 is unavailable, so check only JIT target.
+            can_run_the_code = is_runtime_compatible(jit_target, target,
+                                                     {Target::SME2, Target::SME_SVL128,
+                                                      Target::SME_SVL256, Target::SME_SVL512,
+                                                      Target::SME_SVL1024, Target::SME_SVL2048});
+        } else {
+            // Run tests for SVE2, so don't care SME2.
+            can_run_the_code = is_runtime_compatible(host, target) && is_runtime_compatible(jit_target, target);
         }
+
         if (!can_run_the_code) {
-            cout << "[WARN] To perform verification of realization, "
-                 << R"(the target triple "arm-<bits>-<os>" and key feature "arm_fp16")"
-                 << " must be the same between HL_TARGET and HL_JIT_TARGET" << endl;
+            debug(0) << "[WARN] To perform verification of realization, "
+                     << R"(the target triple "arm-<bits>-<os>", vector_bits, and feature "sve2")"
+                     << " must be the same between HL_TARGET and HL_JIT_TARGET" << endl;
         }
     }
 
@@ -65,6 +74,17 @@ public:
         check_arm_float();
         check_arm_load_store();
         check_arm_pairwise();
+    }
+
+    void apply_additional_schedule(Stage &stage) const override {
+        if (target.has_feature(Target::SME2)) {
+            stage.sme_streaming();
+        }
+    }
+    void apply_additional_schedule(Func &f) const override {
+        if (target.has_feature(Target::SME2)) {
+            f.sme_streaming();
+        }
     }
 
 private:
@@ -100,20 +120,21 @@ private:
             // to peephole match any with vector, so we just try 64-bits, 128
             // bits, 192 bits, and 256 bits for everything.
             std::vector<int> simd_bit_widths;
-            if (has_neon()) {
+
+            if (has_sve_or_sme()) {
+                simd_bit_widths.push_back(native_vector_bits());
+            } else if (has_neon()) {
                 simd_bit_widths.push_back(64);
                 simd_bit_widths.push_back(128);
             }
-            if (has_sve() && ((target.vector_bits > 128) || !has_neon())) {
-                simd_bit_widths.push_back(target.vector_bits);
-            }
+
             for (auto &total_bits : simd_bit_widths) {
                 const int vf = total_bits / bits;
 
                 // Due to workaround for SVE LLVM issues, in case of vector of half length of natural_lanes,
-                // there is some inconsistency in generated SVE insturction about the number of lanes.
+                // there is some inconsistency in generated SVE instruction about the number of lanes.
                 // So the verification of lanes is skipped for this specific case.
-                const int instr_lanes = (total_bits == 64 && has_sve()) ?
+                const int instr_lanes = (total_bits == 64 && has_sve_or_sme()) ?
                                             Instruction::ANY_LANES :
                                             Instruction::get_instr_lanes(bits, vf, target);
                 const int widen_lanes = Instruction::get_instr_lanes(bits * 2, vf, target);
@@ -126,14 +147,14 @@ private:
                 AddTestFunctor add_16_32(*this, bits, instr_lanes, vf, bits == 16 || bits == 32);
                 AddTestFunctor add_32(*this, bits, instr_lanes, vf, bits == 32);
 
-                AddTestFunctor add_8_16_32_widen(*this, bits, widen_lanes, vf, bits != 64 && !has_sve());
+                AddTestFunctor add_8_16_32_widen(*this, bits, widen_lanes, vf, bits != 64 && !has_sve_or_sme());
 
-                AddTestFunctor add_16_32_64_narrow(*this, bits, narrow_lanes, vf * 2, bits != 8 && !has_sve());
-                AddTestFunctor add_16_32_narrow(*this, bits, narrow_lanes, vf * 2, (bits == 16 || bits == 32) && !has_sve());
-                AddTestFunctor add_16_narrow(*this, bits, narrow_lanes, vf * 2, bits == 16 && !has_sve());
+                AddTestFunctor add_16_32_64_narrow(*this, bits, narrow_lanes, vf * 2, bits != 8 && !has_sve_or_sme());
+                AddTestFunctor add_16_32_narrow(*this, bits, narrow_lanes, vf * 2, (bits == 16 || bits == 32) && !has_sve_or_sme());
+                AddTestFunctor add_16_narrow(*this, bits, narrow_lanes, vf * 2, bits == 16 && !has_sve_or_sme());
 
                 // VABA     I       -       Absolute Difference and Accumulate
-                if (!has_sve()) {
+                if (!has_sve_or_sme()) {
                     // Relying on LLVM to detect accumulation
                     add_8_16_32(sel_op("vaba.s", "saba"), i_1 + absd(i_2, i_3));
                     add_8_16_32(sel_op("vaba.u", "uaba"), u_1 + absd(u_2, u_3));
@@ -224,7 +245,7 @@ private:
                 // We skip this
 
                 // VCNT     I       -       Count Number of Set Bits
-                if (!has_sve()) {
+                if (!has_sve_or_sme()) {
                     // In NEON, there is only cnt for bytes, and then horizontal adds.
                     add_8_16_32({{sel_op("vcnt.", "cnt"), 8, total_bits == 64 ? 8 : 16}}, vf, popcount(i_1));
                     add_8_16_32({{sel_op("vcnt.", "cnt"), 8, total_bits == 64 ? 8 : 16}}, vf, popcount(u_1));
@@ -411,7 +432,7 @@ private:
                 add_8_16_32(sel_op("vqshl.u", "uqshl"), cast_u(min(widen_u(u_1) * 16, max_u)));
 
                 // VQSHLU   I       -       Saturating Shift Left Unsigned
-                if (!has_sve()) {
+                if (!has_sve_or_sme()) {
                     add_8_16_32(sel_op("vqshlu.s", "sqshlu"), satcast_u(widen_i(i_1) * 16));
                 }
 
@@ -447,13 +468,14 @@ private:
                 Expr shift = (i_2 % bits) - (bits / 2);
                 Expr round_s = (cast_i(1) >> min(shift, 0)) / 2;
                 Expr round_u = (cast_u(1) >> min(shift, 0)) / 2;
-                add_8_16_32(sel_op("vrshl.s", "srshl", "srshlr"), cast_i((widen_i(i_1) + round_s) << shift));
-                add_8_16_32(sel_op("vrshl.u", "urshl", "urshlr"), cast_u((widen_u(u_1) + round_u) << shift));
+                // The r suffix is optional - it just changes which of the two args gets clobbered
+                add_8_16_32(sel_op("vrshl.s", "srshlr?"), cast_i((widen_i(i_1) + round_s) << shift));
+                add_8_16_32(sel_op("vrshl.u", "urshlr?"), cast_u((widen_u(u_1) + round_u) << shift));
 
                 round_s = (cast_i(1) << max(shift, 0)) / 2;
                 round_u = (cast_u(1) << max(shift, 0)) / 2;
-                add_8_16_32(sel_op("vrshl.s", "srshl", "srshlr"), cast_i((widen_i(i_1) + round_s) >> shift));
-                add_8_16_32(sel_op("vrshl.u", "urshl", "urshlr"), cast_u((widen_u(u_1) + round_u) >> shift));
+                add_8_16_32(sel_op("vrshl.s", "srshlr?"), cast_i((widen_i(i_1) + round_s) >> shift));
+                add_8_16_32(sel_op("vrshl.u", "urshlr?"), cast_u((widen_u(u_1) + round_u) >> shift));
 
                 // VRSHR    I       -       Rounding Shift Right
                 add_8_16_32(sel_op("vrshr.s", "srshr", "srshl"), cast_i((widen_i(i_1) + 1) >> 1));
@@ -468,7 +490,7 @@ private:
                 add_16_32_narrow(sel_op("vrshrn.i", "rshrn"), narrow_u((widen_u(u_1) + (1 << (bits / 4))) >> (bits / 4 + 1)));
 
                 // VRSRA    I       -       Rounding Shift Right and Accumulate
-                if (!has_sve()) {
+                if (!has_sve_or_sme()) {
                     // Relying on LLVM to detect accumulation
                     add_8_16_32(sel_op("vrsra.s", "srsra"), i_2 + cast_i((widen_i(i_1) + 1) >> 1));
                     add_8_16_32(sel_op("vrsra.u", "ursra"), i_2 + cast_u((widen_u(u_1) + 1) >> 1));
@@ -482,7 +504,7 @@ private:
                 add_all_vec(sel_op("vshl.i", "shl", "lsl"), i_1 * 16);
                 add_all_vec(sel_op("vshl.i", "shl", "lsl"), u_1 * 16);
 
-                if (!has_sve()) {  // No equivalent instruction in SVE.
+                if (!has_sve_or_sme()) {  // No equivalent instruction in SVE.
                     add_all_vec(sel_op("vshl.s", "sshl"), i_1 << shift);
                     add_all_vec(sel_op("vshl.s", "sshl"), i_1 >> shift);
                     add_all_vec(sel_op("vshl.u", "ushl"), u_1 << shift);
@@ -508,7 +530,7 @@ private:
                 // I guess this could be used for (x*256) | (y & 255)? We don't do bitwise ops on integers, so skip it.
 
                 // VSRA     I       -       Shift Right and Accumulate
-                if (!has_sve()) {
+                if (!has_sve_or_sme()) {
                     // Relying on LLVM to detect accumulation
                     add_all_vec(sel_op("vsra.s", "ssra"), i_2 + i_1 / 16);
                     add_all_vec(sel_op("vsra.u", "usra"), u_2 + u_1 / 16);
@@ -563,13 +585,20 @@ private:
                 continue;
             }
 
-            vector total_bits_params = {256};  // {64, 128, 192, 256};
-            if (bits != 64) {
-                // Add scalar case to verify float16 native operation
-                total_bits_params.push_back(bits);
+            std::vector<int> simd_bit_widths;
+            if (has_sve_or_sme()) {
+                simd_bit_widths.push_back(native_vector_bits());
+            } else if (has_neon()) {
+                simd_bit_widths.push_back(64);
+                simd_bit_widths.push_back(128);
             }
 
-            for (auto total_bits : total_bits_params) {
+            if (bits != 64 && !has_sme()) {
+                // Add scalar case to verify float16 native operation
+                simd_bit_widths.push_back(bits);
+            }
+
+            for (auto &total_bits : simd_bit_widths) {
                 const int vf = total_bits / bits;
                 const bool is_vector = vf > 1;
 
@@ -585,7 +614,7 @@ private:
                 add(sel_op("vsub.f", "fsub"), f_1 - f_2);
                 add(sel_op("vmul.f", "fmul"), f_1 * f_2);
                 add("fdiv", sel_op("vdiv.f", "fdiv", "(fdiv|fdivr)"), f_1 / f_2_clamped);
-                auto fneg_lanes = has_sve() ? force_vectorized_lanes : instr_lanes;
+                auto fneg_lanes = has_sve_or_sme() ? force_vectorized_lanes : instr_lanes;
                 add({{sel_op("vneg.f", "fneg"), bits, fneg_lanes}}, vf, -f_1);
                 add({{sel_op("vsqrt.f", "fsqrt"), bits, force_vectorized_lanes}}, vf, sqrt(f_1_clamped));
 
@@ -618,8 +647,8 @@ private:
                 add_arm64("fmin", is_vector ? "fmin" : "fminnm", min(f_1, f_2));
                 if (bits != 64 && total_bits != 192) {
                     // Halide relies on LLVM optimization for this pattern, and in some case it doesn't work
-                    add_arm64("fmla", is_vector ? (has_sve() ? "(fmla|fmad)" : "fmla") : "fmadd", f_1 + f_2 * f_3);
-                    add_arm64("fmls", is_vector ? (has_sve() ? "(fmls|fmsb)" : "fmls") : "fmsub", f_1 - f_2 * f_3);
+                    add_arm64("fmla", is_vector ? (has_sve_or_sme() ? "(fmla|fmad)" : "fmla") : "fmadd", f_1 + f_2 * f_3);
+                    add_arm64("fmls", is_vector ? (has_sve_or_sme() ? "(fmls|fmsb)" : "fmls") : "fmsub", f_1 - f_2 * f_3);
                 }
                 if (bits != 64) {
                     add_arm64(vector<string>{"frecpe", "frecps"}, fast_inverse(f_1_clamped));
@@ -631,7 +660,7 @@ private:
                     // and then lowered to Internal::halide_xxx() function.
                     // In case the target has FP16 feature, native type conversion between fp16 and fp32 should be generated
                     // instead of emulated equivalent code with other types.
-                    if (is_vector && !has_sve()) {
+                    if (is_vector && !has_sve_or_sme()) {
                         add_arm64("exp", {{"fcvtl", 16, 4}, {"fcvtn", 16, 4}}, vf, exp(f_1_clamped));
                         add_arm64("log", {{"fcvtl", 16, 4}, {"fcvtn", 16, 4}}, vf, log(f_1_clamped));
                         add_arm64("pow", {{"fcvtl", 16, 4}, {"fcvtn", 16, 4}}, vf, pow(f_1_clamped, f_2_clamped));
@@ -649,7 +678,7 @@ private:
                 add_arm64("finite", is_vector ? sel_op("", "fcmge", "fcmeq") : "", is_inf(f_1));
             }
 
-            if (bits == 16) {
+            if (bits == 16 && target.os != Target::IOS && target.os != Target::OSX) {
                 // Actually, the following ops are not vectorized because SIMD instruction is unavailable.
                 // The purpose of the test is just to confirm no error.
                 // In case the target has FP16 feature, native type conversion between fp16 and fp32 should be generated
@@ -677,6 +706,9 @@ private:
         vector<tuple<Type, CastFuncTy>> test_params = {
             {Int(8), in_i8}, {Int(16), in_i16}, {Int(32), in_i32}, {Int(64), in_i64}, {UInt(8), in_u8}, {UInt(16), in_u16}, {UInt(32), in_u32}, {UInt(64), in_u64}, {Float(16), in_f16}, {Float(32), in_f32}, {Float(64), in_f64}};
 
+        const int base_vec_bits = native_vector_bits();
+        const int vscale = base_vec_bits / 128;
+
         for (const auto &[elt, in_im] : test_params) {
             const int bits = elt.bits();
             if ((elt == Float(16) && !is_float16_supported()) ||
@@ -684,72 +716,86 @@ private:
                 continue;
             }
 
-            // LD/ST       -       Load/Store
-            for (int width = 64; width <= 64 * 4; width *= 2) {
-                const int total_lanes = width / bits;
-                const int instr_lanes = min(total_lanes, 128 / bits);
-                if (instr_lanes < 2) continue;  // bail out scalar op
+            // LD/ST       -       Load/Store scalar
+            // We skip scalar load/store test due to the following challenges.
+            // The rule by which LLVM selects instruction does not seem simple.
+            // For example, ld1, ldr, or ldp is used for instruction and z or q register is used for operand,
+            // depending on data type, vscale, what is performed before/after load, and LLVM version.
+            // The other thing is, load/store instruction appears in other place than we want to check,
+            // which makes it prone to false-positive detection as we only search strings line-by-line.
 
-                // In case of arm32, instruction selection looks inconsistent due to optimization by LLVM
-                AddTestFunctor add(*this, bits, total_lanes, target.bits == 64);
-                // NOTE: if the expr is too simple, LLVM might generate "bl memcpy"
-                Expr load_store_1 = in_im(x) * 3;
+            // LDn       -       Structured Load strided elements
+            if (target.os != Target::IOS && target.os != Target::OSX &&
+                Halide::Internal::get_llvm_version() >= 220) {
+                for (int stride = 2; stride <= 4; ++stride) {
 
-                if (has_sve()) {
-                    // This pattern has changed with LLVM 21, see https://github.com/halide/Halide/issues/8584 for more
-                    // details.
-                    if (Halide::Internal::get_llvm_version() < 210) {
-                        // in native width, ld1b/st1b is used regardless of data type
-                        const bool allow_byte_ls = (width == target.vector_bits);
-                        add({get_sve_ls_instr("ld1", bits, bits, "", allow_byte_ls ? "b" : "")}, total_lanes, load_store_1);
-                        add({get_sve_ls_instr("st1", bits, bits, "", allow_byte_ls ? "b" : "")}, total_lanes, load_store_1);
+                    for (int factor : {1, 2, 4}) {
+                        const int vector_lanes = base_vec_bits * factor / bits;
+
+                        // In StageStridedLoads.cpp (stride < r->lanes) is the condition for staging to happen
+                        // See https://github.com/halide/Halide/issues/8819
+                        if (vector_lanes <= stride) continue;
+
+                        AddTestFunctor add_ldn(*this, bits, vector_lanes);
+
+                        Expr load_n = in_im(x * stride) + in_im(x * stride + stride - 1);
+
+                        const string ldn_str = "ld" + to_string(stride);
+                        if (has_sve_or_sme()) {
+                            add_ldn({get_sve_ls_instr(ldn_str, bits)}, vector_lanes, load_n);
+                        } else {
+                            add_ldn(sel_op("v" + ldn_str + ".", ldn_str), load_n);
+                        }
                     }
-                } else {
-                    // vector register is not used for simple load/store
-                    string reg_prefix = (width <= 64) ? "d" : "q";
-                    add({{"st[rp]", reg_prefix + R"(\d\d?)"}}, total_lanes, load_store_1);
-                    add({{"ld[rp]", reg_prefix + R"(\d\d?)"}}, total_lanes, load_store_1);
                 }
             }
 
-            // LD2/ST2       -       Load/Store two-element structures
-            int base_vec_bits = has_sve() ? target.vector_bits : 128;
-            for (int width = base_vec_bits; width <= base_vec_bits * 4; width *= 2) {
+            // TBL - Structured load with stride=5
+            {
+                constexpr int stride = 5;
+                const int vector_lanes = base_vec_bits * 4 / bits;
+
+                AddTestFunctor add(*this, bits, vector_lanes);
+
+                Expr load_n = in_im(x * stride) + in_im(x * stride + stride - 1);
+
+                if (has_sve_or_sme()) {
+                    add("tbl", load_n);
+                }
+            }
+
+            // ST2       -       Store two-element structures
+            for (int factor : {1, 2}) {
+                const int width = base_vec_bits * 2 * factor;
                 const int total_lanes = width / bits;
                 const int vector_lanes = total_lanes / 2;
                 const int instr_lanes = min(vector_lanes, base_vec_bits / bits);
-                if (instr_lanes < 2) continue;  // bail out scalar op
+                if (instr_lanes < 2 || (vector_lanes / vscale < 2)) continue;  // bail out scalar and <vscale x 1 x ty>
 
-                AddTestFunctor add_ldn(*this, bits, vector_lanes);
                 AddTestFunctor add_stn(*this, bits, instr_lanes, total_lanes);
 
                 Func tmp1, tmp2;
                 tmp1(x) = cast(elt, x);
                 tmp1.compute_root();
                 tmp2(x, y) = select(x % 2 == 0, tmp1(x / 2), tmp1(x / 2 + 16));
-                tmp2.compute_root().vectorize(x, total_lanes);
-                Expr load_2 = in_im(x * 2) + in_im(x * 2 + 1);
+                apply_additional_schedule(tmp2.compute_root().vectorize(x, total_lanes));
                 Expr store_2 = tmp2(0, 0) + tmp2(0, 127);
 
-                if (has_sve()) {
-                    // TODO(inssue needed): Added strided load support.
-#if 0
-                    add_ldn({get_sve_ls_instr("ld2", bits)}, vector_lanes, load_2);
-#endif
+                if (has_sve_or_sme()) {
                     add_stn({get_sve_ls_instr("st2", bits)}, total_lanes, store_2);
                 } else {
-                    add_ldn(sel_op("vld2.", "ld2"), load_2);
                     add_stn(sel_op("vst2.", "st2"), store_2);
                 }
             }
 
             // Also check when the two expressions interleaved have a common
             // subexpression, which results in a vector var being lifted out.
-            for (int width = base_vec_bits; width <= base_vec_bits * 4; width *= 2) {
+            for (float factor : {0.5f, 1.f, 2.f}) {
+                const int width = base_vec_bits * 2 * factor;
                 const int total_lanes = width / bits;
                 const int vector_lanes = total_lanes / 2;
                 const int instr_lanes = Instruction::get_instr_lanes(bits, vector_lanes, target);
-                if (instr_lanes < 2) continue;  // bail out scalar op
+                if (instr_lanes < 2 || (vector_lanes / vscale < 2)) continue;  // bail out scalar and <vscale x 1 x ty>
 
                 AddTestFunctor add_stn(*this, bits, instr_lanes, total_lanes);
 
@@ -758,24 +804,24 @@ private:
                 tmp1.compute_root();
                 Expr e = (tmp1(x / 2) * 2 + 7) / 4;
                 tmp2(x, y) = select(x % 2 == 0, e * 3, e + 17);
-                tmp2.compute_root().vectorize(x, total_lanes);
+                apply_additional_schedule(tmp2.compute_root().vectorize(x, total_lanes));
                 Expr store_2 = tmp2(0, 0) + tmp2(0, 127);
 
-                if (has_sve()) {
+                if (has_sve_or_sme()) {
                     add_stn({get_sve_ls_instr("st2", bits)}, total_lanes, store_2);
                 } else {
                     add_stn(sel_op("vst2.", "st2"), store_2);
                 }
             }
 
-            // LD3/ST3       -       Store three-element structures
-            for (int width = 192; width <= 192 * 4; width *= 2) {
+            // ST3       -       Store three-element structures
+            for (float factor : {0.5f, 1.f, 2.f}) {
+                const int width = base_vec_bits * 3 * factor;
                 const int total_lanes = width / bits;
                 const int vector_lanes = total_lanes / 3;
                 const int instr_lanes = Instruction::get_instr_lanes(bits, vector_lanes, target);
-                if (instr_lanes < 2) continue;  // bail out scalar op
+                if (instr_lanes < 2 || (vector_lanes / vscale < 2)) continue;  // bail out scalar and <vscale x 1 x ty>
 
-                AddTestFunctor add_ldn(*this, bits, vector_lanes);
                 AddTestFunctor add_stn(*this, bits, instr_lanes, total_lanes);
 
                 Func tmp1, tmp2;
@@ -784,30 +830,26 @@ private:
                 tmp2(x, y) = select(x % 3 == 0, tmp1(x / 3),
                                     x % 3 == 1, tmp1(x / 3 + 16),
                                     tmp1(x / 3 + 32));
-                tmp2.compute_root().vectorize(x, total_lanes);
-                Expr load_3 = in_im(x * 3) + in_im(x * 3 + 1) + in_im(x * 3 + 2);
+                apply_additional_schedule(tmp2.compute_root().vectorize(x, total_lanes));
                 Expr store_3 = tmp2(0, 0) + tmp2(0, 127);
 
-                if (has_sve()) {
-                    // TODO(issue needed): Added strided load support.
-#if 0
-                    add_ldn({get_sve_ls_instr("ld3", bits)}, vector_lanes, load_3);
-                    add_stn({get_sve_ls_instr("st3", bits)}, total_lanes, store_3);
-#endif
+                if (has_sve_or_sme()) {
+                    if (Halide::Internal::get_llvm_version() >= 220) {
+                        add_stn({get_sve_ls_instr("st3", bits)}, total_lanes, store_3);
+                    }
                 } else {
-                    add_ldn(sel_op("vld3.", "ld3"), load_3);
                     add_stn(sel_op("vst3.", "st3"), store_3);
                 }
             }
 
-            // LD4/ST4       -       Store four-element structures
-            for (int width = 256; width <= 256 * 4; width *= 2) {
+            // ST4       -       Store four-element structures
+            for (float factor : {0.5f, 1.f, 2.f}) {
+                const int width = base_vec_bits * 4 * factor;
                 const int total_lanes = width / bits;
                 const int vector_lanes = total_lanes / 4;
                 const int instr_lanes = Instruction::get_instr_lanes(bits, vector_lanes, target);
-                if (instr_lanes < 2) continue;  // bail out scalar op
+                if (instr_lanes < 2 || (vector_lanes / vscale < 2)) continue;  // bail out scalar and <vscale x 1 x ty>
 
-                AddTestFunctor add_ldn(*this, bits, vector_lanes);
                 AddTestFunctor add_stn(*this, bits, instr_lanes, total_lanes);
 
                 Func tmp1, tmp2;
@@ -817,28 +859,26 @@ private:
                                     x % 4 == 1, tmp1(x / 4 + 16),
                                     x % 4 == 2, tmp1(x / 4 + 32),
                                     tmp1(x / 4 + 48));
-                tmp2.compute_root().vectorize(x, total_lanes);
-                Expr load_4 = in_im(x * 4) + in_im(x * 4 + 1) + in_im(x * 4 + 2) + in_im(x * 4 + 3);
+                apply_additional_schedule(tmp2.compute_root().vectorize(x, total_lanes));
                 Expr store_4 = tmp2(0, 0) + tmp2(0, 127);
 
-                if (has_sve()) {
-                    // TODO(issue needed): Added strided load support.
-#if 0
-                    add_ldn({get_sve_ls_instr("ld4", bits)}, vector_lanes, load_4);
-                    add_stn({get_sve_ls_instr("st4", bits)}, total_lanes, store_4);
-#endif
+                if (has_sve_or_sme()) {
+                    if (Halide::Internal::get_llvm_version() >= 220) {
+                        add_stn({get_sve_ls_instr("st4", bits)}, total_lanes, store_4);
+                    }
                 } else {
-                    add_ldn(sel_op("vld4.", "ld4"), load_4);
                     add_stn(sel_op("vst4.", "st4"), store_4);
                 }
             }
 
             // SVE Gather/Scatter
-            if (has_sve()) {
-                for (int width = 64; width <= 64 * 4; width *= 2) {
+            // Not supported in streaming mode in SME2.0
+            if (has_sve() && !has_sme()) {
+                for (float factor : {0.5f, 1.f, 2.f}) {
+                    const int width = base_vec_bits * factor;
                     const int total_lanes = width / bits;
                     const int instr_lanes = min(total_lanes, 128 / bits);
-                    if (instr_lanes < 2) continue;  // bail out scalar op
+                    if (instr_lanes < 2 || (total_lanes / vscale < 2)) continue;  // bail out scalar and <vscale x 1 x ty>
 
                     AddTestFunctor add(*this, bits, total_lanes);
                     Expr index = clamp(cast<int>(in_im(x)), 0, W - 1);
@@ -852,7 +892,27 @@ private:
                     const int index_bits = std::max(32, bits);
                     add({get_sve_ls_instr("ld1", bits, index_bits, "uxtw")}, total_lanes, gather);
                     add({get_sve_ls_instr("st1", bits, index_bits, "uxtw")}, total_lanes, scatter);
+
+                    // In case of lanes shorter than native's, predicate pattern is generated by
+                    // "whilelt" intrinsic.
+                    // <vscale x 8 x i1> @llvm.aarch64.sve.whilelt.nxv8i1.i32(i32 0, i32 4)
+                    if (factor == 0.5f && bits >= 32) {
+                        string constraint("vl" + to_string(total_lanes));
+                        add("whilelt", {get_ptrue_instr_with_constraint(bits, constraint)}, total_lanes, scatter);
+                    }
                 }
+            }
+
+            // Regression check for https://github.com/halide/Halide/pull/9120
+            if (has_sve()) {
+                constexpr float factor = 0.5f;
+                const int width = base_vec_bits * factor;
+                const int total_lanes = width / bits;
+                if (total_lanes / vscale < 2) continue;  // bail out scalar and <vscale x 1 x ty>
+                AddTestFunctor add_absence(*this, bits, total_lanes, true, /* check_absense = */ true);
+
+                Expr load = in_im(x);
+                add_absence({{"uunpklo"}, {"uzp1"}}, load);  // check those instrs do not exist
             }
         }
     }
@@ -877,9 +937,12 @@ private:
                 {64, in_i64, in_u64, i64, i64, u64, u64},
             };
 
+            const int base_vec_bits = native_vector_bits();
+            const int vscale = base_vec_bits / 128;
+
             for (const auto &[bits, in_i, in_u, widen_i, widenx4_i, widen_u, widenx4_u] : test_params) {
 
-                for (auto &total_bits : {64, 128}) {
+                for (auto &total_bits : {base_vec_bits / 2, base_vec_bits}) {
                     const int vf = total_bits / bits;
                     const int instr_lanes = Instruction::get_force_vectorized_instr_lanes(bits, vf, target);
                     AddTestFunctor add(*this, bits, instr_lanes, vf, !(is_arm32() && bits == 64));  // 64 bit is unavailable in neon 32 bit
@@ -887,7 +950,7 @@ private:
                     const int widen_lanes = Instruction::get_instr_lanes(bits, vf * 2, target);
                     AddTestFunctor add_widen(*this, bits, widen_lanes, vf, bits != 64);
 
-                    if (!has_sve()) {
+                    if (!has_sve_or_sme()) {
                         // VPADD    I, F    -       Pairwise Add
                         // VPMAX    I, F    -       Pairwise Maximum
                         // VPMIN    I, F    -       Pairwise Minimum
@@ -928,7 +991,7 @@ private:
                     }
 
                     const bool is_arm_dot_prod_available = (!is_arm32() && target.has_feature(Target::ARMDotProd) && bits == 8) ||
-                                                           (has_sve() && (bits == 8 || bits == 16));
+                                                           (has_sve_or_sme() && (bits == 8 || bits == 16));
                     if ((bits == 8 || bits == 16) && !is_arm_dot_prod_available) {  // udot/sdot is applied if available
                         int f = 4;
                         RDom r(0, f);
@@ -951,11 +1014,13 @@ private:
 
                     // UDOT/SDOT
                     if (is_arm_dot_prod_available) {
-                        const int factor_32bit = vf / 4;
+                        const int factor_reduced = vf / 4;
+                        if (factor_reduced / vscale < 2) continue;  // bail out scalar and <vscale x 1 x ty>
+
                         for (int f : {4, 8}) {
                             // checks vector register for narrow src data type (i.e. 8 or 16 bit)
-                            const int lanes_src = Instruction::get_instr_lanes(bits, f * factor_32bit, target);
-                            AddTestFunctor add_dot(*this, bits, lanes_src, factor_32bit);
+                            const int lanes_src = Instruction::get_instr_lanes(bits, f * factor_reduced, target);
+                            AddTestFunctor add_dot(*this, bits, lanes_src, factor_reduced);
                             RDom r(0, f);
 
                             add_dot("udot", sum(widenx4_u(in_u(f * x + r)) * in_u(f * x + r + 32)));
@@ -983,7 +1048,7 @@ private:
                 {64, in_f64},
             };
 
-            if (!has_sve()) {
+            if (!has_sve_or_sme()) {
                 for (const auto &[bits, in_f] : test_params) {
                     for (auto &total_bits : {64, 128}) {
                         const int vf = total_bits / bits;
@@ -1010,6 +1075,7 @@ private:
 
     struct ArmTask {
         vector<string> instrs;
+        bool check_absence;
     };
 
     struct Instruction {
@@ -1029,9 +1095,12 @@ private:
             : opcode(opcode), operand(nullopt), bits(bits), pattern_lanes(lanes) {
         }
 
+        static bool is_sve_instr(const Target &target) {
+            return target.features_any_of({Target::SVE, Target::SVE2, Target::SME2});
+        }
+
         string generate_pattern(const Target &target) const {
             bool is_arm32 = target.bits == 32;
-            bool has_sve = target.has_feature(Target::SVE2);
 
             string opcode_pattern;
             string operand_pattern;
@@ -1039,7 +1108,7 @@ private:
                 if (is_arm32) {
                     opcode_pattern = get_opcode_neon32();
                     operand_pattern = get_reg_neon32();
-                } else if (!has_sve) {
+                } else if (!is_sve_instr(target)) {
                     opcode_pattern = opcode;
                     operand_pattern = get_reg_neon64();
                 } else {
@@ -1054,25 +1123,25 @@ private:
             return opcode_pattern + R"(\s.*\b)" + operand_pattern + R"(\b.*)";
         }
 
-        // TODO Fix this for SVE2
-        static int natural_lanes(int bits) {
-            return 128 / bits;
+        static int natural_lanes(int bits, const Target &t) {
+            const int base_vector_bits = std::max(t.vector_bits, 128);
+            return base_vector_bits / bits;
         }
 
         static int get_instr_lanes(int bits, int vec_factor, const Target &target) {
-            return min(natural_lanes(bits), vec_factor);
+            return min(natural_lanes(bits, target), vec_factor);
         }
 
         static int get_force_vectorized_instr_lanes(int bits, int vec_factor, const Target &target) {
             // For some cases, where scalar operation is forced to vectorize
-            if (target.has_feature(Target::SVE2)) {
+            if (is_sve_instr(target)) {
                 if (vec_factor == 1) {
                     return 1;
                 } else {
-                    return natural_lanes(bits);
+                    return natural_lanes(bits, target);
                 }
             } else {
-                int min_lanes = std::max(2, natural_lanes(bits) / 2);  // 64 bit wide VL
+                int min_lanes = std::max(2, natural_lanes(bits, target) / 2);  // 64 bit wide VL
                 return max(min_lanes, get_instr_lanes(bits, vec_factor, target));
             }
         }
@@ -1081,7 +1150,7 @@ private:
             return opcode + to_string(bits.value());
         }
 
-        const char *get_bits_designator() const {
+        static const char *get_bits_designator(int bits) {
             static const map<int, const char *> designators{
                 // NOTE: vector or float only
                 {8, "b"},
@@ -1089,24 +1158,19 @@ private:
                 {32, "s"},
                 {64, "d"},
             };
-            auto iter = designators.find(bits.value());
+            auto iter = designators.find(bits);
             assert(iter != designators.end());
             return iter->second;
         }
 
         string get_reg_sve() const {
-            if (pattern_lanes == ANY_LANES) {
-                return R"((z\d\d?\.[bhsd])|(s\d\d?))";
+            const char *bits_designator = get_bits_designator(bits.value());
+            if (pattern_lanes == 1) {
+                return std::string(bits_designator) + R"(\d\d?)";  // e.g. "h15"
+            } else if (pattern_lanes == ANY_LANES) {
+                return R"(z\d\d?\.[bhsd])";
             } else {
-                const char *bits_designator = get_bits_designator();
-                // TODO(need issue): This should only match the scalar register, and likely a NEON instruction opcode.
-                // Generating a full SVE vector instruction for a scalar operation is inefficient. However this is
-                // happening and fixing it involves changing intrinsic selection. Likely to use NEON intrinsics where
-                // applicable. For now, accept both a scalar operation and a vector one.
-                std::string scalar_reg_pattern = (pattern_lanes > 1) ? "" : std::string("|(") + bits_designator + R"(\d\d?))";  // e.g. "h15"
-
-                return std::string(R"(((z\d\d?\.)") + bits_designator + ")|(" +
-                       R"(v\d\d?\.)" + to_string(pattern_lanes.value()) + bits_designator + ")" + scalar_reg_pattern + ")";
+                return std::string(R"(z\d\d?\.)") + bits_designator;  // e.g. "z15.h"
             }
         }
 
@@ -1115,11 +1179,11 @@ private:
         }
 
         string get_reg_neon64() const {
-            const char *bits_designator = get_bits_designator();
+            const char *bits_designator = get_bits_designator(bits.value());
             if (pattern_lanes == 1) {
                 return std::string(bits_designator) + R"(\d\d?)";  // e.g. "h15"
             } else if (pattern_lanes == ANY_LANES) {
-                return R"(v\d\d?\.[bhsd])";
+                return R"(v\d\d?\.\d\d?[bhsd])";
             } else {
                 return R"(v\d\d?\.)" + to_string(pattern_lanes.value()) + bits_designator;  // e.g. "v15.4h"
             }
@@ -1155,6 +1219,15 @@ private:
         return get_sve_ls_instr(base_opcode, bits, bits, "");
     }
 
+    Instruction get_ptrue_instr_with_constraint(int bits, const string &constraint) {
+        // Special predicate pattern is generated by "whilelt" intrinsic, e.g.
+        // <vscale x 8 x i1> @llvm.aarch64.sve.whilelt.nxv8i1.i32(i32 0, i32 4)
+        // LLVM compiles this to the instruction below:
+        // ptrue p0.h, vl4
+        string operand = R"(p\d\d?\.)" + string(Instruction::get_bits_designator(bits));
+        return Instruction("ptrue", operand + R"(,\s.*\b)" + constraint);
+    }
+
     // Helper functor to add test case
     class AddTestFunctor {
     public:
@@ -1162,18 +1235,20 @@ private:
                        int default_bits,
                        int default_instr_lanes,
                        int default_vec_factor,
-                       bool is_enabled = true /* false to skip testing */)
+                       bool is_enabled = true, /* false to skip testing */
+                       bool check_absence = false /* true to check the absence of the instruction pattern */)
             : parent(p), default_bits(default_bits), default_instr_lanes(default_instr_lanes),
-              default_vec_factor(default_vec_factor), is_enabled(is_enabled) {};
+              default_vec_factor(default_vec_factor), is_enabled(is_enabled), check_absence(check_absence) {};
 
         AddTestFunctor(SimdOpCheckArmSve &p,
                        int default_bits,
                        // default_instr_lanes is inferred from bits and vec_factor
                        int default_vec_factor,
-                       bool is_enabled = true /* false to skip testing */)
+                       bool is_enabled = true, /* false to skip testing */
+                       bool check_absence = false /* true to check the absence of the instruction pattern */)
             : parent(p), default_bits(default_bits),
               default_instr_lanes(Instruction::get_instr_lanes(default_bits, default_vec_factor, p.target)),
-              default_vec_factor(default_vec_factor), is_enabled(is_enabled) {};
+              default_vec_factor(default_vec_factor), is_enabled(is_enabled), check_absence(check_absence) {};
 
         // Constructs single Instruction with default parameters
         void operator()(const string &opcode, Expr e) {
@@ -1226,6 +1301,12 @@ private:
             std::stringstream type_name_stream;
             type_name_stream << e.type();
             std::string decorated_op_name = op_name + "_" + type_name_stream.str() + "_x" + std::to_string(vec_factor);
+
+            // Some regex symbols are illegal in filenames on windows
+            std::string illegal = "<>:\"/\\|?*";
+            std::replace_if(decorated_op_name.begin(), decorated_op_name.end(),  //
+                            [&](char c) { return illegal.find(c) != std::string::npos; }, '_');
+
             auto unique_name = "op_" + decorated_op_name + "_" + std::to_string(parent.tasks.size());
 
             // Bail out after generating the unique_name, so that names are
@@ -1272,12 +1353,12 @@ private:
                         : env(env) {
                     }
                 } copier(env);
-                e = copier.mutate(e);
+                e = copier(e);
             }
 
             // Create Task and register
             parent.tasks.emplace_back(Task{decorated_op_name, unique_name, vec_factor, e});
-            parent.arm_tasks.emplace(unique_name, ArmTask{std::move(instr_patterns)});
+            parent.arm_tasks.emplace(unique_name, ArmTask{std::move(instr_patterns), check_absence});
         }
 
         SimdOpCheckArmSve &parent;
@@ -1285,6 +1366,7 @@ private:
         int default_instr_lanes;
         int default_vec_factor;
         bool is_enabled;
+        bool check_absence;
     };
 
     void compile_and_check(Func error, const string &op, const string &name, int vector_width, const std::vector<Argument> &arg_types, ostringstream &error_msg) override {
@@ -1293,12 +1375,9 @@ private:
         string fn_name = "test_" + name;
         string file_name = output_directory + fn_name;
 
-        auto ext = Internal::get_output_info(target);
         std::map<OutputFileType, std::string> outputs = {
-            {OutputFileType::llvm_assembly, file_name + ext.at(OutputFileType::llvm_assembly).extension},
-            {OutputFileType::c_header, file_name + ext.at(OutputFileType::c_header).extension},
-            {OutputFileType::object, file_name + ext.at(OutputFileType::object).extension},
             {OutputFileType::assembly, file_name + ".s"},
+            {OutputFileType::llvm_assembly, file_name + ".ll"},
         };
 
         error.compile_to(outputs, arg_types, fn_name, target);
@@ -1310,7 +1389,7 @@ private:
         assert(arm_task != arm_tasks.end());
 
         std::ostringstream msg;
-        msg << op << " did not generate for target=" << target.to_string()
+        msg << op << " was not compiled as expected for target=" << target.to_string()
             << " vector_width=" << vector_width << ". Instead we got:\n";
 
         string line;
@@ -1330,11 +1409,17 @@ private:
             }
         }
 
-        if (!patterns.empty()) {
+        if (!patterns.empty() && !arm_task->second.check_absence) {
             error_msg << "Failed: " << msg.str() << "\n";
             error_msg << "The following instruction patterns were not found:\n";
             for (auto &p : patterns) {
                 error_msg << p << "\n";
+            }
+        } else if (patterns.empty() && arm_task->second.check_absence) {
+            error_msg << "Failed: " << msg.str() << "\n";
+            error_msg << "The following lines contain the instruction which shouldn't exist:\n";
+            for (auto &l : matched_lines) {
+                error_msg << l << "\n";
             }
         } else if (debug_mode == "1") {
             for (auto &l : matched_lines) {
@@ -1349,9 +1434,9 @@ private:
     }
 
     inline const string &sel_op(const string &neon32, const string &neon64, const string &sve) {
-        return is_arm32()                                                          ? neon32 :
-               target.has_feature(Target::SVE) || target.has_feature(Target::SVE2) ? sve :
-                                                                                     neon64;
+        return is_arm32()                                                        ? neon32 :
+               target.features_any_of({Target::SVE, Target::SVE2, Target::SME2}) ? sve :
+                                                                                   neon64;
     }
 
     inline bool is_arm32() const {
@@ -1363,9 +1448,25 @@ private:
     inline bool has_sve() const {
         return target.has_feature(Target::SVE2);
     };
+    inline bool has_sme() const {
+        return target.has_feature(Target::SME2);
+    };
+    inline bool has_sve_or_sme() const {
+        return has_sve() || has_sme();
+    };
+
+    int native_vector_bits() const {
+        // In this test, if target has SME, we run test in streaming mode,
+        // so the target's SME_SVL feature is applied.
+        if (has_sme()) {
+            return target.sme_streaming_vector_bits();
+        }
+        return target.natural_vector_size(Int(8)) * 8;
+    }
 
     bool is_float16_supported() const {
-        return (target.bits == 64) && target.features_any_of({Target::ARMFp16, Target::SVE, Target::SVE2});
+        return (target.bits == 64) &&
+               target.features_any_of({Target::ARMFp16, Target::SVE, Target::SVE2, Target::SME2});
     }
 
     bool can_run_the_code;
@@ -1376,14 +1477,36 @@ private:
 }  // namespace
 
 int main(int argc, char **argv) {
-    return SimdOpCheckTest::main<SimdOpCheckArmSve>(
-        argc, argv,
-        {
-            // IMPORTANT:
-            // When adding new targets here, make sure to also update
-            // can_run_code in simd_op_check.h to include any new features used.
+    if (Internal::get_llvm_version() < 220) {
+        printf("[SKIP] LLVM %d has known SVE backend bugs for this test.\n",
+               Internal::get_llvm_version());
+        return 0;
+    }
 
-            Target("arm-64-linux-sve2-no_neon-vector_bits_128"),
-            Target("arm-64-linux-sve2-no_neon-vector_bits_256"),
-        });
+    // IMPORTANT:
+    // When adding new targets here, make sure to also update
+    // can_run_code() in this file to include any new features used.
+
+    std::vector<Target> targets;
+    if (auto target_set_env = Internal::get_env_variable("HL_SIMDOPCHECK_SVE2_TARGET"); !target_set_env.empty()) {
+        // Only test with the target set by environmental variable
+        targets.emplace_back(target_set_env);
+    } else {
+        targets.emplace_back("arm-64-linux-sve2-vector_bits_128");
+        targets.emplace_back("arm-64-linux-sve2-vector_bits_256");
+        targets.emplace_back("arm-64-linux-sve2-vector_bits_512");
+
+        // For SME2, try to select a target which runs natively if possible.
+        auto host_target = get_host_target();
+        int svb = host_target.has_feature(Target::SME2) ? host_target.sme_streaming_vector_bits() : 512;
+        Target::Feature sme_svl = Target::sme_svl_feature_from_bits(svb);
+        if (sme_svl == Target::FeatureEnd) {
+            std::cerr << "Unsupported SME SVL " << svb << "\n";
+            return 1;
+        }
+        auto sme_target = Target(host_target.os, Target::ARM, 64, Target::ProcessorGeneric, {Target::SME2, sme_svl});
+        targets.emplace_back(sme_target);
+    }
+
+    return SimdOpCheckTest::main<SimdOpCheckArmSve>(argc, argv, targets);
 }

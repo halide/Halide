@@ -219,6 +219,11 @@ void define_func(py::module &m) {
             .def("bound_storage", &Func::bound_storage)
             .def("memoize", &Func::memoize, py::arg("eviction_key") = EvictionKey())
             .def("compute_inline", &Func::compute_inline)
+            .def("eager_inline", (Func & (Func::*)(const std::vector<Func> &)) & Func::eager_inline, py::arg("fs"))
+            .def("eager_inline", [](Func &func, const py::args &args) -> Func & {
+                return func.eager_inline(args_to_vector<Func>(args));
+            })
+            .def("change_type", &Func::change_type, py::arg("type"), py::arg("unsafe") = false)
             .def("compute_root", &Func::compute_root)
             .def("store_root", &Func::store_root)
 
@@ -228,6 +233,9 @@ void define_func(py::module &m) {
             .def("hoist_storage_root", &Func::hoist_storage_root)
 
             .def("store_in", &Func::store_in, py::arg("memory_type"))
+            .def("stream_loads", (Func & (Func::*)()) & Func::stream_loads)
+            .def("stream_loads", (Func & (Func::*)(const std::vector<Func> &)) & Func::stream_loads, py::arg("funcs"))
+            .def("stream_stores", &Func::stream_stores)
 
             .def("compile_to",  //
                  [](Func &f, const std::map<OutputFileType, std::string> &output_files, const std::vector<Argument> &args, const std::string &fn_name, const Target &target) {

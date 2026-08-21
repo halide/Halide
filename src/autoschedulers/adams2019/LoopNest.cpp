@@ -333,7 +333,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                     int64_t working_set_c{0};
                     c->compute_working_set_from_features(&working_set_c, features);
                     working_set_here += working_set_c;
-                    continue;  // no need to recompute fetures
+                    continue;  // no need to recompute features
                 }
             }
 

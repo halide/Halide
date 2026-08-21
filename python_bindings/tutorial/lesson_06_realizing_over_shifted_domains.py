@@ -5,10 +5,6 @@
 # This lesson demonstrates how to evaluate a hl.Func over a domain that
 # does not start at (0, 0).
 
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_06_realizing_over_shifted_domains
-# in a shell with the current directory at python_bindings/
-
 import halide as hl
 
 
@@ -67,8 +63,8 @@ def main():
     # evaluating gradient over an arbitrary rectangle.
     gradient.realize(shifted)
 
-    # From C++, we also access the image object using coordinates
-    # that start at (100, 50).
+    # We also access the image object using coordinates that start
+    # at (100, 50).
     for yy in range(50, 57):
         for xx in range(100, 105):
             assert shifted[xx, yy] == xx + yy, "Something went wrong!"
@@ -78,7 +74,8 @@ def main():
     # fact read out-of-bounds and probably crash.
 
     # What if we want to evaluate our hl.Func over some region that
-    # isn't rectangular? Too bad. Halide only does rectangles :)
+    # isn't rectangular? Unfortunately, we can't. Halide only supports
+    # rectangular domains.
 
     print("Success!")
     return 0

@@ -103,9 +103,9 @@ class IsNoOp : public IRVisitor {
             }
 
             Expr equivalent_load = Load::make(op->value.type(), op->name, op->index,
-                                              Buffer<>(), Parameter(), op->predicate, op->alignment);
+                                              Buffer<>(), Parameter(), op->predicate, op->alignment, false);
             Expr is_no_op = equivalent_load == op->value;
-            is_no_op = StripIdentities().mutate(is_no_op);
+            is_no_op = StripIdentities()(is_no_op);
             // We need to call CSE since sometimes we have "let" stmt on the RHS
             // that makes the expr harder to solve, i.e. the solver will just give up
             // and return a conservative false on call to and_condition_over_domain().
@@ -338,7 +338,7 @@ class SimplifyUsingBounds : public IRMutator {
         containing_loops.push_back({op->name, {min, max}});
         Stmt body = mutate(op->body);
         containing_loops.pop_back();
-        return For::make(op->name, min, max, op->for_type, op->partition_policy, op->device_api, body);
+        return op->with(min, max, body);
     }
 
 public:
@@ -377,11 +377,7 @@ class TrimNoOps : public IRMutator {
             return Evaluate::make(0);
         } else if (is_const_zero(is_no_op.condition)) {
             // This loop is definitely needed
-            if (body.same_as(op->body)) {
-                return op;
-            } else {
-                return For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
-            }
+            return op->with(op->min, op->max, body);
         }
 
         // The condition is something interesting. Try to see if we
@@ -393,7 +389,7 @@ class TrimNoOps : public IRMutator {
 
         if (i.is_everything()) {
             // Nope.
-            return For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
+            return op->with(op->min, op->max, body);
         }
 
         if (i.is_empty()) {
@@ -405,7 +401,7 @@ class TrimNoOps : public IRMutator {
 
         // Simplify the body to take advantage of the fact that the
         // loop range is now truncated
-        body = simplify(SimplifyUsingBounds(op->name, i).mutate(body));
+        body = simplify(SimplifyUsingBounds(op->name, i)(body));
 
         string new_min_name = unique_name(op->name + ".new_min");
         string new_max_name = unique_name(op->name + ".new_max");
@@ -429,7 +425,7 @@ class TrimNoOps : public IRMutator {
             new_max = old_max;
         }
 
-        Stmt stmt = For::make(op->name, new_min_var, new_max_var, op->for_type, op->partition_policy, op->device_api, body);
+        Stmt stmt = op->with(new_min_var, new_max_var, body);
         stmt = LetStmt::make(new_max_name, new_max, stmt);
         stmt = LetStmt::make(new_min_name, new_min, stmt);
         stmt = LetStmt::make(old_max_name, old_max, stmt);
@@ -445,9 +441,8 @@ class TrimNoOps : public IRMutator {
 
 }  // namespace
 
-Stmt trim_no_ops(Stmt s) {
-    s = TrimNoOps().mutate(s);
-    return s;
+Stmt trim_no_ops(const Stmt &s) {
+    return TrimNoOps()(s);
 }
 
 }  // namespace Internal

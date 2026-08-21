@@ -53,7 +53,7 @@ protected:
         IRVisitor::visit(op);  // Make sure we visit the Store first.
         if (index.defined()) {
             if (expr_uses_var(index, op->name)) {
-                index = Let::make(op->name, op->value, index);
+                index = op->with(op->value, index);
             }
         }
     }
@@ -261,12 +261,7 @@ protected:
     Stmt visit(const Store *op) override {
         Expr predicate = mutate(op->predicate);
         Expr value = mutate(op->value);
-        return Store::make(op->name,
-                           std::move(value),
-                           var,
-                           op->param,
-                           std::move(predicate),
-                           op->alignment);
+        return op->with(value, var, predicate, op->alignment);
     }
 
     const std::string &producer_name;
@@ -326,7 +321,7 @@ protected:
         }
 
         if (const std::string *mutex_name = needs_mutex_allocation.find(producer_name)) {
-            Expr extent = cast<uint64_t>(1);  // uint64_t to handle LargeBuffers
+            Expr extent = make_one(UInt(64));  // uint64_t to handle LargeBuffers
             for (const Expr &e : op->extents) {
                 extent = extent * e;
             }
@@ -340,19 +335,7 @@ protected:
             needs_mutex_allocation.pop(producer_name);
         }
 
-        if (body.same_as(op->body)) {
-            return op;
-        } else {
-            return Allocate::make(op->name,
-                                  op->type,
-                                  op->memory_type,
-                                  op->extents,
-                                  op->condition,
-                                  std::move(body),
-                                  op->new_expr,
-                                  op->free_function,
-                                  op->padding);
-        }
+        return op->with(op->extents, op->condition, body);
     }
 
     Stmt visit(const ProducerConsumer *op) override {
@@ -378,18 +361,14 @@ protected:
         if (const std::string *mutex_name = needs_mutex_allocation.find(it->first)) {
             // All output buffers in a Tuple have the same extent.
             OutputImageParam output_buffer = Func(f).output_buffers()[0];
-            Expr extent = cast<uint64_t>(1);  // uint64_t to handle LargeBuffers
+            Expr extent = make_one(UInt(64));  // uint64_t to handle LargeBuffers
             for (int i = 0; i < output_buffer.dimensions(); i++) {
                 extent *= output_buffer.dim(i).extent();
             }
             body = allocate_mutex(*mutex_name, extent, body);
         }
 
-        if (body.same_as(op->body)) {
-            return op;
-        } else {
-            return ProducerConsumer::make(op->name, op->is_producer, std::move(body));
-        }
+        return op->with(body);
     }
 
     Stmt visit(const Atomic *op) override {
@@ -415,7 +394,7 @@ protected:
             std::string name = unique_name('t');
             index_let = index;
             index = Variable::make(index.type(), name);
-            body = ReplaceStoreIndexWithVar(op->producer_name, index).mutate(body);
+            body = ReplaceStoreIndexWithVar(op->producer_name, index)(body);
         }
         // This generates a pointer to the mutex array
         Expr mutex_array = Variable::make(
@@ -433,9 +412,7 @@ protected:
                                                   "halide_mutex_array_unlock",
                                                   {mutex_array, index},
                                                   Call::CallType::Extern))));
-        Stmt ret = Atomic::make(op->producer_name,
-                                op->mutex_name,
-                                std::move(body));
+        Stmt ret = op->with(body);
 
         if (index_let.defined()) {
             // Attach the let binding outside of the atomic node.
@@ -454,8 +431,8 @@ Stmt add_atomic_mutex(Stmt s, const std::vector<Function> &outputs) {
     CheckAtomicValidity check;
     s.accept(&check);
     if (check.any_atomic) {
-        s = RemoveUnnecessaryMutexUse().mutate(s);
-        s = AddAtomicMutex(outputs).mutate(s);
+        s = RemoveUnnecessaryMutexUse()(s);
+        s = AddAtomicMutex(outputs)(s);
     }
     return s;
 }

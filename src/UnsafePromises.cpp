@@ -57,11 +57,11 @@ class LowerSafePromises : public IRMutator {
 }  // namespace
 
 Stmt lower_unsafe_promises(const Stmt &s, const Target &t) {
-    return LowerUnsafePromises(t.has_feature(Target::CheckUnsafePromises)).mutate(s);
+    return LowerUnsafePromises(t.has_feature(Target::CheckUnsafePromises))(s);
 }
 
 Stmt lower_safe_promises(const Stmt &s) {
-    return LowerSafePromises().mutate(s);
+    return LowerSafePromises()(s);
 }
 
 }  // namespace Internal

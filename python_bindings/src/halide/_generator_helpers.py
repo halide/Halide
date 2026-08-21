@@ -4,6 +4,10 @@ from contextvars import ContextVar
 from enum import Enum
 from functools import total_ordering
 from .halide_ import (
+    _,
+    _generate_filter_main,
+    _unique_name,
+    _UnspecifiedType,
     ArgInfo,
     ArgInfoDirection,
     ArgInfoKind,
@@ -21,9 +25,6 @@ from .halide_ import (
     Type,
     UInt,
     Var,
-    _,
-    _UnspecifiedType,
-    _unique_name,
 )
 from inspect import isclass
 from typing import Any, Optional
@@ -865,12 +866,8 @@ def alias(**kwargs):
 
 
 def generator(name: str = ""):
-    # This code relies on dicts preserving key-insertion order, which is only
-    # guaranteed for all Python implementations as of v3.7.
-    _check(sys.version_info >= (3, 7), "Halide Generators require Python 3.7 or later.")
-
     def generator_impl(cls):
-        n = name if name else _fqname(cls)
+        n = name or _fqname(cls)
         _check_generator_name_in_use(n)
         _check(isclass(cls), "@generator can only be used on classes.")
         # Allow (but don't require) explicit inheritance from hl.Generator;
@@ -896,3 +893,14 @@ def funcs(names: str) -> tuple[Func, ...]:
 def vars(names: str) -> tuple[Var, ...]:
     """Given a space-delimited string, create a Var for each substring and return as a tuple."""
     return tuple(Var(n) for n in names.split(" "))
+
+
+def main(argv: Optional[list[str]] = None):
+    """Entrypoint for invoking all registered generators.
+
+    Args:
+        argv: A list of command-line arguments to pass to the generator. If None, uses sys.argv.
+    """
+    if argv is None:
+        argv = sys.argv
+    _generate_filter_main(argv)

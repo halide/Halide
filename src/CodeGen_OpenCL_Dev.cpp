@@ -606,7 +606,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
         // Current only test for atomic add.
         Expr val_expr = op->value;
         Type t = val_expr.type();
-        Expr equiv_load = Load::make(t, op->name, op->index, Buffer<>(), op->param, op->predicate, op->alignment);
+        Expr equiv_load = Load::make(t, op->name, op->index, Buffer<>(), op->param, op->predicate, op->alignment, false);
         Expr delta = simplify(common_subexpression_elimination(op->value - equiv_load));
         // For atomicAdd, we check if op->value - store[index] is independent of store.
         // The atomicAdd operations in OpenCL only supports integers so we also check that.
@@ -800,7 +800,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
     user_assert(!op->new_expr.defined()) << "Allocate node inside OpenCL kernel has custom new expression.\n"
                                          << "(Memoization is not supported inside GPU kernels at present.)\n";
 
-    if (op->memory_type == MemoryType::GPUShared) {
+    if (is_gpu_shared(op->memory_type)) {
         // Already handled
         op->body.accept(this);
     } else {
@@ -1101,7 +1101,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
     const Allocate *shared_alloc = nullptr;
     shared_name = "__shared";
     visit_with(s, [&](auto *self, const Allocate *op) {
-        if (op->memory_type == MemoryType::GPUShared) {
+        if (is_gpu_shared(op->memory_type)) {
             internal_assert(shared_alloc == nullptr)
                 << "Found multiple shared allocations in metal kernel\n";
             shared_alloc = op;
@@ -1161,7 +1161,7 @@ void CodeGen_OpenCL_Dev::init_module() {
     // This identifies the program as OpenCL C (as opposed to SPIR).
     src_stream << "/*OpenCL C " << target.to_string() << "*/\n";
 
-    src_stream << "#pragma OPENCL FP_CONTRACT ON\n";
+    src_stream << "#pragma OPENCL FP_CONTRACT " << (any_strict_float ? "OFF\n" : "ON\n");
 
     // Write out the Halide math functions.
     src_stream << "inline float float_from_bits(unsigned int x) {return as_float(x);}\n"

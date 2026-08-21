@@ -1,18 +1,12 @@
 // Halide tutorial lesson 7: Multi-stage pipelines
 
 // On linux, you can compile and run it like so:
-// g++ lesson_07*.cpp -g -std=c++17 -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide `libpng-config --cflags --ldflags` -ljpeg -lpthread -ldl -o lesson_07
-// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_07
+// g++ lesson_07*.cpp -g -std=c++17 -I <path/to/include> -I <path/to/tools> -L <path/to/lib> -lHalide $(pkg-config --cflags --libs libpng libjpeg) -lpthread -ldl -o lesson_07
+// LD_LIBRARY_PATH=<path/to/lib> ./lesson_07
 
-// On os x:
-// g++ lesson_07*.cpp -g -std=c++17 -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide `libpng-config --cflags --ldflags` -ljpeg -o lesson_07
-// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_07
-
-// If you have the entire Halide source tree, you can also build it by
-// running:
-//    make tutorial_lesson_07_multi_stage_pipelines
-// in a shell with the current directory at the top of the halide
-// source tree.
+// On macOS:
+// g++ lesson_07*.cpp -g -std=c++17 -I <path/to/include> -I <path/to/tools> -L <path/to/lib> -lHalide $(pkg-config --cflags --libs libpng libjpeg) -o lesson_07
+// DYLD_LIBRARY_PATH=<path/to/lib> ./lesson_07
 
 #include "Halide.h"
 #include <cstdio>
@@ -93,7 +87,7 @@ int main() {
         save_image(result, "blurry_parrot_1.png");
 
         // This is usually the fastest way to deal with boundaries:
-        // don't write code that reads out of bounds :) The more
+        // avoid reading out of bounds in the first place. The more
         // general solution is our next example.
     }
 

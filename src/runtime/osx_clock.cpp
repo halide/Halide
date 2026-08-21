@@ -1,7 +1,7 @@
 #include "HalideRuntime.h"
 
 struct mach_timebase_info {
-    uint32_t numer;
+    uint32_t numer;  // codespell:ignore numer
     uint32_t denom;
 };
 
@@ -41,7 +41,7 @@ WEAK int64_t halide_current_time_ns(void *user_context) {
     halide_debug_assert(user_context, halide_reference_clock_inited);
 
     uint64_t now = mach_absolute_time();
-    return (now - halide_reference_clock) * halide_timebase_info.numer / halide_timebase_info.denom;
+    return (now - halide_reference_clock) * halide_timebase_info.numer / halide_timebase_info.denom;  // codespell:ignore numer
 }
 
 extern int usleep(int);

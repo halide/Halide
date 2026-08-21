@@ -21,11 +21,20 @@ if (NOT TARGET Halide::Test)
     # Make internal_assert, debug, etc. available to tests
     target_compile_definitions(Halide_test INTERFACE HALIDE_KEEP_MACROS)
 
+    # Disable warnings about standard C functions that have more secure replacements
+    # in the Windows API.
+    target_compile_definitions(
+        Halide_test
+        INTERFACE $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
+    )
+
     # Everyone gets to see the common headers
-    target_include_directories(Halide_test
-                               INTERFACE
-                               ${Halide_SOURCE_DIR}/test/common
-                               ${Halide_SOURCE_DIR}/tools)
+    target_include_directories(
+        Halide_test
+        INTERFACE
+        ${Halide_SOURCE_DIR}/test/common
+        ${Halide_SOURCE_DIR}/tools
+    )
 endif ()
 
 if (NOT TARGET Halide::ExpectAbort)
@@ -37,7 +46,10 @@ endif ()
 
 if (NOT TARGET Halide::TerminateHandler)
     # Add an OBJECT (not static) library to add a terminate_handler to catch unhandled exceptions.
-    add_library(Halide_terminate_handler OBJECT ${Halide_SOURCE_DIR}/test/common/terminate_handler.cpp)
+    add_library(
+        Halide_terminate_handler OBJECT
+        ${Halide_SOURCE_DIR}/test/common/terminate_handler.cpp
+    )
     add_library(Halide::TerminateHandler ALIAS Halide_terminate_handler)
 endif ()
 
@@ -55,9 +67,11 @@ function(add_halide_test TARGET)
         set(args_COMMAND ${TARGET})
     endif ()
 
-    add_test(NAME ${TARGET}
-             COMMAND ${args_COMMAND} ${args_ARGS}
-             WORKING_DIRECTORY "${args_WORKING_DIRECTORY}")
+    add_test(
+        NAME ${TARGET}
+        COMMAND ${args_COMMAND} ${args_ARGS}
+        WORKING_DIRECTORY "${args_WORKING_DIRECTORY}"
+    )
     if (NOT Halide_TARGET MATCHES "wasm")
         set_halide_compiler_warnings(${TARGET})
     endif ()
@@ -69,24 +83,34 @@ function(add_halide_test TARGET)
     #
     # target_link_libraries("${TARGET}" PRIVATE Halide::TerminateHandler)
 
-    set_tests_properties(${TARGET} PROPERTIES
-                         LABELS "${args_GROUPS}"
-                         ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET}"
-                         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
-                         WILL_FAIL ${args_EXPECT_FAILURE})
+    # Resolve the "cmake" meta-target
+    string(REGEX REPLACE "^cmake" "${Halide_CMAKE_TARGET}" _resolved_target "${Halide_TARGET}")
 
-    if (NOT args_USE_EXIT_CODE_ONLY)
-        set_tests_properties(${TARGET} PROPERTIES
-                             PASS_REGULAR_EXPRESSION "Success!")
+    set_tests_properties(
+        ${TARGET}
+        PROPERTIES
+        LABELS "${args_GROUPS}"
+        ENVIRONMENT "HL_TARGET=${_resolved_target};HL_JIT_TARGET=${_resolved_target}"
+        SKIP_REGULAR_EXPRESSION "\\[SKIP(-WITH-ISSUE(-[0-9]+)?)?\\]"
+        WILL_FAIL ${args_EXPECT_FAILURE}
+    )
+    if ("multithreaded" IN_LIST args_GROUPS)
+        set_tests_properties(${TARGET} PROPERTIES RUN_SERIAL TRUE)
     endif ()
 
-    set_target_properties(${TARGET} PROPERTIES
-                          CXX_VISIBILITY_PRESET hidden
-                          VISIBILITY_INLINES_HIDDEN TRUE)
+    if (NOT args_USE_EXIT_CODE_ONLY)
+        set_tests_properties(${TARGET} PROPERTIES PASS_REGULAR_EXPRESSION "Success!")
+    endif ()
+
+    set_target_properties(${TARGET}
+        PROPERTIES
+        CXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN TRUE
+    )
 
 
-    if (WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
-        if (WITH_SERIALIZATION)
+    if (WITH_SERIALIZATION AND WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
+        if (NOT Halide_TARGET MATCHES "wasm")
             target_compile_definitions(${TARGET} PRIVATE WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
         endif ()
     endif ()
@@ -136,7 +160,13 @@ function(tests)
             set(args_USE_EXIT_CODE_ONLY "")
         endif ()
 
-        add_halide_test("${TARGET}" ARGS ${args_ARGS} GROUPS ${args_GROUPS} ${args_EXPECT_FAILURE} ${args_USE_EXIT_CODE_ONLY})
+        add_halide_test(
+            "${TARGET}"
+            ARGS ${args_ARGS}
+            GROUPS
+            ${args_GROUPS}  #
+            ${args_EXPECT_FAILURE} ${args_USE_EXIT_CODE_ONLY}
+        )
     endforeach ()
 
     set(TEST_NAMES "${TEST_NAMES}" PARENT_SCOPE)

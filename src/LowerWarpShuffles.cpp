@@ -259,7 +259,7 @@ class DetermineAllocStride : public IRVisitor {
             }
         }
         if (!single_stores.empty()) {
-            message << "And the following indicies by lane zero:\n";
+            message << "And the following indices by lane zero:\n";
             for (const Expr &e : single_stores) {
                 message << "  " << e << "\n";
             }
@@ -435,9 +435,7 @@ class LowerWarpShuffles : public IRMutator {
                 internal_assert(alloc && alloc->extents.size() == 1);
                 int new_size = allocation_info.get(alloc->name).size;
                 allocation_info.pop(alloc->name);
-                body = Allocate::make(alloc->name, alloc->type, alloc->memory_type,
-                                      {new_size}, alloc->condition,
-                                      body, alloc->new_expr, alloc->free_function, alloc->padding);
+                body = alloc->with({new_size}, alloc->condition, body);
             }
             allocations.clear();
 
@@ -451,14 +449,11 @@ class LowerWarpShuffles : public IRMutator {
             // Rewrap any hoisted allocations that weren't placed outside some inner loop
             for (const Stmt &s : allocations) {
                 const Allocate *alloc = s.as<Allocate>();
-                body = Allocate::make(alloc->name, alloc->type, alloc->memory_type,
-                                      alloc->extents, alloc->condition,
-                                      body, alloc->new_expr, alloc->free_function, alloc->padding);
+                body = alloc->with(alloc->extents, alloc->condition, body);
             }
             allocations.clear();
 
-            return For::make(op->name, op->min, op->min + warp_size - 1,
-                             op->for_type, op->partition_policy, op->device_api, body);
+            return op->with(op->min, op->min + warp_size - 1, body);
         } else {
             return IRMutator::visit(op);
         }
@@ -512,7 +507,7 @@ class LowerWarpShuffles : public IRMutator {
             // them. Reassembling the result into a flat address gives
             // the expression below.
             Expr in_warp_idx = simplify((idx / (warp_size * stride)) * stride + reduce_expr(idx, stride, bounds), bounds);
-            return Store::make(op->name, value, in_warp_idx, op->param, op->predicate, ModulusRemainder());
+            return op->with(value, in_warp_idx, op->predicate, ModulusRemainder());
         } else {
             return IRMutator::visit(op);
         }
@@ -540,8 +535,7 @@ class LowerWarpShuffles : public IRMutator {
         }
 
         // Load the value to be shuffled
-        Expr base_val = Load::make(type, name, idx, Buffer<>(),
-                                   Parameter(), const_true(idx.type().lanes()), ModulusRemainder());
+        Expr base_val = Load::make(type, name, idx);
 
         Expr scalar_lane = lane;
         if (const Broadcast *b = scalar_lane.as<Broadcast>()) {
@@ -658,8 +652,12 @@ class LowerWarpShuffles : public IRMutator {
     }
 
     Stmt visit(const Allocate *op) override {
-        if (this_lane.defined() || op->memory_type == MemoryType::GPUShared) {
-            // Not a warp-level allocation
+        if (this_lane.defined() ||
+            is_gpu_shared(op->memory_type) ||
+            op->memory_type == MemoryType::Heap) {
+            // Not a warp-level allocation. Warp-level storage is per-lane
+            // register storage; shared and heap (global) memory are never
+            // striped across lanes.
             return IRMutator::visit(op);
         } else {
             // Pick up this allocation and deposit it inside the loop over lanes at reduced size.
@@ -734,7 +732,7 @@ class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
         } else {
             debug(3) << "Successfully hoisted shuffle out of for loop\n";
         }
-        return For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
+        return op->with(op->min, op->max, body);
     }
 
     Stmt visit(const Store *op) override {
@@ -745,13 +743,10 @@ class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
 public:
     bool success = true;
 
-    Stmt rewrap(Stmt s) {
-        while (!lifted_lets.empty()) {
-            const pair<string, Expr> &p = lifted_lets.back();
-            s = LetStmt::make(p.first, p.second, s);
-            lifted_lets.pop_back();
-        }
-        return s;
+    Stmt rewrap(const Stmt &s) {
+        Stmt result = rewrap_all_lets(s, lifted_lets);
+        lifted_lets.clear();
+        return result;
     }
 };
 
@@ -785,8 +780,8 @@ class HoistWarpShuffles : public IRMutator {
         Stmt else_case = mutate(op->else_case);
 
         HoistWarpShufflesFromSingleIfStmt hoister;
-        then_case = hoister.mutate(then_case);
-        else_case = hoister.mutate(else_case);
+        then_case = hoister(then_case);
+        else_case = hoister(else_case);
         Stmt s = IfThenElse::make(op->condition, then_case, else_case);
         if (hoister.success) {
             return hoister.rewrap(s);
@@ -794,7 +789,7 @@ class HoistWarpShuffles : public IRMutator {
             // Need to move the ifstmt further inwards instead.
             internal_assert(!else_case.defined()) << "Cannot hoist warp shuffle out of " << s << "\n";
             string pred_name = unique_name('p');
-            s = MoveIfStatementInwards(Variable::make(op->condition.type(), pred_name)).mutate(then_case);
+            s = MoveIfStatementInwards(Variable::make(op->condition.type(), pred_name))(then_case);
             return LetStmt::make(pred_name, op->condition, s);
         }
     }
@@ -824,8 +819,8 @@ class LowerWarpShufflesInEachKernel : public IRMutator {
     Stmt visit(const For *op) override {
         if (op->device_api == DeviceAPI::CUDA && has_lane_loop(op)) {
             Stmt s = op;
-            s = LowerWarpShuffles(cuda_cap).mutate(s);
-            s = HoistWarpShuffles().mutate(s);
+            s = LowerWarpShuffles(cuda_cap)(s);
+            s = HoistWarpShuffles()(s);
             return simplify(s);
         } else {
             return IRMutator::visit(op);
@@ -844,9 +839,9 @@ public:
 
 Stmt lower_warp_shuffles(Stmt s, const Target &t) {
     s = hoist_loop_invariant_values(s);
-    s = SubstituteInLaneVar().mutate(s);
+    s = SubstituteInLaneVar()(s);
     s = simplify(s);
-    s = LowerWarpShufflesInEachKernel(t.get_cuda_capability_lower_bound()).mutate(s);
+    s = LowerWarpShufflesInEachKernel(t.get_cuda_capability_lower_bound())(s);
     return s;
 };
 

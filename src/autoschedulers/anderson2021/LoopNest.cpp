@@ -1508,7 +1508,6 @@ int64_t LoopNest::points_accessed_per_thread(
 
     int64_t product_of_non_licm_non_unrolled_extents = 1;
     int64_t product_of_non_licm_extents = 1;
-    int num_pure_loops = 0;
     const FunctionDAG::Node *producer = edge_chain.back()->producer;
     for (size_t idx = 0; idx < parent->size.size(); idx++) {
         bool can_apply_licm = true;
@@ -1521,10 +1520,6 @@ int64_t LoopNest::points_accessed_per_thread(
 
         bool pure = stage->loop[idx].pure;
         bool pure_and_unrolled = pure && unrolled_loop_extent > 1;
-
-        if (pure) {
-            ++num_pure_loops;
-        }
 
         if (!can_apply_licm) {
             product_of_non_licm_extents *= parent->size[idx];

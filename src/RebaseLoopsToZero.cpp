@@ -46,7 +46,7 @@ class RebaseLoopsToZero : public IRMutator {
 }  // namespace
 
 Stmt rebase_loops_to_zero(const Stmt &s) {
-    return RebaseLoopsToZero().mutate(s);
+    return RebaseLoopsToZero()(s);
 }
 
 }  // namespace Internal

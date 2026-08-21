@@ -10,6 +10,22 @@ extern "C" HALIDE_EXPORT_SYMBOL int call_counter(int x, int idx) {
 }
 HalideExtern_2(int, call_counter, int, int);
 
+size_t min_alloc_size = (size_t)-1;
+void *recording_malloc(JITUserContext *, size_t x) {
+    if (x < min_alloc_size) {
+        min_alloc_size = x;
+    }
+    // Over-allocate so we can return a 32-byte-aligned pointer; stash the
+    // original so we can free it later.
+    void *orig = malloc(x + 32);
+    void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);
+    ((void **)ptr)[-1] = orig;
+    return ptr;
+}
+void recording_free(JITUserContext *, void *p) {
+    free(((void **)p)[-1]);
+}
+
 void reset_counts() {
     for (int i = 0; i < 4; i++) {
         call_count[i] = 0;
@@ -245,7 +261,7 @@ int main(int argc, char **argv) {
     }
 
     {
-        // Check the interation with storage hoisting
+        // Check the interaction with storage hoisting
 
         // This Func may or may not be loaded, depending on y
         Func maybe_loaded("maybe_loaded");
@@ -266,6 +282,45 @@ int main(int argc, char **argv) {
         // This will fail to compile with an undefined symbol if we haven't
         // handled the condition correctly.
         output.realize({100, 100});
+    }
+
+    {
+        // Regression test: a Func loaded only inside a select branch whose
+        // condition is false at runtime should still get a non-zero
+        // allocation, because Halide's Select evaluates both branches
+        // (the load fires regardless of the condition). The producer's
+        // compute body can still be skipped because `used` is correctly
+        // gated.
+        Func producer("producer");
+        producer(x) = call_counter(x, 0);
+
+        Func consumer("consumer");
+        consumer(x) = select(toggle1, producer(x) + producer(x + 1), 42);
+
+        producer.compute_root().vectorize(x, 8);
+        consumer.vectorize(x, 8);
+
+        consumer.jit_handlers().custom_malloc = recording_malloc;
+        consumer.jit_handlers().custom_free = recording_free;
+
+        reset_counts();
+        toggle1.set(false);
+        min_alloc_size = (size_t)-1;
+        Buffer<int> out = consumer.realize({64});
+
+        // Producer must be skipped when toggle is false.
+        check_counts(0);
+        // ...but the allocation must still happen, sized for the load.
+        if (min_alloc_size == 0) {
+            printf("Producer allocation was zero-sized; unconditional load would OOB\n");
+            exit(1);
+        }
+        for (int i = 0; i < 64; i++) {
+            if (out(i) != 42) {
+                printf("out(%d) = %d, expected 42\n", i, out(i));
+                exit(1);
+            }
+        }
     }
 
     printf("Success!\n");

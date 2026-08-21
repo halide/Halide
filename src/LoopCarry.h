@@ -12,7 +12,7 @@ namespace Internal {
  * pessimization depending on how good the L1 cache is on the architecture
  * and how many memory issue slots there are. Currently only intended
  * for Hexagon. */
-Stmt loop_carry(Stmt, int max_carried_values = 8);
+Stmt loop_carry(const Stmt &, int max_carried_values = 8);
 
 }  // namespace Internal
 }  // namespace Halide

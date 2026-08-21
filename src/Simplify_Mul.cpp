@@ -41,10 +41,18 @@ Expr Simplify::visit(const Mul *op, ExprInfo *info) {
         return rewrite.result;
     }
 
-    if (rewrite(0 * x, 0) ||
-        rewrite(1 * x, x) ||
-        rewrite(x * 0, 0) ||
-        rewrite(x * 1, x)) {
+    if (rewrite(0 * x, a) ||
+        rewrite(1 * x, b) ||
+        rewrite(x * 0, b) ||
+        rewrite(x * 1, a)) {
+        if (info) {
+            if (rewrite.result.same_as(a)) {
+                info->intersect(a_info);
+            } else {
+                internal_assert(rewrite.result.same_as(b));
+                info->intersect(b_info);
+            }
+        }
         return rewrite.result;
     }
 
@@ -81,6 +89,7 @@ Expr Simplify::visit(const Mul *op, ExprInfo *info) {
         rewrite(slice(x, c0, c1, c2) * slice(y, c0, c1, c2), slice(x * y, c0, c1, c2), c2 > 1 && lanes_of(x) == lanes_of(y)) ||
         rewrite(slice(x, c0, c1, c2) * (slice(y, c0, c1, c2) * z), slice(x * y, c0, c1, c2) * z, c2 > 1 && lanes_of(x) == lanes_of(y)) ||
         rewrite(slice(x, c0, c1, c2) * (z * slice(y, c0, c1, c2)), slice(x * y, c0, c1, c2) * z, c2 > 1 && lanes_of(x) == lanes_of(y)) ||
+        rewrite(transpose(x, c0) * transpose(y, c0), transpose(x * y, c0)) ||
 
         false) {
         return mutate(rewrite.result, info);

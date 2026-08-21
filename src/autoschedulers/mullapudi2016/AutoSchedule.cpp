@@ -6,6 +6,7 @@
 #include <map>
 #include <regex>
 #include <set>
+#include <tuple>
 #include <utility>
 
 namespace Halide {
@@ -25,7 +26,7 @@ struct ArchParams {
     /** True iff we are scheduling for GPU */
     bool is_gpu_schedule{false};
 
-    /** Maximum level of parallelism avalaible. */
+    /** Maximum level of parallelism available. */
     int parallelism{};
 
     /** Size of the last-level cache (in bytes). */
@@ -203,22 +204,8 @@ struct DependenceAnalysis {
                    (only_regions_computed == other.only_regions_computed);
         }
         bool operator<(const RegionsRequiredQuery &other) const {
-            if (f < other.f) {
-                return true;
-            } else if (f > other.f) {
-                return false;
-            }
-            if (stage < other.stage) {
-                return true;
-            } else if (stage > other.stage) {
-                return false;
-            }
-            if (only_regions_computed < other.only_regions_computed) {
-                return true;
-            } else if (only_regions_computed > other.only_regions_computed) {
-                return false;
-            }
-            return prods < other.prods;
+            return std::tie(f, stage, only_regions_computed, prods) <
+                   std::tie(other.f, other.stage, other.only_regions_computed, other.prods);
         }
     };
     struct RegionsRequired {
@@ -1103,7 +1090,7 @@ private:
  * it cannot be reordered without failing internal assertions.
  *
  * This class is designed to intercept these Halide scheduling calls to make
- * them indempotent; the Halide schedules methods are called only once no matter
+ * them idempotent; the Halide schedules methods are called only once no matter
  * how the dimensions are reordered repeatedly.
  */
 class GPUTilingDedup {
@@ -1731,7 +1718,7 @@ struct Partitioner {
     pair<map<string, Expr>, GroupAnalysis> find_best_tile_config(const Group &g);
 
     // Estimate the benefit (arithmetic + memory) of 'new_grouping' over 'old_grouping'.
-    // Positive values indicates that 'new_grouping' may be preferrable over 'old_grouping'.
+    // Positive values indicates that 'new_grouping' may be preferable over 'old_grouping'.
     // When 'ensure_parallelism' is set to true, this will return an undefined cost
     // if the estimated parallelism is smaller than the machine parameters.
     // If 'no_redundant_work' is set, we only consider the arithmetic cost, i.e. if

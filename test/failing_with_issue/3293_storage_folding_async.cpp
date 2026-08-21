@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
         f.compute_root();
         g.store_root().compute_at(h, y).fold_storage(g.args()[1], 3).async();
 
-        // Make sure that explict storage folding happens, even if
+        // Make sure that explicit storage folding happens, even if
         // there are multiple producers of the folded buffer. Note the
         // automatic storage folding refused to fold this (the case
         // above).

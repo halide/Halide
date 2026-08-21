@@ -1,0 +1,15 @@
+diff --git a/tensorflow/lite/tools/cmake/tensorflow-liteConfig.cmake.in b/tensorflow/lite/tools/cmake/tensorflow-liteConfig.cmake.in
+index e49f635..d4b92a7 100644
+--- a/tensorflow/lite/tools/cmake/tensorflow-liteConfig.cmake.in
++++ b/tensorflow/lite/tools/cmake/tensorflow-liteConfig.cmake.in
+@@ -18,7 +18,9 @@ include(CMakeFindDependencyMacro)
+ find_dependency(absl)
+ find_dependency(Eigen3)
+ find_dependency(FlatBuffers)
+-find_dependency(NEON_2_SSE)
++if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86|X86|amd64|AMD64|x86_64|X64")
++  find_dependency(NEON_2_SSE)
++endif()
+ find_dependency(cpuinfo)
+ find_dependency(ruy)
+ find_dependency(gemmlowp)

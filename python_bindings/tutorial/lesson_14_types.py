@@ -4,11 +4,6 @@
 
 # This lesson more precisely describes Halide's type system.
 
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_14_types
-# in a shell with the current directory at python_bindings/
-
-
 import halide as hl
 
 
@@ -37,8 +32,8 @@ def main():
     # Constructing and inspecting types.
     if True:
         # You can programmatically examine the properties of a Halide
-        # type. This is useful when you write a C++ function that has
-        # hl.Expr arguments and you wish to check their types:
+        # type. This is useful when you write a Python function that
+        # has hl.Expr arguments and you wish to check their types:
         assert hl.UInt(8).bits() == 8
         assert hl.Int(8).is_int()
 
@@ -82,8 +77,9 @@ def main():
     if True:
         # When you combine Exprs of different types (e.g. using '+',
         # '*', etc), Halide uses a system of type promotion
-        # rules. These differ to C's rules. To demonstrate these
-        # we'll make some Exprs of each type.
+        # rules. These aren't the same as Python's own type promotion
+        # rules. To demonstrate these we'll make some Exprs of each
+        # type.
         x = hl.Var("x")
         u8 = hl.cast(hl.UInt(8), x)
         u16 = hl.cast(hl.UInt(16), x)
@@ -185,11 +181,13 @@ def main():
     # Generic code.
     if True:
         # The main explicit use of Type in Halide is to write Halide
-        # code parameterized by a Type. In C++ you'd do this with
-        # templates. In Halide there's no need - you can inspect and
-        # modify the types dynamically at C++ runtime instead. The
-        # function defined below averages two expressions of any
-        # equal numeric type.
+        # code parameterized by a Type. Even though Python itself is
+        # dynamically typed, an hl.Expr's type is fixed once it's
+        # built, so writing ordinary duck-typed Python code isn't
+        # enough to handle every Halide type generically. Instead you
+        # inspect and modify the types dynamically using Halide's own
+        # Type API. The function defined below averages two
+        # expressions of any equal numeric type.
         x = hl.Var("x")
         assert average(hl.cast(hl.Float(32), x), 3.0).type() == hl.Float(32)
         assert average(x, 3).type() == hl.Int(32)

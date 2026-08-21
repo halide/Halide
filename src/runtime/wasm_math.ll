@@ -301,4 +301,3 @@ define weak_odr <4 x i64> @extend_u32x4_to_u64x4(<4 x i32> %x) nounwind alwaysin
   %5 = shufflevector <2 x i64> %3, <2 x i64> %4, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
   ret <4 x i64> %5
 }
-

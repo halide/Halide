@@ -51,7 +51,7 @@ class SplitTuples : public IRMutator {
             }
             return body;
         } else {
-            return HoistedStorage::make(op->name, body);
+            return op->with(body);
         }
     }
 
@@ -60,8 +60,9 @@ class SplitTuples : public IRMutator {
         if (op->types.size() > 1) {
             // If there is a corresponding HoistedStorage node record the new number of
             // realizes.
-            if (hoisted_tuple_count.count(op->name)) {
-                hoisted_tuple_count[op->name] = op->types.size();
+            if (auto it = hoisted_tuple_count.find(op->name);
+                it != hoisted_tuple_count.end()) {
+                it->second = op->types.size();
             }
             // Make a nested set of realize nodes for each tuple element
             Stmt body = mutate(op->body);
@@ -169,6 +170,7 @@ class SplitTuples : public IRMutator {
                         could_alias(op->args, store_args)) {
                         deps.insert(op->value_index);
                     }
+                    IRVisitor::visit(op);
                 }
 
                 bool could_alias(const vector<Expr> &a, const vector<Expr> &b) {
@@ -179,11 +181,7 @@ class SplitTuples : public IRMutator {
                         aliases = aliases && (a[i] == b[i]);
                     }
                     // Might need some of the containing lets
-                    for (const auto &[var, value] : reverse_view(lets)) {
-                        if (expr_uses_var(aliases, var)) {
-                            aliases = Let::make(var, value, aliases);
-                        }
-                    }
+                    aliases = rewrap_used_lets(aliases, lets);
                     return !can_prove(!aliases);
                 }
 
@@ -279,17 +277,11 @@ class SplitTuples : public IRMutator {
                     provides.push_back(Provide::make(name, {val}, args, op->predicate));
                 }
 
-                s = Block::make(provides);
-
-                while (!lets.empty()) {
-                    auto p = lets.back();
-                    lets.pop_back();
-                    s = LetStmt::make(p.first, p.second, s);
-                }
+                s = rewrap_all_lets(Block::make(provides), lets);
             }
 
             if (atomic && separate_atomic_nodes_per_store) {
-                s = Atomic::make(atomic->producer_name, atomic->mutex_name, s);
+                s = atomic->with(s);
             }
 
             internal_assert(s.defined());
@@ -299,7 +291,7 @@ class SplitTuples : public IRMutator {
         {
             Stmt s = Block::make(result);
             if (atomic && !separate_atomic_nodes_per_store) {
-                s = Atomic::make(atomic->producer_name, atomic->mutex_name, s);
+                s = atomic->with(s);
             }
             return s;
         }
@@ -408,7 +400,7 @@ class SplitScatterGather : public IRMutator {
         vector<Expr> vars;
         for (extractor.idx = 0; extractor.idx < size; extractor.idx++) {
             string name = unique_name(op->name + "." + std::to_string(extractor.idx));
-            lets.emplace_back(name, extractor.mutate(op->value));
+            lets.emplace_back(name, extractor(op->value));
             vars.push_back(Variable::make(op->value.type(), name));
         }
 
@@ -420,11 +412,7 @@ class SplitScatterGather : public IRMutator {
         body = substitute(op->name, gather_replacement, body);
         body = mutate(body);
 
-        for (const auto &[var, value] : reverse_view(lets)) {
-            body = LetStmt::make(var, value, body);
-        }
-
-        return body;
+        return rewrap_all_lets(body, lets);
     }
 
     Stmt visit(const LetStmt *op) override {
@@ -449,11 +437,7 @@ class SplitScatterGather : public IRMutator {
             body = mutate(body);
         }
 
-        for (const auto &[var, value] : reverse_view(lets)) {
-            body = LetStmt::make(var, value, body);
-        }
-
-        return body;
+        return rewrap_all_lets(body, lets);
     }
 
     Stmt visit(const Provide *op) override {
@@ -475,19 +459,19 @@ class SplitScatterGather : public IRMutator {
             vector<Expr> args = op->args;
             for (Expr &a : args) {
                 string name = unique_name('t');
-                exprs.push_back(extractor.mutate(a));
+                exprs.push_back(extractor(a));
                 names.push_back(name);
                 a = Variable::make(a.type(), name);
             }
             vector<Expr> values = op->values;
             for (Expr &v : values) {
-                v = extractor.mutate(v);
+                v = extractor(v);
                 string name = unique_name('t');
-                exprs.push_back(extractor.mutate(v));
+                exprs.push_back(extractor(v));
                 names.push_back(name);
                 v = Variable::make(v.type(), name);
             }
-            provides.push_back(Provide::make(op->name, values, args, op->predicate));
+            provides.push_back(op->with(values, args, op->predicate));
         }
 
         Stmt s = Block::make(provides);
@@ -497,10 +481,7 @@ class SplitScatterGather : public IRMutator {
         bundle = common_subexpression_elimination(bundle);
 
         vector<pair<string, Expr>> lets;
-        while (const Let *let = bundle.as<Let>()) {
-            lets.emplace_back(let->name, let->value);
-            bundle = let->body;
-        }
+        bundle = peel_lets(bundle, &lets);
         const Call *c = bundle.as<Call>();
         internal_assert(c && c->is_intrinsic(Call::bundle));
         for (size_t i = 0; i < exprs.size(); i++) {
@@ -513,19 +494,15 @@ class SplitScatterGather : public IRMutator {
             }
         }
 
-        for (const auto &[var, value] : reverse_view(lets)) {
-            s = LetStmt::make(var, value, s);
-        }
-
-        return s;
+        return rewrap_all_lets(s, lets);
     }
 };
 
 }  // namespace
 
 Stmt split_tuples(const Stmt &stmt, const map<string, Function> &env) {
-    Stmt s = SplitTuples(env).mutate(stmt);
-    s = SplitScatterGather().mutate(s);
+    Stmt s = SplitTuples(env)(stmt);
+    s = SplitScatterGather()(s);
     return s;
 }
 

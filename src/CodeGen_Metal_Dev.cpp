@@ -550,7 +550,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Select *op) {
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Allocate *op) {
 
-    if (op->memory_type == MemoryType::GPUShared) {
+    if (is_gpu_shared(op->memory_type)) {
         // Already handled
         op->body.accept(this);
     } else {
@@ -642,7 +642,6 @@ struct BufferSize {
 void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
                                                     const string &name,
                                                     const vector<DeviceArgument> &args) {
-
     debug(2) << "Adding Metal kernel " << name << "\n";
 
     // Figure out which arguments should be passed in constant.
@@ -743,7 +742,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
     const Allocate *shared_alloc = nullptr;
     shared_name = "__shared";
     visit_with(s, [&](auto *self, const Allocate *op) {
-        if (op->memory_type == MemoryType::GPUShared) {
+        if (is_gpu_shared(op->memory_type)) {
             internal_assert(shared_alloc == nullptr)
                 << "Found multiple shared allocations in metal kernel\n";
             shared_alloc = op;
@@ -800,6 +799,7 @@ void CodeGen_Metal_Dev::init_module() {
 
     // Write out the Halide math functions.
     src_stream << "#pragma clang diagnostic ignored \"-Wunused-function\"\n"
+               << "#pragma METAL fp math_mode(" << (any_strict_float ? "safe)\n" : "fast)\n")
                << "#include <metal_stdlib>\n"
                << "using namespace metal;\n"  // Seems like the right way to go.
                << "namespace {\n"
@@ -849,16 +849,17 @@ vector<char> CodeGen_Metal_Dev::compile_to_src() {
         // Compile the Metal source to a metallib.
         string metalir = tmpfile + ".ir";
         string metallib = tmpfile + "lib";
-        string cmd = string(metal_compiler) + " -c -o " + metalir + " " + tmpfile;
-        debug(2) << "Running: " << cmd << "\n";
 
-        int ret = system(cmd.c_str());
+        auto cc_cmd = split_string(metal_compiler, " ");
+        cc_cmd.insert(cc_cmd.end(), {"-c", "-o", metalir, tmpfile});
+
+        int ret = run_process(std::move(cc_cmd));
         user_assert(ret == 0) << "Metal compiler set, but failed to compile Metal source to Metal IR.\n";
 
-        cmd = string(metal_linker) + " -o " + metallib + " " + metalir;
-        debug(2) << "Running: " << cmd << "\n";
+        auto ld_cmd = split_string(metal_linker, " ");
+        ld_cmd.insert(ld_cmd.end(), {"-o", metallib, metalir});
 
-        ret = system(cmd.c_str());
+        ret = run_process(std::move(ld_cmd));
         user_assert(ret == 0) << "Metal linker set, but failed to compile Metal IR to Metal library.\n";
 
         // Read the metallib into a buffer.

@@ -96,6 +96,10 @@ public:
         check("vaaddu.vv", lanes, halving_add(u_1, u_2));
         check("vaadd.vv", lanes, rounding_halving_add(i_1, i_2));
         check("vaaddu.vv", lanes, rounding_halving_add(u_1, u_2));
+        check("vsadd.vv", lanes, saturating_add(i_1, i_2));
+        check("vsaddu.vv", lanes, saturating_add(u_1, u_2));
+        check("vssub.vv", lanes, saturating_sub(i_1, i_2));
+        check("vssubu.vv", lanes, saturating_sub(u_1, u_2));
 
         // Widening intrinsics
         if (base_bit_width < 64) {

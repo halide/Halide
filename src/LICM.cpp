@@ -21,6 +21,7 @@ namespace {
 
 // Is it safe to lift an Expr out of a loop (and potentially across a device boundary)
 class CanLift : public IRVisitor {
+protected:
     using IRVisitor::visit;
 
     void visit(const Call *op) override {
@@ -54,6 +55,7 @@ public:
 // Lift pure loop invariants to the top level. Applied independently
 // to each loop.
 class LiftLoopInvariants : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Scope<> varying;
@@ -183,6 +185,7 @@ public:
 // them as just renamings of other variables. Easier to substitute
 // them in as a post-pass rather than make the pass above more clever.
 class SubstituteTrivialLets : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Expr visit(const Let *op) override {
@@ -203,6 +206,7 @@ class SubstituteTrivialLets : public IRMutator {
 };
 
 class LICM : public IRMutator {
+protected:
     using IRMutator::visit;
 
     bool in_gpu_loop{false};
@@ -246,8 +250,8 @@ class LICM : public IRMutator {
 
             // Lift invariants
             LiftLoopInvariants lifter;
-            Stmt new_stmt = lifter.mutate(op);
-            new_stmt = SubstituteTrivialLets().mutate(new_stmt);
+            Stmt new_stmt = lifter(op);
+            new_stmt = SubstituteTrivialLets()(new_stmt);
 
             // As an optimization to reduce register pressure, take
             // the set of expressions to lift and check if any can
@@ -272,10 +276,7 @@ class LICM : public IRMutator {
 
             // Peel off containing lets. These will be lifted.
             vector<pair<string, Expr>> lets;
-            while (const Let *let = dummy_call.as<Let>()) {
-                lets.emplace_back(let->name, let->value);
-                dummy_call = let->body;
-            }
+            dummy_call = peel_lets(dummy_call, &lets);
 
             // Track the set of variables used by the inner loop
             set<string> vars;
@@ -313,8 +314,7 @@ class LICM : public IRMutator {
             const For *loop = new_stmt.as<For>();
             internal_assert(loop);
 
-            new_stmt = For::make(loop->name, loop->min, loop->max,
-                                 loop->for_type, loop->partition_policy, loop->device_api, mutate(loop->body));
+            new_stmt = loop->with(loop->min, loop->max, mutate(loop->body));
 
             // Wrap lets for the lifted invariants
             for (size_t i = 0; i < exprs.size(); i++) {
@@ -324,18 +324,14 @@ class LICM : public IRMutator {
             }
 
             // Wrap the lets pulled out by CSE
-            while (!lets.empty()) {
-                new_stmt = LetStmt::make(lets.back().first, lets.back().second, new_stmt);
-                lets.pop_back();
-            }
-
-            return new_stmt;
+            return rewrap_all_lets(new_stmt, lets);
         }
     }
 };
 
 // Reassociate summations to group together the loop invariants. Useful to run before LICM.
 class GroupLoopInvariants : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Scope<int> var_depth;
@@ -520,9 +516,9 @@ class GroupLoopInvariants : public IRMutator {
 }  // namespace
 
 Stmt hoist_loop_invariant_values(Stmt s) {
-    s = GroupLoopInvariants().mutate(s);
+    s = GroupLoopInvariants()(s);
     s = common_subexpression_elimination(s);
-    s = LICM().mutate(s);
+    s = LICM()(s);
     s = simplify_exprs(s);
     return s;
 }
@@ -532,6 +528,7 @@ namespace {
 // Move IfThenElse nodes from the inside of a piece of Stmt IR to the
 // outside when legal.
 class HoistIfStatements : public IRMutator {
+protected:
     using IRMutator::visit;
 
     Stmt visit(const LetStmt *op) override {
@@ -541,15 +538,11 @@ class HoistIfStatements : public IRMutator {
                 is_pure(op->value) &&
                 is_pure(i->condition) &&
                 !expr_uses_var(i->condition, op->name)) {
-                Stmt s = LetStmt::make(op->name, op->value, i->then_case);
+                Stmt s = op->with(op->value, i->then_case);
                 return IfThenElse::make(i->condition, s);
             }
         }
-        if (body.same_as(op->body)) {
-            return op;
-        } else {
-            return LetStmt::make(op->name, op->value, body);
-        }
+        return op->with(op->value, body);
     }
 
     Stmt visit(const For *op) override {
@@ -558,17 +551,11 @@ class HoistIfStatements : public IRMutator {
             if (!i->else_case.defined() &&
                 is_pure(i->condition) &&
                 !expr_uses_var(i->condition, op->name)) {
-                Stmt s = For::make(op->name, op->min, op->max,
-                                   op->for_type, op->partition_policy, op->device_api, i->then_case);
+                Stmt s = op->with(op->min, op->max, i->then_case);
                 return IfThenElse::make(i->condition, s);
             }
         }
-        if (body.same_as(op->body)) {
-            return op;
-        } else {
-            return For::make(op->name, op->min, op->max,
-                             op->for_type, op->partition_policy, op->device_api, body);
-        }
+        return op->with(op->min, op->max, body);
     }
 
     Stmt visit(const ProducerConsumer *op) override {
@@ -576,15 +563,11 @@ class HoistIfStatements : public IRMutator {
         if (const IfThenElse *i = body.as<IfThenElse>()) {
             if (!i->else_case.defined() &&
                 is_pure(i->condition)) {
-                Stmt s = ProducerConsumer::make(op->name, op->is_producer, i->then_case);
+                Stmt s = op->with(i->then_case);
                 return IfThenElse::make(i->condition, s);
             }
         }
-        if (body.same_as(op->body)) {
-            return op;
-        } else {
-            return ProducerConsumer::make(op->name, op->is_producer, body);
-        }
+        return op->with(body);
     }
 
     Stmt visit(const IfThenElse *op) override {
@@ -611,19 +594,11 @@ class HoistIfStatements : public IRMutator {
         if (const IfThenElse *i = body.as<IfThenElse>()) {
             if (!i->else_case.defined() &&
                 is_pure(i->condition)) {
-                Stmt s = Allocate::make(op->name, op->type, op->memory_type,
-                                        op->extents, op->condition, i->then_case,
-                                        op->new_expr, op->free_function, op->padding);
+                Stmt s = op->with(op->extents, op->condition, i->then_case);
                 return IfThenElse::make(i->condition, s);
             }
         }
-        if (body.same_as(op->body)) {
-            return op;
-        } else {
-            return Allocate::make(op->name, op->type, op->memory_type,
-                                  op->extents, op->condition, body,
-                                  op->new_expr, op->free_function, op->padding);
-        }
+        return op->with(op->extents, op->condition, body);
     }
 
     Stmt visit(const Block *op) override {
@@ -656,9 +631,8 @@ class HoistIfStatements : public IRMutator {
 
 }  // namespace
 
-Stmt hoist_loop_invariant_if_statements(Stmt s) {
-    s = HoistIfStatements().mutate(s);
-    return s;
+Stmt hoist_loop_invariant_if_statements(const Stmt &s) {
+    return HoistIfStatements()(s);
 }
 
 }  // namespace Internal

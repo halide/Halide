@@ -2,10 +2,6 @@
 #define __has_attribute(x) 0
 #endif
 
-#if !defined(__has_builtin)
-#define __has_builtin(x) 0
-#endif
-
 namespace {
 
 // We can't use std::array because that has its own overload of operator<, etc,
@@ -146,6 +142,22 @@ public:
         Vec r;
         for (size_t i = 0; i < Lanes; i++) {
             r[i] = cond[i] ? true_value[i] : false_value[i];
+        }
+        return r;
+    }
+
+    static Vec fma(const Vec &a, const Vec &b, const Vec &c) {
+        Vec r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r[i] = ::halide_cpp_fma(a[i], b[i], c[i]);
+        }
+        return r;
+    }
+
+    static Vec fmod(const Vec &a, const Vec &b) {
+        Vec r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r[i] = ::halide_cpp_fmod(a[i], b[i]);
         }
         return r;
     }
@@ -732,6 +744,22 @@ public:
         }
         return r;
 #endif
+    }
+
+    static Vec fma(const Vec a, const Vec b, const Vec c) {
+        Vec r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r[i] = ::halide_cpp_fma(a[i], b[i], c[i]);
+        }
+        return r;
+    }
+
+    static Vec fmod(const Vec a, const Vec b) {
+        Vec r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r[i] = ::halide_cpp_fmod(a[i], b[i]);
+        }
+        return r;
     }
 
     // The relational operators produce signed-int of same width as input; our codegen expects uint8.

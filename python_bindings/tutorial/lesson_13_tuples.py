@@ -5,10 +5,6 @@
 # This lesson describes how to write Funcs that evaluate to multiple
 # values.
 
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_13_tuples
-# in a shell with the current directory at python_bindings/
-
 import math
 
 import halide as hl
@@ -38,7 +34,7 @@ def main():
     )
 
     # Since this pattern appears quite often, Halide provides a
-    # syntatic sugar to write the code above as the following,
+    # syntactic sugar to write the code above as the following,
     # using the "mux" function.
     # color_image[x, y, c] = hl.mux(c, [245, 42, 132]);
 
@@ -104,7 +100,7 @@ def main():
 
     # All Tuple elements are evaluated together over the same domain
     # in the same loop nest, but stored in distinct allocations. The
-    # equivalent C++ code to the above is:
+    # equivalent Python code to the above is:
     if True:
         multi_valued_0 = np.empty((80 * 60), dtype=np.int32)
         multi_valued_1 = np.empty((80 * 60), dtype=np.int32)
@@ -170,7 +166,7 @@ def main():
         new_max = hl.max(input[r], old_max)
         arg_max[()] = (new_index, new_max)
 
-        # The equivalent C++ is:
+        # The equivalent Python is:
         arg_max_0 = 0
         arg_max_1 = float(input[0])
         for r in range(1, 100):
@@ -185,8 +181,8 @@ def main():
             arg_max_0 = new_index
             arg_max_1 = new_max
 
-        # Let's verify that the Halide and C++ found the same maximum
-        # value and index.
+        # Let's verify that Halide and the plain Python code found the
+        # same maximum value and index.
         if True:
             r0, r1 = arg_max.realize()
 

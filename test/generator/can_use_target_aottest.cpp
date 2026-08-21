@@ -31,6 +31,17 @@ static void cpuid(int info[4], int infoType, int extra) {
         : "0"(infoType), "2"(extra));
 }
 #endif
+#if defined(_MSC_VER)
+static uint64_t xgetbv(uint32_t xcr) {
+    return _xgetbv(xcr);
+}
+#else
+static uint64_t xgetbv(uint32_t xcr) {
+    uint32_t lo, hi;
+    __asm__ __volatile__("xgetbv" : "=a"(lo), "=d"(hi) : "c"(xcr));
+    return ((uint64_t)hi << 32) | lo;
+}
+#endif
 #endif  // TESTING_ON_X86
 
 struct HostFeatures {
@@ -52,11 +63,18 @@ int main(int argc, char **argv) {
     int info[4];
     cpuid(info, 1, 0);
 
+    // Check OS support for AVX state saving via XSAVE
+    bool os_avx = false;
+    if (info[2] & (1 << 27)) {  // OSXSAVE
+        uint64_t xcr0 = xgetbv(0);
+        os_avx = (xcr0 & 0x6) == 0x6;  // XMM (bit 1) + YMM (bit 2)
+    }
+
     HostFeatures host_features;
-    if (info[2] & (1 << 28)) host_features.set(halide_target_feature_avx);
+    if ((info[2] & (1 << 28)) && os_avx) host_features.set(halide_target_feature_avx);
     if (info[2] & (1 << 19)) host_features.set(halide_target_feature_sse41);
-    if (info[2] & (1 << 29)) host_features.set(halide_target_feature_f16c);
-    if (info[2] & (1 << 12)) host_features.set(halide_target_feature_fma);
+    if ((info[2] & (1 << 29)) && os_avx) host_features.set(halide_target_feature_f16c);
+    if ((info[2] & (1 << 12)) && os_avx) host_features.set(halide_target_feature_fma);
 
     printf("host_features are: ");
     for (int i = 0; i < host_features.kWordCount; i++) {

@@ -258,7 +258,7 @@ int halide_hexagon_dma_wrapper(void *user_context, struct halide_buffer_t *src,
         roi_stride = dst->dim[1].stride;
     }
 
-    // Assert if destination stride is a multipe of recommended stride
+    // Assert if destination stride is a multiple of recommended stride
     halide_abort_if_false(user_context, ((dst->dim[1].stride % roi_stride) == 0));
 
     // Return nullptr if descriptor is not allocated
@@ -322,7 +322,7 @@ int halide_hexagon_dma_wrapper(void *user_context, struct halide_buffer_t *src,
 
     void *dma_engine = halide_hexagon_allocate_from_dma_pool(user_context, dev->dma_engine);
     if (!dma_engine) {
-        debug(user_context) << "Hexagon: Dma Engine Allocation Faliure\n";
+        debug(user_context) << "Hexagon: Dma Engine Allocation Failure\n";
         return halide_error_code_device_buffer_copy_failed;
     }
 

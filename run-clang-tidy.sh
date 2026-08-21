@@ -1,8 +1,13 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -e
 
-ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+CLEANUP_FILES=()
+# shellcheck disable=SC2329
+cleanup() { rm -rf "${CLEANUP_FILES[@]}"; }
+trap cleanup EXIT
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
 ##
 
@@ -20,24 +25,37 @@ ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 #   export CLANG_TIDY_LLVM_INSTALL_DIR=/opt/homebrew/opt/llvm@X
 #
 # Where X matches the EXPECTED_VERSION below.
+#
+# On Linux, Ubuntu's packaged libwabt.a isn't built with -fPIC, so it can't
+# be linked into libHalide.so. This script won't build wabt for you; point
+# wabt_ROOT at a wabt install built with -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+# (and, e.g., -DUSE_INTERNAL_SHA256=ON to avoid an OpenSSL dependency):
+#
+#   export wabt_ROOT=/path/to/wabt/install
 
 EXPECTED_VERSION=21
 
 ##
 
-usage() { echo "Usage: $0 [-j MAX_PROCESS_COUNT] [-f]" 1>&2; exit 1; }
+usage() {
+    echo "Usage: $0 [-j MAX_PROCESS_COUNT] [-f]" 1>&2
+    exit 1
+}
 
-get_thread_count () {
-  ([ -x "$(command -v nproc)" ] && nproc) ||
-  ([ -x "$(command -v sysctl)" ] && sysctl -n hw.physicalcpu)
+get_thread_count() {
+    ([ -x "$(command -v nproc)" ] && nproc) ||
+        ([ -x "$(command -v sysctl)" ] && sysctl -n hw.physicalcpu)
 }
 
 if [ "$(uname)" == "Darwin" ]; then
-  patch_file () { sed -i '' -E "$@"; }
-  _DEFAULT_LLVM_LOCATION="/opt/homebrew/opt/llvm@$EXPECTED_VERSION"
+    _DEFAULT_LLVM_LOCATION="/opt/homebrew/opt/llvm@$EXPECTED_VERSION"
 else
-  patch_file () { sed -i -E "$@"; }
-  _DEFAULT_LLVM_LOCATION="/usr/lib/llvm-$EXPECTED_VERSION"
+    _DEFAULT_LLVM_LOCATION="/usr/lib/llvm-$EXPECTED_VERSION"
+
+    if [ -z "${wabt_ROOT:-}" ]; then
+        echo "wabt_ROOT must point to a wabt install built with -DCMAKE_POSITION_INDEPENDENT_CODE=ON on Linux." 1>&2
+        exit 1
+    fi
 fi
 
 J=$(get_thread_count)
@@ -47,7 +65,10 @@ while getopts ":j:f" o; do
     case "${o}" in
         j)
             J="${OPTARG}"
-            [[ "${J}" =~ ^[0-9]+$ ]] || ( echo "-j requires an integer argument"; usage )
+            [[ ${J} =~ ^[0-9]+$ ]] || (
+                echo "-j requires an integer argument"
+                usage
+            )
             ;;
         f)
             FIX="-fix"
@@ -57,7 +78,7 @@ while getopts ":j:f" o; do
             ;;
     esac
 done
-shift $((OPTIND-1))
+shift $((OPTIND - 1))
 
 echo "Using ${J} processes."
 if [ -n "${FIX}" ]; then
@@ -84,11 +105,11 @@ else
 fi
 
 # Use a temp folder for the CMake stuff here, so it's fresh & correct every time
-if [[ -z "${CLANG_TIDY_BUILD_DIR}" ]]; then
-  CLANG_TIDY_BUILD_DIR=$(mktemp -d)
-  trap 'rm -rf ${CLANG_TIDY_BUILD_DIR}' EXIT
+if [[ -z ${CLANG_TIDY_BUILD_DIR} ]]; then
+    CLANG_TIDY_BUILD_DIR=$(mktemp -d)
+    CLEANUP_FILES+=("${CLANG_TIDY_BUILD_DIR}")
 else
-  mkdir -p "${CLANG_TIDY_BUILD_DIR}"
+    mkdir -p "${CLANG_TIDY_BUILD_DIR}"
 fi
 
 echo "CLANG_TIDY_BUILD_DIR = ${CLANG_TIDY_BUILD_DIR}"
@@ -102,70 +123,35 @@ export CMAKE_EXPORT_COMPILE_COMMANDS=ON
 export Halide_LLVM_ROOT="${CLANG_TIDY_LLVM_INSTALL_DIR}"
 
 if [[ $(${CC} --version) =~ .*Homebrew.* ]]; then
-  # Homebrew clang 21 is badly misconfigured and needs help finding the
-  # system headers, even though it uses system libc++ by default.
-  SDKROOT="$(xcrun --show-sdk-path)"
-  # TOOLCHAINROOT="$(xcrun --show-toolchain-path)"
-  TOOLCHAINROOT="$(cd "$(dirname "$(xcrun --find clang)")"/../.. && pwd)"
-  RCDIR="$(xcrun clang -print-resource-dir)"
-  cat > "${CLANG_TIDY_BUILD_DIR}/toolchain.cmake" << EOF
-set(CMAKE_SYSROOT "${SDKROOT}")
-set(CMAKE_C_STANDARD_INCLUDE_DIRECTORIES
-    "${RCDIR}/include"
-    "${SDKROOT}/usr/include"
-    "${TOOLCHAINROOT}/usr/include"
-    "${SDKROOT}/System/Library/Frameworks"
-    "${SDKROOT}/System/Library/SubFrameworks"
-)
-set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES
-    "${SDKROOT}/usr/include/c++/v1"
-    \${CMAKE_C_STANDARD_INCLUDE_DIRECTORIES}
-)
-EOF
-  export CMAKE_TOOLCHAIN_FILE="${CLANG_TIDY_BUILD_DIR}/toolchain.cmake"
+    export CMAKE_TOOLCHAIN_FILE="${ROOT_DIR}/cmake/toolchain.macos-homebrew.cmake"
 fi
 
 echo Configuring Halide...
-cmake -S "${ROOT_DIR}" -B "${CLANG_TIDY_BUILD_DIR}" -Wno-dev -DWITH_TESTS=OFF
+cmake -S "${ROOT_DIR}" -B "${CLANG_TIDY_BUILD_DIR}" -Wno-dev -DWITH_TESTS=OFF -DHalide_WASM_BACKEND=wabt
 
-[ -a "${CLANG_TIDY_BUILD_DIR}/compile_commands.json" ]
+[ -e "${CLANG_TIDY_BUILD_DIR}/compile_commands.json" ]
 
 echo Building Halide...
 cmake --build "${CLANG_TIDY_BUILD_DIR}" -j "${J}"
 
-echo Building runtime compilation database...
-temp_file=$(mktemp)
-trap 'rm -f $temp_file' EXIT
-rm -f "${CLANG_TIDY_BUILD_DIR}/src/runtime/compile_commands.json"
-cat "${CLANG_TIDY_BUILD_DIR}"/src/runtime/*.json > "$temp_file"
-{
-  echo '['
-  cat "$temp_file" | sed '$ s/,$//'
-  echo ']'
-} > "${CLANG_TIDY_BUILD_DIR}/src/runtime/compile_commands.json"
-
-echo Merging compilation databases...
+echo Merging runtime compilation database...
 jq -s 'add' "${CLANG_TIDY_BUILD_DIR}/compile_commands.json" \
-    "${CLANG_TIDY_BUILD_DIR}/src/runtime/compile_commands.json" \
-    > "${CLANG_TIDY_BUILD_DIR}/compile_commands_merged.json"
+    <(sed 's/,$//' "${CLANG_TIDY_BUILD_DIR}"/src/runtime/*.json | jq -s '.') \
+    >"${CLANG_TIDY_BUILD_DIR}/compile_commands_merged.json"
 mv "${CLANG_TIDY_BUILD_DIR}/compile_commands_merged.json" "${CLANG_TIDY_BUILD_DIR}/compile_commands.json"
 
-echo Running clang-tidy...
-PYTHONUNBUFFERED=1 "${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/run-clang-tidy" \
+echo "Running clang-tidy..."
+
+export PYTHONUNBUFFERED=1
+export CLANG_TIDY_REAL_BINARY="${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-tidy"
+export CLANG_TIDY_ROOT_DIR="${ROOT_DIR}"
+"${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/run-clang-tidy" \
     ${FIX} \
     -j "${J}" \
     -quiet \
     -p "${CLANG_TIDY_BUILD_DIR}" \
-    -clang-tidy-binary "${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-tidy" \
+    -clang-tidy-binary "${ROOT_DIR}/tools/clang-tidy-filter.sh" \
     -clang-apply-replacements-binary "${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-apply-replacements" \
-    "$@" 2>&1 | sed -Eu '/^[[:digit:]]+ warnings? generated\.$/{N;/\n$/d;}'
+    "$@"
 
-CLANG_TIDY_EXIT_CODE=${PIPESTATUS[0]}
-
-if [ "$CLANG_TIDY_EXIT_CODE" -eq 0 ]; then
-    echo "Success!"
-else
-    echo "clang-tidy failed with exit code $CLANG_TIDY_EXIT_CODE"
-fi
-
-exit "$CLANG_TIDY_EXIT_CODE"
+echo "Success!"

@@ -115,9 +115,7 @@ class OptimizeShuffles : public IRMutator {
                     // vector past the max, so we will add padding to the
                     // allocation accordingly (if we're the one that made it).
                     allocations_to_pad.insert(op->name);
-                    Expr lut = Load::make(op->type.with_lanes(const_extent), op->name,
-                                          Ramp::make(base, 1, const_extent),
-                                          op->image, op->param, const_true(const_extent), alignment);
+                    Expr lut = op->with(Ramp::make(base, 1, const_extent), const_true(const_extent), alignment);
 
                     // We know the size of the LUT is not more than 256, so we
                     // can safely cast the index to 8 bit, which
@@ -129,11 +127,7 @@ class OptimizeShuffles : public IRMutator {
                 alignment = ModulusRemainder();
             }
         }
-        if (!index.same_as(op->index)) {
-            return Load::make(op->type, op->name, index, op->image, op->param, op->predicate, op->alignment);
-        } else {
-            return op;
-        }
+        return op->with(index, op->predicate, op->alignment);
     }
 
 public:
@@ -144,7 +138,7 @@ public:
 }  // namespace
 
 Stmt optimize_shuffles(Stmt s, int lut_alignment) {
-    s = OptimizeShuffles(lut_alignment).mutate(s);
+    s = OptimizeShuffles(lut_alignment)(s);
     return s;
 }
 

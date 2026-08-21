@@ -174,7 +174,7 @@ public:
         return true;
     }
 
-    OptionalRational operator()(int producer_storage_dim, int consumer_loop_dim) const {
+    OptionalRational operator()(size_t producer_storage_dim, size_t consumer_loop_dim) const {
         if (producer_storage_dims() == 0 || consumer_loop_dims() == 0) {
             // The producer or consumer is scalar, so all strides are zero.
             return {0, 1};
@@ -182,7 +182,7 @@ public:
         return coeffs[producer_storage_dim * cols + consumer_loop_dim];
     }
 
-    OptionalRational &operator()(int producer_storage_dim, int consumer_loop_dim) {
+    OptionalRational &operator()(size_t producer_storage_dim, size_t consumer_loop_dim) {
         return coeffs[producer_storage_dim * cols + consumer_loop_dim];
     }
 

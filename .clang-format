@@ -38,3 +38,8 @@ Standard: c++17
 TabWidth: 8
 UseTab: Never
 ...
+---
+Language: Json
+IndentWidth: 2
+ColumnLimit: 0
+...

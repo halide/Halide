@@ -40,7 +40,7 @@ struct Bound {
 map<string, Bound> stores, loads;
 uint64_t loads_total = 0, stores_total = 0;
 
-// These mutexes (mutices?) are only needed for accessing stores/loads
+// These mutexes are only needed for accessing stores/loads
 // from the my_trace callback (which can be called by multiple threads);
 // the ordinary code that initializes stores/loads is single-threaded
 // and has no contention.
@@ -70,7 +70,7 @@ int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
         const auto &iter = stores.find(fname);
         if (iter != stores.end()) {
             const Bound &b = iter->second;
-            if (!check_coordinates(b, e->coordinates, e->dimensions, e->type.lanes, "store", fname)) {
+            if (!check_coordinates(b, e->coordinates, e->dimensions, e->lanes, "store", fname)) {
                 exit(1);
             }
         }
@@ -80,7 +80,7 @@ int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
         const auto &iter = loads.find(fname);
         if (iter != loads.end()) {
             const Bound &b = iter->second;
-            if (!check_coordinates(b, e->coordinates, e->dimensions, e->type.lanes, "load", fname)) {
+            if (!check_coordinates(b, e->coordinates, e->dimensions, e->lanes, "load", fname)) {
                 exit(1);
             }
         }
@@ -595,7 +595,7 @@ int rgb_yuv420_test() {
         // Total: width * height * 6
         // Note: each of the items above also needs to be divided by vector_width, but it doesn't change
         // the ratio between reference and compute_with.
-        // It should be 4x based on above, but let's make it 5x to account for boundary condtions for rgb_x.
+        // It should be 4x based on above, but let's make it 5x to account for boundary conditions for rgb_x.
         if (stores_total > 5 * store_count_ref) {
             printf("Store count for correctness_compute_with rgb to yuv420 case exceeds reference by more than 5x. (Reference: %llu, compute_with: %llu).\n",
                    (unsigned long long)store_count_ref, (unsigned long long)stores_total);
@@ -1016,7 +1016,7 @@ int multi_tile_mixed_tile_factor_test() {
     return 0;
 }
 
-int only_some_are_tiled_test() {
+[[maybe_unused]] int only_some_are_tiled_test() {
     const int size = 256;
     Buffer<int> f_im(size, size), g_im(size / 2, size / 2), h_im(size / 2, size / 2);
     Buffer<int> f_im_ref(size, size), g_im_ref(size / 2, size / 2), h_im_ref(size / 2, size / 2);
@@ -1527,7 +1527,7 @@ int update_stage_pairwise_test() {
     return 0;
 }
 
-int update_stage_pairwise_zigzag_test() {
+[[maybe_unused]] int update_stage_pairwise_zigzag_test() {
     const int f_size = 128;
     const int g_size = 128;
     const int base = 31;

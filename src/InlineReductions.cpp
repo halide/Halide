@@ -40,12 +40,7 @@ private:
         internal.push(op->name);
         Expr body = mutate(op->body);
         internal.pop(op->name);
-        if (value.same_as(op->value) &&
-            body.same_as(op->body)) {
-            return op;
-        } else {
-            return Let::make(op->name, value, body);
-        }
+        return op->with(value, body);
     }
 
     Expr visit(const Variable *v) override {
@@ -126,7 +121,7 @@ Expr sum(const RDom &r, Expr e, const Func &f) {
         << " passed to sum already has a definition";
 
     Internal::FindFreeVars v(r, f.name());
-    e = v.mutate(common_subexpression_elimination(e));
+    e = v(common_subexpression_elimination(e));
 
     user_assert(v.rdom.defined()) << "Expression passed to sum must reference a reduction domain";
 
@@ -152,7 +147,7 @@ Expr saturating_sum(const RDom &r, Expr e, const Func &f) {
         << " passed to saturating_sum already has a definition";
 
     Internal::FindFreeVars v(r, f.name());
-    e = v.mutate(common_subexpression_elimination(e));
+    e = v(common_subexpression_elimination(e));
 
     user_assert(v.rdom.defined()) << "Expression passed to saturating_sum must reference a reduction domain";
 
@@ -179,7 +174,7 @@ Expr product(const RDom &r, Expr e, const Func &f) {
         << " passed to product already has a definition";
 
     Internal::FindFreeVars v(r, f.name());
-    e = v.mutate(common_subexpression_elimination(e));
+    e = v(common_subexpression_elimination(e));
 
     user_assert(v.rdom.defined()) << "Expression passed to product must reference a reduction domain";
 
@@ -205,7 +200,7 @@ Expr maximum(const RDom &r, Expr e, const Func &f) {
         << " passed to maximum already has a definition";
 
     Internal::FindFreeVars v(r, f.name());
-    e = v.mutate(common_subexpression_elimination(e));
+    e = v(common_subexpression_elimination(e));
 
     user_assert(v.rdom.defined()) << "Expression passed to maximum must reference a reduction domain";
 
@@ -232,7 +227,7 @@ Expr minimum(const RDom &r, Expr e, const Func &f) {
         << " passed to minimum already has a definition";
 
     Internal::FindFreeVars v(r, f.name());
-    e = v.mutate(common_subexpression_elimination(e));
+    e = v(common_subexpression_elimination(e));
 
     user_assert(v.rdom.defined()) << "Expression passed to minimum must reference a reduction domain";
 
@@ -259,7 +254,7 @@ Tuple argmax(const RDom &r, Expr e, const Func &f) {
         << " passed to argmax already has a definition";
 
     Internal::FindFreeVars v(r, f.name());
-    e = v.mutate(common_subexpression_elimination(e));
+    e = v(common_subexpression_elimination(e));
 
     user_assert(v.rdom.defined()) << "Expression passed to argmax must reference a reduction domain";
 
@@ -298,7 +293,7 @@ Tuple argmin(const RDom &r, Expr e, const Func &f) {
         << " passed to argmin already has a definition";
 
     Internal::FindFreeVars v(r, f.name());
-    e = v.mutate(common_subexpression_elimination(e));
+    e = v(common_subexpression_elimination(e));
 
     user_assert(v.rdom.defined()) << "Expression passed to argmin must reference a reduction domain";
 

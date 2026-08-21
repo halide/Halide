@@ -1,0 +1,79 @@
+name: Clang-Tidy
+on:
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+    paths:
+      - '**.h'
+      - '**.c'
+      - '**.cpp'
+      - 'run-clang-tidy.sh'
+      - 'tools/clang-tidy-filter.sh'
+      - '**.clang-tidy'
+      - '.github/workflows/clang-tidy.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  LLVM_VERSION: '21'
+  WABT_VERSION: '1.0.39'
+
+jobs:
+  check_clang_tidy:
+    if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
+    name: Check clang-tidy
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      # We intentionally don't use VCPKG here so that we get some
+      # notification that the ecosystem is moving on without us.
+      - name: Install clang-tidy & dependencies
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          echo "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-${LLVM_VERSION} main" | \
+            sudo tee "/etc/apt/sources.list.d/llvm-${LLVM_VERSION}.list"
+          sudo apt-get update
+          sudo apt-get install -y \
+            "clang-${LLVM_VERSION}" \
+            "clang-tidy-${LLVM_VERSION}" \
+            "clang-tools-${LLVM_VERSION}" \
+            flatbuffers-compiler \
+            flatbuffers-compiler-dev \
+            "libclang-${LLVM_VERSION}-dev" \
+            "libclang-cpp${LLVM_VERSION}-dev" \
+            libflatbuffers-dev \
+            "liblld-${LLVM_VERSION}-dev" \
+            libjpeg-turbo8-dev \
+            libpng-dev \
+            "lld-${LLVM_VERSION}" \
+            "llvm-${LLVM_VERSION}-dev" \
+            ninja-build \
+            pybind11-dev
+
+      # Ubuntu's packaged libwabt.a isn't built with -fPIC, so it can't be
+      # linked into libHalide.so -- build our own instead.
+      - name: Build wabt
+        run: |
+          git clone --depth=1 --recurse-submodules -b "${WABT_VERSION}" \
+            https://github.com/WebAssembly/wabt /tmp/wabt-src
+          cmake -G Ninja -S /tmp/wabt-src -B /tmp/wabt-build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DCMAKE_INSTALL_PREFIX=/opt/wabt \
+            -DWITH_EXCEPTIONS=ON \
+            -DBUILD_TESTS=OFF \
+            -DBUILD_TOOLS=OFF \
+            -DBUILD_LIBWASM=OFF \
+            -DUSE_INTERNAL_SHA256=ON
+          cmake --build /tmp/wabt-build --target install
+
+      - name: Run clang-tidy
+        run: ./run-clang-tidy.sh
+        env:
+          CLANG_TIDY_LLVM_INSTALL_DIR: /usr/lib/llvm-${{ env.LLVM_VERSION }}
+          wabt_ROOT: /opt/wabt

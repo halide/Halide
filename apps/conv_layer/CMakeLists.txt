@@ -16,22 +16,30 @@ add_halide_generator(conv_layer.generator SOURCES conv_layer_generator.cpp)
 
 # Filters
 add_halide_library(conv_layer FROM conv_layer.generator)
-add_halide_library(conv_layer_auto_schedule FROM conv_layer.generator
-                   GENERATOR conv_layer
-                   AUTOSCHEDULER Halide::Mullapudi2016
-                   PARAMS autoscheduler.parallelism=4096 autoscheduler.experimental_gpu_schedule=1)
+add_halide_library(
+    conv_layer_auto_schedule
+    FROM conv_layer.generator
+    GENERATOR conv_layer
+    AUTOSCHEDULER Halide::Mullapudi2016
+    PARAMS autoscheduler.parallelism=4096 autoscheduler.experimental_gpu_schedule=1
+)
 
 # Main executable
 add_executable(conv_layer_process process.cpp)
-target_link_libraries(conv_layer_process
-                      PRIVATE
-                      Halide::ImageIO
-                      conv_layer
-                      conv_layer_auto_schedule)
+target_link_libraries(
+    conv_layer_process
+    PRIVATE
+    Halide::ImageIO
+    conv_layer
+    conv_layer_auto_schedule
+)
 
 # Test that the app actually works!
 add_test(NAME conv_layer_process COMMAND conv_layer_process)
-set_tests_properties(conv_layer_process PROPERTIES
-                     LABELS conv_layer
-                     PASS_REGULAR_EXPRESSION "Success!"
-                     SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
+set_tests_properties(
+    conv_layer_process
+    PROPERTIES
+    LABELS conv_layer
+    PASS_REGULAR_EXPRESSION "Success!"
+    SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
+)

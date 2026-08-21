@@ -2,7 +2,9 @@
 #include <atomic>
 #include <cmath>
 #include <iostream>
+#include <set>
 #include <sstream>
+#include <type_traits>
 #include <utility>
 
 #include "ApproximationTables.h"
@@ -14,6 +16,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "IRVisitor.h"
 #include "Interval.h"
 #include "StrictifyFloat.h"
 #include "Util.h"
@@ -130,7 +133,8 @@ bool is_const(const Expr &e, int64_t value) {
     } else if (const FloatImm *i = e.as<FloatImm>()) {
         return i->value == value;
     } else if (const Cast *c = e.as<Cast>()) {
-        return is_const(c->value, value);
+        return c->type.can_represent(value) &&
+               is_const(c->value, value);
     } else if (const Broadcast *b = e.as<Broadcast>()) {
         return is_const(b->value, value);
     } else {
@@ -245,6 +249,65 @@ std::optional<int> is_const_power_of_two_integer(uint64_t val) {
 
 std::optional<int> is_const_power_of_two_integer(int64_t val) {
     return val < 0 ? std::nullopt : is_const_power_of_two_integer((uint64_t)val);
+}
+
+std::optional<std::pair<Expr, Expr>> as_binary_operands(const Expr &e) {
+    // We switch on the actual node type, so we can downcast e.get() directly
+    // rather than going through Expr::as<>(), which would redundantly re-check
+    // the node type the switch case has already established.
+    switch (e.node_type()) {
+#define HANDLE_BINARY_OP(NodeType)                        \
+    case IRNodeType::NodeType: {                          \
+        const NodeType *op = (const NodeType *)(e.get()); \
+        return std::pair{op->a, op->b};                   \
+    }
+        HANDLE_BINARY_OP(Add)
+        HANDLE_BINARY_OP(Sub)
+        HANDLE_BINARY_OP(Mul)
+        HANDLE_BINARY_OP(Div)
+        HANDLE_BINARY_OP(Mod)
+        HANDLE_BINARY_OP(Min)
+        HANDLE_BINARY_OP(Max)
+        HANDLE_BINARY_OP(EQ)
+        HANDLE_BINARY_OP(NE)
+        HANDLE_BINARY_OP(LT)
+        HANDLE_BINARY_OP(LE)
+        HANDLE_BINARY_OP(GT)
+        HANDLE_BINARY_OP(GE)
+        HANDLE_BINARY_OP(And)
+        HANDLE_BINARY_OP(Or)
+#undef HANDLE_BINARY_OP
+    default:
+        return std::nullopt;
+    }
+}
+
+Expr make_binary_op(IRNodeType t, const Expr &a, const Expr &b) {
+    switch (t) {
+#define HANDLE_BINARY_OP(NodeType) \
+    case IRNodeType::NodeType:     \
+        return NodeType::make(a, b);
+        HANDLE_BINARY_OP(Add)
+        HANDLE_BINARY_OP(Sub)
+        HANDLE_BINARY_OP(Mul)
+        HANDLE_BINARY_OP(Div)
+        HANDLE_BINARY_OP(Mod)
+        HANDLE_BINARY_OP(Min)
+        HANDLE_BINARY_OP(Max)
+        HANDLE_BINARY_OP(EQ)
+        HANDLE_BINARY_OP(NE)
+        HANDLE_BINARY_OP(LT)
+        HANDLE_BINARY_OP(LE)
+        HANDLE_BINARY_OP(GT)
+        HANDLE_BINARY_OP(GE)
+        HANDLE_BINARY_OP(And)
+        HANDLE_BINARY_OP(Or)
+#undef HANDLE_BINARY_OP
+    default:
+        internal_error << "make_binary_op: " << IRNodeType_string(t)
+                       << " is not a binary operator\n";
+        return Expr();
+    }
 }
 
 bool is_positive_const(const Expr &e) {
@@ -432,17 +495,18 @@ Expr const_false(int w) {
 Expr lossless_cast(Type t,
                    Expr e,
                    const Scope<ConstantInterval> &scope,
-                   std::map<Expr, ConstantInterval, ExprCompare> *cache) {
+                   std::map<Expr, ConstantInterval, ExprCompare> *cache,
+                   const FuncValueBounds *func_bounds) {
     if (!e.defined() || t == e.type()) {
         return e;
     } else if (t.can_represent(e.type())) {
         return cast(t, std::move(e));
     } else if (const Cast *c = e.as<Cast>()) {
         if (c->type.can_represent(c->value.type())) {
-            return lossless_cast(t, c->value, scope, cache);
+            return lossless_cast(t, c->value, scope, cache, func_bounds);
         }
     } else if (const Broadcast *b = e.as<Broadcast>()) {
-        Expr v = lossless_cast(t.element_of(), b->value, scope, cache);
+        Expr v = lossless_cast(t.with_lanes(b->value.type().lanes()), b->value, scope, cache, func_bounds);
         if (v.defined()) {
             return Broadcast::make(v, b->lanes);
         }
@@ -461,7 +525,7 @@ Expr lossless_cast(Type t,
     } else if (const Shuffle *shuf = e.as<Shuffle>()) {
         std::vector<Expr> vecs;
         for (const auto &vec : shuf->vectors) {
-            vecs.emplace_back(lossless_cast(t.with_lanes(vec.type().lanes()), vec, scope, cache));
+            vecs.emplace_back(lossless_cast(t.with_lanes(vec.type().lanes()), vec, scope, cache, func_bounds));
             if (!vecs.back().defined()) {
                 return Expr();
             }
@@ -470,72 +534,72 @@ Expr lossless_cast(Type t,
     } else if (t.is_int_or_uint()) {
         // Check the bounds. If they're small enough, we can throw narrowing
         // casts around e, or subterms.
-        ConstantInterval ci = constant_integer_bounds(e, scope, cache);
+        ConstantInterval ci = constant_integer_bounds(e, scope, cache, func_bounds);
 
         if (t.can_represent(ci)) {
             // There are certain IR nodes where if the result is expressible
             // using some type, and the args are expressible using that type,
             // then the operation can just be done in that type.
             if (const Add *op = e.as<Add>()) {
-                Expr a = lossless_cast(t, op->a, scope, cache);
-                Expr b = lossless_cast(t, op->b, scope, cache);
+                Expr a = lossless_cast(t, op->a, scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->b, scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
                     return Add::make(a, b);
                 }
             } else if (const Sub *op = e.as<Sub>()) {
-                Expr a = lossless_cast(t, op->a, scope, cache);
-                Expr b = lossless_cast(t, op->b, scope, cache);
+                Expr a = lossless_cast(t, op->a, scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->b, scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
                     return Sub::make(a, b);
                 }
             } else if (const Mul *op = e.as<Mul>()) {
-                Expr a = lossless_cast(t, op->a, scope, cache);
-                Expr b = lossless_cast(t, op->b, scope, cache);
+                Expr a = lossless_cast(t, op->a, scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->b, scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
                     return Mul::make(a, b);
                 }
             } else if (const Min *op = e.as<Min>()) {
-                Expr a = lossless_cast(t, op->a, scope, cache);
-                Expr b = lossless_cast(t, op->b, scope, cache);
+                Expr a = lossless_cast(t, op->a, scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->b, scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
                     return Min::make(a, b);
                 }
             } else if (const Max *op = e.as<Max>()) {
-                Expr a = lossless_cast(t, op->a, scope, cache);
-                Expr b = lossless_cast(t, op->b, scope, cache);
+                Expr a = lossless_cast(t, op->a, scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->b, scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
                     return Max::make(a, b);
                 }
             } else if (const Mod *op = e.as<Mod>()) {
-                Expr a = lossless_cast(t, op->a, scope, cache);
-                Expr b = lossless_cast(t, op->b, scope, cache);
+                Expr a = lossless_cast(t, op->a, scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->b, scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
                     return Mod::make(a, b);
                 }
             } else if (const Call *op = Call::as_intrinsic(e, {Call::widening_add, Call::widen_right_add})) {
-                Expr a = lossless_cast(t, op->args[0], scope, cache);
-                Expr b = lossless_cast(t, op->args[1], scope, cache);
+                Expr a = lossless_cast(t, op->args[0], scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->args[1], scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
                     return Add::make(a, b);
                 }
             } else if (const Call *op = Call::as_intrinsic(e, {Call::widening_sub, Call::widen_right_sub})) {
-                Expr a = lossless_cast(t, op->args[0], scope, cache);
-                Expr b = lossless_cast(t, op->args[1], scope, cache);
+                Expr a = lossless_cast(t, op->args[0], scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->args[1], scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
                     return Sub::make(a, b);
                 }
             } else if (const Call *op = Call::as_intrinsic(e, {Call::widening_mul, Call::widen_right_mul})) {
-                Expr a = lossless_cast(t, op->args[0], scope, cache);
-                Expr b = lossless_cast(t, op->args[1], scope, cache);
+                Expr a = lossless_cast(t, op->args[0], scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->args[1], scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
                     return Mul::make(a, b);
                 }
             } else if (const Call *op = Call::as_intrinsic(e, {Call::shift_left, Call::widening_shift_left,
                                                                Call::shift_right, Call::widening_shift_right})) {
-                Expr a = lossless_cast(t, op->args[0], scope, cache);
-                Expr b = lossless_cast(t, op->args[1], scope, cache);
+                Expr a = lossless_cast(t, op->args[0], scope, cache, func_bounds);
+                Expr b = lossless_cast(t, op->args[1], scope, cache, func_bounds);
                 if (a.defined() && b.defined()) {
-                    ConstantInterval cb = constant_integer_bounds(b, scope, cache);
+                    ConstantInterval cb = constant_integer_bounds(b, scope, cache, func_bounds);
                     if (cb > -t.bits() && cb < t.bits()) {
                         if (op->is_intrinsic({Call::shift_left, Call::widening_shift_left})) {
                             return a << b;
@@ -545,12 +609,20 @@ Expr lossless_cast(Type t,
                     }
                 }
             } else if (const VectorReduce *op = e.as<VectorReduce>()) {
-                if (op->op == VectorReduce::Add ||
+                if ((t.bits() > 1 && op->op == VectorReduce::Add) ||
                     op->op == VectorReduce::Min ||
                     op->op == VectorReduce::Max) {
-                    Expr v = lossless_cast(t.with_lanes(op->value.type().lanes()), op->value, scope, cache);
+                    Expr v = lossless_cast(t.with_lanes(op->value.type().lanes()), op->value, scope, cache, func_bounds);
                     if (v.defined()) {
-                        return VectorReduce::make(op->op, v, op->type.lanes());
+                        auto reduce_op = op->op;
+                        if (t.bits() == 1) {
+                            // UInt(1) == Bool() is the only 1-bit type we expect to see
+                            internal_assert(t.is_uint()) << "Unexpected type: " << t << "\n";
+                            reduce_op = (op->op == VectorReduce::Min ?
+                                             VectorReduce::And :
+                                             VectorReduce::Or);
+                        }
+                        return VectorReduce::make(reduce_op, v, op->type.lanes());
                     }
                 }
             }
@@ -570,6 +642,15 @@ Expr lossless_cast(Type t,
 }
 
 Expr lossless_negate(const Expr &x) {
+    if (x.type().is_uint()) {
+        // An unsigned type can only exactly represent the negation of zero:
+        // any other value would have to be negative, which doesn't fit. In
+        // particular, this rules out e.g. treating cast(uint8, -v) as if it
+        // were -cast(uint8, v) when v doesn't fit in a uint8 to begin with
+        // (the two differ by 256, not just in sign).
+        return is_const_zero(x) ? x : Expr();
+    }
+
     if (const Mul *m = x.as<Mul>()) {
         // Check the terms can't multiply to produce the most negative value.
         if (x.type().is_int() &&
@@ -602,12 +683,23 @@ Expr lossless_negate(const Expr &x) {
     } else if (const FloatImm *f = x.as<FloatImm>()) {
         return FloatImm::make(f->type, -f->value);
     } else if (const Cast *c = x.as<Cast>()) {
-        Expr value = lossless_negate(c->value);
-        if (value.defined()) {
-            // This logic is only sound if we know the cast can't overflow.
-            value = lossless_cast(c->type, value);
+        // Unsigned inner types wrap modularly (-uint8(65) = 191), and signed
+        // integer inner types wrap at INT_TYPE_MIN (-int8(-128) = -128), so both
+        // make cast(outer, -inner) != -cast(outer, inner). Floats are exact.
+        // For signed integers, only proceed when bounds exclude INT_TYPE_MIN.
+        bool inner_negation_safe = c->value.type().is_float();
+        if (!inner_negation_safe && c->value.type().is_int()) {
+            ConstantInterval ci = constant_integer_bounds(c->value);
+            inner_negation_safe = ci.min_defined && !c->value.type().is_min(ci.min);
+        }
+        if (inner_negation_safe) {
+            Expr value = lossless_negate(c->value);
             if (value.defined()) {
-                return value;
+                // This logic is only sound if we know the cast can't overflow.
+                value = lossless_cast(c->type, value);
+                if (value.defined()) {
+                    return value;
+                }
             }
         }
     } else if (const Ramp *r = x.as<Ramp>()) {
@@ -657,11 +749,20 @@ void match_lanes(Expr &a, Expr &b) {
 // Cast to the wider type of the two. Already guaranteed to leave
 // signed/unsigned on number of lanes unchanged.
 void match_bits(Expr &x, Expr &y) {
+    // Widen the narrower operand to match the wider one's bit count. A bfloat
+    // has no wider counterpart (there is no bfloat32), so widening one yields a
+    // regular float, consistent with Type::widen().
+    auto widened = [](Type t, int bits) {
+        if (t.is_bfloat()) {
+            t = t.with_code(halide_type_float);
+        }
+        return t.with_bits(bits);
+    };
     // The signedness doesn't match, so just match the bits.
     if (x.type().bits() < y.type().bits()) {
-        x = cast(x.type().with_bits(y.type().bits()), x);
+        x = cast(widened(x.type(), y.type().bits()), x);
     } else if (y.type().bits() < x.type().bits()) {
-        y = cast(y.type().with_bits(x.type().bits()), y);
+        y = cast(widened(y.type(), x.type().bits()), y);
     }
 }
 }  // namespace
@@ -1064,6 +1165,99 @@ T remove_intrinsics(const T &e, const std::initializer_list<Call::IntrinsicOp> &
 }
 
 }  // namespace
+
+Expr peel_lets(const Expr &e, std::vector<std::pair<std::string, Expr>> *lets) {
+    Expr body = e;
+    while (const Let *let = body.as<Let>()) {
+        lets->emplace_back(let->name, let->value);
+        body = let->body;
+    }
+    return body;
+}
+
+Stmt peel_lets(const Stmt &s, std::vector<std::pair<std::string, Expr>> *lets) {
+    Stmt body = s;
+    while (const LetStmt *let = body.as<LetStmt>()) {
+        lets->emplace_back(let->name, let->value);
+        body = let->body;
+    }
+    return body;
+}
+
+namespace {
+
+/** Gather the names an Expr or Stmt might get from a wrapping let: the names of
+ * Variables, and the buffer names of Loads and Stores. Conservatively assumes
+ * every such name refers to one of the peeled lets, even where an inner let
+ * shadows it. One instance is reused across an entire rewrap so that shared
+ * subexpressions are only visited once. */
+class CollectUsedNames : public IRGraphVisitor {
+    using IRGraphVisitor::visit;
+
+    void visit(const Variable *op) override {
+        names.insert(op->name);
+    }
+
+    void visit(const Load *op) override {
+        names.insert(op->name);
+        IRGraphVisitor::visit(op);
+    }
+
+    void visit(const Store *op) override {
+        names.insert(op->name);
+        IRGraphVisitor::visit(op);
+    }
+
+public:
+    std::set<std::string> names;
+};
+
+template<typename Body>
+Body rewrap_used_lets_impl(const Body &body,
+                           const std::vector<std::pair<std::string, Expr>> &lets) {
+    // The set of names the growing body refers to. Maintaining it as we go
+    // avoids rescanning the body once per let.
+    CollectUsedNames used;
+    body.accept(&used);
+    Body result = body;
+    for (const auto &[name, value] : reverse_view(lets)) {
+        if (used.names.count(name)) {
+            value.accept(&used);
+            if constexpr (std::is_same_v<Body, Expr>) {
+                result = Let::make(name, value, result);
+            } else {
+                result = LetStmt::make(name, value, result);
+            }
+        }
+    }
+    return result;
+}
+
+}  // namespace
+
+Expr rewrap_used_lets(const Expr &body, const std::vector<std::pair<std::string, Expr>> &lets) {
+    return rewrap_used_lets_impl(body, lets);
+}
+
+Stmt rewrap_used_lets(const Stmt &body, const std::vector<std::pair<std::string, Expr>> &lets) {
+    return rewrap_used_lets_impl(body, lets);
+}
+
+Expr rewrap_all_lets(const Expr &body, const std::vector<std::pair<std::string, Expr>> &lets) {
+    Expr result = body;
+    for (const auto &[name, value] : reverse_view(lets)) {
+        result = Let::make(name, value, result);
+    }
+    return result;
+}
+
+Stmt rewrap_all_lets(const Stmt &body, const std::vector<std::pair<std::string, Expr>> &lets) {
+    Stmt result = body;
+    for (const auto &[name, value] : reverse_view(lets)) {
+        result = LetStmt::make(name, value, result);
+    }
+    return result;
+}
 
 Expr remove_likelies(const Expr &e) {
     return remove_intrinsics(e, {Call::likely, Call::likely_if_innermost});
@@ -2249,6 +2443,19 @@ Expr erf(const Expr &x) {
     user_assert(x.defined()) << "erf of undefined Expr\n";
     user_assert(x.type() == Float(32)) << "erf only takes float arguments\n";
     return halide_erf(x);
+}
+
+Expr fma(const Expr &a, const Expr &b, const Expr &c) {
+    user_assert(a.type().is_float()) << "fma requires floating-point arguments.";
+    user_assert(a.type() == b.type() && a.type() == c.type())
+        << "All arguments to fma must have the same type.";
+
+    // TODO: Once we use LLVM's native bfloat type instead of treating them as
+    // ints, we should be able to remove this assert. Currently, it tries to
+    // codegen an integer fma.
+    user_assert(!a.type().is_bfloat()) << "fma does not yet support bfloat types.";
+
+    return Call::make(a.type(), Call::strict_fma, {a, b, c}, Call::PureIntrinsic);
 }
 
 Expr fast_inverse(Expr x) {

@@ -67,7 +67,7 @@ int init_sim() {
         }
     }
 
-    // Configue various tracing capabilites.
+    // Configure various tracing capabilities.
     struct Trace {
         const char *env_var;
         HEXAPI_TracingType hex_trace;

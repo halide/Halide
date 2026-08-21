@@ -1,0 +1,154 @@
+name: Deploy docs and tutorials website
+
+on:
+  release:
+    types: [ published ]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: >-
+          Build and diff only -- never push to halide.github.com. Uploads
+          the generated docs/ as a workflow artifact instead, for manual
+          inspection. This is the safe default for testing changes to this
+          workflow or the generator itself.
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+env:
+  TARGET_REPO_OWNER: halide
+  TARGET_REPO_NAME: halide.github.com
+  # Only ever a real push for `release` events -- any workflow_dispatch run
+  # defaults to a dry run unless explicitly opted out.
+  DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run || 'false' }}
+
+jobs:
+  deploy:
+    name: Build and deploy to halide.github.com
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpng-dev libjpeg-dev gdb
+
+      - name: Install Doxygen
+        env:
+          DOXYGEN_VERSION: 1.18.0
+          DOXYGEN_SHA256: 14fa81bdc34171edb5f1f02b1d60e74802f0439b77fa44e592565d517d72df90
+        run: |
+          # Ubuntu 24.04's apt package is stuck on Doxygen 1.9.8, which
+          # emits an empty <name/> for anonymous enums instead of a
+          # synthetic "@N" name -- generate_api_reference.py only handles
+          # the latter. Install upstream's official prebuilt binary
+          # instead of waiting on the distro package to catch up.
+          curl -fsSL -o doxygen.tar.gz \
+            "https://github.com/doxygen/doxygen/releases/download/Release_${DOXYGEN_VERSION//./_}/doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz"
+          echo "${DOXYGEN_SHA256}  doxygen.tar.gz" | sha256sum -c -
+          tar xzf doxygen.tar.gz
+          echo "${GITHUB_WORKSPACE}/doxygen-${DOXYGEN_VERSION}/bin" >> "$GITHUB_PATH"
+
+      - name: Sync CI environment
+        run: |
+          uv sync --group ci-llvm-22 --group docs --no-install-project
+          echo "${GITHUB_WORKSPACE}/.venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" >> "$GITHUB_ENV"
+
+      - name: Configure LLVM
+        run: echo "Halide_LLVM_ROOT=$(halide-llvm --prefix)" >> "$GITHUB_ENV"
+
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        with:
+          app-id: ${{ secrets.LLVM_UPDATER_ID }}
+          private-key: ${{ secrets.LLVM_UPDATER_PRIVATE_KEY }}
+          # Without these, the action scopes the token to the *current*
+          # repo (halide/Halide) rather than halide.github.com, since
+          # that's where this workflow itself lives -- leaving it unable
+          # to push to halide.github.com despite the app being installed
+          # there.
+          owner: ${{ env.TARGET_REPO_OWNER }}
+          repositories: ${{ env.TARGET_REPO_NAME }}
+
+      - name: Get GitHub App user ID
+        id: get-user-id
+        run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Checkout ${{ env.TARGET_REPO_OWNER }}/${{ env.TARGET_REPO_NAME }}
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ env.TARGET_REPO_OWNER }}/${{ env.TARGET_REPO_NAME }}
+          ref: master
+          token: ${{ steps.app-token.outputs.token }}
+          path: halide.github.com
+
+      - name: Configure CMake
+        run: >-
+          cmake --preset ci-linux-x86-64
+          -DWITH_DOCS=ON
+          -DHalide_TUTORIAL_WEBSITE_DEBUGGER=GDB
+          -DHalide_INSTALL_DOXYGENDIR=docs
+          -DWITH_TESTS=NO
+          -DWITH_PYTHON_BINDINGS=YES
+          -DWITH_UTILS=NO
+
+      - name: Build docs website
+        run: cmake --build build --target doc
+
+      - name: Replace docs/
+        id: replace
+        run: |
+          git config --global user.name "${{ steps.app-token.outputs.app-slug }}[bot]"
+          git config --global user.email "${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
+
+          # Halide_INSTALL_DOXYGENDIR above points the Halide_Doxygen
+          # component (the whole Sphinx site: prose, API reference, and
+          # tutorial together) directly at halide.github.com's own docs/
+          # layout, so no staging directory or path-guessing is needed --
+          # clear stale content first (so removed/renamed lessons or pages
+          # don't linger), then install straight into the checkout.
+          rm -rf halide.github.com/docs
+          cmake --install build --prefix "$GITHUB_WORKSPACE/halide.github.com" --component Halide_Doxygen
+
+          cd halide.github.com
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "No changes to deploy."
+            echo "has-changes=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "has-changes=true" >> "$GITHUB_OUTPUT"
+          git diff --cached --stat
+
+      - name: Upload docs as an artifact (dry run)
+        if: steps.replace.outputs.has-changes == 'true' && env.DRY_RUN == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: docs-site
+          path: halide.github.com/docs
+          retention-days: 7
+
+      - name: Commit and push
+        if: steps.replace.outputs.has-changes == 'true' && env.DRY_RUN != 'true'
+        working-directory: halide.github.com
+        run: |
+          if [ -n "${{ github.event.release.tag_name }}" ]; then
+            MESSAGE="Deploy docs for Halide ${{ github.event.release.tag_name }}"
+          else
+            MESSAGE="Deploy docs (manual run from halide/Halide@${{ github.sha }})"
+          fi
+
+          git commit -m "$MESSAGE"
+          # actions/checkout leaves a detached HEAD, so push explicitly by
+          # refspec rather than relying on a tracked branch.
+          git push origin HEAD:master

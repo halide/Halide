@@ -4,10 +4,6 @@
 
 # This lesson demonstrates how schedule multi-stage pipelines.
 
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_08_scheduling_2
-# in a shell with the current directory at python_bindings/
-
 import halide as hl
 import numpy as np
 import math
@@ -56,10 +52,10 @@ def main():
         #                   sqrt((x + 1) * (y + 1)))
 
         # All calls to 'producer' have been replaced with the body of
-        # 'producer', with the arguments subtituted in for the
+        # 'producer', with the arguments substituted in for the
         # variables.
 
-        # The equivalent C code is:
+        # The equivalent Python code is:
         result = np.empty((4, 4), dtype=np.float32)
         for yy in range(4):
             for xx in range(4):
@@ -108,7 +104,7 @@ def main():
         # A) There were stores to producer.
         # B) They all happened before any stores to consumer.
 
-        # Equivalent C:
+        # Equivalent Python:
         result = np.empty((4, 4), dtype=np.float32)
 
         # Allocate some temporary storage for the producer.
@@ -136,7 +132,7 @@ def main():
         # out-of-bounds reads from an input image.
 
         # If we print the loop nest, we'll see something very
-        # similar to the C above.
+        # similar to the Python above.
         print("Pseudo-code for the schedule:")
         consumer.print_loop_nest()
         print()
@@ -160,7 +156,7 @@ def main():
     # memory and memory bandwidth, but did a whole bunch of redundant
     # expensive math (calling sqrt). It evaluated most points in
     # 'producer' four times. The second schedule,
-    # producer.compute_root(), did the mimimum number of calls to
+    # producer.compute_root(), did the minimum number of calls to
     # sqrt, but used more temporary memory and more memory bandwidth.
 
     # In any given situation the correct choice can be difficult to
@@ -195,7 +191,7 @@ def main():
 
         # This places the code that computes the producer just
         # *inside* the consumer's for loop over y, as in the
-        # equivalent C below.
+        # equivalent Python below.
 
         # Turn on tracing.
         producer.trace_stores()
@@ -207,7 +203,7 @@ def main():
 
         # Reading the log you should see that producer and consumer
         # alternate on a per-scanline basis. Let's look at the
-        # equivalent C:
+        # equivalent Python:
         result = np.empty((4, 4), dtype=np.float32)
 
         # There's an outer loop over scanlines of consumer:
@@ -230,7 +226,7 @@ def main():
                 )
 
         # Again, if we print the loop nest, we'll see something very
-        # similar to the C above.
+        # similar to the Python above.
         print("Pseudo-code for the schedule:")
         consumer.print_loop_nest()
         print()
@@ -287,7 +283,7 @@ def main():
         # Halide has detected that for all scanlines except for the
         # first, it can reuse the values already sitting in the
         # buffer we've allocated for producer. Let's look at the
-        # equivalent C:
+        # equivalent Python:
 
         result = np.empty((4, 4), dtype=np.float32)
 
@@ -333,10 +329,10 @@ def main():
         # - Calls to sqrt: 25
 
         # Note that my claimed amount of memory allocated doesn't
-        # match the reference C code. Halide is performing one more
+        # match the reference Python code. Halide is performing one more
         # optimization under the hood. It folds the storage for the
         # producer down into a circular buffer of two
-        # scanlines. Equivalent C would actually look like this:
+        # scanlines. Equivalent Python would actually look like this:
 
         if True:
             # Actually store 2 scanlines instead of 5
@@ -387,7 +383,7 @@ def main():
         consumer.realize([4, 4])
 
         # Reading the log, you should see that producer and consumer
-        # now alternate on a per-pixel basis. Here's the equivalent C:
+        # now alternate on a per-pixel basis. Here's the equivalent Python:
 
         result = np.empty((4, 4), dtype=np.float32)
 
@@ -441,7 +437,7 @@ def main():
     # iterations are lying around for us to reuse. This assumes that
     # previous values of x or y happened earlier in time and have
     # finished. This is not true if you parallelize or vectorize
-    # either loop. Darn. If you parallelize, Halide won't inject the
+    # either loop. If you parallelize, Halide won't inject the
     # optimizations that skip work already done if there's a parallel
     # loop in between the store_at level and the compute_at level,
     # and won't fold the storage down into a circular buffer either,
@@ -489,7 +485,7 @@ def main():
         consumer.realize([4, 4])
 
         # Reading the log, you should see that producer and consumer
-        # now alternate on a per-tile basis. Here's the equivalent C:
+        # now alternate on a per-tile basis. Here's the equivalent Python:
 
         result = np.empty((4, 4), dtype=np.float32)
 
@@ -572,9 +568,9 @@ def main():
 
         halide_result = consumer.realize([800, 600])
 
-        # Here's the equivalent (serial) C:
+        # Here's the equivalent (serial) Python:
 
-        c_result = np.empty((600, 800), dtype=np.float32)
+        py_result = np.empty((600, 800), dtype=np.float32)
 
         # For every strip of 16 scanlines
         for yo in range(600 // 16 + 1):  # (this loop is parallel in the Halide version)
@@ -650,32 +646,30 @@ def main():
                         ),
                     ]
 
-                    c_result[yy][xx[0]] = vec[0]
-                    c_result[yy][xx[1]] = vec[1]
-                    c_result[yy][xx[2]] = vec[2]
-                    c_result[yy][xx[3]] = vec[3]
+                    py_result[yy][xx[0]] = vec[0]
+                    py_result[yy][xx[1]] = vec[1]
+                    py_result[yy][xx[2]] = vec[2]
+                    py_result[yy][xx[3]] = vec[3]
 
         print("Pseudo-code for the schedule:")
         consumer.print_loop_nest()
         print()
 
-        # Look on my code, ye mighty, and despair!
-
-        # Let's check the C result against the Halide result. Doing
-        # this I found several bugs in my C implementation, which
-        # should tell you something.
+        # Let's check the Python result against the Halide result.
+        # Doing this I found several bugs in my Python implementation,
+        # which should tell you something.
         for yy in range(600):
             for xx in range(800):
-                error = halide_result[xx, yy] - c_result[yy][xx]
+                error = halide_result[xx, yy] - py_result[yy][xx]
                 # It's floating-point math, so we'll allow some slop:
                 assert abs(error) <= 0.001, (
-                    f"halide_result({xx}, {yy}) = {halide_result[xx, yy]} instead of {c_result[yy][xx]}"
+                    f"halide_result({xx}, {yy}) = {halide_result[xx, yy]} instead of {py_result[yy][xx]}"
                 )
 
     # This stuff is hard. We ended up in a three-way trade-off
     # between memory bandwidth, redundant work, and
     # parallelism. Halide can't make the correct choice for you
-    # automatically (sorry). Instead it tries to make it easier for
+    # automatically. Instead it tries to make it easier for
     # you to explore various options, without messing up your
     # program. In fact, Halide promises that scheduling calls like
     # compute_root won't change the meaning of your algorithm -- you

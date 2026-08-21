@@ -1,29 +1,23 @@
 // Halide tutorial lesson 23: Serialization
 
-// This lesson describes how to serialize pipelines into a binary format 
-// which can be saved on disk, and later deserialized and loaded for 
+// This lesson describes how to serialize pipelines into a binary format
+// which can be saved on disk, and later deserialized and loaded for
 // evaluation.
 
 // Note that you'll need to be using a build of Halide that was configured
 // using the WITH_SERIALIZATION=ON macro defined in order for this tutorial
 // to work.
 
-// Disclaimer: Serialization is experimental in Halide 17 and is subject to 
+// Disclaimer: Serialization is experimental in Halide 17 and is subject to
 // change; we recommend that you avoid relying on it for production work at this time.
 
 // On linux, you can compile this tutorial and run it like so:
-// g++ lesson_23*.cpp -g -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_23 -std=c++17
-// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_23
+// g++ lesson_23*.cpp -g -I <path/to/include> -I <path/to/tools> -L <path/to/lib> -lHalide $(pkg-config --cflags --libs libpng libjpeg) -lpthread -ldl -o lesson_23 -std=c++17
+// LD_LIBRARY_PATH=<path/to/lib> ./lesson_23
 
-// On os x:
-// g++ lesson_23*.cpp -g -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide -o lesson_23 -std=c++17
-// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_23
-
-// If you have the entire Halide source tree, you can also build it by
-// running:
-//    make tutorial_lesson_23_serialization
-// in a shell with the current directory at the top of the halide
-// source tree.
+// On macOS:
+// g++ lesson_23*.cpp -g -I <path/to/include> -I <path/to/tools> -L <path/to/lib> -lHalide $(pkg-config --cflags --libs libpng libjpeg) -o lesson_23 -std=c++17
+// DYLD_LIBRARY_PATH=<path/to/lib> ./lesson_23
 
 #include "Halide.h"
 #include <algorithm>
@@ -78,19 +72,19 @@ int main() {
         // that were found ... object's we'll need to attach to buffers if we wish to execute the pipeline
         for(const auto &[name, _param]: params) {
             std::cout << "Found Param: " << name << "\n";
-        } 
+        }
     }
 
-    // new scope ... everything above is now destroyed! Now lets reconstruct the entire pipeline 
-    // from scratch by deserializing it from a file 
+    // new scope ... everything above is now destroyed! Now lets reconstruct the entire pipeline
+    // from scratch by deserializing it from a file
     {
         // Lets load a color 8-bit input and connect it to an ImageParam
         Buffer<uint8_t> rgb_image = Halide::Tools::load_image("images/rgb.png");
         ImageParam input(UInt(8), 3, "input");
-        input.set(rgb_image); 
+        input.set(rgb_image);
 
-        // Now lets populate the params map so we can override the input 
-        std::map<std::string, Parameter> params; 
+        // Now lets populate the params map so we can override the input
+        std::map<std::string, Parameter> params;
         params.insert({"input", input.parameter()});
 
         // Lets construct a new pipeline from scratch by deserializing the file we wrote to disk
@@ -107,7 +101,7 @@ int main() {
     {
         // Lets do the same thing again ... construct a new pipeline from scratch by deserializing the file we wrote to disk
 
-        // First we can deserialize the external parameters (useful in the event we want to remap them 
+        // First we can deserialize the external parameters (useful in the event we want to remap them
         // and replace the definitions with our own user parameter definitions)
         std::map<std::string, Parameter> params = deserialize_parameters("blur.hlpipe");
 

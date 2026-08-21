@@ -1,75 +1,54 @@
-HelloHalide is a simple application which applies a tone curve and sharpening to
-a video preview from the camera on a phone or tablet.
+HelloAndroid is a simple application which uses Halide to process images
+streamed from the Android camera via CameraX (built on top of the camera2 API).
+It reads every frame into the CPU via an `ImageAnalysis` use case and uses
+Halide to either blit the frame to the output surface (converting between YUV
+formats), or apply an edge detector on the luma channel. This example requires a
+phone or tablet running Android API level 23 or above. This sample has been
+tested on Nexus 5, Nexus 6 and Nexus 9.
 
-This application builds for multiple native ABIs. (At present armeabi,
-armeabi-v7a, arm64-v8a, x86_64, and x86 are supported.) Halide code is
-generated for each architecture.
+CAVEAT: This example uses the not-so-well-documented ANativeWindow C API to
+directly write into the graphics buffers that support the Java "Surface" and
+"SurfaceView" classes. In particular, we rely on the YV12 format and use the
+ANativeWindow API to "reconfigure" buffers so that they do not have to match the
+resolution of the display. This exploits the hardware scaler to resample the
+displayed image. However, although CameraX's `ResolutionSelector` reports a set
+of supported analysis resolutions, there is no such enumeration for the display.
+On untested devices, CameraX may settle on a camera resolution for which there
+is no matching graphics resolution. This will lead to a green screen with a
+logcat error message that looks something like:
 
-This build is meant to use Android command line tools. (An IDE is not required.)
-In order to build, the following will be required:
+E/halide_native( 6146): ANativeWindow buffer locked but its size was 1920 x
+1440, expected 1440 x 1080
 
-- Android NDK -- This can be downloaded here:
-  https://developer.android.com/tools/sdk/ndk/index.html After installing, make
-  sure the top-level directory of the install is in the PATH. (It should contain
-  an executable ndk-build file.)
+This app targets `arm64-v8a` and `x86_64`. The two Halide pipelines
+(`app/src/main/cpp/generators/deinterleave_generator.cpp`,
+`edge_detect_generator.cpp`) are compiled once per ABI via Gradle's
+`externalNativeBuild`, which drives a single CMake project
+(`app/src/main/cpp/CMakeLists.txt`); the Halide generators themselves are built
+with the host compiler as a side effect of that same CMake configure, so no
+separate pre-build step is needed.
 
-- Android SDK -- This can be downloaded here:
-  http://developer.android.com/sdk/index.html The standalone SDK is desired.
-  Once downloaded, the "android" program in the tools directory of the install
-  will need to be run. It should bring up a UI allowing one to choose components
-  to install. HelloAndroid currently depends on the android-17 release. (It can
-  easily be made to run on others, but that is what the scripts are setup to
-  build against.) Make sure the tools directory is on one's PATH.
+## Prerequisites
 
-- Apache Ant -- which can be downloaded here:
-  http://ant.apache.org/bindownload.cgi make sure the bin directory is on one's
-  PATH.
+- A local Halide install (built via CMake -- see the top-level
+  `doc/BuildingHalideWithCMake.md`).
+- Android Studio, or the Android SDK + NDK (Android Studio's SDK Manager can
+  install the NDK under SDK Tools -- "NDK (Side by side)").
+- A CMake >= 3.28. The CMake bundled with the Android SDK by default is often
+  older than this; if so, point Gradle at a newer one by adding
+  `cmake.dir=<path to a CMake >= 3.28 install prefix>` to `local.properties`
+  (e.g. `cmake.dir=/opt/homebrew` for a Homebrew-installed CMake on macOS).
 
-If everything is setup correctly, running the build.sh script in this directory,
-with the current directory set to here, whould build the HelloAndroid apk and
-install it on a connected Android device.
-
-# Gradle
-
-To use Gradle create local.properties file in this folder with sdk.dir and
-ndk.dir variables defined like so:
-
-```
-sdk.dir=/Users/joe/Downloads/android-sdk
-ndk.dir=/Users/joe/Downloads/android-ndk
-```
-
-After that run `gradlew build` which will produce .apk file ready for deployment
-to the Android device.
-
-On Linux/Mac you can use `build-gradle.sh` to build, deploy and run this sample
-application.
-
-Pay attention to the list of platforms supported by your Halide installation.
-They are listed in jni/Application.mk APP_ABI variable and in build.gradle archs
-map. For example, if your Halide installation was built without arm64-v8a,
-remove it from APP_ABI and archs. Both list and map should match, otherwise
-you will be getting compilation errors complaining about a missing hello.h file:
+## Building
 
 ```
-:compileDebugNdkClassic FAILED
-
-FAILURE: Build failed with an exception.
-
-* What went wrong:
-Execution failed for task ':compileDebugNdkClassic'.
-...
-  Output:
-    /private/tmp/7/halide/apps/HelloAndroid/jni/native.cpp:9:30: fatal error: hello.h: No such file or directory
-     #include "hello.h"
-
+./gradlew assembleDebug -PHalide_ROOT=<path/to/halide install>
 ```
 
-# Android Studio
+(`Halide_ROOT` can also be provided via an environment variable of the same
+name.) This produces `app/build/outputs/apk/debug/app-debug.apk`, installable
+with `adb install`.
 
-To load project into Android Studio use "File/Import Project..." in Android
-Studio and point to apps/HelloAndroid/build.gradle file.
-
-You will have to edit automatically-generated local.properties file to add
-ndk.dir property so it points to your Android NDK installation as described in
-Gradle section above.
+To build in Android Studio instead, open this directory as a project, add
+`Halide_ROOT=<path/to/halide install>` to `gradle.properties` (or
+`local.properties`), and use the Run button.

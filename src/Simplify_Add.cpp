@@ -25,8 +25,16 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
 
     if (rewrite(IRMatcher::Overflow() + x, a) ||
         rewrite(x + IRMatcher::Overflow(), b) ||
-        rewrite(x + 0, x) ||
-        rewrite(0 + x, x)) {
+        rewrite(x + 0, a) ||
+        rewrite(0 + x, b)) {
+        if (info) {
+            if (rewrite.result.same_as(a)) {
+                info->intersect(a_info);
+            } else {
+                internal_assert(rewrite.result.same_as(b));
+                info->intersect(b_info);
+            }
+        }
         return rewrite.result;
     }
 
@@ -87,6 +95,10 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
          rewrite((x - y) + (y + z), x + z) ||
          rewrite((x - y) + (z + y), x + z) ||
 
+         rewrite((x - y) * z + (y * z + w), x * z + w) ||
+         rewrite((x - y) * z + (w + y * z), x * z + w) ||
+         rewrite((x - y) * z + (y * z - w), x * z - w) ||
+
          rewrite(x + ((y - x) - z), y - z) ||
          rewrite(((x - y) - z) + y, x - z) ||
 
@@ -120,12 +132,14 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
          rewrite(slice(x, c0, c1, c2) + (slice(y, c0, c1, c2) + z), slice(x + y, c0, c1, c2) + z, c2 > 1 && lanes_of(x) == lanes_of(y)) ||
          rewrite(slice(x, c0, c1, c2) + (z - slice(y, c0, c1, c2)), slice(x - y, c0, c1, c2) + z, c2 > 1 && lanes_of(x) == lanes_of(y)) ||
          rewrite(slice(x, c0, c1, c2) + (slice(y, c0, c1, c2) - z), slice(x + y, c0, c1, c2) - z, c2 > 1 && lanes_of(x) == lanes_of(y)) ||
+         rewrite(transpose(x, c0) + transpose(y, c0), transpose(x + y, c0)) ||
 
          (no_overflow(op->type) &&
           (rewrite(x + x * y, x * (y + 1)) ||
            rewrite(x + y * x, (y + 1) * x) ||
            rewrite(x * y + x, x * (y + 1)) ||
            rewrite(y * x + x, (y + 1) * x, !is_const(x)) ||
+
            rewrite(x + (x + y) / c0, (fold(c0 + 1) * x + y) / c0, c0 != 0) ||
            rewrite(x + (y + x) / c0, (fold(c0 + 1) * x + y) / c0, c0 != 0) ||
            rewrite(x + (y - x) / c0, (fold(c0 - 1) * x + y) / c0, c0 != 0) ||

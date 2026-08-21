@@ -584,22 +584,22 @@ double dequantize_scalar(const Tensor *t) {
     int zero = q.zero.empty() ? 0 : q.zero.front();
 
     const auto &buf = t->buffer();
-    switch (buf.type().element_of().as_u32()) {
-    case halide_type_of<uint8_t>().as_u32():
+    switch (buf.type()) {
+    case halide_type_of<uint8_t>():
         return (as_scalar<uint8_t>(buf) - zero) * scale;
-    case halide_type_of<int8_t>().as_u32():
+    case halide_type_of<int8_t>():
         return (as_scalar<int8_t>(buf) - zero) * scale;
-    case halide_type_of<uint16_t>().as_u32():
+    case halide_type_of<uint16_t>():
         return (as_scalar<uint16_t>(buf) - zero) * scale;
-    case halide_type_of<int16_t>().as_u32():
+    case halide_type_of<int16_t>():
         return (as_scalar<int16_t>(buf) - zero) * scale;
-    case halide_type_of<uint32_t>().as_u32():
+    case halide_type_of<uint32_t>():
         return (as_scalar<uint32_t>(buf) - zero) * scale;
-    case halide_type_of<int32_t>().as_u32():
+    case halide_type_of<int32_t>():
         return (as_scalar<int32_t>(buf) - zero) * scale;
-    case halide_type_of<float>().as_u32():
+    case halide_type_of<float>():
         return (as_scalar<float>(buf) - zero) * scale;
-    case halide_type_of<double>().as_u32():
+    case halide_type_of<double>():
         return (as_scalar<double>(buf) - zero) * scale;
     default:
         HLOG(FATAL) << "Unsupported type " << buf.type();
@@ -765,7 +765,7 @@ halide_type_t ConvOp::filter_type() const {
         return metadata->arguments[2].type;
     } else {
         HLOG(FATAL) << "Unsupported type " << output()->type() << "\n";
-        return halide_type_t(halide_type_int, 0, 0);
+        return halide_type_t(halide_type_int, 0);
     }
 }
 
@@ -931,7 +931,7 @@ void call_depthwise_conv_uint8(
 bool can_be_shallow(int alignment, int extent_0, int extent_1) {
     assert(alignment > 0);
     // This is correct: we want to use shallow when the vector size (ie, alignment)
-    // is evenly divisble by the number of channels (ie, extent(0)).
+    // is evenly divisible by the number of channels (ie, extent(0)).
     //
     // To avoid OOB access for tiny buffers, we also check that the fused width
     // is at least one vector wide.
@@ -1887,6 +1887,7 @@ void UpsampleChannelsOp::execute() {
         };                                                          \
     }
 
+// keep-sorted start
 ACCEPT_AND_MUTATE_IMPL(BinaryOp)
 ACCEPT_AND_MUTATE_IMPL(ConcatenationOp)
 ACCEPT_AND_MUTATE_IMPL(ConvOp)
@@ -1896,16 +1897,17 @@ ACCEPT_AND_MUTATE_IMPL(GatherOp)
 ACCEPT_AND_MUTATE_IMPL(L2NormalizationOp)
 ACCEPT_AND_MUTATE_IMPL(PadOp)
 ACCEPT_AND_MUTATE_IMPL(Pool2DOp)
+ACCEPT_AND_MUTATE_IMPL(ReductionOp)
+ACCEPT_AND_MUTATE_IMPL(ReshapeOp)
 ACCEPT_AND_MUTATE_IMPL(ShapeOp)
 ACCEPT_AND_MUTATE_IMPL(SoftmaxOp)
 ACCEPT_AND_MUTATE_IMPL(SpaceDepthOp)
 ACCEPT_AND_MUTATE_IMPL(SplitOp)
-ACCEPT_AND_MUTATE_IMPL(ReductionOp)
-ACCEPT_AND_MUTATE_IMPL(ReshapeOp)
 ACCEPT_AND_MUTATE_IMPL(TileConvFilterOp)
 ACCEPT_AND_MUTATE_IMPL(TransposeOp)
-ACCEPT_AND_MUTATE_IMPL(UpsampleChannelsOp)
 ACCEPT_AND_MUTATE_IMPL(UnaryOp)
+ACCEPT_AND_MUTATE_IMPL(UpsampleChannelsOp)
+// keep-sorted end
 
 ACCEPT_AND_MUTATE_IMPL(OpGroup)
 

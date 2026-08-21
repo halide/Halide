@@ -21,8 +21,10 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
     if (max_info.bounds.is_single_point()) {
         // This is possible when, for example, the largest number in the type
         // that satisfies the alignment of the left-hand-side is smaller than
-        // the min value of the right-hand-side.
-        return make_const(op->type, max_info.bounds.min, nullptr);
+        // the min value of the right-hand-side. Reinferring the info can
+        // potentially give us something tighter than what was computed above if
+        // it's a large uint64.
+        return make_const(op->type, max_info.bounds.min, info);
     }
 
     auto strip_likely = [](const Expr &e) {
@@ -65,10 +67,10 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
         return rewrite.result;
     }
 
+    // Cases where one side dominates. All of these must reduce to a or b in the
+    // RHS for ExprInfo to update correctly.
     if (EVAL_IN_LAMBDA  //
         (rewrite(max(x, x), a) ||
-         rewrite(max(c0, c1), fold(max(c0, c1))) ||
-         // Cases where one side dominates:
          rewrite(max(x, c0), b, is_max_value(c0)) ||
          rewrite(max(x, c0), a, is_min_value(c0)) ||
          rewrite(max((x / c0) * c0, x), b, c0 > 0) ||
@@ -148,16 +150,17 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
             // than just applying max to two constant intervals.
             if (rewrite.result.same_as(a)) {
                 info->intersect(a_info);
-            } else if (rewrite.result.same_as(b)) {
+            } else {
+                internal_assert(rewrite.result.same_as(b));
                 info->intersect(b_info);
             }
         }
-
         return rewrite.result;
     }
 
     if (EVAL_IN_LAMBDA  //
-        (rewrite(max(max(x, c0), c1), max(x, fold(max(c0, c1)))) ||
+        (rewrite(max(c0, c1), fold(max(c0, c1))) ||
+         rewrite(max(max(x, c0), c1), max(x, fold(max(c0, c1)))) ||
          rewrite(max(max(x, c0), y), max(max(x, y), c0)) ||
          rewrite(max(max(x, y), max(x, z)), max(max(y, z), x)) ||
          rewrite(max(max(y, x), max(x, z)), max(max(y, z), x)) ||
@@ -201,6 +204,7 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
          rewrite(max(z, select(x, y, min(z, w))), select(x, max(z, y), z)) ||
 
          rewrite(max(select(x, y, z), select(x, w, u)), select(x, max(y, w), max(z, u))) ||
+         rewrite(max(select(x, y, z), select(x, w, u) / c0), select(x, max(y, w / c0), max(z, u / c0))) ||
          rewrite(max(select(x, max(z, y), w), z), max(select(x, y, w), z)) ||
          rewrite(max(select(x, max(z, y), w), y), max(select(x, z, w), y)) ||
          rewrite(max(select(x, w, max(z, y)), z), max(select(x, w, y), z)) ||
@@ -212,9 +216,12 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
          rewrite(max(slice(x, c0, c1, c2), slice(y, c0, c1, c2)), slice(max(x, y), c0, c1, c2), c2 > 1 && lanes_of(x) == lanes_of(y)) ||
          rewrite(max(slice(x, c0, c1, c2), max(slice(y, c0, c1, c2), z)), max(slice(max(x, y), c0, c1, c2), z), c2 > 1 && lanes_of(x) == lanes_of(y)) ||
          rewrite(max(slice(x, c0, c1, c2), max(z, slice(y, c0, c1, c2))), max(slice(max(x, y), c0, c1, c2), z), c2 > 1 && lanes_of(x) == lanes_of(y)) ||
+         rewrite(max(transpose(x, c0), transpose(y, c0)), transpose(max(x, y), c0)) ||
 
          (no_overflow(op->type) &&
-          (rewrite(max(max(x, y) + c0, x), max(x, y + c0), c0 < 0) ||
+          (rewrite(max(min(x, c0), min(y, c1) + c2), min(max(x, y + c2), c0), c0 == c1 + c2) ||
+
+           rewrite(max(max(x, y) + c0, x), max(x, y + c0), c0 < 0) ||
            rewrite(max(max(x, y) + c0, x), max(x, y) + c0, c0 > 0) ||
            rewrite(max(max(y, x) + c0, x), max(y + c0, x), c0 < 0) ||
            rewrite(max(max(y, x) + c0, x), max(y, x) + c0, c0 > 0) ||

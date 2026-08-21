@@ -1,7 +1,7 @@
 import halide as hl
-
-from simplepy_generator import SimplePy
+import numpy as np
 import simplecpp_pystub  # noqa: F401 - needed for create_callable_from_generator("simplecpp") to work
+from simplepy_generator import SimplePy
 
 
 def test_callable():
@@ -169,6 +169,92 @@ def test_simple(callable_factory):
         assert False, "Did not see expected exception!"
 
 
+def test_callable_buffer_conventions():
+    # Make a generator that echoes the extents and strides of its input buffer
+    # to two output buffers.
+    @hl.generator(name="echo_dims")
+    class EchoDims:
+        input = hl.InputBuffer(hl.Int(32), 3)
+        output_extents = hl.OutputBuffer(hl.Int(32), 1)
+        output_strides = hl.OutputBuffer(hl.Int(32), 1)
+
+        def generate(self):
+            g = self
+            # Relax dim(0).stride == 1 constraint so that we can echo arbitrary strides.
+            g.input.dim(0).set_stride(hl.Expr())
+            d = hl.Var("d")
+            g.output_extents[d] = hl.mux(
+                d,
+                [
+                    g.input.dim(0).extent(),
+                    g.input.dim(1).extent(),
+                    g.input.dim(2).extent(),
+                ],
+            )
+            g.output_strides[d] = hl.mux(
+                d,
+                [
+                    g.input.dim(0).stride(),
+                    g.input.dim(1).stride(),
+                    g.input.dim(2).stride(),
+                ],
+            )
+
+    with hl.GeneratorContext(hl.Target("host-debug")):
+        echo_dims = EchoDims()
+        echo_dims_callable = echo_dims.compile_to_callable()
+
+        output_extents = hl.Buffer(hl.Int(32), [3])
+        output_strides = hl.Buffer(hl.Int(32), [3])
+
+        # Test that buffer protocol arguments always reverse axes, regardless of storage order.
+
+        # C-contiguous input (numpy's default order; order="C" is superfluous).
+        input_c = np.zeros((16, 12, 3), dtype=np.int32, order="C")
+        echo_dims_callable(input_c, output_extents, output_strides)
+        assert output_extents[0] == 3
+        assert output_extents[1] == 12
+        assert output_extents[2] == 16
+        assert output_strides[0] == 1
+        assert output_strides[1] == 3
+        assert output_strides[2] == 36
+
+        # F-contiguous input reverses axes too.
+        input_f = np.zeros((16, 12, 3), dtype=np.int32, order="F")
+        echo_dims_callable(input_f, output_extents, output_strides)
+        assert output_extents[0] == 3
+        assert output_extents[1] == 12
+        assert output_extents[2] == 16
+        assert output_strides[0] == 192
+        assert output_strides[1] == 16
+        assert output_strides[2] == 1
+
+        # Non-contiguous inputs are allowed.
+        # input_noncontig has shape (12, 16, 3) and strides (0, 36, 1) (in elements).
+        # Halide will reverse axes.
+        input_noncontig = np.transpose(np.zeros((16, 12, 3), dtype=np.int32), (1, 0, 2))
+        echo_dims_callable(input_noncontig, output_extents, output_strides)
+        assert output_extents[0] == 3
+        assert output_extents[1] == 16
+        assert output_extents[2] == 12
+        assert output_strides[0] == 1
+        assert output_strides[1] == 36
+        assert output_strides[2] == 3
+
+        # Negative strides are allowed.
+        # Halide reverses axes.
+        input_neg = np.zeros((16, 12, 3), dtype=np.int32)[::-1, :, :]
+        echo_dims_callable(input_neg, output_extents, output_strides)
+        assert output_extents[0] == 3
+        assert output_extents[1] == 12
+        assert output_extents[2] == 16
+        # Reversing axis 0 makes its stride negative; after axis reversal that
+        # axis becomes Halide's last dimension (dim 2).
+        assert output_strides[0] == 1
+        assert output_strides[1] == 3
+        assert output_strides[2] == -36
+
+
 if __name__ == "__main__":
     # test_callable()
 
@@ -182,3 +268,5 @@ if __name__ == "__main__":
 
     test_simple(via_simplecpp_pystub)
     test_simple(via_simplepy)
+
+    test_callable_buffer_conventions()

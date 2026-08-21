@@ -11,15 +11,6 @@
 # uses that object file to actually run the pipeline. This means that
 # compiling this code is a multi-step process.
 
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_10_aot_compilation_generate
-# in a shell with the current directory at python_bindings/
-
-# This will generate a file lesson_10_halide.py.cpp that still needs
-# to be compiled. Use
-#    make test_tutorial_lesson_10_aot_compilation_run
-# to generate and run a Python module called "lesson_10_halide".
-
 # The benefits of this approach are that the final program:
 # - Doesn't do any jit compilation at runtime, so it's fast.
 # - Doesn't depend on libHalide at all, so it's a small, easy-to-deploy binary.

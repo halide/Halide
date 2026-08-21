@@ -234,15 +234,14 @@ public:
         writes.push_back(Store::make(key_name,
                                      StringImm::make(std::to_string(top_level_name.size()) + ":" + top_level_name +
                                                      std::to_string(function_name.size()) + ":" + function_name),
-                                     (index / Handle().bytes()), Parameter(), const_true(), ModulusRemainder()));
+                                     (index / Handle().bytes())));
         size_t alignment = Handle().bytes();
         index += Handle().bytes();
 
         // Halide compilation is not threadsafe anyway...
         writes.push_back(Store::make(key_name,
                                      memoize_instance,
-                                     (index / Int(32).bytes()),
-                                     Parameter(), const_true(), ModulusRemainder()));
+                                     (index / Int(32).bytes())));
         alignment += 4;
         index += 4;
 
@@ -250,7 +249,7 @@ public:
         if (needed_alignment > 1) {
             while (alignment % needed_alignment) {
                 writes.push_back(Store::make(key_name, Cast::make(UInt(8), 0),
-                                             index, Parameter(), const_true(), ModulusRemainder()));
+                                             index));
                 index = index + 1;
                 alignment++;
             }
@@ -259,8 +258,7 @@ public:
         for (const ConstDependencyKeyInfoPair &i : dependencies.dependency_info) {
             writes.push_back(Store::make(key_name,
                                          i.second.value_expr,
-                                         (index / i.second.size_expr),
-                                         Parameter(), const_true(), ModulusRemainder()));
+                                         (index / i.second.size_expr)));
             index += i.second.size_expr;
         }
         Stmt blocks = Block::make(writes);
@@ -412,7 +410,7 @@ private:
                 Allocate::make(cache_key_name, UInt(8), MemoryType::Stack, {key_info.key_size()},
                                const_true(), generate_key);
 
-            return Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, cache_key_alloc);
+            return op->with(op->bounds, op->condition, cache_key_alloc);
         } else {
             return IRMutator::visit(op);
         }
@@ -450,7 +448,7 @@ private:
                 body = Block::make(body, cache_store_back);
                 body = IfThenElse::make(cache_miss, body);
             }
-            return ProducerConsumer::make(op->name, op->is_producer, body);
+            return op->with(body);
         } else {
             return IRMutator::visit(op);
         }
@@ -470,7 +468,7 @@ Stmt inject_memoization(const Stmt &s, const std::map<std::string, Function> &en
 
     InjectMemoization injector(env, memoize_instance++, name, outputs);
 
-    return injector.mutate(s);
+    return injector(s);
 }
 
 namespace {
@@ -552,7 +550,7 @@ private:
 
             pending_memoized_allocations.erase(innermost_realization_name);
 
-            return LetStmt::make(let->name, value, body);
+            return let->with(value, body);
         } else {
             return IRMutator::visit(let);
         }
@@ -563,9 +561,7 @@ private:
 
 Stmt rewrite_memoized_allocations(const Stmt &s, const std::map<std::string, Function> &env) {
 
-    RewriteMemoizedAllocations rewriter(env);
-
-    return rewriter.mutate(s);
+    return RewriteMemoizedAllocations(env)(s);
 }
 
 }  // namespace Internal

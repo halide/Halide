@@ -7,6 +7,7 @@ add_library(the_sort_function MODULE the_sort_function.c)
 target_link_libraries(the_sort_function PRIVATE Halide::Runtime)
 
 set(tests
+    # keep-sorted start
     addconstant_test.py
     atomics.py
     autodiff.py
@@ -26,22 +27,24 @@ set(tests
     pystub.py
     rdom.py
     realize_warnings.py
+    runtime_prefixes.py
     serialization.py
     target.py
     tuple_select.py
     type.py
     user_context_test.py
     var.py
-    )
+    # keep-sorted end
+)
 
 set(PY_GENERATORS "${CMAKE_CURRENT_SOURCE_DIR}/../generators")
 
-set(PYPATH_addconstant_test           "$<TARGET_FILE_DIR:py_aot_addconstantcpp>")
-set(PYPATH_bit_test                   "$<TARGET_FILE_DIR:py_aot_bitcpp>")
-set(PYPATH_callable                   "$<TARGET_FILE_DIR:py_gen_simplecpp_pystub>;${PY_GENERATORS}")
-set(PYPATH_multi_method_module_test   "$<TARGET_FILE_DIR:pyext_multi_method_module>")
-set(PYPATH_pystub                     "$<TARGET_FILE_DIR:py_gen_bitcpp_pystub>;${PY_GENERATORS}")
-set(PYPATH_user_context_test          "$<TARGET_FILE_DIR:py_aot_user_context>;${PY_GENERATORS}")
+set(PYPATH_addconstant_test "$<TARGET_FILE_DIR:py_aot_addconstantcpp>")
+set(PYPATH_bit_test "$<TARGET_FILE_DIR:py_aot_bitcpp>")
+set(PYPATH_callable "$<TARGET_FILE_DIR:py_gen_simplecpp_pystub>;${PY_GENERATORS}")
+set(PYPATH_multi_method_module_test "$<TARGET_FILE_DIR:pyext_multi_method_module>")
+set(PYPATH_pystub "$<TARGET_FILE_DIR:py_gen_bitcpp_pystub>;${PY_GENERATORS}")
+set(PYPATH_user_context_test "$<TARGET_FILE_DIR:py_aot_user_context>;${PY_GENERATORS}")
 
 foreach (test IN LISTS tests)
     cmake_path(GET test STEM test_name)

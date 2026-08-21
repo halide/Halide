@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
         f.store_root().compute_at(g, y).fold_storage(y, 3).async();
         g.specialize(g.output_buffer().width() > 4).vectorize(x, 4);
 
-        // Make sure that explict storage folding happens, even if
+        // Make sure that explicit storage folding happens, even if
         // there are multiple producers of the folded buffer. Note the
         // automatic storage folding refused to fold this (the case
         // above).

@@ -166,12 +166,12 @@ struct ScheduleFeatures {
         return 3;
     }
 
-    double &operator[](int idx) {
-        return ((double *)(this))[idx];
+    double &operator[](size_t idx) {
+        return reinterpret_cast<double *>(this)[idx];
     }
 
-    double operator[](int idx) const {
-        return ((const double *)(this))[idx];
+    double operator[](size_t idx) const {
+        return reinterpret_cast<const double *>(this)[idx];
     }
 
     // The number of times storage for this stage is allocated. The
@@ -247,7 +247,7 @@ struct ScheduleFeatures {
     // For inlined Funcs, how many calls are made to this Func total.
     double inlined_calls = 0;
 
-    // Number of unique bytes and unique continguous segments of
+    // Number of unique bytes and unique contiguous segments of
     // memory loaded from all inputs over a single trip of the loop
     // containing the allocation site.
     double unique_bytes_read_per_realization = 0;

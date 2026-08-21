@@ -191,6 +191,28 @@ public:
     Func rfactor(const RVar &r, const Var &v);
     // @}
 
+    /** Immediately inline direct calls to each of the given Funcs into this
+     * stage's definition. The Funcs are inlined in dependency order regardless
+     * of the order they are passed, so if one inlined Func's body calls another,
+     * both are fully folded in.
+     *
+     * Unlike compute_inline(), which merely marks a Func to be inlined during
+     * lowering, eager_inline() performs the substitution now, at schedule time,
+     * rewriting only this stage's definition in place. This is useful to surface
+     * structure that other schedule-time directives (e.g. rfactor()) need to see.
+     *
+     * Each inlined Func must be inlinable: a pure Func (no update or extern
+     * definition) with no specializations, and with a schedule compatible with
+     * inlining (as for compute_inline()). The inlined Funcs are otherwise
+     * unchanged; only this stage's calls to them are replaced. */
+    // @{
+    Stage &eager_inline(const std::vector<Func> &fs);
+
+    template<typename... Args>
+    HALIDE_NO_USER_CODE_INLINE std::enable_if_t<Internal::all_are_convertible<Func, Args...>::value, Stage &>
+    eager_inline(const Func &first, Args &&...args);
+    // @}
+
     /** Schedule the iteration over this stage to be fused with another
      * stage 's' from outermost loop to a given LoopLevel. 'this' stage will
      * be computed AFTER 's' in the innermost fused dimension. There should not
@@ -461,7 +483,32 @@ public:
     Stage &allow_race_conditions();
     Stage &atomic(bool override_associativity_test = false);
 
+    /** Use non-temporal (streaming) stores for writes done by this Stage. On
+     * targets that require it, Halide emits a fence immediately after this
+     * Stage's production to ensure the streamed values are visible to
+     * whatever reads them next. Only legal on a Stage all of whose RVars (if
+     * any) are pure, i.e. already proven safe to parallelize: a Stage with a
+     * genuine loop-carried self-dependency could otherwise observe data it
+     * streamed earlier in the same Stage, before the fence. It is a user
+     * error to call this on a Stage that doesn't meet this condition. */
+    Stage &stream_stores();
+
+    /** Use non-temporal (streaming) loads for every direct read this Stage
+     * makes of another Func or external buffer (e.g. an ImageParam). This
+     * is a hint to keep data that is only read once from displacing reusable
+     * data from the cache. */
+    Stage &stream_loads();
+
+    /** Use non-temporal (streaming) loads for this Stage's direct reads of
+     * the named Funcs. It is a user error to name this Stage's own Func
+     * (a self-load can't be streamed). */
+    Stage &stream_loads(const std::vector<Func> &funcs);
+
     Stage &hexagon(const VarOrRVar &x = Var::outermost());
+
+    Stage &sme_streaming(const VarOrRVar &x = Var::outermost());
+
+    Stage &host(const VarOrRVar &x = Var::outermost());
 
     Stage &prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                     PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
@@ -1107,7 +1154,7 @@ public:
      * debugging.
      *
      * If filename ends in ".tif" or ".tiff" (case insensitive) the file
-     * is in TIFF format and can be read by standard tools. Oherwise, the
+     * is in TIFF format and can be read by standard tools. Otherwise, the
      * file format is as follows:
      *
      * All data is in the byte-order of the target platform.  First, a
@@ -1279,10 +1326,14 @@ public:
     }
     // @}
 
-    /** Creates and returns a new identity Func that wraps this Func. During
-     * compilation, Halide replaces all calls to this Func done by 'f'
-     * with calls to the wrapper. If this Func is already wrapped for
-     * use in 'f', will return the existing wrapper.
+    /** Creates and returns a new identity Func that wraps this Func, and
+     * immediately rewrites 'f' to call the wrapper instead of this Func. If
+     * this Func is already wrapped for use in 'f', returns the existing wrapper
+     * without rewriting anything again.
+     *
+     * The rewrite is eager, so it only affects the definitions of 'f' that
+     * exist at the time of the call. 'f' is frozen afterwards: adding further
+     * definitions to it is an error, since they would not be wrapped.
      *
      * For example, g.in(f) would rewrite a pipeline like this:
      \code
@@ -1347,6 +1398,12 @@ public:
        for x:
          g(x, y) = f(x, y)
      \endcode
+     * If a Func passed to in() does not directly call this Func, in() acts
+     * transitively: the Func graph is searched downward from each argument,
+     * and every direct caller of this Func found along the way is wrapped.
+     * This is useful when intermediate Funcs are anonymous and not held by
+     * the user (e.g. a pyramid built via helper functions).
+     *
      * using Func::in(), we can write:
      \code
      f(x, y) = x + y;
@@ -1373,16 +1430,16 @@ public:
      * this will throw an error. */
     Func in(const std::vector<Func> &fs);
 
-    /** Create and return a global identity wrapper, which wraps all calls to
-     * this Func by any other Func. If a global wrapper already exists,
-     * returns it. The global identity wrapper is only used by callers for
-     * which no custom wrapper has been specified.
-     */
+    /** Create and return a global identity wrapper, and rewrite all consumers
+     * of this Func -- both those defined before this call and those defined
+     * after -- to call the wrapper instead. Consumers with a custom wrapper of
+     * this Func are unaffected. If a global wrapper already exists, returns it. */
     Func in();
 
     /** Similar to \ref Func::in; however, instead of replacing the call to
      * this Func with an identity Func that refers to it, this replaces the
-     * call with a clone of this Func.
+     * call with a clone of this Func. Like in(), the rewrite is eager and
+     * freezes the consumers it rewrites.
      *
      * For example, f.clone_in(g) would rewrite a pipeline like this:
      \code
@@ -1398,6 +1455,31 @@ public:
      h(x, y) = f(x, y) - 3;
      \endcode
      *
+     * As with Func::in(), clone_in() acts transitively: any Func in 'f'/'fs'
+     * that does not directly call this Func is replaced by the set of direct
+     * callers reachable from it along paths that lead to this Func. Only
+     * this Func is cloned; the intermediate Funcs along the path are not.
+     *
+     * For example, given a pipeline that uses sum() (which constructs an
+     * anonymous inner Func to perform the reduction):
+     \code
+     RDom r(0, 5);
+     f(x, y) = x + y;
+     g(x, y) = sum(f(x + r, y));    // g calls f via an anonymous Func from sum()
+     h(x, y) = f(x, y) - 1;         // h calls f directly
+     \endcode
+     * f.clone_in(g) clones f at the anonymous reduction Func inside g but does
+     * not clone the reduction Func itself. It is equivalent to this:
+     \code
+     RDom r(0, 5);
+     f(x, y) = x + y;
+     f_clone(x, y) = x + y;
+     g(x, y) = sum(f_clone(x + r, y)); // the summation calls the clone
+     h(x, y) = f(x, y) - 1;            // unrelated uses of f are untouched
+     \endcode
+     * If the anonymous reduction Func had other consumers besides g, they
+     * would also see the rewrite from f to f_clone — only this Func is
+     * cloned, not the intermediates.
      */
     //@{
     Func clone_in(const Func &f);
@@ -1989,6 +2071,16 @@ public:
      * Hexagon, that loop is executed on a Hexagon DSP. */
     Func &hexagon(const VarOrRVar &x = Var::outermost());
 
+    /** Schedule for aarch64 SME Streaming Mode.
+     * When a loop is marked with sme_streaming(), that loop including its inner loops
+     * are executed in Streaming mode. */
+    Func &sme_streaming(const VarOrRVar &x = Var::outermost());
+
+    /** Schedule a loop for execution on the host. This can be used inside an
+     * device loop to prevent nested inner loops from being executed on device.
+     * Currently, supported only in sme_streaming() loop. */
+    Func &host(const VarOrRVar &x = Var::outermost());
+
     /** Prefetch data written to or read from a Func or an ImageParam by a
      * subsequent loop iteration, at an optionally specified iteration offset. You may specify
      * specification of different vars for the location of the prefetch() instruction
@@ -2561,6 +2653,71 @@ public:
      */
     Func &compute_inline();
 
+    /** Change the type at which this Func computes and stores its values,
+     * subject to a reduction-aware safety check.
+     *
+     * This splits the Func in two: a new intermediate Func (returned) that
+     * copies this Func's definitions but accumulates at the requested type `t`
+     * (with the appropriate casts inserted, preferring integer forms such as
+     * widening_mul over float round-trips), and this Func, which is rewritten in
+     * place into an inline wrapper that casts the intermediate's result back to
+     * the original type. Every existing consumer therefore keeps seeing the
+     * original type, while the returned intermediate can be scheduled to exploit
+     * the new type (e.g. an Int(32) accumulator eligible for dot-product
+     * instructions). Schedule the returned Func to control the retyped
+     * computation.
+     *
+     * The change is validated with the bounds machinery: for an integer or
+     * floating-point target, change_type() proves the accumulation cannot
+     * overflow (or, for a float target, lose precision) by combining the
+     * per-term value range with the reduction extent. A float target is
+     * checked against the largest integer it can represent exactly (e.g. 2048
+     * for float16), not its full dynamic range, so an integer accumulation
+     * retyped to it stays exact rather than merely finite. If it can only be
+     * guaranteed under a runtime precondition (e.g. the RDom extent isn't too
+     * wide), that precondition is injected into the pipeline's assertion block
+     * (and removed by the no_asserts target feature). If safety cannot be
+     * established, change_type() errors unless `unsafe` is true, which bypasses
+     * the check entirely.
+     *
+     * Translating a min/max identity that does not round-trip through `t`
+     * additionally requires the first update to be dense and unpredicated. Its
+     * reduction extents must be statically positive or satisfy an injected
+     * runtime precondition that they are positive.
+     *
+     * Currently supports single-output Funcs whose update definitions use a
+     * binary operator with one operand that is a direct call to the accumulator
+     * and one self-reference-free term. Difference reductions must have the
+     * accumulator as the left operand. */
+    Func change_type(Type t, bool unsafe = false);
+
+    /** Immediately inline direct calls to each of the given Funcs into this
+     * Func's initial (pure) definition. The Funcs are inlined in dependency
+     * order regardless of the order they are passed, so if one inlined Func's
+     * body calls another, both are fully folded in. This is shorthand for
+     * update(0)-style scheduling: to inline into an update definition, call
+     * eager_inline() on that stage, e.g. f.update(n).eager_inline(...).
+     *
+     * Unlike compute_inline(), which merely marks a Func to be inlined during
+     * lowering, eager_inline() performs the substitution now, at schedule time,
+     * rewriting the definition in place. This is useful to surface structure that
+     * other schedule-time directives need to see.
+     *
+     * Each inlined Func must be inlinable: a pure Func (no update or extern
+     * definition) with no specializations, and with a schedule compatible with
+     * inlining (as for compute_inline()). The inlined Funcs are otherwise
+     * unchanged; only this definition's calls to them are replaced. */
+    // @{
+    Func &eager_inline(const std::vector<Func> &fs);
+
+    template<typename... Args>
+    HALIDE_NO_USER_CODE_INLINE std::enable_if_t<Internal::all_are_convertible<Func, Args...>::value, Func &>
+    eager_inline(const Func &first, Args &&...args) {
+        std::vector<Func> collected_args{first, std::forward<Args>(args)...};
+        return eager_inline(collected_args);
+    }
+    // @}
+
     /** Get a handle on an update step for the purposes of scheduling
      * it. */
     Stage update(int idx = 0);
@@ -2570,6 +2727,25 @@ public:
      * in global vs shared vs local on the GPU. See the documentation
      * on MemoryType for more detail. */
     Func &store_in(MemoryType memory_type);
+
+    /** Use non-temporal (streaming) loads for every direct read this Func's
+     * pure (initial) definition makes of another Func. Equivalent to calling
+     * stream_loads() on Stage 0; see \ref Stage::stream_loads. To stream the
+     * loads of an update definition, call stream_loads() on the Stage returned
+     * by \ref Func::update instead. */
+    Func &stream_loads();
+
+    /** Use non-temporal (streaming) loads for this Func's pure (initial)
+     * definition's direct reads of the named Funcs. Equivalent to calling
+     * stream_loads(funcs) on Stage 0; see \ref Stage::stream_loads. */
+    Func &stream_loads(const std::vector<Func> &funcs);
+
+    /** Use non-temporal (streaming) stores for writes done by this Func's
+     * pure (initial) definition. Equivalent to calling stream_stores() on
+     * Stage 0; see \ref Stage::stream_stores. To stream the stores of an
+     * update definition, call stream_stores() on the Stage returned by
+     * \ref Func::update instead. */
+    Func &stream_stores();
 
     /** Trace all loads from this Func by emitting calls to
      * halide_trace. If the Func is inlined, this has no
@@ -2640,6 +2816,13 @@ public:
         return Stage(*this).get_schedule();
     }
 };
+
+template<typename... Args>
+HALIDE_NO_USER_CODE_INLINE std::enable_if_t<Internal::all_are_convertible<Func, Args...>::value, Stage &>
+Stage::eager_inline(const Func &first, Args &&...args) {
+    std::vector<Func> collected_args{first, std::forward<Args>(args)...};
+    return eager_inline(collected_args);
+}
 
 namespace Internal {
 
