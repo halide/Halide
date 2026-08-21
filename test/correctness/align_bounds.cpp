@@ -22,6 +22,11 @@ int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
     return 0;
 }
 
+bool error_occurred;
+void my_error_handler(JITUserContext *user_context, const char *msg) {
+    error_occurred = true;
+}
+
 int main(int argc, char **argv) {
     // LLVM 21 calls getFixedValue() on scalable TypeSize objects in the
     // AArch64 backend, triggering an assertion. Fixed in LLVM 22 by:
@@ -249,20 +254,16 @@ int main(int argc, char **argv) {
         f.align_bounds(x, 8, 4).trace_realizations();
 
         f.jit_handlers().custom_trace = my_trace;
+        f.jit_handlers().custom_error = my_error_handler;
+        error_occurred = false;
 
         // A fixed buffer with min = 0, extent = 10. 0 is not congruent to 4
         // mod 8, and 10 is not a multiple of 8, so this violates
         // align_bounds(x, 8, 4), and can't be resized to fit.
         Buffer<int> result(10);
+        f.realize(result);
 
-        bool caught_error = false;
-        try {
-            f.realize(result);
-        } catch (const Halide::RuntimeError &) {
-            caught_error = true;
-        }
-
-        if (!caught_error) {
+        if (!error_occurred) {
             printf("%d: Expected an error due to align_bounds being "
                    "violated by the output buffer's min/extent, but the "
                    "pipeline ran and traced bounds [%d, %d)\n",
