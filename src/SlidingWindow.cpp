@@ -1229,37 +1229,33 @@ class SlidingWindow : public IRMutator {
             // simultaneously live. Tell it the window width we just derived.
             const SlideDecision &d = slider.decision;
             if (d.slid()) {
-                // An upper bound, not the exact width. The window spans the
-                // loops the dimension is split across, so its width is often
-                // written in terms of their bounds rather than as a literal.
-                // Erring large just folds to a larger power of two.
-                // The window spans the loops the dimension was split across,
-                // What has to be live is everything the consumer asks for
-                // this iteration together with everything the producer writes
-                // this iteration, which are not the same thing. Sliding
-                // computes from where the previous iteration stopped, and if
-                // the region required jumps rather than stepping - which a
-                // select in the consumer's index will do - the producer
-                // covers the gap, and writes a wider range than is asked for.
-                // Folding to the width asked for would alias those writes
-                // onto each other.
+                // Tell storage folding how wide the window is. What has to
+                // be live is everything the consumer asks for this iteration
+                // together with everything the producer writes this
+                // iteration, which are not the same thing: sliding computes
+                // from where the previous iteration stopped, so if the region
+                // required jumps rather than stepping - which a select in the
+                // consumer's index will do - the producer covers the gap and
+                // writes a wider range than is asked for. Take the span of
+                // the two. The sliver has to be the steady-state one, from
+                // before the warm-up select was folded into it, because
+                // interval arithmetic can't see through that select.
                 //
-                // An upper bound, not the exact width. Two forms of the same
-                // difference are worth trying, because they fail for
-                // different reasons. Written in terms of the dimension, the
-                // two ends of the window cancel against each other, which is
-                // what a consumer that clamps its index needs. Written in
-                // terms of the loops the dimension was split across, it
-                // reaches the constants in their bounds. Take whichever gives
-                // a bound, or the tighter of the two.
-                // Sliding keeps one end of the window fixed and moves the
-                // other, so one of the two ranges contains the other and the
-                // wider of them is the span. Bound them separately rather
-                // than taking a min and a max of the ends: the ends move
-                // together, and pulling them apart loses that.
-                // The ends move together, and a promise the two of them
-                // carry about staying in range is not something the
-                // simplifier can cancel across, so drop those first.
+                // The two ends move together, and the promises they carry
+                // about staying in range are not something the simplifier can
+                // cancel across, so drop those first. Left in, a difference
+                // that is plainly one bounds to the whole extent and nothing
+                // folds at all.
+                //
+                // An upper bound is enough - erring large just folds to a
+                // larger power of two. Two forms of the same difference are
+                // worth trying, because they fail for different reasons.
+                // Written in terms of the dimension, the two ends cancel
+                // against each other, which is what a consumer that clamps
+                // its index needs. Written in terms of the loops the
+                // dimension was split across, it reaches the constants in
+                // their bounds. Take whichever gives a bound, or the tighter
+                // of the two.
                 Expr lo = remove_promises(min(d.old_bounds.min, d.steady_bounds.min));
                 Expr hi = remove_promises(max(d.old_bounds.max, d.steady_bounds.max));
                 Expr raw = hi - lo + 1;
