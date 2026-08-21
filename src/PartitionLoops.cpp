@@ -919,14 +919,8 @@ class RenormalizeGPULoops : public IRMutator {
             inner = f->with(f->min, f->max, inner);
             return mutate(inner);
         } else if (a && in_gpu_loop && !in_thread_loop) {
-            // A tensor core fragment keeps one extent per dimension of the
-            // tile until the accesses to it have been recognized, so an
-            // allocation here does not necessarily have just the one.
-            bool uses_extent = false;
-            for (const Expr &e : a->extents) {
-                uses_extent |= expr_uses_var(e, op->name);
-            }
-            if (uses_extent ||
+            internal_assert(a->extents.size() == 1);
+            if (expr_uses_var(a->extents[0], op->name) ||
                 expr_uses_var(a->condition, op->name) ||
                 (a->new_expr.defined() && expr_uses_var(a->new_expr, op->name))) {
                 // This var is used in the allocation's extent, condition, or
