@@ -67,7 +67,7 @@ jobs:
           LLVM_VER=$(uv export --group '${{ matrix.uv_group }}' --no-emit-project \
             | awk -F'==' '/^halide-llvm==/ { gsub(/ .*/, "", $2); print $2 }')
 
-          uv sync --python '${{ matrix.python }}' --group ci-base --no-install-project
+          uv sync --frozen --python '${{ matrix.python }}' --group ci-base --no-install-workspace
           uv pip install --python-platform i686-pc-windows-msvc --only-binary :all: \
             --extra-index-url https://pypi.halide-lang.org/simple/ \
             "halide-llvm==${LLVM_VER}"
