@@ -16,6 +16,21 @@ namespace {
 
 using namespace std;
 
+// AMX tile intrinsics (see ExtractTileOperations.cpp) are opaque, fixed-shape
+// x86 hardware tile operations, not per-lane-parallel vector ops: their
+// "lanes" don't correspond to independently sliceable SIMD lanes, so they
+// can't be split up like an ordinary wide vector Store/Call.
+bool is_atomic_amx_tile_call(const Expr &e) {
+    const Call *call = e.as<Call>();
+    if (!call) {
+        return false;
+    }
+    return call->name == "tile_matmul" ||
+           call->name == "tile_load" ||
+           call->name == "tile_zero" ||
+           call->name == "tile_store";
+}
+
 int max_lanes_for_device(DeviceAPI api, int parent_max_lanes) {
     // The environment variable below (HL_FORCE_VECTOR_LEGALIZATION) is here solely for testing purposes.
     // It is useful to "stress-test" this lowering pass by forcing a shorter maximal vector size across
@@ -129,7 +144,10 @@ class LiftExceedingVectors : public IRMutator {
                 }
                 const Expr &arg = op->args[i];
                 if (may_extract) {
-                    internal_assert(arg.type().lanes() == op->type.lanes());
+                    // Args need not share the call's own lane count: e.g. AMX
+                    // tile intrinsics like tile_matmul mix scalar tile-shape
+                    // params, operand tiles, and an accumulator that are all
+                    // different widths by design.
                     Expr mutated = mutate(arg);
                     if (!mutated.same_as(arg)) {
                         changed = true;
@@ -240,7 +258,8 @@ class LegalizeVectors : public IRMutator {
     }
 
     Stmt visit(const Store *op) override {
-        bool exceeds_lanecount = op->index.type().lanes() > max_lanes;
+        bool exceeds_lanecount = op->index.type().lanes() > max_lanes &&
+                                 !is_atomic_amx_tile_call(op->value);
         if (exceeds_lanecount) {
             // Split up in multiple stores
             int num_vecs = (op->index.type().lanes() + max_lanes - 1) / max_lanes;
