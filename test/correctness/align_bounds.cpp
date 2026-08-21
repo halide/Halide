@@ -229,6 +229,48 @@ int main(int argc, char **argv) {
         g.realize({1024});
     }
 
+    // Applying align_bounds directly to an output Func constrains the
+    // region computed, but the output buffer realized into has fixed
+    // min/extent that can't be silently expanded to match (there's no
+    // consumer stage left to only read part of it). If the buffer's
+    // min/extent don't already satisfy the alignment, the pipeline
+    // should error out at runtime instead of writing out of bounds.
+    //
+    // Note that this only bites when realizing into a pre-allocated,
+    // fixed-size buffer. Func::realize(sizes) allocates a fresh buffer via
+    // a bounds query, which over-allocates to fit the aligned region and
+    // hands back a cropped view of just the requested size, so it would
+    // silently accommodate the align_bounds request instead of erroring.
+    {
+        Func f;
+        Var x;
+
+        f(x) = x;
+        f.align_bounds(x, 8, 4).trace_realizations();
+
+        f.jit_handlers().custom_trace = my_trace;
+
+        // A fixed buffer with min = 0, extent = 10. 0 is not congruent to 4
+        // mod 8, and 10 is not a multiple of 8, so this violates
+        // align_bounds(x, 8, 4), and can't be resized to fit.
+        Buffer<int> result(10);
+
+        bool caught_error = false;
+        try {
+            f.realize(result);
+        } catch (const Halide::RuntimeError &e) {
+            caught_error = true;
+        }
+
+        if (!caught_error) {
+            printf("%d: Expected an error due to align_bounds being "
+                   "violated by the output buffer's min/extent, but the "
+                   "pipeline ran and traced bounds [%d, %d)\n",
+                   __LINE__, trace_min, trace_min + trace_extent);
+            return 1;
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }
