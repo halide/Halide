@@ -34,13 +34,14 @@ endif ()
 add_halide_runtime(Halide_PythonRuntime_rt)
 target_link_libraries(Halide_PythonRuntime PRIVATE Halide::Runtime Halide_PythonRuntime_rt)
 
-# Place the module at halide/runtime/ *inside the compiler package's tree* so it
-# is importable as `halide.runtime`. The parent (Halide_Python) builds into
-# `<its binary dir>/$<CONFIG>/halide`; this subdirectory's binary dir is one level
-# deeper, so `../$<CONFIG>/halide/runtime` co-locates the two.
+# Place the module next to the compiler extension in normal CMake builds. The
+# package binary directory is set by python_bindings/CMakeLists.txt.
+if (NOT DEFINED Halide_Python_PACKAGE_BINARY_DIR)
+    set(Halide_Python_PACKAGE_BINARY_DIR "${CMAKE_BINARY_DIR}")
+endif ()
 set_target_properties(Halide_PythonRuntime
     PROPERTIES
-    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/../$<CONFIG>/halide/runtime"
+    LIBRARY_OUTPUT_DIRECTORY "${Halide_Python_PACKAGE_BINARY_DIR}/$<CONFIG>/halide/runtime"
 )
 
 if (Halide_ASAN_ENABLED)

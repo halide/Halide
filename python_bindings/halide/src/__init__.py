@@ -1,50 +1,7 @@
-def _halide_install_dir():
-    # `halide-bin` is only present when this package was built in split mode
-    # (see pyproject.toml's HALIDE_SPLIT_BUILD override); a plain, monolithic
-    # build has no such dependency and bundles everything under this package's
-    # own directory instead, exactly as before the split.
-    try:
-        import halide_bin
-    except ImportError:
-        import os
-
-        return os.path.dirname(__file__)
-    else:
-        return halide_bin.install_dir()
-
-
-def _preload_bundled_halide_library():
-    # Force-load our own copy of the Halide runtime library by absolute path before
-    # importing halide_, so that halide_'s implicit load of the same library (by
-    # soname/module name) resolves to this already-loaded instance instead of
-    # searching LD_LIBRARY_PATH / PATH / the default dynamic linker paths, where a
-    # foreign, incompatible libHalide could shadow ours.
-    # See: https://github.com/halide/Halide/issues/8866
-    import ctypes
-    import os
-
-    from pathlib import Path
-
-    root = Path(_halide_install_dir())
-
-    bin_dir = root / "bin"
-    if hasattr(os, "add_dll_directory") and bin_dir.is_dir():
-        os.add_dll_directory(str(bin_dir))
-
-    for relpath in (
-        "bin/Halide.dll",
-        "lib/libHalide.dylib",
-        "lib64/libHalide.so",
-        "lib/libHalide.so",
-    ):
-        lib_path = root / relpath
-        if lib_path.exists():
-            ctypes.CDLL(str(lib_path))
-            return
-
-
 def install_dir():
-    return _halide_install_dir()
+    from . import bin
+
+    return bin.install_dir()
 
 
 # ---------------------------------------------------------------------------
@@ -111,7 +68,11 @@ def _load_compiler():
         return
     _compiler_loading = True
     try:
-        _preload_bundled_halide_library()
+        # halide-bin owns library discovery and loads its bundled libHalide at
+        # import time, making the binary package the single authority.
+        from importlib import import_module
+
+        import_module(".bin", __name__)
 
         try:
             from . import halide_

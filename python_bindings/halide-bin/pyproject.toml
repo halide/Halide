@@ -40,10 +40,32 @@ minimum-version = "build-system.requires"
 cmake.version = ">=3.28"
 ninja.version = ">=1.11,!=1.13.0"
 cmake.source-dir = "../.."
-wheel.packages = ["src/halide_bin"]
-wheel.install-dir = "halide_bin/data"
+wheel.install-dir = "halide"
 # No Python extension modules in this package -- python-version-agnostic tag.
 wheel.py-api = "py3"
+sdist.inclusion-mode = "explicit"
+sdist.include = [
+  "pyproject.toml",
+  "src/halide/bin/__init__.py",
+  "python_bindings/halide-bin/src/halide/bin/__init__.py",
+]
+
+[tool.scikit-build.sdist.force-include]
+"../../cmake" = "cmake"
+"../../dependencies" = "dependencies"
+"../../packaging" = "packaging"
+"../../python_bindings" = "python_bindings"
+"../../src" = "src"
+"../../tools" = "tools"
+"../../.git_archival.txt" = ".git_archival.txt"
+"../../CMakeLists.txt" = "CMakeLists.txt"
+"../../LICENSE.txt" = "LICENSE.txt"
+"../../README.md" = "README.md"
+"../../vcpkg.json" = "vcpkg.json"
+"../../vcpkg-configuration.json" = "vcpkg-configuration.json"
+
+[tool.scikit-build.wheel.force-include]
+"python_bindings/halide-bin/src/halide/bin/__init__.py" = "halide/bin/__init__.py"
 
 [tool.scikit-build.cmake.define]
 CMAKE_DISABLE_FIND_PACKAGE_JPEG = true
@@ -55,6 +77,7 @@ Halide_WASM_BACKEND = "wabt"
 WITH_PYTHON_BINDINGS = false
 WITH_TESTS = false
 WITH_TUTORIALS = false
+WITH_UTILS = false
 
 ##
 # Don't version libHalide.so/dylib -- wheels are zip files that do
@@ -66,6 +89,10 @@ CMAKE_PLATFORM_NO_VERSIONED_SONAME = true
 if.platform-system = "^win32"
 inherit.cmake.define = "append"
 cmake.define.Halide_WASM_BACKEND = "OFF"
+
+[[tool.scikit-build.overrides]]
+if.from-sdist = true
+cmake.source-dir = "."
 
 [tool.setuptools_scm]
 root = "../.."

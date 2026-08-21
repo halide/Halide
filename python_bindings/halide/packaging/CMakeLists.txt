@@ -12,12 +12,12 @@ if (WITH_PYTHON_BINDINGS)
     # so a libHalide-free halide-runtime wheel can select just this component and
     # still be a complete, importable package.
     install(
-        FILES "${Halide_Python_SOURCE_DIR}/src/halide/__init__.py"
+        FILES "${Halide_Python_SOURCE_DIR}/halide/src/__init__.py"
         DESTINATION "${Halide_INSTALL_PYTHONDIR}"
         COMPONENT Halide_PythonRuntime
     )
     install(
-        DIRECTORY "${Halide_Python_SOURCE_DIR}/src/halide/runtime/"
+        DIRECTORY "${Halide_Python_SOURCE_DIR}/halide-runtime/src/halide/runtime/"
         DESTINATION "${Halide_INSTALL_PYTHONDIR}/runtime"
         COMPONENT Halide_PythonRuntime
         FILES_MATCHING
@@ -26,7 +26,7 @@ if (WITH_PYTHON_BINDINGS)
 
     # The remaining (compiler-side) Python sources.
     install(
-        DIRECTORY "${Halide_Python_SOURCE_DIR}/src/halide/"
+        DIRECTORY "${Halide_Python_SOURCE_DIR}/halide/src/"
         DESTINATION "${Halide_INSTALL_PYTHONDIR}"
         COMPONENT Halide_Python
         FILES_MATCHING
@@ -124,5 +124,7 @@ endif ()
 ##
 
 if (SKBUILD)
-    add_subdirectory(pip)
+    add_subdirectory(
+        "${Halide_Python_SOURCE_DIR}/halide/packaging/cmake" "${CMAKE_CURRENT_BINARY_DIR}/pip"
+    )
 endif ()

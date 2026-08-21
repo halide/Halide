@@ -281,14 +281,14 @@ else ()
 endif ()
 
 configure_package_config_file(
-    common/HalideConfig.cmake HalideConfig.cmake
+    HalideConfig.cmake HalideConfig.cmake
     PATH_VARS Halide_INSTALL_COMPILERDIR
     INSTALL_DESTINATION "${Halide_INSTALL_CMAKEDIR}"
     NO_SET_AND_CHECK_MACRO NO_CHECK_REQUIRED_COMPONENTS_MACRO
 )
 
 configure_package_config_file(
-    common/HalideCompilerConfig.cmake HalideCompilerConfig.cmake
+    HalideCompilerConfig.cmake HalideCompilerConfig.cmake
     PATH_VARS ${extra_paths}
     INSTALL_DESTINATION "${Halide_INSTALL_COMPILERDIR}"
     NO_SET_AND_CHECK_MACRO NO_CHECK_REQUIRED_COMPONENTS_MACRO
@@ -296,7 +296,7 @@ configure_package_config_file(
 
 if (WITH_AUTOSCHEDULERS)
     configure_package_config_file(
-        common/HalideAutoschedulersConfig.cmake HalideAutoschedulersConfig.cmake
+        HalideAutoschedulersConfig.cmake HalideAutoschedulersConfig.cmake
         INSTALL_DESTINATION "${Halide_INSTALL_AUTOSCHEDULERSDIR}"
         NO_SET_AND_CHECK_MACRO NO_CHECK_REQUIRED_COMPONENTS_MACRO
     )
@@ -361,7 +361,10 @@ endif ()
 ##
 
 if (SKBUILD)
-    add_subdirectory(pip)
+    add_subdirectory(
+        "${Halide_SOURCE_DIR}/python_bindings/halide-bin/packaging"
+        "${CMAKE_CURRENT_BINARY_DIR}/pip"
+    )
 endif ()
 
 ##
@@ -376,8 +379,8 @@ set(CPACK_PACKAGE_VERSION_MAJOR ${Halide_VERSION_MAJOR})
 set(CPACK_PACKAGE_VERSION_MINOR ${Halide_VERSION_MINOR})
 set(CPACK_PACKAGE_VERSION_PATCH ${Halide_VERSION_PATCH})
 set(CPACK_VERBATIM_VARIABLES YES)
-set(CPACK_PACKAGE_DESCRIPTION_FILE "${CMAKE_CURRENT_LIST_DIR}/common/Description.txt")
-set(CPACK_RESOURCE_FILE_WELCOME "${CMAKE_CURRENT_LIST_DIR}/common/Welcome.txt")
+set(CPACK_PACKAGE_DESCRIPTION_FILE "${CMAKE_CURRENT_LIST_DIR}/Description.txt")
+set(CPACK_RESOURCE_FILE_WELCOME "${CMAKE_CURRENT_LIST_DIR}/Welcome.txt")
 set(CPACK_RESOURCE_FILE_LICENSE "${Halide_SOURCE_DIR}/LICENSE.txt")
 set(CPACK_RESOURCE_FILE_README "${Halide_SOURCE_DIR}/README.md")
 
@@ -416,6 +419,12 @@ cpack_add_component(
     DISPLAY_NAME "Python bindings"
     DESCRIPTION "Python package providing bindings to Halide"
     DEPENDS Halide_Runtime
+)
+
+cpack_add_component(
+    Halide_PythonRuntime
+    DISPLAY_NAME "Python runtime bindings"
+    DESCRIPTION "Python package providing header-only Halide runtime bindings"
 )
 
 cpack_add_component(

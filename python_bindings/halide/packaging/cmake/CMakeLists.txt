@@ -1,7 +1,7 @@
 ##
 # Create a trampoline to the real Halide_PythonConfig.cmake.
 #
-# Same trick as packaging/pip/CMakeLists.txt in the root project: the wheel
+# Same trick as the halide-bin CMake trampoline: the wheel
 # directory gets grafted to one of an unpredictable set of paths determined
 # by sysconfig, so this trampoline finds platlib via sysconfig before jumping
 # to the real Halide_PythonConfig.cmake inside the halide package.

@@ -43,14 +43,14 @@ Issues = "https://github.com/halide/Halide/issues"
 Repository = "https://github.com/halide/Halide.git"
 
 [[tool.dynamic-metadata]]
-provider = "scikit_build_core.metadata.setuptools_scm"
+provider = { path = ".", module = "_dynamic_metadata" }
 
 [tool.scikit-build]
 minimum-version = "build-system.requires"
 experimental = true
 cmake.version = ">=3.28"
 ninja.version = ">=1.11,!=1.13.0"
-cmake.source-dir = "../.."
+cmake.source-dir = ".."
 
 # Build and package ONLY the standalone runtime extension: build just its target
 # (so libHalide's compiler bindings are never compiled) and install just its
@@ -60,7 +60,21 @@ cmake.source-dir = "../.."
 build.targets = ["Halide_PythonRuntime"]
 install.components = ["Halide_PythonRuntime"]
 wheel.install-dir = "halide"
-sdist.include = ["dependencies/"]
+sdist.inclusion-mode = "explicit"
+sdist.include = ["pyproject.toml", "README.md", "_dynamic_metadata.py"]
+
+[tool.scikit-build.sdist.force-include]
+"../../cmake" = "cmake"
+"../../dependencies" = "dependencies"
+"../../packaging" = "packaging"
+"../../python_bindings" = "python_bindings"
+"../../src" = "src"
+"../../tools" = "tools"
+"../../.git_archival.txt" = ".git_archival.txt"
+"../../CMakeLists.txt" = "CMakeLists.txt"
+"../../LICENSE.txt" = "LICENSE.txt"
+"../../vcpkg.json" = "vcpkg.json"
+"../../vcpkg-configuration.json" = "vcpkg-configuration.json"
 
 [tool.scikit-build.cmake.define]
 CMAKE_DISABLE_FIND_PACKAGE_JPEG = true
@@ -73,6 +87,7 @@ Halide_WASM_BACKEND = "wabt"
 WITH_PYTHON_BINDINGS = true
 WITH_TESTS = false
 WITH_TUTORIALS = false
+WITH_UTILS = false
 CMAKE_PLATFORM_NO_VERSIONED_SONAME = true
 
 [[tool.scikit-build.overrides]]
@@ -80,14 +95,9 @@ if.platform-system = "^win32"
 inherit.cmake.define = "append"
 cmake.define.Halide_WASM_BACKEND = "OFF"
 
-##
-# Split-package build: build only the Python bindings tree against an
-# already-installed `halide-bin` (found via CMAKE_PREFIX_PATH, which the caller
-# must set), so the runtime extension is compiled without building libHalide.
-# The extension still links no libHalide at runtime.
 [[tool.scikit-build.overrides]]
-if.env.HALIDE_SPLIT_BUILD = true
-cmake.source-dir = "../../python_bindings"
+if.from-sdist = true
+cmake.source-dir = "python_bindings"
 
 [tool.setuptools_scm]
 root = "../.."
