@@ -20,10 +20,12 @@
 #include <cstring>
 #include <memory>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <vector>
 
 #include "HalideRuntime.h"
+#include "PyRuntimeBuffer.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -409,117 +411,10 @@ private:
 };
 
 std::string type_to_string(halide_type_t t) {
-    if (t.code == halide_type_uint && t.bits == 1) {
-        return "bool";
-    }
-    const char *base;
-    switch (t.code) {
-    case halide_type_int:
-        base = "int";
-        break;
-    case halide_type_uint:
-        base = "uint";
-        break;
-    case halide_type_float:
-        base = "float";
-        break;
-    default:
-        base = "handle";
-        break;
-    }
-    return std::string(base) + std::to_string(t.bits);
+    std::ostringstream out;
+    out << t;
+    return out.str();
 }
-
-// A thin wrapper around a buffer-protocol object (e.g. a NumPy array) that
-// exposes it as a halide_buffer_t. This is the interop bridge: it speaks the
-// same `_get_raw_halide_buffer_t` protocol as halide.Buffer and the generated
-// AOT extensions, so one object can be passed to both a load()'ed Kernel and a
-// generated-extension function. It does not own or copy the underlying memory;
-// the wrapped object is kept alive for the Buffer's lifetime.
-class Buffer {
-public:
-    explicit Buffer(py::object source)
-        : source_(std::move(source)) {
-        PyObject *obj = source_.ptr();
-
-        // Determine ndim so we can size the Halide dimension array.
-        Py_buffer probe;
-        if (PyObject_GetBuffer(obj, &probe, PyBUF_FORMAT | PyBUF_STRIDES) < 0) {
-            throw py::error_already_set();
-        }
-        const int ndim = probe.ndim;
-        PyBuffer_Release(&probe);
-
-        dims_.resize(ndim > 0 ? ndim : 1);
-
-        // Prefer a writable view (so the buffer can be used as an output), but
-        // fall back to read-only for immutable inputs.
-        bool ok = Halide::PythonRuntime::unpack_buffer(
-            obj, PyBUF_WRITABLE, "buffer", 0, view_, dims_.data(), buf_,
-            view_valid_, needs_device_free_);
-        if (!ok) {
-            PyErr_Clear();
-            ok = Halide::PythonRuntime::unpack_buffer(
-                obj, 0, "buffer", 0, view_, dims_.data(), buf_,
-                view_valid_, needs_device_free_);
-        }
-        if (!ok) {
-            throw py::error_already_set();
-        }
-    }
-
-    ~Buffer() {
-        if (needs_device_free_) {
-            halide_device_free(nullptr, &buf_);
-        }
-        if (view_valid_) {
-            PyBuffer_Release(&view_);
-        }
-    }
-
-    Buffer(const Buffer &) = delete;
-    Buffer &operator=(const Buffer &) = delete;
-
-    uintptr_t raw_halide_buffer_t() {
-        return reinterpret_cast<uintptr_t>(&buf_);
-    }
-
-    int dimensions() const {
-        return buf_.dimensions;
-    }
-
-    std::string type() const {
-        return type_to_string(buf_.type);
-    }
-
-    // Shape in NumPy (row-major) axis order.
-    std::vector<int> shape() const {
-        std::vector<int> s(view_.ndim);
-        for (int i = 0; i < view_.ndim; i++) {
-            s[i] = (int)view_.shape[i];
-        }
-        return s;
-    }
-
-    // Re-export the underlying memory via the buffer protocol, in NumPy axis
-    // order, so `numpy.asarray(buffer)` is a zero-copy view of the same data.
-    py::buffer_info buffer_info() {
-        std::vector<Py_ssize_t> shape(view_.shape, view_.shape + view_.ndim);
-        std::vector<Py_ssize_t> strides(view_.strides, view_.strides + view_.ndim);
-        return py::buffer_info(
-            view_.buf, view_.itemsize,
-            std::string(view_.format ? view_.format : "B"),
-            view_.ndim, shape, strides, view_.readonly != 0);
-    }
-
-private:
-    py::object source_;
-    Py_buffer view_{};
-    bool view_valid_ = false;
-    bool needs_device_free_ = false;
-    std::vector<halide_dimension_t> dims_;
-    halide_buffer_t buf_{};
-};
 
 std::shared_ptr<Kernel> load(const std::string &path, const py::object &name_obj) {
     LibHandle handle = open_library(path);
@@ -574,18 +469,7 @@ PYBIND11_MODULE(_runtime, m) {
     // Make our own runtime's errors non-fatal too (e.g. a failed copy-to-host).
     halide_set_error_handler(&runtime_error_handler);
 
-    py::class_<Buffer>(m, "Buffer", py::buffer_protocol())
-        .def(py::init<py::object>(), py::arg("source"),
-             "Wrap a buffer-protocol object (e.g. a NumPy array) as a Halide "
-             "runtime buffer, without copying.")
-        .def_buffer(&Buffer::buffer_info)
-        .def("_get_raw_halide_buffer_t", &Buffer::raw_halide_buffer_t)
-        .def_property_readonly("dimensions", &Buffer::dimensions)
-        .def_property_readonly("type", &Buffer::type)
-        .def_property_readonly("shape", &Buffer::shape)
-        .def("__repr__", [](const Buffer &b) {
-            return "<halide.runtime.Buffer " + b.type() + ">";
-        });
+    Halide::PythonRuntimeBindings::define_buffer(m);
 
     py::class_<Kernel, std::shared_ptr<Kernel>>(m, "Kernel")
         .def("__call__", &Kernel::call)

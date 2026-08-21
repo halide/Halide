@@ -14,7 +14,22 @@ set_target_properties(Halide_PythonRuntime
     EXPORT_NAME PythonRuntime
 )
 
-target_sources(Halide_PythonRuntime PRIVATE PyRuntime.cpp)
+target_sources(
+    Halide_PythonRuntime
+    PRIVATE
+        PyRuntime.cpp
+        PyRuntimeBuffer.cpp
+        # float16_t is a standalone scalar utility whose implementation depends
+        # only on runtime headers and the C++ standard library. Reuse it here so
+        # Buffer's half support does not duplicate its conversion logic or link
+        # libHalide.
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../src/Float16.cpp"
+    PRIVATE
+    FILE_SET runtime_support_headers
+        TYPE HEADERS
+        BASE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../src"
+        FILES "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../src/Float16.h"
+)
 
 # PyRuntime.cpp #includes the shared marshalling core (it depends only on
 # <Python.h> + HalideRuntime.h). In an in-tree build it lives in the Halide

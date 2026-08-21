@@ -10,6 +10,6 @@ This subpackage links only the header-only Halide runtime, so it can be used in
 deployment environments that do not have the Halide compiler installed.
 """
 
-from ._runtime import Buffer, Kernel, load
+from ._runtime import Buffer, BufferDimension, Kernel, Type, load
 
-__all__ = ["Buffer", "Kernel", "load"]
+__all__ = ["Buffer", "BufferDimension", "Kernel", "Type", "load"]

@@ -58,6 +58,7 @@ void define_type(py::module &m) {
         .def("code", &Type::code)
         .def("bits", &Type::bits)
         .def("lanes", &Type::lanes)
+        .def("to_abi", &Type::to_abi)
         .def("with_code", &Type::with_code, py::arg("code"))
         .def("with_bits", &Type::with_bits, py::arg("bits"))
         .def("with_lanes", &Type::with_lanes, py::arg("lanes"))

@@ -340,12 +340,7 @@ py::buffer_info to_buffer_info(Buffer<> &b, bool reverse_axes) {
 void define_buffer(py::module &m) {
     using BufferDimension = Halide::Runtime::Buffer<>::Dimension;
 
-    auto buffer_dimension_class =
-        py::class_<BufferDimension>(m, "BufferDimension")
-            .def("min", &BufferDimension::min)
-            .def("stride", &BufferDimension::stride)
-            .def("extent", &BufferDimension::extent)
-            .def("max", &BufferDimension::max);
+    m.attr("BufferDimension") = py::module_::import("halide.runtime").attr("BufferDimension");
 
     auto buffer_class =
         py::class_<Buffer<>, PyBuffer>(m, "Buffer", py::buffer_protocol())
@@ -405,6 +400,22 @@ void define_buffer(py::module &m) {
                     return Buffer<>::make_with_shape_of(buffer, nullptr, nullptr, name);  //
                 },
                 py::arg("src"), py::arg("name") = "")
+
+            .def_static("from_runtime", [](const py::object &source) -> Buffer<> {
+                    if (!py::hasattr(source, "_get_raw_halide_runtime_buffer") ||
+                        !py::hasattr(source, "defined") ||
+                        !py::hasattr(source, "name")) {
+                        throw py::type_error("Expected a halide.runtime.Buffer.");
+                    }
+                    if (!source.attr("defined")().cast<bool>()) {
+                        return Buffer<>();
+                    }
+                    const uintptr_t address = source.attr("_get_raw_halide_runtime_buffer")().cast<uintptr_t>();
+                    if (address == 0) {
+                        throw py::value_error("A defined Buffer cannot have a null runtime buffer.");
+                    }
+                    const auto *buffer = reinterpret_cast<const Halide::Runtime::Buffer<> *>(address);
+                    return Buffer<>(Halide::Runtime::Buffer<>(*buffer), source.attr("name")().cast<std::string>()); }, py::arg("buffer"), py::keep_alive<0, 1>())
 
             .def("set_name", &Buffer<>::set_name)
             .def("name", &Buffer<>::name)
@@ -684,6 +695,9 @@ void define_buffer(py::module &m) {
 
             .def("_get_raw_halide_buffer_t", [](const Buffer<> &b) -> uintptr_t {
                 return reinterpret_cast<uintptr_t>(b.raw_buffer());  //
+            })
+            .def("_get_raw_halide_runtime_buffer", [](const Buffer<> &b) -> uintptr_t {
+                return reinterpret_cast<uintptr_t>(b.get());  //
             });
 }
 

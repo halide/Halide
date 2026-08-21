@@ -41,7 +41,8 @@ def main():
     # halide.runtime.Buffer interop: introspection + zero-copy NumPy round-trip.
     grid = np.arange(6, dtype=np.uint8).reshape(2, 3)
     buf = hlr.Buffer(grid)
-    assert buf.dimensions == 2 and buf.type == "uint8" and buf.shape == [2, 3]
+    assert buf.dimensions() == 2 and str(buf.type()) == "uint8"
+    assert [buf.dim(i).extent() for i in range(buf.dimensions())] == [3, 2]
     assert (
         isinstance(buf._get_raw_halide_buffer_t(), int)
         and buf._get_raw_halide_buffer_t() != 0

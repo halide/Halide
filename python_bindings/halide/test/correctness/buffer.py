@@ -2,6 +2,7 @@ import gc
 import sys
 
 import halide as hl
+import halide.runtime as hlr
 import numpy as np
 
 
@@ -616,6 +617,35 @@ def test_ndarray_negative_strides():
     assert b[5] == 0
 
 
+def test_runtime_buffer_is_distinct():
+    assert hl.Buffer is not hlr.Buffer
+    assert hl.Type is not hlr.Type
+    assert hl.BufferDimension is hlr.BufferDimension
+
+    runtime_type = hlr.Type(0, 32)
+
+    runtime_buffer = hlr.Buffer(runtime_type, [4, 3], "runtime_buffer")
+    assert runtime_buffer.type() == runtime_type
+    runtime_buffer[1, 2] = 42
+
+    compiler_buffer = hl.Buffer.from_runtime(runtime_buffer)
+    assert isinstance(compiler_buffer, hl.Buffer)
+    assert compiler_buffer.type() == hl.Int(32)
+    assert compiler_buffer.name() == "runtime_buffer"
+    assert compiler_buffer[1, 2] == 42
+
+    compiler_buffer[2, 1] = 17
+    runtime_copy = hlr.Buffer.from_compiler(compiler_buffer)
+    assert isinstance(runtime_copy, hlr.Buffer)
+    assert runtime_copy.type() == runtime_type
+    assert runtime_copy[2, 1] == 17
+
+    # Both adaptations are zero-copy views of the same underlying allocation.
+    runtime_copy[0, 0] = 9
+    assert runtime_buffer[0, 0] == 9
+    assert compiler_buffer[0, 0] == 9
+
+
 if __name__ == "__main__":
     test_make_interleaved()
     test_interleaved_ndarray()
@@ -626,6 +656,7 @@ if __name__ == "__main__":
     test_numpy_view()
     test_buffer_copy_no_reverse()
     test_ndarray_negative_strides()
+    test_runtime_buffer_is_distinct()
     test_for_each_element()
     test_fill_all_equal()
     test_bufferinfo_sharing()

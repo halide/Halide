@@ -1,7 +1,15 @@
 def install_dir():
-    from . import bin
+    try:
+        from . import bin
 
-    return bin.install_dir()
+        return bin.install_dir()
+    except ModuleNotFoundError as e:
+        if e.name != f"{__name__}.bin":
+            raise
+        # Traditional CMake build-tree layout (not a split wheel).
+        from pathlib import Path
+
+        return str(Path(__file__).resolve().parent)
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +80,20 @@ def _load_compiler():
         # import time, making the binary package the single authority.
         from importlib import import_module
 
-        import_module(".bin", __name__)
+        try:
+            import_module(".bin", __name__)
+        except ModuleNotFoundError as e:
+            # A traditional CMake build places halide_ and halide.runtime
+            # together in the build tree, with libHalide resolved by the build
+            # RPATH. It deliberately does not synthesize the separately
+            # packaged halide.bin support module.
+            if e.name != f"{__name__}.bin":
+                raise
+
+        # Register the ABI-only Runtime types before loading the compiler
+        # extension. This lets methods such as Type.to_abi() return the actual
+        # halide.runtime.Type Python class.
+        import_module(".runtime", __name__)
 
         try:
             from . import halide_
