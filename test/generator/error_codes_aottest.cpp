@@ -5,15 +5,23 @@
 
 #include "error_codes.h"
 
+bool print = false;
+
 void my_halide_error(void *user_context, const char *msg) {
     // Silently drop the error
-    // printf("%s\n", msg);
+    if (print) {
+        printf("%s\n", msg);
+    }
 }
 
 void check(int result, int correct) {
     if (result != correct) {
         printf("The exit status was %d instead of %d\n", result, correct);
         exit(1);
+    } else {
+        if (print) {
+            printf("Found expected error: %d\n\n", correct);
+        }
     }
 }
 
@@ -23,17 +31,18 @@ int main(int argc, char **argv) {
 
     halide_buffer_t in = {0}, out = {0};
     halide_dimension_t shape[] = {{0, 64, 1},
-                                  {0, 123, 64}};
+                                  {0, 123, 64},
+                                  {0, 4, 64 * 123}};
 
-    in.host = (uint8_t *)malloc(64 * 123 * 4);
+    in.host = (uint8_t *)malloc(64 * 123 * sizeof(int));
     in.type = halide_type_of<int>();
     in.dim = shape;
     in.dimensions = 2;
 
-    out.host = (uint8_t *)malloc(64 * 123 * 4);
+    out.host = (uint8_t *)malloc(64 * 123 * 4 * sizeof(int));
     out.type = halide_type_of<int>();
     out.dim = shape;
-    out.dimensions = 2;
+    out.dimensions = 3;
 
     // First, a successful run.
     int result = error_codes(&in, 64, &out);
@@ -58,7 +67,8 @@ int main(int argc, char **argv) {
     // buffer extent negative, but in a way that doesn't trigger oob checks
     {
         halide_dimension_t bad_shape[] = {{0, 64, 1},
-                                          {0, -123, 64}};
+                                          {0, 123, 64},
+                                          {0, -4, 64 * 123}};
         halide_buffer_t i = in, o = out;
         i.dim = bad_shape;
         o.dim = bad_shape;
@@ -69,8 +79,8 @@ int main(int argc, char **argv) {
     }
 
     // Input buffer larger than 2GB
-    halide_dimension_t huge[] = {{0, 10000000, 1},
-                                 {0, 10000000, 64}};
+    halide_dimension_t huge[] = {{0, 1 << 30, 1},
+                                 {0, 123, 4}};
     in.dim = huge;
     result = error_codes(&in, 64, &out);
     correct = halide_error_code_buffer_extents_too_large;

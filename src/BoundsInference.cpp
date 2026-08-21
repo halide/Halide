@@ -1317,22 +1317,37 @@ Stmt bounds_inference(Stmt s,
         fused_pairs_in_groups.push_back(pairs);
     }
 
+    // Walk past a block of AssertStmts, which are the user-defined requirements.
+    // We want to use those to further simplify the image_checks which are injected later,
+    // by moving the inject-markers beyond those asserts.
+    std::vector<Stmt> stmts;
+    while (const Block *rb = s.as<Block>()) {
+        if (const auto *a = rb->first.as<AssertStmt>()) {
+            stmts.emplace_back(a);
+            s = rb->rest;
+        } else {
+            break;
+        }
+    }
+
     // Add a note in the IR for where the outermost dynamic-stage skipping
     // checks should go. These are injected in a later pass.
     Expr marker = Call::make(Int(32), Call::skip_stages_marker, {}, Call::Intrinsic);
-    s = Block::make(Evaluate::make(marker), s);
+    stmts.push_back(Evaluate::make(marker));
 
     if (target.has_feature(Target::Profile) || target.has_feature(Target::ProfileByTimer)) {
         // Add a note in the IR for what profiling should cover, so that it doesn't
         // include bounds queries as pipeline executions.
         marker = Call::make(Int(32), Call::profiling_enable_instance_marker, {}, Call::Intrinsic);
-        s = Block::make(Evaluate::make(marker), s);
+        stmts.push_back(Evaluate::make(marker));
     }
 
     // Add a note in the IR for where assertions on input images
     // should go. Those are handled by a later lowering pass.
     marker = Call::make(Int(32), Call::add_image_checks_marker, {}, Call::Intrinsic);
-    s = Block::make(Evaluate::make(marker), s);
+    stmts.push_back(Evaluate::make(marker));
+    stmts.push_back(std::move(s));
+    s = Block::make(stmts);
 
     // Add a synthetic outermost loop to act as 'root'.
     s = For::make("<outermost>", 0, 0, ForType::Serial, Partition::Never, DeviceAPI::None, s);
