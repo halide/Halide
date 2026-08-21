@@ -2,7 +2,9 @@
 
 #include "Bounds.h"
 #include "CanonicalizeGPUVars.h"
+#include "ExprUsesVar.h"
 #include "IR.h"
+#include "IREquality.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "IRVisitor.h"
@@ -245,6 +247,28 @@ class CheckCrossTalk : public IRVisitor {
             }
         }
 
+        // Which dimensions tell one thread's part from another's. A
+        // dimension whose region is the same whatever thread is asking is one
+        // every thread walks the same way, so a coordinate a load names in it
+        // is one every thread names. Such a dimension cannot be what makes a
+        // load another thread's. It is the region that has to be asked, not
+        // the index: a loop of a thread's own is written the same way by every
+        // thread, and it is its bounds that say which part is whose.
+        vector<bool> separates_threads(finder.accesses[0].args.size(), false);
+        for (const auto &region : regions) {
+            for (size_t i = 0; i < region.size(); i++) {
+                for (int t = 0; t < 3; t++) {
+                    const string &n = gpu_thread_name(t);
+                    separates_threads[i] =
+                        separates_threads[i] ||
+                        (region[i].has_lower_bound() &&
+                         stmt_or_expr_uses_var(region[i].min, n)) ||
+                        (region[i].has_upper_bound() &&
+                         stmt_or_expr_uses_var(region[i].max, n));
+                }
+            }
+        }
+
         for (size_t l = 0; l < finder.accesses.size(); l++) {
             const Access &load = finder.accesses[l];
             if (load.is_store) {
@@ -257,15 +281,35 @@ class CheckCrossTalk : public IRVisitor {
             // no other thread stored this one, this thread did. A site this
             // thread never wrote holds a value nothing depends on, like the
             // garbage that pads out a vector.
-            for (size_t s = 0; s < l && !ok; s++) {
+            // Stores earlier in the list have happened. A later one still
+            // counts if it lands somewhere else along a dimension that does
+            // not separate threads, because such a dimension is what carries
+            // an allocation from one run of a loop to the next: the store this
+            // load wants is the one the previous iteration ran, and the thread
+            // that ran it was this one. Where every dimension agrees there is
+            // no such gap, and a later store is simply later.
+            for (size_t s = 0; s < finder.accesses.size() && !ok; s++) {
                 const Access &store = finder.accesses[s];
                 // The store has to be in at least as many loops over threads,
                 // or it is the work of one thread standing in for all of them.
                 if (!store.is_store || store.thread_depth < load.thread_depth) {
                     continue;
                 }
+                if (s > l) {
+                    bool carried = false;
+                    for (size_t i = 0; i < regions[l].size() && !carried; i++) {
+                        carried = (!separates_threads[i] &&
+                                   !equal(load.canonical_args[i], store.canonical_args[i]));
+                    }
+                    if (!carried) {
+                        continue;
+                    }
+                }
                 ok = true;
                 for (size_t i = 0; i < regions[l].size() && ok; i++) {
+                    if (!separates_threads[i]) {
+                        continue;
+                    }
                     const Interval &want = regions[l][i], &have = regions[s][i];
                     ok = (want.has_lower_bound() && want.has_upper_bound() &&
                           have.has_lower_bound() && have.has_upper_bound() &&
