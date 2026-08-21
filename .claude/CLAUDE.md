@@ -27,7 +27,7 @@ via a `uv`-managed Python virtual env; activate it before building so CMake can
 autodetect the LLVM install:
 
 ```shell
-$ uv sync --group ci-llvm-22 --no-install-project
+$ uv sync --frozen --group ci-llvm-22 --no-install-workspace
 $ source .venv/bin/activate
 ```
 

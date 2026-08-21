@@ -3,6 +3,11 @@
 A tiny, standalone runtime for calling **precompiled Halide AOT kernels** from
 Python, with **no dependency on libHalide** (no compiler, no LLVM).
 
+```shell
+pip install halide-runtime
+uv add halide-runtime
+```
+
 ```python
 import numpy as np
 import halide.runtime as hlr

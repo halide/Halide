@@ -14,7 +14,7 @@ if (_docs_python_deps_missing)
     message(
         FATAL_ERROR "WITH_DOCS requires the Python 'myst-parser', 'breathe', 'pydata-sphinx-theme', "
         "'sphinxcontrib-video', and 'sphinx-design' packages for the interpreter at ${Python3_EXECUTABLE}. "
-        "Run: uv sync --group docs"
+        "Run: uv sync --frozen --group docs --no-install-workspace"
     )
 endif ()
 

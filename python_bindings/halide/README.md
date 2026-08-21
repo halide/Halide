@@ -12,6 +12,19 @@ of a Halide pipeline using Halide's Python API. You can then compile this
 representation to an object file, or JIT-compile it and run it in the same
 process.
 
+Install the complete Python and native toolchain with:
+
+```shell
+pip install halide
+uv add halide
+```
+
+This distribution depends on matching versions of `halide-bin`, which provides
+the compiler and C++ development files, and `halide-runtime`, which provides the
+standalone `halide.runtime` API. Package managers install both automatically.
+For a small deployment that only calls precompiled AOT kernels, install
+`halide-runtime` directly instead.
+
 ## Using Halide from C++
 
 Halide is also available as a C++ library. This package provides the development

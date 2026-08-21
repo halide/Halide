@@ -14,16 +14,37 @@ produce Python extensions that can be used within Python code.
 
 ## Acquiring the Python bindings
 
-As of Halide 19.0.0, we provide binary wheels on PyPI which include the Python
-bindings and the C++/CMake package for native development. Full releases may be
-installed with `pip` like so:
+As of Halide 19.0.0, we provide binary wheels on PyPI. Full releases may be
+installed with `pip` or added to a uv project like so:
 
 ```shell
 $ pip install halide
+$ uv add halide
 ```
 
-Every commit to `main` is published to a private PyPI index as a development
-version and these may be installed with a few extra flags:
+The published artifacts are split into three distributions that share the
+`halide` import package:
+
+- `halide` provides the compiler Python API. It depends on matching versions of
+  the other two distributions.
+- `halide-bin` provides `libHalide`, headers, command-line tools,
+  autoschedulers, and the CMake package. Its wheel has no Python ABI dependency.
+- `halide-runtime` provides the standalone `halide.runtime` bindings for calling
+  precompiled AOT code without `libHalide`, the compiler, or LLVM.
+
+Most users should install only `halide`; pip or uv installs its dependencies
+automatically. Install `halide-runtime` directly only for a runtime-only
+deployment. Install `halide-bin` directly when only the C++ compiler tools and
+development files are needed.
+
+Every commit to `main` is published to the Halide package index as a development
+version. With uv, add one to a project with:
+
+```shell
+$ uv add halide --prerelease=allow --index https://pypi.halide-lang.org/simple
+```
+
+Or install it directly with pip:
 
 ```shell
 $ pip install halide --pre --extra-index-url https://pypi.halide-lang.org/simple
@@ -46,8 +67,26 @@ installed in your local Python environment. The best way to get set up is to use
 a virtual environment with `uv`:
 
 ```shell
-$ uv sync --no-install-project
+$ uv sync --frozen --no-install-workspace
 ```
+
+The repository root is a uv workspace containing `halide-bin`, `halide-runtime`,
+and `halide`. For CMake-based development, `--no-install-workspace` installs
+only external development dependencies and leaves the existing monolithic CMake
+build in control of the bindings. `--frozen` uses `uv.lock` without evaluating
+the workspace packages' dynamic build metadata.
+
+To build and install the complete Python workspace into `.venv`, including the
+compiler, use:
+
+```shell
+$ uv sync --all-packages
+$ uv run python -c "import halide"
+```
+
+The compiler build can take considerable time. `--all-packages` is required
+because the repository root is a virtual project; workspace membership alone
+does not cause member packages to be installed.
 
 If you don't have LLVM installed already, you can try using the same ones the
 buildbots use by adding `--group ci-llvm-<VERSION>` to the `uv sync` command,
@@ -60,13 +99,21 @@ Ensure you have `flatbuffers` and `wabt` installed, too. (The wheel build does
 not use vcpkg for manylinux compatibility reasons, so these must be available as
 system packages or installed from source.)
 
-### Using wheel infrastructure
+### Building the wheel packages
 
-When using `uv`, this entire workflow can be run via:
+The repository root is not itself an installable Python package. Build the three
+workspace members in dependency order instead:
 
 ```shell
-$ uv pip install . --no-build-isolation
+$ uv build --package halide-bin
+$ uv build --package halide-runtime --find-links dist
+$ uv build --package halide --find-links dist
 ```
+
+The first command performs the full compiler build. The later builds use the
+matching `halide-bin` wheel in `dist/` as a build dependency. The resulting
+wheels are also placed in `dist/`. These are local, unrepaired wheels; release
+wheels are produced by the pip packaging workflow.
 
 ### Using CMake directly
 
@@ -603,12 +650,13 @@ build machine that has the full Halide toolchain, then ship only the resulting
 kernels plus this tiny runtime, and run them on machines that have neither the
 compiler nor LLVM installed.
 
-`halide.runtime` is always included in the full `halide` package, but it is also
-published as a separate, `libHalide`-free wheel for exactly this deployment
-case:
+The full `halide` distribution depends on `halide-runtime`, so `halide.runtime`
+is available after installing `halide`. It is also published as a separate,
+`libHalide`-free wheel for exactly this deployment case:
 
 ```shell
-pip install halide-runtime
+$ pip install halide-runtime
+$ uv add halide-runtime
 ```
 
 Importing `halide.runtime` never loads `libHalide`; in the full package, the
