@@ -395,6 +395,7 @@ tests(
     update_chunk.cpp
     vector_bounds_inference.cpp
     vector_extern.cpp
+    vector_legalization.cpp
     vector_print_bug.cpp
     vector_shuffle.cpp
     vector_store_alignment.cpp
