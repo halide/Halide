@@ -351,6 +351,13 @@ struct SlideDecision {
     // iteration didn't compute.
     Interval old_bounds, new_bounds;
 
+    // The sliver in the steady state, before any warm-up was folded into it.
+    // Storage has to hold this as well as the region required, and when the
+    // region required jumps rather than stepping the sliver is the wider of
+    // the two. Kept separately because new_bounds may carry a select that
+    // interval arithmetic can't see through.
+    Interval steady_bounds;
+
     // If defined, the iteration the loop should rewind to, so that the
     // steady-state new_bounds above are warmed up by the time the real work
     // starts. If undefined, new_bounds instead contains a select that computes
@@ -618,6 +625,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             new_min = min_required;
             new_max = prev_min_minus_one;
         }
+        result.steady_bounds = Interval(new_min, new_max);
 
         // See if we can find a new min for the loop that can warm up the
         // sliding window. We're going to do this by building an equation
@@ -842,8 +850,13 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                                 size_t loop_depth, size_t binding_depth) {
         Expr result = replacement;
         if (loop_depth < producer_loop_bounds.size()) {
+            // Only the loops in between get widened. Anything else the
+            // replacement mentions is in scope at this declaration and means
+            // the same thing there, so it has to stay exact - chaining to the
+            // enclosing bounds would widen over the loop being slid over too,
+            // and the union of a per-step region over the whole walk is the
+            // whole walk.
             Scope<Interval> inner;
-            inner.set_containing_scope(&bounds_scope);
             for (size_t i = loop_depth; i < producer_loop_bounds.size(); i++) {
                 inner.push(producer_loop_bounds[i].first, producer_loop_bounds[i].second);
             }
@@ -1413,6 +1426,16 @@ class SlidingWindow : public IRMutator {
             // simultaneously live. Tell it the window width we just derived.
             const SlideDecision &d = slider.decision;
             if (d.slid()) {
+                // What has to be live is everything the consumer asks for
+                // this iteration together with everything the producer writes
+                // this iteration, which are not the same thing. Sliding
+                // computes from where the previous iteration stopped, and if
+                // the region required jumps rather than stepping - which a
+                // select in the consumer's index will do - the producer
+                // covers the gap, and writes a wider range than is asked for.
+                // Folding to the width asked for would alias those writes
+                // onto each other.
+                //
                 // An upper bound, not the exact width. Two forms of the same
                 // difference are worth trying, because they fail for
                 // different reasons. Written in terms of the dimension, the
@@ -1421,8 +1444,17 @@ class SlidingWindow : public IRMutator {
                 // terms of the loops the dimension was split across, it
                 // reaches the constants in their bounds. Take whichever gives
                 // a bound, or the tighter of the two.
+                // What the consumer asks for is measured discounting a
+                // recurrence's reads of itself, which reach back to the base
+                // case and would make the window look like the whole scan.
+                //
+                // The ends move together, and a promise the two of them
+                // carry about staying in range is not something the
+                // simplifier can cancel across, so drop those first.
                 Interval window = window_for(func, d, op->name, body);
-                Expr raw = window.max - window.min + 1;
+                Expr lo = remove_promises(min(window.min, d.steady_bounds.min));
+                Expr hi = remove_promises(max(window.max, d.steady_bounds.max));
+                Expr raw = hi - lo + 1;
                 Expr width;
                 for (const Expr &form : {simplify(raw, bounds_scope),
                                          expand_expr(raw, let_values)}) {
