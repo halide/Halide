@@ -2,12 +2,12 @@ version = 1
 revision = 3
 requires-python = ">=3.10"
 resolution-markers = [
-    "(python_full_version >= '3.12' and platform_machine == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l')",
-    "(python_full_version == '3.11.*' and platform_machine == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l')",
-    "(python_full_version < '3.11' and platform_machine == 'armv7l') or (python_full_version < '3.11' and platform_machine == 'armv8l')",
     "python_full_version >= '3.13' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+    "(python_full_version >= '3.12' and platform_machine == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l')",
     "python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+    "(python_full_version == '3.11.*' and platform_machine == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l')",
     "python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+    "(python_full_version < '3.11' and platform_machine == 'armv7l') or (python_full_version < '3.11' and platform_machine == 'armv8l')",
     "python_full_version < '3.11' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
 ]
 conflicts = [[
@@ -361,10 +361,10 @@ name = "docutils"
 version = "0.22.4"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "(python_full_version >= '3.12' and platform_machine == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l')",
-    "(python_full_version == '3.11.*' and platform_machine == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l')",
     "python_full_version >= '3.13' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+    "(python_full_version >= '3.12' and platform_machine == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l')",
     "python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+    "(python_full_version == '3.11.*' and platform_machine == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l')",
     "python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ae/b6/03bb70946330e88ffec97aefd3ea75ba575cb2e762061e0e62a213befee8/docutils-0.22.4.tar.gz", hash = "sha256:4db53b1fde9abecbb74d91230d32ab626d94f6badfc575d6db9194a49df29968", size = 2291750, upload-time = "2025-12-18T19:00:26.443Z" }
@@ -423,12 +423,12 @@ name = "halide-llvm"
 version = "21.1.8"
 source = { registry = "https://pypi.halide-lang.org/simple" }
 resolution-markers = [
-    "(python_full_version >= '3.12' and platform_machine == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l')",
-    "(python_full_version == '3.11.*' and platform_machine == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l')",
-    "(python_full_version < '3.11' and platform_machine == 'armv7l') or (python_full_version < '3.11' and platform_machine == 'armv8l')",
     "python_full_version >= '3.13' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+    "(python_full_version >= '3.12' and platform_machine == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l')",
     "python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+    "(python_full_version == '3.11.*' and platform_machine == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l')",
     "python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+    "(python_full_version < '3.11' and platform_machine == 'armv7l') or (python_full_version < '3.11' and platform_machine == 'armv8l')",
     "python_full_version < '3.11' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
 ]
 wheels = [
@@ -447,12 +447,12 @@ name = "halide-llvm"
 version = "22.1.7"
 source = { registry = "https://pypi.halide-lang.org/simple" }
 resolution-markers = [
-    "(python_full_version >= '3.12' and platform_machine == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l')",
-    "(python_full_version == '3.11.*' and platform_machine == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l')",
-    "(python_full_version < '3.11' and platform_machine == 'armv7l') or (python_full_version < '3.11' and platform_machine == 'armv8l')",
     "python_full_version >= '3.13' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+    "(python_full_version >= '3.12' and platform_machine == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l')",
     "python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+    "(python_full_version == '3.11.*' and platform_machine == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l')",
     "python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+    "(python_full_version < '3.11' and platform_machine == 'armv7l') or (python_full_version < '3.11' and platform_machine == 'armv8l')",
     "python_full_version < '3.11' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
 ]
 wheels = [
@@ -471,12 +471,12 @@ name = "halide-llvm"
 version = "23.0.0.dev100667+g9bf20bdf"
 source = { registry = "https://pypi.halide-lang.org/simple" }
 resolution-markers = [
-    "(python_full_version >= '3.12' and platform_machine == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l')",
-    "(python_full_version == '3.11.*' and platform_machine == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l')",
-    "(python_full_version < '3.11' and platform_machine == 'armv7l') or (python_full_version < '3.11' and platform_machine == 'armv8l')",
     "python_full_version >= '3.13' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+    "(python_full_version >= '3.12' and platform_machine == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l')",
     "python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+    "(python_full_version == '3.11.*' and platform_machine == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l')",
     "python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+    "(python_full_version < '3.11' and platform_machine == 'armv7l') or (python_full_version < '3.11' and platform_machine == 'armv8l')",
     "python_full_version < '3.11' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
 ]
 wheels = [
@@ -854,10 +854,10 @@ name = "markdown-it-py"
 version = "4.2.0"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "(python_full_version >= '3.12' and platform_machine == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l')",
-    "(python_full_version == '3.11.*' and platform_machine == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l')",
     "python_full_version >= '3.13' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+    "(python_full_version >= '3.12' and platform_machine == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l')",
     "python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+    "(python_full_version == '3.11.*' and platform_machine == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l')",
     "python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
 ]
 dependencies = [
@@ -1047,10 +1047,10 @@ name = "myst-parser"
 version = "5.1.0"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "(python_full_version >= '3.12' and platform_machine == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l')",
-    "(python_full_version == '3.11.*' and platform_machine == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l')",
     "python_full_version >= '3.13' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+    "(python_full_version >= '3.12' and platform_machine == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l')",
     "python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+    "(python_full_version == '3.11.*' and platform_machine == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l')",
     "python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
 ]
 dependencies = [
@@ -1549,10 +1549,10 @@ name = "pydata-sphinx-theme"
 version = "0.20.0"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "(python_full_version >= '3.12' and platform_machine == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l')",
-    "(python_full_version == '3.11.*' and platform_machine == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l')",
     "python_full_version >= '3.13' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+    "(python_full_version >= '3.12' and platform_machine == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l')",
     "python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+    "(python_full_version == '3.11.*' and platform_machine == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l')",
     "python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
 ]
 dependencies = [
@@ -1859,8 +1859,8 @@ name = "sphinx"
 version = "9.1.0"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "(python_full_version >= '3.12' and platform_machine == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l')",
     "python_full_version >= '3.13' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+    "(python_full_version >= '3.12' and platform_machine == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l')",
     "python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
 ]
 dependencies = [
@@ -1908,10 +1908,10 @@ name = "sphinx-design"
 version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "(python_full_version >= '3.12' and platform_machine == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l')",
-    "(python_full_version == '3.11.*' and platform_machine == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l')",
     "python_full_version >= '3.13' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+    "(python_full_version >= '3.12' and platform_machine == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l')",
     "python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
+    "(python_full_version == '3.11.*' and platform_machine == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l')",
     "python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l'",
 ]
 dependencies = [
