@@ -1,4 +1,6 @@
-add_subdirectory(src)
+if (WITH_PYTHON_BINDINGS)
+    add_subdirectory(src)
+endif ()
 
 if (WITH_PYTHON_STUBS)
     add_subdirectory(stub)
