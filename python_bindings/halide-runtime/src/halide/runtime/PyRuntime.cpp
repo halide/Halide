@@ -19,7 +19,6 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
-#include <mutex>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -89,23 +88,16 @@ std::string library_error() {
 // records the message for Kernel::call to raise as a Python exception.
 // ---------------------------------------------------------------------------
 
-std::mutex &error_mutex() {
-    static std::mutex m;
-    return m;
-}
-
 std::string &last_error() {
-    static std::string s;
+    static thread_local std::string s;
     return s;
 }
 
 extern "C" void runtime_error_handler(void * /*user_context*/, const char *msg) {
-    std::scoped_lock lock(error_mutex());
     last_error() = msg ? msg : "";
 }
 
 std::string take_last_error() {
-    std::scoped_lock lock(error_mutex());
     std::string s = last_error();
     last_error().clear();
     return s;
