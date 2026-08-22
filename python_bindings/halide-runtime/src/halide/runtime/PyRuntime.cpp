@@ -217,6 +217,7 @@ public:
         halide_buffer_t buffer{};
         std::vector<halide_dimension_t> dims;
         Py_buffer py_buf{};
+        py::object capsule;
         bool py_buf_valid = false;
         bool needs_device_free = false;
     };
@@ -360,30 +361,27 @@ private:
                                        py::handle value,
                                        bool writable,
                                        ArgSlot &slot) {
-        PyObject *obj = value.ptr();
-
         // Fast path: an object that already exposes a halide_buffer_t capsule
         // (halide.Buffer, halide.runtime.Buffer, or another generated result).
-        if (PyObject_HasAttrString(obj, "_get_halide_buffer_t_capsule")) {
-            PyObject *capsule = PyObject_CallMethod(obj, "_get_halide_buffer_t_capsule", nullptr);
-            if (capsule && PyCapsule_CheckExact(capsule)) {
-                void *ptr = PyCapsule_GetPointer(
-                    capsule, Halide::PythonRuntimeBindings::halide_buffer_capsule_name);
-                Py_DECREF(capsule);
-                if (ptr) {
-                    return static_cast<halide_buffer_t *>(ptr);
-                }
-                PyErr_Clear();
-            } else {
-                Py_XDECREF(capsule);
-                PyErr_Clear();
+        py::object get_capsule = py::getattr(value, "_get_halide_buffer_t_capsule", py::none());
+        if (!get_capsule.is_none()) {
+            py::object capsule = get_capsule();
+            if (!py::isinstance<py::capsule>(capsule)) {
+                throw py::type_error("_get_halide_buffer_t_capsule() must return a PyCapsule");
             }
+            void *ptr = PyCapsule_GetPointer(
+                capsule.ptr(), Halide::PythonRuntimeBindings::halide_buffer_capsule_name);
+            if (!ptr) {
+                throw py::error_already_set();
+            }
+            slot.capsule = std::move(capsule);
+            return static_cast<halide_buffer_t *>(ptr);
         }
 
         // General path: buffer-protocol object (e.g. NumPy array).
         slot.dims.resize(a.dimensions > 0 ? a.dimensions : 1);
         bool ok = Halide::PythonRuntime::unpack_buffer(
-            obj, writable ? PyBUF_WRITABLE : 0, a.name, a.dimensions,
+            value.ptr(), writable ? PyBUF_WRITABLE : 0, a.name, a.dimensions,
             slot.py_buf, slot.dims.data(), slot.buffer, slot.py_buf_valid,
             slot.needs_device_free);
         if (!ok) {

@@ -296,14 +296,16 @@ public:
 
     PyBuffer(const py::buffer &buffer, const std::string &name, bool reverse_axes)
         : Buffer<>(), info() {
-        if (py::hasattr(buffer, "_get_halide_runtime_buffer_capsule")) {
-            if (!py::hasattr(buffer, "defined")) {
+        py::object get_runtime_buffer = py::getattr(buffer, "_get_halide_runtime_buffer_capsule", py::none());
+        if (!get_runtime_buffer.is_none()) {
+            py::object defined = py::getattr(buffer, "defined", py::none());
+            if (defined.is_none()) {
                 throw py::type_error("Invalid halide.runtime.Buffer.");
             }
-            if (!buffer.attr("defined")().cast<bool>()) {
+            if (!defined().cast<bool>()) {
                 return;
             }
-            const py::capsule capsule = buffer.attr("_get_halide_runtime_buffer_capsule")().cast<py::capsule>();
+            const py::capsule capsule = get_runtime_buffer().cast<py::capsule>();
             const auto *runtime_buffer = static_cast<const Halide::Runtime::Buffer<> *>(
                 PyCapsule_GetPointer(capsule.ptr(), runtime_buffer_capsule_name));
             if (!runtime_buffer) {

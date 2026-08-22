@@ -124,32 +124,39 @@ struct PyHalideBuffer {
 
     Py_buffer py_buf;
     halide_buffer_t *halide_buf = nullptr;
+    PyObject *halide_buf_capsule = nullptr;
     bool py_buf_needs_release = false;
     bool needs_device_free = false;
 
     bool unpack_from_halide_buffer(PyObject *py_obj) {
-        if (!PyObject_HasAttrString(py_obj, get_halide_buffer_capsule_fn)) {
+        PyObject *get_capsule = PyObject_GetAttrString(py_obj, get_halide_buffer_capsule_fn);
+        if (!get_capsule) {
+            if (PyErr_ExceptionMatches(PyExc_AttributeError)) {
+                PyErr_Clear();
+            }
             return false;
         }
 
-        PyObject *capsule = PyObject_CallMethod(py_obj, get_halide_buffer_capsule_fn, nullptr);
+        PyObject *capsule = PyObject_CallObject(get_capsule, nullptr);
+        Py_DECREF(get_capsule);
         if (!capsule) {
-            PyErr_Clear();
             return false;
         }
 
         if (!PyCapsule_CheckExact(capsule)) {
+            PyErr_Format(PyExc_TypeError, "%s() must return a PyCapsule", get_halide_buffer_capsule_fn);
             Py_DECREF(capsule);
             return false;
         }
 
         void *ptr = PyCapsule_GetPointer(capsule, halide_buffer_capsule_name);
-        Py_DECREF(capsule);
         if (!ptr) {
-            PyErr_Clear();
+            Py_DECREF(capsule);
             return false;
         }
 
+        // Keep the capsule alive for as long as we use the pointer it contains.
+        halide_buf_capsule = capsule;
         halide_buf = static_cast<halide_buffer_t *>(ptr);
         return true;
     }
@@ -157,6 +164,9 @@ struct PyHalideBuffer {
     bool unpack(PyObject *py_obj, int py_getbuffer_flags, const char *name) {
         if (unpack_from_halide_buffer(py_obj)) {
             return true;
+        }
+        if (PyErr_Occurred()) {
+            return false;
         }
         if (Halide::PythonRuntime::unpack_buffer(
                 py_obj, py_getbuffer_flags, name, dimensions, py_buf,
@@ -175,6 +185,7 @@ struct PyHalideBuffer {
         if (py_buf_needs_release) {
             PyBuffer_Release(&py_buf);
         }
+        Py_XDECREF(halide_buf_capsule);
     }
 
     PyHalideBuffer() = default;

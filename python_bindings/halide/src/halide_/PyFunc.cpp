@@ -65,7 +65,9 @@ void define_set_func_ref<double>(py::class_<Func> &func_class) {
                      std::ostringstream os;
                      os << "Loss of precision detected when casting " << rhs << " to a single precision float. The difference is " << diff << ".";
                      std::string msg = os.str();
-                     PyErr_WarnEx(nullptr, msg.c_str(), 1);
+                     if (PyErr_WarnEx(PyExc_RuntimeWarning, msg.c_str(), 1) < 0) {
+                         throw py::error_already_set();
+                     }
                  }
                  func(lhs) = Expr(f);
              });

@@ -95,14 +95,13 @@ Expr double_to_expr_check(double v) {
         std::ostringstream oss;
         oss.precision(17);
         oss << std::fixed << v;
-        PyErr_WarnEx(
-            PyExc_RuntimeWarning,
-            ("The floating-point value " +
-             oss.str() +
-             " will be interpreted as a float32 by Halide and lose precision;"
-             " add an explicit `f32()` or `f64()`` cast to avoid this warning.")
-                .c_str(),
-            0);
+        const std::string warning =
+            "The floating-point value " + oss.str() +
+            " will be interpreted as a float32 by Halide and lose precision;"
+            " add an explicit `f32()` or `f64()` cast to avoid this warning.";
+        if (PyErr_WarnEx(PyExc_RuntimeWarning, warning.c_str(), 0) < 0) {
+            throw py::error_already_set();
+        }
     }
     return Expr(f);
 }
