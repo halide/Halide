@@ -134,8 +134,8 @@ else ()
     ## Lessons 15, 16, and 21 use Generator classes, so unlike the plain
     ## scripts above, they need add_halide_generator()/add_halide_library()
     ## to actually run the generator (mirroring tutorial/CMakeLists.txt's
-    ## C++ versions and python_bindings/apps/CMakeLists.txt's use of the same
-    ## machinery). The directory-wide EXCLUDE_FROM_ALL above keeps these
+    ## C++ versions and python_bindings/halide/apps/CMakeLists.txt's use of the
+    ## same machinery). The directory-wide EXCLUDE_FROM_ALL above keeps these
     ## targets from building as a side effect of a plain `cmake --build .`;
     ## each lesson's own test explicitly builds what it needs (via `cmake
     ## --build --target`), the same trick lesson 10 uses above, just without

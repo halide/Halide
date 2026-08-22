@@ -75,7 +75,9 @@ def _next_blank_line(lines: list[str], from_line: int) -> int:
 
 
 def _python_source(tutorial_dir: Path, slug: str) -> Path | None:
-    candidate = tutorial_dir.parent / "python_bindings" / "tutorial" / f"{slug}.py"
+    candidate = (
+        tutorial_dir.parent / "python_bindings" / "halide" / "tutorial" / f"{slug}.py"
+    )
     return candidate if candidate.exists() else None
 
 
