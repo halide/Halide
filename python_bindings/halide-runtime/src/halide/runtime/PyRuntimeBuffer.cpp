@@ -5,6 +5,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -37,10 +38,28 @@ std::string format_descriptor<float16_t>() {
     return "e";
 }
 
-halide_type_t format_descriptor_to_type(const std::string &format) {
-#define HANDLE_TYPE(TYPE)                                           \
-    if (format == format_descriptor<TYPE>()) {                      \
-        return Halide::Runtime::Buffer<TYPE>::static_halide_type(); \
+halide_type_t format_descriptor_to_type(std::string format, py::ssize_t itemsize) {
+    char byte_order = '@';
+    if (!format.empty() && std::strchr("@<>!=", format.front())) {
+        byte_order = format.front();
+        format.erase(format.begin());
+    }
+    const uint16_t endian_test = 1;
+    const bool native_is_little_endian = *reinterpret_cast<const uint8_t *>(&endian_test) == 1;
+    const bool non_native_byte_order =
+        (native_is_little_endian && (byte_order == '>' || byte_order == '!')) ||
+        (!native_is_little_endian && byte_order == '<');
+    if (non_native_byte_order && itemsize > 1) {
+        throw py::value_error("Non-native byte order is not supported.");
+    }
+
+#define HANDLE_TYPE(TYPE)                                                               \
+    if (format == format_descriptor<TYPE>()) {                                          \
+        const halide_type_t type = Halide::Runtime::Buffer<TYPE>::static_halide_type(); \
+        if (type.bytes() != itemsize) {                                                 \
+            throw py::value_error("Buffer item size does not match its format.");       \
+        }                                                                               \
+        return type;                                                                    \
     }
     HANDLE_TYPE(bool)
     HANDLE_TYPE(uint8_t)
@@ -56,7 +75,11 @@ halide_type_t format_descriptor_to_type(const std::string &format) {
     HANDLE_TYPE(double)
 #undef HANDLE_TYPE
     if (format == "l") {
-        return sizeof(long) == 8 ? Runtime::Buffer<int64_t>::static_halide_type() : Runtime::Buffer<int32_t>::static_halide_type();
+        const halide_type_t type = itemsize == 8 ? Runtime::Buffer<int64_t>::static_halide_type() : Runtime::Buffer<int32_t>::static_halide_type();
+        if (type.bytes() != itemsize) {
+            throw py::value_error("Buffer item size does not match its format.");
+        }
+        return type;
     }
     throw py::value_error("Unsupported Buffer<> type.");
 }
@@ -140,11 +163,17 @@ public:
     Buffer(py::buffer source, std::string name, bool reverse_axes)
         : owner_(std::move(source)), identity_(std::make_shared<char>()), name_(name.empty() ? unique_name() : std::move(name)), defined_(true) {
         py::buffer_info info = py::reinterpret_borrow<py::buffer>(owner_).request(true);
-        const halide_type_t type = format_descriptor_to_type(info.format);
+        if (info.ndim < 0 || info.ndim > INT32_MAX) {
+            throw py::value_error("Out of range dimensionality in buffer conversion.");
+        }
+        const halide_type_t type = format_descriptor_to_type(info.format, info.itemsize);
         std::vector<halide_dimension_t> dims(info.ndim);
         for (int i = 0; i < info.ndim; ++i) {
+            if (info.strides[i] % type.bytes() != 0) {
+                throw py::value_error("Buffer byte stride is not a multiple of its item size.");
+            }
             const auto stride = info.strides[i] / type.bytes();
-            if (info.shape[i] > INT32_MAX || stride < INT32_MIN || stride > INT32_MAX) {
+            if (info.shape[i] < 0 || info.shape[i] > INT32_MAX || stride < INT32_MIN || stride > INT32_MAX) {
                 throw py::value_error("Out of range dimensions in buffer conversion.");
             }
             const int dst = reverse_axes ? info.ndim - i - 1 : i;

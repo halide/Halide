@@ -18,6 +18,7 @@
  */
 #include <Python.h>
 
+#include <climits>
 #include <cstdint>
 #include <cstring>
 
@@ -39,7 +40,8 @@ inline bool unpack_buffer(PyObject *py_obj,
 
     memset(&py_buf, 0, sizeof(py_buf));
     if (PyObject_GetBuffer(py_obj, &py_buf, PyBUF_FORMAT | PyBUF_STRIDED_RO | py_getbuffer_flags) < 0) {
-        PyErr_Format(PyExc_ValueError, "Invalid argument %s: Expected %d dimensions, got %d", name, dimensions, py_buf.ndim);
+        // Preserve the buffer exporter's exception (notably, the specific error
+        // reported when a writable view was requested from a read-only object).
         return false;
     }
     py_buf_valid = true;
@@ -48,14 +50,31 @@ inline bool unpack_buffer(PyObject *py_obj,
         PyErr_Format(PyExc_ValueError, "Invalid argument %s: Expected %d dimensions, got %d", name, dimensions, py_buf.ndim);
         return false;
     }
+    if (py_buf.itemsize <= 0) {
+        PyErr_Format(PyExc_ValueError, "Invalid argument %s: Buffer item size must be positive", name);
+        return false;
+    }
     // Always reverse axes.
     // TODO(jiawen): Can probably consolidate this with similar code in PyCallable.cpp and
     // pybufferinfo_to_halidebuffer() in PyBuffer.h.
     for (int i = 0; i < py_buf.ndim; ++i) {
         const int j = py_buf.ndim - 1 - i;  // numpy axis j maps to Halide dim i
+        if (py_buf.shape[j] < 0 || py_buf.shape[j] > INT32_MAX) {
+            PyErr_Format(PyExc_ValueError, "Invalid argument %s: Buffer extent is out of range", name);
+            return false;
+        }
+        if (py_buf.strides[j] % py_buf.itemsize != 0) {
+            PyErr_Format(PyExc_ValueError, "Invalid argument %s: Buffer byte stride is not a multiple of its item size", name);
+            return false;
+        }
+        const Py_ssize_t element_stride = py_buf.strides[j] / py_buf.itemsize;
+        if (element_stride < INT32_MIN || element_stride > INT32_MAX) {
+            PyErr_Format(PyExc_ValueError, "Invalid argument %s: Buffer stride is out of range", name);
+            return false;
+        }
         halide_dim[i].min = 0;
-        halide_dim[i].stride = (int)(py_buf.strides[j] / py_buf.itemsize);  // Python strides are in bytes
-        halide_dim[i].extent = (int)py_buf.shape[j];
+        halide_dim[i].stride = static_cast<int32_t>(element_stride);
+        halide_dim[i].extent = static_cast<int32_t>(py_buf.shape[j]);
         halide_dim[i].flags = 0;
         if (py_buf.suboffsets && py_buf.suboffsets[j] >= 0) {
             // Halide doesn't support arrays of pointers. But we should never see this
@@ -66,16 +85,29 @@ inline bool unpack_buffer(PyObject *py_obj,
     }
 
     halide_buf = {};
-    needs_device_free = true;
     if (!py_buf.format) {
+        if (py_buf.itemsize != 1) {
+            PyErr_Format(PyExc_ValueError, "Invalid data type for %s: Missing format for a multi-byte buffer", name);
+            return false;
+        }
         halide_buf.type.code = halide_type_uint;
         halide_buf.type.bits = 8;
     } else {
         /* Convert struct type code. See
          * https://docs.python.org/2/library/struct.html#module-struct */
-        char *p = py_buf.format;
-        while (strchr("@<>!=", *p)) {
-            p++;  // ignore little/bit endian (and alignment)
+        const char *p = py_buf.format;
+        char byte_order = '@';
+        if (strchr("@<>!=", *p)) {
+            byte_order = *p++;
+        }
+        const uint16_t endian_test = 1;
+        const bool native_is_little_endian = *reinterpret_cast<const uint8_t *>(&endian_test) == 1;
+        const bool non_native_byte_order =
+            (native_is_little_endian && (byte_order == '>' || byte_order == '!')) ||
+            (!native_is_little_endian && byte_order == '<');
+        if (non_native_byte_order && py_buf.itemsize > 1) {
+            PyErr_Format(PyExc_ValueError, "Invalid data type for %s: Non-native byte order %s is not supported", name, py_buf.format);
+            return false;
         }
         if (*p == 'f' || *p == 'd' || *p == 'e') {
             // 'f', 'd', and 'e' are float, double, and half, respectively.
@@ -88,12 +120,14 @@ inline bool unpack_buffer(PyObject *py_obj,
             halide_buf.type.code = halide_type_uint;
         }
         const char *type_codes = "bBhHiIlLqQfde";  // integers and floats
-        if (*p == '?') {
+        if (*p == '?' && p[1] == '\0' && py_buf.itemsize == 1) {
             // Special-case bool, so that it is a distinct type vs uint8_t
             // (even though the memory layout is identical)
             halide_buf.type.bits = 1;
-        } else if (strchr(type_codes, *p)) {
-            halide_buf.type.bits = (uint8_t)py_buf.itemsize * 8;
+        } else if (strchr(type_codes, *p) && p[1] == '\0' &&
+                   (py_buf.itemsize == 1 || py_buf.itemsize == 2 ||
+                    py_buf.itemsize == 4 || py_buf.itemsize == 8)) {
+            halide_buf.type.bits = static_cast<uint8_t>(py_buf.itemsize * 8);
         } else {
             // We don't handle 's' and 'p' (char[]) and 'P' (void*)
             PyErr_Format(PyExc_ValueError, "Invalid data type for %s: %s", name, py_buf.format);
@@ -102,7 +136,8 @@ inline bool unpack_buffer(PyObject *py_obj,
     }
     halide_buf.dimensions = py_buf.ndim;
     halide_buf.dim = halide_dim;
-    halide_buf.host = (uint8_t *)py_buf.buf;
+    halide_buf.host = static_cast<uint8_t *>(py_buf.buf);
+    needs_device_free = true;
 
     return true;
 }
