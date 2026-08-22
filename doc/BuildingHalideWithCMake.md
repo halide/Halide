@@ -196,7 +196,7 @@ Once Python is installed, you can install the Python module dependencies in a
 [virtual environment][venv] by running
 
 ```shell
-$ uv sync
+$ uv sync --frozen --no-install-workspace
 ```
 
 from the root of the repository.
@@ -237,8 +237,19 @@ dependencies. These are tabulated as constraints in `pyproject.toml` and
 resolved to specific versions in `uv.lock`. They may be installed by running:
 
 ```shell
-$ uv sync --no-install-project
+$ uv sync --frozen --no-install-workspace
 ```
+
+The repository root is a uv workspace for the three published Python
+distributions. `--no-install-workspace` installs only the external development
+dependencies, leaving the normal CMake build responsible for the Python
+bindings. `--frozen` uses the committed lockfile without evaluating or building
+the workspace packages.
+
+To build and install the three Python workspace packages instead, run
+`uv sync --all-packages`. This performs a full compiler build. The
+`--all-packages` option is necessary because the workspace root is a virtual
+project and does not itself depend on its members.
 
 ## Building Halide
 
@@ -484,11 +495,24 @@ $ cmake --install .\build --prefix X:\path\to\Halide-install --config Release
 Of course, make sure that you build the corresponding config before attempting
 to install it.
 
-## Building Halide with pip
+## Building Halide's Python packages
 
-Halide also supports installation via the standard Python packaging workflow.
-Running `pip install .` at the root of the repository will build a wheel and
-install it into the currently active Python environment.
+Halide's repository root is a uv workspace, not an installable package. It
+contains three distributions under `python_bindings/`: `halide-bin` contains the
+compiler, native tools, headers, and CMake package; `halide-runtime` contains
+the standalone runtime bindings; and `halide` contains the compiler Python
+bindings and depends on matching versions of the other two.
+
+Build them in dependency order with uv:
+
+```shell
+$ uv build --package halide-bin
+$ uv build --package halide-runtime --find-links dist
+$ uv build --package halide --find-links dist
+```
+
+The `--find-links dist` options make the matching, locally built `halide-bin`
+available as a build dependency. All artifacts are written to `dist/`.
 
 However, this comes with a few caveats:
 
@@ -501,16 +525,16 @@ However, this comes with a few caveats:
 3. The generated wheel will likely only work on your system. In particular, it
    will not be repaired with `auditwheel` or `delocate`.
 
-Even so, this is a very good method of installing Halide. It supports both
-Python and C++ `find_package` workflows.
+Even so, this is a useful way to produce local Halide artifacts. The complete
+set of wheels supports both Python and C++ `find_package` workflows.
 
-### Using ccache with pip builds
+### Using ccache with Python package builds
 
 Because Python's build infrastructure creates temporary CMake build directories,
 simply setting `CMAKE_CXX_COMPILER_LAUNCHER` to `ccache` is insufficient to
 produce a well-cached build. The following settings should serve as a starting
 point to configure your environment (assuming `$PWD` is the repository root) for
-using `ccache` with `pip install .`.
+using `ccache` with `uv build --package halide-bin`.
 
 ```shell
 # Point CMake to ccache
@@ -530,41 +554,21 @@ export CXXFLAGS="$CFLAGS"
 # Locate the temporary build beneath $PWD so that CCACHE_BASEDIR works
 export TMPDIR=$PWD/build/tmp
 
-# If using uv, don't create a temporary venv
+# Build in the workspace environment rather than a temporary environment
 export UV_NO_BUILD_ISOLATION=1
 ```
 
 See the CCache documentation on [compiling in different directories] and on
 using [precompiled headers] for more information about these settings. To check
-that ccache is working, run,
+that ccache is working, build `halide-bin` twice and inspect the cache
+statistics:
 
 ```shell
-$ uv pip install .  # first run, populate cache
-Resolved 4 packages in 397ms
-      Built halide @ file:///Users/areinking/dev/Halide
-Prepared 1 package in 29.17s
-Installed 1 package in 8ms
- + halide==20.0.0.dev87+gf6c939fd3.d20250724 (from file:///Users/areinking/dev/Halide)
+$ uv build --package halide-bin  # first run, populate cache
 $ ccache -z
 Statistics zeroed
-$ uv pip install .  # second run, reload from cache
-Resolved 4 packages in 338ms
-      Built halide @ file:///Users/areinking/dev/Halide
-Prepared 1 package in 10.82s
-Uninstalled 1 package in 7ms
-Installed 1 package in 6ms
- ~ halide==20.0.0.dev87+gf6c939fd3.d20250724 (from file:///Users/areinking/dev/Halide)
+$ uv build --package halide-bin  # second run, reuse cached objects
 $ ccache -s
-Cacheable calls:   1079 / 1080 (99.91%)
-  Hits:            1079 / 1079 (100.0%)
-    Direct:        1079 / 1079 (100.0%)
-    Preprocessed:     0 / 1079 ( 0.00%)
-  Misses:             0 / 1079 ( 0.00%)
-Uncacheable calls:    1 / 1080 ( 0.09%)
-Local storage:
-  Cache size (GB):  2.2 / 30.0 ( 7.24%)
-  Hits:            1079 / 1079 (100.0%)
-  Misses:             0 / 1079 ( 0.00%)
 ```
 
 On this test system (an M3 MacBook Pro), the build is three times faster, with a

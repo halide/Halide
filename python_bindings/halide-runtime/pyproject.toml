@@ -1,0 +1,109 @@
+[build-system]
+requires = [
+  "pybind11>=2.11.1",
+  "scikit-build-core~=1.0.3",
+  "setuptools-scm>=8.3.1",
+]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "halide-runtime"
+authors = [
+  { name = "The Halide team", email = "halide-dev@lists.csail.mit.edu" },
+]
+maintainers = [{ name = "Alex Reinking", email = "areinking@adobe.com" }]
+description = "Standalone Halide runtime: load and call precompiled Halide AOT kernels without depending on libHalide (no compiler, no LLVM)."
+license = "MIT"
+readme = "README.md"
+requires-python = ">=3.10"
+dynamic = ['version']
+dependencies = ["numpy>=1.26"]
+keywords = ["array", "image processing", "runtime", "aot", "halide"]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Natural Language :: English",
+  "Operating System :: MacOS",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX",
+  "Programming Language :: C++",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Topic :: Multimedia :: Graphics",
+  "Topic :: Scientific/Engineering",
+  "Topic :: Scientific/Engineering :: Image Processing",
+]
+
+[project.urls]
+Homepage = "https://halide-lang.org"
+Documentation = "https://github.com/halide/Halide/blob/main/doc/Python.md"
+Issues = "https://github.com/halide/Halide/issues"
+Repository = "https://github.com/halide/Halide.git"
+
+[[tool.dynamic-metadata]]
+provider = { path = ".", module = "_dynamic_metadata" }
+
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+experimental = true
+cmake.version = ">=3.28"
+ninja.version = ">=1.11,!=1.13.0"
+cmake.source-dir = ".."
+
+# Build and package ONLY the standalone runtime extension: build just its target
+# (so libHalide's compiler bindings are never compiled) and install just its
+# component (the _runtime extension plus the small pure-Python surface: the lazy
+# halide/__init__.py and halide/runtime/__init__.py). The resulting wheel links
+# no libHalide and has no `halide-bin` dependency.
+build.targets = ["Halide_PythonRuntime"]
+install.components = ["Halide_PythonRuntime"]
+wheel.install-dir = "halide"
+sdist.inclusion-mode = "explicit"
+sdist.include = ["pyproject.toml", "README.md", "_dynamic_metadata.py"]
+
+[tool.scikit-build.sdist.force-include]
+"../../cmake" = "cmake"
+"../../dependencies" = "dependencies"
+"../../packaging" = "packaging"
+"../../python_bindings" = "python_bindings"
+"../../src" = "src"
+"../../tools" = "tools"
+"../../.git_archival.txt" = ".git_archival.txt"
+"../../CMakeLists.txt" = "CMakeLists.txt"
+"../../LICENSE.txt" = "LICENSE.txt"
+"../../vcpkg.json" = "vcpkg.json"
+"../../vcpkg-configuration.json" = "vcpkg-configuration.json"
+
+[tool.scikit-build.cmake.define]
+CMAKE_DISABLE_FIND_PACKAGE_JPEG = true
+CMAKE_DISABLE_FIND_PACKAGE_PNG = true
+FETCHCONTENT_FULLY_DISCONNECTED = true
+Halide_ENABLE_EXCEPTIONS = true
+Halide_ENABLE_RTTI = true
+Halide_INSTALL_PYTHONDIR = "."
+Halide_WASM_BACKEND = "wabt"
+WITH_PYTHON_BINDINGS = true
+WITH_TESTS = false
+WITH_TUTORIALS = false
+WITH_UTILS = false
+CMAKE_PLATFORM_NO_VERSIONED_SONAME = true
+
+[[tool.scikit-build.overrides]]
+if.platform-system = "^win32"
+inherit.cmake.define = "append"
+cmake.define.Halide_WASM_BACKEND = "OFF"
+
+[[tool.scikit-build.overrides]]
+if.from-sdist = true
+cmake.source-dir = "python_bindings"
+
+[tool.setuptools_scm]
+root = "../.."
+
+[tool.uv]
+cache-keys = [
+  { file = "pyproject.toml" },
+  { git = { commit = true, tags = true } },
+]

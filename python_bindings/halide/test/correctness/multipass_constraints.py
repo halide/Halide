@@ -1,0 +1,79 @@
+import halide as hl
+
+
+def test_multipass_constraints():
+    input = hl.ImageParam(hl.Float(32), 2, "input")
+
+    f = hl.Func("f")
+    x = hl.Var("x")
+    y = hl.Var("y")
+
+    f[x, y] = input[x + 1, y + 1] + input[x - 1, y - 1]
+    f[x, y] += 3.0
+    f.update().vectorize(x, 4)
+
+    o = f.output_buffer()
+
+    # Now make some hard-to-resolve constraints
+    input.dim(0).set_bounds(
+        min=input.dim(1).min() - 5, extent=input.dim(1).extent() + o.dim(0).extent()
+    )
+
+    o.dim(0).set_bounds(
+        min=0,
+        extent=hl.select(
+            o.dim(0).extent() < 22, o.dim(0).extent() + 1, o.dim(0).extent()
+        ),
+    )
+
+    # Make a bounds query buffer
+    query_buf = hl.Buffer.make_bounds_query(type=hl.Float(32), sizes=[7, 8])
+    query_buf.set_min([2, 2])
+
+    f.infer_input_bounds(query_buf)
+
+    if (
+        input.get().dim(0).min() != -4
+        or input.get().dim(0).extent() != 34
+        or input.get().dim(1).min() != 1
+        or input.get().dim(1).extent() != 10
+        or query_buf.dim(0).min() != 0
+        or query_buf.dim(0).extent() != 24
+        or query_buf.dim(1).min() != 2
+        or query_buf.dim(1).extent() != 8
+    ):
+        print(
+            "Constraints not correctly satisfied:\n",
+            "in:",
+            input.get().dim(0).min(),
+            input.get().dim(0).extent(),
+            input.get().dim(1).min(),
+            input.get().dim(1).extent(),
+            "out:",
+            query_buf.dim(0).min(),
+            query_buf.dim(0).extent(),
+            query_buf.dim(1).min(),
+            query_buf.dim(1).extent(),
+        )
+        assert False
+
+
+def test_infer_input_bounds_preserves_halide_error():
+    output = hl.Func("undefined_output")
+    query = hl.Buffer.make_bounds_query(type=hl.UInt(8), sizes=[4])
+
+    def expect_halide_error(infer):
+        try:
+            infer(query)
+        except hl.HalideError as e:
+            assert "undefined output Func" in str(e)
+        else:
+            assert False, "HalideError was suppressed by overload dispatch"
+
+    expect_halide_error(output.infer_input_bounds)
+    expect_halide_error(hl.Pipeline(output).infer_input_bounds)
+
+
+if __name__ == "__main__":
+    test_multipass_constraints()
+    test_infer_input_bounds_preserves_halide_error()
