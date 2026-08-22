@@ -1,5 +1,7 @@
 #include "PySerialization.h"
 
+#include <filesystem>
+
 #include <pybind11/stl/filesystem.h>
 
 namespace Halide {
@@ -8,13 +10,13 @@ namespace PythonBindings {
 void define_serialization(py::module &m) {
     // Serialize pipeline functions
     m.def("serialize_pipeline",  //
-          [](const Pipeline &pipeline, const PathLike &filename, std::optional<bool> get_params) -> std::optional<std::map<std::string, Parameter>> {
+          [](const Pipeline &pipeline, const std::filesystem::path &filename, std::optional<bool> get_params) -> std::optional<std::map<std::string, Parameter>> {
               if (get_params.value_or(false)) {
                   std::map<std::string, Parameter> params;
-                  serialize_pipeline(pipeline, filename, params);
+                  serialize_pipeline(pipeline, filename.string(), params);
                   return params;
               }
-              serialize_pipeline(pipeline, filename);
+              serialize_pipeline(pipeline, filename.string());
               return {};  //
           },
           py::arg("pipeline"),                   //
@@ -54,8 +56,8 @@ void define_serialization(py::module &m) {
           "Deserialize a Halide pipeline from bytes.");
 
     m.def("deserialize_pipeline",  //
-          [](const PathLike &filename, const std::map<std::string, Parameter> &user_params) -> Pipeline {
-              return deserialize_pipeline(filename, user_params);  //
+          [](const std::filesystem::path &filename, const std::map<std::string, Parameter> &user_params) -> Pipeline {
+              return deserialize_pipeline(filename.string(), user_params);  //
           },
           py::arg("filename"),                                          //
           py::arg("user_params") = std::map<std::string, Parameter>{},  //
@@ -74,8 +76,8 @@ void define_serialization(py::module &m) {
           "Deserialize external parameters from serialized pipeline bytes.");
 
     m.def("deserialize_parameters",  //
-          [](const PathLike &filename) -> std::map<std::string, Parameter> {
-              return deserialize_parameters(filename);  //
+          [](const std::filesystem::path &filename) -> std::map<std::string, Parameter> {
+              return deserialize_parameters(filename.string());  //
           },
           py::arg("filename"),  //
           "Deserialize external parameters from a serialized pipeline file. Accepts string or path-like objects.");
