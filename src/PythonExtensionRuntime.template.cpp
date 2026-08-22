@@ -111,11 +111,16 @@ inline bool unpack_buffer(PyObject *py_obj,
 
 namespace {
 
+#define HALIDE_PYTHON_STRINGIFY_IMPL(x) #x
+#define HALIDE_PYTHON_STRINGIFY(x) HALIDE_PYTHON_STRINGIFY_IMPL(x)
+
 template<int dimensions>
 struct PyHalideBuffer {
     // Must allocate at least 1, even if d=0
     static constexpr int dims_to_allocate = (dimensions < 1) ? 1 : dimensions;
-    static constexpr const char *get_raw_halide_runtime_buffer_fn = "_get_raw_halide_buffer_t";
+    static constexpr const char *get_halide_buffer_capsule_fn = "_get_halide_buffer_t_capsule";
+    static constexpr const char *halide_buffer_capsule_name =
+        "halide.halide_buffer_t.v" HALIDE_PYTHON_STRINGIFY(HALIDE_VERSION_MAJOR);
 
     Py_buffer py_buf;
     halide_buffer_t *halide_buf = nullptr;
@@ -123,29 +128,29 @@ struct PyHalideBuffer {
     bool needs_device_free = false;
 
     bool unpack_from_halide_buffer(PyObject *py_obj) {
-        if (!PyObject_HasAttrString(py_obj, get_raw_halide_runtime_buffer_fn)) {
+        if (!PyObject_HasAttrString(py_obj, get_halide_buffer_capsule_fn)) {
             return false;
         }
 
-        PyObject *py_raw_buffer = PyObject_CallMethod(py_obj, get_raw_halide_runtime_buffer_fn, nullptr);
-        if (!py_raw_buffer) {
+        PyObject *capsule = PyObject_CallMethod(py_obj, get_halide_buffer_capsule_fn, nullptr);
+        if (!capsule) {
             PyErr_Clear();
             return false;
         }
 
-        if (!PyLong_Check(py_raw_buffer)) {
-            Py_DECREF(py_raw_buffer);
+        if (!PyCapsule_CheckExact(capsule)) {
+            Py_DECREF(capsule);
             return false;
         }
 
-        uintptr_t py_raw_buffer_ptr = (uintptr_t)PyLong_AsUnsignedLongLong(py_raw_buffer);
-        Py_DECREF(py_raw_buffer);
-
-        if (py_raw_buffer_ptr == 0) {
+        void *ptr = PyCapsule_GetPointer(capsule, halide_buffer_capsule_name);
+        Py_DECREF(capsule);
+        if (!ptr) {
+            PyErr_Clear();
             return false;
         }
 
-        halide_buf = reinterpret_cast<halide_buffer_t *>(py_raw_buffer_ptr);
+        halide_buf = static_cast<halide_buffer_t *>(ptr);
         return true;
     }
 
@@ -182,5 +187,8 @@ private:
     halide_dimension_t unpacked_dim[dims_to_allocate];
     halide_buffer_t unpacked_buf;
 };
+
+#undef HALIDE_PYTHON_STRINGIFY
+#undef HALIDE_PYTHON_STRINGIFY_IMPL
 
 }  // namespace

@@ -10,6 +10,15 @@ namespace PythonBindings {
 
 namespace {
 
+#define HALIDE_PYTHON_STRINGIFY_IMPL(x) #x
+#define HALIDE_PYTHON_STRINGIFY(x) HALIDE_PYTHON_STRINGIFY_IMPL(x)
+constexpr char halide_buffer_capsule_name[] =
+    "halide.halide_buffer_t.v" HALIDE_PYTHON_STRINGIFY(HALIDE_VERSION_MAJOR);
+constexpr char runtime_buffer_capsule_name[] =
+    "halide.runtime.Buffer.v" HALIDE_PYTHON_STRINGIFY(HALIDE_VERSION_MAJOR);
+#undef HALIDE_PYTHON_STRINGIFY
+#undef HALIDE_PYTHON_STRINGIFY_IMPL
+
 // Standard stream output for halide_dimension_t
 std::ostream &operator<<(std::ostream &stream, const halide_dimension_t &d) {
     stream << "[" << d.min << "," << d.extent << "," << d.stride << "]";
@@ -287,18 +296,19 @@ public:
 
     PyBuffer(const py::buffer &buffer, const std::string &name, bool reverse_axes)
         : Buffer<>(), info() {
-        if (py::hasattr(buffer, "_get_raw_halide_runtime_buffer")) {
+        if (py::hasattr(buffer, "_get_halide_runtime_buffer_capsule")) {
             if (!py::hasattr(buffer, "defined")) {
                 throw py::type_error("Invalid halide.runtime.Buffer.");
             }
             if (!buffer.attr("defined")().cast<bool>()) {
                 return;
             }
-            const uintptr_t address = buffer.attr("_get_raw_halide_runtime_buffer")().cast<uintptr_t>();
-            if (address == 0) {
-                throw py::value_error("A defined Buffer cannot have a null runtime buffer.");
+            const py::capsule capsule = buffer.attr("_get_halide_runtime_buffer_capsule")().cast<py::capsule>();
+            const auto *runtime_buffer = static_cast<const Halide::Runtime::Buffer<> *>(
+                PyCapsule_GetPointer(capsule.ptr(), runtime_buffer_capsule_name));
+            if (!runtime_buffer) {
+                throw py::error_already_set();
             }
-            const auto *runtime_buffer = reinterpret_cast<const Halide::Runtime::Buffer<> *>(address);
             Buffer<>::operator=(Buffer<>(Halide::Runtime::Buffer<>(*runtime_buffer), name));
             return;
         }
@@ -695,13 +705,18 @@ void define_buffer(py::module &m) {
 
             .def("get", [](const py::object &self) -> py::object {
                 const auto &buffer = self.cast<const Buffer<> &>();
-                return py::module_::import("halide.runtime")
-                    .attr("Buffer")
-                    .attr("_from_borrowed")(
-                        reinterpret_cast<uintptr_t>(buffer.get()), self, buffer.name()); })
+                py::object runtime_buffer = py::module_::import("halide.runtime").attr("Buffer");
+                if (!buffer.defined()) {
+                    return runtime_buffer();
+                }
+                return runtime_buffer.attr("_from_borrowed")(
+                    py::capsule(buffer.get(), runtime_buffer_capsule_name), self, buffer.name()); })
 
-            .def("_get_raw_halide_buffer_t", [](const Buffer<> &b) -> uintptr_t {
-                return reinterpret_cast<uintptr_t>(b.raw_buffer());  //
+            .def("_get_halide_buffer_t_capsule", [](Buffer<> &b) -> py::capsule {
+                if (!b.defined()) {
+                    throw py::value_error("Buffer is undefined.");
+                }
+                return py::capsule(b.raw_buffer(), halide_buffer_capsule_name);  //
             });
 }
 

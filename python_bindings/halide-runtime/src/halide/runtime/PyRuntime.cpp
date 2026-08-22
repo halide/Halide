@@ -10,8 +10,8 @@
 // Python extensions emitted by PythonExtensionGen, via the single source of
 // truth in src/PythonExtensionRuntime.template.cpp (included below). Interop
 // with `halide.Buffer` (from the compiler module) and with objects produced by
-// generated extensions flows through the duck-typed `_get_raw_halide_buffer_t`
-// protocol, so no libHalide types cross the boundary.
+// generated extensions flows through a duck-typed, named-capsule protocol, so
+// no libHalide types cross the boundary.
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -354,7 +354,7 @@ private:
     }
 
     // Convert one buffer-protocol / Halide-buffer argument into a halide_buffer_t.
-    // Uses the shared `_get_raw_halide_buffer_t` fast path first, then falls back
+    // Uses the shared named-capsule fast path first, then falls back
     // to the shared unpack_buffer() implementation.
     halide_buffer_t *unpack_buffer_arg(const halide_filter_argument_t &a,
                                        py::handle value,
@@ -362,18 +362,20 @@ private:
                                        ArgSlot &slot) {
         PyObject *obj = value.ptr();
 
-        // Fast path: an object that already exposes a raw halide_buffer_t
+        // Fast path: an object that already exposes a halide_buffer_t capsule
         // (halide.Buffer, halide.runtime.Buffer, or another generated result).
-        if (PyObject_HasAttrString(obj, "_get_raw_halide_buffer_t")) {
-            PyObject *raw = PyObject_CallMethod(obj, "_get_raw_halide_buffer_t", nullptr);
-            if (raw && PyLong_Check(raw)) {
-                auto ptr = (uintptr_t)PyLong_AsUnsignedLongLong(raw);
-                Py_DECREF(raw);
+        if (PyObject_HasAttrString(obj, "_get_halide_buffer_t_capsule")) {
+            PyObject *capsule = PyObject_CallMethod(obj, "_get_halide_buffer_t_capsule", nullptr);
+            if (capsule && PyCapsule_CheckExact(capsule)) {
+                void *ptr = PyCapsule_GetPointer(
+                    capsule, Halide::PythonRuntimeBindings::halide_buffer_capsule_name);
+                Py_DECREF(capsule);
                 if (ptr) {
-                    return reinterpret_cast<halide_buffer_t *>(ptr);
+                    return static_cast<halide_buffer_t *>(ptr);
                 }
+                PyErr_Clear();
             } else {
-                Py_XDECREF(raw);
+                Py_XDECREF(capsule);
                 PyErr_Clear();
             }
         }

@@ -172,12 +172,12 @@ public:
         return result;
     }
 
-    static Buffer from_borrowed(uintptr_t address, py::object owner, std::string name) {
-        if (address == 0) {
-            return Buffer();
-        }
+    static Buffer from_borrowed(const py::capsule &capsule, py::object owner, std::string name) {
         Buffer result;
-        result.borrowed_buffer_ = reinterpret_cast<RuntimeBuffer *>(address);
+        result.borrowed_buffer_ = static_cast<RuntimeBuffer *>(PyCapsule_GetPointer(capsule.ptr(), runtime_buffer_capsule_name));
+        if (!result.borrowed_buffer_) {
+            throw py::error_already_set();
+        }
         result.owner_ = std::move(owner);
         result.identity_ = std::make_shared<char>();
         result.name_ = std::move(name);
@@ -218,12 +218,14 @@ public:
         return borrowed_buffer_ ? *borrowed_buffer_ : buffer_;
     }
 
-    uintptr_t raw_halide_buffer_t() {
-        return reinterpret_cast<uintptr_t>(runtime_buffer().raw_buffer());
+    py::capsule halide_buffer_t_capsule() {
+        require_defined();
+        return py::capsule(runtime_buffer().raw_buffer(), halide_buffer_capsule_name);
     }
 
-    uintptr_t raw_runtime_buffer() {
-        return reinterpret_cast<uintptr_t>(&runtime_buffer());
+    py::capsule runtime_buffer_capsule() {
+        require_defined();
+        return py::capsule(&runtime_buffer(), runtime_buffer_capsule_name);
     }
 
     bool defined() const {
@@ -422,7 +424,7 @@ void define_buffer(py::module_ &m) {
         .def(py::init<halide_type_t, const std::vector<int> &, const std::vector<int> &, std::string>(),
              py::arg("type"), py::arg("sizes"), py::arg("storage_order"), py::arg("name") = "")
         .def_static("_from_borrowed", &Buffer::from_borrowed,
-                    py::arg("address"), py::arg("owner"), py::arg("name"))
+                    py::arg("capsule"), py::arg("owner"), py::arg("name"))
         .def_static("make_bounds_query", &Buffer::make_bounds_query, py::arg("type"), py::arg("sizes"), py::arg("name") = "")
         .def_static("make_scalar", &Buffer::make_scalar, py::arg("type"), py::arg("name") = "")
         .def_static("make_interleaved", &Buffer::make_interleaved, py::arg("type"), py::arg("width"), py::arg("height"), py::arg("channels"), py::arg("name") = "")
@@ -522,8 +524,8 @@ void define_buffer(py::module_ &m) {
                 out << "[" << d.min << "," << d.extent << "," << d.stride << "]";
             }
             return out.str() + "]>"; })
-        .def("_get_raw_halide_buffer_t", &Buffer::raw_halide_buffer_t)
-        .def("_get_raw_halide_runtime_buffer", &Buffer::raw_runtime_buffer);
+        .def("_get_halide_buffer_t_capsule", &Buffer::halide_buffer_t_capsule)
+        .def("_get_halide_runtime_buffer_capsule", &Buffer::runtime_buffer_capsule);
 }
 
 }  // namespace Halide::PythonRuntimeBindings

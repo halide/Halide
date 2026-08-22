@@ -640,6 +640,7 @@ def test_runtime_buffer_is_distinct():
 
     undefined_compiler_buffer = hl.Buffer(hlr.Buffer())
     assert not undefined_compiler_buffer.defined()
+    assert not undefined_compiler_buffer.get().defined()
 
     compiler_buffer[2, 1] = 17
     runtime_view = compiler_buffer.get()
@@ -655,6 +656,16 @@ def test_runtime_buffer_is_distinct():
 
     runtime_view.translate(0, 5)
     assert compiler_buffer.dim(0).min() == 5
+
+    # The two native pointer types use distinct capsule tags.
+    try:
+        hlr.Buffer._from_borrowed(
+            compiler_buffer._get_halide_buffer_t_capsule(), compiler_buffer, ""
+        )
+    except ValueError:
+        pass
+    else:
+        assert False, "accepted a halide_buffer_t capsule as a Runtime::Buffer"
 
     # The borrowed runtime view keeps its compiler Buffer alive.
     runtime_view = hl.Buffer(hl.Int(32), [2]).get()

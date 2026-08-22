@@ -43,16 +43,13 @@ def main():
     buf = hlr.Buffer(grid)
     assert buf.dimensions() == 2 and str(buf.type()) == "uint8"
     assert [buf.dim(i).extent() for i in range(buf.dimensions())] == [3, 2]
-    assert (
-        isinstance(buf._get_raw_halide_buffer_t(), int)
-        and buf._get_raw_halide_buffer_t() != 0
-    )
+    assert type(buf._get_halide_buffer_t_capsule()).__name__ == "PyCapsule"
     view = np.asarray(buf)
     assert np.array_equal(view, grid)
     view[0, 0] = 42
     assert grid[0, 0] == 42, "Buffer must be a zero-copy view of its source"
 
-    # Pass Buffer objects to the kernel (via the _get_raw_halide_buffer_t bridge).
+    # Pass Buffer objects to the kernel (via the named-capsule bridge).
     out3 = np.zeros_like(rng)
     kernel(hlr.Buffer(rng), np.int32(7), hlr.Buffer(out3))
     expected3 = ((rng.astype(np.int64) + 7) % 256).astype(np.uint8)
