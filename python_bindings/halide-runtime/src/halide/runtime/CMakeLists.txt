@@ -43,15 +43,9 @@ if (
     target_include_directories(Halide_PythonRuntime PRIVATE "${Halide_SOURCE_DIR}/src")
 endif ()
 
-# Runtime only: link a compiled Halide runtime (halide_copy_to_host,
-# halide_device_free, error/print handlers, ...) plus the header-only runtime
-# interface -- but NOT libHalide/the compiler.
-# This runtime is linked into a native CPython extension, regardless of the
-# default target used for Halide's AOT tests. In particular, the CI builds
-# reconfigure this build tree with Halide_TARGET=wasm-32-..., which must not
-# turn this archive into WebAssembly.
-add_halide_runtime(Halide_PythonRuntime_rt TARGETS cmake)
-target_link_libraries(Halide_PythonRuntime PRIVATE Halide_PythonRuntime_rt)
+# Header-only runtime interface only: loaded AOT modules supply their own
+# compiled Halide runtime.
+target_link_libraries(Halide_PythonRuntime PRIVATE Halide::Runtime)
 
 # Place the module next to the compiler extension in normal CMake builds. The
 # package binary directory is set by python_bindings/CMakeLists.txt.

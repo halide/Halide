@@ -84,11 +84,9 @@ std::string library_error() {
 //
 // By default the Halide runtime prints an error to stderr and aborts the
 // process. That is unacceptable in a library: a bad argument or a missing GPU
-// driver would take down the interpreter. We install a handler that instead
-// records the message so Kernel::call can raise it as a Python exception. Each
-// AOT artifact carries its own copy of the runtime, so the handler must be
-// installed both into this module's runtime and, at load time, into the
-// runtime bundled in each loaded kernel.
+// driver would take down the interpreter. Each AOT artifact carries its own
+// copy of the runtime, so load() installs a handler into that runtime which
+// records the message for Kernel::call to raise as a Python exception.
 // ---------------------------------------------------------------------------
 
 std::mutex &error_mutex() {
@@ -114,6 +112,21 @@ std::string take_last_error() {
 }
 
 using SetErrorHandlerFn = void (*)(void (*)(void *, const char *));
+
+// Device allocations belong to the runtime in the loaded AOT module. Dispatch
+// through the interface stored on the buffer rather than linking a second,
+// unrelated vanilla runtime into this extension.
+void device_free(halide_buffer_t *buf) {
+    if (buf->device_interface) {
+        (void)buf->device_interface->device_free(nullptr, buf);
+    }
+}
+
+void copy_to_host(halide_buffer_t *buf) {
+    if (buf->device_dirty()) {
+        (void)buf->device_interface->copy_to_host(nullptr, buf);
+    }
+}
 
 // Best-effort default filter name from a library path: strip the directory,
 // any file extension, and a leading "lib". e.g. "/x/libfoo.so" -> "foo".
@@ -225,7 +238,7 @@ public:
             ~Cleanup() {
                 for (auto &s : slots) {
                     if (s.needs_device_free) {
-                        halide_device_free(nullptr, &s.buffer);
+                        device_free(&s.buffer);
                     }
                     if (s.py_buf_valid) {
                         PyBuffer_Release(&s.py_buf);
@@ -327,7 +340,7 @@ public:
             if (a.kind == halide_argument_kind_output_buffer) {
                 auto *buf = static_cast<halide_buffer_t *>(argv[i]);
                 if (buf->device_dirty()) {
-                    (void)halide_copy_to_host(nullptr, buf);
+                    copy_to_host(buf);
                 }
             }
         }
@@ -465,9 +478,6 @@ std::shared_ptr<Kernel> load(const std::string &path, const py::object &name_obj
 PYBIND11_MODULE(_runtime, m) {
     m.doc() = "Standalone Halide runtime: load and call precompiled AOT kernels "
               "without depending on libHalide.";
-
-    // Make our own runtime's errors non-fatal too (e.g. a failed copy-to-host).
-    halide_set_error_handler(&runtime_error_handler);
 
     Halide::PythonRuntimeBindings::define_buffer(m);
 
