@@ -233,13 +233,20 @@ jobs:
             CMAKE_GENERATOR=Ninja
             PIP_FIND_LINKS='${{ github.workspace }}\dist-bin'
             SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE='{local_scheme="no-local-version"}'
-          # halide_.pyd/.so now depends on a Halide.dll/libHalide supplied by the
-          # already-installed halide-bin package, not one bundled in this wheel --
-          # `--exclude` stops delvewheel from vendoring a second copy of it, while
-          # `--add-path` lets its dependency scan actually resolve it.
+          # halide_.pyd/.so depends on Halide.dll/libHalide supplied by the
+          # separately installed halide-bin package. Tell each platform's wheel
+          # repair tool that this dependency is intentionally external instead
+          # of trying to vendor it into the halide wheel.
+          CIBW_REPAIR_WHEEL_COMMAND_LINUX: >
+            auditwheel repair --exclude libHalide.so -w {dest_dir} {wheel}
+          CIBW_REPAIR_WHEEL_COMMAND_MACOS: >
+            delocate-wheel --require-archs {delocate_archs}
+            --exclude libHalide.dylib -w {dest_dir} -v {wheel}
+          # delvewheel still needs to locate Halide.dll before it can exclude
+          # it, so point it at the unpacked halide-bin wheel on Windows.
           CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: >
             delvewheel repair --ignore-existing --exclude Halide.dll
-            --add-path '${{ github.workspace }}\opt\halide-bin\halide\bin'
+            --add-path ${{ github.workspace }}\opt\halide-bin\halide\bin
             -w {dest_dir} {wheel}
           # halide-bin isn't published yet during this CI run, so resolve it
           # from the wheel we just downloaded instead of the package index.
