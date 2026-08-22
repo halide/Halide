@@ -7,9 +7,9 @@ resolution-markers = [
     "python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l'",
     "(python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
+    "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
     "python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l'",
-    "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version < '3.11' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version < '3.11' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
@@ -351,9 +351,9 @@ resolution-markers = [
     "python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l'",
     "(python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
+    "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
     "python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l'",
-    "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv8l')",
 ]
@@ -431,7 +431,7 @@ ci-llvm-21 = [
 ]
 ci-llvm-22 = [
     { name = "cmake" },
-    { name = "halide-llvm", version = "22.1.7", source = { registry = "https://pypi.halide-lang.org/simple" } },
+    { name = "halide-llvm", version = "22.1.8", source = { registry = "https://pypi.halide-lang.org/simple" } },
     { name = "ninja" },
     { name = "onnx", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'" },
     { name = "pre-commit" },
@@ -445,7 +445,7 @@ ci-llvm-22 = [
 ]
 ci-llvm-main = [
     { name = "cmake" },
-    { name = "halide-llvm", version = "23.0.0.dev100667+g9bf20bdf", source = { registry = "https://pypi.halide-lang.org/simple" } },
+    { name = "halide-llvm", version = "23.1.0rc3", source = { registry = "https://pypi.halide-lang.org/simple" } },
     { name = "ninja" },
     { name = "onnx", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'" },
     { name = "pre-commit" },
@@ -541,7 +541,7 @@ ci-llvm-22 = [
 ]
 ci-llvm-main = [
     { name = "cmake", specifier = ">=3.28" },
-    { name = "halide-llvm", specifier = "~=23.0.0.dev0", index = "https://pypi.halide-lang.org/simple" },
+    { name = "halide-llvm", specifier = "~=23.1.0.dev0", index = "https://pypi.halide-lang.org/simple" },
     { name = "ninja", specifier = ">=1.11,!=1.13.0" },
     { name = "onnx", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = "==1.19.0" },
     { name = "pre-commit", specifier = ">=4" },
@@ -584,9 +584,9 @@ resolution-markers = [
     "python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l'",
     "(python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
+    "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
     "python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l'",
-    "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version < '3.11' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version < '3.11' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
@@ -607,7 +607,7 @@ wheels = [
 
 [[package]]
 name = "halide-llvm"
-version = "22.1.7"
+version = "22.1.8"
 source = { registry = "https://pypi.halide-lang.org/simple" }
 resolution-markers = [
     "python_full_version >= '3.13' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l'",
@@ -615,9 +615,9 @@ resolution-markers = [
     "python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l'",
     "(python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
+    "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
     "python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l'",
-    "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version < '3.11' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version < '3.11' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
@@ -626,19 +626,19 @@ resolution-markers = [
     "(python_full_version < '3.11' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv7l') or (python_full_version < '3.11' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv8l')",
 ]
 wheels = [
-    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4022.1.7/halide_llvm-22.1.7-py3-none-macosx_11_0_arm64.whl", hash = "sha256:1f997a871da192c64abb267615cb0aee4491627ce6c705cad849fa6677f352f2" },
-    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4022.1.7/halide_llvm-22.1.7-py3-none-macosx_11_0_x86_64.whl", hash = "sha256:2dab547e28434bf3ac1202975969b753c208c6944bdeb786a8cabc3f02f840e9" },
-    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4022.1.7/halide_llvm-22.1.7-py3-none-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:b81610ef7d7feb56540661dad5c59d71380a075cf193767c75c450707d15bd66" },
-    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4022.1.7/halide_llvm-22.1.7-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:b1eacd19a601a55c23b0ddc329a1caec039270fd29c5a3f94f3a913b3b42a937" },
-    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4022.1.7/halide_llvm-22.1.7-py3-none-manylinux_2_28_i686.whl", hash = "sha256:7a36e7e0f65cea51d4c3f5f85852dbd4ba94100970a893ef98fe2f2b7f154b44" },
-    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4022.1.7/halide_llvm-22.1.7-py3-none-manylinux_2_31_armv7l.whl", hash = "sha256:e9db509c0a3747e3ed0aba53e2d49246ca985efe0b8a1211b7a3c70d4866a3a6" },
-    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4022.1.7/halide_llvm-22.1.7-py3-none-win32.whl", hash = "sha256:1f1611454eb9e6dc1a12197ba4c87c6a4caa3fecc7e5ac5ecb767a8d21f025eb" },
-    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4022.1.7/halide_llvm-22.1.7-py3-none-win_amd64.whl", hash = "sha256:cefb720b2d4df5532ee4742445d55e7004140f3c1257daff8cfa0158d632e986" },
+    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4022.1.8/halide_llvm-22.1.8-py3-none-macosx_11_0_arm64.whl", hash = "sha256:136acbeb8f9522f9e82f7eaf867f0ede1df420172db5276748a90d4fccce1534" },
+    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4022.1.8/halide_llvm-22.1.8-py3-none-macosx_11_0_x86_64.whl", hash = "sha256:dbba736c0bf5377e42d2710503762aca5acedf6be4a7130a8891673d1adb8e08" },
+    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4022.1.8/halide_llvm-22.1.8-py3-none-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:9455ca95665a317ade5a27d86a47a3041d2d8e45af622d2cf6d8592551334067" },
+    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4022.1.8/halide_llvm-22.1.8-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:23e7bb3b1d4f7317fe14b53d769dde575565215571ec3d6bd3e80c6e769c1e6d" },
+    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4022.1.8/halide_llvm-22.1.8-py3-none-manylinux_2_28_i686.whl", hash = "sha256:606d0281a3cf212f8d3b673d856d2da55619b65904f81c31dda97cb8f3df01d3" },
+    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4022.1.8/halide_llvm-22.1.8-py3-none-manylinux_2_31_armv7l.whl", hash = "sha256:dff3f4a9c7ae559c97a69251087276f24b3300bde240c5c3d927fefc1a1ae7b8" },
+    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4022.1.8/halide_llvm-22.1.8-py3-none-win32.whl", hash = "sha256:8c662adf5f3899c3e495a87788e77ff8a2559d6339ce20d3987d55af8c5db019" },
+    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4022.1.8/halide_llvm-22.1.8-py3-none-win_amd64.whl", hash = "sha256:eb585e648cbc2e9e2e9c69cefdc857f930f7e2482f80eedbd191f3dd0750e41c" },
 ]
 
 [[package]]
 name = "halide-llvm"
-version = "23.0.0.dev100667+g9bf20bdf"
+version = "23.1.0rc3"
 source = { registry = "https://pypi.halide-lang.org/simple" }
 resolution-markers = [
     "python_full_version >= '3.13' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l'",
@@ -646,9 +646,9 @@ resolution-markers = [
     "python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l'",
     "(python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
+    "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
     "python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l'",
-    "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version < '3.11' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version < '3.11' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
@@ -657,14 +657,14 @@ resolution-markers = [
     "(python_full_version < '3.11' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv7l') or (python_full_version < '3.11' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv8l')",
 ]
 wheels = [
-    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4023.0.0.dev100667%2Bg9bf20bdf/halide_llvm-23.0.0.dev100667%2Bg9bf20bdf-py3-none-macosx_11_0_arm64.whl", hash = "sha256:bc6ecef649b0eeb2d9b5827e8664652d6722ffe4ee98bac3febd3e223629d0d0" },
-    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4023.0.0.dev100667%2Bg9bf20bdf/halide_llvm-23.0.0.dev100667%2Bg9bf20bdf-py3-none-macosx_11_0_x86_64.whl", hash = "sha256:0fc4450b99b599300ff0088ed798082e1c7129e72a71a55a7ed29fd942d15886" },
-    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4023.0.0.dev100667%2Bg9bf20bdf/halide_llvm-23.0.0.dev100667%2Bg9bf20bdf-py3-none-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:0c00ff01a0c1b43e321cf0491d70d568868c65dc738d59ba054df550b36de6f1" },
-    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4023.0.0.dev100667%2Bg9bf20bdf/halide_llvm-23.0.0.dev100667%2Bg9bf20bdf-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:9dfc5476b8647fb1eab8d6441303d34f065aabfea2d11d547afec94adb27b71b" },
-    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4023.0.0.dev100667%2Bg9bf20bdf/halide_llvm-23.0.0.dev100667%2Bg9bf20bdf-py3-none-manylinux_2_28_i686.whl", hash = "sha256:182725f20d81737cd3d03ea384eaf9f05fbb6070fe57d22880d5efd90b6eae78" },
-    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4023.0.0.dev100667%2Bg9bf20bdf/halide_llvm-23.0.0.dev100667%2Bg9bf20bdf-py3-none-manylinux_2_31_armv7l.whl", hash = "sha256:c14abaadf6781b2fbec4495c2d0558ae7fe25c17de05dde8e1b5e88f4de8fe33" },
-    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4023.0.0.dev100667%2Bg9bf20bdf/halide_llvm-23.0.0.dev100667%2Bg9bf20bdf-py3-none-win32.whl", hash = "sha256:0bff9d935c76af54c0d656f76dd9f9c935784ccc549bf194eb4fedf9f26ce36e" },
-    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4023.0.0.dev100667%2Bg9bf20bdf/halide_llvm-23.0.0.dev100667%2Bg9bf20bdf-py3-none-win_amd64.whl", hash = "sha256:0b32ab7ab02d63fb66664061da597dee70d5039c7be381a3f5ca73d30733b06f" },
+    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4023.1.0rc3/halide_llvm-23.1.0rc3-py3-none-macosx_11_0_arm64.whl", hash = "sha256:678ac695e3f49b4c76817132c0e26b6812fc517e45e7e4b3baedbe506cfcba0a" },
+    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4023.1.0rc3/halide_llvm-23.1.0rc3-py3-none-macosx_11_0_x86_64.whl", hash = "sha256:392363cfb132fc275f31ccd9229486c4e8ae76fb678ad73635e5f7598204aaac" },
+    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4023.1.0rc3/halide_llvm-23.1.0rc3-py3-none-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:efea54578c029833cc13de1a2c5d4de2b8d23d2fe78d078de0ceb99fc9626377" },
+    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4023.1.0rc3/halide_llvm-23.1.0rc3-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:cd88e8634ed1325a44b33862fcbdd463e2e8422399ee2fd924a7572ca411ff2a" },
+    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4023.1.0rc3/halide_llvm-23.1.0rc3-py3-none-manylinux_2_28_i686.whl", hash = "sha256:56fb9310046172fa51cae9e63388411d35c3b01043add088586a96549659f56e" },
+    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4023.1.0rc3/halide_llvm-23.1.0rc3-py3-none-manylinux_2_31_armv7l.whl", hash = "sha256:3cd6371b386d2d7399e7530dbb88ebd4f28c6ca6f3afa19c0d5b8c53f953c7fe" },
+    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4023.1.0rc3/halide_llvm-23.1.0rc3-py3-none-win32.whl", hash = "sha256:21e68346b01420f749872f125c64cda1f8b43660dd20590e01dd73916f8240fa" },
+    { url = "https://github.com/halide/pypi/releases/download/halide-llvm%4023.1.0rc3/halide_llvm-23.1.0rc3-py3-none-win_amd64.whl", hash = "sha256:0119ce2a1f031e89b110d7037e16f1cf6fd523796c3d98b89af0409a89ec467c" },
 ]
 
 [[package]]
@@ -691,8 +691,8 @@ version = "2.37.2"
 source = { registry = "https://piwheels.org/simple" }
 resolution-markers = [
     "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
-    "(python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
     "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
+    "(python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version < '3.11' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version < '3.11' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
     "(python_full_version < '3.11' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version < '3.11' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version < '3.11' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version < '3.11' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
@@ -788,9 +788,9 @@ resolution-markers = [
     "python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l'",
     "(python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
+    "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
     "python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l'",
-    "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv8l')",
 ]
@@ -988,9 +988,9 @@ resolution-markers = [
     "python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l'",
     "(python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
+    "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
     "python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l'",
-    "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv8l')",
 ]
@@ -1128,8 +1128,8 @@ version = "2.4.2"
 source = { registry = "https://piwheels.org/simple" }
 resolution-markers = [
     "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
-    "(python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
     "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
+    "(python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
 ]
 wheels = [
@@ -1293,8 +1293,8 @@ version = "12.3.0"
 source = { registry = "https://piwheels.org/simple" }
 resolution-markers = [
     "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
-    "(python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
     "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
+    "(python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version < '3.11' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version < '3.11' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
     "(python_full_version < '3.11' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version < '3.11' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version < '3.11' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version < '3.11' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
@@ -1502,9 +1502,9 @@ resolution-markers = [
     "python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l'",
     "(python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
+    "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
     "python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l'",
-    "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv8l')",
 ]
@@ -1874,9 +1874,9 @@ resolution-markers = [
     "python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l'",
     "(python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.12.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
+    "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform != 'armv7l' and sys_platform != 'armv8l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l')",
     "python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform != 'armv7l' and sys_platform != 'armv8l'",
-    "(python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version >= '3.12' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version >= '3.12' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine == 'armv7l' and sys_platform == 'armv8l') or (python_full_version == '3.11.*' and platform_machine == 'armv8l' and sys_platform == 'armv8l')",
     "(python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv7l') or (python_full_version == '3.11.*' and platform_machine != 'armv7l' and platform_machine != 'armv8l' and sys_platform == 'armv8l')",
 ]

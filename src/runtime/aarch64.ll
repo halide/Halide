@@ -187,21 +187,21 @@ declare <vscale x 8 x half> @llvm.aarch64.sve.frsqrte.x.nxv8f16(<vscale x 8 x ha
 declare <vscale x 8 x half> @llvm.aarch64.sve.frecps.x.nxv8f16(<vscale x 8 x half> %x, <vscale x 8 x half> %y) nounwind readnone;
 declare <vscale x 8 x half> @llvm.aarch64.sve.frsqrts.x.nxv8f16(<vscale x 8 x half> %x, <vscale x 8 x half> %y) nounwind readnone;
 
-define weak_odr <vscale x 4 x float> @fast_inverse_f32nx4(<vscale x 4 x float> %x) nounwind alwaysinline {
+define weak_odr <vscale x 4 x float> @fast_inverse_f32nx4(<vscale x 4 x float> %x) nounwind alwaysinline "aarch64_pstate_sm_compatible" {
        %approx = tail call <vscale x 4 x float> @llvm.aarch64.sve.frecpe.x.nxv4f32(<vscale x 4 x float> %x)
        %correction = tail call <vscale x 4 x float> @llvm.aarch64.sve.frecps.x.nxv4f32(<vscale x 4 x float> %approx, <vscale x 4 x float> %x)
        %result = fmul <vscale x 4 x float> %approx, %correction
        ret <vscale x 4 x float> %result
 }
 
-define weak_odr <vscale x 8 x half> @fast_inverse_f16nx8(<vscale x 8 x half> %x) nounwind alwaysinline {
+define weak_odr <vscale x 8 x half> @fast_inverse_f16nx8(<vscale x 8 x half> %x) nounwind alwaysinline "aarch64_pstate_sm_compatible" {
        %approx = tail call <vscale x 8 x half> @llvm.aarch64.sve.frecpe.x.nxv8f16(<vscale x 8 x half> %x)
        %correction = tail call <vscale x 8 x half> @llvm.aarch64.sve.frecps.x.nxv8f16(<vscale x 8 x half> %approx, <vscale x 8 x half> %x)
        %result = fmul <vscale x 8 x half> %approx, %correction
        ret <vscale x 8 x half> %result
 }
 
-define weak_odr <vscale x 4 x float> @fast_inverse_sqrt_f32nx4(<vscale x 4 x float> %x) nounwind alwaysinline {
+define weak_odr <vscale x 4 x float> @fast_inverse_sqrt_f32nx4(<vscale x 4 x float> %x) nounwind alwaysinline "aarch64_pstate_sm_compatible" {
        %approx = tail call <vscale x 4 x float> @llvm.aarch64.sve.frsqrte.x.nxv4f32(<vscale x 4 x float> %x)
        %approx2 = fmul <vscale x 4 x float> %approx, %approx
        %correction = tail call <vscale x 4 x float> @llvm.aarch64.sve.frsqrts.x.nxv4f32(<vscale x 4 x float> %approx2, <vscale x 4 x float> %x)
@@ -209,7 +209,7 @@ define weak_odr <vscale x 4 x float> @fast_inverse_sqrt_f32nx4(<vscale x 4 x flo
        ret <vscale x 4 x float> %result
 }
 
-define weak_odr <vscale x 8 x half> @fast_inverse_sqrt_f16nx8(<vscale x 8 x half> %x) nounwind alwaysinline {
+define weak_odr <vscale x 8 x half> @fast_inverse_sqrt_f16nx8(<vscale x 8 x half> %x) nounwind alwaysinline "aarch64_pstate_sm_compatible" {
        %approx = tail call <vscale x 8 x half> @llvm.aarch64.sve.frsqrte.x.nxv8f16(<vscale x 8 x half> %x)
        %approx2 = fmul <vscale x 8 x half> %approx, %approx
        %correction = tail call <vscale x 8 x half> @llvm.aarch64.sve.frsqrts.x.nxv8f16(<vscale x 8 x half> %approx2, <vscale x 8 x half> %x)
