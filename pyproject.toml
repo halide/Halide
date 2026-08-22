@@ -125,6 +125,27 @@ search = "VERSION {current_version}"
 src = "pyproject.toml"
 search = 'version = "{current_version}"'
 
+[[tool.tbump.file]]
+src = "vcpkg.json"
+
+[[tool.tbump.file]]
+src = "apps/vcpkg.json"
+
+[[tool.tbump.file]]
+src = "src/runtime/HalideRuntime.h"
+version_template = "{major}"
+search = "#define HALIDE_VERSION_MAJOR {current_version}"
+
+[[tool.tbump.file]]
+src = "src/runtime/HalideRuntime.h"
+version_template = "{minor}"
+search = "#define HALIDE_VERSION_MINOR {current_version}"
+
+[[tool.tbump.file]]
+src = "src/runtime/HalideRuntime.h"
+version_template = "{patch}"
+search = "#define HALIDE_VERSION_PATCH {current_version}"
+
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "FURB", "PERF", "RUF", "SIM", "UP"]
 ignore = ["UP045", "SIM108"]
