@@ -1989,7 +1989,7 @@ private:
 class ComputeLegalSchedules : public IRVisitor {
 public:
     struct Site {
-        bool is_parallel, is_gpu_block;
+        bool is_parallel, is_gpu_block, is_gpu_thread;
         LoopLevel loop_level;
     };
     vector<Site> sites_allowed;
@@ -2026,7 +2026,9 @@ private:
         // thus any new ones we synthesize we must explicitly lock.
         loop_level.lock();
         const bool is_gpu_block = (f->for_type == ForType::GPUBlock);
-        sites.push_back({f->is_parallel(), is_gpu_block, loop_level});
+        const bool is_gpu_thread = (f->for_type == ForType::GPUThread ||
+                                    f->for_type == ForType::GPULane);
+        sites.push_back({f->is_parallel(), is_gpu_block, is_gpu_thread, loop_level});
 
         f->min.accept(this);
         f->max.accept(this);
@@ -2452,10 +2454,20 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         return store_idx >= 0 && compute_idx >= 0 && hoist_storage_idx >= 0;
     };
 
+    // Storage private to a GPU thread is not shared by a loop over threads, so
+    // such a loop between where it is stored and where it is computed is not a
+    // race - each thread gets its own copy, which is what the memory type
+    // means. Whether each thread then keeps to its own copy is a different
+    // question, and check_gpu_cross_talk answers it later in lowering.
+    const bool thread_private = f.schedule().memory_type() == MemoryType::Register;
+    const auto races = [&](int i) {
+        return sites[i].is_parallel && !(thread_private && sites[i].is_gpu_thread);
+    };
+
     // Check there isn't a parallel loop between the compute_at and the store_at
     if (all_ok()) {
         for (int i = store_idx + 1; i <= compute_idx; i++) {
-            if (sites[i].is_parallel) {
+            if (races(i)) {
                 err << "Func \"" << f.name()
                     << "\" is stored outside the parallel/vectorized/gpu_block loop over "
                     << sites[i].loop_level.to_string()
@@ -2468,7 +2480,7 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
     // Check there isn't a parallel loop between the compute_at and the hoist_storage_at
     if (all_ok()) {
         for (int i = hoist_storage_idx + 1; i <= compute_idx; i++) {
-            if (sites[i].is_parallel) {
+            if (races(i)) {
                 err << "Func \"" << f.name()
                     << "\" storage is hoisted outside the parallel/vectorized/gpu_block loop over "
                     << sites[i].loop_level.to_string()
