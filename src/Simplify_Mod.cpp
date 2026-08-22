@@ -59,6 +59,10 @@ Expr Simplify::visit(const Mod *op, ExprInfo *info) {
            rewrite((x * c0 - y) % c1, (-y) % c1, c0 % c1 == 0) ||
            rewrite((y - x * c0) % c1, y % c1, c0 % c1 == 0) ||
            rewrite((x - y) % 2, (x + y) % 2) ||  // Addition and subtraction are the same modulo 2, because -1 == 1
+           rewrite((((x * c0) + y) - z) % c0, (y - z) % c0) ||
+           rewrite((((x * c0) + y) + z) % c0, (y + z) % c0) ||
+           rewrite((((x * c0) - y) - z) % c0, (-y - z) % c0) ||
+           rewrite((((x * c0) - y) + z) % c0, (z - y) % c0) ||
 
            rewrite(ramp(x, c0, c2) % broadcast(c1, c2), broadcast(x, c2) % broadcast(c1, c2), (c0 % c1 == 0)) ||
            rewrite(ramp(x, c0, lanes) % broadcast(c1, lanes), ramp(x % c1, c0, lanes),

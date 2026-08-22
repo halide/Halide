@@ -1103,9 +1103,9 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
     return intm;
 }
 
-void Stage::split(const string &old, const string &outer, const string &inner, const Expr &factor_arg, bool exact, TailStrategy tail) {
+void Stage::split(const string &old, const string &outer, const string &inner, const Expr &factor_arg, const Expr &align_arg, bool exact, TailStrategy tail) {
     debug(4) << "In schedule for " << name() << ", split " << old << " into "
-             << outer << " and " << inner << " with factor of " << factor_arg << "\n";
+             << outer << " and " << inner << " with factor of " << factor_arg << " and align " << align_arg << "\n";
 
     user_assert(factor_arg.defined())
         << "In schedule for " << name() << ", split factor for splitting "
@@ -1115,6 +1115,14 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
         << old << " has type " << factor_arg.type()
         << ", which is not representable as int32.\n";
     Expr factor = cast<int32_t>(factor_arg);
+    Expr align;
+    if (align_arg.defined()) {
+        user_assert(Int(32).can_represent(align_arg.type()))
+            << "In schedule for " << name() << ", split align for splitting "
+            << old << " has type " << align_arg.type()
+            << ", which is not representable as int32.\n";
+        align = cast<int32_t>(align_arg);
+    }
 
     vector<Dim> &dims = definition.schedule().dims();
 
@@ -1318,11 +1326,15 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
     }
 
     // Add the split to the splits list
-    Split split = {old_name, outer_name, inner_name, factor, exact, tail, Split::SplitVar};
+    Split split = {old_name, outer_name, inner_name, factor, align, exact, tail, Split::SplitVar};
     definition.schedule().splits().push_back(split);
 }
 
-Stage &Stage::split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail) {
+void Stage::split(const std::string &old, const std::string &outer, const std::string &inner, const Expr &factor, bool exact, TailStrategy tail) {
+    split(old, outer, inner, factor, Expr(), exact, tail);
+}
+
+Stage &Stage::split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, const Expr &align, TailStrategy tail) {
     definition.schedule().touched() = true;
     if (old.is_rvar) {
         user_assert(outer.is_rvar) << "Can't split RVar " << old.name() << " into Var " << outer.name() << "\n";
@@ -1331,7 +1343,13 @@ Stage &Stage::split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVa
         user_assert(!outer.is_rvar) << "Can't split Var " << old.name() << " into RVar " << outer.name() << "\n";
         user_assert(!inner.is_rvar) << "Can't split Var " << old.name() << " into RVar " << inner.name() << "\n";
     }
-    split(old.name(), outer.name(), inner.name(), factor, old.is_rvar, tail);
+    split(old.name(), outer.name(), inner.name(), factor, align, old.is_rvar, tail);
+    return *this;
+}
+
+Stage &Stage::split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail) {
+    definition.schedule().touched() = true;
+    split(old.name(), outer.name(), inner.name(), factor, Expr(), old.is_rvar, tail);
     return *this;
 }
 
@@ -1413,7 +1431,7 @@ Stage &Stage::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRV
     set_dim_type(fused, dims[inner_pos].for_type);
 
     // Add the fuse to the splits list
-    Split split = {fused_name, outer_name, inner_name, Expr(), true, TailStrategy::RoundUp, Split::FuseVars};
+    Split split = {fused_name, outer_name, inner_name, Expr(), Expr(), true, TailStrategy::RoundUp, Split::FuseVars};
     definition.schedule().splits().push_back(split);
     return *this;
 }
@@ -1664,7 +1682,7 @@ Stage &Stage::rename(const VarOrRVar &old_var, const VarOrRVar &new_var) {
     }
 
     if (!found) {
-        Split split = {old_name, new_name, "", 1, old_var.is_rvar, TailStrategy::RoundUp, Split::RenameVar};
+        Split split = {old_name, new_name, "", 1, Expr(), old_var.is_rvar, TailStrategy::RoundUp, Split::RenameVar};
         definition.schedule().splits().push_back(split);
     }
 
@@ -2542,6 +2560,12 @@ Func Func::copy_to_host() {
 Func &Func::split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail) {
     invalidate_cache();
     Stage(func, func.definition(), 0).split(old, outer, inner, factor, tail);
+    return *this;
+}
+
+Func &Func::split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, const Expr &align, TailStrategy tail) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).split(old, outer, inner, factor, align, tail);
     return *this;
 }
 
