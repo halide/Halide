@@ -15,9 +15,11 @@
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+#include <pybind11/stl/filesystem.h>
 
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -430,7 +432,8 @@ std::string type_to_string(halide_type_t t) {
     return out.str();
 }
 
-std::shared_ptr<Kernel> load(const std::string &path, const py::object &name_obj) {
+std::shared_ptr<Kernel> load(const std::filesystem::path &path_obj, const py::object &name_obj) {
+    const std::string path = path_obj.string();
     LibHandle handle = open_library(path);
     if (!handle) {
         throw std::runtime_error("Could not load '" + path + "': " + library_error());

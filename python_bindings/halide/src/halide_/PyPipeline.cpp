@@ -237,7 +237,7 @@ void define_pipeline(py::module &m) {
                          Buffer<> b = dst.cast<Buffer<>>();
                          p.infer_input_bounds(&juc, b, t);
                          return;
-                     } catch (...) {
+                     } catch (const py::cast_error &) {
                          // fall thru
                      }
 
@@ -245,7 +245,7 @@ void define_pipeline(py::module &m) {
                          std::vector<Buffer<>> v = dst.cast<std::vector<Buffer<>>>();
                          p.infer_input_bounds(&juc, Realization(std::move(v)), t);
                          return;
-                     } catch (...) {
+                     } catch (const py::cast_error &) {
                          // fall thru
                      }
 
@@ -253,7 +253,7 @@ void define_pipeline(py::module &m) {
                          std::vector<int32_t> v = dst.cast<std::vector<int32_t>>();
                          p.infer_input_bounds(&juc, v, t);
                          return;
-                     } catch (...) {
+                     } catch (const py::cast_error &) {
                          // fall thru
                      }
 

@@ -115,7 +115,7 @@ std::vector<Expr> collect_print_args(const py::args &args) {
         // to Expr, but in this unusual case we do.
         try {
             v.emplace_back(arg.cast<std::string>());
-        } catch (...) {
+        } catch (const py::cast_error &) {
             v.push_back(arg.cast<Expr>());
         }
     }

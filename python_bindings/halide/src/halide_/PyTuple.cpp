@@ -7,7 +7,7 @@ Tuple to_halide_tuple(const py::object &o) {
     try {
         Expr e = o.cast<Expr>();
         return Tuple(e);
-    } catch (...) {
+    } catch (const py::cast_error &) {
         // fall thru
     }
 
@@ -21,7 +21,7 @@ Tuple to_halide_tuple(const py::object &o) {
             v[i] = t[i].cast<Expr>();
         }
         return Tuple(v);
-    } catch (...) {
+    } catch (const py::cast_error &) {
         // fall thru
     }
 

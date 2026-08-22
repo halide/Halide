@@ -37,12 +37,12 @@ void define_boundary_conditions(py::module &m) {
         "constant_exterior", [](const py::object &target, const Expr &exterior, const Region &bounds) -> Func {
             try {
                 return constant_exterior(target.cast<Func>(), exterior, bounds);
-            } catch (...) {
+            } catch (const py::cast_error &) {
                 // fall thru
             }
             try {
                 return constant_exterior(to_func(target.cast<Buffer<>>()), exterior, bounds);
-            } catch (...) {
+            } catch (const py::cast_error &) {
                 // fall thru
             }
             throw py::value_error("Invalid arguments to constant_exterior");
@@ -65,12 +65,12 @@ void define_boundary_conditions(py::module &m) {
         "repeat_edge", [](const py::object &target, const Region &bounds) -> Func {
             try {
                 return repeat_edge(target.cast<Func>(), bounds);
-            } catch (...) {
+            } catch (const py::cast_error &) {
                 // fall thru
             }
             try {
                 return repeat_edge(to_func(target.cast<Buffer<>>()), bounds);
-            } catch (...) {
+            } catch (const py::cast_error &) {
                 // fall thru
             }
             throw py::value_error("Invalid arguments to repeat_edge");
@@ -93,12 +93,12 @@ void define_boundary_conditions(py::module &m) {
         "repeat_image", [](const py::object &target, const Region &bounds) -> Func {
             try {
                 return repeat_image(target.cast<Func>(), bounds);
-            } catch (...) {
+            } catch (const py::cast_error &) {
                 // fall thru
             }
             try {
                 return repeat_image(to_func(target.cast<Buffer<>>()), bounds);
-            } catch (...) {
+            } catch (const py::cast_error &) {
                 // fall thru
             }
             throw py::value_error("Invalid arguments to repeat_image");
@@ -121,12 +121,12 @@ void define_boundary_conditions(py::module &m) {
         "mirror_image", [](const py::object &target, const Region &bounds) -> Func {
             try {
                 return mirror_image(target.cast<Func>(), bounds);
-            } catch (...) {
+            } catch (const py::cast_error &) {
                 // fall thru
             }
             try {
                 return mirror_image(to_func(target.cast<Buffer<>>()), bounds);
-            } catch (...) {
+            } catch (const py::cast_error &) {
                 // fall thru
             }
             throw py::value_error("Invalid arguments to mirror_image");
@@ -149,12 +149,12 @@ void define_boundary_conditions(py::module &m) {
         "mirror_interior", [](const py::object &target, const Region &bounds) -> Func {
             try {
                 return mirror_interior(target.cast<Func>(), bounds);
-            } catch (...) {
+            } catch (const py::cast_error &) {
                 // fall thru
             }
             try {
                 return mirror_interior(to_func(target.cast<Buffer<>>()), bounds);
-            } catch (...) {
+            } catch (const py::cast_error &) {
                 // fall thru
             }
             throw py::value_error("Invalid arguments to mirror_interior");
