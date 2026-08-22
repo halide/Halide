@@ -628,11 +628,18 @@ def test_runtime_buffer_is_distinct():
     assert runtime_buffer.type() == runtime_type
     runtime_buffer[1, 2] = 42
 
-    compiler_buffer = hl.Buffer.from_runtime(runtime_buffer)
+    compiler_buffer = hl.Buffer(runtime_buffer)
     assert isinstance(compiler_buffer, hl.Buffer)
     assert compiler_buffer.type() == hl.Int(32)
-    assert compiler_buffer.name() == "runtime_buffer"
+    assert compiler_buffer.dim(0).extent() == 4
+    assert compiler_buffer.dim(1).extent() == 3
     assert compiler_buffer[1, 2] == 42
+
+    renamed_compiler_buffer = hl.Buffer(runtime_buffer, "compiler_buffer")
+    assert renamed_compiler_buffer.name() == "compiler_buffer"
+
+    undefined_compiler_buffer = hl.Buffer(hlr.Buffer())
+    assert not undefined_compiler_buffer.defined()
 
     compiler_buffer[2, 1] = 17
     runtime_copy = hlr.Buffer.from_compiler(compiler_buffer)

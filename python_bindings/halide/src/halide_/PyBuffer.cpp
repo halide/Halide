@@ -276,11 +276,6 @@ py::object buffer_setitem_operator(Buffer<> &buf, const std::vector<int> &pos, c
 class PyBuffer : public Buffer<> {
     py::buffer_info info;
 
-    PyBuffer(py::buffer_info &&info, const std::string &name, bool reverse_axes)
-        : Buffer<>(pybufferinfo_to_halidebuffer(info, reverse_axes), name),
-          info(std::move(info)) {
-    }
-
 public:
     PyBuffer()
         : Buffer<>(), info() {
@@ -291,7 +286,26 @@ public:
     }
 
     PyBuffer(const py::buffer &buffer, const std::string &name, bool reverse_axes)
-        : PyBuffer(buffer.request(/*writable*/ true), name, reverse_axes) {
+        : Buffer<>(), info() {
+        if (py::hasattr(buffer, "_get_raw_halide_runtime_buffer")) {
+            if (!py::hasattr(buffer, "defined")) {
+                throw py::type_error("Invalid halide.runtime.Buffer.");
+            }
+            if (!buffer.attr("defined")().cast<bool>()) {
+                return;
+            }
+            const uintptr_t address = buffer.attr("_get_raw_halide_runtime_buffer")().cast<uintptr_t>();
+            if (address == 0) {
+                throw py::value_error("A defined Buffer cannot have a null runtime buffer.");
+            }
+            const auto *runtime_buffer = reinterpret_cast<const Halide::Runtime::Buffer<> *>(address);
+            Buffer<>::operator=(Buffer<>(Halide::Runtime::Buffer<>(*runtime_buffer), name));
+            return;
+        }
+
+        info = buffer.request(/*writable*/ true);
+        Buffer<>::operator=(Buffer<>(pybufferinfo_to_halidebuffer(info, reverse_axes), name));
+
         // Default to setting host-dirty on any PyBuffer we create from an existing py::buffer;
         // this allows (e.g.) code like
         //
@@ -370,13 +384,15 @@ void define_buffer(py::module &m) {
             .def(py::init_alias<const Buffer<> &>(), py::keep_alive<1, 2>())
 
             // This py::init_alias allows us to use any buffer-like Python entity to create a
-            // Buffer<> (most notably, an ndarray). reverse_axes = True by default.
+            // Buffer<> (most notably, an ndarray). A halide.runtime.Buffer is copied
+            // directly, matching Halide::Buffer's C++ constructor and preserving its
+            // axis order. reverse_axes = True by default for other buffer objects.
             //
             // ! Note that the copy/default constructors are registered *above, before* the
             // py::buffer one before. This is because hl.Buffer also satisfies the buffer protocol,
             // and we want hl.Buffer(other_buffer) to be a "direct" copy (no axis reversal) rather
             // than routing through the axis-reversing buffer-protocol path.
-            .def(py::init_alias<py::buffer, const std::string &, bool>(), py::arg("buffer"), py::arg("name") = "", py::arg("reverse_axes") = true)
+            .def(py::init_alias<py::buffer, const std::string &, bool>(), py::arg("buffer"), py::arg("name") = "", py::arg("reverse_axes") = true, py::keep_alive<1, 2>())
 
             .def(py::init([](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> {
                      return Buffer<>(type, sizes, name);
@@ -400,22 +416,6 @@ void define_buffer(py::module &m) {
                     return Buffer<>::make_with_shape_of(buffer, nullptr, nullptr, name);  //
                 },
                 py::arg("src"), py::arg("name") = "")
-
-            .def_static("from_runtime", [](const py::object &source) -> Buffer<> {
-                    if (!py::hasattr(source, "_get_raw_halide_runtime_buffer") ||
-                        !py::hasattr(source, "defined") ||
-                        !py::hasattr(source, "name")) {
-                        throw py::type_error("Expected a halide.runtime.Buffer.");
-                    }
-                    if (!source.attr("defined")().cast<bool>()) {
-                        return Buffer<>();
-                    }
-                    const uintptr_t address = source.attr("_get_raw_halide_runtime_buffer")().cast<uintptr_t>();
-                    if (address == 0) {
-                        throw py::value_error("A defined Buffer cannot have a null runtime buffer.");
-                    }
-                    const auto *buffer = reinterpret_cast<const Halide::Runtime::Buffer<> *>(address);
-                    return Buffer<>(Halide::Runtime::Buffer<>(*buffer), source.attr("name")().cast<std::string>()); }, py::arg("buffer"), py::keep_alive<0, 1>())
 
             .def("set_name", &Buffer<>::set_name)
             .def("name", &Buffer<>::name)
