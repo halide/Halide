@@ -76,7 +76,7 @@ def main():
     if True:
         # Lets load a color 8-bit input and connect it to an ImageParam
         image_path = os.path.join(
-            os.path.dirname(__file__), "../../tutorial/images/rgb.png"
+            os.path.dirname(__file__), "../../../tutorial/images/rgb.png"
         )
         rgb_image = hl.Buffer(halide.imageio.imread(image_path))
         input = hl.ImageParam(hl.UInt(8), 3, "input")

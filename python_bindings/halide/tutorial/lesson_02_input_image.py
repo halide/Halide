@@ -14,7 +14,7 @@ def main():
 
     # First we'll load the input image we wish to brighten.
     image_path = os.path.join(
-        os.path.dirname(__file__), "../../tutorial/images/rgb.png"
+        os.path.dirname(__file__), "../../../tutorial/images/rgb.png"
     )
 
     # We create a hl.Buffer object to wrap the numpy array

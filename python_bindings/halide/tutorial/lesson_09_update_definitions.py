@@ -18,7 +18,7 @@ def main():
 
     # Load a grayscale image to use as an input.
     image_path = os.path.join(
-        os.path.dirname(__file__), "../../tutorial/images/gray.png"
+        os.path.dirname(__file__), "../../../tutorial/images/gray.png"
     )
     input_data = halide.imageio.imread(image_path)
     if True:

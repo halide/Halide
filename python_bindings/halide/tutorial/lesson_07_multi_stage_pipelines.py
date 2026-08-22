@@ -16,7 +16,7 @@ def main():
     x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
 
     image_path = os.path.join(
-        os.path.dirname(__file__), "../../tutorial/images/rgb.png"
+        os.path.dirname(__file__), "../../../tutorial/images/rgb.png"
     )
 
     # Now we'll express a multi-stage pipeline that blurs an image
