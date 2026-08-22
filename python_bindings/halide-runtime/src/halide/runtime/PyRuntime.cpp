@@ -122,10 +122,14 @@ void device_free(halide_buffer_t *buf) {
     }
 }
 
-void copy_to_host(halide_buffer_t *buf) {
-    if (buf->device_dirty()) {
-        (void)buf->device_interface->copy_to_host(nullptr, buf);
+int copy_to_host(halide_buffer_t *buf) {
+    if (!buf->device_dirty()) {
+        return halide_error_code_success;
     }
+    if (!buf->device_interface || !buf->device_interface->copy_to_host) {
+        return halide_error_code_no_device_interface;
+    }
+    return buf->device_interface->copy_to_host(nullptr, buf);
 }
 
 // Best-effort default filter name from a library path: strip the directory,
@@ -339,8 +343,14 @@ public:
             const halide_filter_argument_t &a = md_->arguments[i];
             if (a.kind == halide_argument_kind_output_buffer) {
                 auto *buf = static_cast<halide_buffer_t *>(argv[i]);
-                if (buf->device_dirty()) {
-                    copy_to_host(buf);
+                const int copy_result = copy_to_host(buf);
+                if (copy_result != halide_error_code_success) {
+                    const std::string msg = take_last_error();
+                    throw std::runtime_error(
+                        msg.empty() ? ("Halide kernel '" + name() +
+                                       "' failed to copy output '" + a.name +
+                                       "' to host with error " + std::to_string(copy_result)) :
+                                      ("Halide kernel '" + name() + "': " + msg));
                 }
             }
         }
