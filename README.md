@@ -104,6 +104,19 @@ One caveat: vcpkg installs only the minimum Halide backends required to compile
 code for the active platform. If you want to include all the backends, you
 should install `halide[target-all]:x64-windows` instead.
 
+## Spack
+
+If you use [spack](https://spack.io/) to manage dependencies, especially on supercomputing systems,
+you can install Halide via:
+```
+spack install halide
+```
+
+Spack offers most of the configuration options avaliable in a CMake build. These can be viewed on [Spack's Halide package page](https://packages.spack.io/package.html?name=halide) or via
+```
+spack info halide
+```
+
 ## Other package managers
 
 We are interested in bringing Halide to other popular package managers and Linux
