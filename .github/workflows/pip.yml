@@ -8,8 +8,6 @@ on:
     types: [ published ]
 
 env:
-  # TODO: detect this from repo somehow: https://github.com/halide/Halide/issues/8406
-  LLVM_VERSION: 22.1.0
   FLATBUFFERS_VERSION: 23.5.26
   WABT_VERSION: 1.0.39
 
@@ -47,6 +45,7 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
+      - uses: astral-sh/setup-uv@v7
       - uses: ilammy/msvc-dev-cmd@v1
       - uses: lukka/get-cmake@v4.4.2
         with:
@@ -56,13 +55,22 @@ jobs:
       # LLVM
       ########################################################################
 
+      - name: Resolve Halide major version
+        id: halide-version
+        shell: bash
+        run: |
+          MAJOR=$(awk '$2 == "HALIDE_VERSION_MAJOR" { print $3 }' \
+            src/runtime/HalideRuntime.h)
+          [[ "$MAJOR" =~ ^[0-9]+$ ]]
+          echo "major=$MAJOR" >> "$GITHUB_OUTPUT"
+
       - name: Install LLVM
         if: matrix.os != 'ubuntu-latest'
         shell: bash
         run: |
-          pip install "halide-llvm==${{ env.LLVM_VERSION }}" \
-            --extra-index-url https://pypi.halide-lang.org/simple/
-          echo "Halide_LLVM_ROOT=$(halide-llvm --prefix)" >> "$GITHUB_ENV"
+          uv sync --frozen --group ci-llvm-${{ steps.halide-version.outputs.major }} \
+            --no-install-workspace
+          echo "Halide_LLVM_ROOT=$(uv run --no-sync halide-llvm --prefix)" >> "$GITHUB_ENV"
 
       ########################################################################
       # Wheel (no CPython ABI to matrix over -- halide-bin is a plain
@@ -80,10 +88,12 @@ jobs:
         env:
           CIBW_BUILD: "cp312-${{ matrix.platform_tag }}"
           CIBW_BEFORE_ALL_LINUX: >
-            /opt/python/cp312-cp312/bin/pip install cmake ninja
-            "halide-llvm==${{ env.LLVM_VERSION }}"
-            --extra-index-url https://pypi.halide-lang.org/simple/ &&
-            export PATH="/opt/python/cp312-cp312/bin:$PATH" &&
+            /opt/python/cp312-cp312/bin/pip install uv &&
+            cd {project} &&
+            uv sync --frozen --python /opt/python/cp312-cp312/bin/python
+            --group ci-llvm-${{ steps.halide-version.outputs.major }}
+            --no-install-workspace &&
+            export PATH="{project}/.venv/bin:$PATH" &&
             mkdir -p {project}/opt &&
             ln -s $(halide-llvm --prefix) {project}/opt/llvm &&
             git clone --depth=1 -b v${{ env.FLATBUFFERS_VERSION }}
