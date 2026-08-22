@@ -16,6 +16,7 @@ struct Expr;
 namespace Internal {
 
 class Function;
+struct Stmt;
 struct Call;
 
 /** Replace all rounding floating point ops and floating point ops that need to
@@ -32,6 +33,12 @@ Expr unstrictify_float(const Call *op);
  * or not the rest of lowering and codegen needs to worry about floating point
  * strictness). */
 bool strictify_float(std::map<std::string, Function> &env, const Target &t);
+
+/** Checks the passed Stmt for the precense of any strict_float ops. */
+bool any_strict_float(const Stmt &s);
+
+/** Checks the passed Expr for the precense of any strict_float ops. */
+bool any_strict_float(const Expr &s);
 
 }  // namespace Internal
 }  // namespace Halide
