@@ -109,6 +109,8 @@ stdout.txt
 
 # Directories
 bin/
+!python_bindings/halide-bin/src/halide/bin/
+!python_bindings/halide-bin/src/halide/bin/__init__.py
 distrib/
 lib/
 lib64/
