@@ -249,6 +249,7 @@ tests(
     math.cpp
     median3x3.cpp
     memoize_cloned.cpp
+    metal_long_vectors.cpp
     metal_precompiled_shaders.cpp
     min_extent.cpp
     mod.cpp
@@ -393,6 +394,7 @@ tests(
     update_chunk.cpp
     vector_bounds_inference.cpp
     vector_extern.cpp
+    vector_legalization.cpp
     vector_print_bug.cpp
     vector_shuffle.cpp
     vector_store_alignment.cpp
