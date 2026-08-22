@@ -103,3 +103,9 @@ cmake.source-dir = "."
 
 [tool.setuptools_scm]
 root = "../.."
+
+[tool.uv]
+cache-keys = [
+  { file = "pyproject.toml" },
+  { git = { commit = true, tags = true } },
+]

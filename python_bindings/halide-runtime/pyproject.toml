@@ -101,3 +101,9 @@ cmake.source-dir = "python_bindings"
 
 [tool.setuptools_scm]
 root = "../.."
+
+[tool.uv]
+cache-keys = [
+  { file = "pyproject.toml" },
+  { git = { commit = true, tags = true } },
+]
