@@ -1,6 +1,6 @@
 # Verify that the given shared MODULE does not depend on libHalide (the
 # compiler). The standalone runtime must link only the header-only runtime
-# interface plus a compiled Halide runtime, never libHalide.
+# interface, never a compiled Halide runtime or libHalide.
 #
 # Invoked as: cmake -DMODULE=<path> -P check_no_libhalide.cmake
 
