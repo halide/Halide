@@ -113,6 +113,30 @@ def main():
         call_args["packed.1"], expected_total.astype(np.int32)
     )
 
+    # Reject multi-byte arrays whose declared byte order differs from the host,
+    # rather than silently writing native-endian data into them.
+    invalid_args = call_args.copy()
+    invalid_args["total"] = np.zeros(shape, dtype=">i8")
+    try:
+        kernel(**invalid_args)
+    except ValueError as e:
+        assert "Non-native byte order" in str(e)
+    else:
+        assert False, "non-native-endian output was accepted"
+
+    # Reject byte strides that cannot be represented as an integral Halide
+    # element stride.
+    invalid_args = call_args.copy()
+    invalid_args["packed.1"] = np.ndarray(
+        shape, dtype=np.int32, buffer=bytearray(32), strides=(1, 1)
+    )
+    try:
+        kernel(**invalid_args)
+    except ValueError as e:
+        assert "stride" in str(e)
+    else:
+        assert False, "non-integral element stride was accepted"
+
     # The enum GeneratorParam is a compile-time choice: the `combine=xor` build is
     # a different kernel with the *same* calling convention but different behavior.
     xor_kernel = hlr.load(xor_path, name="callconv_xor")

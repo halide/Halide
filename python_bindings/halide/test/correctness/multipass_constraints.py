@@ -58,5 +58,22 @@ def test_multipass_constraints():
         assert False
 
 
+def test_infer_input_bounds_preserves_halide_error():
+    output = hl.Func("undefined_output")
+    query = hl.Buffer.make_bounds_query(type=hl.UInt(8), sizes=[4])
+
+    def expect_halide_error(infer):
+        try:
+            infer(query)
+        except hl.HalideError as e:
+            assert "undefined output Func" in str(e)
+        else:
+            assert False, "HalideError was suppressed by overload dispatch"
+
+    expect_halide_error(output.infer_input_bounds)
+    expect_halide_error(hl.Pipeline(output).infer_input_bounds)
+
+
 if __name__ == "__main__":
     test_multipass_constraints()
+    test_infer_input_bounds_preserves_halide_error()

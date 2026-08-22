@@ -31,6 +31,23 @@ def main():
     if not np.array_equal(array, expected):
         sys.exit("hl.Buffer failure!")
 
+    # Generated extensions use the same named-capsule protocol as
+    # halide.runtime. Exceptions from that protocol must propagate rather than
+    # being discarded before a buffer-protocol fallback.
+    class CapsuleError(Exception):
+        pass
+
+    class BrokenCapsuleArray(np.ndarray):
+        def _get_halide_buffer_t_capsule(self):
+            raise CapsuleError("capsule failure")
+
+    try:
+        identity(array.view(BrokenCapsuleArray))
+    except CapsuleError as e:
+        assert str(e) == "capsule failure"
+    else:
+        assert False, "capsule protocol exception was suppressed"
+
     print("Success!")
 
 

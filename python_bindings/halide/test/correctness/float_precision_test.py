@@ -55,6 +55,17 @@ def test():
         x + 0.75  # 0.5 + 0.25
     assert not ctx.occurred, "RuntimeWarning occurred."
 
+    # Warning filters may promote warnings to exceptions; propagate that
+    # RuntimeWarning rather than returning with a pending Python exception.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        try:
+            x + 0.123456789012345678
+        except RuntimeWarning:
+            pass
+        else:
+            assert False, "RuntimeWarning was not raised as an exception"
+
 
 if __name__ == "__main__":
     test()
