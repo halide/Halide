@@ -403,6 +403,18 @@ Expr Simplify::visit(const LT *op, ExprInfo *info) {
           rewrite((x + c1) / c0 < x / c0 + c2, false, c0 > 0 && c1 >= c2 * c0) ||
           rewrite((x + c1) / c0 < x / c0 + c2, true, c0 > 0 && c1 <= c2 * c0 - c0) ||
 
+          // The same, but with an offset in the division on the right. The
+          // predicate says the left division can't exceed the right one by
+          // more than -c3, using that (x + c2)/c0 >= (x + c1)/c0 - ceil((c2 - c1)/c0).
+          rewrite((x + c1) / c0 < ((x + c2) / c0) + c3, false, c0 > 0 && c3 + ((c2 - c1 + c0 - 1) / c0) <= 0) ||
+          rewrite(x / c0 < ((x + c2) / c0) + c3, false, c0 > 0 && c3 + ((c2 + c0 - 1) / c0) <= 0) ||
+
+          // The same, with a max on both sides that clamps at the same value.
+          rewrite(max(x, (y + c0) / c1) < (max((y + c2) / c1, x) + c3), false, c1 > 0 && c3 <= 0 && c3 + ((c2 - c0 + c1 - 1) / c1) <= 0) ||
+          rewrite(max((x + c0) / c1, y) < (max((x + c2) / c1, y) + c3), false, c1 > 0 && c3 <= 0 && c3 + ((c2 - c0 + c1 - 1) / c1) <= 0) ||
+          rewrite(max((x + c0) / c1, y) < (max(y, (x + c2) / c1) + c3), false, c1 > 0 && c3 <= 0 && c3 + ((c2 - c0 + c1 - 1) / c1) <= 0) ||
+          rewrite(max(x, (y + c0) / c1) < (max(x, (y + c2) / c1) + c3), false, c1 > 0 && c3 <= 0 && c3 + ((c2 - c0 + c1 - 1) / c1) <= 0) ||
+
           // With a confounding max or min
           rewrite((x + c1) / c0 < (min(x / c0, y) + c2), false, c0 > 0 && c1 >= c2 * c0) ||
           rewrite((x + c1) / c0 < (max(x / c0, y) + c2), true, c0 > 0 && c1 <= c2 * c0 - c0) ||
