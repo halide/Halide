@@ -738,7 +738,7 @@ bool case_tuple_output_vectorize() {
     Buffer<int32_t> out0 = out_r[0];
     Buffer<int32_t> out1 = out_r[1];
 
-    return compare_1d(ref0, out0) & compare_1d(ref1, out1);
+    return compare_1d(ref0, out0) && compare_1d(ref1, out1);
 }
 
 // ---------------------------------------------------------------------
