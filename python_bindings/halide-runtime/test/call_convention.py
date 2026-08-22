@@ -116,7 +116,8 @@ def main():
     # Reject multi-byte arrays whose declared byte order differs from the host,
     # rather than silently writing native-endian data into them.
     invalid_args = call_args.copy()
-    invalid_args["total"] = np.zeros(shape, dtype=">i8")
+    non_native_i8 = ">i8" if sys.byteorder == "little" else "<i8"
+    invalid_args["total"] = np.zeros(shape, dtype=non_native_i8)
     try:
         kernel(**invalid_args)
     except ValueError as e:

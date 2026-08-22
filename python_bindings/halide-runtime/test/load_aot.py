@@ -92,8 +92,9 @@ def main():
         assert False, "non-integral element stride was accepted"
 
     # Multi-byte buffers must use native byte order.
+    non_native_i4 = ">i4" if sys.byteorder == "little" else "<i4"
     try:
-        hlr.Buffer(np.zeros(1, dtype=">i4"))
+        hlr.Buffer(np.zeros(1, dtype=non_native_i4))
     except ValueError as e:
         assert "byte order" in str(e)
     else:
