@@ -876,17 +876,25 @@ int main(int argc, char **argv) {
 #else
     Target t = get_jit_target_from_environment();
     if (t.has_feature(Target::SVE2)) {
-        // Forcing legalization down to narrow, non-native-SVE lane counts
-        // across this test's variety of schedules hits real LLVM AArch64
-        // SVE backend crashes on LLVM main ("LLVM ERROR: Do not know how
-        // to scalarize this operator's operand!" on a masked_store) and on
-        // LLVM 21 ("LLVM ERROR: Don't know how to widen the result of
-        // EXTRACT_SUBVECTOR for scalable vectors"), both following a
-        // "Vectorization factor is not suitable ... Disabling SVE"
-        // warning -- i.e. the crash is in SVE's own fallback path, not
-        // something under Halide's control. LLVM 22 is not affected.
-        // Skip broadly rather than chasing exact version cutoffs that may
-        // shift again as LLVM's SVE backend changes.
+        // Forcing legalization down to narrow lane counts can make
+        // LegalizeVectors reassemble a vector whose width isn't evenly
+        // divisible by the cap (e.g. splitting a 40-lane vector at a cap of
+        // 16 leaves a 10-lane remainder chunk), producing a non-power-of-2
+        // width fixed vector mid-expression. Halide's own SVE feasibility
+        // check (CodeGen_ARM::check_feasible_vscale) only looks at
+        // top-level function/allocation vector widths, so it doesn't catch
+        // this and SVE stays enabled -- this is confirmed to *not* go
+        // through Halide's "Vectorization factor is not suitable ...
+        // Disabling SVE" fallback path. The resulting IR is correct (every
+        // non-SVE target passes this same test); LLVM's AArch64 SVE
+        // legalizer just has no rule for widening/scalarizing a
+        // non-power-of-2-width EXTRACT_SUBVECTOR onto scalable vectors, and
+        // hits "LLVM ERROR: Don't know how to widen the result of
+        // EXTRACT_SUBVECTOR for scalable vectors" (LLVM 21) or "Do not know
+        // how to scalarize this operator's operand!" on a masked_store
+        // (LLVM main). LLVM 22 is not affected. Skip broadly rather than
+        // chasing exact version cutoffs that may shift again as LLVM's SVE
+        // backend changes.
         printf("[SKIP] Known LLVM AArch64 SVE backend crashes under forced vector legalization.\n");
         return 0;
     }
