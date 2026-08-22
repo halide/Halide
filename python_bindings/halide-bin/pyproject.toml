@@ -73,6 +73,8 @@ sdist.include = [
 "src/halide/bin/__init__.py" = "halide/bin/__init__.py"
 
 [tool.scikit-build.cmake.define]
+CMAKE_MODULE_PATH = "python_bindings/cmake"
+CMAKE_PROJECT_TOP_LEVEL_INCLUDES = "python_bindings/halide-bin/packaging/ScikitBuild.cmake"
 CMAKE_DISABLE_FIND_PACKAGE_JPEG = true
 CMAKE_DISABLE_FIND_PACKAGE_PNG = true
 FETCHCONTENT_FULLY_DISCONNECTED = true

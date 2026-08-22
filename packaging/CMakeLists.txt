@@ -357,17 +357,6 @@ if (WITH_DOCS)
 endif ()
 
 ##
-# Pip overrides
-##
-
-if (SKBUILD)
-    add_subdirectory(
-        "${Halide_SOURCE_DIR}/python_bindings/halide-bin/packaging"
-        "${CMAKE_CURRENT_BINARY_DIR}/pip"
-    )
-endif ()
-
-##
 # General packaging variables.
 ##
 

@@ -101,6 +101,8 @@ sdist.exclude = ["dependencies/update-*.sh"]
 "../../vcpkg-configuration.json" = "vcpkg-configuration.json"
 
 [tool.scikit-build.cmake.define]
+CMAKE_MODULE_PATH = "cmake"
+CMAKE_PROJECT_TOP_LEVEL_INCLUDES = "halide/packaging/ScikitBuild.cmake"
 CMAKE_DISABLE_FIND_PACKAGE_JPEG = true
 CMAKE_DISABLE_FIND_PACKAGE_PNG = true
 Halide_ENABLE_EXCEPTIONS = true

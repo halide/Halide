@@ -118,13 +118,3 @@ if (WITH_PYTHON_BINDINGS OR WITH_PYTHON_STUBS)
         COMPONENT Halide_Python
     )
 endif ()
-
-##
-# Pip overrides
-##
-
-if (SKBUILD)
-    add_subdirectory(
-        "${Halide_Python_SOURCE_DIR}/halide/packaging/cmake" "${CMAKE_CURRENT_BINARY_DIR}/pip"
-    )
-endif ()

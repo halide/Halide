@@ -1,5 +1,0 @@
-cmake_minimum_required(VERSION 3.28)
-include(CMakeFindDependencyMacro)
-find_dependency(Python 3 COMPONENTS Interpreter Development.Module)
-
-include("${Python_SITEARCH}/halide/@Halide_Python_INSTALL_CMAKEDIR@/Halide_PythonConfig.cmake")
