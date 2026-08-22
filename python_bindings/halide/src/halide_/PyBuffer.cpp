@@ -693,11 +693,15 @@ void define_buffer(py::module &m) {
                 return o.str();  //
             })
 
+            .def("get", [](const py::object &self) -> py::object {
+                const auto &buffer = self.cast<const Buffer<> &>();
+                return py::module_::import("halide.runtime")
+                    .attr("Buffer")
+                    .attr("_from_borrowed")(
+                        reinterpret_cast<uintptr_t>(buffer.get()), self, buffer.name()); })
+
             .def("_get_raw_halide_buffer_t", [](const Buffer<> &b) -> uintptr_t {
                 return reinterpret_cast<uintptr_t>(b.raw_buffer());  //
-            })
-            .def("_get_raw_halide_runtime_buffer", [](const Buffer<> &b) -> uintptr_t {
-                return reinterpret_cast<uintptr_t>(b.get());  //
             });
 }
 

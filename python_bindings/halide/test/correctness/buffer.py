@@ -642,15 +642,24 @@ def test_runtime_buffer_is_distinct():
     assert not undefined_compiler_buffer.defined()
 
     compiler_buffer[2, 1] = 17
-    runtime_copy = hlr.Buffer.from_compiler(compiler_buffer)
-    assert isinstance(runtime_copy, hlr.Buffer)
-    assert runtime_copy.type() == runtime_type
-    assert runtime_copy[2, 1] == 17
+    runtime_view = compiler_buffer.get()
+    assert isinstance(runtime_view, hlr.Buffer)
+    assert runtime_view.type() == runtime_type
+    assert runtime_view[2, 1] == 17
 
-    # Both adaptations are zero-copy views of the same underlying allocation.
-    runtime_copy[0, 0] = 9
+    # Buffer.get() borrows the compiler Buffer's actual Runtime::Buffer, so both
+    # data and descriptor mutations are visible through the compiler Buffer.
+    runtime_view[0, 0] = 9
     assert runtime_buffer[0, 0] == 9
     assert compiler_buffer[0, 0] == 9
+
+    runtime_view.translate(0, 5)
+    assert compiler_buffer.dim(0).min() == 5
+
+    # The borrowed runtime view keeps its compiler Buffer alive.
+    runtime_view = hl.Buffer(hl.Int(32), [2]).get()
+    runtime_view[0] = 23
+    assert runtime_view[0] == 23
 
 
 if __name__ == "__main__":

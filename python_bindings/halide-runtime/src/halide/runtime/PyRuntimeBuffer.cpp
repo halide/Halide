@@ -102,10 +102,40 @@ class Buffer {
 public:
     Buffer() = default;
 
-    Buffer(const Buffer &) = default;
-    Buffer(Buffer &&) noexcept = default;
-    Buffer &operator=(const Buffer &) = default;
-    Buffer &operator=(Buffer &&) noexcept = default;
+    Buffer(const Buffer &other)
+        : buffer_(other.runtime_buffer()),
+          owner_(other.owner_), identity_(other.identity_), name_(other.name_), defined_(other.defined_) {
+    }
+
+    Buffer(Buffer &&other) noexcept
+        : buffer_(std::move(other.buffer_)), borrowed_buffer_(other.borrowed_buffer_),
+          owner_(std::move(other.owner_)), identity_(std::move(other.identity_)),
+          name_(std::move(other.name_)), defined_(other.defined_) {
+    }
+
+    Buffer &operator=(const Buffer &other) {
+        if (this != &other) {
+            buffer_ = other.runtime_buffer();
+            borrowed_buffer_ = nullptr;
+            owner_ = other.owner_;
+            identity_ = other.identity_;
+            name_ = other.name_;
+            defined_ = other.defined_;
+        }
+        return *this;
+    }
+
+    Buffer &operator=(Buffer &&other) noexcept {
+        if (this != &other) {
+            buffer_ = std::move(other.buffer_);
+            borrowed_buffer_ = other.borrowed_buffer_;
+            owner_ = std::move(other.owner_);
+            identity_ = std::move(other.identity_);
+            name_ = std::move(other.name_);
+            defined_ = other.defined_;
+        }
+        return *this;
+    }
 
     Buffer(py::buffer source, std::string name, bool reverse_axes)
         : owner_(std::move(source)), identity_(std::make_shared<char>()), name_(name.empty() ? unique_name() : std::move(name)), defined_(true) {
@@ -121,7 +151,7 @@ public:
             dims[dst] = {0, static_cast<int32_t>(info.shape[i]), static_cast<int32_t>(stride)};
         }
         buffer_ = RuntimeBuffer(type, info.ptr, info.ndim, dims.data());
-        buffer_.set_host_dirty();
+        runtime_buffer().set_host_dirty();
     }
 
     Buffer(halide_type_t type, const std::vector<int> &sizes, std::string name)
@@ -142,23 +172,16 @@ public:
         return result;
     }
 
-    static Buffer from_compiler(const py::object &source) {
-        if (!py::hasattr(source, "_get_raw_halide_runtime_buffer") ||
-            !py::hasattr(source, "defined") ||
-            !py::hasattr(source, "name")) {
-            throw py::type_error("Expected a halide.Buffer.");
-        }
-        if (!source.attr("defined")().cast<bool>()) {
+    static Buffer from_borrowed(uintptr_t address, py::object owner, std::string name) {
+        if (address == 0) {
             return Buffer();
         }
-        const uintptr_t address = source.attr("_get_raw_halide_runtime_buffer")().cast<uintptr_t>();
-        if (address == 0) {
-            throw py::value_error("A defined Buffer cannot have a null runtime buffer.");
-        }
-        Buffer result = from_runtime(
-            *reinterpret_cast<const RuntimeBuffer *>(address),
-            source.attr("name")().cast<std::string>(), true);
-        result.owner_ = source;
+        Buffer result;
+        result.borrowed_buffer_ = reinterpret_cast<RuntimeBuffer *>(address);
+        result.owner_ = std::move(owner);
+        result.identity_ = std::make_shared<char>();
+        result.name_ = std::move(name);
+        result.defined_ = true;
         return result;
     }
 
@@ -183,24 +206,24 @@ public:
     }
 
     static Buffer make_with_shape_of(const Buffer &source, std::string name) {
-        return from_runtime(RuntimeBuffer::make_with_shape_of(source.buffer_),
+        return from_runtime(RuntimeBuffer::make_with_shape_of(source.runtime_buffer()),
                             name.empty() ? unique_name() : std::move(name), true);
     }
 
     RuntimeBuffer &runtime_buffer() {
-        return buffer_;
+        return borrowed_buffer_ ? *borrowed_buffer_ : buffer_;
     }
 
     const RuntimeBuffer &runtime_buffer() const {
-        return buffer_;
+        return borrowed_buffer_ ? *borrowed_buffer_ : buffer_;
     }
 
     uintptr_t raw_halide_buffer_t() {
-        return reinterpret_cast<uintptr_t>(buffer_.raw_buffer());
+        return reinterpret_cast<uintptr_t>(runtime_buffer().raw_buffer());
     }
 
     uintptr_t raw_runtime_buffer() {
-        return reinterpret_cast<uintptr_t>(&buffer_);
+        return reinterpret_cast<uintptr_t>(&runtime_buffer());
     }
 
     bool defined() const {
@@ -221,18 +244,19 @@ public:
 
     py::buffer_info buffer_info(bool reverse_axes) {
         require_defined();
-        if (buffer_.data() == nullptr) {
+        RuntimeBuffer &buffer = runtime_buffer();
+        if (buffer.data() == nullptr) {
             throw py::value_error("Cannot convert a Buffer<> with null host ptr to a Python buffer.");
         }
-        const int d = buffer_.dimensions();
-        const int bytes = buffer_.type().bytes();
+        const int d = buffer.dimensions();
+        const int bytes = buffer.type().bytes();
         std::vector<py::ssize_t> shape(d), strides(d);
         for (int i = 0; i < d; ++i) {
             const int dst = reverse_axes ? d - i - 1 : i;
-            shape[dst] = buffer_.dim(i).extent();
-            strides[dst] = static_cast<py::ssize_t>(buffer_.dim(i).stride()) * bytes;
+            shape[dst] = buffer.dim(i).extent();
+            strides[dst] = static_cast<py::ssize_t>(buffer.dim(i).stride()) * bytes;
         }
-        return py::buffer_info(buffer_.data(), bytes, type_to_format_descriptor(buffer_.type()), d, shape, strides);
+        return py::buffer_info(buffer.data(), bytes, type_to_format_descriptor(buffer.type()), d, shape, strides);
     }
 
     py::array numpy_view(bool reverse_axes) {
@@ -241,12 +265,13 @@ public:
 
     py::object getitem(const std::vector<int> &pos) {
         check_position(pos);
-        if (buffer_.type() == Runtime::Buffer<float16_t>::static_halide_type()) {
-            return py::float_(static_cast<double>(buffer_.as<float16_t>()(pos.data())));
+        RuntimeBuffer &buffer = runtime_buffer();
+        if (buffer.type() == Runtime::Buffer<float16_t>::static_halide_type()) {
+            return py::float_(static_cast<double>(buffer.as<float16_t>()(pos.data())));
         }
-#define HANDLE_TYPE(TYPE)                                                \
-    if (buffer_.type() == Runtime::Buffer<TYPE>::static_halide_type()) { \
-        return py::cast(buffer_.as<TYPE>()(pos.data()));                 \
+#define HANDLE_TYPE(TYPE)                                               \
+    if (buffer.type() == Runtime::Buffer<TYPE>::static_halide_type()) { \
+        return py::cast(buffer.as<TYPE>()(pos.data()));                 \
     }
         HANDLE_TYPE(bool)
         HANDLE_TYPE(uint8_t)
@@ -265,13 +290,14 @@ public:
 
     py::object setitem(const std::vector<int> &pos, const py::object &value) {
         check_position(pos);
-        if (buffer_.type() == Runtime::Buffer<float16_t>::static_halide_type()) {
-            buffer_.as<float16_t>()(pos.data()) = value_cast<float16_t>(value);
+        RuntimeBuffer &buffer = runtime_buffer();
+        if (buffer.type() == Runtime::Buffer<float16_t>::static_halide_type()) {
+            buffer.as<float16_t>()(pos.data()) = value_cast<float16_t>(value);
             return value;
         }
-#define HANDLE_TYPE(TYPE)                                                          \
-    if (buffer_.type() == Runtime::Buffer<TYPE>::static_halide_type()) {           \
-        return py::cast(buffer_.as<TYPE>()(pos.data()) = value_cast<TYPE>(value)); \
+#define HANDLE_TYPE(TYPE)                                                         \
+    if (buffer.type() == Runtime::Buffer<TYPE>::static_halide_type()) {           \
+        return py::cast(buffer.as<TYPE>()(pos.data()) = value_cast<TYPE>(value)); \
     }
         HANDLE_TYPE(bool)
         HANDLE_TYPE(uint8_t)
@@ -289,10 +315,11 @@ public:
     }
 
     void fill(const py::object &value) {
-#define HANDLE_TYPE(TYPE)                                                \
-    if (buffer_.type() == Runtime::Buffer<TYPE>::static_halide_type()) { \
-        buffer_.as<TYPE>().fill(value_cast<TYPE>(value));                \
-        return;                                                          \
+        RuntimeBuffer &buffer = runtime_buffer();
+#define HANDLE_TYPE(TYPE)                                               \
+    if (buffer.type() == Runtime::Buffer<TYPE>::static_halide_type()) { \
+        buffer.as<TYPE>().fill(value_cast<TYPE>(value));                \
+        return;                                                         \
     }
         HANDLE_TYPE(bool)
         HANDLE_TYPE(uint8_t)
@@ -311,9 +338,10 @@ public:
     }
 
     bool all_equal(const py::object &value) {
-#define HANDLE_TYPE(TYPE)                                                \
-    if (buffer_.type() == Runtime::Buffer<TYPE>::static_halide_type()) { \
-        return buffer_.as<TYPE>().all_equal(value_cast<TYPE>(value));    \
+        RuntimeBuffer &buffer = runtime_buffer();
+#define HANDLE_TYPE(TYPE)                                               \
+    if (buffer.type() == Runtime::Buffer<TYPE>::static_halide_type()) { \
+        return buffer.as<TYPE>().all_equal(value_cast<TYPE>(value));    \
     }
         HANDLE_TYPE(bool)
         HANDLE_TYPE(uint8_t)
@@ -340,11 +368,12 @@ private:
 
     void check_position(const std::vector<int> &pos) const {
         require_defined();
-        if (pos.size() != static_cast<size_t>(buffer_.dimensions())) {
+        const RuntimeBuffer &buffer = runtime_buffer();
+        if (pos.size() != static_cast<size_t>(buffer.dimensions())) {
             throw py::value_error("Incorrect number of dimensions.");
         }
-        for (int i = 0; i < buffer_.dimensions(); ++i) {
-            const auto dim = buffer_.dim(i);
+        for (int i = 0; i < buffer.dimensions(); ++i) {
+            const auto dim = buffer.dim(i);
             if (pos[i] < dim.min() || pos[i] > dim.max()) {
                 std::ostringstream out;
                 out << "index " << pos[i] << " is out of bounds for axis " << i
@@ -355,6 +384,7 @@ private:
     }
 
     RuntimeBuffer buffer_;
+    RuntimeBuffer *borrowed_buffer_ = nullptr;
     py::object owner_;
     std::shared_ptr<char> identity_;
     std::string name_;
@@ -391,7 +421,8 @@ void define_buffer(py::module_ &m) {
              py::arg("type"), py::arg("sizes"), py::arg("name") = "")
         .def(py::init<halide_type_t, const std::vector<int> &, const std::vector<int> &, std::string>(),
              py::arg("type"), py::arg("sizes"), py::arg("storage_order"), py::arg("name") = "")
-        .def_static("from_compiler", &Buffer::from_compiler, py::arg("buffer"))
+        .def_static("_from_borrowed", &Buffer::from_borrowed,
+                    py::arg("address"), py::arg("owner"), py::arg("name"))
         .def_static("make_bounds_query", &Buffer::make_bounds_query, py::arg("type"), py::arg("sizes"), py::arg("name") = "")
         .def_static("make_scalar", &Buffer::make_scalar, py::arg("type"), py::arg("name") = "")
         .def_static("make_interleaved", &Buffer::make_interleaved, py::arg("type"), py::arg("width"), py::arg("height"), py::arg("channels"), py::arg("name") = "")
