@@ -474,7 +474,13 @@ bool case_reinterpret_cast() {
 
     auto build = [&]() -> Func {
         Func f("f");
-        Expr bits = cast<int32_t>(x * 1000003 + 17);
+        // Force the exponent field to be non-zero (bitwise-or with the
+        // pattern for 1.0f) so this always reinterprets to a normal float
+        // regardless of x, never a denormal: some hardware (notably ARM
+        // NEON) flushes denormals to zero on arithmetic, which would make
+        // this test's result depend on architecture-specific float
+        // behavior rather than on reinterpret/legalization correctness.
+        Expr bits = cast<int32_t>(x * 1000003 + 17) | cast<int32_t>(0x3F800000);
         Expr as_float = reinterpret<float>(bits);
         Expr doubled = as_float + as_float;
         f(x) = reinterpret<int32_t>(doubled);
@@ -868,6 +874,23 @@ int main(int argc, char **argv) {
     printf("[SKIP] Windows does not have a working setenv\n");
     return 0;
 #else
+    Target t = get_jit_target_from_environment();
+    if (t.has_feature(Target::SVE2)) {
+        // Forcing legalization down to narrow, non-native-SVE lane counts
+        // across this test's variety of schedules hits real LLVM AArch64
+        // SVE backend crashes on LLVM main ("LLVM ERROR: Do not know how
+        // to scalarize this operator's operand!" on a masked_store) and on
+        // LLVM 21 ("LLVM ERROR: Don't know how to widen the result of
+        // EXTRACT_SUBVECTOR for scalable vectors"), both following a
+        // "Vectorization factor is not suitable ... Disabling SVE"
+        // warning -- i.e. the crash is in SVE's own fallback path, not
+        // something under Halide's control. LLVM 22 is not affected.
+        // Skip broadly rather than chasing exact version cutoffs that may
+        // shift again as LLVM's SVE backend changes.
+        printf("[SKIP] Known LLVM AArch64 SVE backend crashes under forced vector legalization.\n");
+        return 0;
+    }
+
     const int lengths[] = {1, 2, 3, 4, 5, 7, 8, 16};
 
     for (int max_lanes : lengths) {
