@@ -7,10 +7,6 @@ on:
   release:
     types: [ published ]
 
-env:
-  FLATBUFFERS_VERSION: 23.5.26
-  WABT_VERSION: 1.0.39
-
 concurrency:
   group: '${{ github.workflow }}-${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
   cancel-in-progress: true
@@ -95,64 +91,18 @@ jobs:
             --no-install-workspace &&
             export PATH="{project}/.venv/bin:$PATH" &&
             mkdir -p {project}/opt &&
-            ln -s $(halide-llvm --prefix) {project}/opt/llvm &&
-            git clone --depth=1 -b v${{ env.FLATBUFFERS_VERSION }}
-            https://github.com/google/flatbuffers /tmp/fb-src &&
-            cmake -G Ninja -S /tmp/fb-src -B /tmp/fb-build
-            -DCMAKE_BUILD_TYPE=Release
-            -DCMAKE_INSTALL_PREFIX={project}/opt/flatbuffers
-            -DFLATBUFFERS_BUILD_TESTS=NO &&
-            cmake --build /tmp/fb-build --target install &&
-            git clone --depth=1 --recurse-submodules -b ${{ env.WABT_VERSION }}
-            https://github.com/WebAssembly/wabt /tmp/wabt-src &&
-            cmake -G Ninja -S /tmp/wabt-src -B /tmp/wabt-build
-            -DCMAKE_BUILD_TYPE=Release
-            -DCMAKE_POSITION_INDEPENDENT_CODE=ON
-            -DCMAKE_INSTALL_PREFIX={project}/opt/wabt
-            -DWITH_EXCEPTIONS=ON
-            -DBUILD_TESTS=OFF
-            -DBUILD_TOOLS=OFF
-            -DBUILD_LIBWASM=OFF
-            -DUSE_INTERNAL_SHA256=ON &&
-            cmake --build /tmp/wabt-build --target install
-          CIBW_BEFORE_ALL_MACOS: >
-            git clone --depth=1 -b v${{ env.FLATBUFFERS_VERSION }}
-            https://github.com/google/flatbuffers /tmp/fb-src &&
-            cmake -G Ninja -S /tmp/fb-src -B /tmp/fb-build
-            -DCMAKE_BUILD_TYPE=Release
-            -DCMAKE_INSTALL_PREFIX={project}/opt/flatbuffers
-            -DFLATBUFFERS_BUILD_TESTS=NO &&
-            cmake --build /tmp/fb-build --target install &&
-            git clone --depth=1 --recurse-submodules -b ${{ env.WABT_VERSION }}
-            https://github.com/WebAssembly/wabt /tmp/wabt-src &&
-            cmake -G Ninja -S /tmp/wabt-src -B /tmp/wabt-build
-            -DCMAKE_BUILD_TYPE=Release
-            -DCMAKE_INSTALL_PREFIX={project}/opt/wabt
-            -DWITH_EXCEPTIONS=ON
-            -DBUILD_TESTS=OFF
-            -DBUILD_TOOLS=OFF
-            -DBUILD_LIBWASM=OFF
-            -DUSE_INTERNAL_SHA256=ON &&
-            cmake --build /tmp/wabt-build --target install
-          CIBW_BEFORE_ALL_WINDOWS: >
-            git clone --depth=1 -b v${{ env.FLATBUFFERS_VERSION }}
-            https://github.com/google/flatbuffers %TEMP%\fb-src &&
-            cmake -G Ninja -S %TEMP%\fb-src -B %TEMP%\fb-build
-            -DCMAKE_BUILD_TYPE=Release
-            -DCMAKE_INSTALL_PREFIX={project}/opt/flatbuffers
-            -DFLATBUFFERS_BUILD_TESTS=NO &&
-            cmake --build %TEMP%\fb-build --target install
+            ln -s $(halide-llvm --prefix) {project}/opt/llvm
           CIBW_ENVIRONMENT_LINUX: >
             Halide_LLVM_ROOT=/project/opt/llvm
-            CMAKE_PREFIX_PATH=/project/opt
+            PIP_EXTRA_INDEX_URL=https://pypi.halide-lang.org/simple/
             SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE_BIN='{local_scheme="no-local-version"}'
           CIBW_ENVIRONMENT_MACOS: >
-            CMAKE_PREFIX_PATH='${{ github.workspace }}/opt'
+            PIP_EXTRA_INDEX_URL=https://pypi.halide-lang.org/simple/
             Python_ROOT_DIR=''
             SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE_BIN='{local_scheme="no-local-version"}'
           CIBW_ENVIRONMENT_WINDOWS: >
             CMAKE_GENERATOR=Ninja
-            CMAKE_PREFIX_PATH='${{ github.workspace }}\opt'
+            PIP_EXTRA_INDEX_URL=https://pypi.halide-lang.org/simple/
             SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE_BIN='{local_scheme="no-local-version"}'
           CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: delvewheel repair --ignore-existing -w {dest_dir} {wheel}
 

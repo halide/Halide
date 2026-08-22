@@ -46,6 +46,8 @@ ci-llvm-21 = [{ include-group = "ci-base" }, "halide-llvm~=21.1.0"]
 
 [tool.uv.sources]
 halide-bin = { workspace = true }
+halide-flatbuffers = { index = "halide" }
+halide-wabt = { index = "halide" }
 halide-runtime = { workspace = true }
 halide-llvm = { index = "halide" }
 imageio = { index = "piwheels", marker = "platform_machine == 'armv8l' or platform_machine == 'armv7l'" }
