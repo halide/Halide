@@ -65,7 +65,7 @@ sdist.include = [
 "../../vcpkg-configuration.json" = "vcpkg-configuration.json"
 
 [tool.scikit-build.wheel.force-include]
-"python_bindings/halide-bin/src/halide/bin/__init__.py" = "halide/bin/__init__.py"
+"src/halide/bin/__init__.py" = "halide/bin/__init__.py"
 
 [tool.scikit-build.cmake.define]
 CMAKE_DISABLE_FIND_PACKAGE_JPEG = true

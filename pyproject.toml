@@ -13,7 +13,10 @@ members = [
 [dependency-groups]
 dev = ["pybind11>=2.11.1", "scikit-build-core>=1.0.3", "setuptools-scm>=8.3.1"]
 apps = [
+  "imageio>=2",
+  "numpy>=1.26",
   "onnx==1.19.0; platform_machine != 'armv8l' and platform_machine != 'armv7l'",
+  "pillow; platform_machine == 'armv8l' or platform_machine == 'armv7l'",
   "protobuf>=7; platform_machine != 'armv8l' and platform_machine != 'armv7l'",
   "pytest; platform_machine != 'armv8l' and platform_machine != 'armv7l'",
 ]
@@ -69,6 +72,34 @@ conflicts = [
   ],
 ]
 
+# Both packages use build-backend hooks to pin their sibling distributions to
+# the exact SCM-derived version in published artifacts. Supplying the otherwise
+# static metadata here lets uv resolve the workspace without executing those
+# hooks (and consequently trying to build halide-bin before LLVM is configured).
+# uv requires a version for direct/workspace sources; these resolution-only
+# base versions are kept in sync with the release version by tbump below.
+[[tool.uv.dependency-metadata]]
+name = "halide"
+version = "22.0.0"
+requires-python = ">=3.10"
+requires-dist = [
+  "halide-bin",
+  "halide-runtime",
+  "imageio>=2",
+  "pillow; platform_machine == 'armv8l' or platform_machine == 'armv7l'",
+]
+
+[[tool.uv.dependency-metadata]]
+name = "halide-runtime"
+version = "22.0.0"
+requires-python = ">=3.10"
+requires-dist = ["numpy>=1.26"]
+
+[[tool.uv.dependency-metadata]]
+name = "halide-bin"
+version = "22.0.0"
+requires-python = ">=3.10"
+
 [tool.tbump]
 github_url = "https://github.com/halide/Halide/"
 
@@ -87,6 +118,10 @@ search = "VERSION {current_version}"
 [[tool.tbump.file]]
 src = "python_bindings/CMakeLists.txt"
 search = "VERSION {current_version}"
+
+[[tool.tbump.file]]
+src = "pyproject.toml"
+search = 'version = "{current_version}"'
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "FURB", "PERF", "RUF", "SIM", "UP"]

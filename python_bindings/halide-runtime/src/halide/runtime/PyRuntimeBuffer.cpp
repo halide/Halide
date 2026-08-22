@@ -162,7 +162,7 @@ public:
         return result;
     }
 
-    Buffer view(RuntimeBuffer buffer) const {
+    Buffer view(const RuntimeBuffer &buffer) const {
         Buffer result = from_runtime(buffer, unique_name(), true);
         result.owner_ = owner_;
         result.identity_ = identity_;
@@ -422,7 +422,9 @@ void define_buffer(py::module_ &m) {
         .def("copy_from", [](Buffer &b, const Buffer &other) { b.runtime_buffer().copy_from(other.runtime_buffer()); })
         .def("reverse_axes", [](const Buffer &b) {
             std::vector<int> order;
-            for (int i = b.runtime_buffer().dimensions() - 1; i >= 0; --i) order.push_back(i);
+            for (int i = b.runtime_buffer().dimensions() - 1; i >= 0; --i) {
+                order.push_back(i);
+            }
             return b.view(b.runtime_buffer().transposed(order)); })
         .def("add_dimension", [](Buffer &b) { b.runtime_buffer().add_dimension(); })
         .def("allocate", [](Buffer &b) { b.runtime_buffer().allocate(nullptr, nullptr); })
@@ -462,21 +464,29 @@ void define_buffer(py::module_ &m) {
         .def("device_free", [](Buffer &b) { return b.runtime_buffer().device_free(nullptr); })
         .def("device_sync", [](Buffer &b) { return b.runtime_buffer().device_sync(nullptr); })
         .def("set_min", [](Buffer &b, const std::vector<int> &mins) {
-            if (mins.size() > static_cast<size_t>(b.runtime_buffer().dimensions())) throw py::value_error("Too many arguments");
+            if (mins.size() > static_cast<size_t>(b.runtime_buffer().dimensions())) {
+                throw py::value_error("Too many arguments");
+            }
             b.runtime_buffer().set_min(mins); })
         .def("contains", [](const Buffer &b, const std::vector<int> &coords) {
-            if (coords.size() > static_cast<size_t>(b.runtime_buffer().dimensions())) throw py::value_error("Too many arguments");
+            if (coords.size() > static_cast<size_t>(b.runtime_buffer().dimensions())) {
+                throw py::value_error("Too many arguments");
+            }
             return b.runtime_buffer().contains(coords); })
         .def("__getitem__", [](Buffer &b, int pos) { return b.getitem({pos}); })
         .def("__getitem__", [](Buffer &b, const std::vector<int> &pos) { return b.getitem(pos); })
         .def("__setitem__", [](Buffer &b, int pos, const py::object &value) { return b.setitem({pos}, value); })
         .def("__setitem__", [](Buffer &b, const std::vector<int> &pos, const py::object &value) { return b.setitem(pos, value); })
         .def("__repr__", [](const Buffer &b) {
-            if (!b.defined()) return std::string("<undefined halide.runtime.Buffer>");
+            if (!b.defined()) {
+                return std::string("<undefined halide.runtime.Buffer>");
+            }
             std::ostringstream out;
             out << "<halide.runtime.Buffer of type " << b.runtime_buffer().type() << " shape:[";
             for (int i = 0; i < b.runtime_buffer().dimensions(); ++i) {
-                if (i) out << ",";
+                if (i) {
+                    out << ",";
+                }
                 const auto d = b.runtime_buffer().raw_buffer()->dim[i];
                 out << "[" << d.min << "," << d.extent << "," << d.stride << "]";
             }
