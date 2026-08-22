@@ -10,6 +10,86 @@
 #include "vulkan_resources.h"
 
 using namespace Halide::Runtime::Internal::Vulkan;
+using Halide::Runtime::Internal::MemoryOwnership;
+
+// --------------------------------------------------------------------------
+
+namespace Halide {
+namespace Runtime {
+namespace Internal {
+namespace Vulkan {
+
+ALWAYS_INLINE uint64_t vk_external_buffer_offset_bytes(void *user_context, VulkanMemoryAllocator *allocator, MemoryRegion *region) {
+    halide_debug_assert(user_context, region != nullptr);
+    MemoryRegion *owner = allocator->owner_of(user_context, region);
+    return (owner != nullptr && owner->ownership == MemoryOwnership::Wrapped) ? owner->allocation.offset : 0;
+}
+
+ALWAYS_INLINE uint64_t vk_total_buffer_offset_bytes(void *user_context, VulkanMemoryAllocator *allocator, MemoryRegion *region, halide_type_t type) {
+    return vk_external_buffer_offset_bytes(user_context, allocator, region) + (region->indexing.offset * type.bytes());
+}
+
+ALWAYS_INLINE void vk_destroy_wrapped_region(void *user_context,
+                                             VulkanMemoryAllocator *allocator,
+                                             MemoryRegion *region) {
+    if (region == nullptr) {
+        return;
+    }
+
+    MemoryRegion *owner = allocator->owner_of(user_context, region);
+    if (owner == nullptr) {
+        return;
+    }
+
+    if (region != owner && region->ownership == MemoryOwnership::CropAlias) {
+        vk_host_free(user_context, region, allocator->callbacks());
+        return;
+    }
+
+    if (owner->ownership != MemoryOwnership::Wrapped) {
+        return;
+    }
+
+    vk_host_free(user_context, owner->handle, allocator->callbacks());
+    vk_host_free(user_context, owner, allocator->callbacks());
+}
+
+ALWAYS_INLINE MemoryRegion *vk_create_wrapped_buffer_region(void *user_context,
+                                                            halide_buffer_t *buf,
+                                                            VkBuffer vk_buffer,
+                                                            uint64_t offset,
+                                                            const VkAllocationCallbacks *callbacks) {
+    constexpr VkSystemAllocationScope alloc_scope = VK_SYSTEM_ALLOCATION_SCOPE_OBJECT;
+    VkBuffer *native_handle = reinterpret_cast<VkBuffer *>(
+        vk_host_malloc(user_context, sizeof(VkBuffer), 0, alloc_scope, callbacks));
+    if (native_handle == nullptr) {
+        error(user_context) << "Vulkan: Failed to allocate wrapped buffer handle metadata.\n";
+        return nullptr;
+    }
+
+    MemoryRegion *region = reinterpret_cast<MemoryRegion *>(
+        vk_host_malloc(user_context, sizeof(MemoryRegion), 0, alloc_scope, callbacks));
+    if (region == nullptr) {
+        vk_host_free(user_context, native_handle, callbacks);
+        error(user_context) << "Vulkan: Failed to allocate wrapped buffer region metadata.\n";
+        return nullptr;
+    }
+
+    *native_handle = vk_buffer;
+    memset(region, 0, sizeof(MemoryRegion));
+    region->handle = native_handle;
+    region->allocation.offset = offset;
+    region->allocation.size = buf->size_in_bytes();
+    region->is_owner = true;
+    region->ownership = MemoryOwnership::Wrapped;
+    region->owner = nullptr;
+    return region;
+}
+
+}  // namespace Vulkan
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 // --------------------------------------------------------------------------
 
@@ -110,12 +190,20 @@ WEAK int halide_vulkan_device_free(void *user_context, halide_buffer_t *halide_b
 
     // get the allocated region for the device
     MemoryRegion *device_region = reinterpret_cast<MemoryRegion *>(halide_buffer->device);
+#ifdef DEBUG_RUNTIME
+    const uint64_t device_region_size = device_region->allocation.size;
+#endif
     MemoryRegion *memory_region = ctx.allocator->owner_of(user_context, device_region);
     if (ctx.allocator && memory_region && memory_region->handle) {
-        if (halide_can_reuse_device_allocations(user_context)) {
-            ctx.allocator->release(user_context, memory_region);
+        if (memory_region->ownership == MemoryOwnership::Wrapped) {
+            debug(user_context) << "Vulkan: Releasing wrapped external buffer metadata only.\n";
+            vk_destroy_wrapped_region(user_context, ctx.allocator, device_region);
         } else {
-            ctx.allocator->reclaim(user_context, memory_region);
+            if (halide_can_reuse_device_allocations(user_context)) {
+                ctx.allocator->release(user_context, memory_region);
+            } else {
+                ctx.allocator->reclaim(user_context, memory_region);
+            }
         }
     }
     halide_buffer->device = 0;
@@ -126,7 +214,7 @@ WEAK int halide_vulkan_device_free(void *user_context, halide_buffer_t *halide_b
     debug(user_context) << "Vulkan: Released memory for device region ("
                         << "user_context: " << user_context << ", "
                         << "buffer: " << halide_buffer << ", "
-                        << "size_in_bytes: " << (uint64_t)device_region->allocation.size << ")\n";
+                        << "size_in_bytes: " << device_region_size << ")\n";
 
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
@@ -272,15 +360,24 @@ WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t *buf) {
     size_t size = buf->size_in_bytes();
     if (buf->device) {
         MemoryRegion *device_region = (MemoryRegion *)(buf->device);
-        if (device_region->allocation.size >= size) {
+        MemoryRegion *memory_region = ctx.allocator->owner_of(user_context, device_region);
+        if (memory_region != nullptr && memory_region->allocation.size >= size) {
             debug(user_context) << "Vulkan: Requested allocation for existing device memory ... using existing buffer!\n";
             return halide_error_code_success;
         } else {
+            if (memory_region == nullptr) {
+                error(user_context) << "Vulkan: Failed to retrieve memory region for existing device buffer!\n";
+                return halide_error_code_internal_error;
+            }
+            if (memory_region->ownership == MemoryOwnership::Wrapped) {
+                error(user_context) << "Vulkan: Wrapped external buffer is too small for requested allocation!\n";
+                return halide_error_code_device_malloc_failed;
+            }
             debug(user_context) << "Vulkan: Requested allocation of different size ... reallocating buffer!\n";
             if (halide_can_reuse_device_allocations(user_context)) {
-                ctx.allocator->release(user_context, device_region);
+                ctx.allocator->release(user_context, memory_region);
             } else {
-                ctx.allocator->reclaim(user_context, device_region);
+                ctx.allocator->reclaim(user_context, memory_region);
             }
             buf->device = 0;
         }
@@ -487,7 +584,7 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
     bool to_host = false;
 
     uint64_t src_offset = copy_helper.src_begin;
-    uint64_t dst_offset = copy_helper.dst_begin + (device_region->indexing.offset * halide_buffer->type.bytes());
+    uint64_t dst_offset = copy_helper.dst_begin + vk_total_buffer_offset_bytes(user_context, ctx.allocator, device_region, halide_buffer->type);
 
     copy_helper.src = (uint64_t)(staging_buffer);
     copy_helper.dst = (uint64_t)(device_buffer);
@@ -656,7 +753,7 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
     bool from_host = false;
     bool to_host = true;
     uint64_t copy_dst = copy_helper.dst;
-    uint64_t src_offset = copy_helper.src_begin + (device_region->indexing.offset * halide_buffer->type.bytes());
+    uint64_t src_offset = copy_helper.src_begin + vk_total_buffer_offset_bytes(user_context, ctx.allocator, device_region, halide_buffer->type);
     uint64_t dst_offset = copy_helper.dst_begin;
 
     copy_helper.src = (uint64_t)(device_buffer);
@@ -937,8 +1034,8 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
 
         // define the src and dst config
         uint64_t copy_dst = copy_helper.dst;
-        uint64_t src_offset = copy_helper.src_begin + (src_buffer_region->indexing.offset * src->type.bytes());
-        uint64_t dst_offset = copy_helper.dst_begin + (dst_buffer_region->indexing.offset * dst->type.bytes());
+        uint64_t src_offset = copy_helper.src_begin + vk_total_buffer_offset_bytes(user_context, ctx.allocator, src_buffer_region, src->type);
+        uint64_t dst_offset = copy_helper.dst_begin + vk_total_buffer_offset_bytes(user_context, ctx.allocator, dst_buffer_region, dst->type);
 
         copy_helper.src = (uint64_t)(src_device_buffer);
         copy_helper.dst = (uint64_t)(dst_device_buffer);
@@ -1345,13 +1442,33 @@ WEAK int halide_vulkan_device_and_host_free(void *user_context, struct halide_bu
     return halide_default_device_and_host_free(user_context, buf, &vulkan_device_interface);
 }
 
-WEAK int halide_vulkan_wrap_vk_buffer(void *user_context, struct halide_buffer_t *buf, uint64_t vk_buffer) {
+WEAK int halide_vulkan_wrap_vk_buffer(void *user_context,
+                                      struct halide_buffer_t *buf,
+                                      uint64_t vk_buffer,
+                                      uint64_t offset) {
     halide_debug_assert(user_context, buf->device == 0);
     if (buf->device != 0) {
         error(user_context) << "Vulkan: Unable to wrap buffer ... invalid device pointer!\n";
         return halide_error_code_device_wrap_native_failed;
     }
-    buf->device = vk_buffer;
+    if (vk_buffer == 0) {
+        error(user_context) << "Vulkan: Unable to wrap buffer ... invalid VkBuffer handle!\n";
+        return halide_error_code_device_wrap_native_failed;
+    }
+
+    VulkanContext ctx(user_context);
+    if (ctx.error != halide_error_code_success) {
+        error(user_context) << "Vulkan: Failed to acquire context!\n";
+        return ctx.error;
+    }
+
+    MemoryRegion *region = vk_create_wrapped_buffer_region(
+        user_context, buf, reinterpret_cast<VkBuffer>(vk_buffer), offset, ctx.allocator->callbacks());
+    if (region == nullptr) {
+        return halide_error_code_out_of_memory;
+    }
+
+    buf->device = reinterpret_cast<uint64_t>(region);
     buf->device_interface = &vulkan_device_interface;
     buf->device_interface->impl->use_module();
     return halide_error_code_success;
@@ -1365,6 +1482,19 @@ WEAK int halide_vulkan_detach_vk_buffer(void *user_context, halide_buffer_t *buf
         error(user_context) << "Vulkan: Unable to detach buffer ... invalid device interface!\n";
         return halide_error_code_incompatible_device_interface;
     }
+    MemoryRegion *device_region = reinterpret_cast<MemoryRegion *>(buf->device);
+    VulkanContext ctx(user_context);
+    if (ctx.error != halide_error_code_success) {
+        error(user_context) << "Vulkan: Failed to acquire context!\n";
+        return ctx.error;
+    }
+
+    MemoryRegion *owner = ctx.allocator->owner_of(user_context, device_region);
+    if (owner == nullptr || owner->ownership != MemoryOwnership::Wrapped) {
+        error(user_context) << "Vulkan: Unable to detach buffer ... buffer is not externally wrapped!\n";
+        return halide_error_code_device_detach_native_failed;
+    }
+    vk_destroy_wrapped_region(user_context, ctx.allocator, device_region);
     buf->device = 0;
     buf->device_interface->impl->release_module();
     buf->device_interface = nullptr;
@@ -1376,7 +1506,29 @@ WEAK uintptr_t halide_vulkan_get_vk_buffer(void *user_context, halide_buffer_t *
         return 0;
     }
     halide_debug_assert(user_context, buf->device_interface == &vulkan_device_interface);
-    return (uintptr_t)buf->device;
+    MemoryRegion *device_region = reinterpret_cast<MemoryRegion *>(buf->device);
+    VulkanContext ctx(user_context);
+    if (ctx.error != halide_error_code_success) {
+        return 0;
+    }
+    MemoryRegion *owner = ctx.allocator->owner_of(user_context, device_region);
+    if (owner == nullptr || owner->handle == nullptr) {
+        return 0;
+    }
+    return (uintptr_t)(*reinterpret_cast<VkBuffer *>(owner->handle));
+}
+
+WEAK uint64_t halide_vulkan_get_vk_crop_offset(void *user_context, halide_buffer_t *buf) {
+    if (buf->device == 0) {
+        return 0;
+    }
+    halide_debug_assert(user_context, buf->device_interface == &vulkan_device_interface);
+    MemoryRegion *device_region = reinterpret_cast<MemoryRegion *>(buf->device);
+    VulkanContext ctx(user_context);
+    if (ctx.error != halide_error_code_success) {
+        return 0;
+    }
+    return vk_total_buffer_offset_bytes(user_context, ctx.allocator, device_region, buf->type);
 }
 
 WEAK const struct halide_device_interface_t *halide_vulkan_device_interface() {
@@ -1445,6 +1597,10 @@ namespace Vulkan {
 
 // --------------------------------------------------------------------------
 
+int vk_wrap_native_vk_buffer(void *user_context, struct halide_buffer_t *buf, uint64_t vk_buffer) {
+    return halide_vulkan_wrap_vk_buffer(user_context, buf, vk_buffer, 0);
+}
+
 WEAK halide_device_interface_impl_t vulkan_device_interface_impl = {
     halide_use_jit_module,
     halide_release_jit_module,
@@ -1460,7 +1616,7 @@ WEAK halide_device_interface_impl_t vulkan_device_interface_impl = {
     halide_vulkan_device_crop,
     halide_vulkan_device_slice,
     halide_vulkan_device_release_crop,
-    halide_vulkan_wrap_vk_buffer,
+    vk_wrap_native_vk_buffer,
     halide_vulkan_detach_vk_buffer,
 };
 
