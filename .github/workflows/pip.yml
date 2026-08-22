@@ -146,13 +146,11 @@ jobs:
       ########################################################################
       # halide-bin
       #
-      # Building the Python bindings no longer needs LLVM/FlatBuffers/WABT at
-      # all -- its dynamic metadata hook installs the matching halide-bin into
-      # the isolated build environment, where find_package(Halide) discovers
-      # it. Fetch the wheel this platform's build-halide-bin job just produced
-      # and expose it to pip via PIP_FIND_LINKS. macOS and Windows also need an
-      # unpacked copy later so the repair tool can resolve (but not vendor)
-      # libHalide.dylib/Halide.dll.
+      # The Python bindings build against the matching halide-bin in its
+      # isolated build environment, where find_package(Halide) discovers the
+      # compiler package. Fetch this platform's wheel and expose it to pip via
+      # PIP_FIND_LINKS. macOS and Windows also need an unpacked copy so the
+      # repair tool can resolve (but not vendor) libHalide.dylib/Halide.dll.
       ########################################################################
 
       - uses: actions/download-artifact@v8
@@ -271,12 +269,10 @@ jobs:
       ########################################################################
       # halide-bin
       #
-      # The runtime module is compiled against an already-installed halide-bin
-      # (for the runtime headers, the shared marshalling source, and GenRT to
-      # generate its bundled Halide runtime), exactly like build-wheels above.
-      # PIP_FIND_LINKS makes the just-built wheel available to the isolated
-      # build resolver. Unlike that job, the resulting extension links no
-      # libHalide and the wheel has no runtime halide-bin dependency.
+      # The runtime module uses halide-bin as an isolated build requirement for
+      # the runtime headers and shared marshalling source. PIP_FIND_LINKS makes
+      # the just-built wheel available to the build resolver. The resulting
+      # extension links no libHalide, and halide-bin is not a runtime dependency.
       ########################################################################
 
       - uses: actions/download-artifact@v8

@@ -43,9 +43,9 @@ if (WITH_PYTHON_BINDINGS)
     )
 
     # The standalone halide.runtime module. It links no libHalide, so it needs
-    # no RPATH patching. It gets its own install component so a libHalide-free
-    # runtime-only wheel can select just this (plus the *.py below); the full
-    # package installs every component and so includes it too.
+    # no RPATH patching. It gets its own install component for the
+    # halide-runtime wheel; monolithic CMake installs include this component
+    # alongside the compiler bindings.
     install(
         TARGETS Halide_PythonRuntime
         LIBRARY DESTINATION "${Halide_INSTALL_PYTHONDIR}/runtime" COMPONENT Halide_PythonRuntime

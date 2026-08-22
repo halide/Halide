@@ -105,9 +105,8 @@ std::string take_last_error() {
 
 using SetErrorHandlerFn = void (*)(void (*)(void *, const char *));
 
-// Device allocations belong to the runtime in the loaded AOT module. Dispatch
-// through the interface stored on the buffer rather than linking a second,
-// unrelated vanilla runtime into this extension.
+// Device allocations belong to the runtime in the loaded AOT module, so device
+// operations dispatch through the interface stored on each buffer.
 void device_free(halide_buffer_t *buf) {
     if (buf->device_interface) {
         (void)buf->device_interface->device_free(nullptr, buf);

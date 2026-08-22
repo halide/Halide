@@ -74,10 +74,9 @@ conflicts = [
   ],
 ]
 
-# Both packages use build-backend hooks to pin their sibling distributions to
-# the exact SCM-derived version in published artifacts. Supplying the otherwise
-# static metadata here lets uv resolve the workspace without executing those
-# hooks (and consequently trying to build halide-bin before LLVM is configured).
+# Package builds use build-backend hooks to resolve sibling requirements from
+# the SCM-derived version. Supplying the resolution metadata here lets uv resolve
+# the workspace without executing those hooks or building halide-bin first.
 # uv requires a version for direct/workspace sources; these resolution-only
 # base versions are kept in sync with the release version by tbump below.
 [[tool.uv.dependency-metadata]]

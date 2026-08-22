@@ -413,7 +413,7 @@ cpack_add_component(
 cpack_add_component(
     Halide_PythonRuntime
     DISPLAY_NAME "Python runtime bindings"
-    DESCRIPTION "Python package providing header-only Halide runtime bindings"
+    DESCRIPTION "Python bindings for Halide runtime types and AOT modules"
 )
 
 cpack_add_component(

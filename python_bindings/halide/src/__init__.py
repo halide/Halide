@@ -6,7 +6,7 @@ def install_dir():
     except ModuleNotFoundError as e:
         if e.name != f"{__name__}.bin":
             raise
-        # Traditional CMake build-tree layout (not a split wheel).
+        # Traditional monolithic CMake build-tree layout.
         from pathlib import Path
 
         return str(Path(__file__).resolve().parent)
