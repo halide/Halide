@@ -61,22 +61,18 @@ if (Halide_ASAN_ENABLED)
     set_target_properties(Halide_PythonRuntime PROPERTIES CMAKE_SHARED_LINKER_FLAGS -shared-libasan)
 endif ()
 
-# Copy the Python sources owned by halide-runtime: the lazy top-level package
-# and the runtime subpackage.
-set(python_package_source "${Halide_Python_SOURCE_DIR}/halide/src/__init__.py")
+# Copy the Python source owned by the halide.runtime subpackage.
 set(python_runtime_source "${CMAKE_CURRENT_SOURCE_DIR}/__init__.py")
 
 set(stamp_file "$<CONFIG>/Halide_PythonRuntime_sources.stamp")
 add_custom_command(
     OUTPUT "${stamp_file}"
-    COMMAND "${CMAKE_COMMAND}" -E make_directory "${Halide_Python_PACKAGE_DIR}"
-    COMMAND "${CMAKE_COMMAND}" -E copy -t "${Halide_Python_PACKAGE_DIR}" "${python_package_source}"
     COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:Halide_PythonRuntime>"
     COMMAND
         "${CMAKE_COMMAND}" -E copy -t "$<TARGET_FILE_DIR:Halide_PythonRuntime>"
         "${python_runtime_source}"
     COMMAND "${CMAKE_COMMAND}" -E touch "${stamp_file}"
-    DEPENDS "${python_package_source}" "${python_runtime_source}"
+    DEPENDS "${python_runtime_source}"
     VERBATIM
 )
 

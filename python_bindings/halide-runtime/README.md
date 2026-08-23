@@ -17,13 +17,12 @@ out = np.empty_like(inp)
 kernel(inp, out)  # call it with NumPy arrays
 ```
 
-This package provides only `halide.runtime` — `hlr.load(...)`, the resulting
-`Kernel` objects, and a lightweight `hlr.Buffer` wrapper. It is a strict subset
-of the full [`halide`](https://pypi.org/project/halide/) package; install this
-one for small deployment environments that run precompiled pipelines but do not
-need the Halide compiler. Accessing the compiler API (e.g. `halide.Func`) from a
-runtime-only install raises a clear `ImportError` directing you to the full
-`halide` package.
+This package contributes only `halide.runtime` — `hlr.load(...)`, the resulting
+`Kernel` objects, and a lightweight `hlr.Buffer` wrapper — to the implicit
+`halide` namespace. It is a strict subset of the full
+[`halide`](https://pypi.org/project/halide/) package; install this one for small
+deployment environments that run precompiled pipelines but do not need the
+Halide compiler.
 
 See the Halide Python docs:
 <https://github.com/halide/Halide/blob/main/doc/Python.md>

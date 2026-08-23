@@ -67,9 +67,8 @@ add_custom_command(
     COMMAND_EXPAND_LISTS VERBATIM
 )
 
-# Copy the Python sources owned by the compiler package. The top-level
-# __init__.py is supplied by Halide_PythonRuntime_sources.
-set(python_sources _generator_helpers.py imageio.py)
+# Copy the Python sources owned by the compiler package.
+set(python_sources __init__.py _generator_helpers.py imageio.py)
 
 list(TRANSFORM python_sources
     PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/"

@@ -36,9 +36,9 @@ import tempfile
 
 import numpy as np
 
-# halide.runtime is all you need to *call* precompiled kernels. Importing it does
-# not load libHalide. (We import the full "halide" package only for the
-# build-time compilation step below.)
+# The standalone halide-runtime distribution is all you need to *call*
+# precompiled kernels. This tutorial also has the full halide distribution
+# available for the build-time compilation step below.
 import halide.runtime as hlr
 
 

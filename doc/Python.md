@@ -659,11 +659,10 @@ $ pip install halide-runtime
 $ uv add halide-runtime
 ```
 
-Importing `halide.runtime` never loads `libHalide`; in the full package, the
-compiler is loaded only if and when you first access a compiler symbol such as
-`hl.Func`. (In a runtime-only install there is no compiler at all, so accessing
-one raises an `ImportError` explaining that only the runtime is present and
-pointing you at the full `halide` package.)
+The standalone `halide-runtime` distribution contributes only the
+`halide.runtime` subpackage to the implicit `halide` namespace, so importing it
+does not load `libHalide`. When the full `halide` distribution is installed, its
+top-level package initializer loads the compiler normally.
 
 #### Producing a loadable kernel
 

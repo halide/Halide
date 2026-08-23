@@ -54,9 +54,9 @@ cmake.source-dir = ".."
 
 # Build and package ONLY the standalone runtime extension: build just its target
 # (so libHalide's compiler bindings are never compiled) and install just its
-# component (the _runtime extension plus the small pure-Python surface: the lazy
-# halide/__init__.py and halide/runtime/__init__.py). The resulting wheel links
-# no libHalide and has no `halide-bin` dependency.
+# component (the _runtime extension plus halide/runtime/__init__.py). The
+# resulting wheel contributes to the implicit `halide` namespace, links no
+# libHalide, and has no `halide-bin` dependency.
 build.targets = ["Halide_PythonRuntime"]
 install.components = ["Halide_PythonRuntime"]
 wheel.install-dir = "halide"

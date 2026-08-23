@@ -6,16 +6,9 @@ set(Halide_INSTALL_PYTHONDIR "${CMAKE_INSTALL_LIBDIR}/python3/site-packages/hali
 )
 
 if (WITH_PYTHON_BINDINGS)
-    # The runtime-only Python surface -- the lazy top-level __init__ (which does
-    # not import the compiler until a compiler attribute is used) and the
-    # halide.runtime subpackage. These go in the Halide_PythonRuntime component
-    # so a libHalide-free halide-runtime wheel can select just this component and
-    # still be a complete, importable package.
-    install(
-        FILES "${Halide_Python_SOURCE_DIR}/halide/src/__init__.py"
-        DESTINATION "${Halide_INSTALL_PYTHONDIR}"
-        COMPONENT Halide_PythonRuntime
-    )
+    # The runtime distribution contributes only the halide.runtime subpackage;
+    # without the full compiler distribution, `halide` is an implicit namespace
+    # package and importing it does not load libHalide.
     install(
         DIRECTORY "${Halide_Python_SOURCE_DIR}/halide-runtime/src/halide/runtime/"
         DESTINATION "${Halide_INSTALL_PYTHONDIR}/runtime"
@@ -24,7 +17,13 @@ if (WITH_PYTHON_BINDINGS)
         PATTERN "*.py"
     )
 
-    # The remaining (compiler-side) Python sources.
+    # The compiler distribution owns the top-level package initializer and the
+    # remaining compiler-side Python sources.
+    install(
+        FILES "${Halide_Python_SOURCE_DIR}/halide/src/__init__.py"
+        DESTINATION "${Halide_INSTALL_PYTHONDIR}"
+        COMPONENT Halide_Python
+    )
     install(
         DIRECTORY "${Halide_Python_SOURCE_DIR}/halide/src/"
         DESTINATION "${Halide_INSTALL_PYTHONDIR}"

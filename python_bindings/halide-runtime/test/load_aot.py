@@ -1,9 +1,4 @@
-"""Test the standalone `halide.runtime` loader against a precompiled AOT kernel.
-
-The key property under test is that `halide.runtime` can load and call a
-precompiled Halide kernel WITHOUT importing the Halide compiler package (and thus
-without libHalide): `import halide.runtime` must not pull in `halide.halide_`.
-"""
+"""Test the standalone `halide.runtime` loader against a precompiled AOT kernel."""
 
 import sys
 from pathlib import Path
@@ -12,14 +7,20 @@ import numpy as np
 
 import halide.runtime as hlr
 
+runtime_only = getattr(sys.modules["halide"], "__file__", None) is None
+
 
 def main():
     aot_path = sys.argv[1]
 
-    # Importing the runtime must not have loaded the compiler extension.
-    assert "halide.halide_" not in sys.modules, (
-        "importing halide.runtime pulled in the halide compiler extension"
-    )
+    # In a runtime-only install, `halide` is an implicit namespace package and
+    # importing the runtime must not load the compiler extension. A monolithic
+    # CMake test build also contains the full package, whose initializer eagerly
+    # loads the compiler before this submodule.
+    if runtime_only:
+        assert "halide.halide_" not in sys.modules, (
+            "importing halide.runtime pulled in the halide compiler extension"
+        )
 
     # load() accepts the standard os.PathLike protocol.
     kernel = hlr.load(Path(aot_path), name="runtimeadd")
@@ -100,8 +101,9 @@ def main():
     else:
         assert False, "non-native-endian buffer was accepted"
 
-    # Still no compiler after all of this.
-    assert "halide.halide_" not in sys.modules
+    # Still no compiler after all of this in a runtime-only installation.
+    if runtime_only:
+        assert "halide.halide_" not in sys.modules
 
     print("Success!")
 
