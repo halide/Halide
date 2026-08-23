@@ -63,18 +63,15 @@ endif ()
 
 # Copy the Python source owned by the halide.runtime subpackage.
 set(python_runtime_source "${CMAKE_CURRENT_SOURCE_DIR}/__init__.py")
+set(python_runtime_destination "${Halide_Python_PACKAGE_DIR}/runtime/__init__.py")
 
-set(stamp_file "$<CONFIG>/Halide_PythonRuntime_sources.stamp")
 add_custom_command(
-    OUTPUT "${stamp_file}"
-    COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:Halide_PythonRuntime>"
-    COMMAND
-        "${CMAKE_COMMAND}" -E copy -t "$<TARGET_FILE_DIR:Halide_PythonRuntime>"
-        "${python_runtime_source}"
-    COMMAND "${CMAKE_COMMAND}" -E touch "${stamp_file}"
+    OUTPUT "${python_runtime_destination}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${Halide_Python_PACKAGE_DIR}/runtime"
+    COMMAND "${CMAKE_COMMAND}" -E copy "${python_runtime_source}" "${python_runtime_destination}"
     DEPENDS "${python_runtime_source}"
     VERBATIM
 )
 
-add_custom_target(Halide_PythonRuntime_sources DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/${stamp_file}")
+add_custom_target(Halide_PythonRuntime_sources DEPENDS "${python_runtime_destination}")
 add_dependencies(Halide_PythonRuntime Halide_PythonRuntime_sources)
