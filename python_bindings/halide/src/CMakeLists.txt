@@ -51,6 +51,7 @@ if (Halide_ASAN_ENABLED)
 endif ()
 
 target_link_libraries(Halide_Python PRIVATE Halide::Halide)
+add_dependencies(Halide_Python Halide_PythonRuntime)
 
 # TODO: There's precious little information about why Python only sometimes prevents DLLs from loading from the PATH
 #   on Windows. This workaround places a copy of Halide.dll (and any other dependencies) next to our Python module.
