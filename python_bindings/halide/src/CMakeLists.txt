@@ -47,7 +47,7 @@ set_target_properties(Halide_Python
 )
 
 if (Halide_ASAN_ENABLED)
-    set_target_properties(Halide_Python PROPERTIES CMAKE_SHARED_LINKER_FLAGS -shared-libasan)
+    target_link_options(Halide_Python PRIVATE -shared-libasan)
 endif ()
 
 target_link_libraries(Halide_Python PRIVATE Halide::Halide)

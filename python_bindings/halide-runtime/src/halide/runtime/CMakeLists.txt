@@ -58,7 +58,7 @@ set_target_properties(Halide_PythonRuntime
 )
 
 if (Halide_ASAN_ENABLED)
-    set_target_properties(Halide_PythonRuntime PROPERTIES CMAKE_SHARED_LINKER_FLAGS -shared-libasan)
+    target_link_options(Halide_PythonRuntime PRIVATE -shared-libasan)
 endif ()
 
 # Copy the Python source owned by the halide.runtime subpackage.
