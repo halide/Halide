@@ -47,11 +47,7 @@ endif ()
 # compiled Halide runtime.
 target_link_libraries(Halide_PythonRuntime PRIVATE Halide::Runtime)
 
-# Place the module in the combined build-tree package. The package directory is
-# normally set by python_bindings/CMakeLists.txt.
-if (NOT DEFINED Halide_Python_PACKAGE_DIR)
-    set(Halide_Python_PACKAGE_DIR "${CMAKE_BINARY_DIR}/$<CONFIG>/site-packages/halide")
-endif ()
+# Place the module in the combined build-tree package.
 set_target_properties(Halide_PythonRuntime
     PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${Halide_Python_PACKAGE_DIR}/runtime"
