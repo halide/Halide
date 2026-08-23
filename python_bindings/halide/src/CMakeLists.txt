@@ -39,19 +39,19 @@ target_sources(
     halide_/PyVarOrRVar.cpp
 )
 
-# It is technically still possible for a user to override the LIBRARY_OUTPUT_DIRECTORY by setting
-# CMAKE_LIBRARY_OUTPUT_DIRECTORY_<CONFIG>, but they do so at their own peril. If a user needs to
-# do this, they should use the CMAKE_PROJECT_Halide_Python_INCLUDE_BEFORE variable to override it
-# just for this project, rather than globally, and they should ensure that the last path component
-# is `halide`. Otherwise, the tests will break.
-set_target_properties(Halide_Python PROPERTIES LIBRARY_OUTPUT_DIRECTORY "$<CONFIG>/halide")
+# Keep the build tree importable with the same package layout produced by
+# installing halide and its halide-bin and halide-runtime dependencies.
+set_target_properties(Halide_Python
+    PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY "${Halide_Python_PACKAGE_DIR}"
+)
 
 if (Halide_ASAN_ENABLED)
     set_target_properties(Halide_Python PROPERTIES CMAKE_SHARED_LINKER_FLAGS -shared-libasan)
 endif ()
 
 target_link_libraries(Halide_Python PRIVATE Halide::Halide)
-add_dependencies(Halide_Python Halide_PythonRuntime)
+add_dependencies(Halide_Python Halide_PythonBin_sources Halide_PythonRuntime)
 
 # TODO: There's precious little information about why Python only sometimes prevents DLLs from loading from the PATH
 #   on Windows. This workaround places a copy of Halide.dll (and any other dependencies) next to our Python module.
@@ -67,8 +67,9 @@ add_custom_command(
     COMMAND_EXPAND_LISTS VERBATIM
 )
 
-# Copy our Python source files over so that we have a valid package in the binary directory.
-set(python_sources __init__.py _generator_helpers.py imageio.py)
+# Copy the Python sources owned by the compiler package. The top-level
+# __init__.py is supplied by Halide_PythonRuntime_sources.
+set(python_sources _generator_helpers.py imageio.py)
 
 list(TRANSFORM python_sources
     PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/"

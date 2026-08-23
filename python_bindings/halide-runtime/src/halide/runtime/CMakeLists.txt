@@ -47,36 +47,36 @@ endif ()
 # compiled Halide runtime.
 target_link_libraries(Halide_PythonRuntime PRIVATE Halide::Runtime)
 
-# Place the module next to the compiler extension in normal CMake builds. The
-# package binary directory is set by python_bindings/CMakeLists.txt.
-if (NOT DEFINED Halide_Python_PACKAGE_BINARY_DIR)
-    set(Halide_Python_PACKAGE_BINARY_DIR "${CMAKE_BINARY_DIR}")
+# Place the module in the combined build-tree package. The package directory is
+# normally set by python_bindings/CMakeLists.txt.
+if (NOT DEFINED Halide_Python_PACKAGE_DIR)
+    set(Halide_Python_PACKAGE_DIR "${CMAKE_BINARY_DIR}/$<CONFIG>/site-packages/halide")
 endif ()
 set_target_properties(Halide_PythonRuntime
     PROPERTIES
-    LIBRARY_OUTPUT_DIRECTORY "${Halide_Python_PACKAGE_BINARY_DIR}/$<CONFIG>/halide/runtime"
+    LIBRARY_OUTPUT_DIRECTORY "${Halide_Python_PACKAGE_DIR}/runtime"
 )
 
 if (Halide_ASAN_ENABLED)
     set_target_properties(Halide_PythonRuntime PROPERTIES CMAKE_SHARED_LINKER_FLAGS -shared-libasan)
 endif ()
 
-# Copy the Python source for the subpackage next to the extension.
-set(python_sources __init__.py)
-list(TRANSFORM python_sources
-    PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/"
-    OUTPUT_VARIABLE python_sources_source_dir
-)
+# Copy the Python sources owned by halide-runtime: the lazy top-level package
+# and the runtime subpackage.
+set(python_package_source "${Halide_Python_SOURCE_DIR}/halide/src/__init__.py")
+set(python_runtime_source "${CMAKE_CURRENT_SOURCE_DIR}/__init__.py")
 
 set(stamp_file "$<CONFIG>/Halide_PythonRuntime_sources.stamp")
 add_custom_command(
     OUTPUT "${stamp_file}"
-    COMMAND "${CMAKE_COMMAND}" -E make_directory $<TARGET_FILE_DIR:Halide_PythonRuntime>
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${Halide_Python_PACKAGE_DIR}"
+    COMMAND "${CMAKE_COMMAND}" -E copy -t "${Halide_Python_PACKAGE_DIR}" "${python_package_source}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:Halide_PythonRuntime>"
     COMMAND
-        "${CMAKE_COMMAND}" -E copy -t $<TARGET_FILE_DIR:Halide_PythonRuntime>
-        ${python_sources_source_dir}
+        "${CMAKE_COMMAND}" -E copy -t "$<TARGET_FILE_DIR:Halide_PythonRuntime>"
+        "${python_runtime_source}"
     COMMAND "${CMAKE_COMMAND}" -E touch "${stamp_file}"
-    DEPENDS ${python_sources_source_dir}
+    DEPENDS "${python_package_source}" "${python_runtime_source}"
     VERBATIM
 )
 

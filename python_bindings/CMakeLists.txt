@@ -60,9 +60,9 @@ include(AddPythonTest)
 # Package subtrees are deliberately ordered: the binary package owns the
 # compiler installation, the runtime owns the header-only extension, and the
 # compiler package consumes both while adding the familiar Python surface.
+set(Halide_Python_PACKAGE_DIR "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/site-packages/halide")
 add_subdirectory(halide-bin)
 if (WITH_PYTHON_BINDINGS)
-    set(Halide_Python_PACKAGE_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/halide/src")
     add_subdirectory(halide-runtime)
 endif ()
 add_subdirectory(halide)
