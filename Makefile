@@ -522,6 +522,7 @@ SOURCE_FILES = \
   HexagonOffload.cpp \
   HexagonOptimize.cpp \
   ImageParam.cpp \
+  Inductive.cpp \
   InferArguments.cpp \
   InjectHostDevBufferCopies.cpp \
   Inline.cpp \
@@ -727,6 +728,7 @@ HEADER_FILES = \
   HexagonOffload.h \
   HexagonOptimize.h \
   ImageParam.h \
+  Inductive.h \
   InferArguments.h \
   InjectHostDevBufferCopies.h \
   Inline.h \
@@ -2294,6 +2296,7 @@ TEST_APPS=\
 	resize \
 	resnet_50 \
 	stencil_chain \
+	stereobm \
 	wavelet
 
 TEST_APPS_DEPS=$(TEST_APPS:%=%_test_app)

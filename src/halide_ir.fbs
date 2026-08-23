@@ -572,6 +572,7 @@ table Split {
 
 enum DimType: ubyte {
     PureVar,
+    InductiveVar,
     PureRVar,
     ImpureRVar,
 }
