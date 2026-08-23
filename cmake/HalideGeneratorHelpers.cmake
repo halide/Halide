@@ -226,6 +226,7 @@ function(add_halide_generator TARGET)
         )
         set_target_properties(${TARGET}_pystub PROPERTIES OUTPUT_NAME ${MODULE_NAME})
         _Halide_target_export_single_symbol(${TARGET}_pystub "PyInit_${MODULE_NAME}")
+        _Halide_place_dll(${TARGET}_pystub)
     endif ()
 endfunction()
 
