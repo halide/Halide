@@ -13,6 +13,8 @@ import numpy as np
 
 import halide.runtime as hlr
 
+runtime_only = getattr(sys.modules["halide"], "__file__", None) is None
+
 # Halide type string (as reported by kernel.arguments) -> numpy dtype.
 _DTYPE = {
     "bool": np.uint8,
@@ -151,8 +153,8 @@ def main():
     # Everything not selected by the enum is unchanged.
     np.testing.assert_array_equal(xor_args["total"], expected_total)
 
-    # No compiler was needed for any of this.
-    assert "halide.halide_" not in sys.modules
+    if runtime_only:
+        assert "halide.halide_" not in sys.modules
 
     print("Success!")
 

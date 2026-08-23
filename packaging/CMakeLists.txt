@@ -91,16 +91,6 @@ endif ()
 
 install(TARGETS Halide_Runtime EXPORT Halide_Targets FILE_SET HEADERS COMPONENT Halide_Development)
 
-# The shared buffer-marshalling core, #included both by generated Python
-# extensions (embedded via binary2cpp) and compiled into the standalone
-# halide.runtime module. Install it next to HalideRuntime.h so an out-of-tree
-# build of the runtime module finds it via Halide::Runtime's include dirs.
-install(
-    FILES "${Halide_SOURCE_DIR}/src/PythonExtensionRuntime.template.cpp"
-    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
-    COMPONENT Halide_Development
-)
-
 ##
 # Halide tools
 ##

@@ -4,6 +4,7 @@ from addconstantcpp_with_offset_42 import addconstantcpp_with_offset_42
 from addconstantpy_with_offset_42 import addconstantpy_with_offset_42
 from addconstantcpp_with_negative_offset import addconstantcpp_with_negative_offset
 from addconstantpy_with_negative_offset import addconstantpy_with_negative_offset
+import halide.runtime as hlr
 import numpy
 
 TESTS_AND_OFFSETS = [
@@ -19,6 +20,8 @@ ERROR_THRESHOLD = 0.0001
 
 
 def test(addconstant_impl_func, offset):
+    assert isinstance(addconstant_impl_func, hlr.Kernel)
+
     scalar_u1 = True
     scalar_u8 = 3
     scalar_u16 = 49153
@@ -170,14 +173,12 @@ def test(addconstant_impl_func, offset):
             output_3d,
         )
     except RuntimeError as e:
-        assert str(e) == "Halide Runtime Error: -27", e
+        assert "Requirement Failed" in str(e), e
     else:
         assert False, "Did not see expected exception!"
 
     try:
-        # Expected requirement failure #2 -- note that for AOT-compiled
-        # code in Python, the error message is strictly numeric (the text
-        # of the error isn't currently propagated int he exception).
+        # Expected requirement failure #2.
         scalar_i32 = -1
         addconstant_impl_func(
             scalar_u1,
@@ -219,7 +220,7 @@ def test(addconstant_impl_func, offset):
             output_3d,
         )
     except RuntimeError as e:
-        assert str(e) == "Halide Runtime Error: -27", e
+        assert "Requirement Failed" in str(e), e
     else:
         assert False, "Did not see expected exception!"
 

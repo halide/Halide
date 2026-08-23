@@ -532,7 +532,10 @@ registered name `logical_op_generator` to produce the target `xor_filter`, and
 then wraps the compiled output with a Python extension. The result will be a
 shared library of the form `<target>.<soabi>.so`, where `<soabi>` describes the
 specific Python version and platform (e.g., `cpython-310-darwin` for Python 3.10
-on OSX.)
+on OSX.) Each exported function is a callable `halide.runtime.Kernel`, so the
+environment where the extension is imported must have the matching
+`halide-runtime` package installed. The full `halide` package includes this
+dependency automatically.
 
 Note that you can combine multiple Halide libraries into a single Python module;
 this is convenient for packaging, but also because all the libraries in a single
@@ -746,11 +749,10 @@ buf.shape  # [480, 640]
 view = np.asarray(buf)  # a zero-copy view of the same memory
 ```
 
-A `Buffer` exposes the same `_get_raw_halide_buffer_t` protocol that
-`halide.Buffer` and the extensions produced by
-`add_halide_python_extension_library` use, so the very same object can be handed
-either to a kernel loaded via `halide.runtime.load` or to a function in a
-generated extension module.
+Generated extensions expose these same `Kernel` objects directly. Consequently,
+the same NumPy arrays, `halide.runtime.Buffer` objects, and `halide.Buffer`
+objects can be handed either to a kernel loaded via `halide.runtime.load` or to
+a kernel imported from a generated extension module.
 
 The same memory-order caveats described in the previous section apply here:
 numpy's default row-major layout corresponds to Halide's axes in reverse order,

@@ -22,7 +22,9 @@ This package contributes only `halide.runtime` — `hlr.load(...)`, the resultin
 `halide` namespace. It is a strict subset of the full
 [`halide`](https://pypi.org/project/halide/) package; install this one for small
 deployment environments that run precompiled pipelines but do not need the
-Halide compiler.
+Halide compiler. Python extensions produced by
+`add_halide_python_extension_library` also expose this package's `Kernel` type
+and therefore require `halide-runtime` when deployed independently.
 
 See the Halide Python docs:
 <https://github.com/halide/Halide/blob/main/doc/Python.md>

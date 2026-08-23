@@ -6,17 +6,16 @@
 // (a shared object exporting `<name>_argv` and `<name>_metadata`) and call it
 // with buffer-protocol objects (e.g. NumPy arrays) and Python scalars.
 //
-// It shares the buffer-protocol <-> halide_buffer_t marshalling core with the
-// Python extensions emitted by PythonExtensionGen, via the single source of
-// truth in src/PythonExtensionRuntime.template.cpp (included below). Interop
-// with `halide.Buffer` (from the compiler module) and with objects produced by
-// generated extensions flows through a duck-typed, named-capsule protocol, so
-// no libHalide types cross the boundary.
+// Generated Python extensions register their linked AOT entry points with this
+// module and expose the resulting Kernel objects directly. Interop with
+// `halide.Buffer` (from the compiler module) flows through a duck-typed,
+// named-capsule protocol, so no libHalide types cross the boundary.
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <pybind11/stl/filesystem.h>
 
+#include <climits>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -34,16 +33,132 @@
 #include <dlfcn.h>
 #endif
 
-// Pull in the shared marshalling core: Halide::PythonRuntime::unpack_buffer()
-// and PyHalideBuffer<>. `unpack_buffer` is `inline` and PyHalideBuffer lives in
-// an anonymous namespace, so including this translation unit here (rather than
-// compiling it separately) is well-formed and keeps a single implementation.
-// NOLINTNEXTLINE(bugprone-suspicious-include): intentionally shared source.
-#include "PythonExtensionRuntime.template.cpp"
-
 namespace py = pybind11;
 
 namespace {
+
+constexpr unsigned python_runtime_api_version = 1;
+constexpr char python_runtime_api_capsule_name[] = "halide.runtime._runtime._C_API";
+
+using ArgvCallFn = int (*)(void **);
+using MetadataFn = const halide_filter_metadata_t *(*)();
+using SetErrorHandlerFn = halide_error_handler_t (*)(halide_error_handler_t);
+using SetCustomPrintFn = halide_print_t (*)(halide_print_t);
+
+struct PythonRuntimeAPI {
+    unsigned api_version;
+    unsigned halide_version_major;
+    PyObject *(*make_kernel)(const char *name,
+                             ArgvCallFn argv_fn,
+                             const halide_filter_metadata_t *metadata,
+                             SetErrorHandlerFn set_error_handler,
+                             SetCustomPrintFn set_custom_print,
+                             int expose_user_context,
+                             int log_errors_to_stderr);
+};
+
+bool unpack_buffer(PyObject *py_obj,
+                   int py_getbuffer_flags,
+                   const char *name,
+                   int dimensions,
+                   Py_buffer &py_buf,
+                   halide_dimension_t *halide_dim,
+                   halide_buffer_t &halide_buf,
+                   bool &py_buf_valid,
+                   bool &needs_device_free) {
+    py_buf_valid = false;
+    needs_device_free = false;
+
+    std::memset(&py_buf, 0, sizeof(py_buf));
+    if (PyObject_GetBuffer(py_obj, &py_buf, PyBUF_FORMAT | PyBUF_STRIDED_RO | py_getbuffer_flags) < 0) {
+        return false;
+    }
+    py_buf_valid = true;
+
+    if (dimensions && py_buf.ndim != dimensions) {
+        PyErr_Format(PyExc_ValueError, "Invalid argument %s: Expected %d dimensions, got %d", name, dimensions, py_buf.ndim);
+        return false;
+    }
+    if (py_buf.itemsize <= 0) {
+        PyErr_Format(PyExc_ValueError, "Invalid argument %s: Buffer item size must be positive", name);
+        return false;
+    }
+    // Always reverse axes.
+    // TODO(jiawen): Consolidate this with similar code in PyCallable.cpp and
+    // pybufferinfo_to_halidebuffer() in PyBuffer.h.
+    for (int i = 0; i < py_buf.ndim; ++i) {
+        const int j = py_buf.ndim - 1 - i;
+        if (py_buf.shape[j] < 0 || py_buf.shape[j] > INT32_MAX) {
+            PyErr_Format(PyExc_ValueError, "Invalid argument %s: Buffer extent is out of range", name);
+            return false;
+        }
+        if (py_buf.strides[j] % py_buf.itemsize != 0) {
+            PyErr_Format(PyExc_ValueError, "Invalid argument %s: Buffer byte stride is not a multiple of its item size", name);
+            return false;
+        }
+        const Py_ssize_t element_stride = py_buf.strides[j] / py_buf.itemsize;
+        if (element_stride < INT32_MIN || element_stride > INT32_MAX) {
+            PyErr_Format(PyExc_ValueError, "Invalid argument %s: Buffer stride is out of range", name);
+            return false;
+        }
+        halide_dim[i].min = 0;
+        halide_dim[i].stride = static_cast<int32_t>(element_stride);
+        halide_dim[i].extent = static_cast<int32_t>(py_buf.shape[j]);
+        halide_dim[i].flags = 0;
+        if (py_buf.suboffsets && py_buf.suboffsets[j] >= 0) {
+            PyErr_Format(PyExc_ValueError, "Invalid buffer: suboffsets not supported");
+            return false;
+        }
+    }
+
+    halide_buf = {};
+    if (!py_buf.format) {
+        if (py_buf.itemsize != 1) {
+            PyErr_Format(PyExc_ValueError, "Invalid data type for %s: Missing format for a multi-byte buffer", name);
+            return false;
+        }
+        halide_buf.type.code = halide_type_uint;
+        halide_buf.type.bits = 8;
+    } else {
+        const char *p = py_buf.format;
+        char byte_order = '@';
+        if (std::strchr("@<>!=", *p)) {
+            byte_order = *p++;
+        }
+        const uint16_t endian_test = 1;
+        const bool native_is_little_endian = *reinterpret_cast<const uint8_t *>(&endian_test) == 1;
+        const bool non_native_byte_order =
+            (native_is_little_endian && (byte_order == '>' || byte_order == '!')) ||
+            (!native_is_little_endian && byte_order == '<');
+        if (non_native_byte_order && py_buf.itemsize > 1) {
+            PyErr_Format(PyExc_ValueError, "Invalid data type for %s: Non-native byte order %s is not supported", name, py_buf.format);
+            return false;
+        }
+        if (*p == 'f' || *p == 'd' || *p == 'e') {
+            halide_buf.type.code = halide_type_float;
+        } else if (*p >= 'a' && *p <= 'z') {
+            halide_buf.type.code = halide_type_int;
+        } else {
+            halide_buf.type.code = halide_type_uint;
+        }
+        const char *type_codes = "bBhHiIlLqQfde";
+        if (*p == '?' && p[1] == '\0' && py_buf.itemsize == 1) {
+            halide_buf.type.bits = 1;
+        } else if (std::strchr(type_codes, *p) && p[1] == '\0' &&
+                   (py_buf.itemsize == 1 || py_buf.itemsize == 2 ||
+                    py_buf.itemsize == 4 || py_buf.itemsize == 8)) {
+            halide_buf.type.bits = static_cast<uint8_t>(py_buf.itemsize * 8);
+        } else {
+            PyErr_Format(PyExc_ValueError, "Invalid data type for %s: %s", name, py_buf.format);
+            return false;
+        }
+    }
+    halide_buf.dimensions = py_buf.ndim;
+    halide_buf.dim = halide_dim;
+    halide_buf.host = static_cast<uint8_t *>(py_buf.buf);
+    needs_device_free = true;
+    return true;
+}
 
 // ---------------------------------------------------------------------------
 // Cross-platform dynamic library handling
@@ -80,6 +195,18 @@ std::string library_error() {
 }
 #endif
 
+struct SharedLibrary {
+    explicit SharedLibrary(LibHandle handle)
+        : handle(handle) {
+    }
+
+    ~SharedLibrary() {
+        close_library(handle);
+    }
+
+    LibHandle handle;
+};
+
 // ---------------------------------------------------------------------------
 // Error handling
 //
@@ -99,13 +226,24 @@ extern "C" void runtime_error_handler(void * /*user_context*/, const char *msg) 
     last_error() = msg ? msg : "";
 }
 
+extern "C" void runtime_error_handler_stderr(void *user_context, const char *msg) {
+    runtime_error_handler(user_context, msg);
+    PyGILState_STATE state = PyGILState_Ensure();
+    PySys_FormatStderr("%s\n", msg ? msg : "");
+    PyGILState_Release(state);
+}
+
+extern "C" void runtime_print_handler(void * /*user_context*/, const char *msg) {
+    PyGILState_STATE state = PyGILState_Ensure();
+    PySys_FormatStdout("%s", msg ? msg : "");
+    PyGILState_Release(state);
+}
+
 std::string take_last_error() {
     std::string s = last_error();
     last_error().clear();
     return s;
 }
-
-using SetErrorHandlerFn = void (*)(void (*)(void *, const char *));
 
 // Device allocations belong to the runtime in the loaded AOT module, so device
 // operations dispatch through the interface stored on each buffer.
@@ -140,9 +278,6 @@ std::string default_filter_name(const std::string &path) {
     return base;
 }
 
-using ArgvCallFn = int (*)(void **);
-using MetadataFn = const halide_filter_metadata_t *(*)();
-
 // ---------------------------------------------------------------------------
 // A single loaded AOT filter.
 // ---------------------------------------------------------------------------
@@ -165,21 +300,23 @@ std::string kind_to_string(int kind) {
 
 class Kernel {
 public:
-    Kernel(LibHandle handle, ArgvCallFn argv_fn, const halide_filter_metadata_t *md)
-        : handle_(handle), argv_fn_(argv_fn), md_(md) {
-    }
-
-    ~Kernel() {
-        if (handle_) {
-            close_library(handle_);
-        }
+    Kernel(std::shared_ptr<SharedLibrary> library,
+           ArgvCallFn argv_fn,
+           const halide_filter_metadata_t *md,
+           std::string name,
+           bool expose_user_context)
+        : library_(std::move(library)),
+          argv_fn_(argv_fn),
+          md_(md),
+          name_(std::move(name)),
+          expose_user_context_(expose_user_context) {
     }
 
     Kernel(const Kernel &) = delete;
     Kernel &operator=(const Kernel &) = delete;
 
-    std::string name() const {
-        return md_->name ? md_->name : "";
+    const std::string &name() const {
+        return name_;
     }
 
     std::string target() const {
@@ -245,14 +382,15 @@ public:
             }
         } cleanup{slots};
 
-        // Map user arguments (positional + keyword) onto metadata slots,
-        // auto-filling the implicit __user_context argument if present.
+        // Map user arguments (positional + keyword) onto metadata slots. Kernels
+        // loaded dynamically hide and null-fill __user_context; generated
+        // extensions preserve their historical explicit user-context argument.
         std::vector<py::handle> values(argc);
         std::vector<bool> filled(argc, false);
 
         size_t next_positional = 0;
         for (int i = 0; i < argc; i++) {
-            if (is_user_context(md_->arguments[i])) {
+            if (!expose_user_context_ && is_user_context(md_->arguments[i])) {
                 filled[i] = true;  // handled specially below; consumes no user arg
             }
         }
@@ -274,7 +412,8 @@ public:
             const std::string key = py::cast<std::string>(kw.first);
             int slot = -1;
             for (int i = 0; i < argc; i++) {
-                if (!is_user_context(md_->arguments[i]) && key == md_->arguments[i].name) {
+                if ((expose_user_context_ || !is_user_context(md_->arguments[i])) &&
+                    key == md_->arguments[i].name) {
                     slot = i;
                     break;
                 }
@@ -294,7 +433,7 @@ public:
 
             ArgSlot &slot = slots[i];
 
-            if (is_user_context(a)) {
+            if (!expose_user_context_ && is_user_context(a)) {
                 slot.scalar.u.u64 = 0;  // null user context
                 argv[i] = &slot.scalar;
                 continue;
@@ -305,7 +444,10 @@ public:
                                          "' for kernel '" + name() + "'.");
             }
 
-            if (a.kind == halide_argument_kind_input_scalar) {
+            if (is_user_context(a)) {
+                slot.scalar.u.handle = values[i].ptr();
+                argv[i] = &slot.scalar;
+            } else if (a.kind == halide_argument_kind_input_scalar) {
                 store_scalar(a, values[i], &slot.scalar);
                 argv[i] = &slot.scalar;
             } else {
@@ -382,7 +524,7 @@ private:
 
         // General path: buffer-protocol object (e.g. NumPy array).
         slot.dims.resize(a.dimensions > 0 ? a.dimensions : 1);
-        bool ok = Halide::PythonRuntime::unpack_buffer(
+        bool ok = unpack_buffer(
             value.ptr(), writable ? PyBUF_WRITABLE : 0, a.name, a.dimensions,
             slot.py_buf, slot.dims.data(), slot.buffer, slot.py_buf_valid,
             slot.needs_device_free);
@@ -413,17 +555,22 @@ private:
         HALIDE_RUNTIME_SCALAR_CASE(halide_type_uint, 16, uint16_t, u16)
         HALIDE_RUNTIME_SCALAR_CASE(halide_type_uint, 32, uint32_t, u32)
         HALIDE_RUNTIME_SCALAR_CASE(halide_type_uint, 64, uint64_t, u64)
-        HALIDE_RUNTIME_SCALAR_CASE(halide_type_handle, 64, uint64_t, u64)
-
 #undef HALIDE_RUNTIME_SCALAR_CASE
+
+        if (t.code == halide_type_handle && t.bits == 64) {
+            out->u.handle = reinterpret_cast<void *>(py::cast<uintptr_t>(value));
+            return;
+        }
 
         throw std::runtime_error("Unsupported scalar type for argument '" +
                                  std::string(a.name) + "'.");
     }
 
-    LibHandle handle_;
+    std::shared_ptr<SharedLibrary> library_;
     ArgvCallFn argv_fn_;
     const halide_filter_metadata_t *md_;
+    std::string name_;
+    bool expose_user_context_;
 };
 
 std::string type_to_string(halide_type_t t) {
@@ -432,16 +579,68 @@ std::string type_to_string(halide_type_t t) {
     return out.str();
 }
 
+std::shared_ptr<Kernel> make_kernel(std::shared_ptr<SharedLibrary> library,
+                                    ArgvCallFn argv_fn,
+                                    const halide_filter_metadata_t *md,
+                                    std::string name,
+                                    bool expose_user_context) {
+    if (!argv_fn || !md) {
+        throw std::runtime_error("Cannot construct a Kernel from null AOT entry points.");
+    }
+    if (md->version != halide_filter_metadata_t::VERSION) {
+        throw std::runtime_error("Kernel '" + name + "' has metadata version " +
+                                 std::to_string(md->version) + ", expected " +
+                                 std::to_string(halide_filter_metadata_t::VERSION));
+    }
+    if (name.empty() && md->name) {
+        name = md->name;
+    }
+    return std::make_shared<Kernel>(
+        std::move(library), argv_fn, md, std::move(name), expose_user_context);
+}
+
+PyObject *make_borrowed_kernel(const char *name,
+                               ArgvCallFn argv_fn,
+                               const halide_filter_metadata_t *md,
+                               SetErrorHandlerFn set_error_handler,
+                               SetCustomPrintFn set_custom_print,
+                               int expose_user_context,
+                               int log_errors_to_stderr) {
+    try {
+        if (set_error_handler) {
+            set_error_handler(log_errors_to_stderr ? &runtime_error_handler_stderr : &runtime_error_handler);
+        }
+        if (set_custom_print) {
+            set_custom_print(&runtime_print_handler);
+        }
+        py::object result = py::cast(make_kernel(
+            nullptr, argv_fn, md, name ? name : "", expose_user_context != 0));
+        return result.release().ptr();
+    } catch (py::error_already_set &e) {
+        e.restore();
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+    }
+    return nullptr;
+}
+
+PythonRuntimeAPI python_runtime_api{
+    python_runtime_api_version,
+    HALIDE_VERSION_MAJOR,
+    &make_borrowed_kernel,
+};
+
 std::shared_ptr<Kernel> load(const std::filesystem::path &path_obj, const py::object &name_obj) {
     const std::string path = path_obj.string();
-    LibHandle handle = open_library(path);
-    if (!handle) {
+    LibHandle raw_handle = open_library(path);
+    if (!raw_handle) {
         throw std::runtime_error("Could not load '" + path + "': " + library_error());
     }
+    auto library = std::make_shared<SharedLibrary>(raw_handle);
 
     // Redirect the kernel runtime's errors to our handler so a runtime failure
     // (e.g. a missing GPU driver) raises a Python exception instead of aborting.
-    if (void *set_handler = find_symbol(handle, "halide_set_error_handler")) {
+    if (void *set_handler = find_symbol(raw_handle, "halide_set_error_handler")) {
         reinterpret_cast<SetErrorHandlerFn>(set_handler)(&runtime_error_handler);
     }
 
@@ -453,24 +652,17 @@ std::shared_ptr<Kernel> load(const std::filesystem::path &path_obj, const py::ob
     }
 
     for (const std::string &name : candidates) {
-        auto argv_fn = reinterpret_cast<ArgvCallFn>(find_symbol(handle, name + "_argv"));
-        auto meta_fn = reinterpret_cast<MetadataFn>(find_symbol(handle, name + "_metadata"));
+        auto argv_fn = reinterpret_cast<ArgvCallFn>(find_symbol(raw_handle, name + "_argv"));
+        auto meta_fn = reinterpret_cast<MetadataFn>(find_symbol(raw_handle, name + "_metadata"));
         if (argv_fn && meta_fn) {
             const halide_filter_metadata_t *md = meta_fn();
             if (!md) {
                 continue;
             }
-            if (md->version != halide_filter_metadata_t::VERSION) {
-                close_library(handle);
-                throw std::runtime_error("Kernel '" + name + "' has metadata version " +
-                                         std::to_string(md->version) + ", expected " +
-                                         std::to_string(halide_filter_metadata_t::VERSION));
-            }
-            return std::make_shared<Kernel>(handle, argv_fn, md);
+            return make_kernel(std::move(library), argv_fn, md, name, false);
         }
     }
 
-    close_library(handle);
     std::string tried = candidates.empty() ? "" : candidates.front();
     throw std::runtime_error(
         "Could not find Halide filter symbols '" + tried + "_argv' / '" + tried +
@@ -494,6 +686,8 @@ PYBIND11_MODULE(_runtime, m) {
         .def("__repr__", [](const Kernel &k) {
             return "<halide.runtime.Kernel '" + k.name() + "'>";
         });
+
+    m.attr("_C_API") = py::capsule(&python_runtime_api, python_runtime_api_capsule_name);
 
     m.def("load", &load, py::arg("path"), py::arg("name") = py::none(),
           "Load a precompiled Halide AOT kernel from a shared library.\n\n"

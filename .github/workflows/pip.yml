@@ -270,7 +270,7 @@ jobs:
       # halide-bin
       #
       # The runtime module uses halide-bin as an isolated build requirement for
-      # the runtime headers and shared marshalling source. PIP_FIND_LINKS makes
+      # the runtime headers and CMake package. PIP_FIND_LINKS makes
       # the just-built wheel available to the build resolver. The resulting
       # extension links no libHalide, and halide-bin is not a runtime dependency.
       ########################################################################

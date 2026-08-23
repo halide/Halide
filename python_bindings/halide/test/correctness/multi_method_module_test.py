@@ -1,9 +1,11 @@
 import numpy as np
 
+import halide.runtime as hlr
 from multi_method_module import simplecpp, user_context
 
 
 def test_simplecpp():
+    assert isinstance(simplecpp, hlr.Kernel)
     buffer_input = np.ndarray([2, 2], dtype=np.uint8)
     buffer_input[0, 0] = 123
     buffer_input[0, 1] = 123
@@ -23,6 +25,7 @@ def test_simplecpp():
 
 
 def test_user_context():
+    assert isinstance(user_context, hlr.Kernel)
     output = bytearray("\0\0\0\0", "ascii")
     user_context(None, ord("q"), output)
     assert output == bytearray("qqqq", "ascii")
@@ -36,7 +39,7 @@ def test_aot_call_failure_throws_exception():
     try:
         simplecpp(buffer_input, float_arg, simple_output)
     except RuntimeError as e:
-        assert "Halide Runtime Error: -3" in str(e), str(e)
+        assert "type uint8" in str(e) and "float32" in str(e), str(e)
     except Exception as e:
         assert False, "Did not see expected exception, saw: " + str(e)
     else:

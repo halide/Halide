@@ -17,6 +17,8 @@ import numpy as np
 
 import halide.runtime as hlr
 
+runtime_only = getattr(sys.modules["halide"], "__file__", None) is None
+
 _GPU_FEATURES = ("cuda", "opencl", "metal", "vulkan", "webgpu")
 
 
@@ -49,7 +51,8 @@ def main():
         print(f"ran on {backend}: OK")
         ran.append(backend)
 
-    assert "halide.halide_" not in sys.modules
+    if runtime_only:
+        assert "halide.halide_" not in sys.modules
 
     if not ran:
         built = ", ".join(backend_of(hlr.load(p).target) or p for p in module_paths)

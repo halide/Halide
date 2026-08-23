@@ -31,18 +31,6 @@ target_sources(
         FILES "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../src/Float16.h"
 )
 
-# PyRuntime.cpp #includes the shared marshalling core (it depends only on
-# <Python.h> + HalideRuntime.h). In an in-tree build it lives in the Halide
-# source tree; when building against an installed Halide it is installed next to
-# HalideRuntime.h and found via Halide::Runtime's include directories (so no
-# extra include path is needed in that case).
-if (
-    DEFINED Halide_SOURCE_DIR
-    AND EXISTS "${Halide_SOURCE_DIR}/src/PythonExtensionRuntime.template.cpp"
-)
-    target_include_directories(Halide_PythonRuntime PRIVATE "${Halide_SOURCE_DIR}/src")
-endif ()
-
 # Header-only runtime interface only: loaded AOT modules supply their own
 # compiled Halide runtime.
 target_link_libraries(Halide_PythonRuntime PRIVATE Halide::Runtime)

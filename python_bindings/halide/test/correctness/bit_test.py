@@ -1,9 +1,12 @@
 from bitcpp import bitcpp
 from bitpy import bitpy
+import halide.runtime as hlr
 import numpy as np
 
 
 def test(fn):
+    assert isinstance(fn, hlr.Kernel)
+
     # Note that in Halide, Buffer<bool> and Buffer<uint8> have identical memory
     # layout -- a bool takes an entire byte in a buffer -- but distinct types,
     # so we must construct a Buffer here that has that correct type. (If we
