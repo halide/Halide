@@ -1,15 +1,8 @@
+from pathlib import Path
+
+
 def install_dir():
-    try:
-        from . import bin
-
-        return bin.install_dir()
-    except ModuleNotFoundError as e:
-        if e.name != f"{__name__}.bin":
-            raise
-        # Traditional monolithic CMake build-tree layout.
-        from pathlib import Path
-
-        return str(Path(__file__).resolve().parent)
+    return str(Path(__file__).resolve().parent)
 
 
 # ---------------------------------------------------------------------------
@@ -60,6 +53,12 @@ _GENERATOR_HELPER_NAMES = (
 
 _compiler_loaded = False
 _compiler_loading = False
+_COMPILER_UNAVAILABLE = (
+    "The Halide compiler is not available in this installation. This looks like "
+    "a runtime-only install, which provides `halide.runtime` (for calling "
+    "precompiled AOT kernels) without libHalide. Install the full `halide` package "
+    "to use the compiler/JIT API."
+)
 
 
 def _load_compiler():
@@ -83,12 +82,9 @@ def _load_compiler():
         try:
             import_module(".bin", __name__)
         except ModuleNotFoundError as e:
-            # A traditional CMake build places halide_ and halide.runtime
-            # together in the build tree, with libHalide resolved by the build
-            # RPATH. It deliberately does not synthesize the separately
-            # packaged halide.bin support module.
             if e.name != f"{__name__}.bin":
                 raise
+            raise ImportError(_COMPILER_UNAVAILABLE) from e
 
         # Register the ABI-only Runtime types before loading the compiler
         # extension. This lets methods such as Type.to_abi() return the actual
@@ -98,12 +94,7 @@ def _load_compiler():
         try:
             from . import halide_
         except ImportError as e:
-            raise ImportError(
-                "The Halide compiler is not available in this installation. This "
-                "looks like a runtime-only install, which provides `halide.runtime` "
-                "(for calling precompiled AOT kernels) without libHalide. Install "
-                "the full `halide` package to use the compiler/JIT API."
-            ) from e
+            raise ImportError(_COMPILER_UNAVAILABLE) from e
 
         g = globals()
         _populate_from_compiler(g, halide_)
