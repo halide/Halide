@@ -67,8 +67,18 @@ extern "C" {
 
 HALIDE_EXPORT_SYMBOL PyObject *_HALIDE_EXPAND_AND_CONCAT(PyInit_, HALIDE_PYTHON_EXTENSION_MODULE_NAME)() {
     constexpr unsigned expected_api_version = 1;
+    PyObject *runtime_module = PyImport_ImportModule("halide.runtime._runtime");
+    if (!runtime_module) {
+        return nullptr;
+    }
+    PyObject *capsule = PyObject_GetAttrString(runtime_module, "_C_API");
+    Py_DECREF(runtime_module);
+    if (!capsule) {
+        return nullptr;
+    }
     auto *api = static_cast<const HalidePythonRuntimeAPI *>(
-        PyCapsule_Import("halide.runtime._runtime._C_API", 0));
+        PyCapsule_GetPointer(capsule, "halide.runtime._runtime._C_API"));
+    Py_DECREF(capsule);
     if (!api) {
         return nullptr;
     }

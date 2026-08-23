@@ -1,3 +1,5 @@
+# Keep these imports before halide.runtime: generated extensions must be able to
+# import the runtime from a standalone halide-runtime namespace package.
 from addconstantcpp import addconstantcpp
 from addconstantpy import addconstantpy
 from addconstantcpp_with_offset_42 import addconstantcpp_with_offset_42
