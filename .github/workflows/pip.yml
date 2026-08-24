@@ -203,11 +203,11 @@ jobs:
             delocate-wheel --require-archs {delocate_archs}
             --exclude libHalide.dylib -w {dest_dir} -v {wheel}
           # delvewheel still needs to locate Halide.dll before it can exclude
-          # it, so point it at the unpacked halide-bin wheel on Windows. This
-          # wheel contributes to the shared halide package but does not own its
-          # __init__.py; --namespace-pkg prevents delvewheel from creating one.
+          # it, so point it at the unpacked halide-bin wheel on Windows. The
+          # halide wheel owns halide/__init__.py, so let delvewheel patch it to
+          # register the wheel's vendored DLL directory.
           CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: >
-            delvewheel repair --ignore-existing --exclude Halide.dll --namespace-pkg halide
+            delvewheel repair --ignore-existing --exclude Halide.dll
             --add-path ${{ github.workspace }}\opt\halide-bin\halide\bin
             -w {dest_dir} {wheel}
           # halide-bin isn't published yet during this CI run, so resolve it
