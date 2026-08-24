@@ -43,7 +43,9 @@ jobs:
         uv_group: [ "ci-llvm-main", "ci-llvm-22", "ci-llvm-21" ]
         include:
           - bits: 32
-            arch: x86
+            # A 64-bit compiler targeting x86, rather than the 32-bit one, so
+            # that large translation units don't exhaust its address space.
+            arch: amd64_x86
             python: cpython-3.10.20-windows-x86-none
           # - bits: 64  # Intentionally not 64, as we haven't configured self-hosted runners for it yet.
           #   arch: x64
