@@ -61,7 +61,7 @@ protected:
                 debug(4) << "Trying to find a constant bound for loop " << op->name << "\n"
                          << "Extent: " << extent << "\n";
                 Interval bounds = tracker.find_constant_bounds_aggressive(extent);
-                debug(4) << "Bounds found: [" << bounds.min << ", " << bounds.max << "]\n";
+                debug(4) << "Bounds found: " << bounds << "\n";
                 auto lo = bounds.has_lower_bound() ? as_const_int(bounds.min) : std::nullopt;
                 auto hi = bounds.has_upper_bound() ? as_const_int(bounds.max) : std::nullopt;
                 if (hi) {
@@ -76,17 +76,6 @@ protected:
                         e = extent_upper.as<IntImm>();
                     }
                 }
-            }
-
-            if (e == nullptr && extent_upper.defined()) {
-                // Still no luck getting an exact extent. Take the upper
-                // bound instead and guard the body with an if statement.
-                debug(4) << "Found an upper bound instead: " << extent_upper << "\n";
-                e = extent_upper.as<IntImm>();
-                body =
-                    IfThenElse::make(likely_if_innermost(Variable::make(Int(32), op->name) <=
-                                                         op->max),
-                                     body);
             }
 
             if (e == nullptr && permit_failed_unroll && op->for_type == ForType::Unrolled) {
