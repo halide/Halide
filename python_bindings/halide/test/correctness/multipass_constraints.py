@@ -59,14 +59,19 @@ def test_multipass_constraints():
 
 
 def test_infer_input_bounds_preserves_halide_error():
-    output = hl.Func("undefined_output")
+    output = hl.Func("output")
+    x = hl.Var("x")
+    output[x] = x
     query = hl.Buffer.make_bounds_query(type=hl.UInt(8), sizes=[4])
+    target = hl.get_jit_target_from_environment().with_feature(
+        hl.TargetFeature.NoBoundsQuery
+    )
 
     def expect_halide_error(infer):
         try:
-            infer(query)
+            infer(query, target)
         except hl.HalideError as e:
-            assert "undefined output Func" in str(e)
+            assert "NoBoundsQuery" in str(e)
         else:
             assert False, "HalideError was suppressed by overload dispatch"
 
