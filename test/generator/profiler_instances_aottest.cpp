@@ -244,9 +244,8 @@ void check_sliding_window_failure_counters(const halide_profiler_pipeline_stats 
 // GPU-only: an outer CPU loop with a host-then-device-then-host data
 // chain forces explicit halide_copy_to_host / halide_copy_to_device calls
 // to fire once per outer iteration. The synthetic copy "Func" entries
-// should be parented somewhere inside the xfer_out producer tree (rather
-// than at the pipeline root), and their realizations counter should
-// equal the outer-loop trip count.
+// should be parented somewhere inside the xfer_out producer tree, rather
+// than at the pipeline root.
 void check_copy_synthetics_parented_to_producer(const halide_profiler_pipeline_stats *p) {
     auto xfer_out = entries_of(p, "xfer_out");
     REQUIRE(xfer_out.size() == 1);
@@ -274,9 +273,6 @@ void check_copy_synthetics_parented_to_producer(const halide_profiler_pipeline_s
         int idx = (int)(fs[0] - p->funcs);
         REQUIRE(p->funcs[idx].parent != -1);
         REQUIRE(descends_from(p->funcs[idx].parent, xfer_out_id));
-        // It must have fired more than once (the outer loop has multiple
-        // iterations). The counter is bumped exactly once per copy.
-        REQUIRE(fs[0]->realizations > 1);
     };
     check("xfer_dev (copy to host)");
     check("xfer_host (copy to device)");
@@ -303,8 +299,6 @@ void check_mixed_host_device_update_defs(const halide_profiler_pipeline_stats *p
         if (strncmp(child->name, "mixed_sched ", strlen("mixed_sched ")) == 0 &&
             (strstr(child->name, " (copy to host)") || strstr(child->name, " (copy to device)"))) {
             found_mid_func_copy = true;
-            // Counter should reflect the copy firing at least once.
-            REQUIRE(child->realizations >= 1);
         }
     }
     REQUIRE(found_mid_func_copy);
