@@ -302,6 +302,11 @@ jobs:
             CMAKE_GENERATOR=Ninja
             PIP_FIND_LINKS='${{ github.workspace }}\dist-bin'
             SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE_RUNTIME='{local_scheme="no-local-version"}'
+          # halide-runtime contributes the halide.runtime subpackage but does
+          # not own halide/__init__.py. Keep delvewheel from creating that file
+          # solely to register its vendored MSVC runtime DLLs.
+          CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: >
+            delvewheel repair --namespace-pkg halide -w {dest_dir} {wheel}
           # The runtime wheel links no libHalide, so its test environment needs
           # nothing installed: a successful `import halide.runtime` in a bare
           # environment is itself proof that the module is libHalide-free.
