@@ -47,11 +47,28 @@ class DebugRule {
     int line_low = -1;
     int line_high = INT_MAX;
     std::string function_suffix = "";
+    bool is_tag_rule = false;
+    std::vector<std::string> tags;
     enum Complexity { VerbosityOnly,
                       NeedsMatching } complexity = VerbosityOnly;
 
 public:
     static std::optional<DebugRule> parse(const std::string &spec) {
+        static constexpr char tag_prefix[] = "tag:";
+        if (spec.rfind(tag_prefix, 0) == 0) {
+            DebugRule rule;
+            rule.is_tag_rule = true;
+            for (std::string &tag : split_string(spec.substr(sizeof(tag_prefix) - 1), ",")) {
+                if (!tag.empty()) {
+                    rule.tags.push_back(std::move(tag));
+                }
+            }
+            if (rule.tags.empty()) {
+                return std::nullopt;
+            }
+            return rule;
+        }
+
         DebugRule rule;
         const char *ptr = spec.c_str();
 
@@ -86,8 +103,11 @@ public:
         return rule;
     }
 
-    bool accepts(const int verbosity, const char *file, const char *function,
-                 const int line) const {
+    bool accepts(const int verbosity, const char *tag, const char *file,
+                 const char *function, const int line) const {
+        if (is_tag_rule) {
+            return std::any_of(tags.begin(), tags.end(), [&](const std::string &t) { return t == tag; });
+        }
         switch (complexity) {
         case VerbosityOnly:
             return verbosity <= this->verbosity;
@@ -118,13 +138,19 @@ std::vector<DebugRule> parse_rules(const std::string &env) {
                 "Warning: Ignoring malformed HL_DEBUG_CODEGEN entry: [" + spec + "]\n" +
                 "Expected rule format:\n"
                 "    verbosity[,filename[:line_low[-line_high]]][@func]\n"
+                "    tag:name[,name...]\n"
                 "Rules are separated by ';' and are OR-ed together.\n"
-                "Matching for filename and function uses suffix matching.\n"
+                "Matching for filename and function uses suffix matching. A\n"
+                "tag:name rule matches a debug(verbosity, \"name\") call site's\n"
+                "tag exactly, regardless of verbosity; a comma-separated list\n"
+                "of names matches any one of them.\n"
                 "Examples:\n"
                 "    HL_DEBUG_CODEGEN=2\n"
                 "    HL_DEBUG_CODEGEN=4,CodeGen_LLVM.cpp\n"
                 "    HL_DEBUG_CODEGEN=3,Simplify.cpp:100-180\n"
                 "    HL_DEBUG_CODEGEN=2@visit\n"
+                "    HL_DEBUG_CODEGEN=tag:counterexample\n"
+                "    HL_DEBUG_CODEGEN=tag:counterexample,non-monotonic\n"
                 "    HL_DEBUG_CODEGEN=1;4,CodeGen_LLVM.cpp@compile\n";
             issue_warning(warning.c_str());
         }
@@ -132,10 +158,10 @@ std::vector<DebugRule> parse_rules(const std::string &env) {
     return rules;
 }
 
-bool rules_accept(const std::vector<DebugRule> &rules, const int verbosity,
+bool rules_accept(const std::vector<DebugRule> &rules, const int verbosity, const char *tag,
                   const char *file, const char *function, const int line) {
     return std::any_of(rules.begin(), rules.end(), [&](const auto &rule) {
-        return rule.accepts(verbosity, file, function, line);
+        return rule.accepts(verbosity, tag, file, function, line);
     });
 }
 
@@ -222,13 +248,18 @@ DebugStream::~DebugStream() {
 
 bool debug_is_active_impl(const int verbosity, const char *file, const char *function,
                           const int line) {
-    static const std::vector<DebugRule> rules = parse_rules(get_env_variable("HL_DEBUG_CODEGEN"));
-    return rules_accept(rules, verbosity, file, function, line);
+    return debug_is_active_impl(verbosity, "", file, function, line);
 }
 
-bool debug_spec_accepts(const std::string &spec, const int verbosity,
+bool debug_is_active_impl(const int verbosity, const char *tag, const char *file,
+                          const char *function, const int line) {
+    static const std::vector<DebugRule> rules = parse_rules(get_env_variable("HL_DEBUG_CODEGEN"));
+    return rules_accept(rules, verbosity, tag, file, function, line);
+}
+
+bool debug_spec_accepts(const std::string &spec, const int verbosity, const char *tag,
                         const char *file, const char *function, const int line) {
-    return rules_accept(parse_rules(spec), verbosity, file, function, line);
+    return rules_accept(parse_rules(spec), verbosity, tag, file, function, line);
 }
 
 }  // namespace Halide::Internal
