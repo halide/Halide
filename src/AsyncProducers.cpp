@@ -637,20 +637,12 @@ protected:
             }
 
             return body;
-        } else if (const Block *block = body.as<Block>()) {
+        } else if (body.as<Block>()) {
             if (is_producer) {
                 // We don't push produce nodes into blocks
                 return ProducerConsumer::make(name, is_producer, body);
             }
-            vector<Stmt> sub_stmts;
-            Stmt rest;
-            do {
-                sub_stmts.push_back(block->first);
-                rest = block->rest;
-                block = rest.as<Block>();
-            } while (block);
-            sub_stmts.push_back(rest);
-
+            vector<Stmt> sub_stmts = Block::to_vector(body);
             for (Stmt &s : sub_stmts) {
                 if (uses_vars.check_stmt(s)) {
                     s = make_producer_consumer(name, is_producer, s, scope, uses_vars);
@@ -813,14 +805,12 @@ protected:
 
     Stmt visit(const Block *op) override {
         // Do an entire sequence of blocks in a single visit method to conserve stack space.
-        vector<Stmt> stmts;
-        Stmt result;
-        do {
-            stmts.push_back(mutate(op->first));
-            result = op->rest;
-        } while ((op = result.as<Block>()));
-
-        result = mutate(result);
+        vector<Stmt> stmts = Block::to_vector(op);
+        for (Stmt &s : stmts) {
+            s = mutate(s);
+        }
+        Stmt result = stmts.back();
+        stmts.pop_back();
 
         vector<pair<Expr, Expr>> semaphores;
         for (Stmt s : reverse_view(stmts)) {
