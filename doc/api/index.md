@@ -15,8 +15,11 @@ directory has many small examples exercising individual features, and the
 
 If you're looking for a binary release, install a
 [stable release](https://pypi.org/project/halide) or a
-[nightly build](https://pypi.halide-lang.org/simple/halide) with pip. If you're
-building with CMake, see [the Halide CMake helpers](../HalideCMakePackage).
+[nightly build](https://pypi.halide-lang.org/simple/halide) with pip or uv.
+Installing `halide` includes the compiler bindings, native toolchain, and
+standalone runtime bindings. Runtime-only deployments can install
+`halide-runtime`. If you're building with CMake, see
+[the Halide CMake helpers](../HalideCMakePackage).
 
 ## Where to start
 

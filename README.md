@@ -36,11 +36,21 @@ We provide binary wheels on PyPI. Halide provides bindings for C++ and Python.
 Even if you only intend to use Halide from C++, pip may be the easiest way to
 get a binary build of Halide.
 
-Full releases may be installed with `pip` like so:
+Full releases may be installed with `pip` or added to a uv project like so:
 
 ```shell
 $ pip install halide
+$ uv add halide
 ```
+
+The published Python artifacts are split into three distributions that share the
+`halide` import package. The `halide` distribution provides the compiler Python
+API and depends on matching versions of `halide-bin` (the compiler, headers,
+tools, and CMake package) and `halide-runtime` (the standalone `halide.runtime`
+API). Most users should install only `halide`; the package manager installs its
+two dependencies automatically. Deployments that only call precompiled AOT
+pipelines can instead install `halide-runtime`, avoiding the compiler and LLVM
+entirely.
 
 Every commit to `main` is published to our [package index][halide-pypi] as a
 development version. If you use [uv](https://docs.astral.sh/uv/), you can pin
@@ -158,13 +168,19 @@ any platform. From the Halide source tree, install with
 [uv](https://docs.astral.sh/uv/):
 
 ```shell
-$ uv sync --group ci-llvm-22 --no-install-project
+$ uv sync --frozen --group ci-llvm-22 --no-install-workspace
 $ export Halide_LLVM_ROOT=$(halide-llvm --prefix)
 ```
 
 Replace `22` with the desired LLVM major version (`21`, `22`, `23`, or `main`).
-Binary wheels are available for Linux (x86-64, x86-32, AArch64, ARMv7), macOS
-(x86-64, ARM64), and Windows (x86-64, x86-32).
+The repository root is a uv workspace containing the three Python distributions.
+`--no-install-workspace` installs only the development tools and LLVM package
+needed for a normal CMake build; `--frozen` uses the committed lockfile without
+evaluating or building the workspace packages. To build and install all three
+workspace packages into the uv environment instead, run
+`uv sync --all-packages`; this includes a full compiler build. Binary wheels are
+available for Linux (x86-64, x86-32, AArch64, ARMv7), macOS (x86-64, ARM64), and
+Windows (x86-64, x86-32).
 
 On macOS, [Homebrew](https://brew.sh) is also a good option:
 `brew install llvm`. On Debian flavors of Linux, the

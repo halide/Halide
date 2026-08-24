@@ -555,9 +555,10 @@ add_halide_python_extension_library(
 ```
 
 `HALIDE_LIBRARIES` is a list of one of more `add_halide_library` targets. Each
-will be added to the extension as a callable method of the module. Note that
-every library specified must be built with the `PYTHON_EXTENSION` keyword
-specified, and all libraries must use the same Halide runtime.
+will be added to the extension as a callable `halide.runtime.Kernel` object.
+Every library specified must be built with the `PYTHON_EXTENSION` keyword, and
+all libraries must use the same Halide runtime. Importing the resulting module
+requires the matching `halide-runtime` Python package.
 
 The result will be a shared library of the form `<target>.<soabi>.so`, where
 `<soabi>` describes the specific Python version and platform (e.g.,
