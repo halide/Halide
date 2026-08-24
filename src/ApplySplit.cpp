@@ -79,6 +79,26 @@ vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
                 // Because the un-rebased base block can start before old_min,
                 // we must clamp both the minimum and maximum boundaries.
                 guarded = promise_clamped(old_var, old_min, old_max);
+
+                // The clamp above is what the *stores* of this stage are
+                // confined to, but it is not the region this stage iterates
+                // over: an aligned split iterates whole tiles anchored at
+                // align, and the boundary tiles hang off the ends of
+                // [old_min, old_max]. Record the tile so that bounds inference
+                // can give anything computed inside this split a tile-aligned
+                // region.
+                //
+                // Without it, a producer's region starts at
+                // max(outer * factor + align, old_min), which is no longer
+                // congruent to align modulo factor. A producer indexing on
+                // `old_var % factor` -- the whole point of an aligned split --
+                // then keeps a non-constant index after unrolling, so e.g. a
+                // mux over the tile never folds away.
+                result.emplace_back(prefix + split.old_var + ".aligned_min",
+                                    base_var + split.align, ApplySplitResult::LetStmt);
+                result.emplace_back(prefix + split.old_var + ".aligned_max",
+                                    base_var + split.align + split.factor - 1,
+                                    ApplySplitResult::LetStmt);
             } else {
                 // Legacy: structurally guaranteed to be >= old_min
                 guarded = promise_clamped(old_var, old_var, old_max);
