@@ -1177,29 +1177,13 @@ public:
                         internal_assert(box[i].is_bounded());
                         string var = b.first + "." + f_args[i];
 
-                        // An aligned split iterates over whole tiles, but the
-                        // provides it makes are clamped to this Func's own
-                        // bounds, so box[i] describes the clamped region. Use
-                        // the tile instead where one was recorded, so that
-                        // producers computed inside the split get a
-                        // tile-aligned region and can fold away indexing that
-                        // is periodic in the tile.
-                        Expr aligned_min, aligned_max;
-                        if (let_vars_in_scope.contains(var + ".aligned_min") &&
-                            let_vars_in_scope.contains(var + ".aligned_max")) {
-                            aligned_min = Variable::make(Int(32), var + ".aligned_min");
-                            aligned_max = Variable::make(Int(32), var + ".aligned_max");
-                        }
-
-                        if (aligned_max.defined()) {
-                            body = LetStmt::make(var + ".max", aligned_max, body);
-                        } else if (box[i].is_single_point()) {
+                        if (box[i].is_single_point()) {
                             body = LetStmt::make(var + ".max", Variable::make(Int(32), var + ".min"), body);
                         } else {
                             body = LetStmt::make(var + ".max", box[i].max, body);
                         }
 
-                        body = LetStmt::make(var + ".min", aligned_min.defined() ? aligned_min : box[i].min, body);
+                        body = LetStmt::make(var + ".min", box[i].min, body);
                     }
                 }
             }
