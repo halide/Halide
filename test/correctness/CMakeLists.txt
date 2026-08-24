@@ -545,6 +545,7 @@ set_target_properties(
     correctness_memoize
     correctness_memoize_cloned
     correctness_multiple_outputs_extern
+    correctness_nested_parallel_stack
     correctness_non_nesting_extern_bounds_query
     correctness_parallel_fork
     correctness_pipeline_set_jit_externs_func
