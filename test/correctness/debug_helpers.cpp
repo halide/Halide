@@ -1,9 +1,55 @@
 #include "Halide.h"
 
+#include <cstdlib>
+#include <sstream>
+
 using namespace Halide;
 using namespace Halide::Internal;
 
+namespace {
+void set_env(const char *name, const char *val) {
+#ifdef _WIN32
+    _putenv_s(name, val);
+#else
+    setenv(name, val, /*overwrite*/ 1);
+#endif
+}
+}  // namespace
+
 int main(int argc, char **argv) {
+    // debug_stream_sink() looks up where a DebugStream's contents will
+    // really end up
+    {
+        std::ostringstream unrelated;
+        internal_assert(debug_stream_sink(unrelated) == DebugStreamSink::None);
+        internal_assert(debug_stream_sink(std::cout) == DebugStreamSink::None);
+        internal_assert(debug_stream_sink(std::cerr) == DebugStreamSink::None);
+
+        // With HL_DEBUG_CODEGEN_LOG_FILE unset, debug() output defaults to
+        // stderr, so a fresh DebugStream should report that
+        DebugStream stream;
+        std::ostream &os = stream.stream();
+        internal_assert(&os != &std::cerr);
+        internal_assert(debug_stream_sink(os) == DebugStreamSink::Cerr);
+    }
+
+    // End-to-end: IRPrinter must actually emit ANSI color codes when writing
+    // into a DebugStream, not just when writing directly to std::cout/cerr.
+    // HL_COLORS is read fresh on every IRPrinter construction (unlike
+    // HL_DEBUG_CODEGEN_LOG_FILE, which is cached process-wide), so setting it
+    // here takes effect immediately without needing a child process.
+    {
+        set_env("HL_COLORS", "1");
+        DebugStream stream;
+        Var x;
+        stream.stream() << (x + 1);
+        std::string printed = stream.str();
+        stream.str("");  // Discard before the destructor flushes to stderr.
+        internal_assert(printed.find('\033') != std::string::npos)
+            << "expected ANSI color codes in: " << printed;
+        set_env("HL_COLORS", "0");
+    }
+
     // A bare verbosity matches purely on level, at any location.
     internal_assert(debug_spec_accepts("2", 0, "any.cpp", "any", 1));
     internal_assert(debug_spec_accepts("2", 2, "any.cpp", "any", 1));
