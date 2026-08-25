@@ -182,6 +182,104 @@ int hoist_invariants_scattered_factors_unsigned_test() {
     return 0;
 }
 
+// A sum reduction can contain independently scaled terms. Each outer addend
+// gets its own scalar intermediate, and the write-back applies the scale while
+// merging those intermediates into the original accumulator.
+int hoist_invariants_multiple_terms_test() {
+    const int K = 16;
+    RDom r(0, K, "r");
+
+    Func f{"multiple_terms"};
+    f() = 0;
+    f() += 2 * (r + 1) + 3 * (2 * r + 1);
+
+    FuncVec intms = f.update().hoist_invariants();
+    internal_assert(intms.size() == 2)
+        << "hoist_invariants multiple terms: expected two intermediates, got "
+        << intms.size() << "\n";
+    internal_assert(intms[0].name() == f.name() + "_intm0" &&
+                    intms[1].name() == f.name() + "_intm1")
+        << "hoist_invariants multiple terms: unexpected intermediate names\n";
+    for (Func &intm : intms) {
+        intm.compute_root();
+    }
+
+    Buffer<int> result = f.realize();
+    int expected = 0;
+    for (int k = 0; k < K; ++k) {
+        expected += 2 * (k + 1) + 3 * (2 * k + 1);
+    }
+    internal_assert(result() == expected)
+        << "hoist_invariants multiple terms: got " << result()
+        << ", expected " << expected << "\n";
+    return 0;
+}
+
+// Splitting outer terms is useful even when none has an invariant factor.
+// Each term is reduced independently and merged at the original accumulator.
+int hoist_invariants_unscaled_terms_test() {
+    const int K = 16;
+    Var x{"x"};
+    RDom r(0, K, "r");
+
+    Func g{"unscaled_g"}, h{"unscaled_h"}, f{"unscaled_terms"};
+    g(x) = x + 1;
+    h(x) = x * x + 3;
+    f() = 0;
+    f() += g(r) + h(r);
+
+    FuncVec intms = f.update().hoist_invariants();
+    internal_assert(intms.size() == 2)
+        << "hoist_invariants unscaled terms: expected two intermediates, got "
+        << intms.size() << "\n";
+    for (Func &intm : intms) {
+        intm.compute_root();
+    }
+
+    Buffer<int> result = f.realize();
+    int expected = 0;
+    for (int k = 0; k < K; ++k) {
+        expected += (k + 1) + (k * k + 3);
+    }
+    internal_assert(result() == expected)
+        << "hoist_invariants unscaled terms: got " << result()
+        << ", expected " << expected << "\n";
+    return 0;
+}
+
+// Tuple outputs are flattened independently. The FuncVec is ordered by tuple
+// output index, then by the order of that output's flattened outer terms.
+int hoist_invariants_tuple_terms_test() {
+    const int K = 8;
+    RDom r(0, K, "r");
+
+    Func f{"tuple_terms"};
+    f() = Tuple(0, 0);
+    f() = Tuple(f()[0] + 2 * (r + 1) + 3 * (r + 2),
+                f()[1] + 4 * (r + 3));
+
+    FuncVec intms = f.update().hoist_invariants();
+    internal_assert(intms.size() == 3)
+        << "hoist_invariants tuple terms: expected three intermediates, got "
+        << intms.size() << "\n";
+    for (size_t i = 0; i < intms.size(); ++i) {
+        internal_assert(intms[i].name() == f.name() + "_intm" + std::to_string(i))
+            << "hoist_invariants tuple terms: unexpected intermediate ordering\n";
+        intms[i].compute_root();
+    }
+
+    Realization result = f.realize();
+    int expected0 = 0, expected1 = 0;
+    for (int k = 0; k < K; ++k) {
+        expected0 += 2 * (k + 1) + 3 * (k + 2);
+        expected1 += 4 * (k + 3);
+    }
+    internal_assert(result[0].as<int>()() == expected0 &&
+                    result[1].as<int>()() == expected1)
+        << "hoist_invariants tuple terms: incorrect result\n";
+    return 0;
+}
+
 // hoist_invariants() with outer Min and additive factor:
 //   min_k(offset(i) + body(i, k)) = offset(i) + min_k(body(i, k))
 // The intermediate accumulates min without the offset; write-back adds it once.
@@ -439,8 +537,8 @@ int hoist_invariants_invalid_law_rejected_test() {
     } catch (const Halide::CompileError &e) {
         error = true;
         const string expected =
-            "hoist_invariants() could not find a distributable loop-invariant "
-            "factor in the update definition of " +
+            "hoist_invariants() could not find multiple reduction terms or a "
+            "distributable loop-invariant factor in the update definition of " +
             f.name() + ".";
         if (string(e.what()).find(expected) == string::npos) {
             printf("Unexpected error for unsigned min hoisting:\n%s\n", e.what());
@@ -454,8 +552,8 @@ int hoist_invariants_invalid_law_rejected_test() {
     return 0;
 }
 
-// hoist_invariants() errors when there is no distributable invariant factor to
-// hoist, rather than silently behaving like a plain rfactor().
+// hoist_invariants() errors when there is neither an invariant factor to hoist
+// nor multiple outer terms to split, rather than behaving like plain rfactor().
 int hoist_invariants_nothing_to_hoist_rejected_test() {
     if (!Halide::exceptions_enabled()) {
         return 0;
@@ -475,8 +573,8 @@ int hoist_invariants_nothing_to_hoist_rejected_test() {
     } catch (const Halide::CompileError &e) {
         error = true;
         const string expected =
-            "hoist_invariants() could not find a distributable loop-invariant "
-            "factor in the update definition of " +
+            "hoist_invariants() could not find multiple reduction terms or a "
+            "distributable loop-invariant factor in the update definition of " +
             f.name() + ".";
         if (string(e.what()).find(expected) == string::npos) {
             printf("Unexpected error when no invariant is hoistable:\n%s\n", e.what());
@@ -502,6 +600,9 @@ int main(int argc, char **argv) {
         {"hoist_invariants test (add/mul)", hoist_invariants_test},
         {"hoist_invariants test (add/mul, scattered factors)", hoist_invariants_scattered_factors_test},
         {"hoist_invariants test (add/mul, scattered factors, unsigned)", hoist_invariants_scattered_factors_unsigned_test},
+        {"hoist_invariants test (multiple terms)", hoist_invariants_multiple_terms_test},
+        {"hoist_invariants test (unscaled terms)", hoist_invariants_unscaled_terms_test},
+        {"hoist_invariants test (tuple terms)", hoist_invariants_tuple_terms_test},
         {"hoist_invariants test (min/add)", hoist_invariants_min_test},
         {"hoist_invariants test (or/and)", hoist_invariants_or_test},
         {"hoist_invariants test (strict_float preserved)", hoist_invariants_strict_float_test},

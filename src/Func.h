@@ -59,6 +59,7 @@ struct VarOrRVar {
 };
 
 class ImageParam;
+class FuncVec;
 
 namespace Internal {
 struct AssociativeOp;
@@ -214,12 +215,13 @@ public:
     eager_inline(const Func &first, Args &&...args);
     // @}
 
-    /** Hoist a loop-invariant factor out of an associative reduction by applying
+    /** Hoist loop-invariant factors out of an associative reduction by applying
      * the distributive law of a semiring. Like rfactor(), this must be called on
      * an update definition; it splits the update into an intermediate that
-     * accumulates the factor-free reduction over all of the update's RVars and a
-     * write-back that applies the hoisted factor once. The intermediate Func is
-     * returned.
+     * accumulates one factor-free outer term over all of the update's RVars and
+     * a write-back that applies the hoisted factors once. The intermediate Funcs
+     * are returned in a FuncVec. For tuple-valued reductions, they are ordered
+     * by tuple output index, then by outer-term order.
      *
      * A factor is hoistable if it does not depend on any RVar being reduced. It
      * may be nested at any depth of an associative/commutative chain. The valid
@@ -236,21 +238,25 @@ public:
      * For example, hoist_invariants() rewrites a pipeline like this:
      * \code
      * f(x) = 0;
-     * f(x) += s(x) * g(x, r);
+     * f(x) += a(x) * g(x, r) + b(x) * h(x, r);
      * \endcode
      * into a pipeline like this:
      * \code
-     * f_intm(x) = 0;
-     * f_intm(x) += g(x, r);
+     * f_intm0(x) = 0;
+     * f_intm0(x) += g(x, r);
+     * f_intm1(x) = 0;
+     * f_intm1(x) += h(x, r);
      *
      * f(x) = 0;
-     * f(x) += s(x) * f_intm(x);
+     * f(x) += a(x) * f_intm0(x) + b(x) * f_intm1(x);
      * \endcode
      *
      * This reduces the number of factor applications from |R| to one per pure
-     * point. It is an error if no distributable invariant factor is found.
+     * point. Terms without a hoistable factor are still split into separate
+     * intermediates. It is an error if there is neither a distributable invariant
+     * factor nor more than one outer term to split.
      */
-    Func hoist_invariants();
+    FuncVec hoist_invariants();
 
     /** Schedule the iteration over this stage to be fused with another
      * stage 's' from outermost loop to a given LoopLevel. 'this' stage will
