@@ -1255,10 +1255,12 @@ class InjectFunctionRealization : public IRMutator {
 public:
     InjectFunctionRealization(const vector<Function> &funcs,
                               const vector<bool> &is_output_list,
+                              const vector<LoopLevel> &inwards_levels,
                               const Target &target,
                               const map<string, Function> &env)
         : funcs(funcs),
           is_output_list(is_output_list),
+          inwards_levels(inwards_levels),
           target(target),
           env(env),
           compute_level(funcs[0].schedule().compute_level()) {
@@ -1277,8 +1279,12 @@ public:
     Stmt operator()(const Stmt &stmt) {
         Stmt s = IRMutator::operator()(stmt);
         if (target.has_feature(Target::Profile)) {
-            for (const auto &func : funcs) {
-                s = declare_box(s, func, Call::declare_box_required_at_root);
+            for (size_t i = 0; i < funcs.size(); i++) {
+                if (is_output_list[i]) {
+                    // There is no realize node
+                    s = declare_box(s, funcs[i], Call::declare_box_required_at_realization);
+                }
+                s = declare_box(s, funcs[i], Call::declare_box_required_at_root);
             }
         }
         return s;
@@ -1414,6 +1420,18 @@ protected:
             }
         }
 
+        if (target.has_feature(Target::Profile)) {
+            for (size_t i = 0; i < funcs.size(); i++) {
+                // Levels for funcs with no further-in site are left unlocked;
+                // only locked ones are defined and safe to inspect.
+                if (inwards_levels[i].locked() &&
+                    inwards_levels[i].defined() &&
+                    inwards_levels[i].match(for_loop->name)) {
+                    body = declare_box(body, funcs[i], Call::declare_box_required_inwards);
+                }
+            }
+        }
+
         // Reinstate the let/if statements
         for (const auto &[var, value] : reverse_view(containers)) {
             if (var.empty()) {
@@ -1473,6 +1491,7 @@ protected:
 private:
     const vector<Function> &funcs;
     const vector<bool> &is_output_list;
+    const vector<LoopLevel> &inwards_levels;
     const Target &target;
     const map<string, Function> &env;
     const LoopLevel &compute_level;
@@ -1497,6 +1516,9 @@ private:
             }
 
             s = Realize::make(name, func.output_types(), func.schedule().memory_type(), bounds, const_true(), s);
+            if (target.has_feature(Target::Profile)) {
+                s = declare_box(s, func, Call::declare_box_required_at_realization);
+            }
         }
 
         // This is also the point at which we inject explicit bounds
@@ -1967,6 +1989,12 @@ private:
         // Add the producer nodes.
         for (const auto &i : funcs) {
             producer = ProducerConsumer::make_produce(i.name(), producer);
+            if (target.has_feature(Target::Profile)) {
+                // Marker sits *outside* the Produce node so the parent
+                // producer_id is in scope (not the Func's own id), but inside
+                // any surrounding loops so it accumulates per production.
+                producer = declare_box(producer, i, Call::declare_box_required_at_production);
+            }
         }
 
         // Add the consumer nodes.
@@ -2206,8 +2234,11 @@ public:
 
 // Check a schedule is legal, throwing an error if it is not. Returns whether or
 // not a realization of the Func should be injected. Unused intermediate Funcs
-// that somehow made it into the Func DAG can be discarded.
-bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_output, const map<string, Function> &env) {
+// that somehow made it into the Func DAG can be discarded. May also return a
+// loop level one-further-in than the current compute_at if there is one. This
+// is used by the profiler to give a hint that a Func could be more aggressively
+// fused.
+bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_output, LoopLevel &inwards_level, const map<string, Function> &env) {
 
     // If f is extern, check that none of its inputs are scheduled inline.
     if (f.has_extern_definition()) {
@@ -2443,6 +2474,21 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         }
         if (sites[i].loop_level.match(compute_at) && store_idx >= 0 && hoist_storage_idx >= 0) {
             compute_idx = i;
+        }
+    }
+
+    if (target.has_feature(Target::Profile) && compute_idx >= 0) {
+        int inwards = compute_idx + 1;
+        // Don't count Var::outermost() as further in.
+        if (inwards < (int)sites.size() &&
+            sites[inwards].loop_level.var().name() == Var::outermost().name()) {
+            inwards++;
+        }
+        if (inwards < (int)sites.size()) {
+            inwards_level.set(sites[inwards].loop_level);
+            // Lock it now so the injector can inspect it. Levels left unset
+            // stay unlocked, and the injector skips them via locked().
+            inwards_level.lock();
         }
     }
 
@@ -2770,6 +2816,9 @@ Stmt schedule_functions(const vector<Function> &outputs,
 
         vector<Function> funcs;
         vector<bool> is_output_list;
+        // Parallel to funcs: the loop level one further in than each Func's
+        // compute_at, if any, for the profiler's could-compute-inwards hint.
+        std::vector<LoopLevel> inwards;
         for (const Function &f : group_funcs) {
             bool is_output = false;
             for (const Function &o : outputs) {
@@ -2782,10 +2831,14 @@ Stmt schedule_functions(const vector<Function> &outputs,
             // ignoring one of the Tuple elements, and that Tuple
             // element is the sole call to a function with an update
             // definition.
-            if (validate_schedule(f, s, target, is_output, env)) {
+            // validate_schedule locks inwards_level if it sets one; otherwise
+            // it stays unlocked/undefined and the injector skips it.
+            LoopLevel inwards_level;
+            if (validate_schedule(f, s, target, is_output, inwards_level, env)) {
                 any_memoized = any_memoized || f.schedule().memoized();
                 funcs.push_back(f);
                 is_output_list.push_back(is_output);
+                inwards.push_back(inwards_level);
             }
         }
 
@@ -2798,7 +2851,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
             s = inline_function(s, funcs[0]);
         } else {
             debug(1) << "Injecting realization of " << funcs << "\n";
-            InjectFunctionRealization injector(funcs, is_output_list, target, env);
+            InjectFunctionRealization injector(funcs, is_output_list, inwards, target, env);
             s = injector(s);
             internal_assert(injector.found_store_level() &&
                             injector.found_compute_level() &&
