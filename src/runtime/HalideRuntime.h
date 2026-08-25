@@ -2027,8 +2027,12 @@ enum halide_profiler_func_kind {
 //     not a sum -- do not divide by runs.
 //   - Counters (everything from memory_total to the end of the struct, and
 //     time): summed over every run. Divide by the pipeline's `runs` to get a
-//     per-run value. `time` is the exception: it is summed only over runs
-//     that produced a sample, so divide it by `billed_runs` instead.
+//     per-run value. `time` is the exception: it is the time the sampler
+//     billed to this func, summed over all runs (a run that took no sample
+//     contributes zero), and is meaningful only as a fraction of the
+//     pipeline's total billed_time --
+//     the wall-clock time attributed to this func is
+//     pipeline.time * (func.time / pipeline.billed_time).
 //     active_threads_{numerator,denominator} are summed as a pair; their
 //     ratio is already an average, so do not divide it further.
 //   - memory_current is a live snapshot (roughly zero once a run finishes),
@@ -2066,9 +2070,12 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
      * bounded instead; the reporter marks such columns with a leading '<'. */
     uint32_t counters_approximated;
 
-    /** Total time (nanoseconds) spent evaluating this Func, summed across
-     * all runs that produced a profiler sample. Divide by the pipeline's
-     * billed_runs (not runs) for a per-run time. */
+    /** The time (nanoseconds) the sampling thread billed to this Func,
+     * summed across all runs (a run that took no sample contributes zero).
+     * This is a raw billed total; to convert it to estimated wall-clock time,
+     * scale by the
+     * pipeline's wall-clock time over its total billed time:
+     * pipeline.time * (time / pipeline.billed_time). */
     uint64_t HALIDE_ATTRIBUTE_ALIGN(8) time;
 
     /** This Func's live heap allocation at the instant the report is taken;
@@ -2149,15 +2156,27 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
 
 /** Per-pipeline state tracked by the sampling profiler. These exist
  * in a linked list. The fields aggregate across `runs` the same way as in
- * halide_profiler_func_stats: `time` is summed over `billed_runs` (divide by
- * that for per-run), `memory_peak` is a maximum (not a sum), the remaining
- * counters are summed over `runs` (divide by `runs` for per-run), the
- * active_threads pair is a ready-made average, and `memory_current` is a
- * live snapshot. */
+ * halide_profiler_func_stats: `time` is wall-clock time summed over all runs
+ * (divide by `runs` for per-run), `billed_time` is the total time billed to
+ * funcs (the denominator for per-func time fractions), `memory_peak` is a
+ * maximum (not a sum), the remaining counters are summed over `runs` (divide
+ * by `runs` for per-run), the active_threads pair is a ready-made average,
+ * and `memory_current` is a live snapshot. */
 struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_pipeline_stats {
-    /** Total time (nanoseconds) spent in this pipeline, summed across the
-     * runs that produced a sample. Divide by billed_runs for a per-run time. */
+    /** Total wall-clock time (nanoseconds) spent in this pipeline, measured
+     * by reading the clock at entry and exit, summed across all runs. Divide
+     * by `runs` for a per-run time. */
     uint64_t time;
+
+    /** The sum of all time (nanoseconds) billed to funcs within this
+     * pipeline by the sampling thread, over all runs. This is distinct from
+     * `time`: `time` is wall-clock time spent inside the pipeline, measured
+     * by checking the clock at entry and exit, whereas billed_time is the
+     * total time the sampler attributed to funcs. It exists to use as the
+     * denominator when estimating what fraction of the total time was spent
+     * evaluating each func: per-func times are reported as
+     * time * (func_time / billed_time). */
+    uint64_t billed_time;
 
     /** Live heap allocation across this pipeline's funcs at report time; a
      * snapshot, not aggregated. */
@@ -2195,13 +2214,6 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_pipeline_stats {
 
     /** The number of times this pipeline has been run. */
     int runs;
-
-    /** The number of pipeline runs that produced at least one profiler
-     * sample. Runs that completed in less than one sampler tick contribute
-     * to `runs` (and to the per-Func counters) but not to per-Func time
-     * accumulation, so this is the correct denominator for time
-     * averages. */
-    int billed_runs;
 
     /** The total number of samples taken inside of this pipeline. */
     int samples;

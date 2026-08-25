@@ -343,14 +343,9 @@ WEAK int halide_profiler_instance_end(void *user_context, halide_profiler_instan
         p->runs++;
         p->samples += instance->samples;
 
-        // Per-Func *counter* fields accumulate every run. Per-Func *time*
-        // fields only get a meaningful contribution from runs that the
-        // sampler actually hit (billed_time > 0): the time-accounting math
-        // in this function relies on a non-zero billed_time, and a run
-        // that completes between two sampler ticks has nothing useful to
-        // contribute. Including such runs in p->time would make the sum
-        // of fs->time across Funcs less than p->time, breaking percentage
-        // math in the report.
+        // The per-Func counter and time fields, and the pipeline's billed
+        // time, are all just summed across runs. A run that produced no
+        // sample simply adds zeros.
 
         // First, the per-Func counter fields. Their layout: stack_peak is
         // a per-instance "max" field; everything after it is a uint64_t
@@ -368,27 +363,20 @@ WEAK int halide_profiler_instance_end(void *user_context, halide_profiler_instan
             }
         }
 
-        // Then per-Func time, only for runs the sampler reached. Compute
-        // an adjustment factor to account for the fact that the billed
-        // time is not exactly the duration between start and end calls.
-        // We could avoid this by force-sampling at the start and end of
-        // the pipeline, but that would overcount whatever the last value
-        // of current_func happens to be at the end, and undercount time
-        // spent in the first Func. Sampling events need to happen
-        // independently (in the random-variable sense) of any changes to
-        // current_func.
-        if (instance->billed_time > 0) {
-            p->time += true_duration;
-            p->billed_runs++;
-            double adjustment = (double)true_duration / instance->billed_time;
-            for (int f = 0; f < p->num_funcs; f++) {
-                halide_profiler_func_stats *func = p->funcs + f;
-                const halide_profiler_func_stats *instance_func = instance->funcs + f;
-                // clang-tidy wants me to use a c standard library function
-                // to do the rounding below, but those aren't guaranteed to
-                // be available when compiling the runtime.
-                func->time += (uint64_t)(instance_func->time * adjustment + 0.5);  // NOLINT
-            }
+        // Wall-clock time spent in the pipeline, measured at entry and exit.
+        p->time += true_duration;
+
+        // Per-Func billed time and the pipeline's total billed time. Each
+        // sample bills the whole interval since the previous sample (of any
+        // pipeline) to whatever Func was current, so billed_time can even
+        // include the wall-clock time of entire runs that took no sample of
+        // their own. These are summed raw; per-Func times are renormalized
+        // against billed_time once, when the report is printed.
+        p->billed_time += instance->billed_time;
+        for (int f = 0; f < p->num_funcs; f++) {
+            halide_profiler_func_stats *func = p->funcs + f;
+            const halide_profiler_func_stats *instance_func = instance->funcs + f;
+            func->time += instance_func->time;
         }
     }
 
@@ -795,21 +783,18 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         }
         bool serial = total_parallel_loops == 0;
 
-        // Pipeline summary (free-form, not column-aligned). Times are
-        // averaged over billed_runs (runs that produced samples), not
-        // total runs — see halide_profiler_instance_end for why.
+        // Pipeline summary (free-form, not column-aligned). `time` is
+        // wall-clock time measured at entry/exit over all runs, so per-run
+        // time divides by the total run count.
         {
             float total_ms = p->time / 1000000.0f;
-            int time_runs = p->billed_runs ? p->billed_runs : 1;
+            int time_runs = p->runs ? p->runs : 1;
             sstr.clear();
             emit_dim(horiz_rule);
             sstr << p->name << "\n"
                  << " total time: " << total_ms << " ms"
                  << "  samples: " << p->samples
                  << "  runs: " << p->runs;
-            if (p->billed_runs != p->runs) {
-                sstr << " (" << p->billed_runs << " timed)";
-            }
             sstr << "  time per run: " << total_ms / time_runs << " ms\n";
             if (!serial) {
                 float threads = p->active_threads_numerator / (p->active_threads_denominator + 1e-10f);
@@ -1130,7 +1115,12 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             float recompute = fs->points_required_at_root ?
                                   (fs->points_computed / (float)fs->points_required_at_root) :
                                   0.f;
-            float ms_per_task = (cs->time / (fs->parallel_tasks + 1e-10f)) * 1e-6f;
+            // cs->time is raw billed time; renormalize it to wall-clock the
+            // same way the T column does, so the reported per-task time agrees.
+            double cs_wall = p->billed_time ?
+                                 (double)p->time * (double)cs->time / (double)p->billed_time :
+                                 0.0;
+            float ms_per_task = (cs_wall / (fs->parallel_tasks + 1e-10f)) * 1e-6f;
             uint64_t total_vector_loads = fs->vector_loads + fs->gathers;
             uint64_t total_vector_stores = fs->vector_stores + fs->scatters;
             uint64_t total_stores = fs->scalar_stores + fs->vector_stores + fs->scatters;
@@ -1170,7 +1160,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
 
             // Skip anything that takes less than 1% of total runtime
             // (including all children).
-            float frac_time = (float)cs->time / (float)(p->time + 1);
+            float frac_time = (float)cs->time / (float)(p->billed_time + 1);
             if (frac_time < 0.01) {
                 return false;
             }
@@ -1279,7 +1269,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
 
             // For rules below here, we only care if the self time is more
             // than 1%.
-            float self_time = fs->time / (float)p->time;
+            float self_time = fs->time / (float)p->billed_time;
             if (self_time < 0.01) {
                 return false;
             }
@@ -1494,11 +1484,22 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 case 'N':
                     emit_name(fs, w);
                     break;
-                case 'T':
-                    emit_time(fs->time, p->billed_runs ? p->billed_runs : 1, w);
+                case 'T': {
+                    // Renormalize the billed time to wall-clock time once,
+                    // here: time * (func_time / billed_time), then divide by
+                    // runs for a per-run figure.
+                    uint64_t renorm =
+                        p->billed_time
+                            ? (uint64_t)((double)p->time * (double)fs->time /
+                                         (double)p->billed_time)
+                            : 0;
+                    emit_time(renorm, p->runs ? p->runs : 1, w);
                     break;
+                }
                 case 'P':
-                    emit_percentage(fs->time, p->time, w);
+                    // fs->time is billed time, so its share of the runtime is
+                    // relative to the total billed time.
+                    emit_percentage(fs->time, p->billed_time, w);
                     break;
                 case 'H':
                     if (cs->time) {
@@ -1673,7 +1674,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 anon_time += p->funcs[i].time;
             }
         }
-        bool too_many_anon_funcs = anon_funcs >= 3 && anon_time * 10 > p->time;
+        bool too_many_anon_funcs = anon_funcs >= 3 && anon_time * 10 > p->billed_time;
 
         // Warn if the pipeline allocates at least 100MB and spends at least
         // 10% of its time freeing it. The free bookkeeping slot's time is
@@ -1687,7 +1688,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         }
         bool expensive_free =
             p->memory_peak > 100 * 1000 * 1000 &&
-            free_time * 10 > p->time;
+            free_time * 10 > p->billed_time;
 
         // Text of the pipeline-level (non-Func-specific) warnings, appended to
         // sstr. Factored out so the report and the JSON output below render
@@ -1878,7 +1879,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 json << "    {\n";
                 field_str("      ", "name", pp->name);
                 field_i("      ", "runs", pp->runs);
-                field_i("      ", "billed_runs", pp->billed_runs);
+                field_u64("      ", "billed_time", pp->billed_time);
                 field_i("      ", "samples", pp->samples);
                 field_i("      ", "num_allocs", pp->num_allocs);
                 field_u64("      ", "time_ns", pp->time);
