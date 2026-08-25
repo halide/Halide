@@ -36,6 +36,10 @@ int main(int argc, char **argv) {
         success &= check(named[i].name() == expected, "named constructor created an incorrect Func name");
     }
 
+    FuncVec singleton_named("func_vec_singleton", 1);
+    success &= check(singleton_named[0].name() == "func_vec_singleton",
+                     "singleton named constructor should preserve its base name");
+
     Func a("func_vec_a");
     Func b("func_vec_b");
     FuncVec funcs{a};

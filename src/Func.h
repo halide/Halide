@@ -2873,7 +2873,8 @@ public:
         : Base(std::move(funcs)) {
     }
 
-    /** Construct count undefined Funcs named base_name + their index. */
+    /** Construct count undefined Funcs. A singleton is named base_name; otherwise
+     * the Funcs are named base_name + their index. */
     FuncVec(const std::string &base_name, size_t count);
 
     /** Convert a singleton FuncVec to its sole Func. It is a user error if
