@@ -383,6 +383,14 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
         return;
     }
 
+    if (op->call_type == Call::PureExtern && op->name == "exp_f32") {
+        // The device runtime has one instruction for this, so use it rather
+        // than the polynomial CodeGen_LLVM would expand it into. It takes one
+        // value at a time.
+        value = call_intrin(op->type, 1, op->name, op->args);
+        return;
+    }
+
     // TODO: It would be better if CodeGen_LLVM could handle overloaded intrin calls by default.
     value = call_overloaded_intrin(op->type, op->name, op->args);
     if (!value) {
