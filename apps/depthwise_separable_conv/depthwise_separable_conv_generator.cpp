@@ -122,11 +122,12 @@ public:
                 .unroll(yii)
                 .unroll(dii);
             // ptxas picks 80 registers here, and asking for 64 is worth 0.5%
-            // on an RTX 5060 Ti. It changes neither the work nor the
-            // occupancy: the same loads, stores and FFMAs, nothing spilled
-            // either way, and a processor holds 24 blocks regardless. All
-            // that differs is the register allocation and the order ptxas
-            // puts the instructions in.
+            // on an RTX 5060 Ti. The work and the theoretical occupancy are
+            // the same either way - the same loads, stores and FFMAs, nothing
+            // spilled, and a processor holds 24 blocks regardless - but it
+            // keeps more warps in flight, 5.63 active warps per scheduler
+            // against 5.56. The effect is not monotonic in the number, so it
+            // is worth sweeping: 72 is worse than either.
             output.gpu_max_registers(64);
 
             pointwise_convolved.compute_at(output, di)
