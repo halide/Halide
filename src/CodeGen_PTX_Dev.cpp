@@ -47,6 +47,8 @@ public:
                     const std::string &name,
                     const std::vector<DeviceArgument> &args) override;
 
+    void set_kernel_max_registers(int n) override;
+
     static void test();
 
     std::vector<char> compile_to_src() override;
@@ -62,6 +64,9 @@ public:
 
 protected:
     using CodeGen_LLVM::visit;
+
+    /** What the schedule asked for, if anything. Zero leaves it to ptxas. */
+    int kernel_max_registers = 0;
 
     /** (Re)initialize the PTX module. This is separate from compile, since
      * a PTX device module will often have many kernels compiled into it for
@@ -194,6 +199,10 @@ public:
     bool known = true;
 };
 
+void CodeGen_PTX_Dev::set_kernel_max_registers(int n) {
+    kernel_max_registers = n;
+}
+
 void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
                                  const std::string &name,
                                  const std::vector<DeviceArgument> &args) {
@@ -284,6 +293,15 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
         debug(2) << "Kernel " << name << " has block size "
                  << block_size.extent[0] << "x" << block_size.extent[1]
                  << "x" << block_size.extent[2] << "\n";
+    }
+
+    // A schedule can ask for fewer registers per thread than ptxas would
+    // choose. That lets more blocks be resident at once, and stops it covering
+    // the latency of a load by issuing it far ahead of its use.
+    if (kernel_max_registers > 0) {
+        function->addFnAttr("nvvm.maxnreg", std::to_string(kernel_max_registers));
+        debug(2) << "Kernel " << name << " is capped at "
+                 << kernel_max_registers << " registers per thread\n";
     }
 
     // Now verify the function is ok

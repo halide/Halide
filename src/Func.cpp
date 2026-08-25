@@ -2615,6 +2615,14 @@ Func &Func::store_in(MemoryType t) {
     return *this;
 }
 
+Func &Func::gpu_max_registers(int n) {
+    invalidate_cache();
+    user_assert(n > 0) << "gpu_max_registers must be given a positive number of "
+                       << "registers, but " << name() << " was given " << n << ".\n";
+    func.schedule().gpu_max_registers() = n;
+    return *this;
+}
+
 Func &Func::stream_loads() {
     invalidate_cache();
     Stage(func, func.definition(), 0).stream_loads();
