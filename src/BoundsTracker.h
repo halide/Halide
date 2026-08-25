@@ -134,6 +134,15 @@ public:
         return scope;
     }
 
+    /** The dominating conditions currently known to hold (see push_fact()),
+     * for passes that want to feed them directly into simplify() as
+     * assumptions alongside interval_scope(), without paying for the more
+     * expensive wrap-in-every-pending-let-and-resimplify path that
+     * find_constant_bound_aggressive()/simplify_with_context() use. */
+    const std::vector<Expr> &known_facts() const {
+        return facts;
+    }
+
 private:
     Scope<Interval> scope;
     std::vector<std::pair<std::string, Expr>> lets;
