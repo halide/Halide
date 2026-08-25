@@ -1,5 +1,4 @@
 #include "BoundConstantExtentLoops.h"
-#include "Bounds.h"
 #include "BoundsTracker.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -63,11 +62,17 @@ protected:
                 debug(4) << "Bounds found: [" << bounds.min << ", " << bounds.max << "]\n";
                 auto lo = bounds.has_lower_bound() ? as_const_int(bounds.min) : std::nullopt;
                 auto hi = bounds.has_upper_bound() ? as_const_int(bounds.max) : std::nullopt;
-                if (lo && hi && *lo == *hi) {
-                    // The bound is exact.
-                    e = bounds.max.as<IntImm>();
-                } else if (hi) {
+                if (hi) {
+                    // Copy the Expr out of `bounds` before it goes out of
+                    // scope below -- otherwise e, taken as a raw pointer via
+                    // as<IntImm>(), would be left dangling into a node whose
+                    // only reference was owned by this soon-to-be-destroyed
+                    // Interval.
                     extent_upper = bounds.max;
+                    if (lo && *lo == *hi) {
+                        // The bound is exact: no guard needed.
+                        e = extent_upper.as<IntImm>();
+                    }
                 }
             }
 
