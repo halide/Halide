@@ -18,21 +18,12 @@
 #include "PrefetchDirective.h"
 #include "Reduction.h"
 #include "Type.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {
 
 class Function;
-
-// The lambda-based IRVisitors and IRMutators use this helper to dispatch
-// to multiple lambdas via function overloading (of `operator()`).
-template<typename... Ts>
-struct LambdaOverloads : Ts... {
-    using Ts::operator()...;
-    explicit LambdaOverloads(Ts... ts)
-        : Ts(std::move(ts))... {
-    }
-};
 
 /** The actual IR nodes begin here. Remember that all the Expr nodes
  * also have a public "type" property. */
@@ -748,7 +739,13 @@ struct Call : public ExprNode<Call> {
         declare_allocation,
         // Declares that region required of a particular Func at this
         // scope. Injected by ScheduleFunctions and used by the profiler.
+        declare_box_required_at_production,
+        declare_box_required_at_realization,
         declare_box_required_at_root,
+        // One loop nest level further in than the current compute_at, if not
+        // already innermost. Used by the profiler to hint that a Func could be
+        // computed more aggressively inside its consumers.
+        declare_box_required_inwards,
         // Declares that a box region of an allocation has been touched (used by bounds inference)
         declare_box_touched,
         // Declares that the following stmt computes a particular stage of

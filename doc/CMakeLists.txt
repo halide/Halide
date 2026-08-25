@@ -14,7 +14,7 @@ if (_docs_python_deps_missing)
     message(
         FATAL_ERROR "WITH_DOCS requires the Python 'myst-parser', 'breathe', 'pydata-sphinx-theme', "
         "'sphinxcontrib-video', and 'sphinx-design' packages for the interpreter at ${Python3_EXECUTABLE}. "
-        "Run: uv sync --group docs"
+        "Run: uv sync --frozen --group docs --no-install-workspace"
     )
 endif ()
 
@@ -215,7 +215,7 @@ add_custom_command(
 ##
 # Tutorial pages: one MyST page per tutorial/lesson_*.cpp (or .sh), with
 # captured gdb/lldb output for interesting statements inlined, plus (where a
-# same-stem file exists under python_bindings/tutorial/) the lesson's Python
+# same-stem file exists under python_bindings/halide/tutorial/) the lesson's Python
 # translation with its own captured output, switchable via a sphinx-design
 # tab-set -- see generate_tutorial_website.py's docstring. WITH_DOCS depends
 # on WITH_TUTORIALS AND WITH_PYTHON_BINDINGS (top-level CMakeLists.txt), and
@@ -362,8 +362,8 @@ foreach (_source_file IN LISTS _tutorial_source_files)
     )
 
     # Mirrors lesson.py's _python_source(): a same-stem file under
-    # python_bindings/tutorial/ is that lesson's Python translation.
-    set(_python_source_file "${Halide_SOURCE_DIR}/python_bindings/tutorial/${_slug}.py")
+    # python_bindings/halide/tutorial/ is that lesson's Python translation.
+    set(_python_source_file "${Halide_SOURCE_DIR}/python_bindings/halide/tutorial/${_slug}.py")
     if (EXISTS "${_python_source_file}")
         list(APPEND _tutorial_lesson_depends "${_python_source_file}")
     endif ()

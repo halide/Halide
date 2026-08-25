@@ -177,6 +177,7 @@ target_sources(
     Prefetch.h
     PrefetchDirective.h
     Profiling.h
+    PromoteGPURegisters.h
     PurifyIndexMath.h
     PythonExtensionGen.h
     Qualify.h
@@ -356,6 +357,7 @@ target_sources(
     Prefetch.cpp
     PrintLoopNest.cpp
     Profiling.cpp
+    PromoteGPURegisters.cpp
     PurifyIndexMath.cpp
     PythonExtensionGen.cpp
     Qualify.cpp

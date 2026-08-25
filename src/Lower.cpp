@@ -52,6 +52,7 @@
 #include "PartitionLoops.h"
 #include "Prefetch.h"
 #include "Profiling.h"
+#include "PromoteGPURegisters.h"
 #include "PurifyIndexMath.h"
 #include "Qualify.h"
 #include "RealizationOrder.h"
@@ -364,6 +365,10 @@ void lower_impl(const vector<Function> &output_funcs,
         t.has_feature(Target::Vulkan)) {
         debug(1) << "Injecting per-block gpu synchronization...\n";
         s = fuse_gpu_thread_loops(s);
+        log("Lowering after fusing GPU thread loops:", s);
+
+        debug(1) << "Promoting GPU register allocations...\n";
+        s = promote_gpu_registers(s);
         log("Lowering after injecting per-block gpu synchronization:", s);
     }
 

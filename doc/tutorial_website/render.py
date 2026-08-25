@@ -32,8 +32,9 @@ from .sitemap import SitemapEntry
 
 # The C++ lessons use paths such as "images/rgb.png" from tutorial/'s build
 # directory; their Python translations refer to the same files relative to
-# python_bindings/tutorial/. Both spellings identify inputs whose contents can
-# affect captured output, so include them in the lesson command's depfile.
+# python_bindings/halide/tutorial/. Both spellings identify inputs whose
+# contents can affect captured output, so include them in the lesson command's
+# depfile.
 _TUTORIAL_INPUT_IMAGE_RE = re.compile(
     r"(?:\.\./\.\./tutorial/)?images/([A-Za-z0-9_.-]+)"
 )

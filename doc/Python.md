@@ -14,16 +14,37 @@ produce Python extensions that can be used within Python code.
 
 ## Acquiring the Python bindings
 
-As of Halide 19.0.0, we provide binary wheels on PyPI which include the Python
-bindings and the C++/CMake package for native development. Full releases may be
-installed with `pip` like so:
+As of Halide 19.0.0, we provide binary wheels on PyPI. Full releases may be
+installed with `pip` or added to a uv project like so:
 
 ```shell
 $ pip install halide
+$ uv add halide
 ```
 
-Every commit to `main` is published to a private PyPI index as a development
-version and these may be installed with a few extra flags:
+The published artifacts are split into three distributions that share the
+`halide` import package:
+
+- `halide` provides the compiler Python API. It depends on matching versions of
+  the other two distributions.
+- `halide-bin` provides `libHalide`, headers, command-line tools,
+  autoschedulers, and the CMake package. Its wheel has no Python ABI dependency.
+- `halide-runtime` provides the standalone `halide.runtime` bindings for calling
+  precompiled AOT code without `libHalide`, the compiler, or LLVM.
+
+Most users should install only `halide`; pip or uv installs its dependencies
+automatically. Install `halide-runtime` directly only for a runtime-only
+deployment. Install `halide-bin` directly when only the C++ compiler tools and
+development files are needed.
+
+Every commit to `main` is published to the Halide package index as a development
+version. With uv, add one to a project with:
+
+```shell
+$ uv add halide --prerelease=allow --index https://pypi.halide-lang.org/simple
+```
+
+Or install it directly with pip:
 
 ```shell
 $ pip install halide --pre --extra-index-url https://pypi.halide-lang.org/simple
@@ -46,8 +67,26 @@ installed in your local Python environment. The best way to get set up is to use
 a virtual environment with `uv`:
 
 ```shell
-$ uv sync --no-install-project
+$ uv sync --frozen --no-install-workspace
 ```
+
+The repository root is a uv workspace containing `halide-bin`, `halide-runtime`,
+and `halide`. For CMake-based development, `--no-install-workspace` installs
+only external development dependencies and leaves the existing monolithic CMake
+build in control of the bindings. `--frozen` uses `uv.lock` without evaluating
+the workspace packages' dynamic build metadata.
+
+To build and install the complete Python workspace into `.venv`, including the
+compiler, use:
+
+```shell
+$ uv sync --all-packages
+$ uv run python -c "import halide"
+```
+
+The compiler build can take considerable time. `--all-packages` is required
+because the repository root is a virtual project; workspace membership alone
+does not cause member packages to be installed.
 
 If you don't have LLVM installed already, you can try using the same ones the
 buildbots use by adding `--group ci-llvm-<VERSION>` to the `uv sync` command,
@@ -60,13 +99,21 @@ Ensure you have `flatbuffers` and `wabt` installed, too. (The wheel build does
 not use vcpkg for manylinux compatibility reasons, so these must be available as
 system packages or installed from source.)
 
-### Using wheel infrastructure
+### Building the wheel packages
 
-When using `uv`, this entire workflow can be run via:
+The repository root is not itself an installable Python package. Build the three
+workspace members in dependency order instead:
 
 ```shell
-$ uv pip install . --no-build-isolation
+$ uv build --package halide-bin
+$ uv build --package halide-runtime --find-links dist
+$ uv build --package halide --find-links dist
 ```
+
+The first command performs the full compiler build. The later builds use the
+matching `halide-bin` wheel in `dist/` as a build dependency. The resulting
+wheels are also placed in `dist/`. These are local, unrepaired wheels; release
+wheels are produced by the pip packaging workflow.
 
 ### Using CMake directly
 
@@ -485,7 +532,10 @@ registered name `logical_op_generator` to produce the target `xor_filter`, and
 then wraps the compiled output with a Python extension. The result will be a
 shared library of the form `<target>.<soabi>.so`, where `<soabi>` describes the
 specific Python version and platform (e.g., `cpython-310-darwin` for Python 3.10
-on OSX.)
+on OSX.) Each exported function is a callable `halide.runtime.Kernel`, so the
+environment where the extension is imported must have the matching
+`halide-runtime` package installed. The full `halide` package includes this
+dependency automatically.
 
 Note that you can combine multiple Halide libraries into a single Python module;
 this is convenient for packaging, but also because all the libraries in a single
@@ -587,6 +637,127 @@ Halide. But if you construct the numpy arrays yourself (like above), you can
 pass `order='F'` to make numpy use the Halide-compatible memory layout. If
 you're passing in an array constructed somewhere else, the easiest thing to do
 is to `.transpose()` it before passing it to your Halide code.
+
+### Calling AOT Code Without the Compiler (`halide.runtime`)
+
+The approach above imports a Python extension that was produced at build time by
+`add_halide_python_extension_library`. Sometimes you instead want to load a
+precompiled Halide kernel _dynamically_, at runtime, from an ordinary shared
+library -- and to do so in an environment that does not have the Halide compiler
+(or `libHalide`) installed at all. This is what the `halide.runtime` module is
+for: it is a small, standalone package that can load and call AOT-compiled
+Halide kernels without depending on `libHalide`.
+
+This is primarily useful for deployment. You can compile your pipelines on a
+build machine that has the full Halide toolchain, then ship only the resulting
+kernels plus this tiny runtime, and run them on machines that have neither the
+compiler nor LLVM installed.
+
+The full `halide` distribution depends on `halide-runtime`, so `halide.runtime`
+is available after installing `halide`. It is also published as a separate,
+`libHalide`-free wheel for exactly this deployment case:
+
+```shell
+$ pip install halide-runtime
+$ uv add halide-runtime
+```
+
+The standalone `halide-runtime` distribution contributes only the
+`halide.runtime` subpackage to the implicit `halide` namespace, so importing it
+does not load `libHalide`. When the full `halide` distribution is installed, its
+top-level package initializer loads the compiler normally.
+
+#### Producing a loadable kernel
+
+`halide.runtime` loads a shared library that exports a Halide filter's
+`<name>_argv` and `<name>_metadata` symbols -- the ordinary product of AOT
+compilation. Note that this is _not_ the same artifact as the Python extension
+produced by `add_halide_python_extension_library`, which deliberately hides
+every symbol except its `PyInit_` entry point. Instead, link the AOT library
+into a plain shared module that keeps those symbols visible:
+
+```cmake
+add_halide_library(my_kernel FROM my_generator GENERATOR my_kernel)
+
+# Wrap the static AOT library in a shared module, keeping the filter's
+# _argv/_metadata symbols exported so they can be resolved at load time.
+# (A MODULE library needs at least one source of its own; an empty stub is fine.)
+add_library(my_kernel_module MODULE stub.c)
+target_link_libraries(my_kernel_module PRIVATE
+                      "$<LINK_LIBRARY:WHOLE_ARCHIVE,my_kernel>")
+set_target_properties(my_kernel_module PROPERTIES
+                      PREFIX "" OUTPUT_NAME my_kernel
+                      C_VISIBILITY_PRESET default
+                      CXX_VISIBILITY_PRESET default)
+```
+
+Because `add_halide_library` bundles a Halide runtime into the library by
+default, the resulting shared module is self-contained and, like
+`halide.runtime` itself, has no dependency on `libHalide`.
+
+#### Loading and calling a kernel
+
+Once you have such a library, loading and calling it looks much like using the
+compiled extension above:
+
+```python
+import numpy as np
+import halide.runtime as hlr
+
+# dlopen the shared library and locate the Halide filter inside it. The filter
+# name defaults to the library's file name; pass name=... if it differs.
+kernel = hlr.load("/path/to/my_kernel.so", name="my_kernel")
+
+print(kernel.name)  # "my_kernel"
+print(kernel.target)  # the Target string it was compiled for
+print(kernel.argument_names)  # e.g. ['input', 'offset', 'output']
+
+# `kernel.arguments` gives the full calling convention: one dict per argument,
+# in argv order, with its name, kind ('input_scalar', 'input_buffer', or
+# 'output_buffer'), element type (e.g. 'uint8'), and dimensions (0 for scalars).
+for arg in kernel.arguments:
+    print(
+        arg
+    )  # {'name': 'input', 'kind': 'input_buffer', 'type': 'uint8', 'dimensions': 2}
+
+input_buf = imageio.imread("/path/to/some/file.png")
+output_buf = np.empty(input_buf.shape, dtype=input_buf.dtype)
+
+# Arguments -- inputs, scalars, and the output buffer(s) -- are passed
+# positionally in the order given by kernel.argument_names, or by keyword,
+# in the Python manner:
+kernel(input_buf, np.int32(5), output_buf)
+# kernel(input=input_buf, offset=5, output=output_buf)
+```
+
+As with the compiled extension, Halide does not allocate outputs for you: you
+must pass in a correctly-sized output buffer, and error conditions raise a
+Python exception rather than returning an int.
+
+#### The `halide.runtime.Buffer` type
+
+Any object that supports the Python buffer protocol (such as a numpy array) may
+be passed directly to a kernel. For finer control, `halide.runtime.Buffer` wraps
+such an object as a Halide runtime buffer, without copying:
+
+```python
+buf = hlr.Buffer(np.empty((480, 640), dtype=np.uint8))
+buf.dimensions  # 2
+buf.type  # "uint8"
+buf.shape  # [480, 640]
+
+view = np.asarray(buf)  # a zero-copy view of the same memory
+```
+
+Generated extensions expose these same `Kernel` objects directly. Consequently,
+the same NumPy arrays, `halide.runtime.Buffer` objects, and `halide.Buffer`
+objects can be handed either to a kernel loaded via `halide.runtime.load` or to
+a kernel imported from a generated extension module.
+
+The same memory-order caveats described in the previous section apply here:
+numpy's default row-major layout corresponds to Halide's axes in reverse order,
+so construct your arrays with `order='F'` (or `.transpose()` them) when the axis
+order matters.
 
 ### Advanced Generator-Related Topics
 

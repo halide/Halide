@@ -498,6 +498,12 @@ enum {
     counter_vector_stores = 11,
     counter_scatters = 12,
     counter_bytes_stored = 13,
+    counter_realizations = 14,
+    counter_productions = 15,
+    counter_points_required_at_realization = 16,
+    counter_points_required_at_production = 17,
+    counter_points_required_inwards = 18,
+    counter_productions_if_inwards = 19,
 };
 
 ALWAYS_INLINE bool counter_is_approximate(const halide_profiler_func_stats *fs, int counter) {
@@ -996,6 +1002,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             warning_too_few_parallel_tasks,
             warning_not_parallelized,
             warning_high_recompute,
+            warning_could_compute_further_inside,
             warning_no_vector_ops,
             warning_more_gathers_than_vector_loads,
             warning_more_scatters_than_vector_stores,
@@ -1186,10 +1193,54 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     fs->parent >= 0) {
                     if (emit) {
                         sstr << fs->name << " redundantly recomputes each value " << recompute
-                             << " times on average. Consider a store_at/compute_at location "
-                             << "further outwards in the parent's loop nest, check whether "
-                             << "sliding-window optimization failed, or reduce the split "
-                             << "factors used in its schedule.";
+                             << " times on average. ";
+                        // The recompute factorizes into three independent
+                        // stages whose product is the total: root->realization
+                        // (redundant realizations), realization->production
+                        // (sliding-window failure), and production->computed
+                        // (tail strategy / split factors). Name each stage that
+                        // contributes meaningfully, so the advice points only at
+                        // causes that are actually present.
+                        uint64_t at_root = fs->points_required_at_root;
+                        uint64_t at_real = fs->points_required_at_realization;
+                        uint64_t at_prod = fs->points_required_at_production;
+                        float a = at_root ? (float)at_real / at_root : 1.0f;
+                        float b = at_real ? (float)at_prod / at_real : 1.0f;
+                        float c = at_prod ? (float)fs->points_computed / at_prod : 1.0f;
+                        const float significant = 1.1f;
+                        if (a > significant) {
+                            sstr << "The region realized across all store_at sites is " << a
+                                 << "x the root footprint; consider a store_at/compute_at "
+                                 << "location further outwards in the parent's loop nest. ";
+                        }
+                        if (b > significant) {
+                            sstr << "The points required at the compute_at site are " << b
+                                 << "x those at the store_at site; sliding window optimization "
+                                 << "may have failed. ";
+                        }
+                        if (c > significant) {
+                            sstr << "The points actually computed are " << c
+                                 << "x those required at the compute_at site; the schedule may "
+                                 << "be using excessively large split factors or a wasteful tail "
+                                 << "strategy. ";
+                        }
+                    }
+                    return true;
+                }
+                return false;
+            case warning_could_compute_further_inside:
+                // The inverse of high_recompute: a more aggressive compute_at
+                // would be possible without incurring recompute. Only trigger
+                // if there's a heap allocation, otherwise it probably doesn't
+                // matter (the value may already be in registers).
+                if (recompute < 2.0f &&
+                    fs->num_allocs > 0 &&
+                    fs->points_required_inwards > 0 &&
+                    fs->productions_if_inwards > fs->productions &&
+                    fs->points_required_inwards < 1.01 * fs->points_required_at_realization) {
+                    if (emit) {
+                        sstr << fs->name << " could be computed further inside the loop nest "
+                             << "of its consumers without incurring significant redundant recompute.";
                     }
                     return true;
                 }
@@ -1682,7 +1733,13 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     field_u64("          ", "scalar_stores", fs->scalar_stores);
                     field_u64("          ", "vector_stores", fs->vector_stores);
                     field_u64("          ", "scatters", fs->scatters);
-                    field_u64("          ", "bytes_stored", fs->bytes_stored, true);
+                    field_u64("          ", "bytes_stored", fs->bytes_stored);
+                    field_u64("          ", "realizations", fs->realizations);
+                    field_u64("          ", "productions", fs->productions);
+                    field_u64("          ", "points_required_at_realization", fs->points_required_at_realization);
+                    field_u64("          ", "points_required_at_production", fs->points_required_at_production);
+                    field_u64("          ", "points_required_inwards", fs->points_required_inwards);
+                    field_u64("          ", "productions_if_inwards", fs->productions_if_inwards, true);
                     json << "        }";
 
                     // Flush periodically so we don't overflow the buffer for

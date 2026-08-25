@@ -85,6 +85,7 @@ tests(
     d3d12compute_strict_float.cpp
     dead_realization_in_specialization.cpp
     debug_helpers.cpp
+    debug_log_file.cpp
     debug_to_file.cpp
     debug_to_file_multiple_outputs.cpp
     debug_to_file_reorder.cpp
@@ -92,6 +93,7 @@ tests(
     deep_inline_chain.cpp
     deferred_loop_level.cpp
     deinterleave4.cpp
+    deinterleave_lets.cpp
     deinterleave_vector.cpp
     device_buffer_copies_with_profile.cpp
     device_buffer_copy.cpp
@@ -445,6 +447,7 @@ tests(
     assertion_failure_in_parallel_for.cpp
     async.cpp
     async_copy_chain.cpp
+    async_deadlock.cpp
     async_order.cpp
     atomic_tuples.cpp
     atomics.cpp
@@ -465,6 +468,7 @@ tests(
     multiple_outputs_extern.cpp
     multiple_scatter.cpp
     named_updates.cpp
+    nested_parallel_stack.cpp
     nested_shiftinwards.cpp
     oddly_sized_output.cpp
     parallel.cpp
@@ -545,6 +549,7 @@ set_target_properties(
     correctness_memoize
     correctness_memoize_cloned
     correctness_multiple_outputs_extern
+    correctness_nested_parallel_stack
     correctness_non_nesting_extern_bounds_query
     correctness_parallel_fork
     correctness_pipeline_set_jit_externs_func

@@ -57,7 +57,7 @@ jobs:
 
       - name: Sync CI environment
         run: |
-          uv sync --group ci-llvm-22 --group docs --no-install-project
+          uv sync --frozen --group ci-llvm-22 --group docs --no-install-workspace
           echo "${GITHUB_WORKSPACE}/.venv/bin" >> "$GITHUB_PATH"
           echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" >> "$GITHUB_ENV"
 

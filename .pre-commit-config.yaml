@@ -48,7 +48,7 @@ repos:
           )
 
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.4.1
+    rev: v2.4.3
     hooks:
       - id: codespell
         args: [ --ignore-words-list, "CreateOr,implementors,PADD,re-use,re-used,re-using,SME,+sme,subtile,subtiles,tRe" ]
@@ -63,12 +63,12 @@ repos:
           )
 
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.9.0
+    rev: v8.30.0
     hooks:
       - id: gitleaks
 
   - repo: https://github.com/google/keep-sorted
-    rev: v0.8.0
+    rev: v0.10.0
     hooks:
       - id: keep-sorted
         args: [
@@ -89,19 +89,19 @@ repos:
           - mdformat-shfmt
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.5
+    rev: v0.16.4
     hooks:
       - id: ruff-check
       - id: ruff-format
 
   - repo: https://github.com/shellcheck-py/shellcheck-py
-    rev: v0.11.0.1
+    rev: v0.11.0.1-1
     hooks:
       - id: shellcheck
         exclude: ^apps/HelloAndroid.*/gradlew$
 
   - repo: https://github.com/maxwinterstein/shfmt-py
-    rev: v3.12.0.1
+    rev: v4.0.0
     hooks:
       - id: shfmt
         args: [ -i, "4", -ci, -s, -w ]
@@ -113,7 +113,7 @@ repos:
       - id: taplo-format
 
   - repo: https://github.com/halide/cmtk-pre-commit
-    rev: v0.1.0
+    rev: v0.2.1
     hooks:
       - id: cmtk
 

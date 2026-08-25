@@ -109,6 +109,8 @@ stdout.txt
 
 # Directories
 bin/
+!python_bindings/halide-bin/src/halide/bin/
+!python_bindings/halide-bin/src/halide/bin/__init__.py
 distrib/
 lib/
 lib64/
@@ -279,5 +281,6 @@ CLAUDE.local.md
 !src/autoschedulers/adams2019/included_schedule_file.schedule.h
 
 # TODO: these should become .cmake.in
-!packaging/common/HalideConfig.cmake
-!packaging/common/HalideCompilerConfig.cmake
+!packaging/HalideConfig.cmake
+!packaging/HalideCompilerConfig.cmake
+!packaging/HalideAutoschedulersConfig.cmake

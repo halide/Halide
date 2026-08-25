@@ -51,6 +51,13 @@ int main(int argc, char **argv) {
     Internal::assert_file_exists(c_filename);
     Internal::assert_file_exists(pyext_filename);
 
+    const std::vector<char> pyext_data = Internal::read_entire_file(pyext_filename);
+    const std::string pyext_source(pyext_data.begin(), pyext_data.end());
+    if (pyext_source.find("PyImport_ImportModule(\"halide.runtime._runtime\")") == std::string::npos) {
+        printf("Generated extension does not explicitly import halide.runtime._runtime.\n");
+        return 1;
+    }
+
     printf("Success!\n");
     return 0;
 }

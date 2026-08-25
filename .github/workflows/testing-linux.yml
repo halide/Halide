@@ -82,7 +82,7 @@ jobs:
         run: |
           setarch ${{ matrix.arch }} bash -ec "
             CC='gcc -m${{ matrix.bits }}' CXX='g++ -m${{ matrix.bits }}' \
-            uv sync --python '${{ matrix.python }}' --group '${{ matrix.uv_group }}' --no-install-project
+            uv sync --frozen --python '${{ matrix.python }}' --group '${{ matrix.uv_group }}' --no-install-workspace
             echo '${GITHUB_WORKSPACE}/.venv/bin' >> '$GITHUB_PATH'
             echo 'VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv' >> '$GITHUB_ENV'
           "
@@ -141,7 +141,7 @@ jobs:
 
       - name: Sync CI environment
         run: |
-          uv sync --group ci-llvm-main --no-install-project
+          uv sync --frozen --group ci-llvm-main --no-install-workspace
           echo "${GITHUB_WORKSPACE}/.venv/bin" >> "$GITHUB_PATH"
           echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" >> "$GITHUB_ENV"
 
@@ -226,7 +226,7 @@ jobs:
 
       - name: Sync CI environment
         run: |
-          uv sync --group ci-llvm-main --no-install-project
+          uv sync --frozen --group ci-llvm-main --no-install-workspace
           echo "${GITHUB_WORKSPACE}/.venv/bin" >> "$GITHUB_PATH"
           echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" >> "$GITHUB_ENV"
 
