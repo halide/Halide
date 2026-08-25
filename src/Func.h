@@ -2728,18 +2728,15 @@ public:
      * on MemoryType for more detail. */
     Func &store_in(MemoryType memory_type);
 
-    /** Set how many registers a thread may use in the kernel this Func's loop
-     * over gpu blocks becomes. This is a budget in both directions, not just a
-     * cap: left alone, the backend compiler picks a number that fits a certain
-     * number of blocks on one of the GPU's processors, and this overrides that
-     * choice in whichever direction you ask for.
+    /** Tell the GPU shader compiler to fit the kernel this Func's loop over gpu
+     * blocks becomes under a given number of registers per thread. A smaller
+     * budget allows more blocks to be resident on one of the GPU's processors
+     * at once, but constrains the compiler's instruction scheduling, and may
+     * make it spill values to memory.
      *
-     * Fewer registers per thread fits more blocks, and stops the compiler
-     * covering the latency of a load by issuing it far ahead of its use and
-     * holding the result in a register until then. More registers fits fewer
-     * blocks, but keeps more of the working set in registers. Either can win,
-     * so measure rather than guess. A number that doesn't change how many
-     * blocks fit is all cost and no benefit.
+     * Leaving this unset does not mean no limit. It means the GPU driver picks
+     * a value automatically, so asking for more registers than it would have
+     * chosen is also a meaningful thing to do.
      *
      * Only has an effect when compiling for CUDA, and only when the PTX
      * version in use has the .maxnreg directive. Other GPU APIs offer no
