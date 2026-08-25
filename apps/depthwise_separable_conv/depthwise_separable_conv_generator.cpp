@@ -99,9 +99,10 @@ public:
             output.dim(3).set_estimate(0, N);
         } else if (get_target().has_gpu_feature()) {
             // 0.034ms on an RTX 5060 Ti. This is about 2.4 TFlops, which is
-            // not a very large fraction of peak. On a 2060 RTX super it took
-            // 0.066ms, where tensorflow 2.3 via cudnn 7 took 0.13ms, so we
-            // were twice as fast there.
+            // not a very large fraction of peak. For comparison, pytorch 2.11
+            // on the same card takes 0.036ms for the same pipeline when given
+            // the same channels-innermost layout, and 0.079ms in its own
+            // default layout.
 
             // This schedule fuses the depthwise conv into the pointwise
             // conv. The results of the depthwise conv are computed inside
