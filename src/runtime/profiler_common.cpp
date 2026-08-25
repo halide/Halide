@@ -153,6 +153,17 @@ extern "C" WEAK int halide_profiler_sample(struct halide_profiler_state *s, uint
 WEAK void sampling_profiler_thread(void *) {
     halide_profiler_state *s = halide_profiler_get_state();
 
+    // A strictly periodic sampler aliases against periodic pipeline work: if
+    // the run period is commensurate with the sample period, samples land at
+    // the same phase of every run and systematically over- or under-count
+    // whichever Funcs live at that phase. Natural OS scheduling jitter is far
+    // too small (a few percent of the interval) to break this. So jitter the
+    // interval deliberately, with a low-discrepancy (Weyl) sequence: advancing
+    // by floor(2^32 / phi) each step walks [0, 2^32) with the golden ratio's
+    // blue-noise spacing, which spreads the sample phases evenly at the cost
+    // of one add and a multiply-shift.
+    uint32_t weyl = 0;
+
     // grab the lock
     halide_mutex_lock(&s->lock);
 
@@ -163,9 +174,14 @@ WEAK void sampling_profiler_thread(void *) {
         if (err < 0) {
             break;
         }
+        weyl += 2654435769u;
+        // Scale the mean interval by a factor in [0.5, 1.5), leaving the mean
+        // sampling rate (and thus the profiling overhead) unchanged.
+        int sleep_us = s->sleep_time / 2 +
+                       (int)(((uint64_t)s->sleep_time * weyl) >> 32);
         // Release the lock, sleep, reacquire.
         halide_mutex_unlock(&s->lock);
-        halide_sleep_us(nullptr, s->sleep_time);
+        halide_sleep_us(nullptr, sleep_us);
         halide_mutex_lock(&s->lock);
     }
 
