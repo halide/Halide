@@ -258,6 +258,32 @@ public:
      */
     FuncVec hoist_invariants();
 
+    /** Multiply out products over sums in this update definition's increment,
+     * so that hoist_invariants() sees a flat sum of terms. Like rfactor(), this
+     * must be called on an update definition, and it rewrites that definition in
+     * place. Returns this Stage, so it can be chained.
+     *
+     * (a + b) * c becomes a * c + b * c, recursively. Subtraction is left alone.
+     *
+     * This is a schedule decision, not a normalization: whether it pays depends
+     * on what the terms turn out to contain. It pays when the sum hides operands
+     * with different loop-invariant factors, since each then reduces to a
+     * factor-free body of its own:
+     * \code
+     * f() += (d*q(r) + m) * (e*p(r));
+     * \endcode
+     * multiplies out to d*e * q(r)*p(r) + m*e * p(r), which hoist_invariants()
+     * turns into two factor-free accumulators. Left alone, the best it could do
+     * is hoist e and reduce over the sum.
+     *
+     * It costs an accumulator per distinct factor, so it is a pessimization when
+     * the terms share a factor that was already hoistable -- s * (r + 1) is
+     * better left as one accumulator with factor s than split into two.
+     *
+     * It is an error if there is no product over a sum to multiply out.
+     */
+    Stage &distribute();
+
     /** Schedule the iteration over this stage to be fused with another
      * stage 's' from outermost loop to a given LoopLevel. 'this' stage will
      * be computed AFTER 's' in the innermost fused dimension. There should not

@@ -1266,6 +1266,94 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
     return intm;
 }
 
+// How many nodes distribute_products() may rewrite before giving up. Multiplying
+// out is exponential in the nesting depth of sums, and a reduction body deep
+// enough to hit this has no business being split into that many accumulators.
+constexpr int distribute_budget = 1024;
+
+// Multiply out products over sums, so that a sum reduction's increment becomes
+// a flat sum of products: (a + b) * c -> a * c + b * c. This exposes terms with
+// *different* invariant factors, which a single flattening of the multiply chain
+// cannot see -- in (a + b) * c the sum is one opaque leaf.
+//
+// Subtraction is deliberately left alone (treated as a leaf): distributing it
+// would have to push the sign into one side, which does not group and is not
+// meaningful for unsigned wraparound.
+Expr distribute_products(const Expr &e, int &budget) {
+    if (--budget < 0) {
+        return e;
+    }
+    if (e.node_type() == IRNodeType::Add) {
+        auto [a, b] = *as_binary_operands(e);
+        return Add::make(distribute_products(a, budget), distribute_products(b, budget));
+    }
+    if (const Mul *mul = e.as<Mul>()) {
+        Expr a = distribute_products(mul->a, budget);
+        Expr b = distribute_products(mul->b, budget);
+        // Recurse on the rewritten form: either side may itself be a product of
+        // sums that only became visible after this step.
+        if (a.node_type() == IRNodeType::Add) {
+            auto [a0, a1] = *as_binary_operands(a);
+            return distribute_products(Add::make(Mul::make(a0, b), Mul::make(a1, b)), budget);
+        }
+        if (b.node_type() == IRNodeType::Add) {
+            auto [b0, b1] = *as_binary_operands(b);
+            return distribute_products(Add::make(Mul::make(a, b0), Mul::make(a, b1)), budget);
+        }
+        return Mul::make(a, b);
+    }
+    return e;
+}
+
+Stage &Stage::distribute() {
+    user_assert(!definition.is_init()) << "distribute() must be called on an update definition\n";
+
+    definition.schedule().touched() = true;
+
+    const auto &prover_result = prove_associativity(function.name(), definition.args(), definition.values());
+    user_assert(prover_result.associative())
+        << "distribute() requires an associative update definition, but the update "
+        << "definition of " << function.name() << " is not associative.\n";
+
+    auto is_self_ref = [&](const Expr &e) {
+        const Call *c = e.as<Call>();
+        return c && c->name == function.name() && c->call_type == Call::Halide;
+    };
+
+    vector<Expr> values = definition.values();
+    bool changed = false;
+    for (size_t i = 0; i < values.size(); ++i) {
+        optional<DistributiveLaw> law = distributive_law_for(prover_result.pattern.ops[i]);
+        if (!law || law->outer_op != IRNodeType::Add || law->inner_op != IRNodeType::Mul) {
+            continue;
+        }
+        // Lets may hide the combiner (e.g. an rfactor of this same update
+        // introduced promise_clamped bindings), so inline them first.
+        Expr value = substitute_in_all_lets(values[i]);
+        optional<pair<Expr, Expr>> split = select_binary_operand(value, law->outer_op, is_self_ref);
+        if (!split) {
+            continue;
+        }
+        int budget = distribute_budget;
+        Expr expanded = distribute_products(split->second, budget);
+        user_assert(budget >= 0)
+            << "distribute() gave up multiplying out the update definition of "
+            << function.name() << ": it expands to more than " << distribute_budget
+            << " nodes.\n";
+        if (!equal(expanded, split->second)) {
+            values[i] = Add::make(split->first, expanded);
+            changed = true;
+        }
+    }
+
+    user_assert(changed)
+        << "distribute() found no product over a sum to multiply out in the update "
+        << "definition of " << function.name() << ".\n";
+
+    definition.values() = values;
+    return *this;
+}
+
 FuncVec Stage::hoist_invariants() {
     user_assert(!definition.is_init()) << "hoist_invariants() must be called on an update definition\n";
 
