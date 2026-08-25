@@ -2728,14 +2728,18 @@ public:
      * on MemoryType for more detail. */
     Func &store_in(MemoryType memory_type);
 
-    /** Cap the registers a thread may use in the kernel this Func's loop over
-     * gpu blocks becomes. Fewer registers per thread lets more blocks be
-     * resident on one of the GPU's processors, and stops the backend compiler
+    /** Set how many registers a thread may use in the kernel this Func's loop
+     * over gpu blocks becomes. This is a budget in both directions, not just a
+     * cap: left alone, the backend compiler picks a number that fits a certain
+     * number of blocks on one of the GPU's processors, and this overrides that
+     * choice in whichever direction you ask for.
+     *
+     * Fewer registers per thread fits more blocks, and stops the compiler
      * covering the latency of a load by issuing it far ahead of its use and
-     * holding the result in a register until then. It costs whatever that
-     * scheduling freedom was buying, so it is worth measuring rather than
-     * guessing: the fastest setting is not always the smallest, and a cap that
-     * doesn't change how many blocks fit is all cost and no benefit.
+     * holding the result in a register until then. More registers fits fewer
+     * blocks, but keeps more of the working set in registers. Either can win,
+     * so measure rather than guess. A number that doesn't change how many
+     * blocks fit is all cost and no benefit.
      *
      * Only has an effect when compiling for CUDA, and only when the PTX
      * version in use has the .maxnreg directive. Other GPU APIs offer no
