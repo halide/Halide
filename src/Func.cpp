@@ -102,7 +102,7 @@ Func::Func(Function f)
 FuncVec::FuncVec(const string &base_name, size_t count) {
     reserve(count);
     for (size_t i = 0; i < count; ++i) {
-        emplace_back(base_name + std::to_string(i));
+        emplace_back(count == 1 ? base_name : base_name + std::to_string(i));
     }
 }
 
