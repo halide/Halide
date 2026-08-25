@@ -23,7 +23,9 @@ void define_stage(py::module &m) {
                  py::arg("preserved"))
             .def("rfactor", static_cast<Func (Stage::*)(const RVar &, const Var &)>(&Stage::rfactor),
                  py::arg("r"), py::arg("v"))
-            .def("hoist_invariants", &Stage::hoist_invariants)
+            .def("hoist_invariants", [](Stage &stage) {
+                return std::vector<Func>(stage.hoist_invariants());
+            })
 
             .def("eager_inline", (Stage & (Stage::*)(const std::vector<Func> &)) & Stage::eager_inline, py::arg("fs"))
             .def("eager_inline", [](Stage &stage, const py::args &args) -> Stage & {
