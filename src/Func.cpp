@@ -842,12 +842,16 @@ struct HoistedFactor {
                       // job of the separate change_type() directive.
 };
 
+struct HoistedTerm {
+    optional<HoistedFactor> factor;
+    Expr body;
+    size_t intermediate_index;
+};
+
 // Given the non-self-reference increment from an update body and the
 // distributive law of the outer associative op, extract a loop-invariant factor
 // that distributes over the outer op. `reduction_vars` is the set of RVar names
 // the factor must not reference.
-// TODO: if we flatten by the outer op here we can make tuple-valued reductions
-//   for things like: f(r) += a * g(r) + b * h(r)
 optional<HoistedFactor> extract_factor(const Expr &increment,
                                        const DistributiveLaw &law,
                                        const Scope<> &reduction_vars) {
@@ -890,20 +894,16 @@ optional<HoistedFactor> extract_factor(const Expr &increment,
     return HoistedFactor{law.inner_op, factor, body};
 }
 
-vector<optional<HoistedFactor>> extract_hoisted_factors(const vector<Expr> &values,
-                                                        const AssociativeOp &prover_result,
-                                                        const string &func_name,
-                                                        const Scope<> &reduction_vars) {
-    vector<optional<HoistedFactor>> result(values.size());
+vector<vector<HoistedTerm>> extract_hoisted_terms(const vector<Expr> &values,
+                                                  const AssociativeOp &prover_result,
+                                                  const string &func_name,
+                                                  const Scope<> &reduction_vars) {
+    vector<vector<HoistedTerm>> result(values.size());
 
-    auto is_orig_self_ref = [&](const Expr &e) {
+    auto is_orig_self_ref = [&](const Expr &e, size_t value_index) {
         const Call *c = e.as<Call>();
-        return c && c->name == func_name && c->call_type == Call::Halide;
-    };
-
-    auto extract_increment = [&](const Expr &val, const DistributiveLaw &law) -> optional<Expr> {
-        optional<pair<Expr, Expr>> split = select_binary_operand(val, law.outer_op, is_orig_self_ref);
-        return split ? std::make_optional(split->second) : std::nullopt;
+        return c && c->name == func_name && c->call_type == Call::Halide &&
+               c->value_index == (int)value_index;
     };
 
     for (size_t i = 0; i < values.size(); ++i) {
@@ -912,8 +912,29 @@ vector<optional<HoistedFactor>> extract_hoisted_factors(const vector<Expr> &valu
             // update introduced promise_clamped bindings for a preserved RVar).
             // Inline them so the outer op is visible to the pattern match.
             Expr value = substitute_in_all_lets(values[i]);
-            if (optional<Expr> increment = extract_increment(value, *law)) {
-                result[i] = extract_factor(*increment, *law, reduction_vars);
+            vector<Expr> outer_leaves;
+            flatten_associative_chain(value, law->outer_op, outer_leaves);
+            const auto self = std::find_if(outer_leaves.begin(), outer_leaves.end(),
+                                           [&](const Expr &e) { return is_orig_self_ref(e, i); });
+            if (self != outer_leaves.end() &&
+                std::find_if(std::next(self), outer_leaves.end(),
+                             [&](const Expr &e) { return is_orig_self_ref(e, i); }) == outer_leaves.end()) {
+                for (const Expr &term : outer_leaves) {
+                    if (!is_orig_self_ref(term, i)) {
+                        optional<HoistedFactor> factor = extract_factor(term, *law, reduction_vars);
+                        result[i].push_back({factor, factor ? factor->inner_body : term, 0});
+                    }
+                }
+            }
+        } else {
+            // A tuple component without a distributive law must still be carried
+            // through an intermediate if another component is being hoisted.
+            Expr value = substitute_in_all_lets(values[i]);
+            const IRNodeType outer_op = prover_result.pattern.ops[i].node_type();
+            optional<pair<Expr, Expr>> split = select_binary_operand(
+                value, outer_op, [&](const Expr &e) { return is_orig_self_ref(e, i); });
+            if (split) {
+                result[i].push_back({std::nullopt, split->second, 0});
             }
         }
     }
@@ -1242,7 +1263,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
     return intm;
 }
 
-Func Stage::hoist_invariants() {
+FuncVec Stage::hoist_invariants() {
     user_assert(!definition.is_init()) << "hoist_invariants() must be called on an update definition\n";
 
     definition.schedule().touched() = true;
@@ -1260,35 +1281,46 @@ Func Stage::hoist_invariants() {
         reduction_vars.push(var);
         reduction_bounds.push(var, Interval{min, min + extent - 1});
     }
-    vector<optional<HoistedFactor>> hoisted_factors =
-        extract_hoisted_factors(definition.values(), prover_result,
-                                function.name(), reduction_vars);
-    const bool any_hoisted = std::any_of(hoisted_factors.begin(), hoisted_factors.end(),
-                                         [](const auto &f) { return f.has_value(); });
-    user_assert(any_hoisted)
-        << "hoist_invariants() could not find a distributable loop-invariant "
-        << "factor in the update definition of " << function.name() << ".\n";
+    vector<vector<HoistedTerm>> hoisted_terms =
+        extract_hoisted_terms(definition.values(), prover_result,
+                              function.name(), reduction_vars);
+    const bool any_hoisted = std::any_of(hoisted_terms.begin(), hoisted_terms.end(),
+                                         [](const auto &terms) {
+                                             return std::any_of(terms.begin(), terms.end(),
+                                                                [](const HoistedTerm &term) {
+                                                                    return term.factor.has_value();
+                                                                });
+                                         });
+    const bool any_split = std::any_of(hoisted_terms.begin(), hoisted_terms.end(),
+                                       [](const auto &terms) { return terms.size() > 1; });
+    user_assert(any_hoisted || any_split)
+        << "hoist_invariants() could not find multiple reduction terms or a "
+        << "distributable loop-invariant factor in the update definition of "
+        << function.name() << ".\n";
 
-    Func intm(function.name() + "_intm");
-    intm(dim_vars_exprs) = Tuple(prover_result.pattern.identities);
-
-    // Define the factor-free intermediate reduction.
-    {
-        vector<Expr> values = definition.values();
-        for (size_t i = 0; i < values.size(); ++i) {
-            if (hoisted_factors[i]) {
-                Expr self_ref = Call::make(hoisted_factors[i]->inner_body.type(), function.name(),
-                                           dim_vars_exprs, Call::Halide, FunctionPtr(), (int)i);
-                values[i] = make_binary_op(prover_result.pattern.ops[i].node_type(),
-                                           self_ref, hoisted_factors[i]->inner_body);
-            }
+    size_t intermediate_count = 0;
+    for (auto &terms : hoisted_terms) {
+        for (HoistedTerm &term : terms) {
+            term.intermediate_index = intermediate_count++;
         }
-        values = substitute_self_reference(values, function.name(), intm.function(), {});
+    }
+    FuncVec intms(function.name() + "_intm", intermediate_count);
 
-        // The args and values still refer to the original RDom, so define_update()
-        // discovers and reuses it. The entire update schedule transfers unchanged.
-        intm.function().define_update(definition.args(), values);
-        intm.function().update(0).schedule() = definition.schedule().get_copy();
+    // Define one factor-free scalar intermediate reduction per outer term.
+    for (size_t i = 0; i < hoisted_terms.size(); ++i) {
+        for (const HoistedTerm &term : hoisted_terms[i]) {
+            Func &intm = intms[term.intermediate_index];
+            intm(dim_vars_exprs) = prover_result.pattern.identities[i];
+
+            Expr self_ref = Call::make(term.body.type(), intm.name(), dim_vars_exprs,
+                                       Call::Halide, FunctionPtr());
+            Expr value = make_binary_op(prover_result.pattern.ops[i].node_type(), self_ref, term.body);
+
+            // The args and value still refer to the original RDom, so define_update()
+            // discovers and reuses it. The entire update schedule transfers unchanged.
+            intm.function().define_update(definition.args(), {value});
+            intm.function().update(0).schedule() = definition.schedule().get_copy();
+        }
     }
 
     // Replace the original reduction with a factor-applying write-back update.
@@ -1296,8 +1328,13 @@ Func Stage::hoist_invariants() {
         SubstitutionMap writeback_map;
         for (size_t i = 0; i < definition.values().size(); ++i) {
             if (!prover_result.ys[i].var.empty()) {
-                Expr r = (definition.values().size() == 1) ? Expr(intm(dim_vars_exprs)) : Expr(intm(dim_vars_exprs)[i]);
-                r = apply_hoisted_factor(r, hoisted_factors[i]);
+                Expr r;
+                for (const HoistedTerm &term : hoisted_terms[i]) {
+                    Expr term_result = intms[term.intermediate_index](dim_vars_exprs);
+                    term_result = apply_hoisted_factor(term_result, term.factor);
+                    r = r.defined() ? make_binary_op(prover_result.pattern.ops[i].node_type(), r, term_result) : term_result;
+                }
+                internal_assert(r.defined());
                 add_let(writeback_map, prover_result.ys[i].var, r);
             }
 
@@ -1337,7 +1374,7 @@ Func Stage::hoist_invariants() {
         definition.schedule().splits() = var_splits;
     }
 
-    return intm;
+    return intms;
 }
 
 void Stage::split(const string &old, const string &outer, const string &inner, const Expr &factor_arg, bool exact, TailStrategy tail) {
