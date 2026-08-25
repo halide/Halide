@@ -107,7 +107,7 @@ struct Pipeline {
         RVar ko("ko"), ki("ki");
         result.update().split(r[1], ko, ki, 16);
         Func partial = result.update().rfactor(r[0], u);
-        Func dot = partial.update().eager_inline(x_wt, y_wt).hoist_invariants();
+        Func dot = partial.update().eager_inline(x_wt, y_wt).hoist_invariants()[0];
         Func dot_i32 = dot.change_type(Int(32));
 
         // One block's scaled contribution per outer step; its quants reduce
