@@ -2736,7 +2736,8 @@ public:
      *
      * Leaving this unset does not mean no limit. It means the GPU driver picks
      * a value automatically, so asking for more registers than it would have
-     * chosen is also a meaningful thing to do.
+     * chosen is also a meaningful thing to do. Zero asks for that automatic
+     * choice, which is what an unscheduled Func gets.
      *
      * Only has an effect when compiling for CUDA, and only when the PTX
      * version in use has the .maxnreg directive. Other GPU APIs offer no

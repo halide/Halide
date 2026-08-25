@@ -40,7 +40,7 @@ std::string assembly_for(int max_registers) {
     Var x("x"), y("y"), xi("xi"), yi("yi");
     Func f = make_pipeline(x, y);
     f.gpu_tile(x, y, xi, yi, 8, 8);
-    if (max_registers > 0) {
+    if (max_registers >= 0) {
         f.gpu_max_registers(max_registers);
     }
     Target t = get_host_target()
@@ -55,12 +55,17 @@ std::string assembly_for(int max_registers) {
 }
 
 bool check_directive_reaches_ptx() {
-    if (assembly_for(0).find("maxnreg") != std::string::npos) {
+    if (assembly_for(-1).find("maxnreg") != std::string::npos) {
         printf("FAIL: .maxnreg appeared without being asked for\n");
         return false;
     }
     if (assembly_for(40).find("maxnreg 40") == std::string::npos) {
         printf("FAIL: .maxnreg 40 did not reach the generated PTX\n");
+        return false;
+    }
+    // Zero asks for the automatic choice, which is the same as not asking.
+    if (assembly_for(0).find("maxnreg") != std::string::npos) {
+        printf("FAIL: gpu_max_registers(0) still capped the registers\n");
         return false;
     }
     return true;
@@ -99,10 +104,10 @@ int main(int argc, char **argv) {
     }
 
 #if HALIDE_WITH_EXCEPTIONS
-    // A cap has to be a number of registers, so zero and negatives are
-    // rejected rather than silently meaning "no cap".
+    // A negative number of registers means nothing, so it is rejected rather
+    // than quietly treated as zero.
     bool ok = true;
-    for (int bad : {0, -8}) {
+    for (int bad : {-1, -8}) {
         ok &= expect_user_error("gpu_max_registers", "gpu_max_registers", [&]() {
             Var x("x"), y("y"), xi("xi"), yi("yi");
             Func f = make_pipeline(x, y);
