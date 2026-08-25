@@ -523,9 +523,16 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         num_pipelines++;
     }
     char **pipeline_warnings = nullptr;
+    // Per-pipeline subtree-cumulative func stats, computed once while printing
+    // the report (which needs them anyway) and consumed by the JSON pass.
+    halide_profiler_func_stats **pipeline_cumulative = nullptr;
     if (json_path && num_pipelines) {
         pipeline_warnings = (char **)malloc(num_pipelines * sizeof(char *));
         __builtin_memset(pipeline_warnings, 0, num_pipelines * sizeof(char *));
+        pipeline_cumulative = (halide_profiler_func_stats **)malloc(
+            num_pipelines * sizeof(halide_profiler_func_stats *));
+        __builtin_memset(pipeline_cumulative, 0,
+                         num_pipelines * sizeof(halide_profiler_func_stats *));
     }
 
     // Emit ANSI color escapes only when the report is going to an actual
@@ -853,48 +860,78 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             }
         }
 
-        // Use the tree order to compute some cumulative stats
-        struct CumulativeStats {
-            // Time taken by this func and all children
-            uint64_t time;
-            // Average threads active for this func and all children
-            uint64_t active_threads_numerator;
-            uint64_t active_threads_denominator;
-
-            // Number of tasks for all containing parallel loops. Note this is
-            // cumulative in the opposite direction - it incorporates
-            // information from parents, not children.
-            uint64_t parallel_tasks;
-        };
-        size_t cum_stats_size = p->num_funcs * sizeof(CumulativeStats);
-        CumulativeStats *cum_stats = (CumulativeStats *)__builtin_alloca(cum_stats_size);
-        __builtin_memset(cum_stats, 0, cum_stats_size);
-        // Propagation to parents
+        // Subtree-cumulative stats: for each Func, its own counters plus those
+        // of all its descendants, folded in via tree order. Every counter is
+        // summed — including the memory and stack peaks, since a Func and its
+        // descendants can be live at once, so summing their peaks is a
+        // pessimistic bound on the subtree's peak footprint. parallel_tasks is
+        // the exception: it latches downward (a Func realized inside a parent's
+        // parallel loop inherits the parent's task count) to match how the
+        // report attributes tasks. Held in a halide_profiler_func_stats so the
+        // same values feed both the report below and the JSON output.
+        constexpr size_t cum_counter_offset =
+            __builtin_offsetof(halide_profiler_func_stats, memory_total);
+        constexpr int cum_counter_words =
+            (int)((sizeof(halide_profiler_func_stats) - cum_counter_offset) /
+                  sizeof(uint64_t));
+        halide_profiler_func_stats *cum_stats =
+            (halide_profiler_func_stats *)__builtin_alloca(
+                p->num_funcs * sizeof(halide_profiler_func_stats));
+        __builtin_memset(cum_stats, 0,
+                         p->num_funcs * sizeof(halide_profiler_func_stats));
+        // Propagation to parents (children already folded in by tree order).
         for (int i = p->num_funcs - 1; i >= 0; i--) {
             int j = tree_order[i];
             cum_stats[j].time += p->funcs[j].time;
-            cum_stats[j].active_threads_numerator += p->funcs[j].active_threads_numerator;
-            cum_stats[j].active_threads_denominator += p->funcs[j].active_threads_denominator;
+            cum_stats[j].memory_peak += p->funcs[j].memory_peak;
+            cum_stats[j].stack_peak += p->funcs[j].stack_peak;
+            uint64_t *jc = (uint64_t *)((char *)&cum_stats[j] + cum_counter_offset);
+            const uint64_t *sc =
+                (const uint64_t *)((const char *)&p->funcs[j] + cum_counter_offset);
+            for (int w = 0; w < cum_counter_words; w++) {
+                jc[w] += sc[w];
+            }
             int parent = p->funcs[j].parent;
             if (parent >= 0) {
                 cum_stats[parent].time += cum_stats[j].time;
-                cum_stats[parent].active_threads_numerator += cum_stats[j].active_threads_numerator;
-                cum_stats[parent].active_threads_denominator += cum_stats[j].active_threads_denominator;
+                cum_stats[parent].memory_peak += cum_stats[j].memory_peak;
+                cum_stats[parent].stack_peak += cum_stats[j].stack_peak;
+                uint64_t *pc =
+                    (uint64_t *)((char *)&cum_stats[parent] + cum_counter_offset);
+                for (int w = 0; w < cum_counter_words; w++) {
+                    pc[w] += jc[w];
+                }
             }
         }
-        // Propagation to children: parallel_tasks latches downward — a Func
-        // realized inside its parent's parallel loop "inherits" the parent's
-        // task count if it doesn't have one of its own.
+        // parallel_tasks doesn't sum meaningfully across a subtree. The report
+        // latches it downward instead — a Func realized inside a parent's
+        // parallel loop inherits the parent's task count. Compute that latched
+        // value separately; cum_stats keeps the plain subtree sum so the JSON
+        // output sums every counter uniformly.
+        uint64_t *latched_tasks =
+            (uint64_t *)__builtin_alloca(p->num_funcs * sizeof(uint64_t));
+        __builtin_memset(latched_tasks, 0, p->num_funcs * sizeof(uint64_t));
         for (int i = 0; i < p->num_funcs; i++) {
             int j = tree_order[i];
             int parent = p->funcs[j].parent;
             if (parent >= 0) {
                 if (p->funcs[j].parallel_tasks == 0) {
-                    cum_stats[j].parallel_tasks = cum_stats[parent].parallel_tasks;
+                    latched_tasks[j] = latched_tasks[parent];
                 } else {
-                    cum_stats[j].parallel_tasks = p->funcs[j].parallel_tasks;
+                    latched_tasks[j] = p->funcs[j].parallel_tasks;
                 }
             }
+        }
+        // Persist a copy for the JSON pass, which runs after all reports print.
+        if (pipeline_cumulative) {
+            halide_profiler_func_stats *copy =
+                (halide_profiler_func_stats *)malloc(
+                    p->num_funcs * sizeof(halide_profiler_func_stats));
+            if (copy) {
+                memcpy(copy, cum_stats,
+                       p->num_funcs * sizeof(halide_profiler_func_stats));
+            }
+            pipeline_cumulative[pipeline_pos] = copy;
         }
 
         // Rows to print, in tree-DFS order, skipping bookkeeping slots
@@ -944,11 +981,11 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         constexpr int num_counter_words = (int)(counter_bytes / sizeof(uint64_t));
 
         size_t canon_fs_size = p->num_funcs * sizeof(halide_profiler_func_stats);
-        size_t canon_cs_size = p->num_funcs * sizeof(CumulativeStats);
+        size_t canon_cs_size = p->num_funcs * sizeof(halide_profiler_func_stats);
         halide_profiler_func_stats *canon_fs =
             (halide_profiler_func_stats *)__builtin_alloca(canon_fs_size);
-        CumulativeStats *canon_cs =
-            (CumulativeStats *)__builtin_alloca(canon_cs_size);
+        halide_profiler_func_stats *canon_cs =
+            (halide_profiler_func_stats *)__builtin_alloca(canon_cs_size);
         __builtin_memset(canon_fs, 0, canon_fs_size);
         __builtin_memset(canon_cs, 0, canon_cs_size);
         // canonical_id <= i for every instance, so a single forward pass
@@ -983,11 +1020,11 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 dst_counters[j] += src_counters[j];
             }
 
-            CumulativeStats &dst_cs = canon_cs[c];
+            halide_profiler_func_stats &dst_cs = canon_cs[c];
             dst_cs.time += cum_stats[i].time;
             dst_cs.active_threads_numerator += cum_stats[i].active_threads_numerator;
             dst_cs.active_threads_denominator += cum_stats[i].active_threads_denominator;
-            dst_cs.parallel_tasks += cum_stats[i].parallel_tasks;
+            dst_cs.parallel_tasks += latched_tasks[i];
         }
 
         // ---- Heuristic warnings -----------------------------------------
@@ -1042,7 +1079,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         // also writes the warning message to sstr (using the same metrics
         // the trigger condition reads).
         auto rule = [&](const halide_profiler_func_stats *fs,
-                        const CumulativeStats *cs,
+                        const halide_profiler_func_stats *cs,
                         WarningKind w,
                         bool emit) -> bool {
             float threads_avg = cs->active_threads_numerator /
@@ -1352,7 +1389,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 continue;
             }
             const halide_profiler_func_stats *agg_fs = &canon_fs[idx];
-            const CumulativeStats *agg_cs = &canon_cs[idx];
+            const halide_profiler_func_stats *agg_cs = &canon_cs[idx];
             for (int w = 0; w < num_warning_kinds; w++) {
                 if (rule(agg_fs, agg_cs, (WarningKind)w, /*emit=*/false) &&
                     num_warnings < max_warnings) {
@@ -1407,7 +1444,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         };
 
         auto print_func_row = [&](const halide_profiler_func_stats *fs,
-                                  const CumulativeStats *cs) {
+                                  const halide_profiler_func_stats *cs) {
             sstr.clear();
             const char *row_template = func_row;
             if (fs->kind == halide_profiler_func_kind_allocation) {
@@ -1569,7 +1606,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
 
         for (int i = 0; i < f_stats_count; i++) {
             const halide_profiler_func_stats *fs = f_stats[i];
-            const CumulativeStats *cs = cum_stats + (fs - p->funcs);
+            const halide_profiler_func_stats *cs = cum_stats + (fs - p->funcs);
             print_func_row(fs, cs);
         }
 
@@ -1773,6 +1810,13 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 field_u64("      ", "native_vector_bytes", pp->native_vector_bytes);
                 json << "      \"funcs\": [";
 
+                // The subtree-cumulative stats, computed once while printing the
+                // text report above (see pipeline_cumulative). Null only if the
+                // allocation failed, in which case the cumulative block is
+                // omitted.
+                const halide_profiler_func_stats *cumulative =
+                    pipeline_cumulative[json_pipeline_pos];
+
                 for (int i = 0; i < pp->num_funcs; i++) {
                     json << (i == 0 ? "\n" : ",\n");
                     const halide_profiler_func_stats *fs = &pp->funcs[i];
@@ -1815,7 +1859,41 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     {
                         uint64_t at_root = pp->funcs[fs->canonical_id].points_required_at_root;
                         float recompute = at_root ? (float)fs->points_computed / at_root : 0.0f;
-                        field_float("          ", "recompute", recompute, /*last=*/true);
+                        field_float("          ", "recompute", recompute,
+                                    /*last=*/(cumulative == nullptr));
+                    }
+                    if (cumulative) {
+                        // The cumulative block is many fields; flush first so
+                        // it can't overflow json's fixed-size buffer.
+                        flush();
+                        const halide_profiler_func_stats *cum = &cumulative[i];
+                        json << "          \"cumulative\": {\n";
+                        field_u64("            ", "time_ns", cum->time);
+                        field_u64("            ", "memory_peak", cum->memory_peak);
+                        field_u64("            ", "stack_peak", cum->stack_peak);
+                        field_u64("            ", "memory_total", cum->memory_total);
+                        field_u64("            ", "active_threads_numerator", cum->active_threads_numerator);
+                        field_u64("            ", "active_threads_denominator", cum->active_threads_denominator);
+                        field_u64("            ", "num_allocs", cum->num_allocs);
+                        field_u64("            ", "parallel_loops", cum->parallel_loops);
+                        field_u64("            ", "parallel_tasks", cum->parallel_tasks);
+                        field_u64("            ", "points_required_at_root", cum->points_required_at_root);
+                        field_u64("            ", "points_computed", cum->points_computed);
+                        field_u64("            ", "scalar_loads", cum->scalar_loads);
+                        field_u64("            ", "vector_loads", cum->vector_loads);
+                        field_u64("            ", "gathers", cum->gathers);
+                        field_u64("            ", "bytes_loaded", cum->bytes_loaded);
+                        field_u64("            ", "scalar_stores", cum->scalar_stores);
+                        field_u64("            ", "vector_stores", cum->vector_stores);
+                        field_u64("            ", "scatters", cum->scatters);
+                        field_u64("            ", "bytes_stored", cum->bytes_stored);
+                        field_u64("            ", "realizations", cum->realizations);
+                        field_u64("            ", "productions", cum->productions);
+                        field_u64("            ", "points_required_at_realization", cum->points_required_at_realization);
+                        field_u64("            ", "points_required_at_production", cum->points_required_at_production);
+                        field_u64("            ", "points_required_inwards", cum->points_required_inwards);
+                        field_u64("            ", "productions_if_inwards", cum->productions_if_inwards, /*last=*/true);
+                        json << "          }\n";
                     }
                     json << "        }";
 
@@ -1852,6 +1930,12 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             free(pipeline_warnings[i]);
         }
         free(pipeline_warnings);
+    }
+    if (pipeline_cumulative) {
+        for (int i = 0; i < num_pipelines; i++) {
+            free(pipeline_cumulative[i]);
+        }
+        free(pipeline_cumulative);
     }
 }
 
