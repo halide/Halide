@@ -1650,34 +1650,48 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             p->memory_peak > 100 * 1000 * 1000 &&
             free_time * 10 > p->time;
 
-        if (num_warnings || too_few_samples || too_many_anon_funcs || expensive_free) {
+        // Text of the pipeline-level (non-Func-specific) warnings, appended to
+        // sstr. Factored out so the report and the JSON output below render
+        // identical wording. k: 0 = anon names, 1 = too few samples, 2 = free.
+        auto append_pipeline_warning = [&](int k) {
+            if (k == 0) {
+                sstr << anon_funcs << " Funcs have auto-generated names and "
+                     << "collectively take up a significant fraction of the total runtime. "
+                     << "Consider giving them explicit names by passing a string to the "
+                     << "Func constructor. This will make this profile easier to read.";
+            } else if (k == 1) {
+                sstr << "Only " << p->samples
+                     << " profiling samples taken. Consider running the "
+                     << "pipeline more times in a loop for more accurate results.";
+            } else {
+                sstr << "The pipeline allocates a significant amount of memory, and a "
+                     << "lot of time is spent freeing it. Either fuse stages more aggressively "
+                     << "to use less memory, or consider a using caching allocator with "
+                     << "retention enabled to make freeing it cheaper.";
+            }
+        };
+        auto pipeline_warning_fired = [&](int k) {
+            return (k == 0 && too_many_anon_funcs) ||
+                   (k == 1 && too_few_samples) ||
+                   (k == 2 && expensive_free);
+        };
+        const bool any_pipeline_warning =
+            too_few_samples || too_many_anon_funcs || expensive_free;
+        if (num_warnings || any_pipeline_warning) {
             halide_print(user_context, " Performance warnings:\n");
             int max_cols = (int)strlen(func_row);
             // print_wrapped doesn't understand non-printing characters.
             bool old = support_colors;
             support_colors = false;
 
-            if (too_many_anon_funcs) {
+            for (int k = 0; k < 3; k++) {
+                if (!pipeline_warning_fired(k)) {
+                    continue;
+                }
                 sstr.clear();
-                sstr << "  - " << anon_funcs << " Funcs have auto-generated names and "
-                     << "collectively take up a significant fraction of the total runtime. "
-                     << "Consider giving them explicit names by passing a string to the "
-                     << "Func constructor. This will make this profile easier to read.\n";
-                print_wrapped(user_context, 4, max_cols, sstr.str());
-            }
-            if (too_few_samples) {
-                sstr.clear();
-                sstr << "  - Only " << p->samples
-                     << " profiling samples taken. Consider running the "
-                     << "pipeline more times in a loop for more accurate results.\n";
-                print_wrapped(user_context, 4, max_cols, sstr.str());
-            }
-            if (expensive_free) {
-                sstr.clear();
-                sstr << "  - The pipeline allocates a significant amount of memory, and a "
-                     << "lot of time is spent freeing it. Either fuse stages more aggressively "
-                     << "to use less memory, or consider a using caching allocator with "
-                     << "retention enabled to make freeing it cheaper.\n";
+                sstr << "  - ";
+                append_pipeline_warning(k);
+                sstr << "\n";
                 print_wrapped(user_context, 4, max_cols, sstr.str());
             }
             for (int w = 0; w < num_warnings; w++) {
@@ -1695,20 +1709,17 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         // for the JSON pass below. Kept separate from the text formatting
         // above, and bounded: if the messages don't fit, the rest are
         // dropped rather than producing a truncated (invalid) array.
-        if (pipeline_warnings && num_warnings) {
+        if (pipeline_warnings && (num_warnings || any_pipeline_warning)) {
             StringStreamPrinter<16384> wjson(user_context);
             wjson << "[";
             bool first = true;
-            for (int w = 0; w < num_warnings; w++) {
-                sstr.clear();
-                int cid = warnings[w].canonical_id;
-                rule(&canon_fs[cid], &canon_cs[cid], (WarningKind)warnings[w].rule_id, /*emit=*/true);
+            // Append sstr's current contents as a JSON string element, escaping
+            // as needed. Returns false (appending nothing) if it wouldn't fit,
+            // so the array is bounded and never left truncated mid-string.
+            auto append_json = [&]() -> bool {
                 const char *msg = sstr.str();
-                // Bound the array so it never overflows wjson mid-string:
-                // reserve room for the escaped message (worst case 2x) plus
-                // the quotes, separator, and closing bracket.
                 if (wjson.size() + 2 * strlen(msg) + 8 >= 16384) {
-                    break;
+                    return false;
                 }
                 wjson << (first ? "\"" : ", \"");
                 first = false;
@@ -1721,6 +1732,27 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     wjson << one;
                 }
                 wjson << "\"";
+                return true;
+            };
+            // Pipeline-level warnings first (same order as the report above),
+            // then the per-Func ones.
+            for (int k = 0; k < 3; k++) {
+                if (!pipeline_warning_fired(k)) {
+                    continue;
+                }
+                sstr.clear();
+                append_pipeline_warning(k);
+                if (!append_json()) {
+                    break;
+                }
+            }
+            for (int w = 0; w < num_warnings; w++) {
+                sstr.clear();
+                int cid = warnings[w].canonical_id;
+                rule(&canon_fs[cid], &canon_cs[cid], (WarningKind)warnings[w].rule_id, /*emit=*/true);
+                if (!append_json()) {
+                    break;
+                }
             }
             wjson << "]";
             pipeline_warnings[pipeline_pos] = (char *)malloc(wjson.size() + 1);
