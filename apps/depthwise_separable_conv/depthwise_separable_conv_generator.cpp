@@ -98,10 +98,10 @@ public:
             output.dim(2).set_estimate(0, H);
             output.dim(3).set_estimate(0, N);
         } else if (get_target().has_gpu_feature()) {
-            // 0.066ms on a 2060 RTX super. This is about 1.2 TFlops,
-            // which is not a very large fraction of peak. For
-            // comparison though, tensorflow 2.3 achieves 0.13ms via
-            // cudnn 7. So we're twice as fast.
+            // 0.034ms on an RTX 5060 Ti. This is about 2.4 TFlops, which is
+            // not a very large fraction of peak. On a 2060 RTX super it took
+            // 0.066ms, where tensorflow 2.3 via cudnn 7 took 0.13ms, so we
+            // were twice as fast there.
 
             // This schedule fuses the depthwise conv into the pointwise
             // conv. The results of the depthwise conv are computed inside
