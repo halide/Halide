@@ -7,9 +7,9 @@
 #include "Halide.h"
 #include "expect_user_error.h"
 #include "halide_test_dirs.h"
-#include <stdio.h>
 #include <fstream>
 #include <sstream>
+#include <stdio.h>
 
 using namespace Halide;
 
