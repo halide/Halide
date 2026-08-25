@@ -51,7 +51,7 @@ public:
         // Do a push-pull thing to blur the cost volume with an
         // exponential-decay type thing to inpaint over regions with low
         // confidence.
-        Func cost_pyramid_push[8];
+        FuncVec cost_pyramid_push("cost_pyramid_push", 8);
         cost_pyramid_push[0](x, y, z, c) =
             mux(c, {cost(x, y, z) * cost_confidence(x, y), cost_confidence(x, y)});
 
@@ -63,7 +63,7 @@ public:
             cost_pyramid_push[i] = BoundaryConditions::repeat_edge(cost_pyramid_push[i], {{0, w}, {0, h}});
         }
 
-        Func cost_pyramid_pull[8];
+        FuncVec cost_pyramid_pull("cost_pyramid_pull", 8);
         cost_pyramid_pull[7](x, y, z, c) = cost_pyramid_push[7](x, y, z, c);
         for (int i = 6; i >= 0; i--) {
             cost_pyramid_pull[i](x, y, z, c) = lerp(upsample(cost_pyramid_pull[i + 1])(x, y, z, c),
