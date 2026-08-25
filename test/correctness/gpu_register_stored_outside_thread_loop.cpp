@@ -31,7 +31,7 @@ const int rows_per_warp = Y / WARPS;
 // A producer stored above a serial walk, computed within the loop over warps
 // inside it, and slid over the walk. Each warp writes and reads only its own
 // rows, and only the two steps of the walk that are live.
-int slid_over_a_walk_inside_the_warps(const Target &target) {
+int slid_over_a_walk_inside_the_warps(const Target &target, MemoryType mem) {
     Func p("p"), acc("acc"), out("out");
     Var x("x"), y("y"), t("t"), yo("yo"), yw("yw"), yi("yi");
     RDom rt(0, N, "rt");
@@ -60,7 +60,7 @@ int slid_over_a_walk_inside_the_warps(const Target &target) {
     // within the warps, and folded down to the two steps that are live.
     p.store_at(out, yo)
         .compute_at(acc, yw)
-        .store_in(MemoryType::Register);
+        .store_in(mem);
 
     Buffer<float> result = out.realize({W, Y}, target);
     result.copy_to_host();
@@ -72,8 +72,8 @@ int slid_over_a_walk_inside_the_warps(const Target &target) {
         for (int x = 0; x < W; x++) {
             float correct = (float)N * (float)(y + 1) * (float)(x + 1);
             if (result(x, y) != correct) {
-                printf("result(%d, %d) = %f instead of %f\n",
-                       x, y, (double)result(x, y), (double)correct);
+                printf("result(%d, %d) = %f instead of %f (memory type %d)\n",
+                       x, y, (double)result(x, y), (double)correct, (int)mem);
                 return 1;
             }
         }
@@ -186,8 +186,12 @@ int main(int argc, char **argv) {
                "accepted is not exercised.\n");
         return 0;
     }
-    if (slid_over_a_walk_inside_the_warps(target) != 0) {
-        return 1;
+    // Both memory types are private to a thread, and check_gpu_cross_talk
+    // checks both, so the schedule is allowed for both.
+    for (MemoryType mem : {MemoryType::Register, MemoryType::Stack}) {
+        if (slid_over_a_walk_inside_the_warps(target, mem) != 0) {
+            return 1;
+        }
     }
 
     printf("Success!\n");
