@@ -120,6 +120,11 @@ public:
                 .unroll(xii)
                 .unroll(yii)
                 .unroll(dii);
+            // Left to itself ptxas gives each thread 56 registers, which
+            // fits 18 blocks on a processor. Asking for 80 fits only 12, but
+            // holding more of the accumulator in registers is worth more here
+            // than the occupancy it costs. Measured on an RTX 5060 Ti: 3%.
+            Func(output).gpu_max_registers(80);
 
             pointwise_convolved.compute_at(output, di)
                 .reorder(x, y, d)
