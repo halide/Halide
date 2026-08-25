@@ -155,7 +155,18 @@ add_library(Halide_initmod OBJECT)
 add_library(Halide::initmod ALIAS Halide_initmod)
 
 # All these are binary2cpp-generated files, so no need to export compile commands for them.
-set_target_properties(Halide_initmod PROPERTIES EXPORT_COMPILE_COMMANDS NO)
+# POSITION_INDEPENDENT_CODE must be set explicitly: this object library is
+# consumed by the Halide target (see POSITION_INDEPENDENT_CODE there), but as
+# an OBJECT library its own sources don't automatically inherit that -- without
+# it, non-optimized builds (e.g. Debug, ASan) can fail to link into a shared
+# Halide with relocation errors on the large embedded byte arrays generated
+# here, even though optimized builds usually happen to produce PIC-compatible
+# code anyway on x86-64 and don't show the problem.
+set_target_properties(Halide_initmod
+    PROPERTIES
+    EXPORT_COMPILE_COMMANDS NO
+    POSITION_INDEPENDENT_CODE ON
+)
 
 # Note: ensure that these flags match the flags in the Makefile.
 # Note: this always uses Clang-from-LLVM for compilation, so none of these flags should need conditionalization.
