@@ -1461,7 +1461,6 @@ protected:
         return it == storage_group.end() ? name : "group " + std::to_string(it->second);
     }
 
-
     MemoryType memory_type_for_name(const std::string &name) {
         for (const auto &x : register_allocs.allocations) {
             if (x.name == name) {
