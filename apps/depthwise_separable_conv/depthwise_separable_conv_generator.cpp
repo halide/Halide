@@ -98,7 +98,7 @@ public:
             output.dim(2).set_estimate(0, H);
             output.dim(3).set_estimate(0, N);
         } else if (get_target().has_gpu_feature()) {
-            // 0.034ms on an RTX 5060 Ti. This is about 2.4 TFlops, which is
+            // 0.032ms on an RTX 5060 Ti. This is about 2.5 TFlops, which is
             // not a very large fraction of peak. For comparison, pytorch 2.11
             // on the same card takes 0.036ms for the same pipeline when given
             // the same channels-innermost layout, and 0.079ms in its own
@@ -111,9 +111,9 @@ public:
             Var xi, yi, di, dii, xii, yii;
             RVar ro, ri;
 
-            // The pointwise convolution kernel. Produces a 4x4 tile of output.
+            // The pointwise convolution kernel. Produces a 4x2 tile of output.
             Func(output)
-                .tile({d, x, y}, {di, xi, yi}, {16, 4, 4})
+                .tile({d, x, y}, {di, xi, yi}, {16, 4, 2})
                 .tile({di, xi, yi}, {dii, xii, yii}, {1, 2, 2})
                 .gpu_threads(di, xi, yi)
                 .fuse(y, b, b)
@@ -121,11 +121,10 @@ public:
                 .unroll(xii)
                 .unroll(yii)
                 .unroll(dii);
-            // Left to itself ptxas gives each thread 56 registers, which fits
-            // 18 blocks on a processor. Asking for 80 fits only 12, and is
-            // worth 3% on an RTX 5060 Ti, so the occupancy is not what this
-            // kernel is short of.
-            output.gpu_max_registers(80);
+            // Worth 0.4% on an RTX 5060 Ti. Occupancy here is capped by how
+            // many blocks a processor will hold rather than by registers, so
+            // this only changes how ptxas schedules and spills.
+            output.gpu_max_registers(64);
 
             pointwise_convolved.compute_at(output, di)
                 .reorder(x, y, d)
@@ -160,11 +159,11 @@ public:
                 .unroll(x)
                 .unroll(y);
 
-            // The depthwise convolution kernel. Produces a 4x4 tile
+            // The depthwise convolution kernel. Produces a 4x2 tile
             // of intermediate state, storing the result in shared.
             depthwise_convolved.in()
                 .compute_at(output, d)
-                .tile({d, x, y}, {di, xi, yi}, {32, 4, 4}, TailStrategy::RoundUp)
+                .tile({d, x, y}, {di, xi, yi}, {32, 4, 2}, TailStrategy::RoundUp)
                 .tile({di, xi, yi}, {dii, xii, yii}, {2, 2, 2})
                 .gpu_threads(di, xi, yi)
                 .unroll(xii)
