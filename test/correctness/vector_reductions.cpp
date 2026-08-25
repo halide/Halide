@@ -160,6 +160,16 @@ void add_tasks(const Target &target, std::vector<Task> &tasks) {
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
+    // The reduce-padding recursion in CodeGen_ARM::codegen_across_vector_reduce
+    // can fail to converge for some SVE2 vector-reduce shapes under LLVM < 22,
+    // hanging the compiler indefinitely rather than failing outright.
+    if (Internal::get_llvm_version() < 220 &&
+        target.has_feature(Target::SVE2)) {
+        printf("[SKIP] LLVM %d has known SVE backend bugs for this test.\n",
+               Internal::get_llvm_version());
+        return 0;
+    }
+
     // TODO(https://github.com/halide/Halide/issues/8985): LLVM's JIT emits
     // misaligned jump tables on arm-32 with arm_fp16, causing SIGILL.
     if (target.arch == Target::ARM && target.bits == 32 &&
