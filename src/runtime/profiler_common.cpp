@@ -559,12 +559,17 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
     // the report (which needs them anyway) and consumed by the JSON pass.
     halide_profiler_func_stats **pipeline_cumulative = nullptr;
     if (json_path && num_pipelines) {
+        // These allocations are small; if they fail the system is in a bad
+        // enough state that bailing out immediately beats trying to limp along.
         pipeline_warnings = (char **)malloc(num_pipelines * sizeof(char *));
+        halide_abort_if_false(user_context, pipeline_warnings != nullptr);
         __builtin_memset(pipeline_warnings, 0, num_pipelines * sizeof(char *));
         pipeline_func_warnings = (char ***)malloc(num_pipelines * sizeof(char **));
+        halide_abort_if_false(user_context, pipeline_func_warnings != nullptr);
         __builtin_memset(pipeline_func_warnings, 0, num_pipelines * sizeof(char **));
         pipeline_cumulative = (halide_profiler_func_stats **)malloc(
             num_pipelines * sizeof(halide_profiler_func_stats *));
+        halide_abort_if_false(user_context, pipeline_cumulative != nullptr);
         __builtin_memset(pipeline_cumulative, 0,
                          num_pipelines * sizeof(halide_profiler_func_stats *));
     }
@@ -926,7 +931,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 jc[w] += sc[w];
             }
             int parent = p->funcs[j].parent;
-            if (parent >= 0) {
+            if (parent >= 0 && parent < p->num_funcs) {
                 cum_stats[parent].time += cum_stats[j].time;
                 cum_stats[parent].memory_peak += cum_stats[j].memory_peak;
                 cum_stats[parent].stack_peak += cum_stats[j].stack_peak;
@@ -949,7 +954,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         for (int i = 0; i < p->num_funcs; i++) {
             int j = tree_order[i];
             int parent = p->funcs[j].parent;
-            if (parent >= 0) {
+            if (parent >= 0 && parent < p->num_funcs) {
                 if (p->funcs[j].parallel_tasks == 0) {
                     cum_stats[j].parallel_tasks = cum_stats[parent].parallel_tasks;
                 } else {
@@ -962,10 +967,9 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             halide_profiler_func_stats *copy =
                 (halide_profiler_func_stats *)malloc(
                     p->num_funcs * sizeof(halide_profiler_func_stats));
-            if (copy) {
-                memcpy(copy, cum_stats,
-                       p->num_funcs * sizeof(halide_profiler_func_stats));
-            }
+            halide_abort_if_false(user_context, copy != nullptr);
+            memcpy(copy, cum_stats,
+                   p->num_funcs * sizeof(halide_profiler_func_stats));
             pipeline_cumulative[pipeline_pos] = copy;
         }
 
@@ -1761,6 +1765,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             }
             wjson << "]";
             pipeline_warnings[pipeline_pos] = (char *)malloc(wjson.size() + 1);
+            halide_abort_if_false(user_context, pipeline_warnings[pipeline_pos] != nullptr);
             memcpy(pipeline_warnings[pipeline_pos], wjson.str(), wjson.size() + 1);
         }
         // Per-Func warnings fire on the canonical Func (every instance sharing a
@@ -1768,38 +1773,36 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         // entry looks up its own canonical id.
         if (pipeline_func_warnings && num_warnings) {
             char **fw = (char **)malloc(p->num_funcs * sizeof(char *));
-            if (fw) {
-                __builtin_memset(fw, 0, p->num_funcs * sizeof(char *));
-                for (int c = 0; c < p->num_funcs; c++) {
-                    bool has = false;
-                    for (int w = 0; w < num_warnings; w++) {
-                        if (warnings[w].canonical_id == c) {
-                            has = true;
-                            break;
-                        }
-                    }
-                    if (!has) {
-                        continue;
-                    }
-                    StringStreamPrinter<16384> cjson(user_context);
-                    cjson << "[";
-                    bool cfirst = true;
-                    for (int w = 0; w < num_warnings; w++) {
-                        if (warnings[w].canonical_id != c) {
-                            continue;
-                        }
-                        sstr.clear();
-                        rule(&canon_fs[c], &canon_cs[c], (WarningKind)warnings[w].rule_id, /*emit=*/true);
-                        if (!json_append_escaped(cjson, cfirst, sstr.str())) {
-                            break;
-                        }
-                    }
-                    cjson << "]";
-                    fw[c] = (char *)malloc(cjson.size() + 1);
-                    if (fw[c]) {
-                        memcpy(fw[c], cjson.str(), cjson.size() + 1);
+            halide_abort_if_false(user_context, fw != nullptr);
+            __builtin_memset(fw, 0, p->num_funcs * sizeof(char *));
+            for (int c = 0; c < p->num_funcs; c++) {
+                bool has = false;
+                for (int w = 0; w < num_warnings; w++) {
+                    if (warnings[w].canonical_id == c) {
+                        has = true;
+                        break;
                     }
                 }
+                if (!has) {
+                    continue;
+                }
+                StringStreamPrinter<16384> cjson(user_context);
+                cjson << "[";
+                bool cfirst = true;
+                for (int w = 0; w < num_warnings; w++) {
+                    if (warnings[w].canonical_id != c) {
+                        continue;
+                    }
+                    sstr.clear();
+                    rule(&canon_fs[c], &canon_cs[c], (WarningKind)warnings[w].rule_id, /*emit=*/true);
+                    if (!json_append_escaped(cjson, cfirst, sstr.str())) {
+                        break;
+                    }
+                }
+                cjson << "]";
+                fw[c] = (char *)malloc(cjson.size() + 1);
+                halide_abort_if_false(user_context, fw[c] != nullptr);
+                memcpy(fw[c], cjson.str(), cjson.size() + 1);
             }
             pipeline_func_warnings[pipeline_pos] = fw;
         }
@@ -1888,9 +1891,9 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 json << "      \"funcs\": [";
 
                 // The subtree-cumulative stats, computed once while printing the
-                // text report above (see pipeline_cumulative). Null only if the
-                // allocation failed, in which case the cumulative block is
-                // omitted.
+                // text report above (see pipeline_cumulative). Null if an
+                // allocation failed or the pipeline was skipped in the text
+                // pass, in which case the cumulative block is omitted.
                 const halide_profiler_func_stats *cumulative =
                     pipeline_cumulative[json_pipeline_pos];
 
@@ -1985,9 +1988,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     json << "          \"warnings\": ";
                     flush();
                     {
-                        char **fw = pipeline_func_warnings
-                                        ? pipeline_func_warnings[json_pipeline_pos]
-                                        : nullptr;
+                        char **fw = pipeline_func_warnings[json_pipeline_pos];
                         const char *fws =
                             (fw && fw[fs->canonical_id]) ? fw[fs->canonical_id] : "[]";
                         fwrite(fws, strlen(fws), 1, f);
