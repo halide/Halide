@@ -588,6 +588,72 @@ int hoist_invariants_nothing_to_hoist_rejected_test() {
     return 0;
 }
 
+// An increment written as a sum of terms with *different* invariant factors has
+// no single factor to hoist. Each term gets its own accumulator instead, all
+// advanced by one loop, with the write-back applying each factor once.
+int hoist_invariants_terms_test() {
+    const int K = 64;
+    ImageParam G{Int(8), 1, "G"};
+    ImageParam H{Int(8), 1, "H"};
+    ImageParam A{Float(32), 1, "A"};
+    ImageParam B{Float(32), 1, "B"};
+
+    Var i{"i"};
+    RDom r(0, K, "r");
+
+    Func Acc{"Acc"};
+    Acc(i) = 0.0f;
+    Acc(i) += A(i) * cast<float>(G(r)) + B(i) * cast<float>(H(r));
+
+    std::vector<Func> Acc_intm = Acc.update().hoist_invariants();
+    internal_assert(Acc_intm.size() == 2)
+        << "hoist_invariants terms: expected one accumulator per term, got "
+        << Acc_intm.size() << "\n";
+    for (Func &f : Acc_intm) {
+        f.compute_root();
+    }
+
+    Buffer<int8_t> g_buf(K), h_buf(K);
+    Buffer<float> a_buf(1), b_buf(1);
+    for (int k = 0; k < K; k++) {
+        g_buf(k) = 3;
+        h_buf(k) = 5;
+    }
+    a_buf(0) = 2.0f;
+    b_buf(0) = 7.0f;
+    G.set(g_buf);
+    H.set(h_buf);
+    A.set(a_buf);
+    B.set(b_buf);
+
+    Buffer<float> result = Acc.realize({1});
+    const float expected = (2.0f * 3.0f + 7.0f * 5.0f) * (float)K;
+    internal_assert(result(0) == expected)
+        << "hoist_invariants terms: got " << result(0) << ", expected " << expected << "\n";
+
+    // Terms still get one accumulator each even when they share an identical
+    // factor: hoist_invariants() doesn't try to detect and merge such terms,
+    // so the accumulator count only ever depends on the number of terms.
+    Func Shared{"Shared"};
+    Shared(i) = 0.0f;
+    Shared(i) += A(i) * cast<float>(G(r)) + A(i) * cast<float>(H(r));
+    std::vector<Func> Shared_intm = Shared.update().hoist_invariants();
+    internal_assert(Shared_intm.size() == 2)
+        << "hoist_invariants terms: expected one accumulator per term even "
+        << "when terms share a factor, got " << Shared_intm.size() << "\n";
+    for (Func &f : Shared_intm) {
+        f.compute_root();
+    }
+
+    Buffer<float> shared = Shared.realize({1});
+    const float shared_expected = 2.0f * (3.0f + 5.0f) * (float)K;
+    internal_assert(shared(0) == shared_expected)
+        << "hoist_invariants shared factor: got " << shared(0) << ", expected "
+        << shared_expected << "\n";
+
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -610,6 +676,7 @@ int main(int argc, char **argv) {
         {"hoist_invariants test (after rfactor)", hoist_invariants_after_rfactor_test},
         {"hoist_invariants test (invalid law rejected)", hoist_invariants_invalid_law_rejected_test},
         {"hoist_invariants test (nothing to hoist rejected)", hoist_invariants_nothing_to_hoist_rejected_test},
+        {"hoist_invariants test (one accumulator per term)", hoist_invariants_terms_test},
     };
 
     using Sharder = Halide::Internal::Test::Sharder;
