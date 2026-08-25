@@ -510,6 +510,33 @@ ALWAYS_INLINE bool counter_is_approximate(const halide_profiler_func_stats *fs, 
     return (fs->counters_approximated & (1u << counter)) != 0;
 }
 
+// Append msg to a JSON string-array builder as an escaped "..." element,
+// preceded by a comma unless it's the first. Returns false without appending
+// if it wouldn't fit, so the array stays bounded and is never left truncated
+// mid-string. (extern "C++" because this file is inside an extern "C" block
+// and templates need C++ linkage.)
+extern "C++" {
+template<uint64_t N>
+ALWAYS_INLINE bool json_append_escaped(StringStreamPrinter<N> &out, bool &first,
+                                       const char *msg) {
+    if (out.size() + 2 * strlen(msg) + 8 >= out.capacity()) {
+        return false;
+    }
+    out << (first ? "\"" : ", \"");
+    first = false;
+    char one[2] = {0, 0};
+    for (const char *c = msg; *c; c++) {
+        if (*c == '"' || *c == '\\') {
+            out << "\\";
+        }
+        one[0] = *c;
+        out << one;
+    }
+    out << "\"";
+    return true;
+}
+}  // extern "C++"
+
 WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_state *s) {
     StringStreamPrinter<1024> sstr(user_context);
 
@@ -522,13 +549,20 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
          p = (halide_profiler_pipeline_stats *)(p->next)) {
         num_pipelines++;
     }
+    // Pipeline-level warnings, one JSON array string per pipeline.
     char **pipeline_warnings = nullptr;
+    // Per-Func warnings, grouped by canonical id: for each pipeline, an array
+    // (indexed by canonical id) of JSON array strings, nested into each Func's
+    // JSON entry below.
+    char ***pipeline_func_warnings = nullptr;
     // Per-pipeline subtree-cumulative func stats, computed once while printing
     // the report (which needs them anyway) and consumed by the JSON pass.
     halide_profiler_func_stats **pipeline_cumulative = nullptr;
     if (json_path && num_pipelines) {
         pipeline_warnings = (char **)malloc(num_pipelines * sizeof(char *));
         __builtin_memset(pipeline_warnings, 0, num_pipelines * sizeof(char *));
+        pipeline_func_warnings = (char ***)malloc(num_pipelines * sizeof(char **));
+        __builtin_memset(pipeline_func_warnings, 0, num_pipelines * sizeof(char **));
         pipeline_cumulative = (halide_profiler_func_stats **)malloc(
             num_pipelines * sizeof(halide_profiler_func_stats *));
         __builtin_memset(pipeline_cumulative, 0,
@@ -1705,58 +1739,68 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             support_colors = old;
         }
 
-        // Render this pipeline's warnings as a JSON array of message strings
-        // for the JSON pass below. Kept separate from the text formatting
-        // above, and bounded: if the messages don't fit, the rest are
-        // dropped rather than producing a truncated (invalid) array.
-        if (pipeline_warnings && (num_warnings || any_pipeline_warning)) {
+        // Render this pipeline's warnings as JSON array strings for the JSON
+        // pass below (kept separate from the text formatting above, and bounded
+        // so a too-long array is dropped rather than left truncated/invalid).
+        // Pipeline-level warnings go in a top-level array; per-Func warnings are
+        // grouped by canonical id and nested into each Func's entry.
+        if (pipeline_warnings && any_pipeline_warning) {
             StringStreamPrinter<16384> wjson(user_context);
             wjson << "[";
             bool first = true;
-            // Append sstr's current contents as a JSON string element, escaping
-            // as needed. Returns false (appending nothing) if it wouldn't fit,
-            // so the array is bounded and never left truncated mid-string.
-            auto append_json = [&]() -> bool {
-                const char *msg = sstr.str();
-                if (wjson.size() + 2 * strlen(msg) + 8 >= 16384) {
-                    return false;
-                }
-                wjson << (first ? "\"" : ", \"");
-                first = false;
-                char one[2] = {0, 0};
-                for (const char *c = msg; *c; c++) {
-                    if (*c == '"' || *c == '\\') {
-                        wjson << "\\";
-                    }
-                    one[0] = *c;
-                    wjson << one;
-                }
-                wjson << "\"";
-                return true;
-            };
-            // Pipeline-level warnings first (same order as the report above),
-            // then the per-Func ones.
             for (int k = 0; k < 3; k++) {
                 if (!pipeline_warning_fired(k)) {
                     continue;
                 }
                 sstr.clear();
                 append_pipeline_warning(k);
-                if (!append_json()) {
-                    break;
-                }
-            }
-            for (int w = 0; w < num_warnings; w++) {
-                sstr.clear();
-                int cid = warnings[w].canonical_id;
-                rule(&canon_fs[cid], &canon_cs[cid], (WarningKind)warnings[w].rule_id, /*emit=*/true);
-                if (!append_json()) {
+                if (!json_append_escaped(wjson, first, sstr.str())) {
                     break;
                 }
             }
             wjson << "]";
             pipeline_warnings[pipeline_pos] = (char *)malloc(wjson.size() + 1);
             memcpy(pipeline_warnings[pipeline_pos], wjson.str(), wjson.size() + 1);
+        }
+        // Per-Func warnings fire on the canonical Func (every instance sharing a
+        // name shows the same set), so group them by canonical id. A Func's JSON
+        // entry looks up its own canonical id.
+        if (pipeline_func_warnings && num_warnings) {
+            char **fw = (char **)malloc(p->num_funcs * sizeof(char *));
+            if (fw) {
+                __builtin_memset(fw, 0, p->num_funcs * sizeof(char *));
+                for (int c = 0; c < p->num_funcs; c++) {
+                    bool has = false;
+                    for (int w = 0; w < num_warnings; w++) {
+                        if (warnings[w].canonical_id == c) {
+                            has = true;
+                            break;
+                        }
+                    }
+                    if (!has) {
+                        continue;
+                    }
+                    StringStreamPrinter<16384> cjson(user_context);
+                    cjson << "[";
+                    bool cfirst = true;
+                    for (int w = 0; w < num_warnings; w++) {
+                        if (warnings[w].canonical_id != c) {
+                            continue;
+                        }
+                        sstr.clear();
+                        rule(&canon_fs[c], &canon_cs[c], (WarningKind)warnings[w].rule_id, /*emit=*/true);
+                        if (!json_append_escaped(cjson, cfirst, sstr.str())) {
+                            break;
+                        }
+                    }
+                    cjson << "]";
+                    fw[c] = (char *)malloc(cjson.size() + 1);
+                    if (fw[c]) {
+                        memcpy(fw[c], cjson.str(), cjson.size() + 1);
+                    }
+                }
+            }
+            pipeline_func_warnings[pipeline_pos] = fw;
         }
 
         sstr.clear();
@@ -1892,7 +1936,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                         uint64_t at_root = pp->funcs[fs->canonical_id].points_required_at_root;
                         float recompute = at_root ? (float)fs->points_computed / at_root : 0.0f;
                         field_float("          ", "recompute", recompute,
-                                    /*last=*/(cumulative == nullptr));
+                                    /*last=*/false);
                     }
                     if (cumulative) {
                         // The cumulative block is many fields; flush first so
@@ -1925,8 +1969,23 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                         field_u64("            ", "points_required_at_production", cum->points_required_at_production);
                         field_u64("            ", "points_required_inwards", cum->points_required_inwards);
                         field_u64("            ", "productions_if_inwards", cum->productions_if_inwards, /*last=*/true);
-                        json << "          }\n";
+                        json << "          },\n";
                     }
+                    // Nested per-Func warnings: this Func's canonical set (fires
+                    // per canonical Func; every instance shows the same set), or
+                    // [] if none. Written straight to the file (it can exceed
+                    // json's buffer).
+                    json << "          \"warnings\": ";
+                    flush();
+                    {
+                        char **fw = pipeline_func_warnings
+                                        ? pipeline_func_warnings[json_pipeline_pos]
+                                        : nullptr;
+                        const char *fws =
+                            (fw && fw[fs->canonical_id]) ? fw[fs->canonical_id] : "[]";
+                        fwrite(fws, strlen(fws), 1, f);
+                    }
+                    json << "\n";
                     json << "        }";
 
                     // Flush periodically so we don't overflow the buffer for
@@ -1962,6 +2021,20 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             free(pipeline_warnings[i]);
         }
         free(pipeline_warnings);
+    }
+    if (pipeline_func_warnings) {
+        int pi = 0;
+        for (halide_profiler_pipeline_stats *p = s->pipelines; p;
+             p = (halide_profiler_pipeline_stats *)(p->next)) {
+            char **fw = pipeline_func_warnings[pi++];
+            if (fw) {
+                for (int j = 0; j < p->num_funcs; j++) {
+                    free(fw[j]);
+                }
+                free(fw);
+            }
+        }
+        free(pipeline_func_warnings);
     }
     if (pipeline_cumulative) {
         for (int i = 0; i < num_pipelines; i++) {
