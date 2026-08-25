@@ -1,11 +1,10 @@
 #include "BoundConstantExtentLoops.h"
 #include "Bounds.h"
-#include "CSE.h"
+#include "BoundsTracker.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Simplify.h"
-#include "SimplifyCorrelatedDifferences.h"
-#include "Substitute.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {
@@ -15,29 +14,23 @@ class BoundLoops : public IRMutator {
 protected:
     using IRMutator::visit;
 
-    std::vector<std::pair<std::string, Expr>> lets;
+    BoundsTracker tracker;
 
     Stmt visit(const LetStmt *op) override {
-        if (is_pure(op->value)) {
-            lets.emplace_back(op->name, op->value);
-            Stmt s = IRMutator::visit(op);
-            lets.pop_back();
-            return s;
-        } else {
-            return IRMutator::visit(op);
-        }
+        auto binding = tracker.push_let(op->name, op->value);
+        return IRMutator::visit(op);
     }
 
-    std::vector<Expr> facts;
     Stmt visit(const IfThenElse *op) override {
-        facts.push_back(op->condition);
-        Stmt then_case = mutate(op->then_case);
-        Stmt else_case;
+        Stmt then_case, else_case;
+        {
+            auto fact = tracker.push_fact(op->condition);
+            then_case = mutate(op->then_case);
+        }
         if (op->else_case.defined()) {
-            facts.back() = simplify(!op->condition);
+            auto fact = tracker.push_fact(simplify(!op->condition));
             else_case = mutate(op->else_case);
         }
-        facts.pop_back();
         if (then_case.same_as(op->then_case) &&
             else_case.same_as(op->else_case)) {
             return op;
@@ -59,31 +52,34 @@ protected:
             Stmt body = op->body;
             const IntImm *e = extent.as<IntImm>();
 
-            if (e == nullptr) {
-                // We're about to hard fail. Get really aggressive
-                // with the simplifier.
-                extent = rewrap_used_lets(extent, lets);
-                extent = remove_likelies(extent);
-                extent = substitute_in_all_lets(extent);
-                extent = simplify(extent,
-                                  Scope<Interval>::empty_scope(),
-                                  Scope<ModulusRemainder>::empty_scope(),
-                                  facts);
-                e = extent.as<IntImm>();
-            }
-
             Expr extent_upper;
             if (e == nullptr) {
-                // Still no luck. Try taking an upper bound and
-                // injecting an if statement around the body.
-                extent_upper = find_constant_bound(extent, Direction::Upper, Scope<Interval>());
-                if (extent_upper.defined()) {
-                    e = extent_upper.as<IntImm>();
-                    body =
-                        IfThenElse::make(likely_if_innermost(Variable::make(Int(32), op->name) <=
-                                                             op->max),
-                                         body);
+                // We're about to hard fail. Get really aggressive with the
+                // simplifier: inline every enclosing let and simplify under
+                // every dominating condition.
+                debug(4) << "Trying to find a constant bound for loop " << op->name << "\n"
+                         << "Extent: " << extent << "\n";
+                Interval bounds = tracker.find_constant_bounds_aggressive(extent);
+                debug(4) << "Bounds found: [" << bounds.min << ", " << bounds.max << "]\n";
+                auto lo = bounds.has_lower_bound() ? as_const_int(bounds.min) : std::nullopt;
+                auto hi = bounds.has_upper_bound() ? as_const_int(bounds.max) : std::nullopt;
+                if (lo && hi && *lo == *hi) {
+                    // The bound is exact.
+                    e = bounds.max.as<IntImm>();
+                } else if (hi) {
+                    extent_upper = bounds.max;
                 }
+            }
+
+            if (e == nullptr && extent_upper.defined()) {
+                // Still no luck getting an exact extent. Take the upper
+                // bound instead and guard the body with an if statement.
+                debug(4) << "Found an upper bound instead: " << extent_upper << "\n";
+                e = extent_upper.as<IntImm>();
+                body =
+                    IfThenElse::make(likely_if_innermost(Variable::make(Int(32), op->name) <=
+                                                         op->max),
+                                     body);
             }
 
             if (e == nullptr && permit_failed_unroll && op->for_type == ForType::Unrolled) {

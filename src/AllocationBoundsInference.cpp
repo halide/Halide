@@ -1,5 +1,6 @@
 #include "AllocationBoundsInference.h"
 #include "Bounds.h"
+#include "BoundsTracker.h"
 #include "CSE.h"
 #include "ExternFuncArgument.h"
 #include "Function.h"
@@ -19,10 +20,6 @@ using std::vector;
 
 namespace {
 
-Expr cse_and_simplify(const Expr &x) {
-    return simplify(common_subexpression_elimination(x));
-}
-
 // Figure out the region touched of each buffer, and deposit them as
 // let statements outside of each realize node, or at the top level if
 // they're not internal allocations.
@@ -33,6 +30,25 @@ class AllocationInference : public IRMutator {
     const map<string, Function> &env;
     const FuncValueBounds &func_bounds;
     set<string> touched_by_extern;
+
+    // Tracks the enclosing pure lets and for loops, so that box_touched's
+    // result -- computed with no knowledge of anything outside op->body --
+    // can be simplified as thoroughly as if it had been.
+    BoundsTracker tracker;
+
+    Expr cse_and_simplify(const Expr &x) {
+        return simplify(common_subexpression_elimination(tracker.simplify_with_context(x)));
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        auto binding = tracker.push_let(op->name, op->value);
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const For *op) override {
+        auto binding = tracker.push_for(op->name, op->min, op->max);
+        return IRMutator::visit(op);
+    }
 
     Stmt visit(const Realize *op) override {
         map<string, Function>::const_iterator iter = env.find(op->name);
