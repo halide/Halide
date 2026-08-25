@@ -937,22 +937,23 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 }
             }
         }
-        // parallel_tasks doesn't sum meaningfully across a subtree. The report
-        // latches it downward instead — a Func realized inside a parent's
-        // parallel loop inherits the parent's task count. Compute that latched
-        // value separately; cum_stats keeps the plain subtree sum so the JSON
-        // output sums every counter uniformly.
-        uint64_t *latched_tasks =
-            (uint64_t *)__builtin_alloca(p->num_funcs * sizeof(uint64_t));
-        __builtin_memset(latched_tasks, 0, p->num_funcs * sizeof(uint64_t));
+        // parallel_tasks is the one field that doesn't sum across a subtree.
+        // The report latches it downward instead — a Func realized inside a
+        // parent's parallel loop inherits the parent's task count if it has
+        // none of its own — so do the same here, overwriting the summed value.
+        // Both the report and the JSON cumulative stats therefore see the
+        // latched value rather than a subtree sum (the JSON emitter notes this).
+        for (int i = 0; i < p->num_funcs; i++) {
+            cum_stats[i].parallel_tasks = 0;
+        }
         for (int i = 0; i < p->num_funcs; i++) {
             int j = tree_order[i];
             int parent = p->funcs[j].parent;
             if (parent >= 0) {
                 if (p->funcs[j].parallel_tasks == 0) {
-                    latched_tasks[j] = latched_tasks[parent];
+                    cum_stats[j].parallel_tasks = cum_stats[parent].parallel_tasks;
                 } else {
-                    latched_tasks[j] = p->funcs[j].parallel_tasks;
+                    cum_stats[j].parallel_tasks = p->funcs[j].parallel_tasks;
                 }
             }
         }
@@ -1058,7 +1059,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             dst_cs.time += cum_stats[i].time;
             dst_cs.active_threads_numerator += cum_stats[i].active_threads_numerator;
             dst_cs.active_threads_denominator += cum_stats[i].active_threads_denominator;
-            dst_cs.parallel_tasks += latched_tasks[i];
+            dst_cs.parallel_tasks += cum_stats[i].parallel_tasks;
         }
 
         // ---- Heuristic warnings -----------------------------------------
@@ -1939,8 +1940,14 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                                     /*last=*/false);
                     }
                     if (cumulative) {
-                        // The cumulative block is many fields; flush first so
-                        // it can't overflow json's fixed-size buffer.
+                        // Subtree rollup: this Func plus all its descendants.
+                        // Every field is a sum EXCEPT parallel_tasks, which
+                        // (like the report) is the latched task count — the
+                        // parallel-loop task count this Func runs under,
+                        // inherited from its parent if it has none of its own,
+                        // not a sum over the subtree.
+                        // The block is many fields; flush first so it can't
+                        // overflow json's fixed-size buffer.
                         flush();
                         const halide_profiler_func_stats *cum = &cumulative[i];
                         json << "          \"cumulative\": {\n";
