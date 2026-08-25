@@ -121,9 +121,12 @@ public:
                 .unroll(xii)
                 .unroll(yii)
                 .unroll(dii);
-            // Worth 0.4% on an RTX 5060 Ti. Occupancy here is capped by how
-            // many blocks a processor will hold rather than by registers, so
-            // this only changes how ptxas schedules and spills.
+            // ptxas picks 80 registers here, and asking for 64 is worth 0.5%
+            // on an RTX 5060 Ti. It changes neither the work nor the
+            // occupancy: the same loads, stores and FFMAs, nothing spilled
+            // either way, and a processor holds 24 blocks regardless. All
+            // that differs is the register allocation and the order ptxas
+            // puts the instructions in.
             output.gpu_max_registers(64);
 
             pointwise_convolved.compute_at(output, di)
