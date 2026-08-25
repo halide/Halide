@@ -2840,6 +2840,18 @@ bool CodeGen_ARM::codegen_across_vector_reduce(const VectorReduce *op, const Exp
         return false;
     }
 
+    // Before LLVM 22, CodeGen_LLVM::codegen_vector_reduce refuses to lower
+    // VectorReduce::Mul to the native "llvm.vector.reduce.mul" intrinsic on
+    // scalable (SVE) targets, and instead decomposes it into halving stages
+    // whose intermediate results are themselves non-native-width
+    // VectorReduce nodes. Padding those up to a native-width multiply
+    // reduce here would be pointless (the intrinsic still can't be used)
+    // and, since the padded result routes back through this same override,
+    // would never converge. Defer to the base class's decomposition instead.
+    if (op->op == VectorReduce::Mul && LLVM_VERSION < 220) {
+        return false;
+    }
+
     Expr val = op->value;
     const int output_lanes = op->type.lanes();
     const int native_lanes = natural_vector_size(op->type);
