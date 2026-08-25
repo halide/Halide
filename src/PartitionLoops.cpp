@@ -254,6 +254,10 @@ class FindSimplifications : public IRVisitor {
     using IRVisitor::visit;
 
     Scope<> depends_on_loop_var, depends_on_invalid_buffers;
+    // Variables whose value can differ between the threads or lanes of a
+    // block. The loops over those are outside the one being partitioned by
+    // now, so this starts with their names and grows through the lets.
+    Scope<> depends_on_gpu_thread;
     Scope<> vars_with_uncaptured_likely, vars_with_likely;
     Scope<> buffers;
 
@@ -271,6 +275,16 @@ class FindSimplifications : public IRVisitor {
             expr_uses_invalid_buffers(condition, buffers)) {
             // The condition refers to buffer allocated in the inner loop.
             // We should throw away the condition
+            return;
+        }
+
+        if (expr_uses_vars(condition, depends_on_gpu_thread)) {
+            // The condition can be true for one thread and false for another,
+            // so there is no range of the loop over which it is true and the
+            // simplification can be made. Partitioning on it would give each
+            // thread a different steady state: they would disagree about the
+            // value of the expression, and about which copy of a barrier they
+            // are waiting at.
             return;
         }
         condition = remove_likelies(condition);
@@ -441,6 +455,8 @@ class FindSimplifications : public IRVisitor {
         ScopedBinding<> bind_invalid(expr_uses_invalid_buffers(op->value, buffers) ||
                                          expr_uses_vars(op->value, depends_on_invalid_buffers),
                                      depends_on_invalid_buffers, op->name);
+        ScopedBinding<> bind_gpu_thread(expr_uses_vars(op->value, depends_on_gpu_thread),
+                                        depends_on_gpu_thread, op->name);
         ScopedBinding<> bind_uncaptured_likely(has_uncaptured_likely(op->value),
                                                vars_with_uncaptured_likely, op->name);
         ScopedBinding<> bind_likely(has_likely(op->value),
@@ -468,8 +484,9 @@ class FindSimplifications : public IRVisitor {
 public:
     vector<Simplification> simplifications;
 
-    FindSimplifications(const std::string &v) {
+    FindSimplifications(const std::string &v, const Scope<> &gpu_loop_vars) {
         depends_on_loop_var.push(v);
+        depends_on_gpu_thread.set_containing_scope(&gpu_loop_vars);
     }
 };
 
@@ -498,43 +515,15 @@ public:
     }
 };
 
-class ContainsWarpSynchronousLogic : public IRVisitor {
-public:
-    bool result = false;
-
-protected:
-    using IRVisitor::visit;
-    void visit(const Call *op) override {
-        if (op->is_intrinsic(Call::gpu_thread_barrier)) {
-            result = true;
-        } else {
-            IRVisitor::visit(op);
-        }
-    }
-
-    void visit(const For *op) override {
-        if (op->for_type == ForType::GPULane) {
-            result = true;
-        } else {
-            IRVisitor::visit(op);
-        }
-    }
-
-    void visit(const Load *op) override {
-    }
-};
-
-bool contains_warp_synchronous_logic(const Stmt &s) {
-    ContainsWarpSynchronousLogic c;
-    s.accept(&c);
-    return c.result;
-}
-
 class PartitionLoops : public IRMutator {
     using IRMutator::visit;
 
-    bool in_gpu_loop = false;
     bool in_tail = false;
+    // The loops over gpu threads and lanes we are inside of. By the time this
+    // pass runs they have been hoisted to the outside of the kernel, so every
+    // serial loop is within them, and anything derived from one of these can
+    // differ between the threads that have to agree on a barrier.
+    Scope<> gpu_loop_vars;
 
     Stmt visit(const For *op) override {
         // Do not partition if the schedule explicitly forbids, or if it's set
@@ -554,16 +543,12 @@ class PartitionLoops : public IRMutator {
         bool mutated = false;
         Stmt body = op->body;
 
-        ScopedValue<bool> old_in_gpu_loop(in_gpu_loop, in_gpu_loop || is_gpu(op->for_type));
-
-        // If we're inside GPU kernel, and the body contains thread
-        // barriers or warp shuffles, it's not safe to partition loops.
-        if (in_gpu_loop && contains_warp_synchronous_logic(op)) {
-            return {IRMutator::visit(op), mutated};
-        }
+        ScopedBinding<> bind_gpu_var(op->for_type == ForType::GPUThread ||
+                                         op->for_type == ForType::GPULane,
+                                     gpu_loop_vars, op->name);
 
         // Find simplifications in this loop body
-        FindSimplifications finder(op->name);
+        FindSimplifications finder(op->name, gpu_loop_vars);
         body.accept(&finder);
 
         if (finder.simplifications.empty()) {

@@ -278,6 +278,7 @@ tests(
     partial_application.cpp
     partial_realization.cpp
     partition_clamped_extent_guard.cpp
+    partition_gpu_loops.cpp
     partition_loops.cpp
     partition_loops_bug.cpp
     partition_max_filter.cpp
