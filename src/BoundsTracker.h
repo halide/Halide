@@ -58,6 +58,13 @@ public:
      * far. */
     Binding push_for(const std::string &name, const Expr &min, const Expr &max);
 
+    /** Push an already-computed Interval directly, bypassing derivation.
+     * Useful when a caller has proven a tighter bound for a variable already
+     * in scope (e.g. because a dominating conditional narrows it) and wants
+     * to temporarily refine it. Does not participate in
+     * find_constant_bound_aggressive()'s let-substitution. */
+    Binding push_interval(const std::string &name, const Interval &interval);
+
     /** Push a let binding. Always updates the fast-path scope with a
      * constant-bounds estimate of the value. Additionally records the
      * syntactic binding for find_constant_bound_aggressive()'s slow path,
@@ -113,6 +120,19 @@ public:
      * result ends up referencing variables bound by lets enclosing the
      * point the helper was called from. */
     Expr simplify_with_context(const Expr &e) const;
+
+    /** The current fast-path scope of constant bounds, for passes that need
+     * to feed it directly into simplify() or a similar helper that accepts a
+     * Scope<Interval> of assumptions, rather than going through
+     * find_constant_bound(). Note that Simplify's own internal bounds
+     * representation is constant-only anyway (it converts via as_const_int
+     * at ingestion), so this scope -- itself always constant-or-unbounded --
+     * loses nothing for that use case. It is not, however, suitable for
+     * general symbolic interval arithmetic (e.g. bounds_of_expr_in_scope)
+     * where a non-constant symbolic bound would otherwise be useful. */
+    const Scope<Interval> &interval_scope() const {
+        return scope;
+    }
 
 private:
     Scope<Interval> scope;
