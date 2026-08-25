@@ -295,9 +295,9 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
                  << "x" << block_size.extent[2] << "\n";
     }
 
-    // A schedule can ask for fewer registers per thread than ptxas would
-    // choose. That lets more blocks be resident at once, and stops it covering
-    // the latency of a load by issuing it far ahead of its use.
+    // A schedule can ask ptxas for a different number of registers per thread
+    // than it would choose for itself, trading how many blocks fit on a
+    // processor against how much it must spill.
     if (kernel_max_registers > 0) {
         function->addFnAttr("nvvm.maxnreg", std::to_string(kernel_max_registers));
         debug(2) << "Kernel " << name << " is capped at "
