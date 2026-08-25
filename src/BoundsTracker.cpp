@@ -34,6 +34,10 @@ BoundsTracker::Binding BoundsTracker::push_for(const std::string &name, const Ex
     return Binding(this, ScopedBinding<Interval>(scope, name, b), false);
 }
 
+BoundsTracker::Binding BoundsTracker::push_interval(const std::string &name, const Interval &interval) {
+    return Binding(this, ScopedBinding<Interval>(scope, name, interval), false);
+}
+
 BoundsTracker::Binding BoundsTracker::push_let(const std::string &name, const Expr &value) {
     bool pure = is_pure(value);
     if (pure) {
