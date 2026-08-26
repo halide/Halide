@@ -21,7 +21,24 @@
 //
 // The chunks of one sequence have to be walked in order, so all of the
 // parallelism is across sequences: one block per (batch * head), walking the
-// whole sequence, holding H in tensor core registers between chunks.
+// whole sequence, holding H between chunks.
+//
+// Two things here are scans, and both are written as inductive Funcs: the
+// decay accumulated across a chunk, and the state carried between chunks.
+// Ground either one out into a reduction and it costs what it is scanning over
+// per element rather than one step - see the inductive generator param.
+//
+// TODO before this app is fit to land:
+//  - The chunk scan has to sit above the loops over threads, because the state
+//    below reads it there, so every thread runs its own copy of it into one
+//    shared buffer. It belongs in Register memory, one copy per thread, and is
+//    rejected there: check_gpu_cross_talk cannot see that a scan reading its
+//    own previous element is reading something this thread wrote.
+//  - The scores are held at half precision sooner than the arithmetic wants,
+//    because a block is capped at 48KB of shared memory: the CUDA runtime
+//    never asks for the larger carveout with cuFuncSetAttribute, so the ~100KB
+//    the hardware has is out of reach.
+//  - None of this is on the tensor cores yet.
 
 #include "Halide.h"
 
@@ -37,6 +54,10 @@ public:
     GeneratorParam<int> channels{"channels", 64};  // D, channels in a head
     GeneratorParam<int> chunk{"chunk", 64};      // how long a chunk is
     GeneratorParam<int> heads{"heads", 128};     // batch * heads
+    // Whether the two scans are written as inductive Funcs or ground out into
+    // reductions. Off, each one costs what it is scanning over per element
+    // instead of one step, which is what this app is here to show.
+    GeneratorParam<bool> inductive{"inductive", true};
 
     // Channels by sequence by head.
     Input<Buffer<float, 3>> X{"X"};
@@ -62,12 +83,19 @@ public:
 
         // How much decay has accumulated from the start of a chunk to each
         // position in it, in the log domain, where the ratio every use wants
-        // is a difference and a long chunk cannot underflow. Written as a
-        // reduction, which costs a chunk's length per position; see the
-        // inductive version for what that ought to be.
+        // is a difference and a long chunk cannot underflow.
+        //
+        // This is a scan, and writing it as one is the point: as an ordinary
+        // reduction each position would re-add every earlier step, costing a
+        // chunk's length per position instead of one step.
+        Func cumdelta = Func(Float(32), "cumdelta");
         RDom rm(0, T, "rm");
-        Func cumdelta("cumdelta");
-        cumdelta(k, t, b) += select(rm <= k, Delta(t * T + rm, b), 0.f);
+        if (inductive) {
+            cumdelta(k, t, b) = Delta(t * T + k, b) +
+                                select(k <= 0, 0.f, likely(cumdelta(k - 1, t, b)));
+        } else {
+            cumdelta(k, t, b) += select(rm <= k, Delta(t * T + rm, b), 0.f);
+        }
 
         // The decay from just after position j to position i.
         auto decay = [&](Expr from, Expr to, Expr tt, Expr bb) {
@@ -178,12 +206,20 @@ private:
         // The scan within a chunk is short, and every thread running its own
         // copy is cheaper than the barriers sharing one would need. a_f and Xb
         // are cheap enough to fold into their uses.
-        // One value per position in the chunk, each an independent reduction,
-        // so the threads can share one copy.
-        cumdelta.compute_at(out, t)
-            .store_in(MemoryType::GPUShared)
-            .gpu_threads(k);
-        cumdelta.update().gpu_threads(k);
+        // HACK: the scan has to live above the loops over threads, because
+        // the state below reads it there. That leaves every thread running its
+        // own copy of it into one shared buffer. Each thread writes a site
+        // before it reads it and they all write the same value, so the answer
+        // is right, but it is a race a reader has to reason about, and the
+        // threads repeat work they could share. Putting it in Register memory
+        // instead is what one would want, and is rejected: the cross-talk
+        // check cannot see that a scan reading its own previous element is
+        // reading something this thread wrote.
+        cumdelta.compute_at(out, t).store_in(MemoryType::GPUShared);
+        if (!inductive) {
+            cumdelta.gpu_threads(k);
+            cumdelta.update().gpu_threads(k);
+        }
     }
 
     RVar rp_var, rj_var;

@@ -20,12 +20,18 @@ CUDA_SDK ?= /usr/local/cuda
 CXXFLAGS += -I $(CUDA_SDK)/include
 LDFLAGS += -L $(CUDA_SDK)/lib64 -Wl,-rpath,$(CUDA_SDK)/lib64
 
-SHAPE = seq=$(SEQ) state=$(STATE) channels=$(CHANNELS) chunk=$(CHUNK) heads=$(HEADS)
+INDUCTIVE ?= true
+SHAPE = seq=$(SEQ) state=$(STATE) channels=$(CHANNELS) chunk=$(CHUNK) heads=$(HEADS) inductive=$(INDUCTIVE)
 CXXFLAGS += -DSEQ=$(SEQ) -DSTATE=$(STATE) -DCHANNELS=$(CHANNELS) -DCHUNK=$(CHUNK) -DHEADS=$(HEADS)
 
 all: $(BIN)/$(HL_TARGET)/runner
 
-$(GENERATOR_BIN)/mamba2.generator: mamba2_generator.cpp $(GENERATOR_DEPS)
+# GenGen does not catch, and Halide's errors are not std::exceptions, so
+# without the terminate handler a generator error arrives with its message
+# unprinted.
+TERMINATE_HANDLER = ../../test/common/terminate_handler.cpp
+
+$(GENERATOR_BIN)/mamba2.generator: mamba2_generator.cpp $(TERMINATE_HANDLER) $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
