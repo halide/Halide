@@ -41,9 +41,11 @@
 //  - The tensor core schedule (wmma=true) is not finished. Three of the four
 //    multiplies are recognised; the state's own contribution is not, because
 //    the prover that checks a fragment's accesses do not partially overlap
-//    cannot see past the select the inductive walk leaves in its index:
-//      chunk_state.s0.t - select(0 < out.s0.t, max(out.s0.t, 2), 1)
-//    This is the same prover that rejects the slid producer in PR 9376.
+//    cannot evaluate the chunk it is indexed by:
+//      chunk_state.s0.t - out.s0.t.$n
+//    It is held two chunks wide because it feeds the state, which slides, and
+//    the prover cannot see that the difference above is zero. This is the same
+//    prover that rejects the slid producer in PR 9376.
 //  - The narrowed state has to go out to shared memory and back every chunk,
 //    because an accumulator fragment and a multiply's second operand are held
 //    in different register layouts. Attention never pays this: it reads its
@@ -163,7 +165,7 @@ public:
         // It is its own Func so that the multiply below reads it plainly: an
         // operand that is a cast of a load is not a matrix multiply operand.
         Func H16("H16");
-        H16(p, d, t, b) = cast<float16_t>(H(p, d, max(t - 1, 0), b));
+        H16(p, d, t, b) = cast<float16_t>(H(p, d, t - 1, b));
 
         Func y_inter("y_inter");
         y_inter(d, idx, t, b) = 0.f;
