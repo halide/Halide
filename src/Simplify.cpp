@@ -430,6 +430,11 @@ Stmt Simplify::ScopedFact::substitute_facts(const Stmt &s) {
     return substitute_facts_impl(s, truths, falsehoods);
 }
 
+Expr Simplify::simplify_can_prove_condition(const Expr &e) {
+    ScopedValue<bool> guard(in_can_prove, true);
+    return mutate(substitute_facts(e), nullptr);
+}
+
 Expr Simplify::substitute_facts(const Expr &e) {
     if (truths.empty() && falsehoods.empty()) {
         return e;

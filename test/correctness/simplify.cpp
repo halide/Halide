@@ -2468,6 +2468,15 @@ void check_facts() {
     check_with_assumptions(max(x * 8, y) / 8, x, {x > y / 8});
     check_with_assumptions(min(x * 8, y) / 8, x, {x < y / 8});
 
+    // Deeply nested mins and maxes must not make the work of proving the
+    // predicates of the rules above blow up.
+    Expr nest = x;
+    for (int i = 0; i < 24; i++) {
+        nest = min(max(nest + i, y - i), z * i);
+    }
+    // The result isn't interesting; what matters is that we get one at all.
+    (void)simplify(nest, Scope<Interval>(), Scope<ModulusRemainder>(), {x < y});
+
     // Without the fact, the division stays put.
     check(max(x * 8, y) / 8, max(x * 8, y) / 8);
 

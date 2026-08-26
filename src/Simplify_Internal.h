@@ -441,17 +441,28 @@ public:
 
     std::set<Expr, IRDeepCompare> truths, falsehoods;
 
-    // Is there anything in the truths/falsehoods sets? Used to gate rewrite
-    // rules whose predicates are only ever provable from facts learned higher
-    // up in the IR, so that we don't pay for them in the common case.
+    // Are we already inside the simplification of the condition of a can_prove
+    // predicate? Fact-driven rules are disabled in there, because simplifying
+    // such a condition visits the operands again, and a rule that fires on
+    // every node of its type would recurse without bound on nested min/max.
+    bool in_can_prove = false;
+
+    // Is there anything in the truths/falsehoods sets that a rewrite rule could
+    // use? Used to gate rules whose predicates are only ever provable from facts
+    // learned higher up in the IR, so that we don't pay for them in the common
+    // case.
     bool has_facts() const {
-        return !truths.empty() || !falsehoods.empty();
+        return !in_can_prove && (!truths.empty() || !falsehoods.empty());
     }
 
     // Replace exprs known to be truths or falsehoods with const_true or
     // const_false. Used to inject everything currently known into the
     // conditions of can_prove predicates in rewrite rules.
     Expr substitute_facts(const Expr &e);
+
+    // Simplify the condition of a can_prove predicate in a rewrite rule, using
+    // everything currently known.
+    Expr simplify_can_prove_condition(const Expr &e);
 
     struct ScopedFact {
         Simplify *simplify;

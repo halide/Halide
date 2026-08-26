@@ -2554,10 +2554,7 @@ struct CanProve {
     // Includes a raw call to an inlined make method, so don't inline.
     [[nodiscard]] HALIDE_NEVER_INLINE bool make_folded_const(halide_scalar_value_t &val, Type &ty, MatcherState &state) const {
         Expr condition = a.make(state, {});
-        // Inject anything the prover currently knows to be true or false into
-        // the condition before trying to simplify it.
-        condition = prover->substitute_facts(condition);
-        condition = prover->mutate(condition, nullptr);
+        condition = prover->simplify_can_prove_condition(condition);
         val.u.u64 = is_const_one(condition);
         ty = Bool(condition.type().lanes());
         return false;
