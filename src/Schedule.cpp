@@ -240,6 +240,7 @@ struct FuncScheduleContents {
     std::vector<Bound> estimates;
     std::map<std::string, Internal::FunctionPtr> wrappers;
     MemoryType memory_type = MemoryType::Auto;
+    int gpu_max_registers = 0;
     bool memoized = false;
     bool async = false;
     // This is an extent of the ring buffer and expected to be a positive integer.
@@ -381,6 +382,7 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->bounds = contents->bounds;
     copy.contents->estimates = contents->estimates;
     copy.contents->memory_type = contents->memory_type;
+    copy.contents->gpu_max_registers = contents->gpu_max_registers;
     copy.contents->memoized = contents->memoized;
     copy.contents->memoize_eviction_key = contents->memoize_eviction_key;
     copy.contents->async = contents->async;
@@ -406,6 +408,14 @@ MemoryType FuncSchedule::memory_type() const {
 
 MemoryType &FuncSchedule::memory_type() {
     return contents->memory_type;
+}
+
+int FuncSchedule::gpu_max_registers() const {
+    return contents->gpu_max_registers;
+}
+
+int &FuncSchedule::gpu_max_registers() {
+    return contents->gpu_max_registers;
 }
 
 bool &FuncSchedule::memoized() {

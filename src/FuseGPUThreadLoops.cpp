@@ -426,6 +426,24 @@ protected:
 public:
     vector<SharedAllocation> allocations;
 
+    /** Which allocations end up sharing one piece of memory. Two Funcs in the
+     * same group are the same bytes at different times, so a hazard between
+     * them is a hazard on that memory even though the names differ, and
+     * whoever places thread barriers has to see them as one thing. The groups
+     * are decided by liveness measured here, before any barriers are placed,
+     * so asking now gives the same answer as rewrapping later will. */
+    std::map<std::string, int> storage_groups() {
+        vector<SharedAllocation> copy = allocations;
+        vector<AllocGroup> groups = allocate_funcs(copy);
+        std::map<std::string, int> result;
+        for (int i = 0; i < (int)groups.size(); i++) {
+            for (const SharedAllocation &a : groups[i].group) {
+                result[a.name] = i;
+            }
+        }
+        return result;
+    }
+
 protected:
     map<string, SharedAllocation *> shared;
 
@@ -1438,10 +1456,15 @@ protected:
     const ExtractSharedAndHeapAllocations &block_allocs;
     const ExtractRegisterAllocations &register_allocs;
 
-    std::set<std::string> shared_stores;
-    std::set<std::string> device_stores;
-    std::set<std::string> shared_loads;
-    std::set<std::string> device_loads;
+    // Names that share memory answer to the same key, so a hazard between two
+    // Funcs the allocator coalesced is not missed.
+    std::map<std::string, int> storage_group;
+
+    std::string storage_key(const std::string &name) {
+        auto it = storage_group.find(name);
+        return it == storage_group.end() ? name : "group " + std::to_string(it->second);
+    }
+
 
     MemoryType memory_type_for_name(const std::string &name) {
         for (const auto &x : register_allocs.allocations) {
@@ -1489,99 +1512,127 @@ protected:
         }
     }
 
-    Stmt visit(const Store *op) override {
-        debug(4) << "Encountered store to " << op->name << "\n";
-        auto mem_type = memory_type_for_name(op->name);
-        switch (mem_type) {
+    // What a statement touches in the memory the threads of a block share.
+    struct Footprint {
+        std::set<std::string> shared_stores, shared_loads;
+        std::set<std::string> device_stores, device_loads;
+
+        static bool intersects(const std::set<std::string> &a,
+                               const std::set<std::string> &b) {
+            for (const auto &x : a) {
+                if (b.count(x)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Which memory spaces this statement and everything before it since
+        // the last barrier disagree about: it reads what was written, writes
+        // what was read, or writes what was written. Any of those needs the
+        // threads brought back together first.
+        int conflict(const Footprint &earlier) const {
+            int mask = 0;
+            if (intersects(shared_loads, earlier.shared_stores) ||
+                intersects(shared_stores, earlier.shared_loads) ||
+                intersects(shared_stores, earlier.shared_stores)) {
+                mask |= CodeGen_GPU_Dev::MemoryFenceType::Shared;
+            }
+            if (intersects(device_loads, earlier.device_stores) ||
+                intersects(device_stores, earlier.device_loads) ||
+                intersects(device_stores, earlier.device_stores)) {
+                mask |= CodeGen_GPU_Dev::MemoryFenceType::Device;
+            }
+            return mask;
+        }
+
+        void add(const Footprint &other) {
+            shared_stores.insert(other.shared_stores.begin(), other.shared_stores.end());
+            shared_loads.insert(other.shared_loads.begin(), other.shared_loads.end());
+            device_stores.insert(other.device_stores.begin(), other.device_stores.end());
+            device_loads.insert(other.device_loads.begin(), other.device_loads.end());
+        }
+    };
+
+    void record(Footprint &f, const std::string &raw_name, bool is_store) {
+        const std::string name = storage_key(raw_name);
+        switch (memory_type_for_name(raw_name)) {
         case MemoryType::GPUSharedAsync:
         case MemoryType::GPUShared:
-            debug(4) << "   memory type is shared\n";
-            shared_stores.insert(op->name);
+            (is_store ? f.shared_stores : f.shared_loads).insert(name);
             break;
         case MemoryType::Auto:
         case MemoryType::Heap:
         case MemoryType::GPUTexture:
-            debug(4) << "   memory type is heap or auto\n";
-            device_stores.insert(op->name);
+            (is_store ? f.device_stores : f.device_loads).insert(name);
             break;
-        case MemoryType::Stack:
-        case MemoryType::Register:
-        case MemoryType::LockedCache:
-        case MemoryType::VTCM:
-        case MemoryType::Tile:
+        default:
             break;
         }
-
-        return IRMutator::visit(op);
     }
 
-    Expr visit(const Load *op) override {
-        debug(4) << "Encountered load from " << op->name << "\n";
-        auto mem_type = memory_type_for_name(op->name);
-        switch (mem_type) {
-        case MemoryType::GPUSharedAsync:
-        case MemoryType::GPUShared:
-            debug(4) << "   memory type is shared\n";
-            shared_loads.insert(op->name);
-            break;
-        case MemoryType::Auto:
-        case MemoryType::Heap:
-        case MemoryType::GPUTexture:
-            debug(4) << "   memory type is heap or auto\n";
-            device_loads.insert(op->name);
-            break;
-        case MemoryType::Stack:
-        case MemoryType::Register:
-        case MemoryType::LockedCache:
-        case MemoryType::VTCM:
-        case MemoryType::Tile:
-            break;
-        }
+    Footprint footprint_of(const Stmt &s) {
+        Footprint f;
+        visit_with(
+            s,
+            [&](auto *self, const Store *op) {
+                record(f, op->name, true);
+                self->visit_base(op);
+            },
+            [&](auto *self, const Load *op) {
+                record(f, op->name, false);
+                self->visit_base(op);
+            });
+        return f;
+    }
 
-        return IRMutator::visit(op);
+    // A Block is a binary node, so a run of statements is a chain of them, and
+    // Block::make reassociates so the chain leans right. Taking them a pair at
+    // a time puts a barrier at every join, whether or not the two halves
+    // disagree about any memory. Walk the whole chain and put barriers only
+    // where a statement meets something an earlier one left.
+    static void flatten(const Stmt &s, std::vector<Stmt> &into) {
+        Stmt rest = s;
+        while (const Block *b = rest.as<Block>()) {
+            if (!b->rest.defined()) {
+                break;
+            }
+            into.push_back(b->first);
+            rest = b->rest;
+        }
+        into.push_back(rest);
     }
 
     Stmt visit(const Block *op) override {
-        if (!in_threads && op->rest.defined()) {
-            // First, we record which loads from shared/device memory occur
-            // in the rest block
-            Stmt rest = mutate(op->rest);
-
-            // Now, record which stores occur in the first stmt
-            // of this block
-            shared_stores.clear();
-            device_stores.clear();
-            Stmt first = mutate(op->first);
-
-            // If there are any loads in the rest part that
-            // load from something stored in first, insert the appropriate
-            // fence type
-            int mask = 0;
-            for (const auto &st : shared_stores) {
-                auto elem = shared_loads.find(st);
-                if (elem != shared_loads.end()) {
-                    mask |= CodeGen_GPU_Dev::MemoryFenceType::Shared;
-                    break;
-                }
-            }
-            for (const auto &st : device_stores) {
-                auto elem = device_loads.find(st);
-                if (elem != device_loads.end()) {
-                    mask |= CodeGen_GPU_Dev::MemoryFenceType::Device;
-                    break;
-                }
-            }
-            injected_barrier = true;
-            return Block::make({first, make_barrier(mask), rest});
-        } else {
+        if (in_threads || !op->rest.defined()) {
             return IRMutator::visit(op);
         }
+
+        std::vector<Stmt> stmts;
+        flatten(op, stmts);
+
+        std::vector<Stmt> result;
+        Footprint pending;
+        for (const Stmt &s : stmts) {
+            Stmt mutated = mutate(s);
+            Footprint here = footprint_of(mutated);
+            int mask = here.conflict(pending);
+            if (mask) {
+                result.push_back(make_barrier(mask));
+                injected_barrier = true;
+                pending = Footprint();
+            }
+            pending.add(here);
+            result.push_back(mutated);
+        }
+        return Block::make(result);
     }
 
 public:
     InjectThreadBarriers(ExtractSharedAndHeapAllocations &sha, ExtractRegisterAllocations &ra)
         : block_allocs(sha),
-          register_allocs(ra) {
+          register_allocs(ra),
+          storage_group(sha.storage_groups()) {
     }
 };
 

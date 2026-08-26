@@ -666,7 +666,7 @@ class ExtractWMMAOperations : public IRMutator {
         // needs the surrounding lets substituted back in for the same reason
         // the stored value does.
         int idx = get_subtile(index_for_analysis(index),
-                              "tensor core fragment", &f->subtiles);
+                              "tensor core fragment " + f->name, &f->subtiles);
         internal_assert(idx >= 0);  // errors handled already
         return f->fragment_name + std::to_string(idx);
     }

@@ -7,7 +7,11 @@
  * appropriate host runtime module.
  */
 
+#include <map>
+#include <string>
+
 #include "Expr.h"
+#include "Function.h"
 
 namespace Halide {
 
@@ -17,7 +21,8 @@ namespace Internal {
 
 /** Pull loops marked with GPU device APIs to a separate
  * module, and call them through the appropriate host runtime module. */
-Stmt inject_gpu_offload(const Stmt &s, const Target &host_target, bool any_strict_float);
+Stmt inject_gpu_offload(const Stmt &s, const Target &host_target, bool any_strict_float,
+                        const std::map<std::string, Function> &env);
 
 }  // namespace Internal
 }  // namespace Halide

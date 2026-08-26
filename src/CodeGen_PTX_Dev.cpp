@@ -42,9 +42,9 @@ using namespace llvm;
 namespace {
 
 using Halide::Runtime::Internal::Constants::wmma_accumulator_registers;
+using Halide::Runtime::Internal::Constants::wmma_build_compare_digits;
 using Halide::Runtime::Internal::Constants::wmma_build_element_marker;
 using Halide::Runtime::Internal::Constants::wmma_build_index_bits;
-using Halide::Runtime::Internal::Constants::wmma_build_compare_digits;
 using Halide::Runtime::Internal::Constants::wmma_build_mask_digits;
 using Halide::Runtime::Internal::Constants::wmma_field_placeholder;
 using Halide::Runtime::Internal::Constants::wmma_get_element_marker;
@@ -69,6 +69,8 @@ public:
                     const std::string &name,
                     const std::vector<DeviceArgument> &args) override;
 
+    void set_kernel_max_registers(int n) override;
+
     static void test();
 
     std::vector<char> compile_to_src() override;
@@ -84,6 +86,9 @@ public:
 
 protected:
     using CodeGen_LLVM::visit;
+
+    /** What the schedule asked for, if anything. Zero leaves it to ptxas. */
+    int kernel_max_registers = 0;
 
     /** (Re)initialize the PTX module. This is separate from compile, since
      * a PTX device module will often have many kernels compiled into it for
@@ -273,6 +278,10 @@ public:
     bool known = true;
 };
 
+void CodeGen_PTX_Dev::set_kernel_max_registers(int n) {
+    kernel_max_registers = n;
+}
+
 void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
                                  const std::string &name,
                                  const std::vector<DeviceArgument> &args) {
@@ -363,6 +372,15 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
         debug(2) << "Kernel " << name << " has block size "
                  << block_size.extent[0] << "x" << block_size.extent[1]
                  << "x" << block_size.extent[2] << "\n";
+    }
+
+    // A schedule can ask for fewer registers per thread than ptxas would
+    // choose. That lets more blocks be resident at once, and stops it covering
+    // the latency of a load by issuing it far ahead of its use.
+    if (kernel_max_registers > 0) {
+        function->addFnAttr("nvvm.maxnreg", std::to_string(kernel_max_registers));
+        debug(2) << "Kernel " << name << " is capped at "
+                 << kernel_max_registers << " registers per thread\n";
     }
 
     // Now verify the function is ok
@@ -471,6 +489,14 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
                     !op->is_intrinsic(Call::wmma_lane_owns))
         << "A tensor core accumulator store was broken apart during lowering. "
         << op->name << " only has meaning as part of one.\n";
+
+    if (op->call_type == Call::PureExtern && op->name == "exp_f32") {
+        // The device runtime has one instruction for this, so use it rather
+        // than the polynomial CodeGen_LLVM would expand it into. It takes one
+        // value at a time.
+        value = call_intrin(op->type, 1, op->name, op->args);
+        return;
+    }
 
     // TODO: It would be better if CodeGen_LLVM could handle overloaded intrin calls by default.
     value = call_overloaded_intrin(op->type, op->name, op->args);
@@ -1327,7 +1353,17 @@ void CodeGen_PTX_Dev::await_copies(int group) {
         if (committed_groups[i - 1] != group) {
             continue;
         }
-        emit_copy_wait((int)(committed_groups.size() - i));
+        {
+            // TEMPORARY, for measurement only: let this many extra groups stay
+            // outstanding, so the wait does not actually wait for the copy just
+            // issued. Produces wrong answers, but the instruction schedule is
+            // the one a double-buffered kernel would have.
+            static const int slack = []() {
+                const char *v = getenv("HL_ASYNC_SLACK");
+                return v ? atoi(v) : 0;
+            }();
+            emit_copy_wait((int)(committed_groups.size() - i) + slack);
+        }
         committed_groups.erase(committed_groups.begin(),
                                committed_groups.begin() + i);
         return;

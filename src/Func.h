@@ -2862,6 +2862,20 @@ public:
      * on MemoryType for more detail. */
     Func &store_in(MemoryType memory_type);
 
+    /** Cap the registers a thread may use in the kernel this Func's loop over
+     * gpu blocks becomes. Fewer registers per thread lets more blocks be
+     * resident on one of the GPU's processors, and stops the backend compiler
+     * covering the latency of a load by issuing it far ahead of its use and
+     * holding the result in a register until then. It costs whatever that
+     * scheduling freedom was buying, so it is worth measuring rather than
+     * guessing: the fastest setting is not always the smallest, and a cap that
+     * doesn't change how many blocks fit is all cost and no benefit.
+     *
+     * Only has an effect when compiling for CUDA, and only when the PTX
+     * version in use has the .maxnreg directive. Other GPU APIs offer no
+     * equivalent, and ignore this. */
+    Func &gpu_max_registers(int n);
+
     /** Use non-temporal (streaming) loads for every direct read this Func's
      * pure (initial) definition makes of another Func. Equivalent to calling
      * stream_loads() on Stage 0; see \ref Stage::stream_loads. To stream the
