@@ -88,8 +88,8 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
               // Facts learned higher up in the IR may tell us which side of a max
               // or min survives the division.
               (has_facts() &&
-               (rewrite(max(x * c0, y) / c0, x, c0 > 0 && can_prove(y / c0 <= x, this)) ||
-                rewrite(max(y, x * c0) / c0, x, c0 > 0 && can_prove(y / c0 <= x, this)) ||
+               (rewrite(max(x * c0, y) / c0, x, c0 > 0 && can_prove(x >= y / c0, this)) ||
+                rewrite(max(y, x * c0) / c0, x, c0 > 0 && can_prove(x >= y / c0, this)) ||
                 rewrite(min(x * c0, y) / c0, x, c0 > 0 && can_prove(x <= y / c0, this)) ||
                 rewrite(min(y, x * c0) / c0, x, c0 > 0 && can_prove(x <= y / c0, this)))) ||
           // Fold repeated division
