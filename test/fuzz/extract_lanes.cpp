@@ -195,6 +195,128 @@ bool might_overflow_signed_int(const Expr &e, const std::vector<Param<int>> &var
     return *lo < type_lo || *hi > type_hi;
 }
 
+// Deterministically exercise ExtractLanes::visit(const VectorReduce *)
+// (Deinterleave.cpp) on both its branches: lane_stride == 1 (recursively
+// re-extracts the reduction's input at a scaled width) and lane_stride != 1
+// (falls back to shuffling the input by the requested factor-scaled
+// indices). The general random walk in test_one() only reaches a
+// VectorReduce node by chance, so isn't guaranteed to hit both branches
+// within a bounded fuzzing budget; this forces a VectorReduce to the root
+// of a small evaluable expression every iteration, with randomized leaf
+// values/types for diversity.
+bool test_vector_reduce_extraction(FuzzingContext &fuzz) {
+    RandomExpressionGenerator reg{fuzz};
+    reg.fuzz_types = {UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32)};
+
+    Type scalar_t = reg.random_scalar_type();
+    int factor = fuzz.ConsumeIntegralInRange(2, 4);
+    int out_lanes = 2 * fuzz.ConsumeIntegralInRange(2, 4);  // even, so a stride-2 slice divides evenly
+    Type in_t = scalar_t.with_lanes(out_lanes * factor);
+
+    Expr val = reg.random_expr(in_t, 2);
+    if (might_overflow_signed_int(val, reg.fuzz_vars)) {
+        return true;
+    }
+    VectorReduce::Operator op = fuzz.PickValueInArray({VectorReduce::Add, VectorReduce::Min, VectorReduce::Max});
+    Expr full = VectorReduce::make(op, val, out_lanes);
+
+    for (auto &v : reg.fuzz_vars) {
+        v.set(fuzz.ConsumeIntegralInRange(0, 0x0f));
+    }
+
+    Buffer<int64_t> full_vals(out_lanes, 1);
+    if (!evaluate_vector_exprs({full}, reg.fuzz_vars, full_vals)) {
+        return true;
+    }
+
+    auto check = [&](const Expr &sliced, int start, int stride, int n) -> bool {
+        Buffer<int64_t> sliced_vals(n, 1);
+        if (!evaluate_vector_exprs({sliced}, reg.fuzz_vars, sliced_vals)) {
+            return true;
+        }
+        for (int x = 0; x < n; x++) {
+            int orig_lane = start + x * stride;
+            if (sliced_vals(x, 0) != full_vals(orig_lane, 0)) {
+                std::cerr << "MISMATCH in VectorReduce extraction (start=" << start
+                          << ", stride=" << stride << ", new_lanes=" << n << "): lane " << x << "\n"
+                          << "Full expr: " << full << "\n"
+                          << "Sliced expr: " << sliced << "\n";
+                return false;
+            }
+        }
+        return true;
+    };
+
+    // lane_stride == 1: drop the last two lanes (keep new_lanes even, since
+    // odd vector widths are more likely to fail to realize() for unrelated
+    // reasons and get silently skipped by evaluate_vector_exprs).
+    if (!check(extract_lanes(full, 0, 1, out_lanes - 2), 0, 1, out_lanes - 2)) {
+        return false;
+    }
+    // lane_stride != 1: every other lane.
+    if (!check(extract_lanes(full, 0, 2, out_lanes / 2), 0, 2, out_lanes / 2)) {
+        return false;
+    }
+
+    return true;
+}
+
+// Deterministically exercise ExtractLanes::visit(const Reinterpret *)'s
+// Case B (Deinterleave.cpp): lane_stride != 1, which gathers a fresh set of
+// input lanes per output lane and (for a bit-width demotion) needs
+// Shuffle::make_extract_element to trim a single gathered input element
+// that's still too wide once reinterpreted. Case A (stride == 1) is
+// exercised broadly elsewhere (e.g. the general random walk below, and
+// test/correctness/vector_legalization.cpp's reinterpret_cast case); this
+// specifically forces a bit-width-changing Reinterpret and a strided slice
+// of it, every iteration.
+bool test_reinterpret_gather_extraction(FuzzingContext &fuzz) {
+    RandomExpressionGenerator reg{fuzz};
+    reg.fuzz_types = {UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32)};
+
+    int in_bits = fuzz.PickValueInArray({16, 32});
+    int in_lanes = 128 / in_bits;
+    Type in_t = (fuzz.ConsumeBool() ? Int(in_bits) : UInt(in_bits)).with_lanes(in_lanes);
+
+    Expr in_expr = reg.random_expr(in_t, 2);
+    if (might_overflow_signed_int(in_expr, reg.fuzz_vars)) {
+        return true;
+    }
+
+    int out_bits = 8;
+    int out_lanes = 128 / out_bits;
+    Type out_t = (in_t.is_int() ? Int(out_bits) : UInt(out_bits)).with_lanes(out_lanes);
+    Expr full = Reinterpret::make(out_t, in_expr);
+
+    for (auto &v : reg.fuzz_vars) {
+        v.set(fuzz.ConsumeIntegralInRange(0, 0x0f));
+    }
+
+    Buffer<int64_t> full_vals(out_lanes, 1);
+    if (!evaluate_vector_exprs({full}, reg.fuzz_vars, full_vals)) {
+        return true;
+    }
+
+    int lane_stride = 2;
+    int new_lanes = out_lanes / lane_stride;
+    Expr sliced = extract_lanes(full, 0, lane_stride, new_lanes);
+    Buffer<int64_t> sliced_vals(new_lanes, 1);
+    if (!evaluate_vector_exprs({sliced}, reg.fuzz_vars, sliced_vals)) {
+        return true;
+    }
+    for (int x = 0; x < new_lanes; x++) {
+        int orig_lane = x * lane_stride;
+        if (sliced_vals(x, 0) != full_vals(orig_lane, 0)) {
+            std::cerr << "MISMATCH in Reinterpret gather extraction: lane " << x << "\n"
+                      << "Full expr: " << full << "\n"
+                      << "Sliced expr: " << sliced << "\n";
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool test_one(FuzzingContext &fuzz) {
     RandomExpressionGenerator reg{fuzz};
     // extract_lanes() only cares about plain integer vectors; keep the same
@@ -296,6 +418,13 @@ FUZZ_TEST(extract_lanes, FuzzingContext &fuzz) {
     if (t.arch != Target::X86 || t.bits != 64) {
         // [SKIP-WITH-ISSUE-9040] Only running test on X86-64 for now. See also #9044.
         return 0;
+    }
+
+    if (!test_vector_reduce_extraction(fuzz)) {
+        return 1;
+    }
+    if (!test_reinterpret_gather_extraction(fuzz)) {
+        return 1;
     }
 
     return test_one(fuzz) ? 0 : 1;
