@@ -29,6 +29,7 @@ protected:
     IRMatcher::Wild<2> z;
     IRMatcher::WildConst<0> c0;
     IRMatcher::WildConst<1> c1;
+    IRMatcher::WildConst<2> c2;
 
     Expr visit(const Sub *op) override {
 
@@ -56,6 +57,17 @@ protected:
 
                 rewrite(min(x + c0, y) - select(z, min(x, y) + c1, x), select(z, (max(min(y - x, c0), 0) - c1), min(y - x, c0)), c0 > 0) ||
                 rewrite(min(y, x + c0) - select(z, min(y, x) + c1, x), select(z, (max(min(y - x, c0), 0) - c1), min(y - x, c0)), c0 > 0) ||
+
+                // A ceiling-divide of a quantity clamped above by an exact
+                // multiple of the divisor (x*c0 + c1), minus the unclamped
+                // multiple (x) that the clamp is anchored to. Comes up when
+                // rounding a min-clamped region's extent up to a multiple of
+                // c0: (min(x*c0 + c1, y) + c2)/c0 - x/1 == min((y+c2)/c0 - x,
+                // (c1+c2)/c0), exactly, for any c1, c2 -- not just when they
+                // happen to be multiples of c0 -- because c0 > 0 means both
+                // "+c2" and "/c0" distribute over min.
+                rewrite((min(x * c0 + c1, y) + c2) / c0 - x, min((y + c2) / c0 - x, fold((c1 + c2) / c0)), c0 > 0) ||
+                rewrite((min(y, x * c0 + c1) + c2) / c0 - x, min((y + c2) / c0 - x, fold((c1 + c2) / c0)), c0 > 0) ||
 
                 false) {
                 return rewrite.result;

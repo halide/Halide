@@ -39,6 +39,7 @@ protected:
     }
 
     Stmt visit(const For *op) override {
+        auto bind = tracker.push_for(op->name, op->min, op->max);
         Expr extent = simplify(op->extent());
         if (is_const(extent)) {
             // Nothing needs to be done
@@ -48,6 +49,7 @@ protected:
         if (op->for_type == ForType::Unrolled ||
             op->for_type == ForType::Vectorized) {
             // Give it one last chance to simplify to an int
+            extent = tracker.simplify_with_context(extent);
             Stmt body = op->body;
             const IntImm *e = extent.as<IntImm>();
 
