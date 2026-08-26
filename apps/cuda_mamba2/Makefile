@@ -26,9 +26,10 @@ CXXFLAGS += -DSEQ=$(SEQ) -DSTATE=$(STATE) -DCHANNELS=$(CHANNELS) -DCHUNK=$(CHUNK
 
 all: $(BIN)/$(HL_TARGET)/runner
 
-# GenGen does not catch, and Halide's errors are not std::exceptions, so
-# without the terminate handler a generator error arrives with its message
-# unprinted.
+# generate_filter_main catches and reports what a generator raises, but only
+# when libHalide was built with WITH_EXCEPTIONS - the catch is compiled out
+# otherwise, while the throw is not. The terminate handler prints the message
+# either way, which is what the tests link it for.
 TERMINATE_HANDLER = ../../test/common/terminate_handler.cpp
 
 $(GENERATOR_BIN)/mamba2.generator: mamba2_generator.cpp $(TERMINATE_HANDLER) $(GENERATOR_DEPS)
