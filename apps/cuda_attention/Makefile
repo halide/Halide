@@ -5,10 +5,17 @@
 # Tensor cores need 7.0 or above.
 HL_TARGET ?= host-cuda
 
+# On sm_120 ptxas scalarises the f32x2 instructions llvm emits, so the pairs
+# buy no arithmetic and the packing around every tensor core instruction is
+# left over: the accumulator can no longer be its own destination, and each
+# matmul gains an unpack and a repack. Worth 5% here. sm_100 has the paired
+# instructions for real and wants them.
+export HL_LLVM_ARGS ?= -nvptx-no-f32x2
+
 include ../support/Makefile.inc
 
-QUERIES ?= 16384
-KEYS ?= 64
+QUERIES ?= 65536
+KEYS ?= 1024
 DEPTH ?= 64
 OUT_DEPTH ?= 64
 
@@ -27,12 +34,14 @@ PAD ?= 0
 FLASH_TILES_Y ?= 0
 FLASH_WARPS ?= 0
 FLASH_STAGE ?= true
+FLASH_STAGE_TILE ?= true
+FLASH_STAGE_Q ?= true
 FLASH_CHUNK ?= 0
 
 SHAPE = queries=$(QUERIES) keys=$(KEYS) depth=$(DEPTH) out_depth=$(OUT_DEPTH)
-SHAPE_FLASH := $(SHAPE) tiles_y=$(FLASH_TILES_Y) warps=$(FLASH_WARPS) chunk=$(FLASH_CHUNK) stage=$(FLASH_STAGE) pad=$(PAD)
+SHAPE_FLASH := $(SHAPE) tiles_y=$(FLASH_TILES_Y) warps=$(FLASH_WARPS) chunk=$(FLASH_CHUNK) stage=$(FLASH_STAGE) stage_tile=$(FLASH_STAGE_TILE) stage_q=$(FLASH_STAGE_Q) pad=$(PAD)
 SHAPE += tiles_y=$(TILES_Y) warps=$(WARPS) stage=$(STAGE) pad=$(PAD)
-CXXFLAGS += -DQUERIES=$(QUERIES) -DKEYS=$(KEYS) -DDEPTH=$(DEPTH) -DOUT_DEPTH=$(OUT_DEPTH)
+CXXFLAGS += -DQUERIES=$(QUERIES) -DKEYS=$(KEYS) -DDEPTH=$(DEPTH) -DOUT_DEPTH=$(OUT_DEPTH) -DFLASH_CHUNK=$(FLASH_CHUNK)
 
 all: $(BIN)/$(HL_TARGET)/runner
 
@@ -42,12 +51,12 @@ $(GENERATOR_BIN)/attention.generator: attention_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/%/attention.a: $(GENERATOR_BIN)/attention.generator
 	@mkdir -p $(@D)
-	$^ -g attention -f attention -e $(GENERATOR_OUTPUTS) -o $(@D) \
+	$^ -g attention -f attention -e $(GENERATOR_OUTPUTS),conceptual_stmt_html -o $(@D) \
 	    target=$* $(SHAPE)
 
 $(BIN)/%/attention_flash.a: $(GENERATOR_BIN)/attention.generator
 	@mkdir -p $(@D)
-	$^ -g attention_flash -f attention_flash -e $(GENERATOR_OUTPUTS) -o $(@D) \
+	$^ -g attention_flash -f attention_flash -e $(GENERATOR_OUTPUTS),conceptual_stmt_html -o $(@D) \
 	    target=$* $(SHAPE_FLASH)
 
 $(BIN)/%/attention_softmax.a: $(GENERATOR_BIN)/attention.generator

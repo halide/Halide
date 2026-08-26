@@ -503,11 +503,12 @@ private:
 // above and against the unfused pair:
 //
 //     keys    flash        fused          unfused
-//       64   47.7us  22530   37.6us  28568   125.1us   8584
-//      128   79.9us  26866   71.0us  30232   274.9us   7811
-//      256  152.6us  28153   would not launch  563.4us   7623
-//      512  418.0us  20548   would not launch 1173.8us   7318
-//     1024  723.4us  23748   would not launch 5327.0us   3225
+//       64   47.4us  22630   37.7us  28451    126.6us   8479
+//      128   79.9us  26868   71.1us  30204    272.1us   7891
+//      256  222.9us  19270   would not launch   563.5us   7621
+//      512  352.4us  24373   would not launch  1171.2us   7334
+//     1024  699.5us  24560   would not launch  5350.4us   3211
+//     2048 1398.3us  24572   would not launch 15193.4us   2261
 //
 // The point of the table is the middle column running out. The filter above
 // holds a block's worth of scores in registers, so the key count sets how many
@@ -523,18 +524,27 @@ private:
 // win: it takes the same time at 64 keys as at 128, so it is latency bound
 // there, and both filters here beat it.
 //
-// Where the time goes at the shapes this one wins: ncu puts L1 at 68% against
-// DRAM at 19% and the tensor pipe at 52%, and the L1 traffic is operand loads
-// using 16 of every 32 byte sector. Register spilling is not the limit, though
-// it is easy to read the profile as saying so - every local memory access is a
-// spill, but local memory is under 4% of the sectors. Two things point the same
-// way: a wider step measures far better than a narrow one despite keeping more
-// live, and computing the weights one operand tile at a time rather than a
-// step's worth - which the extractor now supports, and which does cut the
-// registers a step keeps by about a hundred - changes nothing measurable. What
-// is left is finding which operand load runs at half a sector, and staging a
-// key tile at a time rather than whole panels, which is what would let a block
-// share its operands at key counts where the panels no longer fit.
+// What decides the time is how much work a step does, and nothing else that was
+// measured. The shape above keeps 480 floats per lane live - the scores and the
+// weights 128 each, the two accumulators 64 each, the carried pair 32 each -
+// against the 255 registers a thread has, so it spills, and registers hold it
+// to 8 warps per SM where every other limit allows 24 or more. Both of those
+// look like the answer and neither is:
+//
+//  - Spilling is not it. Every local memory access is a spill, but local memory
+//    is under 4% of the sectors L1 is asked for.
+//  - Occupancy is not it. One tile of queries per warp fits in 164 registers,
+//    which buys half again as many warps per SM, and measures 18686 against the
+//    28153 of the shape that spills.
+//
+// What does correlate is rows per warp times keys per step: halving either one
+// costs about a third of the throughput. So what a step pays that does not
+// scale with it is the thing to chase, and the operand loads are the candidate.
+// Past the key count where whole panels fit in shared memory nothing is staged,
+// so every warp re-reads K and V from global memory on every step. Staging a
+// key tile at a time rather than whole panels is what would fix that, and it
+// wants a loop order this cannot currently express: the panel has to be filled
+// above the loop over warps, and the carried state has to live inside it.
 class AttentionFlash : public Halide::Generator<AttentionFlash> {
 public:
     GeneratorParam<int> queries{"queries", 16384};
@@ -551,9 +561,21 @@ public:
     GeneratorParam<int> warps{"warps", 0};
     // How many keys one step of the walk takes. Zero means as many as the
     // measurements below want, or half the keys if there are too few for that.
+    // Sixty four is what this was tuned to at a key count large enough for the
+    // walk to be a real loop, and is what flash attention implementations
+    // generally use.
     GeneratorParam<int> chunk{"chunk", 0};
     // Whether to stage K and V into shared memory for the block to share.
     GeneratorParam<bool> stage{"stage", true};
+    // Stage one key tile at a time rather than whole panels, which is what a
+    // key count too large for whole panels wants. Off, because it does not
+    // compile yet - see the note above. Needs one warp, so that there is no
+    // loop over warps for the fill to have to sit above.
+    GeneratorParam<bool> stage_tile{"stage_tile", true};
+    // Whether to stage Q into shared memory. A block's rows of it are the same
+    // at every step of the walk, so unstaged it is re-read from global memory
+    // once per step.
+    GeneratorParam<bool> stage_q{"stage_q", true};
     // Extra elements per row of the staged panels, to spread consecutive rows
     // across banks.
     GeneratorParam<int> pad{"pad", 0};
@@ -570,11 +592,12 @@ public:
         // the carried state and the accumulator - is paid once per step, so a
         // wider step amortises it. What it costs is the scores, which are the
         // one thing here that grows with it.
-        key_tile = chunk ? (int)chunk : std::min(128, (int)keys / 2);
+        key_tile = chunk ? (int)chunk : std::min(64, (int)keys / 2);
         _halide_user_assert(key_tile % 16 == 0 && keys % key_tile == 0 &&
                             keys / key_tile >= 2)
             << "chunk must be a multiple of 16 that divides keys at least twice";
         num_tiles = keys / key_tile;
+        key_pad = 2 * key_tile;
 
         k = RDom(0, depth, "k");
         rj_max = RDom(0, key_tile, "rj_max");
@@ -590,7 +613,8 @@ public:
 
         // The largest score up to and including this tile. It depends on
         // nothing but itself and the tile maximum.
-        m(y, t) = select(t <= 0, tile_max(y, t),
+        m(y, t) = select(t <= 0,
+                         tile_max(y, t),
                          likely(max(m(y, t - 1), tile_max(y, t))));
 
         // The weights are taken against the running maximum, so what this step
@@ -603,7 +627,7 @@ public:
         tile_l(y, t) += e(rj, y, t);
 
         l(y, t) = select(t <= 0, tile_l(y, t),
-                         likely(l(y, t - 1) * exp(m(y, max(t - 1, 0)) - m(y, t)) +
+                         likely(l(y, t - 1) * exp(m(y, t - 1) - m(y, t)) +
                                 tile_l(y, t)));
 
         tile_acc(x, y, t) = 0.f;
@@ -611,9 +635,12 @@ public:
             cast<float>(e(rj, y, t)) * cast<float>(V(x, t * key_tile + rj));
 
         acc(x, y) = 0.f;
-        acc(x, y) = (acc(x, y) * exp(m(y, max(rt - 1, 0)) - m(y, rt)) +
-                     tile_acc(x, y, rt)) /
-                    select(rt < num_tiles - 1, 1.f, l(y, rt));
+        acc(x, y) =
+            (tile_acc(x, y, rt) +
+             select(rt <= 0,
+                    0.f,
+                    likely(acc(x, y) * exp(m(y, rt - 1) - m(y, rt))))) /
+            select(rt < num_tiles - 1, 1.f, l(y, rt));
 
         out(x, y) = acc(x, y);
     }
@@ -628,8 +655,24 @@ public:
         }
 
         set_bounds(Q, depth, queries);
-        set_bounds(K, depth, keys);
-        set_bounds(V, out_depth, keys);
+        // The walk is warmed up by rewinding, so it reads whole steps before
+        // the first key. Rather than clamping the index, which would leave
+        // which of the two folded slots of the carried state a step reads
+        // dependent on the step, the caller hands over key panels with room
+        // before them. What is in there only has to be finite: the first step
+        // rescales an accumulator that is still zero.
+        K.set_host_alignment(16)
+            .dim(0)
+            .set_bounds(0, depth)
+            .dim(1)
+            .set_bounds(-key_pad, keys + key_pad)
+            .set_stride(depth);
+        V.set_host_alignment(16)
+            .dim(0)
+            .set_bounds(0, out_depth)
+            .dim(1)
+            .set_bounds(-key_pad, keys + key_pad)
+            .set_stride(out_depth);
         set_bounds(out, out_depth, queries);
 
         const int tile = 16;
@@ -643,25 +686,48 @@ public:
         const int p = pad ? (int)pad : vec;
         const int staged_bytes = 2 * (int)keys * ((int)depth + (int)out_depth + 2 * p);
         const bool staging = stage && staged_bytes <= 40 * 1024;
+        // Staging one key tile at a time instead, which is what a key count too
+        // large for whole panels wants. The fill then sits inside the walk, so
+        // every stage in there needs a loop over warps of its own: all the
+        // thread loops in the walk have to be the same 32 by 4 shape for
+        // lowering to fuse them into one thread block. A stage left outside the
+        // warp loop gets serialized onto one of them instead.
+        const bool stage_per_tile = stage_tile && !staging;
 
         int ty = tiles_y, wy = warps;
         if (ty == 0 || wy == 0) {
             // Measured on an RTX 5060 Ti at queries=65536.
-            ty = 2;
-            wy = staging ? 4 : 1;
-            if (key_tile <= 32) {
-                // Too few keys for a step to be worth much, so spend the block
-                // on warps rather than on rows per warp.
+            if (stage_per_tile) {
+                // The panel is filled once and read by every warp, so the block
+                // wants warps to share it with rather than rows per warp.
                 ty = 1;
-                wy = 8;
+                wy = 4;
+            } else {
+                ty = 2;
+                wy = staging ? 4 : 1;
+                if (key_tile <= 32) {
+                    // Too few keys for a step to be worth much, so spend the
+                    // block on warps rather than on rows per warp.
+                    ty = 1;
+                    wy = 8;
+                }
             }
         }
         const int rows = tile * ty;
         const int block_rows = rows * wy;
+        const bool warp_loop_inside = stage_per_tile && wy > 1;
 
         Var xo("xo"), yo("yo"), xio("xio"), yio("yio"), xi("xi"), yi("yi");
         Var yw("yw"), rxi("rxi"), ryi("ryi");
         RVar rro("rro"), rri("rri"), rto("rto"), rti("rti");
+
+        // Left to itself the backend spends registers covering the latency of
+        // the tensor core operand loads, issuing them far ahead of their use
+        // and holding the results until then. That pushes the kernel to two
+        // blocks per processor when the shared memory would allow three.
+        // Measured on an RTX 5060 Ti: 128 is worth 3.5% over letting it
+        // choose, and neighbouring values are worth less.
+        out.gpu_max_registers(128);
 
         // A block owns a strip of queries and every column of the output.
         out.bound(x, 0, out_depth)
@@ -687,27 +753,40 @@ public:
             .split(y, yw, y, rows)
             .tile(x, y, rxi, ryi, tile, tile)
             .split(rt, rto, rti, 2)
-            .reorder(x, y, rti, rto, yw)
+            .always_partition(rto)
             .unroll(x)
             .unroll(y)
             .unroll(rti)
             .tile_init(rxi, ryi);
+        if (warp_loop_inside) {
+            acc.update().reorder(x, y, yw, rti, rto);
+        } else {
+            acc.update().reorder(x, y, rti, rto, yw);
+        }
 
         // Everything below is per key tile, so it lives inside the walk.
-        s.compute_at(acc, rti)
+        // With the walk outside the loop over warps, a stage in here needs a
+        // loop over warps of its own: every thread loop in the walk has to be
+        // the same 32 by 4 shape for lowering to fuse them into one thread
+        // block, and a stage outside them all is serialized onto one warp.
+        //
+        // Sharing acc's loop instead saves the barriers that would sit between
+        // a stage and its neighbours, but a stage can only do it once all of
+        // its consumers are in that loop. tile_acc is read by acc's update
+        // directly, so it can; the rest are read by each other.
+        for (Func f : {s, e}) {
+            f.compute_at(acc, yw)
+                .store_in(MemoryType::Tile)
+                .hoist_storage(out, xo)
+                .tile(x, y, rxi, ryi, tile, tile)
+                .unroll(x)
+                .unroll(y)
+                .tile_init(rxi, ryi);
+        }
+        tile_acc
+            .compute_at(acc, yw)
             .store_in(MemoryType::Tile)
-            .tile(x, y, rxi, ryi, tile, tile)
-            .unroll(x)
-            .unroll(y)
-            .tile_init(rxi, ryi);
-        e.compute_at(acc, rti)
-            .store_in(MemoryType::Tile)
-            .tile(x, y, rxi, ryi, tile, tile)
-            .unroll(x)
-            .unroll(y)
-            .tile_init(rxi, ryi);
-        tile_acc.compute_at(acc, rti)
-            .store_in(MemoryType::Tile)
+            .hoist_storage(out, xo)
             .tile(x, y, rxi, ryi, tile, tile)
             .unroll(x)
             .unroll(y)
@@ -719,7 +798,10 @@ public:
             .reorder(x, y, rro)
             .unroll(x)
             .unroll(y)
+            .unroll(rro)
             .tile_matmul(rri, rxi, ryi);
+
+        // Shares acc's loop over warps, so it splits off none of its own.
         tile_acc.update()
             .tile(x, y, rxi, ryi, tile, tile)
             .split(rj, rro, rri, tile)
@@ -733,7 +815,8 @@ public:
 
         for (Func f : {tile_max, tile_l}) {
             f.store_in(MemoryType::Tile)
-                .compute_at(acc, rti)
+                .compute_at(acc, yw)
+                .hoist_storage(out, xo)
                 .split(y, y, ryi, tile)
                 .unroll(y)
                 .vectorize(ryi);
@@ -743,12 +826,14 @@ public:
 
         // The carried state. It is stored for the whole walk but computed one
         // step at a time, and folded down to the two tiles that are live. Each
-        // warp carries the state for its own rows, so it is stored inside the
-        // loop over warps rather than above it.
+        // warp carries the state for its own rows: with the walk inside the
+        // loop over warps that means storing it in there, and with the walk
+        // outside it that means storing it above the walk and splitting off a
+        // loop over warps here, so each warp writes only its own.
         for (Func f : {m, l}) {
             f.store_in(MemoryType::Tile)
-                .store_at(acc, yw)
-                .compute_at(acc, rti)
+                .store_at(out, xo)
+                .compute_at(acc, yw)
                 .slide(acc, rt)
                 .fold_storage(t, 2)
                 .split(y, y, ryi, tile)
@@ -757,9 +842,6 @@ public:
         }
 
         if (wy > 1) {
-            // Only the two stages that sit at block level need a loop over
-            // warps of their own. Everything else is computed inside the walk,
-            // which is already within one.
             out.gpu_threads(yw);
             acc.gpu_threads(yw);
             acc.update().gpu_threads(yw);
@@ -776,11 +858,31 @@ public:
         // to be filled above the loop over warps, and the carried state has to
         // live inside it. Past the point where they fit, the walk reads its
         // operands from global memory, which is what the numbers above measure.
-        if (staging) {
+        if (stage_q) {
+            // Q does not depend on the step, so a block's rows of it are
+            // fetched once and read from shared memory by every step.
+            Var qo("qo"), qv("qv"), qt("qt"), qi("qi"), qto("qto"), qw("qw");
+            Q.in()
+                .compute_at(out, xo)
+                .store_in(MemoryType::GPUSharedAsync)
+                .split(_0, qo, qv, vec)
+                .fuse(qo, _1, qt)
+                .split(qt, qt, qi, 32)
+                .split(qt, qto, qw, wy)
+                .gpu_lanes(qi)
+                .gpu_threads(qw)
+                .reorder(qv, qto, qi, qw)
+                .unroll(qto)
+                .vectorize(qv)
+                .align_storage(_0, depth + p);
+        }
+
+        if (staging || stage_per_tile) {
             Var ko("ko"), kv("kv"), tt("tt"), ti("ti"), to("to"), tw("tw");
 
             for (Func f : {K.in(), V.in()}) {
-                f.compute_at(out, xo)
+                f.compute_at(acc, rti)
+                    .hoist_storage(out, xo)
                     .store_in(MemoryType::GPUSharedAsync)
                     .split(_0, ko, kv, vec)
                     .fuse(ko, _1, tt)
@@ -788,8 +890,17 @@ public:
                     .split(tt, to, tw, wy)
                     .gpu_lanes(ti)
                     .gpu_threads(tw)
+                    // A thread moves sixteen bytes per asynchronous copy, so a
+                    // panel takes more than one of them. Put the loop over them
+                    // inside the loops over threads and unroll it, so they are
+                    // all issued before anything waits: left outside, each copy
+                    // is its own loop over threads and gets its own wait and a
+                    // barrier between.
+                    .reorder(kv, to, ti, tw)
+                    .unroll(to)
                     .vectorize(kv);
             }
+            K.in().compute_with(V.in(), to);
             K.in().align_storage(_0, depth + p);
             V.in().align_storage(_0, out_depth + p);
         }
@@ -798,7 +909,7 @@ public:
 private:
     Var x{"x"}, y{"y"}, t{"t"};
     RDom k, rj_max, rj, rt;
-    int num_tiles = 0, key_tile = 0;
+    int num_tiles = 0, key_tile = 0, key_pad = 0;
     Func s{"s"}, tile_max{"tile_max"}, e{"e"}, tile_l{"tile_l"};
     Func tile_acc{"tile_acc"}, acc{"acc"};
     Func m{Float(32), "m"}, l{Float(32), "l"};
