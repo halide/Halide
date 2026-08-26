@@ -60,26 +60,29 @@ public:
     GeneratorParam<bool> inductive{"inductive", true};
 
     // Channels by sequence by head.
-    Input<Buffer<float, 3>> X{"X"};
+    Input<Buffer<float16_t, 3>> X{"X"};
     // State by sequence by head.
-    Input<Buffer<float, 3>> Bm{"Bm"};
-    Input<Buffer<float, 3>> Cm{"Cm"};
+    Input<Buffer<float16_t, 3>> Bm{"Bm"};
+    Input<Buffer<float16_t, 3>> Cm{"Cm"};
     // The step size, one per timestep, and the decay parameter, one per head.
     Input<Buffer<float, 2>> Delta{"Delta"};
     Input<Buffer<float, 1>> A{"A"};
 
     // Channels by position in a chunk by chunk by head.
-    Output<Buffer<float, 4>> out{"out"};
+    Output<Buffer<float16_t, 4>> out{"out"};
 
     void generate() {
-        Var d("d"), p("p"), k("k"), idx("idx"), jj("jj"), t("t"), b("b");
+        Var d("d"), p("p"), k("k"), idx("idx"), jj("jj"), t("t"), b("b"), n("n");
 
         const int T = chunk;
         const int num_chunks = (int)seq / (int)chunk;
 
-        // The input already scaled by the step size.
+        // Everything that feeds a multiply is held at half precision, and
+        // every multiply accumulates at single. That is what the tensor cores
+        // do, and what the reference implementation does: the state is carried
+        // at single precision and narrowed only where it meets a matmul.
         Func Xb("Xb");
-        Xb(d, t, b) = Delta(t, b) * X(d, t, b);
+        Xb(d, n, b) = cast<float16_t>(Delta(n, b) * cast<float>(X(d, n, b)));
 
         // How much decay has accumulated from the start of a chunk to each
         // position in it, in the log domain, where the ratio every use wants
@@ -102,16 +105,16 @@ public:
             return exp(A(bb) * (cumdelta(to, tt, bb) - cumdelta(from, tt, bb)));
         };
 
-        // The chunk's own scores: C^T B, masked to be causal and weighted by
-        // how much the state decays between the two positions.
+        // The chunk's own scores: C^T B.
         RDom rp(0, state, "rp");
         rp_var = rp.x;
         Func qk("qk");
-        qk(jj, idx, t, b) += Cm(rp, t * T + idx, b) * Bm(rp, t * T + jj, b);
+        qk(jj, idx, t, b) = 0.f;
+        qk(jj, idx, t, b) += cast<float>(Cm(rp, t * T + idx, b)) *
+                             cast<float>(Bm(rp, t * T + jj, b));
 
-        // Held at the precision the tensor cores want for the multiply that
-        // consumes it, which also keeps it inside the shared memory a block
-        // gets.
+        // Masked to be causal and weighted by the decay between the two
+        // positions, then narrowed for the multiply that consumes it.
         Func score("score");
         score(jj, idx, t, b) =
             cast<float16_t>(select(jj <= idx, qk(jj, idx, t, b) * decay(jj, idx, t, b), 0.f));
@@ -119,16 +122,23 @@ public:
         RDom rj(0, T, "rj");
         rj_var = rj.x;
         Func y_intra("y_intra");
-        y_intra(d, idx, t, b) += cast<float>(score(rj, idx, t, b)) * Xb(d, t * T + rj, b);
+        y_intra(d, idx, t, b) = 0.f;
+        y_intra(d, idx, t, b) += cast<float>(score(rj, idx, t, b)) *
+                                 cast<float>(Xb(d, t * T + rj, b));
 
-        // What this chunk leaves behind at its last position.
+        // The input decayed to the end of its chunk, so that what this chunk
+        // leaves behind is a plain product of two operands.
+        Func Xbd("Xbd");
+        Xbd(d, jj, t, b) = cast<float16_t>(cast<float>(Xb(d, t * T + jj, b)) *
+                                           decay(jj, T - 1, t, b));
+
         Func chunk_state("chunk_state");
-        chunk_state(p, d, t, b) += Bm(p, t * T + rj, b) * Xb(d, t * T + rj, b) *
-                                   decay(rj, T - 1, t, b);
+        chunk_state(p, d, t, b) = 0.f;
+        chunk_state(p, d, t, b) += cast<float>(Bm(p, t * T + rj, b)) *
+                                   cast<float>(Xbd(d, rj, t, b));
 
-        // Every earlier chunk's state, decayed to the end of this one. This is
-        // the only thing that crosses a chunk boundary, and the only recurrence
-        // left in the pipeline.
+        // Every earlier chunk's state, decayed to the end of this one. Carried
+        // at single precision, and the only recurrence that crosses a chunk.
         Func H = Func(Float(32), "H");
         H(p, d, t, b) = select(t <= 0,
                                0.f,
@@ -136,16 +146,19 @@ public:
                                       exp(A(b) * cumdelta(T - 1, t, b)))) +
                         chunk_state(p, d, t, b);
 
-        // That state read back out at each position of this chunk, decayed
-        // from the end of the previous chunk to here.
+        // The state is narrowed where it meets the multiply, not where it is
+        // carried, which is what keeps the recurrence itself at full precision.
         Func y_inter("y_inter");
-        y_inter(d, idx, t, b) += Cm(rp, t * T + idx, b) * H(rp, d, max(t - 1, 0), b);
+        y_inter(d, idx, t, b) = 0.f;
+        y_inter(d, idx, t, b) +=
+            cast<float>(Cm(rp, t * T + idx, b)) *
+            cast<float>(cast<float16_t>(H(rp, d, max(t - 1, 0), b)));
 
-        out(d, idx, t, b) =
+        out(d, idx, t, b) = cast<float16_t>(
             y_intra(d, idx, t, b) +
             select(t > 0,
                    y_inter(d, idx, t, b) * exp(A(b) * cumdelta(idx, t, b)),
-                   0.f);
+                   0.f));
 
         // ---------------------------------------------------------------
         // Estimates and bounds

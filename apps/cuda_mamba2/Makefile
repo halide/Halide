@@ -43,7 +43,7 @@ $(BIN)/%/mamba2.a: $(GENERATOR_BIN)/mamba2.generator
 
 $(BIN)/%/runner: runner.cpp $(BIN)/%/mamba2.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) -lcuda -lcudart -ldl -lpthread
+	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) -L $(HALIDE_DISTRIB_PATH)/lib -lHalide -Wl,-rpath,$(HALIDE_DISTRIB_PATH)/lib -lcuda -lcudart -ldl -lpthread -lz
 
 test: $(BIN)/$(HL_TARGET)/runner
 	$^
