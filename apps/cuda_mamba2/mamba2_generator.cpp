@@ -38,7 +38,16 @@
 //    because a block is capped at 48KB of shared memory: the CUDA runtime
 //    never asks for the larger carveout with cuFuncSetAttribute, so the ~100KB
 //    the hardware has is out of reach.
-//  - None of this is on the tensor cores yet.
+//  - The tensor core schedule (wmma=true) is not finished. Three of the four
+//    multiplies are recognised; the state's own contribution is not, because
+//    the prover that checks a fragment's accesses do not partially overlap
+//    cannot see past the select the inductive walk leaves in its index:
+//      chunk_state.s0.t - select(0 < out.s0.t, max(out.s0.t, 2), 1)
+//    This is the same prover that rejects the slid producer in PR 9376.
+//  - The narrowed state has to go out to shared memory and back every chunk,
+//    because an accumulator fragment and a multiply's second operand are held
+//    in different register layouts. Attention never pays this: it reads its
+//    accumulator once at the end, where this feeds it back in every chunk.
 
 #include "Halide.h"
 
@@ -58,6 +67,9 @@ public:
     // reductions. Off, each one costs what it is scanning over per element
     // instead of one step, which is what this app is here to show.
     GeneratorParam<bool> inductive{"inductive", true};
+    // Whether the four multiplies go to the tensor cores.
+    GeneratorParam<bool> wmma{"wmma", false};
+    GeneratorParam<int> warps{"warps", 4};
 
     // Channels by sequence by head.
     Input<Buffer<float16_t, 3>> X{"X"};
@@ -148,11 +160,15 @@ public:
 
         // The state is narrowed where it meets the multiply, not where it is
         // carried, which is what keeps the recurrence itself at full precision.
+        // It is its own Func so that the multiply below reads it plainly: an
+        // operand that is a cast of a load is not a matrix multiply operand.
+        Func H16("H16");
+        H16(p, d, t, b) = cast<float16_t>(H(p, d, max(t - 1, 0), b));
+
         Func y_inter("y_inter");
         y_inter(d, idx, t, b) = 0.f;
-        y_inter(d, idx, t, b) +=
-            cast<float>(Cm(rp, t * T + idx, b)) *
-            cast<float>(cast<float16_t>(H(rp, d, max(t - 1, 0), b)));
+        y_inter(d, idx, t, b) += cast<float>(Cm(rp, t * T + idx, b)) *
+                                 cast<float>(H16(rp, d, t, b));
 
         out(d, idx, t, b) = cast<float16_t>(
             y_intra(d, idx, t, b) +
@@ -169,8 +185,13 @@ public:
             .bound(b, 0, heads);
 
         if (!using_autoscheduler()) {
-            schedule_gpu(d, p, k, idx, jj, t, b, Xb, cumdelta, qk, score,
-                         y_intra, chunk_state, H, y_inter);
+            if (wmma) {
+                schedule_wmma(d, p, k, idx, jj, t, b, Xb, Xbd, cumdelta, qk,
+                              score, y_intra, chunk_state, H, H16, y_inter);
+            } else {
+                schedule_gpu(d, p, k, idx, jj, t, b, Xb, cumdelta, qk, score,
+                             y_intra, chunk_state, H, H16, y_inter);
+            }
         }
     }
 
@@ -180,7 +201,7 @@ private:
     // walk, so the only thing that leaves the block is the output.
     void schedule_gpu(Var d, Var p, Var k, Var idx, Var jj, Var t, Var b,
                       Func Xb, Func cumdelta, Func qk, Func score,
-                      Func y_intra, Func chunk_state, Func H, Func y_inter) {
+                      Func y_intra, Func chunk_state, Func H, Func H16, Func y_inter) {
         Var xo("xo"), yo("yo"), xi("xi"), yi("yi");
 
         // The threads sit above the serial tiles each of them walks, so that
@@ -232,6 +253,126 @@ private:
         if (!inductive) {
             cumdelta.gpu_threads(k);
             cumdelta.update().gpu_threads(k);
+        }
+    }
+
+    // Every multiply is a tile of this size on the tensor cores.
+    static constexpr int tile = 16;
+
+    // The four multiplies on the tensor cores. The block is one head; its
+    // warps split the scores by output position, and everything after them by
+    // channel, so that a warp holds every state row for the channels it owns
+    // and never has to reduce across warps.
+    void schedule_wmma(Var d, Var p, Var k, Var idx, Var jj, Var t, Var b,
+                       Func Xb, Func Xbd, Func cumdelta, Func qk, Func score,
+                       Func y_intra, Func chunk_state, Func H, Func H16, Func y_inter) {
+        Var xo("xo"), yo("yo"), xi("xi"), yi("yi"), w("w");
+        Var rxi("rxi"), ryi("ryi");
+        RVar rro("rro"), rri("rri");
+
+
+        // A warp takes a tile of channels and every position of the chunk.
+        out.reorder(d, idx, t, b)
+            .tile(d, idx, xo, yo, xi, yi, tile, tile)
+            .gpu_blocks(b)
+            .gpu_threads(xo)
+            .unroll(yo)
+            .tile_store(xi, yi);
+
+        // The scores, split across the warps by output position, and left in
+        // shared memory because every warp reduces over all of them.
+        qk.compute_at(out, t)
+            .store_in(MemoryType::Tile)
+            .tile(jj, idx, rxi, ryi, tile, tile)
+            .unroll(jj)
+            .gpu_threads(idx)
+            .tile_init(rxi, ryi);
+        qk.update()
+            .tile(jj, idx, rxi, ryi, tile, tile)
+            .split(rp_var, rro, rri, tile)
+            .reorder(jj, idx, rro)
+            .unroll(jj)
+            .gpu_threads(idx)
+            .tile_matmul(rri, rxi, ryi);
+
+        score.compute_at(out, t)
+            .store_in(MemoryType::GPUShared)
+            .tile(jj, idx, rxi, ryi, tile, tile)
+            .unroll(jj)
+            .gpu_threads(idx)
+            .tile_store(rxi, ryi);
+
+        // Everything past the scores is per channel, so a warp owns a tile of
+        // channels and keeps its share of the state in its own fragments.
+        for (Func f : {y_intra, y_inter}) {
+            f.compute_at(out, t)
+                .store_in(MemoryType::Tile)
+                .tile(d, idx, rxi, ryi, tile, tile)
+                .gpu_threads(d)
+                .unroll(idx)
+                .tile_init(rxi, ryi);
+        }
+        // The state is indexed the other way round, so the warps go on its
+        // second dimension to own the same channels they own everywhere else.
+        chunk_state.compute_at(out, t)
+            .store_in(MemoryType::Tile)
+            .tile(p, d, rxi, ryi, tile, tile)
+            .unroll(p)
+            .gpu_threads(d)
+            .tile_init(rxi, ryi);
+
+        y_intra.update()
+            .tile(d, idx, rxi, ryi, tile, tile)
+            .split(rj_var, rro, rri, tile)
+            .reorder(d, idx, rro)
+            .gpu_threads(d)
+            .unroll(idx)
+            .tile_matmul(rri, rxi, ryi);
+        y_inter.update()
+            .tile(d, idx, rxi, ryi, tile, tile)
+            .split(rp_var, rro, rri, tile)
+            .reorder(d, idx, rro)
+            .gpu_threads(d)
+            .unroll(idx)
+            .tile_matmul(rri, rxi, ryi);
+        chunk_state.update()
+            .tile(p, d, rxi, ryi, tile, tile)
+            .split(rj_var, rro, rri, tile)
+            .reorder(p, d, rro)
+            .unroll(p)
+            .gpu_threads(d)
+            .tile_matmul(rri, rxi, ryi);
+
+        H.compute_at(out, t)
+            .store_at(out, b)
+            .store_in(MemoryType::Tile)
+            .tile(p, d, rxi, ryi, tile, tile)
+            .unroll(p)
+            .gpu_threads(d)
+            .tile_init(rxi, ryi);
+
+        // The narrowed state goes out to shared memory rather than staying in
+        // fragments: an accumulator and a multiply's second operand are held
+        // in different register layouts, so one fragment cannot be both. The
+        // state is an accumulator, and this is the operand read from it.
+        H16.compute_at(out, t)
+            .store_in(MemoryType::GPUShared)
+            .tile(p, d, rxi, ryi, tile, tile)
+            .unroll(p)
+            .gpu_threads(d)
+            .tile_store(rxi, ryi);
+
+        // The scan, and the two staged operands the multiplies read.
+        cumdelta.compute_at(out, t).store_in(MemoryType::GPUShared);
+        if (!inductive) {
+            cumdelta.gpu_threads(k);
+            cumdelta.update().gpu_threads(k);
+        }
+        for (Func f : {Xb, Xbd}) {
+            f.compute_at(out, t)
+                .store_in(MemoryType::GPUShared)
+                .split(f.args()[0], xo, xi, tile)
+                .gpu_lanes(xi);
         }
     }
 
