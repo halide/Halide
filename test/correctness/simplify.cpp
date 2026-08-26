@@ -2429,13 +2429,26 @@ void check_facts() {
     check_with_assumptions(min(x, y), y, {x > y});
     check_with_assumptions(min(x, y), x, {x < y});
 
+    // A non-strict fact is enough to pick a side of a max or min, and a strict
+    // fact implies the non-strict one.
+    check_with_assumptions(max(x, y), x, {x >= y});
+    check_with_assumptions(max(x, y), y, {x <= y});
+    check_with_assumptions(min(x, y), x, {x <= y});
+    check_with_assumptions(min(x, y), y, {x >= y});
+
     // Facts about compound expressions work too.
     check_with_assumptions(max(x + z, y * 3), x + z, {x + z > y * 3});
     check_with_assumptions(max(max(x, y), z), z, {max(x, y) < z});
 
-    // A fact only applies where it holds.
+    // Both branches of an if learn from the condition, in opposite directions.
     check(IfThenElse::make(x < y, not_no_op(max(x, y)), not_no_op(max(x, y))),
-          IfThenElse::make(x < y, not_no_op(y), not_no_op(max(x, y))));
+          IfThenElse::make(x < y, not_no_op(y), not_no_op(x)));
+
+    // A fact only applies where it holds.
+    check(Block::make(not_no_op(max(x, y)),
+                      IfThenElse::make(x < y, not_no_op(max(x, y)))),
+          Block::make(not_no_op(max(x, y)),
+                      IfThenElse::make(x < y, not_no_op(y))));
 
     // A division can cancel a multiplication inside a max or min when we know
     // which side wins after the division.
@@ -2443,6 +2456,17 @@ void check_facts() {
     check_with_assumptions(max(y, x * 8) / 8, x, {x >= y / 8});
     check_with_assumptions(min(x * 8, y) / 8, x, {x <= y / 8});
     check_with_assumptions(min(y, x * 8) / 8, x, {x <= y / 8});
+
+    // The direction in which a fact is stated doesn't matter, on either side:
+    // both the facts and the conditions of can_prove predicates are looked up
+    // in the same canonical form.
+    check_with_assumptions(max(x * 8, y) / 8, x, {y / 8 <= x});
+    check_with_assumptions(max(x * 8, y) / 8, x, {!(x < y / 8)});
+    check_with_assumptions(min(x * 8, y) / 8, x, {y / 8 >= x});
+
+    // A strict fact settles a non-strict predicate too.
+    check_with_assumptions(max(x * 8, y) / 8, x, {x > y / 8});
+    check_with_assumptions(min(x * 8, y) / 8, x, {x < y / 8});
 
     // Without the fact, the division stays put.
     check(max(x * 8, y) / 8, max(x * 8, y) / 8);

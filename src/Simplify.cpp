@@ -365,16 +365,56 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
 }
 
 namespace {
+// Is a boolean Expr known to be true or false? Facts are stored in the same
+// form the simplifier itself produces, so a comparison has to be canonicalized
+// the same way before looking it up.
+std::optional<bool> lookup_fact(const Expr &e,
+                                const std::set<Expr, IRDeepCompare> &truths,
+                                const std::set<Expr, IRDeepCompare> &falsehoods) {
+    if (const Not *n = e.as<Not>()) {
+        auto known = lookup_fact(n->a, truths, falsehoods);
+        return known ? std::make_optional(!*known) : known;
+    } else if (const GT *gt = e.as<GT>()) {
+        return lookup_fact(gt->b < gt->a, truths, falsehoods);
+    } else if (const GE *ge = e.as<GE>()) {
+        return lookup_fact(!(ge->a < ge->b), truths, falsehoods);
+    }
+
+    if (truths.count(e)) {
+        return true;
+    } else if (falsehoods.count(e)) {
+        return false;
+    }
+
+    // A comparison may also be settled by the other strictness of the same
+    // comparison, in either direction.
+    if (const LT *lt = e.as<LT>()) {
+        // a < b is implied by !(b <= a), and ruled out by b <= a and by b < a.
+        if (falsehoods.count(lt->b <= lt->a)) {
+            return true;
+        } else if (truths.count(lt->b <= lt->a) || truths.count(lt->b < lt->a)) {
+            return false;
+        }
+    } else if (const LE *le = e.as<LE>()) {
+        // a <= b is implied by a < b and by !(b < a), and ruled out by b < a.
+        if (truths.count(le->a < le->b) || falsehoods.count(le->b < le->a)) {
+            return true;
+        } else if (truths.count(le->b < le->a)) {
+            return false;
+        }
+    }
+
+    return std::nullopt;
+}
+
 template<typename T>
 T substitute_facts_impl(const T &t,
                         const std::set<Expr, IRDeepCompare> &truths,
                         const std::set<Expr, IRDeepCompare> &falsehoods) {
     return mutate_with(t, [&](auto *self, const Expr &e) {
         if (e.type().is_bool()) {
-            if (truths.count(e)) {
-                return make_one(e.type());
-            } else if (falsehoods.count(e)) {
-                return make_zero(e.type());
+            if (auto known = lookup_fact(e, truths, falsehoods)) {
+                return *known ? make_one(e.type()) : make_zero(e.type());
             }
         }
         return self->mutate_base(e);
