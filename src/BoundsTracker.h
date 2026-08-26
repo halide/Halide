@@ -46,16 +46,23 @@ public:
 
     private:
         friend class BoundsTracker;
-        Binding(BoundsTracker *tracker, ScopedBinding<Interval> scope_binding, bool recorded_let);
+        Binding(BoundsTracker *tracker, ScopedBinding<Interval> scope_binding, bool recorded_let,
+                bool recorded_loop = false);
 
         BoundsTracker *tracker = nullptr;
         ScopedBinding<Interval> scope_binding;
         bool recorded_let = false;
+        bool recorded_loop = false;
     };
 
     /** Push the bounds of a for loop variable: the envelope [lower bound of
      * min, upper bound of max], each resolved against everything pushed so
-     * far. */
+     * far. Additionally records the range symbolically, so that
+     * find_constant_bounds_aggressive() can substitute the endpoints into an
+     * expression that turns out to be monotonic in the loop variable. That
+     * recovers bounds the constants-only scope can't represent, because a
+     * loop's min or max may itself mention a symbol the expression also
+     * mentions. */
     Binding push_for(const std::string &name, const Expr &min, const Expr &max);
 
     /** Push an already-computed Interval directly, bypassing derivation.
@@ -144,9 +151,23 @@ public:
     }
 
 private:
+    /** Tighten an interval by exploiting monotonicity in an enclosing loop
+     * variable: if e is monotonic in it, e's extremes over the loop are
+     * reached at the ends of the loop's range, so substituting the symbolic
+     * endpoints and constant-bounding the results can succeed where
+     * per-node interval arithmetic can't, because substitution keeps a
+     * symbol shared by e and the loop's range correlated. */
+    Interval tighten_using_loop_monotonicity(const Expr &e, Interval interval) const;
+
+    struct LoopRange {
+        std::string name;
+        Expr min, max;
+    };
+
     Scope<Interval> scope;
     std::vector<std::pair<std::string, Expr>> lets;
     std::vector<Expr> facts;
+    std::vector<LoopRange> loops;
 };
 
 }  // namespace Internal

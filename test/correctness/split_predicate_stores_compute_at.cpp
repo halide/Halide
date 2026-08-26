@@ -75,13 +75,14 @@ int main(int argc, char **argv) {
         lf.body.accept(&checker);
     }
 
-    // Before the fix, bounds inference couldn't find any bound for the
-    // tile's extent at all, and unrolling g failed outright. After the
-    // fix it finds at least an upper bound (the split factor), which
-    // BoundConstantExtentLoops uses as the unrolled extent, guarded by at
-    // most one check around the whole tile -- not one check per position.
-    if (!check(checker.count <= 1,
-               "expected at most one guard around the whole unrolled tile"))
+    // The tile's extent is exactly the split factor: the enclosing tile
+    // loop's own max bounds the consumer's extent from below, so the
+    // ceiling-divide that rounds the region up to a multiple of the factor
+    // is exact. BoundConstantExtentLoops must find that as an exact
+    // constant, not just an upper bound, so the unrolled body needs no
+    // guard at all.
+    if (!check(checker.count == 0,
+               "expected no guard inside the unrolled tile"))
         return 1;
 
     // Values must still come out right at and past the boundary, for
