@@ -318,6 +318,10 @@ bool case_shuffle_concat() {
 
 // ---------------------------------------------------------------------
 // 10. Shuffle via a strided slice (every third lane of a wider vector).
+//     At small forced max_lanes, the strided access needs more input
+//     lanes than its output width, exercising LegalizeVectors::visit
+//     (Shuffle)'s "secondary violation" path (an input vector wider than
+//     max_lanes, independent of the Shuffle's own output width).
 // ---------------------------------------------------------------------
 bool case_shuffle_slice_stride3() {
     const int W = 43;
@@ -389,6 +393,166 @@ bool case_vector_reduce_horizontal() {
         f(x) += in(x * K + r);
         if (vectorize_reduction) {
             f.update(0).atomic().vectorize(r);
+        }
+        return f;
+    };
+
+    Func ref = build(false);
+    Buffer<int32_t> ref_buf = ref.realize({W});
+
+    Func f = build(true);
+    Buffer<int32_t> out = f.realize({W});
+
+    return compare_1d(ref_buf, out);
+}
+
+// ---------------------------------------------------------------------
+// 12b-12e. Horizontal VectorReduce with each of the other combining
+//     operators LegalizeVectors::visit(VectorReduce)'s "Case B" (a single
+//     output lane) supports: Mul, Min, Or, SaturatingAdd. Case 12 above
+//     only exercises Add (plus And/Max incidentally, from GuardWithIf's
+//     own bounds-check reductions).
+// ---------------------------------------------------------------------
+bool case_vector_reduce_mul() {
+    const int W = 37;
+    const int K = 8;
+    Var x("x");
+    RDom r(0, K);
+
+    auto build = [&](bool vec) -> Func {
+        Func in("in");
+        in(x) = (x % 5) + 1;
+        in.compute_root().bound(x, 0, K * W);
+
+        Func f("f");
+        f(x) = 1;
+        f(x) *= in(x * K + r);
+        if (vec) {
+            f.update(0).atomic().vectorize(r);
+        }
+        return f;
+    };
+
+    Func ref = build(false);
+    Buffer<int32_t> ref_buf = ref.realize({W});
+
+    Func f = build(true);
+    Buffer<int32_t> out = f.realize({W});
+
+    return compare_1d(ref_buf, out);
+}
+
+bool case_vector_reduce_min() {
+    const int W = 37;
+    const int K = 8;
+    Var x("x");
+    RDom r(0, K);
+
+    auto build = [&](bool vec) -> Func {
+        Func in("in");
+        in(x) = (x * 37 + 11) % 1000;
+        in.compute_root().bound(x, 0, K * W);
+
+        Func f("f");
+        f(x) = 1000000;
+        f(x) = min(f(x), in(x * K + r));
+        if (vec) {
+            f.update(0).atomic().vectorize(r);
+        }
+        return f;
+    };
+
+    Func ref = build(false);
+    Buffer<int32_t> ref_buf = ref.realize({W});
+
+    Func f = build(true);
+    Buffer<int32_t> out = f.realize({W});
+
+    return compare_1d(ref_buf, out);
+}
+
+bool case_vector_reduce_or() {
+    const int W = 37;
+    const int K = 8;
+    Var x("x");
+    RDom r(0, K);
+
+    auto build = [&](bool vec) -> Func {
+        Func in("in");
+        in(x) = ((x * 37 + 11) % 7) == 0;
+        in.compute_root().bound(x, 0, K * W);
+
+        Func f("f");
+        f(x) = cast<bool>(false);
+        f(x) = f(x) || in(x * K + r);
+        if (vec) {
+            f.update(0).atomic().vectorize(r);
+        }
+        return f;
+    };
+
+    Func ref = build(false);
+    Buffer<bool> ref_buf = ref.realize({W});
+
+    Func f = build(true);
+    Buffer<bool> out = f.realize({W});
+
+    return compare_1d(ref_buf, out);
+}
+
+bool case_vector_reduce_saturating_add() {
+    const int W = 37;
+    const int K = 8;
+    Var x("x");
+    RDom r(0, K);
+
+    auto build = [&](bool vec) -> Func {
+        Func in("in");
+        in(x) = cast<uint8_t>((x * 37 + 5) % 255);
+        in.compute_root().bound(x, 0, K * W);
+
+        Func f("f");
+        f(x) = cast<uint8_t>(0);
+        f(x) = saturating_add(f(x), in(x * K + r));
+        if (vec) {
+            f.update(0).atomic().vectorize(r);
+        }
+        return f;
+    };
+
+    Func ref = build(false);
+    Buffer<uint8_t> ref_buf = ref.realize({W});
+
+    Func f = build(true);
+    Buffer<uint8_t> out = f.realize({W});
+
+    return compare_1d(ref_buf, out);
+}
+
+// ---------------------------------------------------------------------
+// 12f. Segmented VectorReduce: a scatter-style RDom reduction whose
+//     vectorized loop covers several output groups per vector, producing
+//     a VectorReduce node with more than one output lane. This exercises
+//     LegalizeVectors::visit(VectorReduce)'s "Case A" (splitting the
+//     OUTPUT domain), as opposed to cases 12 and 12b-12e above, which are
+//     all full reductions down to a single output lane ("Case B").
+// ---------------------------------------------------------------------
+bool case_vector_reduce_segmented() {
+    const int W = 32;
+    const int K = 4;
+    Var x("x");
+    RDom r(0, K * W);
+
+    auto build = [&](bool vec) -> Func {
+        Func in("in");
+        in(x) = (x * 7 + 3) % 251;
+        in.compute_root().bound(x, 0, K * W);
+
+        Func f("f");
+        f(x) = 0;
+        f(r / K) += in(r);
+        if (vec) {
+            f.update(0).atomic().vectorize(r, 16, TailStrategy::GuardWithIf);
         }
         return f;
     };
@@ -850,6 +1014,11 @@ const Case cases[] = {
     {"shuffle_slice_stride3",           case_shuffle_slice_stride3},
     {"shuffle_reverse",                 case_shuffle_reverse},
     {"vector_reduce_horizontal",        case_vector_reduce_horizontal},
+    {"vector_reduce_mul",               case_vector_reduce_mul},
+    {"vector_reduce_min",               case_vector_reduce_min},
+    {"vector_reduce_or",                case_vector_reduce_or},
+    {"vector_reduce_saturating_add",    case_vector_reduce_saturating_add},
+    {"vector_reduce_segmented",         case_vector_reduce_segmented},
     {"local_sum_blur_2d",               case_local_sum_blur_2d},
     {"narrow_widen_cast_chain",         case_narrow_widen_cast_chain},
     {"reinterpret_cast",                case_reinterpret_cast},
