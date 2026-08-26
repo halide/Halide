@@ -23,10 +23,10 @@ using namespace Halide;
 
 namespace {
 
-// The width of the accumulator, how many rows there are, how many warps share
-// them, and how many steps the walk takes.
-const int W = 8, Y = 64, WARPS = 4, N = 16;
-const int rows_per_warp = Y / WARPS;
+// The width of the accumulator, how many rows a warp takes, how many warps
+// share a block, how many blocks there are, and how many steps the walk takes.
+const int W = 8, rows_per_warp = 16, WARPS = 4, BLOCKS = 2, N = 16;
+const int Y = rows_per_warp * WARPS * BLOCKS;
 
 // A producer stored above a serial walk, computed within the loop over warps
 // inside it, and slid over the walk. Each warp writes and reads only its own
@@ -45,7 +45,12 @@ int slid_over_a_walk_inside_the_warps(const Target &target, MemoryType mem) {
     out(x, y) = acc(x, y);
 
     out.bound(x, 0, W).bound(y, 0, Y).compute_root();
-    out.split(y, yo, yw, rows_per_warp).gpu_blocks(yo).gpu_threads(yw);
+    // A block holds the warps that share the walk, and each of them a stripe
+    // of rows, so that the loop over warps below has all of them in it.
+    out.split(y, yo, yw, rows_per_warp * WARPS)
+        .split(yw, yw, yi, rows_per_warp)
+        .gpu_blocks(yo)
+        .gpu_threads(yw);
 
     acc.compute_at(out, yo)
         .split(y, yw, yi, rows_per_warp)
