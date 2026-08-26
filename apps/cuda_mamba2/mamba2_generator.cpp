@@ -38,15 +38,20 @@
 //    because a block is capped at 48KB of shared memory: the CUDA runtime
 //    never asks for the larger carveout with cuFuncSetAttribute, so the ~100KB
 //    the hardware has is out of reach.
-//  - The tensor core schedule (wmma=true) is not finished. What is left is
-//    one knot: a fragment is only a register if which register it is, is
-//    known, so every loop that indexes one has to be unrolled. The per-chunk
-//    Funcs each have a loop over their own chunk that runs once, and the state
-//    is two chunks wide with the walk unrolled by that much so each copy names
-//    one of them. But the slid state warms up by computing a different number
-//    of chunks on the first iteration, so the loop that has to be unrolled has
-//    an extent of select(0 < to, 2, ...), and a loop whose extent is not
-//    constant cannot be unrolled at all.
+//  - The tensor core schedule (wmma=true) is finished except for one thing,
+//    and it is the same thing as the first item above. A fragment is only a
+//    register if which register it is, is known, so every loop indexing one
+//    must be unrolled. That works everywhere except the state, which wants a
+//    single slot it reads and then overwrites, as the recurrence does. Asking
+//    for that slot with fold_storage(t, 1) is rejected:
+//      The allocation H is scheduled to live in Tile memory ... Halide could
+//      not prove that each thread keeps to its own part of it
+//    even though the load and the store are at the same index, by the same
+//    thread, one iteration apart. Left at two slots the window has to warm up,
+//    which gives the loop that must be unrolled an extent of
+//    select(0 < to, 2, ...), and a loop whose extent is not constant cannot be
+//    unrolled. So the whole schedule waits on the cross-talk check learning
+//    that a thread may read what it itself wrote last time round.
 //  - The narrowed state has to go out to shared memory and back every chunk,
 //    because an accumulator fragment and a multiply's second operand are held
 //    in different register layouts. Attention never pays this: it reads its
@@ -358,7 +363,7 @@ private:
         // rather than alternating with the chunk.
         H.compute_at(out, ti)
             .store_at(out, b)
-            .slide(out, to)
+            .fold_storage(t, 1)
             .store_in(MemoryType::Tile)
             .tile(p, d, rxi, ryi, tile, tile)
             .unroll(p)
