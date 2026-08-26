@@ -101,6 +101,7 @@ Expr BoundsTracker::simplify_with_context(const Expr &e) const {
     }
     wrapped = remove_likelies(wrapped);
     wrapped = substitute_in_all_lets(wrapped);
+    debug(4) << "Simplify with context: " << wrapped << "\n";
     // Deliberately pass an empty bounds scope here, not `scope`: mixing a
     // bounds scope with equality facts can make the simplifier represent a
     // variable by its (wide) interval instead of substituting the exact

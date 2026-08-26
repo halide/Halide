@@ -2,6 +2,7 @@
 #include "BoundsTracker.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
 #include "Simplify.h"
 #include "Util.h"
 
@@ -76,6 +77,17 @@ protected:
                         e = extent_upper.as<IntImm>();
                     }
                 }
+            }
+
+            if (e == nullptr && extent_upper.defined()) {
+                // Still no luck getting an exact extent. Take the upper
+                // bound instead and guard the body with an if statement.
+                debug(4) << "Found an upper bound instead: " << extent_upper << "\n";
+                e = extent_upper.as<IntImm>();
+                body =
+                    IfThenElse::make(likely_if_innermost(Variable::make(Int(32), op->name) <=
+                                                         op->max),
+                                     body);
             }
 
             if (e == nullptr && permit_failed_unroll && op->for_type == ForType::Unrolled) {

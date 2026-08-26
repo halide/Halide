@@ -110,6 +110,7 @@ class BoundSmallAllocations : public IRMutator {
         for (const Expr &e : op->extents) {
             total_extent *= e;
         }
+        debug(3) << "Finding constant bound for Allocation " << op->name << " with extent " << total_extent << "\n";
         Expr bound = tracker.find_constant_bound_aggressive(total_extent, Direction::Upper);
 
         if (!bound.defined() && must_be_constant(op->memory_type)) {
