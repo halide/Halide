@@ -38,14 +38,15 @@
 //    because a block is capped at 48KB of shared memory: the CUDA runtime
 //    never asks for the larger carveout with cuFuncSetAttribute, so the ~100KB
 //    the hardware has is out of reach.
-//  - The tensor core schedule (wmma=true) is not finished. Three of the four
-//    multiplies are recognised; the state's own contribution is not, because
-//    the prover that checks a fragment's accesses do not partially overlap
-//    cannot evaluate the chunk it is indexed by:
-//      chunk_state.s0.t - out.s0.t.$n
-//    It is held two chunks wide because it feeds the state, which slides, and
-//    the prover cannot see that the difference above is zero. This is the same
-//    prover that rejects the slid producer in PR 9376.
+//  - The tensor core schedule (wmma=true) is not finished. What is left is
+//    one knot: a fragment is only a register if which register it is, is
+//    known, so every loop that indexes one has to be unrolled. The per-chunk
+//    Funcs each have a loop over their own chunk that runs once, and the state
+//    is two chunks wide with the walk unrolled by that much so each copy names
+//    one of them. But the slid state warms up by computing a different number
+//    of chunks on the first iteration, so the loop that has to be unrolled has
+//    an extent of select(0 < to, 2, ...), and a loop whose extent is not
+//    constant cannot be unrolled at all.
 //  - The narrowed state has to go out to shared memory and back every chunk,
 //    because an accumulator fragment and a multiply's second operand are held
 //    in different register layouts. Attention never pays this: it reads its
@@ -268,22 +269,29 @@ private:
     void schedule_wmma(Var d, Var p, Var k, Var idx, Var jj, Var t, Var b,
                        Func Xb, Func Xbd, Func cumdelta, Func qk, Func score,
                        Func y_intra, Func chunk_state, Func H, Func H16, Func y_inter) {
-        Var xo("xo"), yo("yo"), xi("xi"), yi("yi"), w("w");
+        Var xo("xo"), yo("yo"), xi("xi"), yi("yi"), w("w"), to("to"), ti("ti");
         Var rxi("rxi"), ryi("ryi");
         RVar rro("rro"), rri("rri");
 
 
         // A warp takes a tile of channels and every position of the chunk.
+        // The state is two chunks wide, and which of the two a chunk reads
+        // alternates with it. Take the walk two chunks at a time and unroll
+        // that, so each copy names one of them: a fragment is only a register
+        // if which register it is, is known.
         out.reorder(d, idx, t, b)
+            .split(t, to, ti, 2)
             .tile(d, idx, xo, yo, xi, yi, tile, tile)
+            .reorder(xi, yi, xo, yo, ti, to, b)
             .gpu_blocks(b)
             .gpu_threads(xo)
             .unroll(yo)
+            .unroll(ti)
             .tile_store(xi, yi);
 
         // The scores, split across the warps by output position, and left in
         // shared memory because every warp reduces over all of them.
-        qk.compute_at(out, t)
+        qk.compute_at(out, ti)
             .store_in(MemoryType::Tile)
             .tile(jj, idx, rxi, ryi, tile, tile)
             .unroll(jj)
@@ -297,7 +305,7 @@ private:
             .gpu_threads(idx)
             .tile_matmul(rri, rxi, ryi);
 
-        score.compute_at(out, t)
+        score.compute_at(out, ti)
             .store_in(MemoryType::GPUShared)
             .tile(jj, idx, rxi, ryi, tile, tile)
             .unroll(jj)
@@ -307,7 +315,7 @@ private:
         // Everything past the scores is per channel, so a warp owns a tile of
         // channels and keeps its share of the state in its own fragments.
         for (Func f : {y_intra, y_inter}) {
-            f.compute_at(out, t)
+            f.compute_at(out, ti)
                 .store_in(MemoryType::Tile)
                 .tile(d, idx, rxi, ryi, tile, tile)
                 .gpu_threads(d)
@@ -316,7 +324,7 @@ private:
         }
         // The state is indexed the other way round, so the warps go on its
         // second dimension to own the same channels they own everywhere else.
-        chunk_state.compute_at(out, t)
+        chunk_state.compute_at(out, ti)
             .store_in(MemoryType::Tile)
             .tile(p, d, rxi, ryi, tile, tile)
             .unroll(p)
@@ -345,8 +353,12 @@ private:
             .gpu_threads(d)
             .tile_matmul(rri, rxi, ryi);
 
-        H.compute_at(out, t)
+        // The state slides over the walk: one chunk's worth is live at a
+        // time, and saying so is what keeps which fragment holds it fixed
+        // rather than alternating with the chunk.
+        H.compute_at(out, ti)
             .store_at(out, b)
+            .slide(out, to)
             .store_in(MemoryType::Tile)
             .tile(p, d, rxi, ryi, tile, tile)
             .unroll(p)
@@ -357,21 +369,34 @@ private:
         // fragments: an accumulator and a multiply's second operand are held
         // in different register layouts, so one fragment cannot be both. The
         // state is an accumulator, and this is the operand read from it.
-        H16.compute_at(out, t)
+        H16.compute_at(out, ti)
             .store_in(MemoryType::GPUShared)
             .tile(p, d, rxi, ryi, tile, tile)
             .unroll(p)
             .gpu_threads(d)
             .tile_store(rxi, ryi);
 
+        // Each per-chunk Func has a loop over the chunk it is computing, which
+        // runs once. Left alone it stays a variable, and that is enough to stop
+        // two accesses from different stages of the same Func being recognised
+        // as the same tile. Unrolled, they are constants - except that the slid
+        // state's warm-up gives the first iteration a different extent, and a
+        // loop whose extent is not constant cannot be unrolled.
+        for (Func f : {qk, score, y_intra, y_inter, chunk_state, H}) {
+            f.unroll(t);
+        }
+        for (Func f : {qk, y_intra, y_inter, chunk_state}) {
+            f.update().unroll(t);
+        }
+
         // The scan, and the two staged operands the multiplies read.
-        cumdelta.compute_at(out, t).store_in(MemoryType::GPUShared);
+        cumdelta.compute_at(out, ti).store_in(MemoryType::GPUShared);
         if (!inductive) {
             cumdelta.gpu_threads(k);
             cumdelta.update().gpu_threads(k);
         }
         for (Func f : {Xb, Xbd}) {
-            f.compute_at(out, t)
+            f.compute_at(out, ti)
                 .store_in(MemoryType::GPUShared)
                 .split(f.args()[0], xo, xi, tile)
                 .gpu_lanes(xi);
