@@ -343,6 +343,7 @@ tests(
     split_factor_type.cpp
     split_fuse_rvar.cpp
     split_predicate.cpp
+    split_predicate_stores_compute_at.cpp
     split_reuse_inner_name_bug.cpp
     split_store_compute.cpp
     stable_realization_order.cpp
