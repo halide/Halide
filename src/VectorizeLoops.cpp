@@ -1075,7 +1075,7 @@ protected:
                 }
             }
             if (a.type().is_bool()) {
-                const Cast *cast_op = b.as<Cast>();
+                const Cast *cast_op = a.as<Cast>();
                 if (cast_op) {
                     a = cast_op->value;
                 }
