@@ -54,18 +54,28 @@ int slid_over_a_walk_inside_the_warps(const Target &target, MemoryType mem) {
 
     acc.compute_at(out, yo)
         .split(y, yw, yi, rows_per_warp)
-        .gpu_threads(yw);
+        .gpu_threads(yw)
+        .unroll(yi);
     // The walk is outside the loop over warps, so the warps run it together.
+    // The rows a warp owns are unrolled, because storage a thread indexes with
+    // a loop variable cannot be registers.
     acc.update()
         .split(y, yw, yi, rows_per_warp)
         .reorder(x, yi, yw, rt)
-        .gpu_threads(yw);
+        .gpu_threads(yw)
+        .unroll(yi);
 
     // Stored above the walk - and so above the loop over warps - computed
     // within the warps, and folded down to the two steps that are live.
+    //
+    // Everything that indexes it is unrolled, here and above, because a
+    // register is only a register if which one it is, is known: the rows a
+    // warp owns on both sides, and the two live steps it rotates between.
     p.store_at(out, yo)
         .compute_at(acc, yw)
-        .store_in(mem);
+        .store_in(mem)
+        .unroll(y)
+        .unroll(t);
 
     Buffer<float> result = out.realize({W, Y}, target);
     result.copy_to_host();
