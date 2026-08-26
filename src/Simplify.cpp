@@ -431,7 +431,7 @@ Stmt Simplify::ScopedFact::substitute_facts(const Stmt &s) {
 }
 
 Expr Simplify::simplify_can_prove_condition(const Expr &e) {
-    ScopedValue<bool> guard(in_can_prove, true);
+    ScopedValue<int> guard(can_prove_depth, can_prove_depth + 1);
     return mutate(substitute_facts(e), nullptr);
 }
 
