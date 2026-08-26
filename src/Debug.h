@@ -35,6 +35,16 @@ std::ostream &operator<<(std::ostream &, const LoweredFunc &);
 
 bool debug_is_active_impl(int verbosity, const char *file, const char *function, int line);
 
+/** Ask an arbitrary std::ostream whether it is a DebugStream and,
+ * if so, where the output is being routed to. */
+enum class DebugStreamSink {
+    None,
+    Cout,
+    Cerr,
+    File,
+};
+DebugStreamSink debug_stream_sink(std::ostream &os);
+
 /** Backs the debug() macro. Buffers everything written to it in memory, then
  * emits the whole statement's accumulated output as a single write when the
  * temporary is destroyed (i.e. at the end of the debug(n) << ...; statement).
@@ -45,7 +55,7 @@ bool debug_is_active_impl(int verbosity, const char *file, const char *function,
  * use the debug(n) macro. */
 class DebugStream : public std::ostringstream {
 public:
-    DebugStream() = default;
+    DebugStream();
     ~DebugStream() override;
 
     /** Exposes this object as a plain std::ostream&, so every `<<` in a

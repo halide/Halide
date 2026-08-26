@@ -182,6 +182,24 @@ const DebugSink &debug_sink() {
     return sink;
 }
 
+// A process-wide unique id in std::ios_base's array of user-defined tags
+// (iword/xalloc). We tag DebugStreams with their current output destination
+// (cerr/cout/file). Non-DebugStreams have empty tags.
+int debug_stream_sink_xalloc() {
+    static const int idx = std::ios_base::xalloc();
+    return idx;
+}
+
+DebugStreamSink current_debug_stream_sink() {
+    return std::visit(LambdaOverloads{
+                          [](int) { return DebugStreamSink::File; },
+                          [](auto osr) {
+                              return &osr.get() == &std::cout ? DebugStreamSink::Cout : DebugStreamSink::Cerr;
+                          },
+                      },
+                      debug_sink());
+}
+
 // Writes as much of [data, data + size) as the OS accepts in one call. A
 // single write() to a regular file normally consumes the whole request; the
 // loop only guards against the rare partial write (e.g. an EINTR-interrupted
@@ -209,6 +227,15 @@ void write_all(int fd, const char *data, size_t size) {
 }
 
 }  // namespace
+
+DebugStreamSink debug_stream_sink(std::ostream &os) {
+    const long tag = os.iword(debug_stream_sink_xalloc());
+    return tag ? static_cast<DebugStreamSink>(tag) : DebugStreamSink::None;
+}
+
+DebugStream::DebugStream() {
+    iword(debug_stream_sink_xalloc()) = static_cast<long>(current_debug_stream_sink());
+}
 
 DebugStream::~DebugStream() {
     if (std::string s = str(); !s.empty()) {
