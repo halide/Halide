@@ -70,6 +70,10 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
     // RHS for ExprInfo to update correctly.
     if (EVAL_IN_LAMBDA  //
         (rewrite(min(x, x), a) ||
+         // Facts learned higher up in the IR may tell us which side wins.
+         (has_facts() &&
+          (rewrite(min(x, y), a, can_prove(x < y, this)) ||
+           rewrite(min(x, y), b, can_prove(y < x, this)))) ||
          rewrite(min(x, c0), b, is_min_value(c0)) ||
          rewrite(min(x, c0), a, is_max_value(c0)) ||
          rewrite(min((x / c0) * c0, x), a, c0 > 0) ||

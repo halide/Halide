@@ -85,6 +85,16 @@ void Simplify::found_buffer_reference(const string &name, size_t dimensions) {
 }
 
 void Simplify::ScopedFact::learn_false(const Expr &fact) {
+    // Canonicalize the direction of comparisons, so that facts are stored in
+    // the same form the simplifier produces when it visits them.
+    if (const GT *gt = fact.as<GT>()) {
+        learn_false(gt->b < gt->a);
+        return;
+    } else if (const GE *ge = fact.as<GE>()) {
+        learn_false(!(ge->a < ge->b));
+        return;
+    }
+
     Simplify::VarInfo info;
     info.old_uses = info.new_uses = 0;
     if (const Variable *v = fact.as<Variable>()) {
@@ -172,6 +182,16 @@ void Simplify::ScopedFact::learn_lower_bound(const Variable *v, int64_t val) {
 }
 
 void Simplify::ScopedFact::learn_true(const Expr &fact) {
+    // Canonicalize the direction of comparisons, so that facts are stored in
+    // the same form the simplifier produces when it visits them.
+    if (const GT *gt = fact.as<GT>()) {
+        learn_true(gt->b < gt->a);
+        return;
+    } else if (const GE *ge = fact.as<GE>()) {
+        learn_true(!(ge->a < ge->b));
+        return;
+    }
+
     Simplify::VarInfo info;
     info.old_uses = info.new_uses = 0;
     if (const Variable *v = fact.as<Variable>()) {
@@ -368,6 +388,13 @@ Expr Simplify::ScopedFact::substitute_facts(const Expr &e) {
 
 Stmt Simplify::ScopedFact::substitute_facts(const Stmt &s) {
     return substitute_facts_impl(s, truths, falsehoods);
+}
+
+Expr Simplify::substitute_facts(const Expr &e) {
+    if (truths.empty() && falsehoods.empty()) {
+        return e;
+    }
+    return substitute_facts_impl(e, truths, falsehoods);
 }
 
 Simplify::ScopedFact::~ScopedFact() {

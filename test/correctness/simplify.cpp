@@ -2377,6 +2377,18 @@ void check_invariant() {
     }
 }
 
+void check_with_assumptions(const Expr &a, const Expr &b, const std::vector<Expr> &assumptions) {
+    Expr simpler = simplify(a, Scope<Interval>(), Scope<ModulusRemainder>(), assumptions);
+    if (!equal(simpler, b)) {
+        std::cerr
+            << "\nSimplification failure:\n"
+            << "Input: " << a << "\n"
+            << "Output: " << simpler << "\n"
+            << "Expected output: " << b << "\n";
+        abort();
+    }
+}
+
 void check_unreachable() {
     Var x("x"), y("y");
 
@@ -2405,6 +2417,41 @@ void check_unreachable() {
           Evaluate::make(0));
 }
 
+void check_facts() {
+    Expr x = Var("x"), y = Var("y"), z = Var("z");
+
+    // A fact stated in any comparison direction should let the simplifier pick
+    // the winning side of a max or min.
+    check_with_assumptions(max(x, y), x, {x > y});
+    check_with_assumptions(max(x, y), x, {y < x});
+    check_with_assumptions(max(x, y), y, {x < y});
+    check_with_assumptions(max(x, y), y, {y > x});
+    check_with_assumptions(min(x, y), y, {x > y});
+    check_with_assumptions(min(x, y), x, {x < y});
+
+    // Facts about compound expressions work too.
+    check_with_assumptions(max(x + z, y * 3), x + z, {x + z > y * 3});
+    check_with_assumptions(max(max(x, y), z), z, {max(x, y) < z});
+
+    // A fact only applies where it holds.
+    check(IfThenElse::make(x < y, not_no_op(max(x, y)), not_no_op(max(x, y))),
+          IfThenElse::make(x < y, not_no_op(y), not_no_op(max(x, y))));
+
+    // A division can cancel a multiplication inside a max or min when we know
+    // which side wins after the division.
+    check_with_assumptions(max(x * 8, y) / 8, x, {x >= y / 8});
+    check_with_assumptions(max(y, x * 8) / 8, x, {x >= y / 8});
+    check_with_assumptions(min(x * 8, y) / 8, x, {x <= y / 8});
+    check_with_assumptions(min(y, x * 8) / 8, x, {x <= y / 8});
+
+    // Without the fact, the division stays put.
+    check(max(x * 8, y) / 8, max(x * 8, y) / 8);
+
+    // Facts that don't strictly order the operands don't fire these rules.
+    check_with_assumptions(max(x, y), max(x, y), {x != y});
+    check_with_assumptions(max(x * 8, y) / 8, max(x * 8, y) / 8, {x < y / 8});
+}
+
 int main(int argc, char **argv) {
     check_invariant();
     check_casts();
@@ -2417,6 +2464,7 @@ int main(int argc, char **argv) {
     check_bitwise();
     check_lets();
     check_unreachable();
+    check_facts();
 
     // Miscellaneous cases that don't fit into one of the categories above.
     Expr x = Var("x"), y = Var("y");

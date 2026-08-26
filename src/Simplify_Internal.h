@@ -441,6 +441,18 @@ public:
 
     std::set<Expr, IRDeepCompare> truths, falsehoods;
 
+    // Is there anything in the truths/falsehoods sets? Used to gate rewrite
+    // rules whose predicates are only ever provable from facts learned higher
+    // up in the IR, so that we don't pay for them in the common case.
+    bool has_facts() const {
+        return !truths.empty() || !falsehoods.empty();
+    }
+
+    // Replace exprs known to be truths or falsehoods with const_true or
+    // const_false. Used to inject everything currently known into the
+    // conditions of can_prove predicates in rewrite rules.
+    Expr substitute_facts(const Expr &e);
+
     struct ScopedFact {
         Simplify *simplify;
 
