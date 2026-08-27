@@ -133,6 +133,7 @@ tests(
     float16_t_constants.cpp
     float16_t_image_type.cpp
     float16_t_neon_op_check.cpp
+    fold_invariant_to_split.cpp
     for_each_element.cpp
     force_onto_stack.cpp
     func_lifetime.cpp
