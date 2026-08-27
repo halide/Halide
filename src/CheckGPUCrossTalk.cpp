@@ -319,12 +319,20 @@ class CheckCrossTalk : public IRVisitor {
                     continue;
                 }
                 if (s > l) {
-                    bool carried = false;
-                    for (size_t i = 0; i < regions[l].size() && !carried; i++) {
-                        carried = (!separates_threads[i] &&
-                                   !equal(load.canonical_args[i], store.canonical_args[i]));
+                    bool carried = false, same_site = true;
+                    for (size_t i = 0; i < regions[l].size(); i++) {
+                        bool differs =
+                            !equal(load.canonical_args[i], store.canonical_args[i]);
+                        carried = carried || (!separates_threads[i] && differs);
+                        same_site = same_site && !differs;
                     }
-                    if (!carried) {
+                    // A store at the very site the load names is one the
+                    // previous turn of the loop around them both ran, and the
+                    // thread that ran it was this one. That is a recurrence
+                    // that keeps its state in one place rather than moving
+                    // along an axis: the allocation carries the value from one
+                    // iteration to the next without the index going anywhere.
+                    if (!carried && !same_site) {
                         continue;
                     }
                 }
