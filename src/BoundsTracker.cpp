@@ -32,6 +32,8 @@ BoundsTracker::Binding::~Binding() {
     }
     if (recorded_loop) {
         tracker->loops.pop_back();
+        tracker->facts.pop_back();
+        tracker->facts.pop_back();
     }
 }
 
@@ -49,6 +51,9 @@ BoundsTracker::Binding BoundsTracker::push_for(const std::string &name, const Ex
     bool recorded_loop = false;
     if (min.type() == Int(32) && max.type() == Int(32) && is_pure(min) && is_pure(max)) {
         loops.push_back(LoopRange{name, min, max});
+        Expr loop_var = Variable::make(Int(32), name);
+        facts.push_back(loop_var >= min);
+        facts.push_back(loop_var <= max);
         recorded_loop = true;
     }
     return Binding(this, ScopedBinding<Interval>(scope, name, b), false, recorded_loop);
@@ -107,6 +112,10 @@ Expr BoundsTracker::simplify_with_context(const Expr &e) const {
     // value an equality fact implies, which weakens the very reasoning this
     // call exists to do. Any tightening from `scope` happens afterward, once
     // this expression is no longer being asked to prove an equality.
+    debug(4) << "Simplify with context: " << wrapped << "\n";
+    for (const auto &fact : facts) {
+        debug(4) << " [fact] " << fact << "\n";
+    }
     wrapped = Halide::Internal::simplify(wrapped, Scope<Interval>::empty_scope(),
                                          Scope<ModulusRemainder>::empty_scope(), facts);
 
