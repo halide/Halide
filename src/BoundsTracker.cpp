@@ -136,15 +136,6 @@ Expr BoundsTracker::simplify_with_context(const Expr &e) const {
     return wrapped;
 }
 
-Expr BoundsTracker::find_constant_bound_aggressive(const Expr &e, Direction d) const {
-    Expr bound = find_constant_bound(e, d);
-    if (bound.defined()) {
-        return bound;
-    }
-    Expr wrapped = simplify_with_context(e);
-    return Halide::Internal::find_constant_bound(wrapped, d, scope);
-}
-
 Interval BoundsTracker::tighten_using_loop_monotonicity(const Expr &e, Interval interval) const {
     if (e.type() != Int(32)) {
         return interval;
@@ -192,6 +183,15 @@ Interval BoundsTracker::find_constant_bounds_aggressive(const Expr &e) const {
         return interval;
     }
     return tighten_using_loop_monotonicity(wrapped, interval);
+}
+
+Expr BoundsTracker::find_constant_bound_aggressive(const Expr &e, Direction d) const {
+    Interval interval = find_constant_bounds_aggressive(e);
+    if (d == Direction::Lower) {
+        return interval.has_lower_bound() ? interval.min : Expr();
+    } else {
+        return interval.has_upper_bound() ? interval.max : Expr();
+    }
 }
 
 }  // namespace Internal
