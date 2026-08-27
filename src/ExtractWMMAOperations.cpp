@@ -1490,7 +1490,12 @@ class ExtractWMMAOperations : public IRMutator {
         in_scope.pop_back();
 
         if (pass == 0) {
-            user_assert(f.role != Role::Unknown)
+            // Storage nothing touches has no layout to work out. A Func whose
+            // value turns out to be unused still gets an allocation - it is
+            // there to cover a load, and the load went away with the value -
+            // so an untouched fragment is not a mistake. The loop below drops
+            // it, having no subtiles to give it.
+            user_assert(f.role != Role::Unknown || f.subtiles.empty())
                 << op->name << " is stored in Tile memory, but no matrix "
                 << "multiply was found that accumulates into it or reads it as an "
                 << "operand, so we can't tell what layout it should have.\n";
