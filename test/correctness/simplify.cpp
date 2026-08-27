@@ -2477,6 +2477,22 @@ void check_facts() {
     // The result isn't interesting; what matters is that we get one at all.
     (void)simplify(nest, Scope<Interval>(), Scope<ModulusRemainder>(), {x < y});
 
+    // can_prove-based rules (unlike the known_true ones above) recursively
+    // invoke the simplifier on their own predicate, and that predicate can be
+    // a freshly built expression rather than a piece of the original IR (e.g.
+    // min(x, y) - min(z, w) -> y - w, can_prove(x - y == z - w)) constructs a
+    // brand new subtraction). If the operands are themselves unsimplified
+    // instances of the same shape, this recurses; the depth limit must bound
+    // the work rather than let it explode.
+    Expr deep = min(Var("da"), Var("db")) - min(Var("dc"), Var("dd"));
+    for (int i = 0; i < 10; i++) {
+        Expr y = Var("dy" + std::to_string(i));
+        Expr z = Var("dz" + std::to_string(i));
+        Expr w = Var("dw" + std::to_string(i));
+        deep = min(deep, y) - min(z, w);
+    }
+    (void)simplify(deep);
+
     // The rules above look their predicates up in the facts rather than
     // recursively invoking the simplifier, so a fact only settles a predicate
     // it is directly comparable to. This one needs arithmetic to connect:
