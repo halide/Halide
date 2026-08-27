@@ -738,10 +738,28 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             // appears to grow with the loop.
             Expr initial_diff = substitute(loop_var, var_bounds.min,
                                            substitute(steady_state, const_false(), diff));
-            Expr extent = (Max::make(substitute(steady_state, const_true(), diff),
-                                     initial_diff) +
-                           1);
-            extent = simplify(common_subexpression_elimination(extent), bounds);
+            Expr extent_expr = (Max::make(substitute(steady_state, const_true(), diff),
+                                          initial_diff) +
+                                1);
+            Expr extent = simplify(common_subexpression_elimination(extent_expr), bounds);
+
+            // The two ends of a clamped index move together, but the promises
+            // they carry about staying in range are not something the
+            // simplifier can cancel across, so the difference bounds to the
+            // whole extent and nothing folds. Stripping them doesn't change
+            // the value, only what can be proved about it, so take the
+            // stripped form when it bounds more tightly. It isn't always
+            // tighter: a promise can be the only thing bounding an index.
+            Expr no_promises = remove_promises(extent_expr);
+            if (!no_promises.same_as(extent_expr)) {
+                Expr stripped =
+                    simplify(common_subexpression_elimination(no_promises), bounds);
+                Expr a = find_constant_bound(extent, Direction::Upper, bounds);
+                Expr b = find_constant_bound(stripped, Direction::Upper, bounds);
+                if (b.defined() && (!a.defined() || can_prove(b < a))) {
+                    extent = stripped;
+                }
+            }
 
             // Structural safety for aliasing the write with a self-read slot.
             // Let the storage folding extent be k + 1. To alias the write,
