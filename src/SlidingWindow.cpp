@@ -1271,6 +1271,28 @@ class SlidingWindow : public IRMutator {
         });
     }
 
+    // Whether any store to a Func sits inside a vectorized loop, whose lanes
+    // have no order between them.
+    static bool stored_under_lanes(const Stmt &body, const string &name) {
+        bool found = false;
+        int depth = 0;
+        visit_with(
+            body,
+            [&](auto *self, const For *op) {
+                bool lanes = op->for_type == ForType::Vectorized;
+                depth += lanes ? 1 : 0;
+                self->visit_base(op);
+                depth -= lanes ? 1 : 0;
+            },
+            [&](auto *self, const Provide *op) {
+                if (op->name == name && depth > 0) {
+                    found = true;
+                }
+                self->visit_base(op);
+            });
+        return found;
+    }
+
     // How much of a Func has to be kept while sliding over a dimension.
     //
     // The region required per iteration is the obvious answer, and it is wrong
@@ -1334,7 +1356,25 @@ class SlidingWindow : public IRMutator {
             return d.old_bounds;
         }
 
-        Interval live(simplify(min(ext[d.dim_idx].min, dim_var - reach_back), one_step),
+        // The step the recurrence reaches back to is read while the next one
+        // is computed, and never afterwards. It dies at the store that
+        // replaces it, so it does not have to be kept, and the window is
+        // whatever the consumers ask for.
+        //
+        // That argument wants the read to come before the store with nothing
+        // reading it later. Within one pure definition the right-hand side is
+        // evaluated before the store, which gives it. An update stage could
+        // read the older step after that store, and the lanes of a vectorized
+        // loop have no order between them at all, so give up on both.
+        //
+        // A consumer that wants the older step keeps it through ext.
+        bool dies_at_its_store =
+            func.updates().empty() && !stored_under_lanes(body, func.name());
+
+        Expr low = dies_at_its_store ?
+                       ext[d.dim_idx].min :
+                       min(ext[d.dim_idx].min, dim_var - reach_back);
+        Interval live(simplify(low, one_step),
                       simplify(max(ext[d.dim_idx].max, dim_var), one_step));
         return live;
     }

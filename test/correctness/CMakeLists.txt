@@ -207,6 +207,7 @@ tests(
     in_place.cpp
     indexing_access_undef.cpp
     inductive.cpp
+    fold_inductive_in_place.cpp
     inductive_folding.cpp
     inductive_ring_buffer.cpp
     infer_arguments.cpp
