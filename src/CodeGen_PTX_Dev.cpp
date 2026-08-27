@@ -764,14 +764,18 @@ void CodeGen_PTX_Dev::visit(const Shuffle *op) {
 
     // The matrix the fragment inflates to is in row-major order, so an index
     // into it is already the entry asked for.
+    // Built up in a local, because getting each entry generates code of its
+    // own, and generating code is what sets the member this would otherwise
+    // be accumulated into.
     llvm::Type *result_type = llvm_type_of(op->type);
-    value = UndefValue::get(result_type);
+    Value *result = UndefValue::get(result_type);
     for (int i = 0; i < (int)op->indices.size(); i++) {
         Value *element = codegen_wmma_get_element(frag, op->indices[i]);
-        value = op->type.lanes() == 1 ?
-                    element :
-                    builder->CreateInsertElement(value, element, i);
+        result = op->type.lanes() == 1 ?
+                     element :
+                     builder->CreateInsertElement(result, element, i);
     }
+    value = result;
 }
 
 void CodeGen_PTX_Dev::split_fragment(const Expr &e, vector<Value *> &args) {
