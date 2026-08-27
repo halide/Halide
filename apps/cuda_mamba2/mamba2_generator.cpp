@@ -38,24 +38,15 @@
 //    because a block is capped at 48KB of shared memory: the CUDA runtime
 //    never asks for the larger carveout with cuFuncSetAttribute, so the ~100KB
 //    the hardware has is out of reach.
-//  - The tensor core schedule (wmma=true) is finished except for one thing,
-//    and it is the same thing as the first item above. A fragment is only a
-//    register if which register it is, is known, so every loop indexing one
-//    must be unrolled. That works everywhere except the state, which wants a
-//    single slot it reads and then overwrites, as the recurrence does. Asking
-//    for that slot with fold_storage(t, 1) is rejected:
-//      The allocation H is scheduled to live in Tile memory ... Halide could
-//      not prove that each thread keeps to its own part of it
-//    even though the load and the store are at the same index, by the same
-//    thread, one iteration apart. Left at two slots the window has to warm up,
-//    which gives the loop that must be unrolled an extent of
-//    select(0 < to, 2, ...), and a loop whose extent is not constant cannot be
-//    unrolled. So the whole schedule waits on the cross-talk check learning
-//    that a thread may read what it itself wrote last time round.
-//  - The narrowed state has to go out to shared memory and back every chunk,
-//    because an accumulator fragment and a multiply's second operand are held
-//    in different register layouts. Attention never pays this: it reads its
-//    accumulator once at the end, where this feeds it back in every chunk.
+//  - The tensor core schedule (wmma=true) now gets through every check Halide
+//    makes: all four multiplies are recognised, the state lives in one
+//    fragment that each chunk reads and overwrites, and the walk slides over
+//    the chunks with no warm-up. It falls over in llvm instead, building an
+//    insertelement whose operands do not agree, from
+//    CodeGen_PTX_Dev::visit(const Shuffle *) - most likely the ordinary
+//    shuffle path inlined into it rather than the fragment one, which checks
+//    out. The shuffle is inside a cast of a select of a multiply, which is
+//    where the state is read out of its accumulator and narrowed.
 
 #include "Halide.h"
 
@@ -285,18 +276,16 @@ private:
         // that, so each copy names one of them: a fragment is only a register
         // if which register it is, is known.
         out.reorder(d, idx, t, b)
-            .split(t, to, ti, 2)
             .tile(d, idx, xo, yo, xi, yi, tile, tile)
-            .reorder(xi, yi, xo, yo, ti, to, b)
+            .reorder(xi, yi, xo, yo, t, b)
             .gpu_blocks(b)
             .gpu_threads(xo)
             .unroll(yo)
-            .unroll(ti)
             .tile_store(xi, yi);
 
         // The scores, split across the warps by output position, and left in
         // shared memory because every warp reduces over all of them.
-        qk.compute_at(out, ti)
+        qk.compute_at(out, t)
             .store_in(MemoryType::Tile)
             .tile(jj, idx, rxi, ryi, tile, tile)
             .unroll(jj)
@@ -310,7 +299,7 @@ private:
             .gpu_threads(idx)
             .tile_matmul(rri, rxi, ryi);
 
-        score.compute_at(out, ti)
+        score.compute_at(out, t)
             .store_in(MemoryType::GPUShared)
             .tile(jj, idx, rxi, ryi, tile, tile)
             .unroll(jj)
@@ -320,7 +309,7 @@ private:
         // Everything past the scores is per channel, so a warp owns a tile of
         // channels and keeps its share of the state in its own fragments.
         for (Func f : {y_intra, y_inter}) {
-            f.compute_at(out, ti)
+            f.compute_at(out, t)
                 .store_in(MemoryType::Tile)
                 .tile(d, idx, rxi, ryi, tile, tile)
                 .gpu_threads(d)
@@ -329,7 +318,7 @@ private:
         }
         // The state is indexed the other way round, so the warps go on its
         // second dimension to own the same channels they own everywhere else.
-        chunk_state.compute_at(out, ti)
+        chunk_state.compute_at(out, t)
             .store_in(MemoryType::Tile)
             .tile(p, d, rxi, ryi, tile, tile)
             .unroll(p)
@@ -361,7 +350,7 @@ private:
         // The state slides over the walk: one chunk's worth is live at a
         // time, and saying so is what keeps which fragment holds it fixed
         // rather than alternating with the chunk.
-        H.compute_at(out, ti)
+        H.compute_at(out, t)
             .store_at(out, b)
             .fold_storage(t, 1)
             .store_in(MemoryType::Tile)
@@ -374,7 +363,7 @@ private:
         // fragments: an accumulator and a multiply's second operand are held
         // in different register layouts, so one fragment cannot be both. The
         // state is an accumulator, and this is the operand read from it.
-        H16.compute_at(out, ti)
+        H16.compute_at(out, t)
             .store_in(MemoryType::GPUShared)
             .tile(p, d, rxi, ryi, tile, tile)
             .unroll(p)
@@ -395,13 +384,13 @@ private:
         }
 
         // The scan, and the two staged operands the multiplies read.
-        cumdelta.compute_at(out, ti).store_in(MemoryType::GPUShared);
+        cumdelta.compute_at(out, t).store_in(MemoryType::GPUShared);
         if (!inductive) {
             cumdelta.gpu_threads(k);
             cumdelta.update().gpu_threads(k);
         }
         for (Func f : {Xb, Xbd}) {
-            f.compute_at(out, ti)
+            f.compute_at(out, t)
                 .store_in(MemoryType::GPUShared)
                 .split(f.args()[0], xo, xi, tile)
                 .gpu_lanes(xi);
