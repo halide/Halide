@@ -38,17 +38,24 @@
 //    because a block is capped at 48KB of shared memory: the CUDA runtime
 //    never asks for the larger carveout with cuFuncSetAttribute, so the ~100KB
 //    the hardware has is out of reach.
-//  - The tensor core schedule (wmma=true) has all four multiplies recognised
-//    and stops at the state's storage. The recurrence reads the state and
-//    then overwrites it, which is one slot's worth, but the fold analysis
-//    sizes the window from the region required, sees [t-1, t], and asks for
-//    two. Two slots means which one holds the state alternates with the
-//    chunk, and reading a tensor core accumulator at an alternating slice is
-//    not supported - a fragment is only a register if which register it is,
-//    is known. Saying fold_storage(t, 1) instead is refused as too small.
-//    So the last thing wanted is for storage folding to recognise that a
-//    recurrence which reads its own previous value can share one slot, the
-//    way the cross-talk check now does.
+//  - The tensor core schedule (wmma=true) is finished except for one thing,
+//    and it is the same thing as the first item above. A fragment is only a
+//    register if which register it is, is known, so every loop indexing one
+//    must be unrolled. That works everywhere except the state, which wants a
+//    single slot it reads and then overwrites, as the recurrence does. Asking
+//    for that slot with fold_storage(t, 1) is rejected:
+//      The allocation H is scheduled to live in Tile memory ... Halide could
+//      not prove that each thread keeps to its own part of it
+//    even though the load and the store are at the same index, by the same
+//    thread, one iteration apart. Left at two slots the window has to warm up,
+//    which gives the loop that must be unrolled an extent of
+//    select(0 < to, 2, ...), and a loop whose extent is not constant cannot be
+//    unrolled. So the whole schedule waits on the cross-talk check learning
+//    that a thread may read what it itself wrote last time round.
+//  - The narrowed state has to go out to shared memory and back every chunk,
+//    because an accumulator fragment and a multiply's second operand are held
+//    in different register layouts. Attention never pays this: it reads its
+//    accumulator once at the end, where this feeds it back in every chunk.
 
 #include "Halide.h"
 
@@ -118,19 +125,13 @@ public:
             return exp(A(bb) * (cumdelta(to, tt, bb) - cumdelta(from, tt, bb)));
         };
 
-        // The chunk's slices of C and B, staged so that the multiplies read
-        // their operands from one place the block shares.
-        Func Cs("Cs"), Bs("Bs");
-        Cs(p, idx, t, b) = Cm(p, t * T + idx, b);
-        Bs(p, jj, t, b) = Bm(p, t * T + jj, b);
-
         // The chunk's own scores: C^T B.
         RDom rp(0, state, "rp");
         rp_var = rp.x;
         Func qk("qk");
         qk(jj, idx, t, b) = 0.f;
-        qk(jj, idx, t, b) += cast<float>(Cs(rp, idx, t, b)) *
-                             cast<float>(Bs(rp, jj, t, b));
+        qk(jj, idx, t, b) += cast<float>(Cm(rp, t * T + idx, b)) *
+                             cast<float>(Bm(rp, t * T + jj, b));
 
         // Masked to be causal and weighted by the decay between the two
         // positions, then narrowed for the multiply that consumes it.
@@ -153,45 +154,35 @@ public:
 
         Func chunk_state("chunk_state");
         chunk_state(p, d, t, b) = 0.f;
-        chunk_state(p, d, t, b) += cast<float>(Bs(p, rj, t, b)) *
+        chunk_state(p, d, t, b) += cast<float>(Bm(p, t * T + rj, b)) *
                                    cast<float>(Xbd(d, rj, t, b));
 
         // Every earlier chunk's state, decayed to the end of this one. Carried
         // at single precision, and the only recurrence that crosses a chunk.
-        // Indexed by the chunk that reads it rather than the chunk that
-        // finished it, so that every consumer wants it at the chunk it is
-        // already on. Written the other way round the readers all want it one
-        // chunk back, and saying so takes a conditional, which leaves
-        // everything feeding it computed conditionally too.
         Func H = Func(Float(32), "H");
         H(p, d, t, b) = select(t <= 0,
                                0.f,
                                likely(H(p, d, t - 1, b) *
-                                      exp(A(b) * cumdelta(T - 1, t - 1, b))) +
-                                   chunk_state(p, d, t - 1, b));
+                                      exp(A(b) * cumdelta(T - 1, t, b)))) +
+                        chunk_state(p, d, t, b);
 
         // The state is narrowed where it meets the multiply, not where it is
         // carried, which is what keeps the recurrence itself at full precision.
         // It is its own Func so that the multiply below reads it plainly: an
         // operand that is a cast of a load is not a matrix multiply operand.
-        // Stored with the state dimension second, because that is the one the
-        // multiply below reduces over, and an operand is read with the
-        // reduction along its second axis.
-        // Zero for the first chunk, which has nothing before it. Putting that
-        // here rather than on the result keeps the multiply below unguarded:
-        // a conditional consumer leaves its producer computed conditionally,
-        // and a matrix multiply is not recognised through that.
         Func H16("H16");
-        H16(d, p, t, b) = cast<float16_t>(H(p, d, t, b));
+        H16(p, d, t, b) = cast<float16_t>(H(p, d, t - 1, b));
 
         Func y_inter("y_inter");
         y_inter(d, idx, t, b) = 0.f;
-        y_inter(d, idx, t, b) += cast<float>(Cs(rp, idx, t, b)) *
-                                 cast<float>(H16(d, rp, t, b));
+        y_inter(d, idx, t, b) += cast<float>(Cm(rp, t * T + idx, b)) *
+                                 cast<float>(H16(rp, d, t, b));
 
         out(d, idx, t, b) = cast<float16_t>(
             y_intra(d, idx, t, b) +
-            y_inter(d, idx, t, b) * exp(A(b) * cumdelta(idx, t, b)));
+            select(t > 0,
+                   y_inter(d, idx, t, b) * exp(A(b) * cumdelta(idx, t, b)),
+                   0.f));
 
         // ---------------------------------------------------------------
         // Estimates and bounds
@@ -203,7 +194,7 @@ public:
 
         if (!using_autoscheduler()) {
             if (wmma) {
-                schedule_wmma(d, p, k, idx, jj, t, b, Xb, Xbd, Cs, Bs, cumdelta, qk,
+                schedule_wmma(d, p, k, idx, jj, t, b, Xb, Xbd, cumdelta, qk,
                               score, y_intra, chunk_state, H, H16, y_inter);
             } else {
                 schedule_gpu(d, p, k, idx, jj, t, b, Xb, cumdelta, qk, score,
@@ -281,7 +272,7 @@ private:
     // channel, so that a warp holds every state row for the channels it owns
     // and never has to reduce across warps.
     void schedule_wmma(Var d, Var p, Var k, Var idx, Var jj, Var t, Var b,
-                       Func Xb, Func Xbd, Func Cs, Func Bs, Func cumdelta, Func qk, Func score,
+                       Func Xb, Func Xbd, Func cumdelta, Func qk, Func score,
                        Func y_intra, Func chunk_state, Func H, Func H16, Func y_inter) {
         Var xo("xo"), yo("yo"), xi("xi"), yi("yi"), w("w"), to("to"), ti("ti");
         Var rxi("rxi"), ryi("ryi");
@@ -294,16 +285,18 @@ private:
         // that, so each copy names one of them: a fragment is only a register
         // if which register it is, is known.
         out.reorder(d, idx, t, b)
+            .split(t, to, ti, 2)
             .tile(d, idx, xo, yo, xi, yi, tile, tile)
-            .reorder(xi, yi, xo, yo, t, b)
+            .reorder(xi, yi, xo, yo, ti, to, b)
             .gpu_blocks(b)
             .gpu_threads(xo)
             .unroll(yo)
+            .unroll(ti)
             .tile_store(xi, yi);
 
         // The scores, split across the warps by output position, and left in
         // shared memory because every warp reduces over all of them.
-        qk.compute_at(out, t)
+        qk.compute_at(out, ti)
             .store_in(MemoryType::Tile)
             .tile(jj, idx, rxi, ryi, tile, tile)
             .unroll(jj)
@@ -317,7 +310,7 @@ private:
             .gpu_threads(idx)
             .tile_matmul(rri, rxi, ryi);
 
-        score.compute_at(out, t)
+        score.compute_at(out, ti)
             .store_in(MemoryType::GPUShared)
             .tile(jj, idx, rxi, ryi, tile, tile)
             .unroll(jj)
@@ -327,7 +320,7 @@ private:
         // Everything past the scores is per channel, so a warp owns a tile of
         // channels and keeps its share of the state in its own fragments.
         for (Func f : {y_intra, y_inter}) {
-            f.compute_at(out, t)
+            f.compute_at(out, ti)
                 .store_in(MemoryType::Tile)
                 .tile(d, idx, rxi, ryi, tile, tile)
                 .gpu_threads(d)
@@ -336,7 +329,7 @@ private:
         }
         // The state is indexed the other way round, so the warps go on its
         // second dimension to own the same channels they own everywhere else.
-        chunk_state.compute_at(out, t)
+        chunk_state.compute_at(out, ti)
             .store_in(MemoryType::Tile)
             .tile(p, d, rxi, ryi, tile, tile)
             .unroll(p)
@@ -368,8 +361,9 @@ private:
         // The state slides over the walk: one chunk's worth is live at a
         // time, and saying so is what keeps which fragment holds it fixed
         // rather than alternating with the chunk.
-        H.compute_at(out, t)
+        H.compute_at(out, ti)
             .store_at(out, b)
+            .fold_storage(t, 1)
             .store_in(MemoryType::Tile)
             .tile(p, d, rxi, ryi, tile, tile)
             .unroll(p)
@@ -380,11 +374,11 @@ private:
         // fragments: an accumulator and a multiply's second operand are held
         // in different register layouts, so one fragment cannot be both. The
         // state is an accumulator, and this is the operand read from it.
-        H16.compute_at(out, t)
+        H16.compute_at(out, ti)
             .store_in(MemoryType::GPUShared)
-            .tile(d, p, rxi, ryi, tile, tile)
-            .gpu_threads(d)
+            .tile(p, d, rxi, ryi, tile, tile)
             .unroll(p)
+            .gpu_threads(d)
             .tile_store(rxi, ryi);
 
         // Each per-chunk Func has a loop over the chunk it is computing, which
@@ -401,13 +395,13 @@ private:
         }
 
         // The scan, and the two staged operands the multiplies read.
-        cumdelta.compute_at(out, t).store_in(MemoryType::GPUShared);
+        cumdelta.compute_at(out, ti).store_in(MemoryType::GPUShared);
         if (!inductive) {
             cumdelta.gpu_threads(k);
             cumdelta.update().gpu_threads(k);
         }
-        for (Func f : {Cs, Bs, Xb, Xbd}) {
-            f.compute_at(out, t)
+        for (Func f : {Xb, Xbd}) {
+            f.compute_at(out, ti)
                 .store_in(MemoryType::GPUShared)
                 .split(f.args()[0], xo, xi, tile)
                 .gpu_lanes(xi);
