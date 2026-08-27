@@ -440,11 +440,17 @@ bool Simplify::is_known_true(const Expr &e) {
 
 Expr Simplify::simplify_can_prove_condition(const Expr &e) {
     if (can_prove_depth >= max_can_prove_depth) {
-        // Too deep to safely recurse into the full simplifier. substitute_facts
-        // is a plain tree walk that never invokes a rewrite rule (it can't
-        // re-trigger can_prove or known_true), so it remains safe and cheap
-        // here: fall back to it rather than giving up on the condition.
-        return substitute_facts(e);
+        // Too deep to safely recurse into the full simplifier. The only thing
+        // the caller does with the result is check whether it is the literal
+        // constant true, and nothing here can fold a compound expression (an
+        // And of two known-true operands stays an unfolded And, not true) --
+        // that folding is exactly the recursive work we're declining to do.
+        // So a substitute_facts tree walk can't prove anything a direct
+        // lookup of the condition itself couldn't already: skip the walk.
+        if (is_known_true(e)) {
+            return const_true(e.type().lanes(), nullptr);
+        }
+        return e;
     }
     ScopedValue<int> guard(can_prove_depth, can_prove_depth + 1);
     return mutate(substitute_facts(e), nullptr);
