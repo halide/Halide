@@ -88,6 +88,7 @@ int main(int argc, char **argv) {
     // than the pipeline does, so check a few.
     const int checked = 2;
     double max_err = 0, max_mag = 0;
+    int reported = 0;
     std::vector<float> ref(seq * channels);
     for (int b = 0; b < checked; b++) {
         reference_head(X, Bm, Cm, Delta, A(b), b, ref);
@@ -95,6 +96,11 @@ int main(int argc, char **argv) {
             for (int dd = 0; dd < channels; dd++) {
                 double want = ref[dd + n * channels];
                 double got = (float)result(dd, n % chunk, n / chunk, b);
+                if (std::abs(got - want) > 1e-2 && reported < 6) {
+                    printf("  mismatch head %d chunk %d pos %d chan %d: %f vs %f\n",
+                           b, n / chunk, n % chunk, dd, got, want);
+                    reported++;
+                }
                 max_err = std::max(max_err, std::abs(got - want));
                 max_mag = std::max(max_mag, std::abs(want));
             }

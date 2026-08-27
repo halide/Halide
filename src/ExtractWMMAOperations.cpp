@@ -204,6 +204,24 @@ Stmt in_lane_loop(const Expr &lane, Stmt s) {
                      DeviceAPI::CUDA, std::move(s));
 }
 
+// Whether a Stmt reads a fragment as the whole matrix it holds. Assembling the
+// matrix takes the registers of every lane, so the whole warp has to reach it.
+bool reads_a_whole_matrix(const Stmt &s) {
+    class Finder : public IRVisitor {
+        using IRVisitor::visit;
+        void visit(const Call *op) override {
+            found = found || (op->is_intrinsic(Call::wmma_fragment_to_matrix_d) &&
+                              op->args.size() == 4);
+            IRVisitor::visit(op);
+        }
+
+    public:
+        bool found = false;
+    } finder;
+    s.accept(&finder);
+    return finder.found;
+}
+
 // The matrix a wmma load or store moves, described as a Load of every element
 // of it, with the lanes in row-major order regardless of how it is laid out in
 // memory. A row-major matrix has consecutive columns one element apart and its
@@ -1775,7 +1793,12 @@ class ExtractWMMAOperations : public IRMutator {
             }
             // Not a copy of a whole tile out to memory. Recurse, so that reads
             // of a fragment in here become gathers.
-            return IRMutator::visit(op);
+            Stmt stmt = IRMutator::visit(op);
+            if (gpu_lane_vars.empty() && reads_a_whole_matrix(stmt)) {
+                stmt = in_lane_loop(make_lane(unique_name("wmma_lane") + gpu_thread_name(0)),
+                                    stmt);
+            }
+            return stmt;
         }
 
         // A reduction along an axis of the tile accumulates, but it is not a

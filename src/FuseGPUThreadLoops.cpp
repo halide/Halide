@@ -248,22 +248,33 @@ protected:
     const DeviceAPI device_api;
 
     int depth = 0;
-    int max_depth = 0;
+    // Bitmask of the thread dimensions the subtree being wrapped loops over.
+    int dims_used = 0;
 
     Stmt wrap(Stmt s) {
         if (depth != 0) {
             return mutate(s);
         }
-        max_depth = 0;
+        int outer_dims_used = dims_used;
+        dims_used = 0;
         s = mutate(s);
         if (is_no_op(s)) {
+            dims_used = outer_dims_used;
             return s;
         }
-        while (max_depth < block_size.threads_dimensions()) {
-            s = For::make(gpu_thread_name(max_depth), 0, 0, ForType::GPUThread,
-                          Partition::Never, device_api, s);
-            max_depth++;
+        // Give it a degenerate loop over each dimension it lacks. Which
+        // dimensions those are can't be inferred from the depth of the nest: a
+        // loop over lanes is a loop over x, so a nest that has one but not the
+        // other is possible in either order.
+        const int all_dims = (1 << block_size.threads_dimensions()) - 1;
+        for (int d = 0; d < block_size.threads_dimensions(); d++) {
+            if (!(dims_used & (1 << d))) {
+                s = For::make(gpu_thread_name(d), 0, 0, ForType::GPUThread,
+                              Partition::Never, device_api, s);
+            }
         }
+        // Anything enclosing this now loops over every dimension too.
+        dims_used = outer_dims_used | all_dims;
         return s;
     }
 
@@ -287,7 +298,11 @@ protected:
         if (op->for_type == ForType::GPUThread ||
             op->for_type == ForType::GPULane) {
             depth++;
-            max_depth = std::max(max_depth, depth);
+            for (int d = 0; d < 3; d++) {
+                if (ends_with(op->name, gpu_thread_name(d))) {
+                    dims_used |= 1 << d;
+                }
+            }
             Stmt stmt = IRMutator::visit(op);
             depth--;
             return stmt;
