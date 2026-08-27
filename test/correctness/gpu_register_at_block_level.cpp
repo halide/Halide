@@ -63,35 +63,30 @@ int main(int argc, char **argv) {
     }
 
     {
-        // A tile per thread, walked by serial loops rather than unrolled ones,
-        // with a tail strategy that lets neighbouring tiles overlap. Threads
-        // recompute each other's values but each still reads only its own.
+        // Striped across threads rather than tiled: thread t owns elements t,
+        // t + 16, t + 32 and t + 48, so it holds four registers.
         Func f("f"), g("g");
-        Var x("x"), y("y"), xo("xo"), yo("yo"), xi("xi"), yi("yi"), xii("xii"), yii("yii");
-        Var fxo("fxo"), fyo("fyo"), fxi("fxi"), fyi("fyi");
+        Var x("x"), y("y"), xo("xo"), xi("xi");
         f(x, y) = x + y * 1000;
-        g(x, y) = f(x, y) * 2;
-        g.split(x, xo, xi, 32)
-            .split(y, yo, yi, 32)
-            .split(xi, xi, xii, 2)
-            .split(yi, yi, yii, 2)
-            .reorder(xii, yii, xi, yi, xo, yo)
-            .gpu_blocks(xo, yo)
-            .gpu_threads(xi, yi);
+        g(x, y) = f(x, y);
+        g.split(x, xo, xi, 64)
+            .split(xi, xi, x, 16)
+            .reorder(xi, x, y)
+            .unroll(xi)
+            .gpu_blocks(xo, y)
+            .gpu_threads(x);
         f.compute_at(g, xo)
             .store_in(MemoryType::Register)
-            .split(x, fxo, fxi, 2)
-            .split(y, fyo, fyi, 2)
-            .reorder(fxi, fyi, fxo, fyo)
-            .gpu_threads(fxo, fyo);
+            .split(x, xo, xi, 16)
+            .unroll(xo)
+            .gpu_threads(xi);
 
-        Buffer<int> result = g.realize({128, 128}, target);
-        for (int y = 0; y < 128; y++) {
-            for (int x = 0; x < 128; x++) {
-                int correct = (x + y * 1000) * 2;
-                if (result(x, y) != correct) {
-                    printf("tile per thread: result(%d, %d) = %d instead of %d\n",
-                           x, y, result(x, y), correct);
+        Buffer<int> result = g.realize({256, 4}, target);
+        for (int y = 0; y < 4; y++) {
+            for (int x = 0; x < 256; x++) {
+                if (result(x, y) != x + y * 1000) {
+                    printf("striped: result(%d, %d) = %d instead of %d\n",
+                           x, y, result(x, y), x + y * 1000);
                     return 1;
                 }
             }
@@ -115,6 +110,39 @@ int main(int argc, char **argv) {
                 if (result(x, y) != 2 * (x + y)) {
                     printf("two stages: result(%d, %d) = %d instead of %d\n",
                            x, y, result(x, y), 2 * (x + y));
+                    return 1;
+                }
+            }
+        }
+    }
+
+    {
+        // Each thread owns four elements accessed as one vector, so the vector
+        // needs four registers rather than one.
+        Func f("f"), g("g");
+        Var x("x"), y("y"), xo("xo"), yo("yo"), xi("xi"), yi("yi");
+        f(x, y) = x + y * 1000;
+        g(x, y) = f(x, y) * 2;
+        g.split(x, xo, xi, 32)
+            .split(y, yo, yi, 8)
+            .split(xi, xi, x, 4)
+            .reorder(x, xi, yi, xo, yo)
+            .gpu_blocks(xo, yo)
+            .gpu_threads(xi, yi)
+            .vectorize(x);
+        f.compute_at(g, xo)
+            .store_in(MemoryType::Register)
+            .split(x, xo, xi, 4)
+            .gpu_threads(xo, y)
+            .vectorize(xi);
+
+        Buffer<int> result = g.realize({256, 64}, target);
+        for (int y = 0; y < 64; y++) {
+            for (int x = 0; x < 256; x++) {
+                int correct = (x + y * 1000) * 2;
+                if (result(x, y) != correct) {
+                    printf("vectorized: result(%d, %d) = %d instead of %d\n",
+                           x, y, result(x, y), correct);
                     return 1;
                 }
             }

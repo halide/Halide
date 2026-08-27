@@ -21,3 +21,14 @@ rewrite(x < y && y < z || x < z, x < z)
 rewrite(-x + y, y - x)
 rewrite(-x * 2, x * -2)
 rewrite(!(x < y), y <= x)
+
+# Integers of a type other than Int(32) are printed with a suffix giving the
+# type. These rules are only true if the suffix is parsed; they are false if
+# the literals are taken to be Int(32).
+rewrite(255_u8 + 1_u8, 0_u8)
+rewrite(65535_u16 + 1_u16, 0_u16)
+rewrite(32767_i16 + 1_i16, -32768_i16)
+rewrite(-3_i16 * 2_i16, -6_i16)
+
+# Bitwise not
+rewrite(~0_i16 + 1_i16, 0_i16)

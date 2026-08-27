@@ -28,7 +28,7 @@ find_package(Halide REQUIRED)
 add_halide_generator(mat_mul.generator SOURCES mat_mul_generator.cpp)
 
 # Filters
-add_halide_library(mat_mul FROM mat_mul.generator FEATURES cuda cuda_capability_50 PARAMS size=1024)
+add_halide_library(mat_mul FROM mat_mul.generator FEATURES cuda cuda_capability_80 PARAMS size=1024)
 
 # Main executable
 add_executable(runner runner.cpp)

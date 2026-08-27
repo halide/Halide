@@ -64,6 +64,12 @@ Expr Simplify::visit(const And *op, ExprInfo *info) {
 
          rewrite(y < x && x < y, false) ||
          rewrite(x == c0 && x == c1, false, c0 != c1) ||
+         // The same, but where the two equalities are in different halves of
+         // a nested conjunction.
+         rewrite(((x == c0) && y) && ((x == c1) && z), false, c0 != c1) ||
+         rewrite((x && (y == c0)) && ((y == c1) && z), false, c0 != c1) ||
+         rewrite(((x == c0) && y) && (z && (x == c1)), false, c0 != c1) ||
+         rewrite((x && (y == c0)) && (z && (y == c1)), false, c0 != c1) ||
          // Note: In the predicate below, if undefined overflow
          // occurs, the predicate counts as false. If well-defined
          // overflow occurs, the condition couldn't possibly
@@ -144,6 +150,7 @@ Expr Simplify::visit(const And *op, ExprInfo *info) {
          rewrite((x && broadcast(y, c0)) && broadcast(z, c0), x && broadcast(y && z, c0)) ||
          rewrite((broadcast(x, c0) && y) && broadcast(z, c0), broadcast(x && z, c0) && y) ||
 
+         // Collect negations, which is the smaller form.
          rewrite(!x && !y, !(x || y)) ||
 
          rewrite(x && !(x && y), !y && x) ||

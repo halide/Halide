@@ -10,8 +10,8 @@ set(WF_CPP baseline.cpp)
 add_custom_command(
     OUTPUT ${WF_CPP}
     COMMAND
-        binary2cpp baseline_weights < "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/baseline.weights>" >
-        ${WF_CPP}
+        binary2cpp baseline_weights < "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/baseline.weights>"
+        > ${WF_CPP}
     DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/baseline.weights" binary2cpp
     VERBATIM
 )

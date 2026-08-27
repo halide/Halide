@@ -2108,6 +2108,22 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
      * classified the same way (scalar / unit-stride vector / scatter), plus
      * the total bytes stored. */
     uint64_t scalar_stores, vector_stores, scatters, bytes_stored;
+
+    /** The number of times heap storage for this Func was realized (a
+     * store_at site) and produced (a compute_at site). */
+    uint64_t realizations, productions;
+
+    /** The total number of points required of this Func aggregated across all
+     * realizations (store_at sites) and, separately, across all productions
+     * (compute_at sites). When sliding-window succeeds, the production total
+     * is less than the per-production naive sum. */
+    uint64_t points_required_at_realization, points_required_at_production;
+
+    /** The number of points that would be required, and the number of times
+     * the Func would be produced, if it were computed one loop level further
+     * inwards than its current compute_at. Used to evaluate whether computing
+     * further in might be a good idea. */
+    uint64_t points_required_inwards, productions_if_inwards;
 };
 
 /** Per-pipeline state tracked by the sampling profiler. These exist

@@ -164,8 +164,7 @@ public:
         // (so a copy-to-host fires per outer iter); xfer_host is then
         // read by xfer_dev2 on the device (so a copy-to-device fires per
         // outer iter). The synthetic copy entries should be parented
-        // to xfer_out and their realizations counter should match the
-        // outer-loop trip count.
+        // to xfer_out rather than the pipeline root.
         Func xfer_dev("xfer_dev"), xfer_host("xfer_host"),
             xfer_dev2("xfer_dev2"), xfer_out("xfer_out");
         if (get_target().has_gpu_feature()) {
