@@ -156,19 +156,24 @@ public:
 
         // Every earlier chunk's state, decayed to the end of this one. Carried
         // at single precision, and the only recurrence that crosses a chunk.
+        // Indexed by the chunk that reads it rather than the chunk that
+        // finished it, so every consumer wants it at the chunk it is already
+        // on. Written the other way round it is only ever read one chunk back,
+        // which takes a conditional to say, and leaves the window it slides
+        // over reaching past anything that gets written.
         Func H = Func(Float(32), "H");
         H(p, d, t, b) = select(t <= 0,
                                0.f,
                                likely(H(p, d, t - 1, b) *
-                                      exp(A(b) * cumdelta(T - 1, t, b)))) +
-                        chunk_state(p, d, t, b);
+                                      exp(A(b) * cumdelta(T - 1, t - 1, b))) +
+                                   chunk_state(p, d, t - 1, b));
 
         // The state is narrowed where it meets the multiply, not where it is
         // carried, which is what keeps the recurrence itself at full precision.
         // It is its own Func so that the multiply below reads it plainly: an
         // operand that is a cast of a load is not a matrix multiply operand.
         Func H16("H16");
-        H16(p, d, t, b) = cast<float16_t>(H(p, d, t - 1, b));
+        H16(p, d, t, b) = cast<float16_t>(H(p, d, t, b));
 
         Func y_inter("y_inter");
         y_inter(d, idx, t, b) = 0.f;
@@ -177,9 +182,7 @@ public:
 
         out(d, idx, t, b) = cast<float16_t>(
             y_intra(d, idx, t, b) +
-            select(t > 0,
-                   y_inter(d, idx, t, b) * exp(A(b) * cumdelta(idx, t, b)),
-                   0.f));
+            y_inter(d, idx, t, b) * exp(A(b) * cumdelta(idx, t, b)));
 
         // ---------------------------------------------------------------
         // Estimates and bounds
@@ -281,9 +284,14 @@ private:
         // alternates with it. Take the walk two chunks at a time and unroll
         // that, so each copy names one of them: a fragment is only a register
         // if which register it is, is known.
+        // Split the walk by one, so no loop is named after the chunk. The
+        // state then slides over the chunk as a dimension rather than over a
+        // loop, and the window it needs is measured as what outlives each step
+        // rather than what each step asks for.
         out.reorder(d, idx, t, b)
+            .split(t, to, ti, 1)
             .tile(d, idx, xo, yo, xi, yi, tile, tile)
-            .reorder(xi, yi, xo, yo, t, b)
+            .reorder(xi, yi, xo, yo, ti, to, b)
             .gpu_blocks(b)
             .gpu_threads(xo)
             .unroll(yo)
@@ -291,7 +299,7 @@ private:
 
         // The scores, split across the warps by output position, and left in
         // shared memory because every warp reduces over all of them.
-        qk.compute_at(out, t)
+        qk.compute_at(out, ti)
             .store_in(MemoryType::Tile)
             .tile(jj, idx, rxi, ryi, tile, tile)
             .unroll(jj)
@@ -305,7 +313,7 @@ private:
             .gpu_threads(idx)
             .tile_matmul(rri, rxi, ryi);
 
-        score.compute_at(out, t)
+        score.compute_at(out, ti)
             .store_in(MemoryType::GPUShared)
             .tile(jj, idx, rxi, ryi, tile, tile)
             .unroll(jj)
@@ -315,7 +323,7 @@ private:
         // Everything past the scores is per channel, so a warp owns a tile of
         // channels and keeps its share of the state in its own fragments.
         for (Func f : {y_intra, y_inter}) {
-            f.compute_at(out, t)
+            f.compute_at(out, ti)
                 .store_in(MemoryType::Tile)
                 .tile(d, idx, rxi, ryi, tile, tile)
                 .gpu_threads(d)
@@ -324,7 +332,7 @@ private:
         }
         // The state is indexed the other way round, so the warps go on its
         // second dimension to own the same channels they own everywhere else.
-        chunk_state.compute_at(out, t)
+        chunk_state.compute_at(out, ti)
             .store_in(MemoryType::Tile)
             .tile(p, d, rxi, ryi, tile, tile)
             .unroll(p)
@@ -356,9 +364,9 @@ private:
         // The state slides over the walk: one chunk's worth is live at a
         // time, and saying so is what keeps which fragment holds it fixed
         // rather than alternating with the chunk.
-        H.compute_at(out, t)
+        H.compute_at(out, ti)
             .store_at(out, b)
-            .fold_storage(t, 1)
+            .slide(out, t)
             .store_in(MemoryType::Tile)
             .tile(p, d, rxi, ryi, tile, tile)
             .unroll(p)
@@ -369,7 +377,7 @@ private:
         // fragments: an accumulator and a multiply's second operand are held
         // in different register layouts, so one fragment cannot be both. The
         // state is an accumulator, and this is the operand read from it.
-        H16.compute_at(out, t)
+        H16.compute_at(out, ti)
             .store_in(MemoryType::GPUShared)
             .tile(p, d, rxi, ryi, tile, tile)
             .unroll(p)
@@ -390,13 +398,13 @@ private:
         }
 
         // The scan, and the two staged operands the multiplies read.
-        cumdelta.compute_at(out, t).store_in(MemoryType::GPUShared);
+        cumdelta.compute_at(out, ti).store_in(MemoryType::GPUShared);
         if (!inductive) {
             cumdelta.gpu_threads(k);
             cumdelta.update().gpu_threads(k);
         }
         for (Func f : {Xb, Xbd}) {
-            f.compute_at(out, t)
+            f.compute_at(out, ti)
                 .store_in(MemoryType::GPUShared)
                 .split(f.args()[0], xo, xi, tile)
                 .gpu_lanes(xi);
