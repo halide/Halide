@@ -519,11 +519,6 @@ target_include_directories(correctness_spirv_ir PRIVATE "${Halide_SOURCE_DIR}/sr
 target_link_libraries(correctness_spirv_ir PRIVATE SPIRV-Headers::SPIRV-Headers)
 target_compile_definitions(correctness_spirv_ir PRIVATE WITH_SPIRV)
 
-# deinterleave_let_slicing constructs IR by hand and calls
-# rewrite_interleavings() (Deinterleave.h) directly, so it needs src/ on its
-# include path the same way spirv_ir does above.
-target_include_directories(correctness_deinterleave_let_slicing PRIVATE "${Halide_SOURCE_DIR}/src")
-
 # Tests which use external funcs need to enable exports.
 set_target_properties(
     # keep-sorted start

@@ -1,11 +1,5 @@
 #include "Halide.h"
 
-#include "Deinterleave.h"
-#include "IREquality.h"
-#include "IROperator.h"
-#include "Simplify.h"
-#include "Substitute.h"
-
 #include <cstdio>
 #include <sstream>
 
