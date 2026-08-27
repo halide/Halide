@@ -1271,22 +1271,33 @@ class SlidingWindow : public IRMutator {
         });
     }
 
-    // Whether any store to a Func sits inside a vectorized loop, whose lanes
-    // have no order between them.
-    static bool stored_under_lanes(const Stmt &body, const string &name) {
+    // Whether the coordinate a Func is written at along one dimension is
+    // spread across the lanes of a vectorized loop. Lanes have no order
+    // between them, so where that dimension is the one a value is kept by, one
+    // lane's store may land before another lane's read of the value it
+    // replaces. Lanes spreading some other dimension are no such hazard: every
+    // lane then keeps to its own value of this one, and within a lane the
+    // right-hand side is still evaluated before the store.
+    static bool lanes_span_dim(const Stmt &body, const string &name, int dim_idx) {
         bool found = false;
-        int depth = 0;
+        vector<string> lanes;
         visit_with(
             body,
             [&](auto *self, const For *op) {
-                bool lanes = op->for_type == ForType::Vectorized;
-                depth += lanes ? 1 : 0;
+                bool is_lanes = op->for_type == ForType::Vectorized;
+                if (is_lanes) {
+                    lanes.push_back(op->name);
+                }
                 self->visit_base(op);
-                depth -= lanes ? 1 : 0;
+                if (is_lanes) {
+                    lanes.pop_back();
+                }
             },
             [&](auto *self, const Provide *op) {
-                if (op->name == name && depth > 0) {
-                    found = true;
+                if (op->name == name && dim_idx < (int)op->args.size()) {
+                    for (const string &l : lanes) {
+                        found = found || expr_uses_var(op->args[dim_idx], l);
+                    }
                 }
                 self->visit_base(op);
             });
@@ -1368,8 +1379,9 @@ class SlidingWindow : public IRMutator {
         // loop have no order between them at all, so give up on both.
         //
         // A consumer that wants the older step keeps it through ext.
-        bool dies_at_its_store =
-            func.updates().empty() && !stored_under_lanes(body, func.name());
+bool dies_at_its_store =
+            func.updates().empty() &&
+            !lanes_span_dim(body, func.name(), d.dim_idx);
 
         Expr low = dies_at_its_store ?
                        ext[d.dim_idx].min :
