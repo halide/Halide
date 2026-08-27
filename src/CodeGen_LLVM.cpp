@@ -1390,7 +1390,28 @@ void CodeGen_LLVM::optimize_module() {
     // 21.04 -> 14.78 using current ToT release build. (See also https://reviews.llvm.org/rL358304)
     pto.ForgetAllSCEVInLoopUnroll = true;
 
-    llvm::PassBuilder pb(tm.get(), pto);
+    llvm::PassInstrumentationCallbacks pic;
+#if LLVM_VERSION < 220
+    if (get_target().has_feature(Target::SVE) || get_target().has_feature(Target::SVE2)) {
+        // LLVM 21's LoopAccessAnalysis::getStrideFromAddRec() queries a
+        // scalable-vector access type's fixed element count, which hits a
+        // fatal assertion (TypeSize::getFixedValue on a scalable TypeSize).
+        // This is reached from LoopLoadEliminationPass, which the default
+        // pipeline always runs (independent of Halide's own loop-opt
+        // settings). Fixed upstream in LLVM 22 by guarding that query
+        // against ScalableVectorType. Loop load elimination looks for
+        // opportunities to forward a store to a later load across loop
+        // iterations, which Halide-generated code essentially never
+        // benefits from, so skip it entirely on affected SVE targets rather
+        // than accept a compiler crash (or, in a no-asserts LLVM build, a
+        // silently bogus stride).
+        pic.registerShouldRunOptionalPassCallback(
+            [](llvm::StringRef pass_name, const llvm::Any &) {
+                return pass_name != "LoopLoadEliminationPass";
+            });
+    }
+#endif
+    llvm::PassBuilder pb(tm.get(), pto, /*PGOOpt=*/std::nullopt, &pic);
 
     // These analysis managers have to be declared in this order.
     llvm::LoopAnalysisManager lam;
