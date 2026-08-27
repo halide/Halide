@@ -84,14 +84,19 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
          rewrite(select(x, c0, c1) / c2, select(x, fold(c0 / c2), fold(c1 / c2))) ||
          (!op->type.is_float() &&
           rewrite(x / x, select(x == 0, 0, 1))) ||
+
          (no_overflow(op->type) &&
-              // Facts learned higher up in the IR may tell us which side of a max
-              // or min survives the division.
-              (has_facts() &&
-               (rewrite(max(x * c0, y) / c0, x, c0 > 0 && known_true(x >= y / c0, this)) ||
-                rewrite(max(y, x * c0) / c0, x, c0 > 0 && known_true(x >= y / c0, this)) ||
-                rewrite(min(x * c0, y) / c0, x, c0 > 0 && known_true(x <= y / c0, this)) ||
-                rewrite(min(y, x * c0) / c0, x, c0 > 0 && known_true(x <= y / c0, this)))) ||
+          // Facts learned higher up in the IR may tell us which side of a max
+          // or min survives the division. Test them early on to prevents rewrites below
+          // that would make it impossible to recognize the form.
+          (has_facts() &&
+           (rewrite(max(x * c0, y) / c0, x, c0 > 0 && known_true(x >= y / c0, this)) ||
+            rewrite(max(y, x * c0) / c0, x, c0 > 0 && known_true(x >= y / c0, this)) ||
+            rewrite(min(x * c0, y) / c0, x, c0 > 0 && known_true(x <= y / c0, this)) ||
+            rewrite(min(y, x * c0) / c0, x, c0 > 0 && known_true(x <= y / c0, this)) ||
+            false))) ||
+
+         (no_overflow(op->type) &&
           // Fold repeated division
           (rewrite((x / c0) / c2, x / fold(c0 * c2), c0 > 0 && c2 > 0 && !overflows(c0 * c2)) ||
            rewrite((x / c0 + c1) / c2, (x + fold(c1 * c0)) / fold(c0 * c2), c0 > 0 && c2 > 0 && !overflows(c0 * c2) && !overflows(c0 * c1)) ||
