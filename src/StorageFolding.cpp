@@ -1,5 +1,7 @@
 #include "StorageFolding.h"
 
+#include <set>
+
 #include "Bounds.h"
 #include "CSE.h"
 #include "Debug.h"
@@ -152,7 +154,75 @@ bool one_store_per_iteration(const Stmt &body, const string &func) {
         hazard = hazard && (s.args[d] == other[d]);
     }
     hazard = simplify(common_subexpression_elimination(hazard), bounds);
-    return is_const_zero(hazard);
+    if (is_const_zero(hazard)) {
+        return true;
+    }
+
+    // Asking the simplifier to falsify a collision does not survive a split.
+    // Proving that 16a + b == 16a' + b' with b and b' in [0, 15] forces
+    // a == a' is a uniqueness-of-representation argument it does not make, and
+    // a tiled schedule writes coordinates of exactly that shape.
+    //
+    // Ask structurally instead. Each coordinate is affine in the loops around
+    // it, so take the stride of each loop in it. Order the strides by size: if
+    // each is bigger than everything the smaller ones can reach between them,
+    // the coordinate pins every loop that appears in it, the way the digits of
+    // a mixed-radix number are pinned by their value. A loop some coordinate
+    // pins cannot differ between two iterations that write the same site, so
+    // if every loop is pinned by some coordinate, there is no collision.
+    std::set<string> pinned;
+    for (const Expr &arg : s.args) {
+        struct Term {
+            int64_t stride, span;
+            string name;
+        };
+        vector<Term> terms;
+        bool usable = true;
+        for (const auto &lp : s.loops) {
+            Expr v = Variable::make(Int(32), lp.first);
+            Expr stride = simplify(substitute(lp.first, v + 1, arg) - arg, bounds);
+            if (is_const_zero(stride)) {
+                continue;
+            }
+            Expr extent = simplify(lp.second.max - lp.second.min + 1, bounds);
+            auto si = as_const_int(stride), ei = as_const_int(extent);
+            if (!si || !ei || *ei < 1) {
+                usable = false;
+                break;
+            }
+            int64_t abs_stride = *si < 0 ? -*si : *si;
+            terms.push_back({abs_stride, abs_stride * (*ei - 1), lp.first});
+        }
+        if (!usable) {
+            continue;
+        }
+        std::sort(terms.begin(), terms.end(),
+                  [](const Term &a, const Term &b) { return a.stride < b.stride; });
+        int64_t reach = 0;
+        bool injective = true;
+        for (const Term &t : terms) {
+            if (t.stride <= reach) {
+                injective = false;
+                break;
+            }
+            reach += t.span;
+        }
+        if (injective) {
+            for (const Term &t : terms) {
+                pinned.insert(t.name);
+            }
+        }
+    }
+    for (const auto &lp : s.loops) {
+        Expr extent = simplify(lp.second.max - lp.second.min + 1, bounds);
+        if (can_prove(extent <= 1, bounds)) {
+            continue;
+        }
+        if (!pinned.count(lp.first)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 // Fold the storage of a function in a particular dimension by a particular factor
@@ -790,16 +860,27 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
                 Expr max_step = simplify(substitute(name, loop_var + 1, max) - max, bounds);
                 Expr min_step = simplify(substitute(name, loop_var + 1, min) - min, bounds);
+                bool advances_forward = can_prove(max_step == 1, bounds);
                 bool unit_advance =
-                    (can_prove(max_step == 1, bounds)) ||
-                    (can_prove(min_step == -1, bounds));
+                    advances_forward || (can_prove(min_step == -1, bounds));
                 bool single_write =
                     dim < (int)provided.size() && provided[dim].is_bounded() &&
                     can_prove(provided[dim].max <= provided[dim].min, bounds) &&
                     can_prove(provided[dim].max >= max_e, bounds);
 
                 bool extent_shrinks = can_prove(extent_no_self <= extent - 1, bounds);
-                can_inplace = unit_advance && single_write && extent_shrinks;
+                // Overwriting in place destroys the oldest value the window
+                // holds. That is only safe if the recurrence is the only thing
+                // that still wants it. Another Func reading the value before
+                // this one is ordered after the producer, and would find it
+                // already gone.
+                bool external_keeps_clear =
+                    advances_forward ?
+                        can_prove(box_external[dim].min > min, bounds) :
+                        can_prove(box_external[dim].max < max, bounds);
+
+                can_inplace = unit_advance && single_write && extent_shrinks &&
+                              external_keeps_clear;
             }
             if (can_inplace) {
                 extent = simplify(extent - 1);
