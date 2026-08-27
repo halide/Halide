@@ -38,15 +38,21 @@
 //    because a block is capped at 48KB of shared memory: the CUDA runtime
 //    never asks for the larger carveout with cuFuncSetAttribute, so the ~100KB
 //    the hardware has is out of reach.
-//  - The tensor core schedule (wmma=true) now gets through every check Halide
-//    makes: all four multiplies are recognised, the state lives in one
-//    fragment that each chunk reads and overwrites, and the walk slides over
-//    the chunks with no warm-up. It falls over in llvm instead, building an
-//    insertelement whose operands do not agree, from
-//    CodeGen_PTX_Dev::visit(const Shuffle *) - most likely the ordinary
-//    shuffle path inlined into it rather than the fragment one, which checks
-//    out. The shuffle is inside a cast of a select of a multiply, which is
-//    where the state is read out of its accumulator and narrowed.
+//  - The tensor core schedule (wmma=true) compiles and launches. It traps in
+//    the kernel on
+//      assert(t <= 0, halide_error_fold_factor_too_small("H", "t", 1, t, 2))
+//    The state wants one slot that each chunk reads and then overwrites.
+//    Storage folding keeps a window of the last N values instead, and a
+//    recurrence that reads the value before it needs two of those, so
+//    fold_storage(t, 1) is not refused but checked at runtime, and the check
+//    fails from the second chunk on. Left at two, which slot holds the state
+//    alternates with the chunk, and reading a tensor core accumulator at an
+//    alternating slice is not supported.
+//
+//    So either storage folding learns that a producer which reads only the
+//    value before it can overwrite it in place, or sliding learns to rewind
+//    when the loop it slides over has been split with the inner part
+//    unrolled, which would make the alternating slice a constant per copy.
 
 #include "Halide.h"
 
