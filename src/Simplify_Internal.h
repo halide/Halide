@@ -466,6 +466,10 @@ public:
     // everything currently known.
     Expr simplify_can_prove_condition(const Expr &e);
 
+    // Is a boolean Expr already known to be true? Unlike can_prove this only
+    // looks the condition up in the facts, without simplifying anything.
+    bool is_known_true(const Expr &e);
+
     struct ScopedFact {
         Simplify *simplify;
 
