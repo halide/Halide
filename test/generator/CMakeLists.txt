@@ -817,7 +817,6 @@ if (NOT ${_USING_WASM})
         FROM runtime_prefixes_iso.generator
         GENERATOR runtime_prefixes_iso
         FUNCTION_NAME pipe_none_c
-        USE_RUNTIME rniso_rt_none
     )
 
     # a: export/import prefix "runtime_a_", internal prefix "runtime_ai_".
@@ -838,7 +837,6 @@ if (NOT ${_USING_WASM})
         FROM runtime_prefixes_iso.generator
         GENERATOR runtime_prefixes_iso
         FUNCTION_NAME pipe_a_c
-        USE_RUNTIME rniso_rt_a
         PARAMS runtime_prefixes.import=runtime_a_ runtime_prefixes.internal=runtime_ai_
     )
 
@@ -860,7 +858,6 @@ if (NOT ${_USING_WASM})
         FROM runtime_prefixes_iso.generator
         GENERATOR runtime_prefixes_iso
         FUNCTION_NAME pipe_b_c
-        USE_RUNTIME rniso_rt_b
         PARAMS runtime_prefixes.import=runtime_b_ runtime_prefixes.internal=runtime_bi_
     )
 
