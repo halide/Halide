@@ -110,12 +110,17 @@ public:
     /** Fast path first; on failure, wrap e in all pending pure lets
      * (producing a self-contained copy with no free references to enclosing
      * lets), inline them with substitute_in_all_lets, and simplify before
-     * retrying against the resulting expression and the scope. More
-     * expensive than find_constant_bound(), but succeeds far more often,
-     * because the simplifier can cancel terms across let boundaries that
-     * interval arithmetic through opaque variable lookups cannot. */
-    Expr find_constant_bound_aggressive(const Expr &e, Direction d) const;
+     * retrying against the resulting expression and the scope. Any endpoint
+     * still missing after that is attempted once more by substituting the
+     * range of an enclosing loop e is monotonic in. More expensive than
+     * find_constant_bound(), but succeeds far more often, because the
+     * simplifier can cancel terms across let boundaries that interval
+     * arithmetic through opaque variable lookups cannot.
+     *
+     * The single-Direction form is a wrapper around the Interval form; it
+     * returns an undefined Expr if no bound in that direction was found. */
     Interval find_constant_bounds_aggressive(const Expr &e) const;
+    Expr find_constant_bound_aggressive(const Expr &e, Direction d) const;
 
     /** Wrap e in all pending pure lets, inline them with
      * substitute_in_all_lets, and simplify under the current scope and
