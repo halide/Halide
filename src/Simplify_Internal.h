@@ -442,19 +442,19 @@ public:
     std::set<Expr, IRDeepCompare> truths, falsehoods;
 
     // How deeply are we nested inside the conditions of can_prove predicates?
-    // Simplifying such a condition visits the operands again, so a fact-driven
-    // rule that matches every node of its type recurses, and the work grows
-    // like the nesting depth of the expression raised to this. Bound it.
+    // Proving such a condition recursively invokes the simplifier on it, so a
+    // rule whose left-hand side also matches something built while proving its
+    // own predicate recurses without bound. Nesting is also expensive, and no
+    // rule currently relies on it. Bound it.
     int can_prove_depth = 0;
-    static constexpr int max_can_prove_depth = 1;
+    static constexpr int max_can_prove_depth = 4;
 
     // Is there anything in the truths/falsehoods sets that a rewrite rule could
     // use? Used to gate rules whose predicates are only ever provable from facts
     // learned higher up in the IR, so that we don't pay for them in the common
     // case.
     bool has_facts() const {
-        return can_prove_depth < max_can_prove_depth &&
-               (!truths.empty() || !falsehoods.empty());
+        return !truths.empty() || !falsehoods.empty();
     }
 
     // Replace exprs known to be truths or falsehoods with const_true or

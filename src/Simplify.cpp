@@ -439,6 +439,11 @@ bool Simplify::is_known_true(const Expr &e) {
 }
 
 Expr Simplify::simplify_can_prove_condition(const Expr &e) {
+    if (can_prove_depth >= max_can_prove_depth) {
+        // Refuse to nest any deeper. Returning the condition unsimplified just
+        // means the predicate fails to prove anything.
+        return e;
+    }
     ScopedValue<int> guard(can_prove_depth, can_prove_depth + 1);
     return mutate(substitute_facts(e), nullptr);
 }
