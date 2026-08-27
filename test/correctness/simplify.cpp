@@ -2477,6 +2477,11 @@ void check_facts() {
     // The result isn't interesting; what matters is that we get one at all.
     (void)simplify(nest, Scope<Interval>(), Scope<ModulusRemainder>(), {x < y});
 
+    // The rules above look their predicates up in the facts rather than
+    // recursively invoking the simplifier, so a fact only settles a predicate
+    // it is directly comparable to. This one needs arithmetic to connect:
+    check_with_assumptions(max(x, y), max(x, y), {x + 1 <= y});
+
     // Without the fact, the division stays put.
     check(max(x * 8, y) / 8, max(x * 8, y) / 8);
 
