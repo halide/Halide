@@ -56,11 +56,14 @@ def compile_pipeline(directory):
     brighter[x, y] = hl.cast(hl.UInt(8), input[x, y] + offset)
     brighter.vectorize(x, 16).parallel(y)
 
-    # Compile to a static library. Unlike compile_to(object), a static library
-    # bundles a copy of the Halide runtime, so the shared library we link below
-    # is self-contained and, like halide.runtime itself, needs no libHalide.
+    # Compile to a static library using the host target for the current machine
+    # so we can run it right away. This will generate a static library which bundles 
+    # the necessary Halide runtime for the host. So the shared library we link 
+    # below will be self-contained won't require the compiler from libHalide.
     #
-    # We compile for this machine (get_host_target) so we can run it right away.
+    # Note: You can use the `no_runtime` target flag if you wish to create a 
+    #       stand-alone static library for just the kernel, but you would need 
+    #       to link in a matching runtime before you'd be able to run it.
     archive = os.path.join(directory, "brighter.a")
     brighter.compile_to(
         {hl.OutputFileType.static_library: archive},
@@ -82,6 +85,9 @@ def link_shared_library(archive, stem, name):
     # environment has no suitable linker.
     system = platform.system()
 
+    # In a real project, you'd want to use a build system to do the linkage for
+    # you, but for the sake of this tutorial, we'll try and invoke the various
+    # platform toolchain's directly so we have a running example.  
     if system == "Windows":
         # Use the MSVC linker (link.exe) if the Visual Studio toolchain is on the
         # PATH (e.g. from a Developer Command Prompt). We wrap the static library
