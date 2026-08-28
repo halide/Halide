@@ -1,0 +1,38 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -10,7 +10,21 @@ if(ESP_PLATFORM)
+   return()
+ endif()
+ 
+ project (iwasm LANGUAGES C)
++if (MSVC)
++  if (WAMR_BUILD_TARGET MATCHES "X86_.*" OR WAMR_BUILD_TARGET STREQUAL "AMD_64")
++    if (WAMR_BUILD_TARGET STREQUAL "X86_64" OR WAMR_BUILD_TARGET STREQUAL "AMD_64")
++      find_program(MASM_EXECUTABLE ml64)
++    else ()
++      find_program(MASM_EXECUTABLE ml)
++    endif ()
++    if (MASM_EXECUTABLE)
++      enable_language(ASM_MASM)
++    else ()
++      set(WAMR_BUILD_INVOKE_NATIVE_GENERAL 1)
++    endif ()
++  endif ()
++endif ()
+ 
+ set(CMAKE_CXX_STANDARD 17)
+ 
+@@ -24,7 +38,11 @@ endif ()
+ set (CMAKE_SHARED_LIBRARY_LINK_C_FLAGS "")
+ set (CMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS "")
+ 
+-set (CMAKE_C_STANDARD 99)
++if (MSVC)
++  set (CMAKE_C_STANDARD 11)
++else ()
++  set (CMAKE_C_STANDARD 99)
++endif ()
+ 
+ # Set WAMR_BUILD_TARGET, currently values supported:
+ # "X86_64", "AMD_64", "X86_32", "AARCH64[sub]", "ARM[sub]", "THUMB[sub]",
