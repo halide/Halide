@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-# Halide tutorial lesson 15.
+# Halide tutorial lesson 15: Generators: running AOT code with the standalone runtime
 
 # This lesson demonstrates how to load and call a precompiled, ahead-of-time
 # (AOT) compiled Halide pipeline at runtime using the standalone "halide.runtime"
