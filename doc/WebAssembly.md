@@ -81,14 +81,22 @@ environment and are disabled).
 In sum: don't plan on using Halide JIT mode with Wasm unless you are working on
 the Halide library itself.
 
+The interpreter is a *JIT-only* facility. Which engine is used (and whether one
+is built at all) is controlled by the `Halide_WASM_BACKEND` CMake option, which
+defaults to `wabt`. This is the sole reason libHalide depends on wabt (or V8):
+if you don't intend to JIT-execute Wasm, set `-DHalide_WASM_BACKEND=OFF` to
+build without that dependency. Doing so has **no effect on AOT compilation** —
+Halide still generates Wasm object files exactly as before; they simply run in
+an external engine (e.g. Node or a browser) rather than the in-process
+interpreter.
+
 ### Using V8 as the interpreter
 
 There is experimental support for using V8 as the interpreter in JIT mode,
-rather than WABT. This is enabled by the CMake command line options
-`-DWITH_V8=ON -DWITH_WABT=OFF` (only one of them can be used at a time). You
-must build V8 locally V8, then specify the path to the library and headers as
-CMake options. This is currently only tested on x86-64-Linux and requires v8
-version 9.8.177 as a minimum.
+rather than WABT. This is selected with the CMake command line option
+`-DHalide_WASM_BACKEND=V8`. You must build V8 locally, then specify the path to
+the library and headers as CMake options. This is currently only tested on
+x86-64-Linux and requires v8 version 9.8.177 as a minimum.
 
 The canonical instructions to build V8 are at
 [v8.dev](https://v8.dev/docs/build), and
@@ -125,8 +133,7 @@ $ cd /path/to/halide
 $ export HL_TARGET=wasm-32-wasmrt-wasm_simd128
 $ export HL_JIT_TARGET=${HL_TARGET}
 $ cmake -G Ninja \
-      -DWITH_WABT=OFF \
-      -DWITH_V8=ON \
+      -DHalide_WASM_BACKEND=V8 \
       -DV8_INCLUDE_DIR=$HOME/v8/v8/include \
       -DV8_LIBRARY=$HOME/v8/v8/out.gn/x64.release.sample/obj/libv8_monolith.a \
       -DHalide_TARGET=${HL_TARGET} \
