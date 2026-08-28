@@ -194,7 +194,10 @@ target_sources(
     runtime/HalideBuffer.h
     runtime/HalideRuntime.h
     Schedule.h
+    ScheduleAnalyzer.h
+    ScheduleEditor.h
     ScheduleFunctions.h
+    ScheduleValidator.h
     Scope.h
     SelectGPUAPI.h
     Serialization.h
@@ -372,7 +375,10 @@ target_sources(
     RemoveExternLoops.cpp
     RemoveUndef.cpp
     Schedule.cpp
+    ScheduleAnalyzer.cpp
+    ScheduleEditor.cpp
     ScheduleFunctions.cpp
+    ScheduleValidator.cpp
     SelectGPUAPI.cpp
     Serialization.cpp
     Simplify.cpp

@@ -30,6 +30,7 @@ target_sources(
     halide_/PyParameter.cpp
     halide_/PyPipeline.cpp
     halide_/PyRDom.cpp
+    halide_/PyScheduleEditor.cpp
     halide_/PySerialization.cpp
     halide_/PyStage.cpp
     halide_/PyTarget.cpp

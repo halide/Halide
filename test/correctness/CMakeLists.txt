@@ -314,6 +314,7 @@ tests(
     runtime_prefixes.cpp
     saturating_casts.cpp
     scatter.cpp
+    schedule_editor.cpp
     set_custom_trace.cpp
     shadowed_bound.cpp
     shared_self_references.cpp
