@@ -175,7 +175,7 @@ jobs:
       #- uses: mxschmitt/action-tmate@v3
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v4.1.1
+        uses: pypa/cibuildwheel@v4.2.0
         with:
           package-dir: python_bindings/halide
         env:
@@ -285,7 +285,7 @@ jobs:
       ########################################################################
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v4.1.1
+        uses: pypa/cibuildwheel@v4.2.0
         with:
           package-dir: python_bindings/halide-runtime
         env:
