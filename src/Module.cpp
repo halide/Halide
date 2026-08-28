@@ -47,6 +47,7 @@ std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target)
         {OutputFileType::pytorch_wrapper, {"pytorch_wrapper", ".pytorch.h", IsSingle}},
         {OutputFileType::registration, {"registration", ".registration.cpp", IsSingle}},
         {OutputFileType::schedule, {"schedule", ".schedule.h", IsSingle}},
+        {OutputFileType::schedule_json, {"schedule_json", ".schedule.json", IsSingle}},
         {OutputFileType::static_library, {"static_library", is_windows_coff ? ".lib" : ".a", IsSingle}},
         {OutputFileType::stmt, {"stmt", ".stmt", IsMulti}},
         {OutputFileType::conceptual_stmt, {"conceptual_stmt", ".conceptual.stmt", IsMulti}},

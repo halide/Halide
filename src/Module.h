@@ -42,6 +42,7 @@ enum class OutputFileType {
     pytorch_wrapper,
     registration,
     schedule,
+    schedule_json,
     static_library,
     stmt,
     stmt_html,

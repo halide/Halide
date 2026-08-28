@@ -11,6 +11,7 @@
 #include "GeneratorCache.h"
 #include "IRPrinter.h"
 #include "Module.h"
+#include "ScheduleAnalyzer.h"
 #include "Serialization.h"
 #include "Simplify.h"
 
@@ -1230,6 +1231,22 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
             }
         }
 #endif
+
+        if (args.output_types.count(OutputFileType::schedule_json)) {
+            // Serialize the generator's scheduled pipeline as a JSON schedule
+            // (the producer counterpart to the JsonSchedule autoscheduler). The
+            // schedule may be target-dependent, so emit one file per target.
+            const bool use_target_suffix = (args.targets.size() > 1);
+            for (size_t i = 0; i < args.targets.size(); ++i) {
+                const Target &target = args.targets[i];
+                const std::string json_path = use_target_suffix ? (base_path + "-" + target.to_string()) : base_path;
+                auto output_files = compute_output_files(target, json_path, args.output_types);
+                auto gen = generator_factory(args.function_name, target);
+                Pipeline pipeline = gen->build_pipeline();
+                std::ofstream file(output_files[OutputFileType::schedule_json]);
+                file << ScheduleAnalyzer(pipeline).to_json();
+            }
+        }
 
         // Don't bother with this if we're just emitting a cpp_stub.
         if (!cpp_stub_only) {

@@ -301,6 +301,7 @@ function(_Halide_library_from_generator TARGET)
     set(pytorch_wrapper_extension ".pytorch.h")
     set(registration_extension ".registration.cpp")
     set(schedule_extension ".schedule.h")
+    set(schedule_json_extension ".schedule.json")
     # set(static_library_extension (is_windows_coff ? ".lib" : ".a"))  # handled specially
     set(stmt_extension ".stmt")
     set(stmt_html_extension ".stmt.html")
@@ -682,6 +683,7 @@ function(add_halide_library TARGET)
         PYTORCH_WRAPPER
         REGISTRATION
         SCHEDULE
+        SCHEDULE_JSON
         STMT
         STMT_HTML
         # keep-sorted end
