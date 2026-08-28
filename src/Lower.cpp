@@ -450,13 +450,13 @@ void lower_impl(const vector<Function> &output_funcs,
     if (t.has_feature(Target::Profile) || t.has_feature(Target::ProfileByTimer)) {
         debug(1) << "Injecting profiling...\n";
         s = inject_profiling(s, pipeline_name, env, t);
-        s = simplify(s);
         log("Lowering after injecting profiling:", s);
     }
 
     debug(1) << "Finding intrinsics...\n";
     // Must be run after the last simplification, because it turns
     // divisions into shifts, which the simplifier reverses.
+    s = simplify(s);
     s = find_intrinsics(s);
     log("Lowering after finding intrinsics:", s);
 
@@ -470,9 +470,6 @@ void lower_impl(const vector<Function> &output_funcs,
         log("Lowering after stripping asserts:", s);
     }
 
-    debug(1) << "Lowering after final simplification:\n"
-             << s << "\n\n";
-
     if (!custom_passes.empty()) {
         for (size_t i = 0; i < custom_passes.size(); i++) {
             debug(1) << "Running custom lowering pass " << i << "...\n";
@@ -484,6 +481,8 @@ void lower_impl(const vector<Function> &output_funcs,
 
     // Make a copy of the Stmt code, before we lower anything to less human-readable code.
     result_module.set_conceptual_code_stmt(s);
+    debug(1) << "Lowering after reaching conceptual Stmt:\n"
+             << s << "\n\n";
 
     if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {
         debug(1) << "Splitting off Hexagon offload...\n";
