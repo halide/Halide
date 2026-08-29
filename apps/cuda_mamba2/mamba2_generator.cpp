@@ -574,37 +574,47 @@ private:
         // the chunk sizes the reference uses a whole chunk's worth of them at
         // once is more tiles than a thread has registers for, and more scores
         // than a block has shared memory for.
+        // Which dimension the warps own switches with how the scores arrive.
+        // On fragments, a warp must own a tile of positions, so the scores it
+        // computes are its own. Through shared memory the scores are the
+        // block's, and owning a tile of channels instead keeps the state each
+        // warp reads its own rather than every warp reading all of it.
         out
             .compute_root()
             .tile(d, idx, rxi, ryi, tile, tile)
             .split(idx, io, ii, pos_tiles)
             .reorder(rxi, ryi, d, ii, io, t, b)
-            .unroll(d)
             .gpu_blocks(io, t, b)
-            .gpu_threads(ii)
             .tile_store(rxi, ryi);
+        if (fuse_qk) {
+            out.unroll(ii).gpu_threads(d);
+        } else {
+            out.unroll(d).gpu_threads(ii);
+        }
         for (Func f : {y_intra, y_inter, y}) {
             f.compute_at(out, io)
                 .store_in(MemoryType::Tile)
                 .tile(d, idx, rxi, ryi, tile, tile)
-                .unroll(d)
-                .gpu_threads(idx)
                 .tile_init(rxi, ryi);
+            if (fuse_qk) {
+                f.gpu_threads(d).unroll(idx);
+            } else {
+                f.unroll(d).gpu_threads(idx);
+            }
         }
-        y_intra.update()
-            .tile(d, idx, rxi, ryi, tile, tile)
-            .split(rjy_var, rro, rri, tile)
-            .reorder(d, rro, idx)
-            .unroll(d)
-            .gpu_threads(idx)
-            .tile_matmul(rri, rxi, ryi);
-        y_inter.update()
-            .tile(d, idx, rxi, ryi, tile, tile)
-            .split(rp_var, rro, rri, tile)
-            .reorder(d, rro, idx)
-            .unroll(d)
-            .gpu_threads(idx)
-            .tile_matmul(rri, rxi, ryi);
+        for (Func f : {y_intra, y_inter}) {
+            f.update().tile(d, idx, rxi, ryi, tile, tile);
+        }
+        y_intra.update().split(rjy_var, rro, rri, tile);
+        y_inter.update().split(rp_var, rro, rri, tile);
+        for (Func f : {y_intra, y_inter}) {
+            if (fuse_qk) {
+                f.update().reorder(d, idx, rro).gpu_threads(d).unroll(idx);
+            } else {
+                f.update().reorder(d, rro, idx).unroll(d).gpu_threads(idx);
+            }
+            f.update().tile_matmul(rri, rxi, ryi);
+        }
         // The operands come out of global memory with the buffer's own row
         // stride, so a fragment is sixteen separate rows of it, and every
         // operand tile is read again by each tile of the output it meets.
@@ -635,7 +645,7 @@ private:
             f.unroll(t);
         }
         if (fuse_qk) {
-            score.unroll(t);
+            score_h.unroll(t);
         }
         for (Func f : {y_intra, y_inter}) {
             f.update().unroll(t);
@@ -681,15 +691,17 @@ private:
             .tile_matmul(rri, rxi, ryi);
         if (fuse_qk) {
             // Masking and decaying happen on the tile the multiply left them
-            // in, and only the narrowed result reaches shared memory, where the
-            // multiply that consumes them reads it as an operand.
-            score.compute_at(out, io)
+            // in, with the unscheduled full precision form inlined into the
+            // narrowing, so the fragments hold the narrowed scores and only
+            // those reach shared memory, where the multiply that consumes
+            // them reads it as an operand.
+            score_h.compute_at(out, io)
                 .store_in(MemoryType::Tile)
                 .tile(jj, idx, rxi, ryi, tile, tile)
                 .unroll(jj)
                 .gpu_threads(idx)
                 .tile_init(rxi, ryi);
-            score_h
+            score_h.in()
                 .compute_at(out, io)
                 .store_in(MemoryType::GPUShared)
                 .tile(jj, idx, rxi, ryi, tile, tile)
