@@ -35,6 +35,8 @@ int main(int argc, char **argv) {
     Var y{"y"}, yo{"yo"}, yi{"yi"};
     Func f("f"), R("R"), G("G"), B("B");
     Param<int> offset_x{"offset_x"}, offset_y{"offset_y"};
+    offset_x.set_range(0, 2);
+    offset_y.set_range(0, 2);
     auto idx = [](const auto &x, const auto &y, const auto &offset_x, const auto &offset_y) {
         return (3 * ((y - offset_y) % 3)) + ((x - offset_x) % 3);
     };
@@ -65,7 +67,16 @@ int main(int argc, char **argv) {
         .unroll(c);
 
     for (Func *channel : {&R, &G, &B}) {
-        channel->compute_at(f, xo).unroll(x).unroll(y).never_partition_all();
+        channel->compute_at(f, xo)
+            .unroll(x)
+            .bound_extent(x, 3)
+            .bound_storage(x, 3)
+            .align_bounds(x, 3, offset_x)
+            .unroll(y)
+            .bound_extent(y, 3)
+            .bound_storage(y, 3)
+            .align_bounds(y, 3, offset_y)
+            .never_partition_all();
     }
 
     Module module = f.compile_to_module({offset_x, offset_y});
