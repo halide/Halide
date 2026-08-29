@@ -798,6 +798,82 @@ class ExtractWMMAOperations : public IRMutator {
     // is already a fragment. Elementwise ops don't care how the matrix is
     // spread over the warp, so they let it through; anything that does care
     // has to be recognized here or reported.
+    // Where in the tile each entry lands, if that is what this is: a value
+    // that steps by one along one axis of the tile and not at all along the
+    // other is an index along that axis, plus wherever the tile starts. Each
+    // lane can compute it for the entries it holds.
+    Expr tile_coordinate(const Expr &e, const Fragment *dest) {
+        const Shape &shape = dest->shape;
+        const int lanes = shape.M * shape.N;
+        MultiRamp mr;
+        std::vector<Expr> strides;
+        if (!fragment_lane.defined() || !e.type().is_int() ||
+            e.type().lanes() != lanes ||
+            !is_multiramp(e, Scope<Expr>::empty_scope(), &mr) ||
+            !mr.strides_for_shape({shape.N, shape.M}, &strides)) {
+            return Expr{};
+        }
+        // The columns are the inner dimension of the tile, and the rows the
+        // outer one. Axis zero indexes the rows.
+        int axis = -1;
+        if (is_const_zero(strides[0])) {
+            axis = 0;
+        } else if (is_const_zero(strides[1])) {
+            axis = 1;
+        } else {
+            return Expr{};
+        }
+        const Expr stride = strides[axis ? 0 : 1];
+        if (is_const_zero(stride)) {
+            // Flat along both axes, so it is the same everywhere and whatever
+            // reads it doesn't need to know where in the tile it landed.
+            return Expr{};
+        }
+        // One index per entry this lane holds, not one per entry of the tile.
+        const int held = dest->value_type().lanes();
+        Expr index = Call::make(Int(32, held), Call::wmma_entry_index,
+                                {shape.M, shape.N, axis, fragment_lane},
+                                Call::Intrinsic);
+        return simplify(Broadcast::make(mr.base, held) +
+                        Broadcast::make(stride, held) * index);
+    }
+
+    // A vector spread along an axis of the tile that lives in memory every lane
+    // can reach. Loading it as a matrix whose leading dimension is zero makes
+    // every row (or every column) the vector itself, so the hardware spreads it
+    // for free, rather than every lane taking a copy of the whole vector and
+    // selecting out of it.
+    Expr broadcast_matrix_along_axis(const Expr &vec, int axis, const Fragment *dest) {
+        const Load *load = vec.as<Load>();
+        if (!fragment_lane.defined() || !load || find_fragment(load->name) ||
+            !is_const_one(load->predicate) || !is_shared_memory(load->name) ||
+            load->type.element_of() != Float(32)) {
+            return Expr{};
+        }
+        const Ramp *ramp = load->index.as<Ramp>();
+        if (!ramp || !is_const_one(ramp->stride) || ramp->lanes != vec.type().lanes()) {
+            return Expr{};
+        }
+        // The load reads eight bytes at a time whatever the leading dimension,
+        // so the vector has to start on an eight byte boundary. What the load
+        // says about itself was worked out with the enclosing lets in scope, so
+        // it can know things the index alone doesn't say, and the other way
+        // round once the index has been folded. Either proving it is enough.
+        const int align = 8 / load->type.bytes();
+        auto aligned = [&](const ModulusRemainder &m) {
+            return m.modulus % align == 0 && m.remainder % align == 0;
+        };
+        if (!aligned(load->alignment) && !aligned(modulus_remainder(ramp->base))) {
+            return Expr{};
+        }
+        // Which way round the matrix is laid out is what decides which axis the
+        // vector ends up spread along: row major reaches it by column, and
+        // column major by row.
+        return make_matrix_to_fragment(Role::Accumulator, dest->shape,
+                                       axis ? Layout::Row : Layout::Col, load,
+                                       ramp->base, make_zero(Int(32)), fragment_lane);
+    }
+
     Expr to_fragment(const Expr &e, const Fragment *dest) {
         const int lanes = dest->value_type().lanes();
         const Type t = e.type().element_of().with_lanes(lanes);
@@ -816,6 +892,26 @@ class ExtractWMMAOperations : public IRMutator {
         } else if (const Div *op = e.as<Div>()) {
             auto [a, b] = pair(op->a, op->b);
             return Div::make(a, b);
+        } else if (const EQ *op = e.as<EQ>()) {
+            auto [a, b] = pair(op->a, op->b);
+            return EQ::make(a, b);
+        } else if (const NE *op = e.as<NE>()) {
+            auto [a, b] = pair(op->a, op->b);
+            return NE::make(a, b);
+        } else if (const LT *op = e.as<LT>()) {
+            auto [a, b] = pair(op->a, op->b);
+            return LT::make(a, b);
+        } else if (const LE *op = e.as<LE>()) {
+            auto [a, b] = pair(op->a, op->b);
+            return LE::make(a, b);
+        } else if (const And *op = e.as<And>()) {
+            auto [a, b] = pair(op->a, op->b);
+            return And::make(a, b);
+        } else if (const Or *op = e.as<Or>()) {
+            auto [a, b] = pair(op->a, op->b);
+            return Or::make(a, b);
+        } else if (const Not *op = e.as<Not>()) {
+            return Not::make(to_fragment(op->a, dest));
         } else if (const Min *op = e.as<Min>()) {
             auto [a, b] = pair(op->a, op->b);
             return Min::make(a, b);
@@ -881,6 +977,9 @@ class ExtractWMMAOperations : public IRMutator {
         } else if (const VectorReduce *op = e.as<VectorReduce>()) {
             return reduce_along_axis(op, dest);
         }
+        if (Expr coord = tile_coordinate(e, dest); coord.defined()) {
+            return coord;
+        }
         // A vector spread over the tile along one axis, such as a row
         // statistic a softmax subtracts.
         int axis = 0;
@@ -897,6 +996,10 @@ class ExtractWMMAOperations : public IRMutator {
             // fragments underneath.
             if (Expr sunk = sink_broadcast(e, vec); sunk.defined()) {
                 return to_fragment(sunk, dest);
+            }
+            if (Expr spread = broadcast_matrix_along_axis(vec, axis, dest);
+                spread.defined()) {
+                return spread;
             }
             // Every lane holds the whole vector, so this becomes a per-lane
             // selection out of it.
@@ -1236,6 +1339,11 @@ class ExtractWMMAOperations : public IRMutator {
     }
 
     // An elementwise op on whole tiles, which happens where the fragments sit.
+    // The lane whose share of a tile is being computed, while it is being
+    // computed. A value that depends on where in the tile an entry lands needs
+    // it, and nothing else does.
+    Expr fragment_lane;
+
     Stmt convert_to_elementwise(const Store *op, Fragment *f) {
         string name;
         if (f->axis >= 0) {
@@ -1250,16 +1358,17 @@ class ExtractWMMAOperations : public IRMutator {
                 << Stmt(op);
             name = f->fragment_name + std::to_string(subtile);
         }
+        // The tile lives in the registers of a whole warp, so every lane has
+        // to run the store to write the share of it that it holds.
+        Expr lane = make_lane(unique_name("wmma_lane") + gpu_thread_name(0));
         Expr value;
         {
             // Reads of a fragment spread along an axis mean something here and
             // nowhere else, so the load visitor leaves them for to_fragment.
             ScopedValue<bool> bind(in_fragment_value, true);
+            ScopedValue<Expr> bind_lane(fragment_lane, lane);
             value = to_fragment(mutate(op->value), f);
         }
-        // The tile lives in the registers of a whole warp, so every lane has
-        // to run the store to write the share of it that it holds.
-        Expr lane = make_lane(unique_name("wmma_lane") + gpu_thread_name(0));
         return in_lane_loop(
             lane,
             Store::make(name, std::move(value),
@@ -1328,6 +1437,18 @@ class ExtractWMMAOperations : public IRMutator {
             << "can be used that way.\n";
         set_role(f, Role::Accumulator);
         set_shape(f, src->shape);
+
+        // Anything else read here that only knows the shape it was filled with
+        // is elementwise with what settled the shape, so it has that shape and
+        // is spread over the lanes the same way. A causal mask read in
+        // alongside the scores it masks is one of these.
+        for (const Fragment *read : fragments_read(value)) {
+            if (!read->found_shape && read->found_fill_shape) {
+                Fragment *fill = const_cast<Fragment *>(read);
+                set_role(fill, Role::Accumulator);
+                set_shape(fill, src->shape);
+            }
+        }
 
         // A store narrower than the tile writes a value that is uniform along
         // one axis of it, such as a row maximum. The other axis indexes it.
@@ -1486,8 +1607,31 @@ class ExtractWMMAOperations : public IRMutator {
         return s;
     }
 
+    // Where each allocation lives: how many loops over GPU threads it sits
+    // inside, and what it was scheduled into.
+    struct AllocationPlace {
+        int thread_depth;
+        MemoryType memory_type;
+    };
+    Scope<AllocationPlace> allocation_place;
+
+    // Whether every lane of a warp can reach the same allocation at an address
+    // of its own. One made inside a loop over threads is per thread whatever
+    // it was scheduled as, and one asked for in registers is per thread
+    // wherever it was made. One that isn't in scope at all is a buffer the
+    // caller passed in, which is in global memory.
+    bool is_shared_memory(const string &name) {
+        const AllocationPlace *place = allocation_place.find(name);
+        return !place || (place->thread_depth == 0 &&
+                          place->memory_type != MemoryType::Register &&
+                          place->memory_type != MemoryType::Stack);
+    }
+
     Stmt visit(const Allocate *op) override {
         if (op->memory_type != MemoryType::Tile) {
+            ScopedBinding<AllocationPlace> bind(
+                allocation_place, op->name,
+                AllocationPlace{(int)gpu_thread_vars.size(), op->memory_type});
             return IRMutator::visit(op);
         }
 

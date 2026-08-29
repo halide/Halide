@@ -110,6 +110,43 @@ static constexpr int wmma_build_index_bits = 4;
 static constexpr int wmma_build_mask_digits = 2;
 static constexpr int wmma_build_compare_digits = 1;
 
+/** Marks the computing of the row or the column of the matrix that each entry
+ * of an accumulator this lane holds belongs to. That is what an elementwise op
+ * whose value depends on where in the tile it lands needs - a causal mask, or
+ * a read of a vector that lives in shared memory - and it costs a few integer
+ * instructions rather than a select tree over a broadcast vector.
+ *
+ * Every lane holds one entry per register, so the result is one index per
+ * register. Which bit of the lane index gives which bit of the index is the
+ * runtime's to say, and the register contributes only bits that don't vary
+ * with the lane, so the lane's share is computed once and each register
+ * differs from it by a constant. It looks like
+ *
+ *   { .reg .u32 %hxl; .reg .u32 %hxm; .reg .u32 %hxa;
+ *   mov.u32 %hxl, %laneid;
+ *   mov.u32 %hxa, 0;
+ *   // halide_wmma_coord 0
+ *   and.b32 %hxm, %hxl, ??;
+ *   shl.b32 %hxm, %hxm, ?;
+ *   shr.b32 %hxm, %hxm, ?;
+ *   or.b32 %hxa, %hxa, %hxm;
+ *   ... one group per bit of the index ...
+ *   or.b32 $0, %hxa, ??;
+ *   ... one per register ...
+ *
+ * A mask of zero contributes nothing, which is how an index bit that doesn't
+ * vary with the lane is said: it lands in the constant instead. Only one of
+ * the two shifts is ever non-zero, since the pair only has to move a single
+ * bit from where the lane index holds it to where the matrix index wants it. */
+static constexpr const char *wmma_coord_element_marker = "halide_wmma_coord";
+
+/** How the fields of a coord marker are written. The mask names one bit of the
+ * lane index, the shifts move it at most one axis' worth, and the constant is
+ * an index along an axis of the tile. */
+static constexpr int wmma_coord_mask_digits = 2;
+static constexpr int wmma_coord_shift_digits = 1;
+static constexpr int wmma_coord_const_digits = 2;
+
 /** Exchanges the entries of an accumulator with the ones some distance away
  * along one axis of the matrix, which is the step a reduction along that axis
  * is built out of. Entry (row, col) takes the value of the entry whose index

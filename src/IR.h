@@ -934,6 +934,16 @@ struct Call : public ExprNode<Call> {
         // over lanes that something else introduced.
         // wmma_axis_xor(M, N, axis, bit, fragment)
         wmma_axis_xor,
+        // The index along one axis of an M x N tensor core accumulator of each
+        // entry this lane holds: the row of each of them if the axis is zero,
+        // and the column if it is one. One index per entry the lane holds,
+        // which is M*N/32 of them. This is what an elementwise op whose value
+        // depends on where in the tile an entry lands is built out of, such as
+        // a causal mask, or a read of a vector spread along an axis that lives
+        // in memory. The lane is given because the value differs from lane to
+        // lane, so it belongs to the loop over lanes it names.
+        // wmma_entry_index(M, N, axis, lane)
+        wmma_entry_index,
         // The lane is given where a loop over lanes is what demotes a
         // matrix-wide store to a per-fragment one, and omitted where entries
         // are read out of a fragment, which introduces no such loop.

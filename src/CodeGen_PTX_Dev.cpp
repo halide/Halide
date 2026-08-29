@@ -44,6 +44,10 @@ namespace {
 using Halide::Runtime::Internal::Constants::wmma_accumulator_registers;
 using Halide::Runtime::Internal::Constants::wmma_build_compare_digits;
 using Halide::Runtime::Internal::Constants::wmma_build_element_marker;
+using Halide::Runtime::Internal::Constants::wmma_coord_const_digits;
+using Halide::Runtime::Internal::Constants::wmma_coord_element_marker;
+using Halide::Runtime::Internal::Constants::wmma_coord_mask_digits;
+using Halide::Runtime::Internal::Constants::wmma_coord_shift_digits;
 using Halide::Runtime::Internal::Constants::wmma_build_index_bits;
 using Halide::Runtime::Internal::Constants::wmma_build_mask_digits;
 using Halide::Runtime::Internal::Constants::wmma_field_placeholder;
@@ -196,6 +200,7 @@ protected:
     /** Build an accumulator fragment out of a vector every lane holds a copy
      * of, indexed by the row or the column of the matrix. */
     void codegen_wmma_build(const Call *op);
+    void codegen_wmma_coord(const Call *op);
 
     /** Exchange the entries of an accumulator with the ones a power of two
      * away along one axis of the matrix. Whether that is a move between the
@@ -480,6 +485,11 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
         return;
     }
 
+    if (op->is_intrinsic(Call::wmma_entry_index)) {
+        codegen_wmma_coord(op);
+        return;
+    }
+
     if (is_wmma_intrinsic(op)) {
         codegen_wmma(op);
         return;
@@ -582,6 +592,57 @@ void CodeGen_PTX_Dev::codegen_wmma_relayout(const Call *to_fragment,
         packed.push_back(builder->CreateBitCast(builder->CreateCall(asm_call, regs), half2));
     }
     value = concat_vectors(packed);
+}
+
+void CodeGen_PTX_Dev::codegen_wmma_coord(const Call *op) {
+    internal_assert(op->args.size() == 4);
+    const int M = *as_const_int(op->args[0]);
+    const int N = *as_const_int(op->args[1]);
+    const int axis = *as_const_int(op->args[2]);
+    const int regs = op->type.lanes();
+    user_assert(op->type.element_of() == Int(32) &&
+                regs == wmma_accumulator_registers && M * N == 32 * regs)
+        << "The index of an entry of a tensor core accumulator is only "
+        << "implemented for a 16x16 single precision one, but this one is "
+        << M << "x" << N << " held in " << regs << " registers per lane.\n";
+
+    // The lane argument says which loop over lanes this belongs to, which is
+    // what keeps it from being hoisted out of one. The value itself is the
+    // lane's own, so it comes from %laneid rather than from that argument.
+    std::ostringstream asm_text;
+    asm_text << "{ .reg .u32 %hxl; .reg .u32 %hxm; .reg .u32 %hxa;"
+             << "\n\tmov.u32 %hxl, %laneid;"
+             << "\n\tmov.u32 %hxa, 0;"
+             << "\n\t// " << wmma_coord_element_marker << " " << axis;
+    for (int b = 0; b < wmma_build_index_bits; b++) {
+        asm_text << "\n\tand.b32 %hxm, %hxl, " << wmma_field(wmma_coord_mask_digits) << ";"
+                 << "\n\tshl.b32 %hxm, %hxm, " << wmma_field(wmma_coord_shift_digits) << ";"
+                 << "\n\tshr.b32 %hxm, %hxm, " << wmma_field(wmma_coord_shift_digits) << ";"
+                 << "\n\tor.b32 %hxa, %hxa, %hxm;";
+    }
+    for (int i = 0; i < regs; i++) {
+        asm_text << "\n\tor.b32 $" << i << ", %hxa, "
+                 << wmma_field(wmma_coord_const_digits) << ";";
+    }
+    asm_text << " }";
+
+    std::ostringstream constraints;
+    vector<llvm::Type *> result_types(regs, i32_t);
+    for (int i = 0; i < regs; i++) {
+        constraints << (i ? ",=r" : "=r");
+    }
+    llvm::FunctionType *fn_type =
+        llvm::FunctionType::get(llvm::StructType::get(*context, result_types), {}, false);
+    llvm::InlineAsm *asm_call =
+        llvm::InlineAsm::get(fn_type, asm_text.str(), constraints.str(),
+                             /* hasSideEffects */ false);
+    llvm::CallInst *call = builder->CreateCall(asm_call);
+
+    Value *result = UndefValue::get(llvm_type_of(op->type));
+    for (int i = 0; i < regs; i++) {
+        result = builder->CreateInsertElement(result, builder->CreateExtractValue(call, i), i);
+    }
+    value = result;
 }
 
 void CodeGen_PTX_Dev::codegen_wmma_build(const Call *op) {

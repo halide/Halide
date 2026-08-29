@@ -12,6 +12,10 @@ namespace Cuda {
 using Halide::Runtime::Internal::Constants::wmma_accumulator_registers;
 using Halide::Runtime::Internal::Constants::wmma_build_compare_digits;
 using Halide::Runtime::Internal::Constants::wmma_build_element_marker;
+using Halide::Runtime::Internal::Constants::wmma_coord_const_digits;
+using Halide::Runtime::Internal::Constants::wmma_coord_element_marker;
+using Halide::Runtime::Internal::Constants::wmma_coord_mask_digits;
+using Halide::Runtime::Internal::Constants::wmma_coord_shift_digits;
 using Halide::Runtime::Internal::Constants::wmma_build_index_bits;
 using Halide::Runtime::Internal::Constants::wmma_build_mask_digits;
 using Halide::Runtime::Internal::Constants::wmma_field_placeholder;
@@ -717,6 +721,98 @@ WEAK char *patch_wmma_markers(void *user_context, const char *ptx_src) {
         offset = semicolon;
     }
 
+    // The index along one axis of the matrix of each entry a lane holds. Every
+    // bit of it either follows a bit of the lane index, the same way for every
+    // register, or doesn't vary with the lane at all, in which case it belongs
+    // to the constant that tells the registers apart.
+    offset = 0;
+    while (const char *marker = strstr(patched + offset, wmma_coord_element_marker)) {
+        int axis;
+        if (!read_index((marker - patched) + strlen(wmma_coord_element_marker) + 1,
+                        &axis)) {
+            return free(patched), nullptr;
+        }
+
+        // Which index along that axis each lane holds in each register.
+        int index[wmma_accumulator_registers][warp_lanes];
+        for (int e = 0; e < wmma_entries; e++) {
+            index[wmma_entry_reg[e]][wmma_entry_lane[e]] =
+                axis ? e % wmma_tile_width : e / wmma_tile_width;
+        }
+
+        int mask[wmma_axis_bits], shift_up[wmma_axis_bits], shift_down[wmma_axis_bits];
+        int constant[wmma_accumulator_registers] = {0};
+        for (int b = 0; b < wmma_axis_bits; b++) {
+            mask[b] = shift_up[b] = shift_down[b] = 0;
+            for (int s = 0; s < 5 && mask[b] == 0; s++) {
+                bool matches = true;
+                for (int reg = 0; reg < wmma_accumulator_registers; reg++) {
+                    for (int lane = 0; lane < warp_lanes; lane++) {
+                        matches &= (index[reg][lane] >> b & 1) == (lane >> s & 1);
+                    }
+                }
+                if (matches) {
+                    mask[b] = 1 << s;
+                    shift_up[b] = b > s ? b - s : 0;
+                    shift_down[b] = s > b ? s - b : 0;
+                }
+            }
+            if (mask[b] != 0) {
+                continue;
+            }
+            // Not a bit of the lane index, so it has to be one the lane makes
+            // no difference to.
+            for (int reg = 0; reg < wmma_accumulator_registers; reg++) {
+                const int bit = index[reg][0] >> b & 1;
+                for (int lane = 0; lane < warp_lanes; lane++) {
+                    if ((index[reg][lane] >> b & 1) != bit) {
+                        fail("This device spreads an accumulator over the lanes of a "
+                             "warp in a way that doesn't let an entry's place in the "
+                             "matrix be computed lane by lane",
+                             marker - patched);
+                        return free(patched), nullptr;
+                    }
+                }
+                constant[reg] |= bit << b;
+            }
+        }
+
+        // Four statements per bit of the index - a mask, two shifts, and the
+        // or that accumulates it, which has nothing to fill in - and then one
+        // per register. Every field is the last thing on its statement.
+        size_t semicolon = marker - patched;
+        const int statements = 4 * wmma_axis_bits + wmma_accumulator_registers;
+        for (int st = 0; st < statements; st++) {
+            int width = 0, value = 0;
+            if (st < 4 * wmma_axis_bits) {
+                const int b = st / 4, which = st % 4;
+                if (which == 0) {
+                    width = wmma_coord_mask_digits;
+                    value = mask[b];
+                } else if (which < 3) {
+                    width = wmma_coord_shift_digits;
+                    value = which == 1 ? shift_up[b] : shift_down[b];
+                }
+            } else {
+                width = wmma_coord_const_digits;
+                value = constant[st - 4 * wmma_axis_bits];
+            }
+            while (patched[semicolon] && patched[semicolon] != ';') {
+                semicolon++;
+            }
+            if (!patched[semicolon] || semicolon < (size_t)width) {
+                fail("An entry index is not shaped the way it should be",
+                     marker - patched);
+                return free(patched), nullptr;
+            }
+            if (width && !write_field(semicolon - width, width, value)) {
+                return free(patched), nullptr;
+            }
+            semicolon++;
+        }
+        offset = semicolon;
+    }
+
     // A step of a reduction along an axis of the matrix, which becomes a
     // butterfly shuffle of the register holding the entry to combine with. If
     // that entry is one this lane already holds, the mask is zero, which makes
@@ -808,6 +904,7 @@ WEAK const char *finish_wmma_markers(void *user_context, CUcontext ctx,
     if (!strstr(ptx_src, wmma_get_element_marker) &&
         !strstr(ptx_src, wmma_pack_element_marker) &&
         !strstr(ptx_src, wmma_build_element_marker) &&
+        !strstr(ptx_src, wmma_coord_element_marker) &&
         !strstr(ptx_src, wmma_xor_element_marker)) {
         return ptx_src;
     }
