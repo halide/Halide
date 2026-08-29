@@ -96,6 +96,14 @@ public:
     void generate() {
         Var d("d"), p("p"), k("k"), idx("idx"), jj("jj"), t("t"), b("b"), n("n");
 
+        // A tile of the step size is read as a matrix with a leading dimension
+        // of zero, which reads eight bytes at a time and so needs the row it
+        // starts at to be on an eight byte boundary. Nothing about where a
+        // buffer starts or how far apart its rows are is known otherwise, so
+        // say it.
+        Delta.dim(0).set_min(0);
+        Delta.dim(1).set_stride((int)seq);
+
         // Everything that feeds a multiply is held at half precision, and
         // every multiply accumulates at single. That is what the tensor cores
         // do, and what the reference implementation does: the state is carried
@@ -331,30 +339,6 @@ private:
             cumdelta.update().reorder(k, t, b).gpu_blocks(b).gpu_threads(t);
         }
 
-        // The scores. A warp owns a tile of output positions and walks every
-        // position of the chunk against it.
-        Func cb = qk.in();
-        cb.compute_root()
-            .tile(jj, idx, rxi, ryi, tile, tile)
-            .reorder(rxi, ryi, jj, idx, t, b)
-            .unroll(jj)
-            .gpu_blocks(t, b)
-            .gpu_threads(idx)
-            .tile_store(rxi, ryi);
-        qk.compute_at(cb, t)
-            .store_in(MemoryType::Tile)
-            .tile(jj, idx, rxi, ryi, tile, tile)
-            .unroll(jj)
-            .gpu_threads(idx)
-            .tile_init(rxi, ryi);
-        qk.update()
-            .tile(jj, idx, rxi, ryi, tile, tile)
-            .split(rp_var, rro, rri, tile)
-            .reorder(jj, idx, rro)
-            .unroll(jj)
-            .gpu_threads(idx)
-            .tile_matmul(rri, rxi, ryi);
-
         // What each chunk leaves behind, which is a plain product once the
         // input has been decayed to the end of the chunk.
         Func cs = chunk_state.in();
@@ -448,21 +432,59 @@ private:
             .gpu_threads(d)
             .unroll(idx)
             .tile_matmul(rri, rxi, ryi);
-        // The scores come back from memory rather than out of a fragment, so
-        // masking and decaying them is ordinary elementwise work on the way
-        // into shared memory, which is where the multiply reads them. Spread
-        // it over the same 32 by 4 threads the multiplies use, or the staging
-        // costs more than they do.
-        for (Func f : {score}) {
-            Var so("so"), si("si"), to_("to"), ti_("ti");
+        // The operands come out of global memory with the buffer's own row
+        // stride, so a fragment is sixteen separate rows of it, and every
+        // operand tile is read again by each tile of the output it meets.
+        // Staging them makes the read from global one dense run per row and
+        // leaves the multiplies reading a tile that is already dense. The copy
+        // is asynchronous, so it wants sixteen bytes per thread and nothing in
+        // the way between the load and the store.
+        for (Func f : {Func(X).in(y_intra)}) {
+            Var so("so"), si("si"), fu("fu"), fo("fo"), fi("fi"), w("w"), l("l");
             f.compute_at(out, t)
-                .store_in(MemoryType::GPUShared)
-                .split(f.args()[0], so, si, 32)
-                .split(f.args()[1], to_, ti_, tile)
-                .reorder(si, so, ti_, to_)
-                .gpu_lanes(si)
-                .gpu_threads(to_);
+                .store_in(MemoryType::GPUSharedAsync)
+                .split(f.args()[0], so, si, 8)
+                .fuse(so, f.args()[1], fu)
+                .split(fu, fo, fi, 128)
+                .split(fi, w, l, 32)
+                .reorder(si, l, w, fo)
+                .vectorize(si)
+                .gpu_lanes(l)
+                .gpu_threads(w);
         }
+
+        // The scores are a chunk by chunk matrix that the whole block reads,
+        // and the block is one chunk of one head, so computing them here costs
+        // no more multiplies than a kernel of their own would. Masking and
+        // decaying them happens on the tile the multiply left them in, and
+        // only the narrowed result reaches shared memory, where the multiply
+        // that consumes them reads it as an operand.
+        qk.compute_at(out, t)
+            .store_in(MemoryType::Tile)
+            .tile(jj, idx, rxi, ryi, tile, tile)
+            .unroll(jj)
+            .gpu_threads(idx)
+            .tile_init(rxi, ryi);
+        qk.update()
+            .tile(jj, idx, rxi, ryi, tile, tile)
+            .split(rp_var, rro, rri, tile)
+            .reorder(jj, idx, rro)
+            .unroll(jj)
+            .gpu_threads(idx)
+            .tile_matmul(rri, rxi, ryi);
+        score.compute_at(out, t)
+            .store_in(MemoryType::Tile)
+            .tile(jj, idx, rxi, ryi, tile, tile)
+            .unroll(jj)
+            .gpu_threads(idx)
+            .tile_init(rxi, ryi);
+        score.in()
+            .compute_at(out, t)
+            .store_in(MemoryType::GPUShared)
+            .tile(jj, idx, rxi, ryi, tile, tile)
+            .unroll(jj)
+            .gpu_threads(idx)
+            .tile_store(rxi, ryi);
 
         const int num_chunks = (int)seq / (int)chunk;
         out.bound(d, 0, channels)
