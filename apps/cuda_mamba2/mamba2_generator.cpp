@@ -450,10 +450,17 @@ private:
             .unroll(p)
             .gpu_threads(d)
             .tile_init(rxi, ryi);
+        // Where a chunk's worth of the operand does not fit in shared memory,
+        // the walk over it is split so that a block stages as much of it as
+        // does, rather than a step of the multiply's worth at a time.
+        const int stage_slice =
+            std::min((int)chunk, std::max(tile, 40 * 1024 / ((int)state * 2) / tile * tile));
+        RVar rroo("rroo"), rroi("rroi");
         chunk_state.update()
             .tile(p, d, rxi, ryi, tile, tile)
             .split(rj_var, rro, rri, tile)
-            .reorder(p, d, rro)
+            .split(rro, rroo, rroi, stage_slice / tile)
+            .reorder(p, d, rroi, rroo)
             .unroll(p)
             .gpu_threads(d)
             .tile_matmul(rri, rxi, ryi);
@@ -472,10 +479,10 @@ private:
             Var so("so"), si("si"), to_("to"), ti_("ti");
             // A chunk's worth of it where that fits in shared memory, and the
             // slice the multiply is reducing over right now where it does not.
-            if ((int)state * (int)chunk * 2 <= 40 * 1024) {
+            if (stage_slice == (int)chunk) {
                 Bmd.compute_at(cs, t);
             } else {
-                Bmd.compute_at(chunk_state, rro);
+                Bmd.compute_at(chunk_state, rroo);
             }
             Bmd.store_in(MemoryType::GPUShared)
                 .split(p, so, si, 32)
