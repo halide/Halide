@@ -110,16 +110,16 @@ the PATH.
 The following is a complete list of required and optional dependencies for
 building the core pieces of Halide.
 
-| Dependency    | Version            | Required when...           | Notes                                               |
-| ------------- | ------------------ | -------------------------- | --------------------------------------------------- |
-| [LLVM]        | _see policy below_ | _always_                   | WebAssembly and X86 targets are required.           |
-| [Clang]       | `==LLVM`           | _always_                   |                                                     |
-| [LLD]         | `==LLVM`           | _always_                   |                                                     |
-| [flatbuffers] | `~=23.5.26`        | `WITH_SERIALIZATION=ON`    |                                                     |
-| [wabt]        | `==1.0.39`         | `Halide_WASM_BACKEND=wabt` | Does not have a stable API; exact version required. |
-| [V8]          | trunk              | `Halide_WASM_BACKEND=V8`   | Difficult to build. See [WebAssembly.md]            |
-| [Python]      | `>=3.10`           | `WITH_PYTHON_BINDINGS=ON`  |                                                     |
-| [pybind11]    | `~=2.11.1`         | `WITH_PYTHON_BINDINGS=ON`  |                                                     |
+| Dependency    | Version            | Required when...           | Notes                                                                                     |
+| ------------- | ------------------ | -------------------------- | ----------------------------------------------------------------------------------------- |
+| [LLVM]        | _see policy below_ | _always_                   | WebAssembly and X86 targets are required.                                                 |
+| [Clang]       | `==LLVM`           | _always_                   |                                                                                           |
+| [LLD]         | `==LLVM`           | _always_                   |                                                                                           |
+| [flatbuffers] | `~=23.5.26`        | `WITH_SERIALIZATION=ON`    |                                                                                           |
+| [wabt]        | `==1.0.39`         | `Halide_WASM_BACKEND=wabt` | In-process Wasm JIT only, never AOT (see below). Unstable API; exact version required.    |
+| [V8]          | trunk              | `Halide_WASM_BACKEND=V8`   | In-process Wasm JIT only, never AOT (see below). Difficult to build. See [WebAssembly.md] |
+| [Python]      | `>=3.10`           | `WITH_PYTHON_BINDINGS=ON`  |                                                                                           |
+| [pybind11]    | `~=2.11.1`         | `WITH_PYTHON_BINDINGS=ON`  |                                                                                           |
 
 Halide maintains the following compatibility policy with LLVM: Halide version
 `N` supports LLVM versions `N`, `N-1`, and `N-2`. Our binary distributions
@@ -467,11 +467,16 @@ apply when `WITH_TESTS=ON`:
 | `WITH_TEST_RUNTIME`       | `ON`       | enable testing the runtime modules    |
 | `WITH_TEST_WARNING`       | `ON`       | enable the expected-warning tests     |
 
-The following option selects the execution engine for in-process WASM testing:
+The following option selects the engine used to **JIT-execute** WebAssembly
+in-process. This only affects Halide's WebAssembly _JIT_ (used by the self-tests
+and by JIT users targeting Wasm); it has **no effect on AOT compilation**, which
+emits a Wasm object file that runs in an external engine and needs neither wabt
+nor V8. If you don't plan to run Wasm via JIT, set `Halide_WASM_BACKEND=OFF` to
+drop the wabt/V8 dependency entirely — AOT Wasm codegen is unaffected.
 
-| Option                | Default | Description                                                                              |
-| --------------------- | ------- | ---------------------------------------------------------------------------------------- |
-| `Halide_WASM_BACKEND` | `wabt`  | Select the backend for WASM testing. Can be `wabt`, `V8` or a false value such as `OFF`. |
+| Option                | Default | Description                                                                                                                                                           |
+| --------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Halide_WASM_BACKEND` | `wabt`  | Backend for the in-process Wasm JIT. Can be `wabt`, `V8`, or a false value such as `OFF`. `OFF` builds Halide without a Wasm JIT engine (and without its dependency). |
 
 ### Installing
 
