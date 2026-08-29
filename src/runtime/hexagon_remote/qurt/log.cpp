@@ -59,19 +59,17 @@ public:
 Log global_log(1024 * 64);
 
 void log_printf(const char *fmt, ...) {
-    char message[1024] = {
-        0,
-    };
+    char message[1024];
     va_list ap;
     va_start(ap, fmt);
-    int message_size = vsnprintf(message, sizeof(message) - 1, fmt, ap);
+    int message_size = vsnprintf(message, sizeof(message), fmt, ap);
     va_end(ap);
     if (message_size < 0) {
         return;
     }
-    // vsnprintf returns the length the message would have been, not the number
-    // of bytes written, so clamp to what actually fit before copying it out.
-    if (message_size > (int)sizeof(message) - 1) {
+    // vsnprintf returns the length the message would have been if untruncated,
+    // not the number of bytes actually written, so clamp before copying it out.
+    if (message_size >= (int)sizeof(message)) {
         message_size = sizeof(message) - 1;
     }
     global_log.write(message, message_size);
