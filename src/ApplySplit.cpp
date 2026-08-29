@@ -139,7 +139,6 @@ vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
             // recomputed (to avoid double-counting in a reduction).
             Expr old_base = base;
             base = likely(base);
-            Expr zero_based_inner = split.align.defined() ? (inner - split.align) : inner;
             Expr mask;
             if (split.align.defined()) {
                 // Because base is anchored to align instead of old_min, the
@@ -156,8 +155,8 @@ vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
                 Expr shift_high = old_base - high_bound;
                 base = Max::make(base, low_bound);
                 base = Min::make(base, high_bound);
-                Expr mask_low = zero_based_inner < split.factor - shift_low;
-                Expr mask_high = zero_based_inner >= shift_high;
+                Expr mask_low = inner < split.factor - shift_low;
+                Expr mask_high = inner >= shift_high;
                 mask = select(old_base < low_bound, mask_low,
                               select(old_base > high_bound, mask_high, likely(const_true())));
             } else {
@@ -165,12 +164,11 @@ vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
                 // starts at 0), so only the max end can ever be shifted.
                 base = Min::make(base, old_max + (1 - split.factor));
                 Expr unwanted_elems = (-old_extent) % split.factor;
-                mask = zero_based_inner >= unwanted_elems;
+                mask = inner >= unwanted_elems;
                 mask = select(base == old_base, likely(const_true()), mask);
             }
             result.emplace_back(mask, ApplySplitResult::BlendProvides);
         } else if (tail == TailStrategy::RoundUpAndBlend) {
-            Expr zero_based_inner = split.align.defined() ? (inner - split.align) : inner;
             Expr mask;
             if (split.align.defined()) {
                 // Unlike ShiftInwardsAndBlend, the max end is intentionally
@@ -207,18 +205,29 @@ vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
                 // shift_high elements too (the opposite convention from
                 // ShiftInwardsAndBlend's clamped max end, which instead
                 // masks out the *leading* elements of a shifted-back tile).
-                Expr mask_low = zero_based_inner < split.factor - shift_low;
-                Expr mask_high = zero_based_inner < split.factor - shift_high;
+                Expr mask_low = inner < split.factor - shift_low;
+                Expr mask_high = inner < split.factor - shift_high;
                 mask = select(old_base < low_bound, mask_low,
                               select(old_base > high_bound, mask_high, likely(const_true())));
             } else {
                 Expr unwanted_elems = (-old_extent) % split.factor;
-                Expr fresh_high = zero_based_inner < split.factor - unwanted_elems;
+                Expr fresh_high = inner < split.factor - unwanted_elems;
                 mask = select(outer < outer_max, likely(const_true()), fresh_high);
             }
             result.emplace_back(mask, ApplySplitResult::BlendProvides);
         } else {
             internal_assert(tail == TailStrategy::RoundUp);
+        }
+
+        // Add align back in last, after all tail-strategy clamping/masking is
+        // done in terms of the unaligned base: this keeps align as a bare
+        // top-level addend in the final expressions (so e.g. it can still
+        // cancel algebraically against a matching subtraction elsewhere)
+        // rather than being smeared into a Max/Min-clamped expression, while
+        // letting the inner loop variable itself range over the simple,
+        // often-constant [0, factor) instead of [align, align + factor).
+        if (split.align.defined()) {
+            base = base + split.align;
         }
 
         // Define the original variable as the base value computed above plus the inner loop variable.
@@ -271,8 +280,8 @@ vector<std::pair<string, Expr>> compute_loop_bounds_after_split(const Split &spl
             Expr align = split.align;
             Expr outer_min = (old_var_min - align) / split.factor;
             Expr outer_max = (old_var_max - align) / split.factor;
-            let_stmts.emplace_back(prefix + split.inner + ".loop_min", align);
-            let_stmts.emplace_back(prefix + split.inner + ".loop_max", align + split.factor - 1);
+            let_stmts.emplace_back(prefix + split.inner + ".loop_min", 0);
+            let_stmts.emplace_back(prefix + split.inner + ".loop_max", split.factor - 1);
             let_stmts.emplace_back(prefix + split.outer + ".loop_min", outer_min);
             let_stmts.emplace_back(prefix + split.outer + ".loop_max", outer_max);
         } else {
