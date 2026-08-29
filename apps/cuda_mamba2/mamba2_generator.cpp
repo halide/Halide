@@ -39,21 +39,6 @@
 //    because a block is capped at 48KB of shared memory: the CUDA runtime
 //    never asks for the larger carveout with cuFuncSetAttribute, so the ~100KB
 //    the hardware has is out of reach.
-//  - The tensor core schedule (wmma=true) compiles and launches. It traps in
-//    the kernel on
-//      assert(t <= 0, halide_error_fold_factor_too_small("H", "t", 1, t, 2))
-//    The state wants one slot that each chunk reads and then overwrites.
-//    Storage folding keeps a window of the last N values instead, and a
-//    recurrence that reads the value before it needs two of those, so
-//    fold_storage(t, 1) is not refused but checked at runtime, and the check
-//    fails from the second chunk on. Left at two, which slot holds the state
-//    alternates with the chunk, and reading a tensor core accumulator at an
-//    alternating slice is not supported.
-//
-//    So either storage folding learns that a producer which reads only the
-//    value before it can overwrite it in place, or sliding learns to rewind
-//    when the loop it slides over has been split with the inner part
-//    unrolled, which would make the alternating slice a constant per copy.
 
 #include "Halide.h"
 
@@ -68,24 +53,40 @@ public:
     GeneratorParam<int> channels{"channels", 64};  // D, channels in a head
     GeneratorParam<int> chunk{"chunk", 64};        // how long a chunk is
     GeneratorParam<int> heads{"heads", 128};       // batch * heads
-    // Whether the two scans - the decay across a chunk and the state carried
-    // between chunks - are written as inductive Funcs or as update definitions
-    // over an RDom. Both do one step per element either way. What changes is
-    // that an update definition owns the dimension it walks, so it has to be
-    // computed in one piece ahead of its consumers: the state then crosses a
-    // kernel boundary as the wide type it is carried at, rather than being
-    // slid into the walk and narrowed on the way out. Only the split schedule
-    // can be built both ways; the fused ones need the state slid.
-    GeneratorParam<bool> inductive{"inductive", true};
+    // How the two scans - the decay across a chunk and the state carried
+    // between chunks - are written. All three forms do one step per element.
+    //
+    //  inductive:  a Func that refers to itself one step back, which can be
+    //              slid into the loop that consumes it.
+    //  rdom_undef: an update definition over an RDom that covers the base case
+    //              itself, so the pure definition can be undef and stores
+    //              nothing. Fewest kernels of the two RDom forms, but it takes
+    //              care to write: nothing may read the values it leaves unset.
+    //  rdom:       the same update definition with a pure definition that
+    //              really does initialize, which is the straightforward thing
+    //              to write and costs a kernel per scan to run it.
+    //
+    // An update definition owns the dimension it walks either way, so it has
+    // to be computed in one piece ahead of its consumers: the state then
+    // crosses a kernel boundary as the wide type it is carried at, rather than
+    // being slid into the walk and narrowed on the way out. Only the tensor
+    // core schedule can be built all three ways; the fused one needs the state
+    // slid.
+    enum class ScanForm { Inductive,
+                          RDomUndef,
+                          RDom };
+    GeneratorParam<ScanForm> scan{"scan",
+                                  ScanForm::Inductive,
+                                  {{"inductive", ScanForm::Inductive},
+                                   {"rdom_undef", ScanForm::RDomUndef},
+                                   {"rdom", ScanForm::RDom}}};
     // Whether the four multiplies go to the tensor cores.
     GeneratorParam<bool> wmma{"wmma", false};
-    GeneratorParam<int> warps{"warps", 4};
     // Whether to take the reference implementation's shape instead: a kernel
     // per stage, each of them parallel over chunks as well as heads, with the
     // state's recurrence in a kernel of its own and everything that crosses a
     // stage going through memory. Fused, a head's chunks are walked in order
     // by one block, which is where the parallelism goes.
-    GeneratorParam<bool> split{"split", false};
 
     // Channels by sequence by head.
     Input<Buffer<float16_t, 3>> X{"X"};
@@ -129,19 +130,20 @@ public:
         // reduction each position would re-add every earlier step, costing a
         // chunk's length per position instead of one step.
         Func cumdelta = Func(Float(32), "cumdelta");
-        RDom rm(0, (int)chunk, "rm");
+        // The undef form's walk covers the first position too, so it starts one
+        // earlier than the form whose pure definition supplies it.
+        RDom rm(undef_init() ? 0 : 1, (int)chunk - (undef_init() ? 0 : 1), "rm");
         rm_var = rm.x;
-        if (inductive) {
+        if (inductive()) {
             cumdelta(k, t, b) = Delta(t * chunk + k, b) +
                                 select(k <= 0, 0.f, likely(cumdelta(k - 1, t, b)));
-        } else {
-            // The same scan, one step per position either way. What changes is
-            // that an update definition owns the whole dimension it walks, so
-            // it has to be computed in one piece, ahead of everything that
-            // reads it.
+        } else if (undef_init()) {
             cumdelta(k, t, b) = undef<float>();
             cumdelta(rm, t, b) = Delta(t * chunk + rm, b) +
                                  select(rm <= 0, 0.f, likely(cumdelta(rm - 1, t, b)));
+        } else {
+            cumdelta(k, t, b) = Delta(t * chunk + k, b);
+            cumdelta(rm, t, b) = cumdelta(rm - 1, t, b) + Delta(t * chunk + rm, b);
         }
 
         // The decay from just after position j to position i. Left to inline,
@@ -203,15 +205,16 @@ public:
         // over reaching past anything that gets written.
         const int num_chunks = (int)seq / (int)chunk;
         Func H = Func(Float(32), "H");
-        RDom rt(0, num_chunks, "rt");
+        RDom rt(undef_init() ? 0 : 1,
+                undef_init() ? num_chunks : num_chunks - 2, "rt");
         rt_var = rt.x;
-        if (inductive) {
+        if (inductive()) {
             H(p, d, t, b) = select(t <= 0,
                                    0.f,
                                    likely(H(p, d, t - 1, b) *
                                           exp(A(b) * cumdelta(chunk - 1, t - 1, b))) +
                                        chunk_state(p, d, t - 1, b));
-        } else {
+        } else if (undef_init()) {
             // The same recurrence as an update definition. It owns the walk, so
             // it cannot be slid into the loop that consumes it: the whole array
             // has to exist, at the precision it is carried at, before anything
@@ -222,6 +225,22 @@ public:
                                     likely(H(p, d, rt - 1, b) *
                                            exp(A(b) * cumdelta(chunk - 1, rt - 1, b))) +
                                         chunk_state(p, d, rt - 1, b));
+        } else {
+            // The pure definition really does initialize, which is the
+            // straightforward thing to write and costs a kernel to run it.
+            // What it initializes to is the term of the recurrence that does
+            // not depend on the walk - what the previous chunk left behind -
+            // so the kernel running it is the one the chunk state would
+            // otherwise need for itself, and what it stores is a plain copy of
+            // a tile that goes out as a matrix store.
+            //
+            // The first chunk carries nothing in, so nothing reads the state
+            // there and the walk starts a step later. Every index either
+            // definition touches is then inside the domain, with no masking
+            // and no special case anywhere.
+            H(p, d, t, b) = chunk_state(p, d, t - 1, b);
+            H(p, d, rt + 1, b) += H(p, d, rt, b) *
+                                  exp(A(b) * cumdelta(chunk - 1, rt, b));
         }
 
         // The state goes into the multiply as it is carried, at full
@@ -238,33 +257,32 @@ public:
 
         Func y_inter("y_inter");
         y_inter(d, idx, t, b) = 0.f;
-        if (split) {
-            y_inter(d, idx, t, b) += cast<float>(Cm(rp, t * chunk + idx, b)) *
-                                     cast<float>(Hop(rp, d, t, b));
-        } else {
-            y_inter(d, idx, t, b) += cast<float>(Cm(rp, t * chunk + idx, b)) *
-                                     H(rp, d, t, b);
-        }
+        y_inter(d, idx, t, b) += cast<float>(Cm(rp, t * chunk + idx, b)) *
+                                 cast<float>(Hop(rp, d, t, b));
 
         // The two halves of the answer, summed and scaled. Kept apart from the
         // output so that a schedule can put the sum on a tile and leave the
         // output as the copy that takes it to global memory. Inlines into the
         // output when nothing says otherwise.
+        // The first chunk has no earlier state to carry in, so its answer is
+        // just its own half. Saying it here is what keeps every read of the
+        // state inside the domain: nothing ever asks for the state at the first
+        // chunk, so nothing asks for what the chunk before it left behind.
         Func y("y");
         y(d, idx, t, b) = cast<float16_t>(
             y_intra(d, idx, t, b) +
-            y_inter(d, idx, t, b) * exp(A(b) * cumdelta(idx, t, b)));
+            select(t <= 0,
+                   0.f,
+                   likely(y_inter(d, idx, t, b) *
+                          exp(A(b) * cumdelta(idx, t, b)))));
 
         out(d, idx, t, b) = y(d, idx, t, b);
 
         try {
             if (!using_autoscheduler()) {
-                if (split) {
+                if (wmma) {
                     schedule_triton(d, p, k, idx, jj, t, b, Bmd, cumdelta, qk,
                                     score, y_intra, chunk_state, H, Hop, y_inter, y);
-                } else if (wmma) {
-                    schedule_wmma(d, p, k, idx, jj, t, b, Bmd, cumdelta, qk,
-                                  score, y_intra, chunk_state, H, y_inter, y);
                 } else {
                     schedule_gpu(d, p, k, idx, jj, t, b, cumdelta, qk, score,
                                  y_intra, chunk_state, H, y_inter);
@@ -284,11 +302,11 @@ private:
                       Func y_intra, Func chunk_state, Func H, Func y_inter) {
         Var xo("xo"), yo("yo"), xi("xi"), yi("yi");
 
-        _halide_user_assert(inductive)
+        _halide_user_assert(inductive())
             << "This schedule fuses the recurrence over chunks into the loop "
             << "that consumes it, which is only expressible if the state is an "
             << "inductive Func: an update definition owns the whole walk, so "
-            << "there is no per-chunk loop to fuse it into. Use split=true to "
+            << "there is no per-chunk loop to fuse it into. Use wmma=true to "
             << "compare the two ways of writing it.\n";
 
 
@@ -369,15 +387,21 @@ private:
         // with a leading dimension of zero rather than selected out of a
         // broadcast vector lane by lane, which wants an eight byte boundary.
         cumdelta.compute_root().align_bounds(k, 2).align_storage(k, 2);
-        if (inductive) {
+        // The pure stage stores nothing in the undef form, so it has no loops
+        // to schedule and no kernel is launched for it.
+        if (inductive() || !undef_init()) {
             cumdelta.reorder(k, t, b).gpu_blocks(b).gpu_threads(t);
-        } else {
+        }
+        if (!inductive()) {
             cumdelta.update().reorder(rm_var, t, b).gpu_blocks(b).gpu_threads(t);
         }
 
         // What each chunk leaves behind, which is a plain product once the
-        // input has been decayed to the end of the chunk.
-        Func cs = chunk_state.in();
+        // input has been decayed to the end of the chunk. In the form whose
+        // pure definition stores it, that definition is this kernel; otherwise
+        // it needs a wrapper to copy the tile out to memory.
+        const bool state_init_is_chunk_state = !inductive() && !undef_init();
+        Func cs = state_init_is_chunk_state ? H : chunk_state.in();
         cs.compute_root()
             .tile(p, d, rxi, ryi, tile, tile)
             .reorder(rxi, ryi, p, d, t, b)
@@ -398,6 +422,13 @@ private:
             .unroll(p)
             .gpu_threads(d)
             .tile_matmul(rri, rxi, ryi);
+        if (state_init_is_chunk_state) {
+            // The chunk this is computing is one back from the chunk the state
+            // is being initialized for. Left as a variable that offset stops
+            // two accesses to the same tile being recognised as the same tile.
+            chunk_state.unroll(t);
+            chunk_state.update().unroll(t);
+        }
         {
             Var so("so"), si("si"), to_("to"), ti_("ti");
             Bmd.compute_at(cs, t)
@@ -417,7 +448,7 @@ private:
         // outside the thread loops, so it needs saying that it is a thread's
         // own and not something to put in shared.
         Var pt("pt"), pe("pe"), hpt("hpt"), hpe("hpe"), hto("hto"), hti("hti");
-        if (inductive) {
+        if (inductive()) {
             Hop.compute_root()
                 .split(p, pt, pe, 4)
                 .split(d, ddo, ddi, 8)
@@ -515,6 +546,17 @@ private:
                 .gpu_threads(w);
         }
 
+        // Each per-chunk Func has a loop over the chunk it is computing, which
+        // runs once. Left alone it stays a variable, and that is enough to stop
+        // two accesses from different stages of the same Func being recognised
+        // as the same tile.
+        for (Func f : {qk, score, y_intra, y_inter, y}) {
+            f.unroll(t);
+        }
+        for (Func f : {qk, y_intra, y_inter}) {
+            f.update().unroll(t);
+        }
+
         // The scores are a chunk by chunk matrix that the whole block reads,
         // and the block is one chunk of one head, so computing them here costs
         // no more multiplies than a kernel of their own would. Masking and
@@ -558,167 +600,13 @@ private:
     // Every multiply is a tile of this size on the tensor cores.
     static constexpr int tile = 16;
 
-    // The four multiplies on the tensor cores. The block is one head; its
-    // warps split the scores by output position, and everything after them by
-    // channel, so that a warp holds every state row for the channels it owns
-    // and never has to reduce across warps.
-    void schedule_wmma(Var d, Var p, Var k, Var idx, Var jj, Var t, Var b,
-                       Func Bmd, Func cumdelta, Func qk, Func score,
-                       Func y_intra, Func chunk_state, Func H, Func y_inter,
-                       Func y) {
-        Var xo("xo"), yo("yo"), xi("xi"), yi("yi"), w("w"), to("to"), ti("ti");
-
-        _halide_user_assert(inductive)
-            << "This schedule fuses the recurrence over chunks into the loop "
-            << "that consumes it, which is only expressible if the state is an "
-            << "inductive Func: an update definition owns the whole walk, so "
-            << "there is no per-chunk loop to fuse it into. Use split=true to "
-            << "compare the two ways of writing it.\n";
-
-        Var rxi("rxi"), ryi("ryi");
-        RVar rro("rro"), rri("rri");
-
-        // A warp takes a tile of channels and every position of the chunk.
-        // The state is two chunks wide, and which of the two a chunk reads
-        // alternates with it. Take the walk two chunks at a time and unroll
-        // that, so each copy names one of them: a fragment is only a register
-        // if which register it is, is known.
-        // Split the walk by one, so no loop is named after the chunk. The
-        // state then slides over the chunk as a dimension rather than over a
-        // loop, and the window it needs is measured as what outlives each step
-        // rather than what each step asks for.
-        out
-            .reorder(d, idx, t, b)
-            .split(t, to, ti, 1)
-            .tile(d, idx, xo, yo, xi, yi, tile, tile)
-            .reorder(xi, yi, xo, yo, ti, to, b)
-            .gpu_blocks(b)
-            .gpu_threads(xo)
-            .unroll(yo)
-            .tile_store(xi, yi);
-
-        // The scores, split across the warps by output position, and left in
-        // shared memory because every warp reduces over all of them.
-        qk.compute_at(out, ti)
-            .store_in(MemoryType::Tile)
-            .tile(jj, idx, rxi, ryi, tile, tile)
-            .unroll(jj)
-            .gpu_threads(idx)
-            .tile_init(rxi, ryi);
-        qk.update()
-            .tile(jj, idx, rxi, ryi, tile, tile)
-            .split(rp_var, rro, rri, tile)
-            .reorder(jj, idx, rro)
-            .unroll(jj)
-            .gpu_threads(idx)
-            .tile_matmul(rri, rxi, ryi);
-
-        // The masking and the decay happen on the tile the multiply left them
-        // in, and the output is the copy that takes the result to memory.
-        score.compute_at(out, ti)
-            .store_in(MemoryType::Tile)
-            .tile(jj, idx, rxi, ryi, tile, tile)
-            .unroll(jj)
-            .gpu_threads(idx)
-            .tile_init(rxi, ryi);
-        score.in()
-            .compute_at(out, ti)
-            .store_in(MemoryType::GPUShared)
-            .tile(jj, idx, rxi, ryi, tile, tile)
-            .unroll(jj)
-            .gpu_threads(idx)
-            .tile_store(rxi, ryi);
-
-        // Everything past the scores is per channel, so a warp owns a tile of
-        // channels and keeps its share of the state in its own fragments.
-        //
-        // The channel is the tile's first axis rather than its second, which
-        // makes the state the first operand of the multiply that reads it. An
-        // accumulator can be rebuilt in place as a first operand, but not as a
-        // second one, so this is what lets the state stay in registers.
-        for (Func f : {y_intra, y_inter, y}) {
-            f.compute_at(out, ti)
-                .store_in(MemoryType::Tile)
-                .reorder_storage(idx, d)
-                .tile(d, idx, rxi, ryi, tile, tile)
-                .gpu_threads(d)
-                .unroll(idx)
-                .tile_init(ryi, rxi);
-        }
-        // The state is indexed the other way round, so the warps go on its
-        // second dimension to own the same channels they own everywhere else.
-        chunk_state.compute_at(out, ti)
-            .store_in(MemoryType::Tile)
-            .tile(p, d, rxi, ryi, tile, tile)
-            .unroll(p)
-            .gpu_threads(d)
-            .tile_init(rxi, ryi);
-
-        y_intra.update()
-            .tile(d, idx, rxi, ryi, tile, tile)
-            .split(rjy_var, rro, rri, tile)
-            .reorder(d, idx, rro)
-            .gpu_threads(d)
-            .unroll(idx)
-            .tile_matmul(rri, ryi, rxi);
-        y_inter.update()
-            .tile(d, idx, rxi, ryi, tile, tile)
-            .split(rp_var, rro, rri, tile)
-            .reorder(d, idx, rro)
-            .unroll(rro)
-            .gpu_threads(d)
-            .unroll(idx)
-            .tile_matmul(rri, ryi, rxi);
-        chunk_state.update()
-            .tile(p, d, rxi, ryi, tile, tile)
-            .split(rj_var, rro, rri, tile)
-            .reorder(p, d, rro)
-            .unroll(p)
-            .gpu_threads(d)
-            .tile_matmul(rri, rxi, ryi);
-
-        // The state slides over the walk: one chunk's worth is live at a
-        // time, and saying so is what keeps which fragment holds it fixed
-        // rather than alternating with the chunk.
-        H.compute_at(out, ti)
-            .store_at(out, b)
-            .slide(out, t)
-            .store_in(MemoryType::Tile)
-            .tile(p, d, rxi, ryi, tile, tile)
-            .unroll(p)
-            .gpu_threads(d)
-            .tile_init(rxi, ryi);
-
-        // Each per-chunk Func has a loop over the chunk it is computing, which
-        // runs once. Left alone it stays a variable, and that is enough to stop
-        // two accesses from different stages of the same Func being recognised
-        // as the same tile. Unrolled, they are constants - except that the slid
-        // state's warm-up gives the first iteration a different extent, and a
-        // loop whose extent is not constant cannot be unrolled.
-        for (Func f : {qk, score, y_intra, y_inter, chunk_state, H}) {
-            f.unroll(t);
-        }
-        for (Func f : {qk, y_intra, y_inter, chunk_state}) {
-            f.update().unroll(t);
-        }
-
-        // The scan, and the two staged operands the multiplies read.
-        cumdelta.compute_at(out, ti).store_in(MemoryType::GPUShared);
-        for (Func f : {X.in(), Bmd}) {
-            f.compute_at(out, ti)
-                .store_in(MemoryType::GPUShared)
-                .split(f.args()[0], xo, xi, tile)
-                .gpu_lanes(xi);
-        }
-
-        // ---------------------------------------------------------------
-        // Estimates and bounds
-        // ---------------------------------------------------------------
-        const int num_chunks = (int)seq / (int)chunk;
-        out.bound(d, 0, channels)
-            .bound(idx, 0, chunk)
-            .bound(t, 0, num_chunks)
-            .bound(b, 0, heads);
+    bool inductive() const {
+        return scan == ScanForm::Inductive;
+    }
+    // Whether the pure definition of a scan stores nothing, leaving the update
+    // to supply the base case.
+    bool undef_init() const {
+        return scan == ScanForm::RDomUndef;
     }
 
     RVar rp_var, rj_var, rjy_var, rm_var, rt_var;

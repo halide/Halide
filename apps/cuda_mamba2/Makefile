@@ -20,11 +20,12 @@ CUDA_SDK ?= /usr/local/cuda
 CXXFLAGS += -I $(CUDA_SDK)/include
 LDFLAGS += -L $(CUDA_SDK)/lib64 -Wl,-rpath,$(CUDA_SDK)/lib64
 
-INDUCTIVE ?= true
+# inductive, rdom_undef, or rdom - see the generator.
+SCAN ?= inductive
 WMMA ?= false
-WARPS ?= 4
-SPLIT ?= false
-SHAPE = seq=$(SEQ) state=$(STATE) channels=$(CHANNELS) chunk=$(CHUNK) heads=$(HEADS) inductive=$(INDUCTIVE) wmma=$(WMMA) warps=$(WARPS) split=$(SPLIT)
+
+
+SHAPE = seq=$(SEQ) state=$(STATE) channels=$(CHANNELS) chunk=$(CHUNK) heads=$(HEADS) scan=$(SCAN) wmma=$(WMMA)
 CXXFLAGS += -DSEQ=$(SEQ) -DSTATE=$(STATE) -DCHANNELS=$(CHANNELS) -DCHUNK=$(CHUNK) -DHEADS=$(HEADS)
 
 all: $(BIN)/$(HL_TARGET)/runner
