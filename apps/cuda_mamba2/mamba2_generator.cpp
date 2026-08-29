@@ -481,8 +481,9 @@ private:
         }
         // The decayed operand comes in a tile at a time, decayed on the
         // fragment the load leaves it in: a warp owns a block of the state's
-        // rows, so the tiles it multiplies by are its own. X is what the
-        // warps share, staged once per chunk.
+        // rows, so the tiles it multiplies by are its own. The input is read
+        // through the cache: staging it in shared memory costs more occupancy
+        // than the reuse gives back.
         {
             Func Bml = Func(Bm).in(Bmdf);
             Bml.compute_at(chunk_state, rro)
@@ -494,18 +495,6 @@ private:
                 .store_in(MemoryType::Tile)
                 .tile(jj, p, rxi, ryi, tile, tile)
                 .tile_init(rxi, ryi);
-            Func xs = Func(X).in(chunk_state);
-            Var so("so"), si("si"), fu("fu"), fo("fo"), fi("fi"), w("w"), l("l");
-            xs.compute_at(cs, t)
-                .store_in(MemoryType::GPUSharedAsync)
-                .split(xs.args()[0], so, si, 8)
-                .fuse(so, xs.args()[1], fu)
-                .split(fu, fo, fi, 32 * ((int)state / tile))
-                .split(fi, w, l, 32)
-                .reorder(si, l, w, fo)
-                .vectorize(si)
-                .gpu_lanes(l)
-                .gpu_threads(w);
         }
 
         // The recurrence over chunks. The chunks have to be walked in order,
@@ -648,15 +637,17 @@ private:
         if (fuse_qk) {
             qk.compute_at(out, io).store_in(MemoryType::Tile);
         } else {
+            Var jo("jo"), ji("ji");
             qk_at = qk.in();
             qk_at.compute_root()
                 .tile(jj, idx, rxi, ryi, tile, tile)
-                .reorder(rxi, ryi, jj, idx, t, g)
-                .unroll(jj)
-                .gpu_blocks(t, g)
+                .split(jj, jo, ji, 4)
+                .reorder(rxi, ryi, ji, idx, jo, t, g)
+                .unroll(ji)
+                .gpu_blocks(jo, t, g)
                 .gpu_threads(idx)
                 .tile_store(rxi, ryi);
-            qk.compute_at(qk_at, t).store_in(MemoryType::Tile).unroll(t);
+            qk.compute_at(qk_at, jo).store_in(MemoryType::Tile).unroll(t);
             qk.update().unroll(t);
         }
         qk.tile(jj, idx, rxi, ryi, tile, tile)
