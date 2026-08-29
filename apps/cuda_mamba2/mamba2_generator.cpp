@@ -465,10 +465,16 @@ private:
             .unroll(d)
             .gpu_threads(p)
             .tile_init(rxi, ryi);
+        // The reduction is walked a few tiles at a time, so that the slice of
+        // the input those tiles read can be staged for the block while the
+        // whole chunk's worth would not be worth the occupancy. The slice loop
+        // is split from the top so the tiles stay whole, and sits outside the
+        // loop over warps so the block fills the stage together.
         chunk_state.update()
             .tile(d, p, rxi, ryi, tile, tile)
-            .split(rj_var, rro, rri, tile)
-            .reorder(d, rro, p)
+            .split(rj_var, RVar("rjo"), RVar("rji"), 4 * tile)
+            .split(RVar("rji"), rro, rri, tile)
+            .reorder(d, rro, p, RVar("rjo"))
             .unroll(d)
             .gpu_threads(p)
             .tile_matmul(rri, rxi, ryi);
@@ -495,6 +501,18 @@ private:
                 .store_in(MemoryType::Tile)
                 .tile(jj, p, rxi, ryi, tile, tile)
                 .tile_init(rxi, ryi);
+            Func xs = Func(X).in(chunk_state);
+            Var so("so"), si("si"), fu("fu"), fo("fo"), fi("fi"), w("w"), l("l");
+            xs.compute_at(chunk_state, RVar("rjo"))
+                .store_in(MemoryType::GPUSharedAsync)
+                .split(xs.args()[0], so, si, 8)
+                .fuse(so, xs.args()[1], fu)
+                .split(fu, fo, fi, 32 * ((int)state / tile))
+                .split(fi, w, l, 32)
+                .reorder(si, l, w, fo)
+                .vectorize(si)
+                .gpu_lanes(l)
+                .gpu_threads(w);
         }
 
         // The recurrence over chunks. The chunks have to be walked in order,
