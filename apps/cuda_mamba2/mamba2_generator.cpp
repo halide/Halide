@@ -403,6 +403,9 @@ private:
         // tiles. A block gets 48KB, and staging the operand the intra-chunk
         // multiply reads costs a chunk by the channels on top, so at the longer
         // chunks it is the staging that gives way rather than the block.
+        // Fewer than four leaves a block with too little to do to cover the
+        // latency of what it reads, so at the longer chunks it is the staging
+        // that gives way rather than the block.
         const int pos_tiles = 4;
         const int score_bytes = (int)chunk * pos_tiles * tile * 2;
         const int staged_bytes = (int)chunk * (int)channels * 2;
@@ -467,11 +470,11 @@ private:
         // it is computed.
         {
             Var so("so"), si("si"), to_("to"), ti_("ti");
-            const bool whole_chunk = (int)state * (int)chunk * 2 <= 40 * 1024;
-            if (whole_chunk) {
+            // A chunk's worth of it where that fits in shared memory, and the
+            // slice the multiply is reducing over right now where it does not.
+            if ((int)state * (int)chunk * 2 <= 40 * 1024) {
                 Bmd.compute_at(cs, t);
             } else {
-                // Only the slice the multiply is reducing over right now.
                 Bmd.compute_at(chunk_state, rro);
             }
             Bmd.store_in(MemoryType::GPUShared)
@@ -665,10 +668,14 @@ private:
             // The scores come back from memory rather than out of a fragment,
             // so masking and decaying them is ordinary elementwise work on the
             // way into shared memory, which is where the multiply reads them.
+            // How much of a chunk a block's scores span depends on which
+            // positions it holds, because of the mask, so the split over them
+            // has a tail. Shifting it inwards would reach back before the
+            // start of the chunk when the span is shorter than the split.
             Var so("so"), si("si"), to_("to"), ti_("ti");
             score.compute_at(out, io)
                 .store_in(MemoryType::GPUShared)
-                .split(jj, so, si, 32)
+                .split(jj, so, si, 32, TailStrategy::GuardWithIf)
                 .split(idx, to_, ti_, tile)
                 .reorder(si, so, ti_, to_)
                 .gpu_lanes(si)
