@@ -182,11 +182,17 @@ public:
         // Masked to be causal and weighted by the decay between the two
         // positions, then narrowed for the multiply that consumes it.
         Func score("score");
-        score(jj, idx, t, b) = cast<float16_t>(
+        score(jj, idx, t, b) =
             select(jj <= idx,
                    qk(jj, idx, t, group_of(b)) * decay(jj, idx, t, b) *
                        Delta(t * chunk + jj, b),
-                   0.f));
+                   0.f);
+        // Narrowed for the multiply that consumes it. Where the scores stay on
+        // fragments this inlines into the multiply, whose operand conversion
+        // is this same rounding; where they go through shared memory it is the
+        // copy that narrows them on the way in.
+        Func score_h("score_h");
+        score_h(jj, idx, t, b) = cast<float16_t>(score(jj, idx, t, b));
 
         RDom rj(0, chunk, "rj");
         rj_var = rj.x;
@@ -195,20 +201,23 @@ public:
         rjy_var = rjy.x;
         Func y_intra("y_intra");
         y_intra(d, idx, t, b) = 0.f;
-        y_intra(d, idx, t, b) += cast<float>(score(rjy, idx, t, b)) *
+        y_intra(d, idx, t, b) += cast<float>(score_h(rjy, idx, t, b)) *
                                  cast<float>(X(d, t * chunk + rjy, b));
 
         // The state's operand, scaled by the step size and decayed to the end
         // of its chunk, so that what the chunk leaves behind is a plain
         // product of two operands.
+        Func Bmdf("Bmdf");
+        Bmdf(jj, p, t, b) = cast<float>(Bm(p, t * chunk + jj, group_of(b))) *
+                            Delta(t * chunk + jj, b) *
+                            decay(jj, chunk - 1, t, b);
+        // Narrowed for the multiply, like the scores.
         Func Bmd("Bmd");
-        Bmd(p, jj, t, b) = cast<float16_t>(cast<float>(Bm(p, t * chunk + jj, group_of(b))) *
-                                           Delta(t * chunk + jj, b) *
-                                           decay(jj, chunk - 1, t, b));
+        Bmd(p, jj, t, b) = cast<float16_t>(Bmdf(jj, p, t, b));
 
         Func chunk_state("chunk_state");
-        chunk_state(p, d, t, b) = 0.f;
-        chunk_state(p, d, t, b) += cast<float>(Bmd(p, rj, t, b)) *
+        chunk_state(d, p, t, b) = 0.f;
+        chunk_state(d, p, t, b) += cast<float>(Bmd(p, rj, t, b)) *
                                    cast<float>(X(d, t * chunk + rj, b));
 
         // Every earlier chunk's state, decayed to the end of this one. Carried
@@ -224,22 +233,22 @@ public:
                 undef_init() ? num_chunks : num_chunks - 2, "rt");
         rt_var = rt.x;
         if (inductive()) {
-            H(p, d, t, b) = select(t <= 0,
+            H(d, p, t, b) = select(t <= 0,
                                    0.f,
-                                   likely(H(p, d, t - 1, b) *
+                                   likely(H(d, p, t - 1, b) *
                                           exp(A(b) * cumdelta(chunk - 1, t - 1, b))) +
-                                       chunk_state(p, d, t - 1, b));
+                                       chunk_state(d, p, t - 1, b));
         } else if (undef_init()) {
             // The same recurrence as an update definition. It owns the walk, so
             // it cannot be slid into the loop that consumes it: the whole array
             // has to exist, at the precision it is carried at, before anything
             // reads it.
-            H(p, d, t, b) = undef<float>();
-            H(p, d, rt, b) = select(rt <= 0,
+            H(d, p, t, b) = undef<float>();
+            H(d, p, rt, b) = select(rt <= 0,
                                     0.f,
-                                    likely(H(p, d, rt - 1, b) *
+                                    likely(H(d, p, rt - 1, b) *
                                            exp(A(b) * cumdelta(chunk - 1, rt - 1, b))) +
-                                        chunk_state(p, d, rt - 1, b));
+                                        chunk_state(d, p, rt - 1, b));
         } else {
             // The pure definition really does initialize, which is the
             // straightforward thing to write and costs a kernel to run it.
@@ -253,8 +262,8 @@ public:
             // there and the walk starts a step later. Every index either
             // definition touches is then inside the domain, with no masking
             // and no special case anywhere.
-            H(p, d, t, b) = chunk_state(p, d, t - 1, b);
-            H(p, d, rt + 1, b) += H(p, d, rt, b) *
+            H(d, p, t, b) = chunk_state(d, p, t - 1, b);
+            H(d, p, rt + 1, b) += H(d, p, rt, b) *
                                   exp(A(b) * cumdelta(chunk - 1, rt, b));
         }
 
@@ -268,12 +277,12 @@ public:
         // nothing narrows it on the way and it needs saying, which is what the
         // reference implementation does too.
         Func Hop("Hop");
-        Hop(p, d, t, b) = cast<float16_t>(H(p, d, t, b));
+        Hop(d, p, t, b) = cast<float16_t>(H(d, p, t, b));
 
         Func y_inter("y_inter");
         y_inter(d, idx, t, b) = 0.f;
         y_inter(d, idx, t, b) += cast<float>(Cm(rp, t * chunk + idx, group_of(b))) *
-                                 cast<float>(Hop(rp, d, t, b));
+                                 cast<float>(Hop(d, rp, t, b));
 
         // The two halves of the answer, summed and scaled. Kept apart from the
         // output so that a schedule can put the sum on a tile and leave the
@@ -296,11 +305,11 @@ public:
         try {
             if (!using_autoscheduler()) {
                 if (wmma) {
-                    schedule_triton(d, p, k, idx, jj, t, b, Bmd, cumdelta, qk,
-                                    score, y_intra, chunk_state, H, Hop, y_inter,
-                                    y, g);
+                    schedule_triton(d, p, k, idx, jj, t, b, Bmdf, cumdelta, qk,
+                                    score, score_h, y_intra, chunk_state, H, Hop,
+                                    y_inter, y, g);
                 } else {
-                    schedule_gpu(d, p, k, idx, jj, t, b, cumdelta, qk, score,
+                    schedule_gpu(d, p, k, idx, jj, t, b, cumdelta, qk, score_h,
                                  y_intra, chunk_state, H, y_inter);
                 }
             }
@@ -390,9 +399,9 @@ private:
     // instead. Everything that crosses a stage goes through memory, which buys
     // the parallelism the fused walk gives up.
     void schedule_triton(Var d, Var p, Var k, Var idx, Var jj, Var t, Var b,
-                         Func Bmd, Func cumdelta, Func qk, Func score,
-                         Func y_intra, Func chunk_state, Func H, Func Hop,
-                         Func y_inter, Func y, Var g) {
+                         Func Bmdf, Func cumdelta, Func qk, Func score,
+                         Func score_h, Func y_intra, Func chunk_state, Func H,
+                         Func Hop, Func y_inter, Func y, Var g) {
         const int tile = 16;
         Var xo("xo"), xi("xi"), rxi("rxi"), ryi("ryi"), n_var("n");
         Var po("po"), pi("pi"), ddo("ddo"), ddi("ddi");
@@ -407,15 +416,21 @@ private:
         // latency of what it reads, so at the longer chunks it is the staging
         // that gives way rather than the block.
         const int pos_tiles = 4;
-        const int score_bytes = (int)chunk * pos_tiles * tile * 2;
-        const int staged_bytes = (int)chunk * (int)channels * 2;
-        const bool stage_operand = score_bytes + staged_bytes <= 40 * 1024;
         // Computing the scores in the kernel that reads them only costs no
         // extra multiplies if that kernel is the only one that wants them,
         // which needs every head to have its own and a block to cover the whole
-        // chunk. Otherwise they go in a kernel of their own, once per group.
+        // chunk. Otherwise they go in a kernel of their own, once per group,
+        // and come back through fragments a tile at a time, costing no shared
+        // memory here at all.
         const bool fuse_qk =
             (int)groups == (int)heads && (int)chunk <= pos_tiles * tile;
+        const int score_bytes = (int)chunk * pos_tiles * tile * 2;
+        const int staged_bytes = (int)chunk * (int)channels * 2;
+        // With the scores through shared memory, staging what the multiply
+        // reads is worth it where both fit. With them on fragments the block
+        // is small and the panel's reuse is caught by the cache, so occupancy
+        // is worth more than the staging.
+        const bool stage_operand = fuse_qk && score_bytes + staged_bytes <= 40 * 1024;
 
         // The scan within a chunk, one thread per chunk. Its rows are padded to
         // an even length, so that a tile of the decay can be read as a matrix
@@ -438,31 +453,24 @@ private:
         const bool state_init_is_chunk_state = !inductive() && !undef_init();
         Func cs = state_init_is_chunk_state ? H : chunk_state.in();
         cs.compute_root()
-            .tile(p, d, rxi, ryi, tile, tile)
-            .reorder(rxi, ryi, p, d, t, b)
-            .unroll(p)
+            .tile(d, p, rxi, ryi, tile, tile)
+            .reorder(rxi, ryi, d, p, t, b)
+            .unroll(d)
             .gpu_blocks(t, b)
-            .gpu_threads(d)
+            .gpu_threads(p)
             .tile_store(rxi, ryi);
         chunk_state.compute_at(cs, t)
             .store_in(MemoryType::Tile)
-            .tile(p, d, rxi, ryi, tile, tile)
-            .unroll(p)
-            .gpu_threads(d)
+            .tile(d, p, rxi, ryi, tile, tile)
+            .unroll(d)
+            .gpu_threads(p)
             .tile_init(rxi, ryi);
-        // Where a chunk's worth of the operand does not fit in shared memory,
-        // the walk over it is split so that a block stages as much of it as
-        // does, rather than a step of the multiply's worth at a time.
-        const int stage_slice =
-            std::min((int)chunk, std::max(tile, 40 * 1024 / ((int)state * 2) / tile * tile));
-        RVar rroo("rroo"), rroi("rroi");
         chunk_state.update()
-            .tile(p, d, rxi, ryi, tile, tile)
+            .tile(d, p, rxi, ryi, tile, tile)
             .split(rj_var, rro, rri, tile)
-            .split(rro, rroo, rroi, stage_slice / tile)
-            .reorder(p, d, rroi, rroo)
-            .unroll(p)
-            .gpu_threads(d)
+            .reorder(d, rro, p)
+            .unroll(d)
+            .gpu_threads(p)
             .tile_matmul(rri, rxi, ryi);
         if (state_init_is_chunk_state) {
             // The chunk this is computing is one back from the chunk the state
@@ -471,25 +479,33 @@ private:
             chunk_state.unroll(t);
             chunk_state.update().unroll(t);
         }
-        // The decayed operand is a chunk's worth of the state's B, which at the
-        // longer chunks is more shared memory than a block has. Where it fits,
-        // staging it is worth it; where it does not, the multiply reads it as
-        // it is computed.
+        // The decayed operand comes in a tile at a time, decayed on the
+        // fragment the load leaves it in: a warp owns a block of the state's
+        // rows, so the tiles it multiplies by are its own. X is what the
+        // warps share, staged once per chunk.
         {
-            Var so("so"), si("si"), to_("to"), ti_("ti");
-            // A chunk's worth of it where that fits in shared memory, and the
-            // slice the multiply is reducing over right now where it does not.
-            if (stage_slice == (int)chunk) {
-                Bmd.compute_at(cs, t);
-            } else {
-                Bmd.compute_at(chunk_state, rroo);
-            }
-            Bmd.store_in(MemoryType::GPUShared)
-                .split(p, so, si, 32)
-                .split(jj, to_, ti_, tile)
-                .reorder(si, so, ti_, to_)
-                .gpu_lanes(si)
-                .gpu_threads(to_);
+            Func Bml = Func(Bm).in(Bmdf);
+            Bml.compute_at(chunk_state, rro)
+                .store_in(MemoryType::Tile)
+                .reorder_storage(Bml.args()[1], Bml.args()[0], Bml.args()[2])
+                .tile(Bml.args()[0], Bml.args()[1], rxi, ryi, tile, tile)
+                .tile_load(rxi, ryi);
+            Bmdf.compute_at(chunk_state, rro)
+                .store_in(MemoryType::Tile)
+                .tile(jj, p, rxi, ryi, tile, tile)
+                .tile_init(rxi, ryi);
+            Func xs = Func(X).in(chunk_state);
+            Var so("so"), si("si"), fu("fu"), fo("fo"), fi("fi"), w("w"), l("l");
+            xs.compute_at(cs, t)
+                .store_in(MemoryType::GPUSharedAsync)
+                .split(xs.args()[0], so, si, 8)
+                .fuse(so, xs.args()[1], fu)
+                .split(fu, fo, fi, 32 * ((int)state / tile))
+                .split(fi, w, l, 32)
+                .reorder(si, l, w, fo)
+                .vectorize(si)
+                .gpu_lanes(l)
+                .gpu_threads(w);
         }
 
         // The recurrence over chunks. The chunks have to be walked in order,
@@ -502,8 +518,8 @@ private:
         Var pt("pt"), pe("pe"), hpt("hpt"), hpe("hpe"), hto("hto"), hti("hti");
         if (inductive()) {
             Hop.compute_root()
-                .split(p, pt, pe, 4)
-                .split(d, ddo, ddi, 8)
+                .split(d, pt, pe, 4)
+                .split(p, ddo, ddi, 8)
                 .split(t, hto, hti, 1)
                 .reorder(pe, pt, ddi, hti, hto, ddo, b)
                 .gpu_blocks(ddo, b)
@@ -513,9 +529,9 @@ private:
                 .store_at(Hop, ddo)
                 .slide(Hop, t)
                 .store_in(MemoryType::Stack)
-                .split(p, hpt, hpe, 4)
-                .reorder(hpe, hpt, d)
-                .gpu_threads(hpt, d)
+                .split(d, hpt, hpe, 4)
+                .reorder(hpe, hpt, p)
+                .gpu_threads(hpt, p)
                 .vectorize(hpe);
         } else {
             // Written as an update definition the walk is the Func, so there is
@@ -524,8 +540,8 @@ private:
             // at, and the multiply that reads it reads that.
             H.compute_root();
             H.update()
-                .split(p, pt, pe, 4)
-                .split(d, ddo, ddi, 8)
+                .split(d, pt, pe, 4)
+                .split(p, ddo, ddi, 8)
                 .reorder(pe, pt, ddi, rt_var, ddo, b)
                 .gpu_blocks(ddo, b)
                 .gpu_threads(pt, ddi)
@@ -536,8 +552,8 @@ private:
             Var so("so"), si("si"), to_("to"), ti_("ti");
             Hop.compute_at(out, io)
                 .store_in(MemoryType::GPUShared)
-                .split(p, so, si, 32)
-                .split(d, to_, ti_, tile)
+                .split(d, so, si, 32)
+                .split(p, to_, ti_, (int)state / 4)
                 .reorder(si, so, ti_, to_)
                 .gpu_lanes(si)
                 .gpu_threads(to_);
@@ -556,31 +572,31 @@ private:
             .tile(d, idx, rxi, ryi, tile, tile)
             .split(idx, io, ii, pos_tiles)
             .reorder(rxi, ryi, d, ii, io, t, b)
-            .unroll(ii)
+            .unroll(d)
             .gpu_blocks(io, t, b)
-            .gpu_threads(d)
+            .gpu_threads(ii)
             .tile_store(rxi, ryi);
         for (Func f : {y_intra, y_inter, y}) {
             f.compute_at(out, io)
                 .store_in(MemoryType::Tile)
                 .tile(d, idx, rxi, ryi, tile, tile)
-                .gpu_threads(d)
-                .unroll(idx)
+                .unroll(d)
+                .gpu_threads(idx)
                 .tile_init(rxi, ryi);
         }
         y_intra.update()
             .tile(d, idx, rxi, ryi, tile, tile)
             .split(rjy_var, rro, rri, tile)
-            .reorder(d, idx, rro)
-            .gpu_threads(d)
-            .unroll(idx)
+            .reorder(d, rro, idx)
+            .unroll(d)
+            .gpu_threads(idx)
             .tile_matmul(rri, rxi, ryi);
         y_inter.update()
             .tile(d, idx, rxi, ryi, tile, tile)
             .split(rp_var, rro, rri, tile)
-            .reorder(d, idx, rro)
-            .gpu_threads(d)
-            .unroll(idx)
+            .reorder(d, rro, idx)
+            .unroll(d)
+            .gpu_threads(idx)
             .tile_matmul(rri, rxi, ryi);
         // The operands come out of global memory with the buffer's own row
         // stride, so a fragment is sixteen separate rows of it, and every
@@ -664,7 +680,7 @@ private:
                 .unroll(jj)
                 .gpu_threads(idx)
                 .tile_init(rxi, ryi);
-            score.in()
+            score_h
                 .compute_at(out, io)
                 .store_in(MemoryType::GPUShared)
                 .tile(jj, idx, rxi, ryi, tile, tile)
@@ -672,21 +688,25 @@ private:
                 .gpu_threads(idx)
                 .tile_store(rxi, ryi);
         } else {
-            // The scores come back from memory rather than out of a fragment,
-            // so masking and decaying them is ordinary elementwise work on the
-            // way into shared memory, which is where the multiply reads them.
-            // How much of a chunk a block's scores span depends on which
-            // positions it holds, because of the mask, so the split over them
-            // has a tail. Shifting it inwards would reach back before the
-            // start of the chunk when the span is shorter than the split.
-            Var so("so"), si("si"), to_("to"), ti_("ti");
-            score.compute_at(out, io)
-                .store_in(MemoryType::GPUShared)
-                .split(jj, so, si, 32, TailStrategy::GuardWithIf)
-                .split(idx, to_, ti_, tile)
-                .reorder(si, so, ti_, to_)
-                .gpu_lanes(si)
-                .gpu_threads(to_);
+            // The scores come back from memory one tile at a time, straight
+            // into fragments: a warp owns a tile of output positions, so the
+            // scores it needs are its own, and masking and decaying them is
+            // elementwise work on the tile the load left them in. They never
+            // touch shared memory, which leaves all of it for staging the
+            // operand the multiply reads.
+            Func qkl = qk_at.in(score);
+            qkl.compute_at(y_intra, rro)
+                .store_in(MemoryType::Tile)
+                .bound_extent(jj, tile)
+                .bound_storage(jj, tile)
+                .tile(jj, idx, rxi, ryi, tile, tile)
+                .tile_load(rxi, ryi);
+            score.compute_at(y_intra, rro)
+                .store_in(MemoryType::Tile)
+                .bound_extent(jj, tile)
+                .bound_storage(jj, tile)
+                .tile(jj, idx, rxi, ryi, tile, tile)
+                .tile_init(rxi, ryi);
         }
 
         const int num_chunks = (int)seq / (int)chunk;

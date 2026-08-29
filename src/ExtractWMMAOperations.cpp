@@ -378,8 +378,45 @@ MatmulInfo analyze_matmul(const Store *op,
     // Under the casts, broadcasts and lane permutations that vectorization may
     // have left on each operand there must be a load.
     Scope<Expr> empty_scope;
-    info.lhs.load = is_load_of_multiramp(mul->a, empty_scope, &info.lhs.mr);
-    info.rhs.load = is_load_of_multiramp(mul->b, empty_scope, &info.rhs.mr);
+    auto operand_load = [&](const Expr &e, MultiRamp *mr) -> const Load * {
+        if (const Load *l = is_load_of_multiramp(e, empty_scope, mr)) {
+            return l;
+        }
+        // The accumulator of an earlier multiply feeding this one arrives
+        // under a narrowing round trip: narrowed to the operand's precision,
+        // then widened again for the multiply. The relayout that takes it out
+        // of the accumulator performs exactly that rounding, so look under
+        // the pair - but only for an accumulator, where it does. The pair may
+        // sit under a broadcast that vectorization hoisted the operand into.
+        std::function<Expr(const Expr &)> strip = [&](const Expr &b) -> Expr {
+            if (const Broadcast *bc = b.as<Broadcast>()) {
+                Expr v = strip(bc->value);
+                if (!v.same_as(bc->value)) {
+                    return Broadcast::make(v, bc->lanes);
+                }
+                return b;
+            }
+            const Cast *widen = b.as<Cast>();
+            const Cast *narrow = widen ? widen->value.as<Cast>() : nullptr;
+            if (narrow &&
+                widen->type.element_of() == Float(32) &&
+                narrow->type.element_of() == Float(16) &&
+                narrow->value.type().element_of() == Float(32)) {
+                return narrow->value;
+            }
+            return b;
+        };
+        Expr stripped = strip(e);
+        if (!stripped.same_as(e)) {
+            const Load *l = is_load_of_multiramp(stripped, empty_scope, mr);
+            if (l && is_accumulator(l->name)) {
+                return l;
+            }
+        }
+        return nullptr;
+    };
+    info.lhs.load = operand_load(mul->a, &info.lhs.mr);
+    info.rhs.load = operand_load(mul->b, &info.rhs.mr);
     if (!info.lhs.load || !info.rhs.load) {
         return fail("the matrix multiply operands are not loads with affine indices");
     }
