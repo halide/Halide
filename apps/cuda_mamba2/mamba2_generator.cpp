@@ -42,6 +42,9 @@
 
 #include "Halide.h"
 
+#include <algorithm>
+#include <vector>
+
 namespace {
 
 using namespace Halide;
@@ -53,6 +56,10 @@ public:
     GeneratorParam<int> channels{"channels", 64};  // D, channels in a head
     GeneratorParam<int> chunk{"chunk", 64};        // how long a chunk is
     GeneratorParam<int> heads{"heads", 128};       // batch * heads
+    // How many heads share a B and a C. The reference shares one set across
+    // every head of a batch entry; giving each head its own is the other
+    // extreme, and changes which multiplies are worth sharing a kernel.
+    GeneratorParam<int> groups{"groups", 1};
     // How the two scans - the decay across a chunk and the state carried
     // between chunks - are written. All three forms do one step per element.
     //
@@ -102,6 +109,12 @@ public:
 
     void generate() {
         Var d("d"), p("p"), k("k"), idx("idx"), jj("jj"), t("t"), b("b"), n("n");
+        Var g("g");
+
+        // Which group's B and C a head reads.
+        auto group_of = [&](Expr head) {
+            return (int)groups == (int)heads ? head : head / ((int)heads / (int)groups);
+        };
 
         // A tile of the step size is read as a matrix with a leading dimension
         // of zero, which reads eight bytes at a time and so needs the row it
@@ -156,10 +169,12 @@ public:
         // The chunk's own scores: C^T B.
         RDom rp(0, state, "rp");
         rp_var = rp.x;
+        // One per group rather than one per head, which is what makes it a
+        // kernel of its own: every head of a group reads the same matrix.
         Func qk("qk");
-        qk(jj, idx, t, b) = 0.f;
-        qk(jj, idx, t, b) += cast<float>(Cm(rp, t * chunk + idx, b)) *
-                             cast<float>(Bm(rp, t * chunk + jj, b));
+        qk(jj, idx, t, g) = 0.f;
+        qk(jj, idx, t, g) += cast<float>(Cm(rp, t * chunk + idx, g)) *
+                             cast<float>(Bm(rp, t * chunk + jj, g));
 
         // Masking is an elementwise multiply by a tile of the mask, rather
         // than a test on the coordinates of each entry, which the lanes of a
@@ -169,7 +184,7 @@ public:
         Func score("score");
         score(jj, idx, t, b) = cast<float16_t>(
             select(jj <= idx,
-                   qk(jj, idx, t, b) * decay(jj, idx, t, b) *
+                   qk(jj, idx, t, group_of(b)) * decay(jj, idx, t, b) *
                        Delta(t * chunk + jj, b),
                    0.f));
 
@@ -187,7 +202,7 @@ public:
         // of its chunk, so that what the chunk leaves behind is a plain
         // product of two operands.
         Func Bmd("Bmd");
-        Bmd(p, jj, t, b) = cast<float16_t>(cast<float>(Bm(p, t * chunk + jj, b)) *
+        Bmd(p, jj, t, b) = cast<float16_t>(cast<float>(Bm(p, t * chunk + jj, group_of(b))) *
                                            Delta(t * chunk + jj, b) *
                                            decay(jj, chunk - 1, t, b));
 
@@ -257,7 +272,7 @@ public:
 
         Func y_inter("y_inter");
         y_inter(d, idx, t, b) = 0.f;
-        y_inter(d, idx, t, b) += cast<float>(Cm(rp, t * chunk + idx, b)) *
+        y_inter(d, idx, t, b) += cast<float>(Cm(rp, t * chunk + idx, group_of(b))) *
                                  cast<float>(Hop(rp, d, t, b));
 
         // The two halves of the answer, summed and scaled. Kept apart from the
@@ -282,7 +297,8 @@ public:
             if (!using_autoscheduler()) {
                 if (wmma) {
                     schedule_triton(d, p, k, idx, jj, t, b, Bmd, cumdelta, qk,
-                                    score, y_intra, chunk_state, H, Hop, y_inter, y);
+                                    score, y_intra, chunk_state, H, Hop, y_inter,
+                                    y, g);
                 } else {
                     schedule_gpu(d, p, k, idx, jj, t, b, cumdelta, qk, score,
                                  y_intra, chunk_state, H, y_inter);
@@ -376,11 +392,27 @@ private:
     void schedule_triton(Var d, Var p, Var k, Var idx, Var jj, Var t, Var b,
                          Func Bmd, Func cumdelta, Func qk, Func score,
                          Func y_intra, Func chunk_state, Func H, Func Hop,
-                         Func y_inter, Func y) {
+                         Func y_inter, Func y, Var g) {
         const int tile = 16;
         Var xo("xo"), xi("xi"), rxi("rxi"), ryi("ryi"), n_var("n");
         Var po("po"), pi("pi"), ddo("ddo"), ddi("ddi");
+        Var io("io"), ii("ii");
         RVar rro("rro"), rri("rri");
+        // How many tiles of output positions a block covers, and what that
+        // costs in shared memory: the scores are a whole chunk by that many
+        // tiles. A block gets 48KB, and staging the operand the intra-chunk
+        // multiply reads costs a chunk by the channels on top, so at the longer
+        // chunks it is the staging that gives way rather than the block.
+        const int pos_tiles = 4;
+        const int score_bytes = (int)chunk * pos_tiles * tile * 2;
+        const int staged_bytes = (int)chunk * (int)channels * 2;
+        const bool stage_operand = score_bytes + staged_bytes <= 40 * 1024;
+        // Computing the scores in the kernel that reads them only costs no
+        // extra multiplies if that kernel is the only one that wants them,
+        // which needs every head to have its own and a block to cover the whole
+        // chunk. Otherwise they go in a kernel of their own, once per group.
+        const bool fuse_qk =
+            (int)groups == (int)heads && (int)chunk <= pos_tiles * tile;
 
         // The scan within a chunk, one thread per chunk. Its rows are padded to
         // an even length, so that a tile of the decay can be read as a matrix
@@ -429,10 +461,20 @@ private:
             chunk_state.unroll(t);
             chunk_state.update().unroll(t);
         }
+        // The decayed operand is a chunk's worth of the state's B, which at the
+        // longer chunks is more shared memory than a block has. Where it fits,
+        // staging it is worth it; where it does not, the multiply reads it as
+        // it is computed.
         {
             Var so("so"), si("si"), to_("to"), ti_("ti");
-            Bmd.compute_at(cs, t)
-                .store_in(MemoryType::GPUShared)
+            const bool whole_chunk = (int)state * (int)chunk * 2 <= 40 * 1024;
+            if (whole_chunk) {
+                Bmd.compute_at(cs, t);
+            } else {
+                // Only the slice the multiply is reducing over right now.
+                Bmd.compute_at(chunk_state, rro);
+            }
+            Bmd.store_in(MemoryType::GPUShared)
                 .split(p, so, si, 32)
                 .split(jj, to_, ti_, tile)
                 .reorder(si, so, ti_, to_)
@@ -482,7 +524,7 @@ private:
             // is narrowed on the way in from memory rather than on the way out
             // to it. Memory holds the wide form either way round.
             Var so("so"), si("si"), to_("to"), ti_("ti");
-            Hop.compute_at(out, t)
+            Hop.compute_at(out, io)
                 .store_in(MemoryType::GPUShared)
                 .split(p, so, si, 32)
                 .split(d, to_, ti_, tile)
@@ -495,16 +537,21 @@ private:
         // from memory, and the state is narrowed here too. The sum of the two
         // halves happens on the tile the multiplies left them in, and the
         // output is the copy that takes it from there to global memory.
+        // A block is a tile of output positions of one chunk of one head. At
+        // the chunk sizes the reference uses a whole chunk's worth of them at
+        // once is more tiles than a thread has registers for, and more scores
+        // than a block has shared memory for.
         out
             .compute_root()
             .tile(d, idx, rxi, ryi, tile, tile)
-            .reorder(rxi, ryi, d, idx, t, b)
-            .unroll(idx)
-            .gpu_blocks(t, b)
+            .split(idx, io, ii, pos_tiles)
+            .reorder(rxi, ryi, d, ii, io, t, b)
+            .unroll(ii)
+            .gpu_blocks(io, t, b)
             .gpu_threads(d)
             .tile_store(rxi, ryi);
         for (Func f : {y_intra, y_inter, y}) {
-            f.compute_at(out, t)
+            f.compute_at(out, io)
                 .store_in(MemoryType::Tile)
                 .tile(d, idx, rxi, ryi, tile, tile)
                 .gpu_threads(d)
@@ -532,9 +579,10 @@ private:
         // leaves the multiplies reading a tile that is already dense. The copy
         // is asynchronous, so it wants sixteen bytes per thread and nothing in
         // the way between the load and the store.
-        for (Func f : {Func(X).in(y_intra)}) {
+        for (Func f : (stage_operand ? std::vector<Func>{Func(X).in(y_intra)}
+                                     : std::vector<Func>{})) {
             Var so("so"), si("si"), fu("fu"), fo("fo"), fi("fi"), w("w"), l("l");
-            f.compute_at(out, t)
+            f.compute_at(out, io)
                 .store_in(MemoryType::GPUSharedAsync)
                 .split(f.args()[0], so, si, 8)
                 .fuse(so, f.args()[1], fu)
@@ -550,11 +598,18 @@ private:
         // runs once. Left alone it stays a variable, and that is enough to stop
         // two accesses from different stages of the same Func being recognised
         // as the same tile.
-        for (Func f : {qk, score, y_intra, y_inter, y}) {
+        for (Func f : {y_intra, y_inter, y}) {
             f.unroll(t);
         }
-        for (Func f : {qk, y_intra, y_inter}) {
+        if (fuse_qk) {
+            score.unroll(t);
+        }
+        for (Func f : {y_intra, y_inter}) {
             f.update().unroll(t);
+        }
+        if (fuse_qk) {
+            qk.unroll(t);
+            qk.update().unroll(t);
         }
 
         // The scores are a chunk by chunk matrix that the whole block reads,
@@ -563,9 +618,22 @@ private:
         // decaying them happens on the tile the multiply left them in, and
         // only the narrowed result reaches shared memory, where the multiply
         // that consumes them reads it as an operand.
-        qk.compute_at(out, t)
-            .store_in(MemoryType::Tile)
-            .tile(jj, idx, rxi, ryi, tile, tile)
+        Func qk_at = qk;
+        if (fuse_qk) {
+            qk.compute_at(out, io).store_in(MemoryType::Tile);
+        } else {
+            qk_at = qk.in();
+            qk_at.compute_root()
+                .tile(jj, idx, rxi, ryi, tile, tile)
+                .reorder(rxi, ryi, jj, idx, t, g)
+                .unroll(jj)
+                .gpu_blocks(t, g)
+                .gpu_threads(idx)
+                .tile_store(rxi, ryi);
+            qk.compute_at(qk_at, t).store_in(MemoryType::Tile).unroll(t);
+            qk.update().unroll(t);
+        }
+        qk.tile(jj, idx, rxi, ryi, tile, tile)
             .unroll(jj)
             .gpu_threads(idx)
             .tile_init(rxi, ryi);
@@ -576,19 +644,36 @@ private:
             .unroll(jj)
             .gpu_threads(idx)
             .tile_matmul(rri, rxi, ryi);
-        score.compute_at(out, t)
-            .store_in(MemoryType::Tile)
-            .tile(jj, idx, rxi, ryi, tile, tile)
-            .unroll(jj)
-            .gpu_threads(idx)
-            .tile_init(rxi, ryi);
-        score.in()
-            .compute_at(out, t)
-            .store_in(MemoryType::GPUShared)
-            .tile(jj, idx, rxi, ryi, tile, tile)
-            .unroll(jj)
-            .gpu_threads(idx)
-            .tile_store(rxi, ryi);
+        if (fuse_qk) {
+            // Masking and decaying happen on the tile the multiply left them
+            // in, and only the narrowed result reaches shared memory, where the
+            // multiply that consumes them reads it as an operand.
+            score.compute_at(out, io)
+                .store_in(MemoryType::Tile)
+                .tile(jj, idx, rxi, ryi, tile, tile)
+                .unroll(jj)
+                .gpu_threads(idx)
+                .tile_init(rxi, ryi);
+            score.in()
+                .compute_at(out, io)
+                .store_in(MemoryType::GPUShared)
+                .tile(jj, idx, rxi, ryi, tile, tile)
+                .unroll(jj)
+                .gpu_threads(idx)
+                .tile_store(rxi, ryi);
+        } else {
+            // The scores come back from memory rather than out of a fragment,
+            // so masking and decaying them is ordinary elementwise work on the
+            // way into shared memory, which is where the multiply reads them.
+            Var so("so"), si("si"), to_("to"), ti_("ti");
+            score.compute_at(out, io)
+                .store_in(MemoryType::GPUShared)
+                .split(jj, so, si, 32)
+                .split(idx, to_, ti_, tile)
+                .reorder(si, so, ti_, to_)
+                .gpu_lanes(si)
+                .gpu_threads(to_);
+        }
 
         const int num_chunks = (int)seq / (int)chunk;
         out.bound(d, 0, channels)

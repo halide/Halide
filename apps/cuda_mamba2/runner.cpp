@@ -27,20 +27,25 @@ using Halide::float16_t;
 #ifndef HEADS
 #define HEADS 128
 #endif
+#ifndef GROUPS
+#define GROUPS 1
+#endif
 
 constexpr int seq = SEQ, state = STATE, channels = CHANNELS, chunk = CHUNK, heads = HEADS;
+constexpr int groups = GROUPS;
 constexpr int num_chunks = seq / chunk;
 
 // The recurrence as written, one step at a time, for one head.
 static void reference_head(const Buffer<float16_t> &X, const Buffer<float16_t> &Bm,
                            const Buffer<float16_t> &Cm, const Buffer<float> &Delta,
                            float A, int b, std::vector<float> &out) {
+    const int g = b / (heads / groups);
     std::vector<float> h(state * channels, 0.f);
     for (int n = 0; n < seq; n++) {
         float dt = Delta(n, b);
         float a = std::exp(dt * A);
         for (int pp = 0; pp < state; pp++) {
-            float db = dt * (float)Bm(pp, n, b);
+            float db = dt * (float)Bm(pp, n, g);
             for (int dd = 0; dd < channels; dd++) {
                 h[pp * channels + dd] = a * h[pp * channels + dd] + db * (float)X(dd, n, b);
             }
@@ -48,7 +53,7 @@ static void reference_head(const Buffer<float16_t> &X, const Buffer<float16_t> &
         for (int dd = 0; dd < channels; dd++) {
             float y = 0;
             for (int pp = 0; pp < state; pp++) {
-                y += (float)Cm(pp, n, b) * h[pp * channels + dd];
+                y += (float)Cm(pp, n, g) * h[pp * channels + dd];
             }
             out[dd + n * channels] = y;
         }
@@ -56,7 +61,7 @@ static void reference_head(const Buffer<float16_t> &X, const Buffer<float16_t> &
 }
 
 int main(int argc, char **argv) {
-    Buffer<float16_t> X(channels, seq, heads), Bm(state, seq, heads), Cm(state, seq, heads);
+    Buffer<float16_t> X(channels, seq, heads), Bm(state, seq, groups), Cm(state, seq, groups);
     Buffer<float> Delta(seq, heads), A(heads);
     Buffer<float16_t> result(channels, chunk, num_chunks, heads);
 
@@ -71,9 +76,11 @@ int main(int argc, char **argv) {
             for (int dd = 0; dd < channels; dd++) {
                 X(dd, n, b) = float16_t(dist(rng));
             }
-            for (int pp = 0; pp < state; pp++) {
-                Bm(pp, n, b) = float16_t(dist(rng));
-                Cm(pp, n, b) = float16_t(dist(rng));
+            if (b < groups) {
+                for (int pp = 0; pp < state; pp++) {
+                    Bm(pp, n, b) = float16_t(dist(rng));
+                    Cm(pp, n, b) = float16_t(dist(rng));
+                }
             }
         }
     }
@@ -112,10 +119,12 @@ int main(int argc, char **argv) {
 
     // Two multiplies of chunk x state x chunk and chunk x chunk x channels for
     // the scores, and two of state x chunk x channels and chunk x state x
-    // channels for the state, per chunk per head.
-    const double flops = 2.0 * heads * num_chunks * chunk *
-                         ((double)chunk * state + (double)chunk * channels +
-                          2.0 * state * channels);
+    // channels for the state, per chunk. All but the scores are per head; the
+    // scores are per group, because every head of a group has the same ones.
+    const double flops =
+        2.0 * num_chunks * chunk *
+        ((double)groups * chunk * state +
+         heads * ((double)chunk * channels + 2.0 * state * channels));
     double t = Halide::Tools::benchmark(10, 10, [&]() {
         mamba2(X, Bm, Cm, Delta, A, result);
         result.device_sync();

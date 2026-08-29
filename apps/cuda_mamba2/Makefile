@@ -15,6 +15,7 @@ STATE ?= 64
 CHANNELS ?= 64
 CHUNK ?= 64
 HEADS ?= 128
+GROUPS ?= 1
 
 CUDA_SDK ?= /usr/local/cuda
 CXXFLAGS += -I $(CUDA_SDK)/include
@@ -25,8 +26,8 @@ SCAN ?= inductive
 WMMA ?= false
 
 
-SHAPE = seq=$(SEQ) state=$(STATE) channels=$(CHANNELS) chunk=$(CHUNK) heads=$(HEADS) scan=$(SCAN) wmma=$(WMMA)
-CXXFLAGS += -DSEQ=$(SEQ) -DSTATE=$(STATE) -DCHANNELS=$(CHANNELS) -DCHUNK=$(CHUNK) -DHEADS=$(HEADS)
+SHAPE = seq=$(SEQ) state=$(STATE) channels=$(CHANNELS) chunk=$(CHUNK) heads=$(HEADS) groups=$(GROUPS) scan=$(SCAN) wmma=$(WMMA)
+CXXFLAGS += -DSEQ=$(SEQ) -DSTATE=$(STATE) -DCHANNELS=$(CHANNELS) -DCHUNK=$(CHUNK) -DHEADS=$(HEADS) -DGROUPS=$(GROUPS)
 
 all: $(BIN)/$(HL_TARGET)/runner
 
