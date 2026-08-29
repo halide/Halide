@@ -23,7 +23,8 @@ LDFLAGS += -L $(CUDA_SDK)/lib64 -Wl,-rpath,$(CUDA_SDK)/lib64
 INDUCTIVE ?= true
 WMMA ?= false
 WARPS ?= 4
-SHAPE = seq=$(SEQ) state=$(STATE) channels=$(CHANNELS) chunk=$(CHUNK) heads=$(HEADS) inductive=$(INDUCTIVE) wmma=$(WMMA) warps=$(WARPS)
+SPLIT ?= false
+SHAPE = seq=$(SEQ) state=$(STATE) channels=$(CHANNELS) chunk=$(CHUNK) heads=$(HEADS) inductive=$(INDUCTIVE) wmma=$(WMMA) warps=$(WARPS) split=$(SPLIT)
 CXXFLAGS += -DSEQ=$(SEQ) -DSTATE=$(STATE) -DCHANNELS=$(CHANNELS) -DCHUNK=$(CHUNK) -DHEADS=$(HEADS)
 
 all: $(BIN)/$(HL_TARGET)/runner
