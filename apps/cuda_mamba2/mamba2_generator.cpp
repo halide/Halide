@@ -591,6 +591,16 @@ private:
         // computes are its own. Through shared memory the scores are the
         // block's, and owning a tile of channels instead keeps the state each
         // warp reads its own rather than every warp reading all of it.
+        // Left to itself the backend keeps every accumulator's worth of
+        // operand loads in flight and lands past two hundred registers, which
+        // caps the kernel at four blocks per processor. Spilling a little to
+        // fit six is worth more than the spills cost; below this the spills
+        // win. Measured on an RTX 5060 Ti at the library-default shape - at
+        // the smaller shapes, and with the state read back through shared
+        // memory, the same cap only adds spills.
+        if (!fuse_qk && inductive() && (int)state >= 128 && (int)chunk >= 256) {
+            out.gpu_max_registers(168);
+        }
         out
             .compute_root()
             .tile(d, idx, rxi, ryi, tile, tile)
