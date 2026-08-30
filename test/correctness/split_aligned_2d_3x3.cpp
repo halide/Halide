@@ -69,19 +69,27 @@ int main(int argc, char **argv) {
     for (Func *channel : {&R, &G, &B}) {
         channel->compute_at(f, xo)
             .never_partition_all()
-            .unroll(x)
-            .unroll(y)
-            .align_bounds(y, 3, offset_y)
-            .align_bounds(x, 3, offset_x)
-            // In principle, the above scheduling directives should be enough, but the simplifier
-            // in Halide fails to determine that the extent is 3. So here, we can help it and
-            // tell it to use an extent of 3, after which the simplifier manages to prove that
-            // 3 satisfies the minimum required. The simplifier gap manifests itself twice: once
-            // for the compute extent, and once for the the storage extent.
-            .bound_extent(x, 3)
+            // We want to compute a *whole* tile of the channel:
             .bound_storage(x, 3)
+            .bound_extent(x, 3)
+            .align_bounds(x, 3, offset_x)
+            .bound_storage(y, 3)
             .bound_extent(y, 3)
-            .bound_storage(y, 3);
+            .align_bounds(y, 3, offset_y)
+            // In principle, the .align_bounds() should be enough, but the simplifier in Halide
+            // fails to determine that the producer tile perfectly overlaps with the consumer
+            // tile. Both have extent 3, but the producer is not getting simplified. So here,
+            // we can help it and tell it to use an extent of 3, after which the simplifier
+            // manages to prove that 3 satisfies the minimum required. Proving the expression
+            // is <= 3 is easier than proving it's == 3.
+            // The simplifier gap manifests itself twice: once for the compute extent,
+            // and once for the the storage extent. So we specify both. Unfortunately,
+            // the scheduling order here is important: .bound_extent() must precede
+            // .align_bounds() for the bounds inference to do the correct thing.
+            //
+            // Finally, we unroll to get rid of the muxes:
+            .unroll(x)
+            .unroll(y);
     }
 
     Module module = f.compile_to_module({offset_x, offset_y});
