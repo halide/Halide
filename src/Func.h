@@ -1523,11 +1523,17 @@ public:
     Func &split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
 
     /** A version of split() that additionally takes a runtime-valued
-     * phase, 'align', which need not be known at compile time. Instead
-     * of the inner dimension always iterating over [0, factor-1], it
-     * iterates over [align, align+factor-1]. This may increase the
-     * number of iterations over the outer loop by 1 compared to an
-     * unaligned split.
+     * phase, 'align', which need not be known at compile time. An
+     * ordinary split() tiles a Var starting at its own loop_min, so
+     * tile boundaries fall at old_min, old_min + factor, old_min + 2 *
+     * factor, and so on. This variant anchors the tiling to 'align'
+     * instead, so tile boundaries fall at align, align + factor, align
+     * - factor, and so on. The inner dimension still iterates over
+     * [0, factor-1], same as an unaligned split; what changes is which
+     * value of the original Var each (outer, inner) pair reconstructs
+     * to. This may increase the number of iterations over the outer
+     * loop by 1 compared to an unaligned split, since align need not
+     * coincide with old_min.
      *
      * This is useful when an algorithm selects between cases using an
      * expression like ``(x - offset) % factor``, where 'offset' is a
