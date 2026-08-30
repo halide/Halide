@@ -822,6 +822,8 @@ constexpr const char *intrinsic_op_names[] = {
     "count_trailing_zeros",
     "cuda_await_copies",
     "cuda_bypass_registers",
+    "cuda_commit_copies",
+    "cuda_copy_slack",
     "debug_to_file",
     "declare_allocation",
     "declare_box_required_at_root",

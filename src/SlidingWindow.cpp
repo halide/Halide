@@ -801,7 +801,16 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // input, and the depth is a scheduling choice that has no business
             // changing what the algorithm reads.
             Expr in_range = Variable::make(Int(32), loop_var) + depth <= loop_max;
-            result = IfThenElse::make(likely(in_range), result);
+            // Guard the body rather than the producer itself. A staged copy
+            // waits for the copies it issued at the end of the producer, and
+            // a consumer that runs ahead needs that wait to happen every
+            // iteration, whether or not this one had anything to issue -
+            // it is what makes the number of batches in flight the same on
+            // every iteration, and so a number the schedule can state.
+            const ProducerConsumer *pc = result.as<ProducerConsumer>();
+            internal_assert(pc && pc->is_producer);
+            result = ProducerConsumer::make(pc->name, true,
+                                            IfThenElse::make(likely(in_range), pc->body));
         }
         return result;
     }
@@ -1583,6 +1592,31 @@ class SlidingWindow : public IRMutator {
             if (func.schedule().memory_type() == MemoryType::Register &&
                 decision.slid() && decision.old_bounds.has_lower_bound()) {
                 body = slider.translate_loop(body);
+            }
+
+            if (decision.slid() && slide_depth(func, op->name) > 0 &&
+                !decision.warmup_start.defined()) {
+                // Running ahead of the consumer only means anything if the
+                // producer is a fixed number of iterations in front of it on
+                // every iteration. That holds when the loop was rewound to
+                // warm the window up, because the extra iterations put the
+                // producer exactly that far ahead before the consumer starts.
+                // Warming up with a select instead leaves the first iteration
+                // producing what that same iteration consumes, so the distance
+                // is not the stated one until later, and anything counting on
+                // it reads values that have not arrived.
+                user_error
+                    << "Func " << func.name() << " was told to slide over "
+                    << slide_level_name(func, op->name) << " and run "
+                    << slide_depth(func, op->name) << " iterations ahead of "
+                    << "its consumer, but the window it slides has to be "
+                    << "warmed up with a select rather than by rewinding the "
+                    << "loop, and running ahead is not implemented for that "
+                    << "yet. This happens when the region required doesn't "
+                    << "advance at a constant rate - an upsampling consumer "
+                    << "is the usual reason. Slide without a depth, or slide "
+                    << "over a dimension the region required advances with "
+                    << "evenly.\n";
             }
 
             if (decision.warmup_start.defined()) {

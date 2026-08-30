@@ -37,12 +37,26 @@ namespace {
 // consumed. Everything below then sees one kind of shared memory, which is
 // what lets all of a kernel's shared allocations be packed together.
 class MarkAsyncCopies : public IRMutator {
+public:
+    MarkAsyncCopies(const map<string, Function> &env)
+        : env(env) {
+    }
+
+private:
     using IRMutator::visit;
 
     // The allocations being filled by the copy engine, and the group each
     // one's copies belong to. Copies in a group are awaited together.
     map<string, int> groups;
     int next_group = 0;
+
+    // How many copies a consumer of each of them may leave in flight. Zero
+    // means wait for the copy just issued, which is what an unpipelined stage
+    // wants. A stage told to run some iterations ahead of its consumer needs
+    // the copies for those iterations left outstanding, or the wait undoes
+    // the pipelining.
+    map<string, int> slack;
+    const map<string, Function> &env;
 
     // Only CUDA has a copy engine to drive. Elsewhere the allocation still
     // becomes ordinary shared memory, but the stores to it stay ordinary too.
@@ -52,7 +66,67 @@ class MarkAsyncCopies : public IRMutator {
         ScopedValue<DeviceAPI> d(device_api, op->device_api == DeviceAPI::None ?
                                                  device_api :
                                                  op->device_api);
-        return IRMutator::visit(op);
+
+        // A stage told to run ahead of its consumer slides over some loop.
+        // This is where we can see how many batches of copies an iteration of
+        // that loop commits, which is what turns iterations of slack into a
+        // number of batches to leave outstanding.
+        // Sliding window renames a loop it rewinds by appending ".$n", which a
+        // LoopLevel naming the original Var no longer matches.
+        string loop_name = op->name;
+        while (ends_with(loop_name, ".$n")) {
+            loop_name.resize(loop_name.size() - 3);
+        }
+
+        map<string, int> new_slack;
+        for (const auto &g : groups) {
+            auto e = env.find(g.first);
+            if (e == env.end()) {
+                continue;
+            }
+            for (const SlideLevel &sl : e->second.schedule().slide_levels()) {
+                const LoopLevel &l = sl.level;
+                if (sl.depth > 0 && l.defined() && !l.is_inlined() &&
+                    !l.is_root() && l.match(loop_name)) {
+                    new_slack[g.first] = sl.depth;
+                }
+            }
+        }
+        if (new_slack.empty()) {
+            return IRMutator::visit(op);
+        }
+        // Every staged Func here closes one batch per iteration, so a stage
+        // waiting `depth` iterations back has that many iterations' worth of
+        // batches in between - one per Func per iteration.
+        //
+        // A Func in this loop that isn't running ahead still closes its batch
+        // inside its own producer, which happens only when it has something to
+        // copy. That makes the rate vary, and there is no constant number of
+        // batches to leave in flight, so nobody here can run ahead.
+        if (new_slack.size() != groups.size()) {
+            return IRMutator::visit(op);
+        }
+        for (auto &sl : new_slack) {
+            sl.second *= (int)groups.size();
+        }
+        map<string, int> old_slack = slack;
+        int least = 0;
+        for (const auto &s : new_slack) {
+            slack[s.first] = s.second;
+            least = least == 0 ? s.second : std::min(least, s.second);
+        }
+        Stmt result = IRMutator::visit(op);
+        slack = old_slack;
+
+        // Tell the backend what the barriers inside this loop may leave in
+        // flight. It has to know before it reaches them, and the awaits that
+        // say so come later in the body, so declare it up front. Every barrier
+        // in the loop has to satisfy the strictest stage running ahead.
+        const For *loop = result.as<For>();
+        internal_assert(loop);
+        Expr declare = Call::make(Int(32), Call::cuda_copy_slack, {least}, Call::Intrinsic);
+        return loop->with(loop->min, loop->max,
+                          Block::make(Evaluate::make(declare), loop->body));
     }
 
     Stmt visit(const Allocate *op) override {
@@ -120,18 +194,88 @@ class MarkAsyncCopies : public IRMutator {
         }
     };
 
+    // The loops over threads a statement is wrapped in, outermost first.
+    class ThreadLoopsOf : public IRVisitor {
+        using IRVisitor::visit;
+
+        void visit(const For *op) override {
+            if (op->for_type == ForType::GPUThread || op->for_type == ForType::GPULane) {
+                loops.push_back(op);
+                op->body.accept(this);
+            } else if (loops.empty()) {
+                IRVisitor::visit(op);
+            }
+        }
+
+    public:
+        std::vector<const For *> loops;
+    };
+
+    // Closing a batch and waiting for it are both per-thread, so they have to
+    // sit inside loops over threads. They also have to happen on every
+    // iteration, whether or not the producer had anything to copy, so they
+    // can't go inside the producer or its loops. Give them loops over threads
+    // of their own, spanning the same threads as the consumer, so that every
+    // thread in the block runs them once per iteration.
+    static Stmt in_thread_loops_like(const Stmt &like, Stmt body) {
+        ThreadLoopsOf threads;
+        like.accept(&threads);
+        for (size_t i = threads.loops.size(); i > 0; i--) {
+            const For *loop = threads.loops[i - 1];
+            body = For::make(loop->name, loop->min, loop->max, loop->for_type,
+                             loop->partition_policy, loop->device_api, body);
+        }
+        return body;
+    }
+
     Stmt visit(const ProducerConsumer *op) override {
         Stmt body = mutate(op->body);
         auto it = groups.find(op->name);
-        if (op->is_producer && it != groups.end() && device_api == DeviceAPI::CUDA) {
+        if (it == groups.end() || device_api != DeviceAPI::CUDA) {
+            return op->with(body);
+        }
+        auto s = slack.find(op->name);
+        const int sl = s == slack.end() ? 0 : s->second;
+
+        if (sl == 0) {
+            // Nothing runs ahead, so the copies this producer issued are the
+            // ones its consumer wants. Wait for them where they were issued.
+            if (!op->is_producer) {
+                return op->with(body);
+            }
             Expr wait = Call::make(Int(32), Call::cuda_await_copies,
-                                   {it->second}, Call::Intrinsic);
+                                   {it->second, 0}, Call::Intrinsic);
             Stmt with_wait = AwaitInEachThread(wait).mutate(body);
             // Unchanged means there was no loop over threads to put it in,
             // because only one thread runs this producer.
             body = with_wait.same_as(body) ? Block::make(body, Evaluate::make(wait)) : with_wait;
+            return op->with(body);
         }
-        return op->with(body);
+
+        // This producer runs ahead of its consumer, so the copies it issues
+        // are for a later iteration and the ones being waited for were issued
+        // several iterations ago. Counting the batches in between only works
+        // if every iteration closes exactly one, which means the batch can't
+        // be closed inside the producer: a producer that has nothing to do
+        // this iteration is skipped, and one that produces a line only on some
+        // iterations - an upsampling consumer - is skipped on the others.
+        //
+        // Put the batch's close and the wait at the front of the consumer
+        // instead. The consumer is the real work, so it runs every iteration,
+        // and by then this iteration's copies have all been issued.
+        if (op->is_producer) {
+            return op->with(body);
+        }
+        Expr commit = Call::make(Int(32), Call::cuda_commit_copies,
+                                 {it->second}, Call::Intrinsic);
+        Expr wait = Call::make(Int(32), Call::cuda_await_copies,
+                               {it->second, sl}, Call::Intrinsic);
+        // Placed before the consumer rather than inside it, so that the
+        // barrier that publishes what landed goes in after it. Barriers are
+        // injected at the seams between statements here, so standing as a
+        // statement of its own is what puts one on either side.
+        Stmt both = Block::make(Evaluate::make(commit), Evaluate::make(wait));
+        return Block::make(in_thread_loops_like(body, both), op->with(body));
     }
 
 public:
@@ -1814,14 +1958,14 @@ protected:
 
 }  // namespace
 
-Stmt fuse_gpu_thread_loops(Stmt s) {
+Stmt fuse_gpu_thread_loops(Stmt s, const map<string, Function> &env) {
     // NormalizeIfStatements pushes the predicates between GPU blocks
     // into the innermost GPU block. FuseGPUThreadLoops would then
     // merge the predicate into the merged GPU thread.
     s = NormalizeIfStatements()(s);
     // Must run before the allocations are packed together, because packing
     // them relies on there being only one kind of shared memory.
-    s = MarkAsyncCopies().mutate(s);
+    s = MarkAsyncCopies(env).mutate(s);
     s = FuseGPUThreadLoops()(s);
     s = ZeroGPULoopMins()(s);
     return s;

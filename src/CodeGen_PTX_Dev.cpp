@@ -116,6 +116,16 @@ protected:
      * the hardware can only wait for all but the newest N groups - so a
      * group's position here is what determines the N we emit for it. */
     std::vector<int> committed_groups;
+    // How many batches the most recent await deliberately left in flight, for
+    // a stage that runs ahead of its consumer. A barrier must not wait for
+    // those: they are filling slots nobody reads until a later iteration, so
+    // draining them here would undo the pipelining.
+    int outstanding_slack = -1;
+
+    // How many batches the enclosing region leaves in flight on purpose, as
+    // declared by cuda_copy_slack. Negative means no such region, in which
+    // case a barrier drains everything and closes any open batch itself.
+    int region_slack = -1;
     int uncommitted_group = -1;
 
     enum class AsyncCopy {
@@ -134,13 +144,13 @@ protected:
     AsyncCopy codegen_async_copy(const Store *op, const char **reason, std::string *func_name);
 
     /** Close the current group of asynchronous copies, if there is one. */
-    void commit_copies();
+    void commit_copies(bool force = false);
 
     /** Emit a wait that leaves at most n groups of copies outstanding. */
     void emit_copy_wait(int n);
 
     /** Wait for the asynchronous copies in the given group to have landed. */
-    void await_copies(int group);
+    void await_copies(int group, int slack);
 
     /** Wait for every asynchronous copy issued so far to have landed. */
     void await_all_copies();
@@ -346,11 +356,36 @@ void CodeGen_PTX_Dev::init_module() {
 }
 
 void CodeGen_PTX_Dev::visit(const Call *op) {
-    if (op->is_intrinsic(Call::cuda_await_copies)) {
+    if (op->is_intrinsic(Call::cuda_copy_slack)) {
+        internal_assert(op->args.size() == 1);
+        auto slack = as_const_int(op->args[0]);
+        internal_assert(slack) << "cuda_copy_slack is not a constant integer\n";
+        region_slack = (int)*slack;
+        value = ConstantInt::get(i32_t, 0);
+        return;
+    }
+
+    if (op->is_intrinsic(Call::cuda_commit_copies)) {
         internal_assert(op->args.size() == 1);
         auto group = as_const_int(op->args[0]);
+        internal_assert(group) << "cuda_commit_copies group is not a constant integer\n";
+        // Force the batch to close even if this iteration issued nothing, so
+        // that batches and iterations stay in step.
+        if (uncommitted_group == -1) {
+            uncommitted_group = (int)*group;
+        }
+        commit_copies(/* force */ true);
+        value = ConstantInt::get(i32_t, 0);
+        return;
+    }
+
+    if (op->is_intrinsic(Call::cuda_await_copies)) {
+        internal_assert(op->args.size() == 2);
+        auto group = as_const_int(op->args[0]);
+        auto slack = as_const_int(op->args[1]);
         internal_assert(group) << "cuda_await_copies group is not a constant integer\n";
-        await_copies((int)*group);
+        internal_assert(slack) << "cuda_await_copies slack is not a constant integer\n";
+        await_copies((int)*group, (int)*slack);
         value = ConstantInt::get(i32_t, 0);
         return;
     }
@@ -662,8 +697,8 @@ void CodeGen_PTX_Dev::visit(const ProducerConsumer *op) {
     codegen(op->body);
 }
 
-void CodeGen_PTX_Dev::commit_copies() {
-    if (uncommitted_group == -1) {
+void CodeGen_PTX_Dev::commit_copies(bool force) {
+    if (uncommitted_group == -1 && !force) {
         return;
     }
     llvm::Intrinsic::ID id =
@@ -686,16 +721,25 @@ void CodeGen_PTX_Dev::emit_copy_wait(int n) {
     builder->CreateCall(fn, args);
 }
 
-void CodeGen_PTX_Dev::await_copies(int group) {
+void CodeGen_PTX_Dev::await_copies(int group, int slack) {
     commit_copies();
+    // Several stages may await before the next barrier, each allowing a
+    // different number of batches to stay in flight. The barrier has to
+    // satisfy the strictest of them.
+    outstanding_slack = outstanding_slack < 0 ? slack : std::min(outstanding_slack, slack);
     // The wait is FIFO, so waiting for this group means letting everything
     // committed after it stay outstanding. Searching from the newest end finds
     // the most recent batch with this group, which is the one just issued.
+    //
+    // A stage that runs ahead of its consumer issued this batch some
+    // iterations early, and the batch the consumer actually wants is that many
+    // batches older. The loop that carries the two apart isn't visible from
+    // here, so the schedule works the distance out and hands it over as slack.
     for (size_t i = committed_groups.size(); i > 0; i--) {
         if (committed_groups[i - 1] != group) {
             continue;
         }
-        emit_copy_wait((int)(committed_groups.size() - i));
+        emit_copy_wait((int)(committed_groups.size() - i) + slack);
         committed_groups.erase(committed_groups.begin(),
                                committed_groups.begin() + i);
         return;
@@ -704,12 +748,31 @@ void CodeGen_PTX_Dev::await_copies(int group) {
 }
 
 void CodeGen_PTX_Dev::await_all_copies() {
-    commit_copies();
+    if (region_slack < 0) {
+        // Nothing is running ahead here, so a batch left open holds copies
+        // this thread just issued, and the barrier is where they must land.
+        commit_copies();
+    }
+    // Where something is running ahead, batches are closed exactly once per
+    // iteration by cuda_commit_copies. Closing one here too would put two in
+    // an iteration, and the count of batches to leave in flight assumes one.
     if (committed_groups.empty()) {
         return;
     }
-    emit_copy_wait(0);
-    committed_groups.clear();
+    // Everything a thread wrote has to be visible after a barrier, so every
+    // copy it issued has to have landed - except the ones a stage running
+    // ahead of its consumer deliberately left in flight. Those are filling
+    // slots nobody reads until a later iteration, and waiting for them here
+    // would serialize what the pipelining was for.
+    int keep = outstanding_slack < 0 ? 0 : outstanding_slack;
+    if (region_slack >= 0) {
+        keep = std::max(keep, region_slack);
+    }
+    emit_copy_wait(keep);
+    outstanding_slack = -1;
+    if (keep == 0) {
+        committed_groups.clear();
+    }
 }
 
 void CodeGen_PTX_Dev::visit(const Store *op) {

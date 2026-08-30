@@ -22,7 +22,7 @@ Stmt zero_gpu_loop_mins(const Stmt &s);
  * shared allocations at the block level out into a single shared
  * memory array, and heap allocations into a slice of a global pool
  * allocated outside the kernel. */
-Stmt fuse_gpu_thread_loops(Stmt s);
+Stmt fuse_gpu_thread_loops(Stmt s, const std::map<std::string, Function> &env);
 
 }  // namespace Internal
 }  // namespace Halide

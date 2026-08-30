@@ -738,6 +738,20 @@ struct Call : public ExprNode<Call> {
         // `func_name` is the Func the store belonged to before the shared
         // allocations were packed together, for error messages.
         cuda_bypass_registers,
+        // cuda_commit_copies(group) closes the batch of asynchronous copies
+        // issued since the last one, so that cuda_await_copies can count
+        // batches. Emitted once per iteration of the loop a staged Func runs
+        // ahead of, whether or not that iteration had anything to copy: an
+        // empty batch still counts, and it is that fixed rate of one batch per
+        // iteration that makes the number left in flight a constant.
+        cuda_commit_copies,
+        // cuda_copy_slack(n) declares that the statement it precedes leaves n
+        // batches of asynchronous copies in flight on purpose, because a stage
+        // is running ahead of its consumer. A barrier must not wait for those:
+        // they are filling slots nobody reads until a later iteration. It
+        // emits no instructions - it tells the backend what the barriers it is
+        // about to emit may leave outstanding.
+        cuda_copy_slack,
         debug_to_file,
         // Emitted (when profiling) for a device-only allocation that has no
         // host-side Allocate node: the buffer lives solely on the device, so

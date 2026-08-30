@@ -922,36 +922,59 @@ public:
                 }
             }
 
-            // A producer told to run ahead of this consumer needs everything
-            // the consumer will ask for between now and then. Ask again with
-            // the bounds of the loop var stretched by the depth, and merge, so
-            // the region required covers the whole span of iterations in
-            // flight. Stretching the query is not the same as shifting the
-            // answer: the consumer still wants what it wants at this
-            // iteration, and the leading edge is what moves ahead.
-            for (size_t j = 0; j < i; j++) {
-                const Function &pf = stages[j].func;
-                for (const SlideLevel &sl : pf.schedule().slide_levels()) {
+            // Funcs told to run ahead of their consumers. The offsets
+            // compose: a Func runs ahead of its consumers, which may
+            // themselves be running ahead, so its zero is the furthest ahead
+            // any consumer of it within this loop is. Taking the furthest is
+            // what keeps a producer at least as early as everything that reads
+            // it, whatever the shape of the graph.
+            vector<int> offset(stages.size(), 0);
+            string slid_var;
+            bool any_ahead = false;
+            for (size_t j = stages.size(); j > 0; j--) {
+                const size_t k = j - 1;
+                int base = 0;
+                for (int c : stages[k].consumers) {
+                    base = std::max(base, offset[c]);
+                }
+                int own = 0;
+                for (const SlideLevel &sl : stages[k].func.schedule().slide_levels()) {
                     const LoopLevel &l = sl.level;
-                    if (sl.depth <= 0 || !l.defined() || l.is_inlined() || l.is_root()) {
-                        continue;
+                    if (sl.depth > 0 && l.defined() && !l.is_inlined() && !l.is_root()) {
+                        own = std::max(own, sl.depth);
+                        slid_var = l.var_name();
                     }
-                    if (l.func_name() != consumer.func.name()) {
+                }
+                offset[k] = base + own;
+                any_ahead = any_ahead || offset[k] > 0;
+            }
+
+            // Anything running further ahead than this consumer needs what the
+            // consumer will ask for over that many extra iterations, not just
+            // at this one. Ask again with the loop stretched by the
+            // difference, and merge. Stretching the query is not the same as
+            // shifting the answer: the consumer still wants what it wants at
+            // this iteration, and it's the leading edge that moves.
+            if (any_ahead && !slid_var.empty()) {
+                for (size_t j = 0; j < i; j++) {
+                    const int delta = offset[j] - offset[i];
+                    if (delta <= 0) {
                         continue;
                     }
                     Scope<Interval> ahead;
                     consumer.populate_scope(ahead);
-                    const Interval *cur = ahead.find(l.var_name());
+                    const Interval *cur = ahead.find(slid_var);
                     if (!cur) {
                         continue;
                     }
-                    ahead.push(l.var_name(), Interval(cur->min, cur->max + sl.depth));
+                    ahead.push(slid_var, Interval(cur->min, cur->max + delta));
+                    const string &pname = stages[j].func.name();
                     for (const auto &cval : consumer.exprs) {
                         map<string, Box> nb = boxes_required(cval.value, ahead, func_bounds);
-                        auto it = nb.find(pf.name());
-                        if (it != nb.end()) {
-                            it->second.used = cval.cond;
-                            merge_boxes(boxes[pf.name()], it->second);
+                        auto b = nb.find(pname);
+                        if (b != nb.end()) {
+                            b->second.used = cval.cond;
+                            merge_boxes(boxes[pname], b->second);
                         }
                     }
                 }
