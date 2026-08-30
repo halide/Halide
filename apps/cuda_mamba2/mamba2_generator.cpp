@@ -416,6 +416,11 @@ private:
         // latency of what it reads, so at the longer chunks it is the staging
         // that gives way rather than the block.
         const int pos_tiles = 4;
+        // How many of the block's position tiles one warp owns. Owning two
+        // means the state tiles the inter-chunk multiply reads serve two
+        // multiplies per fetch; more than two costs more registers than it
+        // saves in fetches.
+        const int idx_per_warp = 2;
         // Computing the scores in the kernel that reads them only costs no
         // extra multiplies if that kernel is the only one that wants them,
         // which needs every head to have its own and a block to cover the whole
@@ -505,6 +510,10 @@ private:
             Var so("so"), si("si"), fu("fu"), fo("fo"), fi("fi"), w("w"), l("l");
             xs.compute_at(chunk_state, RVar("rjo"))
                 .store_in(MemoryType::GPUSharedAsync)
+                // A row of the panel is a power of two wide, so without a
+                // skew the rows land on the same banks and the operand loads
+                // conflict almost every time.
+                .align_storage(xs.args()[0], (int)channels + 8)
                 .split(xs.args()[0], so, si, 8)
                 .fuse(so, xs.args()[1], fu)
                 .split(fu, fo, fi, 32 * ((int)state / tile))
@@ -559,8 +568,11 @@ private:
             Var so("so"), si("si"), to_("to"), ti_("ti");
             Hop.compute_at(out, io)
                 .store_in(MemoryType::GPUShared)
+                .align_storage(d, (int)channels + 8)
                 .split(d, so, si, 32)
-                .split(p, to_, ti_, (int)state / 4)
+                .split(p, to_, ti_,
+                       (int)state / (fuse_qk ? (int)channels / tile
+                                             : pos_tiles / idx_per_warp))
                 .reorder(si, so, ti_, to_)
                 .gpu_lanes(si)
                 .gpu_threads(to_);
@@ -586,10 +598,14 @@ private:
             .reorder(rxi, ryi, d, ii, io, t, b)
             .gpu_blocks(io, t, b)
             .tile_store(rxi, ryi);
+        Var iw("iw"), ii2("ii2");
         if (fuse_qk) {
             out.unroll(ii).gpu_threads(d);
         } else {
-            out.unroll(d).gpu_threads(ii);
+            out.split(ii, iw, ii2, idx_per_warp)
+                .unroll(d)
+                .unroll(ii2)
+                .gpu_threads(iw);
         }
         for (Func f : {y_intra, y_inter, y}) {
             f.compute_at(out, io)
@@ -599,7 +615,10 @@ private:
             if (fuse_qk) {
                 f.gpu_threads(d).unroll(idx);
             } else {
-                f.unroll(d).gpu_threads(idx);
+                f.split(idx, iw, ii2, idx_per_warp)
+                    .unroll(d)
+                    .unroll(ii2)
+                    .gpu_threads(iw);
             }
         }
         for (Func f : {y_intra, y_inter}) {
@@ -611,7 +630,17 @@ private:
             if (fuse_qk) {
                 f.update().reorder(d, idx, rro).gpu_threads(d).unroll(idx);
             } else {
-                f.update().reorder(d, rro, idx).unroll(d).gpu_threads(idx);
+                f.update().split(idx, iw, ii2, idx_per_warp);
+                if (f.name() == "y_intra") {
+                    // Its walk is pruned by the causal mask per position tile,
+                    // so each owned tile walks separately.
+                    f.update().reorder(d, rro, ii2, iw);
+                } else {
+                    // A uniform walk: both owned tiles sit inside the step, so
+                    // the state tiles it multiplies by are fetched once each.
+                    f.update().reorder(ii2, d, rro, iw);
+                }
+                f.update().unroll(d).unroll(ii2).gpu_threads(iw);
             }
             f.update().tile_matmul(rri, rxi, ryi);
         }
