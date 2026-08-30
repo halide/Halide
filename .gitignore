@@ -281,3 +281,6 @@ CLAUDE.local.md
 # TODO: these should become .cmake.in
 !packaging/common/HalideConfig.cmake
 !packaging/common/HalideCompilerConfig.cmake
+
+# Scratch pads for local experiments, not tests
+test/*/scratch.cpp
