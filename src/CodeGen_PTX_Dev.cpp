@@ -171,7 +171,7 @@ protected:
     void emit_copy_wait(int n);
 
     /** Wait for the asynchronous copies in the given group to have landed. */
-    void await_copies(int group);
+    void await_copies(int group, int allowance = 0);
 
     /** Wait for every asynchronous copy issued so far to have landed. */
     void await_all_copies();
@@ -449,10 +449,22 @@ void CodeGen_PTX_Dev::init_module() {
 
 void CodeGen_PTX_Dev::visit(const Call *op) {
     if (op->is_intrinsic(Call::cuda_await_copies)) {
-        internal_assert(op->args.size() == 1);
+        internal_assert(op->args.size() == 1 || op->args.size() == 2);
         auto group = as_const_int(op->args[0]);
         internal_assert(group) << "cuda_await_copies group is not a constant integer\n";
-        await_copies((int)*group);
+        int allowance = 0;
+        if (op->args.size() == 2) {
+            auto a = as_const_int(op->args[1]);
+            internal_assert(a) << "cuda_await_copies allowance is not a constant integer\n";
+            allowance = (int)*a;
+        }
+        await_copies((int)*group, allowance);
+        value = ConstantInt::get(i32_t, 0);
+        return;
+    }
+
+    if (op->is_intrinsic(Call::cuda_commit_copies)) {
+        commit_copies();
         value = ConstantInt::get(i32_t, 0);
         return;
     }
@@ -1409,11 +1421,15 @@ void CodeGen_PTX_Dev::emit_copy_wait(int n) {
     builder->CreateCall(fn, args);
 }
 
-void CodeGen_PTX_Dev::await_copies(int group) {
+void CodeGen_PTX_Dev::await_copies(int group, int allowance) {
     commit_copies();
     // The wait is FIFO, so waiting for this group means letting everything
     // committed after it stay outstanding. Searching from the newest end finds
     // the most recent batch with this group, which is the one just issued.
+    // The allowance lets that many further batches keep flying, which is how
+    // a software-pipelined producer's copies for future iterations overlap
+    // the arithmetic consuming the current one: the batch the consumer needs
+    // was committed that many batches before the newest.
     for (size_t i = committed_groups.size(); i > 0; i--) {
         if (committed_groups[i - 1] != group) {
             continue;
@@ -1427,7 +1443,7 @@ void CodeGen_PTX_Dev::await_copies(int group) {
                 const char *v = getenv("HL_ASYNC_SLACK");
                 return v ? atoi(v) : 0;
             }();
-            emit_copy_wait((int)(committed_groups.size() - i) + slack);
+            emit_copy_wait((int)(committed_groups.size() - i) + allowance + slack);
         }
         committed_groups.erase(committed_groups.begin(),
                                committed_groups.begin() + i);

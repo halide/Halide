@@ -44,6 +44,16 @@ class MarkAsyncCopies : public IRMutator {
     map<string, int> groups;
     int next_group = 0;
 
+    // How many iterations ahead each Func's producer runs, from the depth on
+    // its slide directive. A pipelined producer's wait lets that many batches
+    // of its copies keep flying.
+    const map<string, int> &slide_depths;
+
+    int depth_of(const string &name) const {
+        auto it = slide_depths.find(name);
+        return it == slide_depths.end() ? 0 : it->second;
+    }
+
     // Only CUDA has a copy engine to drive. Elsewhere the allocation still
     // becomes ordinary shared memory, but the stores to it stay ordinary too.
     DeviceAPI device_api = DeviceAPI::None;
@@ -120,12 +130,67 @@ class MarkAsyncCopies : public IRMutator {
         }
     };
 
+    static bool issues_copies(const Stmt &s) {
+        class Finder : public IRVisitor {
+            using IRVisitor::visit;
+            void visit(const Call *op) override {
+                found |= op->is_intrinsic(Call::cuda_bypass_registers);
+                IRVisitor::visit(op);
+            }
+
+        public:
+            bool found = false;
+        } finder;
+        s.accept(&finder);
+        return finder.found;
+    }
+
+    // A software-pipelined producer's body has more than one sliver's copies
+    // in it: the sliver it is running ahead to fill, and on the first
+    // iteration the slivers that warm the window up. The wait can only tell
+    // them apart if they are separate batches, so close a batch after each
+    // top-level piece of the body that issues copies, except the last, whose
+    // batch the wait itself closes. Each piece holds its own loops over
+    // threads, and a commit is each thread closing the batch of copies it
+    // issued itself, so it goes at the end of those loops, exactly where the
+    // wait goes in the piece that keeps it. An empty batch retires
+    // immediately, so a piece whose copies are guarded off this iteration
+    // closes one for free.
+    static Stmt commit_between_segments(const Stmt &s) {
+        Expr commit = Call::make(Int(32), Call::cuda_commit_copies, {}, Call::Intrinsic);
+        if (const LetStmt *let = s.as<LetStmt>()) {
+            Stmt body = commit_between_segments(let->body);
+            return body.same_as(let->body) ? s : LetStmt::make(let->name, let->value, body);
+        }
+        const Block *b = s.as<Block>();
+        if (!b) {
+            return s;
+        }
+        Stmt rest = commit_between_segments(b->rest);
+        Stmt first = b->first;
+        if (issues_copies(first) && issues_copies(rest)) {
+            // Not the last copy-issuing piece, so its batch closes here.
+            Stmt with_commit = AwaitInEachThread(commit).mutate(first);
+            first = with_commit.same_as(first) ?
+                        Block::make(first, Evaluate::make(commit)) :
+                        with_commit;
+        }
+        if (first.same_as(b->first) && rest.same_as(b->rest)) {
+            return s;
+        }
+        return Block::make(first, rest);
+    }
+
     Stmt visit(const ProducerConsumer *op) override {
         Stmt body = mutate(op->body);
         auto it = groups.find(op->name);
         if (op->is_producer && it != groups.end() && device_api == DeviceAPI::CUDA) {
+            int depth = depth_of(op->name);
+            if (depth > 0) {
+                body = commit_between_segments(body);
+            }
             Expr wait = Call::make(Int(32), Call::cuda_await_copies,
-                                   {it->second}, Call::Intrinsic);
+                                   {it->second, depth}, Call::Intrinsic);
             Stmt with_wait = AwaitInEachThread(wait).mutate(body);
             // Unchanged means there was no loop over threads to put it in,
             // because only one thread runs this producer.
@@ -136,6 +201,10 @@ class MarkAsyncCopies : public IRMutator {
 
 public:
     using IRMutator::mutate;
+
+    MarkAsyncCopies(const map<string, int> &slide_depths)
+        : slide_depths(slide_depths) {
+    }
 };
 
 // The copy engine moves up to 16 bytes at a time, and needs its destination
@@ -1883,14 +1952,27 @@ protected:
 
 }  // namespace
 
-Stmt fuse_gpu_thread_loops(Stmt s) {
+Stmt fuse_gpu_thread_loops(Stmt s, const map<string, Function> &env) {
+    // How far ahead of its consumer each Func's producer runs. The name the
+    // stores carry is the realization name, which for a Func with a single
+    // realization is the Func's own.
+    map<string, int> slide_depths;
+    for (const auto &p : env) {
+        int depth = 0;
+        for (const auto &sl : p.second.schedule().slide_levels()) {
+            depth = std::max(depth, sl.depth);
+        }
+        if (depth > 0) {
+            slide_depths[p.first] = depth;
+        }
+    }
     // NormalizeIfStatements pushes the predicates between GPU blocks
     // into the innermost GPU block. FuseGPUThreadLoops would then
     // merge the predicate into the merged GPU thread.
     s = NormalizeIfStatements()(s);
     // Must run before the allocations are packed together, because packing
     // them relies on there being only one kind of shared memory.
-    s = MarkAsyncCopies().mutate(s);
+    s = MarkAsyncCopies(slide_depths).mutate(s);
     s = FuseGPUThreadLoops()(s);
     s = ZeroGPULoopMins()(s);
     return s;

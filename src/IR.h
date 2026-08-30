@@ -724,10 +724,17 @@ struct Call : public ExprNode<Call> {
         concat_bits,
         count_leading_zeros,
         count_trailing_zeros,
-        // cuda_await_copies(group) waits for every asynchronous copy in the
-        // given group to have landed in shared memory. Appears in an Evaluate
-        // node at the point where the copied data is first read.
+        // cuda_await_copies(group, allowance) waits until at most `allowance`
+        // batches of asynchronous copies in the given group are still in
+        // flight - zero for every copy to have landed in shared memory.
+        // Appears in an Evaluate node at the point where the copied data is
+        // first read.
         cuda_await_copies,
+        // cuda_commit_copies() closes the current batch of asynchronous
+        // copies, so a later wait can let it keep flying while earlier
+        // batches are retired. Software pipelining a staging Func puts one
+        // between the copies for different slivers of it.
+        cuda_commit_copies,
         // cuda_bypass_registers(value, group, func_name) marks a value that must be moved
         // to its destination without being materialized in registers, which the
         // CUDA backend does with the copy engine. It is only valid as the whole
