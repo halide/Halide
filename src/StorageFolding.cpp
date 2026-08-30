@@ -602,10 +602,28 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             // Take the difference before CSE, so that the terms the two ends
             // have in common cancel rather than being hidden behind lets.
             Expr diff = max - min;
-            Expr extent = (Max::make(substitute(steady_state, const_true(), diff),
-                                     substitute(steady_state, const_false(), diff)) +
-                           1);
-            extent = simplify(common_subexpression_elimination(extent), bounds);
+            Expr extent_expr = (Max::make(substitute(steady_state, const_true(), diff),
+                                          substitute(steady_state, const_false(), diff)) +
+                                1);
+            Expr extent = simplify(common_subexpression_elimination(extent_expr), bounds);
+
+            // The two ends of a clamped index move together, but the promises
+            // they carry about staying in range are not something the
+            // simplifier can cancel across, so the difference bounds to the
+            // whole extent and nothing folds. Stripping them doesn't change
+            // the value, only what can be proved about it, so take the
+            // stripped form when it bounds more tightly. It isn't always
+            // tighter: a promise can be the only thing bounding an index.
+            Expr no_promises = remove_promises(extent_expr);
+            if (!no_promises.same_as(extent_expr)) {
+                Expr stripped =
+                    simplify(common_subexpression_elimination(no_promises), bounds);
+                Expr a = find_constant_bound(extent, Direction::Upper, bounds);
+                Expr b = find_constant_bound(stripped, Direction::Upper, bounds);
+                if (b.defined() && (!a.defined() || can_prove(b < a))) {
+                    extent = stripped;
+                }
+            }
 
             // Find the StorageDim corresponding to dim.
             const std::vector<StorageDim> &storage_dims = func.schedule().storage_dims();
