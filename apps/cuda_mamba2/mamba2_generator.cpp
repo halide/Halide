@@ -470,14 +470,32 @@ private:
         // it needs a wrapper to copy the tile out to memory.
         const bool state_init_is_chunk_state = !inductive() && !undef_init();
         Func cs = state_init_is_chunk_state ? H : chunk_state.in();
-        cs.compute_root()
-            .tile(d, p, rxi, ryi, tile, tile)
-            .reorder(rxi, ryi, d, p, t, b)
-            .unroll(d)
-            .gpu_blocks(t, b)
-            .gpu_threads(p)
-            .tile_store(rxi, ryi);
-        chunk_state.compute_at(cs, t)
+        Var hto("hto"), hti("hti");
+        if (inductive()) {
+            // What each chunk leaves behind is computed inside the walk that
+            // consumes it, a chunk per step, and crosses to the carried state
+            // through a tile of shared memory rather than through global.
+            // Locations are set here; the walk's own schedule is below.
+            chunk_state.compute_at(Hop, hti).unroll(t);
+            chunk_state.update().unroll(t);
+            cs.compute_at(Hop, hti)
+                .store_in(MemoryType::GPUShared)
+                .unroll(cs.args()[2])
+                .tile(d, p, rxi, ryi, tile, tile)
+                .unroll(d)
+                .gpu_threads(p)
+                .tile_store(rxi, ryi);
+        } else {
+            cs.compute_root()
+                .tile(d, p, rxi, ryi, tile, tile)
+                .reorder(rxi, ryi, d, p, t, b)
+                .unroll(d)
+                .gpu_blocks(t, b)
+                .gpu_threads(p)
+                .tile_store(rxi, ryi);
+            chunk_state.compute_at(cs, t);
+        }
+        chunk_state
             .store_in(MemoryType::Tile)
             .tile(d, p, rxi, ryi, tile, tile)
             .unroll(d)
@@ -544,36 +562,42 @@ private:
         // walk, which leaves it a few registers per thread. Its store level is
         // outside the thread loops, so it needs saying that it is a thread's
         // own and not something to put in shared.
-        Var pt("pt"), pe("pe"), hpt("hpt"), hpe("hpe"), hto("hto"), hti("hti");
+        Var pt("pt"), pe("pe"), hw("hw"), hp("hp"), hpo("hpo"), hpi("hpi"), hl("hl");
         if (inductive()) {
+            // A block owns one channel tile of one head and walks its chunks.
+            // Each step computes the chunk's state on the tensor cores - one
+            // state-row tile per warp - lands it in shared memory, and folds
+            // it into the carried state, which lives in registers for the
+            // whole walk. Only the narrowed state ever reaches global memory.
             Hop.compute_root()
-                .split(d, pt, pe, 4)
-                .split(p, ddo, ddi, 8)
                 .split(t, hto, hti, 1)
-                .reorder(pe, pt, ddi, hti, hto, ddo, b)
+                .split(d, ddo, ddi, 2 * tile)
+                .split(p, hw, hp, tile)
+                .reorder(ddi, hp, hw, hti, hto, ddo, b)
                 .gpu_blocks(ddo, b)
-                .gpu_threads(pt, ddi)
-                .vectorize(pe);
+                .gpu_lanes(ddi)
+                .gpu_threads(hw);
             H.compute_at(Hop, hti)
                 .store_at(Hop, ddo)
                 .slide(Hop, t)
                 .store_in(MemoryType::Stack)
-                .split(d, hpt, hpe, 4)
-                .reorder(hpe, hpt, p)
-                .gpu_threads(hpt, p)
-                .vectorize(hpe);
+                .split(p, hw, hp, tile)
+                .reorder(d, hp, hw)
+                .gpu_lanes(d)
+                .gpu_threads(hw);
         } else {
             // Written as an update definition the walk is the Func, so there is
             // nothing to slide it into and nothing to narrow it on the way out.
             // The whole array is computed first, at the precision it is carried
             // at, and the multiply that reads it reads that.
             H.compute_root();
+            Var hpt("hpt");
             H.update()
                 .split(d, pt, pe, 4)
-                .split(p, ddo, ddi, 8)
-                .reorder(pe, pt, ddi, rt_var, ddo, b)
+                .split(p, ddo, hpt, 8)
+                .reorder(pe, pt, hpt, rt_var, ddo, b)
                 .gpu_blocks(ddo, b)
-                .gpu_threads(pt, ddi)
+                .gpu_threads(pt, hpt)
                 .vectorize(pe);
             // The multiply still wants a half precision operand, so the state
             // is narrowed on the way in from memory rather than on the way out
