@@ -450,6 +450,19 @@ private:
         if (!inductive()) {
             cumdelta.update().reorder(rm_var, t, b).gpu_blocks(b).gpu_threads(t);
         }
+        // Each thread's walk reads its own row of the step sizes, a whole
+        // block's worth of rows apart, so the walks' reads are one sector per
+        // thread per step. Staged for the block, the fill is coalesced and the
+        // walks read shared memory instead.
+        if (inductive() && (int)seq * 4 <= 40 * 1024) {
+            Func ds = Func(Delta).in(cumdelta);
+            Var fo("fo"), fi("fi");
+            ds.compute_at(cumdelta, b)
+                .store_in(MemoryType::GPUShared)
+                .split(ds.args()[0], fo, fi, (int)seq / (int)chunk)
+                .reorder(fi, fo)
+                .gpu_threads(fi);
+        }
 
         // What each chunk leaves behind, which is a plain product once the
         // input has been decayed to the end of the chunk. In the form whose
