@@ -145,8 +145,12 @@ public:
     // The most threads there are in each dimension, if that is known.
     Expr thread_extents[3];
 
-    FindAccesses(const string &func)
+    FindAccesses(const string &func,
+                 const vector<std::pair<string, Expr>> &enclosing_lets,
+                 const vector<std::pair<string, Interval>> &enclosing_bounds)
         : func(func) {
+        lets = enclosing_lets;
+        loop_bounds = enclosing_bounds;
     }
 };
 
@@ -165,6 +169,20 @@ class CheckCrossTalk : public IRVisitor {
 
     bool in_threads = false;
 
+    // What is in scope on the way down. An index inside the allocation is
+    // free to use a variable defined above it - simplification hoists
+    // loop-invariant pieces of an index out past the allocation - and the
+    // access is only boundable if those definitions come along.
+    vector<std::pair<string, Expr>> lets;
+    vector<std::pair<string, Interval>> loop_bounds;
+
+    void visit(const LetStmt *op) override {
+        op->value.accept(this);
+        lets.emplace_back(op->name, op->value);
+        op->body.accept(this);
+        lets.pop_back();
+    }
+
     void visit(const For *op) override {
         // An allocation inside a loop over threads or lanes already belongs to
         // whoever runs that loop, so there is nothing to tell apart. Note that
@@ -174,8 +192,15 @@ class CheckCrossTalk : public IRVisitor {
         if (op->for_type == ForType::GPUThread || op->for_type == ForType::GPULane) {
             ScopedValue<bool> bind(in_threads, true);
             IRVisitor::visit(op);
-        } else {
+        } else if (op->for_type == ForType::GPUBlock) {
+            // A block var stays symbolic, like a thread: an allocation is
+            // inside the kernel, so each block only ever compares its own
+            // accesses against each other.
             IRVisitor::visit(op);
+        } else {
+            loop_bounds.emplace_back(op->name, Interval(op->min, op->max));
+            IRVisitor::visit(op);
+            loop_bounds.pop_back();
         }
     }
 
@@ -194,7 +219,7 @@ class CheckCrossTalk : public IRVisitor {
     }
 
     void check(const Realize *op) {
-        FindAccesses finder(op->name);
+        FindAccesses finder(op->name, lets, loop_bounds);
         op->body.accept(&finder);
 
         int thread_dims = 0;
@@ -239,11 +264,27 @@ class CheckCrossTalk : public IRVisitor {
         // The region each access touches, by dimension. A tail strategy wraps
         // the clamp on the last thread's part in a likely intrinsic, which
         // stops the simplifier folding it away once the number of threads is
-        // known.
+        // known. Settling such a clamp can need the thread bound and the
+        // bounds of the loops the thread runs together - a split leaves
+        // min(thread * n + inner, last) - so they simplify in one scope. Only
+        // the loop bounds go into the region itself: the thread stays
+        // symbolic, or every region would widen to cover all threads.
+        Scope<Interval> clamp_bounds;
+        for (int i = 0; i < thread_dims; i++) {
+            const Expr &extent = finder.thread_extents[i];
+            if (extent.defined() && is_const(extent)) {
+                clamp_bounds.push(gpu_thread_name(i), Interval(0, simplify(extent - 1)));
+            }
+        }
+        for (const auto &b : finder.loop_bounds) {
+            if (!clamp_bounds.contains(b.first)) {
+                clamp_bounds.push(b.first, b.second);
+            }
+        }
         vector<vector<Interval>> regions(finder.accesses.size());
         for (size_t i = 0; i < finder.accesses.size(); i++) {
             for (const Expr &arg : finder.accesses[i].canonical_args) {
-                Expr e = simplify(remove_likelies(arg), thread_bounds);
+                Expr e = simplify(remove_likelies(arg), clamp_bounds);
                 regions[i].push_back(bounds_of_expr_in_scope(e, bounds));
             }
         }
