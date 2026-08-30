@@ -943,11 +943,50 @@ public:
                     }
                     Scope<Interval> ahead;
                     consumer.populate_scope(ahead);
-                    const Interval *cur = ahead.find(l.var_name());
+                    // The level may name a piece the schedule split off the
+                    // dimension bounds inference knows. Walk the splits back
+                    // to that dimension, scaling the depth as it goes: one
+                    // iteration of the outer piece of a split by n moves the
+                    // dimension by n. An inner piece re-walks its range every
+                    // iteration of the piece outside it, so running ahead
+                    // along one moves no dimension monotonically, and the
+                    // walk stops there.
+                    string var = l.var_name();
+                    Expr scaled_depth = sl.depth;
+                    {
+                        const Definition &def =
+                            consumer.stage == 0 ?
+                                consumer.func.definition() :
+                                consumer.func.update((int)consumer.stage - 1);
+                        const vector<Split> &splits = def.schedule().splits();
+                        bool progress = true;
+                        while (!ahead.contains(var) && progress) {
+                            progress = false;
+                            auto matches = [&](const string &dim) {
+                                return dim == var || ends_with(dim, "." + var);
+                            };
+                            for (size_t k = splits.size(); k > 0; k--) {
+                                const Split &sp = splits[k - 1];
+                                if (sp.split_type == Split::SplitVar && matches(sp.outer)) {
+                                    var = sp.old_var;
+                                    scaled_depth *= sp.factor;
+                                    progress = true;
+                                    break;
+                                } else if (sp.split_type == Split::RenameVar && matches(sp.outer)) {
+                                    var = sp.old_var;
+                                    progress = true;
+                                    break;
+                                } else if (sp.split_type == Split::SplitVar && matches(sp.inner)) {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    const Interval *cur = ahead.find(var);
                     if (!cur) {
                         continue;
                     }
-                    ahead.push(l.var_name(), Interval(cur->min, cur->max + sl.depth));
+                    ahead.push(var, Interval(cur->min, simplify(cur->max + scaled_depth)));
                     for (const auto &cval : consumer.exprs) {
                         map<string, Box> nb = boxes_required(cval.value, ahead, func_bounds);
                         auto it = nb.find(pf.name());
