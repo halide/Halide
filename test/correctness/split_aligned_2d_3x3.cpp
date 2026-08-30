@@ -68,15 +68,20 @@ int main(int argc, char **argv) {
 
     for (Func *channel : {&R, &G, &B}) {
         channel->compute_at(f, xo)
+            .never_partition_all()
             .unroll(x)
+            .unroll(y)
+            .align_bounds(y, 3, offset_y)
+            .align_bounds(x, 3, offset_x)
+            // In principle, the above scheduling directives should be enough, but the simplifier
+            // in Halide fails to determine that the extent is 3. So here, we can help it and
+            // tell it to use an extent of 3, after which the simplifier manages to prove that
+            // 3 satisfies the minimum required. The simplifier gap manifests itself twice: once
+            // for the compute extent, and once for the the storage extent.
             .bound_extent(x, 3)
             .bound_storage(x, 3)
-            .align_bounds(x, 3, offset_x)
-            .unroll(y)
             .bound_extent(y, 3)
-            .bound_storage(y, 3)
-            .align_bounds(y, 3, offset_y)
-            .never_partition_all();
+            .bound_storage(y, 3);
     }
 
     Module module = f.compile_to_module({offset_x, offset_y});
