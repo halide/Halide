@@ -1969,10 +1969,9 @@ class DistributePrefetches : public IRMutator {
             thread_loops.pop_back();
             return s;
         }
+        // Peel any lets to see whether this loop's body is a lone prefetch.
         Stmt body = op->body;
-        vector<std::pair<string, Expr>> lets;
         while (const LetStmt *let = body.as<LetStmt>()) {
-            lets.emplace_back(let->name, let->value);
             body = let->body;
         }
         const Evaluate *eval = body.as<Evaluate>();
@@ -1981,39 +1980,35 @@ class DistributePrefetches : public IRMutator {
         if (op->for_type != ForType::Serial || !prefetch || thread_loops.empty()) {
             return IRMutator::visit(op);
         }
+
+        // The thread's index within the block, and the number of threads in it.
         Expr tid = make_zero(Int(32));
-        Expr step = make_one(Int(32));
+        Expr num_threads = make_one(Int(32));
         for (const auto &t : thread_loops) {
-            tid += Variable::make(Int(32), t.first) * step;
-            step *= t.second;
+            tid += Variable::make(Int(32), t.first) * num_threads;
+            num_threads *= t.second;
         }
+
         Expr total = op->extent();
-        Expr i = min(tid, total - 1) + op->min;
-        for (size_t j = lets.size(); j > 0; j--) {
-            i = Let::make(lets[j - 1].first, lets[j - 1].second, i);
-        }
-        Stmt s = substitute(op->name, Variable::make(Int(32), op->name + ".line"), body);
-        s = LetStmt::make(op->name + ".line", simplify(i), s);
-        for (size_t j = lets.size(); j > 0; j--) {
-            s = LetStmt::make(lets[j - 1].first, lets[j - 1].second, s);
-        }
-        // Rounds that still have lines left keep the round-robin structure:
-        // strides of the block size, starting past the first dealt round.
-        // Usually an empty loop; a step's worth of lines rarely exceeds the
-        // number of threads.
-        Stmt strided;
-        {
-            string k = op->name + ".round";
-            Expr kv = Variable::make(Int(32), k);
-            Expr line = min(op->min + step + kv * step + tid, op->min + total - 1);
-            Stmt body2 = substitute(op->name, Variable::make(Int(32), op->name + ".line"), op->body);
-            body2 = LetStmt::make(op->name + ".line", simplify(line), body2);
-            Expr rounds = (total - step + step - 1) / step;  // ceil((total-step)/step)
-            strided = For::make(k, 0, simplify(rounds - 1), ForType::Serial,
-                                op->partition_policy, op->device_api, body2);
-            strided = IfThenElse::make(simplify(total > step), strided);
-        }
-        return Block::make(s, strided);
+
+        // The first round: each thread takes one line. The loop variable is
+        // bound around the body untouched, so any lets inside that mention it
+        // still see it.
+        Expr first = op->min + min(tid, total - 1);
+        Stmt s = LetStmt::make(op->name, simplify(first), op->body);
+
+        // Any lines left over are dealt in further rounds, a block's worth at
+        // a time. Usually an empty loop; a prefetch rarely spans more lines
+        // than the block has threads.
+        string k = op->name + ".round";
+        Expr line = op->min + num_threads + Variable::make(Int(32), k) * num_threads + tid;
+        Stmt rest = LetStmt::make(op->name, simplify(min(line, op->min + total - 1)), op->body);
+        Expr rounds = (total - num_threads + num_threads - 1) / num_threads;
+        rest = For::make(k, 0, simplify(rounds - 1), ForType::Serial,
+                         op->partition_policy, op->device_api, rest);
+        rest = IfThenElse::make(simplify(total > num_threads), rest);
+
+        return Block::make(s, rest);
     }
 
 public:
