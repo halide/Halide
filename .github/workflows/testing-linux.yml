@@ -156,7 +156,7 @@ jobs:
       - name: Build and install Halide
         run: cmake --build build --target install
 
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
