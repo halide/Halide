@@ -193,6 +193,9 @@ public:
         // walk multiplies by zeros instead.
         RDom riy(0, L, "riy");
         Expr rpos = (L - 16) - (riy / 16) * 16 + (riy % 16);
+        // The walk runs the position tiles in reverse; the score tiles for
+        // positions before this input position's tile are zero.
+        riy.where(riy / tile <= (L / tile - 1) - j / tile);
         Func dxi("dxi");
         dxi(d, j, t, b) = 0.f;
         dxi(d, j, t, b) += cast<float>(score2_h(rpos, j, t, b)) *
@@ -230,6 +233,9 @@ public:
                            cast<float>(dY(rd, i, t, b));
 
         RDom rch(0, L, 0, hpg, "rch");
+        // Whole score tiles above the diagonal are zero, so the sweep over
+        // them stops at the output position's diagonal tile.
+        rch.where(rch.x / tile <= i / tile);
         RVar rcj = rch.x;
         RVar rchh = rch.y;
         Func dCa("dCa");
@@ -264,6 +270,9 @@ public:
                            cast<float>(dHopr(rd, p, nt - 1 - t, b));
 
         RDom rbh(0, L, 0, hpg, "rbh");
+        // Whole score tiles above the diagonal are zero, so the sweep over
+        // the output positions starts at this input position's tile.
+        rbh.where(j / tile <= rbh.x / tile);
         RVar rbi = rbh.x;
         RVar rbhh = rbh.y;
         Func dBa("dBa");
