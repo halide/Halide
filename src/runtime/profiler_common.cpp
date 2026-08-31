@@ -513,11 +513,17 @@ ALWAYS_INLINE bool counter_is_approximate(const halide_profiler_func_stats *fs, 
 WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_state *s) {
     StringStreamPrinter<1024> sstr(user_context);
 
-    bool support_colors = false;
+    // Emit ANSI color escapes only when the report is going to an actual
+    // color-capable terminal. Checking TERM alone isn't enough: CI and other
+    // redirected environments often set TERM=xterm-256color while stdout is a
+    // pipe or file, which would splatter escape codes into the captured log.
+    // The report is printed via halide_print, whose default writes to stdout.
+    const char *no_color = getenv("NO_COLOR");
     const char *term = getenv("TERM");
-    if (term && (strstr(term, "color") || strstr(term, "xterm"))) {
-        support_colors = true;
-    }
+    bool support_colors =
+        !(no_color && no_color[0]) &&
+        term && (strstr(term, "color") || strstr(term, "xterm")) &&
+        isatty(STDOUT_FILENO);
 
     // Column-aligned rows are produced from `const char *` templates. A
     // run of an uppercase marker char is a slot — the marker picks the
