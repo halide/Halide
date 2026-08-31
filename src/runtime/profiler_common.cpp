@@ -513,17 +513,25 @@ ALWAYS_INLINE bool counter_is_approximate(const halide_profiler_func_stats *fs, 
 WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_state *s) {
     StringStreamPrinter<1024> sstr(user_context);
 
-    // Emit ANSI color escapes only when the report is going to an actual
-    // color-capable terminal. Checking TERM alone isn't enough: CI and other
-    // redirected environments often set TERM=xterm-256color while stdout is a
-    // pipe or file, which would splatter escape codes into the captured log.
-    // The report is printed via halide_print, whose default writes to stdout.
-    const char *no_color = getenv("NO_COLOR");
-    const char *term = getenv("TERM");
-    bool support_colors =
-        !(no_color && no_color[0]) &&
-        term && (strstr(term, "color") || strstr(term, "xterm")) &&
-        isatty(STDOUT_FILENO);
+    // Decide whether to emit ANSI color escapes. HL_COLORS, if set, is an
+    // explicit override matching IRPrinter: "0" forces colors off, anything
+    // else on. Otherwise honor NO_COLOR and auto-detect a color-capable
+    // terminal. Checking TERM alone isn't enough: CI and other redirected
+    // environments often set TERM=xterm-256color while stdout is a pipe or
+    // file, which would splatter escape codes into the captured log. The
+    // report is printed via halide_print, whose default writes to stdout.
+    bool support_colors;
+    const char *hl_colors = getenv("HL_COLORS");
+    if (hl_colors) {
+        support_colors = atoi(hl_colors) != 0;
+    } else {
+        const char *no_color = getenv("NO_COLOR");
+        const char *term = getenv("TERM");
+        support_colors =
+            !(no_color && no_color[0]) &&
+            term && (strstr(term, "color") || strstr(term, "xterm")) &&
+            isatty(STDOUT_FILENO);
+    }
 
     // Column-aligned rows are produced from `const char *` templates. A
     // run of an uppercase marker char is a slot — the marker picks the
