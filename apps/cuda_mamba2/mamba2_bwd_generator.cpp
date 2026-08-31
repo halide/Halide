@@ -858,14 +858,19 @@ private:
         }
         for (Func f : {dYY, XdX}) {
             RVar rdo("rdo"), rdi("rdi");
+            Var ko("ko"), ki("ki");
             f.compute_root().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
+            // A warp covers a row's channels: eight lanes of eight-wide
+            // vectors span the 64 channels contiguously, and the row sum
+            // finishes through atomic adds across those lanes.
             f.update()
                 .split(rd_var(f), rdo, rdi, 8)
-                .reorder(rdi, rdo, k, t, b)
+                .split(k, ko, ki, 64)
+                .reorder(rdi, rdo, ki, ko, t, b)
                 .atomic()
                 .vectorize(rdi)
-                .gpu_blocks(t, b)
-                .gpu_threads(k);
+                .gpu_blocks(ko, t, b)
+                .gpu_threads(rdo, ki);
         }
         ddAcs.compute_root().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
         csum.compute_root().gpu_blocks(b).gpu_threads(t);
