@@ -203,12 +203,11 @@ public:
         dxe(d, j, t, b) += cast<float>(Bmd2(rp, j, t, b)) *
                            cast<float>(dHopr(d, rp, nt - 1 - t, b));
 
-        // The last chunk's inputs reach no later chunk, so nothing flows
-        // back into them through the state.
+        // The last chunk's inputs reach no later chunk, but no masking is
+        // needed to say so: the carried gradient is zero there, so the
+        // inter-chunk half vanishes by itself.
         Func dxs("dxs");
-        dxs(d, j, t, b) = cast<float16_t>(
-            dxi(d, j, t, b) +
-            select(t >= nt - 1, 0.f, likely(dxe(d, j, t, b))));
+        dxs(d, j, t, b) = cast<float16_t>(dxi(d, j, t, b) + dxe(d, j, t, b));
 
         dX(d, j, t, b) = dxs(d, j, t, b);
 
@@ -220,10 +219,8 @@ public:
         xy(j, i, t, b) += cast<float>(X(rd, t * L + j, b)) *
                           cast<float>(dY(rd, i, t, b));
         Func scoreT("scoreT");
-        scoreT(j, i, t, b) =
-            select(j <= i,
-                   xy(j, i, t, b) * decay(j, i, t, b) * Delta(t * L + j, b),
-                   0.f);
+        scoreT(j, i, t, b) = xy(j, i, t, b) * decay(j, i, t, b) *
+                             Delta(t * L + j, b) * select(j <= i, 1.f, 0.f);
         Func scoreT_h("scoreT_h");
         scoreT_h(j, i, t, b) = cast<float16_t>(scoreT(j, i, t, b));
 
@@ -233,7 +230,6 @@ public:
                            cast<float>(dY(rd, i, t, b));
 
         RDom rch(0, L, 0, hpg, "rch");
-        rch.where(rch.x / 16 <= i / 16);
         RVar rcj = rch.x;
         RVar rchh = rch.y;
         Func dCa("dCa");
@@ -244,9 +240,8 @@ public:
         Func dCb("dCb");
         dCb(p, i, t, g) = 0.f;
         dCb(p, i, t, g) +=
-            select(t <= 0, 0.f,
-                   likely(exp(A(g * hpg + rhh) * cumdelta(i, t, g * hpg + rhh)) *
-                          dYH(p, i, t, g * hpg + rhh)));
+            exp(A(g * hpg + rhh) * cumdelta(i, t, g * hpg + rhh)) *
+            dYH(p, i, t, g * hpg + rhh);
 
         dC(p, i, t, g) = cast<float16_t>(dCa(p, i, t, g) + dCb(p, i, t, g));
 
@@ -258,10 +253,8 @@ public:
         xy2(i, j, t, b) += cast<float>(dY(rd, i, t, b)) *
                            cast<float>(X(rd, t * L + j, b));
         Func scoreT2("scoreT2");
-        scoreT2(i, j, t, b) =
-            select(j <= i,
-                   xy2(i, j, t, b) * decay(j, i, t, b) * Delta(t * L + j, b),
-                   0.f);
+        scoreT2(i, j, t, b) = xy2(i, j, t, b) * decay(j, i, t, b) *
+                              Delta(t * L + j, b) * select(j <= i, 1.f, 0.f);
         Func scoreT2_h("scoreT2_h");
         scoreT2_h(i, j, t, b) = cast<float16_t>(scoreT2(i, j, t, b));
 
@@ -271,7 +264,6 @@ public:
                            cast<float>(dHopr(rd, p, nt - 1 - t, b));
 
         RDom rbh(0, L, 0, hpg, "rbh");
-        rbh.where(rbh.x / 16 >= j / 16);
         RVar rbi = rbh.x;
         RVar rbhh = rbh.y;
         Func dBa("dBa");
@@ -280,11 +272,9 @@ public:
                            cast<float>(Cm(p, t * L + rbi, g));
         Func dBb("dBb");
         dBb(p, j, t, g) = 0.f;
-        dBb(p, j, t, g) +=
-            select(t >= nt - 1, 0.f,
-                   likely(Delta(t * L + j, g * hpg + rhh) *
-                          decay(j, L - 1, t, g * hpg + rhh) *
-                          XdH(p, j, t, g * hpg + rhh)));
+        dBb(p, j, t, g) += Delta(t * L + j, g * hpg + rhh) *
+                           decay(j, L - 1, t, g * hpg + rhh) *
+                           XdH(p, j, t, g * hpg + rhh);
 
         dB(p, j, t, g) = cast<float16_t>(dBa(p, j, t, g) + dBb(p, j, t, g));
 
@@ -627,29 +617,185 @@ private:
                 .tile_init(rxi, ryi);
         }
 
-        // ---- Everything else stays on the plain schedule for now ----
-        auto flat = [&](Func f, Var a0, Var a1) {
-            f.compute_root()
-                .split(a0, x0, x1, 8)
-                .split(a1, y0, y1, 8)
-                .reorder(x1, y1, x0, y0)
-                .gpu_blocks(f.args()[2], f.args()[3])
-                .gpu_threads(x1, y1);
-            f.update()
-                .split(a0, x0, x1, 8)
-                .split(a1, y0, y1, 8)
-                .reorder(x1, y1, x0, y0)
-                .gpu_blocks(f.args()[2], f.args()[3])
-                .gpu_threads(x1, y1);
-        };
-        flat(xy, j, i);
-        flat(dYH, p, i);
-        flat(dCa, p, i);
-        flat(dCb, p, i);
-        flat(xy2, i, j);
-        flat(XdH, p, j);
-        flat(dBa, p, j);
-        flat(dBb, p, j);
+        // ---- The group-summed gradients ----
+        // A block owns a strip of output positions of one chunk of one
+        // group and sweeps the heads of the group serially, its accumulators
+        // riding in fragments the whole way. Per head, the raw xy scores are
+        // computed a tile at a time on the tensor cores, masked and decayed
+        // where the multiply left them, and fed onward through the relayout;
+        // the inter-chunk halves accumulate a scaled state multiply the same
+        // way. All of the state's tiles ride in each warp, unrolled.
+        {
+            RVar rcjo("rcjo"), rcji("rcji");
+            Func dCaw = dCa.in();
+            dCaw.compute_root()
+                .tile(p, i, rxi, ryi, tile, tile)
+                .split(i, io, ii, pos_tiles)
+                .reorder(rxi, ryi, p, ii, io, t, g)
+                .unroll(p)
+                .unroll(ii)
+                .gpu_blocks(io, t, g)
+                .gpu_threads(ii)
+                .tile_store(rxi, ryi);
+            dCa.compute_at(dCaw, io)
+                .store_in(MemoryType::Tile)
+                .tile(p, i, rxi, ryi, tile, tile)
+                .unroll(p)
+                .gpu_threads(i)
+                .tile_init(rxi, ryi);
+            dCa.update()
+                .tile(p, i, rxi, ryi, tile, tile)
+                .split(RVar("rch$x"), rcjo, rcji, tile)
+                .reorder(p, rcjo, i, RVar("rch$y"))
+                .unroll(p)
+                .gpu_threads(i)
+                .tile_matmul(rcji, rxi, ryi);
+            xy.compute_at(dCa, rcjo)
+                .store_in(MemoryType::Tile)
+                .bound_extent(j, tile)
+                .bound_storage(j, tile)
+                .bound_extent(i, tile)
+                .bound_storage(i, tile)
+                .tile(j, i, rxi, ryi, tile, tile)
+                .tile_init(rxi, ryi);
+            xy.update()
+                .tile(j, i, rxi, ryi, tile, tile)
+                .split(rd_var(xy), rro, rri, tile)
+                .reorder(j, i, rro)
+                .tile_matmul(rri, rxi, ryi);
+            scoreT.compute_at(dCa, rcjo)
+                .store_in(MemoryType::Tile)
+                .bound_extent(j, tile)
+                .bound_storage(j, tile)
+                .bound_extent(i, tile)
+                .bound_storage(i, tile)
+                .tile(j, i, rxi, ryi, tile, tile)
+                .tile_init(rxi, ryi);
+        }
+        {
+            RVar rbio("rbio"), rbii("rbii");
+            Func dBaw = dBa.in();
+            dBaw.compute_root()
+                .tile(p, j, rxi, ryi, tile, tile)
+                .split(j, io, ii, pos_tiles)
+                .reorder(rxi, ryi, p, ii, io, t, g)
+                .unroll(p)
+                .unroll(ii)
+                .gpu_blocks(io, t, g)
+                .gpu_threads(ii)
+                .tile_store(rxi, ryi);
+            dBa.compute_at(dBaw, io)
+                .store_in(MemoryType::Tile)
+                .tile(p, j, rxi, ryi, tile, tile)
+                .unroll(p)
+                .gpu_threads(j)
+                .tile_init(rxi, ryi);
+            dBa.update()
+                .tile(p, j, rxi, ryi, tile, tile)
+                .split(RVar("rbh$x"), rbio, rbii, tile)
+                .reorder(p, rbio, j, RVar("rbh$y"))
+                .unroll(p)
+                .gpu_threads(j)
+                .tile_matmul(rbii, rxi, ryi);
+            xy2.compute_at(dBa, rbio)
+                .store_in(MemoryType::Tile)
+                .bound_extent(i, tile)
+                .bound_storage(i, tile)
+                .bound_extent(j, tile)
+                .bound_storage(j, tile)
+                .tile(i, j, rxi, ryi, tile, tile)
+                .tile_init(rxi, ryi);
+            xy2.update()
+                .tile(i, j, rxi, ryi, tile, tile)
+                .split(rd_var(xy2), rro, rri, tile)
+                .reorder(i, j, rro)
+                .tile_matmul(rri, rxi, ryi);
+            scoreT2.compute_at(dBa, rbio)
+                .store_in(MemoryType::Tile)
+                .bound_extent(i, tile)
+                .bound_storage(i, tile)
+                .bound_extent(j, tile)
+                .bound_storage(j, tile)
+                .tile(i, j, rxi, ryi, tile, tile)
+                .tile_init(rxi, ryi);
+        }
+        {
+            Func dCbw = dCb.in();
+            dCbw.compute_root()
+                .tile(p, i, rxi, ryi, tile, tile)
+                .split(i, io, ii, pos_tiles)
+                .reorder(rxi, ryi, p, ii, io, t, g)
+                .unroll(p)
+                .unroll(ii)
+                .gpu_blocks(io, t, g)
+                .gpu_threads(ii)
+                .tile_store(rxi, ryi);
+            dCb.compute_at(dCbw, io)
+                .store_in(MemoryType::Tile)
+                .tile(p, i, rxi, ryi, tile, tile)
+                .unroll(p)
+                .gpu_threads(i)
+                .tile_init(rxi, ryi);
+            dCb.update()
+                .tile(p, i, rxi, ryi, tile, tile)
+                .reorder(p, i, RVar("rhh$x"))
+                .unroll(p)
+                .gpu_threads(i)
+                .tile_init(rxi, ryi);
+            dYH.compute_at(dCb, RVar("rhh$x"))
+                .store_in(MemoryType::Tile)
+                .tile(p, i, rxi, ryi, tile, tile)
+                .unroll(p)
+                .gpu_threads(i)
+                .tile_init(rxi, ryi);
+            dYH.update()
+                .tile(p, i, rxi, ryi, tile, tile)
+                .split(rd_var(dYH), rro, rri, tile)
+                .reorder(p, i, rro)
+                .unroll(p)
+                .gpu_threads(i)
+                .tile_matmul(rri, rxi, ryi);
+        }
+        {
+            Func dBbw = dBb.in();
+            dBbw.compute_root()
+                .tile(p, j, rxi, ryi, tile, tile)
+                .split(j, io, ii, pos_tiles)
+                .reorder(rxi, ryi, p, ii, io, t, g)
+                .unroll(p)
+                .unroll(ii)
+                .gpu_blocks(io, t, g)
+                .gpu_threads(ii)
+                .tile_store(rxi, ryi);
+            dBb.compute_at(dBbw, io)
+                .store_in(MemoryType::Tile)
+                .tile(p, j, rxi, ryi, tile, tile)
+                .unroll(p)
+                .gpu_threads(j)
+                .tile_init(rxi, ryi);
+            dBb.update()
+                .tile(p, j, rxi, ryi, tile, tile)
+                .reorder(p, j, RVar("rhh$x"))
+                .unroll(p)
+                .gpu_threads(j)
+                .tile_init(rxi, ryi);
+            XdH.compute_at(dBb, RVar("rhh$x"))
+                .store_in(MemoryType::Tile)
+                .tile(p, j, rxi, ryi, tile, tile)
+                .unroll(p)
+                .gpu_threads(j)
+                .tile_init(rxi, ryi);
+            XdH.update()
+                .tile(p, j, rxi, ryi, tile, tile)
+                .split(rd_var(XdH), rro, rri, tile)
+                .reorder(p, j, rro)
+                .unroll(p)
+                .gpu_threads(j)
+                .tile_matmul(rri, rxi, ryi);
+        }
+
+        // ---- The small epilogue stages ----
+
         for (Func f : {Func(dB), Func(dC)}) {
             f.compute_root()
                 .split(f.args()[0], x0, x1, 8)
@@ -692,6 +838,7 @@ private:
     }
 
     // The reduction variables, looked up by the update they belong to.
+    RVar rd_var(Func f) { return RVar(f.update(0).get_schedule().rvars()[0].var); }
     RVar rp_var(Func f) { return RVar(f.update(0).get_schedule().rvars()[0].var); }
     RVar rj_var(Func f) { return RVar(f.update(0).get_schedule().rvars()[0].var); }
     RVar ri_var(Func f) { return RVar(f.update(0).get_schedule().rvars()[0].var); }
@@ -761,14 +908,7 @@ private:
         flat(dG, d, p);
         flat(dxi, d, j);
         flat(dxe, d, j);
-        flat(xy, j, i);
-        flat(dYH, p, i);
-        flat(dCa, p, i);
-        flat(dCb, p, i);
-        flat(xy2, i, j);
-        flat(XdH, p, j);
-        flat(dBa, p, j);
-        flat(dBb, p, j);
+
 
         Func(dX).compute_root()
             .split(d, x0, x1, 8)
