@@ -1,9 +1,8 @@
 #include "BoundSmallAllocations.h"
-#include "Bounds.h"
+#include "BoundsTracker.h"
 #include "CodeGen_Internal.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -15,17 +14,17 @@ class BoundSmallAllocations : public IRMutator {
     using IRMutator::visit;
 
     // Track constant bounds
-    Scope<Interval> scope;
+    BoundsTracker tracker;
 
     template<typename LetOrLetStmt>
     auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
         // Visit an entire chain of lets in a single method to conserve stack space.
         struct Frame {
             const LetOrLetStmt *op;
-            ScopedBinding<Interval> binding;
-            Frame(const LetOrLetStmt *op, Scope<Interval> &scope)
+            BoundsTracker::Binding binding;
+            Frame(const LetOrLetStmt *op, BoundsTracker &tracker)
                 : op(op),
-                  binding(scope, op->name, find_constant_bounds(op->value, scope)) {
+                  binding(tracker.push_let(op->name, op->value)) {
             }
         };
         std::vector<Frame> frames;
@@ -33,7 +32,7 @@ class BoundSmallAllocations : public IRMutator {
 
         do {
             result = op->body;
-            frames.emplace_back(op, scope);
+            frames.emplace_back(op, tracker);
         } while ((op = result.template as<LetOrLetStmt>()));
 
         result = mutate(result);
@@ -58,12 +57,7 @@ class BoundSmallAllocations : public IRMutator {
     DeviceAPI device_api = DeviceAPI::None;
 
     Stmt visit(const For *op) override {
-        Interval min_bounds = find_constant_bounds(op->min, scope);
-        Interval max_bounds = find_constant_bounds(op->max, scope);
-        Interval b = Interval::make_union(min_bounds, max_bounds);
-        b.min = simplify(b.min);
-        b.max = simplify(b.max);
-        ScopedBinding<Interval> bind(scope, op->name, b);
+        auto binding = tracker.push_for(op->name, op->min, op->max);
         bool new_in_thread_loop =
             in_thread_loop || op->for_type == ForType::GPUThread;
         ScopedValue<bool> old_in_thread_loop(in_thread_loop, new_in_thread_loop);
@@ -86,7 +80,7 @@ class BoundSmallAllocations : public IRMutator {
             bool changed = false;
             bool found_non_constant_extent = false;
             for (Range &r : region) {
-                Expr bound = find_constant_bound(r.extent, Direction::Upper, scope);
+                Expr bound = tracker.find_constant_bound_aggressive(r.extent, Direction::Upper);
                 // We can allow non-constant extents for now, as long as all
                 // remaining dimensions are 1 (so the stride is unused, which
                 // will be non-constant).
@@ -116,7 +110,8 @@ class BoundSmallAllocations : public IRMutator {
         for (const Expr &e : op->extents) {
             total_extent *= e;
         }
-        Expr bound = find_constant_bound(total_extent, Direction::Upper, scope);
+        debug(3) << "Finding constant bound for Allocation " << op->name << " with extent " << total_extent << "\n";
+        Expr bound = tracker.find_constant_bound_aggressive(total_extent, Direction::Upper);
 
         if (!bound.defined() && must_be_constant(op->memory_type)) {
             user_assert(op->memory_type != MemoryType::Register)

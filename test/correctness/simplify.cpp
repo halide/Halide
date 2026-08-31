@@ -1767,6 +1767,43 @@ void check_boolean() {
     check(ramp(x * 8 + 5, -1, 4) < broadcast(y * 8, 4), broadcast(x < y, 4));
     check(ramp(x * 8 - 1, -1, 4) < broadcast(y * 8, 4), broadcast(x < y + 1, 4));
 
+    // A horizontal AND/OR of a single ramp/broadcast comparison collapses to
+    // a plain scalar comparison on the ramp's endpoints, for both orderings
+    // of ramp vs broadcast and both '<' and '<='.
+    check(VectorReduce::make(VectorReduce::And, ramp(x, y, 4) < broadcast(z, 4), 1),
+          max(y, 0) * 3 + x < z);
+    check(VectorReduce::make(VectorReduce::And, ramp(x, y, 4) <= broadcast(z, 4), 1),
+          max(y, 0) * 3 + x <= z);
+    check(VectorReduce::make(VectorReduce::And, broadcast(x, 4) < ramp(y, z, 4), 1),
+          x < min(z, 0) * 3 + y);
+    check(VectorReduce::make(VectorReduce::And, broadcast(x, 4) <= ramp(y, z, 4), 1),
+          x <= min(z, 0) * 3 + y);
+
+    check(VectorReduce::make(VectorReduce::Or, ramp(x, y, 4) < broadcast(z, 4), 1),
+          min(y, 0) * 3 + x < z);
+    check(VectorReduce::make(VectorReduce::Or, ramp(x, y, 4) <= broadcast(z, 4), 1),
+          min(y, 0) * 3 + x <= z);
+    check(VectorReduce::make(VectorReduce::Or, broadcast(x, 4) < ramp(y, z, 4), 1),
+          x < max(z, 0) * 3 + y);
+    check(VectorReduce::make(VectorReduce::Or, broadcast(x, 4) <= ramp(y, z, 4), 1),
+          x <= max(z, 0) * 3 + y);
+
+    // The "all lanes of a ramp lie within [lo, hi]" shape loop partitioning
+    // builds -- a lower-bound comparison ANDed with an upper-bound
+    // comparison, both against the same stride -- fuses to a plain And of
+    // two scalar comparisons, regardless of clause order.
+    {
+        Expr u = Var("u");
+        check(VectorReduce::make(VectorReduce::And,
+                                 (broadcast(x, 4) <= ramp(y, z, 4)) && (ramp(w, z, 4) <= broadcast(u, 4)),
+                                 1),
+              (x <= min(z, 0) * 3 + y) && (max(z, 0) * 3 + w <= u));
+        check(VectorReduce::make(VectorReduce::And,
+                                 (ramp(w, z, 4) <= broadcast(u, 4)) && (broadcast(x, 4) <= ramp(y, z, 4)),
+                                 1),
+              (max(z, 0) * 3 + w <= u) && (x <= min(z, 0) * 3 + y));
+    }
+
     // Check anded conditions apply to the then case only
     check(IfThenElse::make(x == 4 && y == 5,
                            not_no_op(z + x + y),
@@ -2377,6 +2414,18 @@ void check_invariant() {
     }
 }
 
+void check_with_assumptions(const Expr &a, const Expr &b, const std::vector<Expr> &assumptions) {
+    Expr simpler = simplify(a, Scope<Interval>(), Scope<ModulusRemainder>(), assumptions);
+    if (!equal(simpler, b)) {
+        std::cerr
+            << "\nSimplification failure:\n"
+            << "Input: " << a << "\n"
+            << "Output: " << simpler << "\n"
+            << "Expected output: " << b << "\n";
+        abort();
+    }
+}
+
 void check_unreachable() {
     Var x("x"), y("y");
 
@@ -2405,6 +2454,95 @@ void check_unreachable() {
           Evaluate::make(0));
 }
 
+void check_facts() {
+    Expr x = Var("x"), y = Var("y"), z = Var("z");
+
+    // A fact stated in any comparison direction should let the simplifier pick
+    // the winning side of a max or min.
+    check_with_assumptions(max(x, y), x, {x > y});
+    check_with_assumptions(max(x, y), x, {y < x});
+    check_with_assumptions(max(x, y), y, {x < y});
+    check_with_assumptions(max(x, y), y, {y > x});
+    check_with_assumptions(min(x, y), y, {x > y});
+    check_with_assumptions(min(x, y), x, {x < y});
+
+    // A non-strict fact is enough to pick a side of a max or min, and a strict
+    // fact implies the non-strict one.
+    check_with_assumptions(max(x, y), x, {x >= y});
+    check_with_assumptions(max(x, y), y, {x <= y});
+    check_with_assumptions(min(x, y), x, {x <= y});
+    check_with_assumptions(min(x, y), y, {x >= y});
+
+    // Facts about compound expressions work too.
+    check_with_assumptions(max(x + z, y * 3), x + z, {x + z > y * 3});
+    check_with_assumptions(max(max(x, y), z), z, {max(x, y) < z});
+
+    // Both branches of an if learn from the condition, in opposite directions.
+    check(IfThenElse::make(x < y, not_no_op(max(x, y)), not_no_op(max(x, y))),
+          IfThenElse::make(x < y, not_no_op(y), not_no_op(x)));
+
+    // A fact only applies where it holds.
+    check(Block::make(not_no_op(max(x, y)),
+                      IfThenElse::make(x < y, not_no_op(max(x, y)))),
+          Block::make(not_no_op(max(x, y)),
+                      IfThenElse::make(x < y, not_no_op(y))));
+
+    // A division can cancel a multiplication inside a max or min when we know
+    // which side wins after the division.
+    check_with_assumptions(max(x * 8, y) / 8, x, {x >= y / 8});
+    check_with_assumptions(max(y, x * 8) / 8, x, {x >= y / 8});
+    check_with_assumptions(min(x * 8, y) / 8, x, {x <= y / 8});
+    check_with_assumptions(min(y, x * 8) / 8, x, {x <= y / 8});
+
+    // The direction in which a fact is stated doesn't matter, on either side:
+    // both the facts and the conditions of can_prove predicates are looked up
+    // in the same canonical form.
+    check_with_assumptions(max(x * 8, y) / 8, x, {y / 8 <= x});
+    check_with_assumptions(max(x * 8, y) / 8, x, {!(x < y / 8)});
+    check_with_assumptions(min(x * 8, y) / 8, x, {y / 8 >= x});
+
+    // A strict fact settles a non-strict predicate too.
+    check_with_assumptions(max(x * 8, y) / 8, x, {x > y / 8});
+    check_with_assumptions(min(x * 8, y) / 8, x, {x < y / 8});
+
+    // Deeply nested mins and maxes must not make the work of proving the
+    // predicates of the rules above blow up.
+    Expr nest = x;
+    for (int i = 0; i < 24; i++) {
+        nest = min(max(nest + i, y - i), z * i);
+    }
+    // The result isn't interesting; what matters is that we get one at all.
+    (void)simplify(nest, Scope<Interval>(), Scope<ModulusRemainder>(), {x < y});
+
+    // can_prove-based rules (unlike the known_true ones above) recursively
+    // invoke the simplifier on their own predicate, and that predicate can be
+    // a freshly built expression rather than a piece of the original IR (e.g.
+    // min(x, y) - min(z, w) -> y - w, can_prove(x - y == z - w)) constructs a
+    // brand new subtraction). If the operands are themselves unsimplified
+    // instances of the same shape, this recurses; the depth limit must bound
+    // the work rather than let it explode.
+    Expr deep = min(Var("da"), Var("db")) - min(Var("dc"), Var("dd"));
+    for (int i = 0; i < 10; i++) {
+        Expr y = Var("dy" + std::to_string(i));
+        Expr z = Var("dz" + std::to_string(i));
+        Expr w = Var("dw" + std::to_string(i));
+        deep = min(deep, y) - min(z, w);
+    }
+    (void)simplify(deep);
+
+    // The rules above look their predicates up in the facts rather than
+    // recursively invoking the simplifier, so a fact only settles a predicate
+    // it is directly comparable to. This one needs arithmetic to connect:
+    check_with_assumptions(max(x, y), max(x, y), {x + 1 <= y});
+
+    // Without the fact, the division stays put.
+    check(max(x * 8, y) / 8, max(x * 8, y) / 8);
+
+    // Facts that don't strictly order the operands don't fire these rules.
+    check_with_assumptions(max(x, y), max(x, y), {x != y});
+    check_with_assumptions(max(x * 8, y) / 8, max(x * 8, y) / 8, {x < y / 8});
+}
+
 int main(int argc, char **argv) {
     check_invariant();
     check_casts();
@@ -2417,6 +2555,7 @@ int main(int argc, char **argv) {
     check_bitwise();
     check_lets();
     check_unreachable();
+    check_facts();
 
     // Miscellaneous cases that don't fit into one of the categories above.
     Expr x = Var("x"), y = Var("y");

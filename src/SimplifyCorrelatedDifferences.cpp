@@ -1,5 +1,6 @@
 #include "SimplifyCorrelatedDifferences.h"
 
+#include "BoundsTracker.h"
 #include "CSE.h"
 #include "ExprUsesVar.h"
 #include "IRMatch.h"
@@ -28,6 +29,7 @@ protected:
     IRMatcher::Wild<2> z;
     IRMatcher::WildConst<0> c0;
     IRMatcher::WildConst<1> c1;
+    IRMatcher::WildConst<2> c2;
 
     Expr visit(const Sub *op) override {
 
@@ -52,11 +54,25 @@ protected:
                 rewrite(max(x, c0) - min(x, c1), max(max(c0 - x, x - c1), fold(max(0, c0 - c1)))) ||
                 rewrite(min(x, y) - max(x, z), min(min(x, y) - max(x, z), 0)) ||
                 rewrite(max(x, y) - min(x, z), max(max(x, y) - min(x, z), 0)) ||
+                rewrite(min(x + c0, y) - max(x, z), min(min(x + c0, y) - max(x, z), c0)) ||
+                rewrite(max(x + c0, y) - min(x, z), max(max(x + c0, y) - min(x, z), c0)) ||
 
                 rewrite(min(x + c0, y) - select(z, min(x, y) + c1, x), select(z, (max(min(y - x, c0), 0) - c1), min(y - x, c0)), c0 > 0) ||
                 rewrite(min(y, x + c0) - select(z, min(y, x) + c1, x), select(z, (max(min(y - x, c0), 0) - c1), min(y - x, c0)), c0 > 0) ||
 
+                // A ceiling-divide of a quantity clamped above by an exact
+                // multiple of the divisor (x*c0 + c1), minus the unclamped
+                // multiple (x) that the clamp is anchored to. Comes up when
+                // rounding a min-clamped region's extent up to a multiple of
+                // c0: (min(x*c0 + c1, y) + c2)/c0 - x/1 == min((y+c2)/c0 - x,
+                // (c1+c2)/c0), exactly, for any c1, c2 -- not just when they
+                // happen to be multiples of c0 -- because c0 > 0 means both
+                // "+c2" and "/c0" distribute over min.
+                rewrite((min(x * c0 + c1, y) + c2) / c0 - x, min((y + c2) / c0 - x, fold((c1 + c2) / c0)), c0 > 0) ||
+                rewrite((min(y, x * c0 + c1) + c2) / c0 - x, min((y + c2) / c0 - x, fold((c1 + c2) / c0)), c0 > 0) ||
+
                 false) {
+                debug(4) << "Rewrote " << Expr(op) << " as " << rewrite.result << "\n";
                 return rewrite.result;
             }
         }
@@ -79,19 +95,34 @@ protected:
     };
     vector<OuterLet> lets;
 
+    // Tracks constant bounds implied by enclosing lets and dominating
+    // asserts. This is a whole-tree lowering pass (see
+    // simplify_correlated_differences() below), not just a helper called
+    // from find_constant_bounds() on one Expr at a time, so it's worth
+    // gathering this context as we descend: it lets the final simplify()
+    // in cancel_correlated_subexpression() resolve free variables that
+    // `lets` above doesn't bother tracking (lets that are pure and
+    // constant w.r.t. loop_var are deliberately excluded from `lets`,
+    // since the monotonicity analysis doesn't need them) and lets it use
+    // dominating assert conditions it otherwise never sees.
+    BoundsTracker tracker;
+
     template<typename LetStmtOrLet>
     auto visit_let(const LetStmtOrLet *op) -> decltype(op->body) {
         // Visit an entire chain of lets in a single method to conserve stack space.
         struct Frame {
             const LetStmtOrLet *op;
             ScopedBinding<ConstantInterval> binding;
+            BoundsTracker::Binding tracker_binding;
             Expr new_value;
-            Frame(const LetStmtOrLet *op, const string &loop_var, Scope<ConstantInterval> &scope)
+            Frame(const LetStmtOrLet *op, const string &loop_var, Scope<ConstantInterval> &scope, BoundsTracker &tracker)
                 : op(op),
-                  binding(scope, op->name, derivative_bounds(op->value, loop_var, scope)) {
+                  binding(scope, op->name, derivative_bounds(op->value, loop_var, scope)),
+                  tracker_binding(tracker.push_let(op->name, op->value)) {
             }
-            Frame(const LetStmtOrLet *op)
-                : op(op) {
+            Frame(const LetStmtOrLet *op, BoundsTracker &tracker)
+                : op(op),
+                  tracker_binding(tracker.push_let(op->name, op->value)) {
             }
         };
         std::vector<Frame> frames;
@@ -111,13 +142,13 @@ protected:
         do {
             result = op->body;
             if (loop_var.empty()) {
-                frames.emplace_back(op);
+                frames.emplace_back(op, tracker);
                 continue;
             }
 
             bool pure = is_pure(op->value);
             if (!pure || expr_uses_vars(op->value, monotonic) || monotonic.contains(op->name)) {
-                frames.emplace_back(op, loop_var, monotonic);
+                frames.emplace_back(op, loop_var, monotonic, tracker);
                 Expr new_value = mutate(op->value);
                 bool may_substitute_in = new_value.type() == Int(32) && pure;
                 lets.emplace_back(OuterLet{op->name, new_value, may_substitute_in});
@@ -126,7 +157,7 @@ protected:
                 // Pure and constant w.r.t the loop var. Doesn't
                 // shadow any outer thing already in the monotonic
                 // scope.
-                frames.emplace_back(op);
+                frames.emplace_back(op, tracker);
             }
         } while ((op = result.template as<LetStmtOrLet>()));
 
@@ -155,6 +186,7 @@ protected:
     }
 
     Stmt visit(const For *op) override {
+        auto bounds_bind = tracker.push_for(op->name, op->min, op->max);
         Stmt s = op;
         // This is unfortunately quadratic in maximum loop nesting depth
         if (loop_var.empty()) {
@@ -173,6 +205,25 @@ protected:
         }
         s = IRMutator::visit(s.as<For>());
         return s;
+    }
+
+    // A leading assert in a Block holds for everything after it (Halide
+    // blocks are left-leaning, so a chain of asserts shows up as nested
+    // Blocks, each with an AssertStmt as `first`; recursing into `rest`
+    // naturally walks the whole chain).
+    Stmt visit(const Block *op) override {
+        if (const AssertStmt *a = op->first.as<AssertStmt>()) {
+            Stmt first = mutate(op->first);
+            auto fact = tracker.push_fact(a->condition);
+            Stmt rest = mutate(op->rest);
+            if (first.same_as(op->first) && rest.same_as(op->rest)) {
+                return op;
+            } else {
+                return Block::make(first, rest);
+            }
+        } else {
+            return IRMutator::visit(op);
+        }
     }
 
     // Add the names of any free variables in an expr to the provided set
@@ -227,7 +278,13 @@ protected:
             e = common_subexpression_elimination(e);
             e = solve_expression(e, loop_var).result;
             e = PartiallyCancelDifferences()(e);
-            e = simplify(e);
+            // Cheaper than find_constant_bound_aggressive()'s
+            // wrap-every-pending-let-and-resimplify path (this pass is
+            // already quadratic in loop nesting depth and runs across the
+            // whole tree several times, so that would be too expensive
+            // here): just hand the already-computed constant scope and
+            // dominating facts to the simplifier directly.
+            e = simplify(e, tracker.interval_scope(), Scope<ModulusRemainder>::empty_scope(), tracker.known_facts());
 
             debug(1) << [&]() -> std::string {
                 if (is_monotonic(e, loop_var) != Monotonic::Unknown) {

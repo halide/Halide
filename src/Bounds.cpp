@@ -119,9 +119,15 @@ Expr find_constant_bound(const Expr &e, Direction d, const Scope<Interval> &scop
 }
 
 Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
+    debug(4) << "find_constant_bounds for " << e << "\n";
+    for (auto it = scope.cbegin(); it != scope.cend(); ++it) {
+        debug(5) << "  with " << it.name() << " in " << it.value() << "\n";
+    }
     Expr expr = bound_correlated_differences(simplify(remove_likelies(e)));
+    debug(4) << "  bcd(simplify()): " << expr << "\n";
     Interval interval = bounds_of_expr_in_scope(expr, scope, FuncValueBounds(), true);
     interval = simplify(interval);
+    debug(4) << "  interval: " << interval << "\n";
 
     // Note that we can get non-const but well-defined results (e.g. signed_integer_overflow);
     // for our purposes here, treat anything non-const as no-bound.

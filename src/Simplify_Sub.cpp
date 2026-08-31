@@ -425,6 +425,9 @@ Expr Simplify::visit(const Sub *op, ExprInfo *info) {
            rewrite(x / c0 - (x - y) / c0, ((y + fold(c0 - 1)) - (x % c0)) / c0, c0 > 0) ||
            rewrite((x - y) / c0 - x / c0, ((x % c0) - y) / c0, c0 > 0) ||
 
+           rewrite(y - ((((y - x) + z) / c1) * c1 + x), (((y - x) + z) % c1) - z, c1 > 0) ||
+           rewrite(y - (((z + (y - x)) / c1) * c1 + x), ((z + (y - x)) % c1) - z, c1 > 0) ||
+
            // Simplification of bounds code for various tail
            // strategies requires cancellations of the form:
            // min(f(x), y) - g(x)

@@ -1152,6 +1152,7 @@ Split Deserializer::deserialize_split(const Serialize::Split *split) {
     const auto exact = split->exact();
     const auto tail = deserialize_tail_strategy(split->tail());
     const auto split_type = deserialize_split_type(split->split_type());
+    const auto align = deserialize_expr(split->align_type(), split->align());
     auto hl_split = Split();
     hl_split.old_var = old_var;
     hl_split.outer = outer;
@@ -1160,6 +1161,7 @@ Split Deserializer::deserialize_split(const Serialize::Split *split) {
     hl_split.exact = exact;
     hl_split.tail = tail;
     hl_split.split_type = split_type;
+    hl_split.align = align;
     return hl_split;
 }
 

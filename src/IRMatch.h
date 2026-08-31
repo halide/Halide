@@ -2554,7 +2554,7 @@ struct CanProve {
     // Includes a raw call to an inlined make method, so don't inline.
     [[nodiscard]] HALIDE_NEVER_INLINE bool make_folded_const(halide_scalar_value_t &val, Type &ty, MatcherState &state) const {
         Expr condition = a.make(state, {});
-        condition = prover->mutate(condition, nullptr);
+        condition = prover->simplify_can_prove_condition(condition);
         val.u.u64 = is_const_one(condition);
         ty = Bool(condition.type().lanes());
         return false;
@@ -2570,6 +2570,46 @@ HALIDE_ALWAYS_INLINE auto can_prove(A &&a, Prover *p) noexcept -> CanProve<declt
 template<typename A, typename Prover>
 std::ostream &operator<<(std::ostream &s, const CanProve<A, Prover> &op) {
     s << "can_prove(" << op.a << ")";
+    return s;
+}
+
+// Like can_prove, but only looks the condition up in the facts the prover
+// already knows, instead of recursively invoking it. Much cheaper, and it
+// cannot recurse, so unlike can_prove it is safe in a rule whose left-hand
+// side matches expressions the prover may construct while proving it.
+template<typename A, typename Prover>
+struct KnownTrue {
+    struct pattern_tag {};
+    A a;
+    Prover *prover;  // An existing simplifying mutator
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    // This rule is a boolean-valued predicate. Bools have type UIntImm.
+    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
+    constexpr static bool canonical = true;
+
+    constexpr static bool foldable = true;
+
+    // Includes a raw call to an inlined make method, so don't inline.
+    [[nodiscard]] HALIDE_NEVER_INLINE bool make_folded_const(halide_scalar_value_t &val, Type &ty, MatcherState &state) const {
+        Expr condition = a.make(state, {});
+        val.u.u64 = prover->is_known_true(condition) ? 1 : 0;
+        ty = Bool(condition.type().lanes());
+        return false;
+    }
+};
+
+template<typename A, typename Prover>
+HALIDE_ALWAYS_INLINE auto known_true(A &&a, Prover *p) noexcept -> KnownTrue<decltype(pattern_arg(a)), Prover> {
+    assert_is_lvalue_if_expr<A>();
+    return {pattern_arg(a), p};
+}
+
+template<typename A, typename Prover>
+std::ostream &operator<<(std::ostream &s, const KnownTrue<A, Prover> &op) {
+    s << "known_true(" << op.a << ")";
     return s;
 }
 
