@@ -108,16 +108,26 @@ public:
         qk(j, i, t, g) += cast<float>(Cm(rp, t * L + i, g)) *
                           cast<float>(Bm(rp, t * L + j, g));
 
+        // The per-position decay factors, precomputed into small hot
+        // tables so the fragment elementwise stages that apply them load
+        // one value instead of exponentiating per entry: the decayed-B
+        // column scale, referenced to the end of its chunk, and the
+        // decayed-C scale, referenced to the start.
+        Func bfac("bfac");
+        bfac(k, t, b) = Delta(t * L + k, b) * decay(k, L - 1, t, b);
+        Func cfac("cfac");
+        cfac(k, t, b) = exp(A(b) * cumdelta(k, t, b));
+
         // The decayed state operand, in both orientations: reduction-first
         // for the forward state multiply, state-first for the gradient's.
         Func Bmdf("Bmdf");
         Bmdf(j, p, t, b) = cast<float>(Bm(p, t * L + j, group_of(b))) *
-                           Delta(t * L + j, b) * decay(j, L - 1, t, b);
+                           bfac(j, t, b);
         Func Bmd("Bmd");
         Bmd(p, j, t, b) = cast<float16_t>(Bmdf(j, p, t, b));
         Func Bmdf2("Bmdf2");
         Bmdf2(p, j, t, b) = cast<float>(Bm(p, t * L + j, group_of(b))) *
-                            Delta(t * L + j, b) * decay(j, L - 1, t, b);
+                            bfac(j, t, b);
         Func Bmd2("Bmd2");
         Bmd2(p, j, t, b) = cast<float16_t>(Bmdf2(p, j, t, b));
 
@@ -141,7 +151,7 @@ public:
         // C decayed from the start of its chunk, the mirror of Bmd.
         Func Cdf("Cdf");
         Cdf(i, p, t, b) = cast<float>(Cm(p, t * L + i, group_of(b))) *
-                          exp(A(b) * cumdelta(i, t, b));
+                          cfac(i, t, b);
         Func Cd("Cd");
         Cd(p, i, t, b) = cast<float16_t>(Cdf(i, p, t, b));
 
@@ -172,12 +182,13 @@ public:
         // transposed copy of qk, so the tile loads read them in the
         // orientation the reduction wants.
         Func qk2("qk2");
-        qk2(i, j, t, g) = qk(j, i, t, g);
+        qk2(i, j, t, g) = cast<float16_t>(qk(j, i, t, g));
         // The mask multiplies rather than selects, so the raw scores are
         // read unconditionally and the masked-off region doesn't clamp the
         // bounds of what feeds the fragment.
         Func score2("score2");
-        score2(i, j, t, b) = qk2(i, j, t, group_of(b)) * decay(j, i, t, b) *
+        score2(i, j, t, b) = cast<float>(qk2(i, j, t, group_of(b))) *
+                             decay(j, i, t, b) *
                              Delta(t * L + j, b) *
                              select(j <= i, 1.f, 0.f);
         Func score2_h("score2_h");
@@ -246,7 +257,7 @@ public:
         Func dCb("dCb");
         dCb(p, i, t, g) = 0.f;
         dCb(p, i, t, g) +=
-            exp(A(g * hpg + rhh) * cumdelta(i, t, g * hpg + rhh)) *
+            cfac(i, t, g * hpg + rhh) *
             dYH(p, i, t, g * hpg + rhh);
 
         dC(p, i, t, g) = cast<float16_t>(dCa(p, i, t, g) + dCb(p, i, t, g));
@@ -281,8 +292,7 @@ public:
                            cast<float>(Cm(p, t * L + rbi, g));
         Func dBb("dBb");
         dBb(p, j, t, g) = 0.f;
-        dBb(p, j, t, g) += Delta(t * L + j, g * hpg + rhh) *
-                           decay(j, L - 1, t, g * hpg + rhh) *
+        dBb(p, j, t, g) += bfac(j, t, g * hpg + rhh) *
                            XdH(p, j, t, g * hpg + rhh);
 
         dB(p, j, t, g) = cast<float16_t>(dBa(p, j, t, g) + dBb(p, j, t, g));
@@ -331,7 +341,8 @@ public:
         try {
             if (!using_autoscheduler()) {
                 if (wmma) {
-                    schedule_wmma(cumdelta, cdpre, qk, qk2, Bmdf, Bmdf2,
+                    schedule_wmma(cumdelta, cdpre, bfac, cfac, qk, qk2,
+                                  Bmdf, Bmdf2,
                                   chunk_state,
                                   H, Hop, Cdf, dG, dHnr, dHopr, score2, score2_h,
                                   dxi, dxe, dxs, xy, scoreT, scoreT_h, dYH,
@@ -359,7 +370,8 @@ private:
     // tensor cores; the dX kernel is the forward's output kernel with the
     // causal mask transposed; the group-summed gradients walk the heads of
     // a group serially inside their blocks, accumulating on fragments.
-    void schedule_wmma(Func cumdelta, Func cdpre, Func qk, Func qk2,
+    void schedule_wmma(Func cumdelta, Func cdpre, Func bfac, Func cfac,
+                       Func qk, Func qk2,
                        Func Bmdf, Func Bmdf2, Func chunk_state, Func H, Func Hop,
                        Func Cdf, Func dG, Func dHnr, Func dHopr, Func score2,
                        Func score2_h, Func dxi, Func dxe, Func dxs, Func xy,
@@ -380,6 +392,9 @@ private:
         // ---- The scans ----
         cumdelta.compute_root().align_bounds(k, 2).align_storage(k, 2)
             .reorder(k, t, b).gpu_blocks(b).gpu_threads(t);
+        for (Func f : {bfac, cfac}) {
+            f.compute_root().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
+        }
         cdpre.compute_root().reorder(t, b).gpu_blocks(b);
         sfxcr.compute_root().reorder(tt, b).gpu_blocks(b);
         sfxr.compute_root().reorder(kk, t, b).gpu_blocks(b).gpu_threads(t);
@@ -781,29 +796,49 @@ private:
                 .tile_init(rxi, ryi);
         }
         {
-            Func dCbw = dCb.in();
-            dCbw.compute_root()
+            RVar hho("hho"), hhi("hhi");
+            Var hb("hb"), tf("tf");
+            const int hpg = (int)heads / (int)groups;
+            // The heads sweep is split into partials across blocks, like the
+            // intra-chunk halves, with a small fold afterwards.
+            dCb.update().split(RVar("rhh$x"), hho, hhi, std::max(1, hpg / 8));
+            Func dCbp = dCb.update().rfactor(hho, hb);
+            Func dCbpw = dCbp.in();
+            dCbpw.compute_root()
                 .tile(p, i, rxi, ryi, tile, tile)
                 .split(i, io, ii, pos_tiles)
-                .reorder(rxi, ryi, p, ii, io, t, g)
+                .fuse(t, hb, tf)
+                .reorder(rxi, ryi, p, ii, io, tf, g)
                 .unroll(p)
                 .unroll(ii)
-                .gpu_blocks(io, t, g)
+                .gpu_blocks(io, tf, g)
                 .gpu_threads(ii)
                 .tile_store(rxi, ryi);
-            dCb.compute_at(dCbw, io)
+            dCbp.compute_at(dCbpw, io)
                 .store_in(MemoryType::Tile)
                 .tile(p, i, rxi, ryi, tile, tile)
                 .unroll(p)
                 .gpu_threads(i)
                 .tile_init(rxi, ryi);
-            dCb.update()
+            dCbp.update()
                 .tile(p, i, rxi, ryi, tile, tile)
-                .reorder(p, i, RVar("rhh$x"))
+                .reorder(p, i, hhi)
                 .unroll(p)
                 .gpu_threads(i)
                 .tile_init(rxi, ryi);
-            dYH.compute_at(dCb, RVar("rhh$x"))
+            dCb.compute_root()
+                .split(p, x0, x1, 8)
+                .split(i, y0, y1, 8)
+                .reorder(x1, y1, x0, y0)
+                .gpu_blocks(y0, t, g)
+                .gpu_threads(x1, y1);
+            dCb.update()
+                .split(p, x0, x1, 8)
+                .split(i, y0, y1, 8)
+                .reorder(x1, y1, hho, x0, y0)
+                .gpu_blocks(y0, t, g)
+                .gpu_threads(x1, y1);
+            dYH.compute_at(dCbp, hhi)
                 .store_in(MemoryType::Tile)
                 .tile(p, i, rxi, ryi, tile, tile)
                 .unroll(p)
@@ -818,29 +853,47 @@ private:
                 .tile_matmul(rri, rxi, ryi);
         }
         {
-            Func dBbw = dBb.in();
-            dBbw.compute_root()
+            RVar hho("hho"), hhi("hhi");
+            Var hb("hb"), tf("tf");
+            const int hpg = (int)heads / (int)groups;
+            dBb.update().split(RVar("rhh$x"), hho, hhi, std::max(1, hpg / 8));
+            Func dBbp = dBb.update().rfactor(hho, hb);
+            Func dBbpw = dBbp.in();
+            dBbpw.compute_root()
                 .tile(p, j, rxi, ryi, tile, tile)
                 .split(j, io, ii, pos_tiles)
-                .reorder(rxi, ryi, p, ii, io, t, g)
+                .fuse(t, hb, tf)
+                .reorder(rxi, ryi, p, ii, io, tf, g)
                 .unroll(p)
                 .unroll(ii)
-                .gpu_blocks(io, t, g)
+                .gpu_blocks(io, tf, g)
                 .gpu_threads(ii)
                 .tile_store(rxi, ryi);
-            dBb.compute_at(dBbw, io)
+            dBbp.compute_at(dBbpw, io)
                 .store_in(MemoryType::Tile)
                 .tile(p, j, rxi, ryi, tile, tile)
                 .unroll(p)
                 .gpu_threads(j)
                 .tile_init(rxi, ryi);
-            dBb.update()
+            dBbp.update()
                 .tile(p, j, rxi, ryi, tile, tile)
-                .reorder(p, j, RVar("rhh$x"))
+                .reorder(p, j, hhi)
                 .unroll(p)
                 .gpu_threads(j)
                 .tile_init(rxi, ryi);
-            XdH.compute_at(dBb, RVar("rhh$x"))
+            dBb.compute_root()
+                .split(p, x0, x1, 8)
+                .split(j, y0, y1, 8)
+                .reorder(x1, y1, x0, y0)
+                .gpu_blocks(y0, t, g)
+                .gpu_threads(x1, y1);
+            dBb.update()
+                .split(p, x0, x1, 8)
+                .split(j, y0, y1, 8)
+                .reorder(x1, y1, hho, x0, y0)
+                .gpu_blocks(y0, t, g)
+                .gpu_threads(x1, y1);
+            XdH.compute_at(dBbp, hhi)
                 .store_in(MemoryType::Tile)
                 .tile(p, j, rxi, ryi, tile, tile)
                 .unroll(p)
@@ -873,7 +926,7 @@ private:
             // vectors span the 64 channels contiguously, and the row sum
             // finishes through atomic adds across those lanes.
             f.update()
-                .split(rd_var(f), rdo, rdi, 8)
+                .split(rd_var(f), rdo, rdi, 16)
                 .split(k, ko, ki, 64)
                 .reorder(rdi, rdo, ki, ko, t, b)
                 .atomic()
