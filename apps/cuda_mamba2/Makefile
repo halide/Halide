@@ -26,7 +26,8 @@ SCAN ?= inductive
 WMMA ?= false
 
 
-SHAPE = seq=$(SEQ) state=$(STATE) channels=$(CHANNELS) chunk=$(CHUNK) heads=$(HEADS) groups=$(GROUPS) scan=$(SCAN) wmma=$(WMMA)
+SHAPE = seq=$(SEQ) state=$(STATE) channels=$(CHANNELS) chunk=$(CHUNK) heads=$(HEADS) groups=$(GROUPS) wmma=$(WMMA)
+SHAPE_FWD = $(SHAPE) scan=$(SCAN)
 CXXFLAGS += -DSEQ=$(SEQ) -DSTATE=$(STATE) -DCHANNELS=$(CHANNELS) -DCHUNK=$(CHUNK) -DHEADS=$(HEADS) -DGROUPS=$(GROUPS)
 
 all: $(BIN)/$(HL_TARGET)/runner
@@ -44,13 +45,29 @@ $(GENERATOR_BIN)/mamba2.generator: mamba2_generator.cpp $(TERMINATE_HANDLER) $(G
 $(BIN)/%/mamba2.a: $(GENERATOR_BIN)/mamba2.generator
 	@mkdir -p $(@D)
 	$^ -g mamba2 -f mamba2 -e $(GENERATOR_OUTPUTS),conceptual_stmt_html -o $(@D) \
-	    target=$* $(SHAPE)
+	    target=$* $(SHAPE_FWD)
 
 $(BIN)/%/runner: runner.cpp $(BIN)/%/mamba2.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) -L $(HALIDE_DISTRIB_PATH)/lib -lHalide -Wl,-rpath,$(HALIDE_DISTRIB_PATH)/lib -lcuda -lcudart -ldl -lpthread -lz
 
 test: $(BIN)/$(HL_TARGET)/runner
+	$^
+
+$(GENERATOR_BIN)/mamba2_bwd.generator: mamba2_bwd_generator.cpp $(TERMINATE_HANDLER) $(GENERATOR_DEPS)
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS)
+
+$(BIN)/%/mamba2_bwd.a: $(GENERATOR_BIN)/mamba2_bwd.generator
+	@mkdir -p $(@D)
+	$^ -g mamba2_bwd -f mamba2_bwd -e $(GENERATOR_OUTPUTS),conceptual_stmt_html -o $(@D) \
+	    target=$* $(SHAPE)
+
+$(BIN)/%/runner_bwd: runner_bwd.cpp $(BIN)/%/mamba2_bwd.a
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) -L $(HALIDE_DISTRIB_PATH)/lib -lHalide -Wl,-rpath,$(HALIDE_DISTRIB_PATH)/lib -lcuda -lcudart -ldl -lpthread -lz
+
+test_bwd: $(BIN)/$(HL_TARGET)/runner_bwd
 	$^
 
 clean:
