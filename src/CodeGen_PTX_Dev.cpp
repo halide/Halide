@@ -448,6 +448,32 @@ void CodeGen_PTX_Dev::init_module() {
 }
 
 void CodeGen_PTX_Dev::visit(const Call *op) {
+    if (op->is_intrinsic(Call::prefetch)) {
+        user_assert(op->args.size() == 4 && is_const_one(op->args[2]))
+            << "Only prefetch of a single cache line is supported in CUDA kernels.\n";
+        // A hint, taken by generic address so no space qualifier is needed.
+        // L1 hides the reload latency of lines the L2 already has, which is
+        // what an operand read again next iteration wants; HL_PTX_PREFETCH_L2
+        // asks for the farther level instead, for measurement.
+        static const char *level = []() {
+            return getenv("HL_PTX_PREFETCH_L2") ? "L2" : "L1";
+        }();
+        const Load *base_load = op->args[0].as<Load>();
+        internal_assert(base_load)
+            << "A prefetch inside a CUDA kernel names its buffer with a load\n";
+        Value *base = sym_get(base_load->name);
+        Value *ptr = codegen_buffer_pointer(base, op->type, op->args[1]);
+        Value *addr = builder->CreatePtrToInt(ptr, i64_t);
+        std::string asm_text = std::string("prefetch.") + level + " [$0];";
+        llvm::FunctionType *fn_type =
+            llvm::FunctionType::get(void_t, {i64_t}, false);
+        llvm::InlineAsm *ia = llvm::InlineAsm::get(fn_type, asm_text, "l",
+                                                   /* hasSideEffects */ true);
+        builder->CreateCall(ia, {addr});
+        value = codegen(make_zero(op->type));
+        return;
+    }
+
     if (op->is_intrinsic(Call::cuda_await_copies)) {
         internal_assert(op->args.size() == 1 || op->args.size() == 2);
         auto group = as_const_int(op->args[0]);

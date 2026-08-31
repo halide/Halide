@@ -281,20 +281,24 @@ protected:
             const Expr &base_address = prefetch->args[0];
             const Expr &base_offset = prefetch->args[1];
 
-            const Variable *base = base_address.as<Variable>();
-            internal_assert(base && base->type.is_handle());
+            const Variable *base_var = base_address.as<Variable>();
+            const Load *base_load = base_address.as<Load>();
+            internal_assert((base_var && base_var->type.is_handle()) || base_load)
+                << "prefetch base is not a handle variable or a load: "
+                << base_address << "\n";
+            const string &base_name = base_var ? base_var->name : base_load->name;
 
             vector<string> index_names;
             Expr new_offset = base_offset;
             for (size_t i = max_arg_size; i < prefetch->args.size(); i += 2) {
                 // const Expr &extent = prefetch->args[i + 0];  // unused
                 const Expr &stride = prefetch->args[i + 1];
-                string index_name = "prefetch_reduce_" + base->name + "." + std::to_string((i - 1) / 2);
+                string index_name = "prefetch_reduce_" + base_name + "." + std::to_string((i - 1) / 2);
                 index_names.push_back(index_name);
                 new_offset += Variable::make(Int(32), index_name) * stride;
             }
 
-            vector<Expr> args = {base, new_offset};
+            vector<Expr> args = {base_address, new_offset};
             for (size_t i = 2; i < max_arg_size; ++i) {
                 args.push_back(prefetch->args[i]);
             }
@@ -335,8 +339,12 @@ protected:
             const Expr &base_address = prefetch->args[0];
             const Expr &base_offset = prefetch->args[1];
 
-            const Variable *base = base_address.as<Variable>();
-            internal_assert(base && base->type.is_handle());
+            const Variable *base_var = base_address.as<Variable>();
+            const Load *base_load = base_address.as<Load>();
+            internal_assert((base_var && base_var->type.is_handle()) || base_load)
+                << "prefetch base is not a handle variable or a load: "
+                << base_address << "\n";
+            const string &base_name = base_var ? base_var->name : base_load->name;
 
             int elem_size = prefetch->type.bytes();
 
@@ -348,7 +356,7 @@ protected:
                 Expr stride = prefetch->args[i + 1];
                 Expr stride_bytes = stride * elem_size;
 
-                string index_name = "prefetch_split_" + base->name + "." + std::to_string((i - 1) / 2);
+                string index_name = "prefetch_split_" + base_name + "." + std::to_string((i - 1) / 2);
                 index_names.push_back(index_name);
 
                 Expr is_negative_stride = (stride < 0);
@@ -370,7 +378,7 @@ protected:
 
             Expr new_extent = 1;
             Expr new_stride = simplify(max_byte_size / elem_size);
-            vector<Expr> args = {base, std::move(new_offset), std::move(new_extent), std::move(new_stride)};
+            vector<Expr> args = {base_address, std::move(new_offset), std::move(new_extent), std::move(new_stride)};
             stmt = Evaluate::make(Call::make(prefetch->type, Call::prefetch, args, Call::Intrinsic));
             for (size_t i = 0; i < index_names.size(); ++i) {
                 stmt = For::make(index_names[i], 0, extents[i] - 1,
@@ -458,6 +466,10 @@ Stmt reduce_prefetch_dimension(Stmt stmt, const Target &t) {
         // size at runtime. To be safe, we just use 32 bytes.
         max_dim = 1;
         max_byte_size = 32;
+    } else if (t.has_feature(Target::CUDA)) {
+        // One prefetch per 128-byte cache line.
+        max_dim = 1;
+        max_byte_size = 128;
     } else {
         max_dim = 1;
         max_byte_size = 64;

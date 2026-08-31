@@ -425,7 +425,22 @@ public:
         }
 
         Expr base_offset = mutate(flatten_args(op->name, prefetch_min, Buffer<>(), op->prefetch.param));
-        Expr base_address = Variable::make(Handle(), op->name);
+        // On the host the buffer's base is its host pointer, named by a
+        // handle variable. Inside a device loop that variable would resolve
+        // to the host-side pointer - null, for a buffer that only lives on
+        // the device - so the base is carried as a load of the buffer's
+        // first element instead, which names the buffer the way every other
+        // device access does and rides into the kernel with them. The value
+        // loaded is never used; codegen takes its address.
+        Expr base_address;
+        if (in_gpu) {
+            base_address = Load::make(op->types[0], op->name, make_zero(Int(32)),
+                                      Buffer<>(), op->prefetch.param,
+                                      const_true(), ModulusRemainder(),
+                                      /* is_streaming */ false);
+        } else {
+            base_address = Variable::make(Handle(), op->name);
+        }
         vector<Expr> args = {base_address, base_offset};
 
         auto iter = env.find(op->name);

@@ -701,6 +701,18 @@ private:
         }
         y_intra.update().split(rjy_var, rro, rri, tile);
         y_inter.update().split(rp_var, rro, rri, tile);
+        // The operands stream from global memory a tile row at a time, and
+        // the warps too few to hide the reload latency. Prefetching the next
+        // reduction step's rows while multiplying this one covers it.
+        if (getenv("PF_X")) {
+            y_intra.update().prefetch(X, rro, rro, 1);
+        }
+        if (getenv("PF_HOP")) {
+            y_inter.update().prefetch(Hop, rro, rro, 1);
+        }
+        if (getenv("PF_CM")) {
+            y_inter.update().prefetch(Cm, rro, rro, 1);
+        }
         for (Func f : {y_intra, y_inter}) {
             if (fuse_qk) {
                 f.update().reorder(d, idx, rro).gpu_threads(d).unroll(idx);
