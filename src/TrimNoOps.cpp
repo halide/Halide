@@ -165,6 +165,11 @@ class IsNoOp : public IRVisitor {
         condition = const_false();
     }
 
+    void visit(const AssertStmt *op) override {
+        // An assert alone does not make an iteration worth keeping. If the
+        // work it checks the bounds for is a no-op, it goes with it.
+    }
+
     template<typename LetOrLetStmt>
     void visit_let(const LetOrLetStmt *op) {
         IRVisitor::visit(op);

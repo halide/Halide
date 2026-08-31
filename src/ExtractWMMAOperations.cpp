@@ -630,6 +630,13 @@ class ExtractWMMAOperations : public IRMutator {
     // matrix, so that uses of them must be restricted too.
     Scope<> matrix_lets;
 
+    // The conditions of the enclosing if statements. A reduction whose bound
+    // depends on a pure loop variable lowers to a guarded body, and bounds
+    // inference refines the regions inside the guard with its condition, so
+    // deciding whether an offset into a fragment is zero can take knowing
+    // that the guard holds.
+    vector<Expr> facts;
+
     // Whether we are rewriting the value of a store to a fragment. A read of a
     // fragment that holds a value spread along an axis of the tile only means
     // something there, where to_fragment can match it against the axis the
@@ -698,6 +705,129 @@ class ExtractWMMAOperations : public IRMutator {
         return result;
     }
 
+    // The bounds a fact implies for the variables it compares, layered over
+    // the given scope. Only the comparison shapes the guards produce are
+    // handled; anything else implies nothing.
+    void refine_bounds_with_fact(const Expr &f, Scope<Interval> &scope) {
+        if (const And *op = f.as<And>()) {
+            refine_bounds_with_fact(op->a, scope);
+            refine_bounds_with_fact(op->b, scope);
+            return;
+        }
+        Expr a, b;  // the fact as a <= b
+        if (const LE *le = f.as<LE>()) {
+            a = le->a;
+            b = le->b;
+        } else if (const LT *lt = f.as<LT>()) {
+            if (!lt->a.type().is_int()) {
+                return;
+            }
+            a = lt->a;
+            b = lt->b - 1;
+        } else if (const EQ *eq = f.as<EQ>()) {
+            for (const Expr &side : {eq->a, eq->b}) {
+                if (const Variable *v = side.as<Variable>()) {
+                    scope.push(v->name,
+                               Interval::single_point(side.same_as(eq->a) ? eq->b : eq->a));
+                }
+            }
+            return;
+        } else {
+            return;
+        }
+        if (const Variable *v = a.as<Variable>()) {
+            Interval i = scope.contains(v->name) ? scope.get(v->name) : Interval::everything();
+            i.max = simplify(i.has_upper_bound() ? min(i.max, b) : b);
+            scope.push(v->name, i);
+        }
+        if (const Variable *v = b.as<Variable>()) {
+            Interval i = scope.contains(v->name) ? scope.get(v->name) : Interval::everything();
+            i.min = simplify(i.has_lower_bound() ? max(i.min, a) : a);
+            scope.push(v->name, i);
+        }
+    }
+
+    // Resolve the selects, mins, and maxes in an index that the conditions
+    // of the enclosing ifs settle. Bounds refinement under a guarded access
+    // leaves offsets like max(i, r) - i that are only provably zero given
+    // that the guard (r <= i, say) holds.
+    Expr apply_facts(const Expr &e) {
+        if (facts.empty()) {
+            return e;
+        }
+        Expr all = const_true();
+        for (const Expr &f : facts) {
+            all = all && index_within_thread(without_lets(f));
+        }
+        all = simplify(all, loop_bounds);
+        if (can_prove(!all, loop_bounds)) {
+            // The guards exclude the thread the analysis runs as, so their
+            // conditions say nothing consistent about the index. Leave it
+            // alone rather than resolving its branches arbitrarily.
+            return e;
+        }
+        Scope<Interval> refined;
+        refined.set_containing_scope(&loop_bounds);
+        refine_bounds_with_fact(all, refined);
+        class ApplyFacts : public IRMutator {
+            using IRMutator::visit;
+            const Expr &fact;
+            const Scope<Interval> &bounds;
+
+            bool provably_false(const Expr &c) {
+                return can_prove(!(fact && c), bounds);
+            }
+
+            Expr visit(const Select *op) override {
+                if (provably_false(op->condition)) {
+                    return mutate(op->false_value);
+                }
+                if (provably_false(!op->condition)) {
+                    return mutate(op->true_value);
+                }
+                return IRMutator::visit(op);
+            }
+
+            Expr visit(const Max *op) override {
+                Expr a = mutate(op->a), b = mutate(op->b);
+                if (provably_false(a < b)) {
+                    return a;
+                }
+                if (provably_false(b < a)) {
+                    return b;
+                }
+                return Max::make(std::move(a), std::move(b));
+            }
+
+            Expr visit(const Min *op) override {
+                Expr a = mutate(op->a), b = mutate(op->b);
+                if (provably_false(a < b)) {
+                    return b;
+                }
+                if (provably_false(b < a)) {
+                    return a;
+                }
+                return Min::make(std::move(a), std::move(b));
+            }
+
+        public:
+            ApplyFacts(const Expr &fact, const Scope<Interval> &bounds)
+                : fact(fact), bounds(bounds) {
+            }
+        } apply(all, refined);
+        Expr result = apply(e);
+        // simplify only uses variable bounds to settle comparisons, so a
+        // variable the facts pin to a point has to be substituted by hand.
+        for (auto it = refined.cbegin(); it != refined.cend(); ++it) {
+            const Interval &i = it.value();
+            if (i.is_single_point() ||
+                (i.is_bounded() && can_prove(i.min == i.max))) {
+                result = substitute(it.name(), i.min, result);
+            }
+        }
+        return simplify(result, refined);
+    }
+
     // An index with the lets substituted back in and simplified knowing what
     // the enclosing loops bound its variables to, which is what settles
     // questions like whether an offset into a fragment is really zero. Likely
@@ -705,8 +835,9 @@ class ExtractWMMAOperations : public IRMutator {
     // anything about the value, and loop partitioning has not consumed them
     // yet, so they only get in the way here.
     Expr index_for_analysis(const Expr &index) {
-        return simplify(remove_likelies(index_within_thread(without_lets(index))),
-                        loop_bounds);
+        Expr idx = substitute_in_all_lets(index);
+        idx = remove_likelies(index_within_thread(without_lets(idx)));
+        return simplify(apply_facts(idx), loop_bounds);
     }
 
     Stmt visit(const LetStmt *op) override {
@@ -714,6 +845,26 @@ class ExtractWMMAOperations : public IRMutator {
         Stmt s = IRMutator::visit(op);
         let_values.pop_back();
         return s;
+    }
+
+    Stmt visit(const IfThenElse *op) override {
+        facts.push_back(op->condition);
+        Stmt then_case = mutate(op->then_case);
+        facts.pop_back();
+        Stmt else_case = op->else_case;
+        if (else_case.defined()) {
+            facts.push_back(simplify(!op->condition));
+            else_case = mutate(op->else_case);
+            facts.pop_back();
+        }
+        Expr condition = mutate(op->condition);
+        if (condition.same_as(op->condition) &&
+            then_case.same_as(op->then_case) &&
+            else_case.same_as(op->else_case)) {
+            return op;
+        }
+        return IfThenElse::make(std::move(condition), std::move(then_case),
+                                std::move(else_case));
     }
 
     string subtile_name(Fragment *f, const Expr &index) {

@@ -690,7 +690,8 @@ int get_subtile(const Expr &index, const std::string &description,
         mr.strides.back() = mr.base - other.base;
         if (!can_prove(mr.alias_free())) {
             user_error << "Failed to prove access to " << description << " does not "
-                       << "partially overlap another distinct access: " << index;
+                       << "partially overlap another distinct access: " << index
+                       << "\n  base: " << mr.base << "\n  other base: " << other.base;
         }
     }
 
