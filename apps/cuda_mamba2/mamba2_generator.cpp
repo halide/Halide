@@ -541,27 +541,46 @@ private:
             Func xs = Func(X).in(chunk_state);
             Var so("so"), si("si"), fu("fu"), fo("fo"), fi("fi"), w("w"), l("l");
             xs.compute_at(chunk_state, RVar("rjo"))
-                .store_in(MemoryType::GPUSharedAsync);
+                .store_in(MemoryType::GPUSharedAsync)
+                // A row of the panel is a power of two wide, so without a
+                // skew the rows land on the same banks and the operand loads
+                // conflict almost every time.
+                .align_storage(xs.args()[0], (int)channels + 8);
             if (const char *pipe = getenv("PIPE")) {
                 xs.store_at(Hop, hti)
                     .slide(chunk_state, RVar("rjo"), atoi(pipe));
                 if (const char *fold = getenv("FOLD")) {
                     xs.fold_storage(xs.args()[1], atoi(fold));
                 }
+                // The sliver the pipeline fills each step is one slice, so
+                // nothing in the fill's loop structure may straddle a slice
+                // boundary: sliding can only clip whole iterations of the
+                // loops it finds, and a fused loop whose rounds cross the
+                // boundary clips outward to cover two slices. Keep a loop
+                // over slices outermost - one iteration per step - and deal
+                // a single slice's runs to the threads inside it.
+                const int slice_rows =
+                    (getenv("SLICE_TILES") ? atoi(getenv("SLICE_TILES")) : 4) * tile;
+                Var sl("sl"), sw("sw");
+                xs.split(xs.args()[1], sl, sw, slice_rows, TailStrategy::GuardWithIf)
+                    .split(xs.args()[0], so, si, 8)
+                    .fuse(so, sw, fu)
+                    .split(fu, fo, fi, 32 * ((int)state / tile))
+                    .split(fi, w, l, 32)
+                    .reorder(si, l, w, fo, sl)
+                    .vectorize(si)
+                    .gpu_lanes(l)
+                    .gpu_threads(w);
+            } else {
+                xs.split(xs.args()[0], so, si, 8)
+                    .fuse(so, xs.args()[1], fu)
+                    .split(fu, fo, fi, 32 * ((int)state / tile))
+                    .split(fi, w, l, 32)
+                    .reorder(si, l, w, fo)
+                    .vectorize(si)
+                    .gpu_lanes(l)
+                    .gpu_threads(w);
             }
-            xs
-                // A row of the panel is a power of two wide, so without a
-                // skew the rows land on the same banks and the operand loads
-                // conflict almost every time.
-                .align_storage(xs.args()[0], (int)channels + 8)
-                .split(xs.args()[0], so, si, 8)
-                .fuse(so, xs.args()[1], fu)
-                .split(fu, fo, fi, 32 * ((int)state / tile))
-                .split(fi, w, l, 32)
-                .reorder(si, l, w, fo)
-                .vectorize(si)
-                .gpu_lanes(l)
-                .gpu_threads(w);
         }
 
         // The recurrence over chunks. The chunks have to be walked in order,
