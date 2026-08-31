@@ -561,6 +561,7 @@ private:
             f.update().tile(d, j, rxi, ryi, tile, tile);
         }
         dxi.update().split(riy_var(dxi), rro, rri, tile);
+        dxi.update().prefetch(dY, rro, rro, std::max(1, 3 * ((int)chunk / tile) / 4));
         dxe.update().split(rp_var2(dxe), rro, rri, tile);
         dxi.update()
             .split(j, iw, ii2, idx_per_warp)
@@ -626,31 +627,59 @@ private:
         // the inter-chunk halves accumulate a scaled state multiply the same
         // way. All of the state's tiles ride in each warp, unrolled.
         {
-            RVar rcjo("rcjo"), rcji("rcji");
-            Func dCaw = dCa.in();
-            dCaw.compute_root()
+            RVar rcjo("rcjo"), rcji("rcji"), hho("hho"), hhi("hhi");
+            Var hb("hb"), tf("tf");
+            const int hpg = (int)heads / (int)groups;
+            // The sweep over a group's heads is split into partials, one per
+            // block, or the group-summed kernels have too few blocks to fill
+            // the card; a small reduction folds the partials afterwards.
+            dCa.update().split(RVar("rch$y"), hho, hhi, std::max(1, hpg / 8));
+            Func dCap = dCa.update().rfactor(hho, hb);
+            Func dCapw = dCap.in();
+            dCapw.compute_root()
                 .tile(p, i, rxi, ryi, tile, tile)
                 .split(i, io, ii, pos_tiles)
-                .reorder(rxi, ryi, p, ii, io, t, g)
+                .fuse(t, hb, tf)
+                .reorder(rxi, ryi, p, ii, io, tf, g)
                 .unroll(p)
                 .unroll(ii)
-                .gpu_blocks(io, t, g)
+                .gpu_blocks(io, tf, g)
                 .gpu_threads(ii)
                 .tile_store(rxi, ryi);
-            dCa.compute_at(dCaw, io)
+            dCap.compute_at(dCapw, io)
                 .store_in(MemoryType::Tile)
                 .tile(p, i, rxi, ryi, tile, tile)
                 .unroll(p)
                 .gpu_threads(i)
                 .tile_init(rxi, ryi);
-            dCa.update()
+            dCap.update()
                 .tile(p, i, rxi, ryi, tile, tile)
                 .split(RVar("rch$x"), rcjo, rcji, tile)
-                .reorder(p, rcjo, i, RVar("rch$y"))
+                .reorder(p, hhi, rcjo, i)
                 .unroll(p)
                 .gpu_threads(i)
                 .tile_matmul(rcji, rxi, ryi);
-            xy.compute_at(dCa, rcjo)
+            // The B side of the matmul is per group, not per head, so its
+            // fragments ride above the sweep over the heads.
+            Func Bmf = Func(Bm).in(dCap);
+            Bmf.compute_at(dCap, rcjo)
+                .store_in(MemoryType::Tile)
+                .tile(Bmf.args()[0], Bmf.args()[1], rxi, ryi, tile, tile)
+                .unroll(Bmf.args()[0])
+                .tile_load(rxi, ryi);
+            dCa.compute_root()
+                .split(p, x0, x1, 8)
+                .split(i, y0, y1, 8)
+                .reorder(x1, y1, x0, y0)
+                .gpu_blocks(y0, t, g)
+                .gpu_threads(x1, y1);
+            dCa.update()
+                .split(p, x0, x1, 8)
+                .split(i, y0, y1, 8)
+                .reorder(x1, y1, hho, x0, y0)
+                .gpu_blocks(y0, t, g)
+                .gpu_threads(x1, y1);
+            xy.compute_at(dCap, hhi)
                 .store_in(MemoryType::Tile)
                 .bound_extent(j, tile)
                 .bound_storage(j, tile)
@@ -663,7 +692,7 @@ private:
                 .split(rd_var(xy), rro, rri, tile)
                 .reorder(j, i, rro)
                 .tile_matmul(rri, rxi, ryi);
-            scoreT.compute_at(dCa, rcjo)
+            scoreT.compute_at(dCap, hhi)
                 .store_in(MemoryType::Tile)
                 .bound_extent(j, tile)
                 .bound_storage(j, tile)
@@ -673,31 +702,54 @@ private:
                 .tile_init(rxi, ryi);
         }
         {
-            RVar rbio("rbio"), rbii("rbii");
-            Func dBaw = dBa.in();
-            dBaw.compute_root()
+            RVar rbio("rbio"), rbii("rbii"), hho("hho"), hhi("hhi");
+            Var hb("hb"), tf("tf");
+            const int hpg = (int)heads / (int)groups;
+            dBa.update().split(RVar("rbh$y"), hho, hhi, std::max(1, hpg / 8));
+            Func dBap = dBa.update().rfactor(hho, hb);
+            Func dBapw = dBap.in();
+            dBapw.compute_root()
                 .tile(p, j, rxi, ryi, tile, tile)
                 .split(j, io, ii, pos_tiles)
-                .reorder(rxi, ryi, p, ii, io, t, g)
+                .fuse(t, hb, tf)
+                .reorder(rxi, ryi, p, ii, io, tf, g)
                 .unroll(p)
                 .unroll(ii)
-                .gpu_blocks(io, t, g)
+                .gpu_blocks(io, tf, g)
                 .gpu_threads(ii)
                 .tile_store(rxi, ryi);
-            dBa.compute_at(dBaw, io)
+            dBap.compute_at(dBapw, io)
                 .store_in(MemoryType::Tile)
                 .tile(p, j, rxi, ryi, tile, tile)
                 .unroll(p)
                 .gpu_threads(j)
                 .tile_init(rxi, ryi);
-            dBa.update()
+            dBap.update()
                 .tile(p, j, rxi, ryi, tile, tile)
                 .split(RVar("rbh$x"), rbio, rbii, tile)
-                .reorder(p, rbio, j, RVar("rbh$y"))
+                .reorder(p, hhi, rbio, j)
                 .unroll(p)
                 .gpu_threads(j)
                 .tile_matmul(rbii, rxi, ryi);
-            xy2.compute_at(dBa, rbio)
+            Func Cmf = Func(Cm).in(dBap);
+            Cmf.compute_at(dBap, rbio)
+                .store_in(MemoryType::Tile)
+                .tile(Cmf.args()[0], Cmf.args()[1], rxi, ryi, tile, tile)
+                .unroll(Cmf.args()[0])
+                .tile_load(rxi, ryi);
+            dBa.compute_root()
+                .split(p, x0, x1, 8)
+                .split(j, y0, y1, 8)
+                .reorder(x1, y1, x0, y0)
+                .gpu_blocks(y0, t, g)
+                .gpu_threads(x1, y1);
+            dBa.update()
+                .split(p, x0, x1, 8)
+                .split(j, y0, y1, 8)
+                .reorder(x1, y1, hho, x0, y0)
+                .gpu_blocks(y0, t, g)
+                .gpu_threads(x1, y1);
+            xy2.compute_at(dBap, hhi)
                 .store_in(MemoryType::Tile)
                 .bound_extent(i, tile)
                 .bound_storage(i, tile)
@@ -710,7 +762,7 @@ private:
                 .split(rd_var(xy2), rro, rri, tile)
                 .reorder(i, j, rro)
                 .tile_matmul(rri, rxi, ryi);
-            scoreT2.compute_at(dBa, rbio)
+            scoreT2.compute_at(dBap, hhi)
                 .store_in(MemoryType::Tile)
                 .bound_extent(i, tile)
                 .bound_storage(i, tile)
@@ -805,8 +857,15 @@ private:
                 .gpu_threads(x1, y1);
         }
         for (Func f : {dYY, XdX}) {
+            RVar rdo("rdo"), rdi("rdi");
             f.compute_root().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
-            f.update().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
+            f.update()
+                .split(rd_var(f), rdo, rdi, 8)
+                .reorder(rdi, rdo, k, t, b)
+                .atomic()
+                .vectorize(rdi)
+                .gpu_blocks(t, b)
+                .gpu_threads(k);
         }
         ddAcs.compute_root().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
         csum.compute_root().gpu_blocks(b).gpu_threads(t);
@@ -927,8 +986,15 @@ private:
 
         // The row dots and small reductions.
         for (Func f : {dYY, XdX}) {
+            RVar rdo("rdo"), rdi("rdi");
             f.compute_root().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
-            f.update().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
+            f.update()
+                .split(rd_var(f), rdo, rdi, 8)
+                .reorder(rdi, rdo, k, t, b)
+                .atomic()
+                .vectorize(rdi)
+                .gpu_blocks(t, b)
+                .gpu_threads(k);
         }
         ddAcs.compute_root().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
         csum.compute_root().gpu_blocks(b).gpu_threads(t);
