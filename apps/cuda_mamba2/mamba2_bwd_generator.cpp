@@ -447,6 +447,7 @@ private:
             .split(RVar("rji"), rro, rri, tile)
             .reorder(d, rro, p, RVar("rjo"))
             .unroll(d)
+            .unroll(rro)
             .gpu_threads(p)
             .tile_matmul(rri, rxi, ryi);
         {
@@ -514,6 +515,7 @@ private:
             .split(RVar("rii"), rro, rri, tile)
             .reorder(d, rro, p, RVar("rio"))
             .unroll(d)
+            .unroll(rro)
             .gpu_threads(p)
             .tile_matmul(rri, rxi, ryi);
         {
