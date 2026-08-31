@@ -435,6 +435,13 @@ int main(int argc, char **argv) {
         // it's exactly 3 wide. unroll() requires a compile-time-constant
         // extent, so it fails outright, before the question of whether the
         // muxes fold even comes up.
+        //
+        // Compiling this schedule throws a Halide::CompileError. Halide can
+        // be built with error reporting done via abort() instead of C++
+        // exceptions (HALIDE_WITH_EXCEPTIONS undefined, e.g. the top-level
+        // Makefile's default), so only attempt to catch it when exceptions
+        // are actually the reporting mechanism in this build.
+#ifdef HALIDE_WITH_EXCEPTIONS
         bool got_expected_error = false;
         try {
             f.compile_to_module({offset_x, offset_y});
@@ -446,6 +453,9 @@ int main(int argc, char **argv) {
             return 1;
         }
         printf("As expected, compute_at without a fixed extent can't be unrolled.\n");
+#else
+        printf("Skipping the expected-compile-failure demonstration (built without exceptions).\n");
+#endif
 
         // Fixing just the crash isn't the same as fixing the muxes. Pin the
         // computed and allocated size of each tile with bound_extent() and
