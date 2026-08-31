@@ -18,8 +18,8 @@
 // DYLD_LIBRARY_PATH=<path/to/lib> ./lesson_25
 
 #include "Halide.h"
+#include <cstdio>
 #include <iostream>
-#include <stdio.h>
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -33,6 +33,7 @@ namespace {
 // so this lesson can show what each schedule accomplishes, rather than
 // just assert it.
 class Counter : public IRVisitor {
+protected:
     using IRVisitor::visit;
     void visit(const Call *op) override {
         IRVisitor::visit(op);
@@ -75,6 +76,7 @@ Counter count(const Module &m) {
 // thing to focus on is the shape of the code inside, not resolving every
 // hoisted temporary.
 class FindProducer : public IRVisitor {
+protected:
     using IRVisitor::visit;
 
     void visit(const ProducerConsumer *p) override {
@@ -108,7 +110,7 @@ Stmt find_producer(const Module &m, const std::string &name) {
 
 }  // namespace
 
-int main(int argc, char **argv) {
+int main() {
 
     // Part 1: what does "aligned" actually change?
     //
@@ -188,11 +190,11 @@ int main(int argc, char **argv) {
         // their own, so the partitioner peels exactly one element off each
         // end, leaving a steady-state loop over x in [1, 6]: three
         // unrolled-by-2 iterations, one more than the unaligned version.
-        if (c_plain.for_count != 1 || !is_const(c_plain.extents[0], 2)) {
+        if (c_plain.for_count != 1 || !is_const(c_plain.extents.at(0), 2)) {
             printf("Expected one steady-state loop of extent 2 without alignment\n");
             return 1;
         }
-        if (c_aligned.for_count != 1 || !is_const(c_aligned.extents[0], 3)) {
+        if (c_aligned.for_count != 1 || !is_const(c_aligned.extents.at(0), 3)) {
             printf("Expected one steady-state loop of extent 3 with alignment\n");
             return 1;
         }
@@ -202,8 +204,15 @@ int main(int argc, char **argv) {
         // result.
         Buffer<int> out = aligned.realize({8});
         for (int i = 0; i < 8; i++) {
-            int expected = (i <= 0) ? 100 : (i < 7) ? i % 2 :
-                                                       200;
+            int expected = [&] {
+                if (i <= 0) {
+                    return 100;
+                }
+                if (i < 7) {
+                    return i % 2;
+                }
+                return 200;
+            }();
             if (out(i) != expected) {
                 printf("out(%d) = %d instead of %d\n", i, out(i), expected);
                 return 1;
@@ -295,10 +304,18 @@ int main(int argc, char **argv) {
             Buffer<int> im = f.realize({32});
             for (int x = 0; x < 32; x++) {
                 int selector = (4 + x - o) % 4;
-                int expected = (selector == 0) ? x :
-                               (selector == 1) ? x * x :
-                               (selector == 2) ? 2 * x :
-                                                  -x * (x + 1);
+                int expected = [&] {
+                    if (selector == 0) {
+                        return x;
+                    }
+                    if (selector == 1) {
+                        return x * x;
+                    }
+                    if (selector == 2) {
+                        return 2 * x;
+                    }
+                    return -x * (x + 1);
+                }();
                 if (im(x) != expected) {
                     printf("im(%d) = %d instead of %d (offset: %d)\n", x, im(x), expected, o);
                     return 1;
@@ -396,6 +413,7 @@ int main(int argc, char **argv) {
         offset_y.set_range(0, 2);
         Expr selector = 3 * ((y - offset_y) % 3) + (x - offset_x) % 3;
         std::vector<Expr> ways;
+        ways.reserve(9);
         for (int i = 0; i < 9; i++) {
             ways.push_back(x * (i % 3) * 3 + y * (i % 3));
         }
@@ -521,6 +539,7 @@ int main(int argc, char **argv) {
         offset_y.set_range(0, 2);
         Expr selector = 3 * ((y - offset_y) % 3) + (x - offset_x) % 3;
         std::vector<Expr> ways;
+        ways.reserve(9);
         for (int i = 0; i < 9; i++) {
             ways.push_back(x * (i % 3) * 3 + y * (i % 3));
         }
