@@ -508,7 +508,8 @@ private:
         // loop over warps so the block fills the stage together.
         chunk_state.update()
             .tile(d, p, rxi, ryi, tile, tile)
-            .split(rj_var, RVar("rjo"), RVar("rji"), 4 * tile)
+            .split(rj_var, RVar("rjo"), RVar("rji"),
+                   (getenv("SLICE_TILES") ? atoi(getenv("SLICE_TILES")) : 4) * tile)
             .split(RVar("rji"), rro, rri, tile)
             .reorder(d, rro, p, RVar("rjo"))
             .unroll(d)
@@ -540,7 +541,15 @@ private:
             Func xs = Func(X).in(chunk_state);
             Var so("so"), si("si"), fu("fu"), fo("fo"), fi("fi"), w("w"), l("l");
             xs.compute_at(chunk_state, RVar("rjo"))
-                .store_in(MemoryType::GPUSharedAsync)
+                .store_in(MemoryType::GPUSharedAsync);
+            if (const char *pipe = getenv("PIPE")) {
+                xs.store_at(Hop, hti)
+                    .slide(chunk_state, RVar("rjo"), atoi(pipe));
+                if (const char *fold = getenv("FOLD")) {
+                    xs.fold_storage(xs.args()[1], atoi(fold));
+                }
+            }
+            xs
                 // A row of the panel is a power of two wide, so without a
                 // skew the rows land on the same banks and the operand loads
                 // conflict almost every time.

@@ -328,19 +328,33 @@ bool div_or_mod_impl(MultiRamp *self, const Expr &k_expr, bool is_div) {
     int64_t k = *ck;
     Type t = self->base.type();
 
-    // Aligned-base assumption: require base to be a known multiple of k.
-    int64_t b_mod = 0;
-    if (!reduce_expr_modulo(self->base, k, &b_mod) || b_mod != 0) {
-        return false;
+    // How much of a k-bucket the base is known to sit at the start of. A
+    // base that is a multiple of k starts a bucket; one only known to be a
+    // multiple of a divisor g of k lands at one of the marks inside it,
+    // which leaves g-1 of room to the next mark rather than k-1. Everything
+    // is a multiple of one, so g is at least that, with no room at all.
+    int64_t g = 1;
+    for (int64_t cand = k; cand > 1; cand--) {
+        int64_t b_mod = 0;
+        if (k % cand == 0 &&
+            reduce_expr_modulo(self->base, cand, &b_mod) && b_mod == 0) {
+            g = cand;
+            break;
+        }
     }
 
     MultiRamp result;
-    result.base = is_div ? simplify(self->base / (int)k) : make_zero(t);
+    // The budget below keeps every lane inside [base rounded down to a
+    // multiple of k, +k), so the quotient is the base's for every lane and
+    // the remainder is the base's plus the lane's offset.
+    result.base = is_div ? simplify(self->base / (int)k) :
+                  g == k ? make_zero(t) :
+                           simplify(self->base % (int)k);
 
-    // Residual budget: how much room is left inside the single k-bucket
-    // starting at the base. Starts at k-1 and shrinks as each non-pure-carry
-    // dim spends r·(lanes-1) of it.
-    int64_t budget = k - 1;
+    // Residual budget: how much room is left between the base and the next
+    // multiple of k. Shrinks as each non-pure-carry dim spends r·(lanes-1)
+    // of it.
+    int64_t budget = g - 1;
 
     for (size_t j = 0; j < self->strides.size(); j++) {
         const Expr &s = self->strides[j];
