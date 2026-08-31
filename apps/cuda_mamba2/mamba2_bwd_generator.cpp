@@ -168,22 +168,35 @@ public:
         // ---------------- dX ----------------
 
         // The forward's score, arguments ordered for a reduction over the
-        // output positions instead of the inputs.
+        // output positions instead of the inputs. Its raw scores come from a
+        // transposed copy of qk, so the tile loads read them in the
+        // orientation the reduction wants.
+        Func qk2("qk2");
+        qk2(i, j, t, g) = qk(j, i, t, g);
+        // The mask multiplies rather than selects, so the raw scores are
+        // read unconditionally and the masked-off region doesn't clamp the
+        // bounds of what feeds the fragment.
         Func score2("score2");
-        score2(i, j, t, b) =
-            select(j <= i,
-                   qk(j, i, t, group_of(b)) * decay(j, i, t, b) *
-                       Delta(t * L + j, b),
-                   0.f);
+        score2(i, j, t, b) = qk2(i, j, t, group_of(b)) * decay(j, i, t, b) *
+                             Delta(t * L + j, b) *
+                             select(j <= i, 1.f, 0.f);
         Func score2_h("score2_h");
         score2_h(i, j, t, b) = cast<float16_t>(score2(i, j, t, b));
 
+        // The reduction runs over the positions at or after j, which is a
+        // suffix - walked as a prefix from the far end, a tile at a time
+        // with the order inside a tile kept forward, so the mask is an
+        // upper bound on the loop the way the machinery likes.
+        // TODO: prune the walk to the unmasked tiles. Written as a where
+        // clause the mask's refinement clamps the fragment regions from
+        // below, which the subtile analysis cannot see through; the full
+        // walk multiplies by zeros instead.
         RDom riy(0, L, "riy");
-        riy.where(riy / 16 >= j / 16);
+        Expr rpos = (L - 16) - (riy / 16) * 16 + (riy % 16);
         Func dxi("dxi");
         dxi(d, j, t, b) = 0.f;
-        dxi(d, j, t, b) += cast<float>(score2_h(riy, j, t, b)) *
-                           cast<float>(dY(d, riy, t, b));
+        dxi(d, j, t, b) += cast<float>(score2_h(rpos, j, t, b)) *
+                           cast<float>(dY(d, rpos, t, b));
 
         Func dxe("dxe");
         dxe(d, j, t, b) = 0.f;
@@ -318,11 +331,21 @@ public:
 
         try {
             if (!using_autoscheduler()) {
-                schedule_simple(cumdelta, cdpre, qk, chunk_state, H, Hop,
-                                dG, dHnr, dHopr, dxi, dxe, xy, scoreT_h, dYH,
-                                dCa, dCb, xy2, scoreT2_h, XdH, dBa, dBb,
-                                dYY, XdX, ddAcs, csum, sfxcr, sfxr, pdA,
-                                d, p, k, i, j, t, b, g, tt, kk);
+                if (wmma) {
+                    schedule_wmma(cumdelta, cdpre, qk, qk2, Bmdf, Bmdf2,
+                                  chunk_state,
+                                  H, Hop, Cdf, dG, dHnr, dHopr, score2, score2_h,
+                                  dxi, dxe, dxs, xy, scoreT, scoreT_h, dYH,
+                                  dCa, dCb, xy2, scoreT2, scoreT2_h, XdH, dBa,
+                                  dBb, dYY, XdX, ddAcs, csum, sfxcr, sfxr, pdA,
+                                  d, p, k, i, j, t, b, g, tt, kk);
+                } else {
+                    schedule_simple(cumdelta, cdpre, qk, chunk_state, H, Hop,
+                                    dG, dHnr, dHopr, dxi, dxe, xy, scoreT_h, dYH,
+                                    dCa, dCb, xy2, scoreT2_h, XdH, dBa, dBb,
+                                    dYY, XdX, ddAcs, csum, sfxcr, sfxr, pdA,
+                                    d, p, k, i, j, t, b, g, tt, kk);
+                }
             }
         } catch (Halide::CompileError &e) {
             std::cerr << e.what() << "\n";
@@ -330,6 +353,351 @@ public:
     }
 
 private:
+    static constexpr int tile = 16;
+
+    // The forward's tensor core structures, mirrored. The fused walks carry
+    // their state in registers and compute each chunk's contribution on the
+    // tensor cores; the dX kernel is the forward's output kernel with the
+    // causal mask transposed; the group-summed gradients walk the heads of
+    // a group serially inside their blocks, accumulating on fragments.
+    void schedule_wmma(Func cumdelta, Func cdpre, Func qk, Func qk2,
+                       Func Bmdf, Func Bmdf2, Func chunk_state, Func H, Func Hop,
+                       Func Cdf, Func dG, Func dHnr, Func dHopr, Func score2,
+                       Func score2_h, Func dxi, Func dxe, Func dxs, Func xy,
+                       Func scoreT, Func scoreT_h, Func dYH, Func dCa,
+                       Func dCb, Func xy2, Func scoreT2, Func scoreT2_h,
+                       Func XdH, Func dBa, Func dBb, Func dYY, Func XdX,
+                       Func ddAcs, Func csum, Func sfxcr, Func sfxr, Func pdA,
+                       Var d, Var p, Var k, Var i, Var j, Var t, Var b,
+                       Var g, Var tt, Var kk) {
+        const int L = chunk;
+        const int nt = (int)seq / L;
+
+        Var xo("xo"), xi_("xi"), rxi("rxi"), ryi("ryi");
+        Var io("io"), ii("ii"), iw("iw"), ii2("ii2"), jo("jo"), ji("ji");
+        RVar rro("rro"), rri("rri");
+        Var x0("x0"), x1("x1"), y0("y0"), y1("y1");
+
+        // ---- The scans ----
+        cumdelta.compute_root().align_bounds(k, 2).align_storage(k, 2)
+            .reorder(k, t, b).gpu_blocks(b).gpu_threads(t);
+        cdpre.compute_root().reorder(t, b).gpu_blocks(b);
+        sfxcr.compute_root().reorder(tt, b).gpu_blocks(b);
+        sfxr.compute_root().reorder(kk, t, b).gpu_blocks(b).gpu_threads(t);
+
+        // ---- qk, once per group, spread over blocks ----
+        Func qk_at = qk.in();
+        qk_at.compute_root()
+            .tile(j, i, rxi, ryi, tile, tile)
+            .split(j, jo, ji, 4)
+            .reorder(rxi, ryi, ji, i, jo, t, g)
+            .unroll(ji)
+            .gpu_blocks(jo, t, g)
+            .gpu_threads(i)
+            .tile_store(rxi, ryi);
+        qk.compute_at(qk_at, jo).store_in(MemoryType::Tile).unroll(t);
+        qk.update().unroll(t);
+        qk.tile(j, i, rxi, ryi, tile, tile)
+            .unroll(j)
+            .gpu_threads(i)
+            .tile_init(rxi, ryi);
+        qk.update()
+            .tile(j, i, rxi, ryi, tile, tile)
+            .split(rp_var(qk), rro, rri, tile)
+            .reorder(j, i, rro)
+            .unroll(j)
+            .gpu_threads(i)
+            .tile_matmul(rri, rxi, ryi);
+
+        // ---- The forward state walk, fused, copied from the forward ----
+        Var hto("hto"), hti("hti"), hw("hw"), hp("hp"), ddo("ddo"), ddi("ddi");
+        Func cs = chunk_state.in();
+        chunk_state.compute_at(Hop, hti).unroll(t);
+        chunk_state.update().unroll(t);
+        cs.compute_at(Hop, hti)
+            .store_in(MemoryType::GPUShared)
+            .unroll(cs.args()[2])
+            .tile(d, p, rxi, ryi, tile, tile)
+            .unroll(d)
+            .gpu_threads(p)
+            .tile_store(rxi, ryi);
+        chunk_state
+            .store_in(MemoryType::Tile)
+            .tile(d, p, rxi, ryi, tile, tile)
+            .unroll(d)
+            .gpu_threads(p)
+            .tile_init(rxi, ryi);
+        chunk_state.update()
+            .tile(d, p, rxi, ryi, tile, tile)
+            .split(rj_var(chunk_state), RVar("rjo"), RVar("rji"), 4 * tile)
+            .split(RVar("rji"), rro, rri, tile)
+            .reorder(d, rro, p, RVar("rjo"))
+            .unroll(d)
+            .gpu_threads(p)
+            .tile_matmul(rri, rxi, ryi);
+        {
+            Func Bml = Func(Bm).in(Bmdf);
+            Bml.compute_at(chunk_state, rro)
+                .store_in(MemoryType::Tile)
+                .reorder_storage(Bml.args()[1], Bml.args()[0], Bml.args()[2])
+                .tile(Bml.args()[0], Bml.args()[1], rxi, ryi, tile, tile)
+                .tile_load(rxi, ryi);
+            Bmdf.compute_at(chunk_state, rro)
+                .store_in(MemoryType::Tile)
+                .tile(j, p, rxi, ryi, tile, tile)
+                .tile_init(rxi, ryi);
+            Func xs = Func(X).in(chunk_state);
+            Var so("so"), si("si"), fu("fu"), fo("fo"), fi("fi"), w("w"), l("l");
+            xs.compute_at(chunk_state, RVar("rjo"))
+                .store_in(MemoryType::GPUSharedAsync)
+                .align_storage(xs.args()[0], (int)channels + 8)
+                .split(xs.args()[0], so, si, 8)
+                .fuse(so, xs.args()[1], fu)
+                .split(fu, fo, fi, 32 * ((int)state / tile))
+                .split(fi, w, l, 32)
+                .reorder(si, l, w, fo)
+                .vectorize(si)
+                .gpu_lanes(l)
+                .gpu_threads(w);
+        }
+        Hop.compute_root()
+            .split(t, hto, hti, 1)
+            .split(d, ddo, ddi, 2 * tile)
+            .split(p, hw, hp, tile)
+            .reorder(ddi, hp, hw, hti, hto, ddo, b)
+            .gpu_blocks(ddo, b)
+            .gpu_lanes(ddi)
+            .gpu_threads(hw);
+        H.compute_at(Hop, hti)
+            .store_at(Hop, ddo)
+            .slide(Hop, t)
+            .store_in(MemoryType::Stack)
+            .split(p, hw, hp, tile)
+            .reorder(d, hp, hw)
+            .gpu_lanes(d)
+            .gpu_threads(hw);
+
+        // ---- The gradient state walk, the mirror image ----
+        Var gto("gto"), gti("gti");
+        Func dgs = dG.in();
+        dG.compute_at(dHopr, gti).unroll(t);
+        dG.update().unroll(t);
+        dgs.compute_at(dHopr, gti)
+            .store_in(MemoryType::GPUShared)
+            .unroll(dgs.args()[2])
+            .tile(d, p, rxi, ryi, tile, tile)
+            .unroll(d)
+            .gpu_threads(p)
+            .tile_store(rxi, ryi);
+        dG.store_in(MemoryType::Tile)
+            .tile(d, p, rxi, ryi, tile, tile)
+            .unroll(d)
+            .gpu_threads(p)
+            .tile_init(rxi, ryi);
+        dG.update()
+            .tile(d, p, rxi, ryi, tile, tile)
+            .split(ri_var(dG), RVar("rio"), RVar("rii"), 4 * tile)
+            .split(RVar("rii"), rro, rri, tile)
+            .reorder(d, rro, p, RVar("rio"))
+            .unroll(d)
+            .gpu_threads(p)
+            .tile_matmul(rri, rxi, ryi);
+        {
+            Func Cml = Func(Cm).in(Cdf);
+            Cml.compute_at(dG, rro)
+                .store_in(MemoryType::Tile)
+                .reorder_storage(Cml.args()[1], Cml.args()[0], Cml.args()[2])
+                .tile(Cml.args()[0], Cml.args()[1], rxi, ryi, tile, tile)
+                .tile_load(rxi, ryi);
+            Cdf.compute_at(dG, rro)
+                .store_in(MemoryType::Tile)
+                .tile(i, p, rxi, ryi, tile, tile)
+                .tile_init(rxi, ryi);
+            Func dys = Func(dY).in(dG);
+            Var so("so"), si("si"), fu("fu"), fo("fo"), fi("fi"), w("w"), l("l");
+            dys.compute_at(dG, RVar("rio"))
+                .store_in(MemoryType::GPUSharedAsync)
+                .align_storage(dys.args()[0], (int)channels + 8)
+                .split(dys.args()[0], so, si, 8)
+                .fuse(so, dys.args()[1], fu)
+                .split(fu, fo, fi, 32 * ((int)state / tile))
+                .split(fi, w, l, 32)
+                .reorder(si, l, w, fo)
+                .vectorize(si)
+                .gpu_lanes(l)
+                .gpu_threads(w);
+        }
+        dHopr.compute_root()
+            .split(tt, gto, gti, 1)
+            .split(d, ddo, ddi, 2 * tile)
+            .split(p, hw, hp, tile)
+            .reorder(ddi, hp, hw, gti, gto, ddo, b)
+            .gpu_blocks(ddo, b)
+            .gpu_lanes(ddi)
+            .gpu_threads(hw);
+        dHnr.compute_at(dHopr, gti)
+            .store_at(dHopr, ddo)
+            .slide(dHopr, tt)
+            .store_in(MemoryType::Stack)
+            .split(p, hw, hp, tile)
+            .reorder(d, hp, hw)
+            .gpu_lanes(d)
+            .gpu_threads(hw);
+
+        // ---- dX: the forward's output kernel with the mask transposed ----
+        const int pos_tiles = 4;
+        const int idx_per_warp = 2;
+        Func(dX).compute_root()
+            .tile(d, dX.args()[1], rxi, ryi, tile, tile)
+            .split(dX.args()[1], io, ii, pos_tiles)
+            .reorder(rxi, ryi, d, ii, io, t, b)
+            .gpu_blocks(io, t, b)
+            .tile_store(rxi, ryi)
+            .split(ii, iw, ii2, idx_per_warp)
+            .unroll(d)
+            .unroll(ii2)
+            .gpu_threads(iw);
+        for (Func f : {dxi, dxe, dxs}) {
+            f.compute_at(Func(dX), io)
+                .store_in(MemoryType::Tile)
+                .tile(d, j, rxi, ryi, tile, tile)
+                .tile_init(rxi, ryi)
+                .split(j, iw, ii2, idx_per_warp)
+                .unroll(d)
+                .unroll(ii2)
+                .gpu_threads(iw);
+        }
+        for (Func f : {dxi, dxe}) {
+            f.update().tile(d, j, rxi, ryi, tile, tile);
+        }
+        dxi.update().split(riy_var(dxi), rro, rri, tile);
+        dxe.update().split(rp_var2(dxe), rro, rri, tile);
+        dxi.update()
+            .split(j, iw, ii2, idx_per_warp)
+            .reorder(d, rro, ii2, iw)
+            .unroll(d)
+            .unroll(ii2)
+            .gpu_threads(iw)
+            .tile_matmul(rri, rxi, ryi);
+        dxe.update()
+            .split(j, iw, ii2, idx_per_warp)
+            .reorder(ii2, d, rro, iw)
+            .unroll(d)
+            .unroll(ii2)
+            .gpu_threads(iw)
+            .tile_matmul(rri, rxi, ryi);
+        for (Func f : {dxi, dxe, dxs}) {
+            f.unroll(t);
+        }
+        for (Func f : {dxi, dxe}) {
+            f.update().unroll(t);
+        }
+        {
+            Func Bml2 = Func(Bm).in(Bmdf2);
+            Bml2.compute_at(dxe, rro)
+                .store_in(MemoryType::Tile)
+                .tile(Bml2.args()[0], Bml2.args()[1], rxi, ryi, tile, tile)
+                .unroll(Bml2.args()[1])
+                .tile_load(rxi, ryi);
+            Bmdf2.compute_at(dxe, rro)
+                .store_in(MemoryType::Tile)
+                .tile(p, j, rxi, ryi, tile, tile)
+                .unroll(j)
+                .tile_init(rxi, ryi);
+        }
+        qk2.compute_root()
+            .split(i, x0, x1, 8)
+            .split(j, y0, y1, 8)
+            .reorder(x1, y1, x0, y0)
+            .gpu_blocks(t, g)
+            .gpu_threads(x1, y1);
+        {
+            Func qkl2 = qk2.in(score2);
+            qkl2.compute_at(dxi, rro)
+                .store_in(MemoryType::Tile)
+                .bound_extent(i, tile)
+                .bound_storage(i, tile)
+                .tile(i, j, rxi, ryi, tile, tile)
+                .tile_load(rxi, ryi);
+            score2.compute_at(dxi, rro)
+                .store_in(MemoryType::Tile)
+                .bound_extent(i, tile)
+                .bound_storage(i, tile)
+                .tile(i, j, rxi, ryi, tile, tile)
+                .tile_init(rxi, ryi);
+        }
+
+        // ---- Everything else stays on the plain schedule for now ----
+        auto flat = [&](Func f, Var a0, Var a1) {
+            f.compute_root()
+                .split(a0, x0, x1, 8)
+                .split(a1, y0, y1, 8)
+                .reorder(x1, y1, x0, y0)
+                .gpu_blocks(f.args()[2], f.args()[3])
+                .gpu_threads(x1, y1);
+            f.update()
+                .split(a0, x0, x1, 8)
+                .split(a1, y0, y1, 8)
+                .reorder(x1, y1, x0, y0)
+                .gpu_blocks(f.args()[2], f.args()[3])
+                .gpu_threads(x1, y1);
+        };
+        flat(xy, j, i);
+        flat(dYH, p, i);
+        flat(dCa, p, i);
+        flat(dCb, p, i);
+        flat(xy2, i, j);
+        flat(XdH, p, j);
+        flat(dBa, p, j);
+        flat(dBb, p, j);
+        for (Func f : {Func(dB), Func(dC)}) {
+            f.compute_root()
+                .split(f.args()[0], x0, x1, 8)
+                .split(f.args()[1], y0, y1, 8)
+                .reorder(x1, y1, x0, y0)
+                .gpu_blocks(f.args()[2], f.args()[3])
+                .gpu_threads(x1, y1);
+        }
+        for (Func f : {dYY, XdX}) {
+            f.compute_root().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
+            f.update().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
+        }
+        ddAcs.compute_root().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
+        csum.compute_root().gpu_blocks(b).gpu_threads(t);
+        csum.update().gpu_blocks(b).gpu_threads(t);
+        pdA.compute_root().gpu_blocks(b).gpu_threads(t);
+        pdA.update().gpu_blocks(b).gpu_threads(t);
+        Func(dDT).compute_root()
+            .split(dDT.args()[0], x0, x1, 64)
+            .gpu_blocks(x0, dDT.args()[1])
+            .gpu_threads(x1);
+        Func(dA_out).compute_root().gpu_blocks(dA_out.args()[0]);
+        Func(dA_out).update().gpu_blocks(dA_out.args()[0]);
+
+        const int L2 = chunk;
+        Func(dX).bound(d, 0, channels)
+            .bound(dX.args()[1], 0, L2)
+            .bound(dX.args()[2], 0, nt)
+            .bound(dX.args()[3], 0, heads);
+        Func(dB).bound(dB.args()[0], 0, state)
+            .bound(dB.args()[1], 0, L2)
+            .bound(dB.args()[2], 0, nt)
+            .bound(dB.args()[3], 0, groups);
+        Func(dC).bound(dC.args()[0], 0, state)
+            .bound(dC.args()[1], 0, L2)
+            .bound(dC.args()[2], 0, nt)
+            .bound(dC.args()[3], 0, groups);
+        Func(dDT).bound(dDT.args()[0], 0, seq).bound(dDT.args()[1], 0, heads);
+        Func(dA_out).bound(dA_out.args()[0], 0, heads);
+    }
+
+    // The reduction variables, looked up by the update they belong to.
+    RVar rp_var(Func f) { return RVar(f.update(0).get_schedule().rvars()[0].var); }
+    RVar rj_var(Func f) { return RVar(f.update(0).get_schedule().rvars()[0].var); }
+    RVar ri_var(Func f) { return RVar(f.update(0).get_schedule().rvars()[0].var); }
+    RVar riy_var(Func f) { return RVar(f.update(0).get_schedule().rvars()[0].var); }
+    RVar rp_var2(Func f) { return RVar(f.update(0).get_schedule().rvars()[0].var); }
+
     // A plain GPU schedule: every stage compute_root, blocks over the outer
     // dimensions, serial reductions per thread. Slow, but the algorithm and
     // the walks are all exercised.
