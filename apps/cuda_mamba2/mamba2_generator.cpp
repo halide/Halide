@@ -702,16 +702,18 @@ private:
         y_intra.update().split(rjy_var, rro, rri, tile);
         y_inter.update().split(rp_var, rro, rri, tile);
         // The operands stream from global memory a tile row at a time, and
-        // the warps too few to hide the reload latency. Prefetching the next
-        // reduction step's rows while multiplying this one covers it.
-        if (getenv("PF_X")) {
-            y_intra.update().prefetch(X, rro, rro, 1);
-        }
-        if (getenv("PF_HOP")) {
-            y_inter.update().prefetch(Hop, rro, rro, 1);
-        }
-        if (getenv("PF_CM")) {
-            y_inter.update().prefetch(Cm, rro, rro, 1);
+        // the warps are too few to hide the reload latency. Prefetching the
+        // input's rows well ahead of the step that multiplies them covers
+        // some of it. Three quarters of the walk ahead measured best - one
+        // step ahead is inside the latency and no help at all - and only the
+        // input pays: the carried state's rows are shared between warps
+        // often enough to be near already, and hinting them too just spends
+        // issue slots. Measured on an RTX 5060 Ti.
+        // In the update-definition forms the carried state comes back
+        // through shared memory, and the same hint measured as a loss there.
+        if (inductive() && !fuse_qk) {
+            y_intra.update().prefetch(X, rro, rro,
+                                      std::max(1, 3 * ((int)chunk / tile) / 4));
         }
         for (Func f : {y_intra, y_inter}) {
             if (fuse_qk) {

@@ -1952,6 +1952,74 @@ protected:
 
 }  // namespace
 
+// A prefetch of a region arrives as a serial loop of one-line prefetches,
+// which every thread of the block would run identically. The lines are only
+// hints, so deal them out across the block's threads instead: each thread
+// takes every block-size'th line, and the last line stands in for the
+// remainder, since prefetching it twice is free.
+class DistributePrefetches : public IRMutator {
+    using IRMutator::visit;
+
+    vector<std::pair<string, Expr>> thread_loops;  // name, extent
+
+    Stmt visit(const For *op) override {
+        if (op->for_type == ForType::GPUThread || op->for_type == ForType::GPULane) {
+            thread_loops.emplace_back(op->name, op->extent());
+            Stmt s = IRMutator::visit(op);
+            thread_loops.pop_back();
+            return s;
+        }
+        Stmt body = op->body;
+        vector<std::pair<string, Expr>> lets;
+        while (const LetStmt *let = body.as<LetStmt>()) {
+            lets.emplace_back(let->name, let->value);
+            body = let->body;
+        }
+        const Evaluate *eval = body.as<Evaluate>();
+        const Call *prefetch =
+            eval ? Call::as_intrinsic(eval->value, {Call::prefetch}) : nullptr;
+        if (op->for_type != ForType::Serial || !prefetch || thread_loops.empty()) {
+            return IRMutator::visit(op);
+        }
+        Expr tid = make_zero(Int(32));
+        Expr step = make_one(Int(32));
+        for (const auto &t : thread_loops) {
+            tid += Variable::make(Int(32), t.first) * step;
+            step *= t.second;
+        }
+        Expr total = op->extent();
+        Expr i = min(tid, total - 1) + op->min;
+        for (size_t j = lets.size(); j > 0; j--) {
+            i = Let::make(lets[j - 1].first, lets[j - 1].second, i);
+        }
+        Stmt s = substitute(op->name, Variable::make(Int(32), op->name + ".line"), body);
+        s = LetStmt::make(op->name + ".line", simplify(i), s);
+        for (size_t j = lets.size(); j > 0; j--) {
+            s = LetStmt::make(lets[j - 1].first, lets[j - 1].second, s);
+        }
+        // Rounds that still have lines left keep the round-robin structure:
+        // strides of the block size, starting past the first dealt round.
+        // Usually an empty loop; a step's worth of lines rarely exceeds the
+        // number of threads.
+        Stmt strided;
+        {
+            string k = op->name + ".round";
+            Expr kv = Variable::make(Int(32), k);
+            Expr line = min(op->min + step + kv * step + tid, op->min + total - 1);
+            Stmt body2 = substitute(op->name, Variable::make(Int(32), op->name + ".line"), op->body);
+            body2 = LetStmt::make(op->name + ".line", simplify(line), body2);
+            Expr rounds = (total - step + step - 1) / step;  // ceil((total-step)/step)
+            strided = For::make(k, 0, simplify(rounds - 1), ForType::Serial,
+                                op->partition_policy, op->device_api, body2);
+            strided = IfThenElse::make(simplify(total > step), strided);
+        }
+        return Block::make(s, strided);
+    }
+
+public:
+    using IRMutator::mutate;
+};
+
 Stmt fuse_gpu_thread_loops(Stmt s, const map<string, Function> &env) {
     // How far ahead of its consumer each Func's producer runs. The name the
     // stores carry is the realization name, which for a Func with a single
@@ -1973,6 +2041,7 @@ Stmt fuse_gpu_thread_loops(Stmt s, const map<string, Function> &env) {
     // Must run before the allocations are packed together, because packing
     // them relies on there being only one kind of shared memory.
     s = MarkAsyncCopies(slide_depths).mutate(s);
+    s = DistributePrefetches().mutate(s);
     s = FuseGPUThreadLoops()(s);
     s = ZeroGPULoopMins()(s);
     return s;
