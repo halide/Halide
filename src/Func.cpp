@@ -99,10 +99,10 @@ Func::Func(Function f)
         << "Can't construct Func from undefined Function";
 }
 
-FuncVec::FuncVec(const string &base_name, size_t count) {
+FuncVec::FuncVec(const string &base_name, size_t count, const string &suffix) {
     reserve(count);
     for (size_t i = 0; i < count; ++i) {
-        emplace_back(count == 1 ? base_name : base_name + std::to_string(i));
+        emplace_back((count == 1 ? base_name : base_name + std::to_string(i)) + suffix);
     }
 }
 

@@ -2835,8 +2835,9 @@ public:
     }
 
     /** Construct count undefined Funcs. A singleton is named base_name; otherwise
-     * the Funcs are named base_name + their index. */
-    FuncVec(const std::string &base_name, size_t count);
+     * the Funcs are named base_name + their index. suffix, if given, is appended
+     * after the name. */
+    FuncVec(const std::string &base_name, size_t count, const std::string &suffix = "");
 
     /** Convert a singleton FuncVec to its sole Func. It is a user error if
      * the FuncVec does not contain exactly one Func. */

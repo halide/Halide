@@ -40,6 +40,17 @@ int main(int argc, char **argv) {
     success &= check(singleton_named[0].name() == "func_vec_singleton",
                      "singleton named constructor should preserve its base name");
 
+    FuncVec suffixed("func_vec_suffixed_", 2, "_s");
+    success &= check(suffixed.size() == 2, "suffixed constructor created the wrong number of Funcs");
+    for (size_t i = 0; i < suffixed.size(); ++i) {
+        const std::string expected = "func_vec_suffixed_" + std::to_string(i) + "_s";
+        success &= check(suffixed[i].name() == expected, "suffixed constructor created an incorrect Func name");
+    }
+
+    FuncVec singleton_suffixed("func_vec_singleton_suffixed", 1, "_s");
+    success &= check(singleton_suffixed[0].name() == "func_vec_singleton_suffixed_s",
+                     "singleton suffixed constructor should append the suffix after its base name");
+
     Func a("func_vec_a");
     Func b("func_vec_b");
     FuncVec funcs{a};
