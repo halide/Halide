@@ -493,7 +493,7 @@ private:
         // ---- The forward state walk: fused when the state is inductive,
         // or a chunk-state kernel plus a flat stored walk when it is not ----
         Var hto("hto"), hti("hti"), hw("hw"), hp("hp"), ddo("ddo"), ddi("ddi");
-        Var tb("tb"), po("po");
+        Var tb("tb"), po("po"), po3("po3"), pw3("pw3");
         if (inductive()) {
             Func cs = chunk_state.in();
             chunk_state.compute_at(Hop, hti).unroll(t);
@@ -825,13 +825,15 @@ private:
                 .split(j, x0, x1, 8)
                 .split(i, y0, y1, 8)
                 .reorder(x1, y1, x0, y0)
-                .gpu_blocks(y0, t, g)
+                .fuse(x0, y0, x0)
+                .gpu_blocks(x0, t, g)
                 .gpu_threads(x1, y1);
             sg.update()
                 .split(j, x0, x1, 8)
                 .split(i, y0, y1, 8)
                 .reorder(x1, y1, hso, x0, y0)
-                .gpu_blocks(y0, t, g)
+                .fuse(x0, y0, x0)
+                .gpu_blocks(x0, t, g)
                 .gpu_threads(x1, y1);
             xy.compute_at(sgp, j)
                 .store_in(MemoryType::Tile)
@@ -920,7 +922,7 @@ private:
             Func dCbpw = dCbp.in();
             dCbpw.compute_root()
                 .tile(p, i, rxi, ryi, tile, tile)
-                .split(i, io, ii, 1)
+                .split(i, io, ii, 2)
                 .fuse(t, hb, tf)
                 .reorder(rxi, ryi, p, ii, io, tf, g)
                 .unroll(p)
@@ -944,13 +946,15 @@ private:
                 .split(p, x0, x1, 8)
                 .split(i, y0, y1, 8)
                 .reorder(x1, y1, x0, y0)
-                .gpu_blocks(y0, t, g)
+                .fuse(x0, y0, x0)
+                .gpu_blocks(x0, t, g)
                 .gpu_threads(x1, y1);
             dCb.update()
                 .split(p, x0, x1, 8)
                 .split(i, y0, y1, 8)
                 .reorder(x1, y1, hho, x0, y0)
-                .gpu_blocks(y0, t, g)
+                .fuse(x0, y0, x0)
+                .gpu_blocks(x0, t, g)
                 .gpu_threads(x1, y1);
             dYH.compute_at(dCbp, hhi)
                 .store_in(MemoryType::Tile)
@@ -975,7 +979,7 @@ private:
             Func dBbpw = dBbp.in();
             dBbpw.compute_root()
                 .tile(p, j, rxi, ryi, tile, tile)
-                .split(j, io, ii, 1)
+                .split(j, io, ii, 2)
                 .fuse(t, hb, tf)
                 .reorder(rxi, ryi, p, ii, io, tf, g)
                 .unroll(p)
@@ -999,13 +1003,15 @@ private:
                 .split(p, x0, x1, 8)
                 .split(j, y0, y1, 8)
                 .reorder(x1, y1, x0, y0)
-                .gpu_blocks(y0, t, g)
+                .fuse(x0, y0, x0)
+                .gpu_blocks(x0, t, g)
                 .gpu_threads(x1, y1);
             dBb.update()
                 .split(p, x0, x1, 8)
                 .split(j, y0, y1, 8)
                 .reorder(x1, y1, hho, x0, y0)
-                .gpu_blocks(y0, t, g)
+                .fuse(x0, y0, x0)
+                .gpu_blocks(x0, t, g)
                 .gpu_threads(x1, y1);
             XdH.compute_at(dBbp, hhi)
                 .store_in(MemoryType::Tile)
