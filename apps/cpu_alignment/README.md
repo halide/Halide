@@ -20,6 +20,12 @@ benchmark:
   the directions can be derived. Nothing smaller is expressible: Tuple
   components share the Func's extent, so the pointers cannot be kept
   while the scores roll.
+- scan=diff8: the Suzuki-Kasahara difference formulation ksw2's SIMD
+  kernel uses, as an inductive Func: state (U, V, X, Y) of H-deltas
+  bounded by the scoring parameters, so it is int8 - twice the lanes.
+  The references are only up and left (the diagonal rides in the
+  differences), still inductive in both dims, and the direction bytes
+  mirror ksw_gg2's, so it stays byte-exact. ~30 declarative lines.
 
 The baseline is ksw2 (MIT, vendored subset), the affine-gap kernel
 family inside minimap2. The recurrence, boundary values, tie-breaking,
@@ -36,42 +42,45 @@ this benchmark's competitor.
 Measured on a Threadripper 9970X (Zen 5):
 
     256x256, batch 1024, one thread:
-      inductive     13.1 ms   (5.1 Gcell/s)
-      unfolded      17.5 ms   (1.34x)
-      rdom          21.2 ms   (1.62x)
-      ksw2 sse      38.2 ms   (2.92x, same output)
+      diff8          9.3 ms   (7.2 Gcell/s)
+      inductive     12.9 ms   (5.2 Gcell/s)
+      unfolded      17.4 ms   (1.35x of inductive)
+      rdom          21.0 ms   (1.63x)
+      ksw2 sse      37.9 ms   (2.94x, same output)
       ksw2 scalar  197   ms   (15x, same output)
 
-    1024x1024, batch 128, one thread - the same generator compiled for
-    the baseline's ISA and for the machine's (HL_TARGET=...-sse41 vs
-    host), against the same 128-bit ksw2 binary:
-      inductive @ sse4.1    76.4 ms   (matched width: ksw2 wins 1.35x)
-      inductive @ avx-512   24.4 ms   (a recompile: 3.1x, now 2.76x ahead)
-      unfolded  @ avx-512   39.6 ms   (1.62x)
-      rdom      @ avx-512   79.1 ms   (3.24x)
-      ksw2 sse (128-bit)    67.3 ms   (same output, hand-vectorized)
+    1024x1024, batch 128, one thread - the same generators compiled
+    for the baseline's ISA and for the machine's (HL_TARGET=...-sse41
+    vs host), against the same 128-bit ksw2 binary:
+      diff8     @ sse4.1    63.9 ms   (matched width AND formulation: a tie)
+      inductive @ sse4.1    76.5 ms   (matched width, int16 table: 1.25x behind)
+      diff8     @ avx-512   15.9 ms   (a recompile: 4.2x ahead of ksw2)
+      inductive @ avx-512   24.2 ms   (2.78x ahead)
+      unfolded  @ avx-512   40.2 ms   (1.66x of inductive)
+      rdom      @ avx-512   81.2 ms   (3.36x)
+      ksw2 sse (128-bit)    61.3 ms   (same output, hand-vectorized)
 
     1024x1024, batch 4096, all cores (PAR=true), ksw2 threaded:
-      inductive     47.7 ms   (90 Gcell/s)
-      unfolded     486   ms   (10.2x)
-      rdom        1077   ms   (22.6x)
-      ksw2 sse      63.0 ms   (1.32x, same output)
+      diff8         43.0 ms   (100 Gcell/s)
+      inductive     46.3 ms   (93 Gcell/s)
+      unfolded     486   ms   (10.5x of inductive)
+      rdom        1069   ms   (23.1x)
+      ksw2 sse      58.4 ms   (1.26x, same output)
 
-Vector-width fairness: ksw2's kernels are 128-bit SSE intrinsics (16
-int8 lanes; lh3 ships no wider port), while Halide compiles to
-AVX-512. At MATCHED width (HL_TARGET=x86-64-linux-sse41, 1k single
-thread) ksw2 wins 1.35x (56.8 ms vs our 76.4): its int8 anti-diagonal
-difference formulation is denser than our int16 absolute-score table,
-worth 2x in lanes. The advantage this benchmark claims is therefore
-not the inner loop - it is that widening is a recompile for the
-schedule and a porting project for the intrinsics (an AVX-512 ksw2 is
-exactly what Intel's mm2-fast contributed, published as its own
-engineering effort; 512-bit lane-crossing shuffles do not translate
-mechanically). At full parallelism both sides sit near the memory
-wall, where formulation density fades and the remaining edge is the
-streaming stores. An int8 difference formulation is expressible as an
-inductive Func too and would compound with the width - left undone to
-keep the algorithm the textbook recurrence.
+Vector-width and formulation fairness: ksw2's kernels are 128-bit SSE
+intrinsics (16 int8 lanes; lh3 ships no wider port), while Halide
+compiles to AVX-512, and ksw2's kernel also uses a denser formulation
+(int8 differences) than the textbook int16 table. The two scan forms
+separate those factors. At matched width and matched formulation
+(diff8 @ sse4.1) it is a tie - the schedule reproduces the hand
+kernel. The int16 textbook table at matched width is 1.25x behind:
+that is the price of the plain formulation, paid in lanes. And the
+recompile to AVX-512 is worth 3.1-4x, which for the intrinsics kernel
+is a porting project, not a flag (an AVX-512 ksw2 is what Intel's
+mm2-fast contributed, published as its own engineering effort;
+512-bit lane-crossing shuffles do not translate mechanically). At
+full parallelism all forms sit near the memory wall, where the
+remaining edge is the streaming stores.
 
 The separations grow with scale because they are memory structure: the
 rdom form's materialized score slabs are L3-resident in the small

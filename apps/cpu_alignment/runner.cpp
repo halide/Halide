@@ -6,6 +6,7 @@
 #include "HalideBuffer.h"
 #include "halide_benchmark.h"
 
+#include "align_diff8.h"
 #include "align_ind.h"
 #include "align_rdom.h"
 #include "align_unf.h"
@@ -235,6 +236,10 @@ int main(int argc, char **argv) {
     if (!check("rdom")) return 1;
     double t_rdom = benchmark(3, 1, [&]() { align_rdom(query, target, dir); });
 
+    align_diff8(query, target, dir);
+    if (!check("diff8")) return 1;
+    double t_d8 = benchmark(3, 1, [&]() { align_diff8(query, target, dir); });
+
     // ksw2 parallelizes across pairs the way aligners deploy it: when the
     // Halide build is parallel, give ksw2 the same cores.
     auto ksw2_sweep = [&](bool sse) {
@@ -262,6 +267,8 @@ int main(int argc, char **argv) {
 
     const double cells = (double)B * J * I;
     printf("  inductive  %10.1f us  (%.2f Gcell/s)\n", t_ind * 1e6, cells / t_ind / 1e9);
+    printf("  diff8      %10.1f us  (%.2f Gcell/s, %.2fx: int8 differences)\n",
+           t_d8 * 1e6, cells / t_d8 / 1e9, t_d8 / t_ind);
     printf("  unfolded   %10.1f us  (%.2fx: fusion without folding)\n",
            t_unf * 1e6, t_unf / t_ind);
     printf("  rdom       %10.1f us  (%.2fx the inductive time)\n",

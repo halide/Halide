@@ -30,12 +30,14 @@ class Align : public Halide::Generator<Align> {
 public:
     enum class ScanForm { Inductive,
                           Unfolded,
-                          RDom };
+                          RDom,
+                          Diff8 };
     GeneratorParam<ScanForm> scan{"scan",
                                   ScanForm::Inductive,
                                   {{"inductive", ScanForm::Inductive},
                                    {"unfolded", ScanForm::Unfolded},
-                                   {"rdom", ScanForm::RDom}}};
+                                   {"rdom", ScanForm::RDom},
+                                   {"diff8", ScanForm::Diff8}}};
     GeneratorParam<bool> par{"par", false};
     // Uniform match bonus and mismatch/gap penalties (positive numbers),
     // matching a ksw2 score matrix with sa on the diagonal and -sb off it.
@@ -74,7 +76,7 @@ public:
         Func dp(std::vector<Type>(3, Int(16)), "dp");
         Func dp_r(std::vector<Type>(3, Int(16)), "dp_r");
 
-        if (scan != ScanForm::RDom) {
+        if (scan != ScanForm::RDom && scan != ScanForm::Diff8) {
             // E(j,i) = max(E(j,i-1) - gape, H(j,i-1) - gapoe): a gap in
             // the query, advancing the target. F advances the query.
             Expr E = max(dp(b, j, i - 1)[1] - (int)gape, dp(b, j, i - 1)[0] - gapoe);
@@ -119,7 +121,9 @@ public:
             return d;
         };
 
-        if (scan != ScanForm::RDom) {
+        if (scan == ScanForm::Diff8) {
+            // defined below, from the difference state
+        } else if (scan != ScanForm::RDom) {
             Expr s0 = s;
             dir(b, j, i) = dir_byte(dp(b, j, i)[0], dp(b, j, i)[1], dp(b, j, i)[2],
                                     dp(b, j - 1, i - 1)[0] + s0);
@@ -128,6 +132,57 @@ public:
             dir(b, j, i) = dir_byte(dp_r(b, j + 1, i + 1)[0], dp_r(b, j + 1, i + 1)[1],
                                     dp_r(b, j + 1, i + 1)[2],
                                     dp_r(b, j, i)[0] + s0);
+        }
+
+        // scan=diff8: the Suzuki-Kasahara difference formulation, as in
+        // ksw2_gg2: state (U, V, X, Y) where U = H(i,j)-H(i-1,j)+q+e and
+        // V = H(i,j)-H(i,j-1)+q+e are bounded by the scoring parameters,
+        // so the whole state is int8 - twice the lanes per vector. The
+        // references are only up and left (the diagonal rides in the
+        // differences), still inductive in both dims. Mirrors ksw_gg2's
+        // arithmetic and direction bytes exactly (which produce the same
+        // CIGARs as ksw_gg).
+        Func dp8(std::vector<Type>(4, Int(8)), "dp8");
+        if (scan == ScanForm::Diff8) {
+            const int qe2 = 2 * gapoe;
+            Expr s8 = cast<int8_t>(select(qseq(b, max(j, 0)) == tseq(b, max(i, 0)), (int)sa, -(int)sb));
+            Expr Vp = dp8(b, j, i - 1)[1], Xp = dp8(b, j, i - 1)[2];
+            Expr Up = dp8(b, j - 1, i)[0], Yp = dp8(b, j - 1, i)[3];
+            Expr av = cast<int8_t>(Xp + Vp);
+            Expr bv = cast<int8_t>(Yp + Up);
+            Expr z0 = cast<int8_t>(s8 + qe2);
+            Expr z = max(max(z0, av), bv);
+            Expr U = cast<int8_t>(z - Vp);
+            Expr V = cast<int8_t>(z - Up);
+            Expr zq = cast<int8_t>(z - (int)gapo);
+            Expr X = max(cast<int8_t>(av - zq), 0);
+            Expr Y = max(cast<int8_t>(bv - zq), 0);
+            // Boundaries from the H-difference definitions: U(i,-1) = q
+            // for i > 0 else 0, V(-1,j) = q for j > 0 else 0, X = Y = 0.
+            Expr Ub = cast<int8_t>(select(j < 0 && 0 < i, (int)gapo, 0));
+            Expr Vb = cast<int8_t>(select(i < 0 && 0 < j, (int)gapo, 0));
+            Expr border[4] = {Ub, Vb, cast<int8_t>(0), cast<int8_t>(0)};
+            Expr step[4] = {U, V, X, Y};
+            std::vector<Expr> defs;
+            for (int c = 0; c < 4; c++) {
+                defs.push_back(select(i < 0 || j < 0, border[c], likely(step[c])));
+            }
+            dp8(b, j, i) = Tuple(defs);
+
+            // ksw_gg2's direction byte: 1 if the up-path strictly beats
+            // the diagonal, then 2 if the left-path strictly beats that;
+            // extension bits are the pre-clamp X/Y positivity.
+            Expr aa = cast<int8_t>(dp8(b, j, i - 1)[2] + dp8(b, j, i - 1)[1]);
+            Expr bb = cast<int8_t>(dp8(b, j - 1, i)[3] + dp8(b, j - 1, i)[0]);
+            Expr zz0 = cast<int8_t>(s8 + qe2);
+            Expr zz1 = max(zz0, aa);
+            Expr zz = max(zz1, bb);
+            Expr zzq = cast<int8_t>(zz - (int)gapo);
+            Expr d = select(aa > zz0, cast<uint8_t>(1), cast<uint8_t>(0));
+            d = select(bb > zz1, cast<uint8_t>(2), d);
+            d = d | select(cast<int8_t>(aa - zzq) > 0, cast<uint8_t>(0x08), cast<uint8_t>(0));
+            d = d | select(cast<int8_t>(bb - zzq) > 0, cast<uint8_t>(0x10), cast<uint8_t>(0));
+            dir(b, j, i) = d;
         }
 
         // ---------------- Schedule ----------------
@@ -145,7 +200,13 @@ public:
             dir.parallel(bo).stream_stores();
         }
 
-        if (scan != ScanForm::RDom) {
+        if (scan == ScanForm::Diff8) {
+            // The int8 state doubles the lanes: one block is one vector.
+            dp8.compute_at(dir, i)
+                .store_at(dir, bo)
+                .fold_storage(i, 2)
+                .vectorize(b, 2 * VEC);
+        } else if (scan != ScanForm::RDom) {
             // One block of pairs walks the table together; the score rows
             // fold to the two the recurrence can reach.
             dp.compute_at(dir, i)
