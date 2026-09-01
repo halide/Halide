@@ -42,11 +42,14 @@ Measured on a Threadripper 9970X (Zen 5):
       ksw2 sse      38.2 ms   (2.92x, same output)
       ksw2 scalar  197   ms   (15x, same output)
 
-    1024x1024, batch 128, one thread:
-      inductive     24.4 ms   (5.5 Gcell/s)
-      unfolded      39.6 ms   (1.62x)
-      rdom          79.1 ms   (3.24x)
-      ksw2 sse      67.3 ms   (2.76x, same output)
+    1024x1024, batch 128, one thread - the same generator compiled for
+    the baseline's ISA and for the machine's (HL_TARGET=...-sse41 vs
+    host), against the same 128-bit ksw2 binary:
+      inductive @ sse4.1    76.4 ms   (matched width: ksw2 wins 1.35x)
+      inductive @ avx-512   24.4 ms   (a recompile: 3.1x, now 2.76x ahead)
+      unfolded  @ avx-512   39.6 ms   (1.62x)
+      rdom      @ avx-512   79.1 ms   (3.24x)
+      ksw2 sse (128-bit)    67.3 ms   (same output, hand-vectorized)
 
     1024x1024, batch 4096, all cores (PAR=true), ksw2 threaded:
       inductive     47.7 ms   (90 Gcell/s)
