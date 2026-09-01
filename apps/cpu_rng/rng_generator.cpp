@@ -51,18 +51,6 @@ public:
             Expr n0 = s0 ^ n3;
             return std::vector<Expr>{n0, n1, n2 ^ t17, rotl(n3, 45)};
         };
-        // The two outputs a step yields: each half of the 64-bit result
-        // becomes a float in [0, 1) by stuffing its top 23 bits into the
-        // mantissa of a float in [1, 2) and shifting down. Integer ops
-        // only, and both halves are the same shift of a 32-bit word.
-        auto out = [&](Expr s0, Expr s3, Expr lane) {
-            Expr r = rotl(s0 + s3, 23) + s0;
-            // extract_bits at an interleaving position compiles to a free
-            // vector reinterpret of the pair-of-halves lanes.
-            Expr w = extract_bits<uint32_t>(r, 32 * (lane % 2));
-            Expr bits = (w >> 9) | Expr((uint32_t)0x3f800000);
-            return reinterpret<float>(bits) - 1.f;
-        };
 
         Func S(std::vector<Type>(4, UInt(64)), "S");
         RDom rt(1, y.dim(1).extent() - 1, "rt");
@@ -81,13 +69,24 @@ public:
                           S(l, rt - 1)[2], S(l, rt - 1)[3]);
             S(l, rt) = Tuple(n);
         }
+        // The step's 64-bit result, computed at the state's own lane
+        // width - a Func of its own, so the arithmetic happens before the
+        // lanes are duplicated into output pairs.
+        Func r64("r64");
+        r64(l, t) = rotl(S(l, t)[0] + S(l, t)[3], 23) + S(l, t)[0];
+
         // Output lane pairs (2l, 2l+1) carry the low and high halves of
-        // stream l's step.
-        y(l, t) = out(S(l / 2, t)[0], S(l / 2, t)[3], l);
+        // stream l's word; extract_bits at the interleaving position is a
+        // free vector reinterpret. Each half's top 24 bits convert and
+        // scale to a float in [0, 1) - bit-exact with what Julia's
+        // Random.XoshiroSimd bulk fill produces.
+        Func r32("r32");
+        r32(l, t) = extract_bits<uint32_t>(r64(l / 2, t), 32 * (l % 2));
+        y(l, t) = cast<float>(r32(l, t) >> 8) * (1.f / 16777216.f);
 
         // ---------------- Schedule ----------------
 
-        const int VEC = 8;  // 64-bit lanes of one vector
+        const int VEC = lanes;  // 64-bit lanes of one vector
         Var co("co"), ci("ci");
         if (scan != ScanForm::RDom) {
             // Blocks of streams advance together through one serial walk;
@@ -103,12 +102,16 @@ public:
                     .parallel(coo);
                 S.store_at(y, coo)
                     .compute_at(y, coi)
-                    .vectorize(l, VEC);
+                    .vectorize(l);
+                r64.compute_at(y, coi).vectorize(l);
+                r32.compute_at(y, coi).vectorize(l);
             } else {
                 y.unroll(co);
                 S.store_root()
                     .compute_at(y, co)
-                    .vectorize(l, VEC);
+                    .vectorize(l);
+                r64.compute_at(y, co).vectorize(l);
+                r32.compute_at(y, co).vectorize(l);
             }
             if (scan == ScanForm::Inductive) {
                 Var to("to"), ti("ti");
@@ -125,10 +128,12 @@ public:
                 y.parallel(co);
             }
             S.compute_at(y, co)
-                .vectorize(l, VEC);
+                .vectorize(l);
             S.update()
                 .reorder(l, rt)
-                .vectorize(l, VEC);
+                .vectorize(l);
+            r64.compute_at(y, co).vectorize(l);
+            r32.compute_at(y, co).vectorize(l);
         }
 
         seeds.dim(0).set_bounds(0, 4);

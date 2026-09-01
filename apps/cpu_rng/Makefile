@@ -39,5 +39,13 @@ $(BIN)/%/runner: runner.cpp $(BIN)/%/rng_ind.a $(BIN)/%/rng_unf.a $(BIN)/%/rng_r
 test: $(BIN)/$(HL_TARGET)/runner
 	$<
 
+# Byte-exact comparison against Julia's stdlib bulk fill. Julia always
+# forks eight SIMD substreams, so build with LANES=8:
+#   make clean && make LANES=8 test_julia
+JULIA ?= $(HOME)/.juliaup/bin/julia
+test_julia: $(BIN)/$(HL_TARGET)/runner
+	$(JULIA) julia_ref.jl $(STEPS) $(BIN)/julia_seeds.bin $(BIN)/julia_ref.bin
+	JULIA_SEEDS=$(BIN)/julia_seeds.bin JULIA_REF=$(BIN)/julia_ref.bin $<
+
 clean:
 	rm -rf $(BIN)

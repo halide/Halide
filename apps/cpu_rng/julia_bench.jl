@@ -3,7 +3,8 @@
 # eight SIMD-interleaved substreams, single-threaded - the same generator
 # and the same multi-stream technique this benchmark uses.
 using Random
-L = length(ARGS) >= 1 ? parse(Int, ARGS[1]) : 32
+# L counts float rows: two per stream, so 2x the generator's lanes param.
+L = length(ARGS) >= 1 ? parse(Int, ARGS[1]) : 64
 T = length(ARGS) >= 2 ? parse(Int, ARGS[2]) : 4 << 20
 rng = Xoshiro(1234)
 a = Array{Float32}(undef, L, T)

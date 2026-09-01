@@ -95,10 +95,8 @@ void reference(const Buffer<uint64_t> &seeds, Buffer<float> &ref) {
         for (int t = 0; t < T; t++) {
             uint64_t r = rotl(s0 + s3, 23) + s0;
             for (int h = 0; h < 2; h++) {
-                uint32_t bits = (((uint32_t)(r >> (32 * h))) >> 9) | 0x3f800000u;
-                float f;
-                memcpy(&f, &bits, 4);
-                ref(2 * l + h, t) = f - 1.f;
+                uint32_t w = (uint32_t)(r >> (32 * h));
+                ref(2 * l + h, t) = (float)(w >> 8) * 0x1.0p-24f;
             }
             uint64_t t17 = s1 << 17;
             s2 ^= s0;
@@ -119,8 +117,7 @@ void simd_fill(const Buffer<uint64_t> &seeds, Buffer<float> &out) {
     // every step stores full cache lines of output in order.
     constexpr int NB = L / 8;
     static_assert(L % 8 == 0, "eight-lane blocks");
-    const __m512i one = _mm512_set1_epi32(0x3f800000);
-    const __m512 onef = _mm512_set1_ps(1.f);
+    const __m512 scale = _mm512_set1_ps(0x1.0p-24f);
     __m512i s[NB][4];
     alignas(64) uint64_t tmp[8];
     for (int blk = 0; blk < NB; blk++) {
@@ -139,9 +136,8 @@ void simd_fill(const Buffer<uint64_t> &seeds, Buffer<float> &out) {
             // Both halves of each 64-bit result are the same shift of a
             // 32-bit word, and little-endian order interleaves them as
             // consecutive output lanes: one full-width store per step.
-            __m512i bits = _mm512_or_si512(
-                _mm512_srli_epi32(r, 9), one);
-            __m512 f = _mm512_sub_ps(_mm512_castsi512_ps(bits), onef);
+            __m512i bits = _mm512_srli_epi32(r, 8);
+            __m512 f = _mm512_mul_ps(_mm512_cvtepu32_ps(bits), scale);
             _mm512_storeu_ps(&out(blk * 16, t), f);
             __m512i t17 = _mm512_slli_epi64(s[blk][1], 17);
             s[blk][2] = _mm512_xor_si512(s[blk][2], s[blk][0]);
@@ -172,10 +168,29 @@ bool check(const Buffer<float> &y, const Buffer<float> &ref, const char *what) {
 
 int main(int argc, char **argv) {
     Buffer<uint64_t> seeds(4, L);
-    uint64_t sm = 0x853c49e6748fea9bull;
-    for (int l = 0; l < L; l++) {
-        for (int i = 0; i < 4; i++) {
-            seeds(i, l) = splitmix64(sm);
+    // With JULIA_SEEDS set, take the eight stream states Julia's rand!
+    // forks from its master RNG (dumped by julia_ref.jl) instead of
+    // seeding with splitmix64, so the output must match Julia's byte for
+    // byte. Julia always forks eight SIMD substreams, so LANES must be 8.
+    const char *julia_seeds = getenv("JULIA_SEEDS");
+    const char *julia_ref = getenv("JULIA_REF");
+    if (julia_seeds) {
+        if (L != 8) {
+            printf("JULIA_SEEDS requires LANES=8 (Julia forks eight substreams)\n");
+            return 1;
+        }
+        FILE *f = fopen(julia_seeds, "rb");
+        if (!f || fread(&seeds(0, 0), 8, 4 * L, f) != 4 * L) {
+            printf("failed to read %s\n", julia_seeds);
+            return 1;
+        }
+        fclose(f);
+    } else {
+        uint64_t sm = 0x853c49e6748fea9bull;
+        for (int l = 0; l < L; l++) {
+            for (int i = 0; i < 4; i++) {
+                seeds(i, l) = splitmix64(sm);
+            }
         }
     }
     Buffer<float> y(2 * L, T), ref(2 * L, T);
@@ -185,6 +200,26 @@ int main(int argc, char **argv) {
 
     reference(seeds, ref);
     double t_ref = benchmark(3, 1, [&]() { reference(seeds, ref); });
+
+    if (julia_ref) {
+        FILE *f = fopen(julia_ref, "rb");
+        std::vector<float> jref(2 * L * (size_t)T);
+        if (!f || fread(jref.data(), 4, jref.size(), f) != jref.size()) {
+            printf("failed to read %s\n", julia_ref);
+            return 1;
+        }
+        fclose(f);
+        for (int t = 0; t < T; t++) {
+            for (int l = 0; l < 2 * L; l++) {
+                if (ref(l, t) != jref[t * 2 * (size_t)L + l]) {
+                    printf("  julia      MISMATCH at lane %d step %d: %a vs %a\n",
+                           l, t, ref(l, t), jref[t * 2 * (size_t)L + l]);
+                    return 1;
+                }
+            }
+        }
+        printf("  julia      bit-exact ok (vs Random.rand! on Xoshiro(1234))\n");
+    }
 
     simd_fill(seeds, y);
     if (!check(y, ref, "simd C++")) return 1;

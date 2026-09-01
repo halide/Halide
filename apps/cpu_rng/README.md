@@ -16,26 +16,35 @@ from one generator, bit-exact against a scalar reference:
 
 Baselines, all the same generator: the canonical scalar loop, a
 hand-written AVX-512 kernel (same interleaved-streams layout), and
-Julia's rand! (which uses eight SIMD-interleaved substreams of the same
-generator - the same technique; its exact output bits differ because
-its substream seeding does). numpy's default fill is PCG64, a different
-and smaller-state generator, reported for ecosystem context only.
+Julia's rand! (eight SIMD-interleaved substreams of the same generator -
+the same technique). The Halide pipeline is bit-exact with Julia:
+`make clean && make LANES=8 test_julia` seeds our eight streams exactly
+as rand! forks its substreams from Xoshiro(1234) and checks the output
+byte for byte (julia_ref.jl replays the fork; the projection is Julia's:
+top 24 bits of each half, converted and scaled by 2^-24). numpy's
+default fill is PCG64, a different and smaller-state generator, reported
+for ecosystem context only.
 
 Measured on a Threadripper 9970X (Zen 5), one thread, 1 GB of floats
 (32 streams x 4M steps x 2):
 
-    inductive       35.2 ms   (31 GB/s of output)
-    hand AVX-512    36.4 ms   (1.03x)
-    julia rand!     36.1 ms   (1.03x)
-    unfolded       180 ms     (5.1x)
-    rdom           377 ms     (10.7x)
-    scalar C++     591 ms     (16.8x)
+    inductive       34.8 ms   (31 GB/s of output)
+    hand AVX-512    35.5 ms   (1.02x)
+    julia rand!     35.4 ms   (1.02x)
+    unfolded       180 ms     (5.2x)
+    rdom           476 ms     (13.7x)
+    scalar C++     591 ms     (17x)
     numpy PCG64    500 ms     (14x, different generator)
 
 Why the top three tie: they are the same algorithm at the same wall.
 All keep the state near registers, advance eight 64-bit lanes per
-vector, and project both halves with integer ops, so each is limited
-by a single core's store bandwidth. The interleaved half-extraction
+vector, and project both halves of each word with a shift, a convert,
+and a scale, so each is limited by a single core's store bandwidth.
+Two things keep the inner loop clean. The step's arithmetic must
+happen at the state's own lane width, before each 64-bit result fans
+out to a pair of output lanes - hence r64 and r32 are Funcs of their
+own rather than expressions inside y, whose 16-wide vectors would
+duplicate every add and rotate. And the interleaved half-extraction
 must be written with extract_bits, which compiles to a free vector
 reinterpret; a select on the lane parity costs three shuffles per
 store. And unrolling the walk by the fold factor, which turns the
