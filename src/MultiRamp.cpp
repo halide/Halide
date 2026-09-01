@@ -637,6 +637,41 @@ const Load *peel_load(const Expr &e, Expr *index, bool cast_allowed) {
     return nullptr;
 }
 
+// Whether a constant offset can be written as a sum of per-dimension lane
+// offsets of the given multiramp, each bounded by that dimension's lane
+// count. Decides exactly whether two same-shaped accesses at a constant
+// base distance share an address, where the symbolic prover below gives up
+// on interleaved tiles.
+bool is_representable_offset(int64_t c, const MultiRamp &mr, int dims) {
+    if (dims == 0) {
+        return c == 0;
+    }
+    std::optional<int64_t> stride = as_const_int(mr.strides[dims - 1]);
+    internal_assert(stride);  // the caller checked constness
+    for (int64_t o = -(mr.lanes[dims - 1] - 1); o <= mr.lanes[dims - 1] - 1; o++) {
+        if (is_representable_offset(c - o * (*stride), mr, dims - 1)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Exact disjointness for accesses whose strides and base difference are
+// constants: they overlap iff the difference is a representable offset.
+// Returns false when the question can't be decided this way.
+bool provably_disjoint_constant(const Expr &diff, const MultiRamp &mr, int dims) {
+    std::optional<int64_t> c = as_const_int(diff);
+    if (!c) {
+        return false;
+    }
+    for (int i = 0; i < dims; i++) {
+        if (!as_const_int(mr.strides[i])) {
+            return false;
+        }
+    }
+    return !is_representable_offset(*c, mr, dims);
+}
+
 }  // namespace
 
 int get_subtile(const Expr &index, const std::string &description,
@@ -688,6 +723,10 @@ int get_subtile(const Expr &index, const std::string &description,
         // and ask if it's alias-free. This is what the synthetic dimension was
         // for.
         mr.strides.back() = mr.base - other.base;
+        if (provably_disjoint_constant(simplify(mr.base - other.base), mr,
+                                       mr.dimensions() - 1)) {
+            continue;
+        }
         if (!can_prove(mr.alias_free())) {
             user_error << "Failed to prove access to " << description << " does not "
                        << "partially overlap another distinct access: " << index
