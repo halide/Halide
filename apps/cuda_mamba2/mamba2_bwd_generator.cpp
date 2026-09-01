@@ -235,24 +235,34 @@ public:
         Func scoreT("scoreT");
         scoreT(j, i, t, b) = xy(j, i, t, b) * decay(j, i, t, b) *
                              Delta(t * L + j, b) * select(j <= i, 1.f, 0.f);
-        Func scoreT_h("scoreT_h");
-        scoreT_h(j, i, t, b) = cast<float16_t>(scoreT(j, i, t, b));
+
+        // B and C are shared by a group, so the masked, decayed score
+        // gradients sum over the group's heads on the L x L plane first,
+        // leaving one small state-by-position multiply per group instead
+        // of one per head. Narrowed copies in both orientations feed the
+        // two multiplies.
+        RDom rsh(0, hpg, "rsh");
+        Func sg("sg");
+        sg(j, i, t, g) = 0.f;
+        sg(j, i, t, g) += scoreT(j, i, t, g * hpg + rsh);
+        Func sgh("sgh");
+        sgh(j, i, t, g) = cast<float16_t>(sg(j, i, t, g));
+        Func sg2h("sg2h");
+        sg2h(i, j, t, g) = cast<float16_t>(sg(j, i, t, g));
 
         Func dYH("dYH");
         dYH(p, i, t, b) = 0.f;
         dYH(p, i, t, b) += cast<float>(Hop(rd, p, t, b)) *
                            cast<float>(dY(rd, i, t, b));
 
-        RDom rch(0, L, 0, hpg, "rch");
+        RDom rch(0, L, "rch");
         // Whole score tiles above the diagonal are zero, so the sweep over
         // them stops at the output position's diagonal tile.
         rch.where(rch.x / tile <= i / tile);
-        RVar rcj = rch.x;
-        RVar rchh = rch.y;
         Func dCa("dCa");
         dCa(p, i, t, g) = 0.f;
-        dCa(p, i, t, g) += cast<float>(scoreT_h(rcj, i, t, g * hpg + rchh)) *
-                           cast<float>(Bm(p, t * L + rcj, g));
+        dCa(p, i, t, g) += cast<float>(sgh(rch.x, i, t, g)) *
+                           cast<float>(Bm(p, t * L + rch.x, g));
         RDom rhh(0, hpg, "rhh");
         Func dCb("dCb");
         dCb(p, i, t, g) = 0.f;
@@ -264,32 +274,19 @@ public:
 
         // ---------------- dB, summed over the heads of a group ----------
 
-        // xy again, oriented for a reduction over the output positions.
-        Func xy2("xy2");
-        xy2(i, j, t, b) = 0.f;
-        xy2(i, j, t, b) += cast<float>(dY(rd, i, t, b)) *
-                           cast<float>(X(rd, t * L + j, b));
-        Func scoreT2("scoreT2");
-        scoreT2(i, j, t, b) = xy2(i, j, t, b) * decay(j, i, t, b) *
-                              Delta(t * L + j, b) * select(j <= i, 1.f, 0.f);
-        Func scoreT2_h("scoreT2_h");
-        scoreT2_h(i, j, t, b) = cast<float16_t>(scoreT2(i, j, t, b));
-
         Func XdH("XdH");
         XdH(p, j, t, b) = 0.f;
         XdH(p, j, t, b) += cast<float>(X(rd, t * L + j, b)) *
                            cast<float>(dHopr(rd, p, nt - 1 - t, b));
 
-        RDom rbh(0, L, 0, hpg, "rbh");
+        RDom rbh(0, L, "rbh");
         // Whole score tiles above the diagonal are zero, so the sweep over
         // the output positions starts at this input position's tile.
         rbh.where(j / tile <= rbh.x / tile);
-        RVar rbi = rbh.x;
-        RVar rbhh = rbh.y;
         Func dBa("dBa");
         dBa(p, j, t, g) = 0.f;
-        dBa(p, j, t, g) += cast<float>(scoreT2_h(rbi, j, t, g * hpg + rbhh)) *
-                           cast<float>(Cm(p, t * L + rbi, g));
+        dBa(p, j, t, g) += cast<float>(sg2h(rbh.x, j, t, g)) *
+                           cast<float>(Cm(p, t * L + rbh.x, g));
         Func dBb("dBb");
         dBb(p, j, t, g) = 0.f;
         dBb(p, j, t, g) += bfac(j, t, g * hpg + rhh) *
@@ -345,14 +342,14 @@ public:
                                   Bmdf, Bmdf2,
                                   chunk_state,
                                   H, Hop, Cdf, dG, dHnr, dHopr, score2, score2_h,
-                                  dxi, dxe, dxs, xy, scoreT, scoreT_h, dYH,
-                                  dCa, dCb, xy2, scoreT2, scoreT2_h, XdH, dBa,
+                                  dxi, dxe, dxs, xy, sg, sgh, sg2h, dYH,
+                                  dCa, dCb, XdH, dBa,
                                   dBb, dYY, XdX, ddAcs, csum, sfxcr, sfxr, pdA,
                                   d, p, k, i, j, t, b, g, tt, kk);
                 } else {
                     schedule_simple(cumdelta, cdpre, qk, chunk_state, H, Hop,
-                                    dG, dHnr, dHopr, dxi, dxe, xy, scoreT_h, dYH,
-                                    dCa, dCb, xy2, scoreT2_h, XdH, dBa, dBb,
+                                    dG, dHnr, dHopr, dxi, dxe, dYH,
+                                    dCa, dCb, XdH, dBa, dBb,
                                     dYY, XdX, ddAcs, csum, sfxcr, sfxr, pdA,
                                     d, p, k, i, j, t, b, g, tt, kk);
                 }
@@ -375,8 +372,8 @@ private:
                        Func Bmdf, Func Bmdf2, Func chunk_state, Func H, Func Hop,
                        Func Cdf, Func dG, Func dHnr, Func dHopr, Func score2,
                        Func score2_h, Func dxi, Func dxe, Func dxs, Func xy,
-                       Func scoreT, Func scoreT_h, Func dYH, Func dCa,
-                       Func dCb, Func xy2, Func scoreT2, Func scoreT2_h,
+                       Func sg, Func sgh, Func sg2h, Func dYH, Func dCa,
+                       Func dCb,
                        Func XdH, Func dBa, Func dBb, Func dYY, Func XdX,
                        Func ddAcs, Func csum, Func sfxcr, Func sfxr, Func pdA,
                        Var d, Var p, Var k, Var i, Var j, Var t, Var b,
@@ -652,60 +649,53 @@ private:
         // where the multiply left them, and fed onward through the relayout;
         // the inter-chunk halves accumulate a scaled state multiply the same
         // way. All of the state's tiles ride in each warp, unrolled.
+        // ---- The group score-gradient plane ----
+        // A block owns a strip of output position tiles and sweeps its
+        // share of the group's heads, computing each head's raw scores on
+        // the tensor cores and accumulating the masked, decayed gradients
+        // into fragments that tile the whole plane.
         {
-            RVar rcjo("rcjo"), rcji("rcji"), hho("hho"), hhi("hhi");
+            RVar hso("hso"), hsi("hsi");
             Var hb("hb"), tf("tf");
             const int hpg = (int)heads / (int)groups;
-            // The sweep over a group's heads is split into partials, one per
-            // block, or the group-summed kernels have too few blocks to fill
-            // the card; a small reduction folds the partials afterwards.
-            dCa.update().split(RVar("rch$y"), hho, hhi, std::max(1, hpg / 8));
-            Func dCap = dCa.update().rfactor(hho, hb);
-            Func dCapw = dCap.in();
-            dCapw.compute_root()
-                .tile(p, i, rxi, ryi, tile, tile)
+            sg.update().split(RVar("rsh$x"), hso, hsi, std::max(1, hpg / 8));
+            Func sgp = sg.update().rfactor(hso, hb);
+            Func sgpw = sgp.in();
+            sgpw.compute_root()
+                .tile(j, i, rxi, ryi, tile, tile)
                 .split(i, io, ii, pos_tiles)
                 .fuse(t, hb, tf)
-                .reorder(rxi, ryi, p, ii, io, tf, g)
-                .unroll(p)
+                .reorder(rxi, ryi, j, ii, io, tf, g)
+                .unroll(j)
                 .unroll(ii)
                 .gpu_blocks(io, tf, g)
                 .gpu_threads(ii)
                 .tile_store(rxi, ryi);
-            dCap.compute_at(dCapw, io)
+            sgp.compute_at(sgpw, io)
                 .store_in(MemoryType::Tile)
-                .tile(p, i, rxi, ryi, tile, tile)
-                .unroll(p)
+                .tile(j, i, rxi, ryi, tile, tile)
+                .unroll(j)
                 .gpu_threads(i)
                 .tile_init(rxi, ryi);
-            dCap.update()
-                .tile(p, i, rxi, ryi, tile, tile)
-                .split(RVar("rch$x"), rcjo, rcji, tile)
-                .reorder(p, hhi, rcjo, i)
-                .unroll(p)
+            sgp.update()
+                .tile(j, i, rxi, ryi, tile, tile)
+                .reorder(j, i, hsi)
+                .unroll(j)
                 .gpu_threads(i)
-                .tile_matmul(rcji, rxi, ryi);
-            // The B side of the matmul is per group, not per head, so its
-            // fragments ride above the sweep over the heads.
-            Func Bmf = Func(Bm).in(dCap);
-            Bmf.compute_at(dCap, rcjo)
-                .store_in(MemoryType::Tile)
-                .tile(Bmf.args()[0], Bmf.args()[1], rxi, ryi, tile, tile)
-                .unroll(Bmf.args()[0])
-                .tile_load(rxi, ryi);
-            dCa.compute_root()
-                .split(p, x0, x1, 8)
+                .tile_init(rxi, ryi);
+            sg.compute_root()
+                .split(j, x0, x1, 8)
                 .split(i, y0, y1, 8)
                 .reorder(x1, y1, x0, y0)
                 .gpu_blocks(y0, t, g)
                 .gpu_threads(x1, y1);
-            dCa.update()
-                .split(p, x0, x1, 8)
+            sg.update()
+                .split(j, x0, x1, 8)
                 .split(i, y0, y1, 8)
-                .reorder(x1, y1, hho, x0, y0)
+                .reorder(x1, y1, hso, x0, y0)
                 .gpu_blocks(y0, t, g)
                 .gpu_threads(x1, y1);
-            xy.compute_at(dCap, hhi)
+            xy.compute_at(sgp, j)
                 .store_in(MemoryType::Tile)
                 .bound_extent(j, tile)
                 .bound_storage(j, tile)
@@ -718,84 +708,68 @@ private:
                 .split(rd_var(xy), rro, rri, tile)
                 .reorder(j, i, rro)
                 .tile_matmul(rri, rxi, ryi);
-            scoreT.compute_at(dCap, hhi)
-                .store_in(MemoryType::Tile)
-                .bound_extent(j, tile)
-                .bound_storage(j, tile)
-                .bound_extent(i, tile)
-                .bound_storage(i, tile)
-                .tile(j, i, rxi, ryi, tile, tile)
-                .tile_init(rxi, ryi);
+            // The narrowed planes, in both orientations.
+            for (Func f : {sgh, sg2h}) {
+                f.compute_root()
+                    .split(f.args()[0], x0, x1, 8)
+                    .split(f.args()[1], y0, y1, 8)
+                    .reorder(x1, y1, x0, y0)
+                    .gpu_blocks(y0, t, g)
+                    .gpu_threads(x1, y1);
+            }
         }
+        // ---- The per-group state-by-position multiplies ----
         {
-            RVar rbio("rbio"), rbii("rbii"), hho("hho"), hhi("hhi");
-            Var hb("hb"), tf("tf");
-            const int hpg = (int)heads / (int)groups;
-            dBa.update().split(RVar("rbh$y"), hho, hhi, std::max(1, hpg / 8));
-            Func dBap = dBa.update().rfactor(hho, hb);
-            Func dBapw = dBap.in();
-            dBapw.compute_root()
-                .tile(p, j, rxi, ryi, tile, tile)
-                .split(j, io, ii, pos_tiles)
-                .fuse(t, hb, tf)
-                .reorder(rxi, ryi, p, ii, io, tf, g)
+            RVar rcjo("rcjo"), rcji("rcji");
+            Func dCaw = dCa.in();
+            dCaw.compute_root()
+                .tile(p, i, rxi, ryi, tile, tile)
+                .split(i, io, ii, pos_tiles)
+                .reorder(rxi, ryi, p, ii, io, t, g)
                 .unroll(p)
                 .unroll(ii)
-                .gpu_blocks(io, tf, g)
+                .gpu_blocks(io, t, g)
                 .gpu_threads(ii)
                 .tile_store(rxi, ryi);
-            dBap.compute_at(dBapw, io)
+            dCa.compute_at(dCaw, io)
+                .store_in(MemoryType::Tile)
+                .tile(p, i, rxi, ryi, tile, tile)
+                .unroll(p)
+                .gpu_threads(i)
+                .tile_init(rxi, ryi);
+            dCa.update()
+                .tile(p, i, rxi, ryi, tile, tile)
+                .split(RVar("rch$x"), rcjo, rcji, tile)
+                .reorder(p, rcjo, i)
+                .unroll(p)
+                .gpu_threads(i)
+                .tile_matmul(rcji, rxi, ryi);
+        }
+        {
+            RVar rbio("rbio"), rbii("rbii");
+            Func dBaw = dBa.in();
+            dBaw.compute_root()
+                .tile(p, j, rxi, ryi, tile, tile)
+                .split(j, io, ii, pos_tiles)
+                .reorder(rxi, ryi, p, ii, io, t, g)
+                .unroll(p)
+                .unroll(ii)
+                .gpu_blocks(io, t, g)
+                .gpu_threads(ii)
+                .tile_store(rxi, ryi);
+            dBa.compute_at(dBaw, io)
                 .store_in(MemoryType::Tile)
                 .tile(p, j, rxi, ryi, tile, tile)
                 .unroll(p)
                 .gpu_threads(j)
                 .tile_init(rxi, ryi);
-            dBap.update()
+            dBa.update()
                 .tile(p, j, rxi, ryi, tile, tile)
                 .split(RVar("rbh$x"), rbio, rbii, tile)
-                .reorder(p, hhi, rbio, j)
+                .reorder(p, rbio, j)
                 .unroll(p)
                 .gpu_threads(j)
                 .tile_matmul(rbii, rxi, ryi);
-            Func Cmf = Func(Cm).in(dBap);
-            Cmf.compute_at(dBap, rbio)
-                .store_in(MemoryType::Tile)
-                .tile(Cmf.args()[0], Cmf.args()[1], rxi, ryi, tile, tile)
-                .unroll(Cmf.args()[0])
-                .tile_load(rxi, ryi);
-            dBa.compute_root()
-                .split(p, x0, x1, 8)
-                .split(j, y0, y1, 8)
-                .reorder(x1, y1, x0, y0)
-                .gpu_blocks(y0, t, g)
-                .gpu_threads(x1, y1);
-            dBa.update()
-                .split(p, x0, x1, 8)
-                .split(j, y0, y1, 8)
-                .reorder(x1, y1, hho, x0, y0)
-                .gpu_blocks(y0, t, g)
-                .gpu_threads(x1, y1);
-            xy2.compute_at(dBap, hhi)
-                .store_in(MemoryType::Tile)
-                .bound_extent(i, tile)
-                .bound_storage(i, tile)
-                .bound_extent(j, tile)
-                .bound_storage(j, tile)
-                .tile(i, j, rxi, ryi, tile, tile)
-                .tile_init(rxi, ryi);
-            xy2.update()
-                .tile(i, j, rxi, ryi, tile, tile)
-                .split(rd_var(xy2), rro, rri, tile)
-                .reorder(i, j, rro)
-                .tile_matmul(rri, rxi, ryi);
-            scoreT2.compute_at(dBap, hhi)
-                .store_in(MemoryType::Tile)
-                .bound_extent(i, tile)
-                .bound_storage(i, tile)
-                .bound_extent(j, tile)
-                .bound_storage(j, tile)
-                .tile(i, j, rxi, ryi, tile, tile)
-                .tile_init(rxi, ryi);
         }
         {
             RVar hho("hho"), hhi("hhi");
@@ -978,8 +952,8 @@ private:
     // the walks are all exercised.
     void schedule_simple(Func cumdelta, Func cdpre, Func qk, Func chunk_state,
                          Func H, Func Hop, Func dG, Func dHnr, Func dHopr,
-                         Func dxi, Func dxe, Func xy, Func scoreT_h, Func dYH,
-                         Func dCa, Func dCb, Func xy2, Func scoreT2_h,
+                         Func dxi, Func dxe, Func dYH,
+                         Func dCa, Func dCb,
                          Func XdH, Func dBa, Func dBb, Func dYY, Func XdX,
                          Func ddAcs, Func csum, Func sfxcr, Func sfxr,
                          Func pdA,
