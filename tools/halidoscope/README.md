@@ -15,6 +15,22 @@ You'll need a few prerequisites to get everything working.
 4. [PNPM](https://pnpm.io/), a space-efficient package manager for the
    JavaScript ecosystem.
 
+## Installing Halidoscope
+
+The easiest way to get `halidoscope` on your `PATH` is via pip:
+
+```bash
+pip install halidoscope
+```
+
+This installs a prebuilt binary wheel containing both the GUI and the CLI. Note
+that pip cannot install the system webview Halidoscope's GUI renders into
+(WebKitGTK on Linux, WebView2 on Windows, WKWebView on macOS) -- `halidoscope`'s
+CLI subcommands (`list`, `stats`, `dot`, `snapshot`) work anywhere the wheel
+installs, but the interactive GUI additionally needs
+[Tauri's system dependencies](https://v2.tauri.app/start/prerequisites/#system-dependencies)
+present on Linux; macOS and Windows ship a compatible webview out of the box.
+
 ## Building Halidoscope
 
 To get a production build locally, run the following two commands:
@@ -31,6 +47,25 @@ symlink this executable to any directory on your `PATH`. On Unix systems:
 ```bash
 ln -sf tools/halidoscope/src-tauri/target/release/halidoscope /some/dir/on/your/path/halidoscope
 ```
+
+### Building the pip package locally
+
+Halidoscope's wheel is built with [maturin](https://www.maturin.rs/), which
+compiles `src-tauri`'s `halidoscope` binary and packages it directly (no Python
+extension module involved). The frontend must be built first, since the binary
+embeds `dist/` at compile time:
+
+```bash
+pnpm install
+pnpm build
+pip install maturin
+maturin build --release
+```
+
+`pyproject.toml` enables the `tauri/custom-protocol` Cargo feature for this
+build. Without it, the compiled binary always tries to load its UI from Tauri's
+dev server instead of the files embedded from `dist/`, so the resulting wheel's
+GUI can't launch outside of `pnpm tauri dev`.
 
 ## Using Halidoscope
 
@@ -108,14 +143,14 @@ the `--trace` flag. Traces may be raw (e.g. as written by `HL_TRACE_FILE`) or
 compressed (as written by `Pipeline::halidoscope`, using
 `tools/halide_trace_compression.h`).
 
-```bash
+```text
 halidoscope --trace <path/to/file.hltrace>
 ```
 
 If you'd also like to visualize a pre-recorded profile JSON file, pass the path
 to that file via the `--profile` flag. Note that `--trace` is always required.
 
-```bash
+```text
 halidoscope --trace <path/to/file.hltrace> --profile <path/to/profile.json>
 ```
 
@@ -128,7 +163,7 @@ your Halide pipeline.
 
 List the `Func`s in a trace, along with their dimensionality.
 
-```bash
+```text
 halidoscope list --trace <path/to/file.hltrace> [--json]
 ```
 
@@ -140,7 +175,7 @@ halidoscope list --trace <path/to/file.hltrace> [--json]
 Print statistics (minimum/maximum coordinates, minimum/maximum value, maximum
 store/load counts, and thread count) for one or all `Func`s in a trace.
 
-```bash
+```text
 halidoscope stats --trace <path/to/file.hltrace> [--func <name>] [--json]
 ```
 
@@ -154,7 +189,7 @@ halidoscope stats --trace <path/to/file.hltrace> [--func <name>] [--json]
 Generate a [Graphviz DOT](https://graphviz.org/doc/info/lang.html)
 representation of the pipeline's dataflow graph.
 
-```bash
+```text
 halidoscope dot --trace <path/to/file.hltrace> [destination]
 ```
 
@@ -167,7 +202,7 @@ halidoscope dot --trace <path/to/file.hltrace> [destination]
 Snapshot a `Func`'s values at a given packet index for a given render mode,
 writing the underlying data to a JSON file.
 
-```bash
+```text
 halidoscope snapshot --trace <path/to/file.hltrace> --func <name> [--packet-index <n>] [--mode <mode>] <destination>
 ```
 
@@ -187,6 +222,9 @@ commands.
 
 ```bash
 pnpm install
+```
+
+```text
 pnpm tauri dev -- -- --trace <path/to/file.hltrace> [--profile <path/to/profile.json>]
 ```
 
