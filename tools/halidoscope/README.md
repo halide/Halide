@@ -25,11 +25,15 @@ pip install halidoscope
 
 This installs a prebuilt binary wheel containing both the GUI and the CLI. Note
 that pip cannot install the system webview Halidoscope's GUI renders into
-(WebKitGTK on Linux, WebView2 on Windows, WKWebView on macOS) -- `halidoscope`'s
-CLI subcommands (`list`, `stats`, `dot`, `snapshot`) work anywhere the wheel
-installs, but the interactive GUI additionally needs
+(WebKitGTK on Linux, WebView2 on Windows, WKWebView on macOS), so
 [Tauri's system dependencies](https://v2.tauri.app/start/prerequisites/#system-dependencies)
-present on Linux; macOS and Windows ship a compatible webview out of the box.
+must be present on Linux; macOS and Windows ship a compatible webview out of the
+box. Currently, `halidoscope` initializes its windowing toolkit unconditionally
+on startup, so on Linux this applies even to the non-interactive CLI subcommands
+(`list`, `stats`, `dot`, `snapshot`) -- running any of them on a Linux host with
+no display attached (e.g., a headless CI runner or container) additionally
+requires a virtual display such as
+[Xvfb](https://www.x.org/releases/X11R7.6/doc/man/man1/Xvfb.1.xhtml).
 
 ## Building Halidoscope
 

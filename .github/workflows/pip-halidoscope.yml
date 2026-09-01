@@ -58,7 +58,8 @@ jobs:
             build-essential \
             libxdo-dev \
             libssl-dev \
-            libsoup-3.0-dev
+            libsoup-3.0-dev \
+            xvfb
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -93,6 +94,11 @@ jobs:
           uv pip install --python .smoke-test-venv --no-index --find-links wheelhouse halidoscope
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             ./.smoke-test-venv/Scripts/halidoscope --version
+          elif [[ "${{ runner.os }}" == "Linux" ]]; then
+            # tauri::Builder::run() initializes tao's GTK-backed event loop
+            # before dispatching to any CLI subcommand, so even `--version`
+            # needs a display on Linux.
+            xvfb-run -a ./.smoke-test-venv/bin/halidoscope --version
           else
             ./.smoke-test-venv/bin/halidoscope --version
           fi
