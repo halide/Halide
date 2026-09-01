@@ -283,21 +283,18 @@ vector<std::pair<string, Expr>> compute_loop_bounds_after_split(const Split &spl
     Expr old_var_min = Variable::make(Int(32), prefix + split.old_var + ".loop_min");
     switch (split.split_type) {
     case Split::SplitVar: {
+        let_stmts.emplace_back(prefix + split.inner + ".loop_min", 0);
+        let_stmts.emplace_back(prefix + split.inner + ".loop_max", split.factor - 1);
         if (split.align.defined()) {
             Expr align = split.align;
             Expr outer_min = (old_var_min - align) / split.factor;
             Expr outer_max = (old_var_max - align) / split.factor;
-            let_stmts.emplace_back(prefix + split.inner + ".loop_min", 0);
-            let_stmts.emplace_back(prefix + split.inner + ".loop_max", split.factor - 1);
             let_stmts.emplace_back(prefix + split.outer + ".loop_min", outer_min);
             let_stmts.emplace_back(prefix + split.outer + ".loop_max", outer_max);
         } else {
-            Expr inner_extent = split.factor;
-            Expr outer_extent = (old_var_max - old_var_min + split.factor) / split.factor;
-            let_stmts.emplace_back(prefix + split.inner + ".loop_min", 0);
-            let_stmts.emplace_back(prefix + split.inner + ".loop_max", inner_extent - 1);
+            Expr outer_max = (old_var_max - old_var_min) / split.factor;
             let_stmts.emplace_back(prefix + split.outer + ".loop_min", 0);
-            let_stmts.emplace_back(prefix + split.outer + ".loop_max", outer_extent - 1);
+            let_stmts.emplace_back(prefix + split.outer + ".loop_max", outer_max);
         }
     } break;
     case Split::FuseVars: {
