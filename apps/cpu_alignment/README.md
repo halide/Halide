@@ -12,20 +12,31 @@ The consumer wants five bits per cell - ksw2's traceback direction
 byte - not the three 16-bit score planes. That asymmetry is the whole
 benchmark:
 
-- scan=inductive: the score rows live in a two-row folded window in
-  cache; only direction bytes reach memory.
-- scan=unfolded: the same fused walk with folding disabled.
-- scan=rdom: the walk as update definitions, which own their axes, so
-  all three score planes materialize at full extent per pair before
-  the directions can be derived. Nothing smaller is expressible: Tuple
-  components share the Func's extent, so the pointers cannot be kept
-  while the scores roll.
-- scan=diff8: the Suzuki-Kasahara difference formulation ksw2's SIMD
-  kernel uses, as an inductive Func: state (U, V, X, Y) of H-deltas
-  bounded by the scoring parameters, so it is int8 - twice the lanes.
-  The references are only up and left (the diagonal rides in the
-  differences), still inductive in both dims, and the direction bytes
-  mirror ksw_gg2's, so it stays byte-exact. ~30 declarative lines.
+Two generators express the two score formulations, each supporting the
+same three scan forms:
+- align16 - the int16 ABSOLUTE-SCORE table, the textbook (H, E, F)
+  recurrence.
+- align8 - the int8 DIFFERENCE formulation of Suzuki-Kasahara that
+  ksw2's SIMD kernel uses: state (U, V, X, Y) of adjacent-cell H
+  differences bounded by the scoring parameters, so the state is eight
+  bits - twice the lanes and two-thirds the row bytes. In (j, i)
+  coordinates its references are only up and left (the diagonal rides
+  in the differences), so it needs no anti-diagonal iteration; still
+  inductive in both dims, direction bytes mirror ksw_gg2's.
+
+The three scan forms (scan= on either generator):
+- inductive: the score rows live in a two-row folded window in cache;
+  only direction bytes reach memory.
+- unfolded: the same fused walk with folding disabled.
+- rdom: the walk as update definitions, which own their axes, so the
+  whole score state materializes at full extent per pair before the
+  directions can be derived. Nothing smaller is expressible: an update
+  definition writes only its own buffer, so the direction byte must be
+  a separate Func that reads the materialized scores back - and the
+  Halide profiler shows that read-back, not the table fill, is where
+  the time goes (at 1kx1k the consumer reading the table is ~17x the
+  cost of writing it). That read-back is the materialization the fused
+  forms avoid by deriving directions inline as the window rolls.
 
 The baseline is ksw2 (MIT, vendored subset), the affine-gap kernel
 family inside minimap2. The recurrence, boundary values, tie-breaking,

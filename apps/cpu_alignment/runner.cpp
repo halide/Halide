@@ -6,10 +6,12 @@
 #include "HalideBuffer.h"
 #include "halide_benchmark.h"
 
-#include "align_diff8.h"
-#include "align_ind.h"
-#include "align_rdom.h"
-#include "align_unf.h"
+#include "align16_ind.h"
+#include "align16_rdom.h"
+#include "align16_unf.h"
+#include "align8_ind.h"
+#include "align8_rdom.h"
+#include "align8_unf.h"
 
 extern "C" {
 #include "ksw2/ksw2.h"
@@ -227,31 +229,32 @@ int main(int argc, char **argv) {
         return true;
     };
 
-    // ONLY_DIFF8: skip everything but the diff8 benchmark, for A/B runs
-    // of differently-built binaries.
-    if (getenv("ONLY_DIFF8")) {
-        align_diff8(query, target, dir);
-        if (!check("diff8")) return 1;
-        double t = benchmark(3, 1, [&]() { align_diff8(query, target, dir); });
-        printf("  diff8      %10.1f us\n", t * 1e6);
+    // ONLY_A8: benchmark only int8 inductive, for A/B runs of
+    // differently-built binaries.
+    if (getenv("ONLY_A8")) {
+        align8_ind(query, target, dir);
+        if (!check("int8 ind")) return 1;
+        double t = benchmark(3, 1, [&]() { align8_ind(query, target, dir); });
+        printf("  int8 ind   %10.1f us\n", t * 1e6);
         return 0;
     }
 
-    align_ind(query, target, dir);
-    if (!check("inductive")) return 1;
-    double t_ind = benchmark(3, 1, [&]() { align_ind(query, target, dir); });
-
-    align_unf(query, target, dir);
-    if (!check("unfolded")) return 1;
-    double t_unf = benchmark(3, 1, [&]() { align_unf(query, target, dir); });
-
-    align_rdom(query, target, dir);
-    if (!check("rdom")) return 1;
-    double t_rdom = benchmark(3, 1, [&]() { align_rdom(query, target, dir); });
-
-    align_diff8(query, target, dir);
-    if (!check("diff8")) return 1;
-    double t_d8 = benchmark(3, 1, [&]() { align_diff8(query, target, dir); });
+    struct Form {
+        const char *name;
+        int (*fn)(struct halide_buffer_t *, struct halide_buffer_t *, struct halide_buffer_t *);
+    };
+    // Two generators x three forms. int8 inductive is the headline.
+    Form forms[] = {
+        {"int8 ind", align8_ind},   {"int8 unf", align8_unf},   {"int8 rdom", align8_rdom},
+        {"int16 ind", align16_ind}, {"int16 unf", align16_unf}, {"int16 rdom", align16_rdom},
+    };
+    double t[6];
+    for (int f = 0; f < 6; f++) {
+        forms[f].fn(query, target, dir);
+        if (!check(forms[f].name)) return 1;
+        t[f] = benchmark(3, 1, [&]() { forms[f].fn(query, target, dir); });
+    }
+    double t_ind = t[0];  // int8 inductive is the reference for ratios
 
 #ifdef HAVE_PARASAIL
     // parasail's traceback variants use the same strategy the inductive
@@ -356,13 +359,20 @@ int main(int argc, char **argv) {
 #endif
 
     const double cells = (double)B * J * I;
-    printf("  inductive  %10.1f us  (%.2f Gcell/s)\n", t_ind * 1e6, cells / t_ind / 1e9);
-    printf("  diff8      %10.1f us  (%.2f Gcell/s, %.2fx: int8 differences)\n",
-           t_d8 * 1e6, cells / t_d8 / 1e9, t_d8 / t_ind);
-    printf("  unfolded   %10.1f us  (%.2fx: fusion without folding)\n",
-           t_unf * 1e6, t_unf / t_ind);
-    printf("  rdom       %10.1f us  (%.2fx the inductive time)\n",
-           t_rdom * 1e6, t_rdom / t_ind);
+    // int8 inductive (t[0]) is the reference. Each form prints its
+    // Gcell/s and its ratio to that reference.
+    static const char *notes[6] = {
+        "int8 differences, folded window",
+        "int8, fusion without folding",
+        "int8, materialized (update definitions)",
+        "int16 table, folded window",
+        "int16, fusion without folding",
+        "int16, materialized (update definitions)",
+    };
+    for (int f = 0; f < 6; f++) {
+        printf("  %-10s %10.1f us  (%.2f Gcell/s, %.2fx int8-ind: %s)\n",
+               forms[f].name, t[f] * 1e6, cells / t[f] / 1e9, t[f] / t_ind, notes[f]);
+    }
     printf("  ksw2 sse   %10.1f us  (%.2fx: same output, hand-vectorized)\n",
            t_gg2 * 1e6, t_gg2 / t_ind);
     printf("  ksw2 gg    %10.1f us  (%.2fx: same output, scalar)\n",
@@ -371,15 +381,15 @@ int main(int argc, char **argv) {
     printf("  parasail   %10.1f us  (%.2fx: nw_trace_striped_16)\n",
            t_ps * 1e6, t_ps / t_ind);
 #endif
-    // INTERLEAVE=n: n alternating single-shot rounds of diff8 and the
-    // ksw2 SSE sweep, so the two sides share the same thermal and clock
-    // state. Reports each round and the mins.
+    // INTERLEAVE=n: n alternating single-shot rounds of int8 inductive
+    // and the ksw2 SSE sweep, so the two sides share the same thermal
+    // and clock state. Reports each round and the medians.
     if (const char *iv = getenv("INTERLEAVE")) {
         int rounds = atoi(iv);
         std::vector<double> ta, tk;
-        printf("  interleaved rounds (diff8 | ksw2 sse):\n");
+        printf("  interleaved rounds (int8 ind | ksw2 sse):\n");
         for (int r = 0; r < rounds; r++) {
-            double a = benchmark(1, 1, [&]() { align_diff8(query, target, dir); });
+            double a = benchmark(1, 1, [&]() { align8_ind(query, target, dir); });
             double k = benchmark(1, 1, [&]() { ksw2_sweep(true); });
             ta.push_back(a);
             tk.push_back(k);
@@ -389,7 +399,7 @@ int main(int argc, char **argv) {
             std::sort(v.begin(), v.end());
             return v[v.size() / 2];
         };
-        printf("  median: diff8 %.1f us, ksw2 sse %.1f us (ratio %.3f)\n",
+        printf("  median: int8 ind %.1f us, ksw2 sse %.1f us (ratio %.3f)\n",
                med(ta) * 1e6, med(tk) * 1e6, med(tk) / med(ta));
     }
     printf("Success!\n");

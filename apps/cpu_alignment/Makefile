@@ -7,41 +7,41 @@ QLEN ?= 256
 TLEN ?= 256
 BATCH ?= 1024
 PAR ?= false
+PROF :=
 
-# 64-bit indexing: required when the direction plane exceeds 2GB
-# (the big parallel configs), and - unexpectedly - measured 19 percent
-# FASTER for the diff8 inner loop than 32-bit indexing at sse4.1
-# (verified with alternating-binary A/B runs; static op mixes are
-# near-identical, so the cause is dynamic and unexplained). Always on.
+# 64-bit indexing: required when the direction plane exceeds 2GB (the
+# big parallel configs), and measured 19 percent FASTER for the int8
+# inner loop than 32-bit indexing at sse4.1 (alternating-binary A/B;
+# cause dynamic, unexplained). Always on.
 LARGE := -large_buffers
 
-$(GENERATOR_BIN)/align.generator: align_generator.cpp $(GENERATOR_DEPS)
+# Two generators, each with three scan forms. align16 is the int16
+# absolute-score table; align8 is the int8 Suzuki-Kasahara difference
+# formulation.
+GENS := align16 align8
+FORMS := inductive unfolded rdom
+SHORT_inductive := ind
+SHORT_unfolded := unf
+SHORT_rdom := rdom
+
+$(GENERATOR_BIN)/%.generator: %_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
-$(BIN)/%/align_ind.a: $(GENERATOR_BIN)/align.generator
-	@mkdir -p $(@D)
-	$< -g align -f align_ind -e $(GENERATOR_OUTPUTS) -o $(@D) \
-	    target=$*-no_runtime$(LARGE) scan=inductive par=$(PAR)
+# align16_ind.a, align16_unf.a, ..., align8_rdom.a
+define GEN_rule
+$$(BIN)/%/$(1)_$$(SHORT_$(2)).a: $$(GENERATOR_BIN)/$(1).generator
+	@mkdir -p $$(@D)
+	$$< -g $(1) -f $(1)_$$(SHORT_$(2)) -e $$(GENERATOR_OUTPUTS) -o $$(@D) \
+	    target=$$*-no_runtime$$(LARGE)$$(PROF) scan=$(2) par=$$(PAR)
+endef
+$(foreach g,$(GENS),$(foreach f,$(FORMS),$(eval $(call GEN_rule,$(g),$(f)))))
 
-$(BIN)/%/align_unf.a: $(GENERATOR_BIN)/align.generator
-	@mkdir -p $(@D)
-	$< -g align -f align_unf -e $(GENERATOR_OUTPUTS) -o $(@D) \
-	    target=$*-no_runtime$(LARGE) scan=unfolded par=$(PAR)
+STATIC_LIBS := $(foreach g,$(GENS),$(foreach f,$(FORMS),$(BIN)/$(HL_TARGET)/$(g)_$(SHORT_$(f)).a))
 
-$(BIN)/%/align_rdom.a: $(GENERATOR_BIN)/align.generator
+$(BIN)/%/runtime.a: $(GENERATOR_BIN)/align16.generator
 	@mkdir -p $(@D)
-	$< -g align -f align_rdom -e $(GENERATOR_OUTPUTS) -o $(@D) \
-	    target=$*-no_runtime$(LARGE) scan=rdom par=$(PAR)
-
-$(BIN)/%/align_diff8.a: $(GENERATOR_BIN)/align.generator
-	@mkdir -p $(@D)
-	$< -g align -f align_diff8 -e $(GENERATOR_OUTPUTS) -o $(@D) \
-	    target=$*-no_runtime$(LARGE) scan=diff8 par=$(PAR)
-
-$(BIN)/%/runtime.a: $(GENERATOR_BIN)/align.generator
-	@mkdir -p $(@D)
-	$< -r runtime -o $(@D) target=$*$(LARGE)
+	$< -r runtime -o $(@D) target=$*$(LARGE)$(PROF)
 
 $(BIN)/%/ksw2_gg.o: ksw2/ksw2_gg.c
 	@mkdir -p $(@D)
@@ -58,10 +58,11 @@ ifneq (,$(wildcard $(PARASAIL_DIR)/build/libparasail.a))
 PARASAIL_FLAGS = -DHAVE_PARASAIL -I$(PARASAIL_DIR) $(PARASAIL_DIR)/build/libparasail.a
 endif
 
-$(BIN)/%/runner: runner.cpp $(BIN)/%/align_ind.a $(BIN)/%/align_unf.a $(BIN)/%/align_rdom.a $(BIN)/%/align_diff8.a $(BIN)/%/runtime.a $(BIN)/%/ksw2_gg.o $(BIN)/%/ksw2_gg2_sse.o
+$(BIN)/%/runner: runner.cpp $(STATIC_LIBS) $(BIN)/%/runtime.a $(BIN)/%/ksw2_gg.o $(BIN)/%/ksw2_gg2_sse.o
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -DQLEN=$(QLEN) -DTLEN=$(TLEN) -DBATCH=$(BATCH) -DPARALLEL=$(if $(filter true,$(PAR)),1,0) \
-	    -Wall -O3 -march=native $^ $(PARASAIL_FLAGS) -o $@ $(LDFLAGS) -lpthread -ldl
+	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -DQLEN=$(QLEN) -DTLEN=$(TLEN) -DBATCH=$(BATCH) \
+	    -DPARALLEL=$(if $(filter true,$(PAR)),1,0) \
+	    -Wall -O3 -march=native $(filter %.cpp %.a %.o,$^) $(PARASAIL_FLAGS) -o $@ $(LDFLAGS) -lpthread -ldl
 
 test: $(BIN)/$(HL_TARGET)/runner
 	$(if $(INTERLEAVE),INTERLEAVE=$(INTERLEAVE)) $<
