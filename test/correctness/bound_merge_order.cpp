@@ -12,20 +12,13 @@ using namespace Halide::Internal;
 namespace {
 
 const Bound &the_bound(const Func &f, const std::string &var_name) {
-    const std::vector<Bound> &bounds = f.function().schedule().bounds();
-    const Bound *found = nullptr;
-    int count = 0;
-    for (const Bound &b : bounds) {
-        if (b.var == var_name) {
-            found = &b;
-            count++;
-        }
-    }
-    if (count != 1) {
-        printf("Expected exactly one Bound for \"%s\", found %d\n", var_name.c_str(), count);
+    const std::map<std::string, Bound> &bounds = f.function().schedule().bounds();
+    auto it = bounds.find(var_name);
+    if (it == bounds.end()) {
+        printf("Expected exactly one Bound for \"%s\", found 0\n", var_name.c_str());
         exit(1);
     }
-    return *found;
+    return it->second;
 }
 
 void expect_extent_bound(const Func &f, const std::string &var_name, int extent) {
