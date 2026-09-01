@@ -144,19 +144,22 @@ public:
         // CIGARs as ksw_gg).
         Func dp8(std::vector<Type>(4, Int(8)), "dp8");
         if (scan == ScanForm::Diff8) {
+            // int8 arithmetic throughout: Halide does no C-style type
+            // promotion, so these stay eight bits and wrap, matching the
+            // hand kernel's vectors.
             const int qe2 = 2 * gapoe;
             Expr s8 = cast<int8_t>(select(qseq(b, max(j, 0)) == tseq(b, max(i, 0)), (int)sa, -(int)sb));
             Expr Vp = dp8(b, j, i - 1)[1], Xp = dp8(b, j, i - 1)[2];
             Expr Up = dp8(b, j - 1, i)[0], Yp = dp8(b, j - 1, i)[3];
-            Expr av = cast<int8_t>(Xp + Vp);
-            Expr bv = cast<int8_t>(Yp + Up);
-            Expr z0 = cast<int8_t>(s8 + qe2);
+            Expr av = Xp + Vp;
+            Expr bv = Yp + Up;
+            Expr z0 = s8 + qe2;
             Expr z = max(max(z0, av), bv);
-            Expr U = cast<int8_t>(z - Vp);
-            Expr V = cast<int8_t>(z - Up);
-            Expr zq = cast<int8_t>(z - (int)gapo);
-            Expr X = max(cast<int8_t>(av - zq), 0);
-            Expr Y = max(cast<int8_t>(bv - zq), 0);
+            Expr U = z - Vp;
+            Expr V = z - Up;
+            Expr zq = z - (int)gapo;
+            Expr X = max(av - zq, 0);
+            Expr Y = max(bv - zq, 0);
             // Boundaries from the H-difference definitions: U(i,-1) = q
             // for i > 0 else 0, V(-1,j) = q for j > 0 else 0, X = Y = 0.
             Expr Ub = cast<int8_t>(select(j < 0 && 0 < i, (int)gapo, 0));
@@ -172,16 +175,16 @@ public:
             // ksw_gg2's direction byte: 1 if the up-path strictly beats
             // the diagonal, then 2 if the left-path strictly beats that;
             // extension bits are the pre-clamp X/Y positivity.
-            Expr aa = cast<int8_t>(dp8(b, j, i - 1)[2] + dp8(b, j, i - 1)[1]);
-            Expr bb = cast<int8_t>(dp8(b, j - 1, i)[3] + dp8(b, j - 1, i)[0]);
-            Expr zz0 = cast<int8_t>(s8 + qe2);
+            Expr aa = dp8(b, j, i - 1)[2] + dp8(b, j, i - 1)[1];
+            Expr bb = dp8(b, j - 1, i)[3] + dp8(b, j - 1, i)[0];
+            Expr zz0 = s8 + qe2;
             Expr zz1 = max(zz0, aa);
             Expr zz = max(zz1, bb);
-            Expr zzq = cast<int8_t>(zz - (int)gapo);
+            Expr zzq = zz - (int)gapo;
             Expr d = select(aa > zz0, cast<uint8_t>(1), cast<uint8_t>(0));
             d = select(bb > zz1, cast<uint8_t>(2), d);
-            d = d | select(cast<int8_t>(aa - zzq) > 0, cast<uint8_t>(0x08), cast<uint8_t>(0));
-            d = d | select(cast<int8_t>(bb - zzq) > 0, cast<uint8_t>(0x10), cast<uint8_t>(0));
+            d = d | select(aa - zzq > 0, cast<uint8_t>(0x08), cast<uint8_t>(0));
+            d = d | select(bb - zzq > 0, cast<uint8_t>(0x10), cast<uint8_t>(0));
             dir(b, j, i) = d;
         }
 

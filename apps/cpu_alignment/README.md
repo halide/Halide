@@ -51,14 +51,17 @@ Measured on a Threadripper 9970X (Zen 5):
 
     1024x1024, batch 128, one thread - the same generators compiled
     for the baseline's ISA and for the machine's (HL_TARGET=...-sse41
-    vs host), against the same 128-bit ksw2 binary:
-      diff8     @ sse4.1    63.9 ms   (matched width AND formulation: a tie)
-      inductive @ sse4.1    76.5 ms   (matched width, int16 table: 1.25x behind)
-      diff8     @ avx-512   15.9 ms   (a recompile: 4.2x ahead of ksw2)
-      inductive @ avx-512   24.2 ms   (2.78x ahead)
+    vs host), against the same 128-bit ksw2 binary. The ksw2
+    comparisons are interleaved single-shot medians (INTERLEAVE=15),
+    so both sides share thermal and clock state:
+      diff8     @ sse4.1    71.2 ms   (matched width AND formulation:
+                                       ksw2 4.5 percent ahead)
+      inductive @ sse4.1    76.5 ms   (matched width, int16 table)
+      diff8     @ avx-512   17.8 ms   (a recompile: 3.8x ahead of ksw2)
+      inductive @ avx-512   24.2 ms   (2.8x ahead)
       unfolded  @ avx-512   40.2 ms   (1.66x of inductive)
       rdom      @ avx-512   81.2 ms   (3.36x)
-      ksw2 sse (128-bit)    61.3 ms   (same output, hand-vectorized)
+      ksw2 sse (128-bit)    67.8 ms   (same output, hand-vectorized)
 
     1024x1024, batch 4096, all cores (PAR=true), ksw2 threaded:
       diff8         43.0 ms   (100 Gcell/s)
@@ -72,10 +75,12 @@ intrinsics (16 int8 lanes; lh3 ships no wider port), while Halide
 compiles to AVX-512, and ksw2's kernel also uses a denser formulation
 (int8 differences) than the textbook int16 table. The two scan forms
 separate those factors. At matched width and matched formulation
-(diff8 @ sse4.1) it is a tie - the schedule reproduces the hand
-kernel. The int16 textbook table at matched width is 1.25x behind:
-that is the price of the plain formulation, paid in lanes. And the
-recompile to AVX-512 is worth 3.1-4x, which for the intrinsics kernel
+(diff8 @ sse4.1) the hand kernel keeps a 4.5 percent edge
+(interleaved medians) - its inner loop carries the previous cell in
+registers where ours reloads it from L1. The int16 textbook table at
+matched width is a further 7 percent behind: the price of the plain
+formulation, paid in lanes. And the recompile to AVX-512 is worth
+3-4x, which for the intrinsics kernel
 is a porting project, not a flag (an AVX-512 ksw2 is what Intel's
 mm2-fast contributed, published as its own engineering effort;
 512-bit lane-crossing shuffles do not translate mechanically). At

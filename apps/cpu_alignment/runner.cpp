@@ -277,6 +277,27 @@ int main(int argc, char **argv) {
            t_gg2 * 1e6, t_gg2 / t_ind);
     printf("  ksw2 gg    %10.1f us  (%.2fx: same output, scalar)\n",
            t_gg * 1e6, t_gg / t_ind);
+    // INTERLEAVE=n: n alternating single-shot rounds of diff8 and the
+    // ksw2 SSE sweep, so the two sides share the same thermal and clock
+    // state. Reports each round and the mins.
+    if (const char *iv = getenv("INTERLEAVE")) {
+        int rounds = atoi(iv);
+        std::vector<double> ta, tk;
+        printf("  interleaved rounds (diff8 | ksw2 sse):\n");
+        for (int r = 0; r < rounds; r++) {
+            double a = benchmark(1, 1, [&]() { align_diff8(query, target, dir); });
+            double k = benchmark(1, 1, [&]() { ksw2_sweep(true); });
+            ta.push_back(a);
+            tk.push_back(k);
+            printf("    %10.1f | %10.1f us\n", a * 1e6, k * 1e6);
+        }
+        auto med = [](std::vector<double> v) {
+            std::sort(v.begin(), v.end());
+            return v[v.size() / 2];
+        };
+        printf("  median: diff8 %.1f us, ksw2 sse %.1f us (ratio %.3f)\n",
+               med(ta) * 1e6, med(tk) * 1e6, med(tk) / med(ta));
+    }
     printf("Success!\n");
     return 0;
 }
