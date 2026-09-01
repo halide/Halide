@@ -186,12 +186,11 @@ public:
 
         // ---------------- Schedule ----------------
 
-        const int VEC = natural_vector_size<int16_t>();
+        const int VEC = 64;
         // A parallel block owns 64 pairs - a full cache line of the
         // direction plane - so no two tasks ever write the same line.
-        const int BLK = 2 * VEC;
         Var bo("bo"), bi("bi");
-        dir.split(b, bo, bi, BLK).reorder(bi, j, i, bo).vectorize(bi, VEC);
+        dir.split(b, bo, bi, VEC).reorder(bi, j, i, bo).vectorize(bi);
         if (par) {
             // The direction plane is written once and read only by the
             // O(N) traceback: streaming stores skip the read-for-ownership
@@ -200,11 +199,17 @@ public:
         }
 
         if (scan == ScanForm::Diff8) {
+            Var io("io"), ii("ii");
+
             // The int8 state doubles the lanes: one block is one vector.
             dp8.compute_at(dir, i)
                 .store_at(dir, bo)
                 .fold_storage(i, 2)
-                .vectorize(b, 2 * VEC);
+                .vectorize(b);
+
+            if (!par) {
+                dp8.hoist_storage_root();
+            }
         } else if (scan != ScanForm::RDom) {
             // One block of pairs walks the table together; the score rows
             // fold to the two the recurrence can reach.

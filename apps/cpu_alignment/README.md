@@ -42,45 +42,50 @@ this benchmark's competitor.
 Measured on a Threadripper 9970X (Zen 5):
 
     256x256, batch 1024, one thread:
-      diff8          9.3 ms   (7.2 Gcell/s)
-      inductive     12.9 ms   (5.2 Gcell/s)
-      unfolded      17.4 ms   (1.35x of inductive)
-      rdom          21.0 ms   (1.63x)
-      ksw2 sse      37.9 ms   (2.94x, same output)
-      ksw2 scalar  197   ms   (15x, same output)
+      diff8          8.3 ms   (8.1 Gcell/s)
+      inductive      9.3 ms   (7.2 Gcell/s)
+      unfolded      15.1 ms   (1.62x of inductive)
+      rdom          18.9 ms   (2.04x)
+      ksw2 sse      38.2 ms   (4.12x, same output)
+      ksw2 scalar  199   ms   (21x, same output)
 
     1024x1024, batch 128, one thread - the same generators compiled
     for the baseline's ISA and for the machine's (HL_TARGET=...-sse41
     vs host), against the same 128-bit ksw2 binary. The ksw2
     comparisons are interleaved single-shot medians (INTERLEAVE=15),
     so both sides share thermal and clock state:
-      diff8     @ sse4.1    71.2 ms   (matched width AND formulation:
-                                       ksw2 4.5 percent ahead)
-      inductive @ sse4.1    76.5 ms   (matched width, int16 table)
-      diff8     @ avx-512   17.8 ms   (a recompile: 3.8x ahead of ksw2)
-      inductive @ avx-512   24.2 ms   (2.8x ahead)
-      unfolded  @ avx-512   40.2 ms   (1.66x of inductive)
-      rdom      @ avx-512   81.2 ms   (3.36x)
-      ksw2 sse (128-bit)    67.8 ms   (same output, hand-vectorized)
+      diff8     @ sse4.1    30.5 ms   (matched ISA: 2.22x ahead)
+      diff8     @ avx-512   14.9 ms   (a recompile: 4.6x ahead of ksw2)
+      inductive @ avx-512   17.4 ms   (3.9x ahead)
+      unfolded  @ avx-512   38.9 ms   (2.24x of inductive)
+      rdom      @ avx-512   77.4 ms   (4.45x)
+      ksw2 sse (128-bit)    68.2 ms   (same output, hand-vectorized)
 
     1024x1024, batch 4096, all cores (PAR=true), ksw2 threaded:
-      diff8         43.0 ms   (100 Gcell/s)
-      inductive     46.3 ms   (93 Gcell/s)
-      unfolded     486   ms   (10.5x of inductive)
-      rdom        1069   ms   (23.1x)
-      ksw2 sse      58.4 ms   (1.26x, same output)
+      diff8         41.7 ms   (103 Gcell/s)
+      inductive     43.3 ms   (99 Gcell/s)
+      unfolded     478   ms   (11.0x of inductive)
+      rdom        1067   ms   (24.6x)
+      ksw2 sse      59.4 ms   (1.37x, same output)
 
 Vector-width and formulation fairness: ksw2's kernels are 128-bit SSE
 intrinsics (16 int8 lanes; lh3 ships no wider port), while Halide
 compiles to AVX-512, and ksw2's kernel also uses a denser formulation
-(int8 differences) than the textbook int16 table. The two scan forms
-separate those factors. At matched width and matched formulation
-(diff8 @ sse4.1) the hand kernel keeps a 4.5 percent edge
-(interleaved medians) - its inner loop carries the previous cell in
-registers where ours reloads it from L1. The int16 textbook table at
-matched width is a further 7 percent behind: the price of the plain
-formulation, paid in lanes. And the recompile to AVX-512 is worth
-3-4x, which for the intrinsics kernel
+(int8 differences) than the textbook int16 table. The scan forms and
+targets separate those factors. At matched ISA (diff8 @ sse4.1,
+interleaved medians) the batch formulation is 2.22x ahead: every
+instruction is still a 16-lane SSE op, but the schedule keeps four
+independent stripes of pairs in flight per cell, filling the latency
+of the serial per-cell chain - the ILP ksw2's anti-diagonal gets from
+independent inner iterations, manufactured from the batch instead,
+without the per-diagonal score-profile fills, byte-carry shifts, and
+boundary bookkeeping the rotated iteration pays. (A single 16-wide
+stripe is latency-bound and 4.5 percent BEHIND ksw2 - the vectorize
+width is the schedule's load-bearing choice.) The scope condition to
+state: inter-sequence SIMD requires a batch of comparable-length
+pairs, the deployment shape of an aligner's scoring stage; ksw2
+aligns one pair at a time. And the recompile to AVX-512 is worth a
+further 2x, which for the intrinsics kernel
 is a porting project, not a flag (an AVX-512 ksw2 is what Intel's
 mm2-fast contributed, published as its own engineering effort;
 512-bit lane-crossing shuffles do not translate mechanically). At
