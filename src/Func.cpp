@@ -843,9 +843,9 @@ struct HoistedFactor {
 };
 
 struct HoistedTerm {
-    optional<HoistedFactor> factor;
-    Expr body;
-    size_t intermediate_index;
+    optional<HoistedFactor> factor;  // The loop-invariant factor to reapply at write-back.
+    Expr body;                       // The term to accumulate in the intermediate Func.
+    size_t intermediate_index;       // Index into the FuncVec of intermediates (not a tuple index).
 };
 
 // Given the non-self-reference increment from an update body and the
