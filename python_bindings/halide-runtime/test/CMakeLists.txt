@@ -29,6 +29,15 @@ function(add_runtime_test_kernel MOD)
     add_library(${MOD}_module MODULE aot_module_stub.c)
     target_link_libraries(${MOD}_module PRIVATE "$<LINK_LIBRARY:WHOLE_ARCHIVE,${MOD}_aot>")
     set_target_properties(${MOD}_module PROPERTIES PREFIX "" OUTPUT_NAME ${MOD})
+
+    if (MSVC)
+        # link.exe's incremental linker can corrupt a /WHOLEARCHIVE module
+        # (LNK1236: corrupt or invalid COFF sections) when relinking it against
+        # a changed archive in an existing build tree. These modules are only
+        # ever built once per configuration, so incremental linking buys us
+        # nothing and isn't worth the risk.
+        target_link_options(${MOD}_module PRIVATE /INCREMENTAL:NO)
+    endif ()
 endfunction()
 
 # A tiny kernel: load, call, and Buffer interop.
