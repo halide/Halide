@@ -30,3 +30,10 @@ At two sections the inductive pass streams at 36 GB/s - the memory
 system's speed. scipy.sosfilt (single thread, scalar, float32) takes
 2.1 s at 8 sections. Parallel over 256 channels x 1M samples the
 inductive form runs 46 ms at 46 GB/s against 461 ms for the N-pass form.
+
+scan=unfolded isolates fusion from folding: the same fused pass with
+every section's whole trajectory kept live times the same as the folded
+form (1.00x). The RDom form's loss is therefore all fusion: an update
+definition owns its walk, so nothing can interleave with it, and the
+signal must cross memory once per section. Folding is what keeps the
+fused form's footprint at kilobytes instead of gigabytes.

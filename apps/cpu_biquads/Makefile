@@ -19,6 +19,11 @@ $(BIN)/%/biquads_ind.a: $(GENERATOR_BIN)/biquads.generator
 	$< -g biquads -f biquads_ind -e $(GENERATOR_OUTPUTS) -o $(@D) \
 	    target=$*-no_runtime sections=$(SECTIONS) channels=$(CHANNELS) scan=inductive par=$(PAR)
 
+$(BIN)/%/biquads_unf.a: $(GENERATOR_BIN)/biquads.generator
+	@mkdir -p $(@D)
+	$< -g biquads -f biquads_unf -e $(GENERATOR_OUTPUTS) -o $(@D) \
+	    target=$*-no_runtime sections=$(SECTIONS) channels=$(CHANNELS) scan=unfolded par=$(PAR)
+
 $(BIN)/%/biquads_rdom.a: $(GENERATOR_BIN)/biquads.generator
 	@mkdir -p $(@D)
 	$< -g biquads -f biquads_rdom -e $(GENERATOR_OUTPUTS) -o $(@D) \
@@ -28,7 +33,7 @@ $(BIN)/%/runtime.a: $(GENERATOR_BIN)/biquads.generator
 	@mkdir -p $(@D)
 	$< -r runtime -o $(@D) target=$*
 
-$(BIN)/%/runner: runner.cpp $(BIN)/%/biquads_ind.a $(BIN)/%/biquads_rdom.a $(BIN)/%/runtime.a
+$(BIN)/%/runner: runner.cpp $(BIN)/%/biquads_ind.a $(BIN)/%/biquads_unf.a $(BIN)/%/biquads_rdom.a $(BIN)/%/runtime.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -DCHANNELS=$(CHANNELS) -DSAMPLES=$(SAMPLES) \
 	    -DSECTIONS=$(SECTIONS) -Wall -O2 $^ -o $@ $(LDFLAGS) -lpthread -ldl

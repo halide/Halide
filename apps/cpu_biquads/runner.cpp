@@ -7,6 +7,7 @@
 
 #include "biquads_ind.h"
 #include "biquads_rdom.h"
+#include "biquads_unf.h"
 
 #include <cmath>
 #include <cstdio>
@@ -170,6 +171,10 @@ int main(int argc, char **argv) {
     check(x, sos, y, "inductive");
     double t_ind = benchmark(3, 1, [&]() { biquads_ind(x, sos, y); });
 
+    biquads_unf(x, sos, y);
+    check(x, sos, y, "unfolded");
+    double t_unf = benchmark(3, 1, [&]() { biquads_unf(x, sos, y); });
+
     biquads_rdom(x, sos, y);
     check(x, sos, y, "rdom");
     double t_rdom = benchmark(3, 1, [&]() { biquads_rdom(x, sos, y); });
@@ -177,6 +182,8 @@ int main(int argc, char **argv) {
     const double gb = C * (double)S * 4 / 1e9;
     printf("  inductive  %10.1f us  (%.1f GB/s of signal each way)\n",
            t_ind * 1e6, 2 * gb / t_ind);
+    printf("  unfolded   %10.1f us  (%.2fx: fusion without folding)\n",
+           t_unf * 1e6, t_unf / t_ind);
     printf("  rdom       %10.1f us  (%.2fx the inductive time)\n",
            t_rdom * 1e6, t_rdom / t_ind);
     printf("Success!\n");

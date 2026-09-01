@@ -23,10 +23,16 @@ public:
     GeneratorParam<int> sections{"sections", 8};
     GeneratorParam<int> channels{"channels", 32};
     enum class ScanForm { Inductive,
+                          // The inductive form with storage folding disabled:
+                          // the same fused single pass, but every section's
+                          // whole trajectory stays live. Isolates folding
+                          // from fusion.
+                          Unfolded,
                           RDom };
     GeneratorParam<ScanForm> scan{"scan",
                                   ScanForm::Inductive,
                                   {{"inductive", ScanForm::Inductive},
+                                   {"unfolded", ScanForm::Unfolded},
                                    {"rdom", ScanForm::RDom}}};
     // Whether blocks of channels spread across cores.
     GeneratorParam<bool> par{"par", false};
@@ -114,8 +120,10 @@ public:
                 for (Func f : ys) {
                     f.store_at(y, coo)
                         .compute_at(y, coi)
-                        .fold_storage(n, 4)
                         .vectorize(c, VEC);
+                    if (folded()) {
+                        f.fold_storage(n, 4);
+                    }
                 }
             } else {
                 y.split(c, co, ci, VEC)
@@ -125,8 +133,10 @@ public:
                 for (Func f : ys) {
                     f.store_root()
                         .compute_at(y, co)
-                        .fold_storage(n, 4)
                         .vectorize(c, VEC);
+                    if (folded()) {
+                        f.fold_storage(n, 4);
+                    }
                 }
             }
         } else {
@@ -157,6 +167,9 @@ public:
     }
 
     bool inductive() const {
+        return scan != ScanForm::RDom;
+    }
+    bool folded() const {
         return scan == ScanForm::Inductive;
     }
 };
