@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <set>
 #include <cmath>
 #include <cstring>
 #include <iostream>
@@ -1955,6 +1956,35 @@ Stage &Stage::tile(const std::vector<VarOrRVar> &previous,
     return tile(previous, previous, inners, factors, tail);
 }
 
+namespace {
+// Trace a dim name back through the splits list to the set of original
+// dims it derives from.
+std::set<std::string> root_vars(const std::string &var, const std::vector<Split> &splits) {
+    std::set<std::string> roots{var};
+    for (auto it = splits.rbegin(); it != splits.rend(); ++it) {
+        switch (it->split_type) {
+        case Split::SplitVar:
+            if (roots.erase(it->outer) + roots.erase(it->inner)) {
+                roots.insert(it->old_var);
+            }
+            break;
+        case Split::FuseVars:
+            if (roots.erase(it->old_var)) {
+                roots.insert(it->outer);
+                roots.insert(it->inner);
+            }
+            break;
+        case Split::RenameVar:
+            if (roots.erase(it->outer)) {
+                roots.insert(it->old_var);
+            }
+            break;
+        }
+    }
+    return roots;
+}
+}  // namespace
+
 Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
     definition.schedule().touched() = true;
     const string &func_name = function.name();
@@ -1995,6 +2025,33 @@ Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
         if (!dims[idx[i]].is_pure()) {
             for (size_t j = i + 1; !safe_to_reorder && j < idx.size(); j++) {
                 if (!dims[idx[j]].is_pure() && (idx[i] > idx[j])) {
+                    if (dims[idx[i]].dim_type == DimType::InductiveVar &&
+                        dims[idx[j]].dim_type == DimType::InductiveVar) {
+                        // Two inductive dims may swap if they derive from
+                        // distinct original vars: every self-reference is
+                        // non-increasing in each inductive var, so each
+                        // recurrence chain sees its var increase under any
+                        // nesting of the two. Loops deriving from a single
+                        // inductive var must keep their order - swapping
+                        // them makes the composed traversal of that var
+                        // non-monotonic.
+                        const vector<Split> &splits = definition.schedule().splits();
+                        std::set<string> roots_i = root_vars(dims[idx[i]].var, splits);
+                        std::set<string> roots_j = root_vars(dims[idx[j]].var, splits);
+                        bool disjoint =
+                            std::none_of(roots_i.begin(), roots_i.end(),
+                                         [&](const string &r) { return roots_j.count(r); });
+                        if (disjoint) {
+                            continue;
+                        }
+                        user_error
+                            << "In schedule for " << name()
+                            << ", can't reorder the loops " << vars[i].name()
+                            << " and " << vars[j].name()
+                            << " because they both derive from the same original "
+                            << "inductive variable, whose loops must keep their "
+                            << "nesting order.\n";
+                    }
                     // Generate an error if the operator is not both associative and commutative.
                     const auto &prover_result = prove_associativity(func_name, args, values);
                     safe_to_reorder = prover_result.associative() &&

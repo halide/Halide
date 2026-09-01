@@ -303,6 +303,60 @@ int tuple_test_2() {
     return 0;
 }
 
+int distinct_inductive_reorder_test() {
+    // A Func inductive in two vars: every self-reference is non-increasing
+    // in each inductive var, so each recurrence chain sees its var increase
+    // under any nesting of the two inductive loops. Reordering loops that
+    // derive from DISTINCT original inductive vars is therefore legal;
+    // only loops deriving from the same one must keep their order.
+    auto make = [](Func &f, Var x, Var y) {
+        f(x, y) = select(x <= 0 || y <= 0, cast<uint32_t>(x + y),
+                         likely(f(x - 1, y) + f(x, y - 1)));
+    };
+    auto reference = [](Buffer<uint32_t> &im) {
+        for (int y = 0; y < im.height(); y++) {
+            for (int x = 0; x < im.width(); x++) {
+                uint32_t correct = (x == 0 || y == 0) ? (uint32_t)(x + y) : im(x - 1, y) + im(x, y - 1);
+                if (im(x, y) != correct) {
+                    printf("im(%d, %d) = %u instead of %u\n", x, y, im(x, y), correct);
+                    return 1;
+                }
+            }
+        }
+        return 0;
+    };
+
+    {
+        // Swap the two inductive dims outright.
+        Func f(UInt(32), 2, "f"), g("g");
+        Var x("x"), y("y");
+        make(f, x, y);
+        g(x, y) = f(x, y);
+        f.compute_root().reorder(y, x);
+        Buffer<uint32_t> im = g.realize({16, 16});
+        if (reference(im)) {
+            return 1;
+        }
+    }
+
+    {
+        // Split both and interleave the pieces across the two vars. Pieces
+        // of the same var keep their relative order; pieces of distinct
+        // vars swap freely.
+        Func f(UInt(32), 2, "f"), g("g");
+        Var x("x"), y("y"), xo("xo"), xi("xi"), yo("yo"), yi("yi");
+        make(f, x, y);
+        g(x, y) = f(x, y);
+        f.compute_root().split(x, xo, xi, 4).split(y, yo, yi, 4).reorder(xi, yi, xo, yo);
+        Buffer<uint32_t> im = g.realize({16, 16});
+        if (reference(im)) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -314,6 +368,7 @@ int main(int argc, char **argv) {
     std::vector<Task> tasks = {
         {"simple inductive test", simple_inductive_test},
         {"reordering test", reorder_test},
+        {"distinct inductive reorder test", distinct_inductive_reorder_test},
         {"summed area table test", summed_area_table},
         {"large baseline test", large_baseline},
         {"fibonacci test", fibonacci},

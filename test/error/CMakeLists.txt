@@ -140,6 +140,7 @@ tests(
     require_fail.cpp
     reuse_var_in_schedule.cpp
     reused_args.cpp
+    reorder_inductive_split.cpp
     rfactor_after_var_and_rvar_fusion.cpp
     rfactor_fused_var_and_rvar.cpp
     rfactor_inner_dim_non_commutative.cpp
