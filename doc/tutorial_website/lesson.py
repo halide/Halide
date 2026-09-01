@@ -56,10 +56,16 @@ class SourceVariant:
 
 @dataclass
 class Lesson:
+    """A single tutorial lesson. Most lessons have a C++ (or shell) source and,
+    where one exists, a same-stem Python translation. A few lessons are
+    Python-only (e.g. lesson_15_runtime, which demonstrates the standalone
+    halide.runtime module and has no C++ equivalent): those have `cpp=None`.
+    At least one of `cpp`/`python` is always set."""
+
     number: int
     slug: str
     title: str
-    cpp: SourceVariant
+    cpp: SourceVariant | None = None
     binary_path: Path | None = None
     python: SourceVariant | None = None
 
@@ -74,11 +80,25 @@ def _next_blank_line(lines: list[str], from_line: int) -> int:
     return len(lines)
 
 
+def _python_tutorial_dir(tutorial_dir: Path) -> Path:
+    return tutorial_dir.parent / "python_bindings" / "halide" / "tutorial"
+
+
 def _python_source(tutorial_dir: Path, slug: str) -> Path | None:
-    candidate = (
-        tutorial_dir.parent / "python_bindings" / "halide" / "tutorial" / f"{slug}.py"
-    )
+    candidate = _python_tutorial_dir(tutorial_dir) / f"{slug}.py"
     return candidate if candidate.exists() else None
+
+
+def _lesson_title(variant: SourceVariant, default: str) -> str:
+    """Extracts the title from a lesson's `Halide tutorial lesson N: Title`
+    comment. That comment isn't necessarily the first line -- shell-script
+    lessons lead with a shebang -- so scan near the top rather than assuming
+    lines[0]. Falls back to `default` (the slug) when there is no such comment."""
+    for line in variant.lines[:5]:
+        title_match = TITLE_RE.match(line)
+        if title_match:
+            return title_match.group(1)
+    return default
 
 
 def _scan_source(source_path: Path, number: int) -> SourceVariant:
@@ -142,16 +162,6 @@ def discover_lessons(tutorial_dir: Path, manifest: dict[str, Path]) -> list[Less
 
         cpp = _scan_source(source_path, number)
 
-        title = source_path.stem
-        # The title comment isn't necessarily the first line -- shell-script
-        # lessons lead with a shebang -- so scan for it near the top instead
-        # of assuming lines[0].
-        for line in cpp.lines[:5]:
-            title_match = TITLE_RE.match(line)
-            if title_match:
-                title = title_match.group(1)
-                break
-
         python_source_path = _python_source(tutorial_dir, source_path.stem)
         python_variant = (
             _scan_source(python_source_path, number) if python_source_path else None
@@ -161,10 +171,37 @@ def discover_lessons(tutorial_dir: Path, manifest: dict[str, Path]) -> list[Less
             Lesson(
                 number=number,
                 slug=source_path.stem,
-                title=title,
+                title=_lesson_title(cpp, source_path.stem),
                 cpp=cpp,
                 binary_path=manifest.get(source_path.name),
                 python=python_variant,
             )
         )
+
+    # Python-only lessons: a lesson_*.py with no same-stem C++/shell source
+    # above is a lesson in its own right (e.g. lesson_15_runtime, which covers
+    # the standalone halide.runtime module and has no C++ counterpart). Render
+    # it from its Python source alone.
+    known_slugs = {lesson.slug for lesson in lessons}
+    for python_path in sorted(_python_tutorial_dir(tutorial_dir).glob("lesson_*.py")):
+        number_match = NUMBER_RE.match(python_path.name)
+        if not number_match or python_path.stem in known_slugs:
+            continue
+        number = int(number_match.group(1))
+        python_variant = _scan_source(python_path, number)
+        lessons.append(
+            Lesson(
+                number=number,
+                slug=python_path.stem,
+                title=_lesson_title(python_variant, python_path.stem),
+                python=python_variant,
+            )
+        )
+
+    # Group pages are built by grouping *consecutive* same-number lessons
+    # (render.py's _group_by_number), so every lesson sharing a number must be
+    # contiguous. Sorting by (number, slug) keeps the existing C++/shell order
+    # (their filenames are already number- then name-sorted) while slotting
+    # each python-only lesson in beside its same-numbered siblings.
+    lessons.sort(key=lambda lesson: (lesson.number, lesson.slug))
     return lessons
