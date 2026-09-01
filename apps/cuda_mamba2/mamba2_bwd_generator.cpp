@@ -445,6 +445,7 @@ private:
             .reorder(d, rro, p, RVar("rjo"))
             .unroll(d)
             .unroll(rro)
+            .unroll(RVar("rjo"))
             .gpu_threads(p)
             .tile_matmul(rri, rxi, ryi);
         {
@@ -513,6 +514,7 @@ private:
             .reorder(d, rro, p, RVar("rio"))
             .unroll(d)
             .unroll(rro)
+            .unroll(RVar("rio"))
             .gpu_threads(p)
             .tile_matmul(rri, rxi, ryi);
         {
@@ -562,7 +564,7 @@ private:
         const int idx_per_warp = 2;
         Func(dX).compute_root()
             .tile(d, dX.args()[1], rxi, ryi, tile, tile)
-            .split(dX.args()[1], io, ii, pos_tiles)
+            .split(dX.args()[1], io, ii, 2)
             .reorder(rxi, ryi, d, ii, io, t, b)
             .gpu_blocks(io, t, b)
             .tile_store(rxi, ryi)
@@ -623,7 +625,7 @@ private:
             .split(i, x0, x1, 8)
             .split(j, y0, y1, 8)
             .reorder(x1, y1, x0, y0)
-            .gpu_blocks(t, g)
+            .gpu_blocks(y0, t, g)
             .gpu_threads(x1, y1);
         {
             Func qkl2 = qk2.in(score2);
@@ -663,7 +665,7 @@ private:
             Func sgpw = sgp.in();
             sgpw.compute_root()
                 .tile(j, i, rxi, ryi, tile, tile)
-                .split(i, io, ii, pos_tiles)
+                .split(i, io, ii, 1)
                 .fuse(t, hb, tf)
                 .reorder(rxi, ryi, j, ii, io, tf, g)
                 .unroll(j)
@@ -782,7 +784,7 @@ private:
             Func dCbpw = dCbp.in();
             dCbpw.compute_root()
                 .tile(p, i, rxi, ryi, tile, tile)
-                .split(i, io, ii, pos_tiles)
+                .split(i, io, ii, 1)
                 .fuse(t, hb, tf)
                 .reorder(rxi, ryi, p, ii, io, tf, g)
                 .unroll(p)
@@ -837,7 +839,7 @@ private:
             Func dBbpw = dBbp.in();
             dBbpw.compute_root()
                 .tile(p, j, rxi, ryi, tile, tile)
-                .split(j, io, ii, pos_tiles)
+                .split(j, io, ii, 1)
                 .fuse(t, hb, tf)
                 .reorder(rxi, ryi, p, ii, io, tf, g)
                 .unroll(p)
