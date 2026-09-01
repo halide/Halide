@@ -1603,7 +1603,7 @@ dependencies = [
 
 [[package]]
 name = "halidoscope"
-version = "0.1.0"
+version = "22.0.0"
 dependencies = [
  "bindgen",
  "colorous",
