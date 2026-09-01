@@ -751,19 +751,23 @@ class ExtractWMMAOperations : public IRMutator {
     // of the enclosing ifs settle. Bounds refinement under a guarded access
     // leaves offsets like max(i, r) - i that are only provably zero given
     // that the guard (r <= i, say) holds.
-    Expr apply_facts(const Expr &e) {
+    Expr apply_facts(const Expr &e, bool threaded) {
         if (facts.empty()) {
             return e;
         }
         Expr all = const_true();
         for (const Expr &f : facts) {
-            all = all && index_within_thread(without_lets(f));
+            all = all && without_lets(f);
+        }
+        if (threaded) {
+            all = index_within_thread(all);
         }
         all = simplify(all, loop_bounds);
         if (can_prove(!all, loop_bounds)) {
-            // The guards exclude the thread the analysis runs as, so their
-            // conditions say nothing consistent about the index. Leave it
-            // alone rather than resolving its branches arbitrarily.
+            // Contradictory facts: either dead code, or the collapse to one
+            // representative thread lost the threads the guard holds for.
+            // Either way they say nothing consistent about the index, so
+            // leave it alone.
             return e;
         }
         Scope<Interval> refined;
@@ -836,8 +840,15 @@ class ExtractWMMAOperations : public IRMutator {
     // yet, so they only get in the way here.
     Expr index_for_analysis(const Expr &index) {
         Expr idx = substitute_in_all_lets(index);
-        idx = remove_likelies(index_within_thread(without_lets(idx)));
-        return simplify(apply_facts(idx), loop_bounds);
+        idx = remove_likelies(without_lets(idx));
+        // The facts go first in symbolic form, while the index still names
+        // the threads they talk about; then the dependence on the thread
+        // collapses to picking this thread's copy, and the facts go again in
+        // the same collapsed form, whose aligned atoms prove more.
+        idx = apply_facts(idx, false);
+        idx = index_within_thread(idx);
+        idx = apply_facts(idx, true);
+        return simplify(idx, loop_bounds);
     }
 
     Stmt visit(const LetStmt *op) override {
@@ -2064,7 +2075,7 @@ class ExtractWMMAOperations : public IRMutator {
         vector<int> subtile, entry;
         user_assert(read_entries(f, op->index, &subtile, &entry))
             << "Read of a tensor core accumulator not supported. The entries read "
-            << "do not all lie within tiles of it.\n"
+            << "do not all lie within tiles of it: " << index_for_analysis(op->index) << "\n"
             << Expr(op);
 
         // One inflated fragment per subtile the read touches, in the order it
