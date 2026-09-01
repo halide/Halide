@@ -256,6 +256,29 @@ int main(int argc, char **argv) {
     }
     double t_ind = t[0];  // int8 inductive is the reference for ratios
 
+    // The baselines' timed calls include their O(N) CIGAR walk; ours
+    // does it here, on the batch-major direction plane, threaded across
+    // pairs under PAR like the baselines. Reported as its own row and
+    // folded into the fill+cigar comparison.
+    auto traceback_sweep = [&]() {
+        int nthreads = PARALLEL ? std::thread::hardware_concurrency() : 1;
+        std::vector<std::thread> threads;
+        std::atomic<int> next{0};
+        for (int th = 0; th < nthreads; th++) {
+            threads.emplace_back([&]() {
+                int b;
+                std::vector<uint32_t> cig2;
+                while ((b = next.fetch_add(8)) < B) {
+                    for (int k = b; k < b + 8 && k < B; k++) {
+                        backtrack(&dir(k, 0, 0), (long)B, (long)B * J, I - 1, J - 1, cig2);
+                    }
+                }
+            });
+        }
+        for (auto &th : threads) th.join();
+    };
+    double t_tb = benchmark(3, 1, [&]() { traceback_sweep(); });
+
 #ifdef HAVE_PARASAIL
     // parasail's traceback variants use the same strategy the inductive
     // schedule derives: striped SIMD score rows kept rolling, a per-cell
@@ -373,34 +396,53 @@ int main(int argc, char **argv) {
         printf("  %-10s %10.1f us  (%.2f Gcell/s, %.2fx int8-ind: %s)\n",
                forms[f].name, t[f] * 1e6, cells / t[f] / 1e9, t[f] / t_ind, notes[f]);
     }
-    printf("  ksw2 sse   %10.1f us  (%.2fx: same output, hand-vectorized)\n",
-           t_gg2 * 1e6, t_gg2 / t_ind);
+    printf("  traceback  %10.1f us  (our O(N) CIGAR walk over the batch-major plane)\n",
+           t_tb * 1e6);
+    printf("  int8 ind + traceback %8.1f us  (fill+cigar, the baselines' contract)\n",
+           (t_ind + t_tb) * 1e6);
+    printf("  ksw2 sse   %10.1f us  (%.2fx fill+cigar: same output, hand-vectorized)\n",
+           t_gg2 * 1e6, t_gg2 / (t_ind + t_tb));
     printf("  ksw2 gg    %10.1f us  (%.2fx: same output, scalar)\n",
            t_gg * 1e6, t_gg / t_ind);
 #ifdef HAVE_PARASAIL
-    printf("  parasail   %10.1f us  (%.2fx: nw_trace_striped_16)\n",
-           t_ps * 1e6, t_ps / t_ind);
+    printf("  parasail   %10.1f us  (%.2fx fill+cigar: nw_trace_striped_16, avx2)\n",
+           t_ps * 1e6, t_ps / (t_ind + t_tb));
 #endif
     // INTERLEAVE=n: n alternating single-shot rounds of int8 inductive
     // and the ksw2 SSE sweep, so the two sides share the same thermal
     // and clock state. Reports each round and the medians.
     if (const char *iv = getenv("INTERLEAVE")) {
         int rounds = atoi(iv);
-        std::vector<double> ta, tk;
-        printf("  interleaved rounds (int8 ind | ksw2 sse):\n");
+        std::vector<double> ta, t16, tk, tp;
+        printf("  interleaved rounds, fill+cigar (int8 ind | int16 ind | ksw2 sse | parasail):\n");
         for (int r = 0; r < rounds; r++) {
-            double a = benchmark(1, 1, [&]() { align8_ind(query, target, dir); });
+            double a = benchmark(1, 1, [&]() {
+                align8_ind(query, target, dir);
+                traceback_sweep();
+            });
+            double a16 = benchmark(1, 1, [&]() {
+                align16_ind(query, target, dir);
+                traceback_sweep();
+            });
             double k = benchmark(1, 1, [&]() { ksw2_sweep(true); });
+            double p = 0;
+#ifdef HAVE_PARASAIL
+            p = benchmark(1, 1, [&]() { parasail_sweep(); });
+#endif
             ta.push_back(a);
+            t16.push_back(a16);
             tk.push_back(k);
-            printf("    %10.1f | %10.1f us\n", a * 1e6, k * 1e6);
+            tp.push_back(p);
+            printf("    %10.1f | %10.1f | %10.1f | %10.1f us\n", a * 1e6, a16 * 1e6, k * 1e6, p * 1e6);
         }
         auto med = [](std::vector<double> v) {
             std::sort(v.begin(), v.end());
             return v[v.size() / 2];
         };
-        printf("  median: int8 ind %.1f us, ksw2 sse %.1f us (ratio %.3f)\n",
-               med(ta) * 1e6, med(tk) * 1e6, med(tk) / med(ta));
+        printf("  medians: int8 %.1f, int16 %.1f, ksw2 sse %.1f, parasail %.1f us\n",
+               med(ta) * 1e6, med(t16) * 1e6, med(tk) * 1e6, med(tp) * 1e6);
+        printf("  ksw2/int8 %.2fx  parasail/int8 %.2fx  parasail/int16 %.2fx\n",
+               med(tk) / med(ta), med(tp) / med(ta), med(tp) / med(t16));
     }
     printf("Success!\n");
     return 0;

@@ -50,76 +50,68 @@ the dense-DP regime; on high-identity pairs wavefront methods (WFA)
 are the right algorithm and would win - cite them as context, not as
 this benchmark's competitor.
 
-Measured on a Threadripper 9970X (Zen 5):
+Measured on a Threadripper 9970X (Zen 5). Every number below is
+FILL+CIGAR: the baselines' timed calls include their O(N) traceback,
+so ours includes the runner's CIGAR walk over the batch-major
+direction plane (about 14 percent of the fill single-threaded). The
+baseline comparisons are interleaved single-shot medians (INTERLEAVE=9
+rounds cycling int8, int16, ksw2, parasail) so all sides share thermal
+and clock state - single-shot numbers taken cold flatter whichever
+side runs first by up to 25 percent.
 
-    256x256, batch 1024, one thread:
-      diff8          8.3 ms   (8.1 Gcell/s)
-      inductive      9.3 ms   (7.2 Gcell/s)
-      unfolded      15.1 ms   (1.62x of inductive)
-      rdom          18.9 ms   (2.04x)
-      ksw2 sse      38.2 ms   (4.12x, same output)
-      parasail      41.2 ms   (4.4x, same scores)
-      ksw2 scalar  199   ms   (21x, same output)
+    1024x1024, batch 128, one thread, fill+cigar, interleaved medians:
 
-    1024x1024, batch 128, one thread - the same generators compiled
-    for the baseline's ISA and for the machine's (HL_TARGET=...-sse41
-    vs host), against the same 128-bit ksw2 binary. The ksw2
-    comparisons are interleaved single-shot medians (INTERLEAVE=15),
-    so both sides share thermal and clock state:
-      diff8     @ sse4.1    30.5 ms   (matched ISA: 2.22x ahead)
-      diff8     @ avx-512   14.9 ms   (a recompile: 4.6x ahead of ksw2)
-      inductive @ avx-512   17.4 ms   (3.9x ahead)
-      unfolded  @ avx-512   38.9 ms   (2.24x of inductive)
-      rdom      @ avx-512   77.4 ms   (4.45x)
-      ksw2 sse (128-bit)    68.2 ms   (same output, hand-vectorized)
-      parasail striped_16   50.9 ms   (same scores; absolute-score
-                                       formulation, like our inductive)
+      ISA the generators were compiled for:   sse4.1    avx2    avx-512
+      int8  inductive (align8)                 35.4    24.1     19.8 ms
+      int16 inductive (align16)                  -     32.5     22.9 ms
+      ksw2 gg2_sse    (128-bit, int8 diffs)    67.6    67.5     67.8 ms
+      parasail striped_16 (256-bit avx2, int16)  -     47.5     48.0 ms
 
-    1024x1024, batch 4096, all cores (PAR=true), ksw2 threaded:
-      diff8         41.7 ms   (103 Gcell/s)
-      inductive     43.3 ms   (99 Gcell/s)
-      unfolded     478   ms   (11.0x of inductive)
-      rdom        1067   ms   (24.6x)
-      ksw2 sse      59.4 ms   (1.37x, same output)
-      parasail      45.5 ms   (1.09x, same scores)
+    The like-for-like cells: ksw2 vs int8 at sse4.1 (its ISA and its
+    formulation) 1.91x; parasail vs int16 at avx2 (its ISA and its
+    formulation) 1.46x. The recompile to avx-512 then adds 1.4-1.8x:
+    3.4x ahead of ksw2, 2.4x ahead of parasail with int8, 2.1x with
+    int16. Ablations at avx-512 (single-shot, same run): unfolded 2.2x
+    and rdom 3.7x (int8) / 2.5x and 5.4x (int16) of their inductive.
 
-parasail (optional; auto-detected from $(PARASAIL_DIR)) is the second
-baseline, and it pairs off against the other scan form: its traceback
-variants use Farrar's striped approach with ABSOLUTE scores - the same
-formulation as our scan=inductive, with the same strategy the schedule
-derives (score rows rolling, per-cell trace bytes as the only
-materialization). It cannot use int8 the way ksw2 does: absolute
-scores grow with length (2048 at 1k pairs), which is exactly the
-overflow the Suzuki-Kasahara differences avoid. parasail is verified
-score-identical on every pair; its CIGARs can differ by tie-breaking
-but all re-score to the optimum, so ksw2 remains the byte-exact
-baseline. At the parallel wall threaded parasail overtakes threaded
-ksw2 - formulation density stops mattering when direction-byte
-bandwidth is the wall.
+    256x256, batch 1024, one thread (single-shot): int8 8.3, int16 9.5,
+    ksw2 38, parasail 42 ms; rdom 1.5x/2.0x, unfolded 1.2x/1.5x.
 
-Vector-width and formulation fairness: ksw2's kernels are 128-bit SSE
-intrinsics (16 int8 lanes; lh3 ships no wider port), while Halide
-compiles to AVX-512, and ksw2's kernel also uses a denser formulation
-(int8 differences) than the textbook int16 table. The scan forms and
-targets separate those factors. At matched ISA (diff8 @ sse4.1,
-interleaved medians) the batch formulation is 2.22x ahead: every
-instruction is still a 16-lane SSE op, but the schedule keeps four
-independent stripes of pairs in flight per cell, filling the latency
-of the serial per-cell chain - the ILP ksw2's anti-diagonal gets from
-independent inner iterations, manufactured from the batch instead,
-without the per-diagonal score-profile fills, byte-carry shifts, and
-boundary bookkeeping the rotated iteration pays. (A single 16-wide
-stripe is latency-bound and 4.5 percent BEHIND ksw2 - the vectorize
-width is the schedule's load-bearing choice.) The scope condition to
-state: inter-sequence SIMD requires a batch of comparable-length
-pairs, the deployment shape of an aligner's scoring stage; ksw2
-aligns one pair at a time. And the recompile to AVX-512 is worth a
-further 2x, which for the intrinsics kernel
-is a porting project, not a flag (an AVX-512 ksw2 is what Intel's
-mm2-fast contributed, published as its own engineering effort;
-512-bit lane-crossing shuffles do not translate mechanically). At
-full parallelism all forms sit near the memory wall, where the
-remaining edge is the streaming stores.
+    1024x1024, batch 4096, all cores (PAR=true, baselines threaded
+    across pairs), fill+cigar, single-shot:
+      int8 inductive     49.5 ms   (43.7 fill at 98 Gcell/s + 5.8 cigar)
+      int16 inductive    49       ms
+      ksw2 sse           57.7 ms   (1.17x)
+      parasail           47.0 ms   (0.95x - parasail is AHEAD here)
+      unfolded / rdom    ~480 / ~1070 ms (11x / 24x)
+
+Fairness, as audited. Vector width: ksw2 ships only 128-bit SSE
+kernels and parasail's widest are AVX2 (no AVX-512 kernels exist;
+its dispatcher picks avx2 here), while Halide compiles to AVX-512 -
+hence the matched-ISA columns. Formulation: ksw2 uses int8
+Suzuki-Kasahara differences (our align8), parasail uses absolute int16
+scores (our align16; its int8 kernels would saturate at 1k lengths,
+which is precisely the overflow the differences avoid). The advantage
+this benchmark claims is not the inner loop: at each baseline's own
+ISA and formulation the batch schedule is 1.5-1.9x ahead, from what
+the intra-sequence iteration pays and the batch does not (ksw2's
+per-diagonal profile fills, byte-carry shifts and boundary
+bookkeeping; parasail's lazy-F correction pass and per-call profile
+and result allocations), plus the ILP of keeping four stripes of pairs
+in flight (a single stripe is latency-bound and LOSES to ksw2). The
+recompile is the rest. Scope condition: inter-sequence SIMD needs a
+batch of comparable-length pairs, the shape of an aligner's scoring
+stage; both baselines align one pair per call. Verification strength:
+ksw2 is byte-exact (every CIGAR and score), parasail is score-exact
+(its CIGARs can differ by tie-breaking; all re-score optimal).
+
+At the parallel memory wall the picture flattens: every form streams
+one direction byte per cell at ~100 Gcell/s, and parasail's per-pair
+contiguous trace layout makes its CIGAR walk nearly free where our
+batch-major plane costs 12 percent in cache-hostile pointer chasing -
+so parasail comes out 5 percent ahead there. The remaining lever would
+be a block transpose of the direction plane or a 4-bit direction
+encoding; neither is taken.
 
 The separations grow with scale because they are memory structure: the
 rdom form's materialized score slabs are L3-resident in the small
