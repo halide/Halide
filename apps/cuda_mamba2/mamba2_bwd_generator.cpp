@@ -450,6 +450,7 @@ private:
         for (Func f : {bfac, cfac}) {
             f.compute_root().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
         }
+        cfac.compute_with(bfac, k);
         cdpre.compute_root().reorder(t, b).gpu_blocks(b);
         sfxcr.compute_root().reorder(tt, b).gpu_blocks(b);
         sfxr.compute_root().reorder(kk, t, b).gpu_blocks(b).gpu_threads(t);
@@ -854,7 +855,8 @@ private:
                     .split(f.args()[0], x0, x1, 8)
                     .split(f.args()[1], y0, y1, 8)
                     .reorder(x1, y1, x0, y0)
-                    .gpu_blocks(y0, t, g)
+                    .fuse(x0, y0, x0)
+                    .gpu_blocks(x0, t, g)
                     .gpu_threads(x1, y1);
             }
         }
@@ -942,20 +944,9 @@ private:
                 .unroll(p)
                 .gpu_threads(i)
                 .tile_init(rxi, ryi);
-            dCb.compute_root()
-                .split(p, x0, x1, 8)
-                .split(i, y0, y1, 8)
-                .reorder(x1, y1, x0, y0)
-                .fuse(x0, y0, x0)
-                .gpu_blocks(x0, t, g)
-                .gpu_threads(x1, y1);
-            dCb.update()
-                .split(p, x0, x1, 8)
-                .split(i, y0, y1, 8)
-                .reorder(x1, y1, hho, x0, y0)
-                .fuse(x0, y0, x0)
-                .gpu_blocks(x0, t, g)
-                .gpu_threads(x1, y1);
+            // The fold of the partials rides inside the output kernel, one
+            // sum per thread, so it is not a kernel or an array of its own.
+            dCb.compute_at(Func(dC), x1);
             dYH.compute_at(dCbp, hhi)
                 .store_in(MemoryType::Tile)
                 .tile(p, i, rxi, ryi, tile, tile)
@@ -999,20 +990,7 @@ private:
                 .unroll(p)
                 .gpu_threads(j)
                 .tile_init(rxi, ryi);
-            dBb.compute_root()
-                .split(p, x0, x1, 8)
-                .split(j, y0, y1, 8)
-                .reorder(x1, y1, x0, y0)
-                .fuse(x0, y0, x0)
-                .gpu_blocks(x0, t, g)
-                .gpu_threads(x1, y1);
-            dBb.update()
-                .split(p, x0, x1, 8)
-                .split(j, y0, y1, 8)
-                .reorder(x1, y1, hho, x0, y0)
-                .fuse(x0, y0, x0)
-                .gpu_blocks(x0, t, g)
-                .gpu_threads(x1, y1);
+            dBb.compute_at(Func(dB), x1);
             XdH.compute_at(dBbp, hhi)
                 .store_in(MemoryType::Tile)
                 .tile(p, j, rxi, ryi, tile, tile)
@@ -1035,24 +1013,31 @@ private:
                 .split(f.args()[0], x0, x1, 8)
                 .split(f.args()[1], y0, y1, 8)
                 .reorder(x1, y1, x0, y0)
-                .gpu_blocks(f.args()[2], f.args()[3])
+                .fuse(x0, y0, x0)
+                .gpu_blocks(x0, f.args()[2], f.args()[3])
                 .gpu_threads(x1, y1);
         }
-        for (Func f : {dYY, XdX}) {
+        {
             RVar rdo("rdo"), rdi("rdi");
             Var ko("ko"), ki("ki");
-            f.compute_root().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
-            // A warp covers a row's channels: eight lanes of eight-wide
-            // vectors span the 64 channels contiguously, and the row sum
-            // finishes through atomic adds across those lanes.
-            f.update()
-                .split(rd_var(f), rdo, rdi, 16)
-                .split(k, ko, ki, 64)
-                .reorder(rdi, rdo, ki, ko, t, b)
-                .atomic()
-                .vectorize(rdi)
-                .gpu_blocks(ko, t, b)
-                .gpu_threads(rdo, ki);
+            for (Func f : {dYY, XdX}) {
+                f.compute_root().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
+                // A warp covers a row's channels: eight lanes of eight-wide
+                // vectors span the 64 channels contiguously, and the row sum
+                // finishes through atomic adds across those lanes.
+                f.update()
+                    .split(rd_var(f), rdo, rdi, 16)
+                    .split(k, ko, ki, 64)
+                    .reorder(rdi, rdo, ki, ko, t, b)
+                    .atomic()
+                    .vectorize(rdi)
+                    .gpu_blocks(ko, t, b)
+                    .gpu_threads(rdo, ki);
+            }
+            // Both row dots in one kernel: the same shape over different
+            // inputs, and both saturate memory anyway.
+            XdX.update().compute_with(dYY.update(), ko);
+            XdX.compute_with(dYY, k);
         }
         ddAcs.compute_root().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
         csum.compute_root().gpu_blocks(b).gpu_threads(t);
