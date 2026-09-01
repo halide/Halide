@@ -47,6 +47,7 @@ Measured on a Threadripper 9970X (Zen 5):
       unfolded      15.1 ms   (1.62x of inductive)
       rdom          18.9 ms   (2.04x)
       ksw2 sse      38.2 ms   (4.12x, same output)
+      parasail      41.2 ms   (4.4x, same scores)
       ksw2 scalar  199   ms   (21x, same output)
 
     1024x1024, batch 128, one thread - the same generators compiled
@@ -60,6 +61,8 @@ Measured on a Threadripper 9970X (Zen 5):
       unfolded  @ avx-512   38.9 ms   (2.24x of inductive)
       rdom      @ avx-512   77.4 ms   (4.45x)
       ksw2 sse (128-bit)    68.2 ms   (same output, hand-vectorized)
+      parasail striped_16   50.9 ms   (same scores; absolute-score
+                                       formulation, like our inductive)
 
     1024x1024, batch 4096, all cores (PAR=true), ksw2 threaded:
       diff8         41.7 ms   (103 Gcell/s)
@@ -67,6 +70,21 @@ Measured on a Threadripper 9970X (Zen 5):
       unfolded     478   ms   (11.0x of inductive)
       rdom        1067   ms   (24.6x)
       ksw2 sse      59.4 ms   (1.37x, same output)
+      parasail      45.5 ms   (1.09x, same scores)
+
+parasail (optional; auto-detected from $(PARASAIL_DIR)) is the second
+baseline, and it pairs off against the other scan form: its traceback
+variants use Farrar's striped approach with ABSOLUTE scores - the same
+formulation as our scan=inductive, with the same strategy the schedule
+derives (score rows rolling, per-cell trace bytes as the only
+materialization). It cannot use int8 the way ksw2 does: absolute
+scores grow with length (2048 at 1k pairs), which is exactly the
+overflow the Suzuki-Kasahara differences avoid. parasail is verified
+score-identical on every pair; its CIGARs can differ by tie-breaking
+but all re-score to the optimum, so ksw2 remains the byte-exact
+baseline. At the parallel wall threaded parasail overtakes threaded
+ksw2 - formulation density stops mattering when direction-byte
+bandwidth is the wall.
 
 Vector-width and formulation fairness: ksw2's kernels are 128-bit SSE
 intrinsics (16 int8 lanes; lh3 ships no wider port), while Halide

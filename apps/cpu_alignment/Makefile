@@ -51,10 +51,17 @@ $(BIN)/%/ksw2_gg2_sse.o: ksw2/ksw2_gg2_sse.c
 	@mkdir -p $(@D)
 	$(CC) -O3 -march=native -c $< -o $@
 
+# Optional parasail baseline: build https://github.com/jeffdaily/parasail
+# with cmake into $(PARASAIL_DIR)/build and this picks it up.
+PARASAIL_DIR ?= $(HOME)/projects/parasail
+ifneq (,$(wildcard $(PARASAIL_DIR)/build/libparasail.a))
+PARASAIL_FLAGS = -DHAVE_PARASAIL -I$(PARASAIL_DIR) $(PARASAIL_DIR)/build/libparasail.a
+endif
+
 $(BIN)/%/runner: runner.cpp $(BIN)/%/align_ind.a $(BIN)/%/align_unf.a $(BIN)/%/align_rdom.a $(BIN)/%/align_diff8.a $(BIN)/%/runtime.a $(BIN)/%/ksw2_gg.o $(BIN)/%/ksw2_gg2_sse.o
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -DQLEN=$(QLEN) -DTLEN=$(TLEN) -DBATCH=$(BATCH) -DPARALLEL=$(if $(filter true,$(PAR)),1,0) \
-	    -Wall -O3 -march=native $^ -o $@ $(LDFLAGS) -lpthread -ldl
+	    -Wall -O3 -march=native $^ $(PARASAIL_FLAGS) -o $@ $(LDFLAGS) -lpthread -ldl
 
 test: $(BIN)/$(HL_TARGET)/runner
 	$(if $(INTERLEAVE),INTERLEAVE=$(INTERLEAVE)) $<

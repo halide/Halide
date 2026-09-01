@@ -19,6 +19,9 @@ int ksw_gg2_sse(void *km, int qlen, const uint8_t *query, int tlen, const uint8_
 
 #include <cstdio>
 #include <malloc.h>
+#ifdef HAVE_PARASAIL
+#include "parasail.h"
+#endif
 #include <cstdlib>
 #include <cstring>
 #include <atomic>
@@ -250,6 +253,62 @@ int main(int argc, char **argv) {
     if (!check("diff8")) return 1;
     double t_d8 = benchmark(3, 1, [&]() { align_diff8(query, target, dir); });
 
+#ifdef HAVE_PARASAIL
+    // parasail's traceback variants use the same strategy the inductive
+    // schedule derives: striped SIMD score rows kept rolling, a per-cell
+    // direction table as the only materialization.
+    std::vector<std::string> qc(B), tc(B);
+    for (int b = 0; b < B; b++) {
+        for (int j = 0; j < J; j++) qc[b] += "ACGT"[qs[(size_t)b * J + j]];
+        for (int i = 0; i < I; i++) tc[b] += "ACGT"[ts[(size_t)b * I + i]];
+    }
+    // ksw2's gap of length L costs GAPO + GAPE*L; parasail's costs
+    // open + (L-1)*ext, so open = GAPO + GAPE.
+    parasail_matrix_t *pmat = parasail_matrix_create("ACGT", SA, -SB);
+    auto parasail_one = [&](int b, std::vector<uint32_t> *cigar_out) {
+        parasail_result_t *res = parasail_nw_trace_striped_16(
+            qc[b].c_str(), J, tc[b].c_str(), I, GAPO + GAPE, GAPE, pmat);
+        int sc = parasail_result_get_score(res);
+        if (cigar_out) {
+            parasail_cigar_t *pc = parasail_result_get_cigar(
+                res, qc[b].c_str(), J, tc[b].c_str(), I, pmat);
+            cigar_out->clear();
+            for (int k = 0; k < pc->len; k++) {
+                uint32_t v = pc->seq[k];
+                char opc = parasail_cigar_decode_op(v);
+                uint32_t op = (opc == 'I') ? 1 : (opc == 'D') ? 2 : 0;  // =/X -> M
+                uint32_t len = parasail_cigar_decode_len(v);
+                if (!cigar_out->empty() && (cigar_out->back() & 0xf) == op) {
+                    cigar_out->back() += len << 4;
+                } else {
+                    cigar_out->push_back(len << 4 | op);
+                }
+            }
+            parasail_cigar_free(pc);
+        }
+        parasail_result_free(res);
+        return sc;
+    };
+    {
+        int score_bad = 0, cigar_diff = 0, path_bad = 0;
+        std::vector<uint32_t> pcig;
+        for (int b = 0; b < B; b++) {
+            int sc = parasail_one(b, &pcig);
+            if (sc != ref_score[b]) score_bad++;
+            if (pcig != ref_cigar[b]) {
+                cigar_diff++;
+                if (path_score(pcig, &qs[(size_t)b * J], &ts[(size_t)b * I]) != ref_score[b]) path_bad++;
+            }
+        }
+        printf("  parasail: %s scores;%s\n",
+               score_bad ? "MISMATCHED" : "identical",
+               cigar_diff == 0 ? " identical cigars" :
+               path_bad == 0   ? " some cigars differ (all optimal: equal path scores)" :
+                                 " INVALID cigars");
+        if (score_bad || path_bad) return 1;
+    }
+#endif
+
     // ksw2 parallelizes across pairs the way aligners deploy it: when the
     // Halide build is parallel, give ksw2 the same cores.
     auto ksw2_sweep = [&](bool sse) {
@@ -275,6 +334,27 @@ int main(int argc, char **argv) {
     double t_gg2 = benchmark(3, 1, [&]() { ksw2_sweep(true); });
     double t_gg = benchmark(3, 1, [&]() { ksw2_sweep(false); });
 
+#ifdef HAVE_PARASAIL
+    auto parasail_sweep = [&]() {
+        int nthreads = PARALLEL ? std::thread::hardware_concurrency() : 1;
+        std::vector<std::thread> threads;
+        std::atomic<int> next{0};
+        for (int t = 0; t < nthreads; t++) {
+            threads.emplace_back([&]() {
+                int b;
+                std::vector<uint32_t> cig2;
+                while ((b = next.fetch_add(8)) < B) {
+                    for (int k = b; k < b + 8 && k < B; k++) {
+                        parasail_one(k, &cig2);
+                    }
+                }
+            });
+        }
+        for (auto &t : threads) t.join();
+    };
+    double t_ps = benchmark(3, 1, [&]() { parasail_sweep(); });
+#endif
+
     const double cells = (double)B * J * I;
     printf("  inductive  %10.1f us  (%.2f Gcell/s)\n", t_ind * 1e6, cells / t_ind / 1e9);
     printf("  diff8      %10.1f us  (%.2f Gcell/s, %.2fx: int8 differences)\n",
@@ -287,6 +367,10 @@ int main(int argc, char **argv) {
            t_gg2 * 1e6, t_gg2 / t_ind);
     printf("  ksw2 gg    %10.1f us  (%.2fx: same output, scalar)\n",
            t_gg * 1e6, t_gg / t_ind);
+#ifdef HAVE_PARASAIL
+    printf("  parasail   %10.1f us  (%.2fx: nw_trace_striped_16)\n",
+           t_ps * 1e6, t_ps / t_ind);
+#endif
     // INTERLEAVE=n: n alternating single-shot rounds of diff8 and the
     // ksw2 SSE sweep, so the two sides share the same thermal and clock
     // state. Reports each round and the mins.
