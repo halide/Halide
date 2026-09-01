@@ -55,10 +55,11 @@ public:
         // becomes a float in [0, 1) by stuffing its top 23 bits into the
         // mantissa of a float in [1, 2) and shifting down. Integer ops
         // only, and both halves are the same shift of a 32-bit word.
-        auto out = [&](Expr s0, Expr s3, Expr half) {
+        auto out = [&](Expr s0, Expr s3, Expr lane) {
             Expr r = rotl(s0 + s3, 23) + s0;
-            Expr w = select(half == 0, cast<uint32_t>(r),
-                            cast<uint32_t>(r >> 32));
+            // extract_bits at an interleaving position compiles to a free
+            // vector reinterpret of the pair-of-halves lanes.
+            Expr w = extract_bits<uint32_t>(r, 32 * (lane % 2));
             Expr bits = (w >> 9) | Expr((uint32_t)0x3f800000);
             return reinterpret<float>(bits) - 1.f;
         };
@@ -82,7 +83,7 @@ public:
         }
         // Output lane pairs (2l, 2l+1) carry the low and high halves of
         // stream l's step.
-        y(l, t) = out(S(l / 2, t)[0], S(l / 2, t)[3], l % 2);
+        y(l, t) = out(S(l / 2, t)[0], S(l / 2, t)[3], l);
 
         // ---------------- Schedule ----------------
 
@@ -108,6 +109,7 @@ public:
                 S.store_root()
                     .compute_at(y, co)
                     .vectorize(l, VEC);
+
             }
             if (scan == ScanForm::Inductive) {
                 S.fold_storage(t, 2);
