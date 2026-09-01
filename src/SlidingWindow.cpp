@@ -1367,10 +1367,12 @@ class SlidingWindow : public IRMutator {
             return d.old_bounds;
         }
 
-        // The step the recurrence reaches back to is read while the next one
-        // is computed, and never afterwards. It dies at the store that
-        // replaces it, so it does not have to be kept, and the window is
-        // whatever the consumers ask for.
+        // The OLDEST step the recurrence reaches back to is read while the
+        // next one is computed, and never afterwards. It dies at the store
+        // that replaces it, so it does not have to be kept - but the younger
+        // lookbacks do: a recurrence reaching back r steps still needs
+        // steps t-1 .. t-(r-1) after t is stored, so the window keeps r-1
+        // old values even when the oldest dies in place.
         //
         // That argument wants the read to come before the store with nothing
         // reading it later. Within one pure definition the right-hand side is
@@ -1379,12 +1381,12 @@ class SlidingWindow : public IRMutator {
         // loop have no order between them at all, so give up on both.
         //
         // A consumer that wants the older step keeps it through ext.
-bool dies_at_its_store =
+        bool dies_at_its_store =
             func.updates().empty() &&
             !lanes_span_dim(body, func.name(), d.dim_idx);
 
         Expr low = dies_at_its_store ?
-                       ext[d.dim_idx].min :
+                       min(ext[d.dim_idx].min, dim_var - (reach_back - 1)) :
                        min(ext[d.dim_idx].min, dim_var - reach_back);
         Interval live(simplify(low, one_step),
                       simplify(max(ext[d.dim_idx].max, dim_var), one_step));
