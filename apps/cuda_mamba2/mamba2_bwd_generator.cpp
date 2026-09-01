@@ -53,6 +53,17 @@ public:
     // Whether the multiplies go to the tensor cores. Off, everything gets a
     // plain GPU schedule, which is slow but exercises the same algorithm.
     GeneratorParam<bool> wmma{"wmma", false};
+    // How the state walks and the scans are written: as inductive Funcs
+    // that refer to themselves one step back and can be slid into the loops
+    // that consume them, or as update definitions over RDoms, which own
+    // their walks and must be computed whole, at the precision they are
+    // carried at, before anything reads them.
+    enum class ScanForm { Inductive,
+                          RDom };
+    GeneratorParam<ScanForm> scan{"scan",
+                                  ScanForm::Inductive,
+                                  {{"inductive", ScanForm::Inductive},
+                                   {"rdom", ScanForm::RDom}}};
 
     Input<Buffer<float16_t, 3>> X{"X"};
     Input<Buffer<float16_t, 3>> Bm{"Bm"};
@@ -88,14 +99,26 @@ public:
         // ---------------- Recomputed forward quantities ----------------
 
         Func cumdelta = Func(Float(32), "cumdelta");
-        cumdelta(k, t, b) = Delta(t * L + k, b) +
-                            select(k <= 0, 0.f, likely(cumdelta(k - 1, t, b)));
+        RDom rmc(1, L - 1, "rmc");
+        if (inductive()) {
+            cumdelta(k, t, b) = Delta(t * L + k, b) +
+                                select(k <= 0, 0.f, likely(cumdelta(k - 1, t, b)));
+        } else {
+            cumdelta(k, t, b) = Delta(t * L + k, b);
+            cumdelta(rmc, t, b) = cumdelta(rmc - 1, t, b) + Delta(t * L + rmc, b);
+        }
 
         // The running total of whole chunks of decay before chunk t, for the
         // gradient of A. A forward walk over chunks.
         Func cdpre = Func(Float(32), "cdpre");
-        cdpre(t, b) = select(t <= 0, 0.f,
-                             likely(cdpre(t - 1, b)) + cumdelta(L - 1, t - 1, b));
+        RDom rtc(1, nt - 1, "rtc");
+        if (inductive()) {
+            cdpre(t, b) = select(t <= 0, 0.f,
+                                 likely(cdpre(t - 1, b)) + cumdelta(L - 1, t - 1, b));
+        } else {
+            cdpre(t, b) = 0.f;
+            cdpre(rtc, b) = cdpre(rtc - 1, b) + cumdelta(L - 1, rtc - 1, b);
+        }
 
         Var from("from"), to("to");
         Func decay("decay");
@@ -138,11 +161,24 @@ public:
                                    cast<float>(X(d, t * L + rj, b));
 
         Func H = Func(Float(32), "H");
-        H(d, p, t, b) = select(t <= 0,
-                               0.f,
-                               likely(H(d, p, t - 1, b) *
-                                      exp(A(b) * cumdelta(L - 1, t - 1, b))) +
-                                   chunk_state(d, p, t - 1, b));
+        RDom rth(0, nt - 1, "rth");
+        if (inductive()) {
+            H(d, p, t, b) = select(t <= 0,
+                                   0.f,
+                                   likely(H(d, p, t - 1, b) *
+                                          exp(A(b) * cumdelta(L - 1, t - 1, b))) +
+                                       chunk_state(d, p, t - 1, b));
+        } else {
+            // The pure definition initializes each chunk to the term of the
+            // recurrence that does not depend on the walk - what the chunk
+            // before it left behind - so the kernel that runs it is the one
+            // the chunk state needs anyway, and the walk folds the decayed
+            // carry on top.
+            H(d, p, t, b) = chunk_state(d, p, max(t - 1, 0), b) *
+                            select(t <= 0, 0.f, 1.f);
+            H(d, p, rth + 1, b) += H(d, p, rth, b) *
+                                   exp(A(b) * cumdelta(L - 1, rth, b));
+        }
         Func Hop("Hop");
         Hop(d, p, t, b) = cast<float16_t>(H(d, p, t, b));
 
@@ -166,12 +202,21 @@ public:
         // by flipped chunk so the walk counts upwards: dHnr(tt) is the
         // gradient at the end of chunk nt-1-tt, fed by every later chunk.
         Func dHnr = Func(Float(32), "dHnr");
-        dHnr(d, p, tt, b) =
-            select(tt <= 0,
-                   0.f,
-                   likely(dHnr(d, p, tt - 1, b) *
-                          exp(A(b) * cumdelta(L - 1, nt - tt, b))) +
-                       dG(d, p, nt - tt, b));
+        RDom rtd(0, nt - 1, "rtd");
+        if (inductive()) {
+            dHnr(d, p, tt, b) =
+                select(tt <= 0,
+                       0.f,
+                       likely(dHnr(d, p, tt - 1, b) *
+                              exp(A(b) * cumdelta(L - 1, nt - tt, b))) +
+                           dG(d, p, nt - tt, b));
+        } else {
+            dHnr(d, p, tt, b) = dG(d, p, min(nt - tt, nt - 1), b) *
+                                select(tt <= 0, 0.f, 1.f);
+            dHnr(d, p, rtd + 1, b) +=
+                dHnr(d, p, rtd, b) *
+                exp(A(b) * cumdelta(L - 1, nt - (rtd + 1), b));
+        }
         Func dHopr("dHopr");
         dHopr(d, p, tt, b) = cast<float16_t>(dHnr(d, p, tt, b));
 
@@ -314,13 +359,22 @@ public:
         csum(t, b) += ddAcs(rk, t, b);
 
         Func sfxcr = Func(Float(32), "sfxcr");
-        sfxcr(tt, b) = select(tt <= 0, 0.f,
-                              likely(sfxcr(tt - 1, b)) + csum(nt - tt, b));
-
+        RDom rsc(1, nt - 1, "rsc");
         Func sfxr = Func(Float(32), "sfxr");
-        sfxr(kk, t, b) = ddAcs(L - 1 - kk, t, b) +
-                         select(kk <= 0, sfxcr(nt - 1 - t, b),
-                                likely(sfxr(kk - 1, t, b)));
+        RDom rsk(1, L - 1, "rsk");
+        if (inductive()) {
+            sfxcr(tt, b) = select(tt <= 0, 0.f,
+                                  likely(sfxcr(tt - 1, b)) + csum(nt - tt, b));
+            sfxr(kk, t, b) = ddAcs(L - 1 - kk, t, b) +
+                             select(kk <= 0, sfxcr(nt - 1 - t, b),
+                                    likely(sfxr(kk - 1, t, b)));
+        } else {
+            sfxcr(tt, b) = 0.f;
+            sfxcr(rsc, b) = sfxcr(rsc - 1, b) + csum(nt - rsc, b);
+            sfxr(kk, t, b) = ddAcs(L - 1 - kk, t, b) +
+                             select(kk <= 0, sfxcr(nt - 1 - t, b), 0.f);
+            sfxr(rsk, t, b) += sfxr(rsk - 1, t, b);
+        }
 
         Func ddtF("ddtF");
         ddtF(k, t, b) = XdX(k, t, b) / Delta(t * L + k, b) +
@@ -362,6 +416,10 @@ public:
 private:
     static constexpr int tile = 16;
 
+    bool inductive() const {
+        return scan == ScanForm::Inductive;
+    }
+
     // The forward's tensor core structures, mirrored. The fused walks carry
     // their state in registers and compute each chunk's contribution on the
     // tensor cores; the dX kernel is the forward's output kernel with the
@@ -395,6 +453,18 @@ private:
         cdpre.compute_root().reorder(t, b).gpu_blocks(b);
         sfxcr.compute_root().reorder(tt, b).gpu_blocks(b);
         sfxr.compute_root().reorder(kk, t, b).gpu_blocks(b).gpu_threads(t);
+        if (!inductive()) {
+            cumdelta.update()
+                .reorder(RVar("rmc$x"), t, b)
+                .gpu_blocks(b)
+                .gpu_threads(t);
+            cdpre.update().gpu_blocks(b);
+            sfxcr.update().gpu_blocks(b);
+            sfxr.update()
+                .reorder(RVar("rsk$x"), t, b)
+                .gpu_blocks(b)
+                .gpu_threads(t);
+        }
 
         // ---- qk, once per group, spread over blocks ----
         Func qk_at = qk.in();
@@ -420,18 +490,42 @@ private:
             .gpu_threads(i)
             .tile_matmul(rri, rxi, ryi);
 
-        // ---- The forward state walk, fused, copied from the forward ----
+        // ---- The forward state walk: fused when the state is inductive,
+        // or a chunk-state kernel plus a flat stored walk when it is not ----
         Var hto("hto"), hti("hti"), hw("hw"), hp("hp"), ddo("ddo"), ddi("ddi");
-        Func cs = chunk_state.in();
-        chunk_state.compute_at(Hop, hti).unroll(t);
-        chunk_state.update().unroll(t);
-        cs.compute_at(Hop, hti)
-            .store_in(MemoryType::GPUShared)
-            .unroll(cs.args()[2])
-            .tile(d, p, rxi, ryi, tile, tile)
-            .unroll(d)
-            .gpu_threads(p)
-            .tile_store(rxi, ryi);
+        Var tb("tb"), po("po");
+        if (inductive()) {
+            Func cs = chunk_state.in();
+            chunk_state.compute_at(Hop, hti).unroll(t);
+            chunk_state.update().unroll(t);
+            cs.compute_at(Hop, hti)
+                .store_in(MemoryType::GPUShared)
+                .unroll(cs.args()[2])
+                .tile(d, p, rxi, ryi, tile, tile)
+                .unroll(d)
+                .gpu_threads(p)
+                .tile_store(rxi, ryi);
+        } else {
+            // The pure definition of the walk is the chunk-state kernel, so
+            // the state's tiles go straight out to memory here.
+            chunk_state.compute_at(H, po);
+            H.compute_root()
+                .tile(d, p, rxi, ryi, tile, tile)
+                .split(p, po, p, 4)
+                .reorder(rxi, ryi, d, p, po, t, b)
+                .unroll(d)
+                .gpu_blocks(po, t, b)
+                .gpu_threads(p)
+                .tile_store(rxi, ryi);
+            Var pt("pt"), pe("pe"), hpt("hpt"), hdo("hdo");
+            H.update()
+                .split(d, pt, pe, 4)
+                .split(p, hdo, hpt, 8)
+                .reorder(pe, pt, hpt, RVar("rth$x"), hdo, b)
+                .gpu_blocks(hdo, b)
+                .gpu_threads(pt, hpt)
+                .vectorize(pe);
+        }
         chunk_state
             .store_in(MemoryType::Tile)
             .tile(d, p, rxi, ryi, tile, tile)
@@ -466,42 +560,75 @@ private:
                 .align_storage(xs.args()[0], (int)channels + 8)
                 .split(xs.args()[0], so, si, 8)
                 .fuse(so, xs.args()[1], fu)
-                .split(fu, fo, fi, 32 * ((int)state / tile))
+                .split(fu, fo, fi, 32 * (inductive() ? (int)state / tile : 4))
                 .split(fi, w, l, 32)
                 .reorder(si, l, w, fo)
                 .vectorize(si)
                 .gpu_lanes(l)
                 .gpu_threads(w);
         }
-        Hop.compute_root()
-            .split(t, hto, hti, 1)
-            .split(d, ddo, ddi, 2 * tile)
-            .split(p, hw, hp, tile)
-            .reorder(ddi, hp, hw, hti, hto, ddo, b)
-            .gpu_blocks(ddo, b)
-            .gpu_lanes(ddi)
-            .gpu_threads(hw);
-        H.compute_at(Hop, hti)
-            .store_at(Hop, ddo)
-            .slide(Hop, t)
-            .store_in(MemoryType::Stack)
-            .split(p, hw, hp, tile)
-            .reorder(d, hp, hw)
-            .gpu_lanes(d)
-            .gpu_threads(hw);
+        if (inductive()) {
+            Hop.compute_root()
+                .split(t, hto, hti, 1)
+                .split(d, ddo, ddi, 2 * tile)
+                .split(p, hw, hp, tile)
+                .reorder(ddi, hp, hw, hti, hto, ddo, b)
+                .gpu_blocks(ddo, b)
+                .gpu_lanes(ddi)
+                .gpu_threads(hw);
+            H.compute_at(Hop, hti)
+                .store_at(Hop, ddo)
+                .slide(Hop, t)
+                .store_in(MemoryType::Stack)
+                .split(p, hw, hp, tile)
+                .reorder(d, hp, hw)
+                .gpu_lanes(d)
+                .gpu_threads(hw);
+        } else {
+            // The tensor core consumers want half precision operands, and
+            // the walk had to store single precision, so the narrowing that
+            // the fused form does for free on the way out of registers is a
+            // pass of its own here.
+            Hop.compute_root()
+                .split(d, x0, x1, 8)
+                .split(p, y0, y1, 8)
+                .reorder(x1, y1, x0, y0)
+                .gpu_blocks(y0, Hop.args()[2], Hop.args()[3])
+                .gpu_threads(x1, y1);
+        }
 
         // ---- The gradient state walk, the mirror image ----
         Var gto("gto"), gti("gti");
-        Func dgs = dG.in();
-        dG.compute_at(dHopr, gti).unroll(t);
-        dG.update().unroll(t);
-        dgs.compute_at(dHopr, gti)
-            .store_in(MemoryType::GPUShared)
-            .unroll(dgs.args()[2])
-            .tile(d, p, rxi, ryi, tile, tile)
-            .unroll(d)
-            .gpu_threads(p)
-            .tile_store(rxi, ryi);
+        if (inductive()) {
+            Func dgs = dG.in();
+            dG.compute_at(dHopr, gti).unroll(t);
+            dG.update().unroll(t);
+            dgs.compute_at(dHopr, gti)
+                .store_in(MemoryType::GPUShared)
+                .unroll(dgs.args()[2])
+                .tile(d, p, rxi, ryi, tile, tile)
+                .unroll(d)
+                .gpu_threads(p)
+                .tile_store(rxi, ryi);
+        } else {
+            dG.compute_at(dHnr, po);
+            dHnr.compute_root()
+                .tile(d, p, rxi, ryi, tile, tile)
+                .split(p, po, p, 4)
+                .reorder(rxi, ryi, d, p, po, tt, b)
+                .unroll(d)
+                .gpu_blocks(po, tt, b)
+                .gpu_threads(p)
+                .tile_store(rxi, ryi);
+            Var pt("pt"), pe("pe"), hpt("hpt"), hdo("hdo");
+            dHnr.update()
+                .split(d, pt, pe, 4)
+                .split(p, hdo, hpt, 8)
+                .reorder(pe, pt, hpt, RVar("rtd$x"), hdo, b)
+                .gpu_blocks(hdo, b)
+                .gpu_threads(pt, hpt)
+                .vectorize(pe);
+        }
         dG.store_in(MemoryType::Tile)
             .tile(d, p, rxi, ryi, tile, tile)
             .unroll(d)
@@ -535,29 +662,38 @@ private:
                 .align_storage(dys.args()[0], (int)channels + 8)
                 .split(dys.args()[0], so, si, 8)
                 .fuse(so, dys.args()[1], fu)
-                .split(fu, fo, fi, 32 * ((int)state / tile))
+                .split(fu, fo, fi, 32 * (inductive() ? (int)state / tile : 4))
                 .split(fi, w, l, 32)
                 .reorder(si, l, w, fo)
                 .vectorize(si)
                 .gpu_lanes(l)
                 .gpu_threads(w);
         }
-        dHopr.compute_root()
-            .split(tt, gto, gti, 1)
-            .split(d, ddo, ddi, 2 * tile)
-            .split(p, hw, hp, tile)
-            .reorder(ddi, hp, hw, gti, gto, ddo, b)
-            .gpu_blocks(ddo, b)
-            .gpu_lanes(ddi)
-            .gpu_threads(hw);
-        dHnr.compute_at(dHopr, gti)
-            .store_at(dHopr, ddo)
-            .slide(dHopr, tt)
-            .store_in(MemoryType::Stack)
-            .split(p, hw, hp, tile)
-            .reorder(d, hp, hw)
-            .gpu_lanes(d)
-            .gpu_threads(hw);
+        if (inductive()) {
+            dHopr.compute_root()
+                .split(tt, gto, gti, 1)
+                .split(d, ddo, ddi, 2 * tile)
+                .split(p, hw, hp, tile)
+                .reorder(ddi, hp, hw, gti, gto, ddo, b)
+                .gpu_blocks(ddo, b)
+                .gpu_lanes(ddi)
+                .gpu_threads(hw);
+            dHnr.compute_at(dHopr, gti)
+                .store_at(dHopr, ddo)
+                .slide(dHopr, tt)
+                .store_in(MemoryType::Stack)
+                .split(p, hw, hp, tile)
+                .reorder(d, hp, hw)
+                .gpu_lanes(d)
+                .gpu_threads(hw);
+        } else {
+            dHopr.compute_root()
+                .split(d, x0, x1, 8)
+                .split(p, y0, y1, 8)
+                .reorder(x1, y1, x0, y0)
+                .gpu_blocks(y0, dHopr.args()[2], dHopr.args()[3])
+                .gpu_threads(x1, y1);
+        }
 
         // ---- dX: the forward's output kernel with the mask transposed ----
         const int pos_tiles = 4;
@@ -971,6 +1107,18 @@ private:
         cdpre.compute_root().reorder(t, b).gpu_blocks(b);
         sfxcr.compute_root().reorder(tt, b).gpu_blocks(b);
         sfxr.compute_root().reorder(kk, t, b).gpu_blocks(b).gpu_threads(t);
+        if (!inductive()) {
+            cumdelta.update()
+                .reorder(RVar("rmc$x"), t, b)
+                .gpu_blocks(b)
+                .gpu_threads(t);
+            cdpre.update().gpu_blocks(b);
+            sfxcr.update().gpu_blocks(b);
+            sfxr.update()
+                .reorder(RVar("rsk$x"), t, b)
+                .gpu_blocks(b)
+                .gpu_threads(t);
+        }
 
         // The forward and backward state walks: serial over chunks, threads
         // over the state.
@@ -982,6 +1130,17 @@ private:
                 .reorder(x1, y1, f.args()[2], x0, y0, b)
                 .gpu_blocks(x0, y0, b)
                 .gpu_threads(x1, y1);
+        }
+        if (!inductive()) {
+            for (Func f : {H, dHnr}) {
+                RVar rw(f.update(0).get_schedule().rvars()[0].var);
+                f.update()
+                    .split(d, x0, x1, 8)
+                    .split(p, y0, y1, 8)
+                    .reorder(x1, y1, rw, x0, y0, b)
+                    .gpu_blocks(x0, y0, b)
+                    .gpu_threads(x1, y1);
+            }
         }
         for (Func f : {Hop, dHopr}) {
             f.compute_root()

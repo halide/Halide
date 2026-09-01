@@ -61,7 +61,7 @@ $(GENERATOR_BIN)/mamba2_bwd.generator: mamba2_bwd_generator.cpp $(TERMINATE_HAND
 $(BIN)/%/mamba2_bwd.a: $(GENERATOR_BIN)/mamba2_bwd.generator
 	@mkdir -p $(@D)
 	$^ -g mamba2_bwd -f mamba2_bwd -e $(GENERATOR_OUTPUTS),conceptual_stmt_html -o $(@D) \
-	    target=$* $(SHAPE)
+	    target=$* $(SHAPE) scan=$(SCAN)
 
 $(BIN)/%/runner_bwd: runner_bwd.cpp $(BIN)/%/mamba2_bwd.a
 	@mkdir -p $(@D)
