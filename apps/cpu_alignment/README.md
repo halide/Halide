@@ -54,6 +54,22 @@ Measured on a Threadripper 9970X (Zen 5):
       rdom        1077   ms   (22.6x)
       ksw2 sse      63.0 ms   (1.32x, same output)
 
+Vector-width fairness: ksw2's kernels are 128-bit SSE intrinsics (16
+int8 lanes; lh3 ships no wider port), while Halide compiles to
+AVX-512. At MATCHED width (HL_TARGET=x86-64-linux-sse41, 1k single
+thread) ksw2 wins 1.35x (56.8 ms vs our 76.4): its int8 anti-diagonal
+difference formulation is denser than our int16 absolute-score table,
+worth 2x in lanes. The advantage this benchmark claims is therefore
+not the inner loop - it is that widening is a recompile for the
+schedule and a porting project for the intrinsics (an AVX-512 ksw2 is
+exactly what Intel's mm2-fast contributed, published as its own
+engineering effort; 512-bit lane-crossing shuffles do not translate
+mechanically). At full parallelism both sides sit near the memory
+wall, where formulation density fades and the remaining edge is the
+streaming stores. An int8 difference formulation is expressible as an
+inductive Func too and would compound with the width - left undone to
+keep the algorithm the textbook recurrence.
+
 The separations grow with scale because they are memory structure: the
 rdom form's materialized score slabs are L3-resident in the small
 config (ties looming - the chebyshev lesson) and DRAM-bound at
