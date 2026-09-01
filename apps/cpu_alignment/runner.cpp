@@ -224,6 +224,16 @@ int main(int argc, char **argv) {
         return true;
     };
 
+    // ONLY_DIFF8: skip everything but the diff8 benchmark, for A/B runs
+    // of differently-built binaries.
+    if (getenv("ONLY_DIFF8")) {
+        align_diff8(query, target, dir);
+        if (!check("diff8")) return 1;
+        double t = benchmark(3, 1, [&]() { align_diff8(query, target, dir); });
+        printf("  diff8      %10.1f us\n", t * 1e6);
+        return 0;
+    }
+
     align_ind(query, target, dir);
     if (!check("inductive")) return 1;
     double t_ind = benchmark(3, 1, [&]() { align_ind(query, target, dir); });

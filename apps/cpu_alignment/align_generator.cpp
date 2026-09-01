@@ -164,13 +164,9 @@ public:
             // for i > 0 else 0, V(-1,j) = q for j > 0 else 0, X = Y = 0.
             Expr Ub = cast<int8_t>(select(j < 0 && 0 < i, (int)gapo, 0));
             Expr Vb = cast<int8_t>(select(i < 0 && 0 < j, (int)gapo, 0));
-            Expr border[4] = {Ub, Vb, cast<int8_t>(0), cast<int8_t>(0)};
-            Expr step[4] = {U, V, X, Y};
-            std::vector<Expr> defs;
-            for (int c = 0; c < 4; c++) {
-                defs.push_back(select(i < 0 || j < 0, border[c], likely(step[c])));
-            }
-            dp8(b, j, i) = Tuple(defs);
+            Tuple border = {Ub, Vb, cast<int8_t>(0), cast<int8_t>(0)};
+            Tuple step = {likely(U), V, X, Y};
+            dp8(b, j, i) = select(i < 0 || j < 0, border, step);
 
             // ksw_gg2's direction byte: 1 if the up-path strictly beats
             // the diagonal, then 2 if the left-path strictly beats that;
