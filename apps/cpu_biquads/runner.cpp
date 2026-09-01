@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <mutex>
 #include <thread>
 #include <vector>
 
@@ -136,7 +137,15 @@ std::vector<std::pair<size_t, void *>> &the_pool() {
 }
 }  // namespace
 
+namespace {
+std::mutex &pool_mutex() {
+    static std::mutex m;
+    return m;
+}
+}  // namespace
+
 extern "C" void *halide_malloc(void *, size_t sz) {
+    std::lock_guard<std::mutex> lock(pool_mutex());
     auto &pool = the_pool();
     for (auto &e : pool) {
         if (e.first == sz && e.second) {
@@ -156,6 +165,7 @@ extern "C" void *halide_malloc(void *, size_t sz) {
 }
 
 extern "C" void halide_free(void *, void *p) {
+    std::lock_guard<std::mutex> lock(pool_mutex());
     the_pool().push_back({((size_t *)p)[-2], p});
 }
 
