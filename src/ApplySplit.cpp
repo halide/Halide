@@ -74,13 +74,20 @@ vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
             // extent divides the factor. Use predication to guard
             // the calls and/or provides.
 
+            // Bounds inference has trouble exploiting an if
+            // condition. We'll directly tell it that the loop
+            // variable is bounded above by the original loop max by
+            // replacing the variable with a promise-clamped version
+            // of it.
             Expr guarded;
             if (split.align.defined()) {
                 // Because the un-rebased base block can start before old_min,
                 // we must clamp both the minimum and maximum boundaries.
                 guarded = promise_clamped(old_var, old_min, old_max);
             } else {
-                // Legacy: structurally guaranteed to be >= old_min
+                // We don't also use the original loop min because
+                // it needlessly complicates the expressions and doesn't
+                // actually communicate anything new.
                 guarded = promise_clamped(old_var, old_var, old_max);
             }
 
