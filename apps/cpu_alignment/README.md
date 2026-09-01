@@ -105,13 +105,19 @@ stage; both baselines align one pair per call. Verification strength:
 ksw2 is byte-exact (every CIGAR and score), parasail is score-exact
 (its CIGARs can differ by tie-breaking; all re-score optimal).
 
-At the parallel memory wall the picture flattens: every form streams
-one direction byte per cell at ~100 Gcell/s, and parasail's per-pair
-contiguous trace layout makes its CIGAR walk nearly free where our
-batch-major plane costs 12 percent in cache-hostile pointer chasing -
-so parasail comes out 5 percent ahead there. The remaining lever would
-be a block transpose of the direction plane or a 4-bit direction
-encoding; neither is taken.
+In the parallel configuration parasail comes out 5 percent ahead, and
+the reason is instructive. Its striped_16 trace table stores one
+16-bit lane per cell (the flags DIAG/INS/DEL/INS_E/DEL_F occupy seven
+bits of it; parasail does no packing), so it writes TWICE our bytes
+per cell - 8.6 GB for the batch in 47 ms, about 180 GB/s, near this
+machine's DRAM write ceiling. Our fill streams 4.3 GB in 44 ms, half
+that rate, which means the parallel fill is NOT at the memory wall
+and some 2x of headroom exists in its per-core throughput (3.1
+Gcell/s per core in parallel against 9.3 single-threaded). Parasail's
+per-pair contiguous layout also makes its CIGAR walk nearly free where
+our batch-major plane costs 12 percent in cache-hostile pointer
+chasing. Untaken levers: find the parallel per-core loss; a block
+transpose of the direction plane for the walk.
 
 The separations grow with scale because they are memory structure: the
 rdom form's materialized score slabs are L3-resident in the small
