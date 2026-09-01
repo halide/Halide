@@ -218,19 +218,24 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
                     x <= y + min(z * (arg_lanes - 1), 0)) ||
 
             // The "all lanes of a ramp lie within [lo, hi]" check loop
-            // partitioning builds (a lower-bound comparison ANDed with an
-            // upper-bound comparison, both against the same stride, e.g.
-            // (0 <= ramp(b0, s, n)) && (ramp(b1, s, n) <= extent))
-            rewrite(h_and((broadcast(x, arg_lanes) <= ramp(y, z, arg_lanes)) &&
-                              (ramp(w, z, arg_lanes) <= broadcast(u, arg_lanes)),
-                          1),
-                    (x <= y + min(z * (arg_lanes - 1), 0)) &&
-                        (w + max(z * (arg_lanes - 1), 0) <= u)) ||
-            rewrite(h_and((ramp(w, z, arg_lanes) <= broadcast(u, arg_lanes)) &&
-                              (broadcast(x, arg_lanes) <= ramp(y, z, arg_lanes)),
-                          1),
-                    (w + max(z * (arg_lanes - 1), 0) <= u) &&
-                        (x <= y + min(z * (arg_lanes - 1), 0))) ||
+            // partitioning builds is a chain of these same ramp/broadcast
+            // comparisons ANDed together (a lower-bound comparison against a
+            // ramp's minimum lane, an upper-bound comparison against its
+            // maximum lane, for one or more ramps sharing a stride). Rather
+            // than special-case every clause count, peel one comparison off
+            // the tail of the && chain at a time: the four rules above already
+            // reduce that comparison to a scalar; h_and(w, 1) on what's left
+            // recurses into this same case, so it either peels the next
+            // clause or -- once w is down to a single comparison -- hits one
+            // of the four rules above directly.
+            rewrite(h_and(w && (ramp(x, y, arg_lanes) < broadcast(z, arg_lanes)), 1),
+                    h_and(w, 1) && (x + max(y * (arg_lanes - 1), 0) < z)) ||
+            rewrite(h_and(w && (ramp(x, y, arg_lanes) <= broadcast(z, arg_lanes)), 1),
+                    h_and(w, 1) && (x + max(y * (arg_lanes - 1), 0) <= z)) ||
+            rewrite(h_and(w && (broadcast(x, arg_lanes) < ramp(y, z, arg_lanes)), 1),
+                    h_and(w, 1) && (x < y + min(z * (arg_lanes - 1), 0))) ||
+            rewrite(h_and(w && (broadcast(x, arg_lanes) <= ramp(y, z, arg_lanes)), 1),
+                    h_and(w, 1) && (x <= y + min(z * (arg_lanes - 1), 0))) ||
             false) {
             return mutate(rewrite.result, info);
         }
