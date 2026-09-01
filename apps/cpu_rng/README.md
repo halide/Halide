@@ -24,13 +24,13 @@ and smaller-state generator, reported for ecosystem context only.
 Measured on a Threadripper 9970X (Zen 5), one thread, 1 GB of floats
 (32 streams x 4M steps x 2):
 
-    inductive       37.6 ms   (29 GB/s of output)
-    hand AVX-512    35.9 ms   (0.95x)
-    julia rand!     36.1 ms   (0.96x)
-    unfolded       180 ms     (4.8x)
-    rdom           373 ms     (9.9x)
-    scalar C++     590 ms     (15.7x)
-    numpy PCG64    500 ms     (13x, different generator)
+    inductive       35.2 ms   (31 GB/s of output)
+    hand AVX-512    36.4 ms   (1.03x)
+    julia rand!     36.1 ms   (1.03x)
+    unfolded       180 ms     (5.1x)
+    rdom           377 ms     (10.7x)
+    scalar C++     591 ms     (16.8x)
+    numpy PCG64    500 ms     (14x, different generator)
 
 Why the top three tie: they are the same algorithm at the same wall.
 All keep the state near registers, advance eight 64-bit lanes per
@@ -38,17 +38,16 @@ vector, and project both halves with integer ops, so each is limited
 by a single core's store bandwidth. The interleaved half-extraction
 must be written with extract_bits, which compiles to a free vector
 reinterpret; a select on the lane parity costs three shuffles per
-store. The remaining ~4 percent is the folded window round-tripping L1
-where the hand kernel's state lives purely in registers. Promoting the
-window is blocked twice today: store_in(Register) defeats the
-sliding-window proof the fold depends on, and unrolling the walk by
-the fold factor - which would make the window's indices constants -
-runs into the fold >= unroll+1 validity check, and worse, splitting
-the walk turns sliding's warm-up into per-iteration dynamic catch-up
-loops whose conditions carry no likely() marker, so loop partitioning
-never peels them (the split form measures 40-60 percent slower even
-with an exact split; the tail itself peels fine). In the unsplit form
-sliding and partitioning cooperate and the steady state is clean.
+store. And unrolling the walk by the fold factor, which turns the
+rolling window's modulo indices into constants the compiler keeps in
+registers, requires the EXPLICIT slide directive - slide(y, t) - not
+the implicit sliding-window pass: once the walk is split you are
+sliding over a split dimension, which only the explicit machinery
+handles (the implicit pass lowers the warm-up into per-iteration
+dynamic catch-up loops instead, 40-60 percent slower). With slide, a
+RoundUp split by the fold factor, and the pair unrolled, the steady
+state is straight-line with no modulos and the window promotes: the
+Halide version edges out the hand-written kernel.
 To see it: make bin/host/rng.generator && ./bin/host/rng.generator \
 -g rng -f rng_ind -e stmt -o /tmp target=host lanes=32 \
 scan=inductive par=false

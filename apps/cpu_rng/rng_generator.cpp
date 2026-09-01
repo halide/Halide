@@ -109,10 +109,11 @@ public:
                 S.store_root()
                     .compute_at(y, co)
                     .vectorize(l, VEC);
-
             }
             if (scan == ScanForm::Inductive) {
-                S.fold_storage(t, 2);
+                Var to("to"), ti("ti");
+                S.slide(y, t).fold_storage(t, 2);
+                y.split(t, to, ti, 2, TailStrategy::RoundUp).unroll(ti);
             }
         } else {
             // The materialized walk, at its best: everything nested inside
