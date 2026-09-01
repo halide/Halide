@@ -39,9 +39,19 @@ by a single core's store bandwidth. The interleaved half-extraction
 must be written with extract_bits, which compiles to a free vector
 reinterpret; a select on the lane parity costs three shuffles per
 store. The remaining ~4 percent is the folded window round-tripping L1
-where the hand kernel's state lives purely in registers
-(store_in(Register) cannot express this today: it defeats the
-sliding-window proof the fold depends on).
+where the hand kernel's state lives purely in registers. Promoting the
+window is blocked twice today: store_in(Register) defeats the
+sliding-window proof the fold depends on, and unrolling the walk by
+the fold factor - which would make the window's indices constants -
+runs into the fold >= unroll+1 validity check, and worse, splitting
+the walk turns sliding's warm-up into per-iteration dynamic catch-up
+loops whose conditions carry no likely() marker, so loop partitioning
+never peels them (the split form measures 40-60 percent slower even
+with an exact split; the tail itself peels fine). In the unsplit form
+sliding and partitioning cooperate and the steady state is clean.
+To see it: make bin/host/rng.generator && ./bin/host/rng.generator \
+-g rng -f rng_ind -e stmt -o /tmp target=host lanes=32 \
+scan=inductive par=false
 
 What the schedule buys beyond parity: par=true spreads stream blocks
 across cores and reaches the chip's write bandwidth - 21 ms at 51 GB/s
