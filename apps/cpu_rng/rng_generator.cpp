@@ -1,8 +1,9 @@
 // Fills a buffer with uniform random floats from xoshiro256++, the
 // generator family behind Julia's default RNG: 256 bits of state per
-// stream advance every step, and each step's output is a 24-bit
-// projection of it. The state is large, evolving, and never wanted by the
-// consumer - only the projection is.
+// stream advance every step, and each step's output is two floats built
+// from the halves of its 64-bit result - the same use-all-the-bits bulk
+// fill contract Julia's Random.XoshiroSimd runs. The state is large,
+// evolving, and never wanted by the consumer - only the projection is.
 //
 // Written two ways. As an inductive Func the state walks the stream in a
 // two-deep folded window that never leaves registers, and only the floats
@@ -50,11 +51,16 @@ public:
             Expr n0 = s0 ^ n3;
             return std::vector<Expr>{n0, n1, n2 ^ t17, rotl(n3, 45)};
         };
-        // The output a call would return from the current state, projected
-        // to a float in [0, 1) from the top 24 bits.
-        auto out = [&](Expr s0, Expr s3) {
+        // The two outputs a step yields: each half of the 64-bit result
+        // becomes a float in [0, 1) by stuffing its top 23 bits into the
+        // mantissa of a float in [1, 2) and shifting down. Integer ops
+        // only, and both halves are the same shift of a 32-bit word.
+        auto out = [&](Expr s0, Expr s3, Expr half) {
             Expr r = rotl(s0 + s3, 23) + s0;
-            return cast<float>(r >> 40) * (1.f / (1 << 24));
+            Expr w = select(half == 0, cast<uint32_t>(r),
+                            cast<uint32_t>(r >> 32));
+            Expr bits = (w >> 9) | Expr((uint32_t)0x3f800000);
+            return reinterpret<float>(bits) - 1.f;
         };
 
         Func S(std::vector<Type>(4, UInt(64)), "S");
@@ -74,7 +80,9 @@ public:
                           S(l, rt - 1)[2], S(l, rt - 1)[3]);
             S(l, rt) = Tuple(n);
         }
-        y(l, t) = out(S(l, t)[0], S(l, t)[3]);
+        // Output lane pairs (2l, 2l+1) carry the low and high halves of
+        // stream l's step.
+        y(l, t) = out(S(l / 2, t)[0], S(l / 2, t)[3], l % 2);
 
         // ---------------- Schedule ----------------
 
@@ -83,7 +91,7 @@ public:
         if (scan != ScanForm::RDom) {
             // Blocks of streams advance together through one serial walk;
             // their chains are independent, which keeps every port busy.
-            y.split(l, co, ci, VEC)
+            y.split(l, co, ci, 2 * VEC)
                 .reorder(ci, co, t)
                 .vectorize(ci);
             if (par) {
@@ -107,7 +115,7 @@ public:
         } else {
             // The materialized walk, at its best: everything nested inside
             // the output's stream-block loop as one parallel loop.
-            y.split(l, co, ci, VEC)
+            y.split(l, co, ci, 2 * VEC)
                 .reorder(ci, t, co)
                 .vectorize(ci);
             if (par) {
@@ -122,7 +130,7 @@ public:
 
         seeds.dim(0).set_bounds(0, 4);
         seeds.dim(1).set_bounds(0, lanes);
-        y.dim(0).set_bounds(0, lanes);
+        y.dim(0).set_bounds(0, 2 * (int)lanes);
     }
 };
 

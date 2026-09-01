@@ -9,6 +9,8 @@
 #include "rng_rdom.h"
 #include "rng_unf.h"
 
+#include <immintrin.h>
+
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -92,7 +94,12 @@ void reference(const Buffer<uint64_t> &seeds, Buffer<float> &ref) {
         uint64_t s2 = seeds(2, l), s3 = seeds(3, l);
         for (int t = 0; t < T; t++) {
             uint64_t r = rotl(s0 + s3, 23) + s0;
-            ref(l, t) = (float)(r >> 40) * (1.f / (1 << 24));
+            for (int h = 0; h < 2; h++) {
+                uint32_t bits = (((uint32_t)(r >> (32 * h))) >> 9) | 0x3f800000u;
+                float f;
+                memcpy(&f, &bits, 4);
+                ref(2 * l + h, t) = f - 1.f;
+            }
             uint64_t t17 = s1 << 17;
             s2 ^= s0;
             s3 ^= s1;
@@ -104,8 +111,51 @@ void reference(const Buffer<uint64_t> &seeds, Buffer<float> &ref) {
     }
 }
 
+// The same generator, hand-vectorized: eight streams per vector, two
+// vectors interleaved, the layout the Halide schedule uses. This is the
+// baseline a performance-minded C++ programmer would write.
+void simd_fill(const Buffer<uint64_t> &seeds, Buffer<float> &out) {
+    // All the stream blocks stay live and advance together per step, so
+    // every step stores full cache lines of output in order.
+    constexpr int NB = L / 8;
+    static_assert(L % 8 == 0, "eight-lane blocks");
+    const __m512i one = _mm512_set1_epi32(0x3f800000);
+    const __m512 onef = _mm512_set1_ps(1.f);
+    __m512i s[NB][4];
+    alignas(64) uint64_t tmp[8];
+    for (int blk = 0; blk < NB; blk++) {
+        for (int i = 0; i < 4; i++) {
+            for (int j = 0; j < 8; j++) {
+                tmp[j] = seeds(i, blk * 8 + j);
+            }
+            s[blk][i] = _mm512_load_si512(tmp);
+        }
+    }
+    for (int t = 0; t < T; t++) {
+        for (int blk = 0; blk < NB; blk++) {
+            __m512i r = _mm512_add_epi64(
+                _mm512_rol_epi64(_mm512_add_epi64(s[blk][0], s[blk][3]), 23),
+                s[blk][0]);
+            // Both halves of each 64-bit result are the same shift of a
+            // 32-bit word, and little-endian order interleaves them as
+            // consecutive output lanes: one full-width store per step.
+            __m512i bits = _mm512_or_si512(
+                _mm512_srli_epi32(r, 9), one);
+            __m512 f = _mm512_sub_ps(_mm512_castsi512_ps(bits), onef);
+            _mm512_storeu_ps(&out(blk * 16, t), f);
+            __m512i t17 = _mm512_slli_epi64(s[blk][1], 17);
+            s[blk][2] = _mm512_xor_si512(s[blk][2], s[blk][0]);
+            s[blk][3] = _mm512_xor_si512(s[blk][3], s[blk][1]);
+            s[blk][1] = _mm512_xor_si512(s[blk][1], s[blk][2]);
+            s[blk][0] = _mm512_xor_si512(s[blk][0], s[blk][3]);
+            s[blk][2] = _mm512_xor_si512(s[blk][2], t17);
+            s[blk][3] = _mm512_rol_epi64(s[blk][3], 45);
+        }
+    }
+}
+
 bool check(const Buffer<float> &y, const Buffer<float> &ref, const char *what) {
-    for (int l = 0; l < L; l++) {
+    for (int l = 0; l < 2 * L; l++) {
         for (int t = 0; t < T; t++) {
             if (y(l, t) != ref(l, t)) {
                 printf("  %-10s MISMATCH at lane %d step %d: %a vs %a\n",
@@ -128,13 +178,17 @@ int main(int argc, char **argv) {
             seeds(i, l) = splitmix64(sm);
         }
     }
-    Buffer<float> y(L, T), ref(L, T);
-    printf("%d streams x %d steps (%.0f MB of floats, %.0f MB of state "
-           "per trajectory)\n",
-           L, T, L * (double)T * 4 / 1e6, L * (double)T * 32 / 1e6);
+    Buffer<float> y(2 * L, T), ref(2 * L, T);
+    printf("%d streams x %d steps, two floats per step (%.0f MB of floats, "
+           "%.0f MB of state per trajectory)\n",
+           L, T, 2 * L * (double)T * 4 / 1e6, L * (double)T * 32 / 1e6);
 
     reference(seeds, ref);
     double t_ref = benchmark(3, 1, [&]() { reference(seeds, ref); });
+
+    simd_fill(seeds, y);
+    if (!check(y, ref, "simd C++")) return 1;
+    double t_simd = benchmark(3, 1, [&]() { simd_fill(seeds, y); });
 
     rng_ind(seeds, y);
     if (!check(y, ref, "inductive")) return 1;
@@ -148,14 +202,16 @@ int main(int argc, char **argv) {
     if (!check(y, ref, "rdom")) return 1;
     double t_rdom = benchmark(3, 1, [&]() { rng_rdom(seeds, y); });
 
-    const double gb = L * (double)T * 4 / 1e9;
+    const double gb = 2 * L * (double)T * 4 / 1e9;
     printf("  inductive  %10.1f us  (%.1f GB/s of output)\n",
            t_ind * 1e6, gb / t_ind);
     printf("  unfolded   %10.1f us  (%.2fx: fusion without folding)\n",
            t_unf * 1e6, t_unf / t_ind);
     printf("  rdom       %10.1f us  (%.2fx the inductive time)\n",
            t_rdom * 1e6, t_rdom / t_ind);
-    printf("  scalar C++ %10.1f us  (%.2fx the inductive time)\n",
+    printf("  simd C++   %10.1f us  (%.2fx: same RNG, hand-vectorized)\n",
+           t_simd * 1e6, t_simd / t_ind);
+    printf("  scalar C++ %10.1f us  (%.2fx: same RNG, the reference loop)\n",
            t_ref * 1e6, t_ref / t_ind);
     printf("Success!\n");
     return 0;
