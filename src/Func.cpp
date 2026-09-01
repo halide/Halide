@@ -16,6 +16,7 @@
 #include "Argument.h"
 #include "Associativity.h"
 #include "Bounds.h"
+#include "CSE.h"
 #include "Callable.h"
 #include "CodeGen_LLVM.h"
 #include "ConstantBounds.h"
@@ -891,6 +892,8 @@ optional<HoistedFactor> extract_factor(const Expr &increment,
         body = body.defined() ? make_binary_op(law.inner_op, body, leaf) : leaf;
     }
 
+    factor = common_subexpression_elimination(factor);
+    body = common_subexpression_elimination(body);
     return HoistedFactor{law.inner_op, factor, body};
 }
 
