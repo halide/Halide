@@ -140,24 +140,30 @@ public:
                 }
             }
         } else {
-            for (int k = 0; k < N; k++) {
-                Func f = k == N - 1 ? Func(y) : ys[k];
-                if (k < N - 1) {
-                    f.compute_root();
-                }
-                f.split(c, co, ci, VEC)
-                    .reorder(ci, n, co)
-                    .vectorize(ci);
-                // The channel blocks' walks are independent, so the
-                // parallel loop must sit outside the serial one.
+            // Every stage is data parallel over channels, so the whole
+            // cascade nests inside the output's channel-block loop: one big
+            // parallel loop rather than a chain of kernels, with each
+            // block's intermediates freed as it finishes. The signal still
+            // crosses memory once per section - each section's update owns
+            // its walk over the block's whole slice.
+            y.split(c, co, ci, VEC)
+                .reorder(ci, n, co)
+                .vectorize(ci);
+            y.update()
+                .split(c, co, ci, VEC)
+                .reorder(ci, r, co)
+                .vectorize(ci);
+            if (par) {
+                y.parallel(co);
+                y.update().parallel(co);
+            }
+            for (int k = 0; k + 1 < N; k++) {
+                Func f = ys[k];
+                f.compute_at(y, co)
+                    .vectorize(c, VEC);
                 f.update()
-                    .split(c, co, ci, VEC)
-                    .reorder(ci, r, co)
-                    .vectorize(ci);
-                if (par) {
-                    f.parallel(co);
-                    f.update().parallel(co);
-                }
+                    .reorder(c, r)
+                    .vectorize(c, VEC);
             }
         }
 

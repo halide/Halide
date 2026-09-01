@@ -22,14 +22,18 @@ N-pass form's per-run intermediate allocations do not add page-fault
 time:
 
     sections          2        4        8       16
-    inductive      59 ms   107 ms   151 ms   272 ms
-    rdom          379 ms   772 ms  1501 ms  3087 ms
-    ratio           6.4x     7.2x    10.0x    11.4x
+    inductive      59 ms   108 ms   146 ms   270 ms
+    rdom          319 ms   611 ms  1122 ms  2059 ms
+    ratio           5.4x     5.7x     7.7x     7.6x
+
+The RDom form is at its best here: every stage is data parallel over
+channels, so the whole cascade nests inside the output's channel-block
+loop as one parallel loop, rather than a chain of root-level kernels.
 
 At two sections the inductive pass streams at 36 GB/s - the memory
 system's speed. scipy.sosfilt (single thread, scalar, float32) takes
 2.1 s at 8 sections. Parallel over 256 channels x 1M samples the
-inductive form runs 46 ms at 46 GB/s against 461 ms for the N-pass form.
+inductive form runs 45 ms at 47 GB/s against 435 ms for the N-pass form.
 
 scan=unfolded isolates fusion from folding: the same fused pass with
 every section's whole trajectory kept live times the same as the folded
