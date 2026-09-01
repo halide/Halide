@@ -31,6 +31,9 @@ public:
                                    {"unfolded", ScanForm::Unfolded},
                                    {"rdom", ScanForm::RDom}}};
     GeneratorParam<bool> par{"par", false};
+    // Streaming stores for the direction plane under par (off only to
+    // test cache-resident planes).
+    GeneratorParam<bool> stream{"stream", true};
     GeneratorParam<int> sa{"sa", 2};
     GeneratorParam<int> sb{"sb", 4};
     GeneratorParam<int> gapo{"gapo", 4};
@@ -124,7 +127,10 @@ public:
         Var bo("bo"), bi("bi");
         dir.split(b, bo, bi, VEC).reorder(bi, j, i, bo).vectorize(bi);
         if (par) {
-            dir.parallel(bo).stream_stores();
+            dir.parallel(bo);
+            if (stream) {
+                Func(dir).stream_stores();
+            }
         }
 
         if (scan != ScanForm::RDom) {

@@ -106,18 +106,28 @@ ksw2 is byte-exact (every CIGAR and score), parasail is score-exact
 (its CIGARs can differ by tie-breaking; all re-score optimal).
 
 In the parallel configuration parasail comes out 5 percent ahead, and
-the reason is instructive. Its striped_16 trace table stores one
-16-bit lane per cell (the flags DIAG/INS/DEL/INS_E/DEL_F occupy seven
-bits of it; parasail does no packing), so it writes TWICE our bytes
-per cell - 8.6 GB for the batch in 47 ms, about 180 GB/s, near this
-machine's DRAM write ceiling. Our fill streams 4.3 GB in 44 ms, half
-that rate, which means the parallel fill is NOT at the memory wall
-and some 2x of headroom exists in its per-core throughput (3.1
-Gcell/s per core in parallel against 9.3 single-threaded). Parasail's
+the investigation of why corrects an earlier guess in this file. Our
+parallel fill is bound by the memory subsystem's write path: it scales
+linearly to 4 threads (8 Gcell/s per thread), loses 30 percent per
+thread by 8, and caps at ~105 Gcell/s from 32 threads on - one
+direction byte per cell as streaming stores, ~105 GB/s. The 9970X is
+four CCDs with separate L3s and fabric links, and spreading threads
+across CCDs recovers 12-28 percent on the way up, so the approach to
+the ceiling is topology, not code quality. There is no cache-resident
+regime to retreat to: a 128 MB plane written with regular stores is
+SLOWER (60 vs 91 Gcell/s at 32 threads), because a batch-width x N^2
+block outruns any one CCD's 32 MB L3 and pays read-for-ownership on
+top. Parasail escapes the wall by contract rather than by bandwidth:
+each call's 2 MB trace table (it stores a full 16-bit lane per cell,
+no packing) is consumed by the CIGAR walk and freed, and measured in
+isolation its resident set is 173 MB with no more DRAM fills than
+ours - the traces never leave cache. Our contract materializes the
+whole batch's plane (4.3 GB) and pays DRAM for it once. Parasail's
 per-pair contiguous layout also makes its CIGAR walk nearly free where
-our batch-major plane costs 12 percent in cache-hostile pointer
-chasing. Untaken levers: find the parallel per-core loss; a block
-transpose of the direction plane for the walk.
+our batch-major plane costs 12 percent. The levers this leaves, both
+untaken: pack directions to four bits (halves the bytes at the wall;
+parasail cannot, its trace lane is its score width), and trace each
+block while its plane is hot instead of retaining the batch's.
 
 The separations grow with scale because they are memory structure: the
 rdom form's materialized score slabs are L3-resident in the small

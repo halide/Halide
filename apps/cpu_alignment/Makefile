@@ -7,6 +7,7 @@ QLEN ?= 256
 TLEN ?= 256
 BATCH ?= 1024
 PAR ?= false
+STREAM ?= true
 PROF :=
 
 # 64-bit indexing: required when the direction plane exceeds 2GB (the
@@ -33,7 +34,7 @@ define GEN_rule
 $$(BIN)/%/$(1)_$$(SHORT_$(2)).a: $$(GENERATOR_BIN)/$(1).generator
 	@mkdir -p $$(@D)
 	$$< -g $(1) -f $(1)_$$(SHORT_$(2)) -e $$(GENERATOR_OUTPUTS) -o $$(@D) \
-	    target=$$*-no_runtime$$(LARGE)$$(PROF) scan=$(2) par=$$(PAR)
+	    target=$$*-no_runtime$$(LARGE)$$(PROF) scan=$(2) par=$$(PAR) stream=$$(STREAM)
 endef
 $(foreach g,$(GENS),$(foreach f,$(FORMS),$(eval $(call GEN_rule,$(g),$(f)))))
 

@@ -37,6 +37,9 @@ public:
                                    {"unfolded", ScanForm::Unfolded},
                                    {"rdom", ScanForm::RDom}}};
     GeneratorParam<bool> par{"par", false};
+    // Streaming stores for the direction plane under par (off only to
+    // test cache-resident planes).
+    GeneratorParam<bool> stream{"stream", true};
     GeneratorParam<int> sa{"sa", 2};
     GeneratorParam<int> sb{"sb", 4};
     GeneratorParam<int> gapo{"gapo", 4};
@@ -129,7 +132,10 @@ public:
         if (par) {
             // The direction plane is written once and read only by the
             // O(N) traceback: streaming stores skip read-for-ownership.
-            dir.parallel(bo).stream_stores();
+            dir.parallel(bo);
+            if (stream) {
+                Func(dir).stream_stores();
+            }
         }
 
         if (scan != ScanForm::RDom) {

@@ -229,56 +229,6 @@ int main(int argc, char **argv) {
         return true;
     };
 
-    // ONLY_A8: benchmark only int8 inductive, for A/B runs of
-    // differently-built binaries.
-    if (getenv("ONLY_A8")) {
-        align8_ind(query, target, dir);
-        if (!check("int8 ind")) return 1;
-        double t = benchmark(3, 1, [&]() { align8_ind(query, target, dir); });
-        printf("  int8 ind   %10.1f us\n", t * 1e6);
-        return 0;
-    }
-
-    struct Form {
-        const char *name;
-        int (*fn)(struct halide_buffer_t *, struct halide_buffer_t *, struct halide_buffer_t *);
-    };
-    // Two generators x three forms. int8 inductive is the headline.
-    Form forms[] = {
-        {"int8 ind", align8_ind},   {"int8 unf", align8_unf},   {"int8 rdom", align8_rdom},
-        {"int16 ind", align16_ind}, {"int16 unf", align16_unf}, {"int16 rdom", align16_rdom},
-    };
-    double t[6];
-    for (int f = 0; f < 6; f++) {
-        forms[f].fn(query, target, dir);
-        if (!check(forms[f].name)) return 1;
-        t[f] = benchmark(3, 1, [&]() { forms[f].fn(query, target, dir); });
-    }
-    double t_ind = t[0];  // int8 inductive is the reference for ratios
-
-    // The baselines' timed calls include their O(N) CIGAR walk; ours
-    // does it here, on the batch-major direction plane, threaded across
-    // pairs under PAR like the baselines. Reported as its own row and
-    // folded into the fill+cigar comparison.
-    auto traceback_sweep = [&]() {
-        int nthreads = PARALLEL ? std::thread::hardware_concurrency() : 1;
-        std::vector<std::thread> threads;
-        std::atomic<int> next{0};
-        for (int th = 0; th < nthreads; th++) {
-            threads.emplace_back([&]() {
-                int b;
-                std::vector<uint32_t> cig2;
-                while ((b = next.fetch_add(8)) < B) {
-                    for (int k = b; k < b + 8 && k < B; k++) {
-                        backtrack(&dir(k, 0, 0), (long)B, (long)B * J, I - 1, J - 1, cig2);
-                    }
-                }
-            });
-        }
-        for (auto &th : threads) th.join();
-    };
-    double t_tb = benchmark(3, 1, [&]() { traceback_sweep(); });
-
 #ifdef HAVE_PARASAIL
     // parasail's traceback variants use the same strategy the inductive
     // schedule derives: striped SIMD score rows kept rolling, a per-cell
@@ -334,6 +284,80 @@ int main(int argc, char **argv) {
         if (score_bad || path_bad) return 1;
     }
 #endif
+
+#ifdef HAVE_PARASAIL
+    // ONLY_PARASAIL: benchmark just the parasail sweep, for isolating its
+    // memory behaviour.
+    if (getenv("ONLY_PARASAIL")) {
+        double tp0 = benchmark(3, 1, [&]() {
+            int nthreads = PARALLEL ? std::thread::hardware_concurrency() : 1;
+            std::vector<std::thread> threads;
+            std::atomic<int> next{0};
+            for (int th = 0; th < nthreads; th++) {
+                threads.emplace_back([&]() {
+                    int b;
+                    std::vector<uint32_t> cig2;
+                    while ((b = next.fetch_add(8)) < B) {
+                        for (int k = b; k < b + 8 && k < B; k++) parasail_one(k, &cig2);
+                    }
+                });
+            }
+            for (auto &th : threads) th.join();
+        });
+        printf("  parasail   %10.1f us\n", tp0 * 1e6);
+        return 0;
+    }
+#endif
+    // ONLY_A8: benchmark only int8 inductive, for A/B runs of
+    // differently-built binaries.
+    if (getenv("ONLY_A8")) {
+        align8_ind(query, target, dir);
+        if (!check("int8 ind")) return 1;
+        double t = benchmark(3, 1, [&]() { align8_ind(query, target, dir); });
+        printf("  int8 ind   %10.1f us\n", t * 1e6);
+        return 0;
+    }
+
+    struct Form {
+        const char *name;
+        int (*fn)(struct halide_buffer_t *, struct halide_buffer_t *, struct halide_buffer_t *);
+    };
+    // Two generators x three forms. int8 inductive is the headline.
+    Form forms[] = {
+        {"int8 ind", align8_ind},   {"int8 unf", align8_unf},   {"int8 rdom", align8_rdom},
+        {"int16 ind", align16_ind}, {"int16 unf", align16_unf}, {"int16 rdom", align16_rdom},
+    };
+    double t[6];
+    for (int f = 0; f < 6; f++) {
+        forms[f].fn(query, target, dir);
+        if (!check(forms[f].name)) return 1;
+        t[f] = benchmark(3, 1, [&]() { forms[f].fn(query, target, dir); });
+    }
+    double t_ind = t[0];  // int8 inductive is the reference for ratios
+
+    // The baselines' timed calls include their O(N) CIGAR walk; ours
+    // does it here, on the batch-major direction plane, threaded across
+    // pairs under PAR like the baselines. Reported as its own row and
+    // folded into the fill+cigar comparison.
+    auto traceback_sweep = [&]() {
+        int nthreads = PARALLEL ? std::thread::hardware_concurrency() : 1;
+        std::vector<std::thread> threads;
+        std::atomic<int> next{0};
+        for (int th = 0; th < nthreads; th++) {
+            threads.emplace_back([&]() {
+                int b;
+                std::vector<uint32_t> cig2;
+                while ((b = next.fetch_add(8)) < B) {
+                    for (int k = b; k < b + 8 && k < B; k++) {
+                        backtrack(&dir(k, 0, 0), (long)B, (long)B * J, I - 1, J - 1, cig2);
+                    }
+                }
+            });
+        }
+        for (auto &th : threads) th.join();
+    };
+    double t_tb = benchmark(3, 1, [&]() { traceback_sweep(); });
+
 
     // ksw2 parallelizes across pairs the way aligners deploy it: when the
     // Halide build is parallel, give ksw2 the same cores.
