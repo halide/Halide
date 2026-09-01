@@ -2727,46 +2727,6 @@ Func &Func::always_partition_all() {
     return *this;
 }
 
-namespace {
-
-// If `incoming` is set, it overwrites `existing` (warning first if `existing` was
-// already set to something different). Otherwise `existing` is left untouched: a call
-// that doesn't set a given field (e.g. bound_extent() leaves min undefined) never
-// clobbers a value a previous call set for that same field.
-void merge_bound_field(const string &func_name, const string &var, const char *what,
-                       Expr &existing, const Expr &incoming) {
-    if (!incoming.defined()) {
-        return;
-    }
-    if (existing.defined() && !equal(existing, incoming)) {
-        user_warning << "Func \"" << func_name << "\": the " << what << " on \"" << var
-                     << "\" was already set to " << existing
-                     << ". Replacing it with " << incoming << ".\n";
-    }
-    existing = incoming;
-}
-
-// Func::bound/bound_extent/align_bounds/align_extent each set one or more of a Var's
-// four Bound fields (min, extent, modulus, remainder) and leave the rest undefined.
-// Folding repeated calls into a single Bound per Var (instead of appending a new entry
-// per call) means every consumer of FuncSchedule::bounds() sees at most one constraint
-// per Var, with no ordering between calls left for them to get wrong.
-void merge_bound(vector<Bound> &bounds, const Bound &b, const string &func_name) {
-    for (Bound &existing : bounds) {
-        if (existing.var != b.var) {
-            continue;
-        }
-        merge_bound_field(func_name, b.var, "min bound", existing.min, b.min);
-        merge_bound_field(func_name, b.var, "extent bound", existing.extent, b.extent);
-        merge_bound_field(func_name, b.var, "alignment modulus", existing.modulus, b.modulus);
-        merge_bound_field(func_name, b.var, "alignment remainder", existing.remainder, b.remainder);
-        return;
-    }
-    bounds.push_back(b);
-}
-
-}  // namespace
-
 Func &Func::bound(const Var &var, Expr min, Expr extent) {
     user_assert(!min.defined() || Int(32).can_represent(min.type())) << "Can't represent min bound in int32\n";
     user_assert(extent.defined()) << "Extent bound of a Func can't be undefined\n";
@@ -2786,7 +2746,7 @@ Func &Func::bound(const Var &var, Expr min, Expr extent) {
         << " is not one of the pure variables of " << name() << ".\n";
 
     Bound b = {var.name(), min, extent, Expr(), Expr()};
-    merge_bound(func.schedule().bounds(), b, name());
+    merge_bound(func.schedule().bounds(), b);
 
     // Propagate constant bounds into estimates as well.
     if (!is_const(min)) {
@@ -2871,7 +2831,7 @@ Func &Func::align_bounds(const Var &var, Expr modulus, Expr remainder) {
         << " is not one of the pure variables of " << name() << ".\n";
 
     Bound b = {var.name(), Expr(), Expr(), modulus, remainder};
-    merge_bound(func.schedule().bounds(), b, name());
+    merge_bound(func.schedule().bounds(), b);
     return *this;
 }
 
@@ -2891,7 +2851,7 @@ Func &Func::align_extent(const Var &var, Expr modulus) {
         << " is not one of the pure variables of " << name() << ".\n";
 
     Bound b = {var.name(), Expr(), Expr(), modulus, Expr()};
-    merge_bound(func.schedule().bounds(), b, name());
+    merge_bound(func.schedule().bounds(), b);
     return *this;
 }
 
