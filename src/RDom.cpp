@@ -1,6 +1,7 @@
 #include <array>
 #include <utility>
 
+#include "FreeVariables.h"
 #include "IREquality.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
@@ -97,38 +98,6 @@ RDom::RDom(const ReductionDomain &d)
     }
 }
 
-namespace {
-class CheckRDomBounds : public IRGraphVisitor {
-
-    using IRGraphVisitor::visit;
-
-    void visit(const Call *op) override {
-        IRGraphVisitor::visit(op);
-        if (op->call_type == Call::Halide) {
-            offending_func = op->name;
-        }
-    }
-
-    void visit(const Variable *op) override {
-        if (!op->param.defined() &&
-            !op->image.defined() &&
-            !internal_vars.contains(op->name)) {
-            offending_free_var = op->name;
-        }
-    }
-
-    void visit(const Let *op) override {
-        ScopedBinding<int> bind(internal_vars, op->name, 0);
-        IRGraphVisitor::visit(op);
-    }
-    Scope<int> internal_vars;
-
-public:
-    string offending_func;
-    string offending_free_var;
-};
-}  // namespace
-
 void RDom::validate_min_extent(const Expr &min, const Expr &extent) {
     user_assert(lossless_cast(Int(32), min).defined())
         << "RDom min cannot be represented as an int32: " << min;
@@ -143,7 +112,7 @@ void RDom::initialize_from_region(const Region &region, string name) {
 
     std::vector<ReductionVariable> vars;
     for (size_t i = 0; i < region.size(); i++) {
-        CheckRDomBounds checker;
+        UnboundVarChecker checker(/*check_func_calls=*/true);
         user_assert(region[i].min.defined() && region[i].extent.defined())
             << "The RDom " << name << " may not be constructed with undefined Exprs.\n";
         region[i].min.accept(&checker);
@@ -155,12 +124,12 @@ void RDom::initialize_from_region(const Region &region, string name) {
             << "  " << region[i].min << " ... " << region[i].extent << "\n"
             << "These depend on a call to the Func " << checker.offending_func << ".\n"
             << "The bounds of an RDom may not depend on a call to a Func.\n";
-        user_assert(checker.offending_free_var.empty())
+        user_assert(checker.offending_var.empty())
             << "The bounds of the RDom " << name
             << " in dimension " << i
             << " are:\n"
             << "  " << region[i].min << " ... " << region[i].extent << "\n"
-            << "These depend on the variable " << checker.offending_free_var << ".\n"
+            << "These depend on the variable " << checker.offending_var << ".\n"
             << "The bounds of an RDom may not depend on a free variable.\n";
 
         std::string rvar_uniquifier;

@@ -1,7 +1,7 @@
 #include "UniquifyVariableNames.h"
+#include "FreeVariables.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "IRVisitor.h"
 #include "Scope.h"
 
 namespace Halide {
@@ -114,57 +114,15 @@ public:
     }
 };
 
-class FindFreeVars : public IRVisitor {
-protected:
-    using IRVisitor::visit;
-
-    Scope<> scope;
-
-    void visit(const Variable *op) override {
-        if (!scope.contains(op->name)) {
-            free_vars.push(op->name, op->name);
-        }
-    }
-
-    template<typename LetOrLetStmt>
-    void visit_let(const LetOrLetStmt *op) {
-        vector<ScopedBinding<>> frame;
-        decltype(op->body) body;
-        do {
-            op->value.accept(this);
-            frame.emplace_back(scope, op->name);
-            body = op->body;
-            op = body.template as<LetOrLetStmt>();
-        } while (op);
-        body.accept(this);
-    }
-
-    void visit(const Let *op) override {
-        visit_let(op);
-    }
-
-    void visit(const LetStmt *op) override {
-        visit_let(op);
-    }
-
-    void visit(const For *op) override {
-        op->min.accept(this);
-        op->max.accept(this);
-        {
-            ScopedBinding<> bind(scope, op->name);
-            op->body.accept(this);
-        }
-    }
-
-public:
-    Scope<string> free_vars;
-};
 }  // namespace
 
 Stmt uniquify_variable_names(const Stmt &s) {
-    FindFreeVars finder;
-    s.accept(&finder);
-    return UniquifyVariableNames(&finder.free_vars)(s);
+    std::map<string, Type> free_vars = find_free_vars(s);
+    Scope<string> free_var_names;
+    for (const auto &p : free_vars) {
+        free_var_names.push(p.first, p.first);
+    }
+    return UniquifyVariableNames(&free_var_names)(s);
 }
 
 }  // namespace Internal

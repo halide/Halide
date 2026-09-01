@@ -124,6 +124,7 @@ target_sources(
     FindIntrinsics.h
     FlattenNestedRamps.h
     Float16.h
+    FreeVariables.h
     Func.h
     Function.h
     FunctionPtr.h
@@ -191,6 +192,7 @@ target_sources(
     RemoveDeadAllocations.h
     RemoveExternLoops.h
     RemoveUndef.h
+    Rename.h
     runtime/HalideBuffer.h
     runtime/HalideRuntime.h
     Schedule.h
@@ -308,6 +310,7 @@ target_sources(
     FindIntrinsics.cpp
     FlattenNestedRamps.cpp
     Float16.cpp
+    FreeVariables.cpp
     Func.cpp
     Function.cpp
     FuseGPUThreadLoops.cpp

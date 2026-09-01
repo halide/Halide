@@ -2,7 +2,9 @@
 #include "Simplify_Internal.h"
 
 #include "CSE.h"
+#include "FreeVariables.h"
 #include "IRMutator.h"
+#include "Rename.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -446,47 +448,27 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
     // simplifier weaknesses
     if (!is_const(e)) {
         debug(1) << [&]() -> std::string {
-            struct RenameVariables : public IRMutator {
-                using IRMutator::visit;
+            // Canonicalize every variable name to v0, v1, ... in encounter
+            // order, so unrelated failed proofs render identically.
+            int count = 0;
+            Expr renamed = rename_ir(e, [&](const string &) {
+                return "v" + std::to_string(count++);
+            });
 
-                Expr visit(const Variable *op) override {
-                    auto it = vars.find(op->name);
-                    if (const std::string *n = lets.find(op->name)) {
-                        return Variable::make(op->type, *n);
-                    } else if (it == vars.end()) {
-                        std::string name = "v" + std::to_string(count++);
-                        vars[op->name] = name;
-                        out_vars.emplace_back(op->type, name);
-                        return Variable::make(op->type, name);
-                    } else {
-                        return Variable::make(op->type, it->second);
-                    }
-                }
-
-                Expr visit(const Let *op) override {
-                    std::string name = "v" + std::to_string(count++);
-                    ScopedBinding<string> bind(lets, op->name, name);
-                    return Let::make(name, mutate(op->value), mutate(op->body));
-                }
-
-                int count = 0;
-                map<string, string> vars;
-                Scope<string> lets;
-                std::vector<pair<Type, string>> out_vars;
-            } renamer;
-
-            Expr renamed = renamer(e);
+            // Collect the free variables of the renamed expression, for
+            // the random probing below.
+            map<string, Type> free_vars = find_free_vars(renamed);
 
             // Look for a concrete counter-example with random probing
             static std::mt19937 rng(0);
             for (int i = 0; i < 100; i++) {
                 map<string, Expr> s;
-                for (const auto &p : renamer.out_vars) {
-                    if (p.first.is_handle()) {
+                for (const auto &p : free_vars) {
+                    if (p.second.is_handle()) {
                         // This aint gonna work
                         return "";
                     }
-                    s[p.second] = make_const(p.first, (int)(rng() & 0xffff) - 0x7fff);
+                    s[p.first] = make_const(p.second, (int)(rng() & 0xffff) - 0x7fff);
                 }
                 Expr probe = unwrap_tags(simplify(substitute(s, renamed)));
                 if (!is_const_one(probe)) {

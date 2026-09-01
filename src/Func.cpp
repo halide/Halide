@@ -22,6 +22,7 @@
 #include "Debug.h"
 #include "ExprUsesVar.h"
 #include "FindCalls.h"
+#include "FreeVariables.h"
 #include "Func.h"
 #include "Function.h"
 #include "IR.h"
@@ -1418,28 +1419,13 @@ Stage &Stage::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRV
     return *this;
 }
 
-namespace Internal {
-class CheckForFreeVars : public IRGraphVisitor {
-public:
-    string offending_var;
-
-protected:
-    using IRGraphVisitor::visit;
-    void visit(const Variable *var) override {
-        if (!var->param.defined() && !var->image.defined()) {
-            offending_var = var->name;
-        }
-    }
-};
-}  // namespace Internal
-
 Stage Stage::specialize(const Expr &condition) {
     user_assert(condition.type().is_bool()) << "Argument passed to specialize must be of type bool\n";
 
     definition.schedule().touched() = true;
 
     // The condition may not depend on Vars or RVars
-    Internal::CheckForFreeVars check;
+    Internal::UnboundVarChecker check;
     condition.accept(&check);
     if (!check.offending_var.empty()) {
         user_error << "Specialization condition " << condition << " for " << name()

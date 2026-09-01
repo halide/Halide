@@ -7,13 +7,13 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
+#include "Rename.h"
 #include "Simplify.h"
 #include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::map;
 using std::string;
 using std::vector;
 
@@ -49,32 +49,12 @@ public:
     vector<vector<Expr>> loads;
 };
 
-/** Rename all free variables to unique new names. */
-class RenameFreeVars : public IRMutator {
-    using IRMutator::visit;
-
-    map<string, string> new_names;
-
-    Expr visit(const Variable *op) override {
-        if (!op->param.defined() && !op->image.defined()) {
-            return Variable::make(op->type, get_new_name(op->name));
-        } else {
-            return op;
-        }
-    }
-
-public:
-    string get_new_name(const string &s) {
-        map<string, string>::iterator iter = new_names.find(s);
-        if (iter != new_names.end()) {
-            return iter->second;
-        } else {
-            string new_name = s + "$_";
-            new_names[s] = new_name;
-            return new_name;
-        }
-    }
-};
+/** A renaming policy that appends a fixed suffix to every free variable, so
+ * that it can stand in for a hypothetical distinct thread's copy of the
+ * same variable. */
+string rename_free_var(const string &name) {
+    return name + "$_";
+}
 
 /** Substitute in boolean expressions. */
 class SubstituteInBooleanLets : public IRMutator {
@@ -109,14 +89,14 @@ bool can_parallelize_rvar(const string &v,
     }
 
     // Make an expr representing the store done by a different thread.
-    RenameFreeVars renamer;
+    Renamer renamer(rename_free_var);
     auto other_store = renamer(args);
 
     // Construct an expression which is true when the two threads are
     // in fact two different threads. We'll use this liberally in the
     // following conditions to give the simplifier the best chance.
     Expr distinct_v = (Variable::make(Int(32), v) !=
-                       Variable::make(Int(32), renamer.get_new_name(v)));
+                       Variable::make(Int(32), renamer.new_name_for(v)));
 
     // Construct an expression which is true if there's a collision
     // between this thread's store and the other thread's store.
@@ -141,7 +121,7 @@ bool can_parallelize_rvar(const string &v,
     for (const auto &rv : rvars) {
         Interval in = Interval(rv.min, simplify(rv.min + rv.extent - 1));
         bounds.push(rv.var, in);
-        bounds.push(renamer.get_new_name(rv.var), in);
+        bounds.push(renamer.new_name_for(rv.var), in);
     }
 
     // Add the definition's predicate if there is any

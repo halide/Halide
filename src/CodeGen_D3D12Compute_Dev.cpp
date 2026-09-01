@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <iomanip>
+#include <set>
 #include <sstream>
 #include <utility>
 
@@ -15,6 +16,8 @@
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
+#include "Rename.h"
 #include "Simplify.h"
 #include "StrictifyFloat.h"
 
@@ -1758,79 +1761,41 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         constants[i].size += constants[i - 1].size;
     }
 
-    // Find all the shared allocations, uniquify their names,
-    // and declare them at global scope.
-    class FindSharedAllocationsAndUniquify : public IRMutator {
-        using IRMutator::visit;
-        Stmt visit(const Allocate *op) override {
-            if (is_shared_allocation(op)) {
-                // Because these will go in global scope,
-                // we need to ensure they have unique names.
-                std::string new_name = unique_name(op->name);
-                replacements[op->name] = new_name;
-
-                auto new_extents = mutate(op->extents);
-                Stmt new_body = mutate(op->body);
-                Expr new_condition = mutate(op->condition);
-                Expr new_new_expr;
-                if (op->new_expr.defined()) {
-                    new_new_expr = mutate(op->new_expr);
-                }
-
-                Stmt new_alloc = Allocate::make(new_name, op->type, op->memory_type, new_extents,
-                                                std::move(new_condition), std::move(new_body),
-                                                std::move(new_new_expr), op->free_function, op->padding);
-
-                allocs.push_back(new_alloc);
-                replacements.erase(op->name);
-                return new_alloc;
-            } else {
-                return IRMutator::visit(op);
+    // Find all the shared allocations, uniquify their names, and declare
+    // them at global scope. Two shared allocations can legitimately share
+    // an original name (e.g. mutually-exclusive GuardWithIf boundary
+    // branches realizing the same Func), so each occurrence needs its own
+    // fresh unique_name() call, not one shared across the whole Stmt --
+    // otherwise two such allocations would collide on one new name and
+    // emit duplicate groupshared declarations.
+    vector<Stmt> allocs;
+    s = mutate_with(
+        s,
+        [&](auto *self, const Allocate *op) -> Stmt {
+            if (!is_shared_allocation(op)) {
+                return self->visit_base(op);
             }
-        }
+            auto new_extents = self->mutate(op->extents);
+            Stmt new_body = self->mutate(op->body);
+            Expr new_condition = self->mutate(op->condition);
+            Expr new_new_expr = op->new_expr.defined() ? self->mutate(op->new_expr) : Expr();
 
-        Stmt visit(const Free *op) override {
-            auto it = replacements.find(op->name);
-            if (it != replacements.end()) {
-                return Free::make(it->second);
-            } else {
-                return IRMutator::visit(op);
-            }
-        }
+            // Because this will go in global scope, we need to ensure it
+            // has a unique name.
+            string new_name = unique_name(op->name);
+            new_body = rename_ir(new_body, [&](const string &name) {
+                return name == op->name ? new_name : name;
+            });
 
-        Expr visit(const Load *op) override {
-            auto it = replacements.find(op->name);
-            if (it != replacements.end()) {
-                return Load::make(op->type, it->second,
-                                  mutate(op->index), op->image, op->param,
-                                  mutate(op->predicate), op->alignment, op->is_streaming);
-            } else {
-                return IRMutator::visit(op);
-            }
-        }
-
-        Stmt visit(const Store *op) override {
-            auto it = replacements.find(op->name);
-            if (it != replacements.end()) {
-                return Store::make(it->second, mutate(op->value),
-                                   mutate(op->index), op->param,
-                                   mutate(op->predicate), op->alignment, op->is_streaming);
-            } else {
-                return IRMutator::visit(op);
-            }
-        }
-
-        std::map<string, string> replacements;
-        friend class CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C;
-        vector<Stmt> allocs;
-    };
-
-    FindSharedAllocationsAndUniquify fsa;
-    s = fsa(s);
+            Stmt new_alloc = Allocate::make(new_name, op->type, op->memory_type, new_extents,
+                                            new_condition, new_body, new_new_expr, op->free_function, op->padding);
+            allocs.push_back(new_alloc);
+            return new_alloc;
+        });
 
     const int sm = target.get_d3d12compute_capability_lower_bound();
     uint32_t total_shared_bytes = 0;
-    for (const Stmt &sop : fsa.allocs) {
+    for (const Stmt &sop : allocs) {
         const Allocate *op = sop.as<Allocate>();
         internal_assert(op->extents.size() == 1);
         internal_assert(op->type.lanes() == 1);
@@ -1922,70 +1887,12 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             dxc_renames[arg.name] = name + "_" + arg.name;
         }
 
-        // Mutate Load/Store/Variable nodes in the body to use the prefixed names.
-        class RenameKernelArgs : public IRMutator {
-            using IRMutator::visit;
-            const std::map<string, string> &renames;
-            Expr visit(const Load *op) override {
-                auto it = renames.find(op->name);
-                if (it != renames.end()) {
-                    return Load::make(op->type, it->second,
-                                      mutate(op->index), op->image, op->param,
-                                      mutate(op->predicate), op->alignment, op->is_streaming);
-                }
-                return IRMutator::visit(op);
-            }
-            Stmt visit(const Store *op) override {
-                auto it = renames.find(op->name);
-                if (it != renames.end()) {
-                    return Store::make(it->second, mutate(op->value),
-                                       mutate(op->index), op->param,
-                                       mutate(op->predicate), op->alignment, op->is_streaming);
-                }
-                return IRMutator::visit(op);
-            }
-            Expr visit(const Variable *op) override {
-                auto it = renames.find(op->name);
-                if (it != renames.end()) {
-                    return Variable::make(op->type, it->second,
-                                          op->image, op->param, op->reduction_domain);
-                }
-                return IRMutator::visit(op);
-            }
-            Expr visit(const Call *op) override {
-                // image_load/image_store carry the buffer name as args[0] StringImm.
-                if ((op->is_intrinsic(Call::image_load) || op->is_intrinsic(Call::image_store)) &&
-                    !op->args.empty()) {
-                    // args[0] is the buffer name as StringImm, possibly
-                    // wrapped in Broadcast for vectorized texture access.
-                    const StringImm *name_imm = op->args[0].as<StringImm>();
-                    if (!name_imm) {
-                        if (const Broadcast *b = op->args[0].as<Broadcast>()) {
-                            name_imm = b->value.as<StringImm>();
-                        }
-                    }
-                    if (name_imm) {
-                        auto it = renames.find(name_imm->value);
-                        if (it != renames.end()) {
-                            vector<Expr> new_args = op->args;
-                            Expr renamed = StringImm::make(it->second);
-                            new_args[0] = op->args[0].as<Broadcast>() ? Broadcast::make(renamed, op->args[0].as<Broadcast>()->lanes) : renamed;
-                            for (size_t i = 1; i < new_args.size(); ++i) {
-                                new_args[i] = mutate(new_args[i]);
-                            }
-                            return op->with(new_args);
-                        }
-                    }
-                }
-                return IRMutator::visit(op);
-            }
-
-        public:
-            RenameKernelArgs(const std::map<string, string> &r)
-                : renames(r) {
-            }
-        };
-        s = RenameKernelArgs(dxc_renames)(s);
+        // Rename Load/Store/Variable/image_load/image_store references in
+        // the body to use the prefixed names.
+        s = rename_ir(s, [&](const string &name) {
+            auto it = dxc_renames.find(name);
+            return it != dxc_renames.end() ? it->second : name;
+        });
 
         // Declare all resources globally with explicit register bindings and
         // put scalar uniforms in a per-kernel constant buffer. The runtime binds:
