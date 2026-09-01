@@ -101,15 +101,33 @@ public:
             // All the channel vectors advance together through one serial
             // walk over the samples: their recurrences are independent, so
             // interleaving them hides the filter's latency chain.
-            y.split(c, co, ci, VEC)
-                .reorder(ci, co, n)
-                .vectorize(ci)
-                .unroll(co);
-            for (Func f : ys) {
-                f.store_root()
-                    .compute_at(y, co)
-                    .fold_storage(n, 4)
-                    .vectorize(c, VEC);
+            if (par) {
+                // Each core owns a pair of channel vectors and walks its
+                // share of the signal independently.
+                Var coo("coo"), coi("coi");
+                y.split(c, co, ci, VEC)
+                    .split(co, coo, coi, 2)
+                    .reorder(ci, coi, n, coo)
+                    .vectorize(ci)
+                    .unroll(coi)
+                    .parallel(coo);
+                for (Func f : ys) {
+                    f.store_at(y, coo)
+                        .compute_at(y, coi)
+                        .fold_storage(n, 4)
+                        .vectorize(c, VEC);
+                }
+            } else {
+                y.split(c, co, ci, VEC)
+                    .reorder(ci, co, n)
+                    .vectorize(ci)
+                    .unroll(co);
+                for (Func f : ys) {
+                    f.store_root()
+                        .compute_at(y, co)
+                        .fold_storage(n, 4)
+                        .vectorize(c, VEC);
+                }
             }
         } else {
             for (int k = 0; k < N; k++) {
@@ -120,9 +138,11 @@ public:
                 f.split(c, co, ci, VEC)
                     .reorder(ci, n, co)
                     .vectorize(ci);
+                // The channel blocks' walks are independent, so the
+                // parallel loop must sit outside the serial one.
                 f.update()
                     .split(c, co, ci, VEC)
-                    .reorder(ci, co, r)
+                    .reorder(ci, r, co)
                     .vectorize(ci);
                 if (par) {
                     f.parallel(co);

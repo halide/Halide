@@ -125,6 +125,39 @@ double check(const Buffer<float> &x, const Buffer<float> &sos,
 
 }  // namespace
 
+// The N-pass form allocates gigabytes of intermediates per realization;
+// without a reusing allocator the benchmark would partly measure page
+// faults. Freed blocks are kept for reuse and reclaimed at exit.
+namespace {
+std::vector<std::pair<size_t, void *>> &the_pool() {
+    static std::vector<std::pair<size_t, void *>> pool;
+    return pool;
+}
+}  // namespace
+
+extern "C" void *halide_malloc(void *, size_t sz) {
+    auto &pool = the_pool();
+    for (auto &e : pool) {
+        if (e.first == sz && e.second) {
+            void *p = e.second;
+            e.second = nullptr;
+            return p;
+        }
+    }
+    char *base = (char *)malloc(sz + 256);
+    if (!base) {
+        return nullptr;
+    }
+    char *p = (char *)(((uintptr_t)base + 128 + 127) & ~(uintptr_t)127);
+    ((void **)p)[-1] = base;
+    ((size_t *)p)[-2] = sz;
+    return p;
+}
+
+extern "C" void halide_free(void *, void *p) {
+    the_pool().push_back({((size_t *)p)[-2], p});
+}
+
 int main(int argc, char **argv) {
     Buffer<float> x(C, S), y(C, S), sos(6, N);
     make_sos(sos);
