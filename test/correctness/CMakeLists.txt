@@ -331,6 +331,7 @@ tests(
     skip_stages_cse_bug.cpp
     skip_stages_external_array_functions.cpp
     skip_stages_memoize.cpp
+    slide_in_place.cpp
     slide_recompute.cpp
     slide_two_deep.cpp
     slide_directive.cpp

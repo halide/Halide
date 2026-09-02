@@ -1384,10 +1384,19 @@ class SlidingWindow : public IRMutator {
         // A one-slot window is only sound if each point is computed exactly
         // once: a self-referential Func recomputed at the same point (a
         // redundant split, a ShiftInwards tail) would read its own fresh
-        // output as the previous value. Keep the previous value for those.
+        // output as the previous value. So a Func that reads itself keeps
+        // the previous value unless the schedule asked for exactly the
+        // reach in slots (fold_storage(dim, reach)), which asserts the
+        // in-place form is wanted and the point is computed once.
+        bool explicit_in_place = false;
+        for (const StorageDim &sd : func.schedule().storage_dims()) {
+            if (sd.var == d.dim && sd.fold_factor.defined()) {
+                explicit_in_place = is_const(sd.fold_factor, reach_back);
+            }
+        }
         bool dies_at_its_store =
             func.updates().empty() &&
-            !func.is_inductive() &&
+            (!func.is_inductive() || explicit_in_place) &&
             !lanes_span_dim(body, func.name(), d.dim_idx);
 
         Expr low = dies_at_its_store ?

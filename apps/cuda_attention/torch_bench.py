@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+"""Times PyTorch's fused attention kernels at the Halide generator's shape:
+one head, QUERIES x KEYS x DEPTH, fp16. The FlashAttention-2 backend is
+the reference the flash filter is measured against; the memory-efficient
+(xformers-style) backend is reported too.
+
+Usage: torch_bench.py QUERIES KEYS DEPTH
+Prints "  torch flash   <us> us" and "  torch mem-efficient   <us> us".
+"""
+import statistics
+import sys
+
+import torch
+import torch.nn.functional as F
+from torch.nn.attention import SDPBackend, sdpa_kernel
+
+queries, keys, depth = (int(a) for a in sys.argv[1:4])
+dev = "cuda"
+torch.manual_seed(0)
+q = torch.randn(1, 1, queries, depth, device=dev, dtype=torch.float16)
+k = torch.randn(1, 1, keys, depth, device=dev, dtype=torch.float16)
+v = torch.randn(1, 1, keys, depth, device=dev, dtype=torch.float16)
+
+
+def timed(fn, warm=5, iters=30):
+    for _ in range(warm):
+        fn()
+    torch.cuda.synchronize()
+    ts = []
+    for _ in range(iters):
+        s = torch.cuda.Event(enable_timing=True)
+        e = torch.cuda.Event(enable_timing=True)
+        s.record()
+        fn()
+        e.record()
+        torch.cuda.synchronize()
+        ts.append(s.elapsed_time(e) * 1e3)
+    return statistics.median(ts)
+
+
+for name, backend in (("flash", SDPBackend.FLASH_ATTENTION), ("mem-efficient", SDPBackend.EFFICIENT_ATTENTION)):
+    try:
+        with sdpa_kernel(backend):
+            t = timed(lambda: F.scaled_dot_product_attention(q, k, v))
+        print(f"  torch {name:14s} {t:10.1f} us")
+    except RuntimeError as e:
+        print(f"  torch {name:14s} unavailable: {str(e).splitlines()[0][:80]}")
