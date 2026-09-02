@@ -40,98 +40,114 @@ int main(int argc, char **argv) {
 
     Var d("d"), b("b"), n("n");
 
-    // Stencil RHS f(v)_i = eps*(v_{i-1}-2v_i+v_{i+1}) + v_i - v_i^3 as a Func of a 2-D Func.
-    auto rhs_of = [&](Func v, const std::string &nm) {
-        Func f(nm);
-        f(d, b) = eps * (v(clamp(d - 1, 0, D - 1), b) - 2.0f * v(d, b) + v(clamp(d + 1, 0, D - 1), b)) +
-                  v(d, b) - v(d, b) * v(d, b) * v(d, b);
-        f.compute_root();
-        return f;
-    };
-    // One classical RK4 step y0 -> y1 (matches Boost's runge_kutta4 startup exactly).
-    // Computed once (compute_root); negligible vs the T-step integration.
-    auto make_y1 = [&](const std::string &tag) {
-        Func Y0("Y0_" + tag);
-        Y0(d, b) = y0(d, b);
-        Y0.compute_root();
-        Func k1 = rhs_of(Y0, "k1_" + tag);
-        Func s2("s2_" + tag);
-        s2(d, b) = Y0(d, b) + (0.5f * h) * k1(d, b);
-        s2.compute_root();
-        Func k2 = rhs_of(s2, "k2_" + tag);
-        Func s3("s3_" + tag);
-        s3(d, b) = Y0(d, b) + (0.5f * h) * k2(d, b);
-        s3.compute_root();
-        Func k3 = rhs_of(s3, "k3_" + tag);
-        Func s4("s4_" + tag);
-        s4(d, b) = Y0(d, b) + h * k3(d, b);
-        s4.compute_root();
-        Func k4 = rhs_of(s4, "k4_" + tag);
-        Func y1("y1_" + tag);
-        y1(d, b) = Y0(d, b) + (h / 6.0f) * (k1(d, b) + 2.0f * k2(d, b) + 2.0f * k3(d, b) + k4(d, b));
-        y1.compute_root();
-        return y1;
+    // The right-hand side and one classical RK4 step, on the host: the
+    // integrator is Adams-Bashforth 2, which needs two initial slices, so
+    // y1 is one RK4 step from y0, computed here and handed to every
+    // pipeline as an input. The C++ reference uses the same two functions;
+    // Boost's stepper initializes itself with its own runge_kutta4.
+    auto rhs = [&](const std::vector<float> &y, std::vector<float> &f) {
+        for (int i = 0; i < D; i++) {
+            float lm = y[i > 0 ? i - 1 : 0], lp = y[i + 1 < D ? i + 1 : D - 1];
+            f[i] = eps * (lm - 2.f * y[i] + lp) + y[i] - y[i] * y[i] * y[i];
+        }
     };
 
-    // Build one inductive (dynamics) + observer pipeline. `vec_obs` toggles observer
-    // SIMD; `fold_k` pins the y history window (3 = folded, T = unfolded ablation).
-    auto build = [&](const char *tag, bool vec_obs, int fold_k) {
-        Func y1 = make_y1(std::string("ind_") + tag);
-        Func y(Float(32), std::string("y_") + tag), E(std::string("E_") + tag);
-        y(d, b, n) = cast<float>(0);
-        Expr nm1 = n - 1, nm2 = n - 2;
+    auto rk4_step = [&](std::vector<float> &y) {
+        std::vector<float> k1(D), k2(D), k3(D), k4(D), tmp(D);
+        rhs(y, k1);
+        for (int i = 0; i < D; i++)
+            tmp[i] = y[i] + 0.5f * h * k1[i];
+        rhs(tmp, k2);
+        for (int i = 0; i < D; i++)
+            tmp[i] = y[i] + 0.5f * h * k2[i];
+        rhs(tmp, k3);
+        for (int i = 0; i < D; i++)
+            tmp[i] = y[i] + h * k3[i];
+        rhs(tmp, k4);
+        for (int i = 0; i < D; i++)
+            y[i] += (h / 6.f) * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]);
+    };
+
+    Buffer<float> y1(D, B);
+    {
+        std::vector<float> yv(D);
+        for (int bb = 0; bb < B; bb++) {
+            for (int i = 0; i < D; i++)
+                yv[i] = y0(i, bb);
+            rk4_step(yv);
+            for (int i = 0; i < D; i++)
+                y1(i, bb) = yv[i];
+        }
+    }
+
+    // The stencil right-hand side of a slice, as the reference computes it:
+    // f = eps*lap + c - c^3, left-associated.
+    auto stencil = [&](Expr left, Expr center, Expr right) {
+        Expr lap = left - 2.0f * center + right;
+        return eps * lap + center - center * center * center;
+    };
+
+    // The observer: the mean order parameter <y> = (1/D) sum_i y_i, the
+    // standard phase-field monitoring diagnostic. Summed in two stages: 16
+    // partial sums across the lanes with plain vector adds over the slice,
+    // then those 16 reduced once per step, rather than a horizontal
+    // reduction of every vector into the scalar.
+    auto observe = [&](Func E, auto slice) {
+        RDom rd(0, D, "rd");
+        E(b, n) = cast<float>(0);
+        E(b, n) += slice(rd.x, b, n) * (1.0f / D);
+        RVar rdo("rdo"), rdi("rdi");
+        Var l("l");
+        E.update(0).split(rd.x, rdo, rdi, 16);
+        Func partial = E.update(0).rfactor(rdi, l);
+        partial.compute_at(E, n).vectorize(l);
+        partial.update(0).reorder(l, rdo).vectorize(l);
+        E.compute_root();
+        E.update(0).reorder(rdi, b, n);
+        E.bound(b, 0, B).bound(n, 0, T);
+    };
+
+    // Build one inductive (dynamics) + observer pipeline. `fold_k` pins the
+    // state window (2 = folded, T = unfolded ablation).
+    auto build = [&](const char *tag, int fold_k) {
+        // The state carries {y_n, f(y_{n-1})}: each step evaluates the
+        // right-hand side once, on the slice it carries, and reads the one
+        // before from the carried component, as the reference does, so
+        // nothing reaches back more than one step.
+        Func y({Float(32), Float(32)}, 3, std::string("y_") + tag), E(std::string("E_") + tag);
+        y(d, b, n) = Tuple(cast<float>(0), cast<float>(0));
         RDom r(0, D, "r");
         Expr i = r.x;
         Expr iL = clamp(i - 1, 0, D - 1), iR = clamp(i + 1, 0, D - 1);
-        Expr c1 = y(i, b, nm1), c2 = y(i, b, nm2);
-        // Build the RHS EXACTLY as the non-inductive y_m and the C++ reference:
-        // f = eps*lap + c - c^3 (left-associated), then a single AB2 combine
-        // c1 + h*(1.5*f1 - 0.5*f2). Same float32 op-grouping -> inductive and
-        // non-inductive are bit-identical. (The previous per-offset scatter split
-        // reaction from diffusion and reassociated the diffusion sum, which drifted
-        // ~1e-6 and produced the mismatched errors.)
-        auto fexpr = [&](Expr c, Expr t) {
-            Expr lap = y(iL, b, t) - 2.0f * y(i, b, t) + y(iR, b, t);
-            return eps * lap + c - c * c * c;
-        };
-        Expr fP1 = fexpr(c1, nm1), fP2 = fexpr(c2, nm2);
-        // Base cases: n<=0 -> y0, n==1 -> RK4 step y1. The AB2 recursion (self-refs) is in
-        // the single outer select's false branch (n>=2) -- not nested, so it stays legal.
-        Expr base = select(n <= 0, y0(i, b), y1(i, b));
-        y(i, b, n) = select(n <= 1, base, c1 + h * (1.5f * fP1 - 0.5f * fP2));
+        Expr c1 = y(i, b, n - 1)[0];
+        Expr f1 = stencil(y(iL, b, n - 1)[0], c1, y(iR, b, n - 1)[0]);
+        Expr f2 = y(i, b, n - 1)[1];
+        Tuple step(likely(c1 + h * (1.5f * f1 - 0.5f * f2)), likely(f1));
+        // Base cases: n<=0 -> y0 (its derivative is never read); n==1 -> the
+        // RK4 slice y1, carrying f(y0) for the first AB2 step.
+        Expr f0 = stencil(y0(iL, b), y0(i, b), y0(iR, b));
+        Tuple base = select(n <= 0, Tuple(y0(i, b), cast<float>(0)), Tuple(y1(i, b), f0));
+        y(i, b, n) = select(n <= 1, base, step);
 
-        // Realistic (cheap, untuned) observer: the mean order parameter <y> = (1/D) sum_i y_i,
-        // the standard phase-field monitoring diagnostic. Just an add per element -- so the
-        // observer arithmetic is negligible and any inductive-vs-materialize gap is purely
-        // the L1-vs-DRAM cost of reading each slice.
-        RDom rd(0, D, "rd");
-        E(b, n) = cast<float>(0);
-        E(b, n) += y(rd.x, b, n) * (1.0f / D);
-
-        E.compute_root();
-        if (vec_obs) {
-            // Vectorize the associative sum reduction across components.
-            E.update(0).atomic().reorder(rd.x, b, n).vectorize(rd.x, 16);
-        } else {
-            E.update(0).reorder(rd.x, b, n);
-        }
+        observe(E, [&](Expr x, Expr bb, Expr nn) { return y(x, bb, nn)[0]; });
         y.compute_at(E, n).store_root().fold_storage(n, fold_k);
         y.update(0).allow_race_conditions().vectorize(r.x, 16);
-        E.bound(b, 0, B).bound(n, 0, T);
         E.compile_jit();
         return E;
     };
 
-    // Three-way ablation (vectorized observer held fixed): inductive FOLDED (3-slice
+    // Three-way ablation (the observer held fixed): inductive FOLDED (2-slice
     // window) vs inductive UNFOLDED (fold n -> T, full trajectory, same fusion) vs
     // non-inductive materialize.
-    Func E_fold = build("fold", true, 3);
-    Func E_unfold = build("unfold", true, T);
+    Func E_fold = build("fold", 2);
+    Func E_unfold = build("unfold", T);
 
-    // Non-inductive (materialize full trajectory) with the SAME vectorized observer.
+    // Non-inductive (materialize full trajectory) with the SAME observer. It
+    // has every slice in memory, so it recomputes the stencil of the slice
+    // two back rather than carrying the derivative: another trajectory's
+    // worth of traffic would cost more than the arithmetic saves.
     Func E_mat("E_mat");
     {
-        Func y1 = make_y1("mat");
         Func y_m(Float(32), "y_m");
         // r.x (row) is an RVar, not a plain pure Var, so the stencil's ±1 shifts
         // can't look like a shift of a pure dimension to is_inductive().
@@ -141,23 +157,17 @@ int main(int argc, char **argv) {
         y_m(d, b, 0) = y0(d, b);
         y_m(d, b, 1) = y1(d, b);  // RK4 startup
         Expr p1 = rn - 1, p2 = rn - 2;
-        auto lap = [&](Expr t) {
-            return y_m(clamp(rd_ - 1, 0, D - 1), b, t) - 2.0f * y_m(rd_, b, t) +
-                   y_m(clamp(rd_ + 1, 0, D - 1), b, t);
+        auto f = [&](Expr t) {
+            return stencil(y_m(clamp(rd_ - 1, 0, D - 1), b, t), y_m(rd_, b, t),
+                           y_m(clamp(rd_ + 1, 0, D - 1), b, t));
         };
-        auto f = [&](Expr t) { Expr c = y_m(rd_, b, t); return eps * lap(t) + c - c * c * c; };
         y_m(rd_, b, rn) = y_m(rd_, b, p1) + h * (1.5f * f(p1) - 0.5f * f(p2));
 
-        RDom rd(0, D, "rd");
-        E_mat(b, n) = cast<float>(0);
-        E_mat(b, n) += y_m(rd.x, b, n) * (1.0f / D);
+        observe(E_mat, [&](Expr x, Expr bb, Expr nn) { return y_m(x, bb, nn); });
         y_m.compute_root();
         y_m.update(0).unscheduled();                                                    // slice 0 init
         y_m.update(1).unscheduled();                                                    // slice 1 (RK4) init
         y_m.update(2).reorder(r.x, r.y, b).allow_race_conditions().vectorize(r.x, 16);  // AB2 scan
-        E_mat.compute_root();
-        E_mat.update(0).atomic().reorder(rd.x, b, n).vectorize(rd.x, 16);  // same vectorized observer
-        E_mat.bound(b, 0, B).bound(n, 0, T);
         E_mat.compile_jit();
     }
 
@@ -181,35 +191,11 @@ int main(int argc, char **argv) {
             e += y[i];
         return (float)(e / D);
     };
-    auto rhs = [&](const std::vector<float> &y, std::vector<float> &f) {
-        for (int i = 0; i < D; i++) {
-            float lm = y[i > 0 ? i - 1 : 0], lp = y[i + 1 < D ? i + 1 : D - 1];
-            f[i] = eps * (lm - 2.f * y[i] + lp) + y[i] - y[i] * y[i] * y[i];
-        }
-    };
-
     namespace odeint = boost::numeric::odeint;
     using state = std::vector<float>;
     auto sys = [&](const state &y, state &dy, double) { rhs(y, dy); };
-    // One RK4 step (matches make_y1 / Boost's runge_kutta4 startup).
-    auto rk4_step = [&](state &y) {
-        state k1(D), k2(D), k3(D), k4(D), tmp(D);
-        rhs(y, k1);
-        for (int i = 0; i < D; i++)
-            tmp[i] = y[i] + 0.5f * h * k1[i];
-        rhs(tmp, k2);
-        for (int i = 0; i < D; i++)
-            tmp[i] = y[i] + 0.5f * h * k2[i];
-        rhs(tmp, k3);
-        for (int i = 0; i < D; i++)
-            tmp[i] = y[i] + h * k3[i];
-        rhs(tmp, k4);
-        for (int i = 0; i < D; i++)
-            y[i] += (h / 6.f) * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]);
-    };
-
     // Idiomatic Boost.odeint: integrate_n_steps + observer, with runge_kutta4 as the
-    // initializing stepper so its startup matches make_y1 exactly (tight agreement).
+    // initializing stepper, the same startup as the host's rk4_step (tight agreement).
     typedef odeint::adams_bashforth<2, state, double, state, double, odeint::range_algebra,
                                     odeint::default_operations, odeint::initially_resizer,
                                     odeint::runge_kutta4<state>>
@@ -284,7 +270,7 @@ int main(int argc, char **argv) {
                   "Mupd/s", bytes_non, err_m, err_m < 1e-3, "", fp_unfold);
     hb::print_row("inductive UNFOLDED (fold n -> T)", s_unfold, thr / (s_unfold.min * 1e-3),
                   "Mupd/s", bytes_unf, err_u, err_u < 1e-3, hb::verdict(s_unfold.min, s_mat.min), fp_unfold);
-    hb::print_row("inductive FOLDED (fold n -> 3)", s_fold, thr / (s_fold.min * 1e-3),
+    hb::print_row("inductive FOLDED (fold n -> 2)", s_fold, thr / (s_fold.min * 1e-3),
                   "Mupd/s", bytes_ind, err_f, err_f < 1e-3, hb::verdict(s_fold.min, s_unfold.min), fp_unfold);
     printf("  gap (inductive-fold vs Boost): %+.1f%%   inductive-fold vs non-ind: %.2fx\n",
            100.0 * (s_fold.min - s_boost.min) / s_boost.min, s_mat.min / s_fold.min);
