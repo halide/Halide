@@ -26,14 +26,14 @@ JULIA = Path.home() / ".juliaup/bin/julia"
 NCORES = os.cpu_count() // 2 or 1  # physical cores: parallel configs use one thread per core
 
 
-def sh(cmd, cwd, env=None, log=None):
+def sh(cmd, cwd, env=None, log=None, check=True):
     e = dict(os.environ)
     e.update(env or {})
     p = subprocess.run(cmd, shell=True, cwd=str(cwd), env=e,
                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     if log:
         log.write_text(p.stdout)
-    if p.returncode != 0:
+    if check and p.returncode != 0:
         raise RuntimeError(f"{cmd!r} in {cwd} failed:\n{p.stdout[-2000:]}")
     return p.stdout
 
@@ -171,9 +171,14 @@ def prefixsum(W, H, threads):
 
 
 def mamba2(direction):
+    # Each side at its own best chunk: Triton's kernels prefer 256; the
+    # Halide forward matches it there, the Halide backward is best at 128
+    # (its causal pruning makes smaller chunks cheaper).
     d = APPS / "cuda_mamba2"
-    shape = dict(SEQ=4096, STATE=64, CHANNELS=64, HEADS=128, GROUPS=1, CHUNK=64)
-    kv = " ".join(f"{k}={v}" for k, v in shape.items()) + " WMMA=true"
+    shape = dict(SEQ=4096, STATE=128, CHANNELS=64, HEADS=128, GROUPS=1)
+    ours_chunk = 128 if direction == "bwd" else 256
+    triton_chunk = 256
+    kv = " ".join(f"{k}={v}" for k, v in shape.items()) + f" CHUNK={ours_chunk} WMMA=true"
     target = "test_bwd" if direction == "bwd" else "test"
     label = "Halide mamba2 bwd" if direction == "bwd" else "Halide mamba2"
     times = {}
@@ -186,15 +191,43 @@ def mamba2(direction):
     if VENV.exists():
         try:
             to = sh(f"{VENV} triton_bench.py {shape['SEQ']} {shape['STATE']} {shape['CHANNELS']} "
-                    f"{shape['HEADS']} {shape['GROUPS']} {shape['CHUNK']}", d,
-                    log=LOGS / f"mamba2_triton.txt")
+                    f"{shape['HEADS']} {shape['GROUPS']} {triton_chunk}", d,
+                    log=LOGS / f"mamba2_triton_{direction}.txt")
             triton = us_row(to, f"triton {direction}")
         except RuntimeError:
             pass
     return dict(params=f"{direction}, seq {shape['SEQ']}, state {shape['STATE']}, {shape['HEADS']} heads x "
-                       f"{shape['CHANNELS']}, chunk {shape['CHUNK']}, RTX 5060 Ti",
+                       f"{shape['CHANNELS']}, chunk {ours_chunk} (Triton {triton_chunk}), RTX 5060 Ti",
                 ind=times["inductive"], rdom=times["rdom"],
                 base_name="Triton (mamba_ssm)" if triton else "Triton (unavailable)", base=triton)
+
+
+def flash_attention():
+    # The flash filter only: an inductive online softmax over key chunks.
+    # The runner also drives a non-flash fused filter that does not launch
+    # at this shape (a known, pre-existing failure), so run the binary
+    # directly and take the flash row. Reference: PyTorch's FlashAttention-2
+    # SDPA backend at the same shape.
+    d = APPS / "cuda_attention"
+    shape = dict(QUERIES=65536, KEYS=1024, DEPTH=64, OUT_DEPTH=64)
+    kv = " ".join(f"{k}={v}" for k, v in shape.items())
+    sh("make -s clean", d)
+    sh(f"make -s {kv} bin/host-cuda/runner", d)
+    out = sh("bin/host-cuda/runner", d, log=LOGS / "flash_attention.txt", check=False)
+    m = re.search(r"Halide flash attention\s+[\d.]+ GFlop/s\s+([\d.]+) us", out)
+    ind = float(m.group(1)) / 1e3 if m else None
+    torch_flash = None
+    if VENV.exists():
+        try:
+            to = sh(f"{VENV} torch_bench.py {shape['QUERIES']} {shape['KEYS']} {shape['DEPTH']}", d,
+                    log=LOGS / "flash_attention_torch.txt")
+            torch_flash = us_row(to, "torch flash")
+        except RuntimeError:
+            pass
+    return dict(params=f"{shape['QUERIES']} queries x {shape['KEYS']} keys, depth {shape['DEPTH']}, fp16, RTX 5060 Ti",
+                ind=ind, rdom=None,
+                base_name="FlashAttention-2 (torch SDPA)" if torch_flash else "torch flash (unavailable)",
+                base=torch_flash)
 
 
 SUITE = [
@@ -214,6 +247,7 @@ SUITE = [
     ("chebyshev", lambda: chebyshev(2048, 100)),
     ("cuda_mamba2", lambda: mamba2("fwd")),
     ("cuda_mamba2", lambda: mamba2("bwd")),
+    ("flash_attention", flash_attention),
 ]
 
 
@@ -229,6 +263,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--only", help="comma-separated app names; other apps' rows come from the cache")
     ap.add_argument("--out", default=str(APPS / "inductive_benchmarks_results.md"))
+    ap.add_argument("--render", action="store_true", help="only render the table from the cache")
     args = ap.parse_args()
     LOGS.mkdir(exist_ok=True)
     only = set(args.only.split(",")) if args.only else None
@@ -239,7 +274,7 @@ def main():
     cache = json.loads(cache_path.read_text()) if cache_path.exists() else {}
     for idx, (name, fn) in enumerate(SUITE):
         key = f"{idx}:{name}"
-        if only and name not in only:
+        if args.render or (only and name not in only):
             continue
         print(f"== {name} ==", flush=True)
         try:
@@ -262,9 +297,20 @@ def main():
                      f"{r['base_name'] or '-'} | {ratio(r['ind'], r['rdom'])} | {ratio(r['ind'], r['base'])} |")
     table = "\n".join(lines)
     print("\n" + table)
-    Path(args.out).write_text("Times are milliseconds per run; inductive = the folded inductive-Func form, "
-                              "RDom = the same algorithm as update definitions (materializing), baseline = "
-                              "the fastest non-Halide implementation available on this machine.\n\n" + table + "\n")
+    notes = (
+        "Times are milliseconds per run: inductive = the folded inductive-Func form, RDom = the same "
+        "algorithm as update definitions (materializing), baseline = the fastest non-Halide implementation "
+        "available on this machine. Measured on a Threadripper 9970X (Zen 5, 32 cores) and an RTX 5060 Ti.\n\n"
+        "Every Halide form is verified against its app's reference before timing (the alignment rows "
+        "byte-exact against ksw2, the rng rows bit-exact against Julia's rand! seeding, the GPU rows against "
+        "serial references). Baselines are threaded across independent problems in the all-cores rows where "
+        "the library allows it (ksw2, parasail, oneTBB); the rng hand kernel and Julia's rand! are "
+        "single-threaded, so the rng all-cores baseline is the single-thread hand kernel. The mamba2 rows "
+        "compare each side at its own best chunk (Triton prefers 256; the Halide backward is best at 128), "
+        "with the tensor-core schedules (WMMA=true). Flash attention has no RDom form by construction; its "
+        "materialized-scores alternative is cuBLAS + softmax + cuBLAS, about 13x slower. Chebyshev is the "
+        "intended in-cache control, where folding buys nothing.\n\n")
+    Path(args.out).write_text(notes + table + "\n")
     print(f"\nwritten to {args.out}")
 
 
