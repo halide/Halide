@@ -203,11 +203,14 @@ def mamba2(direction):
 
 
 def flash_attention():
-    # The flash filter only: an inductive online softmax over key chunks.
-    # The runner also drives a non-flash fused filter that does not launch
-    # at this shape (a known, pre-existing failure), so run the binary
-    # directly and take the flash row. Reference: PyTorch's FlashAttention-2
-    # SDPA backend at the same shape.
+    # The flash filter (an inductive online softmax over key chunks) against
+    # its RDom-only form: with no inductive Funcs the running maximum cannot
+    # advance alongside the accumulator's walk, so that form takes two
+    # passes over the keys, the first for the row maxima, at its own best
+    # chunk. The runner also drives a non-flash fused filter that does not
+    # launch at this shape (a known, pre-existing failure), so run the
+    # binary directly and take the rows. Reference: PyTorch's
+    # FlashAttention-2 SDPA backend at the same shape.
     d = APPS / "cuda_attention"
     shape = dict(QUERIES=65536, KEYS=1024, DEPTH=64, OUT_DEPTH=64)
     kv = " ".join(f"{k}={v}" for k, v in shape.items())
@@ -216,6 +219,8 @@ def flash_attention():
     out = sh("bin/host-cuda/runner", d, log=LOGS / "flash_attention.txt", check=False)
     m = re.search(r"Halide flash attention\s+[\d.]+ GFlop/s\s+([\d.]+) us", out)
     ind = float(m.group(1)) / 1e3 if m else None
+    m = re.search(r"Halide flash attention \(rdom\)\s+[\d.]+ GFlop/s\s+([\d.]+) us", out)
+    rdom = float(m.group(1)) / 1e3 if m else None
     torch_flash = None
     if VENV.exists():
         try:
@@ -224,8 +229,9 @@ def flash_attention():
             torch_flash = us_row(to, "torch flash")
         except RuntimeError:
             pass
-    return dict(params=f"{shape['QUERIES']} queries x {shape['KEYS']} keys, depth {shape['DEPTH']}, fp16, RTX 5060 Ti",
-                ind=ind, rdom=None,
+    return dict(params=f"{shape['QUERIES']} queries x {shape['KEYS']} keys, depth {shape['DEPTH']}, fp16, "
+                       f"chunk 64 (two-pass RDom form: chunk 32), RTX 5060 Ti",
+                ind=ind, rdom=rdom,
                 base_name="FlashAttention-2 (torch SDPA)" if torch_flash else "torch flash (unavailable)",
                 base=torch_flash)
 
@@ -307,8 +313,9 @@ def main():
         "the library allows it (ksw2, parasail, oneTBB); the rng hand kernel and Julia's rand! are "
         "single-threaded, so the rng all-cores baseline is the single-thread hand kernel. The mamba2 rows "
         "compare each side at its own best chunk (Triton prefers 256; the Halide backward is best at 128), "
-        "with the tensor-core schedules (WMMA=true). Flash attention has no RDom form by construction; its "
-        "materialized-scores alternative is cuBLAS + softmax + cuBLAS, about 13x slower. Chebyshev is the "
+        "with the tensor-core schedules (WMMA=true). Flash attention's RDom form is the two-pass softmax "
+        "(a row-max walk, then the weighted walk), the same tile verbs and staging at its own best chunk; the "
+        "materialized-scores alternative, cuBLAS + softmax + cuBLAS, is about 13x slower. Chebyshev is the "
         "intended in-cache control, where folding buys nothing.\n\n")
     Path(args.out).write_text(notes + table + "\n")
     print(f"\nwritten to {args.out}")

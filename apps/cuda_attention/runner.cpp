@@ -15,6 +15,7 @@
 
 #include "attention.h"
 #include "attention_flash.h"
+#include "attention_flash_rdom.h"
 #include "attention_softmax.h"
 
 using Halide::float16_t;
@@ -254,6 +255,29 @@ int main(int argc, char **argv) {
                 },
                 [&]() { OF.device_sync(); });
             printf("  Halide flash attention        %9.0f GFlop/s %8.1f us\n",
+                   gflops(t), t * 1e6);
+        } else {
+            failures++;
+        }
+    }
+
+    // The flash walk with no inductive Funcs: two passes over the keys, the
+    // first for the row maxima. It takes the unpadded panels.
+    Buffer<float, 2> OR(out_depth, queries);
+    if (attention_flash_rdom(Q.raw_buffer(), K.raw_buffer(), V.raw_buffer(),
+                             OR.raw_buffer()) != 0) {
+        printf("flash rdom filter returned an error\n");
+        failures++;
+    } else {
+        OR.copy_to_host();
+        if (check(Q, K, V, OR, "attention_flash_rdom")) {
+            double t = bench(
+                [&]() {
+                    attention_flash_rdom(Q.raw_buffer(), K.raw_buffer(),
+                                         V.raw_buffer(), OR.raw_buffer());
+                },
+                [&]() { OR.device_sync(); });
+            printf("  Halide flash attention (rdom) %9.0f GFlop/s %8.1f us\n",
                    gflops(t), t * 1e6);
         } else {
             failures++;

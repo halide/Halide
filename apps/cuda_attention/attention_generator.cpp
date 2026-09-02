@@ -915,8 +915,361 @@ private:
     Func m{Float(32), "m"}, l{Float(32), "l"};
 };
 
+
+// The flash filter with no inductive Funcs: the running maximum cannot
+// advance alongside the accumulator's walk (an update definition owns its
+// whole walk, compute_with forbids dependent stages, and one Tuple would
+// force every reduction inline and off the tensor cores), so the softmax
+// takes two passes. The first walks the key tiles to find each row's
+// maximum; the second walks them again with that maximum known, so the
+// weights need no rescaling and the row sum rides as a second component
+// of the accumulator. Same tile verbs, staging, and warp layout as the
+// flash filter; the price is the scores computed twice.
+class AttentionFlashRDom : public Halide::Generator<AttentionFlashRDom> {
+public:
+    GeneratorParam<int> queries{"queries", 16384};
+    GeneratorParam<int> keys{"keys", 64};
+    GeneratorParam<int> depth{"depth", 64};
+    GeneratorParam<int> out_depth{"out_depth", 64};
+    GeneratorParam<int> tiles_y{"tiles_y", 0};
+    GeneratorParam<int> warps{"warps", 0};
+    GeneratorParam<int> chunk{"chunk", 0};
+    GeneratorParam<bool> stage{"stage", true};
+    GeneratorParam<bool> stage_tile{"stage_tile", true};
+    GeneratorParam<bool> stage_q{"stage_q", true};
+    GeneratorParam<int> pad{"pad", 0};
+
+    Input<Buffer<float16_t, 2>> Q{"Q"};
+    Input<Buffer<float16_t, 2>> K{"K"};
+    Input<Buffer<float16_t, 2>> V{"V"};
+
+    Output<Buffer<float, 2>> out{"out"};
+
+    void generate() {
+        key_tile = chunk ? (int)chunk : std::min(64, (int)keys / 2);
+        _halide_user_assert(key_tile % 16 == 0 && keys % key_tile == 0 &&
+                            keys / key_tile >= 2)
+            << "chunk must be a multiple of 16 that divides keys at least twice";
+        num_tiles = keys / key_tile;
+        key_pad = 2 * key_tile;
+
+        k = RDom(0, depth, "k");
+        k1 = RDom(0, depth, "k1");
+        rj_max = RDom(0, key_tile, "rj_max");
+        rj = RDom(0, key_tile, "rj");
+        rt1 = RDom(0, num_tiles, "rt1");
+        rt = RDom(0, num_tiles, "rt");
+
+        // Pass one: the scores of a key tile, their row maximum, and the
+        // running maximum over the walk.
+        s1(x, y, t) = 0.f;
+        s1(x, y, t) += cast<float>(Q(k1, y)) * cast<float>(K(k1, t * key_tile + x));
+
+        tile_max(y, t) = -1e30f;
+        tile_max(y, t) = max(tile_max(y, t), s1(rj_max, y, t));
+
+        mfin(y) = -1e30f;
+        mfin(y) = max(mfin(y), tile_max(y, rt1));
+
+        // Pass two: the same scores again, weighted against the final
+        // maximum, so nothing carried needs rescaling.
+        s(x, y, t) = 0.f;
+        s(x, y, t) += cast<float>(Q(k, y)) * cast<float>(K(k, t * key_tile + x));
+
+        e(x, y, t) = exp(s(x, y, t) - mfin(y));
+
+        tile_l(y, t) = 0.f;
+        tile_l(y, t) += e(rj, y, t);
+
+        tile_acc(x, y, t) = 0.f;
+        tile_acc(x, y, t) +=
+            cast<float>(e(rj, y, t)) * cast<float>(V(x, t * key_tile + rj));
+
+        // The row sum and the accumulator are two update definitions over
+        // the same walk; they do not depend on each other, so their loops
+        // fuse (compute_with) and each step's weights serve both. Neither
+        // can read the other mid-walk, so the normalization is its own
+        // fragment pass after the walk.
+        l(y) = 0.f;
+        l(y) += tile_l(y, rt);
+
+        acc(x, y) = 0.f;
+        acc(x, y) += tile_acc(x, y, rt);
+
+        outf(x, y) = acc(x, y) / l(y);
+        out(x, y) = outf(x, y);
+    }
+
+    void schedule() {
+        if (using_autoscheduler()) {
+            Q.dim(0).set_estimate(0, depth).dim(1).set_estimate(0, queries);
+            K.dim(0).set_estimate(0, depth).dim(1).set_estimate(0, keys);
+            V.dim(0).set_estimate(0, out_depth).dim(1).set_estimate(0, keys);
+            out.bound(x, 0, out_depth).bound(y, 0, queries);
+            return;
+        }
+
+        set_bounds(Q, depth, queries);
+        // Nothing here reads before the first key or after the last, so the
+        // panels are taken as they are, unpadded.
+        set_bounds(K, depth, keys);
+        set_bounds(V, out_depth, keys);
+        set_bounds(out, out_depth, queries);
+
+        const int tile = 16;
+        const int vec = 8;
+        const int p = pad ? (int)pad : vec;
+        const int staged_bytes = 2 * (int)keys * ((int)depth + (int)out_depth + 2 * p);
+        const bool staging = stage && staged_bytes <= 40 * 1024;
+        const bool stage_per_tile = stage_tile && !staging;
+
+        int ty = tiles_y, wy = warps;
+        if (ty == 0 || wy == 0) {
+            // The flash filter's shape, measured to suit this form as well
+            // except for the step, which is narrower (see the Makefile).
+            if (stage_per_tile) {
+                ty = 1;
+                wy = 4;
+            } else {
+                ty = 2;
+                wy = staging ? 4 : 1;
+                if (key_tile <= 32) {
+                    ty = 1;
+                    wy = 8;
+                }
+            }
+        }
+        const int rows = tile * ty;
+        const int block_rows = rows * wy;
+        const bool warp_loop_inside = stage_per_tile && wy > 1;
+
+        Var xo("xo"), yo("yo"), xio("xio"), yio("yio"), xi("xi"), yi("yi");
+        Var yw("yw"), rxi("rxi"), ryi("ryi");
+        RVar rro("rro"), rri("rri"), rto("rto"), rti("rti"), r1o("r1o"), r1i("r1i");
+
+        out.gpu_max_registers(128);
+
+        out.bound(x, 0, out_depth)
+            .bound(y, 0, queries)
+            .tile(x, y, xo, yo, xi, yi, out_depth, block_rows)
+            .split(yi, yw, yi, rows)
+            .tile(xi, yi, xio, yio, xi, yi, tile, tile)
+            .gpu_blocks(xo, yo)
+            .unroll(xio)
+            .unroll(yio)
+            .tile_store(xi, yi);
+
+        // ---- pass one: the row maxima, one walk over the key tiles ----
+        mfin.store_in(MemoryType::Tile)
+            .compute_at(out, xo)
+            .split(y, yw, y, rows)
+            .split(y, y, ryi, tile)
+            .unroll(y)
+            .vectorize(ryi);
+        mfin.update()
+            .split(y, yw, y, rows)
+            .split(y, y, ryi, tile)
+            .split(rt1, r1o, r1i, 2)
+            .unroll(y)
+            .unroll(r1i)
+            .vectorize(ryi);
+        if (warp_loop_inside) {
+            mfin.update().reorder(ryi, y, yw, r1i, r1o);
+        } else {
+            mfin.update().reorder(ryi, y, r1i, r1o, yw);
+        }
+
+        s1.compute_at(mfin, yw)
+            .store_in(MemoryType::Tile)
+            .hoist_storage(out, xo)
+            .tile(x, y, rxi, ryi, tile, tile)
+            .unroll(x)
+            .unroll(y)
+            .tile_init(rxi, ryi);
+        s1.update()
+            .tile(x, y, rxi, ryi, tile, tile)
+            .split(k1, rro, rri, tile)
+            .reorder(x, y, rro)
+            .unroll(x)
+            .unroll(y)
+            .unroll(rro)
+            .tile_matmul(rri, rxi, ryi);
+
+        tile_max.store_in(MemoryType::Tile)
+            .compute_at(mfin, yw)
+            .hoist_storage(out, xo)
+            .split(y, y, ryi, tile)
+            .unroll(y)
+            .vectorize(ryi);
+        tile_max.update().split(y, y, ryi, tile).unroll(y).tile_reduce(rj_max, ryi);
+
+        // ---- pass two: the weighted walk ----
+        acc.compute_at(out, xo)
+            .store_in(MemoryType::Tile)
+            .split(y, yw, y, rows)
+            .tile(x, y, rxi, ryi, tile, tile)
+            .unroll(x)
+            .unroll(y)
+            .tile_init(rxi, ryi);
+        acc.update()
+            .split(y, yw, y, rows)
+            .tile(x, y, rxi, ryi, tile, tile)
+            .split(rt, rto, rti, 2)
+            .unroll(x)
+            .unroll(y)
+            .unroll(rti)
+            .tile_init(rxi, ryi);
+        if (warp_loop_inside) {
+            acc.update().reorder(x, y, yw, rti, rto);
+        } else {
+            acc.update().reorder(x, y, rti, rto, yw);
+        }
+
+        for (Func f : {s, e}) {
+            f.compute_at(acc, yw)
+                .store_in(MemoryType::Tile)
+                .hoist_storage(out, xo)
+                .tile(x, y, rxi, ryi, tile, tile)
+                .unroll(x)
+                .unroll(y)
+                .tile_init(rxi, ryi);
+        }
+        tile_acc
+            .compute_at(acc, yw)
+            .store_in(MemoryType::Tile)
+            .hoist_storage(out, xo)
+            .tile(x, y, rxi, ryi, tile, tile)
+            .unroll(x)
+            .unroll(y)
+            .tile_init(rxi, ryi);
+
+        s.update()
+            .tile(x, y, rxi, ryi, tile, tile)
+            .split(k, rro, rri, tile)
+            .reorder(x, y, rro)
+            .unroll(x)
+            .unroll(y)
+            .unroll(rro)
+            .tile_matmul(rri, rxi, ryi);
+
+        tile_acc.update()
+            .tile(x, y, rxi, ryi, tile, tile)
+            .split(rj, rro, rri, tile)
+            .reorder(x, y, rro)
+            .unroll(x)
+            .unroll(y)
+            .unroll(rro)
+            .tile_matmul(rri, rxi, ryi);
+
+        tile_l.store_in(MemoryType::Tile)
+            .compute_at(acc, yw)
+            .hoist_storage(out, xo)
+            .split(y, y, ryi, tile)
+            .unroll(y)
+            .vectorize(ryi);
+        tile_l.update().split(y, y, ryi, tile).unroll(y).tile_reduce(rj, ryi);
+
+        // The row sum's walk, shaped like the accumulator's from the outside
+        // in so the two fuse at the step; acc is the parent, so the per-step
+        // Funcs above sit in its loop and l is computed after it each step.
+        l.store_in(MemoryType::Tile)
+            .compute_at(out, xo)
+            .split(y, yw, y, rows)
+            .split(y, y, ryi, tile)
+            .unroll(y)
+            .vectorize(ryi);
+        l.update()
+            .split(y, yw, y, rows)
+            .split(y, y, ryi, tile)
+            .split(rt, rto, rti, 2)
+            .unroll(y)
+            .unroll(rti)
+            .vectorize(ryi);
+        if (warp_loop_inside) {
+            l.update().reorder(ryi, y, yw, rti, rto);
+        } else {
+            l.update().reorder(ryi, y, rti, rto, yw);
+        }
+        l.update().compute_with(acc.update(), yw);
+
+        // Normalize once the walk is done: an elementwise pass over the
+        // accumulator fragments with the row sums broadcast.
+        outf.compute_at(out, xo)
+            .store_in(MemoryType::Tile)
+            .split(y, yw, y, rows)
+            .tile(x, y, rxi, ryi, tile, tile)
+            .unroll(x)
+            .unroll(y)
+            .tile_init(rxi, ryi);
+
+        if (wy > 1) {
+            out.gpu_threads(yw);
+            mfin.gpu_threads(yw);
+            mfin.update().gpu_threads(yw);
+            acc.gpu_threads(yw);
+            acc.update().gpu_threads(yw);
+            l.gpu_threads(yw);
+            l.update().gpu_threads(yw);
+            outf.gpu_threads(yw);
+        }
+
+        if (stage_q) {
+            Var qo("qo"), qv("qv"), qt("qt"), qi("qi"), qto("qto"), qw("qw");
+            Q.in()
+                .compute_at(out, xo)
+                .store_in(MemoryType::GPUSharedAsync)
+                .split(_0, qo, qv, vec)
+                .fuse(qo, _1, qt)
+                .split(qt, qt, qi, 32)
+                .split(qt, qto, qw, wy)
+                .gpu_lanes(qi)
+                .gpu_threads(qw)
+                .reorder(qv, qto, qi, qw)
+                .unroll(qto)
+                .vectorize(qv)
+                .align_storage(_0, depth + p);
+        }
+
+        if (staging || stage_per_tile) {
+            Var ko("ko"), kv("kv"), tt("tt"), ti("ti"), to("to"), tw("tw");
+            // Each pass stages the key tiles it walks; the second also the
+            // value tiles. K.in(s1) is the first pass's own wrapper.
+            auto stage_panel = [&](Func f, Func at, RVar level, int width) {
+                f.compute_at(at, level)
+                    .hoist_storage(out, xo)
+                    .store_in(MemoryType::GPUSharedAsync)
+                    .split(_0, ko, kv, vec)
+                    .fuse(ko, _1, tt)
+                    .split(tt, tt, ti, 32)
+                    .split(tt, to, tw, wy)
+                    .gpu_lanes(ti)
+                    .gpu_threads(tw)
+                    .reorder(kv, to, ti, tw)
+                    .unroll(to)
+                    .vectorize(kv)
+                    .align_storage(_0, width + p);
+            };
+            Func K1 = K.in(s1);
+            stage_panel(K1, mfin, r1i, depth);
+            Func K2 = K.in(s);
+            Func V2 = V.in();
+            stage_panel(K2, acc, rti, depth);
+            stage_panel(V2, acc, rti, out_depth);
+            K2.compute_with(V2, to);
+        }
+    }
+
+private:
+    Var x{"x"}, y{"y"}, t{"t"};
+    RDom k, k1, rj_max, rj, rt1, rt;
+    int num_tiles = 0, key_tile = 0, key_pad = 0;
+    Func s1{"s1"}, tile_max{"tile_max"}, mfin{Float(32), "mfin"};
+    Func s{"s"}, e{"e"}, tile_l{"tile_l"}, l{Float(32), "l"}, tile_acc{"tile_acc"}, acc{"acc"}, outf{"outf"};
+};
+
 }  // namespace
 
 HALIDE_REGISTER_GENERATOR(Attention, attention)
 HALIDE_REGISTER_GENERATOR(AttentionSoftmax, attention_softmax)
 HALIDE_REGISTER_GENERATOR(AttentionFlash, attention_flash)
+HALIDE_REGISTER_GENERATOR(AttentionFlashRDom, attention_flash_rdom)
