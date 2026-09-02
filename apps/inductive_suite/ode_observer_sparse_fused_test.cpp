@@ -45,11 +45,15 @@ int main(int argc, char **argv) {
     // y1 is one RK4 step from y0, computed here and handed to every
     // pipeline as an input. The C++ reference uses the same two functions;
     // Boost's stepper initializes itself with its own runge_kutta4.
-    auto rhs = [&](const std::vector<float> &y, std::vector<float> &f) {
-        for (int i = 0; i < D; i++) {
-            float lm = y[i > 0 ? i - 1 : 0], lp = y[i + 1 < D ? i + 1 : D - 1];
-            f[i] = eps * (lm - 2.f * y[i] + lp) + y[i] - y[i] * y[i] * y[i];
-        }
+    // The two boundary elements apart, so the interior vectorizes.
+    auto rhs = [&](const std::vector<float> &yv, std::vector<float> &fv) {
+        const float *__restrict__ y = yv.data();
+        float *__restrict__ f = fv.data();
+        auto at = [&](float lm, float c, float lp) { return eps * (lm - 2.f * c + lp) + c - c * c * c; };
+        f[0] = at(y[0], y[0], y[1]);
+        for (int i = 1; i < D - 1; i++)
+            f[i] = at(y[i - 1], y[i], y[i + 1]);
+        f[D - 1] = at(y[D - 2], y[D - 1], y[D - 1]);
     };
 
     auto rk4_step = [&](std::vector<float> &y) {
@@ -185,11 +189,18 @@ int main(int argc, char **argv) {
     double bytes_non = hb::profiled_peak_bytes(E_mat, emat);
 
     // energy + rhs helpers
-    auto energy = [&](const std::vector<float> &y) {  // mean order parameter <y>
-        double e = 0;
-        for (int i = 0; i < D; i++)
-            e += y[i];
-        return (float)(e / D);
+    // The mean order parameter <y>, summed in sixteen partials so the
+    // compiler can vectorize it (a single accumulator is a dependent chain
+    // of adds, and was most of the baselines' time).
+    auto energy = [&](const std::vector<float> &y) {
+        float part[16] = {};
+        for (int i = 0; i < D; i += 16)
+            for (int k = 0; k < 16; k++)
+                part[k] += y[i + k];
+        float e = 0;
+        for (int k = 0; k < 16; k++)
+            e += part[k];
+        return e / D;
     };
     namespace odeint = boost::numeric::odeint;
     using state = std::vector<float>;
