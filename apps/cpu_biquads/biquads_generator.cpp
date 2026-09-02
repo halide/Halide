@@ -51,7 +51,7 @@ public:
         Func xin("xin");
         xin(c, n) = x(c, n);
 
-        RDom r(1, x.dim(1).extent() - 1, "r");
+        RDom r(0, x.dim(1).extent(), "r");
         std::vector<Func> ys;
         Func prev = xin;
         for (int k = 0; k < N; k++) {
@@ -76,15 +76,25 @@ public:
                 ys.push_back(yk);
                 prev = yk;
             } else {
-                // The pure definition is the feed-forward half, which is
-                // parallel; the update folds the feedback in place, walking
-                // the samples in order.
+                // The whole section is the update, walking the samples in
+                // order, so the update never reads its own current element
+                // and the pure definition is just a zero fill. Each section
+                // is then a fill sweep plus one walk - read the previous
+                // section's output, write this one's, feedback taps still in
+                // cache - rather than a feed-forward sweep and a
+                // read-modify-write walk. (An undefined pure definition
+                // would drop the fill sweep too, at 1.9x / 2.8x of the
+                // inductive form at 2 / 8 sections; it is unsafe Halide and
+                // not used.)
                 Func yk = last ? Func(y) : Func(Float(32), "y" + std::to_string(k));
-                yk(c, n) = b0 * prev(c, n) +
-                           select(n < 1, 0.f, b1 * prev(c, max(n - 1, 0))) +
-                           select(n < 2, 0.f, b2 * prev(c, max(n - 2, 0)));
-                yk(c, r) = yk(c, r) - a1 * yk(c, r - 1) -
-                           select(r < 2, 0.f, a2 * yk(c, max(r - 2, 0)));
+                yk(c, n) = 0.f;
+                yk(c, r) = b0 * prev(c, r) +
+                           select(r < 1, 0.f,
+                                  likely(b1 * prev(c, max(r - 1, 0)) -
+                                         a1 * yk(c, max(r - 1, 0)))) +
+                           select(r < 2, 0.f,
+                                  likely(b2 * prev(c, max(r - 2, 0)) -
+                                         a2 * yk(c, max(r - 2, 0))));
                 if (!last) {
                     ys.push_back(yk);
                 }
@@ -116,7 +126,8 @@ public:
                     .reorder(ci, coi, n, coo)
                     .vectorize(ci)
                     .unroll(coi)
-                    .parallel(coo);
+                    .parallel(coo)
+                    .stream_stores();
                 for (Func f : ys) {
                     f.store_at(y, coo)
                         .compute_at(y, coi)
@@ -126,10 +137,12 @@ public:
                     }
                 }
             } else {
+                // The output is written once and never read back: stream it.
                 y.split(c, co, ci, VEC)
                     .reorder(ci, co, n)
                     .vectorize(ci)
-                    .unroll(co);
+                    .unroll(co)
+                    .stream_stores();
                 for (Func f : ys) {
                     f.store_root()
                         .compute_at(y, co)
@@ -146,13 +159,25 @@ public:
             // block's intermediates freed as it finishes. The signal still
             // crosses memory once per section - each section's update owns
             // its walk over the block's whole slice.
-            y.split(c, co, ci, VEC)
+            // Two channel vectors per block, unrolled inside each walk, so
+            // two independent recurrence chains are in flight per sample -
+            // the same latency hiding the inductive schedule gets from its
+            // interleaved blocks.
+            // The zero fill is a write-once sweep whose lines are evicted
+            // before the walk reads them back, so it streams: no
+            // read-for-ownership.
+            y.split(c, co, ci, 2 * VEC)
                 .reorder(ci, n, co)
-                .vectorize(ci);
+                .vectorize(ci, VEC)
+                .unroll(ci)
+                .stream_stores();
+            // The walk cannot stream its stores: it reloads what it just
+            // wrote, which streamed stores keep out of the cache.
             y.update()
-                .split(c, co, ci, VEC)
+                .split(c, co, ci, 2 * VEC)
                 .reorder(ci, r, co)
-                .vectorize(ci);
+                .vectorize(ci, VEC)
+                .unroll(ci);
             if (par) {
                 y.parallel(co);
                 y.update().parallel(co);
@@ -160,10 +185,13 @@ public:
             for (int k = 0; k + 1 < N; k++) {
                 Func f = ys[k];
                 f.compute_at(y, co)
-                    .vectorize(c, VEC);
+                    .vectorize(c, VEC)
+                    .unroll(c)
+                    .stream_stores();
                 f.update()
                     .reorder(c, r)
-                    .vectorize(c, VEC);
+                    .vectorize(c, VEC)
+                    .unroll(c);
             }
         }
 
