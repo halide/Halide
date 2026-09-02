@@ -171,9 +171,6 @@ int main(int argc, char **argv) {
         li.compile_jit();
         ln.compile_jit();
         Buffer<float> ri(B), rn(B);
-        for (Func *f : {&li, &ln}) {
-            hb::reuse_jit_allocations(*f);
-        }
         li.realize(ri);
         ln.realize(rn);
 

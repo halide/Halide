@@ -27,7 +27,6 @@ int ksw_gg2_sse(void *km, int qlen, const uint8_t *query, int tlen, const uint8_
 #include <cstdlib>
 #include <cstring>
 #include <atomic>
-#include <mutex>
 #include <thread>
 #include <vector>
 
@@ -51,69 +50,6 @@ using Halide::Tools::benchmark;
 
 constexpr int J = QLEN, I = TLEN, B = BATCH;
 constexpr int SA = 2, SB = 4, GAPO = 4, GAPE = 2;
-
-// A reusing allocator: the benchmark should measure alignment, not page
-// faults on the rdom form's gigabytes of fresh intermediates.
-std::mutex pool_mutex;
-std::vector<std::pair<size_t, void *>> pool;
-
-}  // namespace
-
-extern "C" void *halide_malloc(void *, size_t size) {
-    constexpr size_t header = 128;
-    // HB_NO_REUSE=1 leaves the process allocator in charge, to measure
-    // what the pool is worth.
-    static const bool no_reuse = getenv("HB_NO_REUSE") != nullptr;
-    if (no_reuse) {
-        char *base = (char *)aligned_alloc(128, (size + header + 127) / 128 * 128);
-        ((size_t *)base)[0] = 0;
-        return base + header;
-    }
-    {
-        std::lock_guard<std::mutex> lock(pool_mutex);
-        for (auto &entry : pool) {
-            if (entry.first == size && entry.second) {
-                void *base = entry.second;
-                entry.second = nullptr;
-                return (char *)base + header;
-            }
-        }
-    }
-    char *base = (char *)aligned_alloc(128, (size + header + 127) / 128 * 128);
-    ((size_t *)base)[0] = size;
-    return base + header;
-}
-
-// Between forms: the planes differ in size, so one form's pool is dead
-// weight to the next, and all six together would be most of the machine.
-void drain_pool() {
-    std::lock_guard<std::mutex> lock(pool_mutex);
-    for (auto &entry : pool) {
-        if (entry.second) {
-            free(entry.second);
-        }
-    }
-    pool.clear();
-}
-
-extern "C" void halide_free(void *, void *ptr) {
-    char *base = (char *)ptr - 128;
-    size_t size = ((size_t *)base)[0];
-    if (size == 0) {
-        free(base);
-        return;
-    }
-    std::lock_guard<std::mutex> lock(pool_mutex);
-    for (auto &entry : pool) {
-        if (!entry.second) {
-            entry = {size, base};
-            return;
-        }
-    }
-    pool.emplace_back(size, base);
-}
-
-namespace {
 
 uint64_t splitmix64(uint64_t &x) {
     uint64_t z = (x += 0x9e3779b97f4a7c15ull);
@@ -359,7 +295,6 @@ int main(int argc, char **argv) {
         forms[f].fn(query, target, path);
         if (!check(forms[f].name)) return 1;
         t[f] = benchmark(3, 1, [&]() { forms[f].fn(query, target, path); });
-        drain_pool();
     }
     double t_ind = t[0];  // int8 inductive is the reference for ratios
 

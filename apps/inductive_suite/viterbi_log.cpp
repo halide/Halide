@@ -136,9 +136,6 @@ int main(int argc, char **argv) {
         };
 
         Func path_n = build(false), path_u = build(true, T + 1), path_i = build(true, 2);
-        for (Func *f : {&path_n, &path_u, &path_i}) {
-            hb::reuse_jit_allocations(*f);
-        }
         Buffer<int> res_i(T), res_u(T), res_n(T);
         path_i.realize(res_i);  // warm/JIT
         path_u.realize(res_u);

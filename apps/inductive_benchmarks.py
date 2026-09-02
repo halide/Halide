@@ -26,8 +26,22 @@ JULIA = Path.home() / ".juliaup/bin/julia"
 NCORES = os.cpu_count() // 2 or 1  # physical cores: parallel configs use one thread per core
 
 
+# Every process the driver runs, Halide runners and baselines alike, gets
+# jemalloc configured to keep freed memory: blocks above 8 MB in a normal
+# arena rather than the immediately purged oversize one, and no decay. A
+# pipeline's scratch is freed at the end of every run, and past a few MB
+# the default allocators hand it back to the kernel, so each timed run would
+# otherwise pay a first-touch page fault per 4 KB of it; retaining is what
+# any application that reuses its work buffers gets. Without the library the
+# numbers change materially, so its absence is an error, not a fallback.
+JEMALLOC = "/lib/x86_64-linux-gnu/libjemalloc.so.2"
+MALLOC_CONF = "oversize_threshold:0,dirty_decay_ms:-1,muzzy_decay_ms:-1"
+
+
 def sh(cmd, cwd, env=None, log=None, check=True):
     e = dict(os.environ)
+    e["LD_PRELOAD"] = JEMALLOC
+    e["MALLOC_CONF"] = MALLOC_CONF
     e.update(env or {})
     p = subprocess.run(cmd, shell=True, cwd=str(cwd), env=e,
                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
@@ -280,6 +294,8 @@ def main():
     args = ap.parse_args()
     LOGS.mkdir(exist_ok=True)
     only = set(args.only.split(",")) if args.only else None
+    if not args.render and not Path(JEMALLOC).exists():
+        sys.exit(f"{JEMALLOC} is needed to retain freed memory across runs (apt install libjemalloc2)")
     # Rows are cached per (app, config index) so a partial run updates the
     # table instead of replacing it.
     import json
@@ -328,13 +344,14 @@ def main():
         "cuBLAS + softmax + cuBLAS is about 13x slower than the flash filter. Chebyshev is the "
         "intended in-cache control, where folding buys nothing. Outputs that are written once and never "
         "read back are streamed in every form (rng, biquads, the alignment direction plane); the JIT apps "
-        "(kalman, viterbi, ode) and the alignment runner reuse their scratch buffers across timed runs, "
-        "as Halide's profiler recommends for this allocation pattern, so page faults on fresh mappings are "
-        "not charged to any form. A stock caching allocator (mimalloc, default or with purging off) does "
-        "the same for scratch up to a few tens of MB and nothing for larger blocks: without reuse the ode "
-        "RDom row is 23 ms rather than 8, and every alignment form pays about 230 ms of first-touch faults "
-        "on its 64 MB per-task planes (HB_NO_REUSE=1 reproduces those). The Python baselines report the "
-        "best sample, as Halide's harness does.\n\n")
+        "(kalman, viterbi, ode) and the alignment runner free their scratch at the end of every run, and "
+        "past a few MB the default allocators hand it back to the kernel, so every process the driver runs, "
+        "baselines included, uses jemalloc configured to keep freed memory (oversize_threshold:0, no "
+        "decay), which is what an application reusing its work buffers gets. It matters where the scratch "
+        "is large: without retention the ode RDom row is 23 ms rather than 7, and every alignment form pays "
+        "about 230 ms of first-touch faults on its 64 MB per-task direction planes; the baselines are within "
+        "noise either way, scipy a few percent faster. The Python baselines report the best sample, as "
+        "Halide's harness does.\n\n")
     Path(args.out).write_text(notes + table + "\n")
     print(f"\nwritten to {args.out}")
 
