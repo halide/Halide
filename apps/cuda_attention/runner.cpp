@@ -5,7 +5,7 @@
 
 #include "HalideBuffer.h"
 #include "HalideRuntimeCuda.h"
-#include "halide_benchmark.h"
+#include "../support/bench_harness.h"
 #include <cmath>
 #include <cstdio>
 #include <cublas_v2.h>
@@ -65,20 +65,12 @@ double gflops(double seconds) {
     return flops / seconds * 1e-9;
 }
 
-// Time one call. Both sides queue work asynchronously, so batch the launches
-// and sync once rather than measuring a synchronize per launch. `sync` has to
-// match the launcher: Halide runs on its own CUDA context.
+// Time one call: the shared harness's batched form, launches then one sync
+// per trial. `sync` has to match the launcher: Halide runs on its own CUDA
+// context.
 template<typename F, typename S>
 double bench(F &&launch, S &&sync) {
-    const int batch = 5;
-    return Halide::Tools::benchmark(5, 1,
-                                    [&]() {
-                                        for (int i = 0; i < batch; i++) {
-                                            launch();
-                                        }
-                                        sync();
-                                    }) /
-           batch;
+    return hb::bench_s(launch, 10, sync);
 }
 
 void fill(Buffer<float16_t, 2> &b, int modulus) {

@@ -1,6 +1,7 @@
 # Times scipy.signal.sosfilt on the same shape and coefficients the runner
 # uses. Usage: sosfilt_bench.py [channels samples sections]
 import sys
+import os
 import time
 
 import numpy as np
@@ -25,9 +26,12 @@ rng = np.random.default_rng(1234)
 x[:] = rng.standard_normal((C, S), dtype=np.float32)
 
 sos = sos.astype(np.float32)
-sosfilt(sos, x[:2, :4096], axis=-1)  # warm the JIT-ish paths
+# The shared protocol (apps/support/bench_harness.h): HB_WARMUP untimed
+# runs, HB_TRIALS timed ones, the best reported.
+for _ in range(int(os.environ.get("HB_WARMUP", 3))):
+    y = sosfilt(sos, x, axis=-1)
 best = float("inf")
-for _ in range(3):
+for _ in range(int(os.environ.get("HB_TRIALS", 30))):
     t0 = time.perf_counter()
     y = sosfilt(sos, x, axis=-1)
     best = min(best, time.perf_counter() - t0)

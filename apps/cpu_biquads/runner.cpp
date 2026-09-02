@@ -4,7 +4,7 @@
 
 #include "HalideBuffer.h"
 #include "HalideRuntime.h"
-#include "halide_benchmark.h"
+#include "../support/bench_harness.h"
 
 #include "biquads_ind.h"
 #include "biquads_rdom.h"
@@ -25,7 +25,6 @@
 #include <vector>
 
 using Halide::Runtime::Buffer;
-using Halide::Tools::benchmark;
 
 #ifndef CHANNELS
 #define CHANNELS 32
@@ -157,15 +156,15 @@ int main(int argc, char **argv) {
 
     biquads_ind(x, sos, y);
     check(x, sos, y, "inductive");
-    double t_ind = benchmark(10, 1, [&]() { biquads_ind(x, sos, y); });
+    double t_ind = hb::bench_s([&]() { biquads_ind(x, sos, y); });
 
     biquads_unf(x, sos, y);
     check(x, sos, y, "unfolded");
-    double t_unf = benchmark(10, 1, [&]() { biquads_unf(x, sos, y); });
+    double t_unf = hb::bench_s([&]() { biquads_unf(x, sos, y); });
 
     biquads_rdom(x, sos, y);
     check(x, sos, y, "rdom");
-    double t_rdom = benchmark(10, 1, [&]() { biquads_rdom(x, sos, y); });
+    double t_rdom = hb::bench_s([&]() { biquads_rdom(x, sos, y); });
 
 #ifdef HAVE_IPP
     // Intel IPP's multi-channel IIR: one biquad-cascade state per channel
@@ -231,7 +230,7 @@ int main(int argc, char **argv) {
     // above by a few ulps of the signal: a looser tolerance, same double
     // reference.
     check(x, sos, yipp, "ipp", 1e-3);
-    double t_ipp = benchmark(10, 1, ipp_run);
+    double t_ipp = hb::bench_s(ipp_run);
     free(xin);
     free(yout);
 #endif
@@ -292,7 +291,7 @@ int main(int argc, char **argv) {
         }
     }
     check(x, sos, yfff, "fff");
-    double t_fff = benchmark(10, 1, fff_run);
+    double t_fff = hb::bench_s(fff_run);
     if (blocked) {
         free(xb);
         free(yb);

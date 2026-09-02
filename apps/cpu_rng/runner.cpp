@@ -3,7 +3,7 @@
 // baseline. The output buffer is sized well past the last level cache.
 
 #include "HalideBuffer.h"
-#include "halide_benchmark.h"
+#include "../support/bench_harness.h"
 
 #include "rng_ind.h"
 #include "rng_rdom.h"
@@ -18,7 +18,6 @@
 #include <vector>
 
 using Halide::Runtime::Buffer;
-using Halide::Tools::benchmark;
 
 #ifndef LANES
 #define LANES 32
@@ -160,7 +159,7 @@ int main(int argc, char **argv) {
            L, T, 2 * L * (double)T * 4 / 1e6, L * (double)T * 32 / 1e6);
 
     reference(seeds, ref);
-    double t_ref = benchmark(3, 1, [&]() { reference(seeds, ref); });
+    double t_ref = hb::bench_s([&]() { reference(seeds, ref); });
 
     if (julia_ref) {
         FILE *f = fopen(julia_ref, "rb");
@@ -184,19 +183,19 @@ int main(int argc, char **argv) {
 
     simd_fill(seeds, y);
     if (!check(y, ref, "simd C++")) return 1;
-    double t_simd = benchmark(3, 1, [&]() { simd_fill(seeds, y); });
+    double t_simd = hb::bench_s([&]() { simd_fill(seeds, y); });
 
     rng_ind(seeds, y);
     if (!check(y, ref, "inductive")) return 1;
-    double t_ind = benchmark(3, 1, [&]() { rng_ind(seeds, y); });
+    double t_ind = hb::bench_s([&]() { rng_ind(seeds, y); });
 
     rng_unf(seeds, y);
     if (!check(y, ref, "unfolded")) return 1;
-    double t_unf = benchmark(3, 1, [&]() { rng_unf(seeds, y); });
+    double t_unf = hb::bench_s([&]() { rng_unf(seeds, y); });
 
     rng_rdom(seeds, y);
     if (!check(y, ref, "rdom")) return 1;
-    double t_rdom = benchmark(3, 1, [&]() { rng_rdom(seeds, y); });
+    double t_rdom = hb::bench_s([&]() { rng_rdom(seeds, y); });
 
     const double gb = 2 * L * (double)T * 4 / 1e9;
     printf("  inductive  %10.1f us  (%.1f GB/s of output)\n",

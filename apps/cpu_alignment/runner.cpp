@@ -4,7 +4,7 @@
 // CIGARs reconstructed from them must match ksw2's exactly.
 
 #include "HalideBuffer.h"
-#include "halide_benchmark.h"
+#include "../support/bench_harness.h"
 
 #include "align16_ind.h"
 #include "align16_rdom.h"
@@ -45,7 +45,6 @@ int ksw_gg2_sse(void *km, int qlen, const uint8_t *query, int tlen, const uint8_
 namespace {
 
 using Halide::Runtime::Buffer;
-using Halide::Tools::benchmark;
 
 constexpr int J = QLEN, I = TLEN, B = BATCH;
 constexpr int SA = 2, SB = 4, GAPO = 4, GAPE = 2;
@@ -235,7 +234,7 @@ int main(int argc, char **argv) {
     // ONLY_PARASAIL: benchmark just the parasail sweep, for isolating its
     // memory behaviour.
     if (getenv("ONLY_PARASAIL")) {
-        double tp0 = benchmark(3, 1, [&]() {
+        double tp0 = hb::bench_s([&]() {
             int nthreads = PARALLEL ? std::thread::hardware_concurrency() : 1;
             std::vector<std::thread> threads;
             std::atomic<int> next{0};
@@ -275,7 +274,7 @@ int main(int argc, char **argv) {
             if (std::string(f.name) != only) continue;
             double best = 1e30;
             for (int r = 0; r < 3; r++) {
-                double t = benchmark(1, 1, [&]() { f.fn(query, target, path); });
+                double t = hb::bench_s([&]() { f.fn(query, target, path); });
                 if (!check(f.name)) return 1;
                 best = std::min(best, t);
             }
@@ -289,7 +288,7 @@ int main(int argc, char **argv) {
     for (int f = 0; f < 6; f++) {
         forms[f].fn(query, target, path);
         if (!check(forms[f].name)) return 1;
-        t[f] = benchmark(3, 1, [&]() { forms[f].fn(query, target, path); });
+        t[f] = hb::bench_s([&]() { forms[f].fn(query, target, path); });
     }
     double t_ind = t[0];  // int8 inductive is the reference for ratios
 
@@ -313,7 +312,7 @@ int main(int argc, char **argv) {
         }
         for (auto &th : threads) th.join();
     };
-    double t_tb = benchmark(3, 1, [&]() { compaction_sweep(); });
+    double t_tb = hb::bench_s([&]() { compaction_sweep(); });
 
 
     // ksw2 parallelizes across pairs the way aligners deploy it: when the
@@ -338,8 +337,8 @@ int main(int argc, char **argv) {
         }
         for (auto &t : threads) t.join();
     };
-    double t_gg2 = benchmark(3, 1, [&]() { ksw2_sweep(true); });
-    double t_gg = benchmark(3, 1, [&]() { ksw2_sweep(false); });
+    double t_gg2 = hb::bench_s([&]() { ksw2_sweep(true); });
+    double t_gg = hb::bench_s([&]() { ksw2_sweep(false); });
 
 #ifdef HAVE_PARASAIL
     auto parasail_sweep = [&]() {
@@ -359,7 +358,7 @@ int main(int argc, char **argv) {
         }
         for (auto &t : threads) t.join();
     };
-    double t_ps = benchmark(3, 1, [&]() { parasail_sweep(); });
+    double t_ps = hb::bench_s([&]() { parasail_sweep(); });
 #endif
 
     const double cells = (double)B * J * I;
@@ -397,18 +396,18 @@ int main(int argc, char **argv) {
         std::vector<double> ta, t16, tk, tp;
         printf("  interleaved rounds, fill+cigar (int8 ind | int16 ind | ksw2 sse | parasail):\n");
         for (int r = 0; r < rounds; r++) {
-            double a = benchmark(1, 1, [&]() {
+            double a = hb::bench_s([&]() {
                 align8_ind(query, target, path);
                 compaction_sweep();
             });
-            double a16 = benchmark(1, 1, [&]() {
+            double a16 = hb::bench_s([&]() {
                 align16_ind(query, target, path);
                 compaction_sweep();
             });
-            double k = benchmark(1, 1, [&]() { ksw2_sweep(true); });
+            double k = hb::bench_s([&]() { ksw2_sweep(true); });
             double p = 0;
 #ifdef HAVE_PARASAIL
-            p = benchmark(1, 1, [&]() { parasail_sweep(); });
+            p = hb::bench_s([&]() { parasail_sweep(); });
 #endif
             ta.push_back(a);
             t16.push_back(a16);

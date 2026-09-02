@@ -364,7 +364,11 @@ def main():
         "noise either way, scipy a few percent faster. The same allocator backs everything with transparent "
         "huge pages, and single-threaded rows run pinned to one core: the serial forms that stream gigabyte "
         "signals otherwise vary by 30% from run to run with where their pages land. The Python baselines "
-        "report the best sample, as Halide's harness does.\n\n")
+        "report the best sample, as Halide's harness does. Every measurement, Halide forms and baselines in "
+        "every language, follows one protocol (apps/support/bench_harness.h): three untimed runs, thirty "
+        "timed trials, the best reported with the median kept for the spread; on the GPU a trial is ten "
+        "launches and one device synchronization, divided by ten, so the time includes completion but not a "
+        "synchronization per launch.\n\n")
     Path(args.out).write_text(notes + table + "\n")
     print(f"\nwritten to {args.out}")
 

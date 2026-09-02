@@ -13,9 +13,12 @@
 //                            least perturbed by OS/thermal noise. Median is kept
 //                            as a reference column to show the spread.
 //
-// Each timed iteration runs a caller-supplied `body` that must perform exactly one
-// full realize AND, on GPU, a device_sync -- so the timed region includes device
-// completion, not just kernel launch.
+// Each timed iteration runs a caller-supplied `body` that performs exactly one
+// full realize. On GPU, work is queued asynchronously, so the batched form
+// runs `batch` bodies and then a `finish` (a device sync) inside the timed
+// region and divides by the batch: the time includes device completion but
+// not a synchronization per launch, which for a sub-millisecond kernel would
+// be most of the measurement. HB_BATCH overrides the batch size.
 //
 // Memory is reported ANALYTICALLY (byte-exact, deterministic): the app passes the
 // live bytes of the recurrence state/trajectory for each variant. This isolates
@@ -55,19 +58,28 @@ struct Stats {
 };
 
 // Run `body` HB_WARMUP + HB_TRIALS times; return median/IQR/min over the timed
-// runs. `body` owns the realize (+ device_sync on GPU).
-inline Stats bench(const std::function<void()> &body) {
+// runs, per body. A trial is `batch` bodies followed by `finish`, timed
+// together and divided by the batch; the default is one body and no finish.
+inline Stats bench(const std::function<void()> &body, int batch,
+                   const std::function<void()> &finish) {
     const int warmup = env_int("HB_WARMUP", 3);
     const int trials = std::max(1, env_int("HB_TRIALS", 30));
+    batch = std::max(1, env_int("HB_BATCH", batch));
+    auto trial = [&]() {
+        for (int i = 0; i < batch; i++)
+            body();
+        if (finish)
+            finish();
+    };
     for (int i = 0; i < warmup; i++)
-        body();
+        trial();
     std::vector<double> ms;
     ms.reserve(trials);
     for (int i = 0; i < trials; i++) {
         auto t0 = std::chrono::high_resolution_clock::now();
-        body();
+        trial();
         auto t1 = std::chrono::high_resolution_clock::now();
-        ms.push_back(std::chrono::duration<double, std::milli>(t1 - t0).count());
+        ms.push_back(std::chrono::duration<double, std::milli>(t1 - t0).count() / batch);
     }
     std::sort(ms.begin(), ms.end());
     Stats s;
@@ -79,6 +91,16 @@ inline Stats bench(const std::function<void()> &body) {
     return s;
 }
 
+inline Stats bench(const std::function<void()> &body) {
+    return bench(body, 1, nullptr);
+}
+
+// The best time in seconds, for runners that report their own rows.
+inline double bench_s(const std::function<void()> &body, int batch = 1,
+                      const std::function<void()> &finish = nullptr) {
+    return bench(body, batch, finish).min * 1e-3;
+}
+
 // Machine + protocol provenance, emitted once per result file so §6.1 of the
 // paper is generated rather than transcribed. `target` is the Halide target
 // string (pass "host" for CPU JIT). Optional `note` for app-specific config.
@@ -88,8 +110,8 @@ inline void print_spec_header(const char *app, const std::string &target,
     const char *hlt = getenv("HL_NUM_THREADS");
     printf("### %s  |  target=%s  |  hw_concurrency=%u  |  HL_NUM_THREADS=%s\n",
            app, target.c_str(), hw, hlt ? hlt : "(default)");
-    printf("### protocol: warmup=%d trials=%d  metric=best(min) ms; median shown for reference\n",
-           env_int("HB_WARMUP", 3), env_int("HB_TRIALS", 30));
+    printf("### protocol: warmup=%d trials=%d batch=%d  metric=best(min) ms; median shown for reference\n",
+           env_int("HB_WARMUP", 3), env_int("HB_TRIALS", 30), env_int("HB_BATCH", 1));
     if (!note.empty()) printf("### %s\n", note.c_str());
     printf("### %-30s %10s %10s   %12s  %10s  %s\n",
            "variant", "best_ms", "median_ms", "throughput", "state_MB", "check");

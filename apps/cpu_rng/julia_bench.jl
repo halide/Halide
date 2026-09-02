@@ -8,9 +8,13 @@ L = length(ARGS) >= 1 ? parse(Int, ARGS[1]) : 64
 T = length(ARGS) >= 2 ? parse(Int, ARGS[2]) : 4 << 20
 rng = Xoshiro(1234)
 a = Array{Float32}(undef, L, T)
-rand!(rng, a)
+# The shared protocol (apps/support/bench_harness.h): HB_WARMUP untimed
+# runs, HB_TRIALS timed ones, the best reported.
+for _ in 1:parse(Int, get(ENV, "HB_WARMUP", "3"))
+    rand!(rng, a)
+end
 best = Inf
-for _ in 1:3
+for _ in 1:parse(Int, get(ENV, "HB_TRIALS", "30"))
     t0 = time_ns()
     rand!(rng, a)
     global best = min(best, (time_ns() - t0) / 1e3)

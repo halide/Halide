@@ -7,7 +7,7 @@ the reference the flash filter is measured against; the memory-efficient
 Usage: torch_bench.py QUERIES KEYS DEPTH
 Prints "  torch flash   <us> us" and "  torch mem-efficient   <us> us".
 """
-import statistics
+import os
 import sys
 
 import torch
@@ -22,20 +22,27 @@ k = torch.randn(1, 1, keys, depth, device=dev, dtype=torch.float16)
 v = torch.randn(1, 1, keys, depth, device=dev, dtype=torch.float16)
 
 
-def timed(fn, warm=5, iters=30):
+def timed(fn):
+    # The shared protocol (apps/support/bench_harness.h): HB_WARMUP untimed
+    # trials, HB_TRIALS timed ones, each a batch of HB_BATCH launches and one
+    # synchronize, the time divided by the batch; the best trial is reported.
+    warm = int(os.environ.get("HB_WARMUP", 3))
+    iters = int(os.environ.get("HB_TRIALS", 30))
+    batch = int(os.environ.get("HB_BATCH", 10))
     for _ in range(warm):
-        fn()
-    torch.cuda.synchronize()
+        for _ in range(batch):
+            fn()
+        torch.cuda.synchronize()
     ts = []
     for _ in range(iters):
         s = torch.cuda.Event(enable_timing=True)
         e = torch.cuda.Event(enable_timing=True)
         s.record()
-        fn()
+        for _ in range(batch):
+            fn()
         e.record()
         torch.cuda.synchronize()
-        ts.append(s.elapsed_time(e) * 1e3)
-    # The best sample, which is what Halide's benchmark harness reports.
+        ts.append(s.elapsed_time(e) * 1e3 / batch)
     return min(ts)
 
 

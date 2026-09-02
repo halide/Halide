@@ -1,7 +1,7 @@
 // Linked against libHalide only for float16_t, as apps/cuda_attention does.
 #include "Halide.h"
 #include "HalideBuffer.h"
-#include "halide_benchmark.h"
+#include "../support/bench_harness.h"
 #include "mamba2.h"
 
 #include <algorithm>
@@ -192,10 +192,8 @@ int main(int argc, char **argv) {
         2.0 * num_chunks * chunk *
         ((double)groups * chunk * state +
          heads * ((double)chunk * channels + 2.0 * state * channels));
-    double t = Halide::Tools::benchmark(10, 10, [&]() {
-        mamba2(X, Bm, Cm, Delta, A, result);
-        result.device_sync();
-    });
+    double t = hb::bench_s([&]() { mamba2(X, Bm, Cm, Delta, A, result); },
+                           10, [&]() { result.device_sync(); });
     printf("  Halide mamba2 %30.0f GFlop/s %10.1f us\n", flops / t / 1e9, t * 1e6);
 
     printf("%s\n", ok ? "Success!" : "FAILED");

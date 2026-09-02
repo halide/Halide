@@ -1,7 +1,7 @@
 // Linked against libHalide only for float16_t, as the forward runner is.
 #include "Halide.h"
 #include "HalideBuffer.h"
-#include "halide_benchmark.h"
+#include "../support/bench_harness.h"
 #include "mamba2_bwd.h"
 
 #include <algorithm>
@@ -410,10 +410,8 @@ int main(int argc, char **argv) {
          (double)heads * (3.0 * chunk * chunk * channels +
                           2.0 * chunk * chunk * state +
                           5.0 * chunk * state * channels));
-    double tm = Halide::Tools::benchmark(3, 3, [&]() {
-        mamba2_bwd(X, Bm, Cm, Delta, A, Y, dY, dX, dB, dC, dDT, dA);
-        dA.device_sync();
-    });
+    double tm = hb::bench_s([&]() { mamba2_bwd(X, Bm, Cm, Delta, A, Y, dY, dX, dB, dC, dDT, dA); },
+                            10, [&]() { dA.device_sync(); });
     printf("  Halide mamba2 bwd %26.0f GFlop/s %10.1f us\n", flops / tm / 1e9, tm * 1e6);
 
     printf("%s\n", ok ? "Success!" : "FAILED");
