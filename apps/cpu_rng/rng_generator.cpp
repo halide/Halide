@@ -99,10 +99,13 @@ public:
                 .reorder(ci, co, t)
                 .vectorize(ci);
             if (par) {
+                // One block of streams per task: a pair of blocks unrolled
+                // together is 32 vector registers of state, which spills. The
+                // inner block loop is kept, at one iteration, as the level
+                // the state and the step's temporaries are computed at.
                 Var coo("coo"), coi("coi");
-                y.split(co, coo, coi, 2)
+                y.split(co, coo, coi, 1)
                     .reorder(ci, coi, t, coo)
-                    .unroll(coi)
                     .parallel(coo);
                 S.store_at(y, coo)
                     .compute_at(y, coi)

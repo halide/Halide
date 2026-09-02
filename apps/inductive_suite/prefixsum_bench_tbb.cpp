@@ -4,7 +4,7 @@
 //
 // Pipeline: input(x, y) = x + y
 //           prefix_sum(x, y) = sum_{i<=x} input(i, y)
-//           output(x, y) = prefix_sum(x, y) // (x + 1)
+//           output(x, y) = float(prefix_sum(x, y)) / float(x + 1)
 //
 // Unlike bench_numpy.py's numpy/numba comparisons (deliberately pinned to
 // one thread to match Halide's single-core schedule), this benchmark uses
@@ -12,6 +12,7 @@
 // single multi-threaded pass -- a genuinely optimized, parallel third-party
 // baseline, rather than a single-core one.
 #include <cstdint>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
@@ -31,31 +32,25 @@ namespace {
 // behavior for large W) and, on the final pass, fuses in the division by
 // (x + 1) as a side effect, so no separate prefix_sum array is ever
 // materialized; the return value only carries the running sum forward.
-void fused_prefix_mean_tbb(const int32_t *inp, int32_t *out, int W, int H, bool shr) {
+void fused_prefix_mean_tbb(const int32_t *inp, float *out, int W, int H) {
     tbb::parallel_for(tbb::blocked_range<int>(0, H), [&](const tbb::blocked_range<int> &yr) {
         for (int y = yr.begin(); y < yr.end(); y++) {
             const int32_t *row_in = inp + (size_t)y * W;
-            int32_t *row_out = out + (size_t)y * W;
+            float *row_out = out + (size_t)y * W;
             tbb::parallel_scan(
                 tbb::blocked_range<int>(0, W), (int32_t)0,
                 [&](const tbb::blocked_range<int> &r, int32_t sum, bool is_final_scan) -> int32_t {
-                    // Branches (is_final_scan, shr) are hoisted OUT of the element
-                    // loop so the hot loop is a bare accumulate + store -- no
-                    // per-element branch. Inputs are bounded (&255) so temp never
-                    // overflows and stays >= 0, making `/` and `>>` plain floors.
+                    // The branch on is_final_scan is hoisted OUT of the element
+                    // loop so the hot loop is a bare accumulate + store. Inputs
+                    // are bounded (&255) so the sum never overflows.
                     int32_t temp = sum;
                     if (!is_final_scan) {
                         for (int i = r.begin(); i < r.end(); i++)
                             temp += row_in[i];
-                    } else if (shr) {
-                        for (int i = r.begin(); i < r.end(); i++) {
-                            temp += row_in[i];
-                            row_out[i] = temp >> 2;
-                        }
                     } else {
                         for (int i = r.begin(); i < r.end(); i++) {
                             temp += row_in[i];
-                            row_out[i] = temp / (i + 1);
+                            row_out[i] = (float)temp / (float)(i + 1);
                         }
                     }
                     return temp;
@@ -82,15 +77,15 @@ int main(int argc, char **argv) {
     }
     int W = header[0], H = header[1];
 
-    std::vector<int32_t> inp((size_t)W * H), halide_out((size_t)W * H), out((size_t)W * H);
+    std::vector<int32_t> inp((size_t)W * H);
+    std::vector<float> halide_out((size_t)W * H), out((size_t)W * H);
     if (fread(inp.data(), sizeof(int32_t), (size_t)W * H, f) != (size_t)W * H ||
-        fread(halide_out.data(), sizeof(int32_t), (size_t)W * H, f) != (size_t)W * H) {
+        fread(halide_out.data(), sizeof(float), (size_t)W * H, f) != (size_t)W * H) {
         fprintf(stderr, "Bad data in %s\n", data_path);
         return 1;
     }
     fclose(f);
 
-    const bool shr = getenv("SHR") != nullptr;  // cheap >>2 consumer (match bench/rdom)
 
     // Honor HL_NUM_THREADS so oneTBB can be measured single-core (=1, fair vs the
     // single-core inductive/non-inductive benches) or multi-core (unset/=cores,
@@ -102,23 +97,24 @@ int main(int argc, char **argv) {
     if (nth > 0)
         gc.reset(new tbb::global_control(tbb::global_control::max_allowed_parallelism, nth));
 
-    fused_prefix_mean_tbb(inp.data(), out.data(), W, H, shr);  // warm-up.
+    fused_prefix_mean_tbb(inp.data(), out.data(), W, H);  // warm-up.
 
-    hb::Stats s_bench = hb::bench([&] { fused_prefix_mean_tbb(inp.data(), out.data(), W, H, shr); });
+    hb::Stats s_bench = hb::bench([&] { fused_prefix_mean_tbb(inp.data(), out.data(), W, H); });
 
+    // Compiled with fast-math, the division may go by a reciprocal, so the
+    // comparison allows an ulp or so.
     size_t n_mismatch = 0;
     for (size_t i = 0; i < out.size(); i++) {
-        if (out[i] != halide_out[i]) n_mismatch++;
+        if (std::abs(out[i] - halide_out[i]) > 1e-6f * std::abs(halide_out[i])) n_mismatch++;
     }
 
     // Third-party parallel baseline: oneTBB parallel_scan fuses the scan and the
     // division, so no prefix array is materialized (footprint ~O(1) per thread).
     char note[128];
     snprintf(note, sizeof(note),
-             "Row prefix-sum then %s  W=%d H=%d  (3rd-party: oneTBB parallel_scan)",
-             shr ? ">>2" : "/(x+1)", W, H);
+             "Row prefix-sum then /(x+1)  W=%d H=%d  (3rd-party: oneTBB parallel_scan)", W, H);
     hb::print_spec_header("prefixsum_bench_tbb", "host", note);
-    hb::print_row(shr ? "oneTBB parallel_scan (>>2)" : "oneTBB parallel_scan (fused)", s_bench,
+    hb::print_row("oneTBB parallel_scan (fused)", s_bench,
                   (W * (double)H) / (s_bench.min * 1e3), "Mpix/s",
                   0.0, (double)n_mismatch, n_mismatch == 0);
 

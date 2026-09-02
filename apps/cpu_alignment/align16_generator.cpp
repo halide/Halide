@@ -163,7 +163,7 @@ public:
             // The direction plane is the state's last element, copied out
             // row by row as the window slides.
             dir.compute_at(path, bo).store_at(path, bo).reorder(b, j, i).vectorize(b, VEC);
-            if (par && stream) {
+            if (stream) {
                 // Written once per block and read back at 2N of its N^2
                 // cells: streaming stores skip read-for-ownership.
                 dir.stream_stores();

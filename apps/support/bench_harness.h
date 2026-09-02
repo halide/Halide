@@ -61,9 +61,10 @@ struct Stats {
 // runs, per body. A trial is `batch` bodies followed by `finish`, timed
 // together and divided by the batch; the default is one body and no finish.
 inline Stats bench(const std::function<void()> &body, int batch,
-                   const std::function<void()> &finish) {
-    const int warmup = env_int("HB_WARMUP", 3);
-    const int trials = std::max(1, env_int("HB_TRIALS", 30));
+                   const std::function<void()> &finish, int warmup = -1, int trials = -1) {
+    if (warmup < 0) warmup = env_int("HB_WARMUP", 3);
+    if (trials < 0) trials = env_int("HB_TRIALS", 30);
+    trials = std::max(1, trials);
     batch = std::max(1, env_int("HB_BATCH", batch));
     auto trial = [&]() {
         for (int i = 0; i < batch; i++)
@@ -97,8 +98,13 @@ inline Stats bench(const std::function<void()> &body) {
 
 // The best time in seconds, for runners that report their own rows.
 inline double bench_s(const std::function<void()> &body, int batch = 1,
-                      const std::function<void()> &finish = nullptr) {
-    return bench(body, batch, finish).min * 1e-3;
+                      const std::function<void()> &finish = nullptr,
+                      int warmup = -1, int trials = -1) {
+    return bench(body, batch, finish, warmup, trials).min * 1e-3;
+}
+// One untimed-free single shot, for interleaved diagnostic rounds.
+inline double bench_once_s(const std::function<void()> &body) {
+    return bench(body, 1, nullptr, 0, 1).min * 1e-3;
 }
 
 // Machine + protocol provenance, emitted once per result file so §6.1 of the

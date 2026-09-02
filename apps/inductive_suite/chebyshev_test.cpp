@@ -123,59 +123,59 @@ double rel_error(const std::vector<double> &x, const std::vector<double> &y) {
 // nested in the iteration index; they differ only in how the iterate history is
 // stored: inductive folds column storage to 3 via fold_storage, non-inductive
 // builds the same mod-3 ring by hand and materializes.
-Func build_cheb(bool inductive, Buffer<double> &A, Buffer<double> &b,
-                Buffer<double> &alpha, Buffer<double> &omega, int Miter,
+Func build_cheb(bool inductive, Buffer<float> &A, Buffer<float> &b,
+                Buffer<float> &alpha, Buffer<float> &omega, int Miter,
                 int fold_k = 3, bool materialize = false) {
     Var t("t"), k("k");
     Expr n = A.dim(0).extent();
-    Func x(Float(64), inductive ? "x_i" : (materialize ? "x_m" : "x_n"));
+    Func x(Float(32), inductive ? "x_i" : (materialize ? "x_m" : "x_n"));
     if (!inductive && materialize) {
         // Non-inductive FULL materialize: store every one of the M+1 iterate
         // columns (index k directly, no mod-3 ring), so the whole trajectory
         // lives in DRAM. This is the true O(M*n) non-inductive baseline that the
         // fold ablation (unfolded -> folded) reduces; the mod-3 ring below is a
         // hand-optimized non-inductive form that already keeps only 3 columns.
-        Func X(Float(64), "Xmat");
-        X(t, k) = cast<double>(0);
+        Func X(Float(32), "Xmat");
+        X(t, k) = cast<float>(0);
         RDom r(0, n, 0, n, 1, Miter, "r");
         Expr km1 = r.z - 1, km2 = max(0, r.z - 2);
-        Expr once = (Expr(1.0) + omega(km1)) * X(r.x, km1) - omega(km1) * X(r.x, km2) +
+        Expr once = (Expr(1.0f) + omega(km1)) * X(r.x, km1) - omega(km1) * X(r.x, km2) +
                     alpha(km1) * b(r.x);
         Expr matvec = alpha(km1) * A(r.x, r.y) * X(r.y, km1);
         X(r.x, r.z) = select(r.y == 0, once - matvec, X(r.x, r.z) - matvec);
         x(t) = X(t, Miter);
         X.compute_root();
-        X.update(0).allow_race_conditions().vectorize(r.x, 4);
+        X.update(0).allow_race_conditions().vectorize(r.x, 16);
     } else if (inductive) {
-        Func X(Float(64), "X");
-        X(t, k) = cast<double>(0);
+        Func X(Float(32), "X");
+        X(t, k) = cast<float>(0);
         RDom r(0, n, 0, n, "r");
         Expr km1 = max(0, k - 1), km2 = max(0, k - 2);
-        Expr once = (Expr(1.0) + omega(km1)) * X(r.x, km1) - omega(km1) * X(r.x, km2) +
+        Expr once = (Expr(1.0f) + omega(km1)) * X(r.x, km1) - omega(km1) * X(r.x, km2) +
                     alpha(km1) * b(r.x);
-        X(r.x, k) = select(k <= 0, cast<double>(0),
-                           X(r.x, k) + cast<double>(r.y == 0) * once -
+        X(r.x, k) = select(k <= 0, cast<float>(0),
+                           X(r.x, k) + cast<float>(r.y == 0) * once -
                                alpha(km1) * A(r.x, r.y) * X(r.y, km1));
         RDom rk(0, Miter + 1, "rk");
-        x(t) = cast<double>(0);
-        x(t) += select(rk == Miter, X(t, rk), cast<double>(0));
+        x(t) = cast<float>(0);
+        x(t) += select(rk == Miter, X(t, rk), cast<float>(0));
         x.update(0).reorder(t, rk);
         // fold_k = 3 folds the iterate history to a 3-column window; fold_k = M+1
         // pins the full extent (the unfolded ablation), holding fusion fixed.
         X.compute_at(x, rk).store_root().fold_storage(k, fold_k);
-        X.update(0).allow_race_conditions().vectorize(r.x, 4);
+        X.update(0).allow_race_conditions().vectorize(r.x, 16);
     } else {
-        Func X(Float(64), "Xni");
-        X(t, k) = cast<double>(0);
+        Func X(Float(32), "Xni");
+        X(t, k) = cast<float>(0);
         RDom r(0, n, 0, n, 1, Miter, "r");
         Expr cur = r.z % 3, c1 = (r.z + 2) % 3, c2 = (r.z + 1) % 3, km1 = r.z - 1;
-        Expr once = (Expr(1.0) + omega(km1)) * X(r.x, c1) - omega(km1) * X(r.x, c2) +
+        Expr once = (Expr(1.0f) + omega(km1)) * X(r.x, c1) - omega(km1) * X(r.x, c2) +
                     alpha(km1) * b(r.x);
         Expr matvec = alpha(km1) * A(r.x, r.y) * X(r.y, c1);
         X(r.x, cur) = select(r.y == 0, once - matvec, X(r.x, cur) - matvec);
         x(t) = X(t, Miter % 3);
         X.compute_root();
-        X.update(0).allow_race_conditions().vectorize(r.x, 4);
+        X.update(0).allow_race_conditions().vectorize(r.x, 16);
     }
     return x;  // output bounds come from the realize target buffer
 }
@@ -194,12 +194,20 @@ int main(int argc, char **argv) {
     make_coeffs(lmin, lmax, M, alpha_h, omega_h);
     std::vector<double> ref = host_chebyshev(Ah, n, bh, alpha_h, omega_h, M);
 
-    // A is column-major (dim0 = row, fastest), matching make_spd.
-    Buffer<double> A(Ah.data(), n, n);
-    Buffer<double> b(bh.data(), n);
-    Buffer<double> alpha(alpha_h.data(), M);
-    Buffer<double> omega(omega_h.data(), M);
-    Buffer<double> x_inductive(n), x_unfold(n), x_ring(n), x_mat(n);
+    // The system, coefficients and solvers are single precision; the setup
+    // and the reference solve above stay in double. A is column-major
+    // (dim0 = row, fastest), matching make_spd.
+    Buffer<float> A(n, n), b(n), alpha(M), omega(M);
+    for (int j = 0; j < n; j++)
+        for (int i = 0; i < n; i++)
+            A(i, j) = (float)Ah[(size_t)j * n + i];
+    for (int i = 0; i < n; i++)
+        b(i) = (float)bh[i];
+    for (int k = 0; k < M; k++) {
+        alpha(k) = (float)alpha_h[k];
+        omega(k) = (float)omega_h[k];
+    }
+    Buffer<float> x_inductive(n), x_unfold(n), x_ring(n), x_mat(n);
 
     // Four variants:
     //   non-inductive FULL materialize (Xmat) : true O(M*n) DRAM trajectory.
@@ -242,8 +250,10 @@ int main(int argc, char **argv) {
     printf("error vs exact:   inductive %g   unfold %g   ring %g   materialize %g\n", err_i, err_u, err_n, err_m);
     printf("error vs C++ ref: inductive %g   ring %g\n", ref_i, ref_n);
 
-    bool ok = !(diff > 1e-9 || diffu > 1e-9 || diffm > 1e-9 || err_i > 1e-6 || err_n > 1e-6 ||
-                ref_i > 1e-9 || ref_n > 1e-9);
+    // Single precision against a double reference: the forms agree with each
+    // other to rounding, and all sit within float's reach of the solution.
+    bool ok = !(diff > 1e-5 || diffu > 1e-5 || diffm > 1e-5 || err_i > 1e-4 || err_n > 1e-4 ||
+                ref_i > 1e-4 || ref_n > 1e-4);
     // Footprint (state_MB) is the measured peak internal scratch of each variant.
     char note[160];
     snprintf(note, sizeof(note),

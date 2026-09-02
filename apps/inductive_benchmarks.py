@@ -137,7 +137,9 @@ def cpu_alignment(par):
 def kalman_ll(threads):
     d = APPS / "kalman_ll"
     sh("make -s clean && make -s bin/ar_ll", d)
-    B, T = 256, 16384
+    # A task is two vectors of series, 32 in float, so the threaded row takes
+    # enough series to give every core work.
+    B, T = (1024 if threads > 1 else 256), 16384
     out = sh(f"bin/ar_ll {B} {T}", d, env={"HL_NUM_THREADS": str(threads)}, pin=threads == 1,
              log=LOGS / f"kalman_ll_t{threads}.txt")
     r = hb_rows(out)

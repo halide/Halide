@@ -23,7 +23,6 @@ int main(int argc, char **argv) {
     int W = argc > 1 ? atoi(argv[1]) : 65536;
     int H = argc > 2 ? atoi(argv[2]) : 32;
     const char *data_path = argc > 3 ? argv[3] : "/tmp/prefixsum_bench_data.bin";
-    const bool shr = getenv("SHR") != nullptr;  // cheap >>2 consumer (match bench/tbb)
 
     try {
         Var x("x"), y("y");
@@ -36,14 +35,14 @@ int main(int argc, char **argv) {
         prefix_sum(0, y) = input(0, y);
         prefix_sum(r, y) = prefix_sum(r - 1, y) + input(r, y);
 
-        output(x, y) = shr ? (prefix_sum(x, y) >> 2) : (prefix_sum(x, y) / (x + 1));
+        output(x, y) = cast<float>(prefix_sum(x, y)) / cast<float>(x + 1);
 
         prefix_sum.compute_at(output, y);
         // Parallel over rows (matches oneTBB / the inductive fold); HL_NUM_THREADS=1
         // makes it serial, so one binary covers both the 1-core and multi-core cells.
         output.bound(x, 0, W).bound(y, 0, H).parallel(y);
 
-        Buffer<int> result(W, H);
+        Buffer<float> result(W, H);
         output.realize(result);  // warm-up / JIT compile.
 
         hb::Stats s_bench = hb::bench([&] { output.realize(result); });
@@ -59,9 +58,10 @@ int main(int argc, char **argv) {
         if (f) {
             int32_t header[2];
             fread(header, sizeof(int32_t), 2, f);
-            std::vector<int32_t> in_flat(W * H), halide_out(W * H);
+            std::vector<int32_t> in_flat(W * H);
+            std::vector<float> halide_out(W * H);
             fread(in_flat.data(), sizeof(int32_t), W * H, f);
-            fread(halide_out.data(), sizeof(int32_t), W * H, f);
+            fread(halide_out.data(), sizeof(float), W * H, f);
             fclose(f);
 
             n_mismatch = 0;
@@ -75,10 +75,10 @@ int main(int argc, char **argv) {
         const double fp_unfold = (double)W * H * 4;
         char note[160];
         snprintf(note, sizeof(note),
-                 "Row prefix-sum then %s  W=%d H=%d  (correctness vs inductive dump)  |  unfolded fp/LLC=%.3f",
-                 shr ? ">>2" : "/(x+1)", W, H, hb::footprint_over_llc(fp_unfold));
+                 "Row prefix-sum then /(x+1)  W=%d H=%d  (correctness vs inductive dump)  |  unfolded fp/LLC=%.3f",
+                 W, H, hb::footprint_over_llc(fp_unfold));
         hb::print_spec_header("prefixsum_bench_rdom", "host", note);
-        hb::print_row(shr ? "non-inductive mat (>>2 consumer)" : "non-inductive (RDom, materialize row)", s_bench,
+        hb::print_row("non-inductive (RDom, materialize row)", s_bench,
                       (W * (double)H) / (s_bench.min * 1e3), "Mpix/s",
                       meas_bytes, (double)(n_mismatch < 0 ? 0 : n_mismatch), n_mismatch == 0, "", fp_unfold);
 

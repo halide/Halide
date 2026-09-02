@@ -801,6 +801,10 @@ private:
             sg.update().split(RVar("rsh$x"), hso, hsi, std::max(1, hpg / 8));
             Func sgp = sg.update().rfactor(hso, hb);
             Func sgpw = sgp.in();
+            // The same kernel in both builds; left to itself the RDom build's
+            // takes 255 registers to the inductive build's 168 and halves its
+            // occupancy.
+            sgpw.gpu_max_registers(168);
             sgpw.compute_root()
                 .tile(j, i, rxi, ryi, tile, tile)
                 .split(i, io, ii, 1)

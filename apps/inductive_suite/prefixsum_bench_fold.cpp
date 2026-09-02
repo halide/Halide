@@ -36,11 +36,6 @@ int main(int argc, char **argv) {
     int S = argc > 2 ? atoi(argv[2]) : 32;       // independent spatial lanes
     int L = argc > 3 ? atoi(argv[3]) : 4096;     // chunk length
     const char *data_path = argc > 4 ? argv[4] : "/tmp/prefixsum_bench_data.bin";
-    // Post-scan consumer: default is the running mean /(t+1) (a hardware integer
-    // divide by a runtime-variable divisor -- expensive, and it dominates the
-    // measurement). SHR=1 selects a cheap >>2 (arithmetic shift = floor-divide by
-    // 4) instead, which isolates the scan/fold cost from the divide.
-    const bool shr = getenv("SHR") != nullptr;
 
     if (W % L != 0) {  // keep the chunking exact; round W down to a multiple of L.
         W = (W / L) * L;
@@ -72,7 +67,8 @@ int main(int argc, char **argv) {
         local(j, k, s) = select(j <= 0, input(0, k, s),
                                 likely(local(j - 1, k, s) + input(j, k, s)));
         Expr scanned = carry(k, s) + local(j, k, s);
-        output(j, k, s) = shr ? (scanned >> 2) : (scanned / (k * L + j + 1));
+        // The running mean, in single precision: the sum stays exact in int32.
+        output(j, k, s) = cast<float>(scanned) / cast<float>(k * L + j + 1);
 
         // Parallelize over the time dimension (chunk axis k), placed OUTERMOST so
         // the whole grid is one parallel region (one fork/join), with the lanes
@@ -83,7 +79,7 @@ int main(int argc, char **argv) {
         local.compute_at(output, j).store_at(output, k).fold_storage(j, hb::fold_factor(1, L));
         output.bound(j, 0, L).bound(k, 0, C).bound(s, 0, S).reorder(j, s, k).parallel(k);  // k outermost parallel; s serial inside
 
-        Buffer<int> result(L, C, S);
+        Buffer<float> result(L, C, S);
         output.realize(result);  // warm-up / JIT compile.
 
         hb::Stats s_bench = hb::bench([&] { output.realize(result); });
@@ -96,35 +92,34 @@ int main(int argc, char **argv) {
         const double fp_unfold = (double)W * S * 4;
         char note[200];
         snprintf(note, sizeof(note),
-                 "Time prefix-sum then %s  W=%d S=%d L=%d C=%d  (2-stage scan, parallel over time chunks)  |  unfolded fp/LLC=%.3f",
-                 shr ? ">>2 (cheap consumer)" : "/(t+1) (running mean)", W, S, L, C,
+                 "Time prefix-sum then /(t+1)  W=%d S=%d L=%d C=%d  (2-stage scan, parallel over time chunks)  |  unfolded fp/LLC=%.3f",
+                 W, S, L, C,
                  hb::footprint_over_llc(fp_unfold));
         hb::print_spec_header("prefixsum_bench_fold", "host", note);
 
         // Correctness vs a straight serial per-lane prefix sum. Inputs are bounded
-        // (&255) so the running sum never overflows int32 and stays non-negative --
-        // both `/` and `>>` are then plain floor divides, matching Halide exactly.
+        // (&255) so the running sum never overflows int32.
         size_t n_mismatch = 0;
         for (int ss = 0; ss < S; ss++) {
             int32_t run = 0;
             for (int tt = 0; tt < W; tt++) {
                 run += (tt + ss) & 255;
-                int32_t expect = shr ? (run >> 2) : (run / (tt + 1));
+                float expect = (float)run / (float)(tt + 1);
                 if (result(tt % L, tt / L, ss) != expect) n_mismatch++;
             }
         }
         // UNFOLD=1 pins the per-chunk local fold to L: same fusion, materializes
         // the O(W*S) prefix trajectory -> report the unfolded label + footprint.
         const bool unfolded = getenv("UNFOLD") != nullptr;
-        const char *label = unfolded ? (shr ? "2-stage UNFOLDED (>>2 consumer)" : "inductive 2-stage UNFOLDED (fold j -> L)") : (shr ? "2-stage FOLDED (>>2 consumer)" : "inductive 2-stage FOLDED (parallel time)");
+        const char *label = unfolded ? "inductive 2-stage UNFOLDED (fold j -> L)" : "inductive 2-stage FOLDED (parallel time)";
         hb::print_row(label, s_bench,
                       (W * (double)S) / (s_bench.min * 1e3), "Mpix/s",
                       unfolded ? fp_unfold : bytes_fold, (double)n_mismatch, n_mismatch == 0, "", fp_unfold);
 
-        // Dump input+output for the oneTBB validator ONLY in the default /(t+1)
-        // mode -- the >>2 output would not match oneTBB's running-mean reference.
-        if (!shr) {
-            std::vector<int32_t> in_flat((size_t)W * S), out_flat((size_t)W * S);
+        // Dump input+output for the oneTBB validator.
+        {
+            std::vector<int32_t> in_flat((size_t)W * S);
+            std::vector<float> out_flat((size_t)W * S);
             for (int ss = 0; ss < S; ss++)
                 for (int tt = 0; tt < W; tt++) {
                     in_flat[(size_t)ss * W + tt] = (tt + ss) & 255;
@@ -134,7 +129,7 @@ int main(int argc, char **argv) {
             int32_t header[2] = {W, S};
             fwrite(header, sizeof(int32_t), 2, f);
             fwrite(in_flat.data(), sizeof(int32_t), (size_t)W * S, f);
-            fwrite(out_flat.data(), sizeof(int32_t), (size_t)W * S, f);
+            fwrite(out_flat.data(), sizeof(float), (size_t)W * S, f);
             fclose(f);
         }
 

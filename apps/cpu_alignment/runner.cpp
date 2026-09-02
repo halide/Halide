@@ -274,7 +274,7 @@ int main(int argc, char **argv) {
             if (std::string(f.name) != only) continue;
             double best = 1e30;
             for (int r = 0; r < 3; r++) {
-                double t = hb::bench_s([&]() { f.fn(query, target, path); });
+                double t = hb::bench_once_s([&]() { f.fn(query, target, path); });
                 if (!check(f.name)) return 1;
                 best = std::min(best, t);
             }
@@ -396,18 +396,18 @@ int main(int argc, char **argv) {
         std::vector<double> ta, t16, tk, tp;
         printf("  interleaved rounds, fill+cigar (int8 ind | int16 ind | ksw2 sse | parasail):\n");
         for (int r = 0; r < rounds; r++) {
-            double a = hb::bench_s([&]() {
+            double a = hb::bench_once_s([&]() {
                 align8_ind(query, target, path);
                 compaction_sweep();
             });
-            double a16 = hb::bench_s([&]() {
+            double a16 = hb::bench_once_s([&]() {
                 align16_ind(query, target, path);
                 compaction_sweep();
             });
-            double k = hb::bench_s([&]() { ksw2_sweep(true); });
+            double k = hb::bench_once_s([&]() { ksw2_sweep(true); });
             double p = 0;
 #ifdef HAVE_PARASAIL
-            p = hb::bench_s([&]() { parasail_sweep(); });
+            p = hb::bench_once_s([&]() { parasail_sweep(); });
 #endif
             ta.push_back(a);
             t16.push_back(a16);

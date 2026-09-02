@@ -94,8 +94,10 @@ int main(int argc, char **argv) {
             Expr obs_t = Halide::Internal::promise_clamped(
                 obs(Halide::Internal::promise_clamped(t, 0, T - 1)), 0, M - 1);
 
-            Func state({Float(32), Int(32)}, 2, inductive ? "state_i" : "state_n");
-            state(s, t) = {neg_inf, 0};
+            // The argmax is a byte: it indexes the states, and the backpointer
+            // plane, one per state per step, is what the 16-state row writes.
+            Func state({Float(32), UInt(8)}, 2, inductive ? "state_i" : "state_n");
+            state(s, t) = {neg_inf, cast<uint8_t>(0)};
 
             // Summed in the reference's order, so ties fall the same way.
             auto candidate = [&](Expr prev_score, Expr out, Expr in, Expr step) {
@@ -107,35 +109,35 @@ int main(int argc, char **argv) {
                 // Inductive in t: pure Var t, base case at t<=0, argmax over r.
                 Expr cand = candidate(state(r.y, t - 1)[0], r.x, r.y, t);
                 Expr cur = state(r.x, t)[0];
-                Tuple step = select(cand >= cur, Tuple(cand, r.y), state(r.x, t));
+                Tuple step = select(cand >= cur, Tuple(cand, cast<uint8_t>(r.y)), state(r.x, t));
                 state(r.x, t) = select(t <= 0,
-                                       Tuple(log_init(r.x) + log_emit(r.x, obs_0), 0),
+                                       Tuple(log_init(r.x) + log_emit(r.x, obs_0), cast<uint8_t>(0)),
                                        Tuple(likely(step[0]), likely(step[1])));
                 state.update(0).allow_race_conditions().vectorize(r.x);
             } else {
                 // Non-inductive: explicit init at t=0, then an RDom scan over time.
                 RDom ri(0, S, "ri");
-                state(ri, 0) = {log_init(ri) + log_emit(ri, obs_0), 0};
+                state(ri, 0) = {log_init(ri) + log_emit(ri, obs_0), cast<uint8_t>(0)};
                 RDom rr(0, S, 0, S, 1, T, "rr");  // rr.x=state, rr.y=prev, rr.z=time
                 Expr ot = clamp(obs(min(rr.z, T - 1)), 0, M - 1);
                 Expr candn = select(rr.z >= T, state(rr.y, rr.z - 1)[0],
                                     state(rr.y, rr.z - 1)[0] + log_trans(rr.x, rr.y) + log_emit(rr.x, ot));
                 state(rr.x, rr.z) = select(candn >= state(rr.x, rr.z)[0],
-                                           Tuple(candn, rr.y), state(rr.x, rr.z));
+                                           Tuple(candn, cast<uint8_t>(rr.y)), state(rr.x, rr.z));
                 state.update(0).vectorize(ri);
                 state.update(1).allow_race_conditions().vectorize(rr.x);
             }
 
             // The backpointers, materialized for the traceback: a copy of the
             // argmax component, one row per step, while the scores fold.
-            Func prev(Int(32), 2, inductive ? "prev_i" : "prev_n");
+            Func prev(UInt(8), 2, inductive ? "prev_i" : "prev_n");
             prev(s, t) = state(s, t)[1];
 
             Func path(Int(32), 1, inductive ? "path_i" : "path_n");
             path(t) = undef<int>();
-            path(T - 1) = prev(0, T);
+            path(T - 1) = cast<int>(prev(0, T));
             RDom rt(1, T - 1, "rt");
-            path(T - 1 - rt) = prev(clamp(path(T - rt), 0, S - 1), T - rt);
+            path(T - 1 - rt) = cast<int>(prev(clamp(path(T - rt), 0, S - 1), T - rt));
 
             prev.bound(s, 0, S).bound(t, 0, T + 1);
             if (inductive) {
