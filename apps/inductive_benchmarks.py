@@ -35,14 +35,24 @@ NCORES = os.cpu_count() // 2 or 1  # physical cores: parallel configs use one th
 # any application that reuses its work buffers gets. Without the library the
 # numbers change materially, so its absence is an error, not a fallback.
 JEMALLOC = "/lib/x86_64-linux-gnu/libjemalloc.so.2"
-MALLOC_CONF = "oversize_threshold:0,dirty_decay_ms:-1,muzzy_decay_ms:-1"
+# thp:always backs every allocation with transparent huge pages where the
+# kernel allows (this box has them in madvise mode): the serial forms that
+# stream gigabyte signals otherwise vary by 30% run to run with where the
+# 4 KB pages land, and huge pages take that spread away.
+MALLOC_CONF = "oversize_threshold:0,dirty_decay_ms:-1,muzzy_decay_ms:-1,thp:always"
+# Single-threaded rows run pinned to one core, so that which chiplet the
+# thread lands on, and any migration during the run, is not part of the
+# measurement. The machine is one NUMA node, so there is no memory to place.
+PIN_CORE = 4
 
 
-def sh(cmd, cwd, env=None, log=None, check=True):
+def sh(cmd, cwd, env=None, log=None, check=True, pin=False):
     e = dict(os.environ)
     e["LD_PRELOAD"] = JEMALLOC
     e["MALLOC_CONF"] = MALLOC_CONF
     e.update(env or {})
+    if pin:
+        cmd = f"taskset -c {PIN_CORE} {cmd}"
     p = subprocess.run(cmd, shell=True, cwd=str(cwd), env=e,
                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     if log:
@@ -78,10 +88,10 @@ def cpu_biquads(par):
     knobs = dict(SECTIONS=8, CHANNELS=256 if par else 32, SAMPLES=1 << 20 if par else 8 << 20, PAR=str(par).lower())
     kv = " ".join(f"{k}={v}" for k, v in knobs.items())
     sh("make -s clean", d)
-    out = sh(f"make -s {kv} test", d, log=LOGS / f"cpu_biquads_par{par}.txt")
+    out = sh(f"make -s {kv} test", d, log=LOGS / f"cpu_biquads_par{par}.txt", pin=not par)
     scipy = None
     if VENV.exists() and not par:  # scipy is single-threaded; compare it in the serial config
-        so = sh(f"{VENV} sosfilt_bench.py {knobs['CHANNELS']} {knobs['SAMPLES']} {knobs['SECTIONS']}", d)
+        so = sh(f"{VENV} sosfilt_bench.py {knobs['CHANNELS']} {knobs['SAMPLES']} {knobs['SECTIONS']}", d, pin=True)
         scipy = us_row(so, "scipy.sosfilt")
     # Intel IPP's multi-channel IIR (ippsIIR_32f_P), threaded across channels
     # in the parallel config, when the runner was built with it.
@@ -101,10 +111,10 @@ def cpu_rng(par):
     knobs = dict(LANES=1024 if par else 32, STEPS=131072 if par else 1 << 22, PAR=str(par).lower())
     kv = " ".join(f"{k}={v}" for k, v in knobs.items())
     sh("make -s clean", d)
-    out = sh(f"make -s {kv} test", d, log=LOGS / f"cpu_rng_par{par}.txt")
+    out = sh(f"make -s {kv} test", d, log=LOGS / f"cpu_rng_par{par}.txt", pin=not par)
     julia = None
     if JULIA.exists() and not par:  # Julia's rand! is single-threaded
-        jo = sh(f"{JULIA} julia_bench.jl {2 * knobs['LANES']} {knobs['STEPS']}", d)
+        jo = sh(f"{JULIA} julia_bench.jl {2 * knobs['LANES']} {knobs['STEPS']}", d, pin=True)
         julia = us_row(jo, "julia xoshiro")
     bn, bt = best([("hand AVX-512 kernel", us_row(out, "simd C++")), ("Julia rand!", julia)])
     return dict(params=f"{knobs['LANES']} streams x {knobs['STEPS']} steps, {'all cores' if par else '1 thread'}",
@@ -116,7 +126,7 @@ def cpu_alignment(par):
     knobs = dict(QLEN=1024, TLEN=1024, BATCH=4096 if par else 128, PAR=str(par).lower())
     kv = " ".join(f"{k}={v}" for k, v in knobs.items())
     sh("make -s clean", d)
-    out = sh(f"make -s {kv} test", d, log=LOGS / f"cpu_alignment_par{par}.txt")
+    out = sh(f"make -s {kv} test", d, log=LOGS / f"cpu_alignment_par{par}.txt", pin=not par)
     comp = us_row(out, "compaction") or 0.0
     bn, bt = best([("ksw2 (minimap2 kernel)", us_row(out, "ksw2 sse")), ("parasail", us_row(out, "parasail"))])
     return dict(params=f"1024x1024 x {knobs['BATCH']} pairs, {'all cores' if par else '1 thread'}, fill+traceback+cigar",
@@ -128,7 +138,7 @@ def kalman_ll(threads):
     d = APPS / "kalman_ll"
     sh("make -s clean && make -s bin/ar_ll", d)
     B, T = 256, 16384
-    out = sh(f"bin/ar_ll {B} {T}", d, env={"HL_NUM_THREADS": str(threads)},
+    out = sh(f"bin/ar_ll {B} {T}", d, env={"HL_NUM_THREADS": str(threads)}, pin=threads == 1,
              log=LOGS / f"kalman_ll_t{threads}.txt")
     r = hb_rows(out)
     return dict(params=f"{B} series x {T} steps, {threads} thread{'s' if threads > 1 else ''}",
@@ -144,7 +154,7 @@ def suite_bin(name):
 
 def viterbi(S, M, T):
     out = sh(f"{suite_bin('viterbi_log')} {S} {M} {T}", APPS / "inductive_suite",
-             env={"HL_NUM_THREADS": "1"}, log=LOGS / f"viterbi_{S}_{M}_{T}.txt")
+             env={"HL_NUM_THREADS": "1"}, log=LOGS / f"viterbi_{S}_{M}_{T}.txt", pin=True)
     r = hb_rows(out)
     return dict(params=f"{S} states, {M} symbols, T={T}, 1 thread",
                 ind=r.get("inductive FOLDED (fold t -> 2)"), rdom=r.get("non-inductive (materialize)"),
@@ -153,7 +163,7 @@ def viterbi(S, M, T):
 
 def chebyshev(n, M):
     out = sh(f"{suite_bin('chebyshev_test')} {n} {M}", APPS / "inductive_suite",
-             env={"HL_NUM_THREADS": "1"}, log=LOGS / f"chebyshev_{n}_{M}.txt")
+             env={"HL_NUM_THREADS": "1"}, log=LOGS / f"chebyshev_{n}_{M}.txt", pin=True)
     r = hb_rows(out)
     return dict(params=f"n={n} dense SPD, {M} iterations, 1 thread (in-cache control)",
                 ind=r.get("inductive FOLDED (fold -> 3 cols)"),
@@ -166,7 +176,7 @@ def ode(D, B, T):
     if not b.exists():
         return dict(params=f"D={D}, B={B}, T={T}", ind=None, rdom=None,
                     base_name="Boost.odeint (needs libboost-dev)", base=None, skipped=True)
-    out = sh(f"{b} {D} {B} {T}", APPS / "inductive_suite", env={"HL_NUM_THREADS": "1"},
+    out = sh(f"{b} {D} {B} {T}", APPS / "inductive_suite", env={"HL_NUM_THREADS": "1"}, pin=True,
              log=LOGS / f"ode_{D}_{B}_{T}.txt")
     r = hb_rows(out)
     return dict(params=f"Allen-Cahn D={D}, batch {B}, T={T}, 1 thread",
@@ -177,14 +187,15 @@ def ode(D, B, T):
 def prefixsum(W, H, threads):
     env = {"HL_NUM_THREADS": str(threads)}
     d = APPS / "inductive_suite"
-    ind = hb_rows(sh(f"{suite_bin('prefixsum_bench')} {W} {H}", d, env=env,
+    pin = threads == 1
+    ind = hb_rows(sh(f"{suite_bin('prefixsum_bench')} {W} {H}", d, env=env, pin=pin,
                      log=LOGS / f"prefixsum_ind_{W}_{H}_t{threads}.txt"))
-    rd = hb_rows(sh(f"{suite_bin('prefixsum_bench_rdom')} {W} {H}", d, env=env,
+    rd = hb_rows(sh(f"{suite_bin('prefixsum_bench_rdom')} {W} {H}", d, env=env, pin=pin,
                     log=LOGS / f"prefixsum_rdom_{W}_{H}_t{threads}.txt"))
     tbb = d / "bin/prefixsum_bench_tbb"
     tb = None
     if tbb.exists():
-        tb = hb_rows(sh(f"{tbb}", d, env=env)).get("oneTBB parallel_scan (fused)")
+        tb = hb_rows(sh(f"{tbb}", d, env=env, pin=pin)).get("oneTBB parallel_scan (fused)")
     return dict(params=f"{W} x {H} rows, running-mean consumer, {threads} thread{'s' if threads > 1 else ''}",
                 ind=ind.get("inductive FOLDED (fold x -> 1 accum)"),
                 rdom=rd.get("non-inductive (RDom, materialize row)"),
@@ -350,8 +361,10 @@ def main():
         "decay), which is what an application reusing its work buffers gets. It matters where the scratch "
         "is large: without retention the ode RDom row is 23 ms rather than 7, and every alignment form pays "
         "about 230 ms of first-touch faults on its 64 MB per-task direction planes; the baselines are within "
-        "noise either way, scipy a few percent faster. The Python baselines report the best sample, as "
-        "Halide's harness does.\n\n")
+        "noise either way, scipy a few percent faster. The same allocator backs everything with transparent "
+        "huge pages, and single-threaded rows run pinned to one core: the serial forms that stream gigabyte "
+        "signals otherwise vary by 30% from run to run with where their pages land. The Python baselines "
+        "report the best sample, as Halide's harness does.\n\n")
     Path(args.out).write_text(notes + table + "\n")
     print(f"\nwritten to {args.out}")
 

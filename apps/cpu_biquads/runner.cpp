@@ -139,8 +139,16 @@ double check(const Buffer<float> &x, const Buffer<float> &sos,
 }  // namespace
 
 
+// The signals: one 64-byte-aligned block each, shared by every variant
+// whose layout is channels innermost (the Halide forms, and the library
+// cascade when its block is the whole channel set).
+float *signal_alloc() {
+    return (float *)aligned_alloc(64, (size_t)C * S * sizeof(float));
+}
+
 int main(int argc, char **argv) {
-    Buffer<float> x(C, S), y(C, S), sos(6, N);
+    float *xmem = signal_alloc(), *ymem = signal_alloc();
+    Buffer<float> x(xmem, C, S), y(ymem, C, S), sos(6, N);
     make_sos(sos);
     fill_input(x);
 
@@ -149,25 +157,26 @@ int main(int argc, char **argv) {
 
     biquads_ind(x, sos, y);
     check(x, sos, y, "inductive");
-    double t_ind = benchmark(3, 1, [&]() { biquads_ind(x, sos, y); });
+    double t_ind = benchmark(10, 1, [&]() { biquads_ind(x, sos, y); });
 
     biquads_unf(x, sos, y);
     check(x, sos, y, "unfolded");
-    double t_unf = benchmark(3, 1, [&]() { biquads_unf(x, sos, y); });
+    double t_unf = benchmark(10, 1, [&]() { biquads_unf(x, sos, y); });
 
     biquads_rdom(x, sos, y);
     check(x, sos, y, "rdom");
-    double t_rdom = benchmark(3, 1, [&]() { biquads_rdom(x, sos, y); });
+    double t_rdom = benchmark(10, 1, [&]() { biquads_rdom(x, sos, y); });
 
 #ifdef HAVE_IPP
     // Intel IPP's multi-channel IIR: one biquad-cascade state per channel
     // (the same sos taps), all channels in one ippsIIR_32f_P call over
     // planar signals. Under PAR the channels are dealt across threads,
     // each thread making its own call over its share.
-    std::vector<std::vector<float>> xin(C, std::vector<float>(S)), yout(C, std::vector<float>(S));
+    // Planar copies of the signal, one aligned block each.
+    float *xin = signal_alloc(), *yout = signal_alloc();
     for (int c = 0; c < C; c++) {
         for (int n = 0; n < S; n++) {
-            xin[c][n] = x(c, n);
+            xin[(size_t)c * S + n] = x(c, n);
         }
     }
     std::vector<float> taps(6 * N);
@@ -183,29 +192,38 @@ int main(int argc, char **argv) {
     std::vector<const float *> src(C);
     std::vector<float *> dst(C);
     for (int c = 0; c < C; c++) {
-        src[c] = xin[c].data();
-        dst[c] = yout[c].data();
+        src[c] = xin + (size_t)c * S;
+        dst[c] = yout + (size_t)c * S;
     }
-    auto ipp_run = [&]() {
-        // Fresh delay lines each run: a cascade is stateful.
-        int nthreads = PARALLEL ? std::min<int>(C, std::thread::hardware_concurrency()) : 1;
-        std::vector<std::thread> threads;
-        for (int t = 0; t < nthreads; t++) {
-            threads.emplace_back([&, t]() {
-                int c0 = (int)((long)C * t / nthreads), c1 = (int)((long)C * (t + 1) / nthreads);
-                for (int c = c0; c < c1; c++) {
-                    ippsIIRInit_BiQuad_32f(&states[c], taps.data(), N, nullptr, state_buf[c].data());
-                }
-                ippsIIR_32f_P(src.data() + c0, dst.data() + c0, S, c1 - c0, states.data() + c0);
-            });
+    // Under PAR the channels are dealt in chunks across the Halide runtime's
+    // thread pool, the same persistent pool the Halide forms run on; each
+    // chunk is one multi-channel call. Fresh delay lines each run: a
+    // cascade is stateful.
+    const int ipp_chunks = PARALLEL ? std::min<int>(C, std::thread::hardware_concurrency()) : 1;
+    auto ipp_chunk = [&](int t) {
+        int c0 = (int)((long)C * t / ipp_chunks), c1 = (int)((long)C * (t + 1) / ipp_chunks);
+        for (int c = c0; c < c1; c++) {
+            ippsIIRInit_BiQuad_32f(&states[c], taps.data(), N, nullptr, state_buf[c].data());
         }
-        for (auto &th : threads) th.join();
+        ippsIIR_32f_P(src.data() + c0, dst.data() + c0, S, c1 - c0, states.data() + c0);
+    };
+    auto ipp_run = [&]() {
+        if (PARALLEL) {
+            halide_do_par_for(
+                nullptr, [](void *, int t, uint8_t *closure) {
+                    (*(decltype(ipp_chunk) *)closure)(t);
+                    return 0;
+                },
+                0, ipp_chunks, (uint8_t *)&ipp_chunk);
+        } else {
+            ipp_chunk(0);
+        }
     };
     ipp_run();
     Buffer<float> yipp(C, S);
     for (int c = 0; c < C; c++) {
         for (int n = 0; n < S; n++) {
-            yipp(c, n) = yout[c][n];
+            yipp(c, n) = yout[(size_t)c * S + n];
         }
     }
     // IPP runs the cascade in single precision in its own filter
@@ -213,7 +231,9 @@ int main(int argc, char **argv) {
     // above by a few ulps of the signal: a looser tolerance, same double
     // reference.
     check(x, sos, yipp, "ipp", 1e-3);
-    double t_ipp = benchmark(3, 1, ipp_run);
+    double t_ipp = benchmark(10, 1, ipp_run);
+    free(xin);
+    free(yout);
 #endif
 
 #ifdef HAVE_FFF
@@ -224,13 +244,17 @@ int main(int argc, char **argv) {
     // innermost within a block, and the blocks are dealt to threads.
     const int fstride = FffBiquads::stride();
     const int nblocks = C / fstride;
-    // The library loads whole vectors, so the signals are 64-byte aligned.
-    float *xb = (float *)aligned_alloc(64, (size_t)C * S * sizeof(float));
-    float *yb = (float *)aligned_alloc(64, (size_t)C * S * sizeof(float));
-    for (int b = 0; b < nblocks; b++) {
-        for (int n = 0; n < S; n++) {
-            for (int c = 0; c < fstride; c++) {
-                xb[((size_t)b * S + n) * fstride + c] = x(b * fstride + c, n);
+    // With one block of all the channels the layout is the signal's own;
+    // narrower blocks need a block-major copy.
+    const bool blocked = nblocks > 1;
+    float *xb = blocked ? signal_alloc() : xmem;
+    float *yb = blocked ? signal_alloc() : ymem;
+    if (blocked) {
+        for (int b = 0; b < nblocks; b++) {
+            for (int n = 0; n < S; n++) {
+                for (int c = 0; c < fstride; c++) {
+                    xb[((size_t)b * S + n) * fstride + c] = x(b * fstride + c, n);
+                }
             }
         }
     }
@@ -268,9 +292,11 @@ int main(int argc, char **argv) {
         }
     }
     check(x, sos, yfff, "fff");
-    double t_fff = benchmark(3, 1, fff_run);
-    free(xb);
-    free(yb);
+    double t_fff = benchmark(10, 1, fff_run);
+    if (blocked) {
+        free(xb);
+        free(yb);
+    }
 #endif
 
     const double gb = C * (double)S * 4 / 1e9;
