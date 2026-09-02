@@ -535,7 +535,6 @@ table FuncSchedule {
     memoize_eviction_key: Expr;
     type_change_checks: [TypeChangeCheck];
     slide_levels: [LoopLevel];
-    slide_depths: [int32];
 }
 
 table Specialization {

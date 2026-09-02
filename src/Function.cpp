@@ -1381,7 +1381,7 @@ void Function::lock_loop_levels() {
     schedule.store_level().lock();
     schedule.hoist_storage_level().lock();
     for (auto &l : schedule.slide_levels()) {
-        l.level.lock();
+        l.lock();
     }
     // If store_level is inlined, use the compute_level instead.
     // (Note that we deliberately do *not* do the same if store_level

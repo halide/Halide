@@ -3412,15 +3412,12 @@ Func &Func::hoist_storage(const Func &f, const Var &var) {
     return hoist_storage(LoopLevel(f, var));
 }
 
-Func &Func::slide(const Func &f, const VarOrRVar &var, int depth) {
+Func &Func::slide(const Func &f, const VarOrRVar &var) {
     invalidate_cache();
     // The dimension is named rather than the loop, because after splitting
     // there may be no single loop that corresponds to it. Calls accumulate,
     // because a window can slide over more than one dimension at once.
-    user_assert(depth >= 0)
-        << "Can't slide " << name() << " over " << f.name() << "." << var.name()
-        << " with a negative pipelining depth (" << depth << ").\n";
-    func.schedule().slide_levels().emplace_back(LoopLevel(f, var), depth);
+    func.schedule().slide_levels().emplace_back(f, var);
     return *this;
 }
 
