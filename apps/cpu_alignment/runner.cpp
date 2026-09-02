@@ -61,6 +61,14 @@ std::vector<std::pair<size_t, void *>> pool;
 
 extern "C" void *halide_malloc(void *, size_t size) {
     constexpr size_t header = 128;
+    // HB_NO_REUSE=1 leaves the process allocator in charge, to measure
+    // what the pool is worth.
+    static const bool no_reuse = getenv("HB_NO_REUSE") != nullptr;
+    if (no_reuse) {
+        char *base = (char *)aligned_alloc(128, (size + header + 127) / 128 * 128);
+        ((size_t *)base)[0] = 0;
+        return base + header;
+    }
     {
         std::lock_guard<std::mutex> lock(pool_mutex);
         for (auto &entry : pool) {
@@ -91,6 +99,10 @@ void drain_pool() {
 extern "C" void halide_free(void *, void *ptr) {
     char *base = (char *)ptr - 128;
     size_t size = ((size_t *)base)[0];
+    if (size == 0) {
+        free(base);
+        return;
+    }
     std::lock_guard<std::mutex> lock(pool_mutex);
     for (auto &entry : pool) {
         if (!entry.second) {

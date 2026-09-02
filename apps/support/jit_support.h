@@ -63,6 +63,11 @@ inline void jit_reuse_free(Halide::JITUserContext *, void *p) {
     ReusePool::dealloc(p);
 }
 inline void reuse_jit_allocations(Halide::Func &f) {
+    // HB_NO_REUSE=1 leaves the process allocator in charge, to measure
+    // what the pool is worth.
+    if (getenv("HB_NO_REUSE")) {
+        return;
+    }
     f.jit_handlers().custom_malloc = jit_reuse_malloc;
     f.jit_handlers().custom_free = jit_reuse_free;
 }
