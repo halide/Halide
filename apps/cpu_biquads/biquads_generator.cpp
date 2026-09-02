@@ -35,14 +35,6 @@ public:
                                    {"unfolded", ScanForm::Unfolded},
                                    {"rdom", ScanForm::RDom}}};
     // Whether blocks of channels spread across cores.
-    // Software-pipeline the sections: section k computed N-1-k samples
-    // ahead, so the sections' chains are independent within a sample.
-    // The serial form only: the parallel form's pair of channel blocks
-    // already keeps the ports busy, and unrolling it further spills.
-    GeneratorParam<bool> skew{"skew", true};
-    // Unroll the walk by the window so the window lives in registers.
-    GeneratorParam<bool> promote{"promote", true};
-    GeneratorParam<int> fold{"fold", 8};
     GeneratorParam<bool> par{"par", false};
 
     // Channel by sample.
@@ -136,8 +128,7 @@ public:
                     .unroll(coi)
                     .parallel(coo)
                     .stream_stores();
-                for (int k = 0; k < (int)ys.size(); k++) {
-                    Func f = ys[k];
+                for (Func f : ys) {
                     f.store_at(y, coo)
                         .compute_at(y, coi)
                         .vectorize(c, VEC);
@@ -152,20 +143,13 @@ public:
                     .vectorize(ci)
                     .unroll(co)
                     .stream_stores();
-                for (int k = 0; k < (int)ys.size(); k++) {
-                    Func f = ys[k];
+                for (Func f : ys) {
                     f.store_root()
                         .compute_at(y, co)
                         .vectorize(c, VEC);
                     if (folded()) {
-                        f.slide(y, n, skew ? N - 1 - k : 0).fold_storage(n, fold);
+                        f.fold_storage(n, 4);
                     }
-                }
-                if (folded() && promote) {
-                    // Unrolled by the fold, so each window slot is a fixed
-                    // register rather than a modulo-indexed stack slot.
-                    Var no("no"), ni("ni");
-                    y.split(n, no, ni, fold, TailStrategy::RoundUp).unroll(ni);
                 }
             }
         } else {
