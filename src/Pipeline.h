@@ -516,6 +516,58 @@ public:
 
 private:
     std::string generate_function_name() const;
+
+    friend class ProfilerScope;
+};
+
+/** Accumulates the profiler's statistics for a JIT-compiled Pipeline
+ * across multiple runs, and makes them available for inspection.
+ *
+ * Normally each call to realize on a Target with the Profile or
+ * ProfileByTimer feature prints the profiler's report and then resets
+ * its statistics. While a ProfilerScope for the Pipeline is alive,
+ * realize does neither, so statistics accumulate over every run within
+ * the scope and can be read via pipeline_stats and func_stats. The
+ * report is printed and the statistics reset when the scope is
+ * destroyed.
+ *
+ * The scope holds a copy of the Pipeline, which keeps its
+ * JIT-compiled code, and thus the memory backing the statistics, alive.
+ * The profiler's statistics are global to the process, so the reset at
+ * the end of a scope also discards the statistics of any other profiled
+ * Pipelines that ran in the meantime. */
+class ProfilerScope {
+    Pipeline pipeline;
+
+public:
+    explicit ProfilerScope(Pipeline p);
+
+    /** Construct from the Pipeline that Func::realize uses for f. Copies
+     * of a Func do not share that Pipeline, so pass the Func that will
+     * be realized. */
+    explicit ProfilerScope(Func &f);
+
+    ~ProfilerScope();
+
+    ProfilerScope(const ProfilerScope &) = delete;
+    ProfilerScope &operator=(const ProfilerScope &) = delete;
+
+    /** The statistics accumulated for the Pipeline so far. Returns
+     * nullptr if the Pipeline has not run with profiling enabled within
+     * this scope, or the Target does not support inspecting the profiler
+     * state (e.g. WebAssembly). The pointer is valid until the scope is
+     * destroyed. Only call this between runs of the Pipeline. */
+    const halide_profiler_pipeline_stats *pipeline_stats() const;
+
+    /** The statistics accumulated for one Func of the Pipeline, found by
+     * name. Returns the Func's canonical entry; a Func computed at
+     * several distinct sites has further entries in pipeline_stats()
+     * that share its canonical_id. Returns nullptr if pipeline_stats
+     * would, or if no Func of that name was profiled. */
+    // @{
+    const halide_profiler_func_stats *func_stats(const std::string &name) const;
+    const halide_profiler_func_stats *func_stats(const Func &f) const;
+    // @}
 };
 
 struct ExternSignature {
