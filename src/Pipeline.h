@@ -531,10 +531,10 @@ private:
  * report is printed and the statistics reset when the scope is
  * destroyed.
  *
- * The scope holds a copy of the Pipeline, which keeps its
- * JIT-compiled code, and thus the memory backing the statistics, alive.
- * The profiler's statistics are global to the process, so the reset at
- * the end of a scope also discards the statistics of any other profiled
+ * The scope holds a copy of the Pipeline, which keeps its JIT-compiled
+ * runtime, and thus the memory backing the statistics, alive. The
+ * profiler's statistics are global to the process, so the reset at the
+ * end of a scope also discards the statistics of any other profiled
  * Pipelines that ran in the meantime. */
 class ProfilerScope {
     Pipeline pipeline;
