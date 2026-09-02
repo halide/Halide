@@ -82,6 +82,14 @@ int main(int argc, char **argv) {
             // the terminal argmax over the final scores, with no transition
             // or emission, so the backpointer plane's last row starts the
             // traceback.
+            // The output state is an RVar, not a pure Var, in both forms: an
+            // update may only refer to its own Func with the pure Vars in the
+            // positions it writes them, and this one reads the previous state
+            // in the output state's slot (the inductive classifier makes the
+            // same objection, since a read at another position along a pure
+            // Var would make that Var inductive). Vectorizing over it is
+            // race-free, each lane writing its own state, but has to be waved
+            // through.
             RDom r(0, S, 0, S, "r");  // r.x = output state, r.y = previous state
             Expr obs_t = Halide::Internal::promise_clamped(
                 obs(Halide::Internal::promise_clamped(t, 0, T - 1)), 0, M - 1);
