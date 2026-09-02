@@ -40,9 +40,19 @@ class BaseCaseSolver : public IRVisitor {
         if (op->is_intrinsic(Call::if_then_else)) {
 
             // A select whose condition doesn't depend on any inductive var
-            // can be traversed normally.
+            // can be traversed normally. So can one whose condition reads
+            // the function itself: that is a data-dependent step of the
+            // recurrence, not a base-case guard, and both of its branches
+            // may recurse (each self-reference in them is still checked).
             bool cond_is_inductive = expr_uses_vars(op->args[0], inductive_vars);
-            if (!cond_is_inductive) {
+            bool cond_recurses = false;
+            visit_with(op->args[0], [&](auto *self, const Call *inner_op) {
+                if (inner_op->name == func) {
+                    cond_recurses = true;
+                }
+                self->visit_base(inner_op);
+            });
+            if (!cond_is_inductive || cond_recurses) {
                 IRVisitor::visit(op);
                 return;
             }

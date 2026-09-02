@@ -25,7 +25,7 @@ SHORT_inductive := ind
 SHORT_unfolded := unf
 SHORT_rdom := rdom
 
-$(GENERATOR_BIN)/%.generator: %_generator.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/%.generator: %_generator.cpp align_traceback.h $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 

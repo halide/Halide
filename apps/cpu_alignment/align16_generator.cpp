@@ -21,6 +21,7 @@
 // align8 generator.
 
 #include "Halide.h"
+#include "align_traceback.h"
 
 using namespace Halide;
 
@@ -47,10 +48,14 @@ public:
 
     Input<Buffer<uint8_t, 2>> qseq{"qseq"};
     Input<Buffer<uint8_t, 2>> tseq{"tseq"};
-    Output<Buffer<uint8_t, 3>> dir{"dir"};
+    // The traceback op stream: path(b, s) for query+target length steps,
+    // backward order, 3 once a pair is done. The direction plane is an
+    // intermediate realized one block of pairs at a time.
+    Output<Buffer<uint8_t, 2>> path{"path"};
 
     void generate() {
-        Var b("b"), j("j"), i("i");
+        Var b("b"), j("j"), i("i"), ps("ps");
+        Func dir("dir");
 
         const int gapoe = (int)gapo + (int)gape;
         const Expr NEG = cast<int16_t>(-(1 << 14));
@@ -120,6 +125,9 @@ public:
                                     dp(b, j + 1, i + 1)[2], dp(b, j, i)[0] + s0);
         }
 
+        Func tb = align_traceback(dir, qseq.dim(1).extent(), tseq.dim(1).extent(), b, ps);
+        path(b, ps) = tb(b, ps)[3];
+
         // ---------------- Schedule ----------------
 
         const int VEC = 64;
@@ -128,28 +136,40 @@ public:
         // direction plane - so no two tasks write the same line. The
         // wide vector also keeps several stripes of pairs in flight,
         // filling the serial per-cell chain's latency.
-        dir.split(b, bo, bi, VEC).reorder(bi, j, i, bo).vectorize(bi);
+        // One block of 64 pairs is one task: realize its direction plane,
+        // then walk it while it is the freshest thing in cache.
+        path.split(b, bo, bi, VEC).reorder(bi, ps, bo).vectorize(bi);
         if (par) {
-            // The direction plane is written once and read only by the
-            // O(N) traceback: streaming stores skip read-for-ownership.
-            dir.parallel(bo);
-            if (stream) {
-                Func(dir).stream_stores();
-            }
+            path.parallel(bo);
+        }
+        tb.compute_at(path, ps).store_at(path, bo).fold_storage(ps, 2).vectorize(b, VEC);
+        dir.compute_at(path, bo).store_at(path, bo).reorder(b, j, i).vectorize(b, VEC);
+        if (par && stream) {
+            // Written once per block and read back at 2N of its N^2 cells:
+            // streaming stores skip read-for-ownership.
+            dir.stream_stores();
         }
 
         if (scan != ScanForm::RDom) {
             // One block of pairs walks the table together; the score rows
             // fold to the two the recurrence can reach.
-            dp.compute_at(dir, i).store_at(dir, bo).vectorize(b, VEC);
+            dp.compute_at(dir, i).store_at(path, bo).vectorize(b, VEC);
             if (scan == ScanForm::Inductive) {
                 dp.fold_storage(i, 2);
+            } else {
+                // Genuinely unfolded: an explicit fold factor of the whole
+                // table gives every row its own slot (the modulo never
+                // wraps) and overrides the automatic folding pass, which
+                // would otherwise fold this form anyway and leave the
+                // ablation measuring nothing. bound_storage alone only
+                // inflates the allocation; the indexing still folds.
+                dp.fold_storage(i, tseq.dim(1).extent() + 1);
             }
             if (!par) {
                 dp.hoist_storage_root();
             }
         } else {
-            dp.compute_at(dir, bo).vectorize(b, VEC);
+            dp.compute_at(path, bo).vectorize(b, VEC);
             dp.update().reorder(b, rj, ri).vectorize(b, VEC);
         }
     }

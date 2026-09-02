@@ -98,31 +98,22 @@ uint64_t splitmix64(uint64_t &x) {
     return z ^ (z >> 31);
 }
 
-// ksw_backtrack for the unbanded row-major case, over one pair's
-// direction plane accessed through a stride.
-void backtrack(const uint8_t *p, long jstride, long istride, int i0, int j0,
-               std::vector<uint32_t> &cigar) {
+// The pipeline emits each pair's ops in backward order (ksw2's
+// traceback order), 3 once done. Reverse and run-length encode into
+// ksw2's CIGAR form for comparison.
+void cigar_from_path(const uint8_t *ops, long sstride, int nsteps,
+                     std::vector<uint32_t> &cigar) {
+    int n = 0;
+    while (n < nsteps && ops[n * sstride] != 3) n++;
     cigar.clear();
-    auto push = [&](uint32_t op, int len) {
+    for (int k = n - 1; k >= 0; k--) {
+        uint32_t op = ops[k * sstride];
         if (!cigar.empty() && (cigar.back() & 0xf) == op) {
-            cigar.back() += len << 4;
+            cigar.back() += 1 << 4;
         } else {
-            cigar.push_back(len << 4 | op);
+            cigar.push_back(1 << 4 | op);
         }
-    };
-    int i = i0, j = j0, state = 0;
-    while (i >= 0 && j >= 0) {
-        uint32_t tmp = p[j * jstride + i * istride];
-        if (state == 0) state = tmp & 7;
-        else if (!(tmp >> (state + 2) & 1)) state = 0;
-        if (state == 0) state = tmp & 7;
-        if (state == 0) push(0 /*M*/, 1), --i, --j;
-        else if (state == 1) push(2 /*D*/, 1), --i;
-        else push(1 /*I*/, 1), --j;
     }
-    if (i >= 0) push(2, i + 1);
-    if (j >= 0) push(1, j + 1);
-    std::reverse(cigar.begin(), cigar.end());
 }
 
 // Global alignment score recomputed by walking the CIGAR: for a valid
@@ -210,12 +201,12 @@ int main(int argc, char **argv) {
                mismatches ? "DIFFER (using ksw_gg as reference)" : "identical cigars");
     }
 
-    Buffer<uint8_t> dir(B, J, I);
+    Buffer<uint8_t> path(B, I + J);
     std::vector<uint32_t> cig;
 
     auto check = [&](const char *what) {
         for (int b = 0; b < B; b++) {
-            backtrack(&dir(b, 0, 0), (long)B, (long)B * J, I - 1, J - 1, cig);
+            cigar_from_path(&path(b, 0), (long)B, I + J, cig);
             if (cig != ref_cigar[b] ||
                 path_score(cig, &qs[(size_t)b * J], &ts[(size_t)b * I]) != ref_score[b]) {
                 printf("  %-10s MISMATCH pair %d:\n    ours %s (%d)\n    ksw2 %s (%d)\n",
@@ -308,38 +299,49 @@ int main(int argc, char **argv) {
         return 0;
     }
 #endif
-    // ONLY_A8: benchmark only int8 inductive, for A/B runs of
-    // differently-built binaries.
-    if (getenv("ONLY_A8")) {
-        align8_ind(query, target, dir);
-        if (!check("int8 ind")) return 1;
-        double t = benchmark(3, 1, [&]() { align8_ind(query, target, dir); });
-        printf("  int8 ind   %10.1f us\n", t * 1e6);
-        return 0;
-    }
-
     struct Form {
         const char *name;
-        int (*fn)(struct halide_buffer_t *, struct halide_buffer_t *, struct halide_buffer_t *);
+        int (*fn)(struct halide_buffer_t *, struct halide_buffer_t *, struct halide_buffer_t *);  // (qseq, tseq, path)
     };
     // Two generators x three forms. int8 inductive is the headline.
     Form forms[] = {
         {"int8 ind", align8_ind},   {"int8 unf", align8_unf},   {"int8 rdom", align8_rdom},
         {"int16 ind", align16_ind}, {"int16 unf", align16_unf}, {"int16 rdom", align16_rdom},
     };
+
+    // ONLY_FORM=<name> (or ONLY_A8 for "int8 ind"): benchmark one form
+    // alone, re-verifying its output after every timed call, for A/B
+    // runs of differently-built binaries and for isolating memory
+    // behaviour.
+    const char *only = getenv("ONLY_FORM");
+    if (getenv("ONLY_A8")) only = "int8 ind";
+    if (only) {
+        for (auto &f : forms) {
+            if (std::string(f.name) != only) continue;
+            double best = 1e30;
+            for (int r = 0; r < 3; r++) {
+                double t = benchmark(1, 1, [&]() { f.fn(query, target, path); });
+                if (!check(f.name)) return 1;
+                best = std::min(best, t);
+            }
+            printf("  %-10s %10.1f us  (best of 3, verified each)\n", f.name, best * 1e6);
+            return 0;
+        }
+        printf("no such form: %s\n", only);
+        return 1;
+    }
     double t[6];
     for (int f = 0; f < 6; f++) {
-        forms[f].fn(query, target, dir);
+        forms[f].fn(query, target, path);
         if (!check(forms[f].name)) return 1;
-        t[f] = benchmark(3, 1, [&]() { forms[f].fn(query, target, dir); });
+        t[f] = benchmark(3, 1, [&]() { forms[f].fn(query, target, path); });
     }
     double t_ind = t[0];  // int8 inductive is the reference for ratios
 
-    // The baselines' timed calls include their O(N) CIGAR walk; ours
-    // does it here, on the batch-major direction plane, threaded across
-    // pairs under PAR like the baselines. Reported as its own row and
-    // folded into the fill+cigar comparison.
-    auto traceback_sweep = [&]() {
+    // The pipeline includes the traceback; what remains outside it is
+    // turning each pair's op stream into a run-length CIGAR, which the
+    // baselines' calls also do. Timed and folded into fill+cigar.
+    auto compaction_sweep = [&]() {
         int nthreads = PARALLEL ? std::thread::hardware_concurrency() : 1;
         std::vector<std::thread> threads;
         std::atomic<int> next{0};
@@ -349,14 +351,14 @@ int main(int argc, char **argv) {
                 std::vector<uint32_t> cig2;
                 while ((b = next.fetch_add(8)) < B) {
                     for (int k = b; k < b + 8 && k < B; k++) {
-                        backtrack(&dir(k, 0, 0), (long)B, (long)B * J, I - 1, J - 1, cig2);
+                        cigar_from_path(&path(k, 0), (long)B, I + J, cig2);
                     }
                 }
             });
         }
         for (auto &th : threads) th.join();
     };
-    double t_tb = benchmark(3, 1, [&]() { traceback_sweep(); });
+    double t_tb = benchmark(3, 1, [&]() { compaction_sweep(); });
 
 
     // ksw2 parallelizes across pairs the way aligners deploy it: when the
@@ -420,9 +422,9 @@ int main(int argc, char **argv) {
         printf("  %-10s %10.1f us  (%.2f Gcell/s, %.2fx int8-ind: %s)\n",
                forms[f].name, t[f] * 1e6, cells / t[f] / 1e9, t[f] / t_ind, notes[f]);
     }
-    printf("  traceback  %10.1f us  (our O(N) CIGAR walk over the batch-major plane)\n",
+    printf("  compaction %10.1f us  (op stream -> run-length CIGAR, outside the pipeline)\n",
            t_tb * 1e6);
-    printf("  int8 ind + traceback %8.1f us  (fill+cigar, the baselines' contract)\n",
+    printf("  int8 ind + traceback %8.1f us  (fill+trace+cigar, the baselines' contract)\n",
            (t_ind + t_tb) * 1e6);
     printf("  ksw2 sse   %10.1f us  (%.2fx fill+cigar: same output, hand-vectorized)\n",
            t_gg2 * 1e6, t_gg2 / (t_ind + t_tb));
@@ -441,12 +443,12 @@ int main(int argc, char **argv) {
         printf("  interleaved rounds, fill+cigar (int8 ind | int16 ind | ksw2 sse | parasail):\n");
         for (int r = 0; r < rounds; r++) {
             double a = benchmark(1, 1, [&]() {
-                align8_ind(query, target, dir);
-                traceback_sweep();
+                align8_ind(query, target, path);
+                compaction_sweep();
             });
             double a16 = benchmark(1, 1, [&]() {
-                align16_ind(query, target, dir);
-                traceback_sweep();
+                align16_ind(query, target, path);
+                compaction_sweep();
             });
             double k = benchmark(1, 1, [&]() { ksw2_sweep(true); });
             double p = 0;

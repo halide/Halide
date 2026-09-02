@@ -357,6 +357,38 @@ int distinct_inductive_reorder_test() {
     return 0;
 }
 
+int data_dependent_select_test() {
+    // A select whose condition reads the previous value is a step of the
+    // recurrence, not a base-case guard: both branches may recurse. The
+    // classifier must not demand a base case of it. A bounded Collatz-ish
+    // walk with state carried in a Tuple.
+    Func f(std::vector<Type>{Int(32), Int(32)}, 1, "f"), g("g");
+    Var t("t");
+    Expr prev = f(t - 1)[0], count = f(t - 1)[1];
+    Expr even = prev % 2 == 0;
+    Expr next = select(even, prev / 2, select(prev > 1000, prev - 1000, 3 * prev + 1));
+    Tuple base = {7, 0};
+    Tuple step = {likely(next), count + select(even, 1, 2)};
+    f(t) = select(t <= 0, base, step);
+    g(t) = f(t)[0] + f(t)[1];
+    f.compute_at(g, t).store_root().fold_storage(t, 2);
+    Buffer<int> im = g.realize({200});
+    int v = 7, c = 0;
+    for (int t = 0; t < 200; t++) {
+        if (t > 0) {
+            bool ev = v % 2 == 0;
+            int nv = ev ? v / 2 : (v > 1000 ? v - 1000 : 3 * v + 1);
+            c += ev ? 1 : 2;
+            v = nv;
+        }
+        if (im(t) != v + c) {
+            printf("im(%d) = %d instead of %d\n", t, im(t), v + c);
+            return 1;
+        }
+    }
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -369,6 +401,7 @@ int main(int argc, char **argv) {
         {"simple inductive test", simple_inductive_test},
         {"reordering test", reorder_test},
         {"distinct inductive reorder test", distinct_inductive_reorder_test},
+        {"data-dependent select test", data_dependent_select_test},
         {"summed area table test", summed_area_table},
         {"large baseline test", large_baseline},
         {"fibonacci test", fibonacci},

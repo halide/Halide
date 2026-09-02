@@ -15,6 +15,7 @@
 // no fold) / rdom (update definitions materializing the full state).
 
 #include "Halide.h"
+#include "align_traceback.h"
 
 using namespace Halide;
 
@@ -41,10 +42,14 @@ public:
 
     Input<Buffer<uint8_t, 2>> qseq{"qseq"};
     Input<Buffer<uint8_t, 2>> tseq{"tseq"};
-    Output<Buffer<uint8_t, 3>> dir{"dir"};
+    // The traceback op stream: path(b, s) for query+target length steps,
+    // backward order, 3 once a pair is done. The direction plane is an
+    // intermediate realized one block of pairs at a time.
+    Output<Buffer<uint8_t, 2>> path{"path"};
 
     void generate() {
-        Var b("b"), j("j"), i("i");
+        Var b("b"), j("j"), i("i"), ps("ps");
+        Func dir("dir");
 
         const int gapoe = (int)gapo + (int)gape;
         const int qe2 = 2 * gapoe;
@@ -121,28 +126,45 @@ public:
                                     dp8(b, j + 1, i)[2], dp8(b, j, i + 1)[3], score(j, i));
         }
 
+        Func tb = align_traceback(dir, qseq.dim(1).extent(), tseq.dim(1).extent(), b, ps);
+        path(b, ps) = tb(b, ps)[3];
+
         // ---------------- Schedule ----------------
 
         const int VEC = 64;
         Var bo("bo"), bi("bi");
-        dir.split(b, bo, bi, VEC).reorder(bi, j, i, bo).vectorize(bi);
+        // One block of 64 pairs is one task: realize its direction plane,
+        // then walk it while it is the freshest thing in cache.
+        path.split(b, bo, bi, VEC).reorder(bi, ps, bo).vectorize(bi);
         if (par) {
-            dir.parallel(bo);
-            if (stream) {
-                Func(dir).stream_stores();
-            }
+            path.parallel(bo);
+        }
+        tb.compute_at(path, ps).store_at(path, bo).fold_storage(ps, 2).vectorize(b, VEC);
+        dir.compute_at(path, bo).store_at(path, bo).reorder(b, j, i).vectorize(b, VEC);
+        if (par && stream) {
+            // Written once per block and read back at 2N of its N^2 cells:
+            // streaming stores skip read-for-ownership.
+            dir.stream_stores();
         }
 
         if (scan != ScanForm::RDom) {
-            dp8.compute_at(dir, i).store_at(dir, bo).vectorize(b, VEC);
+            dp8.compute_at(dir, i).store_at(path, bo).vectorize(b, VEC);
             if (scan == ScanForm::Inductive) {
                 dp8.fold_storage(i, 2);
+            } else {
+                // Genuinely unfolded: an explicit fold factor of the whole
+                // table gives every row its own slot (the modulo never
+                // wraps) and overrides the automatic folding pass, which
+                // would otherwise fold this form anyway and leave the
+                // ablation measuring nothing. bound_storage alone only
+                // inflates the allocation; the indexing still folds.
+                dp8.fold_storage(i, tseq.dim(1).extent() + 1);
             }
             if (!par) {
                 dp8.hoist_storage_root();
             }
         } else {
-            dp8.compute_at(dir, bo).vectorize(b, VEC);
+            dp8.compute_at(path, bo).vectorize(b, VEC);
             dp8.update().reorder(b, rj, ri).vectorize(b, VEC);
         }
     }
