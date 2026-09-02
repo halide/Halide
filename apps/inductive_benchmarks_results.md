@@ -14,7 +14,7 @@ Every Halide form is verified against its app's reference before timing (the ali
 | kalman_ll | 256 series x 16384 steps, 32 threads | 0.211 | 2.2 | - | - | 10.49x | - |
 | viterbi | 16 states, 4 symbols, T=320000, 1 thread | 5.6 | 6.8 | - | - | 1.21x | - |
 | viterbi | 64 states, 8 symbols, T=50000, 1 thread | 5.7 | 6.4 | - | - | 1.13x | - |
-| ode | Allen-Cahn D=1024, batch 1, T=32768, 1 thread | 6.2 | 8.4 | 28.9 | Boost.odeint | 1.34x | 4.62x |
+| ode | Allen-Cahn D=1024, batch 1, T=32768, 1 thread | 5.1 | 6.9 | 29.2 | Boost.odeint | 1.34x | 5.70x |
 | prefixsum | 1048576 x 32 rows, running-mean consumer, 1 thread | 37.3 | 45.6 | 37.3 | oneTBB parallel_scan | 1.22x | 1.00x |
 | prefixsum | 1048576 x 32 rows, running-mean consumer, 32 threads | 2.8 | 3.8 | 3.0 | oneTBB parallel_scan | 1.35x | 1.09x |
 | chebyshev | n=2048 dense SPD, 100 iterations, 1 thread (in-cache control) | 150.6 | 135.9 | 138.5 | hand-written mod-3 ring | 0.90x | 0.92x |

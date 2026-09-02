@@ -180,7 +180,7 @@ def ode(D, B, T):
              log=LOGS / f"ode_{D}_{B}_{T}.txt")
     r = hb_rows(out)
     return dict(params=f"Allen-Cahn D={D}, batch {B}, T={T}, 1 thread",
-                ind=r.get("inductive FOLDED (fold n -> 3)"), rdom=r.get("non-inductive (materialize)"),
+                ind=r.get("inductive FOLDED (fold n -> 2)"), rdom=r.get("non-inductive (materialize)"),
                 base_name="Boost.odeint", base=r.get("Boost.odeint (rk4 init + observer)"))
 
 
