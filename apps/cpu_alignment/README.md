@@ -56,6 +56,16 @@ timed and included. Two consequences: the vectorized walk replaces a
 is transient - 64 MB per task instead of a retained 4 GB - which is
 the same contract the baselines run (fill, trace, free).
 
+The rdom forms use an RDom walk too (an update definition over the
+steps, storage shifted by one so the start state sits at index zero),
+so scan=rdom is RDom throughout. The two walks tie - every rdom total
+is unchanged within noise after the swap - and that is the expected
+result: the walk's consumer wants every step and its per-step state is
+six bytes, so there is nothing to fold away and no thin projection to
+extract. The inductive form's value is in the fill, where the state is
+fat and the wanted projection thin; the walk is the same computation
+either way, and the paper should claim exactly that.
+
 The baseline is ksw2 (MIT, vendored subset), the affine-gap kernel
 family inside minimap2. The recurrence, boundary values, tie-breaking,
 and direction-byte encoding mirror ksw_gg exactly, and the runner

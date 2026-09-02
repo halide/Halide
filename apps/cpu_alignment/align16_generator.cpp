@@ -125,8 +125,20 @@ public:
                                     dp(b, j + 1, i + 1)[2], dp(b, j, i)[0] + s0);
         }
 
-        Func tb = align_traceback(dir, qseq.dim(1).extent(), tseq.dim(1).extent(), b, ps);
-        path(b, ps) = tb(b, ps)[3];
+        // The walk: inductive for the inductive forms, an update
+        // definition for the fully-RDom ablation.
+        Expr J = qseq.dim(1).extent(), I = tseq.dim(1).extent();
+        Func tb;
+        RVar rs;
+        if (scan != ScanForm::RDom) {
+            tb = align_traceback(dir, J, I, b, ps);
+            path(b, ps) = tb(b, ps)[3];
+        } else {
+            TracebackRDom t = align_traceback_rdom(dir, J, I, J + I, b, ps);
+            tb = t.tb;
+            rs = t.rs;
+            path(b, ps) = tb(b, ps + 1)[3];
+        }
 
         // ---------------- Schedule ----------------
 
@@ -142,7 +154,12 @@ public:
         if (par) {
             path.parallel(bo);
         }
-        tb.compute_at(path, ps).store_at(path, bo).fold_storage(ps, 2).vectorize(b, VEC);
+        if (scan != ScanForm::RDom) {
+            tb.compute_at(path, ps).store_at(path, bo).fold_storage(ps, 2).vectorize(b, VEC);
+        } else {
+            tb.compute_at(path, bo).vectorize(b, VEC);
+            tb.update().reorder(b, rs).vectorize(b, VEC);
+        }
         dir.compute_at(path, bo).store_at(path, bo).reorder(b, j, i).vectorize(b, VEC);
         if (par && stream) {
             // Written once per block and read back at 2N of its N^2 cells:
