@@ -18,6 +18,16 @@ void define_enums(py::module &m) {
         .value("Input", Internal::ArgInfoDirection::Input)
         .value("Output", Internal::ArgInfoDirection::Output);
 
+    py::enum_<halide_profiler_func_kind>(m, "ProfilerFuncKind")
+        .value("Func", halide_profiler_func_kind_func)
+        .value("Overhead", halide_profiler_func_kind_overhead)
+        .value("ThreadIdle", halide_profiler_func_kind_thread_idle)
+        .value("Malloc", halide_profiler_func_kind_malloc)
+        .value("Free", halide_profiler_func_kind_free)
+        .value("CopyToHost", halide_profiler_func_kind_copy_to_host)
+        .value("CopyToDevice", halide_profiler_func_kind_copy_to_device)
+        .value("Allocation", halide_profiler_func_kind_allocation);
+
     py::enum_<DeviceAPI>(m, "DeviceAPI")
         .value("None", DeviceAPI::None)
         .value("Host", DeviceAPI::Host)
