@@ -99,15 +99,15 @@ define weak_odr double @cos_f64(double %x) nounwind uwtable readnone alwaysinlin
 }
 
 declare double @__nv_exp(double) nounwind readnone
-declare float @llvm.exp2.f32(float) nounwind readnone
+declare float @llvm.nvvm.ex2.approx.ftz.f(float) nounwind readnone
 
-; The hardware exponentiates base two, so the argument is rescaled. The afn
-; flag is what picks ex2.approx over an accurate expansion of exp2; the nvvm
-; intrinsic that names the instruction directly is spelled differently on
-; different llvm versions.
+; The hardware exponentiates base two, so the argument is rescaled. The
+; flush-to-zero form of the instruction is named directly: the plain form
+; costs a compare and two guarded multiplies around every use to handle
+; denormals, which nothing here needs.
 define weak_odr float @exp_f32(float %x) nounwind uwtable readnone alwaysinline {
        %s = fmul float %x, 0x3FF7154760000000
-       %y = tail call afn float @llvm.exp2.f32(float %s) nounwind readnone
+       %y = tail call float @llvm.nvvm.ex2.approx.ftz.f(float %s) nounwind readnone
        ret float %y
 }
 
