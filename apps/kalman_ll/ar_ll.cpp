@@ -11,8 +11,9 @@
 //  - two vectors of series advance together through each walk, hiding the
 //    divide's latency (the same interleaving that pays in cpu_biquads).
 // Measured here (Zen 5, B=256 T=16384, one thread): as shipped the
-// inductive form lost 68ms to 20ms; fixed it wins 14ms to 20ms against
-// the non-inductive form's best schedule.
+// inductive form lost 68ms to 20ms; fixed, in double, it won 14ms to 20ms
+// against the non-inductive form's best schedule; in single precision it
+// is 1.3ms to 3.7ms.
 //
 // Model (n_states = 2, scalar observation -> only 1/S, NO matrix inverse):
 //   latent   s_t = phi1 s_{t-1} + phi2 s_{t-2} + eta_t,  eta_t ~ N(0, q)
@@ -26,6 +27,15 @@
 //   x-  = F x = [phi1 x0 + phi2 x1, x0],   innov = z - x-0
 //   x   = x- + K innov,   P = (I - K H) P-
 //   ll_contrib_t = -0.5 (innov²/S + log S);   LL(b) = Σ_t ll_contrib_t
+//
+// Everything is single precision: the observations, the five state
+// channels and the log-likelihood. The recursion is contractive (the
+// covariance settles within a few dozen steps and S stays near one), so
+// float carries it comfortably, and float is what vectorizes: sixteen
+// lanes per vector, and a log that lowers to arithmetic rather than a
+// libm call per lane. The reference stays in double, and the sum over
+// sixteen thousand terms is where the two part company, at the fifth
+// digit.
 //
 // The five scalar state channels (x0, x1, P00, P01, P11) are PACKED into one
 // Func State(b, c, t), inductive in t. LL(b) reduces the whole trajectory over
@@ -53,7 +63,7 @@ int main(int argc, char **argv) {
     const double phi1 = 0.6, phi2 = 0.3, q = 0.1, Rv = 1.0;
     const int NC = 5;  // packed channels: 0=x0 1=x1 2=P00 3=P01 4=P11
 
-    Buffer<double> z(B, T);
+    Buffer<float> z(B, T);
     srand(7);
     // Box-Muller standard normal from rand().
     auto nrand = [&]() {
@@ -66,37 +76,37 @@ int main(int argc, char **argv) {
         double s1 = 0.0, s2 = 0.0;  // s_{t-1}, s_{t-2}
         for (int t = 0; t < T; t++) {
             double s = phi1 * s1 + phi2 * s2 + std::sqrt(q) * nrand();
-            z(b, t) = s + std::sqrt(Rv) * nrand();
+            z(b, t) = (float)(s + std::sqrt(Rv) * nrand());
             s2 = s1;
             s1 = s;
         }
     }
-
 
     auto build = [&](bool inductive) -> Func {
         Var b("b"), t("t");
         // The five state channels ride in one Tuple-valued Func: one store
         // per step with the arithmetic shared across components, instead of
         // a five-way channel select evaluated once per channel.
-        Func State(std::vector<Type>(NC, Float(64)), "State");
+        Func State(std::vector<Type>(NC, Float(32)), "State");
+        const float p1 = (float)phi1, p2 = (float)phi2, qf = (float)q, Rf = (float)Rv;
 
         auto step5 = [&](Expr x0, Expr x1, Expr P00, Expr P01, Expr P11,
                          Expr zt) {
-            Expr Pp00 = Expr(phi1 * phi1) * P00 + Expr(2.0 * phi1 * phi2) * P01 +
-                        Expr(phi2 * phi2) * P11 + Expr(q);
-            Expr Pp01 = Expr(phi1) * P00 + Expr(phi2) * P01;
+            Expr Pp00 = (p1 * p1) * P00 + (2.f * p1 * p2) * P01 +
+                        (p2 * p2) * P11 + qf;
+            Expr Pp01 = p1 * P00 + p2 * P01;
             Expr Pp11 = P00;
-            Expr S = Pp00 + Expr(Rv);
+            Expr S = Pp00 + Rf;
             Expr K0 = Pp00 / S, K1 = Pp01 / S;
-            Expr xm0 = Expr(phi1) * x0 + Expr(phi2) * x1, xm1 = x0;
+            Expr xm0 = p1 * x0 + p2 * x1, xm1 = x0;
             Expr innov = zt - xm0;
             return std::vector<Expr>{xm0 + K0 * innov,
                                      xm1 + K1 * innov,
-                                     (Expr(1.0) - K0) * Pp00,
-                                     (Expr(1.0) - K0) * Pp01,
+                                     (1.f - K0) * Pp00,
+                                     (1.f - K0) * Pp01,
                                      Pp11 - K1 * Pp01};
         };
-        const double init5[NC] = {0.0, 0.0, 1.0, 0.0, 1.0};
+        const Tuple init5{0.f, 0.f, 1.f, 0.f, 1.f};
 
         RDom rt(1, T - 1, "rt");
         if (inductive) {
@@ -126,16 +136,16 @@ int main(int argc, char **argv) {
         RDom rl(1, T - 1, "rl");
         Expr P00 = State(b, rl - 1)[2], P01 = State(b, rl - 1)[3],
              P11 = State(b, rl - 1)[4];
-        Expr Pp00 = Expr(phi1 * phi1) * P00 + Expr(2.0 * phi1 * phi2) * P01 +
-                    Expr(phi2 * phi2) * P11 + Expr(q);
-        Expr S = Pp00 + Expr(Rv);
-        Expr xm0 = Expr(phi1) * State(b, rl - 1)[0] +
-                   Expr(phi2) * State(b, rl - 1)[1];
+        Expr Pp00 = (p1 * p1) * P00 + (2.f * p1 * p2) * P01 +
+                    (p2 * p2) * P11 + qf;
+        Expr S = Pp00 + Rf;
+        Expr xm0 = p1 * State(b, rl - 1)[0] +
+                   p2 * State(b, rl - 1)[1];
         Expr innov = z(b, rl) - xm0;
-        LL(b) = Expr(0.0);
-        LL(b) += Expr(-0.5) * (innov * innov / S + log(S));
+        LL(b) = 0.f;
+        LL(b) += -0.5f * (innov * innov / S + log(S));
 
-        const int V = 8;
+        const int V = 16;
         Var bo("bo"), bi("bi");
         LL.bound(b, 0, B).split(b, bo, bi, 2 * V).vectorize(bi, V).parallel(bo);
         // Two vectors of series advance together through each walk: their
@@ -148,9 +158,7 @@ int main(int argc, char **argv) {
             .parallel(bo);
         // The two vectors' steps interleave, not just their LL terms.
         if (inductive) {
-            State.compute_at(LL, rl).store_at(LL, bo)
-                 .fold_storage(t, 2)
-                 .vectorize(b, V).unroll(b);
+            State.compute_at(LL, rl).store_at(LL, bo).fold_storage(t, 2).vectorize(b, V).unroll(b);
         } else {
             State.compute_at(LL, bo).vectorize(b, V);
             State.update(0).vectorize(b, V).unroll(b);
@@ -162,7 +170,7 @@ int main(int argc, char **argv) {
         Func li = build(true), ln = build(false);
         li.compile_jit();
         ln.compile_jit();
-        Buffer<double> ri(B), rn(B);
+        Buffer<float> ri(B), rn(B);
         for (Func *f : {&li, &ln}) {
             hb::reuse_jit_allocations(*f);
         }
@@ -175,8 +183,8 @@ int main(int argc, char **argv) {
         // Scalar C++ reference.
         std::vector<double> cll((size_t)B);
         {
-            const double *zp = z.data();
-            #pragma omp parallel for schedule(static)
+            const float *zp = z.data();
+#pragma omp parallel for schedule(static)
             for (int b = 0; b < B; b++) {
                 double x0 = 0, x1 = 0, P00 = 1, P01 = 0, P11 = 1, ll = 0;
                 for (int t = 1; t < T; t++) {
@@ -197,17 +205,20 @@ int main(int argc, char **argv) {
             }
         }
 
-        double err = 0; bool bad = false;
+        // Relative to the double reference: the float sum over T terms
+        // drifts from it at about the fifth digit.
+        double err = 0;
+        bool bad = false;
         for (int b = 0; b < B; b++) {
             double a = ri(b), cc = rn(b), g = cll[b];
             if (std::isnan(a) || std::isnan(cc)) bad = true;
-            err = std::max({err, std::abs(a - g), std::abs(cc - g)});
+            err = std::max({err, std::abs(a - g) / std::abs(g), std::abs(cc - g) / std::abs(g)});
         }
         // Analytic state footprint: inductive folds t -> 2 slices (O(B*NC*2));
         // non-inductive materializes the full O(B*NC*T) trajectory.
-        const double bytes_ind = (double)NC * B * 2 * 8;
-        const double bytes_non = (double)NC * B * T * 8;
-        bool ok = !bad && err < 1e-5;
+        const double bytes_ind = (double)NC * B * 2 * 4;
+        const double bytes_non = (double)NC * B * T * 4;
+        bool ok = !bad && err < 1e-4;
         char note[160];
         snprintf(note, sizeof(note),
                  "Latent AR(2)+obs-noise log-likelihood  B=%d T=%d  |  state fold %.0fx (%.2f -> %.2f MB)",
@@ -219,7 +230,7 @@ int main(int argc, char **argv) {
         hb::print_row("inductive (fold t -> 2)", si, mseq / (si.median * 1e-3), "Mseq/s",
                       bytes_ind, err, ok, "win");
 
-        return (!bad && err < 1e-5) ? 0 : 1;
+        return ok ? 0 : 1;
     } catch (const Halide::Error &e) {
         printf("HALIDE ERROR: %s\n", e.what());
         return 2;

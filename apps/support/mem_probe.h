@@ -152,7 +152,8 @@ inline double measure_jit_peak(Halide::Func &f, const std::function<void()> &rea
 }
 #endif  // HALIDE_H
 
-// ---- AOT ----
+// ---- AOT (only when HalideRuntime.h has been included) ----
+#ifdef HALIDE_HALIDERUNTIME_H
 inline void *aot_probe_malloc(void *, size_t x) {
     return MemProbe::alloc(x);
 }
@@ -175,5 +176,7 @@ inline double measure_aot_peak(const std::function<void()> &call_once) {
 }
 
 }  // namespace hb
+
+#endif  // HALIDE_HALIDERUNTIME_H
 
 #endif  // HB_MEM_PROBE_H
