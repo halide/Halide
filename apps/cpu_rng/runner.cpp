@@ -3,6 +3,7 @@
 // baseline. The output buffer is sized well past the last level cache.
 
 #include "HalideBuffer.h"
+#include "HalideRuntime.h"
 #include "../support/bench_harness.h"
 
 #include "rng_ind.h"
@@ -16,6 +17,10 @@
 #include <cstring>
 #include <thread>
 #include <vector>
+
+#ifndef PARALLEL
+#define PARALLEL 0
+#endif
 
 using Halide::Runtime::Buffer;
 
@@ -69,45 +74,76 @@ void reference(const Buffer<uint64_t> &seeds, Buffer<float> &ref) {
     }
 }
 
-// The same generator, hand-vectorized: eight streams per vector, two
-// vectors interleaved, the layout the Halide schedule uses. This is the
-// baseline a performance-minded C++ programmer would write.
-void simd_fill(const Buffer<uint64_t> &seeds, Buffer<float> &out) {
-    // All the stream blocks stay live and advance together per step, so
-    // every step stores full cache lines of output in order.
-    constexpr int NB = L / 8;
-    static_assert(L % 8 == 0, "eight-lane blocks");
+// The same generator, hand-vectorized: eight streams per vector, the
+// layout the Halide schedule uses. This is the baseline a
+// performance-minded C++ programmer would write. A task owns a group of
+// stream blocks and walks every step for them: the blocks stay live and
+// advance together, so every step stores full cache lines of output in
+// order. Under PAR the groups go across the Halide runtime's thread pool,
+// the same persistent pool the Halide forms run on.
+constexpr int NB = L / 8;
+static_assert(L % 8 == 0, "eight-lane blocks");
+// Four blocks, 32 streams, per task: the serial configuration's width,
+// whose state is sixteen vector registers.
+constexpr int BLOCKS_PER_TASK = NB < 4 ? NB : 4;
+constexpr int NTASKS = NB / BLOCKS_PER_TASK;
+static_assert(NB % BLOCKS_PER_TASK == 0, "whole tasks");
+
+void simd_fill_task(const Buffer<uint64_t> &seeds, Buffer<float> &out, int task) {
+    // Raw addressing: the Buffer accessor marks the shared buffer host-dirty
+    // on every store, which is a cache line all the tasks would fight over.
+    float *const base = out.data();
+    const ptrdiff_t row = out.dim(1).stride();
     const __m512 scale = _mm512_set1_ps(0x1.0p-24f);
-    __m512i s[NB][4];
+    __m512i s[BLOCKS_PER_TASK][4];
     alignas(64) uint64_t tmp[8];
-    for (int blk = 0; blk < NB; blk++) {
+    const int blk0 = task * BLOCKS_PER_TASK;
+    for (int b = 0; b < BLOCKS_PER_TASK; b++) {
         for (int i = 0; i < 4; i++) {
             for (int j = 0; j < 8; j++) {
-                tmp[j] = seeds(i, blk * 8 + j);
+                tmp[j] = seeds(i, (blk0 + b) * 8 + j);
             }
-            s[blk][i] = _mm512_load_si512(tmp);
+            s[b][i] = _mm512_load_si512(tmp);
         }
     }
     for (int t = 0; t < T; t++) {
-        for (int blk = 0; blk < NB; blk++) {
+        for (int b = 0; b < BLOCKS_PER_TASK; b++) {
+            const int blk = blk0 + b;
+            __m512i (&sb)[4] = s[b];
             __m512i r = _mm512_add_epi64(
-                _mm512_rol_epi64(_mm512_add_epi64(s[blk][0], s[blk][3]), 23),
-                s[blk][0]);
+                _mm512_rol_epi64(_mm512_add_epi64(sb[0], sb[3]), 23),
+                sb[0]);
             // Both halves of each 64-bit result are the same shift of a
             // 32-bit word, and little-endian order interleaves them as
             // consecutive output lanes: one full-width store per step.
             __m512i bits = _mm512_srli_epi32(r, 8);
             __m512 f = _mm512_mul_ps(_mm512_cvtepu32_ps(bits), scale);
-            _mm512_stream_ps(&out(blk * 16, t), f);  // written once, never read back
-            __m512i t17 = _mm512_slli_epi64(s[blk][1], 17);
-            s[blk][2] = _mm512_xor_si512(s[blk][2], s[blk][0]);
-            s[blk][3] = _mm512_xor_si512(s[blk][3], s[blk][1]);
-            s[blk][1] = _mm512_xor_si512(s[blk][1], s[blk][2]);
-            s[blk][0] = _mm512_xor_si512(s[blk][0], s[blk][3]);
-            s[blk][2] = _mm512_xor_si512(s[blk][2], t17);
-            s[blk][3] = _mm512_rol_epi64(s[blk][3], 45);
+            _mm512_stream_ps(base + blk * 16 + t * row, f);  // written once, never read back
+            __m512i t17 = _mm512_slli_epi64(sb[1], 17);
+            sb[2] = _mm512_xor_si512(sb[2], sb[0]);
+            sb[3] = _mm512_xor_si512(sb[3], sb[1]);
+            sb[1] = _mm512_xor_si512(sb[1], sb[2]);
+            sb[0] = _mm512_xor_si512(sb[0], sb[3]);
+            sb[2] = _mm512_xor_si512(sb[2], t17);
+            sb[3] = _mm512_rol_epi64(sb[3], 45);
         }
     }
+}
+
+void simd_fill(const Buffer<uint64_t> &seeds, Buffer<float> &out) {
+#if PARALLEL
+    auto task = [&](int k) { simd_fill_task(seeds, out, k); };
+    halide_do_par_for(
+        nullptr, [](void *, int k, uint8_t *closure) {
+            (*(decltype(task) *)closure)(k);
+            return 0;
+        },
+        0, NTASKS, (uint8_t *)&task);
+#else
+    for (int k = 0; k < NTASKS; k++) {
+        simd_fill_task(seeds, out, k);
+    }
+#endif
 }
 
 bool check(const Buffer<float> &y, const Buffer<float> &ref, const char *what) {
@@ -204,8 +240,8 @@ int main(int argc, char **argv) {
            t_unf * 1e6, t_unf / t_ind);
     printf("  rdom       %10.1f us  (%.2fx the inductive time)\n",
            t_rdom * 1e6, t_rdom / t_ind);
-    printf("  simd C++   %10.1f us  (%.2fx: same RNG, hand-vectorized)\n",
-           t_simd * 1e6, t_simd / t_ind);
+    printf("  simd C++   %10.1f us  (%.2fx: same RNG, hand-vectorized%s)\n",
+           t_simd * 1e6, t_simd / t_ind, PARALLEL ? ", threaded" : "");
     printf("  scalar C++ %10.1f us  (%.2fx: same RNG, the reference loop)\n",
            t_ref * 1e6, t_ref / t_ind);
     printf("Success!\n");
