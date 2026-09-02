@@ -48,10 +48,20 @@ with store-to-load forwarding (LLVM does not promote loop-carried array
 elements to registers), so that is not where the gap comes from.
 
 At two sections the inductive pass streams at 42 GB/s each way - the
-memory system's speed. scipy.sosfilt (single thread, scalar, float32)
-takes 2.0 s at 8 sections. Parallel over 256 channels x 1M samples the
+memory system's speed. Parallel over 256 channels x 1M samples the
 inductive form runs 26 ms at ~80 GB/s of signal against 450 ms for the
 N-pass form, whose fills and walks all queue on the same DRAM.
+
+Library baselines, same double reference: scipy.sosfilt (single thread,
+scalar, float32) takes 2.0 s at 8 sections. Intel IPP has a
+multi-channel IIR call, ippsIIR_32f_P, over per-channel biquad-cascade
+states (the same sos taps; the runner builds it when IPP_DIR points at
+a venv with ipp-devel installed): 1.64 s single-threaded at the same
+shape - inside, it walks the channels one at a time, so it is not
+vectorized across them either - and, dealt across threads in the
+parallel configuration, 36 ms against the inductive form's 27. IPP
+rounds a few ulps differently (its own single-precision filter
+structure), so its check uses a looser tolerance.
 
 scan=unfolded isolates fusion from folding: the same fused pass with
 every section's whole trajectory kept live times the same as the folded

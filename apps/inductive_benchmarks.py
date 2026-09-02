@@ -69,7 +69,10 @@ def cpu_biquads(par):
     if VENV.exists() and not par:  # scipy is single-threaded; compare it in the serial config
         so = sh(f"{VENV} sosfilt_bench.py {knobs['CHANNELS']} {knobs['SAMPLES']} {knobs['SECTIONS']}", d)
         scipy = us_row(so, "scipy.sosfilt")
-    bn, bt = best([("scipy.sosfilt", scipy)])
+    # Intel IPP's multi-channel IIR (ippsIIR_32f_P), threaded across channels
+    # in the parallel config, when the runner was built with it.
+    ipp = us_row(out, "ipp")
+    bn, bt = best([("scipy.sosfilt", scipy), ("Intel IPP ippsIIR_32f_P" + (" (threaded)" if par else ""), ipp)])
     return dict(params=f"{knobs['SECTIONS']} sections, {knobs['CHANNELS']} ch x {knobs['SAMPLES']} samples, "
                        f"{'all cores' if par else '1 thread'}",
                 ind=us_row(out, "inductive"), rdom=us_row(out, "rdom"), base_name=bn, base=bt)

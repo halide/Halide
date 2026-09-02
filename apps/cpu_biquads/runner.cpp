@@ -9,6 +9,11 @@
 #include "biquads_rdom.h"
 #include "biquads_unf.h"
 
+#ifdef HAVE_IPP
+#include "ipps.h"
+#endif
+
+#include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -24,6 +29,9 @@ using Halide::Tools::benchmark;
 #endif
 #ifndef SAMPLES
 #define SAMPLES (8 << 20)
+#endif
+#ifndef PARALLEL
+#define PARALLEL 0
 #endif
 #ifndef SECTIONS
 #define SECTIONS 8
@@ -79,7 +87,7 @@ void fill_input(Buffer<float> &x) {
 
 // The same cascade at double precision, one channel at a time.
 double check(const Buffer<float> &x, const Buffer<float> &sos,
-             const Buffer<float> &y, const char *what) {
+             const Buffer<float> &y, const char *what, double tol = 2e-4) {
     const int check_channels = std::min(C, 4);
     std::vector<double> errs(check_channels, 0.0);
     std::vector<std::thread> pool;
@@ -118,8 +126,8 @@ double check(const Buffer<float> &x, const Buffer<float> &sos,
         err = std::max(err, e);
     }
     printf("  %-10s max error %.3e %s\n", what, err,
-           err < 2e-4 ? "ok" : "FAILED");
-    if (err >= 2e-4) {
+           err < tol ? "ok" : "FAILED");
+    if (err >= tol) {
         exit(1);
     }
     return err;
@@ -189,6 +197,63 @@ int main(int argc, char **argv) {
     check(x, sos, y, "rdom");
     double t_rdom = benchmark(3, 1, [&]() { biquads_rdom(x, sos, y); });
 
+#ifdef HAVE_IPP
+    // Intel IPP's multi-channel IIR: one biquad-cascade state per channel
+    // (the same sos taps), all channels in one ippsIIR_32f_P call over
+    // planar signals. Under PAR the channels are dealt across threads,
+    // each thread making its own call over its share.
+    std::vector<std::vector<float>> xin(C, std::vector<float>(S)), yout(C, std::vector<float>(S));
+    for (int c = 0; c < C; c++) {
+        for (int n = 0; n < S; n++) {
+            xin[c][n] = x(c, n);
+        }
+    }
+    std::vector<float> taps(6 * N);
+    for (int k = 0; k < N; k++) {
+        for (int j = 0; j < 6; j++) {
+            taps[6 * k + j] = sos(j, k);
+        }
+    }
+    int state_bytes = 0;
+    ippsIIRGetStateSize_BiQuad_32f(N, &state_bytes);
+    std::vector<std::vector<Ipp8u>> state_buf(C, std::vector<Ipp8u>(state_bytes));
+    std::vector<IppsIIRState_32f *> states(C);
+    std::vector<const float *> src(C);
+    std::vector<float *> dst(C);
+    for (int c = 0; c < C; c++) {
+        src[c] = xin[c].data();
+        dst[c] = yout[c].data();
+    }
+    auto ipp_run = [&]() {
+        // Fresh delay lines each run: a cascade is stateful.
+        int nthreads = PARALLEL ? std::min<int>(C, std::thread::hardware_concurrency()) : 1;
+        std::vector<std::thread> threads;
+        for (int t = 0; t < nthreads; t++) {
+            threads.emplace_back([&, t]() {
+                int c0 = (int)((long)C * t / nthreads), c1 = (int)((long)C * (t + 1) / nthreads);
+                for (int c = c0; c < c1; c++) {
+                    ippsIIRInit_BiQuad_32f(&states[c], taps.data(), N, nullptr, state_buf[c].data());
+                }
+                ippsIIR_32f_P(src.data() + c0, dst.data() + c0, S, c1 - c0, states.data() + c0);
+            });
+        }
+        for (auto &th : threads) th.join();
+    };
+    ipp_run();
+    Buffer<float> yipp(C, S);
+    for (int c = 0; c < C; c++) {
+        for (int n = 0; n < S; n++) {
+            yipp(c, n) = yout[c][n];
+        }
+    }
+    // IPP runs the cascade in single precision in its own filter
+    // structure, so its rounding differs from the direct-form-one forms
+    // above by a few ulps of the signal: a looser tolerance, same double
+    // reference.
+    check(x, sos, yipp, "ipp", 1e-3);
+    double t_ipp = benchmark(3, 1, ipp_run);
+#endif
+
     const double gb = C * (double)S * 4 / 1e9;
     printf("  inductive  %10.1f us  (%.1f GB/s of signal each way)\n",
            t_ind * 1e6, 2 * gb / t_ind);
@@ -196,6 +261,10 @@ int main(int argc, char **argv) {
            t_unf * 1e6, t_unf / t_ind);
     printf("  rdom       %10.1f us  (%.2fx the inductive time)\n",
            t_rdom * 1e6, t_rdom / t_ind);
+#ifdef HAVE_IPP
+    printf("  ipp        %10.1f us  (%.2fx: ippsIIR_32f_P, biquad cascade per channel%s)\n",
+           t_ipp * 1e6, t_ipp / t_ind, PARALLEL ? ", threaded" : "");
+#endif
     printf("Success!\n");
     return 0;
 }

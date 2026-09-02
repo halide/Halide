@@ -33,10 +33,18 @@ $(BIN)/%/runtime.a: $(GENERATOR_BIN)/biquads.generator
 	@mkdir -p $(@D)
 	$< -r runtime -o $(@D) target=$*
 
+# Optional Intel IPP baseline (pip install ipp-devel ipp-static puts it
+# in a venv; point IPP_DIR at that venv).
+IPP_DIR ?= $(HOME)/.claude/jobs/6e7f4185/tmp/venv
+ifneq (,$(wildcard $(IPP_DIR)/include/ipp/ipps.h))
+IPP_FLAGS = -DHAVE_IPP -I$(IPP_DIR)/include/ipp -L$(IPP_DIR)/lib -lipps -lippvm -lippcore -Wl,-rpath,$(IPP_DIR)/lib
+endif
+
 $(BIN)/%/runner: runner.cpp $(BIN)/%/biquads_ind.a $(BIN)/%/biquads_unf.a $(BIN)/%/biquads_rdom.a $(BIN)/%/runtime.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -DCHANNELS=$(CHANNELS) -DSAMPLES=$(SAMPLES) \
-	    -DSECTIONS=$(SECTIONS) -Wall -O2 $^ -o $@ $(LDFLAGS) -lpthread -ldl
+	    -DSECTIONS=$(SECTIONS) -DPARALLEL=$(if $(filter true,$(PAR)),1,0) \
+	    -Wall -O2 $^ -o $@ $(IPP_FLAGS) $(LDFLAGS) -lpthread -ldl
 
 test: $(BIN)/$(HL_TARGET)/runner
 	$<

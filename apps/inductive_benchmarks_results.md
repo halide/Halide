@@ -4,8 +4,8 @@ Every Halide form is verified against its app's reference before timing (the ali
 
 | App | Config | Inductive (ms) | RDom (ms) | Fastest baseline (ms) | Baseline | RDom / ind | Baseline / ind |
 |---|---|---:|---:|---:|---|---:|---:|
-| cpu_biquads | 8 sections, 32 ch x 8388608 samples, 1 thread | 130.1 | 549.2 | 1987.1 | scipy.sosfilt | 4.22x | 15.27x |
-| cpu_biquads | 8 sections, 256 ch x 1048576 samples, all cores | 25.9 | 449.8 | - | - | 17.34x | - |
+| cpu_biquads | 8 sections, 32 ch x 8388608 samples, 1 thread | 176.5 | 536.4 | 1636.8 | Intel IPP ippsIIR_32f_P | 3.04x | 9.27x |
+| cpu_biquads | 8 sections, 256 ch x 1048576 samples, all cores | 28.8 | 428.3 | 36.3 | Intel IPP ippsIIR_32f_P (threaded) | 14.88x | 1.26x |
 | cpu_rng | 32 streams x 4194304 steps, 1 thread | 35.4 | 496.0 | 35.1 | Julia rand! | 14.03x | 0.99x |
 | cpu_rng | 1024 streams x 131072 steps, all cores | 29.7 | 219.9 | 54.2 | hand AVX-512 kernel | 7.40x | 1.82x |
 | cpu_alignment | 1024x1024 x 128 pairs, 1 thread, fill+traceback+cigar | 14.2 | 52.3 | 50.8 | parasail | 3.68x | 3.57x |
