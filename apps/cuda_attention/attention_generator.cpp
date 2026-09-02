@@ -954,28 +954,26 @@ public:
         key_pad = 2 * key_tile;
 
         k = RDom(0, depth, "k");
-        k1 = RDom(0, depth, "k1");
         rj_max = RDom(0, key_tile, "rj_max");
         rj = RDom(0, key_tile, "rj");
-        rt1 = RDom(0, num_tiles, "rt1");
         rt = RDom(0, num_tiles, "rt");
 
-        // Pass one: the scores of a key tile, their row maximum, and the
-        // running maximum over the walk.
-        s1(x, y, t) = 0.f;
-        s1(x, y, t) += cast<float>(Q(k1, y)) * cast<float>(K(k1, t * key_tile + x));
-
-        tile_max(y, t) = -1e30f;
-        tile_max(y, t) = max(tile_max(y, t), s1(rj_max, y, t));
-
-        mfin(y) = -1e30f;
-        mfin(y) = max(mfin(y), tile_max(y, rt1));
-
-        // Pass two: the same scores again, weighted against the final
-        // maximum, so nothing carried needs rescaling.
+        // The scores of a key tile, defined once. Both passes read them;
+        // that the second recomputes them rather than keeping the first's
+        // is a scheduling decision (clone_in, below).
         s(x, y, t) = 0.f;
         s(x, y, t) += cast<float>(Q(k, y)) * cast<float>(K(k, t * key_tile + x));
 
+        // Pass one: each tile's row maximum, and the running maximum over
+        // the walk.
+        tile_max(y, t) = -1e30f;
+        tile_max(y, t) = max(tile_max(y, t), s(rj_max, y, t));
+
+        mfin(y) = -1e30f;
+        mfin(y) = max(mfin(y), tile_max(y, rt));
+
+        // Pass two: the weights against the final maximum, so nothing
+        // carried needs rescaling.
         e(x, y, t) = exp(s(x, y, t) - mfin(y));
 
         tile_l(y, t) = 0.f;
@@ -1069,7 +1067,7 @@ public:
         mfin.update()
             .split(y, yw, y, rows)
             .split(y, y, ryi, tile)
-            .split(rt1, r1o, r1i, 2)
+            .split(rt, r1o, r1i, 2)
             .unroll(y)
             .unroll(r1i)
             .vectorize(ryi);
@@ -1079,6 +1077,12 @@ public:
             mfin.update().reorder(ryi, y, r1i, r1o, yw);
         }
 
+        // The first pass gets its own copy of the scores, recomputed
+        // rather than kept: a block's strip of them is 256 KB, too big for
+        // shared memory and a write-back of the whole matrix if held in
+        // global memory, where one more tensor-core product per tile is
+        // cheaper.
+        Func s1 = s.clone_in(tile_max);
         s1.compute_at(mfin, yw)
             .store_in(MemoryType::Tile)
             .hoist_storage(out, xo)
@@ -1088,7 +1092,7 @@ public:
             .tile_init(rxi, ryi);
         s1.update()
             .tile(x, y, rxi, ryi, tile, tile)
-            .split(k1, rro, rri, tile)
+            .split(k, rro, rri, tile)
             .reorder(x, y, rro)
             .unroll(x)
             .unroll(y)
@@ -1261,9 +1265,9 @@ public:
 
 private:
     Var x{"x"}, y{"y"}, t{"t"};
-    RDom k, k1, rj_max, rj, rt1, rt;
+    RDom k, rj_max, rj, rt;
     int num_tiles = 0, key_tile = 0, key_pad = 0;
-    Func s1{"s1"}, tile_max{"tile_max"}, mfin{Float(32), "mfin"};
+    Func tile_max{"tile_max"}, mfin{Float(32), "mfin"};
     Func s{"s"}, e{"e"}, tile_l{"tile_l"}, l{Float(32), "l"}, tile_acc{"tile_acc"}, acc{"acc"}, outf{"outf"};
 };
 
