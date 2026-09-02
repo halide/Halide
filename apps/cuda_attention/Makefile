@@ -44,9 +44,8 @@ SHAPE_FLASH := $(SHAPE) tiles_y=$(FLASH_TILES_Y) warps=$(FLASH_WARPS) chunk=$(FL
 # narrower step, since its first pass is cheaper per key than its second.
 RDOM_TILES_Y ?= $(FLASH_TILES_Y)
 RDOM_WARPS ?= $(FLASH_WARPS)
-RDOM_CHUNK ?= 32
-RDOM_MATERIALIZE ?= false
-SHAPE_FLASH_RDOM := $(SHAPE) tiles_y=$(RDOM_TILES_Y) warps=$(RDOM_WARPS) chunk=$(RDOM_CHUNK) materialize=$(RDOM_MATERIALIZE) stage=$(FLASH_STAGE) stage_tile=$(FLASH_STAGE_TILE) stage_q=$(FLASH_STAGE_Q) pad=$(PAD)
+RDOM_CHUNK ?= 64
+SHAPE_FLASH_RDOM := $(SHAPE) tiles_y=$(RDOM_TILES_Y) warps=$(RDOM_WARPS) chunk=$(RDOM_CHUNK) stage=$(FLASH_STAGE) stage_tile=$(FLASH_STAGE_TILE) stage_q=$(FLASH_STAGE_Q) pad=$(PAD)
 SHAPE += tiles_y=$(TILES_Y) warps=$(WARPS) stage=$(STAGE) pad=$(PAD)
 CXXFLAGS += -DQUERIES=$(QUERIES) -DKEYS=$(KEYS) -DDEPTH=$(DEPTH) -DOUT_DEPTH=$(OUT_DEPTH) -DFLASH_CHUNK=$(FLASH_CHUNK)
 

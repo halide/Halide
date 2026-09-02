@@ -207,10 +207,10 @@ def mamba2(direction):
 
 def flash_attention():
     # The flash filter (an inductive online softmax over key chunks) against
-    # its RDom-only form: with no inductive Funcs the running maximum cannot
-    # advance alongside the accumulator's walk, so that form takes two
-    # passes over the keys, the first for the row maxima, at its own best
-    # chunk. The runner also drives a non-flash fused filter that does not
+    # its RDom-only form: the same online softmax with the running maximum
+    # and row sum carried at the accumulator's shape, as one Tuple update
+    # over the key chunks, at its own best chunk. The runner also drives a
+    # non-flash fused filter that does not
     # launch at this shape (a known, pre-existing failure), so run the
     # binary directly and take the rows. Reference: PyTorch's
     # FlashAttention-2 SDPA backend at the same shape.
@@ -233,7 +233,7 @@ def flash_attention():
         except RuntimeError:
             pass
     return dict(params=f"{shape['QUERIES']} queries x {shape['KEYS']} keys, depth {shape['DEPTH']}, fp16, "
-                       f"chunk 64 (two-pass RDom form: chunk 32), RTX 5060 Ti",
+                       f"chunk 64, RTX 5060 Ti",
                 ind=ind, rdom=rdom,
                 base_name="FlashAttention-2 (torch SDPA)" if torch_flash else "torch flash (unavailable)",
                 base=torch_flash)
@@ -316,11 +316,12 @@ def main():
         "the library allows it (ksw2, parasail, oneTBB); the rng hand kernel and Julia's rand! are "
         "single-threaded, so the rng all-cores baseline is the single-thread hand kernel. The mamba2 rows "
         "compare each side at its own best chunk (Triton prefers 256; the Halide backward is best at 128), "
-        "with the tensor-core schedules (WMMA=true). Flash attention's RDom form is the two-pass softmax "
-        "(a row-max walk, then the weighted walk), the same tile verbs and staging at its own best chunk; the "
-        "same two passes with the scores materialized in their own kernel (the generator's materialize "
-        "knob) run at 1.97 ms, memory-bound on the 256 MB score matrix written once and read twice, and "
-        "cuBLAS + softmax + cuBLAS is about 13x slower. Chebyshev is the "
+        "with the tensor-core schedules (WMMA=true). Flash attention's RDom form is the same online softmax "
+        "with the running maximum and row sum carried at the accumulator's shape, broadcast across its "
+        "columns, so that one Tuple update over the key chunks advances all three (Halide fuses no "
+        "dependent stages, and a per-row Func may not read the state its update feeds); the rescalings are "
+        "then paid per element rather than per row, the same tile verbs and staging otherwise. For scale, "
+        "cuBLAS + softmax + cuBLAS is about 13x slower than the flash filter. Chebyshev is the "
         "intended in-cache control, where folding buys nothing.\n\n")
     Path(args.out).write_text(notes + table + "\n")
     print(f"\nwritten to {args.out}")

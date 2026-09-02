@@ -916,15 +916,15 @@ private:
 };
 
 
-// The flash filter with no inductive Funcs: the running maximum cannot
-// advance alongside the accumulator's walk (an update definition owns its
-// whole walk, compute_with forbids dependent stages, and one Tuple would
-// force every reduction inline and off the tensor cores), so the softmax
-// takes two passes. The first walks the key tiles to find each row's
-// maximum; the second walks them again with that maximum known, so the
-// weights need no rescaling and the row sum rides as a second component
-// of the accumulator. Same tile verbs, staging, and warp layout as the
-// flash filter; the price is the scores computed twice.
+// The flash filter with no inductive Funcs. The carried state is one Tuple
+// at the accumulator's shape: the running maximum and the row sum ride
+// along broadcast across the columns, so all three advance in one update
+// over the key tiles. A tile's weights are taken against the tile's own
+// maximum, so its row sum and its product with V depend on nothing carried
+// and stay tensor-core reductions of their own; the update folds them into
+// the carried state with the online softmax's two rescalings. Same tile
+// verbs, staging, and warp layout as the flash filter; the price is the
+// per-row rescalings, paid once per element.
 class AttentionFlashRDom : public Halide::Generator<AttentionFlashRDom> {
 public:
     GeneratorParam<int> queries{"queries", 16384};
@@ -938,10 +938,6 @@ public:
     GeneratorParam<bool> stage_tile{"stage_tile", true};
     GeneratorParam<bool> stage_q{"stage_q", true};
     GeneratorParam<int> pad{"pad", 0};
-    // Keep the first pass's scores for the second instead of recomputing
-    // them: the whole score matrix, computed by its own kernel and read
-    // back by both walks. For measuring what the recompute is worth.
-    GeneratorParam<bool> materialize{"materialize", false};
 
     Input<Buffer<float16_t, 2>> Q{"Q"};
     Input<Buffer<float16_t, 2>> K{"K"};
@@ -955,34 +951,23 @@ public:
                             keys / key_tile >= 2)
             << "chunk must be a multiple of 16 that divides keys at least twice";
         num_tiles = keys / key_tile;
-        key_pad = 2 * key_tile;
 
         k = RDom(0, depth, "k");
         rj_max = RDom(0, key_tile, "rj_max");
         rj = RDom(0, key_tile, "rj");
         rt = RDom(0, num_tiles, "rt");
 
-        // The scores of a key tile, defined once. Both passes read them;
-        // that the second recomputes them rather than keeping the first's
-        // is a scheduling decision (clone_in, below).
+        // One key tile's worth of scores.
         s(x, y, t) = 0.f;
         s(x, y, t) += cast<float>(Q(k, y)) * cast<float>(K(k, t * key_tile + x));
 
-        // What the two passes read: the scores themselves, or a copy of
-        // them held in global memory.
-        Func sg = materialize ? s.in() : s;
-
-        // Pass one: each tile's row maximum, and the running maximum over
-        // the walk.
         tile_max(y, t) = -1e30f;
-        tile_max(y, t) = max(tile_max(y, t), sg(rj_max, y, t));
+        tile_max(y, t) = max(tile_max(y, t), s(rj_max, y, t));
 
-        mfin(y) = -1e30f;
-        mfin(y) = max(mfin(y), tile_max(y, rt));
-
-        // Pass two: the weights against the final maximum, so nothing
-        // carried needs rescaling.
-        e(x, y, t) = exp(sg(x, y, t) - mfin(y));
+        // The weights against the tile's own maximum. Only the carried state
+        // knows the running one, and a Func that read it here would depend
+        // on the update that reads this.
+        e(x, y, t) = exp(s(x, y, t) - tile_max(y, t));
 
         tile_l(y, t) = 0.f;
         tile_l(y, t) += e(rj, y, t);
@@ -991,18 +976,27 @@ public:
         tile_acc(x, y, t) +=
             cast<float>(e(rj, y, t)) * cast<float>(V(x, t * key_tile + rj));
 
-        // The row sum and the accumulator are two update definitions over
-        // the same walk; they do not depend on each other, so their loops
-        // fuse (compute_with) and each step's weights serve both. Neither
-        // can read the other mid-walk, so the normalization is its own
-        // fragment pass after the walk.
-        l(y) = 0.f;
-        l(y) += tile_l(y, rt);
+        // The carried state: running maximum, row sum, accumulator. The
+        // first two are per row but ride at the accumulator's shape, so
+        // that one update advances all three.
+        state(x, y) = {-1e30f, 0.f, 0.f};
+        Expr m_old = state(x, y)[0];
+        Expr l_old = state(x, y)[1];
+        Expr a_old = state(x, y)[2];
+        Expr tm = tile_max(y, rt);
+        Expr m_new = max(m_old, tm);
+        // Whichever of the two was not the maximum moves to it, and the
+        // other stays: one exponential covers both.
+        Expr d = exp(-abs(m_old - tm));
+        Expr carried_max = m_old >= tm;
+        Expr alpha = select(carried_max, 1.f, d);
+        Expr beta = select(carried_max, d, 1.f);
+        Expr l_new = alpha * l_old + beta * tile_l(y, rt);
+        Expr a_new = alpha * a_old + beta * tile_acc(x, y, rt);
+        state(x, y) = {m_new, l_new, a_new};
 
-        acc(x, y) = 0.f;
-        acc(x, y) += tile_acc(x, y, rt);
-
-        outf(x, y) = acc(x, y) / l(y);
+        // Normalised once the walk is done.
+        outf(x, y) = state(x, y)[2] / state(x, y)[1];
         out(x, y) = outf(x, y);
     }
 
@@ -1031,8 +1025,7 @@ public:
 
         int ty = tiles_y, wy = warps;
         if (ty == 0 || wy == 0) {
-            // The flash filter's shape, measured to suit this form as well
-            // except for the step, which is narrower (see the Makefile).
+            // The flash filter's shape.
             if (stage_per_tile) {
                 ty = 1;
                 wy = 4;
@@ -1051,7 +1044,7 @@ public:
 
         Var xo("xo"), yo("yo"), xio("xio"), yio("yio"), xi("xi"), yi("yi");
         Var yw("yw"), rxi("rxi"), ryi("ryi");
-        RVar rro("rro"), rri("rri"), rto("rto"), rti("rti"), r1o("r1o"), r1i("r1i");
+        RVar rro("rro"), rri("rri"), rto("rto"), rti("rti");
 
         out.gpu_max_registers(128);
 
@@ -1065,119 +1058,14 @@ public:
             .unroll(yio)
             .tile_store(xi, yi);
 
-        // ---- pass one: the row maxima, one walk over the key tiles ----
-        mfin.store_in(MemoryType::Tile)
-            .compute_at(out, xo)
-            .split(y, yw, y, rows)
-            .split(y, y, ryi, tile)
-            .unroll(y)
-            .vectorize(ryi);
-        mfin.update()
-            .split(y, yw, y, rows)
-            .split(y, y, ryi, tile)
-            .split(rt, r1o, r1i, 2)
-            .unroll(y)
-            .unroll(r1i)
-            .vectorize(ryi);
-        if (warp_loop_inside) {
-            mfin.update().reorder(ryi, y, yw, r1i, r1o);
-        } else {
-            mfin.update().reorder(ryi, y, r1i, r1o, yw);
-        }
-
-        if (materialize) {
-            // The scores as a kernel of their own, one block per strip of
-            // rows and key tile, stored whole; both walks read them back.
-            Func sg = s.in();
-            Var sxo("sxo"), syo("syo"), sxi("sxi"), syi("syi"), sxio("sxio"), syio("syio"), syw("syw");
-            sg.compute_root()
-                .bound(x, 0, key_tile)
-                .bound(y, 0, queries)
-                .bound(t, 0, num_tiles)
-                .tile(x, y, sxo, syo, sxi, syi, key_tile, block_rows)
-                .split(syi, syw, syi, rows)
-                .tile(sxi, syi, sxio, syio, sxi, syi, tile, tile)
-                .reorder(sxi, syi, sxio, syio, syw, sxo, syo, t)
-                .gpu_blocks(syo, t)
-                .unroll(sxio)
-                .unroll(syio)
-                .tile_store(sxi, syi);
-            if (wy > 1) {
-                sg.gpu_threads(syw);
-            }
-            s.compute_at(sg, syw)
-                .store_in(MemoryType::Tile)
-                .tile(x, y, rxi, ryi, tile, tile)
-                .unroll(x)
-                .unroll(y)
-                .tile_init(rxi, ryi);
-            s.update()
-                .tile(x, y, rxi, ryi, tile, tile)
-                .split(k, rro, rri, tile)
-                .reorder(x, y, rro)
-                .unroll(x)
-                .unroll(y)
-                .unroll(rro)
-                .tile_matmul(rri, rxi, ryi);
-
-            // Each pass loads its score tiles back from memory as fragments.
-            Func sl1 = sg.in(tile_max);
-            sl1.compute_at(mfin, yw)
-                .store_in(MemoryType::Tile)
-                .hoist_storage(out, xo)
-                .tile(x, y, rxi, ryi, tile, tile)
-                .unroll(x)
-                .unroll(y)
-                .tile_load(rxi, ryi);
-            Func sl2 = sg.in(e);
-            sl2.compute_at(acc, yw)
-                .store_in(MemoryType::Tile)
-                .hoist_storage(out, xo)
-                .tile(x, y, rxi, ryi, tile, tile)
-                .unroll(x)
-                .unroll(y)
-                .tile_load(rxi, ryi);
-        } else {
-            // The first pass gets its own copy of the scores, recomputed
-            // rather than kept: a block's strip of them is 256 KB, too big
-            // for shared memory and a write-back of the whole matrix if held
-            // in global memory, where one more tensor-core product per tile
-            // is cheaper.
-            Func s1 = s.clone_in(tile_max);
-            s1.compute_at(mfin, yw)
-                .store_in(MemoryType::Tile)
-                .hoist_storage(out, xo)
-                .tile(x, y, rxi, ryi, tile, tile)
-                .unroll(x)
-                .unroll(y)
-                .tile_init(rxi, ryi);
-            s1.update()
-                .tile(x, y, rxi, ryi, tile, tile)
-                .split(k, rro, rri, tile)
-                .reorder(x, y, rro)
-                .unroll(x)
-                .unroll(y)
-                .unroll(rro)
-                .tile_matmul(rri, rxi, ryi);
-        }
-
-        tile_max.store_in(MemoryType::Tile)
-            .compute_at(mfin, yw)
-            .hoist_storage(out, xo)
-            .split(y, y, ryi, tile)
-            .unroll(y)
-            .vectorize(ryi);
-        tile_max.update().split(y, y, ryi, tile).unroll(y).tile_reduce(rj_max, ryi);
-
-        // ---- pass two: the weighted walk ----
-        acc.compute_at(out, xo)
+        state.compute_at(out, xo)
             .store_in(MemoryType::Tile)
             .split(y, yw, y, rows)
             .tile(x, y, rxi, ryi, tile, tile)
             .unroll(x)
             .unroll(y)
             .tile_init(rxi, ryi);
-        acc.update()
+        state.update()
             .split(y, yw, y, rows)
             .tile(x, y, rxi, ryi, tile, tile)
             .split(rt, rto, rti, 2)
@@ -1186,16 +1074,14 @@ public:
             .unroll(rti)
             .tile_init(rxi, ryi);
         if (warp_loop_inside) {
-            acc.update().reorder(x, y, yw, rti, rto);
+            state.update().reorder(x, y, yw, rti, rto);
         } else {
-            acc.update().reorder(x, y, rti, rto, yw);
+            state.update().reorder(x, y, rti, rto, yw);
         }
 
+        // Everything below is per key tile, so it lives inside the walk.
         for (Func f : {s, e}) {
-            if (materialize && f.name() == s.name()) {
-                continue;  // computed by its own kernel above
-            }
-            f.compute_at(acc, yw)
+            f.compute_at(state, yw)
                 .store_in(MemoryType::Tile)
                 .hoist_storage(out, xo)
                 .tile(x, y, rxi, ryi, tile, tile)
@@ -1204,7 +1090,7 @@ public:
                 .tile_init(rxi, ryi);
         }
         tile_acc
-            .compute_at(acc, yw)
+            .compute_at(state, yw)
             .store_in(MemoryType::Tile)
             .hoist_storage(out, xo)
             .tile(x, y, rxi, ryi, tile, tile)
@@ -1212,16 +1098,14 @@ public:
             .unroll(y)
             .tile_init(rxi, ryi);
 
-        if (!materialize) {
-            s.update()
-                .tile(x, y, rxi, ryi, tile, tile)
-                .split(k, rro, rri, tile)
-                .reorder(x, y, rro)
-                .unroll(x)
-                .unroll(y)
-                .unroll(rro)
-                .tile_matmul(rri, rxi, ryi);
-        }
+        s.update()
+            .tile(x, y, rxi, ryi, tile, tile)
+            .split(k, rro, rri, tile)
+            .reorder(x, y, rro)
+            .unroll(x)
+            .unroll(y)
+            .unroll(rro)
+            .tile_matmul(rri, rxi, ryi);
 
         tile_acc.update()
             .tile(x, y, rxi, ryi, tile, tile)
@@ -1232,39 +1116,17 @@ public:
             .unroll(rro)
             .tile_matmul(rri, rxi, ryi);
 
-        tile_l.store_in(MemoryType::Tile)
-            .compute_at(acc, yw)
-            .hoist_storage(out, xo)
-            .split(y, y, ryi, tile)
-            .unroll(y)
-            .vectorize(ryi);
+        for (Func f : {tile_max, tile_l}) {
+            f.store_in(MemoryType::Tile)
+                .compute_at(state, yw)
+                .hoist_storage(out, xo)
+                .split(y, y, ryi, tile)
+                .unroll(y)
+                .vectorize(ryi);
+        }
+        tile_max.update().split(y, y, ryi, tile).unroll(y).tile_reduce(rj_max, ryi);
         tile_l.update().split(y, y, ryi, tile).unroll(y).tile_reduce(rj, ryi);
 
-        // The row sum's walk, shaped like the accumulator's from the outside
-        // in so the two fuse at the step; acc is the parent, so the per-step
-        // Funcs above sit in its loop and l is computed after it each step.
-        l.store_in(MemoryType::Tile)
-            .compute_at(out, xo)
-            .split(y, yw, y, rows)
-            .split(y, y, ryi, tile)
-            .unroll(y)
-            .vectorize(ryi);
-        l.update()
-            .split(y, yw, y, rows)
-            .split(y, y, ryi, tile)
-            .split(rt, rto, rti, 2)
-            .unroll(y)
-            .unroll(rti)
-            .vectorize(ryi);
-        if (warp_loop_inside) {
-            l.update().reorder(ryi, y, yw, rti, rto);
-        } else {
-            l.update().reorder(ryi, y, rti, rto, yw);
-        }
-        l.update().compute_with(acc.update(), yw);
-
-        // Normalize once the walk is done: an elementwise pass over the
-        // accumulator fragments with the row sums broadcast.
         outf.compute_at(out, xo)
             .store_in(MemoryType::Tile)
             .split(y, yw, y, rows)
@@ -1275,18 +1137,12 @@ public:
 
         if (wy > 1) {
             out.gpu_threads(yw);
-            mfin.gpu_threads(yw);
-            mfin.update().gpu_threads(yw);
-            acc.gpu_threads(yw);
-            acc.update().gpu_threads(yw);
-            l.gpu_threads(yw);
-            l.update().gpu_threads(yw);
+            state.gpu_threads(yw);
+            state.update().gpu_threads(yw);
             outf.gpu_threads(yw);
         }
 
-        // Q's staging follows the scores: only the walks stage it, the
-        // score kernel of the materialized form reads its strip directly.
-        if (stage_q && !materialize) {
+        if (stage_q) {
             Var qo("qo"), qv("qv"), qt("qt"), qi("qi"), qto("qto"), qw("qw");
             Q.in()
                 .compute_at(out, xo)
@@ -1305,10 +1161,8 @@ public:
 
         if (staging || stage_per_tile) {
             Var ko("ko"), kv("kv"), tt("tt"), ti("ti"), to("to"), tw("tw");
-            // Each pass stages the key tiles it walks; the second also the
-            // value tiles. K.in(s1) is the first pass's own wrapper.
-            auto stage_panel = [&](Func f, Func at, RVar level, int width) {
-                f.compute_at(at, level)
+            for (Func f : {K.in(), V.in()}) {
+                f.compute_at(state, rti)
                     .hoist_storage(out, xo)
                     .store_in(MemoryType::GPUSharedAsync)
                     .split(_0, ko, kv, vec)
@@ -1319,28 +1173,20 @@ public:
                     .gpu_threads(tw)
                     .reorder(kv, to, ti, tw)
                     .unroll(to)
-                    .vectorize(kv)
-                    .align_storage(_0, width + p);
-            };
-            Func V2 = V.in();
-            stage_panel(V2, acc, rti, out_depth);
-            if (!materialize) {
-                // Each walk stages the key tiles its scores need.
-                Func K1 = K.in(s.clone_in(tile_max));
-                stage_panel(K1, mfin, r1i, depth);
-                Func K2 = K.in(s);
-                stage_panel(K2, acc, rti, depth);
-                K2.compute_with(V2, to);
+                    .vectorize(kv);
             }
+            K.in().compute_with(V.in(), to);
+            K.in().align_storage(_0, depth + p);
+            V.in().align_storage(_0, out_depth + p);
         }
     }
 
 private:
     Var x{"x"}, y{"y"}, t{"t"};
     RDom k, rj_max, rj, rt;
-    int num_tiles = 0, key_tile = 0, key_pad = 0;
-    Func tile_max{"tile_max"}, mfin{Float(32), "mfin"};
-    Func s{"s"}, e{"e"}, tile_l{"tile_l"}, l{Float(32), "l"}, tile_acc{"tile_acc"}, acc{"acc"}, outf{"outf"};
+    int num_tiles = 0, key_tile = 0;
+    Func s{"s"}, tile_max{"tile_max"}, e{"e"}, tile_l{"tile_l"};
+    Func tile_acc{"tile_acc"}, state{"state"}, outf{"outf"};
 };
 
 }  // namespace
