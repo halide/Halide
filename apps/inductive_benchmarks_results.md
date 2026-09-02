@@ -8,8 +8,8 @@ Every Halide form is verified against its app's reference before timing (the ali
 | cpu_biquads | 8 sections, 256 ch x 1048576 samples, all cores | 26.6 | 476.9 | 29.6 | Finding Fast Filters strided cascade (threaded) | 17.90x | 1.11x |
 | cpu_rng | 32 streams x 4194304 steps, 1 thread | 23.8 | 363.9 | 24.9 | hand AVX-512 kernel | 15.27x | 1.04x |
 | cpu_rng | 1024 streams x 131072 steps, all cores | 17.7 | 166.5 | 32.5 | hand AVX-512 kernel | 9.43x | 1.84x |
-| cpu_alignment | 1024x1024 x 128 pairs, 1 thread, fill+traceback+cigar | 10.3 | 45.7 | 43.1 | parasail | 4.42x | 4.17x |
-| cpu_alignment | 1024x1024 x 4096 pairs, all cores, fill+traceback+cigar | 37.8 | 711.7 | 46.2 | parasail | 18.81x | 1.22x |
+| cpu_alignment | 1024x1024 x 128 pairs, 1 thread, fill+traceback+cigar | 8.4 | 43.9 | 38.1 | parasail | 5.25x | 4.55x |
+| cpu_alignment | 1024x1024 x 4096 pairs, all cores, fill+traceback+cigar | 27.9 | 712.2 | 47.1 | parasail | 25.55x | 1.69x |
 | kalman_ll | 256 series x 16384 steps, 1 thread | 1.6 | 4.3 | - | - | 2.69x | - |
 | kalman_ll | 256 series x 16384 steps, 32 threads | 0.211 | 2.2 | - | - | 10.49x | - |
 | viterbi | 16 states, 4 symbols, T=320000, 1 thread | 5.6 | 6.8 | - | - | 1.21x | - |

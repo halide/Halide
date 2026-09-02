@@ -98,7 +98,11 @@ public:
             Tuple step(likely(cast<int16_t>(H)), likely(cast<int16_t>(E)), likely(cast<int16_t>(F)),
                        likely(dir_byte(cast<int16_t>(H), cast<int16_t>(E), cast<int16_t>(F), Hd)));
             dp(b, j, i) = select(i < 0 || j < 0, border, step);
-            dir(b, j, i) = dp(b, j, i)[3];
+            // Two cells per byte of the direction plane: half the bytes the
+            // fill streams out, which is what bounds it across cores.
+            Expr J = qseq.dim(1).extent();
+            dir(b, j, i) = align_tb::pack_dir(dp(b, 2 * j, i)[3]) |
+                           (align_tb::pack_dir(dp(b, min(2 * j + 1, J - 1), i)[3]) << 4);
         } else {
             // The same recurrence as update definitions. Indices shift by
             // one so the boundary lives at storage index zero.
@@ -126,10 +130,10 @@ public:
         Func tb;
         RVar rs;
         if (scan != ScanForm::RDom) {
-            tb = align_traceback(dir, J, I, b, ps);
+            tb = align_traceback(dir, true, J, I, b, ps);
             path(b, ps) = tb(b, ps)[3];
         } else {
-            TracebackRDom t = align_traceback_rdom(dir, J, I, J + I, b, ps);
+            TracebackRDom t = align_traceback_rdom(dir, false, J, I, J + I, b, ps);
             tb = t.tb;
             rs = t.rs;
             path(b, ps) = tb(b, ps + 1)[3];

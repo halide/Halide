@@ -108,7 +108,11 @@ public:
                            likely(dir_byte(Up, Vp, Xp, Yp, score(j, i)))};
             dp8(b, j, i) = select(i < 0 || j < 0, border, stepT);
 
-            dir(b, j, i) = dp8(b, j, i)[4];
+            // Two cells per byte of the direction plane: half the bytes the
+            // fill streams out, which is what bounds it across cores.
+            Expr J = qseq.dim(1).extent();
+            dir(b, j, i) = align_tb::pack_dir(dp8(b, 2 * j, i)[4]) |
+                           (align_tb::pack_dir(dp8(b, min(2 * j + 1, J - 1), i)[4]) << 4);
         } else {
             // Update-definition form. Storage index shifts by one so the
             // boundary lives at index zero; storage (j, i) holds original
@@ -138,10 +142,10 @@ public:
         Func tb;
         RVar rs;
         if (scan != ScanForm::RDom) {
-            tb = align_traceback(dir, J, I, b, ps);
+            tb = align_traceback(dir, true, J, I, b, ps);
             path(b, ps) = tb(b, ps)[3];
         } else {
-            TracebackRDom t = align_traceback_rdom(dir, J, I, J + I, b, ps);
+            TracebackRDom t = align_traceback_rdom(dir, false, J, I, J + I, b, ps);
             tb = t.tb;
             rs = t.rs;
             path(b, ps) = tb(b, ps + 1)[3];

@@ -135,8 +135,12 @@ full 16-bit lane per cell - it does no direction packing.
 
 In the parallel configuration the fill is bound by the memory
 subsystem's write path: it scales linearly to 4 threads (8 Gcell/s per
-thread), loses 30 percent per thread by 8, and caps at ~105 Gcell/s
-from 32 threads on - one streaming-stored direction byte per cell. The
+thread), loses 30 percent per thread by 8, and with one streaming-stored
+direction byte per cell capped at ~105 Gcell/s from 32 threads on. The
+fused forms now pack two cells' directions into a byte (ksw2's state in
+the low two bits, its two extension flags in the next two; the walk
+reads a nibble), which halves what the fill streams out and lifts it to
+~180 Gcell/s: 28 ms for the all-cores row, from 38. The
 9970X is four CCDs with separate L3s and fabric links; spreading
 threads across CCDs recovers 12-28 percent on the way up. There is no
 cache-resident regime for a batch-width x N^2 block at 1k lengths (a
@@ -146,15 +150,15 @@ read-for-ownership). Parasail's per-call 2 MB trace is consumed and
 freed - isolated, its resident set is 173 MB with no more DRAM fills
 than ours - so it never pays that path; making our plane transient per
 block and the walk vectorized is what moved the parallel row from 5
-percent behind parasail to 10 percent ahead. The lever still untaken:
-pack directions to four bits (parasail cannot; its trace lane is its
-score width).
+percent behind parasail to 10 percent ahead, and packing the directions
+to four bits (parasail cannot; its trace lane is its score width) to
+1.7x ahead.
 
 The separations grow with scale because they are memory structure: the
 rdom form's materialized score slabs are L3-resident in the small
 config (ties looming - the chebyshev lesson) and DRAM-bound at
-long-read lengths and full parallelism. At 90 Gcell/s the inductive
-form is writing direction bytes at the streaming-store wall.
+long-read lengths and full parallelism. At 180 Gcell/s the inductive
+form is writing packed directions at the streaming-store wall.
 
 Schedule notes, in the order they mattered:
 - Sequences must be BATCH-MAJOR (qseq(b, j)): pair-major layout turns
