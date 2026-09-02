@@ -118,7 +118,7 @@ int main(int argc, char **argv) {
         y(d, b, n) = Tuple(cast<float>(0), cast<float>(0));
         RDom r(0, D, "r");
         Expr i = r.x;
-        Expr iL = clamp(i - 1, 0, D - 1), iR = clamp(i + 1, 0, D - 1);
+        Expr iL = max(i - 1, 0), iR = min(i + 1, D - 1);
         Expr c1 = y(i, b, n - 1)[0];
         Expr f1 = stencil(y(iL, b, n - 1)[0], c1, y(iR, b, n - 1)[0]);
         Expr f2 = y(i, b, n - 1)[1];
@@ -158,8 +158,8 @@ int main(int argc, char **argv) {
         y_m(d, b, 1) = y1(d, b);  // RK4 startup
         Expr p1 = rn - 1, p2 = rn - 2;
         auto f = [&](Expr t) {
-            return stencil(y_m(clamp(rd_ - 1, 0, D - 1), b, t), y_m(rd_, b, t),
-                           y_m(clamp(rd_ + 1, 0, D - 1), b, t));
+            return stencil(y_m(max(rd_ - 1, 0), b, t), y_m(rd_, b, t),
+                           y_m(min(rd_ + 1, D - 1), b, t));
         };
         y_m(rd_, b, rn) = y_m(rd_, b, p1) + h * (1.5f * f(p1) - 0.5f * f(p2));
 
