@@ -15,7 +15,7 @@
 #include "Halide.h"
 
 #include "../support/bench_harness.h"
-#include "../support/mem_probe.h"
+#include "../support/jit_support.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -148,9 +148,9 @@ int main(int argc, char **argv) {
         hb::Stats si = hb::bench([&] { path_i.realize(res_i); });
 
         // Measured peak internal scratch (untimed, separate from the benches above).
-        double bytes_non = hb::measure_jit_peak(path_n, [&] { path_n.realize(res_n); });
-        double bytes_unf = hb::measure_jit_peak(path_u, [&] { path_u.realize(res_u); });
-        double bytes_ind = hb::measure_jit_peak(path_i, [&] { path_i.realize(res_i); });
+        double bytes_non = hb::profiled_peak_bytes(path_n, res_n);
+        double bytes_unf = hb::profiled_peak_bytes(path_u, res_u);
+        double bytes_ind = hb::profiled_peak_bytes(path_i, res_i);
 
         // C++ log-domain reference (last-index argmax, matching Halide's prev).
         std::vector<std::vector<float>> rv(T, std::vector<float>(S));

@@ -48,7 +48,7 @@
 
 #include "Halide.h"
 #include "../support/bench_harness.h"
-#include "../support/mem_probe.h"
+#include "../support/jit_support.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>

@@ -10,7 +10,7 @@
 #include "Halide.h"
 
 #include "../support/bench_harness.h"
-#include "../support/mem_probe.h"
+#include "../support/jit_support.h"
 #include <cstdio>
 #include <cstdlib>
 #include <vector>
@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
         // Measured peak internal-heap footprint (untimed, custom allocator): the
         // actual bytes Halide allocates for prefix_sum's scratch (the result buffer
         // is user-supplied and allocated outside realize, so it is not counted).
-        const double meas_bytes = hb::measure_jit_peak(output, [&] { output.realize(result); });
+        const double meas_bytes = hb::profiled_peak_bytes(output, result);
         // Unfolded footprint = the full prefix trajectory O(W*H) folding removes;
         // the roofline x-axis (dimension roles: W = recurrence length, H = batch).
         const double fp_unfold = (double)W * H * 4;

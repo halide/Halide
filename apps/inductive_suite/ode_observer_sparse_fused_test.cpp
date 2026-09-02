@@ -16,7 +16,7 @@
 #include "Halide.h"
 
 #include "../support/bench_harness.h"
-#include "../support/mem_probe.h"
+#include "../support/jit_support.h"
 #include <boost/numeric/odeint.hpp>
 #include <cmath>
 #include <cstdio>
@@ -173,9 +173,9 @@ int main(int argc, char **argv) {
     hb::Stats s_mat = bench(5, [&]() { E_mat.realize(emat); });
 
     // Measured peak internal scratch (untimed, separate from the benches above).
-    double bytes_ind = hb::measure_jit_peak(E_fold, [&]() { E_fold.realize(ef); });
-    double bytes_unf = hb::measure_jit_peak(E_unfold, [&]() { E_unfold.realize(eu); });
-    double bytes_non = hb::measure_jit_peak(E_mat, [&]() { E_mat.realize(emat); });
+    double bytes_ind = hb::profiled_peak_bytes(E_fold, ef);
+    double bytes_unf = hb::profiled_peak_bytes(E_unfold, eu);
+    double bytes_non = hb::profiled_peak_bytes(E_mat, emat);
 
     // energy + rhs helpers
     auto energy = [&](const std::vector<float> &y) {  // mean order parameter <y>

@@ -12,7 +12,7 @@
 #include "Halide.h"
 
 #include "../support/bench_harness.h"
-#include "../support/mem_probe.h"
+#include "../support/jit_support.h"
 #include <cstdio>
 #include <cstdlib>
 #include <vector>
@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
         // Measured peak internal-heap footprint (untimed, custom allocator): the
         // actual prefix_sum scratch Halide allocates (one materialized O(W) row per
         // live parallel task -- reused across y -- not the whole O(W*H) trajectory).
-        const double meas_bytes = hb::measure_jit_peak(output, [&] { output.realize(result); });
+        const double meas_bytes = hb::profiled_peak_bytes(output, result);
 
         // Compare against the reference data dumped by prefixsum_bench.cpp.
         int n_mismatch = -1;  // -1 => reference file absent

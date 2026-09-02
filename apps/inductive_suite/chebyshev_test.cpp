@@ -8,7 +8,7 @@
 #include "Halide.h"
 
 #include "../support/bench_harness.h"
-#include "../support/mem_probe.h"
+#include "../support/jit_support.h"
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -221,10 +221,10 @@ int main(int argc, char **argv) {
 
     // Measured peak internal scratch (separate untimed realize per variant; the
     // custom allocator is never active during the timed benches above).
-    double bytes_mat = hb::measure_jit_peak(f_mat, [&]() { f_mat.realize(x_mat); });
-    double bytes_ring = hb::measure_jit_peak(f_ring, [&]() { f_ring.realize(x_ring); });
-    double bytes_unf = hb::measure_jit_peak(f_unf, [&]() { f_unf.realize(x_unfold); });
-    double bytes_ind = hb::measure_jit_peak(f_ind, [&]() { f_ind.realize(x_inductive); });
+    double bytes_mat = hb::profiled_peak_bytes(f_mat, x_mat);
+    double bytes_ring = hb::profiled_peak_bytes(f_ring, x_ring);
+    double bytes_unf = hb::profiled_peak_bytes(f_unf, x_unfold);
+    double bytes_ind = hb::profiled_peak_bytes(f_ind, x_inductive);
 
     std::vector<double> xi(n), xu(n), xn(n), xm(n);
     for (int i = 0; i < n; i++) {

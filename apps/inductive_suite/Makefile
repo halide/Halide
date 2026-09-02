@@ -27,7 +27,7 @@ $(BIN)/prefixsum_bench_tbb: prefixsum_bench_tbb.cpp ../support/bench_harness.h
 	@mkdir -p $(@D)
 	$(CXX) -O3 -march=native -std=c++17 $< -ltbb -lpthread -o $@
 
-$(BIN)/%: %.cpp ../support/bench_harness.h ../support/mem_probe.h
+$(BIN)/%: %.cpp ../support/bench_harness.h ../support/jit_support.h
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS_JIT) $< $(LDFLAGS_JIT) -o $@
 
