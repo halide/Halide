@@ -1,6 +1,7 @@
 HL_TARGET ?= host
 # The whole app builds with clang: the "Finding Fast Filters" library the
-# runner links needs its vector extensions.
+# runner links needs its vector extensions. The runner keeps infinities
+# under fast-math for the benchmark harness's initial best time.
 CXX = clang++-21
 
 include ../support/Makefile.inc
@@ -64,7 +65,7 @@ $(BIN)/%/runner: runner.cpp fff_biquads.h $(BIN)/%/biquads_ind.a $(BIN)/%/biquad
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -DCHANNELS=$(CHANNELS) -DSAMPLES=$(SAMPLES) \
 	    -DSECTIONS=$(SECTIONS) -DPARALLEL=$(if $(filter true,$(PAR)),1,0) \
-	    -Wall -O2 $(filter-out %.h,$^) -o $@ $(IPP_FLAGS) $(FFF_FLAGS) $(LDFLAGS) -lpthread -ldl
+	    -Wall -O3 -ffast-math -fno-finite-math-only $(filter-out %.h,$^) -o $@ $(IPP_FLAGS) $(FFF_FLAGS) $(LDFLAGS) -lpthread -ldl
 
 test: $(BIN)/$(HL_TARGET)/runner
 	$<

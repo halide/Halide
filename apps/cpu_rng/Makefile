@@ -34,7 +34,7 @@ $(BIN)/%/runtime.a: $(GENERATOR_BIN)/rng.generator
 $(BIN)/%/runner: runner.cpp $(BIN)/%/rng_ind.a $(BIN)/%/rng_unf.a $(BIN)/%/rng_rdom.a $(BIN)/%/runtime.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -DLANES=$(LANES) -DSTEPS=$(STEPS) \
-	    -Wall -O3 -march=native $^ -o $@ $(LDFLAGS) -lpthread -ldl
+	    -Wall -O3 -march=native -ffast-math $^ -o $@ $(LDFLAGS) -lpthread -ldl
 
 test: $(BIN)/$(HL_TARGET)/runner
 	$<

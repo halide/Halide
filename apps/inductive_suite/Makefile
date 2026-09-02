@@ -10,7 +10,9 @@ HL_TARGET ?= host
 
 include ../support/Makefile.inc
 
-CXXFLAGS_JIT = -O3 -march=native -std=c++17 -I$(HALIDE_DISTRIB_PATH)/include -I$(HALIDE_DISTRIB_PATH)/tools
+# fast-math for the host-side references and baselines, matching the
+# floating-point semantics Halide's own code generation assumes.
+CXXFLAGS_JIT = -O3 -march=native -ffast-math -std=c++17 -I$(HALIDE_DISTRIB_PATH)/include -I$(HALIDE_DISTRIB_PATH)/tools
 LDFLAGS_JIT = -L$(HALIDE_DISTRIB_PATH)/lib -lHalide -lpthread -ldl -Wl,-rpath,$(HALIDE_DISTRIB_PATH)/lib
 
 BINS = $(BIN)/viterbi_log $(BIN)/chebyshev_test $(BIN)/prefixsum_bench $(BIN)/prefixsum_bench_rdom $(BIN)/prefixsum_bench_fold
@@ -25,7 +27,7 @@ all: $(BINS)
 
 $(BIN)/prefixsum_bench_tbb: prefixsum_bench_tbb.cpp ../support/bench_harness.h
 	@mkdir -p $(@D)
-	$(CXX) -O3 -march=native -std=c++17 $< -ltbb -lpthread -o $@
+	$(CXX) -O3 -march=native -ffast-math -std=c++17 $< -ltbb -lpthread -o $@
 
 $(BIN)/%: %.cpp ../support/bench_harness.h ../support/jit_support.h
 	@mkdir -p $(@D)

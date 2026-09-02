@@ -46,11 +46,11 @@ $(BIN)/%/runtime.a: $(GENERATOR_BIN)/align16.generator
 
 $(BIN)/%/ksw2_gg.o: ksw2/ksw2_gg.c
 	@mkdir -p $(@D)
-	$(CC) -O3 -march=native -c $< -o $@
+	$(CC) -O3 -march=native -ffast-math -c $< -o $@
 
 $(BIN)/%/ksw2_gg2_sse.o: ksw2/ksw2_gg2_sse.c
 	@mkdir -p $(@D)
-	$(CC) -O3 -march=native -c $< -o $@
+	$(CC) -O3 -march=native -ffast-math -c $< -o $@
 
 # Optional parasail baseline: build https://github.com/jeffdaily/parasail
 # with cmake into $(PARASAIL_DIR)/build and this picks it up.
@@ -63,7 +63,7 @@ $(BIN)/%/runner: runner.cpp $(STATIC_LIBS) $(BIN)/%/runtime.a $(BIN)/%/ksw2_gg.o
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -DQLEN=$(QLEN) -DTLEN=$(TLEN) -DBATCH=$(BATCH) \
 	    -DPARALLEL=$(if $(filter true,$(PAR)),1,0) \
-	    -Wall -O3 -march=native $(filter %.cpp %.a %.o,$^) $(PARASAIL_FLAGS) -o $@ $(LDFLAGS) -lpthread -ldl
+	    -Wall -O3 -march=native -ffast-math $(filter %.cpp %.a %.o,$^) $(PARASAIL_FLAGS) -o $@ $(LDFLAGS) -lpthread -ldl
 
 test: $(BIN)/$(HL_TARGET)/runner
 	$(if $(INTERLEAVE),INTERLEAVE=$(INTERLEAVE)) $<
