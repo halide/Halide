@@ -48,8 +48,12 @@ PIN_CORE = 4
 
 def sh(cmd, cwd, env=None, log=None, check=True, pin=False):
     e = dict(os.environ)
-    e["LD_PRELOAD"] = JEMALLOC
-    e["MALLOC_CONF"] = MALLOC_CONF
+    # Julia brings its own allocator regime and crashes at exit under the
+    # preload (free(): invalid size, after printing its result), so it runs
+    # without it; its 32 MB working array is retained by its own runtime.
+    if str(JULIA) not in cmd:
+        e["LD_PRELOAD"] = JEMALLOC
+        e["MALLOC_CONF"] = MALLOC_CONF
     e.update(env or {})
     if pin:
         cmd = f"taskset -c {PIN_CORE} {cmd}"
