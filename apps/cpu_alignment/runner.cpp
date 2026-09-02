@@ -20,7 +20,6 @@ int ksw_gg2_sse(void *km, int qlen, const uint8_t *query, int tlen, const uint8_
 }
 
 #include <cstdio>
-#include <malloc.h>
 #ifdef HAVE_PARASAIL
 #include "parasail.h"
 #endif
@@ -106,10 +105,6 @@ std::string cigar_str(const std::vector<uint32_t> &cigar) {
 }  // namespace
 
 int main(int argc, char **argv) {
-    // Keep glibc from serving ksw2's per-call megabyte allocations with
-    // mmap/munmap: page faults would otherwise dominate both baselines.
-    mallopt(M_MMAP_THRESHOLD, 1 << 30);
-    mallopt(M_TRIM_THRESHOLD, 1 << 30);
     // Batch-major layouts for Halide; contiguous per-pair copies for ksw2.
     Buffer<uint8_t> query(B, J), target(B, I);
     std::vector<uint8_t> qs((size_t)B * J), ts((size_t)B * I);
