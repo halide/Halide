@@ -12,8 +12,8 @@ Every Halide form is verified against its app's reference before timing (the ali
 | cpu_alignment | 1024x1024 x 4096 pairs, all cores, fill+traceback+cigar | 37.8 | 711.7 | 46.2 | parasail | 18.81x | 1.22x |
 | kalman_ll | 256 series x 16384 steps, 1 thread | 1.6 | 4.3 | - | - | 2.69x | - |
 | kalman_ll | 256 series x 16384 steps, 32 threads | 0.211 | 2.2 | - | - | 10.49x | - |
-| viterbi | 16 states, 4 symbols, T=320000, 1 thread | 4.8 | 6.6 | - | - | 1.37x | - |
-| viterbi | 64 states, 8 symbols, T=50000, 1 thread | 9.8 | 10.3 | - | - | 1.04x | - |
+| viterbi | 16 states, 4 symbols, T=320000, 1 thread | 5.6 | 6.8 | - | - | 1.21x | - |
+| viterbi | 64 states, 8 symbols, T=50000, 1 thread | 5.7 | 6.4 | - | - | 1.13x | - |
 | ode | Allen-Cahn D=1024, batch 1, T=32768, 1 thread | 6.2 | 8.4 | 28.9 | Boost.odeint | 1.34x | 4.62x |
 | prefixsum | 1048576 x 32 rows, running-mean consumer, 1 thread | 37.3 | 45.6 | 37.3 | oneTBB parallel_scan | 1.22x | 1.00x |
 | prefixsum | 1048576 x 32 rows, running-mean consumer, 32 threads | 2.8 | 3.8 | 3.0 | oneTBB parallel_scan | 1.35x | 1.09x |
