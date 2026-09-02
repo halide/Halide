@@ -1381,8 +1381,13 @@ class SlidingWindow : public IRMutator {
         // loop have no order between them at all, so give up on both.
         //
         // A consumer that wants the older step keeps it through ext.
+        // A one-slot window is only sound if each point is computed exactly
+        // once: a self-referential Func recomputed at the same point (a
+        // redundant split, a ShiftInwards tail) would read its own fresh
+        // output as the previous value. Keep the previous value for those.
         bool dies_at_its_store =
             func.updates().empty() &&
+            !func.is_inductive() &&
             !lanes_span_dim(body, func.name(), d.dim_idx);
 
         Expr low = dies_at_its_store ?

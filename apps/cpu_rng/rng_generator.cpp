@@ -86,7 +86,11 @@ public:
 
         // ---------------- Schedule ----------------
 
-        const int VEC = lanes;  // 64-bit lanes of one vector
+        // 64-bit lanes per vector: wider than native for ILP, but capped so
+        // that large parallel stream counts still split into many blocks
+        // (VEC = lanes makes the block loop a single iteration, which
+        // turns the parallel split degenerate).
+        const int VEC = std::min((int)lanes, 32);
         Var co("co"), ci("ci");
         if (scan != ScanForm::RDom) {
             // Blocks of streams advance together through one serial walk;
