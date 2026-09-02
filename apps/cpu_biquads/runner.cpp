@@ -3,6 +3,7 @@
 // chosen so the signal does not fit in the last level cache.
 
 #include "HalideBuffer.h"
+#include "HalideRuntime.h"
 #include "halide_benchmark.h"
 
 #include "biquads_ind.h"
@@ -10,12 +11,7 @@
 #include "biquads_unf.h"
 
 #ifdef HAVE_FFF
-extern "C" {
-void *fff_biquads_create(int nblocks, const float *sos);
-int fff_biquads_stride();
-void fff_biquads_run_block(void *handle, int b, const float *x, float *y, long S);
-void fff_biquads_destroy(void *handle);
-}
+#include "fff_biquads.h"
 #endif
 #ifdef HAVE_IPP
 #include "ipps.h"
@@ -268,7 +264,7 @@ int main(int argc, char **argv) {
     // sparse FIRs (numerators) cascaded with the library's serial
     // second-order IIRs. The signal is handed over block-major, channels
     // innermost within a block, and the blocks are dealt to threads.
-    const int fstride = fff_biquads_stride();
+    const int fstride = FffBiquads::stride();
     const int nblocks = C / fstride;
     // The library loads whole vectors, so the signals are 64-byte aligned.
     float *xb = (float *)aligned_alloc(64, (size_t)C * S * sizeof(float));
@@ -286,13 +282,22 @@ int main(int argc, char **argv) {
             sos_flat[6 * k + j] = sos(j, k);
         }
     }
-    void *fff = fff_biquads_create(nblocks, sos_flat.data());
-    // Blocks across OpenMP's persistent pool under PAR, one thread each.
-    const int fff_threads = PARALLEL ? std::min<int>(nblocks, std::thread::hardware_concurrency()) : 1;
+    FffBiquads fff(nblocks, sos_flat);
+    // Blocks across the Halide runtime's thread pool under PAR: the same
+    // persistent pool the Halide forms run on.
+    auto fff_block = [&](int b) { fff.run_block(b, xb, yb, S); };
     auto fff_run = [&]() {
-#pragma omp parallel for schedule(static) num_threads(fff_threads)
-        for (int b = 0; b < nblocks; b++) {
-            fff_biquads_run_block(fff, b, xb, yb, S);
+        if (PARALLEL) {
+            halide_do_par_for(
+                nullptr, [](void *, int b, uint8_t *closure) {
+                    (*(decltype(fff_block) *)closure)(b);
+                    return 0;
+                },
+                0, nblocks, (uint8_t *)&fff_block);
+        } else {
+            for (int b = 0; b < nblocks; b++) {
+                fff_block(b);
+            }
         }
     };
     fff_run();
@@ -306,7 +311,6 @@ int main(int argc, char **argv) {
     }
     check(x, sos, yfff, "fff");
     double t_fff = benchmark(3, 1, fff_run);
-    fff_biquads_destroy(fff);
     free(xb);
     free(yb);
 #endif

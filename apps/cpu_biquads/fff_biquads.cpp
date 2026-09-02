@@ -1,16 +1,19 @@
 // The biquad cascade as a strided 1-D filter, built from the "Finding Fast
-// Filters" (Ma et al.) template library vendored under fff/. With the
+// Filters" template library (Ma, Adams and Ragan-Kelley,
+// https://arxiv.org/abs/2607.20634) vendored under fff/. With the
 // channels innermost, a block of STRIDE channels is one 1-D signal of
 // stride STRIDE: each section is a sparse FIR with taps at 0, STRIDE and
 // 2*STRIDE for the numerator, cascaded with the library's serial
-// second-order IIR at that stride for the denominator. Compiled with clang
-// (the library uses its vector extensions); the runner calls it through
-// the C interface below.
+// second-order IIR at that stride for the denominator. The library uses
+// clang's vector extensions; the runner uses it through the class in
+// fff_biquads.h.
 
 #include <memory>
 #include <vector>
 #include <cstring>
 #include <utility>
+
+#include "fff_biquads.h"
 
 #include "fff/FloatVector.h"
 #include "fff/CircularBuffer.h"
@@ -57,33 +60,28 @@ auto make_cascade(const float *sos, std::index_sequence<I...>) {
 
 using Filter = decltype(make_cascade(nullptr, std::make_index_sequence<N>{}));
 
-struct State {
+}  // namespace
+
+struct FffBiquads::Impl {
     // One filter per block of channels, built once and reset per run.
     std::vector<std::unique_ptr<Filter>> filters;
 };
 
-}  // namespace
-
-extern "C" {
-
-void *fff_biquads_create(int nblocks, const float *sos) {
-    State *st = new State;
-    for (int b = 0; b < nblocks; b++) {
-        st->filters.emplace_back(new Filter(make_cascade(sos, std::make_index_sequence<N>{})));
-    }
-    return st;
-}
-
-int fff_biquads_stride() {
+int FffBiquads::stride() {
     return STRIDE;
 }
 
-// x and y are block-major: block b's samples are S rows of STRIDE floats,
-// channels innermost, at x + b * S * STRIDE. The caller deals blocks to
-// threads.
-void fff_biquads_run_block(void *handle, int b, const float *x, float *y, long S) {
-    State *st = (State *)handle;
-    Filter &f = *st->filters[b];
+FffBiquads::FffBiquads(int nblocks, const std::vector<float> &sos)
+    : impl(new Impl) {
+    for (int b = 0; b < nblocks; b++) {
+        impl->filters.emplace_back(new Filter(make_cascade(sos.data(), std::make_index_sequence<N>{})));
+    }
+}
+
+FffBiquads::~FffBiquads() = default;
+
+void FffBiquads::run_block(int b, const float *x, float *y, long S) {
+    Filter &f = *impl->filters[b];
     f.reset();
     const float_vec *in = (const float_vec *)(x + (size_t)b * S * STRIDE);
     float_vec *out = (float_vec *)(y + (size_t)b * S * STRIDE);
@@ -93,9 +91,4 @@ void fff_biquads_run_block(void *handle, int b, const float *x, float *y, long S
     for (long v = 0; v < nvec; v += STEP) {
         f.run(in + v, out + v);
     }
-}
-
-void fff_biquads_destroy(void *handle) {
-    delete (State *)handle;
-}
 }

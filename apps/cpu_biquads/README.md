@@ -74,8 +74,9 @@ the signal through) are the same shape: every library walks channels
 one at a time.
 
 The one baseline vectorized across channels is built from the "Finding
-Fast Filters" template library (Ma et al.), vendored under fff/ and
-compiled with clang (fff_biquads.cpp): a block of channels, channels
+Fast Filters" template library (Ma, Adams and Ragan-Kelley,
+https://arxiv.org/abs/2607.20634), vendored under fff/; the app builds
+with clang for its vector extensions (fff_biquads.cpp): a block of channels, channels
 innermost, is one 1-D signal with that stride, each section a sparse
 FIR with taps at 0, stride and 2*stride for the numerator cascaded with
 the library's second-order IIR at that stride for the denominator. Its
