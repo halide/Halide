@@ -81,13 +81,33 @@ def hb_rows(text):
 
 
 def best(cands):
-    """(name, ms, others) for [(name, ms-or-None)]: the fastest available, and
-    the slower ones tried as 'name (ms)' strings, so the table says what the
-    fastest baseline beat."""
-    c = sorted([(n, t) for n, t in cands if t is not None], key=lambda x: x[1])
-    if not c:
-        return None, None, []
-    return c[0][0], c[0][1], [f"{n} ({fmt(t)})" for n, t in c[1:]]
+    """(name, ms) of the fastest available among [(name, ms-or-None)]."""
+    c = [(n, t) for n, t in cands if t is not None]
+    return min(c, key=lambda x: x[1]) if c else (None, None)
+
+
+# Every non-Halide implementation tried per app, fastest-baseline candidates
+# included, so the table records what has already been measured and found
+# slower (see the app READMEs for the numbers behind the ones the driver
+# does not run).
+TRIED = {
+    "cpu_biquads": ["Finding Fast Filters strided cascade", "Intel IPP ippsIIR_32f_P", "scipy.sosfilt",
+                    "Julia DSP.jl filt", "FFmpeg biquad", "torchaudio lfilter"],
+    "cpu_rng": ["hand AVX-512 kernel", "Julia rand!", "numpy PCG64", "scalar C++ loop"],
+    "cpu_alignment": ["parasail", "ksw2 (minimap2 kernel)", "ksw2 scalar"],
+    "kalman_ll": [],
+    "viterbi": [],
+    "ode": ["Boost.odeint", "plain C++ loop"],
+    "prefixsum": ["oneTBB parallel_scan"],
+    "chebyshev": ["hand-written mod-3 ring"],
+    "cuda_mamba2": ["Triton (mamba_ssm)"],
+    "flash_attention": ["FlashAttention-2 (torch SDPA)", "torch memory-efficient SDPA", "cuBLAS + softmax + cuBLAS"],
+}
+
+
+def slower_tried(app, base_name):
+    base = (base_name or "").replace(" (threaded)", "")
+    return [n for n in TRIED.get(app, []) if n != base]
 
 
 # Each config returns dict(params, ind, rdom, base_name, base).
@@ -107,11 +127,11 @@ def cpu_biquads(par):
     # The "Finding Fast Filters" template library's strided IIR cascade
     # (Ma et al.), vectorized across a block of channels like our schedule.
     fff = us_row(out, "fff")
-    bn, bt, others = best([("scipy.sosfilt", scipy), ("Intel IPP ippsIIR_32f_P" + (" (threaded)" if par else ""), ipp),
+    bn, bt = best([("scipy.sosfilt", scipy), ("Intel IPP ippsIIR_32f_P" + (" (threaded)" if par else ""), ipp),
                            ("Finding Fast Filters strided cascade" + (" (threaded)" if par else ""), fff)])
     return dict(params=f"{knobs['SECTIONS']} sections, {knobs['CHANNELS']} ch x {knobs['SAMPLES']} samples, "
                        f"{'all cores' if par else '1 thread'}",
-                ind=us_row(out, "inductive"), rdom=us_row(out, "rdom"), base_name=bn, base=bt, others=others)
+                ind=us_row(out, "inductive"), rdom=us_row(out, "rdom"), base_name=bn, base=bt)
 
 
 def cpu_rng(par):
@@ -124,10 +144,10 @@ def cpu_rng(par):
     if JULIA.exists() and not par:  # Julia's rand! is single-threaded
         jo = sh(f"{JULIA} julia_bench.jl {2 * knobs['LANES']} {knobs['STEPS']}", d, pin=True)
         julia = us_row(jo, "julia xoshiro")
-    bn, bt, others = best([("hand AVX-512 kernel" + (" (threaded)" if par else ""), us_row(out, "simd C++")),
+    bn, bt = best([("hand AVX-512 kernel" + (" (threaded)" if par else ""), us_row(out, "simd C++")),
                            ("Julia rand!", julia), ("scalar C++ loop", us_row(out, "scalar C++"))])
     return dict(params=f"{knobs['LANES']} streams x {knobs['STEPS']} steps, {'all cores' if par else '1 thread'}",
-                ind=us_row(out, "inductive"), rdom=us_row(out, "rdom"), base_name=bn, base=bt, others=others)
+                ind=us_row(out, "inductive"), rdom=us_row(out, "rdom"), base_name=bn, base=bt)
 
 
 def cpu_alignment(par):
@@ -137,11 +157,11 @@ def cpu_alignment(par):
     sh("make -s clean", d)
     out = sh(f"make -s {kv} test", d, log=LOGS / f"cpu_alignment_par{par}.txt", pin=not par)
     comp = us_row(out, "compaction") or 0.0
-    bn, bt, others = best([("ksw2 (minimap2 kernel)", us_row(out, "ksw2 sse")), ("parasail", us_row(out, "parasail")),
+    bn, bt = best([("ksw2 (minimap2 kernel)", us_row(out, "ksw2 sse")), ("parasail", us_row(out, "parasail")),
                            ("ksw2 scalar", us_row(out, "ksw2 gg"))])
     return dict(params=f"1024x1024 x {knobs['BATCH']} pairs, {'all cores' if par else '1 thread'}, fill+traceback+cigar",
                 ind=us_row(out, "int8 ind + traceback"),
-                rdom=(us_row(out, "int8 rdom") or 0) + comp, base_name=bn, base=bt, others=others)
+                rdom=(us_row(out, "int8 rdom") or 0) + comp, base_name=bn, base=bt)
 
 
 def kalman_ll(threads):
@@ -191,11 +211,11 @@ def ode(D, B, T):
     out = sh(f"{b} {D} {B} {T}", APPS / "inductive_suite", env={"HL_NUM_THREADS": "1"}, pin=True,
              log=LOGS / f"ode_{D}_{B}_{T}.txt")
     r = hb_rows(out)
-    bn, bt, others = best([("Boost.odeint", r.get("Boost.odeint (rk4 init + observer)")),
+    bn, bt = best([("Boost.odeint", r.get("Boost.odeint (rk4 init + observer)")),
                            ("plain C++ loop", r.get("C++ reference + observer (oracle)"))])
     return dict(params=f"Allen-Cahn D={D}, batch {B}, T={T}, 1 thread",
                 ind=r.get("inductive FOLDED (fold n -> 2)"), rdom=r.get("non-inductive (materialize)"),
-                base_name=bn, base=bt, others=others)
+                base_name=bn, base=bt)
 
 
 def prefixsum(W, H, threads):
@@ -277,10 +297,10 @@ def flash_attention():
             torch_flash = us_row(to, "torch flash")
         except RuntimeError:
             pass
-    bn, bt, others = best([("FlashAttention-2 (torch SDPA)", torch_flash), ("cuBLAS + softmax + cuBLAS", unfused)])
+    bn, bt = best([("FlashAttention-2 (torch SDPA)", torch_flash), ("cuBLAS + softmax + cuBLAS", unfused)])
     return dict(params=f"{shape['QUERIES']} queries x {shape['KEYS']} keys, depth {shape['DEPTH']}, fp16, "
                        f"chunk 64, RTX 5060 Ti",
-                ind=ind, rdom=rdom, base_name=bn or "torch flash (unavailable)", base=bt, others=others)
+                ind=ind, rdom=rdom, base_name=bn or "torch flash (unavailable)", base=bt)
 
 
 SUITE = [
@@ -345,12 +365,12 @@ def main():
     rows = [cache[f"{idx}:{name}"] for idx, (name, _) in enumerate(SUITE) if f"{idx}:{name}" in cache]
 
     hdr = ("| App | Config | Inductive (ms) | RDom (ms) | Fastest baseline (ms) | Baseline | "
-           "Slower baselines tried (ms) | RDom / ind | Baseline / ind |")
+           "Slower baselines tried | RDom / ind | Baseline / ind |")
     sep = "|---|---|---:|---:|---:|---|---|---:|---:|"
     lines = [hdr, sep]
     for r in rows:
         lines.append(f"| {r['app']} | {r['params']} | {fmt(r['ind'])} | {fmt(r['rdom'])} | {fmt(r['base'])} | "
-                     f"{r['base_name'] or '-'} | {'; '.join(r.get('others') or []) or '-'} | "
+                     f"{r['base_name'] or '-'} | {', '.join(slower_tried(r['app'], r['base_name'])) or '-'} | "
                      f"{ratio(r['ind'], r['rdom'])} | {ratio(r['ind'], r['base'])} |")
     table = "\n".join(lines)
     print("\n" + table)

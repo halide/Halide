@@ -2,22 +2,22 @@ Times are milliseconds per run: inductive = the folded inductive-Func form, RDom
 
 Every Halide form is verified against its app's reference before timing (the alignment rows byte-exact against ksw2, the rng rows bit-exact against Julia's rand! seeding, the GPU rows against serial references). Baselines are threaded across independent problems in the all-cores rows where the library allows it (ksw2, parasail, oneTBB); the rng hand kernel and Julia's rand! are single-threaded, so the rng all-cores baseline is the single-thread hand kernel. The mamba2 rows compare each side at its own best chunk (Triton prefers 256; the Halide backward is best at 128), with the tensor-core schedules (WMMA=true). Flash attention's RDom form is the same online softmax with the running maximum and row sum carried at the accumulator's shape, broadcast across its columns, so that one Tuple update over the key chunks advances all three (Halide fuses no dependent stages, and a per-row Func may not read the state its update feeds); the rescalings are then paid per element rather than per row, the same tile verbs and staging otherwise. For scale, cuBLAS + softmax + cuBLAS is about 13x slower than the flash filter. Chebyshev is the intended in-cache control, where folding buys nothing. Outputs that are written once and never read back are streamed in every form (rng, biquads, the alignment direction plane); the JIT apps (kalman, viterbi, ode) and the alignment runner free their scratch at the end of every run, and past a few MB the default allocators hand it back to the kernel, so every process the driver runs, baselines included, uses jemalloc configured to keep freed memory (oversize_threshold:0, no decay), which is what an application reusing its work buffers gets. It matters where the scratch is large: without retention the ode RDom row is 23 ms rather than 7, and every alignment form pays about 230 ms of first-touch faults on its 64 MB per-task direction planes; the baselines are within noise either way, scipy a few percent faster. The same allocator backs everything with transparent huge pages, and single-threaded rows run pinned to one core: the serial forms that stream gigabyte signals otherwise vary by 30% from run to run with where their pages land. The Python baselines report the best sample, as Halide's harness does. Every measurement, Halide forms and baselines in every language, follows one protocol (apps/support/bench_harness.h): three untimed runs, thirty timed trials, the best reported with the median kept for the spread; on the GPU a trial is ten launches and one device synchronization, divided by ten, so the time includes completion but not a synchronization per launch.
 
-| App | Config | Inductive (ms) | RDom (ms) | Fastest baseline (ms) | Baseline | Slower baselines tried (ms) | RDom / ind | Baseline / ind |
+| App | Config | Inductive (ms) | RDom (ms) | Fastest baseline (ms) | Baseline | Slower baselines tried | RDom / ind | Baseline / ind |
 |---|---|---:|---:|---:|---|---|---:|---:|
-| cpu_biquads | 8 sections, 32 ch x 8388608 samples, 1 thread | 92.0 | 531.0 | 175.6 | Finding Fast Filters strided cascade | - | 5.77x | 1.91x |
-| cpu_biquads | 8 sections, 256 ch x 1048576 samples, all cores | 24.5 | 480.5 | 32.2 | Finding Fast Filters strided cascade (threaded) | - | 19.62x | 1.32x |
-| cpu_rng | 32 streams x 4194304 steps, 1 thread | 24.4 | 337.0 | 24.4 | hand AVX-512 kernel | Julia rand! (35.1); scalar C++ loop (554.8) | 13.82x | 1.00x |
-| cpu_rng | 1024 streams x 131072 steps, all cores | 9.1 | 160.3 | 9.6 | hand AVX-512 kernel (threaded) | scalar C++ loop (1084.1) | 17.58x | 1.06x |
-| cpu_alignment | 1024x1024 x 128 pairs, 1 thread, fill+traceback+cigar | 7.8 | 43.6 | 38.7 | parasail | - | 5.55x | 4.94x |
-| cpu_alignment | 1024x1024 x 4096 pairs, all cores, fill+traceback+cigar | 22.2 | 707.2 | 47.3 | parasail | - | 31.82x | 2.13x |
-| kalman_ll | 256 series x 16384 steps, 1 thread | 1.6 | 4.1 | - | - | - | 2.57x | - |
-| kalman_ll | 1024 series x 16384 steps, 32 threads | 0.565 | 12.1 | - | - | - | 21.44x | - |
+| cpu_biquads | 8 sections, 32 ch x 8388608 samples, 1 thread | 90.7 | 532.6 | 177.3 | Finding Fast Filters strided cascade | Intel IPP ippsIIR_32f_P, scipy.sosfilt, Julia DSP.jl filt, FFmpeg biquad, torchaudio lfilter | 5.87x | 1.96x |
+| cpu_biquads | 8 sections, 256 ch x 1048576 samples, all cores | 25.1 | 477.0 | 34.8 | Finding Fast Filters strided cascade (threaded) | Intel IPP ippsIIR_32f_P, scipy.sosfilt, Julia DSP.jl filt, FFmpeg biquad, torchaudio lfilter | 19.01x | 1.39x |
+| cpu_rng | 32 streams x 4194304 steps, 1 thread | 24.4 | 335.2 | 24.4 | hand AVX-512 kernel | Julia rand!, numpy PCG64, scalar C++ loop | 13.75x | 1.00x |
+| cpu_rng | 1024 streams x 131072 steps, all cores | 9.4 | 160.3 | 9.5 | hand AVX-512 kernel (threaded) | Julia rand!, numpy PCG64, scalar C++ loop | 17.02x | 1.00x |
+| cpu_alignment | 1024x1024 x 128 pairs, 1 thread, fill+traceback+cigar | 7.9 | 43.4 | 38.1 | parasail | ksw2 (minimap2 kernel), ksw2 scalar | 5.53x | 4.86x |
+| cpu_alignment | 1024x1024 x 4096 pairs, all cores, fill+traceback+cigar | 22.7 | 708.5 | 47.3 | parasail | ksw2 (minimap2 kernel), ksw2 scalar | 31.15x | 2.08x |
+| kalman_ll | 256 series x 16384 steps, 1 thread | 1.6 | 4.1 | - | - | - | 2.58x | - |
+| kalman_ll | 1024 series x 16384 steps, 32 threads | 0.550 | 12.1 | - | - | - | 21.97x | - |
 | viterbi | 16 states, 4 symbols, T=320000, 1 thread | 5.5 | 5.6 | - | - | - | 1.03x | - |
 | viterbi | 64 states, 8 symbols, T=50000, 1 thread | 5.4 | 5.1 | - | - | - | 0.94x | - |
-| ode | Allen-Cahn D=1024, batch 1, T=32768, 1 thread | 4.3 | 6.6 | 5.5 | Boost.odeint | - | 1.54x | 1.27x |
-| prefixsum | 1048576 x 32 rows, running-mean consumer, 1 thread | 16.1 | 23.9 | 15.5 | oneTBB parallel_scan | - | 1.48x | 0.97x |
-| prefixsum | 1048576 x 32 rows, running-mean consumer, 32 threads | 1.2 | 2.9 | 2.8 | oneTBB parallel_scan | - | 2.44x | 2.40x |
-| chebyshev | n=2048 dense SPD, 100 iterations, 1 thread (in-cache control) | 19.0 | 16.5 | 17.6 | hand-written mod-3 ring | - | 0.87x | 0.93x |
-| cuda_mamba2 | fwd, seq 4096, state 128, 128 heads x 64, chunk 256 (Triton 256), RTX 5060 Ti | 1.6 | 1.7 | 1.5 | Triton (mamba_ssm) | - | 1.09x | 0.98x |
-| cuda_mamba2 | bwd, seq 4096, state 128, 128 heads x 64, chunk 128 (Triton 256), RTX 5060 Ti | 4.4 | 5.6 | 4.3 | Triton (mamba_ssm) | - | 1.28x | 0.98x |
-| flash_attention | 65536 queries x 1024 keys, depth 64, fp16, chunk 64, RTX 5060 Ti | 0.397 | 0.438 | 0.375 | FlashAttention-2 (torch SDPA) | - | 1.11x | 0.95x |
+| ode | Allen-Cahn D=1024, batch 1, T=32768, 1 thread | 4.3 | 6.6 | 4.5 | plain C++ loop | Boost.odeint | 1.54x | 1.04x |
+| prefixsum | 1048576 x 32 rows, running-mean consumer, 1 thread | 16.1 | 23.8 | 15.6 | oneTBB parallel_scan | - | 1.48x | 0.97x |
+| prefixsum | 1048576 x 32 rows, running-mean consumer, 32 threads | 1.3 | 3.2 | 3.0 | oneTBB parallel_scan | - | 2.34x | 2.21x |
+| chebyshev | n=2048 dense SPD, 100 iterations, 1 thread (in-cache control) | 18.5 | 16.8 | 18.0 | hand-written mod-3 ring | - | 0.91x | 0.97x |
+| cuda_mamba2 | fwd, seq 4096, state 128, 128 heads x 64, chunk 256 (Triton 256), RTX 5060 Ti | 1.6 | 1.7 | 1.5 | Triton (mamba_ssm) | - | 1.09x | 0.97x |
+| cuda_mamba2 | bwd, seq 4096, state 128, 128 heads x 64, chunk 128 (Triton 256), RTX 5060 Ti | 4.6 | 5.7 | 4.3 | Triton (mamba_ssm) | - | 1.22x | 0.93x |
+| flash_attention | 65536 queries x 1024 keys, depth 64, fp16, chunk 64, RTX 5060 Ti | 0.396 | 0.438 | 0.375 | FlashAttention-2 (torch SDPA) | torch memory-efficient SDPA, cuBLAS + softmax + cuBLAS | 1.11x | 0.95x |
