@@ -1625,6 +1625,13 @@ class ExtractWMMAOperations : public IRMutator {
                 }
             }
         }
+        if (!src && !last_attempt) {
+            // What it reads may get its shape from a store further on, as a
+            // value computed ahead of the stores that use it does. Look again
+            // once the whole pass has been walked.
+            unresolved++;
+            return;
+        }
         user_assert(src)
             << "The tensor core fragment " << f->name << " is computed from "
             << "something other than another fragment, so there is nothing to say "
@@ -2187,19 +2194,87 @@ class ExtractWMMAOperations : public IRMutator {
     }
 
 public:
+    // Elementwise stores whose sources had no shape yet when the first pass
+    // reached them, and whether the pass is the one that gives up on them.
+    int unresolved = 0;
+    bool last_attempt = false;
+
     void next_pass() {
         pass = 1;
     }
 };
 
+// A value built from fragments and bound by a let before the stores that use
+// it. A Tuple-valued update is lowered this way: every component's new value
+// is computed before any component is written, so that each can read the
+// others as they were. The value only means anything as a fragment, so it is
+// given one: a tile of its own, written where the let was, and read back
+// where the variable was.
+class MaterializeFragmentLets : public IRMutator {
+    using IRMutator::visit;
+
+    Scope<> tile_allocations;
+
+    bool reads_fragment(const Expr &e) {
+        class Reads : public IRVisitor {
+            using IRVisitor::visit;
+            void visit(const Load *op) override {
+                found |= self->tile_allocations.contains(op->name);
+                IRVisitor::visit(op);
+            }
+
+        public:
+            MaterializeFragmentLets *self;
+            bool found = false;
+        } reads;
+        reads.self = this;
+        e.accept(&reads);
+        return reads.found;
+    }
+
+    Stmt visit(const Allocate *op) override {
+        if (op->memory_type != MemoryType::Tile) {
+            return IRMutator::visit(op);
+        }
+        ScopedBinding<> bind(tile_allocations, op->name);
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        const Type t = op->value.type();
+        if (!t.is_vector() || !reads_fragment(op->value)) {
+            return IRMutator::visit(op);
+        }
+        const int lanes = t.lanes();
+        Expr index = Ramp::make(0, 1, lanes);
+        Stmt body = substitute(op->name, Load::make(t, op->name, index), op->body);
+        {
+            ScopedBinding<> bind(tile_allocations, op->name);
+            body = mutate(body);
+        }
+        Stmt store = Store::make(op->name, mutate(op->value), index);
+        return Allocate::make(op->name, t.element_of(), MemoryType::Tile, {lanes},
+                              const_true(), Block::make(store, body));
+    }
+};
+
 }  // namespace
 
-Stmt extract_wmma_operations(const Stmt &s) {
+Stmt extract_wmma_operations(const Stmt &stmt) {
+    Stmt s = MaterializeFragmentLets()(stmt);
     ExtractWMMAOperations mutator;
     // The first pass only looks. What it learns about a fragment from one use
     // of it is needed at all the others, including the ones it has already
-    // walked past.
-    mutator(s);
+    // walked past. A fragment computed from one whose shape is settled only
+    // further on is looked at again, until nothing is left unsettled or
+    // another walk would settle nothing more.
+    int previous = -1;
+    do {
+        mutator.last_attempt = (mutator.unresolved == previous);
+        previous = mutator.unresolved;
+        mutator.unresolved = 0;
+        mutator(s);
+    } while (mutator.unresolved > 0);
     mutator.next_pass();
     return mutator(s);
 }
