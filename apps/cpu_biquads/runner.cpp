@@ -9,6 +9,14 @@
 #include "biquads_rdom.h"
 #include "biquads_unf.h"
 
+#ifdef HAVE_FFF
+extern "C" {
+void *fff_biquads_create(int nblocks, const float *sos);
+int fff_biquads_stride();
+void fff_biquads_run_block(void *handle, int b, const float *x, float *y, long S);
+void fff_biquads_destroy(void *handle);
+}
+#endif
 #ifdef HAVE_IPP
 #include "ipps.h"
 #endif
@@ -254,6 +262,55 @@ int main(int argc, char **argv) {
     double t_ipp = benchmark(3, 1, ipp_run);
 #endif
 
+#ifdef HAVE_FFF
+    // The "Finding Fast Filters" library's strided IIR cascade: a block of
+    // FFF_STRIDE channels is one 1-D signal with that stride, sections as
+    // sparse FIRs (numerators) cascaded with the library's serial
+    // second-order IIRs. The signal is handed over block-major, channels
+    // innermost within a block, and the blocks are dealt to threads.
+    const int fstride = fff_biquads_stride();
+    const int nblocks = C / fstride;
+    // The library loads whole vectors, so the signals are 64-byte aligned.
+    float *xb = (float *)aligned_alloc(64, (size_t)C * S * sizeof(float));
+    float *yb = (float *)aligned_alloc(64, (size_t)C * S * sizeof(float));
+    for (int b = 0; b < nblocks; b++) {
+        for (int n = 0; n < S; n++) {
+            for (int c = 0; c < fstride; c++) {
+                xb[((size_t)b * S + n) * fstride + c] = x(b * fstride + c, n);
+            }
+        }
+    }
+    std::vector<float> sos_flat(6 * N);
+    for (int k = 0; k < N; k++) {
+        for (int j = 0; j < 6; j++) {
+            sos_flat[6 * k + j] = sos(j, k);
+        }
+    }
+    void *fff = fff_biquads_create(nblocks, sos_flat.data());
+    // Blocks across OpenMP's persistent pool under PAR, one thread each.
+    const int fff_threads = PARALLEL ? std::min<int>(nblocks, std::thread::hardware_concurrency()) : 1;
+    auto fff_run = [&]() {
+#pragma omp parallel for schedule(static) num_threads(fff_threads)
+        for (int b = 0; b < nblocks; b++) {
+            fff_biquads_run_block(fff, b, xb, yb, S);
+        }
+    };
+    fff_run();
+    Buffer<float> yfff(C, S);
+    for (int b = 0; b < nblocks; b++) {
+        for (int n = 0; n < S; n++) {
+            for (int c = 0; c < fstride; c++) {
+                yfff(b * fstride + c, n) = yb[((size_t)b * S + n) * fstride + c];
+            }
+        }
+    }
+    check(x, sos, yfff, "fff");
+    double t_fff = benchmark(3, 1, fff_run);
+    fff_biquads_destroy(fff);
+    free(xb);
+    free(yb);
+#endif
+
     const double gb = C * (double)S * 4 / 1e9;
     printf("  inductive  %10.1f us  (%.1f GB/s of signal each way)\n",
            t_ind * 1e6, 2 * gb / t_ind);
@@ -264,6 +321,10 @@ int main(int argc, char **argv) {
 #ifdef HAVE_IPP
     printf("  ipp        %10.1f us  (%.2fx: ippsIIR_32f_P, biquad cascade per channel%s)\n",
            t_ipp * 1e6, t_ipp / t_ind, PARALLEL ? ", threaded" : "");
+#endif
+#ifdef HAVE_FFF
+    printf("  fff        %10.1f us  (%.2fx: Finding Fast Filters strided cascade, %d-channel blocks%s)\n",
+           t_fff * 1e6, t_fff / t_ind, fstride, PARALLEL ? ", threaded" : "");
 #endif
     printf("Success!\n");
     return 0;

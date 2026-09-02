@@ -61,7 +61,32 @@ shape - inside, it walks the channels one at a time, so it is not
 vectorized across them either - and, dealt across threads in the
 parallel configuration, 36 ms against the inductive form's 27. IPP
 rounds a few ulps differently (its own single-precision filter
-structure), so its check uses a looser tolerance.
+structure), so its check uses a looser tolerance. Inside, its AVX-512
+dispatch variant uses xmm registers only: four-wide ops on one
+channel's taps, one channel at a time, a latency-bound chain that the
+parallel row hides with 64 hardware threads (pinned to 32 cores it
+takes 88 ms, to 8 cores 209 ms, while the inductive form is flat from 8
+cores up, at the memory wall). Julia's DSP.jl filt (1.95 s single
+thread, 182 ms over 64 threads), torchaudio's lfilter (58 s) and
+FFmpeg's biquad filter (2.0 s for 24 channels, its largest named
+layout; handed more channels in an unnamed layout it silently passes
+the signal through) are the same shape: every library walks channels
+one at a time.
+
+The one baseline vectorized across channels is built from the "Finding
+Fast Filters" template library (Ma et al.), vendored under fff/ and
+compiled with clang (fff_biquads.cpp): a block of channels, channels
+innermost, is one 1-D signal with that stride, each section a sparse
+FIR with taps at 0, stride and 2*stride for the numerator cascaded with
+the library's second-order IIR at that stride for the denominator. Its
+best shape differs by configuration: serially, 32-channel blocks with
+the serial IIR, two vector chains a step, 204 ms; across cores,
+16-channel blocks with the pairwise IIR, whose shorter dependency chain
+wins once every core has a single block, 30 to 35 ms. What separates it
+from the inductive form is the chain: the library's IIR carries one
+recurrence per vector, so a block is latency-bound, where the inductive
+schedule interleaves two channel vectors through a window kept in L1
+and is bound by the memory system instead.
 
 scan=unfolded isolates fusion from folding: the same fused pass with
 every section's whole trajectory kept live times the same as the folded

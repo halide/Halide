@@ -72,7 +72,11 @@ def cpu_biquads(par):
     # Intel IPP's multi-channel IIR (ippsIIR_32f_P), threaded across channels
     # in the parallel config, when the runner was built with it.
     ipp = us_row(out, "ipp")
-    bn, bt = best([("scipy.sosfilt", scipy), ("Intel IPP ippsIIR_32f_P" + (" (threaded)" if par else ""), ipp)])
+    # The "Finding Fast Filters" template library's strided IIR cascade
+    # (Ma et al.), vectorized across a block of channels like our schedule.
+    fff = us_row(out, "fff")
+    bn, bt = best([("scipy.sosfilt", scipy), ("Intel IPP ippsIIR_32f_P" + (" (threaded)" if par else ""), ipp),
+                   ("Finding Fast Filters strided cascade" + (" (threaded)" if par else ""), fff)])
     return dict(params=f"{knobs['SECTIONS']} sections, {knobs['CHANNELS']} ch x {knobs['SAMPLES']} samples, "
                        f"{'all cores' if par else '1 thread'}",
                 ind=us_row(out, "inductive"), rdom=us_row(out, "rdom"), base_name=bn, base=bt)
@@ -324,9 +328,13 @@ def main():
         "cuBLAS + softmax + cuBLAS is about 13x slower than the flash filter. Chebyshev is the "
         "intended in-cache control, where folding buys nothing. Outputs that are written once and never "
         "read back are streamed in every form (rng, biquads, the alignment direction plane); the JIT apps "
-        "(kalman, viterbi, ode) reuse their scratch buffers across timed runs so page faults on fresh "
-        "mappings are not charged to any form; the Python baselines report the best sample, as Halide's "
-        "harness does.\n\n")
+        "(kalman, viterbi, ode) and the alignment runner reuse their scratch buffers across timed runs, "
+        "as Halide's profiler recommends for this allocation pattern, so page faults on fresh mappings are "
+        "not charged to any form. A stock caching allocator (mimalloc, default or with purging off) does "
+        "the same for scratch up to a few tens of MB and nothing for larger blocks: without reuse the ode "
+        "RDom row is 23 ms rather than 8, and every alignment form pays about 230 ms of first-touch faults "
+        "on its 64 MB per-task planes (HB_NO_REUSE=1 reproduces those). The Python baselines report the "
+        "best sample, as Halide's harness does.\n\n")
     Path(args.out).write_text(notes + table + "\n")
     print(f"\nwritten to {args.out}")
 

@@ -4,8 +4,8 @@ Every Halide form is verified against its app's reference before timing (the ali
 
 | App | Config | Inductive (ms) | RDom (ms) | Fastest baseline (ms) | Baseline | RDom / ind | Baseline / ind |
 |---|---|---:|---:|---:|---|---:|---:|
-| cpu_biquads | 8 sections, 32 ch x 8388608 samples, 1 thread | 116.7 | 533.0 | 1636.7 | Intel IPP ippsIIR_32f_P | 4.57x | 14.03x |
-| cpu_biquads | 8 sections, 256 ch x 1048576 samples, all cores | 26.4 | 465.0 | 37.0 | Intel IPP ippsIIR_32f_P (threaded) | 17.62x | 1.40x |
+| cpu_biquads | 8 sections, 32 ch x 8388608 samples, 1 thread | 122.7 | 533.5 | 232.8 | Finding Fast Filters strided cascade | 4.35x | 1.90x |
+| cpu_biquads | 8 sections, 256 ch x 1048576 samples, all cores | 27.5 | 358.1 | 31.7 | Finding Fast Filters strided cascade (threaded) | 13.02x | 1.15x |
 | cpu_rng | 32 streams x 4194304 steps, 1 thread | 23.8 | 363.9 | 24.9 | hand AVX-512 kernel | 15.27x | 1.04x |
 | cpu_rng | 1024 streams x 131072 steps, all cores | 17.7 | 166.5 | 32.5 | hand AVX-512 kernel | 9.43x | 1.84x |
 | cpu_alignment | 1024x1024 x 128 pairs, 1 thread, fill+traceback+cigar | 10.3 | 45.7 | 43.1 | parasail | 4.42x | 4.17x |

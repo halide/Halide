@@ -40,11 +40,29 @@ ifneq (,$(wildcard $(IPP_DIR)/include/ipp/ipps.h))
 IPP_FLAGS = -DHAVE_IPP -I$(IPP_DIR)/include/ipp -L$(IPP_DIR)/lib -lipps -lippvm -lippcore -Wl,-rpath,$(IPP_DIR)/lib
 endif
 
-$(BIN)/%/runner: runner.cpp $(BIN)/%/biquads_ind.a $(BIN)/%/biquads_unf.a $(BIN)/%/biquads_rdom.a $(BIN)/%/runtime.a
+# The "Finding Fast Filters" strided cascade baseline (fff_biquads.cpp, the
+# library vendored under fff/). It needs clang for the vector extensions.
+FFF_CXX ?= clang++-21
+# Its best shape per configuration: serially, 32-channel blocks with the
+# serial IIR (two vector chains per step); across cores, 16-channel blocks
+# with the pairwise IIR, whose shorter chain wins once every core has only
+# one block.
+FFF_STRIDE ?= $(if $(filter true,$(PAR)),16,32)
+FFF_PAIRWISE ?= $(if $(filter true,$(PAR)),1,0)
+ifneq (,$(shell which $(FFF_CXX) 2>/dev/null))
+FFF_FLAGS = -DHAVE_FFF
+FFF_OBJ = $(BIN)/$(HL_TARGET)/fff_biquads.o
+endif
+
+$(BIN)/%/fff_biquads.o: fff_biquads.cpp fff/*.h
+	@mkdir -p $(@D)
+	$(FFF_CXX) -O3 -std=c++20 -mavx512f -mavx512bw -Wall -DSECTIONS=$(SECTIONS) -DFFF_STRIDE=$(FFF_STRIDE) -DFFF_PAIRWISE=$(FFF_PAIRWISE) -c $< -o $@
+
+$(BIN)/%/runner: runner.cpp $(BIN)/%/biquads_ind.a $(BIN)/%/biquads_unf.a $(BIN)/%/biquads_rdom.a $(BIN)/%/runtime.a $(FFF_OBJ)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -DCHANNELS=$(CHANNELS) -DSAMPLES=$(SAMPLES) \
 	    -DSECTIONS=$(SECTIONS) -DPARALLEL=$(if $(filter true,$(PAR)),1,0) \
-	    -Wall -O2 $^ -o $@ $(IPP_FLAGS) $(LDFLAGS) -lpthread -ldl
+	    -Wall -O2 -fopenmp $^ -o $@ $(IPP_FLAGS) $(FFF_FLAGS) $(LDFLAGS) -lpthread -ldl
 
 test: $(BIN)/$(HL_TARGET)/runner
 	$<
