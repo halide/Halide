@@ -75,46 +75,53 @@ int main(int argc, char **argv) {
         // Build one variant; returns the decoded `path` Func. fold_k pins the
         // prob storage window when inductive (2 = folded, T+1 = unfolded ablation).
         auto build = [&](bool inductive, int fold_k = 2) -> Func {
+            // The walk carries {best score, argmax} per state as one Tuple:
+            // every candidate is computed once, and the compare that keeps
+            // the larger score is the compare that keeps its index (>= so
+            // ties go to the last index, as the reference does). Step T is
+            // the terminal argmax over the final scores, with no transition
+            // or emission, so the backpointer plane's last row starts the
+            // traceback.
             RDom r(0, S, 0, S, "r");  // r.x = output state, r.y = previous state
-            RDom r2(0, S, "r2"), r3(0, S, "r3");
             Expr obs_t = Halide::Internal::promise_clamped(
                 obs(Halide::Internal::promise_clamped(t, 0, T - 1)), 0, M - 1);
 
-            Func prob(Float(32), 2, inductive ? "prob_i" : "prob_n");
-            prob(s, t) = neg_inf;
+            Func state({Float(32), Int(32)}, 2, inductive ? "state_i" : "state_n");
+            state(s, t) = {neg_inf, 0};
 
-            auto normal_cand = [&](Expr idx, Expr idx2) {
-                return likely(prob(idx, t - 1) + log_trans(idx2, idx) + log_emit(idx2, obs_t));
+            // Summed in the reference's order, so ties fall the same way.
+            auto candidate = [&](Expr prev_score, Expr out, Expr in, Expr step) {
+                return prev_score + select(step >= T, 0.f, log_trans(out, in)) +
+                       select(step >= T, 0.f, log_emit(out, obs_t));
             };
 
             if (inductive) {
-                // Inductive in t: pure Var t, base case at t<=0, running max over r.
-                prob(r.x, t) = select(t <= 0,
-                                      log_init(r.x) + log_emit(r.x, obs_0),
-                                      likely(max(prob(r.x, t), normal_cand(r.y, r.x))));
-                prob.update(0).allow_race_conditions().vectorize(r.x);
+                // Inductive in t: pure Var t, base case at t<=0, argmax over r.
+                Expr cand = candidate(state(r.y, t - 1)[0], r.x, r.y, t);
+                Expr cur = state(r.x, t)[0];
+                Tuple step = select(cand >= cur, Tuple(cand, r.y), state(r.x, t));
+                state(r.x, t) = select(t <= 0,
+                                       Tuple(log_init(r.x) + log_emit(r.x, obs_0), 0),
+                                       Tuple(likely(step[0]), likely(step[1])));
+                state.update(0).allow_race_conditions().vectorize(r.x);
             } else {
                 // Non-inductive: explicit init at t=0, then an RDom scan over time.
                 RDom ri(0, S, "ri");
-                prob(ri, 0) = log_init(ri) + log_emit(ri, obs_0);
-                RDom rr(0, S, 0, S, 1, T - 1, "rr");  // rr.x=state, rr.y=prev, rr.z=time
-                Expr ot = clamp(obs(rr.z), 0, M - 1);
-                Expr candn = prob(rr.y, rr.z - 1) + log_trans(rr.x, rr.y) + log_emit(rr.x, ot);
-                prob(rr.x, rr.z) = max(prob(rr.x, rr.z), candn);
-                prob.update(0).vectorize(ri);
-                prob.update(1).allow_race_conditions().vectorize(rr.x);
+                state(ri, 0) = {log_init(ri) + log_emit(ri, obs_0), 0};
+                RDom rr(0, S, 0, S, 1, T, "rr");  // rr.x=state, rr.y=prev, rr.z=time
+                Expr ot = clamp(obs(min(rr.z, T - 1)), 0, M - 1);
+                Expr candn = select(rr.z >= T, state(rr.y, rr.z - 1)[0],
+                                    state(rr.y, rr.z - 1)[0] + log_trans(rr.x, rr.y) + log_emit(rr.x, ot));
+                state(rr.x, rr.z) = select(candn >= state(rr.x, rr.z)[0],
+                                           Tuple(candn, rr.y), state(rr.x, rr.z));
+                state.update(0).vectorize(ri);
+                state.update(1).allow_race_conditions().vectorize(rr.x);
             }
 
-            // prev: plain RDom argmax (same in both variants; reads prob only).
-            Expr is_terminal = (t >= T);
-            Expr terminal_cand = prob(r2, t - 1);
-            Expr cand2 = select(is_terminal, terminal_cand, normal_cand(r2, s));
-            Expr row_max = maximum(r3, prob(r3, t - 1));
-            Expr compare_val = select(is_terminal, row_max, prob(s, t));
-
+            // The backpointers, materialized for the traceback: a copy of the
+            // argmax component, one row per step, while the scores fold.
             Func prev(Int(32), 2, inductive ? "prev_i" : "prev_n");
-            prev(s, t) = S;
-            prev(s, t) = select(t <= 0, 0, likely(select(cand2 == compare_val, r2, likely(prev(s, t)))));
+            prev(s, t) = state(s, t)[1];
 
             Func path(Int(32), 1, inductive ? "path_i" : "path_n");
             path(t) = undef<int>();
@@ -124,12 +131,12 @@ int main(int argc, char **argv) {
 
             prev.bound(s, 0, S).bound(t, 0, T + 1);
             if (inductive) {
-                prob.compute_at(prev, t).store_root().fold_storage(t, fold_k);
+                state.compute_at(prev, t).store_root().fold_storage(t, fold_k);
             } else {
-                prob.compute_root();
+                state.compute_root();
             }
-            prob.vectorize(s);
-            prev.vectorize(s).update().vectorize(s);
+            state.vectorize(s);
+            prev.vectorize(s);
             prev.compute_root();
             path.compute_root();
             return path;

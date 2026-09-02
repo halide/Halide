@@ -94,14 +94,10 @@ public:
             Expr F = max(dp(b, j - 1, i)[2] - (int)gape, dp(b, j - 1, i)[0] - gapoe);
             Expr Hd = dp(b, j - 1, i - 1)[0] + s;
             Expr H = max(max(Hd, E), F);
-            Expr border[4] = {Hb, NEG, NEG, cast<uint8_t>(0)};
-            Expr step[4] = {cast<int16_t>(H), cast<int16_t>(E), cast<int16_t>(F),
-                            dir_byte(cast<int16_t>(H), cast<int16_t>(E), cast<int16_t>(F), Hd)};
-            std::vector<Expr> defs;
-            for (int c = 0; c < 4; c++) {
-                defs.push_back(select(i < 0 || j < 0, border[c], likely(step[c])));
-            }
-            dp(b, j, i) = Tuple(defs);
+            Tuple border(Hb, NEG, NEG, cast<uint8_t>(0));
+            Tuple step(likely(cast<int16_t>(H)), likely(cast<int16_t>(E)), likely(cast<int16_t>(F)),
+                       likely(dir_byte(cast<int16_t>(H), cast<int16_t>(E), cast<int16_t>(F), Hd)));
+            dp(b, j, i) = select(i < 0 || j < 0, border, step);
             dir(b, j, i) = dp(b, j, i)[3];
         } else {
             // The same recurrence as update definitions. Indices shift by
