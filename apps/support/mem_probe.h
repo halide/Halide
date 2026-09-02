@@ -23,6 +23,7 @@
 #include <cstdlib>
 #include <functional>
 #include <mutex>
+#include <vector>
 #include <unordered_map>
 
 namespace hb {
@@ -79,6 +80,58 @@ inline void *jit_probe_malloc(Halide::JITUserContext *, size_t x) {
 }
 inline void jit_probe_free(Halide::JITUserContext *, void *p) {
     MemProbe::dealloc(p);
+}
+
+// A reusing allocator for the timed realizes: a pipeline's scratch
+// buffers are freed at the end of every realize, and past a few MB glibc
+// hands them back to the kernel, so each timed run would otherwise pay a
+// first-touch page fault per 4 KB of them. Blocks are matched by exact
+// size and never returned.
+struct ReusePool {
+    static std::mutex &mtx() { static std::mutex m; return m; }
+    static std::vector<std::pair<size_t, void *>> &pool() {
+        static std::vector<std::pair<size_t, void *>> p;
+        return p;
+    }
+    static void *alloc(size_t size) {
+        constexpr size_t header = 128;
+        {
+            std::lock_guard<std::mutex> g(mtx());
+            for (auto &e : pool()) {
+                if (e.first == size && e.second) {
+                    void *base = e.second;
+                    e.second = nullptr;
+                    return (char *)base + header;
+                }
+            }
+        }
+        char *base = (char *)aligned_alloc(128, (size + header + 127) / 128 * 128);
+        ((size_t *)base)[0] = size;
+        return base + header;
+    }
+    static void dealloc(void *p) {
+        if (!p) return;
+        char *base = (char *)p - 128;
+        size_t size = ((size_t *)base)[0];
+        std::lock_guard<std::mutex> g(mtx());
+        for (auto &e : pool()) {
+            if (!e.second) {
+                e = {size, base};
+                return;
+            }
+        }
+        pool().emplace_back(size, base);
+    }
+};
+inline void *jit_reuse_malloc(Halide::JITUserContext *, size_t x) {
+    return ReusePool::alloc(x);
+}
+inline void jit_reuse_free(Halide::JITUserContext *, void *p) {
+    ReusePool::dealloc(p);
+}
+inline void reuse_jit_allocations(Halide::Func &f) {
+    f.jit_handlers().custom_malloc = jit_reuse_malloc;
+    f.jit_handlers().custom_free = jit_reuse_free;
 }
 
 // Measure the peak internal heap a JIT pipeline allocates during one realize().

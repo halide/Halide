@@ -35,7 +35,8 @@ def timed(fn, warm=5, iters=30):
         e.record()
         torch.cuda.synchronize()
         ts.append(s.elapsed_time(e) * 1e3)
-    return statistics.median(ts)
+    # The best sample, which is what Halide's benchmark harness reports.
+    return min(ts)
 
 
 for name, backend in (("flash", SDPBackend.FLASH_ATTENTION), ("mem-efficient", SDPBackend.EFFICIENT_ATTENTION)):

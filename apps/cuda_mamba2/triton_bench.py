@@ -3,7 +3,7 @@
 forward and backward, at the shape the Halide generator is built for.
 
 Usage: triton_bench.py SEQ STATE CHANNELS HEADS GROUPS CHUNK
-Prints "  triton fwd  <us> us" and "  triton bwd  <us> us" (medians).
+Prints "  triton fwd  <us> us" and "  triton bwd  <us> us" (the best sample, as the Halide runner reports).
 
 The mamba_ssm package's __init__ imports its CUDA extension and several
 model-zoo dependencies that are not needed for the Triton path; the
@@ -55,7 +55,8 @@ def timed(fn, warm=5, iters=30):
         e.record()
         torch.cuda.synchronize()
         ts.append(s.elapsed_time(e) * 1e3)
-    return statistics.median(ts)
+    # The best sample, which is what Halide's benchmark harness reports.
+    return min(ts)
 
 
 t_fwd = timed(fwd)

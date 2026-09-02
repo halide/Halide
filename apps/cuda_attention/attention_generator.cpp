@@ -938,6 +938,9 @@ public:
     GeneratorParam<bool> stage_tile{"stage_tile", true};
     GeneratorParam<bool> stage_q{"stage_q", true};
     GeneratorParam<int> pad{"pad", 0};
+    // The register cap for the walk; three components of carried state
+    // want more than the flash filter's.
+    GeneratorParam<int> max_registers{"max_registers", 255};
 
     Input<Buffer<float16_t, 2>> Q{"Q"};
     Input<Buffer<float16_t, 2>> K{"K"};
@@ -1046,7 +1049,7 @@ public:
         Var yw("yw"), rxi("rxi"), ryi("ryi");
         RVar rro("rro"), rri("rri"), rto("rto"), rti("rti");
 
-        out.gpu_max_registers(128);
+        out.gpu_max_registers(max_registers);
 
         out.bound(x, 0, out_depth)
             .bound(y, 0, queries)

@@ -32,12 +32,12 @@ The three scan forms (scan= on either generator):
   the allocation while the automatic folding pass still folds the
   indexing (a lesson learned the hard way; see the numbers).
 - rdom: the walk as update definitions, which own their axes, so the
-  whole score state materializes at full extent per pair before the
-  directions can be derived. Nothing smaller is expressible: an update
-  definition writes only its own buffer, so the direction byte must be
-  a separate Func that reads the materialized scores back - and the
-  Halide profiler shows that read-back, not the table fill, is where
-  the time goes (~17x the fill cost at 1kx1k).
+  whole score state materializes at full extent per pair. The direction
+  byte is an element of the state's Tuple in every form, computed from
+  the same intermediates as the scores, so no form derives it in a pass
+  of its own; the walk gathers straight from that plane. What the rdom
+  form cannot avoid is writing the full state at full extent, and at
+  1kx1k that state never fits a cache.
 
 The whole deliverable is Halide, including the traceback. The
 direction plane is an intermediate Func realized one block of 64 pairs

@@ -160,27 +160,31 @@ public:
         chunk_state(d, p, t, b) += cast<float>(Bmd(p, rj, t, b)) *
                                    cast<float>(X(d, t * L + rj, b));
 
-        Func H = Func(Float(32), "H");
-        RDom rth(0, nt - 1, "rth");
+        Func H = inductive() ? Func(Float(32), "H") : Func("H");
+        RDom rth(1, nt - 1, "rth");
+        Func Hop("Hop");
         if (inductive()) {
             H(d, p, t, b) = select(t <= 0,
                                    0.f,
                                    likely(H(d, p, t - 1, b) *
                                           exp(A(b) * cumdelta(L - 1, t - 1, b))) +
                                        chunk_state(d, p, t - 1, b));
+            Hop(d, p, t, b) = cast<float16_t>(H(d, p, t, b));
         } else {
-            // The pure definition initializes each chunk to the term of the
-            // recurrence that does not depend on the walk - what the chunk
-            // before it left behind - so the kernel that runs it is the one
-            // the chunk state needs anyway, and the walk folds the decayed
-            // carry on top.
-            H(d, p, t, b) = chunk_state(d, p, max(t - 1, 0), b) *
-                            select(t <= 0, 0.f, 1.f);
-            H(d, p, rth + 1, b) += H(d, p, rth, b) *
-                                   exp(A(b) * cumdelta(L - 1, rth, b));
+            // The same recurrence as an update definition, over a state
+            // zeroed ahead of the walk: the first chunk carries nothing in,
+            // and each step folds the decayed carry onto what the chunk
+            // before it left behind. The walk owns its storage, so the
+            // state is written out at every step; the half-precision copy
+            // the consumers want rides along as a second component, so
+            // narrowing it is not a pass of its own.
+            H(d, p, t, b) = {0.f, cast<float16_t>(0.f)};
+            Expr carried = H(d, p, rth - 1, b)[0] *
+                               exp(A(b) * cumdelta(L - 1, rth - 1, b)) +
+                           chunk_state(d, p, rth - 1, b);
+            H(d, p, rth, b) = {carried, cast<float16_t>(carried)};
+            Hop(d, p, t, b) = H(d, p, t, b)[1];
         }
-        Func Hop("Hop");
-        Hop(d, p, t, b) = cast<float16_t>(H(d, p, t, b));
 
         // ---------------- The gradient state, walked backwards ----------
 
@@ -201,8 +205,9 @@ public:
         // The carried gradient of the state at the END of chunk t, indexed
         // by flipped chunk so the walk counts upwards: dHnr(tt) is the
         // gradient at the end of chunk nt-1-tt, fed by every later chunk.
-        Func dHnr = Func(Float(32), "dHnr");
-        RDom rtd(0, nt - 1, "rtd");
+        Func dHnr = inductive() ? Func(Float(32), "dHnr") : Func("dHnr");
+        RDom rtd(1, nt - 1, "rtd");
+        Func dHopr("dHopr");
         if (inductive()) {
             dHnr(d, p, tt, b) =
                 select(tt <= 0,
@@ -210,15 +215,15 @@ public:
                        likely(dHnr(d, p, tt - 1, b) *
                               exp(A(b) * cumdelta(L - 1, nt - tt, b))) +
                            dG(d, p, nt - tt, b));
+            dHopr(d, p, tt, b) = cast<float16_t>(dHnr(d, p, tt, b));
         } else {
-            dHnr(d, p, tt, b) = dG(d, p, min(nt - tt, nt - 1), b) *
-                                select(tt <= 0, 0.f, 1.f);
-            dHnr(d, p, rtd + 1, b) +=
-                dHnr(d, p, rtd, b) *
-                exp(A(b) * cumdelta(L - 1, nt - (rtd + 1), b));
+            dHnr(d, p, tt, b) = {0.f, cast<float16_t>(0.f)};
+            Expr carried = dHnr(d, p, rtd - 1, b)[0] *
+                               exp(A(b) * cumdelta(L - 1, nt - rtd, b)) +
+                           dG(d, p, nt - rtd, b);
+            dHnr(d, p, rtd, b) = {carried, cast<float16_t>(carried)};
+            dHopr(d, p, tt, b) = dHnr(d, p, tt, b)[1];
         }
-        Func dHopr("dHopr");
-        dHopr(d, p, tt, b) = cast<float16_t>(dHnr(d, p, tt, b));
 
         // ---------------- dX ----------------
 
@@ -507,25 +512,33 @@ private:
                 .gpu_threads(p)
                 .tile_store(rxi, ryi);
         } else {
-            // The pure definition of the walk is the chunk-state kernel, so
-            // the state's tiles go straight out to memory here.
-            chunk_state.compute_at(H, po);
-            H.compute_root()
+            // The walk is the kernel, shaped as the fused form's: a block
+            // owns a slice of the state for every chunk, computes the chunk
+            // state a step at a time into shared memory, and folds it onto
+            // the carry it wrote the step before.
+            Func cs = chunk_state.in();
+            chunk_state.compute_at(H, RVar("rth$x")).unroll(t);
+            chunk_state.update().unroll(t);
+            cs.compute_at(H, RVar("rth$x"))
+                .store_in(MemoryType::GPUShared)
+                .unroll(cs.args()[2])
                 .tile(d, p, rxi, ryi, tile, tile)
-                .split(p, po, p, 4)
-                .reorder(rxi, ryi, d, p, po, t, b)
                 .unroll(d)
-                .gpu_blocks(po, t, b)
                 .gpu_threads(p)
                 .tile_store(rxi, ryi);
-            Var pt("pt"), pe("pe"), hpt("hpt"), hdo("hdo");
+            H.compute_root()
+                .split(d, x0, x1, 8)
+                .split(p, y0, y1, 8)
+                .reorder(x1, y1, x0, y0)
+                .gpu_blocks(y0, t, b)
+                .gpu_threads(x1, y1);
             H.update()
-                .split(d, pt, pe, 4)
-                .split(p, hdo, hpt, 8)
-                .reorder(pe, pt, hpt, RVar("rth$x"), hdo, b)
-                .gpu_blocks(hdo, b)
-                .gpu_threads(pt, hpt)
-                .vectorize(pe);
+                .split(d, ddo, ddi, 2 * tile)
+                .split(p, hw, hp, tile)
+                .reorder(ddi, hp, hw, RVar("rth$x"), ddo, b)
+                .gpu_blocks(ddo, b)
+                .gpu_lanes(ddi)
+                .gpu_threads(hw);
         }
         chunk_state
             .store_in(MemoryType::Tile)
@@ -561,7 +574,7 @@ private:
                 .align_storage(xs.args()[0], (int)channels + 8)
                 .split(xs.args()[0], so, si, 8)
                 .fuse(so, xs.args()[1], fu)
-                .split(fu, fo, fi, 32 * (inductive() ? (int)state / tile : 4))
+                .split(fu, fo, fi, 32 * ((int)state / tile))
                 .split(fi, w, l, 32)
                 .reorder(si, l, w, fo)
                 .vectorize(si)
@@ -585,17 +598,6 @@ private:
                 .reorder(d, hp, hw)
                 .gpu_lanes(d)
                 .gpu_threads(hw);
-        } else {
-            // The tensor core consumers want half precision operands, and
-            // the walk had to store single precision, so the narrowing that
-            // the fused form does for free on the way out of registers is a
-            // pass of its own here.
-            Hop.compute_root()
-                .split(d, x0, x1, 8)
-                .split(p, y0, y1, 8)
-                .reorder(x1, y1, x0, y0)
-                .gpu_blocks(y0, Hop.args()[2], Hop.args()[3])
-                .gpu_threads(x1, y1);
         }
 
         // ---- The gradient state walk, the mirror image ----
@@ -612,23 +614,29 @@ private:
                 .gpu_threads(p)
                 .tile_store(rxi, ryi);
         } else {
-            dG.compute_at(dHnr, po);
-            dHnr.compute_root()
+            Func dgs = dG.in();
+            dG.compute_at(dHnr, RVar("rtd$x")).unroll(t);
+            dG.update().unroll(t);
+            dgs.compute_at(dHnr, RVar("rtd$x"))
+                .store_in(MemoryType::GPUShared)
+                .unroll(dgs.args()[2])
                 .tile(d, p, rxi, ryi, tile, tile)
-                .split(p, po, p, 4)
-                .reorder(rxi, ryi, d, p, po, tt, b)
                 .unroll(d)
-                .gpu_blocks(po, tt, b)
                 .gpu_threads(p)
                 .tile_store(rxi, ryi);
-            Var pt("pt"), pe("pe"), hpt("hpt"), hdo("hdo");
+            dHnr.compute_root()
+                .split(d, x0, x1, 8)
+                .split(p, y0, y1, 8)
+                .reorder(x1, y1, x0, y0)
+                .gpu_blocks(y0, tt, b)
+                .gpu_threads(x1, y1);
             dHnr.update()
-                .split(d, pt, pe, 4)
-                .split(p, hdo, hpt, 8)
-                .reorder(pe, pt, hpt, RVar("rtd$x"), hdo, b)
-                .gpu_blocks(hdo, b)
-                .gpu_threads(pt, hpt)
-                .vectorize(pe);
+                .split(d, ddo, ddi, 2 * tile)
+                .split(p, hw, hp, tile)
+                .reorder(ddi, hp, hw, RVar("rtd$x"), ddo, b)
+                .gpu_blocks(ddo, b)
+                .gpu_lanes(ddi)
+                .gpu_threads(hw);
         }
         dG.store_in(MemoryType::Tile)
             .tile(d, p, rxi, ryi, tile, tile)
@@ -663,7 +671,7 @@ private:
                 .align_storage(dys.args()[0], (int)channels + 8)
                 .split(dys.args()[0], so, si, 8)
                 .fuse(so, dys.args()[1], fu)
-                .split(fu, fo, fi, 32 * (inductive() ? (int)state / tile : 4))
+                .split(fu, fo, fi, 32 * ((int)state / tile))
                 .split(fi, w, l, 32)
                 .reorder(si, l, w, fo)
                 .vectorize(si)
@@ -687,13 +695,6 @@ private:
                 .reorder(d, hp, hw)
                 .gpu_lanes(d)
                 .gpu_threads(hw);
-        } else {
-            dHopr.compute_root()
-                .split(d, x0, x1, 8)
-                .split(p, y0, y1, 8)
-                .reorder(x1, y1, x0, y0)
-                .gpu_blocks(y0, dHopr.args()[2], dHopr.args()[3])
-                .gpu_threads(x1, y1);
         }
 
         // ---- dX: the forward's output kernel with the mask transposed ----

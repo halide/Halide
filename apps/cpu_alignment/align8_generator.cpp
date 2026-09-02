@@ -88,22 +88,27 @@ public:
             return d;
         };
 
-        Func dp8(std::vector<Type>(4, Int(8)), "dp8");
+        // The four differences and the direction byte, computed from the
+        // same intermediates in one pass.
+        Func dp8({Int(8), Int(8), Int(8), Int(8), UInt(8)}, "dp8");
 
         if (scan != ScanForm::RDom) {
             // Boundaries from the H-difference definitions: U(-1,i) = q
             // for i > 0 else 0, V(j,-1) = q for j > 0 else 0, X = Y = 0.
             Expr Ub = cast<int8_t>(select(j < 0 && 0 < i, (int)gapo, 0));
             Expr Vb = cast<int8_t>(select(i < 0 && 0 < j, (int)gapo, 0));
-            Tuple border = {Ub, Vb, cast<int8_t>(0), cast<int8_t>(0)};
+            Tuple border = {Ub, Vb, cast<int8_t>(0), cast<int8_t>(0), cast<uint8_t>(0)};
 
-            auto n = step(dp8(b, j - 1, i)[0], dp8(b, j, i - 1)[1],
-                          dp8(b, j, i - 1)[2], dp8(b, j - 1, i)[3], score(j, i));
-            Tuple stepT = {likely(n[0]), n[1], n[2], n[3]};
+            Expr Up = dp8(b, j - 1, i)[0], Vp = dp8(b, j, i - 1)[1];
+            Expr Xp = dp8(b, j, i - 1)[2], Yp = dp8(b, j - 1, i)[3];
+            auto n = step(Up, Vp, Xp, Yp, score(j, i));
+            // likely on every element, so the border select partitions
+            // the loops rather than being evaluated per cell.
+            Tuple stepT = {likely(n[0]), likely(n[1]), likely(n[2]), likely(n[3]),
+                           likely(dir_byte(Up, Vp, Xp, Yp, score(j, i)))};
             dp8(b, j, i) = select(i < 0 || j < 0, border, stepT);
 
-            dir(b, j, i) = dir_byte(dp8(b, j - 1, i)[0], dp8(b, j, i - 1)[1],
-                                    dp8(b, j, i - 1)[2], dp8(b, j - 1, i)[3], score(j, i));
+            dir(b, j, i) = dp8(b, j, i)[4];
         } else {
             // Update-definition form. Storage index shifts by one so the
             // boundary lives at index zero; storage (j, i) holds original
@@ -111,19 +116,20 @@ public:
             // two storage edges.
             Expr Ub = cast<int8_t>(select(j == 0 && i > 1, (int)gapo, 0));
             Expr Vb = cast<int8_t>(select(i == 0 && j > 1, (int)gapo, 0));
-            dp8(b, j, i) = Tuple(Ub, Vb, cast<int8_t>(0), cast<int8_t>(0));
+            dp8(b, j, i) = Tuple(Ub, Vb, cast<int8_t>(0), cast<int8_t>(0), cast<uint8_t>(0));
 
             RDom r(1, qseq.dim(1).extent(), 1, tseq.dim(1).extent(), "r");
             rj = r.x, ri = r.y;
             // Up neighbour (j-1, i) is storage (rj-1, ri); left neighbour
             // (j, i-1) is storage (rj, ri-1).
-            auto n = step(dp8(b, rj - 1, ri)[0], dp8(b, rj, ri - 1)[1],
-                          dp8(b, rj, ri - 1)[2], dp8(b, rj - 1, ri)[3],
-                          score(rj - 1, ri - 1));
-            dp8(b, rj, ri) = Tuple(n[0], n[1], n[2], n[3]);
+            Expr Up = dp8(b, rj - 1, ri)[0], Vp = dp8(b, rj, ri - 1)[1];
+            Expr Xp = dp8(b, rj, ri - 1)[2], Yp = dp8(b, rj - 1, ri)[3];
+            auto n = step(Up, Vp, Xp, Yp, score(rj - 1, ri - 1));
+            dp8(b, rj, ri) = Tuple(n[0], n[1], n[2], n[3],
+                                   dir_byte(Up, Vp, Xp, Yp, score(rj - 1, ri - 1)));
 
-            dir(b, j, i) = dir_byte(dp8(b, j, i + 1)[0], dp8(b, j + 1, i)[1],
-                                    dp8(b, j + 1, i)[2], dp8(b, j, i + 1)[3], score(j, i));
+            // The walk gathers straight from the direction plane.
+            dir(b, j, i) = dp8(b, j + 1, i + 1)[4];
         }
 
         // The walk: inductive for the inductive forms, an update
@@ -157,11 +163,15 @@ public:
             tb.compute_at(path, bo).vectorize(b, VEC);
             tb.update().reorder(b, rs).vectorize(b, VEC);
         }
-        dir.compute_at(path, bo).store_at(path, bo).reorder(b, j, i).vectorize(b, VEC);
-        if (par && stream) {
-            // Written once per block and read back at 2N of its N^2 cells:
-            // streaming stores skip read-for-ownership.
-            dir.stream_stores();
+        if (scan != ScanForm::RDom) {
+            // The direction plane is the state's last element, copied out
+            // row by row as the window slides.
+            dir.compute_at(path, bo).store_at(path, bo).reorder(b, j, i).vectorize(b, VEC);
+            if (par && stream) {
+                // Written once per block and read back at 2N of its N^2
+                // cells: streaming stores skip read-for-ownership.
+                dir.stream_stores();
+            }
         }
 
         if (scan != ScanForm::RDom) {

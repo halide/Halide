@@ -9,6 +9,9 @@ CHANNELS ?= 32
 SAMPLES ?= 8388608
 # Whether blocks of channels spread across cores.
 PAR ?= false
+SKEW ?= true
+PROMOTE ?= true
+FOLD ?= 8
 
 $(GENERATOR_BIN)/biquads.generator: biquads_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
@@ -17,12 +20,12 @@ $(GENERATOR_BIN)/biquads.generator: biquads_generator.cpp $(GENERATOR_DEPS)
 $(BIN)/%/biquads_ind.a: $(GENERATOR_BIN)/biquads.generator
 	@mkdir -p $(@D)
 	$< -g biquads -f biquads_ind -e $(GENERATOR_OUTPUTS) -o $(@D) \
-	    target=$*-no_runtime sections=$(SECTIONS) channels=$(CHANNELS) scan=inductive par=$(PAR)
+	    target=$*-no_runtime sections=$(SECTIONS) channels=$(CHANNELS) scan=inductive par=$(PAR) skew=$(SKEW) promote=$(PROMOTE) fold=$(FOLD)
 
 $(BIN)/%/biquads_unf.a: $(GENERATOR_BIN)/biquads.generator
 	@mkdir -p $(@D)
 	$< -g biquads -f biquads_unf -e $(GENERATOR_OUTPUTS) -o $(@D) \
-	    target=$*-no_runtime sections=$(SECTIONS) channels=$(CHANNELS) scan=unfolded par=$(PAR)
+	    target=$*-no_runtime sections=$(SECTIONS) channels=$(CHANNELS) scan=unfolded par=$(PAR) skew=$(SKEW) promote=$(PROMOTE) fold=$(FOLD)
 
 $(BIN)/%/biquads_rdom.a: $(GENERATOR_BIN)/biquads.generator
 	@mkdir -p $(@D)

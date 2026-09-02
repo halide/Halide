@@ -76,6 +76,18 @@ extern "C" void *halide_malloc(void *, size_t size) {
     return base + header;
 }
 
+// Between forms: the planes differ in size, so one form's pool is dead
+// weight to the next, and all six together would be most of the machine.
+void drain_pool() {
+    std::lock_guard<std::mutex> lock(pool_mutex);
+    for (auto &entry : pool) {
+        if (entry.second) {
+            free(entry.second);
+        }
+    }
+    pool.clear();
+}
+
 extern "C" void halide_free(void *, void *ptr) {
     char *base = (char *)ptr - 128;
     size_t size = ((size_t *)base)[0];
@@ -335,6 +347,7 @@ int main(int argc, char **argv) {
         forms[f].fn(query, target, path);
         if (!check(forms[f].name)) return 1;
         t[f] = benchmark(3, 1, [&]() { forms[f].fn(query, target, path); });
+        drain_pool();
     }
     double t_ind = t[0];  // int8 inductive is the reference for ratios
 

@@ -162,6 +162,9 @@ int main(int argc, char **argv) {
     }
 
     Buffer<float> ef(B, T), eu(B, T), emat(B, T);
+    for (Func *f : {&E_fold, &E_unfold, &E_mat}) {
+        hb::reuse_jit_allocations(*f);
+    }
     E_fold.realize(ef);
     E_unfold.realize(eu);
     E_mat.realize(emat);

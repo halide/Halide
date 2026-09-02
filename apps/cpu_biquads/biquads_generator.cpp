@@ -35,6 +35,14 @@ public:
                                    {"unfolded", ScanForm::Unfolded},
                                    {"rdom", ScanForm::RDom}}};
     // Whether blocks of channels spread across cores.
+    // Software-pipeline the sections: section k computed N-1-k samples
+    // ahead, so the sections' chains are independent within a sample.
+    // The serial form only: the parallel form's pair of channel blocks
+    // already keeps the ports busy, and unrolling it further spills.
+    GeneratorParam<bool> skew{"skew", true};
+    // Unroll the walk by the window so the window lives in registers.
+    GeneratorParam<bool> promote{"promote", true};
+    GeneratorParam<int> fold{"fold", 8};
     GeneratorParam<bool> par{"par", false};
 
     // Channel by sample.
@@ -128,7 +136,8 @@ public:
                     .unroll(coi)
                     .parallel(coo)
                     .stream_stores();
-                for (Func f : ys) {
+                for (int k = 0; k < (int)ys.size(); k++) {
+                    Func f = ys[k];
                     f.store_at(y, coo)
                         .compute_at(y, coi)
                         .vectorize(c, VEC);
@@ -143,13 +152,20 @@ public:
                     .vectorize(ci)
                     .unroll(co)
                     .stream_stores();
-                for (Func f : ys) {
+                for (int k = 0; k < (int)ys.size(); k++) {
+                    Func f = ys[k];
                     f.store_root()
                         .compute_at(y, co)
                         .vectorize(c, VEC);
                     if (folded()) {
-                        f.fold_storage(n, 4);
+                        f.slide(y, n, skew ? N - 1 - k : 0).fold_storage(n, fold);
                     }
+                }
+                if (folded() && promote) {
+                    // Unrolled by the fold, so each window slot is a fixed
+                    // register rather than a modulo-indexed stack slot.
+                    Var no("no"), ni("ni");
+                    y.split(n, no, ni, fold, TailStrategy::RoundUp).unroll(ni);
                 }
             }
         } else {
@@ -198,6 +214,16 @@ public:
         x.dim(0).set_bounds(0, channels);
         y.dim(0).set_bounds(0, channels);
         y.dim(1).set_bounds(0, x.dim(1).extent());
+        if (!par) {
+            // Dense, aligned rows, so the serial walk's streaming stores
+            // are vector-wide rather than scalarized around an unknown
+            // alignment. Measured the other way round with eight walks
+            // streaming at once: whole-line stores from every core run
+            // 1.4x slower than the eight-byte ones, so the parallel form
+            // leaves the alignment undeclared.
+            x.set_host_alignment(64).dim(1).set_stride(channels);
+            y.set_host_alignment(64).dim(1).set_stride(channels);
+        }
     }
 
     bool inductive() const {

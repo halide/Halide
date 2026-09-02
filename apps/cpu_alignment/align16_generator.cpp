@@ -71,38 +71,9 @@ public:
                                        select(i < 0, -(gapoe + (int)gape * j),
                                               -(gapoe + (int)gape * i))));
 
-        Func dp(std::vector<Type>(3, Int(16)), "dp");
-
-        if (scan != ScanForm::RDom) {
-            // E(j,i) = max(E(j,i-1) - gape, H(j,i-1) - gapoe): a gap in
-            // the query, advancing the target. F advances the query.
-            Expr E = max(dp(b, j, i - 1)[1] - (int)gape, dp(b, j, i - 1)[0] - gapoe);
-            Expr F = max(dp(b, j - 1, i)[2] - (int)gape, dp(b, j - 1, i)[0] - gapoe);
-            Expr Hd = dp(b, j - 1, i - 1)[0] + s;
-            Expr H = max(max(Hd, E), F);
-            Expr border[3] = {Hb, NEG, NEG};
-            Expr step[3] = {cast<int16_t>(H), cast<int16_t>(E), cast<int16_t>(F)};
-            std::vector<Expr> defs;
-            for (int c = 0; c < 3; c++) {
-                defs.push_back(select(i < 0 || j < 0, border[c], likely(step[c])));
-            }
-            dp(b, j, i) = Tuple(defs);
-        } else {
-            // The same recurrence as update definitions. Indices shift by
-            // one so the boundary lives at storage index zero.
-            Expr Hb1 = cast<int16_t>(select(i == 0 && j == 0, 0,
-                                            select(i == 0, -(gapoe + (int)gape * (j - 1)),
-                                                   -(gapoe + (int)gape * (i - 1)))));
-            dp(b, j, i) = Tuple(Hb1, NEG, NEG);
-            RDom r(1, qseq.dim(1).extent(), 1, tseq.dim(1).extent(), "r");
-            rj = r.x, ri = r.y;
-            Expr s1 = cast<int16_t>(select(qseq(b, rj - 1) == tseq(b, ri - 1), (int)sa, -(int)sb));
-            Expr E = max(dp(b, rj, ri - 1)[1] - (int)gape, dp(b, rj, ri - 1)[0] - gapoe);
-            Expr F = max(dp(b, rj - 1, ri)[2] - (int)gape, dp(b, rj - 1, ri)[0] - gapoe);
-            Expr Hd = dp(b, rj - 1, ri - 1)[0] + s1;
-            Expr H = max(max(Hd, E), F);
-            dp(b, rj, ri) = Tuple(cast<int16_t>(H), cast<int16_t>(E), cast<int16_t>(F));
-        }
+        // H, E, F and the direction byte, computed from the same
+        // intermediates in one pass.
+        Func dp({Int(16), Int(16), Int(16), UInt(8)}, "dp");
 
         // ksw_gg's direction byte: d = 0 if the diagonal ties-or-beats E,
         // else 1; then 2 if F strictly beats that; extension bits use
@@ -117,13 +88,41 @@ public:
         };
 
         if (scan != ScanForm::RDom) {
-            dir(b, j, i) = dir_byte(dp(b, j, i)[0], dp(b, j, i)[1], dp(b, j, i)[2],
-                                    dp(b, j - 1, i - 1)[0] + s);
+            // E(j,i) = max(E(j,i-1) - gape, H(j,i-1) - gapoe): a gap in
+            // the query, advancing the target. F advances the query.
+            Expr E = max(dp(b, j, i - 1)[1] - (int)gape, dp(b, j, i - 1)[0] - gapoe);
+            Expr F = max(dp(b, j - 1, i)[2] - (int)gape, dp(b, j - 1, i)[0] - gapoe);
+            Expr Hd = dp(b, j - 1, i - 1)[0] + s;
+            Expr H = max(max(Hd, E), F);
+            Expr border[4] = {Hb, NEG, NEG, cast<uint8_t>(0)};
+            Expr step[4] = {cast<int16_t>(H), cast<int16_t>(E), cast<int16_t>(F),
+                            dir_byte(cast<int16_t>(H), cast<int16_t>(E), cast<int16_t>(F), Hd)};
+            std::vector<Expr> defs;
+            for (int c = 0; c < 4; c++) {
+                defs.push_back(select(i < 0 || j < 0, border[c], likely(step[c])));
+            }
+            dp(b, j, i) = Tuple(defs);
+            dir(b, j, i) = dp(b, j, i)[3];
         } else {
-            Expr s0 = cast<int16_t>(select(qseq(b, j) == tseq(b, i), (int)sa, -(int)sb));
-            dir(b, j, i) = dir_byte(dp(b, j + 1, i + 1)[0], dp(b, j + 1, i + 1)[1],
-                                    dp(b, j + 1, i + 1)[2], dp(b, j, i)[0] + s0);
+            // The same recurrence as update definitions. Indices shift by
+            // one so the boundary lives at storage index zero.
+            Expr Hb1 = cast<int16_t>(select(i == 0 && j == 0, 0,
+                                            select(i == 0, -(gapoe + (int)gape * (j - 1)),
+                                                   -(gapoe + (int)gape * (i - 1)))));
+            dp(b, j, i) = Tuple(Hb1, NEG, NEG, cast<uint8_t>(0));
+            RDom r(1, qseq.dim(1).extent(), 1, tseq.dim(1).extent(), "r");
+            rj = r.x, ri = r.y;
+            Expr s1 = cast<int16_t>(select(qseq(b, rj - 1) == tseq(b, ri - 1), (int)sa, -(int)sb));
+            Expr E = max(dp(b, rj, ri - 1)[1] - (int)gape, dp(b, rj, ri - 1)[0] - gapoe);
+            Expr F = max(dp(b, rj - 1, ri)[2] - (int)gape, dp(b, rj - 1, ri)[0] - gapoe);
+            Expr Hd = dp(b, rj - 1, ri - 1)[0] + s1;
+            Expr H = max(max(Hd, E), F);
+            dp(b, rj, ri) = Tuple(cast<int16_t>(H), cast<int16_t>(E), cast<int16_t>(F),
+                                  dir_byte(cast<int16_t>(H), cast<int16_t>(E), cast<int16_t>(F), Hd));
+            // The walk gathers straight from the direction plane.
+            dir(b, j, i) = dp(b, j + 1, i + 1)[3];
         }
+
 
         // The walk: inductive for the inductive forms, an update
         // definition for the fully-RDom ablation.
@@ -160,11 +159,15 @@ public:
             tb.compute_at(path, bo).vectorize(b, VEC);
             tb.update().reorder(b, rs).vectorize(b, VEC);
         }
-        dir.compute_at(path, bo).store_at(path, bo).reorder(b, j, i).vectorize(b, VEC);
-        if (par && stream) {
-            // Written once per block and read back at 2N of its N^2 cells:
-            // streaming stores skip read-for-ownership.
-            dir.stream_stores();
+        if (scan != ScanForm::RDom) {
+            // The direction plane is the state's last element, copied out
+            // row by row as the window slides.
+            dir.compute_at(path, bo).store_at(path, bo).reorder(b, j, i).vectorize(b, VEC);
+            if (par && stream) {
+                // Written once per block and read back at 2N of its N^2
+                // cells: streaming stores skip read-for-ownership.
+                dir.stream_stores();
+            }
         }
 
         if (scan != ScanForm::RDom) {

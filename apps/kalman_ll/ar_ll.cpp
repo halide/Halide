@@ -38,6 +38,7 @@
 
 #include "Halide.h"
 #include "../support/bench_harness.h"
+#include "../support/mem_probe.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -145,13 +146,14 @@ int main(int argc, char **argv) {
             .vectorize(bi, V)
             .unroll(bi)
             .parallel(bo);
+        // The two vectors' steps interleave, not just their LL terms.
         if (inductive) {
             State.compute_at(LL, rl).store_at(LL, bo)
                  .fold_storage(t, 2)
-                 .vectorize(b, V);
+                 .vectorize(b, V).unroll(b);
         } else {
             State.compute_at(LL, bo).vectorize(b, V);
-            State.update(0).vectorize(b, V);
+            State.update(0).vectorize(b, V).unroll(b);
         }
         return LL;
     };
@@ -161,6 +163,9 @@ int main(int argc, char **argv) {
         li.compile_jit();
         ln.compile_jit();
         Buffer<double> ri(B), rn(B);
+        for (Func *f : {&li, &ln}) {
+            hb::reuse_jit_allocations(*f);
+        }
         li.realize(ri);
         ln.realize(rn);
 

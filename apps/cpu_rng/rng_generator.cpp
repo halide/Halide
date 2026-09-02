@@ -136,13 +136,18 @@ public:
             S.update()
                 .reorder(l, rt)
                 .vectorize(l);
-            r64.compute_at(y, co).vectorize(l);
-            r32.compute_at(y, co).vectorize(l);
+            // Per step, as temporaries; only the state trajectory is stored.
+            r64.compute_at(y, t).vectorize(l);
+            r32.compute_at(y, t).vectorize(l);
         }
+        // The output is written once and never read back: streaming stores,
+        // which need the rows aligned to be vector-wide.
+        Func(y).stream_stores();
 
         seeds.dim(0).set_bounds(0, 4);
         seeds.dim(1).set_bounds(0, lanes);
-        y.dim(0).set_bounds(0, 2 * (int)lanes);
+        y.set_host_alignment(64).dim(0).set_bounds(0, 2 * (int)lanes);
+        y.dim(1).set_stride(2 * (int)lanes);
     }
 };
 

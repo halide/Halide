@@ -322,7 +322,11 @@ def main():
         "dependent stages, and a per-row Func may not read the state its update feeds); the rescalings are "
         "then paid per element rather than per row, the same tile verbs and staging otherwise. For scale, "
         "cuBLAS + softmax + cuBLAS is about 13x slower than the flash filter. Chebyshev is the "
-        "intended in-cache control, where folding buys nothing.\n\n")
+        "intended in-cache control, where folding buys nothing. Outputs that are written once and never "
+        "read back are streamed in every form (rng, biquads, the alignment direction plane); the JIT apps "
+        "(kalman, viterbi, ode) reuse their scratch buffers across timed runs so page faults on fresh "
+        "mappings are not charged to any form; the Python baselines report the best sample, as Halide's "
+        "harness does.\n\n")
     Path(args.out).write_text(notes + table + "\n")
     print(f"\nwritten to {args.out}")
 

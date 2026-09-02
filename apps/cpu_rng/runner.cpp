@@ -138,7 +138,7 @@ void simd_fill(const Buffer<uint64_t> &seeds, Buffer<float> &out) {
             // consecutive output lanes: one full-width store per step.
             __m512i bits = _mm512_srli_epi32(r, 8);
             __m512 f = _mm512_mul_ps(_mm512_cvtepu32_ps(bits), scale);
-            _mm512_storeu_ps(&out(blk * 16, t), f);
+            _mm512_stream_ps(&out(blk * 16, t), f);  // written once, never read back
             __m512i t17 = _mm512_slli_epi64(s[blk][1], 17);
             s[blk][2] = _mm512_xor_si512(s[blk][2], s[blk][0]);
             s[blk][3] = _mm512_xor_si512(s[blk][3], s[blk][1]);
