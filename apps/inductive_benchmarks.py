@@ -318,7 +318,9 @@ def main():
         "compare each side at its own best chunk (Triton prefers 256; the Halide backward is best at 128), "
         "with the tensor-core schedules (WMMA=true). Flash attention's RDom form is the two-pass softmax "
         "(a row-max walk, then the weighted walk), the same tile verbs and staging at its own best chunk; the "
-        "materialized-scores alternative, cuBLAS + softmax + cuBLAS, is about 13x slower. Chebyshev is the "
+        "same two passes with the scores materialized in their own kernel (the generator's materialize "
+        "knob) run at 1.97 ms, memory-bound on the 256 MB score matrix written once and read twice, and "
+        "cuBLAS + softmax + cuBLAS is about 13x slower. Chebyshev is the "
         "intended in-cache control, where folding buys nothing.\n\n")
     Path(args.out).write_text(notes + table + "\n")
     print(f"\nwritten to {args.out}")

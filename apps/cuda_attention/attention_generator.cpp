@@ -938,6 +938,10 @@ public:
     GeneratorParam<bool> stage_tile{"stage_tile", true};
     GeneratorParam<bool> stage_q{"stage_q", true};
     GeneratorParam<int> pad{"pad", 0};
+    // Keep the first pass's scores for the second instead of recomputing
+    // them: the whole score matrix, computed by its own kernel and read
+    // back by both walks. For measuring what the recompute is worth.
+    GeneratorParam<bool> materialize{"materialize", false};
 
     Input<Buffer<float16_t, 2>> Q{"Q"};
     Input<Buffer<float16_t, 2>> K{"K"};
@@ -964,17 +968,21 @@ public:
         s(x, y, t) = 0.f;
         s(x, y, t) += cast<float>(Q(k, y)) * cast<float>(K(k, t * key_tile + x));
 
+        // What the two passes read: the scores themselves, or a copy of
+        // them held in global memory.
+        Func sg = materialize ? s.in() : s;
+
         // Pass one: each tile's row maximum, and the running maximum over
         // the walk.
         tile_max(y, t) = -1e30f;
-        tile_max(y, t) = max(tile_max(y, t), s(rj_max, y, t));
+        tile_max(y, t) = max(tile_max(y, t), sg(rj_max, y, t));
 
         mfin(y) = -1e30f;
         mfin(y) = max(mfin(y), tile_max(y, rt));
 
         // Pass two: the weights against the final maximum, so nothing
         // carried needs rescaling.
-        e(x, y, t) = exp(s(x, y, t) - mfin(y));
+        e(x, y, t) = exp(sg(x, y, t) - mfin(y));
 
         tile_l(y, t) = 0.f;
         tile_l(y, t) += e(rj, y, t);
@@ -1077,27 +1085,81 @@ public:
             mfin.update().reorder(ryi, y, r1i, r1o, yw);
         }
 
-        // The first pass gets its own copy of the scores, recomputed
-        // rather than kept: a block's strip of them is 256 KB, too big for
-        // shared memory and a write-back of the whole matrix if held in
-        // global memory, where one more tensor-core product per tile is
-        // cheaper.
-        Func s1 = s.clone_in(tile_max);
-        s1.compute_at(mfin, yw)
-            .store_in(MemoryType::Tile)
-            .hoist_storage(out, xo)
-            .tile(x, y, rxi, ryi, tile, tile)
-            .unroll(x)
-            .unroll(y)
-            .tile_init(rxi, ryi);
-        s1.update()
-            .tile(x, y, rxi, ryi, tile, tile)
-            .split(k, rro, rri, tile)
-            .reorder(x, y, rro)
-            .unroll(x)
-            .unroll(y)
-            .unroll(rro)
-            .tile_matmul(rri, rxi, ryi);
+        if (materialize) {
+            // The scores as a kernel of their own, one block per strip of
+            // rows and key tile, stored whole; both walks read them back.
+            Func sg = s.in();
+            Var sxo("sxo"), syo("syo"), sxi("sxi"), syi("syi"), sxio("sxio"), syio("syio"), syw("syw");
+            sg.compute_root()
+                .bound(x, 0, key_tile)
+                .bound(y, 0, queries)
+                .bound(t, 0, num_tiles)
+                .tile(x, y, sxo, syo, sxi, syi, key_tile, block_rows)
+                .split(syi, syw, syi, rows)
+                .tile(sxi, syi, sxio, syio, sxi, syi, tile, tile)
+                .reorder(sxi, syi, sxio, syio, syw, sxo, syo, t)
+                .gpu_blocks(syo, t)
+                .unroll(sxio)
+                .unroll(syio)
+                .tile_store(sxi, syi);
+            if (wy > 1) {
+                sg.gpu_threads(syw);
+            }
+            s.compute_at(sg, syw)
+                .store_in(MemoryType::Tile)
+                .tile(x, y, rxi, ryi, tile, tile)
+                .unroll(x)
+                .unroll(y)
+                .tile_init(rxi, ryi);
+            s.update()
+                .tile(x, y, rxi, ryi, tile, tile)
+                .split(k, rro, rri, tile)
+                .reorder(x, y, rro)
+                .unroll(x)
+                .unroll(y)
+                .unroll(rro)
+                .tile_matmul(rri, rxi, ryi);
+
+            // Each pass loads its score tiles back from memory as fragments.
+            Func sl1 = sg.in(tile_max);
+            sl1.compute_at(mfin, yw)
+                .store_in(MemoryType::Tile)
+                .hoist_storage(out, xo)
+                .tile(x, y, rxi, ryi, tile, tile)
+                .unroll(x)
+                .unroll(y)
+                .tile_load(rxi, ryi);
+            Func sl2 = sg.in(e);
+            sl2.compute_at(acc, yw)
+                .store_in(MemoryType::Tile)
+                .hoist_storage(out, xo)
+                .tile(x, y, rxi, ryi, tile, tile)
+                .unroll(x)
+                .unroll(y)
+                .tile_load(rxi, ryi);
+        } else {
+            // The first pass gets its own copy of the scores, recomputed
+            // rather than kept: a block's strip of them is 256 KB, too big
+            // for shared memory and a write-back of the whole matrix if held
+            // in global memory, where one more tensor-core product per tile
+            // is cheaper.
+            Func s1 = s.clone_in(tile_max);
+            s1.compute_at(mfin, yw)
+                .store_in(MemoryType::Tile)
+                .hoist_storage(out, xo)
+                .tile(x, y, rxi, ryi, tile, tile)
+                .unroll(x)
+                .unroll(y)
+                .tile_init(rxi, ryi);
+            s1.update()
+                .tile(x, y, rxi, ryi, tile, tile)
+                .split(k, rro, rri, tile)
+                .reorder(x, y, rro)
+                .unroll(x)
+                .unroll(y)
+                .unroll(rro)
+                .tile_matmul(rri, rxi, ryi);
+        }
 
         tile_max.store_in(MemoryType::Tile)
             .compute_at(mfin, yw)
@@ -1130,6 +1192,9 @@ public:
         }
 
         for (Func f : {s, e}) {
+            if (materialize && f.name() == s.name()) {
+                continue;  // computed by its own kernel above
+            }
             f.compute_at(acc, yw)
                 .store_in(MemoryType::Tile)
                 .hoist_storage(out, xo)
@@ -1147,14 +1212,16 @@ public:
             .unroll(y)
             .tile_init(rxi, ryi);
 
-        s.update()
-            .tile(x, y, rxi, ryi, tile, tile)
-            .split(k, rro, rri, tile)
-            .reorder(x, y, rro)
-            .unroll(x)
-            .unroll(y)
-            .unroll(rro)
-            .tile_matmul(rri, rxi, ryi);
+        if (!materialize) {
+            s.update()
+                .tile(x, y, rxi, ryi, tile, tile)
+                .split(k, rro, rri, tile)
+                .reorder(x, y, rro)
+                .unroll(x)
+                .unroll(y)
+                .unroll(rro)
+                .tile_matmul(rri, rxi, ryi);
+        }
 
         tile_acc.update()
             .tile(x, y, rxi, ryi, tile, tile)
@@ -1217,7 +1284,9 @@ public:
             outf.gpu_threads(yw);
         }
 
-        if (stage_q) {
+        // Q's staging follows the scores: only the walks stage it, the
+        // score kernel of the materialized form reads its strip directly.
+        if (stage_q && !materialize) {
             Var qo("qo"), qv("qv"), qt("qt"), qi("qi"), qto("qto"), qw("qw");
             Q.in()
                 .compute_at(out, xo)
@@ -1253,13 +1322,16 @@ public:
                     .vectorize(kv)
                     .align_storage(_0, width + p);
             };
-            Func K1 = K.in(s1);
-            stage_panel(K1, mfin, r1i, depth);
-            Func K2 = K.in(s);
             Func V2 = V.in();
-            stage_panel(K2, acc, rti, depth);
             stage_panel(V2, acc, rti, out_depth);
-            K2.compute_with(V2, to);
+            if (!materialize) {
+                // Each walk stages the key tiles its scores need.
+                Func K1 = K.in(s.clone_in(tile_max));
+                stage_panel(K1, mfin, r1i, depth);
+                Func K2 = K.in(s);
+                stage_panel(K2, acc, rti, depth);
+                K2.compute_with(V2, to);
+            }
         }
     }
 
