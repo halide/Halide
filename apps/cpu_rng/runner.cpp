@@ -14,7 +14,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <mutex>
 #include <thread>
 #include <vector>
 
@@ -33,45 +32,7 @@ namespace {
 constexpr int L = LANES;
 constexpr int T = STEPS;
 
-// The reusing allocator, so the materialized form's gigabytes of state per
-// realization are not charged as page faults.
-std::vector<std::pair<size_t, void *>> &the_pool() {
-    static std::vector<std::pair<size_t, void *>> pool;
-    return pool;
-}
-
 }  // namespace
-
-namespace {
-std::mutex &pool_mutex() {
-    static std::mutex m;
-    return m;
-}
-}  // namespace
-
-extern "C" void *halide_malloc(void *, size_t sz) {
-    std::lock_guard<std::mutex> lock(pool_mutex());
-    for (auto &e : the_pool()) {
-        if (e.first == sz && e.second) {
-            void *p = e.second;
-            e.second = nullptr;
-            return p;
-        }
-    }
-    char *base = (char *)malloc(sz + 256);
-    if (!base) {
-        return nullptr;
-    }
-    char *p = (char *)(((uintptr_t)base + 128 + 127) & ~(uintptr_t)127);
-    ((void **)p)[-1] = base;
-    ((size_t *)p)[-2] = sz;
-    return p;
-}
-
-extern "C" void halide_free(void *, void *p) {
-    std::lock_guard<std::mutex> lock(pool_mutex());
-    the_pool().push_back({((size_t *)p)[-2], p});
-}
 
 namespace {
 
