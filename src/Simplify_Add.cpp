@@ -198,6 +198,8 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
            rewrite((x / w) * w + (z + x % w), select(w == 0, 0, x) + z) ||
            rewrite(x / 2 + x % 2, (x + 1) / 2) ||
 
+           rewrite((0 - (x % 2)) / 2 * 2 + (x % 2), 0 - (x % 2)) ||
+
            rewrite(x + ((c0 - x) / c1) * c1, c0 - ((c0 - x) % c1), c1 > 0) ||
            rewrite(x + ((c0 - x) / c1 + y) * c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0) ||
            rewrite(x + (y + (c0 - x) / c1) * c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0) ||
