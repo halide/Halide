@@ -127,9 +127,85 @@ def test_minmax():
     assert b[4] == 3
 
 
+def test_tuple_helpers():
+    x = hl.Var("x")
+    p = hl.Param(hl.Int(32), "p", 1)
+
+    # Helpers that don't imply any math distribute across Tuples.
+    f = hl.Func("f")
+    f[x] = hl.select(x < 10, (0, 0), hl.likely((x, x + 1)))
+    a, b = f.realize([20])
+    for i in range(20):
+        assert a[i] == (0 if i < 10 else i)
+        assert b[i] == (0 if i < 10 else i + 1)
+
+    # The result is an hl.Tuple, which can be indexed and iterated.
+    t = hl.likely((x, x + 1))
+    assert len(t) == 2
+    assert len(list(t)) == 2
+    f = hl.Func("f")
+    f[x] = t[0] + t[1]
+    a = f.realize([20])
+    for i in range(20):
+        assert a[i] == 2 * i + 1
+
+    f = hl.Func("f")
+    f[x] = hl.likely_if_innermost((x, x + 1))
+    a, b = f.realize([20])
+    for i in range(20):
+        assert a[i] == i
+        assert b[i] == i + 1
+
+    f = hl.Func("f")
+    f[x] = hl.strict_float((hl.f32(x) + 1.0, hl.f32(x) * 2.0))
+    a, b = f.realize([20])
+    for i in range(20):
+        assert a[i] == i + 1
+        assert b[i] == i * 2
+
+    f = hl.Func("f")
+    f[x] = hl.memoize_tag((x, x + 1), p)
+    a, b = f.realize([20])
+    for i in range(20):
+        assert a[i] == i
+        assert b[i] == i + 1
+
+    f = hl.Func("f")
+    f[x] = hl.require(p > 0, (x, x + 1), "p was", p)
+    a, b = f.realize([20])
+    for i in range(20):
+        assert a[i] == i
+        assert b[i] == i + 1
+
+    f = hl.Func("f")
+    f[x] = hl.print((x, x * 2), "at", x)
+    output = io.StringIO()
+    with _redirect_stdout(output):
+        a, b = f.realize([3])
+        expected = "0 0 at 0\n1 2 at 1\n2 4 at 2\n"
+        actual = output.getvalue()
+        assert expected == actual, f"Expected: {expected}, Actual: {actual}"
+    for i in range(3):
+        assert a[i] == i
+        assert b[i] == i * 2
+
+    f = hl.Func("f")
+    f[x] = hl.print_when(x == 1, (x, x * 2), "at", x)
+    output = io.StringIO()
+    with _redirect_stdout(output):
+        a, b = f.realize([3])
+        expected = "1 2 at 1\n"
+        actual = output.getvalue()
+        assert expected == actual, f"Expected: {expected}, Actual: {actual}"
+    for i in range(3):
+        assert a[i] == i
+        assert b[i] == i * 2
+
+
 if __name__ == "__main__":
     test_print_expr()
     test_print_when()
+    test_tuple_helpers()
     test_select()
     test_select_bad_argmax()
     test_mux()

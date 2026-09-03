@@ -373,6 +373,7 @@ tests(
     transpose_idioms.cpp
     transposed_vector_reduce.cpp
     trim_no_ops.cpp
+    tuple_helpers.cpp
     tuple_partial_update.cpp
     tuple_reduction.cpp
     tuple_select.cpp
