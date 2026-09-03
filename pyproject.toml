@@ -40,9 +40,9 @@ ci-base = [
   { include-group = "apps" },
   { include-group = "tools" },
 ]
-ci-llvm-main = [{ include-group = "ci-base" }, "halide-llvm~=23.0.0.dev0"]
-ci-llvm-22 = [{ include-group = "ci-base" }, "halide-llvm~=22.1.0"]
-ci-llvm-21 = [{ include-group = "ci-base" }, "halide-llvm~=21.1.0"]
+ci-llvm-main = [{ include-group = "ci-base" }, "halide-llvm>=23.0.0.dev0,<24"]
+ci-llvm-22 = [{ include-group = "ci-base" }, "halide-llvm>=22.0.0.dev0,<23"]
+ci-llvm-21 = [{ include-group = "ci-base" }, "halide-llvm>=21.0.0.dev0,<22"]
 
 [tool.uv.sources]
 halide-bin = { workspace = true }
