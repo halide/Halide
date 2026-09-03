@@ -1283,7 +1283,7 @@ Expr unwrap_tags(const Expr &e) {
     return e;
 }
 
-Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args) {
+Expr requirement_failed_error(const Expr &condition, const std::vector<Expr> &args) {
     std::stringstream cond_str;
     cond_str << condition;
     return Call::make(Int(32),
