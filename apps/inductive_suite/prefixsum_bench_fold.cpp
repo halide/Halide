@@ -16,7 +16,7 @@
 //   full(j, k, s)     = carry(k, s) + local(j, k, s)      (add inter-chunk carry)
 //   output(j, k, s)   = full(j, k, s) / (k*L + j + 1)
 //
-// local is inductive over j and folded (fold_storage(j,1)); the up-sweep
+// local is inductive over j and folded (fold_storage(j,2)); the up-sweep
 // (local + ctot) and the down-sweep (full/output) both run .parallel(k) -- the
 // time dimension. carry is the short serial O(C) scan over chunk totals, the
 // only inherently sequential part (exactly oneTBB's serial reduction step).
@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
         // single accumulator per lane inside each chunk; carry stays serial.
         ctot.compute_root().reorder(s, k).parallel(k);
         carry.compute_root();
-        local.compute_at(output, j).store_at(output, k).fold_storage(j, hb::fold_factor(1, L));
+        local.compute_at(output, j).store_at(output, k).fold_storage(j, hb::fold_factor(2, L));
         output.bound(j, 0, L).bound(k, 0, C).bound(s, 0, S).reorder(j, s, k).parallel(k);  // k outermost parallel; s serial inside
 
         Buffer<float> result(L, C, S);

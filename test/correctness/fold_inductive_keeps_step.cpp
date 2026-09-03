@@ -1,17 +1,11 @@
 // A Func defined in terms of its own previous value reads that value while
-// computing the next one, and never again. The read dies at the store that
-// replaces it, so one slot is enough to slide over the dimension - provided
-// each point is computed exactly once, which a redundant split or a
-// ShiftInwards tail would break. So the one-slot window is not the default:
-// the schedule asks for it with fold_storage(t, 1), exactly the reach of the
-// recurrence, and gets it.
-//
-// Whether that is noticed depends on being able to say that two iterations of
-// the loops inside the producer never write the same place. Asking a solver to
-// falsify a collision does not survive a split: that 16a + b == 16a' + b' with
-// b and b' in [0, 15] forces a == a' is a uniqueness-of-representation
-// argument, and a tiled schedule writes coordinates of exactly that shape. So
-// the case below tiles the dimensions the producer writes.
+// computing the next one, and never again, so one slot would do if every
+// point were computed exactly once. A redundant split or a ShiftInwards tail
+// computes points twice, and then the point's own store would overwrite the
+// step it reads. Nothing checks for that, so the window always keeps the
+// step: two slots for a reach of one, whether the coordinate the producer
+// writes is plain or tiled (a tiled coordinate, yo*4 + yi, is what a real
+// schedule looks like, and is where the arithmetic tends to go wrong).
 //
 // The values come out right either way - only the size of the allocation is at
 // stake - so this asserts on the allocation rather than on the answer.
@@ -75,7 +69,7 @@ int64_t allocation_slots(bool tiled) {
     // computed in runs once and there is nothing for the loop-based sliding to
     // do with it.
     out.split(t, to, ti, 1);
-    m.compute_at(out, ti).store_root().slide(out, t).fold_storage(t, 1);
+    m.compute_at(out, ti).store_root().slide(out, t);
     if (tiled) {
         // The coordinate the producer writes becomes yo*4 + yi.
         m.split(y, yo, yi, 4);
@@ -111,15 +105,14 @@ int main(int argc, char **argv) {
     printf("slots when it writes a tiled one:                  %d\n", (int)tiled);
 
     int failures = 0;
-    if (plain != 1) {
-        printf("FAIL: the older value dies at the store that replaces it, so one "
-               "slot is enough, but %d were allocated\n", (int)plain);
+    if (plain != 2) {
+        printf("FAIL: the window should keep the step the recurrence reads, two "
+               "slots, but %d were allocated\n", (int)plain);
         failures++;
     }
-    if (tiled != 1) {
-        printf("FAIL: tiling the coordinate the producer writes does not change "
-               "when the older value dies, so one slot is still enough, but %d "
-               "were allocated\n", (int)tiled);
+    if (tiled != 2) {
+        printf("FAIL: tiling the coordinate the producer writes should not change "
+               "the window, two slots, but %d were allocated\n", (int)tiled);
         failures++;
     }
     if (failures) {

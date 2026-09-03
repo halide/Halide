@@ -15,7 +15,7 @@
 //             once per 8 elements, rather than round-tripping through the
 //             ring at every element.
 //   SCALAR=1  prefix_sum computed per output element, folded to a single
-//             accumulator per row (fold_storage(x, 1)); everything scalar.
+//             two-slot window per row (fold_storage(x, 2)); everything scalar.
 //
 // Rows run in parallel (like oneTBB's parallel_for); HL_NUM_THREADS=1 makes
 // the run serial, so one binary covers both the 1-core and the all-cores
@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
         output.bound(x, 0, W).bound(y, 0, H).parallel(y);
         int fold;
         if (scalar) {
-            fold = hb::fold_factor(1, W);
+            fold = hb::fold_factor(2, W);
             prefix_sum.compute_at(output, x).store_at(output, y).fold_storage(x, fold);
         } else {
             fold = hb::fold_factor(2 * group, W);
@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
         if (unfolded) {
             snprintf(label, sizeof(label), "inductive UNFOLDED (fold x -> W%s)", scalar ? "" : ", vec 16");
         } else if (scalar) {
-            snprintf(label, sizeof(label), "inductive FOLDED (fold x -> 1 accum)");
+            snprintf(label, sizeof(label), "inductive FOLDED (fold x -> 2)");
         } else {
             snprintf(label, sizeof(label), "inductive FOLDED (fold x -> %d, group %d, vec %d)", fold, group, vec);
         }

@@ -1346,22 +1346,26 @@ class SlidingWindow : public IRMutator {
         // loop have no order between them at all, so give up on both.
         //
         // A consumer that wants the older step keeps it through ext.
-        // A one-slot window is only sound if each point is computed exactly
-        // once: a self-referential Func recomputed at the same point (a
-        // redundant split, a ShiftInwards tail) would read its own fresh
-        // output as the previous value. So a Func that reads itself keeps
-        // the previous value unless the schedule asked for exactly the
-        // reach in slots (fold_storage(dim, reach)), which asserts the
-        // in-place form is wanted and the point is computed once.
-        bool explicit_in_place = false;
+        // A Func that reads itself always keeps the step it reads: a window
+        // of exactly the reach would have the point's own store overwrite
+        // it, which is only sound if every point is computed exactly once,
+        // and a redundant split or a ShiftInwards tail computes points
+        // twice with nothing to say so. Nothing checks that, so the
+        // one-slot form is refused rather than promised.
         for (const StorageDim &sd : func.schedule().storage_dims()) {
-            if (sd.var == d.dim && sd.fold_factor.defined()) {
-                explicit_in_place = is_const(sd.fold_factor, reach_back);
+            if (sd.var == d.dim && sd.fold_factor.defined() && func.is_inductive()) {
+                user_assert(!can_prove(sd.fold_factor <= reach_back))
+                    << "Func " << func.name() << " reads itself " << reach_back
+                    << " step" << (reach_back == 1 ? "" : "s")
+                    << " back along " << d.dim << ", so fold_storage(" << d.dim << ", "
+                    << sd.fold_factor << ") would overwrite the step it reads "
+                    << "wherever a point is computed more than once. The window "
+                    << "must keep that step: fold by at least " << (reach_back + 1) << ".\n";
             }
         }
         bool dies_at_its_store =
             func.updates().empty() &&
-            (!func.is_inductive() || explicit_in_place) &&
+            !func.is_inductive() &&
             !lanes_span_dim(body, func.name(), d.dim_idx);
 
         Expr low = dies_at_its_store ?
