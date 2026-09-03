@@ -17,8 +17,8 @@ Memory: the JIT apps and the alignment runner free their scratch at the end of e
 | cpu_alignment | 1024x1024 x 128 pairs, 1 thread, fill+traceback+cigar | 7.9 | 22.4 | 38.6 | parasail | ksw2 (minimap2 kernel), ksw2 scalar | 2.85x | 4.91x |
 | cpu_alignment | 1024x1024 x 4096 pairs, all cores, fill+traceback+cigar | 23.4 | 348.1 | 48.0 | parasail | ksw2 (minimap2 kernel), ksw2 scalar | 14.85x | 2.05x |
 | viterbi | 16 states, 4 symbols, T=320000, 1 thread (in-cache control) | 6.1 | 6.0 | - | - | - | 0.98x | - |
-| viterbi | 64 states, 8 symbols, T=50000, 1 thread (in-cache control) | 6.9 | 5.6 | - | - | - | 0.81x | - |
-| viterbi | 8 states, 4 symbols, T=16777216, 1 thread | 165.0 | 186.8 | - | - | - | 1.13x | - |
+| viterbi | 64 states, 8 symbols, T=50000, 1 thread (in-cache control) | 6.8 | 5.5 | - | - | - | 0.81x | - |
+| viterbi | 8 states, 4 symbols, T=16777216, 1 thread (latency-bound control) | 165.0 | 186.8 | - | - | - | 1.13x | - |
 | ode | Allen-Cahn D=1024, batch 1, T=32768, 1 thread | 2.3 | 6.9 | 3.1 | Boost.odeint | fused C++ loop | 3.04x | 1.39x |
 | prefixsum | 67108864 x 2 rows, running-mean consumer, 1 thread | 49.9 | 55.8 | 62.2 | oneTBB parallel_for rows | oneTBB parallel_scan | 1.12x | 1.25x |
 | prefixsum | 8388608 x 32 rows, running-mean consumer, 32 threads | 23.5 | 46.9 | 23.4 | oneTBB parallel_for rows | oneTBB parallel_scan | 1.99x | 0.99x |
