@@ -152,7 +152,11 @@ int main(int argc, char **argv) {
                 state(r.x, t) = select(t <= 0,
                                        Tuple(log_init(r.x) + log_emit(r.x, obs_0), cast<uint8_t>(0)),
                                        Tuple(likely(step[0]), likely(step[1])));
-                state.update(0).allow_race_conditions().vectorize(r.x);
+                // Vectorizing r.x needs no race annotation: the update
+                // reads the previous step, and t is an inductive Var,
+                // whose loop is serial by construction, so the race
+                // analysis knows two lanes see the same t.
+                state.update(0).vectorize(r.x);
             } else {
                 // RDom form: explicit init at t=0, then an RDom scan over time.
                 RDom ri(0, S, "ri");
@@ -164,6 +168,9 @@ int main(int argc, char **argv) {
                 state(rr.x, rr.z) = select(candn >= state(rr.x, rr.z)[0],
                                            Tuple(candn, cast<uint8_t>(rr.y)), state(rr.x, rr.z));
                 state.update(0).vectorize(ri);
+                // The same read of the previous step, but rr.z is an RVar,
+                // and the race analysis cannot know its loop is serial, so
+                // this form has to vouch for itself.
                 state.update(1).allow_race_conditions().vectorize(rr.x);
             }
 

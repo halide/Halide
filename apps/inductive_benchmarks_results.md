@@ -20,9 +20,9 @@ Memory: the JIT apps and the alignment runner free their scratch at the end of e
 | viterbi | 64 states, 8 symbols, T=50000, 1 thread (in-cache control) | 6.8 | 5.5 | - | - | - | 0.81x | - |
 | viterbi | 8 states, 4 symbols, T=16777216, 1 thread (latency-bound control) | 165.0 | 186.8 | - | - | - | 1.13x | - |
 | ode | Allen-Cahn D=1024, batch 1, T=32768, 1 thread | 2.3 | 6.9 | 3.1 | Boost.odeint | fused C++ loop | 3.04x | 1.39x |
-| prefixsum | 67108864 x 2 rows, running-mean consumer, 1 thread | 49.9 | 55.8 | 62.2 | oneTBB parallel_for rows | oneTBB parallel_scan | 1.12x | 1.25x |
-| prefixsum | 8388608 x 32 rows, running-mean consumer, 32 threads | 23.5 | 46.9 | 23.4 | oneTBB parallel_for rows | oneTBB parallel_scan | 1.99x | 0.99x |
-| chebyshev | n=2048 dense SPD, 100 iterations, 1 thread (in-cache control) | 18.6 | 16.7 | 19.2 | hand-written mod-3 ring | - | 0.90x | 1.04x |
+| prefixsum | 67108864 x 2 rows, running-mean consumer, 1 thread | 31.2 | 56.0 | 62.1 | oneTBB parallel_for rows | oneTBB parallel_scan | 1.79x | 1.99x |
+| prefixsum | 8388608 x 32 rows, running-mean consumer, 32 threads | 23.5 | 46.9 | 25.2 | oneTBB parallel_for rows | oneTBB parallel_scan | 2.00x | 1.07x |
+| chebyshev | n=2048 dense SPD, 100 iterations, 1 thread (in-cache control) | 11.2 | 11.8 | 11.1 | hand-written mod-3 ring | - | 1.06x | 0.99x |
 | cuda_mamba2 | fwd, seq 4096, state 128, 128 heads x 64, chunk 256 (Triton 256), RTX 5060 Ti | 1.6 | 1.8 | 1.6 | Triton (mamba_ssm) | - | 1.15x | 0.98x |
 | cuda_mamba2 | bwd, seq 4096, state 128, 128 heads x 64, chunk 128 (Triton 256), RTX 5060 Ti | 5.9 | 6.2 | 4.3 | Triton (mamba_ssm) | - | 1.05x | 0.73x |
 | flash_attention | 65536 queries x 1024 keys, depth 64, fp16, chunk 64 (RDom 64), RTX 5060 Ti | 0.402 | 0.438 | 0.375 | FlashAttention-2 (torch SDPA) | cuDNN SDPA (torch), torch memory-efficient SDPA, cuBLAS + softmax + cuBLAS | 1.09x | 0.93x |

@@ -1,4 +1,6 @@
 #include "ParallelRVar.h"
+
+#include <set>
 #include "CSE.h"
 #include "Debug.h"
 #include "Definition.h"
@@ -54,9 +56,11 @@ class RenameFreeVars : public IRMutator {
     using IRMutator::visit;
 
     map<string, string> new_names;
+    // Variables the other thread shares with this one.
+    const std::set<string> &serial_vars;
 
     Expr visit(const Variable *op) override {
-        if (!op->param.defined() && !op->image.defined()) {
+        if (!op->param.defined() && !op->image.defined() && !serial_vars.count(op->name)) {
             return Variable::make(op->type, get_new_name(op->name));
         } else {
             return op;
@@ -64,6 +68,10 @@ class RenameFreeVars : public IRMutator {
     }
 
 public:
+    explicit RenameFreeVars(const std::set<string> &serial_vars)
+        : serial_vars(serial_vars) {
+    }
+
     string get_new_name(const string &s) {
         map<string, string>::iterator iter = new_names.find(s);
         if (iter != new_names.end()) {
@@ -92,7 +100,8 @@ class SubstituteInBooleanLets : public IRMutator {
 
 bool can_parallelize_rvar(const string &v,
                           const string &f,
-                          const Definition &r) {
+                          const Definition &r,
+                          const std::set<string> &serial_vars) {
     const vector<Expr> &values = r.values();
     const vector<Expr> &args = r.args();
     const vector<ReductionVariable> &rvars = r.schedule().rvars();
@@ -109,7 +118,7 @@ bool can_parallelize_rvar(const string &v,
     }
 
     // Make an expr representing the store done by a different thread.
-    RenameFreeVars renamer;
+    RenameFreeVars renamer(serial_vars);
     auto other_store = renamer(args);
 
     // Construct an expression which is true when the two threads are

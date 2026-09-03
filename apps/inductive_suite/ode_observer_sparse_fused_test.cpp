@@ -157,6 +157,11 @@ int main(int argc, char **argv) {
         E.bound(b, 0, B).bound(n, 0, T);
 
         y.compute_at(E, n).store_root().fold_storage(n, fold_k);
+        // The stencil's reads of the previous slice pass the race analysis
+        // (n is inductive, so its loop is serial); the lane partial's read
+        // sixteen elements back in the same slice does not. It is safe at
+        // this vector width, each vector reading the one written before
+        // it, which the analysis cannot see.
         y.update(0).allow_race_conditions().vectorize(r.x, 16);
         E.compile_jit();
         return E;

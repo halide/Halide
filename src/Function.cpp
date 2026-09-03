@@ -1,4 +1,5 @@
 #include <atomic>
+#include <set>
 #include <cstdlib>
 #include <utility>
 
@@ -17,6 +18,10 @@
 
 namespace Halide {
 namespace Internal {
+
+namespace {
+bool inductive_in(const std::vector<Definition> &defs, const std::string &var, const std::string &fname);
+}  // namespace
 
 using std::map;
 using std::pair;
@@ -956,6 +961,23 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values, con
     Definition r(args, values, check.reduction_domain, false);
     internal_assert(!r.is_init()) << "Should have been an update definition\n";
 
+    // The update's inductive pure variables. Their loops are serial by
+    // construction (they may be split but not parallelized), so two
+    // parallel iterations of an RVar see the same value of them: the race analysis
+    // below treats them as shared, which lets a read of an earlier step
+    // pass, as it should, since that step is complete.
+    std::set<string> serial_vars;
+    {
+        std::vector<Definition> defs = {definition()};
+        defs.insert(defs.end(), updates().begin(), updates().end());
+        defs.push_back(r);
+        for (const string &pure_arg : pure_args) {
+            if (!pure_arg.empty() && inductive_in(defs, pure_arg, name())) {
+                serial_vars.insert(pure_arg);
+            }
+        }
+    }
+
     // First add any reduction domain
     if (check.reduction_domain.defined()) {
         for (const auto &rvar : check.reduction_domain.domain()) {
@@ -965,7 +987,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values, con
             // writing to.
             const string &v = rvar.var;
 
-            bool pure = can_parallelize_rvar(v, name(), r);
+            bool pure = can_parallelize_rvar(v, name(), r, serial_vars);
             Dim d = {v, ForType::Serial, DeviceAPI::None,
                      pure ? DimType::PureRVar : DimType::ImpureRVar};
             r.schedule().dims().push_back(d);
@@ -1226,14 +1248,12 @@ bool Function::is_inductive() const {
     return recursive;
 }
 
-bool Function::is_inductive(const string &var) const {
-    if (!has_pure_definition()) {
-        return false;
-    }
+namespace {
 
-    std::vector<Definition> defs = {definition()};
-    defs.insert(defs.end(), updates().begin(), updates().end());
-
+// Whether var, a pure variable of the Func named fname, is inductive
+// across the given definitions: some definition writes at var and reads
+// the Func at some other position along it.
+bool inductive_in(const std::vector<Definition> &defs, const string &var, const string &fname) {
     // Only pure vars can be inductive
     for (const Definition &def : defs) {
         for (const ReductionVariable &rv : def.schedule().rvars()) {
@@ -1259,7 +1279,7 @@ bool Function::is_inductive(const string &var) const {
 
         for (const Expr &e : def.values()) {
             visit_with(e, [&](auto *self, const Call *op) {
-                if (op->call_type == Call::Halide && op->name == name()) {
+                if (op->call_type == Call::Halide && op->name == fname) {
                     for (int pos : positions) {
                         if (const auto &v = op->args[pos].as<Variable>()) {
                             if (v->name != var) {
@@ -1276,6 +1296,18 @@ bool Function::is_inductive(const string &var) const {
     }
 
     return inductive_in_var;
+}
+
+}  // namespace
+
+bool Function::is_inductive(const string &var) const {
+    if (!has_pure_definition()) {
+        return false;
+    }
+
+    std::vector<Definition> defs = {definition()};
+    defs.insert(defs.end(), updates().begin(), updates().end());
+    return inductive_in(defs, var, name());
 }
 
 bool Function::can_be_inlined() const {
