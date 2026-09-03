@@ -531,30 +531,24 @@ private:
 
     Stmt visit(const Block *op) override {
         // Visit a sequence of blocks in a single method to conserve stack space.
-        Stmt result;
-        vector<std::pair<const Block *, Stmt>> frames;
-
-        do {
-            Stmt next = mutate(op->first);
-            if (next.defined()) {
-                frames.emplace_back(op, std::move(next));
-            }
-            result = op->rest;
-        } while ((op = result.as<Block>()));
-
-        result = mutate(result);
-
-        for (const auto &[block, stmt] : reverse_view(frames)) {
-            Stmt new_first = stmt;
-            if (!result.defined()) {
-                result = new_first;
-            } else if (new_first.same_as(block->first) && result.same_as(block->rest)) {
-                result = block;
-            } else {
-                result = Block::make(new_first, result);
+        vector<Stmt> stmts = Block::to_vector(op);
+        vector<Stmt> new_stmts;
+        new_stmts.reserve(stmts.size());
+        bool unchanged = true;
+        for (const Stmt &s : stmts) {
+            Stmt new_s = mutate(s);
+            unchanged &= new_s.same_as(s);
+            if (new_s.defined()) {
+                new_stmts.push_back(std::move(new_s));
             }
         }
-        return result;
+
+        if (unchanged) {
+            return op;
+        } else {
+            // Returns an undefined Stmt if everything was removed.
+            return Block::make(new_stmts);
+        }
     }
 
     Stmt visit(const IfThenElse *op) override {

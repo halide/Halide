@@ -719,6 +719,20 @@ Stmt Block::make(const std::vector<Stmt> &stmts) {
     return result;
 }
 
+std::vector<Stmt> Block::to_vector(const Stmt &s) {
+    std::vector<Stmt> result;
+    // Blocks are right-leaning: 'first' is never itself a Block.
+    Stmt rest = s;
+    while (const Block *b = rest.as<Block>()) {
+        result.push_back(b->first);
+        rest = b->rest;
+    }
+    if (rest.defined()) {
+        result.push_back(std::move(rest));
+    }
+    return result;
+}
+
 Stmt Block::with(const Stmt &first, const Stmt &rest) const {
     if (first.same_as(this->first) && rest.same_as(this->rest)) {
         return this;
