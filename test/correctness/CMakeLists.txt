@@ -342,6 +342,7 @@ tests(
     split_aligned.cpp
     split_aligned_2d.cpp
     split_aligned_2d_3x3.cpp
+    split_aligned_mux_phase.cpp
     split_aligned_nested.cpp
     split_aligned_partition.cpp
     split_aligned_reduction.cpp
