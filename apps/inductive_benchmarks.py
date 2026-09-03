@@ -193,14 +193,21 @@ def suite_bin(name):
     return d / "bin" / name
 
 
-def viterbi(S, M, T):
-    out = sh(f"{suite_bin('viterbi_log')} {S} {M} {T}", APPS / "inductive_suite",
-             env={"HL_NUM_THREADS": "1"}, log=LOGS / f"viterbi_{S}_{M}_{T}.txt", pin=True)
+def viterbi(S, M, T, B=1, par=False):
+    out = sh(f"{suite_bin('viterbi_log')} {S} {M} {T} {B}", APPS / "inductive_suite",
+             env=None if par else {"HL_NUM_THREADS": "1"}, log=LOGS / f"viterbi_{S}_{M}_{T}_{B}.txt",
+             pin=not par, cores=par)
     r = hb_rows(out)
-    # The RDom form's trajectory is S*T*(4+1) bytes; a row whose trajectory
-    # fits in one CCD's 32 MB L3 is an in-cache control.
-    control = " (in-cache control)" if S * T * 5 <= 32 << 20 else " (latency-bound control)"
-    return dict(params=f"{S} states, {M} symbols, T={T}, 1 thread{control}",
+    if par:
+        params = f"{S} states, {M} symbols, T={T}, {B} decodes, all cores"
+    else:
+        # One decode on an otherwise idle machine has a chiplet's L3 and the
+        # write path to itself. The RDom form's trajectory is S*T*(4+1)
+        # bytes; a row whose trajectory fits in the 32 MB L3 is an in-cache
+        # control, and one whose trajectory streams is a latency control.
+        control = " (in-cache control)" if S * T * 5 <= 32 << 20 else " (latency-bound control)"
+        params = f"{S} states, {M} symbols, T={T}, 1 thread{control}"
+    return dict(params=params,
                 ind=r.get("inductive FOLDED (fold t -> 2)"), rdom=r.get("non-inductive (materialize)"),
                 base_name=None, base=None)
 
@@ -215,17 +222,18 @@ def chebyshev(n, M):
                 base_name="hand-written mod-3 ring", base=r.get("non-inductive mod-3 ring (3 cols)"))
 
 
-def ode(D, B, T):
+def ode(D, B, T, par=False):
     b = suite_bin("ode_observer_sparse_fused_test")
     if not b.exists():
         return dict(params=f"D={D}, B={B}, T={T}", ind=None, rdom=None,
                     base_name="Boost.odeint (needs libboost-dev)", base=None, skipped=True)
-    out = sh(f"{b} {D} {B} {T}", APPS / "inductive_suite", env={"HL_NUM_THREADS": "1"}, pin=True,
-             log=LOGS / f"ode_{D}_{B}_{T}.txt")
+    out = sh(f"{b} {D} {B} {T}", APPS / "inductive_suite", env=None if par else {"HL_NUM_THREADS": "1"},
+             pin=not par, cores=par, log=LOGS / f"ode_{D}_{B}_{T}.txt")
     r = hb_rows(out)
-    bn, bt = best([("Boost.odeint", r.get("Boost.odeint (rk4 init + observer)")),
-                           ("fused C++ loop", r.get("fused C++ loop"))])
-    return dict(params=f"Allen-Cahn D={D}, batch {B}, T={T}, 1 thread",
+    threaded = " (threaded)" if par else ""
+    bn, bt = best([("Boost.odeint" + threaded, r.get("Boost.odeint (rk4 init + observer)")),
+                           ("fused C++ loop" + threaded, r.get("fused C++ loop"))])
+    return dict(params=f"Allen-Cahn D={D}, batch {B}, T={T}, {'all cores' if par else '1 thread'}",
                 ind=r.get("inductive FOLDED (fold n -> 2)"), rdom=r.get("non-inductive (materialize)"),
                 base_name=bn, base=bt)
 
@@ -341,7 +349,9 @@ SUITE = [
     ("viterbi", lambda: viterbi(16, 4, 320000)),
     ("viterbi", lambda: viterbi(64, 8, 50000)),
     ("viterbi", lambda: viterbi(8, 4, 16777216)),
+    ("viterbi", lambda: viterbi(16, 4, 262144, NCORES, True)),
     ("ode", lambda: ode(1024, 1, 32768)),
+    ("ode", lambda: ode(1024, NCORES, 8192, True)),
     # Rows past the last-level cache, so the materialized row is a trip
     # through memory: 256 MB rows serially, 32 MB rows over the cores.
     ("prefixsum", lambda: prefixsum(1 << 26, 2, 1)),
@@ -443,10 +453,13 @@ def main():
         "the key chunks advances all three (Halide fuses no dependent stages, and a per-row Func may not "
         "read the state its update feeds); the rescalings are then paid per element rather than per row, "
         "the same tile verbs and staging otherwise, so that row measures the cost of the expression, not "
-        "of memory traffic. Chebyshev and the viterbi rows are controls: chebyshev's trajectory fits in "
-        "cache, and viterbi's step is a dependency chain of a few dozen cycles over its states, which the "
-        "materialized trajectory's extra bytes per step barely add to even when they stream (the third "
-        "row); folding buys nothing in either. The alignment rows are a matched comparison: the Halide "
+        "of memory traffic. Chebyshev and the single-thread viterbi and ode rows are controls: chebyshev's "
+        "trajectory fits in cache, and a lone recurrence on an otherwise idle machine has a chiplet's L3 and "
+        "the whole write path to itself, so the materialized trajectory's extra bytes per step barely add "
+        "to a step that is a dependency chain of a few dozen cycles (viterbi) or a microsecond of "
+        "arithmetic (ode) even when they stream; folding buys nothing there. The all-cores viterbi and "
+        "ode rows are the representative workload, many independent recurrences at once, where those "
+        "bytes have to share the machine. The alignment rows are a matched comparison: the Halide "
         "forms are compiled for AVX2, the widest instruction set parasail ships kernels for (ksw2 ships SSE "
         "only); compiled for the machine's AVX-512 the single-thread row runs 1.4x faster again, while the "
         "all-cores row, at the memory wall, does not move (apps/cpu_alignment/README.md).\n\n"
