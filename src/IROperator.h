@@ -411,7 +411,7 @@ inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &arg
     collect_print_args(args, std::forward<Args>(more_args)...);
 }
 
-Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args);
+Expr requirement_failed_error(const Expr &condition, const std::vector<Expr> &args);
 
 Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values);
 
