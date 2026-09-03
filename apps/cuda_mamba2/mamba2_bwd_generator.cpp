@@ -82,6 +82,10 @@ public:
     Func Uh, Ih, ebd, xyq, Mq32, Mqhi, Mqlo, Ms, Q, Qm, Qd, SX, Sst, Bmdf3, Bmd3, dxe2, Cdf2, Cd2,
         yprev, E2, PS, PSb, PSst, Sb, cterm, chunk_term, nx, pv, ga, pdA;
     Var jj{"jj"}, u{"u"};
+    // The pair-sum accumulators carry their tile indices as dimensions
+    // of their own (within-tile, tile), so the sweeps' predicates mention
+    // nothing the tile operations vectorize.
+    Var ii{"ii"}, it{"it"}, jji{"jji"}, jjt{"jjt"};
 
     Output<Buffer<float16_t, 4>> dX{"dX"};    // channels x pos x chunk x head
     Output<Buffer<float16_t, 4>> dB{"dB"};    // state x pos x chunk x group
@@ -388,35 +392,41 @@ public:
         // and the per-position row sums are then both reductions over the
         // output position. The diagonal never enters a boundary sum, since
         // it lies strictly inside neither half of the pair.
-        RDom rjq(0, L, "rjq");
+        // Input tiles past either the output tile or the boundary tile hold
+        // only zeros: the sweep skips them, its predicate on tile indices
+        // alone.
+        RDom rq(0, tile, 0, L / tile, "rq");
+        rq.where(rq.y <= min(it, jjt));
+        Expr jq = rq.y * tile + rq.x, iq = it * tile + ii, jjq = jjt * tile + jji;
         Q = Func("Q");
-        Q(i, jj, t, b) = 0.f;
-        Q(i, jj, t, b) += cast<float>(Ms(rjq, i, t, b)[0]) * cast<float>(Uh(rjq, jj));
-        Q(i, jj, t, b) += cast<float>(Ms(rjq, i, t, b)[1]) * cast<float>(Uh(rjq, jj));
+        Q(ii, it, jji, jjt, t, b) = 0.f;
+        Q(ii, it, jji, jjt, t, b) += cast<float>(Ms(jq, iq, t, b)[0]) * cast<float>(Uh(jq, jjq));
+        Q(ii, it, jji, jjt, t, b) += cast<float>(Ms(jq, iq, t, b)[1]) * cast<float>(Uh(jq, jjq));
         // The identity's only nonzero tile is the diagonal one, so the
         // transpose sweeps just the input tile of its own boundaries.
         RDom rjd(0, tile, "rjd");
-        Expr jd = (jj / tile) * tile + rjd;
+        Expr jd = jjt * tile + rjd;
         Qd = Func("Qd");
-        Qd(i, jj, t, b) = 0.f;
-        Qd(i, jj, t, b) += cast<float>(Ms(jd, i, t, b)[0]) * cast<float>(Ih(jd, jj));
-        Qd(i, jj, t, b) += cast<float>(Ms(jd, i, t, b)[1]) * cast<float>(Ih(jd, jj));
+        Qd(ii, it, jji, jjt, t, b) = 0.f;
+        Qd(ii, it, jji, jjt, t, b) += cast<float>(Ms(jd, iq, t, b)[0]) * cast<float>(Ih(jd, jjq));
+        Qd(ii, it, jji, jjt, t, b) += cast<float>(Ms(jd, iq, t, b)[1]) * cast<float>(Ih(jd, jjq));
         // The mask multiplies rather than selects, so the whole plane is
         // read and the masked-off region doesn't clamp the tile's bounds.
         Qm = Func("Qm");
-        Qm(i, jj, t, b) = Q(i, jj, t, b) * select(i >= jj, 1.f, 0.f);
+        Qm(ii, it, jji, jjt, t, b) = Q(ii, it, jji, jjt, t, b) * select(iq >= jjq, 1.f, 0.f);
         // The boundary sums, and the direct step-size term's intra-chunk
         // half: the row sums of the plane, diagonal included. One value of
         // each per position, held as tiles with the value repeated along
         // the tile's rows, and stored that way.
-        RDom ri2(0, L, "ri2");
+        RDom ri2(0, tile, 0, L / tile, "ri2");
         SX = Func("SX");
-        SX(jj, t, b) = {0.f, 0.f};
-        SX(jj, t, b) = {SX(jj, t, b)[0] + Qm(ri2, jj, t, b), SX(jj, t, b)[1] + Qd(ri2, jj, t, b)};
+        SX(jji, jjt, t, b) = {0.f, 0.f};
+        SX(jji, jjt, t, b) = {SX(jji, jjt, t, b)[0] + Qm(ri2.x, ri2.y, jji, jjt, t, b),
+                              SX(jji, jjt, t, b)[1] + Qd(ri2.x, ri2.y, jji, jjt, t, b)};
         Sb = Func("Sb");
-        Sb(u, jj, t, b) = {SX(jj, t, b)[0], SX(jj, t, b)[1]};
+        Sb(u, jji, jjt, t, b) = {SX(jji, jjt, t, b)[0], SX(jji, jjt, t, b)[1]};
         Sst = Func("Sst");
-        Sst(u, jj, t, b) = {Sb(u, jj, t, b)[0], Sb(u, jj, t, b)[1]};
+        Sst(u, jji, jjt, t, b) = {Sb(u, jji, jjt, t, b)[0], Sb(u, jji, jjt, t, b)[1]};
 
         // (2) The input end in this chunk, the output end after it: the
         // inter-chunk half of dX, dotted with X, summed over the inputs
@@ -485,13 +495,13 @@ public:
             pv(rsk, t, b) += pv(rsk - 1, t, b);
         }
         ga = Func("ga");
-        ga(k, t, b) = Sst(0, k, t, b)[0] + pv(L - 1 - k, t, b) + nx(k, t, b) +
+        ga(k, t, b) = Sst(0, k % tile, k / tile, t, b)[0] + pv(L - 1 - k, t, b) + nx(k, t, b) +
                       chunk_term(t, b);
 
         // The direct step-size term, X dotted with both halves of dX at
         // single precision.
         Func ddtF("ddtF");
-        ddtF(k, t, b) = (Sst(0, k, t, b)[1] + PSst(0, k, t, b)[0]) / Delta(t * L + k, b) +
+        ddtF(k, t, b) = (Sst(0, k % tile, k / tile, t, b)[1] + PSst(0, k, t, b)[0]) / Delta(t * L + k, b) +
                         A(b) * ga(k, t, b);
 
         dDT(k, b) = ddtF(k % L, k / L, b);
@@ -1143,9 +1153,8 @@ private:
             // per-boundary totals.
             RVar rio("rio"), rii("rii"), rjo("rjo"), rji("rji");
             // Exact extents, so the tile splits carry no tail guards.
-            for (Func st : {Sst, PSst}) {
-                st.bound(u, 0, tile).bound(st.args()[1], 0, L).bound(t, 0, nt).bound(b, 0, heads);
-            }
+            Sst.bound(u, 0, tile).bound(jji, 0, tile).bound(jjt, 0, L / tile).bound(t, 0, nt).bound(b, 0, heads);
+            PSst.bound(u, 0, tile).bound(k, 0, L).bound(t, 0, nt).bound(b, 0, heads);
             for (Func f : {Uh, Ih}) {
                 f.compute_root().gpu_blocks(jj).gpu_threads(j);
             }
@@ -1154,40 +1163,31 @@ private:
             // its output positions at a time, four warps computing a tile
             // row each; then every warp sweeps the staged tiles for its own
             // boundaries, accumulating one tile of each sum.
-            Var jjt("jjt");
-            RVar rh("rh");
+            RVar rh("rh"), rqo("rqo"), rqi("rqi");
             Sst.compute_root()
-                .tile(u, jj, rxi, ryi, tile, tile)
-                .reorder(rxi, ryi, jj, u, t, b)
+                .tile(u, jji, rxi, ryi, tile, tile)
+                .reorder(rxi, ryi, jjt, jji, u, t, b)
                 .gpu_blocks(t, b)
-                .gpu_threads(jj)
+                .gpu_threads(jjt)
                 .tile_store(rxi, ryi);
-            Sb.compute_at(Sst, jj)
+            Sb.compute_at(Sst, jjt)
                 .store_in(MemoryType::Tile)
-                .bound_extent(jj, tile)
-                .bound_storage(jj, tile)
-                .tile(u, jj, rxi, ryi, tile, tile)
+                .tile(u, jji, rxi, ryi, tile, tile)
                 .tile_init(rxi, ryi);
             SX.compute_at(Sst, u)
                 .store_in(MemoryType::Tile)
-                .split(jj, jjt, ryi, tile)
+                .reorder(jji, jjt)
                 .gpu_threads(jjt)
-                .vectorize(ryi);
+                .vectorize(jji);
             SX.update()
-                .split(rd_var(SX), rh, rio, L / 2)
-                .split(rio, rio, rii, tile)
-                .split(jj, jjt, ryi, tile)
-                .reorder(ryi, rio, jjt, rh)
+                .split(RVar("ri2$y"), rh, rio, L / tile / 2)
+                .reorder(jji, rio, jjt, rh)
                 .gpu_threads(jjt)
-                .tile_reduce(rii, ryi);
+                .tile_reduce(RVar("ri2$x"), jji);
             for (Func f : {Q, Qd, Qm}) {
                 f.compute_at(SX, rio)
                     .store_in(MemoryType::Tile)
-                    .bound_extent(i, tile)
-                    .bound_storage(i, tile)
-                    .bound_extent(jj, tile)
-                    .bound_storage(jj, tile)
-                    .tile(i, jj, rxi, ryi, tile, tile)
+                    .tile(ii, jji, rxi, ryi, tile, tile)
                     .tile_init(rxi, ryi);
             }
             // The triangle's tiles for a warp's boundaries, and the
@@ -1195,8 +1195,12 @@ private:
             // once per warp and held in registers.
             {
                 Func Uhl = Uh.in(Q);
+                // All eight tiles, whatever the predicate leaves of the
+                // sweep, so the fragment array's shape is fixed.
                 Uhl.compute_at(SX, jjt)
                     .store_in(MemoryType::Tile)
+                    .bound_extent(j, L)
+                    .bound_storage(j, L)
                     .bound_extent(jj, tile)
                     .bound_storage(jj, tile)
                     .tile(j, jj, rxi, ryi, tile, tile)
@@ -1212,18 +1216,22 @@ private:
                     .tile(j, jj, rxi, ryi, tile, tile)
                     .tile_load(rxi, ryi);
             }
-            // The prefix's multiplies sweep the staged plane's tiles; the
-            // transpose's take one tile each.
+            // The prefix's multiplies sweep the staged plane's tiles under
+            // the predicate; the transpose's take one tile each.
             for (int k2 = 0; k2 < 2; k2++) {
                 Q.update(k2)
-                    .tile(i, jj, rxi, ryi, tile, tile)
-                    .split(RVar("rjq$x"), rjo, rji, tile)
+                    .tile(ii, jji, rxi, ryi, tile, tile)
                     // The triangle's tile comes out of a fragment, so which
-                    // tile each step reads has to be known here.
-                    .unroll(rjo)
-                    .tile_matmul(rji, rxi, ryi);
+                    // tile each step reads has to be known here. The
+                    // predicate has become the sweep's loop bound; splitting
+                    // by the full tile count with a guarded tail gives an
+                    // inner loop of constant extent to unroll, each step
+                    // under the guard.
+                    .split(RVar("rq$y"), rqo, rqi, L / tile, TailStrategy::GuardWithIf)
+                    .unroll(rqi)
+                    .tile_matmul(RVar("rq$x"), rxi, ryi);
                 Qd.update(k2)
-                    .tile(i, jj, rxi, ryi, tile, tile)
+                    .tile(ii, jji, rxi, ryi, tile, tile)
                     .tile_matmul(RVar("rjd$x"), rxi, ryi);
             }
             // The staged rows are padded by half a tile so that a tile's
@@ -1528,34 +1536,23 @@ private:
         }
 
         // The increment gradients: plain reductions, a thread per element.
-        for (Func st : {Sst, PSst}) {
-            st.bound(u, 0, tile).bound(st.args()[1], 0, L).bound(t, 0, nt).bound(b, 0, heads);
-        }
+        Sst.bound(u, 0, tile).bound(jji, 0, tile).bound(jjt, 0, L / tile).bound(t, 0, nt).bound(b, 0, heads);
+        PSst.bound(u, 0, tile).bound(k, 0, L).bound(t, 0, nt).bound(b, 0, heads);
         for (Func f : {Uh, Ih}) {
             f.compute_root().gpu_blocks(jj).gpu_threads(j);
         }
         flat(xyq, j, i);
         ebd.compute_root().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
         for (Func f : {Q, Qd}) {
-            f.compute_root()
-                .split(i, x0, x1, 8)
-                .split(jj, y0, y1, 8)
-                .reorder(x1, y1, x0, y0)
-                .gpu_blocks(t, b)
-                .gpu_threads(x1, y1);
+            f.compute_root().gpu_blocks(t, b).gpu_threads(ii, jji);
             for (int k2 = 0; k2 < 2; k2++) {
-                f.update(k2)
-                    .split(i, x0, x1, 8)
-                    .split(jj, y0, y1, 8)
-                    .reorder(x1, y1, x0, y0)
-                    .gpu_blocks(t, b)
-                    .gpu_threads(x1, y1);
+                f.update(k2).gpu_blocks(t, b).gpu_threads(ii, jji);
             }
         }
         flat(dxe2, d, j);
         flat(yprev, d, i);
-        SX.compute_root().reorder(jj, t, b).gpu_blocks(t, b).gpu_threads(jj);
-        SX.update().reorder(RVar("ri2$x"), jj, t, b).gpu_blocks(t, b).gpu_threads(jj);
+        SX.compute_root().gpu_blocks(t, b).gpu_threads(jji, jjt);
+        SX.update().gpu_blocks(t, b).gpu_threads(jji, jjt);
         PS.compute_root().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
         PS.update().reorder(rd_var(PS), k, t, b).gpu_blocks(t, b).gpu_threads(k);
         cterm.compute_root().reorder(t, b).gpu_blocks(b).gpu_threads(t);
