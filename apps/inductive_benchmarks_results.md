@@ -27,4 +27,6 @@ Memory: the JIT apps and the alignment runner free their scratch at the end of e
 | prefixsum | 67108864 x 2 rows, running-mean consumer, 1 thread | 29.2 | 55.7 | 0 | 268 | 62.2 | oneTBB parallel_scan | oneTBB parallel_for rows | 1.91x | 2.13x |
 | prefixsum | 8388608 x 32 rows, running-mean consumer, 32 threads | 23.4 | 47.0 | 0 | 1074 | 23.4 | oneTBB parallel_for rows | oneTBB parallel_scan | 2.01x | 1.00x |
 | chebyshev | n=2048 dense SPD, 100 iterations, 1 thread (in-cache control) | 11.3 | 11.0 | 0.0246 | 0.827 | 11.1 | hand-written mod-3 ring | - | 0.97x | 0.98x |
-| cuda_mamba2 | bwd, seq 4096, state 128, 128 heads x 64, chunk 128 (Triton 256), RTX 5060 Ti | 4.6 | 5.7 | - | - | 4.3 | Triton (mamba_ssm) | - | 1.22x | 0.93x |
+| cuda_mamba2 | fwd, seq 4096, state 128, 128 heads x 64, chunk 256 (Triton 256), RTX 5060 Ti | 1.6 | 1.8 | 42.1 | 141 | 1.5 | Triton (mamba_ssm) | - | 1.15x | 0.98x |
+| cuda_mamba2 | bwd, seq 4096, state 128, 128 heads x 64, chunk 128 (Triton 256), RTX 5060 Ti | 5.9 | 6.1 | 235 | 277 | 4.3 | Triton (mamba_ssm) | - | 1.04x | 0.73x |
+| flash_attention | 65536 queries x 1024 keys, depth 64, fp16, chunk 64 (RDom 64), RTX 5060 Ti | 0.398 | 0.437 | 0 | 0 | 0.375 | FlashAttention-2 (torch SDPA) | cuDNN SDPA (torch), torch memory-efficient SDPA, cuBLAS + softmax + cuBLAS | 1.10x | 0.94x |
