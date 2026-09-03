@@ -1,21 +1,19 @@
 #include "Halide.h"
 #include <stdio.h>
 
-// A minimal distillation of a bilinear demosaicer scheduled with aligned
-// splits. A demosaicer selects which interpolation to apply from the position
-// within the Bayer pattern -- a mux over (x - bayer_offset) % 2 -- and is
-// scheduled with a split aligned to that same offset precisely so that the
-// phase is constant across every tile, letting the mux resolve at compile
-// time.
+// A minimal distillation of a demosaicer scheduled with aligned splits. A
+// demosaicer selects which interpolation to apply from the position within the
+// sensor's colour filter pattern -- a mux over (x - offset) % period, where the
+// period is 2 for a Bayer sensor and 6 for an X-Trans one -- and is scheduled
+// with a split aligned to that same offset precisely so that the phase is
+// constant across every tile, letting the mux resolve at compile time.
 //
-// The alignment cancels only if the simplifier can see the "+ off" that the
-// aligned split puts into the reconstructed loop variable at the same time as
-// the "- off" at the use site. When the producer is computed inside the
-// consumer's tile and then split again itself (here to vectorize), the second
-// split binds the reconstructed variable to a LetStmt, and the simplifier
-// cannot see through a LetStmt. The "+ off" is then hidden behind an opaque
-// name, (x - off) % 2 never reduces to a function of the inner loop variable
-// alone, and the mux survives to the end of lowering.
+// For that to happen the compiler has to see two things. The alignment the
+// split adds into the reconstructed loop variable has to cancel against the
+// subtraction at the use site, even though the split binds that variable to a
+// LetStmt and the offset is a runtime value (see reduce_expr_modulo_symbolic).
+// And the vectorized loop has to be deinterleaved by the period, so that each
+// of the resulting slices has a phase of its own (see Deinterleave.cpp).
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -34,18 +32,26 @@ public:
     int mux_count{0};
 };
 
-int main(int argc, char **argv) {
+int test(int period) {
     const int width = 1024;
-    const int tile = 128;
-    const int vec = 8;
+    // The tile has to be a whole number of periods for the phase to be the
+    // same in every tile, and the vector a whole number of periods for each
+    // deinterleaved slice to have a single phase.
+    const int tile = period * 64;
+    const int vec = period * 2;
 
     Var x{"x"}, xo{"xo"}, xi{"xi"};
     Param<int> off{"off"};
-    off.set_range(0, 1);
+    off.set_range(0, period - 1);
 
-    // Two "phases", selected by the position relative to the offset.
+    // One phase per position in the pattern.
+    std::vector<Expr> phases;
+    for (int i = 0; i < period; i++) {
+        phases.push_back(x * (i + 1) + i);
+    }
+
     Func prod{"prod"};
-    prod(x) = mux((x - off) % 2, {x + 1, x * 2});
+    prod(x) = mux((x - off) % period, phases);
 
     Func out{"out"};
     out(x) = prod(x);
@@ -63,7 +69,7 @@ int main(int argc, char **argv) {
     // again to vectorize.
     prod.compute_at(out, xo)
         .never_partition_all()
-        .align_bounds(x, 2, off)
+        .align_bounds(x, period, off)
         .vectorize(x, vec, TailStrategy::RoundUp);
 
     Pipeline p(out);
@@ -73,21 +79,33 @@ int main(int argc, char **argv) {
     MuxCounter checker;
     m.functions().front().body.accept(&checker);
     if (checker.mux_count != 0) {
-        printf("Expected 0 muxes, got %d\n", checker.mux_count);
+        printf("Period %d: expected 0 muxes, got %d\n", period, checker.mux_count);
         return 1;
     }
 
     // And it still has to compute the right thing.
-    for (int o = 0; o <= 1; o++) {
+    for (int o = 0; o < period; o++) {
         off.set(o);
         Buffer<int> result = p.realize({width});
         for (int i = 0; i < width; i++) {
-            int correct = (((i - o) % 2) + 2) % 2 == 0 ? i + 1 : i * 2;
+            int phase = (((i - o) % period) + period) % period;
+            int correct = i * (phase + 1) + phase;
             if (result(i) != correct) {
-                printf("off = %d: result(%d) = %d instead of %d\n",
-                       o, i, result(i), correct);
+                printf("Period %d, off = %d: result(%d) = %d instead of %d\n",
+                       period, o, i, result(i), correct);
                 return 1;
             }
+        }
+    }
+
+    return 0;
+}
+
+int main(int argc, char **argv) {
+    // Bayer, a three-phase pattern, and X-Trans.
+    for (int period : {2, 3, 6}) {
+        if (test(period) != 0) {
+            return 1;
         }
     }
 
