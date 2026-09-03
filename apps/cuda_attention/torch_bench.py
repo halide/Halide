@@ -11,6 +11,7 @@ Prints the torch version, then one row per backend:
 "  torch cudnn   <us> us".
 """
 import os
+import time
 import sys
 
 import torch
@@ -36,16 +37,16 @@ def timed(fn):
         for _ in range(batch):
             fn()
         torch.cuda.synchronize()
+    # Wall clock around the batch and its synchronize, as the harness
+    # times the Halide forms, so launch and completion latency count on
+    # both sides alike.
     ts = []
     for _ in range(iters):
-        s = torch.cuda.Event(enable_timing=True)
-        e = torch.cuda.Event(enable_timing=True)
-        s.record()
+        t0 = time.perf_counter()
         for _ in range(batch):
             fn()
-        e.record()
         torch.cuda.synchronize()
-        ts.append(s.elapsed_time(e) * 1e3 / batch)
+        ts.append((time.perf_counter() - t0) * 1e6 / batch)
     return min(ts)
 
 

@@ -11,6 +11,7 @@ Triton modules are imported by path so none of that runs.
 """
 import importlib
 import os
+import time
 import sys
 import types
 
@@ -30,11 +31,20 @@ seq, dstate, headdim, nheads, ngroups, chunk = (int(a) for a in sys.argv[1:7])
 batch = 1
 dev = "cuda"
 torch.manual_seed(0)
-x = torch.randn(batch, seq, nheads, headdim, device=dev, dtype=torch.float16, requires_grad=True)
-dt = torch.rand(batch, seq, nheads, device=dev, dtype=torch.float32).requires_grad_()
-A = (-torch.rand(nheads, device=dev, dtype=torch.float32)).requires_grad_()
-B = torch.randn(batch, seq, ngroups, dstate, device=dev, dtype=torch.float16, requires_grad=True)
-C = torch.randn(batch, seq, ngroups, dstate, device=dev, dtype=torch.float16, requires_grad=True)
+# The inputs as the Halide runners lay them out and fill them: X, B, C and
+# the output gradient head-major, so a head's sequence is contiguous (a view
+# of (batch, heads, seq, dim), which the kernels accept by its strides),
+# with values uniform in [-1, 1); the step sizes uniform in [0.001, 0.1];
+# and A one of -1, -1.5, -2 per head.
+def uniform(*shape, dtype=torch.float16):
+    return (torch.rand(*shape, device=dev, dtype=torch.float32) * 2 - 1).to(dtype)
+
+
+x = uniform(batch, nheads, seq, headdim).transpose(1, 2).requires_grad_()
+dt = (torch.rand(batch, seq, nheads, device=dev, dtype=torch.float32) * 0.099 + 0.001).requires_grad_()
+A = (-1.0 - 0.5 * (torch.arange(nheads, device=dev, dtype=torch.float32) % 3)).requires_grad_()
+B = uniform(batch, ngroups, seq, dstate).transpose(1, 2).requires_grad_()
+C = uniform(batch, ngroups, seq, dstate).transpose(1, 2).requires_grad_()
 
 
 def fwd():
@@ -52,22 +62,22 @@ def timed(fn):
         for _ in range(batch):
             fn()
         torch.cuda.synchronize()
+    # Wall clock around the batch and its synchronize, as the harness
+    # times the Halide forms, so launch and completion latency count on
+    # both sides alike.
     ts = []
     for _ in range(iters):
-        s = torch.cuda.Event(enable_timing=True)
-        e = torch.cuda.Event(enable_timing=True)
-        s.record()
+        t0 = time.perf_counter()
         for _ in range(batch):
             fn()
-        e.record()
         torch.cuda.synchronize()
-        ts.append(s.elapsed_time(e) * 1e3 / batch)
+        ts.append((time.perf_counter() - t0) * 1e6 / batch)
     return min(ts)
 
 
 t_fwd = timed(fwd)
 out = fwd()
-dy = torch.randn_like(out)
+dy = uniform(batch, nheads, seq, headdim).transpose(1, 2)
 inputs = (x, dt, A, B, C)
 
 
