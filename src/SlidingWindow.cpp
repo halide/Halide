@@ -174,6 +174,33 @@ public:
     }
 };
 
+// The names an expression refers to that it doesn't bind itself.
+class FreeVariableNames : public IRVisitor {
+    using IRVisitor::visit;
+    Scope<> bound;
+
+    void visit(const Variable *op) override {
+        if (!bound.contains(op->name)) {
+            names.insert(op->name);
+        }
+    }
+
+    void visit(const Let *op) override {
+        op->value.accept(this);
+        ScopedBinding<> bind(bound, op->name);
+        op->body.accept(this);
+    }
+
+public:
+    set<string> names;
+};
+
+set<string> free_variable_names(const Expr &e) {
+    FreeVariableNames v;
+    e.accept(&v);
+    return v.names;
+}
+
 // Perform all the substitutions in a scope
 Expr expand_expr(const Expr &e, const Scope<Expr> &scope) {
     ExpandExpr ee(scope);
@@ -1119,6 +1146,54 @@ class SlidingWindow : public IRMutator {
     vector<string> loop_stack;
     Scope<Expr> let_values;
     Scope<Interval> bounds_scope;
+    // For each let in scope, the loops its value depends on through any
+    // chain of other lets. Computed when the let is bound, so it only ever
+    // looks outwards and costs one pass over the value.
+    Scope<set<string>> loop_deps;
+
+    set<string> loops_used_by(const Expr &e) {
+        set<string> loops;
+        for (const string &v : free_variable_names(e)) {
+            if (std::find(loop_stack.begin(), loop_stack.end(), v) != loop_stack.end()) {
+                loops.insert(v);
+            } else if (const set<string> *deps = loop_deps.find(v)) {
+                loops.insert(deps->begin(), deps->end());
+            }
+        }
+        return loops;
+    }
+
+    // Substitute in just the lets that depend on a loop, so the loops a
+    // dimension is built from appear in it directly. Everything else stays a
+    // symbol: it is constant across the loops, which is all the checks need,
+    // and expanding it would only make the expression bigger.
+    class ExpandLoopDependentLets : public IRMutator {
+        using IRMutator::visit;
+        const Scope<Expr> &values;
+        const Scope<set<string>> &deps;
+        // A let rebound in terms of its outer binding names itself.
+        set<string> expanding;
+
+        Expr visit(const Variable *var) override {
+            const set<string> *d = deps.find(var->name);
+            const Expr *value = values.find(var->name);
+            if (!d || d->empty() || !value || expanding.count(var->name)) {
+                return var;
+            }
+            expanding.insert(var->name);
+            Expr e = mutate(*value);
+            expanding.erase(var->name);
+            return e;
+        }
+
+    public:
+        ExpandLoopDependentLets(const Scope<Expr> &values, const Scope<set<string>> &deps)
+            : values(values), deps(deps) {
+        }
+        Expr operator()(const Expr &e) {
+            return mutate(e);
+        }
+    };
 
     using IRMutator::visit;
 
@@ -1134,7 +1209,7 @@ class SlidingWindow : public IRMutator {
     // as the loops inside it can take back when they wrap around.
     void check_dimension_is_monotonic(const Function &f, const string &let_name,
                                       const Expr &value) {
-        Expr v = expand_expr(value, let_values);
+        Expr v = ExpandLoopDependentLets(let_values, loop_deps)(value);
 
         vector<string> contributing;
         for (const string &loop : loop_stack) {
@@ -1192,9 +1267,9 @@ class SlidingWindow : public IRMutator {
                 break;
             }
         }
-        Expr expanded = expand_expr(value, let_values);
+        set<string> loops = loops_used_by(value);
         for (size_t i = 0; i < depth; i++) {
-            if (expr_uses_var(expanded, loop_stack[i])) {
+            if (loops.count(loop_stack[i])) {
                 user_error
                     << "Func " << f.name() << " was told to slide over "
                     << slide_level_name(f, let_name) << ", but that "
@@ -1396,6 +1471,7 @@ class SlidingWindow : public IRMutator {
         }
         ScopedBinding<Interval> bind(bounds_scope, op->name, let_bounds);
         ScopedBinding<Expr> bind_value(let_values, op->name, op->value);
+        ScopedBinding<set<string>> bind_deps(loop_deps, op->name, loops_used_by(op->value));
 
         // The window warms up by prepending iterations to the outermost loop
         // the dimension depends on. One iteration of that loop moves the
