@@ -550,12 +550,17 @@ private:
 //
 // What does correlate is rows per warp times keys per step: halving either one
 // costs about a third of the throughput. So what a step pays that does not
-// scale with it is the thing to chase, and the operand loads are the candidate.
-// Past the key count where whole panels fit in shared memory nothing is staged,
-// so every warp re-reads K and V from global memory on every step. Staging a
-// key tile at a time rather than whole panels is what would fix that, and it
-// wants a loop order this cannot currently express: the panel has to be filled
-// above the loop over warps, and the carried state has to live inside it.
+// scale with it is the thing to chase, and the operand loads are it. Past the
+// key count where whole panels fit in shared memory, each step stages its own
+// K and V tiles, with the loop over warps inside the walk and the carried
+// state in each warp's fragments across it. What no step does is overlap: a
+// step issues its copies, waits for them, and only then computes, so the copy
+// latency is hidden by nothing but the other warps, and registers cap those at
+// eight per SM. FlashAttention-2 double-buffers the tiles and issues the next
+// step's copies before this step's softmax. Expressing that needs the producer
+// of step t+1 rotated into step t with a two-deep window and the wait moved to
+// the step that reads it, which is software pipelining, and Halide has no
+// directive for it yet.
 class AttentionFlash : public Halide::Generator<AttentionFlash> {
 public:
     GeneratorParam<int> queries{"queries", 16384};
@@ -879,12 +884,12 @@ public:
         // operand into one shared load, and spreads what it costs to fetch them
         // over the warps, which is the only thing the warp count buys.
         //
-        // They are staged whole rather than a tile at a time, so this only
-        // applies while both panels fit in shared memory. A per-tile panel
-        // would be the thing to want at a larger key count, but it would have
-        // to be filled above the loop over warps, and the carried state has to
-        // live inside it. Past the point where they fit, the walk reads its
-        // operands from global memory, which is what the numbers above measure.
+        // While both panels fit in shared memory they are staged whole, once
+        // per block. Past that each step stages the tile it is about to read,
+        // filled by every thread above the loop over warps, and the carried
+        // state stays in each warp's fragments across the walk. Either way a
+        // step waits for its own copies before it computes; nothing is fetched
+        // a step ahead.
         if (stage_q) {
             // Q does not depend on the step, so a block's rows of it are
             // fetched once and read from shared memory by every step.

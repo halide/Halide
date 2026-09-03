@@ -107,7 +107,9 @@ int main(int argc, char **argv) {
                 log_emit(st, o) = std::log(emit(st, o));
 
         const float neg_inf = -std::numeric_limits<float>::infinity();
-        Expr obs_0 = clamp(obs(0), 0, M - 1);
+        // The observations are symbols in [0, M), which the input promises;
+        // that bounds the emission table lookups without a clamp per step.
+        Expr obs_0 = unsafe_promise_clamped(obs(0), 0, M - 1);
 
         // Build one variant; returns the decoded `path` Func. fold_k pins the
         // score storage window when inductive (2 = folded, T+1 = unfolded ablation).
@@ -128,8 +130,9 @@ int main(int argc, char **argv) {
             // race-free, each lane writing its own state, but has to be waved
             // through.
             RDom r(0, S, 0, S, "r");  // r.x = output state, r.y = previous state
-            Expr obs_t = Halide::Internal::promise_clamped(
-                obs(Halide::Internal::promise_clamped(t, 0, T - 1)), 0, M - 1);
+            // Step T is the terminal argmax, with no emission, but its
+            // observation is still read, so the index stops at the last one.
+            Expr obs_t = unsafe_promise_clamped(obs(min(t, T - 1)), 0, M - 1);
 
             // The argmax is a byte: it indexes the states, and the backpointer
             // plane, one per state per step, is what the traceback reads.
@@ -162,7 +165,7 @@ int main(int argc, char **argv) {
                 RDom ri(0, S, "ri");
                 state(ri, 0) = {log_init(ri) + log_emit(ri, obs_0), cast<uint8_t>(0)};
                 RDom rr(0, S, 0, S, 1, T, "rr");  // rr.x=state, rr.y=prev, rr.z=time
-                Expr ot = clamp(obs(min(rr.z, T - 1)), 0, M - 1);
+                Expr ot = unsafe_promise_clamped(obs(min(rr.z, T - 1)), 0, M - 1);
                 Expr prev = state(rr.y, rr.z - 1)[0] - state(0, rr.z - 1)[0];
                 Expr candn = select(rr.z >= T, prev, prev + log_trans(rr.x, rr.y) + log_emit(rr.x, ot));
                 state(rr.x, rr.z) = select(candn >= state(rr.x, rr.z)[0],
