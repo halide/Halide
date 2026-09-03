@@ -127,7 +127,10 @@ int main(int argc, char **argv) {
         // hold 16 lane partials of the slice's sum, and the vector of 16
         // lanes reads the vector written just before it.
         Func y({Float(32), Float(32), Float(32)}, 3, std::string("y_") + tag), E(std::string("E_") + tag);
-        y(d, b, n) = Tuple(cast<float>(0), cast<float>(0), cast<float>(0));
+        // The walk over the slice writes every element of every step, base
+        // cases included, so the pure definition is left undefined: no fill
+        // of the window before each step.
+        y(d, b, n) = Tuple(undef<float>(), undef<float>(), undef<float>());
         RDom r(0, D, "r");
         Expr i = r.x;
         Expr iL = max(i - 1, 0), iR = min(i + 1, D - 1);
@@ -148,7 +151,9 @@ int main(int argc, char **argv) {
         E(b, n) = cast<float>(0);
         E(b, n) += y(D - 16 + rl, b, n)[2] * (1.0f / D);
         E.compute_root();
-        E.update(0).reorder(rl, b, n);
+        // The 16 partials reduce as a shuffle tree rather than a chain of
+        // 16 dependent adds per step.
+        E.update(0).reorder(rl, b, n).atomic().vectorize(rl);
         E.bound(b, 0, B).bound(n, 0, T);
 
         y.compute_at(E, n).store_root().fold_storage(n, fold_k);

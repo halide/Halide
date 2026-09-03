@@ -192,7 +192,7 @@ def viterbi(S, M, T):
     r = hb_rows(out)
     # The RDom form's trajectory is S*T*(4+1) bytes; a row whose trajectory
     # fits in one CCD's 32 MB L3 is an in-cache control.
-    control = " (in-cache control)" if S * T * 5 <= 32 << 20 else ""
+    control = " (in-cache control)" if S * T * 5 <= 32 << 20 else " (latency-bound control)"
     return dict(params=f"{S} states, {M} symbols, T={T}, 1 thread{control}",
                 ind=r.get("inductive FOLDED (fold t -> 2)"), rdom=r.get("non-inductive (materialize)"),
                 base_name=None, base=None)
@@ -410,7 +410,10 @@ def main():
         "for the step-size and decay gradients, 1e-3 of their largest value; attention against a double "
         "softmax with the same scale torch applies). The RDom forms leave their pure definitions undefined "
         "wherever the walk writes every element before it is read (biquads, rng, alignment, prefixsum, the "
-        "materialized ode), which the inductive forms never need.\n\n"
+        "materialized ode). The inductive forms do not need that, with one exception: ode's inductive form "
+        "is inductive in the step but walks each slice as an update definition, since its folded observer's "
+        "lane partial reads earlier elements of the same slice, so its two-slice window is left undefined "
+        "too rather than zero-filled before every step.\n\n"
         "Threads: single-thread rows run pinned to one core. All-cores rows run one thread per physical core "
         "on the first hardware thread of each core, Halide forms and baselines alike: the materializing forms "
         "are bound by each chiplet's write path to the memory controller, and where the scheduler lands their "
@@ -431,8 +434,13 @@ def main():
         "the key chunks advances all three (Halide fuses no dependent stages, and a per-row Func may not "
         "read the state its update feeds); the rescalings are then paid per element rather than per row, "
         "the same tile verbs and staging otherwise, so that row measures the cost of the expression, not "
-        "of memory traffic. Chebyshev and the first two viterbi rows are in-cache controls, where folding "
-        "buys nothing; viterbi's third row streams its trajectory through memory.\n\n"
+        "of memory traffic. Chebyshev and the viterbi rows are controls: chebyshev's trajectory fits in "
+        "cache, and viterbi's step is a dependency chain of a few dozen cycles over its states, which the "
+        "materialized trajectory's extra bytes per step barely add to even when they stream (the third "
+        "row); folding buys nothing in either. The alignment baselines ship SSE (ksw2) and AVX2 (parasail) "
+        "kernels while Halide compiles to AVX-512; at matched instruction sets the int8 form leads ksw2 by "
+        "2.1x and the int16 form leads parasail by 2.3x (apps/cpu_alignment/README.md), the rest of the "
+        "table's margin is the vector width.\n\n"
         "Memory: the JIT apps and the alignment runner free their scratch at the end of every run, and past "
         "a few MB the default allocators hand it back to the kernel, so every process the driver runs, "
         "baselines included, uses jemalloc configured to keep freed memory (oversize_threshold:0, no decay) "
