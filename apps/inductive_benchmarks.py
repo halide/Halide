@@ -44,6 +44,8 @@ MALLOC_CONF = "oversize_threshold:0,dirty_decay_ms:-1,muzzy_decay_ms:-1,thp:alwa
 # thread lands on, and any migration during the run, is not part of the
 # measurement. The machine is one NUMA node, so there is no memory to place.
 PIN_CORE = 4
+# The alignment rows compare at parasail's instruction set.
+ALIGN_TARGET = "x86-64-linux-sse41-avx-avx2"
 # All-cores rows run one thread per physical core, on the first hardware
 # thread of every core: the forms that stream their state through memory
 # are bound by each chiplet's link to the memory controller, so where the
@@ -170,12 +172,17 @@ def cpu_alignment(par):
     d = APPS / "cpu_alignment"
     knobs = dict(QLEN=1024, TLEN=1024, BATCH=4096 if par else 128, PAR=str(par).lower())
     kv = " ".join(f"{k}={v}" for k, v in knobs.items())
+    # The Halide forms are compiled for parasail's instruction set (its
+    # widest kernels are AVX2), so the table's row is a matched comparison;
+    # the AVX-512 numbers are in the app's README.
     sh("make -s clean", d)
-    out = sh(f"make -s {kv} test", d, log=LOGS / f"cpu_alignment_par{par}.txt", pin=not par, cores=par)
+    out = sh(f"make -s HL_TARGET={ALIGN_TARGET} {kv} test", d, log=LOGS / f"cpu_alignment_par{par}.txt",
+             pin=not par, cores=par)
     comp = us_row(out, "compaction") or 0.0
     bn, bt = best([("ksw2 (minimap2 kernel)", us_row(out, "ksw2 sse")), ("parasail", us_row(out, "parasail")),
                            ("ksw2 scalar", us_row(out, "ksw2 gg"))])
-    return dict(params=f"1024x1024 x {knobs['BATCH']} pairs, {'all cores' if par else '1 thread'}, fill+traceback+cigar",
+    return dict(params=f"1024x1024 x {knobs['BATCH']} pairs, {'all cores' if par else '1 thread'}, fill+traceback+cigar, "
+                       f"AVX2 (parasail's ISA)",
                 ind=us_row(out, "int8 ind + traceback"),
                 rdom=(us_row(out, "int8 rdom") or 0) + comp, base_name=bn, base=bt)
 
@@ -437,10 +444,10 @@ def main():
         "of memory traffic. Chebyshev and the viterbi rows are controls: chebyshev's trajectory fits in "
         "cache, and viterbi's step is a dependency chain of a few dozen cycles over its states, which the "
         "materialized trajectory's extra bytes per step barely add to even when they stream (the third "
-        "row); folding buys nothing in either. The alignment baselines ship SSE (ksw2) and AVX2 (parasail) "
-        "kernels while Halide compiles to AVX-512; at matched instruction sets the int8 form leads ksw2 by "
-        "2.1x and the int16 form leads parasail by 2.3x (apps/cpu_alignment/README.md), the rest of the "
-        "table's margin is the vector width.\n\n"
+        "row); folding buys nothing in either. The alignment rows are a matched comparison: the Halide "
+        "forms are compiled for AVX2, the widest instruction set parasail ships kernels for (ksw2 ships SSE "
+        "only); compiled for the machine's AVX-512 the single-thread row runs 1.4x faster again, while the "
+        "all-cores row, at the memory wall, does not move (apps/cpu_alignment/README.md).\n\n"
         "Memory: the JIT apps and the alignment runner free their scratch at the end of every run, and past "
         "a few MB the default allocators hand it back to the kernel, so every process the driver runs, "
         "baselines included, uses jemalloc configured to keep freed memory (oversize_threshold:0, no decay) "
