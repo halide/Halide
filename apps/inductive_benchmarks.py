@@ -93,7 +93,7 @@ def best(cands):
 TRIED = {
     "cpu_biquads": ["Finding Fast Filters strided cascade", "Intel IPP ippsIIR_32f_P", "scipy.sosfilt",
                     "Julia DSP.jl filt", "FFmpeg biquad", "torchaudio lfilter"],
-    "cpu_rng": ["Julia XoshiroSimd (C++ port)", "Julia rand!", "numpy PCG64", "scalar C++ loop"],
+    "cpu_rng": ["Julia rand!", "numpy PCG64", "scalar C++ loop"],
     "cpu_alignment": ["parasail", "ksw2 (minimap2 kernel)", "ksw2 scalar"],
     "kalman_ll": [],
     "viterbi": [],
@@ -146,8 +146,9 @@ def cpu_rng(par):
         jo = sh(f"{JULIA} {threads} julia_bench.jl {2 * knobs['LANES']} {knobs['STEPS']}", d, pin=not par,
                 log=LOGS / f"cpu_rng_julia_par{par}.txt")
         julia = us_row(jo, "julia xoshiro")
-    bn, bt = best([("Julia XoshiroSimd (C++ port)" + (" (threaded)" if par else ""), us_row(out, "julia port")),
-                   ("Julia rand!" + (" (threaded)" if par else ""), julia),
+    # The runner's AVX-512 port of Julia's kernel is a control on the Halide
+    # forms, not a baseline; Julia's own rand! is the third-party number.
+    bn, bt = best([("Julia rand!" + (" (threaded)" if par else ""), julia),
                    ("scalar C++ loop", us_row(out, "scalar C++"))])
     return dict(params=f"{knobs['LANES']} streams x {knobs['STEPS']} steps, {'all cores' if par else '1 thread'}",
                 ind=us_row(out, "inductive"), rdom=us_row(out, "rdom"), base_name=bn, base=bt)
