@@ -10,6 +10,10 @@
 //             divide and store go 16 wide. prefix_sum is computed per group
 //             at the outer loop (the scan itself is serial) into a ring of
 //             2*GROUP per row (fold_storage): a group and the value before it.
+//             The scan is unrolled by 8 so the running sum is carried in a
+//             register through the unrolled body and reloaded from the ring
+//             once per 8 elements, rather than round-tripping through the
+//             ring at every element.
 //   SCALAR=1  prefix_sum computed per output element, folded to a single
 //             accumulator per row (fold_storage(x, 1)); everything scalar.
 //
@@ -62,7 +66,7 @@ int main(int argc, char **argv) {
         } else {
             fold = hb::fold_factor(2 * group, W);
             output.split(x, xo, xi, group).vectorize(xi, vec);
-            prefix_sum.compute_at(output, xo).store_at(output, y).fold_storage(x, fold);
+            prefix_sum.compute_at(output, xo).store_at(output, y).fold_storage(x, fold).unroll(x, 8);
         }
 
         Buffer<float> result(W, H);

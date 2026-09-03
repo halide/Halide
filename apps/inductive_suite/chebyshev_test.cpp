@@ -123,6 +123,12 @@ double rel_error(const std::vector<double> &x, const std::vector<double> &y) {
 // nested in the iteration index; they differ only in how the iterate history is
 // stored: inductive folds column storage to 3 via fold_storage, non-inductive
 // builds the same mod-3 ring by hand and materializes.
+// Each form applies the once-per-iterate term (the previous two iterates and
+// b) on the first pass over the column, r.y == 0, and only the mat-vec fma on
+// the others. The condition is written as r.y <= 0 with likely() on the other
+// branch so the loop partitioner peels that first pass: the partitioner needs
+// an interval, which r.y == 0 is not, and without the peel every pass would
+// load the once-term's three operands.
 Func build_cheb(bool inductive, Buffer<float> &A, Buffer<float> &b,
                 Buffer<float> &alpha, Buffer<float> &omega, int Miter,
                 int fold_k = 3, bool materialize = false) {
@@ -142,7 +148,7 @@ Func build_cheb(bool inductive, Buffer<float> &A, Buffer<float> &b,
         Expr once = (Expr(1.0f) + omega(km1)) * X(r.x, km1) - omega(km1) * X(r.x, km2) +
                     alpha(km1) * b(r.x);
         Expr matvec = alpha(km1) * A(r.x, r.y) * X(r.y, km1);
-        X(r.x, r.z) = select(r.y == 0, once - matvec, X(r.x, r.z) - matvec);
+        X(r.x, r.z) = select(r.y <= 0, once - matvec, likely(X(r.x, r.z) - matvec));
         x(t) = X(t, Miter);
         X.compute_root();
         X.update(0).allow_race_conditions().vectorize(r.x, 16);
@@ -153,9 +159,10 @@ Func build_cheb(bool inductive, Buffer<float> &A, Buffer<float> &b,
         Expr km1 = max(0, k - 1), km2 = max(0, k - 2);
         Expr once = (Expr(1.0f) + omega(km1)) * X(r.x, km1) - omega(km1) * X(r.x, km2) +
                     alpha(km1) * b(r.x);
+        Expr matvec = alpha(km1) * A(r.x, r.y) * X(r.y, km1);
         X(r.x, k) = select(k <= 0, cast<float>(0),
-                           X(r.x, k) + cast<float>(r.y == 0) * once -
-                               alpha(km1) * A(r.x, r.y) * X(r.y, km1));
+                           select(r.y <= 0, X(r.x, k) + once - matvec,
+                                  likely(X(r.x, k) - matvec)));
         RDom rk(0, Miter + 1, "rk");
         x(t) = cast<float>(0);
         x(t) += select(rk == Miter, X(t, rk), cast<float>(0));
@@ -172,7 +179,7 @@ Func build_cheb(bool inductive, Buffer<float> &A, Buffer<float> &b,
         Expr once = (Expr(1.0f) + omega(km1)) * X(r.x, c1) - omega(km1) * X(r.x, c2) +
                     alpha(km1) * b(r.x);
         Expr matvec = alpha(km1) * A(r.x, r.y) * X(r.y, c1);
-        X(r.x, cur) = select(r.y == 0, once - matvec, X(r.x, cur) - matvec);
+        X(r.x, cur) = select(r.y <= 0, once - matvec, likely(X(r.x, cur) - matvec));
         x(t) = X(t, Miter % 3);
         X.compute_root();
         X.update(0).allow_race_conditions().vectorize(r.x, 16);
