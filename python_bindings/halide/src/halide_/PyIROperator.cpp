@@ -74,7 +74,7 @@ py::object py_select(const py::args &args) {
 // the first element.
 template<typename F>
 py::object py_print(const py::args &args, F make_print) {
-    if (args.size() == 0) {
+    if (args.empty()) {
         throw py::value_error("print() must have at least 1 argument");
     }
     if (is_expr(args[0])) {
