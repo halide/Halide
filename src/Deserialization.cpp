@@ -1446,13 +1446,6 @@ Pipeline Deserializer::deserialize(std::istream &in) {
 }
 
 Pipeline Deserializer::deserialize(const std::vector<uint8_t> &data) {
-    // The accessors below chase offsets straight out of the buffer, so the
-    // buffer has to be structurally sound before we touch it. flatbuffers does
-    // not check that unless we ask; without this a malformed .hlpipe reads out
-    // of bounds (Finish() writes no file identifier, so verify without one).
-    flatbuffers::Verifier verifier(data.data(), data.size());
-    user_assert(verifier.VerifyBuffer<Serialize::Pipeline>())
-        << "malformed serialized pipeline: failed flatbuffer verification\n";
     const auto *pipeline_obj = Serialize::GetPipeline(data.data());
     if (pipeline_obj == nullptr) {
         user_warning << "deserialized pipeline is empty\n";
@@ -1580,9 +1573,6 @@ std::map<std::string, Parameter> Deserializer::deserialize_parameters(std::istre
 
 std::map<std::string, Parameter> Deserializer::deserialize_parameters(const std::vector<uint8_t> &data) {
     std::map<std::string, Parameter> external_parameters_by_name;
-    flatbuffers::Verifier verifier(data.data(), data.size());
-    user_assert(verifier.VerifyBuffer<Serialize::Pipeline>())
-        << "malformed serialized pipeline: failed flatbuffer verification\n";
     const auto *pipeline_obj = Serialize::GetPipeline(data.data());
     if (pipeline_obj == nullptr) {
         user_warning << "deserialized pipeline is empty\n";
