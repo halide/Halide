@@ -74,13 +74,18 @@ void reference(const Buffer<uint64_t> &seeds, Buffer<float> &ref) {
     }
 }
 
-// The same generator, hand-vectorized: eight streams per vector, the
-// layout the Halide schedule uses. This is the baseline a
-// performance-minded C++ programmer would write. A task owns a group of
-// stream blocks and walks every step for them: the blocks stay live and
-// advance together, so every step stores full cache lines of output in
-// order. Under PAR the groups go across the Halide runtime's thread pool,
-// the same persistent pool the Halide forms run on.
+// Julia's bulk generator, ported to AVX-512 intrinsics: xoshiro_bulk_simd
+// in the Random stdlib (stdlib/Random/src/XoshiroSimd.jl, Julia 1.12,
+// https://github.com/JuliaLang/julia/blob/v1.12.7/stdlib/Random/src/XoshiroSimd.jl),
+// which runs eight substreams of Vigna's xoshiro256++
+// (https://prng.di.unimi.it/xoshiro256plusplus.c) interleaved across one
+// vector and projects each 32-bit half to a float as _bits2float does:
+// the top 24 bits, converted and scaled by 2^-24. The port is byte-exact
+// with rand! (make LANES=8 test_julia). A task owns a group of stream
+// blocks and walks every step for them: the blocks stay live and advance
+// together, so every step stores full cache lines of output in order.
+// Under PAR the groups go across the Halide runtime's thread pool, the
+// same persistent pool the Halide forms run on.
 constexpr int NB = L / 8;
 static_assert(L % 8 == 0, "eight-lane blocks");
 // Four blocks, 32 streams, per task: the serial configuration's width,
@@ -218,7 +223,7 @@ int main(int argc, char **argv) {
     }
 
     simd_fill(seeds, y);
-    if (!check(y, ref, "simd C++")) return 1;
+    if (!check(y, ref, "julia port")) return 1;
     double t_simd = hb::bench_s([&]() { simd_fill(seeds, y); });
 
     rng_ind(seeds, y);
@@ -240,7 +245,7 @@ int main(int argc, char **argv) {
            t_unf * 1e6, t_unf / t_ind);
     printf("  rdom       %10.1f us  (%.2fx the inductive time)\n",
            t_rdom * 1e6, t_rdom / t_ind);
-    printf("  simd C++   %10.1f us  (%.2fx: same RNG, hand-vectorized%s)\n",
+    printf("  julia port %10.1f us  (%.2fx: Julia's XoshiroSimd kernel in AVX-512 intrinsics%s)\n",
            t_simd * 1e6, t_simd / t_ind, PARALLEL ? ", threaded" : "");
     printf("  scalar C++ %10.1f us  (%.2fx: same RNG, the reference loop)\n",
            t_ref * 1e6, t_ref / t_ind);

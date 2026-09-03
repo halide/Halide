@@ -93,7 +93,7 @@ def best(cands):
 TRIED = {
     "cpu_biquads": ["Finding Fast Filters strided cascade", "Intel IPP ippsIIR_32f_P", "scipy.sosfilt",
                     "Julia DSP.jl filt", "FFmpeg biquad", "torchaudio lfilter"],
-    "cpu_rng": ["hand AVX-512 kernel", "Julia rand!", "numpy PCG64", "scalar C++ loop"],
+    "cpu_rng": ["Julia XoshiroSimd (C++ port)", "Julia rand!", "numpy PCG64", "scalar C++ loop"],
     "cpu_alignment": ["parasail", "ksw2 (minimap2 kernel)", "ksw2 scalar"],
     "kalman_ll": [],
     "viterbi": [],
@@ -141,11 +141,14 @@ def cpu_rng(par):
     sh("make -s clean", d)
     out = sh(f"make -s {kv} test", d, log=LOGS / f"cpu_rng_par{par}.txt", pin=not par)
     julia = None
-    if JULIA.exists() and not par:  # Julia's rand! is single-threaded
-        jo = sh(f"{JULIA} julia_bench.jl {2 * knobs['LANES']} {knobs['STEPS']}", d, pin=True)
+    if JULIA.exists():
+        threads = f"-t {os.cpu_count()}" if par else ""
+        jo = sh(f"{JULIA} {threads} julia_bench.jl {2 * knobs['LANES']} {knobs['STEPS']}", d, pin=not par,
+                log=LOGS / f"cpu_rng_julia_par{par}.txt")
         julia = us_row(jo, "julia xoshiro")
-    bn, bt = best([("hand AVX-512 kernel" + (" (threaded)" if par else ""), us_row(out, "simd C++")),
-                           ("Julia rand!", julia), ("scalar C++ loop", us_row(out, "scalar C++"))])
+    bn, bt = best([("Julia XoshiroSimd (C++ port)" + (" (threaded)" if par else ""), us_row(out, "julia port")),
+                   ("Julia rand!" + (" (threaded)" if par else ""), julia),
+                   ("scalar C++ loop", us_row(out, "scalar C++"))])
     return dict(params=f"{knobs['LANES']} streams x {knobs['STEPS']} steps, {'all cores' if par else '1 thread'}",
                 ind=us_row(out, "inductive"), rdom=us_row(out, "rdom"), base_name=bn, base=bt)
 
@@ -381,8 +384,7 @@ def main():
         "Every Halide form is verified against its app's reference before timing (the alignment rows "
         "byte-exact against ksw2, the rng rows bit-exact against Julia's rand! seeding, the GPU rows against "
         "serial references). Baselines are threaded across independent problems in the all-cores rows where "
-        "the library allows it (ksw2, parasail, oneTBB); the rng hand kernel and Julia's rand! are "
-        "single-threaded, so the rng all-cores baseline is the single-thread hand kernel. The mamba2 rows "
+        "the library allows it (ksw2, parasail, oneTBB, the rng kernel's blocks of streams). The mamba2 rows "
         "compare each side at its own best chunk (Triton prefers 256; the Halide backward is best at 128), "
         "with the tensor-core schedules (WMMA=true). Flash attention's RDom form is the same online softmax "
         "with the running maximum and row sum carried at the accumulator's shape, broadcast across its "

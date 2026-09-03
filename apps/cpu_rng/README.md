@@ -14,10 +14,14 @@ from one generator, bit-exact against a scalar reference:
   the state trajectory must be materialized before the projection reads
   it.
 
-Baselines, all the same generator: the canonical scalar loop, a
-hand-written AVX-512 kernel (same interleaved-streams layout), and
-Julia's rand! (eight SIMD-interleaved substreams of the same generator -
-the same technique). The Halide pipeline is bit-exact with Julia:
+Baselines, all the same generator: the canonical scalar loop, Julia's
+rand! (Random.XoshiroSimd: eight SIMD-interleaved substreams of the same
+generator, the same technique), and that kernel ported to AVX-512
+intrinsics in runner.cpp (from stdlib/Random/src/XoshiroSimd.jl, Julia
+1.12, whose 8 x UInt64 vectors LLVM already lowers to AVX-512 on this
+CPU; the port runs threaded over blocks of streams under PAR, and the
+all-cores Julia number fills blocks in parallel the same way, one
+generator each). The Halide pipeline is bit-exact with Julia:
 `make clean && make LANES=8 test_julia` seeds our eight streams exactly
 as rand! forks its substreams from Xoshiro(1234) and checks the output
 byte for byte (julia_ref.jl replays the fork; the projection is Julia's:
@@ -29,7 +33,7 @@ Measured on a Threadripper 9970X (Zen 5), one thread, 1 GB of floats
 (32 streams x 4M steps x 2):
 
     inductive       34.8 ms   (31 GB/s of output)
-    hand AVX-512    35.5 ms   (1.02x)
+    Julia port      35.5 ms   (1.02x, AVX-512 intrinsics)
     julia rand!     35.4 ms   (1.02x)
     unfolded       180 ms     (5.2x)
     rdom           476 ms     (13.7x)
@@ -56,7 +60,7 @@ handles (the implicit pass lowers the warm-up into per-iteration
 dynamic catch-up loops instead, 40-60 percent slower). With slide, a
 RoundUp split by the fold factor, and the pair unrolled, the steady
 state is straight-line with no modulos and the window promotes: the
-Halide version edges out the hand-written kernel.
+Halide version edges out the ported kernel.
 To see it: make bin/host/rng.generator && ./bin/host/rng.generator \
 -g rng -f rng_ind -e stmt -o /tmp target=host lanes=32 \
 scan=inductive par=false
@@ -64,8 +68,9 @@ scan=inductive par=false
 What the schedule buys beyond parity: par=true spreads stream blocks
 across cores and reaches the chip's write bandwidth - 21 ms at 51 GB/s
 for the same gigabyte with 1024 streams (1.7x past any single-thread
-implementation; Julia's rand! is single-threaded, and going wider
-there means managing per-task generators by hand). Thread-count
+implementation; rand! fills one array from one generator, so going
+wider there means one generator per block of streams, which is what
+julia_bench.jl does under julia -t). Thread-count
 defaults are safe: the runtime parks excess workers, and adding
 threads past the useful count does not regress. Provide enough stream
 blocks - one task per sixteen output rows. And the ablations quantify
