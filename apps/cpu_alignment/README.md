@@ -79,11 +79,12 @@ are the right algorithm and would win - cite them as context, not as
 this benchmark's competitor.
 
 Measured on a Threadripper 9970X (Zen 5). Every number is the full
-contract - fill, traceback, and run-length CIGAR - and the baseline
-comparisons are interleaved single-shot medians (INTERLEAVE=9 rounds
-cycling int8, int16, ksw2, parasail) so all sides share thermal and
-clock state; cold single-shots flatter whichever side runs first by up
-to 25 percent.
+contract - fill, traceback, and run-length CIGAR. The matched-ISA
+comparison below uses interleaved single-shot medians (INTERLEAVE=9
+rounds cycling int8, int16, ksw2, parasail) so all sides share thermal
+and clock state; the table apps/inductive_benchmarks.py writes uses the
+shared protocol (three warm-up runs, thirty trials, the best), with the
+baselines' sweeps over pairs on the Halide thread pool.
 
     1024x1024, batch 128, one thread, interleaved medians:
 
@@ -97,22 +98,28 @@ to 25 percent.
     (sse4.1) 2.1x; parasail vs int16 at its ISA and formulation (avx2)
     2.3x. The recompile to avx-512 then lands int8 4.5x ahead of ksw2
     and 3.3x ahead of parasail (int16: 2.9x ahead of parasail).
-    Ablations at avx-512 (single-shot, verified per call): unfolded 2.1x
-    (both formulations), rdom 3.8x (int8) / 4.4x (int16) of their
-    inductive form.
+    Ablations at avx-512 (the driver's protocol): unfolded 3.1x / 4.8x,
+    rdom 2.9x / 4.5x (int8 / int16) of their inductive form. The RDom
+    form's pure definitions are undefined - its border sweeps and walk
+    write every cell before it is read - so it pays no fill; what it
+    pays is the five full-extent planes it writes and reads back.
 
     256x256, batch 1024, one thread (single-shot): int8 6.2, int16 8.0,
     ksw2 37.8, parasail 41.1 ms (5.3x / 5.7x with the 0.9 ms CIGAR
     encoding included); unfolded 1.1x / 1.5x, rdom 1.5x / 2.4x.
 
-    1024x1024, batch 4096, all cores (PAR=true, baselines threaded
-    across pairs), single-shot:
-      int8 inductive     42.0 ms   (40.8 fill+trace at 105 Gcell/s + 1.2 cigar)
-      int16 inductive    38.6 ms
-      int8 / int16 unfolded    335 /  483 ms   (8.7x / 12.6x)
-      int8 / int16 rdom        739 / 1076 ms   (18x / 26x)
-      ksw2 sse           57.6 ms   (1.37x)
-      parasail           46.1 ms   (1.10x)
+    1024x1024, batch 4096, all cores (PAR=true, one thread per
+    physical core, baselines' sweeps on the same pool):
+      int8 inductive     23.4 ms   (21.6 fill+trace at 199 Gcell/s + 1.8 cigar)
+      int16 inductive    24.7 ms
+      int8 / int16 unfolded    362 /  497 ms   (17x / 23x)
+      int8 / int16 rdom        346 /  480 ms   (16x / 22x)
+      ksw2 sse           68.2 ms   (2.9x)
+      parasail           48.0 ms   (2.1x)
+    The materialized forms are bound by each chiplet's write path: eight
+    of their tasks pinned to one chiplet run no faster than one, spread
+    over four chiplets twice as fast, so every all-cores row is placed
+    one thread per physical core.
 
 Fairness, as audited. Vector width: ksw2 ships only 128-bit SSE
 kernels and parasail's widest are AVX2 (no AVX-512 kernels exist; its
@@ -169,12 +176,13 @@ Schedule notes, in the order they mattered:
   The two interleaved vector chains per cell also buy ILP one thread.
 - The score rows are computed a row at a time (compute_at the i loop)
   and folded to two; per-cell producer granularity cost 2x.
-- dir.stream_stores() under PAR skips read-for-ownership on the plane
-  that is written once and read O(N): half the DRAM demand, worth
-  1.9x at full parallelism.
-- The runner needs the reusing allocator plus mallopt(M_MMAP_THRESHOLD)
-  - both ksw2's per-call megabyte workspaces and the rdom form's
-  gigabyte slabs otherwise make it a page-fault benchmark.
+- dir.stream_stores() skips read-for-ownership on the plane that is
+  written once and read O(N): half the DRAM demand, worth 1.9x at full
+  parallelism.
+- Every process runs under jemalloc configured to retain freed memory
+  (the driver's LD_PRELOAD): both ksw2's per-call megabyte workspaces
+  and the rdom form's gigabyte slabs otherwise make it a page-fault
+  benchmark.
 
 Knobs: QLEN, TLEN, BATCH, PAR (rebuild with make clean between
 changes; PAR also threads the ksw2 baseline).

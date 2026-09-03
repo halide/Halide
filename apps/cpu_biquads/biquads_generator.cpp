@@ -77,17 +77,15 @@ public:
                 prev = yk;
             } else {
                 // The whole section is the update, walking the samples in
-                // order, so the update never reads its own current element
-                // and the pure definition is just a zero fill. Each section
-                // is then a fill sweep plus one walk - read the previous
-                // section's output, write this one's, feedback taps still in
-                // cache - rather than a feed-forward sweep and a
-                // read-modify-write walk. (An undefined pure definition
-                // would drop the fill sweep too, at 1.9x / 2.8x of the
-                // inductive form at 2 / 8 sections; it is unsafe Halide and
-                // not used.)
+                // order, so the update never reads its own current element.
+                // The pure definition is left undefined: the walk writes
+                // every sample before anything reads it, so a fill sweep
+                // would only add a pass over the section's trajectory.
+                // Each section is then one walk - read the previous
+                // section's output, write this one's, feedback taps still
+                // in cache.
                 Func yk = last ? Func(y) : Func(Float(32), "y" + std::to_string(k));
-                yk(c, n) = 0.f;
+                yk(c, n) = undef<float>();
                 yk(c, r) = b0 * prev(c, r) +
                            select(r < 1, 0.f,
                                   likely(b1 * prev(c, max(r - 1, 0)) -
@@ -126,30 +124,26 @@ public:
                     .reorder(ci, coi, n, coo)
                     .vectorize(ci)
                     .unroll(coi)
-                    .parallel(coo)
-                    .stream_stores();
+                    .parallel(coo);
                 for (Func f : ys) {
                     f.store_at(y, coo)
                         .compute_at(y, coi)
                         .vectorize(c, VEC);
-                    if (folded()) {
-                        f.fold_storage(n, 4);
-                    }
+                    f.fold_storage(n, folded() ? 4 : x.dim(1).extent() + 4);
                 }
             } else {
-                // The output is written once and never read back: stream it.
                 y.split(c, co, ci, VEC)
                     .reorder(ci, co, n)
                     .vectorize(ci)
-                    .unroll(co)
-                    .stream_stores();
+                    .unroll(co);
                 for (Func f : ys) {
                     f.store_root()
                         .compute_at(y, co)
                         .vectorize(c, VEC);
-                    if (folded()) {
-                        f.fold_storage(n, 4);
-                    }
+                    // The unfolded ablation keeps every section's whole
+                    // trajectory live: an explicit full-extent fold, since
+                    // the automatic folding pass would otherwise fold it.
+                    f.fold_storage(n, folded() ? 4 : x.dim(1).extent() + 4);
                 }
             }
         } else {
@@ -163,31 +157,17 @@ public:
             // two independent recurrence chains are in flight per sample -
             // the same latency hiding the inductive schedule gets from its
             // interleaved blocks.
-            // The zero fill is a write-once sweep whose lines are evicted
-            // before the walk reads them back, so it streams: no
-            // read-for-ownership.
-            y.split(c, co, ci, 2 * VEC)
-                .reorder(ci, n, co)
-                .vectorize(ci, VEC)
-                .unroll(ci)
-                .stream_stores();
-            // The walk cannot stream its stores: it reloads what it just
-            // wrote, which streamed stores keep out of the cache.
             y.update()
                 .split(c, co, ci, 2 * VEC)
                 .reorder(ci, r, co)
                 .vectorize(ci, VEC)
                 .unroll(ci);
             if (par) {
-                y.parallel(co);
                 y.update().parallel(co);
             }
             for (int k = 0; k + 1 < N; k++) {
                 Func f = ys[k];
-                f.compute_at(y, co)
-                    .vectorize(c, VEC)
-                    .unroll(c)
-                    .stream_stores();
+                f.compute_at(y, co);
                 f.update()
                     .reorder(c, r)
                     .vectorize(c, VEC)

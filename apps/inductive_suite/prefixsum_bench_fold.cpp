@@ -9,7 +9,7 @@
 // stages, and the parallel axis is the chunk index k (i.e. we parallelize over
 // time):
 //
-//   input(t, s)       = t + s
+//   input(t, s)       = the int32 image, read from memory
 //   local(j, k, s)    = sum_{i<=j} input(k*L+i, s)        (inductive over j; per-chunk local scan)
 //   ctot(k, s)        = local(L-1, k, s)                  (chunk total)
 //   carry(k, s)       = sum_{q<k} ctot(q, s)              (inductive over k; exclusive chunk prefix)
@@ -20,14 +20,11 @@
 // (local + ctot) and the down-sweep (full/output) both run .parallel(k) -- the
 // time dimension. carry is the short serial O(C) scan over chunk totals, the
 // only inherently sequential part (exactly oneTBB's serial reduction step).
-//
-// Dumps the same {W,H,input,output} data file as prefixsum_bench.cpp (flattened
-// back to t-major per lane) so prefixsum_bench_tbb.cpp validates on identical data.
 #include "../support/bench_harness.h"
 #include "Halide.h"
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
-#include <vector>
 
 using namespace Halide;
 
@@ -35,7 +32,6 @@ int main(int argc, char **argv) {
     int W = argc > 1 ? atoi(argv[1]) : 1048576;  // time length
     int S = argc > 2 ? atoi(argv[2]) : 32;       // independent spatial lanes
     int L = argc > 3 ? atoi(argv[3]) : 4096;     // chunk length
-    const char *data_path = argc > 4 ? argv[4] : "/tmp/prefixsum_bench_data.bin";
 
     if (W % L != 0) {  // keep the chunking exact; round W down to a multiple of L.
         W = (W / L) * L;
@@ -49,9 +45,16 @@ int main(int argc, char **argv) {
     try {
         Var j("j"), k("k"), s("s");
 
+        // The input lives in memory, as it does for the baseline. Bounded
+        // values, so the running sum never overflows int32.
+        Buffer<int32_t> image(W, S, "image");
+        for (int ss = 0; ss < S; ss++)
+            for (int tt = 0; tt < W; tt++)
+                image(tt, ss) = (tt + ss) & 255;
+
         Func input("input"), ctot("ctot"), carry(Int(32), "carry"),
             local(Int(32), "local"), output("output");
-        input(j, k, s) = ((k * L + j) + s) & 255;  // bounded: no int32 overflow
+        input(j, k, s) = image(k * L + j, s);
 
         // Up-sweep: each chunk's total, a plain reduction (parallel over chunks).
         RDom r(0, L, "r");
@@ -97,15 +100,17 @@ int main(int argc, char **argv) {
                  hb::footprint_over_llc(fp_unfold));
         hb::print_spec_header("prefixsum_bench_fold", "host", note);
 
-        // Correctness vs a straight serial per-lane prefix sum. Inputs are bounded
-        // (&255) so the running sum never overflows int32.
-        size_t n_mismatch = 0;
+        // Correctness against a serial reference: the same running int32 sum
+        // and float divide. The divide may go by a reciprocal in either form,
+        // so the comparison is relative, to 1e-6.
+        double max_rel = 0;
         for (int ss = 0; ss < S; ss++) {
             int32_t run = 0;
             for (int tt = 0; tt < W; tt++) {
-                run += (tt + ss) & 255;
+                run += image(tt, ss);
                 float expect = (float)run / (float)(tt + 1);
-                if (result(tt % L, tt / L, ss) != expect) n_mismatch++;
+                double rel = std::abs((double)result(tt % L, tt / L, ss) - expect) / std::abs((double)expect);
+                if (rel > max_rel) max_rel = rel;
             }
         }
         // UNFOLD=1 pins the per-chunk local fold to L: same fusion, materializes
@@ -114,24 +119,7 @@ int main(int argc, char **argv) {
         const char *label = unfolded ? "inductive 2-stage UNFOLDED (fold j -> L)" : "inductive 2-stage FOLDED (parallel time)";
         hb::print_row(label, s_bench,
                       (W * (double)S) / (s_bench.min * 1e3), "Mpix/s",
-                      unfolded ? fp_unfold : bytes_fold, (double)n_mismatch, n_mismatch == 0, "", fp_unfold);
-
-        // Dump input+output for the oneTBB validator.
-        {
-            std::vector<int32_t> in_flat((size_t)W * S);
-            std::vector<float> out_flat((size_t)W * S);
-            for (int ss = 0; ss < S; ss++)
-                for (int tt = 0; tt < W; tt++) {
-                    in_flat[(size_t)ss * W + tt] = (tt + ss) & 255;
-                    out_flat[(size_t)ss * W + tt] = result(tt % L, tt / L, ss);
-                }
-            FILE *f = fopen(data_path, "wb");
-            int32_t header[2] = {W, S};
-            fwrite(header, sizeof(int32_t), 2, f);
-            fwrite(in_flat.data(), sizeof(int32_t), (size_t)W * S, f);
-            fwrite(out_flat.data(), sizeof(float), (size_t)W * S, f);
-            fclose(f);
-        }
+                      unfolded ? fp_unfold : bytes_fold, max_rel, max_rel <= 1e-6, "", fp_unfold);
 
         return 0;
     } catch (const Halide::Error &e) {

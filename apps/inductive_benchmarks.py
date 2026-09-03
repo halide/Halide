@@ -44,9 +44,17 @@ MALLOC_CONF = "oversize_threshold:0,dirty_decay_ms:-1,muzzy_decay_ms:-1,thp:alwa
 # thread lands on, and any migration during the run, is not part of the
 # measurement. The machine is one NUMA node, so there is no memory to place.
 PIN_CORE = 4
+# All-cores rows run one thread per physical core, on the first hardware
+# thread of every core: the forms that stream their state through memory
+# are bound by each chiplet's link to the memory controller, so where the
+# scheduler lands their threads otherwise moves them by up to 1.7x. Halide
+# forms and baselines get the same mask and the same thread count.
+CORES_MASK = f"0-{NCORES - 1}"
 
 
-def sh(cmd, cwd, env=None, log=None, check=True, pin=False):
+def sh(cmd, cwd, env=None, log=None, check=True, pin=False, cores=False):
+    """Run cmd in cwd under the benchmarking environment. pin: one core,
+    for single-threaded rows; cores: one thread per physical core."""
     e = dict(os.environ)
     # Julia brings its own allocator regime and crashes at exit under the
     # preload (free(): invalid size, after printing its result), so it runs
@@ -57,6 +65,9 @@ def sh(cmd, cwd, env=None, log=None, check=True, pin=False):
     e.update(env or {})
     if pin:
         cmd = f"taskset -c {PIN_CORE} {cmd}"
+    elif cores:
+        e.setdefault("HL_NUM_THREADS", str(NCORES))
+        cmd = f"taskset -c {CORES_MASK} {cmd}"
     p = subprocess.run(cmd, shell=True, cwd=str(cwd), env=e,
                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     if log:
@@ -93,15 +104,15 @@ def best(cands):
 TRIED = {
     "cpu_biquads": ["Finding Fast Filters strided cascade", "Intel IPP ippsIIR_32f_P", "scipy.sosfilt",
                     "Julia DSP.jl filt", "FFmpeg biquad", "torchaudio lfilter"],
-    "cpu_rng": ["Julia rand!", "numpy PCG64", "scalar C++ loop"],
+    "cpu_rng": ["Julia rand!", "numpy PCG64 (a different generator)", "scalar C++ loop"],
     "cpu_alignment": ["parasail", "ksw2 (minimap2 kernel)", "ksw2 scalar"],
-    "kalman_ll": [],
     "viterbi": [],
-    "ode": ["Boost.odeint", "plain C++ loop"],
-    "prefixsum": ["oneTBB parallel_scan"],
+    "ode": ["Boost.odeint", "fused C++ loop"],
+    "prefixsum": ["oneTBB parallel_for rows", "oneTBB parallel_scan"],
     "chebyshev": ["hand-written mod-3 ring"],
     "cuda_mamba2": ["Triton (mamba_ssm)"],
-    "flash_attention": ["FlashAttention-2 (torch SDPA)", "torch memory-efficient SDPA", "cuBLAS + softmax + cuBLAS"],
+    "flash_attention": ["FlashAttention-2 (torch SDPA)", "cuDNN SDPA (torch)", "torch memory-efficient SDPA",
+                        "cuBLAS + softmax + cuBLAS"],
 }
 
 
@@ -113,10 +124,11 @@ def slower_tried(app, base_name):
 # Each config returns dict(params, ind, rdom, base_name, base).
 def cpu_biquads(par):
     d = APPS / "cpu_biquads"
-    knobs = dict(SECTIONS=8, CHANNELS=256 if par else 32, SAMPLES=1 << 20 if par else 8 << 20, PAR=str(par).lower())
+    # The all-cores signal has 32 blocks of 32 channels: one task per core.
+    knobs = dict(SECTIONS=8, CHANNELS=1024 if par else 32, SAMPLES=1 << 18 if par else 8 << 20, PAR=str(par).lower())
     kv = " ".join(f"{k}={v}" for k, v in knobs.items())
     sh("make -s clean", d)
-    out = sh(f"make -s {kv} test", d, log=LOGS / f"cpu_biquads_par{par}.txt", pin=not par)
+    out = sh(f"make -s {kv} test", d, log=LOGS / f"cpu_biquads_par{par}.txt", pin=not par, cores=par)
     scipy = None
     if VENV.exists() and not par:  # scipy is single-threaded; compare it in the serial config
         so = sh(f"{VENV} sosfilt_bench.py {knobs['CHANNELS']} {knobs['SAMPLES']} {knobs['SECTIONS']}", d, pin=True)
@@ -139,11 +151,11 @@ def cpu_rng(par):
     knobs = dict(LANES=1024 if par else 32, STEPS=131072 if par else 1 << 22, PAR=str(par).lower())
     kv = " ".join(f"{k}={v}" for k, v in knobs.items())
     sh("make -s clean", d)
-    out = sh(f"make -s {kv} test", d, log=LOGS / f"cpu_rng_par{par}.txt", pin=not par)
+    out = sh(f"make -s {kv} test", d, log=LOGS / f"cpu_rng_par{par}.txt", pin=not par, cores=par)
     julia = None
     if JULIA.exists():
-        threads = f"-t {os.cpu_count()}" if par else ""
-        jo = sh(f"{JULIA} {threads} julia_bench.jl {2 * knobs['LANES']} {knobs['STEPS']}", d, pin=not par,
+        threads = f"-t {NCORES}" if par else ""
+        jo = sh(f"{JULIA} {threads} julia_bench.jl {2 * knobs['LANES']} {knobs['STEPS']}", d, pin=not par, cores=par,
                 log=LOGS / f"cpu_rng_julia_par{par}.txt")
         julia = us_row(jo, "julia xoshiro")
     # The runner's AVX-512 port of Julia's kernel is a control on the Halide
@@ -159,27 +171,13 @@ def cpu_alignment(par):
     knobs = dict(QLEN=1024, TLEN=1024, BATCH=4096 if par else 128, PAR=str(par).lower())
     kv = " ".join(f"{k}={v}" for k, v in knobs.items())
     sh("make -s clean", d)
-    out = sh(f"make -s {kv} test", d, log=LOGS / f"cpu_alignment_par{par}.txt", pin=not par)
+    out = sh(f"make -s {kv} test", d, log=LOGS / f"cpu_alignment_par{par}.txt", pin=not par, cores=par)
     comp = us_row(out, "compaction") or 0.0
     bn, bt = best([("ksw2 (minimap2 kernel)", us_row(out, "ksw2 sse")), ("parasail", us_row(out, "parasail")),
                            ("ksw2 scalar", us_row(out, "ksw2 gg"))])
     return dict(params=f"1024x1024 x {knobs['BATCH']} pairs, {'all cores' if par else '1 thread'}, fill+traceback+cigar",
                 ind=us_row(out, "int8 ind + traceback"),
                 rdom=(us_row(out, "int8 rdom") or 0) + comp, base_name=bn, base=bt)
-
-
-def kalman_ll(threads):
-    d = APPS / "kalman_ll"
-    sh("make -s clean && make -s bin/ar_ll", d)
-    # A task is two vectors of series, 32 in float, so the threaded row takes
-    # enough series to give every core work.
-    B, T = (1024 if threads > 1 else 256), 16384
-    out = sh(f"bin/ar_ll {B} {T}", d, env={"HL_NUM_THREADS": str(threads)}, pin=threads == 1,
-             log=LOGS / f"kalman_ll_t{threads}.txt")
-    r = hb_rows(out)
-    return dict(params=f"{B} series x {T} steps, {threads} thread{'s' if threads > 1 else ''}",
-                ind=r.get("inductive (fold t -> 2)"), rdom=r.get("non-inductive (materialize)"),
-                base_name=None, base=None)
 
 
 def suite_bin(name):
@@ -192,7 +190,10 @@ def viterbi(S, M, T):
     out = sh(f"{suite_bin('viterbi_log')} {S} {M} {T}", APPS / "inductive_suite",
              env={"HL_NUM_THREADS": "1"}, log=LOGS / f"viterbi_{S}_{M}_{T}.txt", pin=True)
     r = hb_rows(out)
-    return dict(params=f"{S} states, {M} symbols, T={T}, 1 thread",
+    # The RDom form's trajectory is S*T*(4+1) bytes; a row whose trajectory
+    # fits in one CCD's 32 MB L3 is an in-cache control.
+    control = " (in-cache control)" if S * T * 5 <= 32 << 20 else ""
+    return dict(params=f"{S} states, {M} symbols, T={T}, 1 thread{control}",
                 ind=r.get("inductive FOLDED (fold t -> 2)"), rdom=r.get("non-inductive (materialize)"),
                 base_name=None, base=None)
 
@@ -216,7 +217,7 @@ def ode(D, B, T):
              log=LOGS / f"ode_{D}_{B}_{T}.txt")
     r = hb_rows(out)
     bn, bt = best([("Boost.odeint", r.get("Boost.odeint (rk4 init + observer)")),
-                           ("plain C++ loop", r.get("C++ reference + observer (oracle)"))])
+                           ("fused C++ loop", r.get("fused C++ loop"))])
     return dict(params=f"Allen-Cahn D={D}, batch {B}, T={T}, 1 thread",
                 ind=r.get("inductive FOLDED (fold n -> 2)"), rdom=r.get("non-inductive (materialize)"),
                 base_name=bn, base=bt)
@@ -231,13 +232,20 @@ def prefixsum(W, H, threads):
     rd = hb_rows(sh(f"{suite_bin('prefixsum_bench_rdom')} {W} {H}", d, env=env, pin=pin,
                     log=LOGS / f"prefixsum_rdom_{W}_{H}_t{threads}.txt"))
     tbb = d / "bin/prefixsum_bench_tbb"
-    tb = None
+    bn, bt = "oneTBB (needs libtbb-dev)", None
     if tbb.exists():
-        tb = hb_rows(sh(f"{tbb}", d, env=env, pin=pin)).get("oneTBB parallel_scan (fused)")
+        # Two oneTBB forms: rows in parallel with a serial scan per row, and
+        # parallel_scan along each row as well; the faster is the baseline.
+        tb = hb_rows(sh(f"{tbb} {W} {H}", d, env=env, pin=pin,
+                        log=LOGS / f"prefixsum_tbb_{W}_{H}_t{threads}.txt"))
+        bn, bt = best([("oneTBB parallel_for rows", tb.get("oneTBB parallel_for rows (serial scan)")),
+                       ("oneTBB parallel_scan", tb.get("oneTBB parallel_scan (fused)"))])
+    # The inductive row's label carries its fold and vector widths.
+    ind_ms = next((ms for label, ms in ind.items() if label.startswith("inductive FOLDED")), None)
     return dict(params=f"{W} x {H} rows, running-mean consumer, {threads} thread{'s' if threads > 1 else ''}",
-                ind=ind.get("inductive FOLDED (fold x -> 1 accum)"),
+                ind=ind_ms,
                 rdom=rd.get("non-inductive (RDom, materialize row)"),
-                base_name="oneTBB parallel_scan" if tb is not None else "oneTBB (needs libtbb-dev)", base=tb)
+                base_name=bn, base=bt)
 
 
 def mamba2(direction):
@@ -252,11 +260,14 @@ def mamba2(direction):
     target = "test_bwd" if direction == "bwd" else "test"
     label = "Halide mamba2 bwd" if direction == "bwd" else "Halide mamba2"
     times = {}
-    for scan in ("inductive", "rdom"):
+    # The forward's RDom form with the undefined pure definition, its fewest
+    # kernels; the backward's RDom form leaves its walks undefined the same way.
+    rdom_form = "rdom_undef" if direction == "fwd" else "rdom"
+    for scan, key in (("inductive", "inductive"), (rdom_form, "rdom")):
         sh("make -s clean", d)
         out = sh(f"make -s {kv} SCAN={scan} {target}", d, log=LOGS / f"mamba2_{direction}_{scan}.txt")
         m = re.search(re.escape(label) + r"\s+[\d.]+ GFlop/s\s+([\d.]+) us", out)
-        times[scan] = float(m.group(1)) / 1e3 if m else None
+        times[key] = float(m.group(1)) / 1e3 if m else None
     triton = None
     if VENV.exists():
         try:
@@ -276,34 +287,40 @@ def flash_attention():
     # The flash filter (an inductive online softmax over key chunks) against
     # its RDom-only form: the same online softmax with the running maximum
     # and row sum carried at the accumulator's shape, as one Tuple update
-    # over the key chunks, at its own best chunk. The runner also drives a
-    # non-flash fused filter that does not
-    # launch at this shape (a known, pre-existing failure), so run the
-    # binary directly and take the rows. Reference: PyTorch's
-    # FlashAttention-2 SDPA backend at the same shape.
+    # over the key chunks, at its own best chunk (the Makefile's RDOM_CHUNK).
+    # The runner also drives a non-flash fused filter, which it skips at this
+    # shape since it holds every key's scores in registers. All forms compute
+    # softmax(QK^T / sqrt(depth)) V and store fp16, as torch's kernels do.
+    # Baselines: PyTorch's FlashAttention-2, cuDNN and memory-efficient SDPA
+    # backends at the same shape, and an unfused cuBLAS + softmax + cuBLAS.
     d = APPS / "cuda_attention"
     shape = dict(QUERIES=65536, KEYS=1024, DEPTH=64, OUT_DEPTH=64)
     kv = " ".join(f"{k}={v}" for k, v in shape.items())
     sh("make -s clean", d)
     sh(f"make -s {kv} bin/host-cuda/runner", d)
-    out = sh("bin/host-cuda/runner", d, log=LOGS / "flash_attention.txt", check=False)
+    out = sh("bin/host-cuda/runner", d, log=LOGS / "flash_attention.txt")
+    m = re.search(r"^RDOM_CHUNK \?= (\d+)", (d / "Makefile").read_text(), re.M)
+    rdom_chunk = m.group(1) if m else "?"
     m = re.search(r"Halide flash attention\s+[\d.]+ GFlop/s\s+([\d.]+) us", out)
     ind = float(m.group(1)) / 1e3 if m else None
     m = re.search(r"Halide flash attention \(rdom\)\s+[\d.]+ GFlop/s\s+([\d.]+) us", out)
     rdom = float(m.group(1)) / 1e3 if m else None
     m = re.search(r"cublas \+ softmax \+ cublas\s+[\d.]+ GFlop/s\s+([\d.]+) us", out)
     unfused = float(m.group(1)) / 1e3 if m else None
-    torch_flash = None
+    torch_flash = torch_cudnn = torch_mem = None
     if VENV.exists():
         try:
             to = sh(f"{VENV} torch_bench.py {shape['QUERIES']} {shape['KEYS']} {shape['DEPTH']}", d,
                     log=LOGS / "flash_attention_torch.txt")
             torch_flash = us_row(to, "torch flash")
+            torch_cudnn = us_row(to, "torch cudnn")
+            torch_mem = us_row(to, "torch mem-efficient")
         except RuntimeError:
             pass
-    bn, bt = best([("FlashAttention-2 (torch SDPA)", torch_flash), ("cuBLAS + softmax + cuBLAS", unfused)])
+    bn, bt = best([("FlashAttention-2 (torch SDPA)", torch_flash), ("cuDNN SDPA (torch)", torch_cudnn),
+                   ("torch memory-efficient SDPA", torch_mem), ("cuBLAS + softmax + cuBLAS", unfused)])
     return dict(params=f"{shape['QUERIES']} queries x {shape['KEYS']} keys, depth {shape['DEPTH']}, fp16, "
-                       f"chunk 64, RTX 5060 Ti",
+                       f"chunk 64 (RDom {rdom_chunk}), RTX 5060 Ti",
                 ind=ind, rdom=rdom, base_name=bn or "torch flash (unavailable)", base=bt)
 
 
@@ -314,13 +331,14 @@ SUITE = [
     ("cpu_rng", lambda: cpu_rng(True)),
     ("cpu_alignment", lambda: cpu_alignment(False)),
     ("cpu_alignment", lambda: cpu_alignment(True)),
-    ("kalman_ll", lambda: kalman_ll(1)),
-    ("kalman_ll", lambda: kalman_ll(NCORES)),
     ("viterbi", lambda: viterbi(16, 4, 320000)),
     ("viterbi", lambda: viterbi(64, 8, 50000)),
+    ("viterbi", lambda: viterbi(8, 4, 16777216)),
     ("ode", lambda: ode(1024, 1, 32768)),
-    ("prefixsum", lambda: prefixsum(1 << 20, 32, 1)),
-    ("prefixsum", lambda: prefixsum(1 << 20, 32, NCORES)),
+    # Rows past the last-level cache, so the materialized row is a trip
+    # through memory: 256 MB rows serially, 32 MB rows over the cores.
+    ("prefixsum", lambda: prefixsum(1 << 26, 2, 1)),
+    ("prefixsum", lambda: prefixsum(1 << 23, 32, NCORES)),
     ("chebyshev", lambda: chebyshev(2048, 100)),
     ("cuda_mamba2", lambda: mamba2("fwd")),
     ("cuda_mamba2", lambda: mamba2("bwd")),
@@ -381,34 +399,50 @@ def main():
     notes = (
         "Times are milliseconds per run: inductive = the folded inductive-Func form, RDom = the same "
         "algorithm as update definitions (materializing), baseline = the fastest non-Halide implementation "
-        "available on this machine. Measured on a Threadripper 9970X (Zen 5, 32 cores) and an RTX 5060 Ti.\n\n"
-        "Every Halide form is verified against its app's reference before timing (the alignment rows "
-        "byte-exact against ksw2, the rng rows bit-exact against Julia's rand! seeding, the GPU rows against "
-        "serial references). Baselines are threaded across independent problems in the all-cores rows where "
-        "the library allows it (ksw2, parasail, oneTBB, the rng kernel's blocks of streams). The mamba2 rows "
-        "compare each side at its own best chunk (Triton prefers 256; the Halide backward is best at 128), "
-        "with the tensor-core schedules (WMMA=true). Flash attention's RDom form is the same online softmax "
-        "with the running maximum and row sum carried at the accumulator's shape, broadcast across its "
-        "columns, so that one Tuple update over the key chunks advances all three (Halide fuses no "
-        "dependent stages, and a per-row Func may not read the state its update feeds); the rescalings are "
-        "then paid per element rather than per row, the same tile verbs and staging otherwise. For scale, "
-        "cuBLAS + softmax + cuBLAS is about 13x slower than the flash filter. Chebyshev is the "
-        "intended in-cache control, where folding buys nothing. Outputs that are written once and never "
-        "read back are streamed in every form (rng, biquads, the alignment direction plane); the JIT apps "
-        "(kalman, viterbi, ode) and the alignment runner free their scratch at the end of every run, and "
-        "past a few MB the default allocators hand it back to the kernel, so every process the driver runs, "
-        "baselines included, uses jemalloc configured to keep freed memory (oversize_threshold:0, no "
-        "decay), which is what an application reusing its work buffers gets. It matters where the scratch "
-        "is large: without retention the ode RDom row is 23 ms rather than 7, and every alignment form pays "
-        "about 230 ms of first-touch faults on its 64 MB per-task direction planes; the baselines are within "
-        "noise either way, scipy a few percent faster. The same allocator backs everything with transparent "
-        "huge pages, and single-threaded rows run pinned to one core: the serial forms that stream gigabyte "
-        "signals otherwise vary by 30% from run to run with where their pages land. The Python baselines "
-        "report the best sample, as Halide's harness does. Every measurement, Halide forms and baselines in "
-        "every language, follows one protocol (apps/support/bench_harness.h): three untimed runs, thirty "
-        "timed trials, the best reported with the median kept for the spread; on the GPU a trial is ten "
-        "launches and one device synchronization, divided by ten, so the time includes completion but not a "
-        "synchronization per launch.\n\n")
+        "available on this machine, with the others tried listed beside it. Measured on a Threadripper 9970X "
+        "(Zen 5, 32 cores in four 8-core chiplets) and an RTX 5060 Ti (driver 595.71, CUDA 13).\n\n"
+        "Every form is verified against its app's reference before timing: the alignment rows byte-exact "
+        "(score and CIGAR of every pair) against ksw2; the rng rows bit-exact against the scalar reference, "
+        "and byte-exact against Julia's rand! in the eight-stream configuration (make LANES=8 test_julia); "
+        "biquads against a double-precision cascade; the JIT apps against double references (viterbi's "
+        "decoded path must match the reference decode except at near-ties, the prefix mean and ode to 1e-6 "
+        "and 1e-5); the GPU rows against serial double references (mamba2's five gradients to 4e-3 and, "
+        "for the step-size and decay gradients, 1e-3 of their largest value; attention against a double "
+        "softmax with the same scale torch applies). The RDom forms leave their pure definitions undefined "
+        "wherever the walk writes every element before it is read (biquads, rng, alignment, prefixsum, the "
+        "materialized ode), which the inductive forms never need.\n\n"
+        "Threads: single-thread rows run pinned to one core. All-cores rows run one thread per physical core "
+        "on the first hardware thread of each core, Halide forms and baselines alike: the materializing forms "
+        "are bound by each chiplet's write path to the memory controller, and where the scheduler lands their "
+        "threads otherwise moves them by up to 1.7x. The C++ baselines' parallel loops run on the same "
+        "persistent Halide thread pool as the Halide forms (Finding Fast Filters, IPP, ksw2, parasail); "
+        "oneTBB uses its own pool at the same thread count, Julia its own threads. Compiler flags are the "
+        "same on both sides (-O3 -march=native -ffast-math, except Finding Fast Filters, whose authors "
+        "found fast-math slower for it). Streaming stores are used only for the alignment direction plane, "
+        "which is written once and read at 2N of its N^2 cells, in every form that has one; the rng and "
+        "biquads outputs are consumed as they are produced and take ordinary stores in every "
+        "implementation.\n\n"
+        "The mamba2 rows compare each side at its own best chunk (Triton prefers 256; the Halide backward "
+        "is best at 128), with the tensor-core schedules (WMMA=true); the Halide backward computes the "
+        "step-size and decay gradients by the pair-sum path mamba_ssm uses, which costs it extra kernels "
+        "that the cheaper adjoint identity would avoid at the price of a gradient that is wrong in float. "
+        "Flash attention's RDom form is the same online softmax with the running maximum and row sum "
+        "carried at the accumulator's shape, broadcast across its columns, so that one Tuple update over "
+        "the key chunks advances all three (Halide fuses no dependent stages, and a per-row Func may not "
+        "read the state its update feeds); the rescalings are then paid per element rather than per row, "
+        "the same tile verbs and staging otherwise, so that row measures the cost of the expression, not "
+        "of memory traffic. Chebyshev and the first two viterbi rows are in-cache controls, where folding "
+        "buys nothing; viterbi's third row streams its trajectory through memory.\n\n"
+        "Memory: the JIT apps and the alignment runner free their scratch at the end of every run, and past "
+        "a few MB the default allocators hand it back to the kernel, so every process the driver runs, "
+        "baselines included, uses jemalloc configured to keep freed memory (oversize_threshold:0, no decay) "
+        "and to back it with transparent huge pages, which is what an application reusing its work buffers "
+        "gets; Julia, which crashes under the preload, runs on its own allocator and retains its arrays "
+        "itself. Every measurement, Halide forms and baselines in every language, follows one protocol "
+        "(apps/support/bench_harness.h): three untimed runs, thirty timed trials, the best reported; on the "
+        "GPU a trial is ten launches and one device synchronization, divided by ten. Baseline versions: "
+        "torch 2.11.0+cu130 (FlashAttention-2 and cuDNN SDPA backends), Triton 3.6.0, mamba_ssm 2.3.2.post1, "
+        "Julia 1.12.7, scipy 1.15.3, numpy 2.2.4.\n\n")
     Path(args.out).write_text(notes + table + "\n")
     print(f"\nwritten to {args.out}")
 

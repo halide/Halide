@@ -2,45 +2,51 @@
 // pipeline expressed with a plain RDom scan (the non-inductive idiom from
 // tutorial/lesson_25_inductive.cpp: prefix_sum(x, y) = undef<int>(), with
 // prefix_sum(0, y) and prefix_sum(r, y) update definitions), instead of the
-// inductive-function version in prefixsum_bench.cpp.
+// inductive-function version in prefixsum_bench.cpp. Same input: the
+// running mean of each row of an int32 image read from memory.
 //
 // Unlike the inductive schedule, an RDom forces the entire scan over r to
 // complete before output can be computed, so prefix_sum.compute_at(output, y)
 // materializes a full row of prefix_sum (not folded to a single register).
-// Single-core (no .parallel), same as prefixsum_bench.cpp, so the two are
-// directly comparable.
+// The materialized row makes the consumer trivially vectorizable, so
+// output's cast, divide and store go 16 wide. Rows run in parallel, like
+// prefixsum_bench.cpp; HL_NUM_THREADS=1 makes the run serial.
 #include "Halide.h"
 
 #include "../support/bench_harness.h"
 #include "../support/jit_support.h"
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
-#include <vector>
 
 using namespace Halide;
 
 int main(int argc, char **argv) {
     int W = argc > 1 ? atoi(argv[1]) : 65536;
     int H = argc > 2 ? atoi(argv[2]) : 32;
-    const char *data_path = argc > 3 ? argv[3] : "/tmp/prefixsum_bench_data.bin";
 
     try {
         Var x("x"), y("y");
 
-        Func input("input"), prefix_sum("prefix_sum"), output("output");
-        input(x, y) = (x + y) & 255;  // bounded: no int32 overflow
+        // The input lives in memory, as it does for the baseline. Bounded
+        // values, so the running sum never overflows int32.
+        Buffer<int32_t> input(W, H, "input");
+        for (int yy = 0; yy < H; yy++)
+            for (int xx = 0; xx < W; xx++)
+                input(xx, yy) = (xx + yy) & 255;
+
+        Func prefix_sum("prefix_sum"), output("output");
 
         RDom r(1, W - 1, "r");
         prefix_sum(x, y) = undef<int>();
         prefix_sum(0, y) = input(0, y);
         prefix_sum(r, y) = prefix_sum(r - 1, y) + input(r, y);
 
+        // The running mean, in single precision: the sum stays exact in int32.
         output(x, y) = cast<float>(prefix_sum(x, y)) / cast<float>(x + 1);
 
         prefix_sum.compute_at(output, y);
-        // Parallel over rows (matches oneTBB / the inductive fold); HL_NUM_THREADS=1
-        // makes it serial, so one binary covers both the 1-core and multi-core cells.
-        output.bound(x, 0, W).bound(y, 0, H).parallel(y);
+        output.bound(x, 0, W).bound(y, 0, H).vectorize(x, 16).parallel(y);
 
         Buffer<float> result(W, H);
         output.realize(result);  // warm-up / JIT compile.
@@ -52,22 +58,18 @@ int main(int argc, char **argv) {
         // live parallel task -- reused across y -- not the whole O(W*H) trajectory).
         const double meas_bytes = hb::profiled_peak_bytes(output, result);
 
-        // Compare against the reference data dumped by prefixsum_bench.cpp.
-        int n_mismatch = -1;  // -1 => reference file absent
-        FILE *f = fopen(data_path, "rb");
-        if (f) {
-            int32_t header[2];
-            fread(header, sizeof(int32_t), 2, f);
-            std::vector<int32_t> in_flat(W * H);
-            std::vector<float> halide_out(W * H);
-            fread(in_flat.data(), sizeof(int32_t), W * H, f);
-            fread(halide_out.data(), sizeof(float), W * H, f);
-            fclose(f);
-
-            n_mismatch = 0;
-            for (int yy = 0; yy < H; yy++)
-                for (int xx = 0; xx < W; xx++)
-                    if (result(xx, yy) != halide_out[yy * W + xx]) n_mismatch++;
+        // Correctness against a serial reference: the same running int32 sum
+        // and float divide. The divide may go by a reciprocal in either form,
+        // so the comparison is relative, to 1e-6.
+        double max_rel = 0;
+        for (int yy = 0; yy < H; yy++) {
+            int32_t run = 0;
+            for (int xx = 0; xx < W; xx++) {
+                run += input(xx, yy);
+                float expect = (float)run / (float)(xx + 1);
+                double rel = std::abs((double)result(xx, yy) - expect) / std::abs((double)expect);
+                if (rel > max_rel) max_rel = rel;
+            }
         }
 
         // Unfolded footprint = full prefix trajectory O(W*H) (roofline x-axis;
@@ -75,12 +77,12 @@ int main(int argc, char **argv) {
         const double fp_unfold = (double)W * H * 4;
         char note[160];
         snprintf(note, sizeof(note),
-                 "Row prefix-sum then /(x+1)  W=%d H=%d  (correctness vs inductive dump)  |  unfolded fp/LLC=%.3f",
+                 "Row prefix-sum then /(x+1)  W=%d H=%d  |  unfolded fp/LLC=%.3f",
                  W, H, hb::footprint_over_llc(fp_unfold));
         hb::print_spec_header("prefixsum_bench_rdom", "host", note);
         hb::print_row("non-inductive (RDom, materialize row)", s_bench,
                       (W * (double)H) / (s_bench.min * 1e3), "Mpix/s",
-                      meas_bytes, (double)(n_mismatch < 0 ? 0 : n_mismatch), n_mismatch == 0, "", fp_unfold);
+                      meas_bytes, max_rel, max_rel <= 1e-6, "", fp_unfold);
 
         return 0;
     } catch (const Halide::Error &e) {

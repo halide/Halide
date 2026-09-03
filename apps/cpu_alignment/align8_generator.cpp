@@ -118,9 +118,15 @@ public:
             // boundary lives at index zero; storage (j, i) holds original
             // cell (j-1, i-1). The nonzero boundary differences sit on the
             // two storage edges.
-            Expr Ub = cast<int8_t>(select(j == 0 && i > 1, (int)gapo, 0));
-            Expr Vb = cast<int8_t>(select(i == 0 && j > 1, (int)gapo, 0));
-            dp8(b, j, i) = Tuple(Ub, Vb, cast<int8_t>(0), cast<int8_t>(0), cast<uint8_t>(0));
+            // Undefined pure definition: the two border sweeps and the
+            // walk write every cell before it is read, so a fill of the
+            // table would only add a pass over it.
+            dp8(b, j, i) = Tuple(undef<int8_t>(), undef<int8_t>(), undef<int8_t>(), undef<int8_t>(), undef<uint8_t>());
+            RDom bi(0, tseq.dim(1).extent() + 1, "bi"), bj(0, qseq.dim(1).extent() + 1, "bj");
+            dp8(b, 0, bi) = Tuple(cast<int8_t>(select(bi > 1, (int)gapo, 0)), cast<int8_t>(0),
+                                  cast<int8_t>(0), cast<int8_t>(0), cast<uint8_t>(0));
+            dp8(b, bj, 0) = Tuple(cast<int8_t>(0), cast<int8_t>(select(bj > 1, (int)gapo, 0)),
+                                  cast<int8_t>(0), cast<int8_t>(0), cast<uint8_t>(0));
 
             RDom r(1, qseq.dim(1).extent(), 1, tseq.dim(1).extent(), "r");
             rj = r.x, ri = r.y;
@@ -195,8 +201,10 @@ public:
                 dp8.hoist_storage_root();
             }
         } else {
-            dp8.compute_at(path, bo).vectorize(b, VEC);
-            dp8.update().reorder(b, rj, ri).vectorize(b, VEC);
+            dp8.compute_at(path, bo);
+            dp8.update(0).vectorize(b, VEC);
+            dp8.update(1).vectorize(b, VEC);
+            dp8.update(2).reorder(b, rj, ri).vectorize(b, VEC);
         }
     }
 

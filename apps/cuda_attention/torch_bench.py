@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Times PyTorch's fused attention kernels at the Halide generator's shape:
-one head, QUERIES x KEYS x DEPTH, fp16. The FlashAttention-2 backend is
-the reference the flash filter is measured against; the memory-efficient
-(xformers-style) backend is reported too.
+one head, QUERIES x KEYS x DEPTH, fp16, no mask, no dropout, and the
+default softmax scale of 1/sqrt(DEPTH), which is what the Halide forms
+compute. Each of the FlashAttention-2, memory-efficient (xformers-style)
+and cuDNN backends is timed on its own.
 
 Usage: torch_bench.py QUERIES KEYS DEPTH
-Prints "  torch flash   <us> us" and "  torch mem-efficient   <us> us".
+Prints the torch version, then one row per backend:
+"  torch flash   <us> us", "  torch mem-efficient   <us> us",
+"  torch cudnn   <us> us".
 """
 import os
 import sys
@@ -46,7 +49,10 @@ def timed(fn):
     return min(ts)
 
 
-for name, backend in (("flash", SDPBackend.FLASH_ATTENTION), ("mem-efficient", SDPBackend.EFFICIENT_ATTENTION)):
+print(f"torch {torch.__version__}")
+for name, backend in (("flash", SDPBackend.FLASH_ATTENTION),
+                      ("mem-efficient", SDPBackend.EFFICIENT_ATTENTION),
+                      ("cudnn", SDPBackend.CUDNN_ATTENTION)):
     try:
         with sdpa_kernel(backend):
             t = timed(lambda: F.scaled_dot_product_attention(q, k, v))

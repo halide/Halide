@@ -106,10 +106,15 @@ public:
         } else {
             // The same recurrence as update definitions. Indices shift by
             // one so the boundary lives at storage index zero.
-            Expr Hb1 = cast<int16_t>(select(i == 0 && j == 0, 0,
-                                            select(i == 0, -(gapoe + (int)gape * (j - 1)),
-                                                   -(gapoe + (int)gape * (i - 1)))));
-            dp(b, j, i) = Tuple(Hb1, NEG, NEG, cast<uint8_t>(0));
+            // Undefined pure definition: the two border sweeps and the
+            // walk write every cell before it is read, so a fill of the
+            // table would only add a pass over it.
+            dp(b, j, i) = Tuple(undef<int16_t>(), undef<int16_t>(), undef<int16_t>(), undef<uint8_t>());
+            RDom bi(0, tseq.dim(1).extent() + 1, "bi"), bj(0, qseq.dim(1).extent() + 1, "bj");
+            dp(b, bj, 0) = Tuple(cast<int16_t>(select(bj == 0, 0, -(gapoe + (int)gape * (bj - 1)))),
+                                 NEG, NEG, cast<uint8_t>(0));
+            dp(b, 0, bi) = Tuple(cast<int16_t>(select(bi == 0, 0, -(gapoe + (int)gape * (bi - 1)))),
+                                 NEG, NEG, cast<uint8_t>(0));
             RDom r(1, qseq.dim(1).extent(), 1, tseq.dim(1).extent(), "r");
             rj = r.x, ri = r.y;
             Expr s1 = cast<int16_t>(select(qseq(b, rj - 1) == tseq(b, ri - 1), (int)sa, -(int)sb));
@@ -189,8 +194,10 @@ public:
                 dp.hoist_storage_root();
             }
         } else {
-            dp.compute_at(path, bo).vectorize(b, VEC);
-            dp.update().reorder(b, rj, ri).vectorize(b, VEC);
+            dp.compute_at(path, bo);
+            dp.update(0).vectorize(b, VEC);
+            dp.update(1).vectorize(b, VEC);
+            dp.update(2).reorder(b, rj, ri).vectorize(b, VEC);
         }
     }
 

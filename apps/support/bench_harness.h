@@ -2,7 +2,7 @@
 #define HALIDE_APP_BENCH_HARNESS_H
 
 // Standardized benchmarking protocol shared by the inductive-function apps
-// (viterbi, kalman_ll, prefixsum, stereobm, chebyshev, ode, mamba). The point is
+// (viterbi, prefixsum, chebyshev, ode, the alignment and biquads runners, mamba). The point is
 // that every app reports numbers the same way, so the paper's tables are directly
 // comparable and self-documenting.
 //

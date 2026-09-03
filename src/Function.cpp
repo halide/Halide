@@ -1259,7 +1259,7 @@ bool Function::is_inductive(const string &var) const {
 
         for (const Expr &e : def.values()) {
             visit_with(e, [&](auto *self, const Call *op) {
-                if (op->name == name()) {
+                if (op->call_type == Call::Halide && op->name == name()) {
                     for (int pos : positions) {
                         if (const auto &v = op->args[pos].as<Variable>()) {
                             if (v->name != var) {

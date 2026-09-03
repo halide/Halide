@@ -1,5 +1,6 @@
 #include "Halide.h"
 #include <algorithm>
+#include <cmath>
 
 using namespace Halide;
 
@@ -70,7 +71,15 @@ void set_bounds(OutputImageParam p, int extent_0, int extent_1) {
 // would, and all sit six times nearer a float64 reference than rounding the
 // scores to half precision would put them. A half precision accumulator for
 // the second multiply measured 12% to 14% faster, but it computes something
-// else, and something no attention library offers.
+// else, and something no attention library offers. The output is narrowed to
+// half precision at the final store, which is what those libraries write too.
+//
+// The scores are scaled by 1/sqrt(depth) before the exponential, as torch's
+// scaled_dot_product_attention does by default. The scale is folded into the
+// exponent's argument rather than into Q, so that the first multiply's
+// operands stay the half precision inputs as given; a positive scale commutes
+// with the row maximum, so the maximum is taken over the raw scores and the
+// difference is scaled.
 //
 // The last column is why. The softmax reads a queries x keys matrix that the
 // multiply before it just wrote, and writes another one for the multiply after
@@ -126,12 +135,13 @@ public:
     Input<Buffer<float16_t, 2>> K{"K"};
     Input<Buffer<float16_t, 2>> V{"V"};
 
-    Output<Buffer<float, 2>> out{"out"};
+    Output<Buffer<float16_t, 2>> out{"out"};
 
     void generate() {
         k = RDom(0, depth, "k");
         r = RDom(0, keys, "r");
         rv = RDom(0, keys, "rv");
+        const float scale = 1.0f / std::sqrt((float)depth);
 
         // The scores, one row per query.
         s(x, y) = 0.f;
@@ -142,7 +152,7 @@ public:
         m(y) = -1e30f;
         m(y) = max(m(y), s(r, y));
 
-        e(x, y) = exp(s(x, y) - m(y));
+        e(x, y) = exp((s(x, y) - m(y)) * scale);
 
         sum_e(y) = 0.f;
         sum_e(y) += e(r, y);
@@ -154,7 +164,7 @@ public:
         acc(x, y) = 0.f;
         acc(x, y) += cast<float>(e(rv, y)) * cast<float>(V(x, rv));
 
-        soft(x, y) = acc(x, y) / sum_e(y);
+        soft(x, y) = cast<float16_t>(acc(x, y) / sum_e(y));
 
         out(x, y) = soft(x, y);
     }
@@ -584,7 +594,7 @@ public:
     Input<Buffer<float16_t, 2>> K{"K"};
     Input<Buffer<float16_t, 2>> V{"V"};
 
-    Output<Buffer<float, 2>> out{"out"};
+    Output<Buffer<float16_t, 2>> out{"out"};
 
     void generate() {
         // How many keys a step of the walk takes. Everything that is per step
@@ -598,6 +608,10 @@ public:
             << "chunk must be a multiple of 16 that divides keys at least twice";
         num_tiles = keys / key_tile;
         key_pad = 2 * key_tile;
+        // The softmax scale, applied to every difference of scores that goes
+        // into an exponential. The running maximum is over raw scores, which
+        // is the same maximum, since the scale is positive.
+        const float scale = 1.0f / std::sqrt((float)depth);
 
         k = RDom(0, depth, "k");
         rj_max = RDom(0, key_tile, "rj_max");
@@ -621,13 +635,13 @@ public:
         // produces is already on the right scale and only what is carried has
         // to be rescaled.
         //
-        e(x, y, t) = exp(s(x, y, t) - m(y, t));
+        e(x, y, t) = exp((s(x, y, t) - m(y, t)) * scale);
 
         tile_l(y, t) = 0.f;
         tile_l(y, t) += e(rj, y, t);
 
         l(y, t) = select(t <= 0, tile_l(y, t),
-                         likely(l(y, t - 1) * exp(m(y, t - 1) - m(y, t)) +
+                         likely(l(y, t - 1) * exp((m(y, t - 1) - m(y, t)) * scale) +
                                 tile_l(y, t)));
 
         tile_acc(x, y, t) = 0.f;
@@ -639,10 +653,12 @@ public:
             (tile_acc(x, y, rt) +
              select(rt <= 0,
                     0.f,
-                    likely(acc(x, y) * exp(m(y, rt - 1) - m(y, rt))))) /
+                    likely(acc(x, y) * exp((m(y, rt - 1) - m(y, rt)) * scale)))) /
             select(rt < num_tiles - 1, 1.f, l(y, rt));
 
-        out(x, y) = acc(x, y);
+        // Narrowed to half precision where it sits, then stored.
+        outh(x, y) = cast<float16_t>(acc(x, y));
+        out(x, y) = outh(x, y);
     }
 
     void schedule() {
@@ -739,6 +755,14 @@ public:
             .unroll(xio)
             .unroll(yio)
             .tile_store(xi, yi);
+
+        outh.compute_at(out, xo)
+            .store_in(MemoryType::Tile)
+            .split(y, yw, y, rows)
+            .tile(x, y, rxi, ryi, tile, tile)
+            .unroll(x)
+            .unroll(y)
+            .tile_init(rxi, ryi);
 
         acc.compute_at(out, xo)
             .store_in(MemoryType::Tile)
@@ -843,6 +867,7 @@ public:
 
         if (wy > 1) {
             out.gpu_threads(yw);
+            outh.gpu_threads(yw);
             acc.gpu_threads(yw);
             acc.update().gpu_threads(yw);
         }
@@ -911,7 +936,7 @@ private:
     RDom k, rj_max, rj, rt;
     int num_tiles = 0, key_tile = 0, key_pad = 0;
     Func s{"s"}, tile_max{"tile_max"}, e{"e"}, tile_l{"tile_l"};
-    Func tile_acc{"tile_acc"}, acc{"acc"};
+    Func tile_acc{"tile_acc"}, acc{"acc"}, outh{"outh"};
     Func m{Float(32), "m"}, l{Float(32), "l"};
 };
 
@@ -946,7 +971,7 @@ public:
     Input<Buffer<float16_t, 2>> K{"K"};
     Input<Buffer<float16_t, 2>> V{"V"};
 
-    Output<Buffer<float, 2>> out{"out"};
+    Output<Buffer<float16_t, 2>> out{"out"};
 
     void generate() {
         key_tile = chunk ? (int)chunk : std::min(64, (int)keys / 2);
@@ -954,6 +979,7 @@ public:
                             keys / key_tile >= 2)
             << "chunk must be a multiple of 16 that divides keys at least twice";
         num_tiles = keys / key_tile;
+        const float scale = 1.0f / std::sqrt((float)depth);
 
         k = RDom(0, depth, "k");
         rj_max = RDom(0, key_tile, "rj_max");
@@ -970,7 +996,7 @@ public:
         // The weights against the tile's own maximum. Only the carried state
         // knows the running one, and a Func that read it here would depend
         // on the update that reads this.
-        e(x, y, t) = exp(s(x, y, t) - tile_max(y, t));
+        e(x, y, t) = exp((s(x, y, t) - tile_max(y, t)) * scale);
 
         tile_l(y, t) = 0.f;
         tile_l(y, t) += e(rj, y, t);
@@ -990,7 +1016,7 @@ public:
         Expr m_new = max(m_old, tm);
         // Whichever of the two was not the maximum moves to it, and the
         // other stays: one exponential covers both.
-        Expr d = exp(-abs(m_old - tm));
+        Expr d = exp(-abs(m_old - tm) * scale);
         Expr carried_max = m_old >= tm;
         Expr alpha = select(carried_max, 1.f, d);
         Expr beta = select(carried_max, d, 1.f);
@@ -998,8 +1024,8 @@ public:
         Expr a_new = alpha * a_old + beta * tile_acc(x, y, rt);
         state(x, y) = {m_new, l_new, a_new};
 
-        // Normalised once the walk is done.
-        outf(x, y) = state(x, y)[2] / state(x, y)[1];
+        // Normalised once the walk is done, and narrowed for the store.
+        outf(x, y) = cast<float16_t>(state(x, y)[2] / state(x, y)[1]);
         out(x, y) = outf(x, y);
     }
 

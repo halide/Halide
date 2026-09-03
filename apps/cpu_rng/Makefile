@@ -3,7 +3,7 @@ HL_TARGET ?= host
 include ../support/Makefile.inc
 
 # Streams and steps per stream: the output is sized well past the last
-# level cache, and the materialized state trajectory is eight times it.
+# level cache, and the materialized state trajectory is four times it.
 LANES ?= 32
 STEPS ?= 4194304
 PAR ?= false

@@ -40,8 +40,9 @@ FLASH_CHUNK ?= 0
 
 SHAPE = queries=$(QUERIES) keys=$(KEYS) depth=$(DEPTH) out_depth=$(OUT_DEPTH)
 SHAPE_FLASH := $(SHAPE) tiles_y=$(FLASH_TILES_Y) warps=$(FLASH_WARPS) chunk=$(FLASH_CHUNK) stage=$(FLASH_STAGE) stage_tile=$(FLASH_STAGE_TILE) stage_q=$(FLASH_STAGE_Q) pad=$(PAD)
-# The two-pass (RDom-only) flash filter has its own best shape: a
-# narrower step, since its first pass is cheaper per key than its second.
+# The RDom-only flash filter walks the same online softmax with its running
+# maximum, row sum and accumulator carried as one Tuple update, and has its
+# own best step width and register cap.
 RDOM_TILES_Y ?= $(FLASH_TILES_Y)
 RDOM_WARPS ?= $(FLASH_WARPS)
 RDOM_CHUNK ?= 64

@@ -391,13 +391,12 @@ int main(int argc, char **argv) {
         run();
         printf("random:\n");
         Refs r = run_reference(X, Bm, Cm, Delta, A, dY);
-        // ddt and dA fold the f16 rounding of Y and dX through suffix sums
-        // over the whole sequence, so their noise grows with its length; dA
-        // additionally weights each term by a cumulative-time factor that
-        // grows linearly with position.
+        // ddt and dA carry the half-precision rounding of the operands the
+        // tensor cores see (the carried gradient among them) through sums
+        // whose length grows with the sequence.
         double len = std::max(1.0, seq / 4096.0);
-        ok &= check_all(r, dX, dB, dC, dDT, dA, 4e-3, 2e-2 * sqrt(len),
-                        1e-1 * len);
+        ok &= check_all(r, dX, dB, dC, dDT, dA, 4e-3, 1e-3 * sqrt(len),
+                        1e-3 * len);
     }
 
     // Matrix multiply flops only: the two recomputed forward multiplies and

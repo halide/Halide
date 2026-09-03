@@ -90,11 +90,14 @@ void fill_input(Buffer<float> &x) {
 // The same cascade at double precision, one channel at a time.
 double check(const Buffer<float> &x, const Buffer<float> &sos,
              const Buffer<float> &y, const char *what, double tol = 2e-4) {
-    const int check_channels = std::min(C, 4);
+    // Eight channels spread across the range, so every block of every
+    // implementation's channel split is represented.
+    const int check_channels = std::min(C, 8);
     std::vector<double> errs(check_channels, 0.0);
     std::vector<std::thread> pool;
-    for (int c = 0; c < check_channels; c++) {
-        pool.emplace_back([&, c]() {
+    for (int k = 0; k < check_channels; k++) {
+        const int c = (int)((long)k * (C - 1) / std::max(1, check_channels - 1));
+        pool.emplace_back([&, k, c]() {
             std::vector<double> u(S), v(S);
             for (int n = 0; n < S; n++) {
                 u[n] = x(c, n);
@@ -117,7 +120,7 @@ double check(const Buffer<float> &x, const Buffer<float> &sos,
             for (int n = 0; n < S; n++) {
                 err = std::max(err, std::abs(u[n] - (double)y(c, n)));
             }
-            errs[c] = err;
+            errs[k] = err;
         });
     }
     for (auto &th : pool) {
@@ -299,7 +302,7 @@ int main(int argc, char **argv) {
 #endif
 
     const double gb = C * (double)S * 4 / 1e9;
-    printf("  inductive  %10.1f us  (%.1f GB/s of signal each way)\n",
+    printf("  inductive  %10.1f us  (%.1f GB/s of signal, read plus written)\n",
            t_ind * 1e6, 2 * gb / t_ind);
     printf("  unfolded   %10.1f us  (%.2fx: fusion without folding)\n",
            t_unf * 1e6, t_unf / t_ind);

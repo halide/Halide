@@ -7,6 +7,7 @@
 #include "HalideRuntimeCuda.h"
 #include "../support/bench_harness.h"
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cublas_v2.h>
 #include <cuda.h>
@@ -40,6 +41,15 @@ namespace {
 #endif
 constexpr int queries = QUERIES, keys = KEYS, depth = DEPTH, out_depth = OUT_DEPTH;
 
+// Every form here computes softmax(Q.K' * scale).V with torch's default
+// scale, so that the rows compare against torch's kernels like for like.
+const float scale = 1.0f / std::sqrt((float)depth);
+
+// The fused filter that is not flash holds a block's worth of scores for every
+// key in registers, so past this many keys the launch asks for more registers
+// than a thread has and is rejected. It is skipped there rather than run.
+constexpr int fused_max_keys = 128;
+
 // The flash filter warms its walk up by rewinding, so it reads whole key steps
 // before the first one. It asks for K and V with room in front of them rather
 // than clamping the index, which would cost it a constant fold slot. What is in
@@ -56,10 +66,8 @@ constexpr int key_pad = 2 * flash_chunk;
 // not count. It is the usual way attention is reported, and it compares like
 // with like here because every row below has the same numerator and the same
 // answer to produce, so the ratios between them are ratios of time. What it is
-// not is a fraction of what the hardware can do, and the row that skips the
-// softmax gets to keep the same numerator for less work, which is why it reads
-// high. The time is printed alongside for anyone who wants a number with no
-// convention in it.
+// not is a fraction of what the hardware can do. The time is printed alongside
+// for anyone who wants a number with no convention in it.
 double gflops(double seconds) {
     double flops = 2.0 * queries * keys * depth + 2.0 * queries * out_depth * keys;
     return flops / seconds * 1e-9;
@@ -73,50 +81,80 @@ double bench(F &&launch, S &&sync) {
     return hb::bench_s(launch, 10, sync);
 }
 
-void fill(Buffer<float16_t, 2> &b, int modulus) {
-    b.for_each_value([&](float16_t &v) { v = float16_t((float)(rand() % modulus)); });
+// Standard normal samples from a fixed seed: an LCG driving Box-Muller. The
+// inputs are what a real Q, K and V look like - torch_bench.py draws its own
+// the same way - so the scores, the exponentials and the multiplies see
+// values of realistic magnitude and bit pattern.
+void fill(Buffer<float16_t, 2> &b, uint64_t seed) {
+    uint64_t state = seed * 6364136223846793005ull + 1442695040888963407ull;
+    auto uniform = [&]() {
+        state = state * 6364136223846793005ull + 1442695040888963407ull;
+        // The top bits, into (0, 1]: never zero, so the log below is finite.
+        return ((state >> 40) + 1) * (1.0f / 16777216.0f);
+    };
+    b.for_each_value([&](float16_t &v) {
+        float u1 = uniform(), u2 = uniform();
+        v = float16_t(std::sqrt(-2.0f * std::log(u1)) * std::cos(6.2831853f * u2));
+    });
     // for_each_value writes through the host pointer without saying so.
     b.set_host_dirty();
 }
 
-// Attention on the host, for a sample of rows. The tolerance is relative
-// because the scores go through a half precision operand on the way into the
-// second multiply, which is what the filter does too.
+// Attention on the host in double precision, for a sample of rows, against an
+// output that every form stores in half precision. The tolerance is what the
+// forms' own rounding allows for. Rounding to nearest half precision is off by
+// at most 2^-11 of the value, which covers the final narrowing of the output.
+// The weights go through a half precision operand on the way into the second
+// multiply - torch's kernels do the same - which puts up to that same 2^-11
+// of noise on each term of the weighted sum. Those errors have random sign,
+// so their sum is a random walk whose standard deviation is at most 2^-11
+// times the root of the sum of squares of the terms; the tolerance allows
+// eight of those.
+template<typename T>
 bool check(Buffer<float16_t, 2> &Q, Buffer<float16_t, 2> &K,
-           Buffer<float16_t, 2> &V, Buffer<float, 2> &O, const char *name) {
-    std::vector<float> score(keys);
-    // A stride coprime with the rows per block, so the samples land at varying
-    // offsets within a block.
+           Buffer<float16_t, 2> &V, Buffer<T, 2> &O, const char *name) {
     if (getenv("HL_SKIP_CHECK")) {
         return true;
     }
+    std::vector<double> weight(keys);
+    double worst = 0;
+    // A stride coprime with the rows per block, so the samples land at varying
+    // offsets within a block.
     for (int y = 0; y < queries; y += 397) {
-        float row_max = -1e30f;
+        double row_max = -1e30;
         for (int j = 0; j < keys; j++) {
-            score[j] = 0;
+            double score = 0;
             for (int i = 0; i < depth; i++) {
-                score[j] += (float)Q(i, y) * (float)K(i, j);
+                score += (double)Q(i, y) * (double)K(i, j);
             }
-            row_max = std::max(row_max, score[j]);
+            weight[j] = score * scale;
+            row_max = std::max(row_max, weight[j]);
         }
-        float total = 0;
+        double total = 0;
         for (int j = 0; j < keys; j++) {
-            score[j] = std::exp(score[j] - row_max);
-            total += score[j];
+            weight[j] = std::exp(weight[j] - row_max);
+            total += weight[j];
         }
         for (int x = 0; x < out_depth; x++) {
-            float correct = 0;
+            double correct = 0, squares = 0;
             for (int j = 0; j < keys; j++) {
-                correct += (float)float16_t(score[j]) * (float)V(x, j);
+                double term = weight[j] * (double)V(x, j);
+                correct += term;
+                squares += term * term;
             }
             correct /= total;
-            if (std::abs(O(x, y) - correct) > 2e-3f * std::abs(correct) + 1e-5f) {
-                printf("%s: bad result at %d %d: %f != %f\n", name, x, y,
-                       (double)O(x, y), correct);
+            const double rounding = 1.0 / 2048;
+            double tol = rounding * std::abs(correct) + 8 * rounding * std::sqrt(squares) / total;
+            double err = std::abs((double)O(x, y) - correct);
+            worst = std::max(worst, err / tol);
+            if (err > tol) {
+                printf("%s: bad result at %d %d: %f != %f (tolerance %g)\n", name, x, y,
+                       (double)O(x, y), correct, tol);
                 return false;
             }
         }
     }
+    printf("  %s: checked, worst error %.2f of tolerance\n", name, worst);
     return true;
 }
 
@@ -183,12 +221,10 @@ int main(int argc, char **argv) {
     halide_set_cuda_release_context(release_context);
 
     Buffer<float16_t, 2> Q(depth, queries), K(depth, keys), V(out_depth, keys);
-    Buffer<float, 2> O(out_depth, queries);
-    // Small integers, so that the scores are exact and the only rounding is
-    // the one the filter itself does going into the second multiply.
-    fill(Q, 3);
-    fill(K, 3);
-    fill(V, 4);
+    Buffer<float16_t, 2> O(out_depth, queries);
+    fill(Q, 1);
+    fill(K, 2);
+    fill(V, 3);
 
     // The flash filter wants room in front of the keys, so give it its own
     // copies. The other two take K and V as they are.
@@ -209,7 +245,11 @@ int main(int argc, char **argv) {
     VP.set_host_dirty();
 
     int failures = 0;
-    if (attention(Q.raw_buffer(), K.raw_buffer(), V.raw_buffer(), O.raw_buffer()) != 0) {
+    if (keys > fused_max_keys) {
+        printf("  Halide fused attention        skipped: holds every key's scores in "
+               "registers, and does not launch past %d keys\n",
+               fused_max_keys);
+    } else if (attention(Q.raw_buffer(), K.raw_buffer(), V.raw_buffer(), O.raw_buffer()) != 0) {
         printf("filter returned an error\n");
         failures++;
     } else {
@@ -232,7 +272,7 @@ int main(int argc, char **argv) {
     // rescaled as it goes.
     // Its own output buffer, so that a filter that failed to write cannot be
     // checked against what the one before it left behind.
-    Buffer<float, 2> OF(out_depth, queries);
+    Buffer<float16_t, 2> OF(out_depth, queries);
     if (attention_flash(Q.raw_buffer(), KP.raw_buffer(), VP.raw_buffer(),
                         OF.raw_buffer()) != 0) {
         printf("flash filter returned an error\n");
@@ -253,9 +293,11 @@ int main(int argc, char **argv) {
         }
     }
 
-    // The flash walk with no inductive Funcs: two passes over the keys, the
-    // first for the row maxima. It takes the unpadded panels.
-    Buffer<float, 2> OR(out_depth, queries);
+    // The flash walk with no inductive Funcs: the same online softmax, with
+    // the running maximum, the row sum and the accumulator carried as one
+    // Tuple that a single update over the key chunks advances. It never reads
+    // before the first key, so it takes the unpadded panels.
+    Buffer<float16_t, 2> OR(out_depth, queries);
     if (attention_flash_rdom(Q.raw_buffer(), K.raw_buffer(), V.raw_buffer(),
                              OR.raw_buffer()) != 0) {
         printf("flash rdom filter returned an error\n");
@@ -277,21 +319,25 @@ int main(int argc, char **argv) {
     }
 
     // The same attention, unfused: cublas multiplies into a scores matrix in
-    // global memory, a kernel normalises it there, and cublas multiplies
-    // again. Same arithmetic, same answer - the only difference is that the
+    // global memory, with the softmax scale applied as its alpha, a kernel
+    // normalises it there, and cublas multiplies again into a half precision
+    // output. Same arithmetic, same answer - the only difference is that the
     // scores are written out and read back rather than staying in registers.
     cublasCreate(&handle);
     Buffer<float, 2> S(keys, queries);
     Buffer<float16_t, 2> P(keys, queries);
     S.device_malloc(halide_cuda_device_interface());
     P.device_malloc(halide_cuda_device_interface());
+    // Its own output buffer, for the same reason the filters above have theirs.
+    Buffer<float16_t, 2> OU(out_depth, queries);
+    OU.device_malloc(halide_cuda_device_interface());
     void *Qd = (void *)halide_cuda_get_device_ptr(nullptr, Q.raw_buffer());
     void *Kd = (void *)halide_cuda_get_device_ptr(nullptr, K.raw_buffer());
     void *Vd = (void *)halide_cuda_get_device_ptr(nullptr, V.raw_buffer());
-    void *Od = (void *)halide_cuda_get_device_ptr(nullptr, O.raw_buffer());
+    void *Od = (void *)halide_cuda_get_device_ptr(nullptr, OU.raw_buffer());
     void *Sd = (void *)halide_cuda_get_device_ptr(nullptr, S.raw_buffer());
     void *Pd = (void *)halide_cuda_get_device_ptr(nullptr, P.raw_buffer());
-    static float alpha = 1.0f, beta = 0.0f;
+    static float alpha = scale, one = 1.0f, beta = 0.0f;
 
     // Halide's buffers are dense in their first dimension, which is what
     // cublas calls column major, so neither multiply needs a transpose beyond
@@ -304,11 +350,12 @@ int main(int argc, char **argv) {
                   "scores");
     };
     // The multiply against V takes both its operands in half precision, so
-    // whatever feeds it has to be half precision too.
+    // whatever feeds it has to be half precision too. It accumulates in single
+    // precision and narrows on the store, as the filters do.
     auto gemm_out = [&](void *lhs) {
         return ok(cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_N, out_depth,
-                               queries, keys, &alpha, Vd, CUDA_R_16F, out_depth,
-                               lhs, CUDA_R_16F, keys, &beta, Od, CUDA_R_32F,
+                               queries, keys, &one, Vd, CUDA_R_16F, out_depth,
+                               lhs, CUDA_R_16F, keys, &beta, Od, CUDA_R_16F,
                                out_depth, CUBLAS_COMPUTE_32F,
                                CUBLAS_GEMM_DEFAULT),
                   "out");
@@ -322,10 +369,10 @@ int main(int argc, char **argv) {
     };
 
     unfused();
-    O.device_sync();
-    O.set_device_dirty();
-    O.copy_to_host();
-    if (!cublas_ok || !check(Q, K, V, O, "unfused")) {
+    OU.device_sync();
+    OU.set_device_dirty();
+    OU.copy_to_host();
+    if (!cublas_ok || !check(Q, K, V, OU, "unfused")) {
         failures++;
     } else {
         double t = bench(unfused, []() { cudaDeviceSynchronize(); });

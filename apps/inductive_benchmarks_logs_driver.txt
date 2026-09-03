@@ -1,0 +1,61 @@
+== cpu_biquads ==
+   8 sections, 32 ch x 8388608 samples, 1 thread: inductive 163.2 ms, rdom 1144.1 ms, baseline scipy.sosfilt 2154.4 ms
+== cpu_biquads ==
+   8 sections, 256 ch x 1048576 samples, all cores: inductive 45.1 ms, rdom 441.8 ms, baseline - - ms
+== cpu_rng ==
+   32 streams x 4194304 steps, 1 thread: inductive 35.0 ms, rdom 470.4 ms, baseline Julia rand! 35.1 ms
+== cpu_rng ==
+   FAILED: 'make -s LANES=1024 STEPS=131072 PAR=true test' in /home/abadams/projects/Halide_wmma_layout_aware/apps/cpu_rng failed:
+1024 streams x 131072 steps, two floats per step (1074 MB of floats, 4295 MB of state per trajectory)
+  simd C++   bit-exact ok
+  inductive  MISMATCH at lane 0 step 1: 0x1.7a8f7p-1 vs 0x1.891ac8p-1
+make: *** [Makefile:40: test] Error 1
+
+   (failed): inductive - ms, rdom - ms, baseline - - ms
+== cpu_alignment ==
+   1024x1024 x 128 pairs, 1 thread, fill+traceback+cigar: inductive 12.8 ms, rdom 52.3 ms, baseline parasail 40.3 ms
+== cpu_alignment ==
+   1024x1024 x 4096 pairs, all cores, fill+traceback+cigar: inductive 40.2 ms, rdom 731.9 ms, baseline parasail 46.1 ms
+== kalman_ll ==
+   256 series x 16384 steps, 1 thread: inductive 11.4 ms, rdom 30.6 ms, baseline - - ms
+== kalman_ll ==
+   256 series x 16384 steps, 32 threads: inductive 0.812 ms, rdom 5.9 ms, baseline - - ms
+== viterbi ==
+   16 states, 4 symbols, T=320000, 1 thread: inductive 4.8 ms, rdom 11.5 ms, baseline - - ms
+== viterbi ==
+   64 states, 8 symbols, T=50000, 1 thread: inductive 8.3 ms, rdom 11.2 ms, baseline - - ms
+== ode ==
+   D=1024, B=1, T=32768: inductive - ms, rdom - ms, baseline Boost.odeint (needs libboost-dev) - ms
+== prefixsum ==
+   1048576 x 32 rows, running-mean consumer, 1 thread: inductive 44.5 ms, rdom 54.2 ms, baseline oneTBB (needs libtbb-dev) - ms
+== prefixsum ==
+   1048576 x 32 rows, running-mean consumer, 32 threads: inductive 1.4 ms, rdom 3.4 ms, baseline oneTBB (needs libtbb-dev) - ms
+== chebyshev ==
+   n=2048 dense SPD, 100 iterations, 1 thread (in-cache control): inductive 146.1 ms, rdom 135.9 ms, baseline hand-written mod-3 ring 136.1 ms
+== cuda_mamba2 ==
+   FAILED: 'make -s SEQ=4096 STATE=64 CHANNELS=64 HEADS=128 GROUPS=1 CHUNK=64 SCAN=rdom test' in /home/abadams/projects/Halide_wmma_layout_aware/apps/cuda_mamba2 failed:
+Error: This schedule fuses the recurrence over chunks into the loop that consumes it, which is only expressible if the state is an inductive Func: an update definition owns the whole walk, so there is no per-chunk loop to fuse it into. Use w
+   (failed): inductive - ms, rdom - ms, baseline - - ms
+== cuda_mamba2 ==
+   bwd, seq 4096, state 64, 128 heads x 64, chunk 64, RTX 5060 Ti: inductive 2053.5 ms, rdom 2020.4 ms, baseline Triton (mamba_ssm) 5.4 ms
+
+| App | Config | Inductive (ms) | RDom (ms) | Fastest baseline (ms) | Baseline | RDom / ind | Baseline / ind |
+|---|---|---:|---:|---:|---|---:|---:|
+| cpu_biquads | 8 sections, 32 ch x 8388608 samples, 1 thread | 163.2 | 1144.1 | 2154.4 | scipy.sosfilt | 7.01x | 13.20x |
+| cpu_biquads | 8 sections, 256 ch x 1048576 samples, all cores | 45.1 | 441.8 | - | - | 9.79x | - |
+| cpu_rng | 32 streams x 4194304 steps, 1 thread | 35.0 | 470.4 | 35.1 | Julia rand! | 13.45x | 1.01x |
+| cpu_rng | (failed) | - | - | - | - | - | - |
+| cpu_alignment | 1024x1024 x 128 pairs, 1 thread, fill+traceback+cigar | 12.8 | 52.3 | 40.3 | parasail | 4.08x | 3.14x |
+| cpu_alignment | 1024x1024 x 4096 pairs, all cores, fill+traceback+cigar | 40.2 | 731.9 | 46.1 | parasail | 18.20x | 1.15x |
+| kalman_ll | 256 series x 16384 steps, 1 thread | 11.4 | 30.6 | - | - | 2.67x | - |
+| kalman_ll | 256 series x 16384 steps, 32 threads | 0.812 | 5.9 | - | - | 7.24x | - |
+| viterbi | 16 states, 4 symbols, T=320000, 1 thread | 4.8 | 11.5 | - | - | 2.39x | - |
+| viterbi | 64 states, 8 symbols, T=50000, 1 thread | 8.3 | 11.2 | - | - | 1.35x | - |
+| ode | D=1024, B=1, T=32768 | - | - | - | Boost.odeint (needs libboost-dev) | - | - |
+| prefixsum | 1048576 x 32 rows, running-mean consumer, 1 thread | 44.5 | 54.2 | - | oneTBB (needs libtbb-dev) | 1.22x | - |
+| prefixsum | 1048576 x 32 rows, running-mean consumer, 32 threads | 1.4 | 3.4 | - | oneTBB (needs libtbb-dev) | 2.37x | - |
+| chebyshev | n=2048 dense SPD, 100 iterations, 1 thread (in-cache control) | 146.1 | 135.9 | 136.1 | hand-written mod-3 ring | 0.93x | 0.93x |
+| cuda_mamba2 | (failed) | - | - | - | - | - | - |
+| cuda_mamba2 | bwd, seq 4096, state 64, 128 heads x 64, chunk 64, RTX 5060 Ti | 2053.5 | 2020.4 | 5.4 | Triton (mamba_ssm) | 0.98x | 0.00x |
+
+written to /home/abadams/projects/Halide_wmma_layout_aware/apps/inductive_benchmarks_results.md

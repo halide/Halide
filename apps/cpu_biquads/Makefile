@@ -59,7 +59,7 @@ endif
 
 $(BIN)/%/fff_biquads.o: fff_biquads.cpp fff_biquads.h fff/*.h
 	@mkdir -p $(@D)
-	$(CXX) -O3 -std=c++20 -mavx512f -mavx512bw -Wall -DSECTIONS=$(SECTIONS) -DFFF_STRIDE=$(FFF_STRIDE) -DFFF_PAIRWISE=$(FFF_PAIRWISE) -c $< -o $@
+	$(CXX) -O3 -march=native -std=c++20 -Wall -DSECTIONS=$(SECTIONS) -DFFF_STRIDE=$(FFF_STRIDE) -DFFF_PAIRWISE=$(FFF_PAIRWISE) -c $< -o $@
 
 $(BIN)/%/runner: runner.cpp fff_biquads.h $(BIN)/%/biquads_ind.a $(BIN)/%/biquads_unf.a $(BIN)/%/biquads_rdom.a $(BIN)/%/runtime.a $(FFF_OBJ)
 	@mkdir -p $(@D)

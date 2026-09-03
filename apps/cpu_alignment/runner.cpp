@@ -103,6 +103,32 @@ std::string cigar_str(const std::vector<uint32_t> &cigar) {
 
 }  // namespace
 
+
+// The baselines' sweeps over pairs, eight pairs per task, on the Halide
+// runtime's thread pool: the same persistent pool the Halide forms run on.
+// Serial builds walk the pairs in one loop.
+template<typename F>
+void pair_sweep(int npairs, F body) {
+    const int ntasks = (npairs + 7) / 8;
+    auto task = [&](int t) {
+        for (int k = t * 8; k < t * 8 + 8 && k < npairs; k++) {
+            body(k);
+        }
+    };
+#if PARALLEL
+    halide_do_par_for(
+        nullptr, [](void *, int t, uint8_t *closure) {
+            (*(decltype(task) *)closure)(t);
+            return 0;
+        },
+        0, ntasks, (uint8_t *)&task);
+#else
+    for (int t = 0; t < ntasks; t++) {
+        task(t);
+    }
+#endif
+}
+
 int main(int argc, char **argv) {
     // Batch-major layouts for Halide; contiguous per-pair copies for ksw2.
     Buffer<uint8_t> query(B, J), target(B, I);
@@ -235,19 +261,10 @@ int main(int argc, char **argv) {
     // memory behaviour.
     if (getenv("ONLY_PARASAIL")) {
         double tp0 = hb::bench_s([&]() {
-            int nthreads = PARALLEL ? std::thread::hardware_concurrency() : 1;
-            std::vector<std::thread> threads;
-            std::atomic<int> next{0};
-            for (int th = 0; th < nthreads; th++) {
-                threads.emplace_back([&]() {
-                    int b;
-                    std::vector<uint32_t> cig2;
-                    while ((b = next.fetch_add(8)) < B) {
-                        for (int k = b; k < b + 8 && k < B; k++) parasail_one(k, &cig2);
-                    }
-                });
-            }
-            for (auto &th : threads) th.join();
+            pair_sweep(B, [&](int k) {
+                std::vector<uint32_t> cig2;
+                parasail_one(k, &cig2);
+            });
         });
         printf("  parasail   %10.1f us\n", tp0 * 1e6);
         return 0;
@@ -296,21 +313,10 @@ int main(int argc, char **argv) {
     // turning each pair's op stream into a run-length CIGAR, which the
     // baselines' calls also do. Timed and folded into fill+cigar.
     auto compaction_sweep = [&]() {
-        int nthreads = PARALLEL ? std::thread::hardware_concurrency() : 1;
-        std::vector<std::thread> threads;
-        std::atomic<int> next{0};
-        for (int th = 0; th < nthreads; th++) {
-            threads.emplace_back([&]() {
-                int b;
-                std::vector<uint32_t> cig2;
-                while ((b = next.fetch_add(8)) < B) {
-                    for (int k = b; k < b + 8 && k < B; k++) {
-                        cigar_from_path(&path(k, 0), (long)B, I + J, cig2);
-                    }
-                }
-            });
-        }
-        for (auto &th : threads) th.join();
+        pair_sweep(B, [&](int k) {
+            std::vector<uint32_t> cig2;
+            cigar_from_path(&path(k, 0), (long)B, I + J, cig2);
+        });
     };
     double t_tb = hb::bench_s([&]() { compaction_sweep(); });
 
@@ -318,45 +324,23 @@ int main(int argc, char **argv) {
     // ksw2 parallelizes across pairs the way aligners deploy it: when the
     // Halide build is parallel, give ksw2 the same cores.
     auto ksw2_sweep = [&](bool sse) {
-        int nthreads = PARALLEL ? std::thread::hardware_concurrency() : 1;
-        std::vector<std::thread> threads;
-        std::atomic<int> next{0};
-        for (int t = 0; t < nthreads; t++) {
-            threads.emplace_back([&]() {
-                int mc = 0, nc = 0, b;
-                uint32_t *cig = nullptr;
-                while ((b = next.fetch_add(8)) < B) {
-                    for (int k = b; k < b + 8 && k < B; k++) {
-                        nc = 0;
-                        (sse ? ksw_gg2_sse : ksw_gg)(nullptr, J, &qs[(size_t)k * J], I, &ts[(size_t)k * I],
-                                                     4, mat, GAPO, GAPE, -1, &mc, &nc, &cig);
-                    }
-                }
-                free(cig);
-            });
-        }
-        for (auto &t : threads) t.join();
+        pair_sweep(B, [&](int k) {
+            int mc = 0, nc = 0;
+            uint32_t *cig = nullptr;
+            (sse ? ksw_gg2_sse : ksw_gg)(nullptr, J, &qs[(size_t)k * J], I, &ts[(size_t)k * I],
+                                         4, mat, GAPO, GAPE, -1, &mc, &nc, &cig);
+            free(cig);
+        });
     };
     double t_gg2 = hb::bench_s([&]() { ksw2_sweep(true); });
     double t_gg = hb::bench_s([&]() { ksw2_sweep(false); });
 
 #ifdef HAVE_PARASAIL
     auto parasail_sweep = [&]() {
-        int nthreads = PARALLEL ? std::thread::hardware_concurrency() : 1;
-        std::vector<std::thread> threads;
-        std::atomic<int> next{0};
-        for (int t = 0; t < nthreads; t++) {
-            threads.emplace_back([&]() {
-                int b;
-                std::vector<uint32_t> cig2;
-                while ((b = next.fetch_add(8)) < B) {
-                    for (int k = b; k < b + 8 && k < B; k++) {
-                        parasail_one(k, &cig2);
-                    }
-                }
-            });
-        }
-        for (auto &t : threads) t.join();
+        pair_sweep(B, [&](int k) {
+            std::vector<uint32_t> cig2;
+            parasail_one(k, &cig2);
+        });
     };
     double t_ps = hb::bench_s([&]() { parasail_sweep(); });
 #endif

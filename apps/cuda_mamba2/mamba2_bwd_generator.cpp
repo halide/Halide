@@ -19,16 +19,18 @@
 //   dC       = scoreT B + (decay) Hop dY, summed over the heads of a group
 //   dB       = scoreT^T C + (decay) X dHnext, summed likewise
 //
-// where scoreT is the forward's score with xy in place of qk. The step
-// size and decay gradients collapse through the adjoint identity
-//
-//   ddAcs(k) = sum_d dY(d,k) y(d,k) - sum_d X(d,k) dX(d,k)
-//
-// (every decay is exp of a difference of cumulative sums, the state's
-// derivative with respect to its own log-decay is itself, and the two
-// dot products are what remains after the telescoping) so ddt is that
-// plus a suffix sum of it, and dA a weighted total - two more scans,
-// also walked backwards.
+// where scoreT is the forward's score with xy in place of qk. The
+// gradient of each step's log-decay increment a_k = A dt_k is gathered
+// the way mamba_ssm's stable path gathers it: as the sum over the pairs
+// of positions n < k <= m whose decay the increment sits inside, split by
+// which chunk each end lies in (both in this chunk: the head's scaled
+// score-gradient plane, prefixed along the input position and summed over
+// the output positions; one end outside: the inter-chunk halves of dX and
+// of y dotted with X and dY, prefixed or suffixed within the chunk; both
+// ends outside: the carried state against the carried gradient). The
+// adjoint identity dY.y - X.dX suffix-summed gives the same number in
+// exact arithmetic and cancels catastrophically in float. ddt is the
+// direct term plus A times that gradient, dA its weighted total.
 //
 // Every reverse walk is written as an ordinary inductive Func over a
 // flipped index, tt = last - t, so the loops still count upwards.
@@ -75,6 +77,12 @@ public:
     Input<Buffer<float16_t, 4>> Y{"Y"};
     Input<Buffer<float16_t, 4>> dY{"dY"};
 
+    // The increment-gradient stages, defined in generate() and scheduled
+    // by both schedule functions.
+    Func Uh, Ih, ebd, xyq, Mq32, Mqhi, Mqlo, Ms, Q, Qm, Qd, SX, Sst, Bmdf3, Bmd3, dxe2, Cdf2, Cd2,
+        yprev, E2, PS, PSb, PSst, Sb, cterm, chunk_term, nx, pv, ga, pdA;
+    Var jj{"jj"}, u{"u"};
+
     Output<Buffer<float16_t, 4>> dX{"dX"};    // channels x pos x chunk x head
     Output<Buffer<float16_t, 4>> dB{"dB"};    // state x pos x chunk x group
     Output<Buffer<float16_t, 4>> dC{"dC"};    // state x pos x chunk x group
@@ -110,16 +118,6 @@ public:
 
         // The running total of whole chunks of decay before chunk t, for the
         // gradient of A. A forward walk over chunks.
-        Func cdpre = Func(Float(32), "cdpre");
-        RDom rtc(1, nt - 1, "rtc");
-        if (inductive()) {
-            cdpre(t, b) = select(t <= 0, 0.f,
-                                 likely(cdpre(t - 1, b)) + cumdelta(L - 1, t - 1, b));
-        } else {
-            cdpre(t, b) = 0.f;
-            cdpre(rtc, b) = cdpre(rtc - 1, b) + cumdelta(L - 1, rtc - 1, b);
-        }
-
         Var from("from"), to("to");
         Func decay("decay");
         decay(from, to, t, b) =
@@ -171,14 +169,16 @@ public:
                                        chunk_state(d, p, t - 1, b));
             Hop(d, p, t, b) = cast<float16_t>(H(d, p, t, b));
         } else {
-            // The same recurrence as an update definition, over a state
-            // zeroed ahead of the walk: the first chunk carries nothing in,
-            // and each step folds the decayed carry onto what the chunk
-            // before it left behind. The walk owns its storage, so the
-            // state is written out at every step; the half-precision copy
-            // the consumers want rides along as a second component, so
-            // narrowing it is not a pass of its own.
-            H(d, p, t, b) = {0.f, cast<float16_t>(0.f)};
+            // The same recurrence as an update definition: the first chunk
+            // carries nothing in, and each step folds the decayed carry
+            // onto what the chunk before it left behind. The walk owns its
+            // storage, so the state is written out at every step; the
+            // half-precision copy the consumers want rides along as a
+            // second component, so narrowing it is not a pass of its own.
+            // The pure definition is undefined: the walk writes every step
+            // before it is read.
+            H(d, p, t, b) = {undef<float>(), undef<float16_t>()};
+            H(d, p, 0, b) = {0.f, cast<float16_t>(0.f)};
             Expr carried = H(d, p, rth - 1, b)[0] *
                                exp(A(b) * cumdelta(L - 1, rth - 1, b)) +
                            chunk_state(d, p, rth - 1, b);
@@ -217,7 +217,8 @@ public:
                            dG(d, p, nt - tt, b));
             dHopr(d, p, tt, b) = cast<float16_t>(dHnr(d, p, tt, b));
         } else {
-            dHnr(d, p, tt, b) = {0.f, cast<float16_t>(0.f)};
+            dHnr(d, p, tt, b) = {undef<float>(), undef<float16_t>()};
+            dHnr(d, p, 0, b) = {0.f, cast<float16_t>(0.f)};
             Expr carried = dHnr(d, p, rtd - 1, b)[0] *
                                exp(A(b) * cumdelta(L - 1, nt - rtd, b)) +
                            dG(d, p, nt - rtd, b);
@@ -345,51 +346,160 @@ public:
         dB(p, j, t, g) = cast<float16_t>(dBa(p, j, t, g) + dBb(p, j, t, g));
 
         // ---------------- ddt and dA ----------------
+        //
+        // The gradient of each step's log-decay increment, as the sums over
+        // the position pairs it sits between, in the four cases of where
+        // the pair's ends lie (see the header).
 
-        Func dYY("dYY");
-        dYY(k, t, b) = 0.f;
-        dYY(k, t, b) += cast<float>(dY(rd, k, t, b)) * cast<float>(Y(rd, k, t, b));
-        Func XdX("XdX");
-        XdX(k, t, b) = 0.f;
-        XdX(k, t, b) += cast<float>(X(rd, t * L + k, b)) * cast<float>(dX(rd, k, t, b));
+        // (1) Both ends in this chunk. The head's score-gradient plane,
+        // scaled by its scores, is recomputed here from X and dY; a multiply
+        // by a triangle of ones prefixes it along the input position, and a
+        // masked sum over the output positions at or after each boundary
+        // gives the boundary's total.
+        Uh = Func("Uh");
+        Uh(j, jj) = cast<float16_t>(select(j < jj, 1.f, 0.f));
+        Ih = Func("Ih");
+        Ih(j, jj) = cast<float16_t>(select(j == jj, 1.f, 0.f));
+        xyq = Func("xyq");
+        xyq(j, i, t, b) = 0.f;
+        xyq(j, i, t, b) += cast<float>(X(rd, t * L + j, b)) *
+                           cast<float>(dY(rd, i, t, b));
+        // The decay between two positions splits into a factor of each,
+        // referenced to the start of the chunk, as the forward's operand
+        // scales are: two small tables instead of an exponential per entry.
+        ebd = Func("ebd");
+        ebd(k, t, b) = Delta(t * L + k, b) * exp(-A(b) * cumdelta(k, t, b));
+        Mq32 = Func("Mq32");
+        Mq32(j, i, t, b) = xyq(j, i, t, b) * cfac(i, t, b) * ebd(j, t, b) *
+                           qk(j, i, t, group_of(b)) * select(j <= i, 1.f, 0.f);
+        // The plane passes through shared memory on its way into the
+        // multiplies, which put the output position on the tile's rows so
+        // that the sums over it are reductions along the tile's columns.
+        // It goes as a pair of halves, the value and its rounding residual,
+        // so the sums come out at single precision.
+        Mqhi = Func("Mqhi");
+        Mqhi(j, i, t, b) = cast<float16_t>(Mq32(j, i, t, b));
+        Mqlo = Func("Mqlo");
+        Mqlo(j, i, t, b) = cast<float16_t>(Mq32(j, i, t, b) - cast<float>(Mqhi(j, i, t, b)));
+        Ms = Func("Ms");
+        Ms(j, i, t, b) = {Mqhi(j, i, t, b), Mqlo(j, i, t, b)};
+        // The prefix along the input position, from the triangle of ones,
+        // and the plane's transpose, from the identity: the boundary sums
+        // and the per-position row sums are then both reductions over the
+        // output position. The diagonal never enters a boundary sum, since
+        // it lies strictly inside neither half of the pair.
+        RDom rjq(0, L, "rjq");
+        Q = Func("Q");
+        Q(i, jj, t, b) = 0.f;
+        Q(i, jj, t, b) += cast<float>(Ms(rjq, i, t, b)[0]) * cast<float>(Uh(rjq, jj));
+        Q(i, jj, t, b) += cast<float>(Ms(rjq, i, t, b)[1]) * cast<float>(Uh(rjq, jj));
+        // The identity's only nonzero tile is the diagonal one, so the
+        // transpose sweeps just the input tile of its own boundaries.
+        RDom rjd(0, tile, "rjd");
+        Expr jd = (jj / tile) * tile + rjd;
+        Qd = Func("Qd");
+        Qd(i, jj, t, b) = 0.f;
+        Qd(i, jj, t, b) += cast<float>(Ms(jd, i, t, b)[0]) * cast<float>(Ih(jd, jj));
+        Qd(i, jj, t, b) += cast<float>(Ms(jd, i, t, b)[1]) * cast<float>(Ih(jd, jj));
+        // The mask multiplies rather than selects, so the whole plane is
+        // read and the masked-off region doesn't clamp the tile's bounds.
+        Qm = Func("Qm");
+        Qm(i, jj, t, b) = Q(i, jj, t, b) * select(i >= jj, 1.f, 0.f);
+        // The boundary sums, and the direct step-size term's intra-chunk
+        // half: the row sums of the plane, diagonal included. One value of
+        // each per position, held as tiles with the value repeated along
+        // the tile's rows, and stored that way.
+        RDom ri2(0, L, "ri2");
+        SX = Func("SX");
+        SX(jj, t, b) = {0.f, 0.f};
+        SX(jj, t, b) = {SX(jj, t, b)[0] + Qm(ri2, jj, t, b), SX(jj, t, b)[1] + Qd(ri2, jj, t, b)};
+        Sb = Func("Sb");
+        Sb(u, jj, t, b) = {SX(jj, t, b)[0], SX(jj, t, b)[1]};
+        Sst = Func("Sst");
+        Sst(u, jj, t, b) = {Sb(u, jj, t, b)[0], Sb(u, jj, t, b)[1]};
 
-        Func ddAcs("ddAcs");
-        ddAcs(k, t, b) = dYY(k, t, b) - XdX(k, t, b);
+        // (2) The input end in this chunk, the output end after it: the
+        // inter-chunk half of dX, dotted with X, summed over the inputs
+        // before the boundary. The half is a small state multiply,
+        // recomputed rather than kept from the dX kernel.
+        Bmdf3 = Func("Bmdf3");
+        Bmdf3(p, j, t, b) = cast<float>(Bm(p, t * L + j, group_of(b))) *
+                            bfac(j, t, b);
+        Bmd3 = Func("Bmd3");
+        Bmd3(p, j, t, b) = cast<float16_t>(Bmdf3(p, j, t, b));
+        dxe2 = Func("dxe2");
+        dxe2(d, j, t, b) = 0.f;
+        dxe2(d, j, t, b) += cast<float>(Bmd3(rp, j, t, b)) *
+                            cast<float>(dHopr(d, rp, nt - 1 - t, b));
 
-        // Suffix sums of ddAcs: whole chunks first, then within a chunk,
-        // both walked backwards over flipped indices.
-        RDom rk(0, L, "rk");
-        Func csum("csum");
-        csum(t, b) = 0.f;
-        csum(t, b) += ddAcs(rk, t, b);
+        // (3) The output end in this chunk, the input end before it: what
+        // the carried state contributes to the output, dotted with dY,
+        // summed over the outputs at or after the boundary.
+        Cdf2 = Func("Cdf2");
+        Cdf2(p, i, t, b) = cast<float>(Cm(p, t * L + i, group_of(b))) *
+                           cfac(i, t, b);
+        Cd2 = Func("Cd2");
+        Cd2(p, i, t, b) = cast<float16_t>(Cdf2(p, i, t, b));
+        yprev = Func("yprev");
+        yprev(d, i, t, b) = 0.f;
+        yprev(d, i, t, b) += cast<float>(Cd2(rp, i, t, b)) *
+                             cast<float>(Hop(d, rp, t, b));
+        // Both dot products, reduced along the channels into one value of
+        // each per position, held as tiles with the value repeated along
+        // the tile's rows, and stored that way.
+        E2 = Func("E2");
+        E2(d, k, t, b) = {dxe2(d, k, t, b) * cast<float>(X(d, t * L + k, b)),
+                          yprev(d, k, t, b) * cast<float>(dY(d, k, t, b))};
+        PS = Func("PS");
+        PS(k, t, b) = {0.f, 0.f};
+        PS(k, t, b) = {PS(k, t, b)[0] + E2(rd, k, t, b)[0], PS(k, t, b)[1] + E2(rd, k, t, b)[1]};
+        PSb = Func("PSb");
+        PSb(u, k, t, b) = {PS(k, t, b)[0], PS(k, t, b)[1]};
+        PSst = Func("PSst");
+        PSst(u, k, t, b) = {PSb(u, k, t, b)[0], PSb(u, k, t, b)[1]};
 
-        Func sfxcr = Func(Float(32), "sfxcr");
-        RDom rsc(1, nt - 1, "rsc");
-        Func sfxr = Func(Float(32), "sfxr");
+        // (4) Both ends outside this chunk: the state carried in against
+        // the gradient carried out, through the whole chunk's decay.
+        RDom rdp(0, channels, 0, state, "rdp");
+        cterm = Func("cterm");
+        cterm(t, b) = 0.f;
+        cterm(t, b) += cast<float>(Hop(rdp.x, rdp.y, t, b)) *
+                       cast<float>(dHopr(rdp.x, rdp.y, nt - 1 - t, b));
+        chunk_term = Func("chunk_term");
+        chunk_term(t, b) = cterm(t, b) * exp(A(b) * cumdelta(L - 1, t, b));
+
+        // The prefix of (2) and the suffix of (3) within the chunk, walked
+        // as the form walks its scans: the suffix over a flipped index.
+        nx = Func(Float(32), "nx");
+        pv = Func(Float(32), "pv");
         RDom rsk(1, L - 1, "rsk");
         if (inductive()) {
-            sfxcr(tt, b) = select(tt <= 0, 0.f,
-                                  likely(sfxcr(tt - 1, b)) + csum(nt - tt, b));
-            sfxr(kk, t, b) = ddAcs(L - 1 - kk, t, b) +
-                             select(kk <= 0, sfxcr(nt - 1 - t, b),
-                                    likely(sfxr(kk - 1, t, b)));
+            nx(k, t, b) = select(k <= 0, 0.f,
+                                 likely(nx(k - 1, t, b)) + PSst(0, max(k - 1, 0), t, b)[0]);
+            pv(kk, t, b) = PSst(0, L - 1 - kk, t, b)[1] +
+                           select(kk <= 0, 0.f, likely(pv(kk - 1, t, b)));
         } else {
-            sfxcr(tt, b) = 0.f;
-            sfxcr(rsc, b) = sfxcr(rsc - 1, b) + csum(nt - rsc, b);
-            sfxr(kk, t, b) = ddAcs(L - 1 - kk, t, b) +
-                             select(kk <= 0, sfxcr(nt - 1 - t, b), 0.f);
-            sfxr(rsk, t, b) += sfxr(rsk - 1, t, b);
+            nx(k, t, b) = 0.f;
+            nx(rsk, t, b) = nx(rsk - 1, t, b) + PSst(0, rsk - 1, t, b)[0];
+            pv(kk, t, b) = PSst(0, L - 1 - kk, t, b)[1];
+            pv(rsk, t, b) += pv(rsk - 1, t, b);
         }
+        ga = Func("ga");
+        ga(k, t, b) = Sst(0, k, t, b)[0] + pv(L - 1 - k, t, b) + nx(k, t, b) +
+                      chunk_term(t, b);
 
+        // The direct step-size term, X dotted with both halves of dX at
+        // single precision.
         Func ddtF("ddtF");
-        ddtF(k, t, b) = XdX(k, t, b) / Delta(t * L + k, b) +
-                        A(b) * sfxr(L - 1 - k, t, b);
+        ddtF(k, t, b) = (Sst(0, k, t, b)[1] + PSst(0, k, t, b)[0]) / Delta(t * L + k, b) +
+                        A(b) * ga(k, t, b);
 
         dDT(k, b) = ddtF(k % L, k / L, b);
 
-        Func pdA("pdA");
+        RDom rk(0, L, "rk");
+        pdA = Func("pdA");
         pdA(t, b) = 0.f;
-        pdA(t, b) += ddAcs(rk, t, b) * (cumdelta(rk, t, b) + cdpre(t, b));
+        pdA(t, b) += ga(rk, t, b) * Delta(t * L + rk, b);
         RDom rt(0, nt, "rt");
         dA_out(b) = 0.f;
         dA_out(b) += pdA(rt, b);
@@ -397,19 +507,18 @@ public:
         try {
             if (!using_autoscheduler()) {
                 if (wmma) {
-                    schedule_wmma(cumdelta, cdpre, bfac, cfac, qk, qk2,
+                    schedule_wmma(cumdelta, bfac, cfac, qk, qk2,
                                   Bmdf, Bmdf2,
                                   chunk_state,
                                   H, Hop, Cdf, dG, dHnr, dHopr, score2, score2_h,
                                   dxi, dxe, dxs, xy, sg, sgh, sg2h, dYH,
                                   dCa, dCb, XdH, dBa,
-                                  dBb, dYY, XdX, ddAcs, csum, sfxcr, sfxr, pdA,
+                                  dBb,
                                   d, p, k, i, j, t, b, g, tt, kk);
                 } else {
-                    schedule_simple(cumdelta, cdpre, qk, chunk_state, H, Hop,
+                    schedule_simple(cumdelta, qk, chunk_state, H, Hop,
                                     dG, dHnr, dHopr, dxi, dxe, dYH,
                                     dCa, dCb, XdH, dBa, dBb,
-                                    dYY, XdX, ddAcs, csum, sfxcr, sfxr, pdA,
                                     d, p, k, i, j, t, b, g, tt, kk);
                 }
             }
@@ -430,15 +539,14 @@ private:
     // tensor cores; the dX kernel is the forward's output kernel with the
     // causal mask transposed; the group-summed gradients walk the heads of
     // a group serially inside their blocks, accumulating on fragments.
-    void schedule_wmma(Func cumdelta, Func cdpre, Func bfac, Func cfac,
+    void schedule_wmma(Func cumdelta, Func bfac, Func cfac,
                        Func qk, Func qk2,
                        Func Bmdf, Func Bmdf2, Func chunk_state, Func H, Func Hop,
                        Func Cdf, Func dG, Func dHnr, Func dHopr, Func score2,
                        Func score2_h, Func dxi, Func dxe, Func dxs, Func xy,
                        Func sg, Func sgh, Func sg2h, Func dYH, Func dCa,
                        Func dCb,
-                       Func XdH, Func dBa, Func dBb, Func dYY, Func XdX,
-                       Func ddAcs, Func csum, Func sfxcr, Func sfxr, Func pdA,
+                       Func XdH, Func dBa, Func dBb,
                        Var d, Var p, Var k, Var i, Var j, Var t, Var b,
                        Var g, Var tt, Var kk) {
         const int L = chunk;
@@ -452,21 +560,23 @@ private:
         // ---- The scans ----
         cumdelta.compute_root().align_bounds(k, 2).align_storage(k, 2)
             .reorder(k, t, b).gpu_blocks(b).gpu_threads(t);
-        for (Func f : {bfac, cfac}) {
+        for (Func f : {bfac, cfac, ebd}) {
             f.compute_root().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
         }
         cfac.compute_with(bfac, k);
-        cdpre.compute_root().reorder(t, b).gpu_blocks(b);
-        sfxcr.compute_root().reorder(tt, b).gpu_blocks(b);
-        sfxr.compute_root().reorder(kk, t, b).gpu_blocks(b).gpu_threads(t);
+        ebd.compute_with(cfac, k);
+        nx.compute_root().reorder(k, t, b).gpu_blocks(b).gpu_threads(t);
+        pv.compute_root().reorder(kk, t, b).gpu_blocks(b).gpu_threads(t);
         if (!inductive()) {
             cumdelta.update()
                 .reorder(RVar("rmc$x"), t, b)
                 .gpu_blocks(b)
                 .gpu_threads(t);
-            cdpre.update().gpu_blocks(b);
-            sfxcr.update().gpu_blocks(b);
-            sfxr.update()
+            nx.update()
+                .reorder(RVar("rsk$x"), t, b)
+                .gpu_blocks(b)
+                .gpu_threads(t);
+            pv.update()
                 .reorder(RVar("rsk$x"), t, b)
                 .gpu_blocks(b)
                 .gpu_threads(t);
@@ -526,13 +636,14 @@ private:
                 .unroll(d)
                 .gpu_threads(p)
                 .tile_store(rxi, ryi);
-            H.compute_root()
+            H.compute_root();
+            H.update(0)
                 .split(d, x0, x1, 8)
                 .split(p, y0, y1, 8)
                 .reorder(x1, y1, x0, y0)
-                .gpu_blocks(y0, t, b)
+                .gpu_blocks(y0, b)
                 .gpu_threads(x1, y1);
-            H.update()
+            H.update(1)
                 .split(d, ddo, ddi, 2 * tile)
                 .split(p, hw, hp, tile)
                 .reorder(ddi, hp, hw, RVar("rth$x"), ddo, b)
@@ -624,13 +735,14 @@ private:
                 .unroll(d)
                 .gpu_threads(p)
                 .tile_store(rxi, ryi);
-            dHnr.compute_root()
+            dHnr.compute_root();
+            dHnr.update(0)
                 .split(d, x0, x1, 8)
                 .split(p, y0, y1, 8)
                 .reorder(x1, y1, x0, y0)
-                .gpu_blocks(y0, tt, b)
+                .gpu_blocks(y0, b)
                 .gpu_threads(x1, y1);
-            dHnr.update()
+            dHnr.update(1)
                 .split(d, ddo, ddi, 2 * tile)
                 .split(p, hw, hp, tile)
                 .reorder(ddi, hp, hw, RVar("rtd$x"), ddo, b)
@@ -1022,31 +1134,257 @@ private:
                 .gpu_blocks(x0, f.args()[2], f.args()[3])
                 .gpu_threads(x1, y1);
         }
+        // ---- The increment gradients ----
         {
-            RVar rdo("rdo"), rdi("rdi");
-            Var ko("ko"), ki("ki");
-            for (Func f : {dYY, XdX}) {
-                f.compute_root().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
-                // A warp covers a row's channels: eight lanes of eight-wide
-                // vectors span the 64 channels contiguously, and the row sum
-                // finishes through atomic adds across those lanes.
-                f.update()
-                    .split(rd_var(f), rdo, rdi, 16)
-                    .split(k, ko, ki, 64)
-                    .reorder(rdi, rdo, ki, ko, t, b)
-                    .atomic()
-                    .vectorize(rdi)
-                    .gpu_blocks(ko, t, b)
-                    .gpu_threads(rdo, ki);
+            // (1) A block owns one head's chunk and walks its output
+            // position tiles; for each, the input tiles sweep by, the raw
+            // scores recomputed on the tensor cores and multiplied by the
+            // triangle of ones, and the masked column sums fold into the
+            // per-boundary totals.
+            RVar rio("rio"), rii("rii"), rjo("rjo"), rji("rji");
+            // Exact extents, so the tile splits carry no tail guards.
+            for (Func st : {Sst, PSst}) {
+                st.bound(u, 0, tile).bound(st.args()[1], 0, L).bound(t, 0, nt).bound(b, 0, heads);
             }
-            // Both row dots in one kernel: the same shape over different
-            // inputs, and both saturate memory anyway.
-            XdX.update().compute_with(dYY.update(), ko);
-            XdX.compute_with(dYY, k);
+            for (Func f : {Uh, Ih}) {
+                f.compute_root().gpu_blocks(jj).gpu_threads(j);
+            }
+            // A block owns one head's chunk with eight warps, one per tile
+            // of boundaries. The plane is staged into shared memory half of
+            // its output positions at a time, four warps computing a tile
+            // row each; then every warp sweeps the staged tiles for its own
+            // boundaries, accumulating one tile of each sum.
+            Var jjt("jjt");
+            RVar rh("rh");
+            Sst.compute_root()
+                .tile(u, jj, rxi, ryi, tile, tile)
+                .reorder(rxi, ryi, jj, u, t, b)
+                .gpu_blocks(t, b)
+                .gpu_threads(jj)
+                .tile_store(rxi, ryi);
+            Sb.compute_at(Sst, jj)
+                .store_in(MemoryType::Tile)
+                .bound_extent(jj, tile)
+                .bound_storage(jj, tile)
+                .tile(u, jj, rxi, ryi, tile, tile)
+                .tile_init(rxi, ryi);
+            SX.compute_at(Sst, u)
+                .store_in(MemoryType::Tile)
+                .split(jj, jjt, ryi, tile)
+                .gpu_threads(jjt)
+                .vectorize(ryi);
+            SX.update()
+                .split(rd_var(SX), rh, rio, L / 2)
+                .split(rio, rio, rii, tile)
+                .split(jj, jjt, ryi, tile)
+                .reorder(ryi, rio, jjt, rh)
+                .gpu_threads(jjt)
+                .tile_reduce(rii, ryi);
+            for (Func f : {Q, Qd, Qm}) {
+                f.compute_at(SX, rio)
+                    .store_in(MemoryType::Tile)
+                    .bound_extent(i, tile)
+                    .bound_storage(i, tile)
+                    .bound_extent(jj, tile)
+                    .bound_storage(jj, tile)
+                    .tile(i, jj, rxi, ryi, tile, tile)
+                    .tile_init(rxi, ryi);
+            }
+            // The triangle's tiles for a warp's boundaries, and the
+            // identity's one, are the same for every output tile: loaded
+            // once per warp and held in registers.
+            {
+                Func Uhl = Uh.in(Q);
+                Uhl.compute_at(SX, jjt)
+                    .store_in(MemoryType::Tile)
+                    .bound_extent(jj, tile)
+                    .bound_storage(jj, tile)
+                    .tile(j, jj, rxi, ryi, tile, tile)
+                    .unroll(j)
+                    .tile_load(rxi, ryi);
+                Func Ihl = Ih.in(Qd);
+                Ihl.compute_at(SX, jjt)
+                    .store_in(MemoryType::Tile)
+                    .bound_extent(j, tile)
+                    .bound_storage(j, tile)
+                    .bound_extent(jj, tile)
+                    .bound_storage(jj, tile)
+                    .tile(j, jj, rxi, ryi, tile, tile)
+                    .tile_load(rxi, ryi);
+            }
+            // The prefix's multiplies sweep the staged plane's tiles; the
+            // transpose's take one tile each.
+            for (int k2 = 0; k2 < 2; k2++) {
+                Q.update(k2)
+                    .tile(i, jj, rxi, ryi, tile, tile)
+                    .split(RVar("rjq$x"), rjo, rji, tile)
+                    // The triangle's tile comes out of a fragment, so which
+                    // tile each step reads has to be known here.
+                    .unroll(rjo)
+                    .tile_matmul(rji, rxi, ryi);
+                Qd.update(k2)
+                    .tile(i, jj, rxi, ryi, tile, tile)
+                    .tile_matmul(RVar("rjd$x"), rxi, ryi);
+            }
+            // The staged rows are padded by half a tile so that a tile's
+            // rows fall on different shared memory banks.
+            // All eight warps stage: two per tile row, each half its tiles.
+            Var jh("jh"), jt("jt"), w("w");
+            Ms.compute_at(SX, rh)
+                .store_in(MemoryType::GPUShared)
+                .bound_storage(j, L + tile / 2)
+                .bound_extent(i, L / 2)
+                .bound_storage(i, L / 2)
+                .tile(j, i, rxi, ryi, tile, tile)
+                .split(j, jh, jt, L / tile / 2)
+                .reorder(rxi, ryi, jt, jh, i)
+                .fuse(jh, i, w)
+                .gpu_threads(w)
+                .tile_store(rxi, ryi);
+            // The scores enter the plane's fragment through a tile load.
+            Func qkl3 = qk.in().in(Mq32);
+            qkl3.compute_at(Ms, jt)
+                .store_in(MemoryType::Tile)
+                .bound_extent(j, tile)
+                .bound_storage(j, tile)
+                .bound_extent(i, tile)
+                .bound_storage(i, tile)
+                .tile(j, i, rxi, ryi, tile, tile)
+                .tile_load(rxi, ryi);
+            for (Func f : {Mq32, Mqhi, Mqlo}) {
+                f.compute_at(Ms, jt)
+                    .store_in(MemoryType::Tile)
+                    .bound_extent(j, tile)
+                    .bound_storage(j, tile)
+                    .bound_extent(i, tile)
+                    .bound_storage(i, tile)
+                    .tile(j, i, rxi, ryi, tile, tile)
+                    .tile_init(rxi, ryi);
+            }
+            xyq.compute_at(Ms, jt)
+                .store_in(MemoryType::Tile)
+                .bound_extent(j, tile)
+                .bound_storage(j, tile)
+                .bound_extent(i, tile)
+                .bound_storage(i, tile)
+                .tile(j, i, rxi, ryi, tile, tile)
+                .tile_init(rxi, ryi);
+            xyq.update()
+                .tile(j, i, rxi, ryi, tile, tile)
+                .split(rd_var(xyq), rro, rri, tile)
+                .reorder(j, i, rro)
+                .tile_matmul(rri, rxi, ryi);
+
+            // (2) and (3): the inter-chunk state multiply of dX and its
+            // mirror for the output, in one kernel, each dotted against its
+            // input and reduced along the channels.
+            PSst.compute_root()
+                .tile(u, k, rxi, ryi, tile, tile)
+                .split(k, io, ii, L / tile)
+                .split(ii, iw, ii2, 2)
+                .reorder(rxi, ryi, u, ii2, iw, io, t, b)
+                .unroll(u)
+                .unroll(ii2)
+                .gpu_blocks(io, t, b)
+                .gpu_threads(iw)
+                .tile_store(rxi, ryi);
+            PSb.compute_at(PSst, iw)
+                .store_in(MemoryType::Tile)
+                .tile(u, k, rxi, ryi, tile, tile)
+                .unroll(k)
+                .tile_init(rxi, ryi);
+            PS.compute_at(PSst, iw)
+                .store_in(MemoryType::Tile)
+                .split(k, k, ryi, tile)
+                .unroll(k)
+                .vectorize(ryi);
+            PS.update()
+                .split(rd_var(PS), rro, rri, tile)
+                .split(k, k, ryi, tile)
+                .reorder(ryi, k, rro)
+                .unroll(k)
+                // The multiplies' fragments are read a tile at a time, so
+                // which tile has to be known here.
+                .unroll(rro)
+                .tile_reduce(rri, ryi);
+            // The products are formed one channel tile at a time inside the
+            // reduction's loop over them, each dotted input entering through
+            // a tile load, so what the reduce reads is a whole fragment.
+            for (Func ld : {Func(X).in(E2), Func(dY).in(E2)}) {
+                ld.compute_at(PS, rro)
+                    .store_in(MemoryType::Tile)
+                    .bound_extent(ld.args()[0], tile)
+                    .bound_storage(ld.args()[0], tile)
+                    .tile(ld.args()[0], ld.args()[1], rxi, ryi, tile, tile)
+                    .unroll(ld.args()[1])
+                    .tile_load(rxi, ryi);
+            }
+            E2.compute_at(PS, rro)
+                .store_in(MemoryType::Tile)
+                .bound_extent(d, tile)
+                .bound_storage(d, tile)
+                .tile(d, k, rxi, ryi, tile, tile)
+                .unroll(k)
+                .tile_init(rxi, ryi);
+            for (Func mm : {dxe2, yprev}) {
+                Var pos = mm.args()[1];
+                mm.compute_at(PSst, iw)
+                    .store_in(MemoryType::Tile)
+                    .tile(d, pos, rxi, ryi, tile, tile)
+                    .unroll(d)
+                    .unroll(pos)
+                    .tile_init(rxi, ryi);
+                mm.update()
+                    .tile(d, pos, rxi, ryi, tile, tile)
+                    .split(rd_var(mm), rro, rri, tile)
+                    .reorder(d, pos, rro)
+                    .unroll(d)
+                    .unroll(pos)
+                    .tile_matmul(rri, rxi, ryi);
+            }
+            {
+                Func Bml3 = Func(Bm).in(Bmdf3);
+                Bml3.compute_at(dxe2, rro)
+                    .store_in(MemoryType::Tile)
+                    .tile(Bml3.args()[0], Bml3.args()[1], rxi, ryi, tile, tile)
+                    .unroll(Bml3.args()[1])
+                    .tile_load(rxi, ryi);
+                Bmdf3.compute_at(dxe2, rro)
+                    .store_in(MemoryType::Tile)
+                    .tile(p, j, rxi, ryi, tile, tile)
+                    .unroll(j)
+                    .tile_init(rxi, ryi);
+                Func Cml2 = Func(Cm).in(Cdf2);
+                Cml2.compute_at(yprev, rro)
+                    .store_in(MemoryType::Tile)
+                    .tile(Cml2.args()[0], Cml2.args()[1], rxi, ryi, tile, tile)
+                    .unroll(Cml2.args()[1])
+                    .tile_load(rxi, ryi);
+                Cdf2.compute_at(yprev, rro)
+                    .store_in(MemoryType::Tile)
+                    .tile(p, i, rxi, ryi, tile, tile)
+                    .unroll(i)
+                    .tile_init(rxi, ryi);
+            }
+
+            // (4) One dot product of the two carried states per chunk: a
+            // thread per channel walks the state, reading contiguous rows
+            // across the warp, into a partial per channel that a second
+            // stage sums.
+            {
+                Var cx("cx");
+                Func cpart = cterm.update().rfactor(RVar("rdp$x"), cx);
+                cpart.compute_root().reorder(cx, t, b).gpu_blocks(t, b).gpu_threads(cx);
+                cpart.update()
+                    .reorder(RVar("rdp$y"), cx, t, b)
+                    .gpu_blocks(t, b)
+                    .gpu_threads(cx);
+                cterm.compute_root().reorder(t, b).gpu_blocks(b).gpu_threads(t);
+                cterm.update().reorder(RVar("rdp$x"), t, b).gpu_blocks(b).gpu_threads(t);
+            }
+
         }
-        ddAcs.compute_root().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
-        csum.compute_root().gpu_blocks(b).gpu_threads(t);
-        csum.update().gpu_blocks(b).gpu_threads(t);
+        ga.compute_root().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
         pdA.compute_root().gpu_blocks(b).gpu_threads(t);
         pdA.update().gpu_blocks(b).gpu_threads(t);
         Func(dDT).compute_root()
@@ -1084,13 +1422,11 @@ private:
     // A plain GPU schedule: every stage compute_root, blocks over the outer
     // dimensions, serial reductions per thread. Slow, but the algorithm and
     // the walks are all exercised.
-    void schedule_simple(Func cumdelta, Func cdpre, Func qk, Func chunk_state,
+    void schedule_simple(Func cumdelta, Func qk, Func chunk_state,
                          Func H, Func Hop, Func dG, Func dHnr, Func dHopr,
                          Func dxi, Func dxe, Func dYH,
                          Func dCa, Func dCb,
-                         Func XdH, Func dBa, Func dBb, Func dYY, Func XdX,
-                         Func ddAcs, Func csum, Func sfxcr, Func sfxr,
-                         Func pdA,
+                         Func XdH, Func dBa, Func dBb,
                          Var d, Var p, Var k, Var i, Var j, Var t, Var b,
                          Var g, Var tt, Var kk) {
         const int L = chunk;
@@ -1100,17 +1436,18 @@ private:
 
         // The scans: one thread per independent walk.
         cumdelta.compute_root().reorder(k, t, b).gpu_blocks(b).gpu_threads(t);
-        cdpre.compute_root().reorder(t, b).gpu_blocks(b);
-        sfxcr.compute_root().reorder(tt, b).gpu_blocks(b);
-        sfxr.compute_root().reorder(kk, t, b).gpu_blocks(b).gpu_threads(t);
+        nx.compute_root().reorder(k, t, b).gpu_blocks(b).gpu_threads(t);
+        pv.compute_root().reorder(kk, t, b).gpu_blocks(b).gpu_threads(t);
         if (!inductive()) {
             cumdelta.update()
                 .reorder(RVar("rmc$x"), t, b)
                 .gpu_blocks(b)
                 .gpu_threads(t);
-            cdpre.update().gpu_blocks(b);
-            sfxcr.update().gpu_blocks(b);
-            sfxr.update()
+            nx.update()
+                .reorder(RVar("rsk$x"), t, b)
+                .gpu_blocks(b)
+                .gpu_threads(t);
+            pv.update()
                 .reorder(RVar("rsk$x"), t, b)
                 .gpu_blocks(b)
                 .gpu_threads(t);
@@ -1119,18 +1456,24 @@ private:
         // The forward and backward state walks: serial over chunks, threads
         // over the state.
         for (Func f : {H, dHnr}) {
-            Var w("w"), v("v");
-            f.compute_root()
-                .split(d, x0, x1, 8)
-                .split(p, y0, y1, 8)
-                .reorder(x1, y1, f.args()[2], x0, y0, b)
-                .gpu_blocks(x0, y0, b)
-                .gpu_threads(x1, y1);
-        }
-        if (!inductive()) {
-            for (Func f : {H, dHnr}) {
-                RVar rw(f.update(0).get_schedule().rvars()[0].var);
-                f.update()
+            if (inductive()) {
+                f.compute_root()
+                    .split(d, x0, x1, 8)
+                    .split(p, y0, y1, 8)
+                    .reorder(x1, y1, f.args()[2], x0, y0, b)
+                    .gpu_blocks(x0, y0, b)
+                    .gpu_threads(x1, y1);
+            } else {
+                // The base case, then the walk over the undefined state.
+                f.compute_root();
+                f.update(0)
+                    .split(d, x0, x1, 8)
+                    .split(p, y0, y1, 8)
+                    .reorder(x1, y1, x0, y0, b)
+                    .gpu_blocks(x0, y0, b)
+                    .gpu_threads(x1, y1);
+                RVar rw(f.update(1).get_schedule().rvars()[0].var);
+                f.update(1)
                     .split(d, x0, x1, 8)
                     .split(p, y0, y1, 8)
                     .reorder(x1, y1, rw, x0, y0, b)
@@ -1184,21 +1527,40 @@ private:
                 .gpu_threads(x1, y1);
         }
 
-        // The row dots and small reductions.
-        for (Func f : {dYY, XdX}) {
-            RVar rdo("rdo"), rdi("rdi");
-            f.compute_root().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
-            f.update()
-                .split(rd_var(f), rdo, rdi, 8)
-                .reorder(rdi, rdo, k, t, b)
-                .atomic()
-                .vectorize(rdi)
-                .gpu_blocks(t, b)
-                .gpu_threads(k);
+        // The increment gradients: plain reductions, a thread per element.
+        for (Func st : {Sst, PSst}) {
+            st.bound(u, 0, tile).bound(st.args()[1], 0, L).bound(t, 0, nt).bound(b, 0, heads);
         }
-        ddAcs.compute_root().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
-        csum.compute_root().gpu_blocks(b).gpu_threads(t);
-        csum.update().gpu_blocks(b).gpu_threads(t);
+        for (Func f : {Uh, Ih}) {
+            f.compute_root().gpu_blocks(jj).gpu_threads(j);
+        }
+        flat(xyq, j, i);
+        ebd.compute_root().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
+        for (Func f : {Q, Qd}) {
+            f.compute_root()
+                .split(i, x0, x1, 8)
+                .split(jj, y0, y1, 8)
+                .reorder(x1, y1, x0, y0)
+                .gpu_blocks(t, b)
+                .gpu_threads(x1, y1);
+            for (int k2 = 0; k2 < 2; k2++) {
+                f.update(k2)
+                    .split(i, x0, x1, 8)
+                    .split(jj, y0, y1, 8)
+                    .reorder(x1, y1, x0, y0)
+                    .gpu_blocks(t, b)
+                    .gpu_threads(x1, y1);
+            }
+        }
+        flat(dxe2, d, j);
+        flat(yprev, d, i);
+        SX.compute_root().reorder(jj, t, b).gpu_blocks(t, b).gpu_threads(jj);
+        SX.update().reorder(RVar("ri2$x"), jj, t, b).gpu_blocks(t, b).gpu_threads(jj);
+        PS.compute_root().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
+        PS.update().reorder(rd_var(PS), k, t, b).gpu_blocks(t, b).gpu_threads(k);
+        cterm.compute_root().reorder(t, b).gpu_blocks(b).gpu_threads(t);
+        cterm.update().reorder(RVar("rdp$x"), RVar("rdp$y"), t, b).gpu_blocks(b).gpu_threads(t);
+        ga.compute_root().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
         pdA.compute_root().gpu_blocks(b).gpu_threads(t);
         pdA.update().gpu_blocks(b).gpu_threads(t);
         Func(dDT).compute_root()

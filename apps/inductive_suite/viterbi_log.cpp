@@ -1,63 +1,100 @@
-// Log-domain Viterbi decoding -- the standardized inductive-vs-non-inductive
-// benchmark. Both variants share the exact recurrence structure of viterbi.cpp
-// (the 2-D RDom r over output state r.x and previous state r.y, running-max of
-// prob(r.y, t-1) + log_trans + log_emit; prev is a plain RDom argmax); they
-// differ ONLY in how the time axis is expressed and stored:
+// Log-domain Viterbi decoding: the inductive form of the recurrence against
+// its RDom form. Both share the 2-D RDom r over output state r.x and previous
+// state r.y (running max of score(r.y, t-1) + log_trans + log_emit, with the
+// argmax carried alongside as a backpointer); they differ only in how the
+// time axis is expressed and stored:
 //
-//   INDUCTIVE     : t is a pure Var, prob is inductive in t (select(t<=0,...) +
-//                   likely), storage folds to 2 time-slices (O(S*2)).
-//   NON-INDUCTIVE : t is an explicit RDom scan (rt in 1..T-1), the whole
-//                   trajectory is materialized (O(S*T)).
+//   INDUCTIVE : t is a pure Var, the scores are inductive in t (select(t<=0,
+//               ...) + likely) and their storage folds to two time slices.
+//   RDom      : t is an explicit RDom scan over 1..T, and the whole
+//               trajectory of scores is materialized.
 //
-// Log domain (sum of logs + max) rather than products, so long sequences don't
-// underflow float32 -- what librosa does internally too.
+// The scores are rescaled every step by subtracting state 0's score of the
+// previous step, so they stay O(1) in float over any sequence length; the
+// argmax at each step, and so the decoded path, is unchanged by a per-step
+// constant.
+//
+// The HMM is random and seeded: log transition and log emission tables from
+// uniform random probabilities with normalized rows, and an observation
+// sequence sampled from that HMM. The decoded paths are checked exactly
+// against a double-precision decode, except where the reference's own
+// decision is a near-tie, and each path's log-probability is checked
+// against the reference optimum.
 
 #include "Halide.h"
 
 #include "../support/bench_harness.h"
 #include "../support/jit_support.h"
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
+#include <random>
 #include <string>
 #include <vector>
 
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    int S = argc > 1 ? atoi(argv[1]) : 4;      // hidden states (S=4: DNA-style HMM)
+    int S = argc > 1 ? atoi(argv[1]) : 4;      // hidden states
     int M = argc > 2 ? atoi(argv[2]) : 3;      // emission alphabet size
     int T = argc > 3 ? atoi(argv[3]) : 20000;  // observation-sequence length
-    const char *data_path = argc > 4 ? argv[4] : "/tmp/viterbi_bench_data.bin";
+
+    // A reference decision whose best and second-best candidates are within
+    // this many nats is a near-tie: the float decode may take either branch.
+    const double tie_tol = 1e-6;
+    // The decoded path's log-probability must be within this relative
+    // distance of the reference optimum.
+    const double score_tol = 1e-5;
 
     try {
         Var s("s"), t("t");
 
+        // Random HMM. trans(out, in) is P(out | in), normalized over out for
+        // each previous state in; emit(st, o) is P(o | st), normalized over o.
+        std::mt19937 rng(12345);
+        std::uniform_real_distribution<float> uni(0.0f, 1.0f);
         Buffer<float> init(S), trans(S, S), emit(S, M);
-        Buffer<int> obs(T);
         for (int i = 0; i < S; i++)
             init(i) = 1.0f / S;
-        for (int r = 0; r < S; r++) {
-            float row_sum = 0;
-            for (int c = 0; c < S; c++) {
-                trans(r, c) = 1 + ((r + 1) * (c + 2)) % 5;
-                row_sum += trans(r, c);
+        for (int in = 0; in < S; in++) {
+            float col_sum = 0;
+            for (int out = 0; out < S; out++) {
+                trans(out, in) = uni(rng) + 1e-3f;
+                col_sum += trans(out, in);
             }
-            for (int c = 0; c < S; c++)
-                trans(r, c) /= row_sum;
+            for (int out = 0; out < S; out++)
+                trans(out, in) /= col_sum;
         }
         for (int st = 0; st < S; st++) {
             float row_sum = 0;
             for (int o = 0; o < M; o++) {
-                emit(st, o) = 1 + ((st + 1) * (o + 3)) % 4;
+                emit(st, o) = uni(rng) + 1e-3f;
                 row_sum += emit(st, o);
             }
             for (int o = 0; o < M; o++)
                 emit(st, o) /= row_sum;
         }
-        for (int i = 0; i < T; i++)
-            obs(i) = (i * 2 + 1) % M;
+
+        // The observations: a state sequence walked from the HMM, each state
+        // emitting one symbol.
+        Buffer<int> obs(T);
+        {
+            auto draw = [&](auto prob, int n) {
+                float u = uni(rng), acc = 0;
+                for (int k = 0; k < n; k++) {
+                    acc += prob(k);
+                    if (u < acc) return k;
+                }
+                return n - 1;
+            };
+            int state = draw([&](int k) { return init(k); }, S);
+            for (int i = 0; i < T; i++) {
+                obs(i) = draw([&](int k) { return emit(state, k); }, M);
+                state = draw([&](int k) { return trans(k, state); }, S);
+            }
+        }
 
         Buffer<float> log_init(S), log_trans(S, S), log_emit(S, M);
         for (int i = 0; i < S; i++)
@@ -73,7 +110,7 @@ int main(int argc, char **argv) {
         Expr obs_0 = clamp(obs(0), 0, M - 1);
 
         // Build one variant; returns the decoded `path` Func. fold_k pins the
-        // prob storage window when inductive (2 = folded, T+1 = unfolded ablation).
+        // score storage window when inductive (2 = folded, T+1 = unfolded ablation).
         auto build = [&](bool inductive, int fold_k = 2) -> Func {
             // The walk carries {best score, argmax} per state as one Tuple:
             // every candidate is computed once, and the compare that keeps
@@ -95,19 +132,21 @@ int main(int argc, char **argv) {
                 obs(Halide::Internal::promise_clamped(t, 0, T - 1)), 0, M - 1);
 
             // The argmax is a byte: it indexes the states, and the backpointer
-            // plane, one per state per step, is what the 16-state row writes.
+            // plane, one per state per step, is what the traceback reads.
             Func state({Float(32), UInt(8)}, 2, inductive ? "state_i" : "state_n");
             state(s, t) = {neg_inf, cast<uint8_t>(0)};
 
-            // Summed in the reference's order, so ties fall the same way.
-            auto candidate = [&](Expr prev_score, Expr out, Expr in, Expr step) {
-                return prev_score + select(step >= T, 0.f, log_trans(out, in)) +
+            // A candidate for output state `out` from previous state `in` at
+            // step `step`: the previous score, rescaled by state 0's score of
+            // the same previous step, plus the transition and emission.
+            auto candidate = [&](Expr prev_score, Expr pivot, Expr out, Expr in, Expr step) {
+                return prev_score - pivot + select(step >= T, 0.f, log_trans(out, in)) +
                        select(step >= T, 0.f, log_emit(out, obs_t));
             };
 
             if (inductive) {
                 // Inductive in t: pure Var t, base case at t<=0, argmax over r.
-                Expr cand = candidate(state(r.y, t - 1)[0], r.x, r.y, t);
+                Expr cand = candidate(state(r.y, t - 1)[0], state(0, t - 1)[0], r.x, r.y, t);
                 Expr cur = state(r.x, t)[0];
                 Tuple step = select(cand >= cur, Tuple(cand, cast<uint8_t>(r.y)), state(r.x, t));
                 state(r.x, t) = select(t <= 0,
@@ -115,13 +154,13 @@ int main(int argc, char **argv) {
                                        Tuple(likely(step[0]), likely(step[1])));
                 state.update(0).allow_race_conditions().vectorize(r.x);
             } else {
-                // Non-inductive: explicit init at t=0, then an RDom scan over time.
+                // RDom form: explicit init at t=0, then an RDom scan over time.
                 RDom ri(0, S, "ri");
                 state(ri, 0) = {log_init(ri) + log_emit(ri, obs_0), cast<uint8_t>(0)};
                 RDom rr(0, S, 0, S, 1, T, "rr");  // rr.x=state, rr.y=prev, rr.z=time
                 Expr ot = clamp(obs(min(rr.z, T - 1)), 0, M - 1);
-                Expr candn = select(rr.z >= T, state(rr.y, rr.z - 1)[0],
-                                    state(rr.y, rr.z - 1)[0] + log_trans(rr.x, rr.y) + log_emit(rr.x, ot));
+                Expr prev = state(rr.y, rr.z - 1)[0] - state(0, rr.z - 1)[0];
+                Expr candn = select(rr.z >= T, prev, prev + log_trans(rr.x, rr.y) + log_emit(rr.x, ot));
                 state(rr.x, rr.z) = select(candn >= state(rr.x, rr.z)[0],
                                            Tuple(candn, cast<uint8_t>(rr.y)), state(rr.x, rr.z));
                 state.update(0).vectorize(ri);
@@ -166,64 +205,107 @@ int main(int argc, char **argv) {
         double bytes_unf = hb::profiled_peak_bytes(path_u, res_u);
         double bytes_ind = hb::profiled_peak_bytes(path_i, res_i);
 
-        // C++ log-domain reference (last-index argmax, matching Halide's prev).
-        std::vector<std::vector<float>> rv(T, std::vector<float>(S));
-        std::vector<std::vector<int>> rp(T, std::vector<int>(S, 0));
-        for (int st = 0; st < S; st++)
-            rv[0][st] = log_init(st) + log_emit(st, obs(0));
-        for (int tt = 1; tt < T; tt++)
-            for (int st = 0; st < S; st++) {
-                float best = neg_inf;
-                int best_r = 0;
-                for (int rr = 0; rr < S; rr++) {
-                    float v = rv[tt - 1][rr] + log_trans(st, rr) + log_emit(st, obs(tt));
-                    if (v >= best) {
-                        best = v;
-                        best_r = rr;
-                    }
-                }
-                rv[tt][st] = best;
-                rp[tt][st] = best_r;
-            }
+        // Double-precision reference decode, with the same per-step rescaling
+        // and the same last-index argmax. One forward pass records the
+        // backpointers (a byte per state per step) for the traceback; a
+        // second, with the path known, records the margin of each decision
+        // on it: best minus second-best candidate, at (t+1, path[t+1]) for
+        // path[t], and at the terminal argmax for path[T-1].
+        std::vector<uint8_t> rp((size_t)T * S, 0);
+        std::vector<double> prev_row(S), cur_row(S);
         std::vector<int> ref_path(T);
-        {
-            int best_r = 0;
-            float best = neg_inf;
+        std::vector<float> margin(T);
+        auto forward = [&](auto on_decision) {
             for (int st = 0; st < S; st++)
-                if (rv[T - 1][st] >= best) {
-                    best = rv[T - 1][st];
-                    best_r = st;
+                prev_row[st] = (double)log_init(st) + (double)log_emit(st, obs(0));
+            for (int tt = 1; tt < T; tt++) {
+                const double pivot = prev_row[0];
+                for (int st = 0; st < S; st++) {
+                    double best = -std::numeric_limits<double>::infinity(), second = best;
+                    int best_r = 0;
+                    for (int rr = 0; rr < S; rr++) {
+                        double v = prev_row[rr] - pivot + (double)log_trans(st, rr) + (double)log_emit(st, obs(tt));
+                        if (v >= best) {
+                            second = best;
+                            best = v;
+                            best_r = rr;
+                        } else if (v > second) {
+                            second = v;
+                        }
+                    }
+                    cur_row[st] = best;
+                    on_decision(tt, st, best_r, best - second);
                 }
-            ref_path[T - 1] = best_r;
-        }
+                std::swap(prev_row, cur_row);
+            }
+            double best = -std::numeric_limits<double>::infinity(), second = best;
+            int best_r = 0;
+            for (int st = 0; st < S; st++) {
+                if (prev_row[st] >= best) {
+                    second = best;
+                    best = prev_row[st];
+                    best_r = st;
+                } else if (prev_row[st] > second) {
+                    second = prev_row[st];
+                }
+            }
+            on_decision(T, 0, best_r, best - second);
+        };
+        forward([&](int tt, int st, int best_r, double) {
+            if (tt < T) rp[(size_t)tt * S + st] = (uint8_t)best_r;
+            else ref_path[T - 1] = best_r;
+        });
         for (int tt = T - 2; tt >= 0; tt--)
-            ref_path[tt] = rp[tt + 1][ref_path[tt + 1]];
+            ref_path[tt] = rp[(size_t)(tt + 1) * S + ref_path[tt + 1]];
+        forward([&](int tt, int st, int, double gap) {
+            if (tt == T) margin[T - 1] = (float)gap;
+            else if (st == ref_path[tt]) margin[tt - 1] = (float)gap;
+        });
+        int near_ties = 0;
+        for (int tt = 0; tt < T; tt++)
+            near_ties += margin[tt] <= tie_tol;
 
-        auto count_mismatch = [&](Buffer<int> &res) {
-            int m = 0; for (int tt = 0; tt < T; tt++) if (res(tt) != ref_path[tt]) m++; return m; };
-        int mi = count_mismatch(res_i), mu = count_mismatch(res_u), mn = count_mismatch(res_n);
+        // A decoded path is compared position by position, from the end. A
+        // divergence at a decision the reference made by less than tie_tol
+        // is excused, and so are the positions before it until the two paths
+        // rejoin; any other divergence is an error.
+        struct Mismatch {
+            int positions = 0, excused = 0, unexcused = 0;
+        };
+        auto compare = [&](Buffer<int> &res) {
+            Mismatch m;
+            bool diverged = false;
+            for (int tt = T - 1; tt >= 0; tt--) {
+                if (res(tt) == ref_path[tt]) {
+                    diverged = false;
+                    continue;
+                }
+                m.positions++;
+                if (!diverged) {
+                    if (margin[tt] <= tie_tol) m.excused++;
+                    else m.unexcused++;
+                    diverged = true;
+                }
+            }
+            return m;
+        };
+        Mismatch mi = compare(res_i), mu = compare(res_u), mn = compare(res_n);
 
-        // Correctness is on the path SCORE (total log-probability), not the index
-        // sequence: with degenerate synthetic emission/transition tables (large S)
-        // the optimal Viterbi path is non-unique, so an equally-optimal decode is a
-        // valid answer even if its indices differ. Compare each decoded path's
-        // realized log-prob to the reference optimum.
+        // The log-probability of a decoded path, against the reference optimum.
         auto path_score = [&](auto &&at) {
-            double sc = log_init(at(0)) + log_emit(at(0), obs(0));
+            double sc = (double)log_init(at(0)) + (double)log_emit(at(0), obs(0));
             for (int tt = 1; tt < T; tt++)
-                sc += log_trans(at(tt), at(tt - 1)) + log_emit(at(tt), obs(tt));
+                sc += (double)log_trans(at(tt), at(tt - 1)) + (double)log_emit(at(tt), obs(tt));
             return sc;
         };
-        // Rescore the reference path with the SAME double routine so the optimality
-        // check compares like-for-like (no float-vs-double drift over T steps).
         double opt = path_score([&](int tt) { return ref_path[tt]; });
-        // Optimal Viterbi paths are non-unique under degenerate ties, but every
-        // optimal path has the same total log-prob; a decode is correct iff its
-        // score is >= the reference optimum (up to per-step float rounding).
-        double tol = 1e-3 * T;
-        auto score_gap = [&](Buffer<int> &res) { return opt - path_score([&](int tt) { return res(tt); }); };
+        auto score_gap = [&](Buffer<int> &res) {
+            return (opt - path_score([&](int tt) { return res(tt); })) / std::abs(opt);
+        };
         double gi = score_gap(res_i), gu = score_gap(res_u), gn = score_gap(res_n);
-        bool oki = gi <= tol, oku = gu <= tol, okn = gn <= tol;
+        bool oki = mi.unexcused == 0 && gi <= score_tol;
+        bool oku = mu.unexcused == 0 && gu <= score_tol;
+        bool okn = mn.unexcused == 0 && gn <= score_tol;
 
         // Roofline x-axis: unfolded footprint (backpointer trajectory, S*(T+1)
         // states) / LLC. Recurrence-length (T) and state-count (S) sweeps collapse
@@ -235,27 +317,23 @@ int main(int argc, char **argv) {
                  "Viterbi decode (log domain)  S=%d M=%d T=%d  |  state fold %.0fx  |  unfolded fp/LLC=%.3f",
                  S, M, T, hb::mem_ratio(bytes_non, bytes_ind), hb::footprint_over_llc(fp_unfold));
         hb::print_spec_header("viterbi_log", "host", note);
-        // check column reports the score gap vs the optimum (0 = optimal path);
-        // the index-mismatch count is printed below for reference.
+        // The err column is the relative gap of the path's log-probability
+        // from the optimum; the exact path comparison is printed below.
         hb::print_row("non-inductive (materialize)", sn, (S * (double)T) / (sn.min * 1e3),
                       "Mstates/s", bytes_non, gn, okn, "", fp_unfold);
         hb::print_row("inductive UNFOLDED (fold t -> T+1)", su, (S * (double)T) / (su.min * 1e3),
                       "Mstates/s", bytes_unf, gu, oku, hb::verdict(su.min, sn.min), fp_unfold);
         hb::print_row("inductive FOLDED (fold t -> 2)", si, (S * (double)T) / (si.min * 1e3),
                       "Mstates/s", bytes_ind, gi, oki, hb::verdict(si.min, su.min), fp_unfold);
-        printf("  path-index mismatches vs reference (ties => non-unique optimum): "
-               "non=%d unfold=%d fold=%d\n",
-               mn, mu, mi);
-
-        // Dump the inductive path for the librosa comparison script.
-        std::vector<int32_t> po(T);
-        for (int i = 0; i < T; i++)
-            po[i] = res_i(i);
-        FILE *f = fopen((std::string(data_path) + ".path").c_str(), "wb");
-        if (f) {
-            fwrite(po.data(), sizeof(int32_t), T, f);
-            fclose(f);
-        }
+        printf("  reference decisions on the path within %.0e nats of a tie: %d of %d\n",
+               tie_tol, near_ties, T);
+        auto report = [&](const char *name, const Mismatch &m) {
+            printf("  path vs double reference, %s: %d positions differ; divergences: %d excused (near-tie), %d unexcused\n",
+                   name, m.positions, m.excused, m.unexcused);
+        };
+        report("non", mn);
+        report("unfold", mu);
+        report("fold", mi);
 
         return (oki && oku && okn) ? 0 : 1;
     } catch (const Halide::Error &e) {

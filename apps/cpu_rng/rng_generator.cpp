@@ -9,7 +9,7 @@
 // two-deep folded window that never leaves registers, and only the floats
 // reach memory. As an update definition over an RDom the walk owns its
 // axis, so the full 32-byte-per-step state trajectory must be materialized
-// before the projection can read it: eight times the output's traffic in
+// before the projection can read it: four times the output's bytes in
 // state alone, for values nothing wants.
 
 #include "Halide.h"
@@ -64,7 +64,11 @@ public:
             }
             S(l, t) = Tuple(defs);
         } else {
-            S(l, t) = Tuple(seeds(0, l), seeds(1, l), seeds(2, l), seeds(3, l));
+            // Undefined pure definition: the seed store and the walk write
+            // every step before it is read, so a fill would only add a
+            // pass over the trajectory.
+            S(l, t) = Tuple(undef<uint64_t>(), undef<uint64_t>(), undef<uint64_t>(), undef<uint64_t>());
+            S(l, 0) = Tuple(seeds(0, l), seeds(1, l), seeds(2, l), seeds(3, l));
             auto n = step(S(l, rt - 1)[0], S(l, rt - 1)[1],
                           S(l, rt - 1)[2], S(l, rt - 1)[3]);
             S(l, rt) = Tuple(n);
@@ -134,9 +138,9 @@ public:
             if (par) {
                 y.parallel(co);
             }
-            S.compute_at(y, co)
-                .vectorize(l);
-            S.update()
+            S.compute_at(y, co);
+            S.update(0).vectorize(l);
+            S.update(1)
                 .reorder(l, rt)
                 .vectorize(l);
             // Per step, as temporaries; only the state trajectory is stored.

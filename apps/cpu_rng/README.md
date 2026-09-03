@@ -66,8 +66,8 @@ To see it: make bin/host/rng.generator && ./bin/host/rng.generator \
 scan=inductive par=false
 
 What the schedule buys beyond parity: par=true spreads stream blocks
-across cores and reaches the chip's write bandwidth - 17.6 ms at 61
-GB/s for the same gigabyte with 1024 streams, 2x past any single-thread
+across cores and reaches the chip's write bandwidth - 18.6 ms at 58
+GB/s for the same gigabyte with 1024 streams, 1.9x past any single-thread
 implementation, and the threaded Julia port and rand! itself land at
 the same wall (rand! fills one array from one generator, so going
 wider there means one generator per block of streams, which is what
