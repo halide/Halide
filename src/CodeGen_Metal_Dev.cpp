@@ -70,37 +70,49 @@ protected:
     public:
         CodeGen_Metal_C(std::ostream &s, const Target &t)
             : CodeGen_GPU_C(s, t) {
+            float16_datatype = "half";
             abs_returns_unsigned_type = false;
 
 #define alias(x, y)                         \
     extern_function_name_map[x "_f16"] = y; \
     extern_function_name_map[x "_f32"] = y
             alias("sqrt", "sqrt");
-            alias("sin", "sin");
-            alias("cos", "cos");
-            alias("exp", "exp");
-            alias("log", "log");
+            alias("sin", "precise::sin");
+            alias("cos", "precise::cos");
+            alias("exp", "precise::exp");
+            alias("log", "precise::log");
             alias("abs", "fabs");  // f-prefix!
             alias("floor", "floor");
             alias("ceil", "ceil");
             alias("trunc", "trunc");
-            alias("pow", "pow");
-            alias("asin", "asin");
-            alias("acos", "acos");
-            alias("tan", "tan");
-            alias("atan", "atan");
-            alias("atan2", "atan2");
-            alias("sinh", "sinh");
-            alias("asinh", "asinh");
-            alias("cosh", "cosh");
-            alias("acosh", "acosh");
-            alias("tanh", "tanh");
-            alias("atanh", "atanh");
+            alias("pow", "precise::pow");
+            alias("asin", "precise::asin");
+            alias("acos", "precise::acos");
+            alias("tan", "precise::tan");
+            alias("atan", "precise::atan");
+            alias("atan2", "precise::atan2");
+            alias("sinh", "precise::sinh");
+            alias("asinh", "precise::asinh");
+            alias("cosh", "precise::cosh");
+            alias("acosh", "precise::acosh");
+            alias("tanh", "precise::tanh");
+            alias("atanh", "precise::atanh");
 
             alias("is_nan", "isnan");
             alias("is_inf", "isinf");
             alias("is_finite", "isfinite");
 
+            alias("fast_acos", "fast::acos");
+            alias("fast_asin", "fast::asin");
+            alias("fast_atan", "fast::atan");
+            alias("fast_atan2", "fast::atan2");
+            alias("fast_cos", "fast::cos");
+            alias("fast_sin", "fast::sin");
+            alias("fast_tan", "fast::tan");
+            alias("fast_exp", "fast::exp");
+            alias("fast_log", "fast::log");
+            alias("fast_pow", "fast::pow");
+            alias("fast_tanh", "fast::tanh");
             alias("fast_inverse_sqrt", "fast::rsqrt");
 #undef alias
         }
@@ -142,7 +154,6 @@ protected:
         void visit(const Cast *op) override;
         void visit(const VectorReduce *op) override;
         void visit(const Atomic *op) override;
-        void visit(const FloatImm *op) override;
     };
 
     std::ostringstream src_stream;
@@ -595,51 +606,6 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Atomic *op) {
     user_assert(false) << "Atomic updates are not supported inside Metal kernels";
 }
 
-void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const FloatImm *op) {
-    if (op->type.bits() == 16) {
-        float16_t f(op->value);
-        if (f.is_nan()) {
-            id = "nan_f16()";
-        } else if (f.is_infinity()) {
-            if (!f.is_negative()) {
-                id = "inf_f16()";
-            } else {
-                id = "neg_inf_f16()";
-            }
-        } else {
-            // Write the constant as reinterpreted uint to avoid any bits lost in conversion.
-            ostringstream oss;
-            oss << "half_from_bits(" << f.to_bits() << " /* " << float(f) << " */)";
-            print_assignment(op->type, oss.str());
-        }
-    } else {
-        if (std::isnan(op->value)) {
-            id = "nan_f32()";
-        } else if (std::isinf(op->value)) {
-            if (op->value > 0) {
-                id = "inf_f32()";
-            } else {
-                id = "neg_inf_f32()";
-            }
-        } else {
-            // Write the constant as reinterpreted uint to avoid any bits lost in conversion.
-            ostringstream oss;
-            union {
-                uint32_t as_uint;
-                float as_float;
-            } u;
-            u.as_float = op->value;
-            if (op->type.bits() == 64) {
-                user_error << "Metal does not support 64-bit floating point literals.\n";
-            } else if (op->type.bits() == 32) {
-                oss << "float_from_bits(" << u.as_uint << " /* " << u.as_float << " */)";
-            } else {
-                user_error << "Unsupported floating point literal with " << op->type.bits() << " bits.\n";
-            }
-            print_assignment(op->type, oss.str());
-        }
-    }
-}
 void CodeGen_Metal_Dev::add_kernel(Stmt s,
                                    const string &name,
                                    const vector<DeviceArgument> &args) {

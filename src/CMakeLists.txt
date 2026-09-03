@@ -61,6 +61,7 @@ target_sources(
     AlignLoads.h
     AllocationBoundsInference.h
     ApplySplit.h
+    ApproximationTables.h
     Argument.h
     AssociativeOpsTable.h
     Associativity.h
@@ -120,6 +121,7 @@ target_sources(
     ExternFuncArgument.h
     ExtractTileOperations.h
     FastIntegerDivide.h
+    FastMathFunctions.h
     FindCalls.h
     FindIntrinsics.h
     FlattenNestedRamps.h
@@ -230,8 +232,7 @@ target_sources(
     # keep-sorted end
 )
 
-# The sources that go into libHalide. For the sake of IDE support, headers that
-# exist in src/ but are not public should be included here.
+# The sources that go into libHalide.
 target_sources(
     Halide
     PRIVATE
@@ -245,6 +246,7 @@ target_sources(
     AlignLoads.cpp
     AllocationBoundsInference.cpp
     ApplySplit.cpp
+    ApproximationTables.cpp
     Argument.cpp
     AssociativeOpsTable.cpp
     Associativity.cpp
@@ -304,6 +306,7 @@ target_sources(
     Expr.cpp
     ExtractTileOperations.cpp
     FastIntegerDivide.cpp
+    FastMathFunctions.cpp
     FindCalls.cpp
     FindIntrinsics.cpp
     FlattenNestedRamps.cpp
