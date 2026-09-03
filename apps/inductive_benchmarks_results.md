@@ -6,8 +6,8 @@ Every Halide form is verified against its app's reference before timing (the ali
 |---|---|---:|---:|---:|---|---|---:|---:|
 | cpu_biquads | 8 sections, 32 ch x 8388608 samples, 1 thread | 90.7 | 532.6 | 177.3 | Finding Fast Filters strided cascade | Intel IPP ippsIIR_32f_P, scipy.sosfilt, Julia DSP.jl filt, FFmpeg biquad, torchaudio lfilter | 5.87x | 1.96x |
 | cpu_biquads | 8 sections, 256 ch x 1048576 samples, all cores | 25.1 | 477.0 | 34.8 | Finding Fast Filters strided cascade (threaded) | Intel IPP ippsIIR_32f_P, scipy.sosfilt, Julia DSP.jl filt, FFmpeg biquad, torchaudio lfilter | 19.01x | 1.39x |
-| cpu_rng | 32 streams x 4194304 steps, 1 thread | 24.4 | 335.6 | 24.4 | Julia XoshiroSimd (C++ port) | Julia rand!, numpy PCG64, scalar C++ loop | 13.76x | 1.00x |
-| cpu_rng | 1024 streams x 131072 steps, all cores | 9.1 | 159.8 | 9.9 | Julia XoshiroSimd (C++ port) (threaded) | Julia rand!, numpy PCG64, scalar C++ loop | 17.53x | 1.09x |
+| cpu_rng | 32 streams x 4194304 steps, 1 thread | 35.2 | 356.3 | 34.9 | Julia XoshiroSimd (C++ port) | Julia rand!, numpy PCG64, scalar C++ loop | 10.12x | 0.99x |
+| cpu_rng | 1024 streams x 131072 steps, all cores | 17.6 | 167.9 | 17.5 | Julia rand! (threaded) | Julia XoshiroSimd (C++ port), numpy PCG64, scalar C++ loop | 9.56x | 1.00x |
 | cpu_alignment | 1024x1024 x 128 pairs, 1 thread, fill+traceback+cigar | 7.9 | 43.4 | 38.1 | parasail | ksw2 (minimap2 kernel), ksw2 scalar | 5.53x | 4.86x |
 | cpu_alignment | 1024x1024 x 4096 pairs, all cores, fill+traceback+cigar | 22.7 | 708.5 | 47.3 | parasail | ksw2 (minimap2 kernel), ksw2 scalar | 31.15x | 2.08x |
 | kalman_ll | 256 series x 16384 steps, 1 thread | 1.6 | 4.1 | - | - | - | 2.58x | - |

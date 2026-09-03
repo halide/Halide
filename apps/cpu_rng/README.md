@@ -32,12 +32,12 @@ for ecosystem context only.
 Measured on a Threadripper 9970X (Zen 5), one thread, 1 GB of floats
 (32 streams x 4M steps x 2):
 
-    inductive       34.8 ms   (31 GB/s of output)
-    Julia port      35.5 ms   (1.02x, AVX-512 intrinsics)
-    julia rand!     35.4 ms   (1.02x)
-    unfolded       180 ms     (5.2x)
-    rdom           476 ms     (13.7x)
-    scalar C++     591 ms     (17x)
+    inductive       35.2 ms   (31 GB/s of output)
+    Julia port      34.9 ms   (0.99x, AVX-512 intrinsics)
+    julia rand!     35.1 ms   (1.00x)
+    unfolded       177 ms     (5.0x)
+    rdom           356 ms     (10x)
+    scalar C++     554 ms     (16x)
     numpy PCG64    500 ms     (14x, different generator)
 
 Why the top three tie: they are the same algorithm at the same wall.
@@ -66,15 +66,18 @@ To see it: make bin/host/rng.generator && ./bin/host/rng.generator \
 scan=inductive par=false
 
 What the schedule buys beyond parity: par=true spreads stream blocks
-across cores and reaches the chip's write bandwidth - 21 ms at 51 GB/s
-for the same gigabyte with 1024 streams (1.7x past any single-thread
-implementation; rand! fills one array from one generator, so going
+across cores and reaches the chip's write bandwidth - 17.6 ms at 61
+GB/s for the same gigabyte with 1024 streams, 2x past any single-thread
+implementation, and the threaded Julia port and rand! itself land at
+the same wall (rand! fills one array from one generator, so going
 wider there means one generator per block of streams, which is what
-julia_bench.jl does under julia -t). Thread-count
+julia_bench.jl does under julia -t). The stores are ordinary ones
+throughout: the numbers are consumed as they are generated, so no
+form gets to declare its output cache-cold. Thread-count
 defaults are safe: the runtime parks excess workers, and adding
 threads past the useful count does not regress. Provide enough stream
 blocks - one task per sixteen output rows. And the ablations quantify
 what the inductive form itself is worth: materializing the trajectory
-an RDom walk requires costs 9.9x, and even the fused-but-unfolded form
-costs 4.8x - at the store-bandwidth roofline, the state has no spare
+an RDom walk requires costs 10x, and even the fused-but-unfolded form
+costs 5x - at the store-bandwidth roofline, the state has no spare
 bandwidth to hide in.
