@@ -20,6 +20,65 @@ py::object realization_to_object(const Realization &r) {
     return to_python_tuple(r);
 }
 
+// Python-owned snapshots of the profiler's stats, so that they stay valid
+// after the ProfilerScope exits and the profiler resets.
+struct ProfilerFuncStats {
+    std::string name;
+    halide_profiler_func_stats stats;
+};
+
+struct ProfilerPipelineStats {
+    std::string name;
+    halide_profiler_pipeline_stats stats;
+    std::vector<ProfilerFuncStats> funcs;
+};
+
+ProfilerFuncStats snapshot(const halide_profiler_func_stats &f) {
+    return {f.name, f};
+}
+
+std::optional<ProfilerPipelineStats> snapshot(const halide_profiler_pipeline_stats *p) {
+    if (!p) {
+        return std::nullopt;
+    }
+    ProfilerPipelineStats result{p->name, *p, {}};
+    for (int i = 0; i < p->num_funcs; i++) {
+        result.funcs.push_back(snapshot(p->funcs[i]));
+    }
+    return result;
+}
+
+std::optional<ProfilerFuncStats> snapshot(const halide_profiler_func_stats *f) {
+    if (!f) {
+        return std::nullopt;
+    }
+    return snapshot(*f);
+}
+
+// Owns a ProfilerScope that a with-statement can end early, via exit(),
+// rather than waiting on garbage collection.
+struct PyProfilerScope {
+    std::unique_ptr<ProfilerScope> scope;
+
+    explicit PyProfilerScope(Pipeline p)
+        : scope(std::make_unique<ProfilerScope>(std::move(p))) {
+    }
+    explicit PyProfilerScope(Func &f)
+        : scope(std::make_unique<ProfilerScope>(f)) {
+    }
+
+    const ProfilerScope &get() const {
+        if (!scope) {
+            throw std::runtime_error("This ProfilerScope has already exited");
+        }
+        return *scope;
+    }
+
+    void exit() {
+        scope.reset();
+    }
+};
+
 }  // namespace
 
 void define_pipeline(py::module &m) {
@@ -305,6 +364,83 @@ void define_pipeline(py::module &m) {
             return create_callable_from_generator(target, name, generator_params);
         },
         py::arg("target"), py::arg("name"), py::arg("generator_params") = std::map<std::string, std::string>{});
+
+    auto func_stats_class = py::class_<ProfilerFuncStats>(m, "ProfilerFuncStats")
+                                .def_readonly("name", &ProfilerFuncStats::name)
+                                .def("__repr__", [](const ProfilerFuncStats &s) -> std::string {
+                                    return "<halide.ProfilerFuncStats " + s.name + ">";
+                                });
+#define HALIDE_PROFILER_FUNC_FIELD(field) \
+    func_stats_class.def_property_readonly(#field, [](const ProfilerFuncStats &s) { return s.stats.field; })
+    HALIDE_PROFILER_FUNC_FIELD(parent);
+    HALIDE_PROFILER_FUNC_FIELD(canonical_id);
+    HALIDE_PROFILER_FUNC_FIELD(kind);
+    HALIDE_PROFILER_FUNC_FIELD(buffer_func_id);
+    HALIDE_PROFILER_FUNC_FIELD(counters_approximated);
+    HALIDE_PROFILER_FUNC_FIELD(time);
+    HALIDE_PROFILER_FUNC_FIELD(memory_current);
+    HALIDE_PROFILER_FUNC_FIELD(memory_peak);
+    HALIDE_PROFILER_FUNC_FIELD(stack_peak);
+    HALIDE_PROFILER_FUNC_FIELD(memory_total);
+    HALIDE_PROFILER_FUNC_FIELD(active_threads_numerator);
+    HALIDE_PROFILER_FUNC_FIELD(active_threads_denominator);
+    HALIDE_PROFILER_FUNC_FIELD(num_allocs);
+    HALIDE_PROFILER_FUNC_FIELD(parallel_loops);
+    HALIDE_PROFILER_FUNC_FIELD(parallel_tasks);
+    HALIDE_PROFILER_FUNC_FIELD(points_required_at_root);
+    HALIDE_PROFILER_FUNC_FIELD(points_computed);
+    HALIDE_PROFILER_FUNC_FIELD(scalar_loads);
+    HALIDE_PROFILER_FUNC_FIELD(vector_loads);
+    HALIDE_PROFILER_FUNC_FIELD(gathers);
+    HALIDE_PROFILER_FUNC_FIELD(bytes_loaded);
+    HALIDE_PROFILER_FUNC_FIELD(scalar_stores);
+    HALIDE_PROFILER_FUNC_FIELD(vector_stores);
+    HALIDE_PROFILER_FUNC_FIELD(scatters);
+    HALIDE_PROFILER_FUNC_FIELD(bytes_stored);
+    HALIDE_PROFILER_FUNC_FIELD(realizations);
+    HALIDE_PROFILER_FUNC_FIELD(productions);
+    HALIDE_PROFILER_FUNC_FIELD(points_required_at_realization);
+    HALIDE_PROFILER_FUNC_FIELD(points_required_at_production);
+    HALIDE_PROFILER_FUNC_FIELD(points_required_inwards);
+    HALIDE_PROFILER_FUNC_FIELD(productions_if_inwards);
+#undef HALIDE_PROFILER_FUNC_FIELD
+
+    auto pipeline_stats_class = py::class_<ProfilerPipelineStats>(m, "ProfilerPipelineStats")
+                                    .def_readonly("name", &ProfilerPipelineStats::name)
+                                    .def_readonly("funcs", &ProfilerPipelineStats::funcs)
+                                    .def("__repr__", [](const ProfilerPipelineStats &s) -> std::string {
+                                        return "<halide.ProfilerPipelineStats " + s.name + ">";
+                                    });
+#define HALIDE_PROFILER_PIPELINE_FIELD(field) \
+    pipeline_stats_class.def_property_readonly(#field, [](const ProfilerPipelineStats &s) { return s.stats.field; })
+    HALIDE_PROFILER_PIPELINE_FIELD(time);
+    HALIDE_PROFILER_PIPELINE_FIELD(memory_current);
+    HALIDE_PROFILER_PIPELINE_FIELD(memory_peak);
+    HALIDE_PROFILER_PIPELINE_FIELD(memory_total);
+    HALIDE_PROFILER_PIPELINE_FIELD(active_threads_numerator);
+    HALIDE_PROFILER_PIPELINE_FIELD(active_threads_denominator);
+    HALIDE_PROFILER_PIPELINE_FIELD(native_vector_bytes);
+    HALIDE_PROFILER_PIPELINE_FIELD(runs);
+    HALIDE_PROFILER_PIPELINE_FIELD(billed_runs);
+    HALIDE_PROFILER_PIPELINE_FIELD(samples);
+    HALIDE_PROFILER_PIPELINE_FIELD(num_allocs);
+#undef HALIDE_PROFILER_PIPELINE_FIELD
+
+    py::class_<PyProfilerScope>(m, "ProfilerScope")
+        .def(py::init<Pipeline>(), py::arg("pipeline"))
+        .def(py::init<Func &>(), py::arg("func"))
+        .def("__enter__", [](PyProfilerScope &s) -> PyProfilerScope & { return s; })
+        .def("__exit__", [](PyProfilerScope &s, const py::object &exc_type, const py::object &exc_value, const py::object &exc_traceback) -> bool {
+            s.exit();
+            return false;
+        })
+        .def("exit", &PyProfilerScope::exit)
+        .def("pipeline_stats", [](const PyProfilerScope &s) {
+            return snapshot(s.get().pipeline_stats());
+        })
+        .def("func_stats", [](const PyProfilerScope &s, const Func &f) { return snapshot(s.get().func_stats(f)); }, py::arg("func"))
+        .def("func_stats", [](const PyProfilerScope &s, const std::string &name) { return snapshot(s.get().func_stats(name)); }, py::arg("name"))
+        .def("__repr__", [](const PyProfilerScope &s) -> std::string { return "<halide.ProfilerScope>"; });
 }
 
 }  // namespace PythonBindings
