@@ -96,6 +96,11 @@ public:
     // by one block, which is where the parallelism goes.
 
     // Channels by sequence by head.
+    // The decay between two positions, split into a factor of each
+    // referenced to the start of the chunk: two small tables instead of an
+    // exponential per entry of the score plane.
+    Func cfac, ebd;
+
     Input<Buffer<float16_t, 3>> X{"X"};
     // State by sequence by head.
     Input<Buffer<float16_t, 3>> Bm{"Bm"};
@@ -165,6 +170,10 @@ public:
         Func decay("decay");
         decay(from, to, t, b) =
             exp(A(b) * (cumdelta(to, t, b) - cumdelta(from, t, b)));
+        cfac = Func("cfac");
+        cfac(k, t, b) = exp(A(b) * cumdelta(k, t, b));
+        ebd = Func("ebd");
+        ebd(k, t, b) = Delta(t * chunk + k, b) * exp(-A(b) * cumdelta(k, t, b));
 
         // The chunk's own scores: C^T B.
         RDom rp(0, state, "rp");
@@ -184,8 +193,7 @@ public:
         Func score("score");
         score(jj, idx, t, b) =
             select(jj <= idx,
-                   qk(jj, idx, t, group_of(b)) * decay(jj, idx, t, b) *
-                       Delta(t * chunk + jj, b),
+                   qk(jj, idx, t, group_of(b)) * cfac(idx, t, b) * ebd(jj, t, b),
                    0.f);
         // Narrowed for the multiply that consumes it. Where the scores stay on
         // fragments this inlines into the multiply, whose operand conversion
@@ -442,6 +450,9 @@ private:
         // with a leading dimension of zero rather than selected out of a
         // broadcast vector lane by lane, which wants an eight byte boundary.
         cumdelta.compute_root().align_bounds(k, 2).align_storage(k, 2);
+        for (Func f : {cfac, ebd}) {
+            f.compute_root().reorder(k, t, b).gpu_blocks(t, b).gpu_threads(k);
+        }
         // The pure stage stores nothing in the undef form, so it has no loops
         // to schedule and no kernel is launched for it.
         if (inductive() || !undef_init()) {
