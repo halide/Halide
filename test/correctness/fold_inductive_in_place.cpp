@@ -1,6 +1,10 @@
 // A Func defined in terms of its own previous value reads that value while
 // computing the next one, and never again. The read dies at the store that
-// replaces it, so one slot is enough to slide over the dimension.
+// replaces it, so one slot is enough to slide over the dimension - provided
+// each point is computed exactly once, which a redundant split or a
+// ShiftInwards tail would break. So the one-slot window is not the default:
+// the schedule asks for it with fold_storage(t, 1), exactly the reach of the
+// recurrence, and gets it.
 //
 // Whether that is noticed depends on being able to say that two iterations of
 // the loops inside the producer never write the same place. Asking a solver to
@@ -71,7 +75,7 @@ int64_t allocation_slots(bool tiled) {
     // computed in runs once and there is nothing for the loop-based sliding to
     // do with it.
     out.split(t, to, ti, 1);
-    m.compute_at(out, ti).store_root().slide(out, t);
+    m.compute_at(out, ti).store_root().slide(out, t).fold_storage(t, 1);
     if (tiled) {
         // The coordinate the producer writes becomes yo*4 + yi.
         m.split(y, yo, yi, 4);
