@@ -1012,6 +1012,12 @@ Expr hypot(const Expr &x, const Expr &y);
  * mantissa. Vectorizes cleanly. */
 Expr exp(Expr x);
 
+/** Return two raised to a floating-point expression. If the argument is
+ * not a floating-point type, it is cast to Float(32). Where the hardware
+ * exponentiates base two (as GPUs do), this is a single instruction, so a
+ * scale on the exponent can be folded into one fused multiply-add. */
+Expr exp2(Expr x);
+
 /** Return the logarithm of a floating-point expression. If the
  * argument is not floating-point, it is cast to Float(32). For
  * Float(64) arguments, this calls the system log function, and does

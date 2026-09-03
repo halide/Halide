@@ -170,6 +170,7 @@ const std::map<std::string, std::string> transcendental_remapping =
      {"atanh_f16", "atanh_f32"},
      {"sqrt_f16", "sqrt_f32"},
      {"exp_f16", "exp_f32"},
+     {"exp2_f16", "exp2_f32"},
      {"log_f16", "log_f32"},
      {"pow_f16", "pow_f32"},
      {"floor_f16", "floor_f32"},

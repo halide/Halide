@@ -2498,6 +2498,17 @@ Expr exp(Expr x) {
     }
 }
 
+Expr exp2(Expr x) {
+    user_assert(x.defined()) << "exp2 of undefined Expr\n";
+    if (x.type() == Float(64)) {
+        return Call::make(Float(64), "exp2_f64", {std::move(x)}, Call::PureExtern);
+    } else if (x.type() == Float(16)) {
+        return Call::make(Float(16), "exp2_f16", {std::move(x)}, Call::PureExtern);
+    } else {
+        return Call::make(Float(32), "exp2_f32", {cast<float>(std::move(x))}, Call::PureExtern);
+    }
+}
+
 Expr log(Expr x) {
     user_assert(x.defined()) << "log of undefined Expr\n";
     if (x.type() == Float(64)) {

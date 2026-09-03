@@ -116,6 +116,18 @@ define weak_odr double @exp_f64(double %x) nounwind uwtable readnone alwaysinlin
        ret double %y
 }
 
+declare double @__nv_exp2(double) nounwind readnone
+
+define weak_odr float @exp2_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call float @llvm.nvvm.ex2.approx.ftz.f(float %x) nounwind readnone
+       ret float %y
+}
+
+define weak_odr double @exp2_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @__nv_exp2(double %x) nounwind readnone
+       ret double %y
+}
+
 declare float @__nv_logf(float) nounwind readnone
 declare double @__nv_log(double) nounwind readnone
 

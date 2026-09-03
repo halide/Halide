@@ -75,11 +75,12 @@ void set_bounds(OutputImageParam p, int extent_0, int extent_1) {
 // half precision at the final store, which is what those libraries write too.
 //
 // The scores are scaled by 1/sqrt(depth) before the exponential, as torch's
-// scaled_dot_product_attention does by default. The scale is folded into the
-// exponent's argument rather than into Q, so that the first multiply's
-// operands stay the half precision inputs as given; a positive scale commutes
-// with the row maximum, so the maximum is taken over the raw scores and the
-// difference is scaled.
+// scaled_dot_product_attention does by default. The scale is applied in the
+// exponent rather than to Q, so that the first multiply's operands stay the
+// half precision inputs as given; a positive scale commutes with the row
+// maximum, so the maximum is taken over the raw scores. The scale and log2(e)
+// are one constant and the exponential is base two, so each weight costs one
+// fused multiply-add and one exponential instruction, as in FlashAttention-2.
 //
 // The last column is why. The softmax reads a queries x keys matrix that the
 // multiply before it just wrote, and writes another one for the multiply after
@@ -141,7 +142,7 @@ public:
         k = RDom(0, depth, "k");
         r = RDom(0, keys, "r");
         rv = RDom(0, keys, "rv");
-        const float scale = 1.0f / std::sqrt((float)depth);
+        const float scale = std::log2(std::exp(1.0f)) / std::sqrt((float)depth);
 
         // The scores, one row per query.
         s(x, y) = 0.f;
@@ -152,7 +153,7 @@ public:
         m(y) = -1e30f;
         m(y) = max(m(y), s(r, y));
 
-        e(x, y) = exp((s(x, y) - m(y)) * scale);
+        e(x, y) = exp2(s(x, y) * scale - m(y) * scale);
 
         sum_e(y) = 0.f;
         sum_e(y) += e(r, y);
@@ -608,10 +609,11 @@ public:
             << "chunk must be a multiple of 16 that divides keys at least twice";
         num_tiles = keys / key_tile;
         key_pad = 2 * key_tile;
-        // The softmax scale, applied to every difference of scores that goes
-        // into an exponential. The running maximum is over raw scores, which
-        // is the same maximum, since the scale is positive.
-        const float scale = 1.0f / std::sqrt((float)depth);
+        // The softmax scale times log2(e): the exponentials are base two,
+        // and every score that goes into one is multiplied by this. The
+        // running maximum is over raw scores, which is the same maximum,
+        // since the scale is positive.
+        const float scale = std::log2(std::exp(1.0f)) / std::sqrt((float)depth);
 
         k = RDom(0, depth, "k");
         rj_max = RDom(0, key_tile, "rj_max");
@@ -635,13 +637,13 @@ public:
         // produces is already on the right scale and only what is carried has
         // to be rescaled.
         //
-        e(x, y, t) = exp((s(x, y, t) - m(y, t)) * scale);
+        e(x, y, t) = exp2(s(x, y, t) * scale - m(y, t) * scale);
 
         tile_l(y, t) = 0.f;
         tile_l(y, t) += e(rj, y, t);
 
         l(y, t) = select(t <= 0, tile_l(y, t),
-                         likely(l(y, t - 1) * exp((m(y, t - 1) - m(y, t)) * scale) +
+                         likely(l(y, t - 1) * exp2((m(y, t - 1) - m(y, t)) * scale) +
                                 tile_l(y, t)));
 
         tile_acc(x, y, t) = 0.f;
@@ -653,7 +655,7 @@ public:
             (tile_acc(x, y, rt) +
              select(rt <= 0,
                     0.f,
-                    likely(acc(x, y) * exp((m(y, rt - 1) - m(y, rt)) * scale)))) /
+                    likely(acc(x, y) * exp2((m(y, rt - 1) - m(y, rt)) * scale)))) /
             select(rt < num_tiles - 1, 1.f, l(y, rt));
 
         // Narrowed to half precision where it sits, then stored.
@@ -979,7 +981,7 @@ public:
                             keys / key_tile >= 2)
             << "chunk must be a multiple of 16 that divides keys at least twice";
         num_tiles = keys / key_tile;
-        const float scale = 1.0f / std::sqrt((float)depth);
+        const float scale = std::log2(std::exp(1.0f)) / std::sqrt((float)depth);
 
         k = RDom(0, depth, "k");
         rj_max = RDom(0, key_tile, "rj_max");
@@ -996,7 +998,7 @@ public:
         // The weights against the tile's own maximum. Only the carried state
         // knows the running one, and a Func that read it here would depend
         // on the update that reads this.
-        e(x, y, t) = exp((s(x, y, t) - tile_max(y, t)) * scale);
+        e(x, y, t) = exp2(s(x, y, t) * scale - tile_max(y, t) * scale);
 
         tile_l(y, t) = 0.f;
         tile_l(y, t) += e(rj, y, t);
@@ -1016,7 +1018,7 @@ public:
         Expr m_new = max(m_old, tm);
         // Whichever of the two was not the maximum moves to it, and the
         // other stays: one exponential covers both.
-        Expr d = exp(-abs(m_old - tm) * scale);
+        Expr d = exp2(-abs(m_old - tm) * scale);
         Expr carried_max = m_old >= tm;
         Expr alpha = select(carried_max, 1.f, d);
         Expr beta = select(carried_max, d, 1.f);

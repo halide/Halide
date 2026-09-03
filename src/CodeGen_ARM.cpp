@@ -857,6 +857,7 @@ const std::map<string, string> float16_transcendental_remapping = {
     {"cos_f16", "cos_f32"},
     {"cosh_f16", "cosh_f32"},
     {"exp_f16", "exp_f32"},
+    {"exp2_f16", "exp2_f32"},
     {"log_f16", "log_f32"},
     {"pow_f16", "pow_f32"},
     {"sin_f16", "sin_f32"},

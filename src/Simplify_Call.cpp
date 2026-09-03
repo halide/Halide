@@ -797,6 +797,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
                     {"cos_f32", std::cos},
                     {"cosh_f32", std::cosh},
                     {"exp_f32", std::exp},
+                    {"exp2_f32", std::exp2},
                     {"log_f32", std::log},
                     {"sin_f32", std::sin},
                     {"sinh_f32", std::sinh},

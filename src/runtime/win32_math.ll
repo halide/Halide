@@ -60,6 +60,20 @@ define weak_odr double @exp_f64(double %x) nounwind uwtable readnone alwaysinlin
        ret double %y
 }
 
+declare double @llvm.exp2.f64(double) nounwind readnone
+
+define weak_odr double @exp2_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @llvm.exp2.f64(double %x) nounwind readnone
+       ret double %y
+}
+
+define weak_odr float @exp2_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %xd = fpext float %x to double
+       %yd = tail call double @exp2_f64(double %xd) nounwind readnone
+       %y = fptrunc double %yd to float
+       ret float %y
+}
+
 define weak_odr float @exp_f32(float %x) nounwind uwtable readnone alwaysinline {
        %xd = fpext float %x to double
        %yd = tail call double @exp_f64(double %xd) nounwind readnone

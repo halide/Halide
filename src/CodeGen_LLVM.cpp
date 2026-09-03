@@ -3947,6 +3947,10 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 1);
         Expr e = Internal::halide_exp(op->args[0]);
         e.accept(this);
+    } else if (op->call_type == Call::PureExtern && op->name == "exp2_f32") {
+        internal_assert(op->args.size() == 1);
+        Expr e = Internal::halide_exp(op->args[0] * 0.69314718055994531f);
+        e.accept(this);
     } else if (op->call_type == Call::PureExtern &&
                (op->name == "is_nan_f32" || op->name == "is_nan_f64" || op->name == "is_nan_f16")) {
         internal_assert(op->args.size() == 1);

@@ -88,6 +88,9 @@ inline float hypot_f32(float x, float y) {
 inline float exp_f32(float x) {
     return expf(x);
 }
+inline float exp2_f32(float x) {
+    return exp2f(x);
+}
 inline float log_f32(float x) {
     return logf(x);
 }
@@ -139,6 +142,9 @@ inline double hypot_f64(double x, double y) {
 }
 inline double exp_f64(double x) {
     return exp(x);
+}
+inline double exp2_f64(double x) {
+    return exp2(x);
 }
 inline double log_f64(double x) {
     return log(x);

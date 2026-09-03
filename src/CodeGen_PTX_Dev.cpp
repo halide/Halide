@@ -538,7 +538,7 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
         << "A tensor core accumulator store was broken apart during lowering. "
         << op->name << " only has meaning as part of one.\n";
 
-    if (op->call_type == Call::PureExtern && op->name == "exp_f32") {
+    if (op->call_type == Call::PureExtern && (op->name == "exp_f32" || op->name == "exp2_f32")) {
         // The device runtime has one instruction for this, so use it rather
         // than the polynomial CodeGen_LLVM would expand it into. It takes one
         // value at a time.

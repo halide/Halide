@@ -25,4 +25,4 @@ Memory: the JIT apps and the alignment runner free their scratch at the end of e
 | chebyshev | n=2048 dense SPD, 100 iterations, 1 thread (in-cache control) | 11.2 | 11.8 | 11.1 | hand-written mod-3 ring | - | 1.06x | 0.99x |
 | cuda_mamba2 | fwd, seq 4096, state 128, 128 heads x 64, chunk 256 (Triton 256), RTX 5060 Ti | 1.6 | 1.8 | 1.6 | Triton (mamba_ssm) | - | 1.15x | 0.98x |
 | cuda_mamba2 | bwd, seq 4096, state 128, 128 heads x 64, chunk 128 (Triton 256), RTX 5060 Ti | 5.9 | 6.2 | 4.3 | Triton (mamba_ssm) | - | 1.05x | 0.73x |
-| flash_attention | 65536 queries x 1024 keys, depth 64, fp16, chunk 64 (RDom 64), RTX 5060 Ti | 0.402 | 0.438 | 0.375 | FlashAttention-2 (torch SDPA) | cuDNN SDPA (torch), torch memory-efficient SDPA, cuBLAS + softmax + cuBLAS | 1.09x | 0.93x |
+| flash_attention | 65536 queries x 1024 keys, depth 64, fp16, chunk 64 (RDom 64), RTX 5060 Ti | 0.398 | 0.434 | 0.373 | FlashAttention-2 (torch SDPA) | cuDNN SDPA (torch), torch memory-efficient SDPA, cuBLAS + softmax + cuBLAS | 1.09x | 0.94x |

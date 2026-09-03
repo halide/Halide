@@ -192,6 +192,8 @@ protected:
             {"cosh_f32", GLSLstd450Cosh},
             {"exp_f16", GLSLstd450Exp},
             {"exp_f32", GLSLstd450Exp},
+            {"exp2_f16", GLSLstd450Exp2},
+            {"exp2_f32", GLSLstd450Exp2},
             {"fast_inverse_sqrt_f16", GLSLstd450InverseSqrt},
             {"fast_inverse_sqrt_f32", GLSLstd450InverseSqrt},
             {"fast_log_f16", GLSLstd450Log},
