@@ -79,7 +79,8 @@ void validate_schedule_inlined_function(Function f) {
         }
     }
 
-    for (const auto &b : func_s.bounds()) {
+    for (const auto &entry : func_s.bounds()) {
+        const Bound &b = entry.second;
         if (b.min.defined()) {
             user_warning << "It is meaningless to bound dimension "
                          << b.var << " of function "
