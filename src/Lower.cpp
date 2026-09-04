@@ -41,6 +41,7 @@
 #include "IRPrinter.h"
 #include "InferArguments.h"
 #include "InjectHostDevBufferCopies.h"
+#include "InjectModuloVars.h"
 #include "Inline.h"
 #include "LICM.h"
 #include "LoopCarry.h"
@@ -376,6 +377,16 @@ void lower_impl(const vector<Function> &output_funcs,
     s = rewrite_interleavings(s);
     s = simplify(s);
     log("Lowering after rewriting vector interleavings:", s);
+
+    debug(1) << "Injecting variables for values needed modulo a constant...\n";
+    {
+        // Only worth re-simplifying if it bound anything.
+        Stmt t = inject_modulo_vars(s);
+        if (!t.same_as(s)) {
+            s = simplify(t);
+            log("Lowering after injecting modulo variables:", s);
+        }
+    }
 
     debug(1) << "Partitioning loops to simplify boundary conditions...\n";
     s = partition_loops(s);

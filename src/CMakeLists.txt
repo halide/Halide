@@ -136,6 +136,7 @@ target_sources(
     ImageParam.h
     InferArguments.h
     InjectHostDevBufferCopies.h
+    InjectModuloVars.h
     Inline.h
     InlineReductions.h
     IntegerDivisionTable.h
@@ -319,6 +320,7 @@ target_sources(
     ImageParam.cpp
     InferArguments.cpp
     InjectHostDevBufferCopies.cpp
+    InjectModuloVars.cpp
     Inline.cpp
     InlineReductions.cpp
     IntegerDivisionTable.cpp
