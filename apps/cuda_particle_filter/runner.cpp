@@ -68,7 +68,13 @@ int main() {
 
     est.fill(0.f);
     particle_filter(obs, est);  // warm / JIT-free AOT
-    hb::Stats s = hb::bench([&]() { particle_filter(obs, est); });
+    // On a GPU target the result lands device-side; the batched timer syncs
+    // each batch and copy_to_host brings it back before the host reads it.
+    // Both are no-ops for the CPU target.
+    auto body = [&]() { particle_filter(obs, est); };
+    auto finish = [&]() { est.device_sync(); };
+    hb::Stats s = hb::bench(body, 1, finish);
+    est.copy_to_host();
 
     double se = 0; long cnt = 0; bool finite = true;
     for (int b = 0; b < B; b++)

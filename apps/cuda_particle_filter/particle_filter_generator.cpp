@@ -70,7 +70,8 @@ public:
         // Consumer: per-step weighted mean, weights shifted by the slice max.
         RDom rp(0, N, "rp");
         Func mx("mx");
-        mx(t, b) = maximum(state(rp, t, b)[1]);
+        mx(t, b) = -1e30f;
+        mx(t, b) = max(mx(t, b), state(rp, t, b)[1]);
         Func acc({Float(32), Float(32)}, 2, "acc");
         acc(t, b) = {0.0f, 0.0f};
         Expr w = exp(state(rp, t, b)[1] - mx(t, b));
@@ -78,15 +79,41 @@ public:
         est(t, b) = acc(t, b)[1] / max(acc(t, b)[0], 1e-30f);
 
         // Schedule.
-        est.compute_root().reorder(t, b);
-        mx.compute_at(est, t);
-        acc.compute_at(est, t);
-        if (folded) {
-            state.compute_at(est, t).store_root().fold_storage(t, 2);
+        if (get_target().has_gpu_feature()) {
+            // Time is the serial inductive loop; within each step the particle
+            // update is one kernel over (particle, batch) and the reduction is
+            // one kernel over batch. A kernel boundary per step gives the
+            // global sync the Metropolis gather of the previous slice needs.
+            Var bo("bo"), bi("bi");
+            est.compute_root().reorder(b, t).gpu_tile(b, bo, bi, 32);
+            // The per-step weighted mean is fused into the est kernel: one
+            // thread per batch element scans the slice for the max and the
+            // weighted sums. A separate reduction kernel per step was tried and
+            // lost to the extra launches.
+            mx.compute_at(est, bi);
+            acc.compute_at(est, bi);
+            if (folded) {
+                state.compute_at(est, t).store_root().fold_storage(t, 2);
+            } else {
+                state.compute_root();
+            }
+            RVar po("po"), pi("pi");
+            state.update(0)
+                .split(p, po, pi, 64)
+                .reorder(pi, po, b, t)
+                .gpu_blocks(po, b)
+                .gpu_threads(pi);
         } else {
-            state.compute_root();
+            est.compute_root().reorder(t, b);
+            mx.compute_at(est, t);
+            acc.compute_at(est, t);
+            if (folded) {
+                state.compute_at(est, t).store_root().fold_storage(t, 2);
+            } else {
+                state.compute_root();
+            }
+            state.update(0).reorder(p, b);
         }
-        state.update(0).reorder(p, b);
     }
 };
 
