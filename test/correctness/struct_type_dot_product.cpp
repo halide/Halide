@@ -7,9 +7,9 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <new>
 #include <random>
 #include <sstream>
-#include <vector>
 
 using namespace Halide;
 
@@ -142,9 +142,40 @@ int count_occurrences(const std::string &haystack, const std::string &needle) {
     return n;
 }
 
+// A heap allocation aligned to 16 bytes, since the pipeline declares a
+// 16-byte host alignment on its inputs and plain std::vector's allocator
+// does not guarantee that (only happens to on some 64-bit ABIs).
+struct AlignedBytes {
+    explicit AlignedBytes(size_t n)
+        : n(n), ptr(static_cast<uint8_t *>(::operator new(n, std::align_val_t(16)))) {
+    }
+    ~AlignedBytes() {
+        ::operator delete(ptr, std::align_val_t(16));
+    }
+    AlignedBytes(const AlignedBytes &) = delete;
+    AlignedBytes &operator=(const AlignedBytes &) = delete;
+
+    uint8_t *data() {
+        return ptr;
+    }
+    const uint8_t *data() const {
+        return ptr;
+    }
+    uint8_t &operator[](size_t i) {
+        return ptr[i];
+    }
+    size_t size() const {
+        return n;
+    }
+
+private:
+    size_t n;
+    uint8_t *ptr;
+};
+
 // ---- Reference implementation (scalar, for correctness checking) ----
-float reference_dot(const std::vector<uint8_t> &x_blocks,
-                    const std::vector<uint8_t> &y_blocks, int nb) {
+float reference_dot(const AlignedBytes &x_blocks,
+                    const AlignedBytes &y_blocks, int nb) {
     // x block = 18 bytes {fp16 d, u8 qs[16]}; y block = 34 bytes {fp16 d, i8 qs[32]}.
     float sumf = 0.0f;
     for (int i = 0; i < nb; i++) {
@@ -169,11 +200,11 @@ float reference_dot(const std::vector<uint8_t> &x_blocks,
 void test_correctness() {
     const int nb = 7;
     std::mt19937 rng(12345);
-    std::vector<uint8_t> x_data((size_t)nb * 18), y_data((size_t)nb * 34);
-    for (auto &v : x_data)
-        v = (uint8_t)(rng() & 0xff);
-    for (auto &v : y_data)
-        v = (uint8_t)(rng() & 0xff);
+    AlignedBytes x_data((size_t)nb * 18), y_data((size_t)nb * 34);
+    for (size_t i = 0; i < x_data.size(); i++)
+        x_data[i] = (uint8_t)(rng() & 0xff);
+    for (size_t i = 0; i < y_data.size(); i++)
+        y_data[i] = (uint8_t)(rng() & 0xff);
     // Give the two deltas modest, exactly-representable fp16 values so the
     // reference and Halide agree bit-for-bit-ish.
     for (int i = 0; i < nb; i++) {
