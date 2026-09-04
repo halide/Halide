@@ -60,7 +60,7 @@ std::string halide_type_to_string(const Type &type) {
 
 void define_type(py::module &m) {
     py::class_<StructField>(m, "StructField")
-        .def(py::init([](const std::string &name, const Type &type, py::object array_extent) -> StructField {
+        .def(py::init([](const std::string &name, const Type &type, const py::object &array_extent) -> StructField {
                  std::optional<int> extent;
                  if (!array_extent.is_none()) {
                      extent = array_extent.cast<int>();
@@ -85,7 +85,7 @@ void define_type(py::module &m) {
             [](const StructField &f) -> py::object {
                 return f.array_extent ? py::cast(*f.array_extent) : py::none();
             },
-            [](StructField &f, py::object v) {
+            [](StructField &f, const py::object &v) {
                 f.array_extent = v.is_none() ? std::nullopt : std::make_optional(v.cast<int>());
             })
         .def("__eq__", [](const StructField &a, const StructField &b) -> bool { return a == b; })

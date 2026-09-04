@@ -99,6 +99,32 @@ class LowerStructTypesMutator : public IRMutator {
             return field_type == UInt(8) ? bl : Reinterpret::make(field_type, bl);
         }
 
+        vector<Expr> bytes;
+        bytes.reserve(elem_bytes);
+        for (int b = 0; b < elem_bytes; b++) {
+            bytes.push_back(byte_load(b));
+        }
+
+        if (field_type.is_float()) {
+            // A float field (e.g. a packed fp16 delta) is built as a genuine
+            // shift/or chain of the bytes rather than through concat_bits's
+            // vector-shuffle-then-reinterpret lowering. Some AArch64 backends
+            // (LLVM < 23) cannot legalize a bitcast straight from a vector to
+            // a scalar half, and unlike the integer case below, there's no way
+            // to route around that once the value is vector-shaped: any chain
+            // of pure bitcasts collapses back to the direct (illegal) one
+            // during optimization. Building the packed bits with real ALU ops
+            // keeps the final Reinterpret's input a plain scalar integer, so
+            // the last step is an always-legal scalar-to-scalar bitcast; LLVM's
+            // load-combiner still typically recovers a single wide load.
+            Type uint_t = UInt(8 * elem_bytes);
+            Expr combined = cast(uint_t, bytes[0]);
+            for (int b = 1; b < elem_bytes; b++) {
+                combined = combined | (cast(uint_t, bytes[b]) << (8 * b));
+            }
+            return Reinterpret::make(field_type, combined);
+        }
+
         // Keep a packed scalar field as a bit-concatenation of adjacent bytes
         // rather than immediately expanding it to a shift/or tree. The
         // concat_bits lowering turns this into a dense byte shuffle followed
@@ -106,11 +132,6 @@ class LowerStructTypesMutator : public IRMutator {
         // one (possibly unaligned) wide load. Expanding here obscures that the
         // byte loads are adjacent once individual extracts of the field have
         // simplified, and commonly leaves one scalar load per byte.
-        vector<Expr> bytes;
-        bytes.reserve(elem_bytes);
-        for (int b = 0; b < elem_bytes; b++) {
-            bytes.push_back(byte_load(b));
-        }
         Expr combined = concat_bits(bytes);
         return field_type == combined.type() ? combined : Reinterpret::make(field_type, combined);
     }
