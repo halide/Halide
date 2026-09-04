@@ -997,13 +997,15 @@ public:
                 internal_assert(ratio != 0)
                     << "alloc_type should have been at most as wide as the widest type in group\n";
                 // Sizes here are counted in units of one type or another, and
-                // are converted between them by dividing, so the types have to
-                // be whole multiples of each other.
-                internal_assert(is_power_of_two(alloc_type.bytes()) &&
-                                is_power_of_two(alloc.widest_type.bytes()))
-                    << "Allocation types must be a power of two bytes wide, but these "
-                    << "are " << alloc_type.bytes() << " and "
-                    << alloc.widest_type.bytes() << "\n";
+                // are converted between them by dividing, so the widest type
+                // has to be a whole multiple of alloc_type -- not necessarily
+                // a power of two, e.g. when alloc_type is UInt(8) (always the
+                // case when may_merge_allocs_of_different_type is set) any
+                // byte count, including a struct's, divides evenly.
+                internal_assert(alloc.widest_type.bytes() % alloc_type.bytes() == 0)
+                    << "Allocation type " << alloc.widest_type << " (" << alloc.widest_type.bytes()
+                    << " bytes) is not a whole multiple of the cluster's allocation type "
+                    << alloc_type << " (" << alloc_type.bytes() << " bytes)\n";
                 total_size += align_up(alloc.max_size * ratio,
                                        async_copy_alignment / alloc_type.bytes());
             }
