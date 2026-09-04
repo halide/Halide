@@ -10,6 +10,9 @@
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "ExprUsesVar.h"
+#include "Monotonic.h"
+#include "Simplify.h"
 #include "IRPrinter.h"
 #include "ParallelRVar.h"
 #include "Random.h"
@@ -1281,11 +1284,39 @@ bool inductive_in(const std::vector<Definition> &defs, const string &var, const 
             visit_with(e, [&](auto *self, const Call *op) {
                 if (op->call_type == Call::Halide && op->name == fname) {
                     for (int pos : positions) {
-                        if (const auto &v = op->args[pos].as<Variable>()) {
-                            if (v->name != var) {
-                                inductive_in_var = true;
+                        const Expr &arg = op->args[pos];
+                        const auto *v = arg.as<Variable>();
+                        if (v && v->name == var) {
+                            // Read at the same position: not a step.
+                            continue;
+                        }
+                        // The dimension is inductive only if the self-reference
+                        // is provably a step backward along it (so the storage
+                        // can fold to a window). A read that is not provably
+                        // below the coordinate -- a data-dependent gather into
+                        // the previous slice -- leaves the dimension
+                        // non-inductive and stored in full, which is safe: the
+                        // whole slice it reads is kept.
+                        // The dimension is an inductive-step candidate if the
+                        // self-reference moves along it as a monotonic function
+                        // of the coordinate (t - 1, max(0, x - 1)) or reads it
+                        // through a reduction variable; the real monotonicity
+                        // check downstream then accepts the genuine steps and
+                        // rejects the rest. A read that is neither -- a plain
+                        // data-dependent gather into the previous slice, whose
+                        // index the analysis cannot relate to the coordinate --
+                        // leaves the dimension non-inductive and stored in
+                        // full, which is safe because the whole slice it reads
+                        // is kept.
+                        bool uses_rvar = false;
+                        for (const ReductionVariable &rv : def.schedule().rvars()) {
+                            if (expr_uses_var(arg, rv.var)) {
+                                uses_rvar = true;
+                                break;
                             }
-                        } else {
+                        }
+                        Monotonic m = is_monotonic(arg, var);
+                        if (uses_rvar || m == Monotonic::Increasing || m == Monotonic::Decreasing) {
                             inductive_in_var = true;
                         }
                     }
