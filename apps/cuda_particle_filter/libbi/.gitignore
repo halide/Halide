@@ -1,0 +1,5 @@
+# LibBi generated build tree and filter outputs
+.Gordon/
+filt*.nc
+*_gpu.nc
+*_cpu.nc
