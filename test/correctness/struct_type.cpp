@@ -105,6 +105,42 @@ void test_struct_type_ordering_consistent_with_equality() {
     }
 }
 
+// constant_integer_bounds() (used e.g. for overflow checks ahead of a cast)
+// must treat a struct-typed Expr as having no known integer bounds -- it
+// isn't a number, so there's nothing to bound. bounds_helper's generic
+// fallback (for a node shape it doesn't specifically recognize, e.g. a
+// struct-typed Select) computes ConstantInterval::bounds_of_type(e.type())
+// and asserts the result is representable by e.type(); can_represent()
+// rejects a struct outright, so bounds_of_type() must agree and report "no
+// known bounds" too. A Select (rather than the struct_pack Expr itself) is
+// used here because bounds_helper has no case for Select at all, so it's
+// guaranteed to hit that generic fallback rather than Call's own (more
+// specific) dispatch. Built via a raw struct_pack Call rather than the
+// pack_struct() front-end helper, since that helper validates one initializer
+// per declared field (with arrays swept via gather()/`_`) -- more machinery
+// than this Type/Expr-level test needs.
+void test_constant_integer_bounds_of_struct() {
+    Type block_t = Type::Struct({{"d", Float(32)}, {"qs", UInt(8), 4}});
+    Expr a = Call::make(block_t, Call::struct_pack,
+                        {make_zero(Float(32)), make_zero(UInt(8)), make_zero(UInt(8)), make_zero(UInt(8)), make_zero(UInt(8))},
+                        Call::PureIntrinsic);
+    Expr cond = Variable::make(Bool(), "c");
+    Expr sel = Select::make(cond, a, a);
+
+    ConstantInterval ci = constant_integer_bounds(sel);
+    if (ci.min_defined || ci.max_defined) {
+        printf("constant_integer_bounds() of a struct-typed Expr should be unbounded, got "
+               "min_defined=%d max_defined=%d\n",
+               ci.min_defined, ci.max_defined);
+        exit(1);
+    }
+
+    if (block_t.can_represent((int64_t)0)) {
+        printf("A struct type should not claim to represent any integer constant\n");
+        exit(1);
+    }
+}
+
 // Reading struct-typed data through an ImageParam/hand-built Buffer. A
 // struct-typed ImageParam/Func keeps *exactly* the dimensionality the user
 // declared -- no hidden extra dimension anywhere -- so its buffer shape is
@@ -705,6 +741,7 @@ void test_pack_struct_field_copy() {
 int main(int argc, char **argv) {
     test_type_struct_basics();
     test_struct_type_ordering_consistent_with_equality();
+    test_constant_integer_bounds_of_struct();
     test_read_from_buffer();
     test_realized_writer_as_output();
     test_struct_consumed_by_another_func();
