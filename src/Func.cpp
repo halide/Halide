@@ -99,6 +99,20 @@ Func::Func(Function f)
         << "Can't construct Func from undefined Function";
 }
 
+FuncVec::FuncVec(const string &base_name, size_t count, const string &suffix) {
+    reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+        emplace_back(count == 1 ? concat_strings(base_name, suffix) : concat_strings(base_name, i, suffix));
+    }
+}
+
+FuncVec::operator Func() const {
+    user_assert(size() == 1)
+        << "Cannot convert a FuncVec of size " << size()
+        << " to a Func; exactly one Func is required.\n";
+    return front();
+}
+
 const string &Func::name() const {
     return func.name();
 }

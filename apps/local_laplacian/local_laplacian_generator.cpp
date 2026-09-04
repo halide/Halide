@@ -36,7 +36,7 @@ public:
         gray(x, y) = 0.299f * floating(x, y, 0) + 0.587f * floating(x, y, 1) + 0.114f * floating(x, y, 2);
 
         // Make the processed Gaussian pyramid.
-        Func gPyramid[maxJ];
+        FuncVec gPyramid("gPyramid", J);
         // Do a lookup into a lut with 256 entries per intensity level
         Expr level = k * (1.0f / (levels - 1));
         Expr idx = gray(x, y) * cast<float>(levels - 1) * 256.0f;
@@ -47,21 +47,21 @@ public:
         }
 
         // Get its laplacian pyramid
-        Func lPyramid[maxJ];
+        FuncVec lPyramid("lPyramid", J);
         lPyramid[J - 1](x, y, k) = gPyramid[J - 1](x, y, k);
         for (int j = J - 2; j >= 0; j--) {
             lPyramid[j](x, y, k) = gPyramid[j](x, y, k) - upsample(gPyramid[j + 1])(x, y, k);
         }
 
         // Make the Gaussian pyramid of the input
-        Func inGPyramid[maxJ];
+        FuncVec inGPyramid("inGPyramid", J);
         inGPyramid[0](x, y) = gray(x, y);
         for (int j = 1; j < J; j++) {
             inGPyramid[j](x, y) = downsample(inGPyramid[j - 1])(x, y);
         }
 
         // Make the laplacian pyramid of the output
-        Func outLPyramid[maxJ];
+        FuncVec outLPyramid("outLPyramid", J);
         for (int j = 0; j < J; j++) {
             // Split input pyramid value into integer and floating parts
             Expr level = inGPyramid[j](x, y) * cast<float>(levels - 1);
@@ -72,7 +72,7 @@ public:
         }
 
         // Make the Gaussian pyramid of the output
-        Func outGPyramid[maxJ];
+        FuncVec outGPyramid("outGPyramid", J);
         outGPyramid[J - 1](x, y) = outLPyramid[J - 1](x, y);
         for (int j = J - 2; j >= 0; j--) {
             outGPyramid[j](x, y) = upsample(outGPyramid[j + 1])(x, y) + outLPyramid[j](x, y);
