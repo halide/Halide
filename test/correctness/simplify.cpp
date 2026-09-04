@@ -2493,10 +2493,16 @@ void check_facts() {
     }
     (void)simplify(deep);
 
-    // The rules above look their predicates up in the facts rather than
-    // recursively invoking the simplifier, so a fact only settles a predicate
-    // it is directly comparable to. This one needs arithmetic to connect:
-    check_with_assumptions(max(x, y), max(x, y), {x + 1 <= y});
+    // Constant offsets are peeled off both the facts and the queries, so a fact
+    // stated about a shifted operand still settles a predicate about the
+    // unshifted one, in either direction.
+    check_with_assumptions(max(x, y), y, {x + 1 <= y});
+    check_with_assumptions(max(x, y), x, {y <= x + 0});
+    check_with_assumptions(max(x + 3, y), y, {x + 4 <= y});
+    check_with_assumptions(min(x, y), x, {x + 1 <= y});
+
+    // But an offset that leaves the order undetermined still doesn't fire.
+    check_with_assumptions(max(x, y), max(x, y), {x <= y + 1});
 
     // Without the fact, the division stays put.
     check(max(x * 8, y) / 8, max(x * 8, y) / 8);

@@ -73,8 +73,8 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
         (rewrite(max(x, x), a) ||
          // Facts learned higher up in the IR may tell us which side wins.
          (has_facts() &&
-          (rewrite(max(x, y), a, known_true(y <= x, this)) ||
-           rewrite(max(x, y), b, known_true(x <= y, this)))) ||
+          (rewrite(max(x, y), a, min_diff(x, y, this) >= 0) ||
+           rewrite(max(x, y), b, max_diff(x, y, this) <= 0))) ||
          rewrite(max(x, c0), b, is_max_value(c0)) ||
          rewrite(max(x, c0), a, is_min_value(c0)) ||
          rewrite(max((x / c0) * c0, x), b, c0 > 0) ||

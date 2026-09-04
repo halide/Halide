@@ -84,6 +84,85 @@ void Simplify::found_buffer_reference(const string &name, size_t dimensions) {
     }
 }
 
+namespace {
+
+// Rewrite (a - b) as (a' - b') + offset by stripping constant terms off either
+// side, so that a fact about x and y + 3 and a query about x and y meet at the
+// same pair. Walks the existing nodes; builds nothing.
+void peel_constant_offsets(const BaseExprNode *&a, const BaseExprNode *&b, int64_t &offset) {
+    // Peels one constant term off e if there is one, returning whether it did.
+    // The constant is added to delta, which the caller applies with the sign
+    // appropriate to the side e is on.
+    auto peel_one = [](const BaseExprNode *&e, int64_t &delta) {
+        if (e->node_type == IRNodeType::Add) {
+            const Add *add = (const Add *)e;
+            if (const IntImm *i = add->b.as<IntImm>()) {
+                if (add_would_overflow(64, delta, i->value)) {
+                    return false;
+                }
+                delta += i->value;
+                e = add->a.get();
+                return true;
+            } else if (const IntImm *i = add->a.as<IntImm>()) {
+                if (add_would_overflow(64, delta, i->value)) {
+                    return false;
+                }
+                delta += i->value;
+                e = add->b.get();
+                return true;
+            }
+        } else if (e->node_type == IRNodeType::Sub) {
+            const Sub *sub = (const Sub *)e;
+            if (const IntImm *i = sub->b.as<IntImm>()) {
+                if (sub_would_overflow(64, delta, i->value)) {
+                    return false;
+                }
+                delta -= i->value;
+                e = sub->a.get();
+                return true;
+            }
+        }
+        return false;
+    };
+
+    // A constant on the left of the difference adds to the offset; one on the
+    // right subtracts from it, so accumulate it negated and subtract at the end.
+    int64_t from_a = 0, from_b = 0;
+    while (peel_one(a, from_a)) {
+    }
+    while (peel_one(b, from_b)) {
+    }
+    if (!sub_would_overflow(64, from_a, from_b)) {
+        offset = from_a - from_b;
+    } else {
+        offset = 0;
+    }
+}
+
+}  // namespace
+
+void Simplify::ScopedFact::learn_difference(const Expr &a, const Expr &b,
+                                            const ConstantInterval &diff, bool invert) {
+    // Differences are only meaningful where they can't wrap.
+    if (!simplify->no_overflow_int(a.type()) || a.type() != b.type()) {
+        return;
+    }
+
+    const BaseExprNode *pa = a.get(), *pb = b.get();
+    int64_t offset = 0;
+    peel_constant_offsets(pa, pb, offset);
+
+    // (a - b) = (pa - pb) + offset, so the bound on the peeled pair is the
+    // bound we were given shifted the other way.
+    ConstantInterval peeled = diff - offset;
+    if (invert && !peeled.is_single_point()) {
+        // Only a single removed point is representable.
+        return;
+    }
+
+    simplify->known_bounds.push_back(Simplify::KnownBound{Expr(pa), Expr(pb), peeled, invert});
+}
+
 void Simplify::ScopedFact::learn_false(const Expr &fact) {
     // Canonicalize the direction of comparisons, so that facts are stored in
     // the same form the simplifier produces when it visits them.
@@ -93,6 +172,22 @@ void Simplify::ScopedFact::learn_false(const Expr &fact) {
     } else if (const GE *ge = fact.as<GE>()) {
         learn_false(!(ge->a < ge->b));
         return;
+    }
+
+    // Record what this says about the difference between the two sides. And,
+    // Not, and the tag intrinsic are handled by the recursion below instead.
+    if (const LT *lt = fact.as<LT>()) {
+        // !(a < b) -> a - b >= 0
+        learn_difference(lt->a, lt->b, ConstantInterval::bounded_below(0), false);
+    } else if (const LE *le = fact.as<LE>()) {
+        // !(a <= b) -> a - b >= 1
+        learn_difference(le->a, le->b, ConstantInterval::bounded_below(1), false);
+    } else if (const EQ *eq = fact.as<EQ>()) {
+        // !(a == b) -> a - b is anything but zero
+        learn_difference(eq->a, eq->b, ConstantInterval::single_point(0), true);
+    } else if (const NE *ne = fact.as<NE>()) {
+        // !(a != b) -> a - b == 0
+        learn_difference(ne->a, ne->b, ConstantInterval::single_point(0), false);
     }
 
     Simplify::VarInfo info;
@@ -190,6 +285,22 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
     } else if (const GE *ge = fact.as<GE>()) {
         learn_true(!(ge->a < ge->b));
         return;
+    }
+
+    // Record what this says about the difference between the two sides. And,
+    // Not, and the tag intrinsic are handled by the recursion below instead.
+    if (const LT *lt = fact.as<LT>()) {
+        // a < b -> a - b <= -1
+        learn_difference(lt->a, lt->b, ConstantInterval::bounded_above(-1), false);
+    } else if (const LE *le = fact.as<LE>()) {
+        // a <= b -> a - b <= 0
+        learn_difference(le->a, le->b, ConstantInterval::bounded_above(0), false);
+    } else if (const EQ *eq = fact.as<EQ>()) {
+        // a == b -> a - b == 0
+        learn_difference(eq->a, eq->b, ConstantInterval::single_point(0), false);
+    } else if (const NE *ne = fact.as<NE>()) {
+        // a != b -> a - b is anything but zero
+        learn_difference(ne->a, ne->b, ConstantInterval::single_point(0), true);
     }
 
     Simplify::VarInfo info;
@@ -430,6 +541,125 @@ Stmt Simplify::ScopedFact::substitute_facts(const Stmt &s) {
     return substitute_facts_impl(s, truths, falsehoods);
 }
 
+namespace {
+
+// Intersect acc with d, reporting whether the result would be empty rather than
+// constructing it. make_intersection asserts on an empty result, and empty means
+// the facts contradict each other, which means this code is unreachable. We
+// don't try to exploit that here; we just decline to tighten any further.
+bool intersect_if_nonempty(ConstantInterval &acc, const ConstantInterval &d) {
+    ConstantInterval result = acc;
+    if (d.min_defined && (!result.min_defined || d.min > result.min)) {
+        result.min = d.min;
+        result.min_defined = true;
+    }
+    if (d.max_defined && (!result.max_defined || d.max < result.max)) {
+        result.max = d.max;
+        result.max_defined = true;
+    }
+    if (result.min_defined && result.max_defined && result.min > result.max) {
+        return false;
+    }
+    acc = result;
+    return true;
+}
+
+}  // namespace
+
+Simplify::KnownDiff Simplify::known_difference(const BaseExprNode *a, const BaseExprNode *b) {
+    KnownDiff result;
+
+    if (known_bounds.empty()) {
+        return result;
+    }
+
+    // Canonicalize the query the way the facts were canonicalized when learned.
+    int64_t offset = 0;
+    peel_constant_offsets(a, b, offset);
+
+    if (equal(*a, *b)) {
+        result.bounds = ConstantInterval::single_point(0);
+    } else {
+        // A hole only tightens the bounds once we know where the ends are, so
+        // collect them as we go and apply them below. There are hardly ever any.
+        constexpr int max_holes = 4;
+        int64_t holes[max_holes];
+        int num_holes = 0;
+
+        for (const KnownBound &kb : known_bounds) {
+            // equal() is inlined and rejects on pointer identity and then on
+            // node type, so a record about some other pair costs almost nothing.
+            ConstantInterval d;
+            if (equal(*a, *kb.a.get()) && equal(*b, *kb.b.get())) {
+                d = kb.diff;
+            } else if (equal(*a, *kb.b.get()) && equal(*b, *kb.a.get())) {
+                // We know about (b - a), and this is the other direction.
+                d = -kb.diff;
+            } else {
+                continue;
+            }
+
+            if (kb.invert) {
+                if (num_holes < max_holes) {
+                    holes[num_holes++] = d.min;
+                }
+            } else if (!intersect_if_nonempty(result.bounds, d)) {
+                break;
+            }
+        }
+
+        for (int i = 0; i < num_holes; i++) {
+            const int64_t hole = holes[i];
+            // Removing a point only narrows the bounds if it is at one end.
+            if (result.bounds.min_defined && result.bounds.min == hole &&
+                !add_would_overflow(64, hole, 1)) {
+                result.bounds.min = hole + 1;
+            }
+            if (result.bounds.max_defined && result.bounds.max == hole &&
+                !sub_would_overflow(64, hole, 1)) {
+                result.bounds.max = hole - 1;
+            }
+            // Whether the difference can be zero matters even when the hole is
+            // in the interior, where it can't be captured by the bounds.
+            if (!add_would_overflow(64, hole, offset) && hole + offset == 0) {
+                result.excludes_zero = true;
+            }
+        }
+    }
+
+    // Undo the canonicalization: (a - b) = (peeled a - peeled b) + offset.
+    result.bounds += offset;
+
+    return result;
+}
+
+bool Simplify::is_known_equal(const BaseExprNode *a, const BaseExprNode *b) {
+    return known_difference(a, b).bounds.is_single_point(0);
+}
+
+bool Simplify::is_known_not_equal(const BaseExprNode *a, const BaseExprNode *b) {
+    KnownDiff d = known_difference(a, b);
+    return d.excludes_zero || !d.bounds.contains((int64_t)0);
+}
+
+bool Simplify::known_min_diff(const BaseExprNode *a, const BaseExprNode *b, int64_t *result) {
+    ConstantInterval bounds = known_difference(a, b).bounds;
+    if (bounds.min_defined) {
+        *result = bounds.min;
+        return true;
+    }
+    return false;
+}
+
+bool Simplify::known_max_diff(const BaseExprNode *a, const BaseExprNode *b, int64_t *result) {
+    ConstantInterval bounds = known_difference(a, b).bounds;
+    if (bounds.max_defined) {
+        *result = bounds.max;
+        return true;
+    }
+    return false;
+}
+
 bool Simplify::is_known_true(const Expr &e) {
     if (truths.empty() && falsehoods.empty()) {
         return false;
@@ -464,12 +694,18 @@ Expr Simplify::substitute_facts(const Expr &e) {
 }
 
 Simplify::ScopedFact::~ScopedFact() {
+    if (!simplify) {
+        // Moved from; the object that took over owns the cleanup.
+        return;
+    }
     for (const auto *v : pop_list) {
         simplify->var_info.pop(v->name);
     }
     for (const auto *v : bounds_pop_list) {
         simplify->bounds_and_alignment_info.pop(v->name);
     }
+    internal_assert(simplify->known_bounds.size() >= known_bounds_size);
+    simplify->known_bounds.resize(known_bounds_size);
     for (const auto &e : truths) {
         simplify->truths.erase(e);
     }

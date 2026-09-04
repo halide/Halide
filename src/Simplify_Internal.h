@@ -441,6 +441,43 @@ public:
 
     std::set<Expr, IRDeepCompare> truths, falsehoods;
 
+    /** What we know about the difference between a pair of Exprs. Every
+     * comparison we can learn from is a statement about (a - b): a < b means it
+     * is at most -1, !(a < b) means it is at least 0, a == b means it is zero.
+     * Because the complement of a half-line is a half-line, only the negation
+     * of an equality fails to be an interval, and that is always a single point
+     * removed, which is what invert represents. */
+    struct KnownBound {
+        Expr a, b;
+        ConstantInterval diff;
+        // If set, a - b is known *not* to lie in diff, which is always a single
+        // point. Only a != b (or !(a == b)) produces one of these.
+        bool invert = false;
+    };
+    std::vector<KnownBound> known_bounds;
+
+    /** What a scan of known_bounds was able to establish about (a - b). A hole
+     * that doesn't touch an end of the interval can't be represented in the
+     * bounds, so it is tracked separately when it matters, which is when the
+     * hole is at zero. */
+    struct KnownDiff {
+        ConstantInterval bounds;
+        bool excludes_zero = false;
+    };
+
+    /** Everything the facts tell us about (a - b), without building any IR.
+     * The arguments are borrowed, so this is safe to call with the raw nodes a
+     * rewrite rule has bound to its wildcards. */
+    KnownDiff known_difference(const BaseExprNode *a, const BaseExprNode *b);
+
+    // Helpers over known_difference, for use as rewrite rule predicates. The
+    // diffs return false when nothing is known, so that a rule asking for a
+    // bound it can't get simply doesn't fire.
+    bool is_known_equal(const BaseExprNode *a, const BaseExprNode *b);
+    bool is_known_not_equal(const BaseExprNode *a, const BaseExprNode *b);
+    bool known_min_diff(const BaseExprNode *a, const BaseExprNode *b, int64_t *result);
+    bool known_max_diff(const BaseExprNode *a, const BaseExprNode *b, int64_t *result);
+
     // How deeply are we nested inside the conditions of can_prove predicates?
     // Proving such a condition recursively invokes the simplifier on it, so a
     // rule whose left-hand side also matches something built while proving its
@@ -454,7 +491,7 @@ public:
     // learned higher up in the IR, so that we don't pay for them in the common
     // case.
     bool has_facts() const {
-        return !truths.empty() || !falsehoods.empty();
+        return !truths.empty() || !falsehoods.empty() || !known_bounds.empty();
     }
 
     // Replace exprs known to be truths or falsehoods with const_true or
@@ -476,24 +513,41 @@ public:
         std::vector<const Variable *> pop_list;
         std::vector<const Variable *> bounds_pop_list;
         std::set<Expr, IRDeepCompare> truths, falsehoods;
+        // Everything in the simplifier's known_bounds from this index on was
+        // pushed by this scope, and is truncated away again when it ends.
+        size_t known_bounds_size = 0;
 
         void learn_false(const Expr &fact);
         void learn_true(const Expr &fact);
         void learn_upper_bound(const Variable *v, int64_t val);
         void learn_lower_bound(const Variable *v, int64_t val);
+        // Record what a comparison says about the difference between its sides.
+        void learn_difference(const Expr &a, const Expr &b, const ConstantInterval &diff, bool invert);
 
         // Replace exprs known to be truths or falsehoods with const_true or const_false.
         Expr substitute_facts(const Expr &e);
         Stmt substitute_facts(const Stmt &s);
 
         ScopedFact(Simplify *s)
-            : simplify(s) {
+            : simplify(s), known_bounds_size(s->known_bounds.size()) {
         }
         ~ScopedFact();
 
         // allow move but not copy
         ScopedFact(const ScopedFact &that) = delete;
-        ScopedFact(ScopedFact &&that) = default;
+        // Not defaulted: the moved-from object must not undo anything in its
+        // destructor. The containers below would be empty after a move and so
+        // would be harmless, but known_bounds_size would survive and truncate
+        // away the facts this scope had just learned.
+        ScopedFact(ScopedFact &&that) noexcept
+            : simplify(that.simplify),
+              pop_list(std::move(that.pop_list)),
+              bounds_pop_list(std::move(that.bounds_pop_list)),
+              truths(std::move(that.truths)),
+              falsehoods(std::move(that.falsehoods)),
+              known_bounds_size(that.known_bounds_size) {
+            that.simplify = nullptr;
+        }
     };
 
     // Tell the simplifier to learn from and exploit a boolean
