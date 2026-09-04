@@ -18,6 +18,7 @@
 #include "Var.h"
 
 #include <map>
+#include <type_traits>
 #include <utility>
 
 namespace Halide {
@@ -58,6 +59,7 @@ struct VarOrRVar {
 };
 
 class ImageParam;
+class FuncVec;
 
 namespace Internal {
 struct AssociativeOp;
@@ -212,6 +214,49 @@ public:
     HALIDE_NO_USER_CODE_INLINE std::enable_if_t<Internal::all_are_convertible<Func, Args...>::value, Stage &>
     eager_inline(const Func &first, Args &&...args);
     // @}
+
+    /** Hoist loop-invariant factors out of an associative reduction by applying
+     * the distributive law of a semiring. Like rfactor(), this must be called on
+     * an update definition; it splits the update into an intermediate that
+     * accumulates one factor-free outer term over all of the update's RVars and
+     * a write-back that applies the hoisted factors once. The intermediate Funcs
+     * are returned in a FuncVec. For tuple-valued reductions, they are ordered
+     * by tuple output index, then by outer-term order.
+     *
+     * A factor is hoistable if it does not depend on any RVar being reduced. It
+     * may be nested at any depth of an associative/commutative chain. The valid
+     * hoistings are:
+     *
+     *   Outer op    Inner combine   Law
+     *   ---------   -------------   ---
+     *   + (sum)     *               sum_k(s * x_k) = s * sum_k(x_k)
+     *   min         +               min_k(c + x_k) = c + min_k(x_k)
+     *   max         +               max_k(c + x_k) = c + max_k(x_k)
+     *   || (bool)   &&              or_k(p && x_k) = p && or_k(x_k)
+     *   && (bool)   ||              and_k(p || x_k) = p || and_k(x_k)
+     *
+     * For example, hoist_invariants() rewrites a pipeline like this:
+     * \code
+     * f(x) = 0;
+     * f(x) += a(x) * g(x, r) + b(x) * h(x, r);
+     * \endcode
+     * into a pipeline like this:
+     * \code
+     * f_intm0(x) = 0;
+     * f_intm0(x) += g(x, r);
+     * f_intm1(x) = 0;
+     * f_intm1(x) += h(x, r);
+     *
+     * f(x) = 0;
+     * f(x) += a(x) * f_intm0(x) + b(x) * f_intm1(x);
+     * \endcode
+     *
+     * This reduces the number of factor applications from |R| to one per pure
+     * point. Terms without a hoistable factor are still split into separate
+     * intermediates. It is an error if there is neither a distributable invariant
+     * factor nor more than one outer term to split.
+     */
+    FuncVec hoist_invariants();
 
     /** Schedule the iteration over this stage to be fused with another
      * stage 's' from outermost loop to a given LoopLevel. 'this' stage will
