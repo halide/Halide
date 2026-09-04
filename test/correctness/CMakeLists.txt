@@ -207,6 +207,7 @@ tests(
     in_place.cpp
     indexing_access_undef.cpp
     infer_arguments.cpp
+    inject_modulo_vars.cpp
     inline_reduction.cpp
     inlined_generator.cpp
     input_func_name_unique.cpp
