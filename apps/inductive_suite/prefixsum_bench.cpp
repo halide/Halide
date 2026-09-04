@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
             prefix_sum.compute_at(output, x).store_at(output, y).fold_storage(x, fold);
         } else {
             fold = hb::fold_factor(2 * group, W);
-            output.split(x, xo, xi, group).vectorize(xi, vec);
+            output.split(x, xo, xi, group).vectorize(xi);
             prefix_sum.compute_at(output, xo).store_at(output, y).fold_storage(x, fold).unroll(x, 8);
         }
 
