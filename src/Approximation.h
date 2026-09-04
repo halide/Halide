@@ -1,0 +1,393 @@
+#ifndef HALIDE_APPROXIMATION_H
+#define HALIDE_APPROXIMATION_H
+
+/** \file
+ * Defines Approximation, a core interface for lossy, quantified
+ * Func-to-Func transformations (e.g. a quantize/dequantize round trip), and
+ * Compose/Apply, which build larger Approximations out of smaller ones. See
+ * Func::approximate_by(), which splices such a round trip into an existing
+ * call graph, and doc/ApproximationDesign.md for the design rationale.
+ */
+
+#include <memory>
+#include <string>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
+#include "Func.h"
+
+namespace Halide {
+
+/** An opaque identity for one Approximation stage. Keys are cheap to copy and
+ * remain stable when an Approximation is moved into Compose/Apply. A copied
+ * Approximation deliberately retains its key: the key identifies the logical
+ * stage selected by the caller, not a particular C++ address. */
+class ApproximationStageKey {
+public:
+    ApproximationStageKey() = default;
+
+    bool defined() const {
+        return token_ != nullptr;
+    }
+
+    friend bool operator==(const ApproximationStageKey &a, const ApproximationStageKey &b) {
+        return a.token_ == b.token_;
+    }
+    friend bool operator!=(const ApproximationStageKey &a, const ApproximationStageKey &b) {
+        return !(a == b);
+    }
+
+private:
+    explicit ApproximationStageKey(std::shared_ptr<const char> token)
+        : token_(std::move(token)) {
+    }
+
+    std::shared_ptr<const char> token_;
+    friend class Approximation;
+};
+
+/** The ports produced by one stage during encode or decode. This trace is
+ * supplemental scheduling metadata; it does not alter the signature contract
+ * or the legacy flat handle lists. */
+struct ApproximationStageOutputs {
+    ApproximationStageKey stage;
+    std::vector<Func> ports;
+};
+
+/** The result of Approximation::encode(): the Func(s) that make up the
+ * signature contract other code is expected to consume, plus any extra
+ * intermediate Funcs ("handles") that have no meaning outside scheduling
+ * (e.g. per-block reduction Funcs) but must still be scheduled by whoever
+ * calls encode(). */
+struct EncodeResult {
+    std::vector<Func> encoded;
+    std::vector<Func> handles;
+    std::vector<ApproximationStageOutputs> stage_outputs;
+};
+
+/** The result of Approximation::decode(): decoded is the round-trip
+ * replacement for whatever Func(s) were originally encoded, plus any
+ * additional scheduling-only handles. When an Approximation is used
+ * directly with Func::approximate_by(), decoded must contain exactly one
+ * Func; when it's used as one stage of a larger Compose/Apply chain,
+ * decoded may contain however many Funcs the next stage down expects. */
+struct DecodeResult {
+    std::vector<Func> decoded;
+    std::vector<Func> handles;
+    std::vector<ApproximationStageOutputs> stage_outputs;
+};
+
+/** Approximation is the base class for a lossy, quantified transformation
+ * of one or more Funcs' values -- e.g. quantize-then-dequantize. Unlike an
+ * ordinary schedule directive, an Approximation deliberately changes the
+ * *value* computed, not just how or where it's computed: decode(encode(f))
+ * is expected to approximately reproduce f, not exactly reproduce it.
+ *
+ * encode()/decode() take and return a *vector* of Funcs, not a single Func,
+ * even though the common case (a leaf Approximation like a plain quantizer)
+ * only ever uses one. This is what makes Compose and Apply below possible:
+ * a composed Approximation's inner stage can produce multiple Funcs (e.g. a
+ * quantized-values Func plus a separate scale Func), and the next stage
+ * needs to be able to consume all of them, or select just one to act on.
+ *
+ * An Approximation makes no claim about *where* or *when* encode/decode are
+ * computed relative to the rest of a pipeline (offline vs fused inline,
+ * compute_root vs compute_at) -- that is a scheduling decision, orthogonal
+ * to the semantics defined here. Concretely: the same Approximation can be
+ * used with encode() computed once, offline, ahead of any other stage (a
+ * static weight quantizer) or fused into a producer's inner loop and
+ * recomputed on every call (dynamic activation requantization) -- nothing
+ * about the interface favors one over the other. See Func::approximate_by()
+ * for splicing an Approximation into an existing call graph. */
+class Approximation {
+public:
+    Approximation()
+        : stage_key_(std::make_shared<const char>(0)) {
+    }
+    virtual ~Approximation() = default;
+
+    ApproximationStageKey stage_key() const {
+        return stage_key_;
+    }
+
+    /** Produce the encoded form of `inputs`. EncodeResult::encoded's
+     * elements are not required to have the same type, dimensionality, or
+     * count as `inputs` -- an Approximation is free to choose a packed
+     * representation (a single opaque byte buffer, fields recovered via
+     * reinterpret<>() inside decode) or a planar one (multiple typed Funcs,
+     * one per field). Either is legitimate; the framework does not
+     * decide. */
+    virtual EncodeResult encode(std::vector<Func> inputs) = 0;
+
+    /** Reconstruct an approximation of the original Func(s) from their
+     * encoded form. See DecodeResult for the constraint on `decoded`'s
+     * size, which depends on how this Approximation is used. */
+    virtual DecodeResult decode(std::vector<Func> encoded) = 0;
+
+private:
+    ApproximationStageKey stage_key_;
+};
+
+namespace Internal {
+
+/** Not for direct use. Type-erases an Approximation-derived value (or an
+ * already-type-erased std::unique_ptr<Approximation>, for the rare case
+ * where the concrete type is only known at runtime, e.g. chosen by an
+ * if/else) into an owned std::unique_ptr<Approximation> -- what lets
+ * Compose/Apply's constructors accept a plain mix of concrete Approximation
+ * values while still handling runtime-chosen ones, without exposing that
+ * distinction as something a caller has to think about. */
+// @{
+template<typename T>
+std::unique_ptr<Approximation> approximation_ptr(T &&value) {
+    return std::make_unique<std::decay_t<T>>(std::forward<T>(value));
+}
+inline std::unique_ptr<Approximation> approximation_ptr(std::unique_ptr<Approximation> value) {
+    return value;
+}
+// @}
+
+}  // namespace Internal
+
+/** The result of Func::approximate_by(): the primary replacement Func
+ * (already spliced into every Func in `consumers`), plus every
+ * intermediate Func produced by encode()/decode() along the way that needs
+ * scheduling (compute_root, compute_at, etc.) -- none of `handles` are
+ * part of the Approximation's signature contract, but Halide still
+ * requires Funcs with update definitions to be scheduled, and the fusion
+ * patterns described on Approximation above (e.g. compute_at-ing the
+ * encoded Func into a producer) are only possible if the caller has a
+ * handle to schedule. */
+struct ApproximationResult {
+    Func replacement;
+    /** The Func(s) produced by encode() -- the signature-contract boundary
+     * between the original values and their approximated form (e.g. a
+     * quantizer's packed byte buffer). This is a subset of `handles` (kept
+     * there too, so existing code that schedules everything in `handles`
+     * doesn't need to change), broken out separately so callers can act on
+     * exactly this boundary -- e.g. Pipeline::compute_offline(result.encoded)
+     * -- without calling Approximation::encode() themselves. */
+    std::vector<Func> encoded;
+    std::vector<Func> handles;
+    std::vector<ApproximationStageOutputs> encoded_stage_outputs;
+    std::vector<ApproximationStageOutputs> decoded_stage_outputs;
+
+    /** Return a stage output port, or an undefined Func if the key was not
+     * invoked in this direction or the port is out of range. */
+    Func encoded_by(const ApproximationStageKey &stage, size_t port = 0) const;
+    Func decoded_by(const ApproximationStageKey &stage, size_t port = 0) const;
+};
+
+/** Sequentially composes any number of Approximations into a pipeline:
+ * encode() runs `stages` back-to-front (the last stage first, on the
+ * original inputs), feeding each stage's encoded output to the one before
+ * it; decode() runs the mirror image, front-to-back. So `stages[0]` is the
+ * "outermost" stage -- the one whose encode() output is this Compose's own
+ * encoded result, and whose decode() input is this Compose's own encoded
+ * argument -- and `stages.back()` is "innermost", closest to the original
+ * values. This generalizes what used to be a fixed two-stage
+ * `Compose(outer, inner)`; that's just the two-element case.
+ *
+ * Compose owns every stage: each constructor argument is moved into (or, if
+ * already a std::unique_ptr<Approximation> -- e.g. because the concrete
+ * type was only known at runtime -- taken as) internal storage, so callers
+ * don't need to keep named locals alive alongside the Compose itself:
+ *
+ * \code
+ * Compose scheme{
+ *     StructPack{...},
+ *     Apply{1, 1, 1, Fp16Pack{}},
+ *     SymmetricAffineQuantize{block_size, qmax, rounding, anchor},
+ * };
+ * \endcode
+ */
+class Compose : public Approximation {
+public:
+    explicit Compose(std::vector<std::unique_ptr<Approximation>> stages)
+        : stages_(std::move(stages)) {
+    }
+
+    template<typename... Stages>
+    explicit Compose(Stages &&...stages) {
+        stages_.reserve(sizeof...(Stages));
+        (stages_.push_back(Internal::approximation_ptr(std::forward<Stages>(stages))), ...);
+    }
+
+    EncodeResult encode(std::vector<Func> inputs) override;
+    DecodeResult decode(std::vector<Func> encoded) override;
+
+private:
+    std::vector<std::unique_ptr<Approximation>> stages_;
+};
+
+class ComposeBuilder {
+public:
+    template<typename Stage>
+    ComposeBuilder &add(Stage &&stage) {
+        stages_.emplace_back(Internal::approximation_ptr(std::forward<Stage>(stage)));
+        return *this;
+    }
+
+    [[nodiscard]] std::unique_ptr<Approximation> build() {
+        return std::make_unique<Compose>(std::move(stages_));
+    }
+
+private:
+    std::vector<std::unique_ptr<Approximation>> stages_;
+};
+
+/** Applies `inner` to just the sub-range `[idx, idx + arity)` of a Func
+ * vector, passing every other element through unchanged -- e.g. applying a
+ * quantizer to just the "shifted" component of an affine (shift + scale)
+ * scheme's encoded output while leaving the shift amount itself untouched.
+ * `encode_arity`/`decode_arity` (how many Funcs `inner` consumes at that
+ * position for each direction) must be given explicitly, since C++ has no
+ * way to infer them generically from `inner` itself. Apply owns `inner` --
+ * moved in (or taken directly, if already a std::unique_ptr<Approximation>)
+ * -- the same way Compose owns its stages. */
+class Apply : public Approximation {
+public:
+    template<typename Inner>
+    Apply(int idx, int encode_arity, int decode_arity, Inner &&inner)
+        : idx_(idx), encode_arity_(encode_arity), decode_arity_(decode_arity),
+          inner_(Internal::approximation_ptr(std::forward<Inner>(inner))) {
+    }
+
+    template<typename Inner>
+    Apply(int idx, Inner &&inner)
+        : Apply(idx, 1, 1, std::forward<Inner>(inner)) {
+    }
+
+    EncodeResult encode(std::vector<Func> inputs) override;
+    DecodeResult decode(std::vector<Func> encoded) override;
+
+private:
+    int idx_, encode_arity_, decode_arity_;
+    std::unique_ptr<Approximation> inner_;
+};
+
+/** Routes encode() to one Approximation and decode() to another, taking each
+ * direction from a *different* source. This is the deliberate backdoor out of
+ * the structural guarantee Compose provides.
+ *
+ * Every Approximation is meant to be an approximate identity, factored into a
+ * decode-after-encode pair (decode(encode(f)) ~= f). Compose preserves that by
+ * construction: it interleaves its stages' encode()s and decode()s in mirror
+ * order, so the composed round trip (d1 . d2) . (e2 . e1) is *guaranteed* to be
+ * an approximate identity for the same structural reason each stage is -- the
+ * two halves provably come from one stage list. TrustedInverse pairs an encode
+ * and a decode from unrelated Approximations, so nothing structural guarantees
+ * they compose to an identity: the caller is *trusted* to have supplied a true
+ * inverse pair. Hence the name -- "trusted" as in "taken on trust", not "known
+ * safe".
+ *
+ * The motivating case: a scheme whose forward map (quantize) is an opaque
+ * offline black box -- a per-block codeword search, a transcendental scale fit,
+ * typically an extern call -- that no composition of Halide Funcs reproduces
+ * bit-for-bit, but whose reverse map (dequantize) *is* an ordinary Compose of
+ * invertible primitives. Compose can't express that pairing; TrustedInverse
+ * can, keeping the decode side a clean composition while the encode side is
+ * whatever opaque Approximation actually produces the encoded form:
+ *
+ * \code
+ * TrustedInverse{
+ *     ExternQuantize{"q4_k_quantize_via_ggml"},   // encode(): values -> bytes
+ *     Compose{                                      // decode(): bytes -> values
+ *         StructPack{...}, Apply{...}, ..., BlockReshape{block_size},
+ *     },
+ * };
+ * \endcode
+ *
+ * The unused half of each side is never called (here, the ExternQuantize's
+ * decode() and the Compose's encode()); supplying an Approximation whose
+ * relevant half is a stub is expected. TrustedInverse owns both sides the same
+ * way Compose/Apply own their stages -- moved in, or taken directly if already
+ * a std::unique_ptr<Approximation>. */
+class TrustedInverse : public Approximation {
+public:
+    template<typename Enc, typename Dec>
+    TrustedInverse(Enc &&encoder, Dec &&decoder)
+        : encoder_(Internal::approximation_ptr(std::forward<Enc>(encoder))),
+          decoder_(Internal::approximation_ptr(std::forward<Dec>(decoder))) {
+    }
+
+    EncodeResult encode(std::vector<Func> inputs) override;
+    DecodeResult decode(std::vector<Func> encoded) override;
+
+private:
+    std::unique_ptr<Approximation> encoder_, decoder_;
+};
+
+/** Picks one of two Approximations at construction time based on `cond` */
+class Choose : public Approximation {
+public:
+    template<typename True, typename False>
+    Choose(bool cond, True &&if_true, False &&if_false)
+        : chosen_(cond ? Internal::approximation_ptr(std::forward<True>(if_true)) :
+                         Internal::approximation_ptr(std::forward<False>(if_false))) {
+    }
+
+    EncodeResult encode(std::vector<Func> inputs) {
+        EncodeResult r = chosen_->encode(std::move(inputs));
+        r.stage_outputs.push_back({chosen_->stage_key(), r.encoded});
+        return r;
+    }
+
+    DecodeResult decode(std::vector<Func> encoded) {
+        DecodeResult r = chosen_->decode(std::move(encoded));
+        r.stage_outputs.push_back({chosen_->stage_key(), r.decoded});
+        return r;
+    }
+
+private:
+    std::unique_ptr<Approximation> chosen_;
+};
+
+class Identity : public Approximation {
+public:
+    EncodeResult encode(std::vector<Func> inputs) override {
+        return {inputs, {}};
+    }
+
+    DecodeResult decode(std::vector<Func> encoded) override {
+        return {encoded, {}};
+    }
+};
+
+class Permute : public Approximation {
+public:
+    explicit Permute(std::vector<int> permutation) : forward_(std::move(permutation)) {
+        backward_.resize(forward_.size());
+        for (int i = 0; i < (int)forward_.size(); i++) {
+            backward_[forward_[i]] = i;
+        }
+    }
+
+    EncodeResult encode(std::vector<Func> inputs) override {
+        user_assert(inputs.size() == forward_.size()) << "Permutation size does not match input size";
+        std::vector<Func> result;
+        result.reserve(inputs.size());
+        for (int i = 0; i < (int)inputs.size(); i++) {
+            result.push_back(inputs[forward_[i]]);
+        }
+        return {result, {}};
+    }
+
+    DecodeResult decode(std::vector<Func> encoded) override {
+        user_assert(encoded.size() == forward_.size()) << "Permutation size does not match encoded size";
+        std::vector<Func> result;
+        result.reserve(encoded.size());
+        for (int i = 0; i < (int)encoded.size(); i++) {
+            result.push_back(encoded[backward_[i]]);
+        }
+        return {result, {}};
+    }
+
+private:
+    std::vector<int> forward_, backward_;
+};
+
+}  // namespace Halide
+
+#endif
