@@ -11,12 +11,13 @@ namespace {
 
 using namespace Halide;
 
-int fib_fold2() {
+int fib_fold3() {
     Func f(Int(32), "f"), g("g");
     Var x("x"), y("y");
     f(x, y) = select(x <= 1, x + y, likely(f(x - 1, y) + f(x - 2, y)));
     g(x, y) = f(x, y);
-    f.compute_at(g, x).store_root().fold_storage(x, 2);
+    // Reaches back two steps, so the window keeps t-1, t-2, and t.
+    f.compute_at(g, x).store_root().fold_storage(x, 3);
     g.bound(x, 0, 30).bound(y, 0, 8);
 
     Buffer<int> im = g.realize({30, 8});
@@ -38,7 +39,7 @@ int multi_inner_injective_fold1() {
     f(x, y, z) = select(x <= 0, y + z, likely(f(x - 1, y, z) + 1));
     g(x, y, z) = f(x, y, z);
     g.reorder(z, y, x);
-    f.compute_at(g, x).store_root().fold_storage(x, 1);
+    f.compute_at(g, x).store_root().fold_storage(x, 2);
     g.bound(x, 0, 16).bound(y, 0, 4).bound(z, 0, 4);
 
     Buffer<int> im = g.realize({16, 4, 4});
@@ -50,7 +51,7 @@ int consumer_strided_nonfold_fold1() {
     Var x("x"), y("y");
     f(x, y) = select(x <= 0, y, likely(f(x - 1, y) + 1));  // f(x, y) = x + y
     g(x, y) = f(x, 2 * y);
-    f.compute_at(g, x).store_root().fold_storage(x, 1);
+    f.compute_at(g, x).store_root().fold_storage(x, 2);
     g.bound(x, 0, 64).bound(y, 0, 8);
 
     Buffer<int> im = g.realize({64, 8});
@@ -82,7 +83,7 @@ int box_filter_chained_inductive_fold() {
     box.bound(x, 0, W).bound(y, 0, H);
 
     sat.store_root().compute_at(box, y).fold_storage(y, 2 * R + 2);
-    rowsum.store_at(box, y).compute_at(sat, x).fold_storage(x, 1);
+    rowsum.store_at(box, y).compute_at(sat, x).fold_storage(x, 2);
 
     Buffer<int> result = box.realize({W, H});
 
@@ -106,10 +107,10 @@ int main(int argc, char **argv) {
     };
 
     std::vector<Task> tasks = {
-        {"fibonacci, fold_storage 2", fib_fold2},
-        {"loop-reordered recurrence, fold_storage 1", multi_inner_injective_fold1},
-        {"strided non-fold consumer access, fold_storage 1", consumer_strided_nonfold_fold1},
-        {"box filter, fold_storage 1", box_filter_chained_inductive_fold},
+        {"fibonacci, fold_storage 3", fib_fold3},
+        {"loop-reordered recurrence, fold_storage 2", multi_inner_injective_fold1},
+        {"strided non-fold consumer access, fold_storage 2", consumer_strided_nonfold_fold1},
+        {"box filter, fold_storage 2", box_filter_chained_inductive_fold},
     };
 
     using Sharder = Halide::Internal::Test::Sharder;

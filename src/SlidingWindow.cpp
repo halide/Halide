@@ -1311,39 +1311,6 @@ class SlidingWindow : public IRMutator {
         });
     }
 
-    // Whether the coordinate a Func is written at along one dimension is
-    // spread across the lanes of a vectorized loop. Lanes have no order
-    // between them, so where that dimension is the one a value is kept by, one
-    // lane's store may land before another lane's read of the value it
-    // replaces. Lanes spreading some other dimension are no such hazard: every
-    // lane then keeps to its own value of this one, and within a lane the
-    // right-hand side is still evaluated before the store.
-    static bool lanes_span_dim(const Stmt &body, const string &name, int dim_idx) {
-        bool found = false;
-        vector<string> lanes;
-        visit_with(
-            body,
-            [&](auto *self, const For *op) {
-                bool is_lanes = op->for_type == ForType::Vectorized;
-                if (is_lanes) {
-                    lanes.push_back(op->name);
-                }
-                self->visit_base(op);
-                if (is_lanes) {
-                    lanes.pop_back();
-                }
-            },
-            [&](auto *self, const Provide *op) {
-                if (op->name == name && dim_idx < (int)op->args.size()) {
-                    for (const string &l : lanes) {
-                        found = found || expr_uses_var(op->args[dim_idx], l);
-                    }
-                }
-                self->visit_base(op);
-            });
-        return found;
-    }
-
     // How much of a Func has to be kept while sliding over a dimension.
     //
     // The region required per iteration is the obvious answer, and it is wrong
@@ -1407,26 +1374,14 @@ class SlidingWindow : public IRMutator {
             return d.old_bounds;
         }
 
-        // The OLDEST step the recurrence reaches back to is read while the
-        // next one is computed, and never afterwards. It dies at the store
-        // that replaces it, so it does not have to be kept - but the younger
-        // lookbacks do: a recurrence reaching back r steps still needs
-        // steps t-1 .. t-(r-1) after t is stored, so the window keeps r-1
-        // old values even when the oldest dies in place.
-        //
-        // That argument wants the read to come before the store with nothing
-        // reading it later. Within one pure definition the right-hand side is
-        // evaluated before the store, which gives it. An update stage could
-        // read the older step after that store, and the lanes of a vectorized
-        // loop have no order between them at all, so give up on both.
-        //
-        // A consumer that wants the older step keeps it through ext.
-        // A Func that reads itself always keeps the step it reads: a window
-        // of exactly the reach would have the point's own store overwrite
-        // it, which is only sound if every point is computed exactly once,
-        // and a redundant split or a ShiftInwards tail computes points
-        // twice with nothing to say so. Nothing checks that, so the
-        // one-slot form is refused rather than promised.
+        // A recurrence reaching back r steps still needs steps t-1 .. t-r
+        // after t is stored, so the window keeps r old values on top of
+        // whatever the consumers ask for through ext. A window of exactly the
+        // reach would have the point's own store overwrite the step it reads,
+        // which is only sound if every point is computed exactly once - and a
+        // redundant split or a ShiftInwards tail computes points twice with
+        // nothing to say so. So an inductive Func explicitly folded no wider
+        // than its reach is refused rather than folded over the step it reads.
         for (const StorageDim &sd : func.schedule().storage_dims()) {
             if (sd.var == d.dim && sd.fold_factor.defined() && func.is_inductive()) {
                 user_assert(!can_prove(sd.fold_factor <= reach_back))
@@ -1438,14 +1393,8 @@ class SlidingWindow : public IRMutator {
                     << "must keep that step: fold by at least " << (reach_back + 1) << ".\n";
             }
         }
-        bool dies_at_its_store =
-            func.updates().empty() &&
-            !func.is_inductive() &&
-            !lanes_span_dim(body, func.name(), d.dim_idx);
 
-        Expr low = dies_at_its_store ?
-                       min(ext[d.dim_idx].min, dim_var - (reach_back - 1)) :
-                       min(ext[d.dim_idx].min, dim_var - reach_back);
+        Expr low = min(ext[d.dim_idx].min, dim_var - reach_back);
         Interval live(simplify(low, one_step),
                       simplify(max(ext[d.dim_idx].max, dim_var), one_step));
         return live;
