@@ -325,7 +325,11 @@ def ode(D, B, T, par=False):
     if not b.exists():
         return dict(params=f"D={D}, B={B}, T={T}", ind=None, rdom=None,
                     base_name="Boost.odeint (needs libboost-dev)", base=None, skipped=True)
-    out = sh(f"{b} {D} {B} {T}", APPS / "inductive_suite", env=None if par else {"HL_NUM_THREADS": "1"},
+    # The all-cores forms are short (~1 ms), so a single realize is dominated
+    # by thread-pool fork/join and migration noise; batch 16 realizes per
+    # timed sample so each measurement is long enough to be repeatable.
+    env = {"HB_BATCH": "16"} if par else {"HL_NUM_THREADS": "1"}
+    out = sh(f"{b} {D} {B} {T}", APPS / "inductive_suite", env=env,
              pin=not par, cores=par, log=LOGS / f"ode_{D}_{B}_{T}.txt")
     r, bts = hb_rows(out), hb_bytes(out)
     threaded = " (threaded)" if par else ""
@@ -607,7 +611,11 @@ def main():
         "gets; Julia, which crashes under the preload, runs on its own allocator and retains its arrays "
         "itself. Every measurement, Halide forms and baselines in every language, follows one protocol "
         "(apps/support/bench_harness.h): three untimed runs, thirty timed trials, the best reported; on the "
-        "GPU a trial is ten launches and one device synchronization, divided by ten. Baseline versions: "
+        "GPU a trial is ten launches and one device synchronization, divided by ten. The ode all-cores "
+        "forms run in about a millisecond, short enough that a single realize is dominated by thread-pool "
+        "fork/join and scheduling noise (the machine masks threads to the core set but does not pin them), "
+        "so that row times a batch of sixteen realizes together and divides, which the header records; the "
+        "other rows are long enough to time one at a time. Baseline versions: "
         "torch 2.11.0+cu130 (FlashAttention-2 and cuDNN SDPA backends), Triton 3.6.0, mamba_ssm 2.3.2.post1, "
         "Julia 1.12.7, scipy 1.15.3, numpy 2.2.4.\n\n")
     Path(args.out).write_text(notes + table + "\n")
