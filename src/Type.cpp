@@ -1,8 +1,10 @@
 #include "ConstantBounds.h"
 #include "IR.h"
 #include <cfloat>
+#include <map>
 #include <mutex>
 #include <sstream>
+#include <tuple>
 
 namespace Halide {
 
@@ -25,8 +27,110 @@ int64_t min_int(int bits) {
 
 }  // namespace
 
+bool StructField::operator==(const StructField &other) const {
+    return name == other.name && type == other.type && array_extent == other.array_extent;
+}
+
+bool StructField::operator<(const StructField &other) const {
+    if (name != other.name) {
+        return name < other.name;
+    }
+    if (type != other.type) {
+        return type < other.type;
+    }
+    return array_extent < other.array_extent;
+}
+
+int StructTypeInfo::find_field(const std::string &name) const {
+    for (size_t i = 0; i < fields.size(); i++) {
+        if (fields[i].name == name) {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+int Type::bytes() const {
+    if (is_struct()) {
+        const StructTypeInfo *info = struct_type();
+        return info ? info->total_bytes : 0;
+    }
+    return (bits() + 7) / 8;
+}
+
+Type Type::Struct(const std::vector<StructField> &fields) {
+    user_assert(!fields.empty()) << "Type::Struct requires at least one field.\n";
+
+    // Deliberately leaked: like halide_handle_cplusplus_type, this info table
+    // must remain valid for the lifetime of the program, since the intern
+    // table holds a (non-owning) pointer to it and Types get freely copied
+    // and compared throughout compilation.
+    auto *info = new StructTypeInfo();
+    info->fields = fields;
+    info->offsets.reserve(fields.size());
+
+    int offset = 0;
+    for (const auto &f : fields) {
+        user_assert(!f.type.is_struct() || f.type.struct_type() != nullptr)
+            << "Struct field \"" << f.name << "\" has an invalid nested struct type.\n";
+        user_assert(f.array_extent.value_or(1) > 0)
+            << "Struct field \"" << f.name << "\" has a non-positive array extent.\n";
+        info->offsets.push_back(offset);
+        offset += f.type.bytes() * f.array_extent.value_or(1);
+    }
+    info->total_bytes = offset;
+
+    // A struct has its own honest type code; its byte size lives in the interned
+    // StructTypeInfo (and is carried in the ABI's reserved field, see to_abi()).
+    // type_bits is not meaningful for a struct -- it's set to a byte's worth so
+    // the erased ABI tag is well-formed, but bytes() is the real size.
+    Type t(StructKind, 8, 1);
+    t.metadata_index_ = Internal::intern_struct_type(info);
+    return t;
+}
+
+bool Type::same_struct_type(const Type &other) const {
+    const StructTypeInfo *a = struct_type();
+    const StructTypeInfo *b = other.struct_type();
+
+    if (a == b) {
+        return true;
+    }
+    if (a == nullptr || b == nullptr) {
+        return false;
+    }
+    return a->fields == b->fields;
+}
+
+bool Type::operator<(const Type &other) const {
+    if (std::tie(type_code, type_bits, type_lanes) <
+        std::tie(other.type_code, other.type_bits, other.type_lanes)) {
+        return true;
+    }
+    if (std::tie(other.type_code, other.type_bits, other.type_lanes) <
+        std::tie(type_code, type_bits, type_lanes)) {
+        return false;
+    }
+    if (code() == Handle) {
+        return handle_type() < other.handle_type();
+    }
+    if (is_struct()) {
+        // Equal (type_code, type_bits, type_lanes) above already implies both
+        // are structs here, so we only order by field layout.
+        if (same_struct_type(other)) {
+            // Consistent with operator==: two struct types with identical
+            // field lists always compare as neither-less-than-the-other, even
+            // if they're backed by different interned StructTypeInfo tables.
+            return false;
+        }
+        return struct_type()->fields < other.struct_type()->fields;
+    }
+    return false;
+}
+
 /** Return an expression which is the maximum value of this type */
 Halide::Expr Type::max() const {
+    user_assert(!is_struct()) << "Type::max() is not defined for a struct type: " << *this << "\n";
     if (is_vector()) {
         return Internal::Broadcast::make(element_of().max(), lanes());
     } else if (is_int()) {
@@ -34,7 +138,7 @@ Halide::Expr Type::max() const {
     } else if (is_uint()) {
         return Internal::UIntImm::make(*this, max_uint(bits()));
     } else {
-        internal_assert(is_float());
+        internal_assert(is_float()) << "Type::max() is not defined for " << *this << "\n";
         if (bits() == 16) {
             return Internal::FloatImm::make(*this, (double)float16_t::make_infinity());
         } else if (bits() == 32) {
@@ -51,6 +155,7 @@ Halide::Expr Type::max() const {
 
 /** Return an expression which is the minimum value of this type */
 Halide::Expr Type::min() const {
+    user_assert(!is_struct()) << "Type::min() is not defined for a struct type: " << *this << "\n";
     if (is_vector()) {
         return Internal::Broadcast::make(element_of().min(), lanes());
     } else if (is_int()) {
@@ -58,7 +163,7 @@ Halide::Expr Type::min() const {
     } else if (is_uint()) {
         return Internal::UIntImm::make(*this, 0);
     } else {
-        internal_assert(is_float());
+        internal_assert(is_float()) << "Type::min() is not defined for " << *this << "\n";
         if (bits() == 16) {
             return Internal::FloatImm::make(*this, (double)float16_t::make_negative_infinity());
         } else if (bits() == 32) {
@@ -225,46 +330,99 @@ bool Type::can_represent(double x) const {
 
 namespace Internal {
 namespace {
-std::mutex &handle_type_intern_mutex() {
-    static std::mutex m;
-    return m;
-}
-std::vector<const halide_handle_cplusplus_type *> &handle_type_intern_table() {
-    static std::vector<const halide_handle_cplusplus_type *> t;
+
+/** A process-wide table that maps externally-owned, program-lifetime metadata
+ * pointers (handle-type descriptors, struct-type layouts) to small 1-based
+ * indices, so a `Type` can reference them in 4 bytes instead of an 8-byte
+ * inline pointer. Index 0 is reserved to mean "none". Pointers are deduped by
+ * identity (the pointees are stable, and distinct pointers with equal content
+ * are reconciled by the deep comparisons in Type). Entries are never removed. */
+template<typename T>
+class InternTable {
+    std::mutex mutex;
+    std::vector<const T *> table;
+
+public:
+    uint32_t intern(const T *ptr) {
+        if (ptr == nullptr) {
+            return 0;
+        }
+        std::scoped_lock lock(mutex);
+        for (size_t i = 0; i < table.size(); i++) {
+            if (table[i] == ptr) {
+                return (uint32_t)(i + 1);  // +1: index 0 is reserved for null
+            }
+        }
+        table.push_back(ptr);
+        internal_assert(table.size() < (size_t)0xffffffffu) << "intern table overflow";
+        return (uint32_t)table.size();
+    }
+
+    const T *get(uint32_t index) {
+        if (index == 0) {
+            return nullptr;
+        }
+        std::scoped_lock lock(mutex);
+        internal_assert(index <= table.size()) << "invalid intern index";
+        return table[index - 1];
+    }
+};
+
+InternTable<halide_handle_cplusplus_type> &handle_type_intern_table() {
+    static InternTable<halide_handle_cplusplus_type> t;
     return t;
 }
+
+InternTable<StructTypeInfo> &struct_type_intern_table() {
+    static InternTable<StructTypeInfo> t;
+    return t;
+}
+
 }  // namespace
 
 uint32_t intern_handle_type(const halide_handle_cplusplus_type *handle_type) {
-    // The overwhelmingly common case: a non-handle type. Costs a null check,
-    // no lock.
-    if (handle_type == nullptr) {
-        return 0;
-    }
-    std::scoped_lock lock(handle_type_intern_mutex());
-    auto &table = handle_type_intern_table();
-    // Dedup by pointer identity. Handle types are rare and few, so a linear
-    // scan is cheap; the pointees are externally owned and stable, so pointer
-    // identity is a safe key. (Distinct pointers with equal content still
-    // compare equal via Type::same_handle_type's deep comparison.)
-    for (size_t i = 0; i < table.size(); i++) {
-        if (table[i] == handle_type) {
-            return (uint32_t)(i + 1);  // +1: index 0 is reserved for null
-        }
-    }
-    table.push_back(handle_type);
-    internal_assert(table.size() < (size_t)0xffffffffu) << "handle-type intern table overflow";
-    return (uint32_t)table.size();
+    // The overwhelmingly common case (a non-handle type) is the nullptr fast
+    // path inside intern(), which costs just a null check and no lock.
+    return handle_type_intern_table().intern(handle_type);
 }
 
 const halide_handle_cplusplus_type *get_interned_handle_type(uint32_t index) {
-    if (index == 0) {
-        return nullptr;
+    return handle_type_intern_table().get(index);
+}
+
+uint32_t intern_struct_type(const StructTypeInfo *struct_type) {
+    internal_assert(struct_type != nullptr) << "intern_struct_type(nullptr)";
+    return struct_type_intern_table().intern(struct_type);
+}
+
+const StructTypeInfo *get_interned_struct_type(uint32_t index) {
+    return struct_type_intern_table().get(index);
+}
+
+uint32_t intern_opaque_struct_type(int total_bytes) {
+    // Reconstructing a struct Type from its ABI form recovers only the size,
+    // not the field layout. Memoize one field-opaque StructTypeInfo per size so
+    // repeated round-trips (e.g. Buffer::type()) don't leak a table entry each.
+    static std::mutex m;
+    static std::map<int, const StructTypeInfo *> by_size{};
+    const StructTypeInfo *info = nullptr;
+    {
+        std::scoped_lock lock(m);
+        auto it = by_size.find(total_bytes);
+        if (it == by_size.end()) {
+            // A single opaque byte-blob field of the right length; deliberately
+            // leaked, like every other interned StructTypeInfo.
+            auto *fresh = new StructTypeInfo();
+            fresh->fields = {StructField{"", UInt(8), total_bytes > 0 ? std::optional<int>(total_bytes) : std::nullopt}};
+            fresh->offsets = {0};
+            fresh->total_bytes = total_bytes;
+            by_size[total_bytes] = fresh;
+            info = fresh;
+        } else {
+            info = it->second;
+        }
     }
-    std::scoped_lock lock(handle_type_intern_mutex());
-    auto &table = handle_type_intern_table();
-    internal_assert(index <= table.size()) << "invalid handle-type intern index";
-    return table[index - 1];
+    return intern_struct_type(info);
 }
 }  // namespace Internal
 
@@ -294,7 +452,12 @@ std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus) {
     bool needs_space = true;
     ostringstream oss;
 
-    if (type.is_bfloat()) {
+    if (type.is_struct()) {
+        // The C backend byte-addresses struct storage (field access is lowered
+        // to byte loads/stores), so a struct's C element type is a raw byte;
+        // callers scale allocations by Type::bytes() for the true size.
+        oss << "uint8_t";
+    } else if (type.is_bfloat()) {
         oss << "bfloat" << type.bits() << "_t";
     } else if (type.is_float()) {
         if (type.bits() == 32) {

@@ -1431,6 +1431,12 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Allocate *op)
             << "Only fixed-size allocations are supported on the gpu. "
             << "Try storing into shared memory instead.";
 
+        // A struct is stored as a raw byte array (print_storage_type emits a byte
+        // element type), so size is an element count and must be scaled to bytes.
+        if (op->type.is_struct()) {
+            size *= op->type.bytes();
+        }
+
         stream << get_indent() << print_storage_type(op->type) << " "
                << print_name(op->name) << "[" << size << "];\n";
         stream << get_indent();
