@@ -78,9 +78,14 @@ tests(
     custom_allocator.cpp
     custom_auto_scheduler.cpp
     custom_cuda_context.cpp
+    custom_d3d12compute_context.cpp
     custom_error_reporter.cpp
     custom_jit_context.cpp
     custom_lowering_pass.cpp
+    custom_metal_context.cpp
+    custom_opencl_context.cpp
+    custom_vulkan_context.cpp
+    custom_webgpu_context.cpp
     d3d12compute_sm6x.cpp
     d3d12compute_strict_float.cpp
     dead_realization_in_specialization.cpp
