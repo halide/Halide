@@ -326,9 +326,9 @@ def ode(D, B, T, par=False):
         return dict(params=f"D={D}, B={B}, T={T}", ind=None, rdom=None,
                     base_name="Boost.odeint (needs libboost-dev)", base=None, skipped=True)
     # The all-cores forms are short (~1 ms), so a single realize is dominated
-    # by thread-pool fork/join and migration noise; batch 16 realizes per
+    # by thread-pool fork/join and migration noise; batch 128 realizes per
     # timed sample so each measurement is long enough to be repeatable.
-    env = {"HB_BATCH": "16"} if par else {"HL_NUM_THREADS": "1"}
+    env = {"HB_BATCH": "128"} if par else {"HL_NUM_THREADS": "1"}
     out = sh(f"{b} {D} {B} {T}", APPS / "inductive_suite", env=env,
              pin=not par, cores=par, log=LOGS / f"ode_{D}_{B}_{T}.txt")
     r, bts = hb_rows(out), hb_bytes(out)

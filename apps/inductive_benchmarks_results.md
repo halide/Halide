@@ -12,21 +12,21 @@ Memory: the JIT apps and the alignment runner free their scratch at the end of e
 
 | App | Config | Inductive (ms) | RDom (ms) | Ind peak (MB) | RDom peak (MB) | Fastest baseline (ms) | Baseline | Slower baselines tried | RDom / ind | Baseline / ind |
 |---|---|---:|---:|---:|---:|---:|---|---|---:|---:|
-| cpu_biquads | 8 sections, 32 ch x 8388608 samples, 1 thread | 94.8 | 449.3 | 0 | 2147 | 170.6 | Finding Fast Filters strided cascade | Intel IPP ippsIIR_32f_P, scipy.sosfilt, Julia DSP.jl filt, FFmpeg biquad, torchaudio lfilter | 4.74x | 1.80x |
-| cpu_biquads | 8 sections, 1024 ch x 262144 samples, all cores | 26.5 | 194.0 | 0 | 2147 | 24.6 | Finding Fast Filters strided cascade (threaded) | Intel IPP ippsIIR_32f_P, scipy.sosfilt, Julia DSP.jl filt, FFmpeg biquad, torchaudio lfilter | 7.32x | 0.93x |
-| cpu_rng | 32 streams x 4194304 steps, 1 thread | 34.9 | 216.5 | 0 | 4295 | 35.1 | Julia rand! | numpy PCG64 (a different generator), scalar C++ loop | 6.21x | 1.01x |
-| cpu_rng | 1024 streams x 131072 steps, all cores | 17.2 | 100.3 | 0 | 4295 | 17.3 | Julia rand! (threaded) | numpy PCG64 (a different generator), scalar C++ loop | 5.83x | 1.00x |
-| cpu_alignment | 1024x1024 x 128 pairs, 1 thread, fill+traceback+cigar, AVX2 (parasail's ISA) | 10.9 | 23.1 | 34.2 | 336 | 38.9 | parasail | ksw2 (minimap2 kernel), ksw2 scalar | 2.12x | 3.57x |
-| cpu_alignment | 1024x1024 x 4096 pairs, all cores, fill+traceback+cigar, AVX2 (parasail's ISA) | 25.1 | 345.5 | 1095 | 10758 | 48.3 | parasail | ksw2 (minimap2 kernel), ksw2 scalar | 13.76x | 1.93x |
+| cpu_biquads | 8 sections, 32 ch x 8388608 samples, 1 thread | 98.4 | 446.3 | 0 | 2147 | 181.9 | Finding Fast Filters strided cascade | Intel IPP ippsIIR_32f_P, scipy.sosfilt, Julia DSP.jl filt, FFmpeg biquad, torchaudio lfilter | 4.54x | 1.85x |
+| cpu_biquads | 8 sections, 1024 ch x 262144 samples, all cores | 26.4 | 195.8 | 0 | 2147 | 24.5 | Finding Fast Filters strided cascade (threaded) | Intel IPP ippsIIR_32f_P, scipy.sosfilt, Julia DSP.jl filt, FFmpeg biquad, torchaudio lfilter | 7.43x | 0.93x |
+| cpu_rng | 32 streams x 4194304 steps, 1 thread | 34.9 | 216.6 | 0 | 4295 | 35.1 | Julia rand! | numpy PCG64 (a different generator), scalar C++ loop | 6.21x | 1.01x |
+| cpu_rng | 1024 streams x 131072 steps, all cores | 17.1 | 100.5 | 0 | 4295 | 17.0 | Julia rand! (threaded) | numpy PCG64 (a different generator), scalar C++ loop | 5.88x | 0.99x |
+| cpu_alignment | 1024x1024 x 128 pairs, 1 thread, fill+traceback+cigar, AVX2 (parasail's ISA) | 10.9 | 23.1 | 34.2 | 336 | 38.6 | parasail | ksw2 (minimap2 kernel), ksw2 scalar | 2.12x | 3.53x |
+| cpu_alignment | 1024x1024 x 4096 pairs, all cores, fill+traceback+cigar, AVX2 (parasail's ISA) | 20.9 | 344.3 | 1094 | 10758 | 48.3 | parasail | ksw2 (minimap2 kernel), ksw2 scalar | 16.47x | 2.31x |
 | viterbi | 16 states, 4 symbols, T=320000, 1 thread (in-cache control) | 5.2 | 5.0 | 5.1 | 25.6 | - | - | - | 0.97x | - |
-| viterbi | 64 states, 8 symbols, T=50000, 1 thread (in-cache control) | 6.9 | 5.7 | 3.2 | 16.0 | - | - | - | 0.83x | - |
-| viterbi | 8 states, 4 symbols, T=16777216, 1 thread (latency-bound control) | 167.7 | 186.8 | 134 | 671 | - | - | - | 1.11x | - |
-| viterbi | 16 states, 4 symbols, T=262144, 32 decodes, all cores | 10.3 | 47.3 | 134 | 671 | - | - | - | 4.58x | - |
-| ode | Allen-Cahn D=1024, batch 1, T=32768, 1 thread | 2.3 | 6.9 | 0 | 134 | 2.9 | Boost.odeint | fused C++ loop | 3.05x | 1.31x |
-| ode | Allen-Cahn D=1024, batch 32, T=8192, all cores | 1.5 | 26.2 | 0 | 1074 | 1.4 | Boost.odeint (threaded) | fused C++ loop | 17.31x | 0.96x |
-| prefixsum | 67108864 x 2 rows, running-mean consumer, 1 thread | 29.2 | 55.7 | 0 | 268 | 62.2 | oneTBB parallel_scan | oneTBB parallel_for rows | 1.91x | 2.13x |
-| prefixsum | 8388608 x 32 rows, running-mean consumer, 32 threads | 23.4 | 47.0 | 0 | 1074 | 23.4 | oneTBB parallel_for rows | oneTBB parallel_scan | 2.01x | 1.00x |
-| chebyshev | n=2048 dense SPD, 100 iterations, 1 thread (in-cache control) | 11.3 | 11.0 | 0.0246 | 0.827 | 11.1 | hand-written mod-3 ring | - | 0.97x | 0.98x |
+| viterbi | 64 states, 8 symbols, T=50000, 1 thread (in-cache control) | 6.8 | 5.6 | 3.2 | 16.0 | - | - | - | 0.81x | - |
+| viterbi | 8 states, 4 symbols, T=16777216, 1 thread (latency-bound control) | 167.7 | 186.7 | 134 | 671 | - | - | - | 1.11x | - |
+| viterbi | 16 states, 4 symbols, T=262144, 32 decodes, all cores | 10.8 | 47.3 | 134 | 671 | - | - | - | 4.37x | - |
+| ode | Allen-Cahn D=1024, batch 1, T=32768, 1 thread | 2.0 | 6.7 | 0 | 134 | 2.7 | Boost.odeint | fused C++ loop | 3.35x | 1.36x |
+| ode | Allen-Cahn D=1024, batch 32, T=8192, all cores | 1.4 | 26.6 | 0 | 1074 | 1.5 | Boost.odeint (threaded) | fused C++ loop | 19.01x | 1.10x |
+| prefixsum | 67108864 x 2 rows, running-mean consumer, 1 thread | 28.8 | 55.8 | 0 | 268 | 62.2 | oneTBB parallel_for rows | oneTBB parallel_scan | 1.94x | 2.16x |
+| prefixsum | 8388608 x 32 rows, running-mean consumer, 32 threads | 23.4 | 46.8 | 0 | 1074 | 23.5 | oneTBB parallel_for rows | oneTBB parallel_scan | 2.00x | 1.00x |
+| chebyshev | n=2048 dense SPD, 100 iterations, 1 thread (in-cache control) | 11.3 | 11.0 | 0.0246 | 0.827 | 11.3 | hand-written mod-3 ring | - | 0.97x | 1.00x |
 | cuda_mamba2 | fwd, seq 4096, state 128, 128 heads x 64, chunk 256 (Triton 256), RTX 5060 Ti | 1.6 | 1.8 | 42.1 | 141 | 1.5 | Triton (mamba_ssm) | - | 1.15x | 0.98x |
 | cuda_mamba2 | bwd, seq 4096, state 128, 128 heads x 64, chunk 128 (Triton 256), RTX 5060 Ti | 5.9 | 6.1 | 235 | 277 | 4.3 | Triton (mamba_ssm) | - | 1.04x | 0.73x |
-| flash_attention | 65536 queries x 1024 keys, depth 64, fp16, chunk 64 (RDom 64), RTX 5060 Ti | 0.398 | 0.437 | 0 | 0 | 0.375 | FlashAttention-2 (torch SDPA) | cuDNN SDPA (torch), torch memory-efficient SDPA, cuBLAS + softmax + cuBLAS | 1.10x | 0.94x |
+| flash_attention | 65536 queries x 1024 keys, depth 64, fp16, chunk 64 (RDom 64), RTX 5060 Ti | 0.400 | 0.437 | 0 | 0 | 0.375 | FlashAttention-2 (torch SDPA) | cuDNN SDPA (torch), torch memory-efficient SDPA, cuBLAS + softmax + cuBLAS | 1.09x | 0.94x |
