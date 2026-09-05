@@ -191,6 +191,7 @@ tests(
     growing_stack.cpp
     half_native_interleave.cpp
     halide_buffer.cpp
+    halidoscope.cpp
     handle.cpp
     heap_cleanup.cpp
     hello_gpu.cpp
@@ -572,4 +573,5 @@ set_target_properties(
 if (WITH_SERIALIZATION)
     target_compile_definitions(correctness_streaming PRIVATE TEST_WITH_SERIALIZATION)
     target_compile_definitions(correctness_generator_cache PRIVATE TEST_WITH_SERIALIZATION)
+    target_compile_definitions(correctness_halidoscope PRIVATE TEST_WITH_SERIALIZATION)
 endif ()
