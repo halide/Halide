@@ -160,10 +160,10 @@ void Simplify::ScopedFact::learn_difference(const Expr &a, const Expr &b,
         return;
     }
 
+    const uint32_t fa = Simplify::expr_fingerprint(pa), fb = Simplify::expr_fingerprint(pb);
+    simplify->add_difference_key(fa ^ fb);
     simplify->known_bounds.push_back(
-        Simplify::KnownBound{Expr(pa), Expr(pb), peeled,
-                             Simplify::expr_fingerprint(pa), Simplify::expr_fingerprint(pb),
-                             invert});
+        Simplify::KnownBound{Expr(pa), Expr(pb), peeled, fa, fb, invert});
 }
 
 void Simplify::ScopedFact::learn_false(const Expr &fact) {
@@ -630,6 +630,11 @@ Simplify::KnownDiff Simplify::known_difference(const BaseExprNode *a, const Base
         int num_holes = 0;
 
         const uint32_t fa = expr_fingerprint(a), fb = expr_fingerprint(b);
+        // One test against the whole table before looking at any record.
+        if (!difference_key_present(fa ^ fb)) {
+            result.bounds += offset;
+            return result;
+        }
         for (const KnownBound &kb : known_bounds) {
             // Reject on the summaries first. They live in the record, so a
             // record about some other pair costs a pair of integer compares
@@ -757,6 +762,9 @@ Simplify::ScopedFact::~ScopedFact() {
     }
     internal_assert(simplify->known_bounds.size() >= known_bounds_size);
     simplify->known_bounds.resize(known_bounds_size);
+    for (int i = 0; i < Simplify::difference_key_words; i++) {
+        simplify->difference_keys[i] = saved_difference_keys[i];
+    }
     for (const auto &e : truths) {
         simplify->truths.erase(e);
     }

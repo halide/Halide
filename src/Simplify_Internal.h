@@ -461,6 +461,13 @@ public:
     };
     std::vector<KnownBound> known_bounds;
 
+    // A bit per pair key, over every record in the table. A query whose bit is
+    // clear cannot match anything, which is the answer almost every query gets.
+    // Wide enough that a few dozen facts leave it sparse: at 64 bits a typical
+    // table saturates and lets four queries in ten through to the scan.
+    static constexpr int difference_key_words = 4;
+    uint64_t difference_keys[difference_key_words] = {0};
+
     // Summarize an Expr by its node type, plus the name or value of the leaves
     // that distinguish otherwise identical-looking nodes. Deliberately ignores
     // children: this only has to be equal for equal Exprs, not unique.
@@ -528,6 +535,20 @@ public:
         return !known_bounds.empty();
     }
 
+    // The two fingerprints xored together identify a pair whichever way round
+    // it is asked about, so one bit serves both directions.
+    HALIDE_ALWAYS_INLINE
+    bool difference_key_present(uint32_t key) const {
+        const uint32_t bit = key % (difference_key_words * 64);
+        return (difference_keys[bit / 64] >> (bit % 64)) & 1;
+    }
+
+    HALIDE_ALWAYS_INLINE
+    void add_difference_key(uint32_t key) {
+        const uint32_t bit = key % (difference_key_words * 64);
+        difference_keys[bit / 64] |= (uint64_t)1 << (bit % 64);
+    }
+
     // Replace exprs known to be truths or falsehoods with const_true or
     // const_false. Used to inject everything currently known into the
     // conditions of can_prove predicates in rewrite rules.
@@ -550,6 +571,9 @@ public:
         // Everything in the simplifier's known_bounds from this index on was
         // pushed by this scope, and is truncated away again when it ends.
         size_t known_bounds_size = 0;
+        // Bits can't be cleared one at a time, so keep the summary from before
+        // this scope and put it back wholesale.
+        uint64_t saved_difference_keys[difference_key_words] = {0};
 
         void learn_false(const Expr &fact);
         void learn_true(const Expr &fact);
@@ -564,6 +588,9 @@ public:
 
         ScopedFact(Simplify *s)
             : simplify(s), known_bounds_size(s->known_bounds.size()) {
+            for (int i = 0; i < difference_key_words; i++) {
+                saved_difference_keys[i] = s->difference_keys[i];
+            }
         }
         ~ScopedFact();
 
@@ -580,6 +607,9 @@ public:
               truths(std::move(that.truths)),
               falsehoods(std::move(that.falsehoods)),
               known_bounds_size(that.known_bounds_size) {
+            for (int i = 0; i < difference_key_words; i++) {
+                saved_difference_keys[i] = that.saved_difference_keys[i];
+            }
             that.simplify = nullptr;
         }
     };
