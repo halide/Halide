@@ -208,6 +208,7 @@ tests(
     in_place.cpp
     indexing_access_undef.cpp
     infer_arguments.cpp
+    inject_modulo_vars.cpp
     inline_reduction.cpp
     inlined_generator.cpp
     input_func_name_unique.cpp
@@ -343,6 +344,7 @@ tests(
     split_aligned.cpp
     split_aligned_2d.cpp
     split_aligned_2d_3x3.cpp
+    split_aligned_mux_phase.cpp
     split_aligned_nested.cpp
     split_aligned_partition.cpp
     split_aligned_reduction.cpp
