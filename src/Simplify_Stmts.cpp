@@ -1,3 +1,4 @@
+#include "Simplify.h"
 #include "Simplify_Internal.h"
 
 #include <algorithm>
@@ -40,6 +41,7 @@ Stmt Simplify::visit(const IfThenElse *op) {
 
     Stmt then_case, else_case;
     {
+        ScopedValue<bool> differences(record_difference_facts, regions_have_been_inferred());
         auto f = scoped_truth(unwrapped_condition);
         then_case = mutate(op->then_case);
         Stmt learned_then_case = f.substitute_facts(then_case);
@@ -51,6 +53,7 @@ Stmt Simplify::visit(const IfThenElse *op) {
     in_unreachable = false;
 
     {
+        ScopedValue<bool> differences(record_difference_facts, regions_have_been_inferred());
         auto f = scoped_falsehood(unwrapped_condition);
         else_case = mutate(op->else_case);
         Stmt learned_else_case = f.substitute_facts(else_case);

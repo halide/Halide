@@ -2377,6 +2377,18 @@ void check_invariant() {
     }
 }
 
+void check_with_assumptions(const Expr &a, const Expr &b, const std::vector<Expr> &assumptions) {
+    Expr simpler = simplify(a, Scope<Interval>(), Scope<ModulusRemainder>(), assumptions);
+    if (!equal(simpler, b)) {
+        std::cerr
+            << "\nSimplification failure:\n"
+            << "Input: " << a << "\n"
+            << "Output: " << simpler << "\n"
+            << "Expected output: " << b << "\n";
+        abort();
+    }
+}
+
 void check_unreachable() {
     Var x("x"), y("y");
 
@@ -2405,6 +2417,114 @@ void check_unreachable() {
           Evaluate::make(0));
 }
 
+void check_facts() {
+    Expr x = Var("x"), y = Var("y"), z = Var("z");
+
+    // A fact stated in any comparison direction should let the simplifier pick
+    // the winning side of a max or min.
+    check_with_assumptions(max(x, y), x, {x > y});
+    check_with_assumptions(max(x, y), x, {y < x});
+    check_with_assumptions(max(x, y), y, {x < y});
+    check_with_assumptions(max(x, y), y, {y > x});
+    check_with_assumptions(min(x, y), y, {x > y});
+    check_with_assumptions(min(x, y), x, {x < y});
+
+    // A non-strict fact is enough to pick a side of a max or min, and a strict
+    // fact implies the non-strict one.
+    check_with_assumptions(max(x, y), x, {x >= y});
+    check_with_assumptions(max(x, y), y, {x <= y});
+    check_with_assumptions(min(x, y), x, {x <= y});
+    check_with_assumptions(min(x, y), y, {x >= y});
+
+    // Facts about compound expressions work too.
+    check_with_assumptions(max(x + z, y * 3), x + z, {x + z > y * 3});
+    check_with_assumptions(max(max(x, y), z), z, {max(x, y) < z});
+
+    // The condition of an if is deliberately not used to order a min or max.
+    // Removing one of those is not only a statement about a value: a clamp
+    // around an index is what holds bounds inference's idea of the region
+    // required inside the buffer, and bounds inference only partly models the
+    // conditions of ifs -- a reduction domain's predicate among them. Dropping
+    // a clamp on the strength of such a condition leaves it asking for a region
+    // the clamp had been keeping in range.
+    check(IfThenElse::make(x < y, not_no_op(max(x, y)), not_no_op(z)),
+          IfThenElse::make(x < y, not_no_op(max(x, y)), not_no_op(z)));
+
+    // A division can cancel a multiplication inside a max or min when we know
+    // which side wins after the division.
+    check_with_assumptions(max(x * 8, y) / 8, x, {x >= y / 8});
+    check_with_assumptions(max(y, x * 8) / 8, x, {x >= y / 8});
+    check_with_assumptions(min(x * 8, y) / 8, x, {x <= y / 8});
+    check_with_assumptions(min(y, x * 8) / 8, x, {x <= y / 8});
+
+    // The direction in which a fact is stated doesn't matter, on either side:
+    // both the facts and the conditions of can_prove predicates are looked up
+    // in the same canonical form.
+    check_with_assumptions(max(x * 8, y) / 8, x, {y / 8 <= x});
+    check_with_assumptions(max(x * 8, y) / 8, x, {!(x < y / 8)});
+    check_with_assumptions(min(x * 8, y) / 8, x, {y / 8 >= x});
+
+    // A strict fact settles a non-strict predicate too.
+    check_with_assumptions(max(x * 8, y) / 8, x, {x > y / 8});
+    check_with_assumptions(min(x * 8, y) / 8, x, {x < y / 8});
+
+    // A min is at most either of its operands and a max is at least either of
+    // them, which needs no facts at all. That only bounds the difference on one
+    // side, but knowing the two are unequal removes the endpoint, and the two
+    // together settle a comparison that neither settles alone.
+    check_with_assumptions(max(min(x, y) + 1, x), x, {min(x, y) != x});
+    check_with_assumptions(min(max(x, y) - 1, x), x, {max(x, y) != x});
+
+    // Neither ingredient is enough by itself: without the inequality the
+    // difference could still be zero, and without the shape there is no bound
+    // for the inequality to tighten.
+    check_with_assumptions(max(min(x, y) + 1, x), max(min(x, y) + 1, x), {z < z + 1});
+    check_with_assumptions(max(y + 1, x), max(y + 1, x), {y != x});
+
+    // Deeply nested mins and maxes must not make the work of proving the
+    // predicates of the rules above blow up.
+    Expr nest = x;
+    for (int i = 0; i < 24; i++) {
+        nest = min(max(nest + i, y - i), z * i);
+    }
+    // The result isn't interesting; what matters is that we get one at all.
+    (void)simplify(nest, Scope<Interval>(), Scope<ModulusRemainder>(), {x < y});
+
+    // can_prove-based rules (unlike the known_true ones above) recursively
+    // invoke the simplifier on their own predicate, and that predicate can be
+    // a freshly built expression rather than a piece of the original IR (e.g.
+    // min(x, y) - min(z, w) -> y - w, can_prove(x - y == z - w)) constructs a
+    // brand new subtraction). If the operands are themselves unsimplified
+    // instances of the same shape, this recurses; the depth limit must bound
+    // the work rather than let it explode.
+    Expr deep = min(Var("da"), Var("db")) - min(Var("dc"), Var("dd"));
+    for (int i = 0; i < 10; i++) {
+        Expr y = Var("dy" + std::to_string(i));
+        Expr z = Var("dz" + std::to_string(i));
+        Expr w = Var("dw" + std::to_string(i));
+        deep = min(deep, y) - min(z, w);
+    }
+    (void)simplify(deep);
+
+    // Constant offsets are peeled off both the facts and the queries, so a fact
+    // stated about a shifted operand still settles a predicate about the
+    // unshifted one, in either direction.
+    check_with_assumptions(max(x, y), y, {x + 1 <= y});
+    check_with_assumptions(max(x, y), x, {y <= x + 0});
+    check_with_assumptions(max(x + 3, y), y, {x + 4 <= y});
+    check_with_assumptions(min(x, y), x, {x + 1 <= y});
+
+    // But an offset that leaves the order undetermined still doesn't fire.
+    check_with_assumptions(max(x, y), max(x, y), {x <= y + 1});
+
+    // Without the fact, the division stays put.
+    check(max(x * 8, y) / 8, max(x * 8, y) / 8);
+
+    // Facts that don't strictly order the operands don't fire these rules.
+    check_with_assumptions(max(x, y), max(x, y), {x != y});
+    check_with_assumptions(max(x * 8, y) / 8, max(x * 8, y) / 8, {x < y / 8});
+}
+
 int main(int argc, char **argv) {
     check_invariant();
     check_casts();
@@ -2417,6 +2537,7 @@ int main(int argc, char **argv) {
     check_bitwise();
     check_lets();
     check_unreachable();
+    check_facts();
 
     // Miscellaneous cases that don't fit into one of the categories above.
     Expr x = Var("x"), y = Var("y");

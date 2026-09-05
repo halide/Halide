@@ -441,30 +441,195 @@ public:
 
     std::set<Expr, IRDeepCompare> truths, falsehoods;
 
+    /** What we know about the difference between a pair of Exprs. Every
+     * comparison we can learn from is a statement about (a - b): a < b means it
+     * is at most -1, !(a < b) means it is at least 0, a == b means it is zero.
+     * Because the complement of a half-line is a half-line, only the negation
+     * of an equality fails to be an interval, and that is always a single point
+     * removed, which is what invert represents. */
+    struct KnownBound {
+        Expr a, b;
+        ConstantInterval diff;
+        // Cheap structural summaries of a and b. Equal Exprs always summarize
+        // to the same value, so a mismatch rules a record out without touching
+        // the Exprs at all. Almost every query is about a pair nothing is known
+        // about, so what this scan needs to be good at is saying no.
+        uint32_t fingerprint_a = 0, fingerprint_b = 0;
+        // If set, a - b is known *not* to lie in diff, which is always a single
+        // point. Only a != b (or !(a == b)) produces one of these.
+        bool invert = false;
+    };
+    std::vector<KnownBound> known_bounds;
+
+    // A bit per pair key, over every record in the table. A query whose bit is
+    // clear cannot match anything, which is the answer almost every query gets.
+    // Wide enough that a few dozen facts leave it sparse: at 64 bits a typical
+    // table saturates and lets four queries in ten through to the scan.
+    static constexpr int difference_key_words = 4;
+    uint64_t difference_keys[difference_key_words] = {0};
+
+    // Summarize an Expr by its node type, plus the name or value of the leaves
+    // that distinguish otherwise identical-looking nodes. Deliberately ignores
+    // children: this only has to be equal for equal Exprs, not unique.
+    static uint32_t expr_fingerprint(const BaseExprNode *e) {
+        uint32_t h = ((uint32_t)e->node_type + 1) * 2654435761u;
+        if (e->node_type == IRNodeType::Variable) {
+            for (char c : ((const Variable *)e)->name) {
+                h = h * 31u + (uint32_t)(unsigned char)c;
+            }
+        } else if (e->node_type == IRNodeType::IntImm) {
+            h ^= (uint32_t)((const IntImm *)e)->value;
+        }
+        return h;
+    }
+
+    /** What a scan of known_bounds was able to establish about (a - b). A hole
+     * that doesn't touch an end of the interval can't be represented in the
+     * bounds, so it is tracked separately when it matters, which is when the
+     * hole is at zero. */
+    struct KnownDiff {
+        ConstantInterval bounds;
+        bool excludes_zero = false;
+    };
+
+    /** Everything the facts tell us about (a - b), without building any IR.
+     * The arguments are borrowed, so this is safe to call with the raw nodes a
+     * rewrite rule has bound to its wildcards. */
+    KnownDiff known_difference(const BaseExprNode *a, const BaseExprNode *b);
+
+    // Helpers over known_difference, for use as rewrite rule predicates. The
+    // diffs return false when nothing is known, so that a rule asking for a
+    // bound it can't get simply doesn't fire.
+    bool is_known_equal(const BaseExprNode *a, const BaseExprNode *b);
+    bool is_known_not_equal(const BaseExprNode *a, const BaseExprNode *b);
+    bool known_min_diff(const BaseExprNode *a, const BaseExprNode *b, int64_t *result);
+    bool known_max_diff(const BaseExprNode *a, const BaseExprNode *b, int64_t *result);
+
+    // How deeply are we nested inside the conditions of can_prove predicates?
+    // Proving such a condition recursively invokes the simplifier on it, so a
+    // rule whose left-hand side also matches something built while proving its
+    // own predicate recurses without bound. Bound it.
+    //
+    // The work grows sharply with this limit -- on an adversarial nest of
+    // min(x, y) - min(z, w) it is roughly 0.02s at 1 or 2, 0.11s at 3 and 0.72s
+    // at 4 -- while no rule needs the depth: instrumenting every correctness
+    // test shows the deepest nesting any of them reaches is one. So this is
+    // already a level of headroom over anything observed.
+    int can_prove_depth = 0;
+    static constexpr int max_can_prove_depth = 2;
+
+    // Is there anything a known_true predicate could look up? Used to gate rules
+    // whose predicates are only ever provable from facts learned higher up in
+    // the IR, so that we don't pay for them in the common case.
+    bool has_facts() const {
+        return !truths.empty() || !falsehoods.empty();
+    }
+
+    // Should a comparison we learn from also be recorded as a bound on the
+    // difference between its sides? Removing a min or max is not just a
+    // statement about a value: a clamp around an index is what keeps bounds
+    // inference's idea of the region required within the buffer. Bounds
+    // inference derives the same ranges we do from loop bounds, and an explicit
+    // assumption is the caller's business, but it only partly models the
+    // conditions of ifs -- and a reduction domain's predicate is one of those.
+    // Removing a clamp justified by such a condition leaves it asking for a
+    // region the clamp had been keeping in bounds.
+    bool record_difference_facts = true;
+
+    // Is there anything a min_diff or max_diff predicate could look up? Only a
+    // comparison of non-overflowing integers leaves a record here, so this is
+    // strictly narrower than has_facts: a boolean fact, or a fact about a type
+    // that can wrap, satisfies that one while leaving this table empty. Rules
+    // that ask about differences must gate on this, or they spend a lookup on
+    // a table that cannot answer.
+    bool has_difference_facts() const {
+        return !known_bounds.empty();
+    }
+
+    // Symmetric key for a pair. Equal summaries say only that the two nodes are
+    // the same kind, and xoring them throws even that away, so key those by the
+    // kind instead of letting every same-type pair share one bit.
+    HALIDE_ALWAYS_INLINE
+    static uint32_t difference_key(uint32_t fa, uint32_t fb) {
+        return fa == fb ? fa * 0x9e3779b9u : (fa ^ fb);
+    }
+
+    // One bit per pair key.
+    HALIDE_ALWAYS_INLINE
+    bool difference_key_present(uint32_t key) const {
+        const uint32_t bit = key % (difference_key_words * 64);
+        return (difference_keys[bit / 64] >> (bit % 64)) & 1;
+    }
+
+    HALIDE_ALWAYS_INLINE
+    void add_difference_key(uint32_t key) {
+        const uint32_t bit = key % (difference_key_words * 64);
+        difference_keys[bit / 64] |= (uint64_t)1 << (bit % 64);
+    }
+
+    // Replace exprs known to be truths or falsehoods with const_true or
+    // const_false. Used to inject everything currently known into the
+    // conditions of can_prove predicates in rewrite rules.
+    Expr substitute_facts(const Expr &e);
+
+    // Simplify the condition of a can_prove predicate in a rewrite rule, using
+    // everything currently known.
+    Expr simplify_can_prove_condition(const Expr &e);
+
+    // Is a boolean Expr already known to be true? Unlike can_prove this only
+    // looks the condition up in the facts, without simplifying anything.
+    bool is_known_true(const Expr &e);
+
     struct ScopedFact {
         Simplify *simplify;
 
         std::vector<const Variable *> pop_list;
         std::vector<const Variable *> bounds_pop_list;
         std::set<Expr, IRDeepCompare> truths, falsehoods;
+        // Everything in the simplifier's known_bounds from this index on was
+        // pushed by this scope, and is truncated away again when it ends.
+        size_t known_bounds_size = 0;
+        // Bits can't be cleared one at a time, so keep the summary from before
+        // this scope and put it back wholesale.
+        uint64_t saved_difference_keys[difference_key_words] = {0};
 
         void learn_false(const Expr &fact);
         void learn_true(const Expr &fact);
         void learn_upper_bound(const Variable *v, int64_t val);
         void learn_lower_bound(const Variable *v, int64_t val);
+        // Record what a comparison says about the difference between its sides.
+        void learn_difference(const Expr &a, const Expr &b, const ConstantInterval &diff, bool invert);
 
         // Replace exprs known to be truths or falsehoods with const_true or const_false.
         Expr substitute_facts(const Expr &e);
         Stmt substitute_facts(const Stmt &s);
 
         ScopedFact(Simplify *s)
-            : simplify(s) {
+            : simplify(s), known_bounds_size(s->known_bounds.size()) {
+            for (int i = 0; i < difference_key_words; i++) {
+                saved_difference_keys[i] = s->difference_keys[i];
+            }
         }
         ~ScopedFact();
 
         // allow move but not copy
         ScopedFact(const ScopedFact &that) = delete;
-        ScopedFact(ScopedFact &&that) = default;
+        // Not defaulted: the moved-from object must not undo anything in its
+        // destructor. The containers below would be empty after a move and so
+        // would be harmless, but known_bounds_size would survive and truncate
+        // away the facts this scope had just learned.
+        ScopedFact(ScopedFact &&that) noexcept
+            : simplify(that.simplify),
+              pop_list(std::move(that.pop_list)),
+              bounds_pop_list(std::move(that.bounds_pop_list)),
+              truths(std::move(that.truths)),
+              falsehoods(std::move(that.falsehoods)),
+              known_bounds_size(that.known_bounds_size) {
+            for (int i = 0; i < difference_key_words; i++) {
+                saved_difference_keys[i] = that.saved_difference_keys[i];
+            }
+            that.simplify = nullptr;
+        }
     };
 
     // Tell the simplifier to learn from and exploit a boolean

@@ -490,6 +490,13 @@ struct Wild {
         return state.get_binding(i);
     }
 
+    // The bound node itself. Unlike make() this doesn't even touch a reference
+    // count, which lets predicates inspect what matched for free.
+    HALIDE_ALWAYS_INLINE
+    const BaseExprNode *bound_node(MatcherState &state) const noexcept {
+        return state.get_binding(i);
+    }
+
     constexpr static bool foldable = false;
 };
 
@@ -2554,7 +2561,7 @@ struct CanProve {
     // Includes a raw call to an inlined make method, so don't inline.
     [[nodiscard]] HALIDE_NEVER_INLINE bool make_folded_const(halide_scalar_value_t &val, Type &ty, MatcherState &state) const {
         Expr condition = a.make(state, {});
-        condition = prover->mutate(condition, nullptr);
+        condition = prover->simplify_can_prove_condition(condition);
         val.u.u64 = is_const_one(condition);
         ty = Bool(condition.type().lanes());
         return false;
@@ -2570,6 +2577,175 @@ HALIDE_ALWAYS_INLINE auto can_prove(A &&a, Prover *p) noexcept -> CanProve<declt
 template<typename A, typename Prover>
 std::ostream &operator<<(std::ostream &s, const CanProve<A, Prover> &op) {
     s << "can_prove(" << op.a << ")";
+    return s;
+}
+
+// Like can_prove, but only looks the condition up in the facts the prover
+// already knows, instead of recursively invoking it. Much cheaper, and it
+// cannot recurse, so unlike can_prove it is safe in a rule whose left-hand
+// side matches expressions the prover may construct while proving it.
+template<typename A, typename Prover>
+struct KnownTrue {
+    struct pattern_tag {};
+    A a;
+    Prover *prover;  // An existing simplifying mutator
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    // This rule is a boolean-valued predicate. Bools have type UIntImm.
+    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
+    constexpr static bool canonical = true;
+
+    constexpr static bool foldable = true;
+
+    // Includes a raw call to an inlined make method, so don't inline.
+    [[nodiscard]] HALIDE_NEVER_INLINE bool make_folded_const(halide_scalar_value_t &val, Type &ty, MatcherState &state) const {
+        Expr condition = a.make(state, {});
+        val.u.u64 = prover->is_known_true(condition) ? 1 : 0;
+        ty = Bool(condition.type().lanes());
+        return false;
+    }
+};
+
+template<typename A, typename Prover>
+HALIDE_ALWAYS_INLINE auto known_true(A &&a, Prover *p) noexcept -> KnownTrue<decltype(pattern_arg(a)), Prover> {
+    assert_is_lvalue_if_expr<A>();
+    return {pattern_arg(a), p};
+}
+
+template<typename A, typename Prover>
+std::ostream &operator<<(std::ostream &s, const KnownTrue<A, Prover> &op) {
+    s << "known_true(" << op.a << ")";
+    return s;
+}
+
+// Detects patterns that can hand back the node they matched without building
+// anything. The predicates below are restricted to these, which is what makes
+// them allocation-free: it is a compile error to ask about a derived expression
+// like min_diff(x, y + 1). Put the offset on the other side of the comparison
+// instead: min_diff(x, y) >= 1.
+template<typename A, typename = void>
+struct has_bound_node : std::false_type {};
+
+template<typename A>
+struct has_bound_node<A, std::void_t<decltype(std::declval<const A &>().bound_node(std::declval<MatcherState &>()))>>
+    : std::true_type {};
+
+// Bounds on the difference between two matched expressions, derived from the
+// facts the prover has learned. Used as (min_diff(x, y, this) >= 0) and
+// friends. When nothing is known the fold reports overflow, which the rewriter
+// already treats as a failed predicate, so the rule simply doesn't fire.
+template<typename A, typename B, typename Prover, bool is_min>
+struct DiffBound {
+    struct pattern_tag {};
+    A a;
+    B b;
+    Prover *prover;
+
+    static_assert(has_bound_node<A>::value && has_bound_node<B>::value,
+                  "The operands of min_diff/max_diff must be wildcards, so that "
+                  "testing the predicate doesn't have to construct any IR.");
+
+    constexpr static uint32_t binds = bindings<A>::mask | bindings<B>::mask;
+
+    // This is an integer-valued term of a comparison.
+    constexpr static IRNodeType min_node_type = IRNodeType::IntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::IntImm;
+    constexpr static bool canonical = true;
+
+    constexpr static bool foldable = true;
+
+    [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, Type &ty, MatcherState &state) const noexcept {
+        int64_t result = 0;
+        bool known;
+        if (is_min) {
+            known = prover->known_min_diff(a.bound_node(state), b.bound_node(state), &result);
+        } else {
+            known = prover->known_max_diff(a.bound_node(state), b.bound_node(state), &result);
+        }
+        val.u.i64 = result;
+        ty = Int(64);
+        // Report an unknown bound as an overflow, which fails the predicate.
+        return !known;
+    }
+};
+
+template<typename A, typename B, typename Prover>
+HALIDE_ALWAYS_INLINE auto min_diff(A &&a, B &&b, Prover *p) noexcept
+    -> DiffBound<decltype(pattern_arg(a)), decltype(pattern_arg(b)), Prover, true> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
+    return {pattern_arg(a), pattern_arg(b), p};
+}
+
+template<typename A, typename B, typename Prover>
+HALIDE_ALWAYS_INLINE auto max_diff(A &&a, B &&b, Prover *p) noexcept
+    -> DiffBound<decltype(pattern_arg(a)), decltype(pattern_arg(b)), Prover, false> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
+    return {pattern_arg(a), pattern_arg(b), p};
+}
+
+template<typename A, typename B, typename Prover, bool is_min>
+std::ostream &operator<<(std::ostream &s, const DiffBound<A, B, Prover, is_min> &op) {
+    s << (is_min ? "min_diff(" : "max_diff(") << op.a << ", " << op.b << ")";
+    return s;
+}
+
+// Do the facts say these two are equal, or that they differ? Equality is just a
+// difference of zero, but inequality is a hole in the difference rather than a
+// bound on it, so it gets its own predicate.
+template<typename A, typename B, typename Prover, bool want_equal>
+struct KnownComparison {
+    struct pattern_tag {};
+    A a;
+    B b;
+    Prover *prover;
+
+    static_assert(has_bound_node<A>::value && has_bound_node<B>::value,
+                  "The operands of known_equal/known_not_equal must be wildcards, "
+                  "so that testing the predicate doesn't have to construct any IR.");
+
+    constexpr static uint32_t binds = bindings<A>::mask | bindings<B>::mask;
+
+    // This rule is a boolean-valued predicate. Bools have type UIntImm.
+    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
+    constexpr static bool canonical = true;
+
+    constexpr static bool foldable = true;
+
+    [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, Type &ty, MatcherState &state) const noexcept {
+        if (want_equal) {
+            val.u.u64 = prover->is_known_equal(a.bound_node(state), b.bound_node(state)) ? 1 : 0;
+        } else {
+            val.u.u64 = prover->is_known_not_equal(a.bound_node(state), b.bound_node(state)) ? 1 : 0;
+        }
+        ty = Bool();
+        return false;
+    }
+};
+
+template<typename A, typename B, typename Prover>
+HALIDE_ALWAYS_INLINE auto known_equal(A &&a, B &&b, Prover *p) noexcept
+    -> KnownComparison<decltype(pattern_arg(a)), decltype(pattern_arg(b)), Prover, true> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
+    return {pattern_arg(a), pattern_arg(b), p};
+}
+
+template<typename A, typename B, typename Prover>
+HALIDE_ALWAYS_INLINE auto known_not_equal(A &&a, B &&b, Prover *p) noexcept
+    -> KnownComparison<decltype(pattern_arg(a)), decltype(pattern_arg(b)), Prover, false> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
+    return {pattern_arg(a), pattern_arg(b), p};
+}
+
+template<typename A, typename B, typename Prover, bool want_equal>
+std::ostream &operator<<(std::ostream &s, const KnownComparison<A, B, Prover, want_equal> &op) {
+    s << (want_equal ? "known_equal(" : "known_not_equal(") << op.a << ", " << op.b << ")";
     return s;
 }
 
