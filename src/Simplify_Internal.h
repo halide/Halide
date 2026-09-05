@@ -450,11 +450,31 @@ public:
     struct KnownBound {
         Expr a, b;
         ConstantInterval diff;
+        // Cheap structural summaries of a and b. Equal Exprs always summarize
+        // to the same value, so a mismatch rules a record out without touching
+        // the Exprs at all. Almost every query is about a pair nothing is known
+        // about, so what this scan needs to be good at is saying no.
+        uint32_t fingerprint_a = 0, fingerprint_b = 0;
         // If set, a - b is known *not* to lie in diff, which is always a single
         // point. Only a != b (or !(a == b)) produces one of these.
         bool invert = false;
     };
     std::vector<KnownBound> known_bounds;
+
+    // Summarize an Expr by its node type, plus the name or value of the leaves
+    // that distinguish otherwise identical-looking nodes. Deliberately ignores
+    // children: this only has to be equal for equal Exprs, not unique.
+    static uint32_t expr_fingerprint(const BaseExprNode *e) {
+        uint32_t h = ((uint32_t)e->node_type + 1) * 2654435761u;
+        if (e->node_type == IRNodeType::Variable) {
+            for (char c : ((const Variable *)e)->name) {
+                h = h * 31u + (uint32_t)(unsigned char)c;
+            }
+        } else if (e->node_type == IRNodeType::IntImm) {
+            h ^= (uint32_t)((const IntImm *)e)->value;
+        }
+        return h;
+    }
 
     /** What a scan of known_bounds was able to establish about (a - b). A hole
      * that doesn't touch an end of the interval can't be represented in the

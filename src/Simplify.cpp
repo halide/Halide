@@ -160,7 +160,10 @@ void Simplify::ScopedFact::learn_difference(const Expr &a, const Expr &b,
         return;
     }
 
-    simplify->known_bounds.push_back(Simplify::KnownBound{Expr(pa), Expr(pb), peeled, invert});
+    simplify->known_bounds.push_back(
+        Simplify::KnownBound{Expr(pa), Expr(pb), peeled,
+                             Simplify::expr_fingerprint(pa), Simplify::expr_fingerprint(pb),
+                             invert});
 }
 
 void Simplify::ScopedFact::learn_false(const Expr &fact) {
@@ -626,13 +629,21 @@ Simplify::KnownDiff Simplify::known_difference(const BaseExprNode *a, const Base
         int64_t holes[max_holes];
         int num_holes = 0;
 
+        const uint32_t fa = expr_fingerprint(a), fb = expr_fingerprint(b);
         for (const KnownBound &kb : known_bounds) {
-            // equal() is inlined and rejects on pointer identity and then on
-            // node type, so a record about some other pair costs almost nothing.
+            // Reject on the summaries first. They live in the record, so a
+            // record about some other pair costs a pair of integer compares
+            // and never follows a pointer.
+            const bool same_order = (fa == kb.fingerprint_a && fb == kb.fingerprint_b);
+            const bool swapped = (fa == kb.fingerprint_b && fb == kb.fingerprint_a);
+            if (!same_order && !swapped) {
+                continue;
+            }
+
             ConstantInterval d;
-            if (equal(*a, *kb.a.get()) && equal(*b, *kb.b.get())) {
+            if (same_order && equal(*a, *kb.a.get()) && equal(*b, *kb.b.get())) {
                 d = kb.diff;
-            } else if (equal(*a, *kb.b.get()) && equal(*b, *kb.a.get())) {
+            } else if (swapped && equal(*a, *kb.b.get()) && equal(*b, *kb.a.get())) {
                 // We know about (b - a), and this is the other direction.
                 d = -kb.diff;
             } else {
