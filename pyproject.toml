@@ -131,6 +131,18 @@ src = "vcpkg.json"
 src = "apps/vcpkg.json"
 
 [[tool.tbump.file]]
+src = "tools/halidoscope/src-tauri/Cargo.toml"
+search = 'version = "{current_version}"'
+
+[[tool.tbump.file]]
+src = "tools/halidoscope/src-tauri/tauri.conf.json"
+search = '"version": "{current_version}"'
+
+[[tool.tbump.file]]
+src = "tools/halidoscope/package.json"
+search = '"version": "{current_version}"'
+
+[[tool.tbump.file]]
 src = "src/runtime/HalideRuntime.h"
 version_template = "{major}"
 search = "#define HALIDE_VERSION_MAJOR {current_version}"
