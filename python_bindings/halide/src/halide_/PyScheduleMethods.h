@@ -29,6 +29,8 @@ HALIDE_NEVER_INLINE void add_schedule_methods(PythonClass &class_instance) {
 
         .def("split", (T & (T::*)(const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const Expr &, TailStrategy)) & T::split,
              py::arg("old"), py::arg("outer"), py::arg("inner"), py::arg("factor"), py::arg("tail") = TailStrategy::Auto)
+        .def("split", (T & (T::*)(const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const Expr &, const Expr &, TailStrategy)) & T::split,
+             py::arg("old"), py::arg("outer"), py::arg("inner"), py::arg("factor"), py::arg("align"), py::arg("tail") = TailStrategy::Auto)
 
         .def("fuse", &T::fuse,
              py::arg("inner"), py::arg("outer"), py::arg("fused"))

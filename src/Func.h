@@ -81,6 +81,8 @@ class Stage {
     void set_dim_device_api(const VarOrRVar &var, DeviceAPI device_api);
     void split(const std::string &old, const std::string &outer, const std::string &inner,
                const Expr &factor, bool exact, TailStrategy tail);
+    void split(const std::string &old, const std::string &outer, const std::string &inner,
+               const Expr &factor, const Expr &align, bool exact, TailStrategy tail);
     void remove(const std::string &var);
 
     const std::vector<Internal::StorageDim> &storage_dims() const {
@@ -365,6 +367,7 @@ public:
     // @{
 
     Stage &split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
+    Stage &split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, const Expr &align, TailStrategy tail = TailStrategy::Auto);
     Stage &fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRVar &fused);
     Stage &serial(const VarOrRVar &var);
     Stage &parallel(const VarOrRVar &var);
@@ -1518,6 +1521,41 @@ public:
      * argument specifies how the tail should be handled if the split
      * factor does not provably divide the extent. */
     Func &split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
+
+    /** A version of split() that additionally takes a runtime-valued
+     * 'align' Expr. This version anchors the inner-loop's iterations
+     * to absolute coordinates, instead of to Halide's inferred loop
+     * bounds.
+     *
+     * As such, in absolute coordinates, the inner-loop boundaries fall
+     * at ``align``, ``align + factor``, ``align + 2*factor``, and so on.
+     * The inner dimension still iterates over ``[0, factor-1]``, same as
+     * an unaligned split. The difference is how the original loop Var
+     * is reconstructed from the outer and inner loop Vars.
+     * This may increase the number of iterations over the outer
+     * loop by 1 compared to an unaligned split.
+     *
+     * This is useful when an algorithm selects between cases using an
+     * expression like ``(x - offset) % factor``, where 'offset' is a
+     * value only known at runtime (e.g. a Param). Passing that same
+     * 'offset' as 'align' makes ``(x - offset) % factor`` a
+     * compile-time constant on each unrolled iteration of the inner
+     * loop, so that a mux() indexed by it can be resolved statically
+     * instead of compiling to a runtime select:
+     \code
+     Var x, xo, xi;
+     Param<int> offset;
+     f(x) = mux((x - offset) % 4, {a(x), b(x), c(x), d(x)});
+     f.split(x, xo, xi, 4, offset, TailStrategy::GuardWithIf)
+      .unroll(xi);
+     \endcode
+     * Without 'align', the compiler can't tell at compile time which of
+     * the four mux() cases applies to a given unrolled value of 'xi',
+     * because that depends on the runtime value of 'offset'. With it,
+     * ``(x - offset) % 4`` simplifies to a distinct compile-time
+     * constant for each unrolled value of 'xi', and each mux() call
+     * collapses to its selected case. */
+    Func &split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, const Expr &align, TailStrategy tail = TailStrategy::Auto);
 
     /** Join two dimensions into a single fused dimension. The fused dimension
      * covers the product of the extents of the inner and outer dimensions
