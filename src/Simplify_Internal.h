@@ -481,10 +481,15 @@ public:
     // How deeply are we nested inside the conditions of can_prove predicates?
     // Proving such a condition recursively invokes the simplifier on it, so a
     // rule whose left-hand side also matches something built while proving its
-    // own predicate recurses without bound. Nesting is also expensive, and no
-    // rule currently relies on it. Bound it.
+    // own predicate recurses without bound. Bound it.
+    //
+    // The work grows sharply with this limit -- on an adversarial nest of
+    // min(x, y) - min(z, w) it is roughly 0.02s at 1 or 2, 0.11s at 3 and 0.72s
+    // at 4 -- while no rule needs the depth: instrumenting every correctness
+    // test shows the deepest nesting any of them reaches is one. So this is
+    // already a level of headroom over anything observed.
     int can_prove_depth = 0;
-    static constexpr int max_can_prove_depth = 4;
+    static constexpr int max_can_prove_depth = 2;
 
     // Is there anything in the truths/falsehoods sets that a rewrite rule could
     // use? Used to gate rules whose predicates are only ever provable from facts
