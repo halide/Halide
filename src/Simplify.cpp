@@ -161,7 +161,7 @@ void Simplify::ScopedFact::learn_difference(const Expr &a, const Expr &b,
     }
 
     const uint32_t fa = Simplify::expr_fingerprint(pa), fb = Simplify::expr_fingerprint(pb);
-    simplify->add_difference_key(fa ^ fb);
+    simplify->add_difference_key(Simplify::difference_key(fa, fb));
     simplify->known_bounds.push_back(
         Simplify::KnownBound{Expr(pa), Expr(pb), peeled, fa, fb, invert});
 }
@@ -631,7 +631,7 @@ Simplify::KnownDiff Simplify::known_difference(const BaseExprNode *a, const Base
 
         const uint32_t fa = expr_fingerprint(a), fb = expr_fingerprint(b);
         // One test against the whole table before looking at any record.
-        if (!difference_key_present(fa ^ fb)) {
+        if (!difference_key_present(difference_key(fa, fb))) {
             result.bounds += offset;
             return result;
         }

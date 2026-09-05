@@ -535,8 +535,15 @@ public:
         return !known_bounds.empty();
     }
 
-    // The two fingerprints xored together identify a pair whichever way round
-    // it is asked about, so one bit serves both directions.
+    // Symmetric key for a pair. Equal summaries say only that the two nodes are
+    // the same kind, and xoring them throws even that away, so key those by the
+    // kind instead of letting every same-type pair share one bit.
+    HALIDE_ALWAYS_INLINE
+    static uint32_t difference_key(uint32_t fa, uint32_t fb) {
+        return fa == fb ? fa * 0x9e3779b9u : (fa ^ fb);
+    }
+
+    // One bit per pair key.
     HALIDE_ALWAYS_INLINE
     bool difference_key_present(uint32_t key) const {
         const uint32_t bit = key % (difference_key_words * 64);
