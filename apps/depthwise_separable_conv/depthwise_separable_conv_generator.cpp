@@ -98,10 +98,11 @@ public:
             output.dim(2).set_estimate(0, H);
             output.dim(3).set_estimate(0, N);
         } else if (get_target().has_gpu_feature()) {
-            // 0.066ms on a 2060 RTX super. This is about 1.2 TFlops,
-            // which is not a very large fraction of peak. For
-            // comparison though, tensorflow 2.3 achieves 0.13ms via
-            // cudnn 7. So we're twice as fast.
+            // 0.032ms on an RTX 5060 Ti. This is about 2.5 TFlops, which is
+            // not a very large fraction of peak. For comparison, pytorch 2.11
+            // on the same card takes 0.036ms for the same pipeline when given
+            // the same channels-innermost layout, and 0.079ms in its own
+            // default layout.
 
             // This schedule fuses the depthwise conv into the pointwise
             // conv. The results of the depthwise conv are computed inside
@@ -110,9 +111,9 @@ public:
             Var xi, yi, di, dii, xii, yii;
             RVar ro, ri;
 
-            // The pointwise convolution kernel. Produces a 4x4 tile of output.
+            // The pointwise convolution kernel. Produces a 4x2 tile of output.
             Func(output)
-                .tile({d, x, y}, {di, xi, yi}, {16, 4, 4})
+                .tile({d, x, y}, {di, xi, yi}, {16, 4, 2})
                 .tile({di, xi, yi}, {dii, xii, yii}, {1, 2, 2})
                 .gpu_threads(di, xi, yi)
                 .fuse(y, b, b)
@@ -120,6 +121,14 @@ public:
                 .unroll(xii)
                 .unroll(yii)
                 .unroll(dii);
+            // ptxas picks 80 registers here, and asking for 64 is worth 0.5%
+            // on an RTX 5060 Ti. The work and the theoretical occupancy are
+            // the same either way - the same loads, stores and FFMAs, nothing
+            // spilled, and a processor holds 24 blocks regardless - but it
+            // keeps more warps in flight, 5.63 active warps per scheduler
+            // against 5.56. The effect is not monotonic in the number, so it
+            // is worth sweeping: 72 is worse than either.
+            output.gpu_max_registers(64);
 
             pointwise_convolved.compute_at(output, di)
                 .reorder(x, y, d)
@@ -154,11 +163,11 @@ public:
                 .unroll(x)
                 .unroll(y);
 
-            // The depthwise convolution kernel. Produces a 4x4 tile
+            // The depthwise convolution kernel. Produces a 4x2 tile
             // of intermediate state, storing the result in shared.
             depthwise_convolved.in()
                 .compute_at(output, d)
-                .tile({d, x, y}, {di, xi, yi}, {32, 4, 4}, TailStrategy::RoundUp)
+                .tile({d, x, y}, {di, xi, yi}, {32, 4, 2}, TailStrategy::RoundUp)
                 .tile({di, xi, yi}, {dii, xii, yii}, {2, 2, 2})
                 .gpu_threads(di, xi, yi)
                 .unroll(xii)

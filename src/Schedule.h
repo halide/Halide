@@ -631,6 +631,13 @@ public:
     // @{
     MemoryType memory_type() const;
     MemoryType &memory_type();
+
+    /** The most registers a thread of the kernel this Func's loop over gpu
+     * blocks becomes may use. Zero means let the backend decide. */
+    // @{
+    int gpu_max_registers() const;
+    int &gpu_max_registers();
+    // @}
     // @}
 
     /** You may explicitly bound some of the dimensions of a function,
