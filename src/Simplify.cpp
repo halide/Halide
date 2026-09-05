@@ -564,14 +564,43 @@ bool intersect_if_nonempty(ConstantInterval &acc, const ConstantInterval &d) {
     return true;
 }
 
+// What the shape of the two sides says about (a - b) on its own, with no facts
+// involved: a min is at most either of its operands, and a max is at least
+// either of them. Only the immediate operands are inspected, so this stays a
+// couple of pointer comparisons rather than a search.
+ConstantInterval structural_difference(const BaseExprNode *a, const BaseExprNode *b) {
+    ConstantInterval result;
+
+    auto is_operand_of = [](const BaseExprNode *e, const BaseExprNode *node) {
+        if (node->node_type == IRNodeType::Min) {
+            const Min *m = (const Min *)node;
+            return equal(*m->a.get(), *e) || equal(*m->b.get(), *e);
+        } else if (node->node_type == IRNodeType::Max) {
+            const Max *m = (const Max *)node;
+            return equal(*m->a.get(), *e) || equal(*m->b.get(), *e);
+        }
+        return false;
+    };
+
+    // min(p, q) - b <= 0 and max(p, q) - b >= 0, when b is one of the operands.
+    if (a->node_type == IRNodeType::Min && is_operand_of(b, a)) {
+        result = ConstantInterval::bounded_above(0);
+    } else if (a->node_type == IRNodeType::Max && is_operand_of(b, a)) {
+        result = ConstantInterval::bounded_below(0);
+    } else if (b->node_type == IRNodeType::Min && is_operand_of(a, b)) {
+        // a - min(p, q) >= 0
+        result = ConstantInterval::bounded_below(0);
+    } else if (b->node_type == IRNodeType::Max && is_operand_of(a, b)) {
+        result = ConstantInterval::bounded_above(0);
+    }
+
+    return result;
+}
+
 }  // namespace
 
 Simplify::KnownDiff Simplify::known_difference(const BaseExprNode *a, const BaseExprNode *b) {
     KnownDiff result;
-
-    if (known_bounds.empty()) {
-        return result;
-    }
 
     // Canonicalize the query the way the facts were canonicalized when learned.
     int64_t offset = 0;
@@ -580,6 +609,17 @@ Simplify::KnownDiff Simplify::known_difference(const BaseExprNode *a, const Base
     if (equal(*a, *b)) {
         result.bounds = ConstantInterval::single_point(0);
     } else {
+        if (a->node_type == IRNodeType::IntImm && b->node_type == IRNodeType::IntImm &&
+            !sub_would_overflow(64, ((const IntImm *)a)->value, ((const IntImm *)b)->value)) {
+            // Two constants need no facts to compare.
+            result.bounds = ConstantInterval::single_point(((const IntImm *)a)->value -
+                                                           ((const IntImm *)b)->value);
+        } else {
+            intersect_if_nonempty(result.bounds, structural_difference(a, b));
+        }
+    }
+
+    if (!result.bounds.is_single_point() && !known_bounds.empty()) {
         // A hole only tightens the bounds once we know where the ends are, so
         // collect them as we go and apply them below. There are hardly ever any.
         constexpr int max_holes = 4;
