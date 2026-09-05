@@ -143,6 +143,9 @@ void peel_constant_offsets(const BaseExprNode *&a, const BaseExprNode *&b, int64
 
 void Simplify::ScopedFact::learn_difference(const Expr &a, const Expr &b,
                                             const ConstantInterval &diff, bool invert) {
+    if (!simplify->record_difference_facts) {
+        return;
+    }
     // Differences are only meaningful where they can't wrap.
     if (!simplify->no_overflow_int(a.type()) || a.type() != b.type()) {
         return;

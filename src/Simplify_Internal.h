@@ -525,6 +525,17 @@ public:
         return !truths.empty() || !falsehoods.empty();
     }
 
+    // Should a comparison we learn from also be recorded as a bound on the
+    // difference between its sides? Removing a min or max is not just a
+    // statement about a value: a clamp around an index is what keeps bounds
+    // inference's idea of the region required within the buffer. Bounds
+    // inference derives the same ranges we do from loop bounds, and an explicit
+    // assumption is the caller's business, but it only partly models the
+    // conditions of ifs -- and a reduction domain's predicate is one of those.
+    // Removing a clamp justified by such a condition leaves it asking for a
+    // region the clamp had been keeping in bounds.
+    bool record_difference_facts = true;
+
     // Is there anything a min_diff or max_diff predicate could look up? Only a
     // comparison of non-overflowing integers leaves a record here, so this is
     // strictly narrower than has_facts: a boolean fact, or a fact about a type
