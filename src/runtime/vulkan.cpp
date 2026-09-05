@@ -13,9 +13,34 @@ using namespace Halide::Runtime::Internal::Vulkan;
 
 // --------------------------------------------------------------------------
 
-extern "C" {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
+namespace Vulkan {
 
-// --------------------------------------------------------------------------
+ALWAYS_INLINE int vk_load_vulkan_interface(void *user_context, VkInstance instance, VkDevice device) {
+    if (vkGetInstanceProcAddr == nullptr) {
+        vk_load_vulkan_loader_functions(user_context);
+        if (vkGetInstanceProcAddr == nullptr) {
+            error(user_context) << "Vulkan: Failed to resolve loader functions!\n";
+            return halide_error_code_symbol_not_found;
+        }
+    }
+
+    vk_load_vulkan_instance_functions(user_context, instance);
+    if (vkGetPhysicalDeviceProperties == nullptr || vkGetDeviceProcAddr == nullptr) {
+        error(user_context) << "Vulkan: Failed to resolve instance functions!\n";
+        return halide_error_code_symbol_not_found;
+    }
+
+    vk_load_vulkan_device_functions(user_context, device);
+    if (vkCreateBuffer == nullptr || vkAllocateMemory == nullptr) {
+        error(user_context) << "Vulkan: Failed to resolve device functions!\n";
+        return halide_error_code_symbol_not_found;
+    }
+
+    return halide_error_code_success;
+}
 
 // The default implementation of halide_acquire_vulkan_context uses
 // the global pointers above, and serializes access with a spin lock.
@@ -29,15 +54,15 @@ extern "C" {
 //   call to halide_release_vulkan_context. halide_acquire_vulkan_context
 //   should block while a previous call (if any) has not yet been
 //   released via halide_release_vulkan_context.
-WEAK int halide_vulkan_acquire_context(void *user_context,
-                                       halide_vulkan_memory_allocator **allocator,
-                                       VkInstance *instance,
-                                       VkDevice *device,
-                                       VkPhysicalDevice *physical_device,
-                                       VkQueue *queue,
-                                       uint32_t *queue_family_index,
-                                       VkDebugUtilsMessengerEXT *messenger,
-                                       bool create) {
+WEAK int default_vulkan_acquire_context(void *user_context,
+                                        halide_vulkan_memory_allocator **allocator,
+                                        VkInstance *instance,
+                                        VkDevice *device,
+                                        VkPhysicalDevice *physical_device,
+                                        VkQueue *queue,
+                                        uint32_t *queue_family_index,
+                                        VkDebugUtilsMessengerEXT *messenger,
+                                        bool create) {
 #ifdef DEBUG_RUNTIME
     halide_start_clock(user_context);
 #endif
@@ -74,9 +99,128 @@ WEAK int halide_vulkan_acquire_context(void *user_context,
     return halide_error_code_success;
 }
 
-WEAK int halide_vulkan_release_context(void *user_context, VkInstance instance, VkDevice device, VkQueue queue, VkDebugUtilsMessengerEXT messenger) {
+WEAK int default_vulkan_release_context(void *user_context, VkInstance instance, VkDevice device, VkQueue queue, VkDebugUtilsMessengerEXT messenger) {
     halide_mutex_unlock(&thread_lock);
     return halide_error_code_success;
+}
+
+WEAK halide_vulkan_acquire_context_t vulkan_acquire_context_handler =
+    default_vulkan_acquire_context;
+WEAK halide_vulkan_release_context_t vulkan_release_context_handler =
+    default_vulkan_release_context;
+
+}  // namespace Vulkan
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
+
+// --------------------------------------------------------------------------
+
+extern "C" {
+
+// --------------------------------------------------------------------------
+
+WEAK int halide_vulkan_acquire_context(void *user_context,
+                                       halide_vulkan_memory_allocator **allocator,
+                                       VkInstance *instance,
+                                       VkDevice *device,
+                                       VkPhysicalDevice *physical_device,
+                                       VkQueue *queue,
+                                       uint32_t *queue_family_index,
+                                       VkDebugUtilsMessengerEXT *messenger,
+                                       bool create) {
+    return vulkan_acquire_context_handler(user_context, allocator, instance, device,
+                                          physical_device, queue, queue_family_index,
+                                          messenger, create);
+}
+
+WEAK int halide_vulkan_release_context(void *user_context, VkInstance instance, VkDevice device, VkQueue queue, VkDebugUtilsMessengerEXT messenger) {
+    return vulkan_release_context_handler(user_context, instance, device, queue, messenger);
+}
+
+WEAK halide_vulkan_acquire_context_t halide_set_vulkan_acquire_context(halide_vulkan_acquire_context_t handler) {
+    halide_vulkan_acquire_context_t result = vulkan_acquire_context_handler;
+    vulkan_acquire_context_handler = handler ? handler : default_vulkan_acquire_context;
+    return result;
+}
+
+WEAK halide_vulkan_release_context_t halide_set_vulkan_release_context(halide_vulkan_release_context_t handler) {
+    halide_vulkan_release_context_t result = vulkan_release_context_handler;
+    vulkan_release_context_handler = handler ? handler : default_vulkan_release_context;
+    return result;
+}
+
+WEAK int halide_vulkan_acquire_memory_allocator(void *user_context,
+                                                halide_vulkan_memory_allocator **allocator,
+                                                VkInstance instance,
+                                                VkDevice device,
+                                                VkPhysicalDevice physical_device) {
+    if (allocator == nullptr) {
+        error(user_context) << "Vulkan: allocator output pointer is null!\n";
+        return halide_error_code_buffer_argument_is_null;
+    }
+    if (instance == VK_NULL_HANDLE || device == VK_NULL_HANDLE || physical_device == VK_NULL_HANDLE) {
+        error(user_context) << "Vulkan: invalid external context handles for allocator acquisition!\n";
+        return halide_error_code_device_interface_no_device;
+    }
+
+    VulkanMemoryAllocator *runtime_allocator =
+        reinterpret_cast<VulkanMemoryAllocator *>(*allocator);
+    if (runtime_allocator != nullptr) {
+        if (runtime_allocator->current_device() != device ||
+            runtime_allocator->current_physical_device() != physical_device) {
+            error(user_context) << "Vulkan: external allocator does not match supplied device handles!\n";
+            return halide_error_code_internal_error;
+        }
+        return halide_error_code_success;
+    }
+
+    const VkAllocationCallbacks *alloc_callbacks =
+        halide_vulkan_get_allocation_callbacks(user_context);
+
+    int error_code = vk_load_vulkan_interface(user_context, instance, device);
+    if (error_code != halide_error_code_success) {
+        return error_code;
+    }
+
+    runtime_allocator =
+        vk_create_memory_allocator(user_context, device, physical_device, alloc_callbacks);
+    if (runtime_allocator == nullptr) {
+        error(user_context) << "Vulkan: Failed to create memory allocator for external context!\n";
+        return halide_error_code_out_of_memory;
+    }
+
+    *allocator = reinterpret_cast<halide_vulkan_memory_allocator *>(runtime_allocator);
+    return halide_error_code_success;
+}
+
+WEAK int halide_vulkan_release_memory_allocator(void *user_context,
+                                                halide_vulkan_memory_allocator *allocator,
+                                                VkInstance instance,
+                                                VkDevice device,
+                                                VkPhysicalDevice physical_device) {
+    VulkanMemoryAllocator *runtime_allocator =
+        reinterpret_cast<VulkanMemoryAllocator *>(allocator);
+    if (runtime_allocator == nullptr) {
+        return halide_error_code_success;
+    }
+    if (instance == VK_NULL_HANDLE || device == VK_NULL_HANDLE || physical_device == VK_NULL_HANDLE) {
+        error(user_context) << "Vulkan: invalid external context handles for allocator release!\n";
+        return halide_error_code_device_interface_no_device;
+    }
+    if (runtime_allocator->current_device() != device ||
+        runtime_allocator->current_physical_device() != physical_device) {
+        error(user_context) << "Vulkan: external allocator does not match supplied device handles during release!\n";
+        return halide_error_code_internal_error;
+    }
+
+    if (vkDestroyShaderModule == nullptr || vkFreeMemory == nullptr) {
+        error(user_context) << "Vulkan: Failed to resolve device functions for external allocator release!\n";
+        return halide_error_code_symbol_not_found;
+    }
+
+    vk_destroy_shader_modules(user_context, runtime_allocator);
+    return vk_destroy_memory_allocator(user_context, runtime_allocator);
 }
 
 WEAK bool halide_vulkan_is_initialized() {
