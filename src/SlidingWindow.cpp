@@ -174,6 +174,33 @@ public:
     }
 };
 
+// The names an expression refers to that it doesn't bind itself.
+class FreeVariableNames : public IRVisitor {
+    using IRVisitor::visit;
+    Scope<> bound;
+
+    void visit(const Variable *op) override {
+        if (!bound.contains(op->name)) {
+            names.insert(op->name);
+        }
+    }
+
+    void visit(const Let *op) override {
+        op->value.accept(this);
+        ScopedBinding<> bind(bound, op->name);
+        op->body.accept(this);
+    }
+
+public:
+    set<string> names;
+};
+
+set<string> free_variable_names(const Expr &e) {
+    FreeVariableNames v;
+    e.accept(&v);
+    return v.names;
+}
+
 // Perform all the substitutions in a scope
 Expr expand_expr(const Expr &e, const Scope<Expr> &scope) {
     ExpandExpr ee(scope);
@@ -1119,6 +1146,54 @@ class SlidingWindow : public IRMutator {
     vector<string> loop_stack;
     Scope<Expr> let_values;
     Scope<Interval> bounds_scope;
+    // For each let in scope, the loops its value depends on through any
+    // chain of other lets. Computed when the let is bound, so it only ever
+    // looks outwards and costs one pass over the value.
+    Scope<set<string>> loop_deps;
+
+    set<string> loops_used_by(const Expr &e) {
+        set<string> loops;
+        for (const string &v : free_variable_names(e)) {
+            if (std::find(loop_stack.begin(), loop_stack.end(), v) != loop_stack.end()) {
+                loops.insert(v);
+            } else if (const set<string> *deps = loop_deps.find(v)) {
+                loops.insert(deps->begin(), deps->end());
+            }
+        }
+        return loops;
+    }
+
+    // Substitute in just the lets that depend on a loop, so the loops a
+    // dimension is built from appear in it directly. Everything else stays a
+    // symbol: it is constant across the loops, which is all the checks need,
+    // and expanding it would only make the expression bigger.
+    class ExpandLoopDependentLets : public IRMutator {
+        using IRMutator::visit;
+        const Scope<Expr> &values;
+        const Scope<set<string>> &deps;
+        // A let rebound in terms of its outer binding names itself.
+        set<string> expanding;
+
+        Expr visit(const Variable *var) override {
+            const set<string> *d = deps.find(var->name);
+            const Expr *value = values.find(var->name);
+            if (!d || d->empty() || !value || expanding.count(var->name)) {
+                return var;
+            }
+            expanding.insert(var->name);
+            Expr e = mutate(*value);
+            expanding.erase(var->name);
+            return e;
+        }
+
+    public:
+        ExpandLoopDependentLets(const Scope<Expr> &values, const Scope<set<string>> &deps)
+            : values(values), deps(deps) {
+        }
+        Expr operator()(const Expr &e) {
+            return mutate(e);
+        }
+    };
 
     using IRMutator::visit;
 
@@ -1134,7 +1209,7 @@ class SlidingWindow : public IRMutator {
     // as the loops inside it can take back when they wrap around.
     void check_dimension_is_monotonic(const Function &f, const string &let_name,
                                       const Expr &value) {
-        Expr v = expand_expr(value, let_values);
+        Expr v = ExpandLoopDependentLets(let_values, loop_deps)(value);
 
         vector<string> contributing;
         for (const string &loop : loop_stack) {
@@ -1192,9 +1267,9 @@ class SlidingWindow : public IRMutator {
                 break;
             }
         }
-        Expr expanded = expand_expr(value, let_values);
+        set<string> loops = loops_used_by(value);
         for (size_t i = 0; i < depth; i++) {
-            if (expr_uses_var(expanded, loop_stack[i])) {
+            if (loops.count(loop_stack[i])) {
                 user_error
                     << "Func " << f.name() << " was told to slide over "
                     << slide_level_name(f, let_name) << ", but that "
@@ -1236,6 +1311,95 @@ class SlidingWindow : public IRMutator {
         });
     }
 
+    // How much of a Func has to be kept while sliding over a dimension.
+    //
+    // The region required per iteration is the obvious answer, and it is wrong
+    // for a recurrence. A Func defined in terms of itself one step back
+    // requires, transitively, everything it has ever computed, so the region
+    // reaches all the way to the base case and the window looks like the whole
+    // scan. Sliding itself is not fooled by this - it still computes one new
+    // value per step - but the width handed to storage folding would be.
+    //
+    // What has to be kept is what will still be read once this step's value
+    // has been written: the values the consumers ask for, and the value the
+    // recurrence reaches back to.
+    Interval window_for(const Function &func, const SlideDecision &d,
+                        const string &dim_name, const Stmt &body) {
+        // The step the recurrence reaches back by, as a number of values of
+        // the dimension. Zero if the Func does not read itself, in which case
+        // the region required was the right answer already. The Func's own
+        // definition names the dimension by its pure Var.
+        int reach_back = 0;
+        Expr pure_var = Variable::make(Int(32), d.dim);
+        auto note_self_calls = [&](const Definition &def) {
+            for (const Expr &v : def.values()) {
+                visit_with(v, [&](auto *self, const Call *op) {
+                    if (op->name == func.name() && op->call_type == Call::Halide &&
+                        d.dim_idx < (int)op->args.size()) {
+                        auto step = as_const_int(simplify(pure_var - op->args[d.dim_idx]));
+                        // A step we can't pin down means we can't say how wide
+                        // the window is either.
+                        reach_back = step ? std::max(reach_back, (int)*step) : -1;
+                    }
+                    self->visit_base(op);
+                });
+            }
+        };
+        note_self_calls(func.definition());
+        for (const Definition &def : func.updates()) {
+            note_self_calls(def);
+        }
+        if (reach_back <= 0) {
+            return d.old_bounds;
+        }
+
+        // What the consumers ask for at one value of the dimension. Pinning it
+        // to itself keeps it symbolic: left to the enclosing bounds it would
+        // be replaced by its whole range, which is the union over every step
+        // rather than the region at any one of them.
+        Expr dim_var = Variable::make(Int(32), dim_name);
+        Scope<Interval> one_step;
+        one_step.set_containing_scope(&bounds_scope);
+        one_step.push(dim_name, Interval::single_point(dim_var));
+        // Scrub the self-references of everything sliding here, not just the
+        // Func being measured. Another recurrence sliding over the same
+        // dimension has the same whole-scan region, and if it reads this Func
+        // it drags this Func's region back to the start with it.
+        Stmt scrubbed = body;
+        for (const Function &other : sliding) {
+            scrubbed = scrub_self_reads(scrubbed, other.name());
+        }
+        Box ext = box_required(scrubbed, func.name(), one_step);
+        if (d.dim_idx >= (int)ext.size() || !ext[d.dim_idx].is_bounded()) {
+            return d.old_bounds;
+        }
+
+        // A recurrence reaching back r steps still needs steps t-1 .. t-r
+        // after t is stored, so the window keeps r old values on top of
+        // whatever the consumers ask for through ext. A window of exactly the
+        // reach would have the point's own store overwrite the step it reads,
+        // which is only sound if every point is computed exactly once - and a
+        // redundant split or a ShiftInwards tail computes points twice with
+        // nothing to say so. So an inductive Func explicitly folded no wider
+        // than its reach is refused rather than folded over the step it reads.
+        for (const StorageDim &sd : func.schedule().storage_dims()) {
+            if (sd.var == d.dim && sd.fold_factor.defined() && func.is_inductive()) {
+                user_assert(!can_prove(sd.fold_factor <= reach_back))
+                    << "Func " << func.name() << " reads itself " << reach_back
+                    << " step" << (reach_back == 1 ? "" : "s")
+                    << " back along " << d.dim << ", so fold_storage(" << d.dim << ", "
+                    << sd.fold_factor << ") would overwrite the step it reads "
+                    << "wherever a point is computed more than once. The window "
+                    << "must keep that step: fold by at least " << (reach_back + 1) << ".\n";
+            }
+        }
+
+        Expr low = min(ext[d.dim_idx].min, dim_var - reach_back);
+        Interval live(simplify(low, one_step),
+                      simplify(max(ext[d.dim_idx].max, dim_var), one_step));
+        return live;
+    }
+
     Stmt visit(const LetStmt *op) override {
         Interval let_bounds = bounds_of_expr_in_scope(op->value, bounds_scope);
         // For a dimension we're about to slide over, simplify the ends before
@@ -1256,6 +1420,7 @@ class SlidingWindow : public IRMutator {
         }
         ScopedBinding<Interval> bind(bounds_scope, op->name, let_bounds);
         ScopedBinding<Expr> bind_value(let_values, op->name, op->value);
+        ScopedBinding<set<string>> bind_deps(loop_deps, op->name, loops_used_by(op->value));
 
         // The window warms up by prepending iterations to the outermost loop
         // the dimension depends on. One iteration of that loop moves the
@@ -1323,35 +1488,34 @@ class SlidingWindow : public IRMutator {
             // simultaneously live. Tell it the window width we just derived.
             const SlideDecision &d = slider.decision;
             if (d.slid()) {
-                // Tell storage folding how wide the window is. What has to
-                // be live is everything the consumer asks for this iteration
-                // together with everything the producer writes this
-                // iteration, which are not the same thing: sliding computes
-                // from where the previous iteration stopped, so if the region
-                // required jumps rather than stepping - which a select in the
-                // consumer's index will do - the producer covers the gap and
-                // writes a wider range than is asked for. Take the span of
-                // the two. The sliver has to be the steady-state one, from
-                // before the warm-up select was folded into it, because
-                // interval arithmetic can't see through that select.
+                // What has to be live is everything the consumer asks for
+                // this iteration together with everything the producer writes
+                // this iteration, which are not the same thing. Sliding
+                // computes from where the previous iteration stopped, and if
+                // the region required jumps rather than stepping - which a
+                // select in the consumer's index will do - the producer
+                // covers the gap, and writes a wider range than is asked for.
+                // Folding to the width asked for would alias those writes
+                // onto each other.
                 //
-                // The two ends move together, and the promises they carry
-                // about staying in range are not something the simplifier can
-                // cancel across, so drop those first. Left in, a difference
-                // that is plainly one bounds to the whole extent and nothing
-                // folds at all.
+                // An upper bound, not the exact width. Two forms of the same
+                // difference are worth trying, because they fail for
+                // different reasons. Written in terms of the dimension, the
+                // two ends of the window cancel against each other, which is
+                // what a consumer that clamps its index needs. Written in
+                // terms of the loops the dimension was split across, it
+                // reaches the constants in their bounds. Take whichever gives
+                // a bound, or the tighter of the two.
+                // What the consumer asks for is measured discounting a
+                // recurrence's reads of itself, which reach back to the base
+                // case and would make the window look like the whole scan.
                 //
-                // An upper bound is enough - erring large just folds to a
-                // larger power of two. Two forms of the same difference are
-                // worth trying, because they fail for different reasons.
-                // Written in terms of the dimension, the two ends cancel
-                // against each other, which is what a consumer that clamps
-                // its index needs. Written in terms of the loops the
-                // dimension was split across, it reaches the constants in
-                // their bounds. Take whichever gives a bound, or the tighter
-                // of the two.
-                Expr lo = remove_promises(min(d.old_bounds.min, d.steady_bounds.min));
-                Expr hi = remove_promises(max(d.old_bounds.max, d.steady_bounds.max));
+                // The ends move together, and a promise the two of them
+                // carry about staying in range is not something the
+                // simplifier can cancel across, so drop those first.
+                Interval window = window_for(func, d, op->name, body);
+                Expr lo = remove_promises(min(window.min, d.steady_bounds.min));
+                Expr hi = remove_promises(max(window.max, d.steady_bounds.max));
                 Expr raw = hi - lo + 1;
                 Expr width;
                 for (const Expr &form : {simplify(raw, bounds_scope),

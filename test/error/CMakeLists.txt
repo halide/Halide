@@ -149,6 +149,7 @@ tests(
     rvar_fuse_reorder.cpp
     shift_inwards_and_blend_race.cpp
     slide_in_place.cpp
+    slide_nested_tail.cpp
     slide_entangled_dimensions.cpp
     slide_non_monotonic_dimension.cpp
     slide_region_moves_with_inner_loop.cpp

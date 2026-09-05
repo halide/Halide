@@ -208,6 +208,7 @@ tests(
     in_place.cpp
     indexing_access_undef.cpp
     inductive.cpp
+    fold_inductive_keeps_step.cpp
     inductive_folding.cpp
     inductive_ring_buffer.cpp
     inductive_var_race.cpp
@@ -331,6 +332,8 @@ tests(
     skip_stages_cse_bug.cpp
     skip_stages_external_array_functions.cpp
     skip_stages_memoize.cpp
+    slide_recompute.cpp
+    slide_two_deep.cpp
     slide_directive.cpp
     slide_down_over_dimension.cpp
     slide_staging_bounds.cpp
