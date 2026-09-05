@@ -2468,6 +2468,19 @@ void check_facts() {
     check_with_assumptions(max(x * 8, y) / 8, x, {x > y / 8});
     check_with_assumptions(min(x * 8, y) / 8, x, {x < y / 8});
 
+    // A min is at most either of its operands and a max is at least either of
+    // them, which needs no facts at all. That only bounds the difference on one
+    // side, but knowing the two are unequal removes the endpoint, and the two
+    // together settle a comparison that neither settles alone.
+    check_with_assumptions(max(min(x, y) + 1, x), x, {min(x, y) != x});
+    check_with_assumptions(min(max(x, y) - 1, x), x, {max(x, y) != x});
+
+    // Neither ingredient is enough by itself: without the inequality the
+    // difference could still be zero, and without the shape there is no bound
+    // for the inequality to tighten.
+    check_with_assumptions(max(min(x, y) + 1, x), max(min(x, y) + 1, x), {z < z + 1});
+    check_with_assumptions(max(y + 1, x), max(y + 1, x), {y != x});
+
     // Deeply nested mins and maxes must not make the work of proving the
     // predicates of the rules above blow up.
     Expr nest = x;
