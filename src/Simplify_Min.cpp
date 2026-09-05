@@ -71,7 +71,7 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
     if (EVAL_IN_LAMBDA  //
         (rewrite(min(x, x), a) ||
          // Facts learned higher up in the IR may tell us which side wins.
-         (has_facts() &&
+         (has_difference_facts() &&
           (rewrite(min(x, y), a, max_diff(x, y, this) <= 0) ||
            rewrite(min(x, y), b, min_diff(x, y, this) >= 0))) ||
          rewrite(min(x, c0), b, is_min_value(c0)) ||

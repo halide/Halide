@@ -511,12 +511,21 @@ public:
     int can_prove_depth = 0;
     static constexpr int max_can_prove_depth = 2;
 
-    // Is there anything in the truths/falsehoods sets that a rewrite rule could
-    // use? Used to gate rules whose predicates are only ever provable from facts
-    // learned higher up in the IR, so that we don't pay for them in the common
-    // case.
+    // Is there anything a known_true predicate could look up? Used to gate rules
+    // whose predicates are only ever provable from facts learned higher up in
+    // the IR, so that we don't pay for them in the common case.
     bool has_facts() const {
-        return !truths.empty() || !falsehoods.empty() || !known_bounds.empty();
+        return !truths.empty() || !falsehoods.empty();
+    }
+
+    // Is there anything a min_diff or max_diff predicate could look up? Only a
+    // comparison of non-overflowing integers leaves a record here, so this is
+    // strictly narrower than has_facts: a boolean fact, or a fact about a type
+    // that can wrap, satisfies that one while leaving this table empty. Rules
+    // that ask about differences must gate on this, or they spend a lookup on
+    // a table that cannot answer.
+    bool has_difference_facts() const {
+        return !known_bounds.empty();
     }
 
     // Replace exprs known to be truths or falsehoods with const_true or
