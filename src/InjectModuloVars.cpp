@@ -150,9 +150,12 @@ public:
             }
         }
         while (!worklist.empty()) {
-            auto [name, m] = worklist.back();
+            // Not a structured binding: the lambda below captures the modulus,
+            // and capturing a structured binding is C++20.
+            const std::pair<std::string, int64_t> item = worklist.back();
             worklist.pop_back();
-            for_each_congruent_var(let_values[name], m, [&](const Variable *v) {
+            const int64_t m = item.second;
+            for_each_congruent_var(let_values[item.first], m, [&](const Variable *v) {
                 if (let_values.count(v->name) && required[v->name].insert(m).second) {
                     worklist.emplace_back(v->name, m);
                 }
