@@ -141,6 +141,25 @@ void peel_constant_offsets(const BaseExprNode *&a, const BaseExprNode *&b, int64
 
 }  // namespace
 
+namespace {
+// Lowering is single-threaded per pipeline, but several pipelines can be
+// lowered at once, so this is per-thread rather than global.
+thread_local bool t_regions_have_been_inferred = false;
+}  // namespace
+
+bool regions_have_been_inferred() {
+    return t_regions_have_been_inferred;
+}
+
+ScopedRegionsInferred::ScopedRegionsInferred()
+    : old_value(t_regions_have_been_inferred) {
+    t_regions_have_been_inferred = true;
+}
+
+ScopedRegionsInferred::~ScopedRegionsInferred() {
+    t_regions_have_been_inferred = old_value;
+}
+
 void Simplify::ScopedFact::learn_difference(const Expr &a, const Expr &b,
                                             const ConstantInterval &diff, bool invert) {
     if (!simplify->record_difference_facts) {
