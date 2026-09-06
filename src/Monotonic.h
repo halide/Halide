@@ -34,8 +34,6 @@ Monotonic is_monotonic(const Expr &e, const std::string &var, const Scope<Monoto
 /** Emit the monotonic class in human-readable form for debugging. */
 std::ostream &operator<<(std::ostream &stream, const Monotonic &m);
 
-void is_monotonic_test();
-
 }  // namespace Internal
 }  // namespace Halide
 

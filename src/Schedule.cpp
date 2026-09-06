@@ -307,6 +307,10 @@ struct StageScheduleContents {
     bool allow_race_conditions = false;
     bool atomic = false;
     bool override_atomic_associativity_test = false;
+    bool stream_stores = false;
+    // nullopt = stream all direct loads (except self); present = stream
+    // only the named Funcs (empty = the default, i.e. none).
+    std::optional<std::vector<std::string>> stream_loads_names = std::vector<std::string>{};
 
     StageScheduleContents()
         : fuse_level(FuseLoopLevel()) {
@@ -366,13 +370,16 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->async = contents->async;
     copy.contents->ring_buffer = contents->ring_buffer;
 
-    // Deep-copy wrapper functions.
+    // Deep-copy wrapper functions. In a partial deep-copy (e.g. cloning a
+    // single Func via clone_in), the wrapper Funcs may not be among the Funcs
+    // being copied. Those wrappers describe redirections for callers of the
+    // original Func and don't apply to the copy, so drop them.
     for (const auto &iter : contents->wrappers) {
-        FunctionPtr &copied_func = copied_map[iter.second];
-        internal_assert(copied_func.defined()) << Function(iter.second).name() << "\n";
-        copy.contents->wrappers[iter.first] = copied_func;
+        const auto &copied_func = copied_map.find(iter.second);
+        if (copied_func != copied_map.end()) {
+            copy.contents->wrappers[iter.first] = copied_func->second;
+        }
     }
-    internal_assert(copy.contents->wrappers.size() == contents->wrappers.size());
     return copy;
 }
 
@@ -532,7 +539,8 @@ StageSchedule::StageSchedule()
 StageSchedule::StageSchedule(const std::vector<ReductionVariable> &rvars, const std::vector<Split> &splits,
                              const std::vector<Dim> &dims, const std::vector<PrefetchDirective> &prefetches,
                              const FuseLoopLevel &fuse_level, const std::vector<FusedPair> &fused_pairs,
-                             bool touched, bool allow_race_conditions, bool atomic, bool override_atomic_associativity_test)
+                             bool touched, bool allow_race_conditions, bool atomic, bool override_atomic_associativity_test,
+                             bool stream_stores, const std::optional<std::vector<std::string>> &stream_loads_names)
     : contents(new StageScheduleContents) {
     contents->rvars = rvars;
     contents->splits = splits;
@@ -544,6 +552,8 @@ StageSchedule::StageSchedule(const std::vector<ReductionVariable> &rvars, const 
     contents->allow_race_conditions = allow_race_conditions;
     contents->atomic = atomic;
     contents->override_atomic_associativity_test = override_atomic_associativity_test;
+    contents->stream_stores = stream_stores;
+    contents->stream_loads_names = stream_loads_names;
 }
 
 StageSchedule StageSchedule::get_copy() const {
@@ -559,6 +569,8 @@ StageSchedule StageSchedule::get_copy() const {
     copy.contents->allow_race_conditions = contents->allow_race_conditions;
     copy.contents->atomic = contents->atomic;
     copy.contents->override_atomic_associativity_test = contents->override_atomic_associativity_test;
+    copy.contents->stream_stores = contents->stream_stores;
+    copy.contents->stream_loads_names = contents->stream_loads_names;
     return copy;
 }
 
@@ -640,6 +652,22 @@ bool &StageSchedule::override_atomic_associativity_test() {
 
 bool StageSchedule::override_atomic_associativity_test() const {
     return contents->override_atomic_associativity_test;
+}
+
+bool &StageSchedule::stream_stores() {
+    return contents->stream_stores;
+}
+
+bool StageSchedule::stream_stores() const {
+    return contents->stream_stores;
+}
+
+std::optional<std::vector<std::string>> &StageSchedule::stream_loads_names() {
+    return contents->stream_loads_names;
+}
+
+const std::optional<std::vector<std::string>> &StageSchedule::stream_loads_names() const {
+    return contents->stream_loads_names;
 }
 
 void StageSchedule::accept(IRVisitor *visitor) const {

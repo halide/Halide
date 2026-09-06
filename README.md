@@ -440,7 +440,13 @@ $ make -f ../Halide/Makefile
 `HL_JIT_TARGET=...` will set Halide's JIT compilation target.
 
 `HL_DEBUG_CODEGEN=1` will print out pseudocode for what Halide is compiling.
-Higher numbers will print more detail.
+Higher numbers will print more detail. The output can be filtered by source
+location using the grammar `verbosity[,filename[:line_low[-line_high]]][@func]`,
+with rules separated by `;` and OR-ed together (filenames and function names are
+matched as suffixes). For example, `HL_DEBUG_CODEGEN=3,Simplify.cpp:100-180`
+prints verbosity-3 output only from lines 100–180 of `Simplify.cpp`. See
+[doc/Testing.md](doc/Testing.md) for more, including the LLDB/GDB debugger
+helpers.
 
 `HL_NUM_THREADS=...` specifies the number of threads to create for the thread
 pool. When the async scheduling directive is used, more threads than this number
@@ -452,6 +458,10 @@ default, the number of cores on the host is used.)
 output can be parsed programmatically by starting from the code in
 `utils/HalideTraceViz.cpp`.
 
+`HL_CACHE_DIR=...` enables the opt-in generator compile cache, restoring a
+generator's previously emitted artifacts instead of recompiling when its inputs
+are unchanged. See [Generator cache](doc/GeneratorCache.md).
+
 # Further references
 
 We have more documentation in `doc/`, the following links might be helpful:
@@ -460,6 +470,7 @@ We have more documentation in `doc/`, the following links might be helpful:
 | --------------------------------------------- | ------------------------------------------------------------------------- |
 | [CMake build](doc/BuildingHalideWithCMake.md) | How to configure and build Halide using CMake.                            |
 | [CMake package](doc/HalideCMakePackage.md)    | How to use the Halide CMake package to build your code.                   |
+| [Generator cache](doc/GeneratorCache.md)      | How to speed up rebuilds with the opt-in generator compile cache.         |
 | [Hexagon](doc/Hexagon.md)                     | How to use the Hexagon backend.                                           |
 | [Python](doc/Python.md)                       | Documentation for the Python bindings.                                    |
 | [RunGen](doc/RunGen.md)                       | How to use the RunGen interface to run and benchmark arbitrary pipelines. |

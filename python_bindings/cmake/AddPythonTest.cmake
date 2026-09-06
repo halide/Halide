@@ -17,7 +17,9 @@ function(add_python_test)
 
     add_test(
         NAME "${test_name}"
-        COMMAND ${Halide_PYTHON_LAUNCHER} "$<TARGET_FILE:Python::Interpreter>" "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${ARG_FILE}>" ${ARG_TEST_ARGS}
+        COMMAND
+            ${Halide_PYTHON_LAUNCHER} "$<TARGET_FILE:Python::Interpreter>"
+            "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${ARG_FILE}>" ${ARG_TEST_ARGS}
     )
     set_tests_properties(
         "${test_name}"

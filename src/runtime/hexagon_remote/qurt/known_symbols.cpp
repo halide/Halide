@@ -20,7 +20,7 @@ void *lookup_symbol(const char *name, const known_symbol *map) {
 extern "C" {
 
 // More symbols we need to support.
-extern int qurt_hvx_lock();
+extern int qurt_hvx_lock(qurt_hvx_mode_t lock_mode);
 extern int qurt_hvx_unlock();
 extern int __hexagon_muldf3();
 extern int __hexagon_divdf3();

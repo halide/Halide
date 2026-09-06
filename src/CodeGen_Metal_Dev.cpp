@@ -539,7 +539,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Select *op) {
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Allocate *op) {
 
-    if (op->memory_type == MemoryType::GPUShared) {
+    if (is_gpu_shared(op->memory_type)) {
         // Already handled
         op->body.accept(this);
     } else {
@@ -776,7 +776,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
     const Allocate *shared_alloc = nullptr;
     shared_name = "__shared";
     visit_with(s, [&](auto *self, const Allocate *op) {
-        if (op->memory_type == MemoryType::GPUShared) {
+        if (is_gpu_shared(op->memory_type)) {
             internal_assert(shared_alloc == nullptr)
                 << "Found multiple shared allocations in metal kernel\n";
             shared_alloc = op;

@@ -6,7 +6,9 @@
  */
 
 #include <map>
+#include <optional>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -552,19 +554,9 @@ struct FusedPair {
                (var_name == other.var_name);
     }
     bool operator<(const FusedPair &other) const {
-        if (func_1 != other.func_1) {
-            return func_1 < other.func_1;
-        }
-        if (func_2 != other.func_2) {
-            return func_2 < other.func_2;
-        }
-        if (var_name != other.var_name) {
-            return var_name < other.var_name;
-        }
-        if (stage_1 != other.stage_1) {
-            return stage_1 < other.stage_1;
-        }
-        return stage_2 < other.stage_2;
+        return std::tie(func_1, func_2, var_name, stage_1, stage_2) <
+               std::tie(other.func_1, other.func_2, other.var_name,
+                        other.stage_1, other.stage_2);
     }
 };
 
@@ -696,7 +688,8 @@ public:
     StageSchedule(const std::vector<ReductionVariable> &rvars, const std::vector<Split> &splits,
                   const std::vector<Dim> &dims, const std::vector<PrefetchDirective> &prefetches,
                   const FuseLoopLevel &fuse_level, const std::vector<FusedPair> &fused_pairs,
-                  bool touched, bool allow_race_conditions, bool atomic, bool override_atomic_associativity_test);
+                  bool touched, bool allow_race_conditions, bool atomic, bool override_atomic_associativity_test,
+                  bool stream_stores, const std::optional<std::vector<std::string>> &stream_loads_names);
 
     /** Return a copy of this StageSchedule. */
     StageSchedule get_copy() const;
@@ -780,6 +773,27 @@ public:
     // @{
     bool override_atomic_associativity_test() const;
     bool &override_atomic_associativity_test();
+    // @}
+
+    /** True if stores to this Stage's backing storage should use
+     * non-temporal (streaming) stores. Only legal on a Stage all of whose
+     * RVars (if any) are pure, i.e. already proven safe to parallelize; see
+     * \ref Func::stream_stores. */
+    // @{
+    bool stream_stores() const;
+    bool &stream_stores();
+    // @}
+
+    /** The stream_loads() request (see \ref Func::stream_loads / \ref
+     * Stage::stream_loads) for this Stage: nullopt means stream every
+     * direct load of another Func (except a self-load), set by the
+     * zero-arg form; otherwise the vector names exactly the Funcs whose
+     * direct loads by this Stage should be streamed (non-temporal) -- an
+     * empty vector (the default, if stream_loads() was never called)
+     * means don't stream any of them. */
+    // @{
+    const std::optional<std::vector<std::string>> &stream_loads_names() const;
+    std::optional<std::vector<std::string>> &stream_loads_names();
     // @}
 
     /** Pass an IRVisitor through to all Exprs referenced in the

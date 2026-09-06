@@ -9,7 +9,7 @@ bool vector_store = false, scalar_store = false;
 int my_trace(JITUserContext *user_context, const halide_trace_event_t *ev) {
 
     if (ev->event == halide_trace_store) {
-        if (ev->type.lanes > 1) {
+        if (ev->lanes > 1) {
             vector_store = true;
         } else {
             scalar_store = true;

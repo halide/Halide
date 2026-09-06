@@ -131,6 +131,7 @@ DECLARE_CPP_INITMOD(fopen_lfs)
 DECLARE_CPP_INITMOD(force_include_types)
 DECLARE_CPP_INITMOD(fuchsia_clock)
 DECLARE_CPP_INITMOD(fuchsia_host_cpu_count)
+DECLARE_CPP_INITMOD(fuchsia_thread_id)
 DECLARE_CPP_INITMOD(fuchsia_yield)
 DECLARE_CPP_INITMOD(gpu_device_selection)
 DECLARE_CPP_INITMOD(halide_buffer_t)
@@ -139,8 +140,12 @@ DECLARE_CPP_INITMOD(hexagon_dma)
 DECLARE_CPP_INITMOD(hexagon_dma_pool)
 DECLARE_CPP_INITMOD(hexagon_host)
 DECLARE_CPP_INITMOD(ios_io)
+DECLARE_CPP_INITMOD(linux_arm_thread_id)
 DECLARE_CPP_INITMOD(linux_clock)
 DECLARE_CPP_INITMOD(linux_host_cpu_count)
+DECLARE_CPP_INITMOD(linux_powerpc_thread_id)
+DECLARE_CPP_INITMOD(linux_riscv_thread_id)
+DECLARE_CPP_INITMOD(linux_x86_thread_id)
 DECLARE_CPP_INITMOD(linux_yield)
 DECLARE_CPP_INITMOD(module_aot_ref_count)
 DECLARE_CPP_INITMOD(module_jit_ref_count)
@@ -150,6 +155,7 @@ DECLARE_CPP_INITMOD(opencl)
 DECLARE_CPP_INITMOD(osx_clock)
 DECLARE_CPP_INITMOD(osx_get_symbol)
 DECLARE_CPP_INITMOD(osx_host_cpu_count)
+DECLARE_CPP_INITMOD(osx_thread_id)
 DECLARE_CPP_INITMOD(osx_yield)
 DECLARE_CPP_INITMOD(posix_aligned_alloc)
 DECLARE_CPP_INITMOD(posix_allocator)
@@ -220,35 +226,31 @@ DECLARE_NO_INITMOD(metal_objc_x86)
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
 DECLARE_LL_INITMOD(arm_no_neon)
+#else
+DECLARE_NO_INITMOD(arm)
+DECLARE_NO_INITMOD(arm_no_neon)
+#endif  // WITH_ARM
+
+#if defined(WITH_ARM) || defined(WITH_AARCH64)
 DECLARE_CPP_INITMOD(arm_cpu_features)
 DECLARE_CPP_INITMOD(linux_arm_cpu_features)
 DECLARE_CPP_INITMOD(osx_arm_cpu_features)
 #else
-DECLARE_NO_INITMOD(arm)
-DECLARE_NO_INITMOD(arm_no_neon)
 DECLARE_NO_INITMOD(arm_cpu_features)
 DECLARE_NO_INITMOD(linux_arm_cpu_features)
 DECLARE_NO_INITMOD(osx_arm_cpu_features)
-#endif  // WITH_ARM
+#endif  // WITH_ARM || WITH_AARCH64
 
 #ifdef WITH_AARCH64
 DECLARE_LL_INITMOD(aarch64)
-DECLARE_CPP_INITMOD(aarch64_cpu_features)
-DECLARE_CPP_INITMOD(linux_aarch64_cpu_features)
-DECLARE_CPP_INITMOD(osx_aarch64_cpu_features)
 DECLARE_CPP_INITMOD_64(windows_aarch64_cpu_features_arm)
 #else
 DECLARE_NO_INITMOD(aarch64)
-DECLARE_NO_INITMOD(aarch64_cpu_features)
-DECLARE_NO_INITMOD(linux_aarch64_cpu_features)
-DECLARE_NO_INITMOD(osx_aarch64_cpu_features)
 DECLARE_NO_INITMOD(windows_aarch64_cpu_features_arm)
 #endif  // WITH_AARCH64
 
 #ifdef WITH_NVPTX
-DECLARE_LL_INITMOD(ptx_compute_20)
-DECLARE_LL_INITMOD(ptx_compute_30)
-DECLARE_LL_INITMOD(ptx_compute_35)
+DECLARE_LL_INITMOD(ptx_libdevice)
 #endif  // WITH_NVPTX
 
 #if defined(WITH_D3D12) && defined(WITH_X86)
@@ -289,6 +291,7 @@ DECLARE_NO_INITMOD(windows_vulkan)
 
 #ifdef WITH_X86
 // keep-sorted start by_regex=["INITMOD\\(.+"]
+DECLARE_CPP_INITMOD(linux_x86_cpu_features)
 DECLARE_LL_INITMOD(x86)
 DECLARE_LL_INITMOD(x86_amx)
 DECLARE_LL_INITMOD(x86_avx)
@@ -299,6 +302,7 @@ DECLARE_LL_INITMOD(x86_sse41)
 // keep-sorted end
 #else
 // keep-sorted start by_regex=["INITMOD\\(.+"]
+DECLARE_NO_INITMOD(linux_x86_cpu_features)
 DECLARE_NO_INITMOD(x86)
 DECLARE_NO_INITMOD(x86_amx)
 DECLARE_NO_INITMOD(x86_avx)
@@ -328,9 +332,11 @@ DECLARE_NO_INITMOD(hexagon_cpu_features)
 #ifdef WITH_WEBASSEMBLY
 DECLARE_CPP_INITMOD(wasm_cpu_features)
 DECLARE_LL_INITMOD(wasm_math)
+DECLARE_CPP_INITMOD(wasm_thread_id)
 #else
 DECLARE_NO_INITMOD(wasm_cpu_features)
 DECLARE_NO_INITMOD(wasm_math)
+DECLARE_NO_INITMOD(wasm_thread_id)
 #endif  // WITH_WEBASSEMBLY
 
 #ifdef WITH_RISCV
@@ -937,6 +943,46 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
     };
 
+    const auto add_posix_threads = [&] {
+        if (tsan) {
+            modules.push_back(get_initmod_posix_threads_tsan(c, bits_64, debug));
+        } else {
+            modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
+        }
+    };
+
+    const auto add_linux_thread_id = [&] {
+        if (t.arch == Target::X86) {
+            modules.push_back(get_initmod_linux_x86_thread_id(c, bits_64, debug));
+        } else if (t.arch == Target::ARM) {
+            modules.push_back(get_initmod_linux_arm_thread_id(c, bits_64, debug));
+        } else if (t.arch == Target::RISCV) {
+            modules.push_back(get_initmod_linux_riscv_thread_id(c, bits_64, debug));
+        } else if (t.arch == Target::POWERPC) {
+            modules.push_back(get_initmod_linux_powerpc_thread_id(c, bits_64, debug));
+        }
+    };
+
+    const auto add_linux_posix_threads = [&] {
+        add_linux_thread_id();
+        add_posix_threads();
+    };
+
+    const auto add_darwin_posix_threads = [&] {
+        modules.push_back(get_initmod_osx_thread_id(c, bits_64, debug));
+        add_posix_threads();
+    };
+
+    const auto add_fuchsia_posix_threads = [&] {
+        modules.push_back(get_initmod_fuchsia_thread_id(c, bits_64, debug));
+        add_posix_threads();
+    };
+
+    const auto add_wasm_posix_threads = [&] {
+        modules.push_back(get_initmod_wasm_thread_id(c, bits_64, debug));
+        add_posix_threads();
+    };
+
     if (module_type != ModuleGPU) {
         if (module_type != ModuleJITInlined && module_type != ModuleAOTNoRuntime) {
             // OS-dependent modules
@@ -953,11 +999,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
                 modules.push_back(get_initmod_linux_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_linux_yield(c, bits_64, debug));
-                if (tsan) {
-                    modules.push_back(get_initmod_posix_threads_tsan(c, bits_64, debug));
-                } else {
-                    modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
-                }
+                add_linux_posix_threads();
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::WebAssemblyRuntime) {
                 add_allocator();
@@ -969,7 +1011,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_linux_yield(c, bits_64, debug));
                 if (t.has_feature(Target::WasmThreads)) {
                     // Assume that the wasm libc will be providing pthreads
-                    modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
+                    add_wasm_posix_threads();
                 } else {
                     modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
                 }
@@ -982,11 +1024,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_yield(c, bits_64, debug));
-                if (tsan) {
-                    modules.push_back(get_initmod_posix_threads_tsan(c, bits_64, debug));
-                } else {
-                    modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
-                }
+                add_darwin_posix_threads();
                 modules.push_back(get_initmod_osx_get_symbol(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_host_cpu_count(c, bits_64, debug));
             } else if (t.os == Target::Android) {
@@ -1001,11 +1039,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_android_io(c, bits_64, debug));
                 modules.push_back(get_initmod_android_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_linux_yield(c, bits_64, debug));  // TODO: verify
-                if (tsan) {
-                    modules.push_back(get_initmod_posix_threads_tsan(c, bits_64, debug));
-                } else {
-                    modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
-                }
+                add_linux_posix_threads();
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::Windows) {
                 modules.push_back(get_initmod_posix_aligned_alloc(c, bits_64, debug));
@@ -1029,11 +1063,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_ios_io(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_yield(c, bits_64, debug));
-                if (tsan) {
-                    modules.push_back(get_initmod_posix_threads_tsan(c, bits_64, debug));
-                } else {
-                    modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
-                }
+                add_darwin_posix_threads();
             } else if (t.os == Target::QuRT) {
                 modules.push_back(get_initmod_posix_aligned_alloc(c, bits_64, debug));
                 modules.push_back(get_initmod_qurt_allocator(c, bits_64, debug));
@@ -1068,11 +1098,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
                 modules.push_back(get_initmod_fuchsia_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_fuchsia_yield(c, bits_64, debug));
-                if (tsan) {
-                    modules.push_back(get_initmod_posix_threads_tsan(c, bits_64, debug));
-                } else {
-                    modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
-                }
+                add_fuchsia_posix_threads();
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             }
         }
@@ -1245,27 +1271,21 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             // These modules are only used for AOT compilation
             modules.push_back(get_initmod_can_use_target(c, bits_64, debug));
             if (t.arch == Target::X86) {
-                modules.push_back(get_initmod_x86_cpu_features(c, bits_64, debug));
+                if (t.os == Target::Android || t.os == Target::Linux) {
+                    modules.push_back(get_initmod_linux_x86_cpu_features(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_x86_cpu_features(c, bits_64, debug));
+                }
             }
             if (t.arch == Target::ARM) {
-                if (t.bits == 64) {
-                    if (t.os == Target::Android || t.os == Target::Linux) {
-                        modules.push_back(get_initmod_linux_aarch64_cpu_features(c, bits_64, debug));
-                    } else if (t.os == Target::OSX || t.os == Target::IOS) {
-                        modules.push_back(get_initmod_osx_aarch64_cpu_features(c, bits_64, debug));
-                    } else if (t.os == Target::Windows) {
-                        modules.push_back(get_initmod_windows_aarch64_cpu_features_arm(c, bits_64, debug));
-                    } else {
-                        modules.push_back(get_initmod_aarch64_cpu_features(c, bits_64, debug));
-                    }
+                if (t.os == Target::Android || t.os == Target::Linux) {
+                    modules.push_back(get_initmod_linux_arm_cpu_features(c, bits_64, debug));
+                } else if (t.os == Target::OSX || t.os == Target::IOS) {
+                    modules.push_back(get_initmod_osx_arm_cpu_features(c, bits_64, debug));
+                } else if (t.bits == 64 && t.os == Target::Windows) {
+                    modules.push_back(get_initmod_windows_aarch64_cpu_features_arm(c, bits_64, debug));
                 } else {
-                    if (t.os == Target::Android || t.os == Target::Linux) {
-                        modules.push_back(get_initmod_linux_arm_cpu_features(c, bits_64, debug));
-                    } else if (t.os == Target::OSX || t.os == Target::IOS) {
-                        modules.push_back(get_initmod_osx_arm_cpu_features(c, bits_64, debug));
-                    } else {
-                        modules.push_back(get_initmod_arm_cpu_features(c, bits_64, debug));
-                    }
+                    modules.push_back(get_initmod_arm_cpu_features(c, bits_64, debug));
                 }
             }
             if (t.arch == Target::POWERPC) {
@@ -1384,22 +1404,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, l
     std::vector<std::unique_ptr<llvm::Module>> modules;
     modules.push_back(get_initmod_ptx_dev_ll(c));
 
-    std::unique_ptr<llvm::Module> module;
-
-    // This table is based on the guidance at:
-    // http://docs.nvidia.com/cuda/libdevice-users-guide/basic-usage.html#linking-with-libdevice
-    if (target.has_feature(Target::CUDACapability35)) {
-        module = get_initmod_ptx_compute_35_ll(c);
-    } else if (target.features_any_of({Target::CUDACapability32,
-                                       Target::CUDACapability50})) {
-        // For some reason sm_32 and sm_50 use libdevice 20
-        module = get_initmod_ptx_compute_20_ll(c);
-    } else if (target.has_feature(Target::CUDACapability30)) {
-        module = get_initmod_ptx_compute_30_ll(c);
-    } else {
-        module = get_initmod_ptx_compute_20_ll(c);
-    }
-    modules.push_back(std::move(module));
+    modules.push_back(get_initmod_ptx_libdevice_ll(c));
 
     link_modules(modules, target);
 

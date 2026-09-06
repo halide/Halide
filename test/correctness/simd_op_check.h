@@ -6,6 +6,7 @@
 #include "halide_thread_pool.h"
 #include "test_sharding.h"
 
+#include <cctype>
 #include <fstream>
 #include <iostream>
 
@@ -18,16 +19,16 @@ using namespace Halide;
 Expr input(const Type &t, const Expr &arg) {
     return Internal::Call::make(t, "input", {arg}, Internal::Call::Extern);
 }
-Expr in_f16(const Expr &arg) {
+[[maybe_unused]] Expr in_f16(const Expr &arg) {
     return input(Float(16), arg);
 }
-Expr in_bf16(const Expr &arg) {
+[[maybe_unused]] Expr in_bf16(const Expr &arg) {
     return input(BFloat(16), arg);
 }
-Expr in_f32(const Expr &arg) {
+[[maybe_unused]] Expr in_f32(const Expr &arg) {
     return input(Float(32), arg);
 }
-Expr in_f64(const Expr &arg) {
+[[maybe_unused]] Expr in_f64(const Expr &arg) {
     return input(Float(64), arg);
 }
 Expr in_i8(const Expr &arg) {
@@ -149,6 +150,7 @@ public:
                  Target::SSE41,
                  Target::SVE,
                  Target::SVE2,
+                 Target::SME2,
                  Target::VSX,
              }) {
             if (target.has_feature(f) != host_target.has_feature(f)) {
@@ -167,10 +169,7 @@ public:
         std::string fn_name = "test_" + name + "_vecwidth" + std::to_string(vector_width);
         std::string file_name = output_directory + fn_name;
 
-        auto ext = Internal::get_output_info(target);
         std::map<OutputFileType, std::string> outputs = {
-            {OutputFileType::c_header, file_name + ext.at(OutputFileType::c_header).extension},
-            {OutputFileType::object, file_name + ext.at(OutputFileType::object).extension},
             {OutputFileType::assembly, file_name + ".s"},
             {OutputFileType::llvm_assembly, file_name + ".ll"},
         };
@@ -216,12 +215,12 @@ public:
                     return true;
                 }
             } while (*str++);
-        } else if (*p == ' ') {  // ignore whitespace in pattern
+        } else if (std::isspace(static_cast<unsigned char>(*p))) {  // ignore whitespace in pattern
             p++;
             if (wildcard_match(p, str)) {
                 return true;
             }
-        } else if (*str == ' ') {  // ignore whitespace in string
+        } else if (std::isspace(static_cast<unsigned char>(*str))) {  // ignore whitespace in string
             str++;
             if (wildcard_match(p, str)) {
                 return true;
@@ -324,6 +323,7 @@ public:
         f(x, y) = e;
         f.bound(x, 0, W).vectorize(x, vector_width);
         f.compute_root();
+        apply_additional_schedule(f);
 
         // Include a scalar version
         Halide::Func f_scalar("scalar_" + name);
@@ -342,12 +342,13 @@ public:
             // Do the reduction separately in f_scalar
             g.clone_in(f_scalar);
 
-            g.compute_at(f, x)
-                .update()
-                .split(x, xo, xi, vector_width)
-                .atomic(true)
-                .vectorize(g.rvars()[0])
-                .vectorize(xi);
+            auto stage = g.compute_at(f, x)
+                             .update()
+                             .split(x, xo, xi, vector_width)
+                             .atomic(true)
+                             .vectorize(g.rvars()[0])
+                             .vectorize(xi);
+            apply_additional_schedule(stage);
         }
 
         compile_and_check(f, op, name, vector_width, arg_types, error_msg);
@@ -374,7 +375,7 @@ public:
             std::vector<Argument> args(image_params.size() + 1);
             for (size_t i = 0; i < image_params.size(); i++) {
                 args[i] = image_params[i];
-                inputs[i] = Runtime::Buffer<>(args[i].type, nullptr, 0);
+                inputs[i] = Runtime::Buffer<>(args[i].type.to_abi(), nullptr, 0);
             }
             args.back() = rows;
 
@@ -486,6 +487,14 @@ public:
         return Halide::Tools::ThreadPool<void>::num_processors_online();
     }
 
+    virtual void apply_additional_schedule(Stage &stage) const {
+        return;
+    }
+
+    virtual void apply_additional_schedule(Func &f) const {
+        return;
+    }
+
     virtual bool test_all() {
         /* First add some tests based on the target */
         add_tests();
@@ -503,7 +512,14 @@ public:
             if (!sharder.should_run(t)) continue;
             const auto &task = tasks.at(t);
             futures.push_back(pool.async([&]() {
-                return check_one(task.op, task.name, task.vector_width, task.expr);
+                // Run check_one on a large-stack thread to avoid overflowing the
+                // default 512 KB worker stack during deeply recursive LLVM codegen
+                // (especially under coverage instrumentation).
+                TestResult result;
+                Internal::run_with_large_stack([&] {
+                    result = check_one(task.op, task.name, task.vector_width, task.expr);
+                });
+                return result;
             }));
         }
 

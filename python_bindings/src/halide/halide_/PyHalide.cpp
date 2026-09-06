@@ -38,6 +38,16 @@
 PYBIND11_MODULE(HALIDE_PYBIND_MODULE_NAME, m) {
     using namespace Halide::PythonBindings;
 
+#if PY_VERSION_HEX >= 0x030E0000
+    // CPython 3.14 caches C stack limits in the thread state, which does not
+    // interact well with Halide's user-space compiler stack when warnings call
+    // back into Python. Stay on Python's stack by default, but preserve the
+    // existing Halide behavior when the user explicitly opts in.
+    if (Halide::Internal::get_env_variable("HL_COMPILER_STACK_SIZE").empty()) {
+        Halide::set_compiler_stack_size(0);
+    }
+#endif
+
     // Order of definitions matters somewhat:
     // things used for default arguments must be registered
     // prior to that usage.

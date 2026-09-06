@@ -26,7 +26,8 @@ void define_enums(py::module &m) {
         .value("Vulkan", DeviceAPI::Vulkan)
         .value("OpenCL", DeviceAPI::OpenCL)
         .value("Metal", DeviceAPI::Metal)
-        .value("Hexagon", DeviceAPI::Hexagon);
+        .value("Hexagon", DeviceAPI::Hexagon)
+        .value("SMEStreaming", DeviceAPI::SMEStreaming);
 
     py::enum_<LinkageType>(m, "LinkageType")
         .value("External", LinkageType::External)
@@ -48,7 +49,9 @@ void define_enums(py::module &m) {
         .value("GPUShared", MemoryType::GPUShared)
         .value("GPUTexture", MemoryType::GPUTexture)
         .value("LockedCache", MemoryType::LockedCache)
-        .value("VTCM", MemoryType::VTCM);
+        .value("VTCM", MemoryType::VTCM)
+        .value("AMXTile", MemoryType::AMXTile)
+        .value("GPUSharedAsync", MemoryType::GPUSharedAsync);
 
     py::enum_<NameMangling>(m, "NameMangling")
         .value("Default", NameMangling::Default)
@@ -59,6 +62,11 @@ void define_enums(py::module &m) {
         .value("Clamp", PrefetchBoundStrategy::Clamp)
         .value("GuardWithIf", PrefetchBoundStrategy::GuardWithIf)
         .value("NonFaulting", PrefetchBoundStrategy::NonFaulting);
+
+    py::enum_<RuntimeLinkage>(m, "RuntimeLinkage")
+        .value("Import", RuntimeLinkage::Import)
+        .value("Export", RuntimeLinkage::Export)
+        .value("Internal", RuntimeLinkage::Internal);
 
     py::enum_<StmtOutputFormat>(m, "StmtOutputFormat")
         .value("Text", StmtOutputFormat::Text)
@@ -140,6 +148,10 @@ void define_enums(py::module &m) {
         .value("CUDACapability75", Target::Feature::CUDACapability75)
         .value("CUDACapability80", Target::Feature::CUDACapability80)
         .value("CUDACapability86", Target::Feature::CUDACapability86)
+        .value("CUDACapability89", Target::Feature::CUDACapability89)
+        .value("CUDACapability90", Target::Feature::CUDACapability90)
+        .value("CUDACapability100", Target::Feature::CUDACapability100)
+        .value("CUDACapability120", Target::Feature::CUDACapability120)
         .value("OpenCL", Target::Feature::OpenCL)
         .value("CLDoubles", Target::Feature::CLDoubles)
         .value("CLHalf", Target::Feature::CLHalf)
@@ -186,6 +198,12 @@ void define_enums(py::module &m) {
         .value("WebGPU", Target::Feature::WebGPU)
         .value("SVE", Target::Feature::SVE)
         .value("SVE2", Target::Feature::SVE2)
+        .value("SME2", Target::Feature::SME2)
+        .value("SME_SVL128", Target::Feature::SME_SVL128)
+        .value("SME_SVL256", Target::Feature::SME_SVL256)
+        .value("SME_SVL512", Target::Feature::SME_SVL512)
+        .value("SME_SVL1024", Target::Feature::SME_SVL1024)
+        .value("SME_SVL2048", Target::Feature::SME_SVL2048)
         .value("ARMDotProd", Target::Feature::ARMDotProd)
         .value("ARMFp16", Target::Feature::ARMFp16)
         .value("LLVMLargeCodeModel", Target::Feature::LLVMLargeCodeModel)
@@ -216,6 +234,16 @@ void define_enums(py::module &m) {
         .value("AVX10_1", Target::Feature::AVX10_1)
         .value("X86APX", Target::Feature::X86APX)
         .value("Simulator", Target::Feature::Simulator)
+        .value("HLSL_SM60", Target::Feature::HLSL_SM60)
+        .value("HLSL_SM61", Target::Feature::HLSL_SM61)
+        .value("HLSL_SM62", Target::Feature::HLSL_SM62)
+        .value("HLSL_SM63", Target::Feature::HLSL_SM63)
+        .value("HLSL_SM64", Target::Feature::HLSL_SM64)
+        .value("HLSL_SM65", Target::Feature::HLSL_SM65)
+        .value("HLSL_SM66", Target::Feature::HLSL_SM66)
+        .value("HLSL_SM67", Target::Feature::HLSL_SM67)
+        .value("HLSL_SM68", Target::Feature::HLSL_SM68)
+        .value("HLSL_SM69", Target::Feature::HLSL_SM69)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")
@@ -229,7 +257,6 @@ void define_enums(py::module &m) {
         .value("bitcode", OutputFileType::bitcode)
         .value("c_header", OutputFileType::c_header)
         .value("c_source", OutputFileType::c_source)
-        .value("compiler_log", OutputFileType::compiler_log)
         .value("cpp_stub", OutputFileType::cpp_stub)
         .value("featurization", OutputFileType::featurization)
         .value("function_info_header", OutputFileType::function_info_header)

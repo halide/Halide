@@ -140,24 +140,33 @@ private:
 
     // ---------------------------------
 
-    // This value is constructed so we can do a complete type-and-dim check
-    // of Buffers, and is used for the make_std_function() method, to ensure
-    // that if we specify static type-and-dims for Buffers, the ones we specify
-    // actually match the underlying code. We take horrible liberties with halide_type_t
-    // to make this happen -- specifically, encoding dimensionality and buffer-vs-scalar
-    // into the 'lanes' field -- but that's ok since this never escapes into other usage.
-    using FullCallCheckInfo = halide_type_t;
+    // This struct is used to do a complete type-and-dim check of Buffers, and
+    // is used for the make_std_function() method, to ensure that if we specify
+    // static type-and-dims for Buffers, the ones we specify actually match the
+    // underlying code. Unlike QuickCallCheckInfo, this needs to be able to
+    // represent "type unspecified" and "dims unspecified" (e.g. for
+    // Buffer<void, AnyDims> args).
+    struct FullCallCheckInfo {
+        // The scalar ABI element type; code == 0 && bits == 0 means "unspecified".
+        halide_type_t type;
+        // Buffer dimensionality; negative means "unspecified". Unused for scalars.
+        int8_t dims;
+        bool is_buffer;
 
-    static constexpr FullCallCheckInfo _make_fcci(halide_type_t type, int dims, bool is_buffer) {
-        return type.with_lanes(((uint16_t)dims << 1) | (uint16_t)(is_buffer ? 1 : 0));
-    }
+        constexpr bool operator==(const FullCallCheckInfo &other) const {
+            return is_buffer == other.is_buffer && dims == other.dims && type == other.type;
+        }
+        constexpr bool operator!=(const FullCallCheckInfo &other) const {
+            return !(*this == other);
+        }
+    };
 
     static constexpr FullCallCheckInfo make_scalar_fcci(halide_type_t t) {
-        return _make_fcci(t, 0, false);
+        return FullCallCheckInfo{t, 0, false};
     }
 
     static constexpr FullCallCheckInfo make_buffer_fcci(halide_type_t t, int dims) {
-        return _make_fcci(t, dims, true);
+        return FullCallCheckInfo{t, (int8_t)dims, true};
     }
 
     static bool is_compatible_fcci(FullCallCheckInfo actual, FullCallCheckInfo expected) {
@@ -165,24 +174,19 @@ private:
             return true;  // my, that was easy
         }
 
+        // The "no type specified" sentinel: code/bits both zero.
+        constexpr halide_type_t none{(halide_type_code_t)0, 0};
+
         // Might still be compatible
-        const bool a_is_buffer = (actual.lanes & 1) != 0;
-        const int a_dims = (((int16_t)actual.lanes) >> 1);
-        const halide_type_t a_type = actual.with_lanes(0);
+        const bool types_match = actual.type == none ||
+                                 expected.type == none ||
+                                 actual.type == expected.type;
 
-        const bool e_is_buffer = (expected.lanes & 1) != 0;
-        const int e_dims = (((int16_t)expected.lanes) >> 1);
-        const halide_type_t e_type = expected.with_lanes(0);
+        const bool dims_match = actual.dims < 0 ||
+                                expected.dims < 0 ||
+                                actual.dims == expected.dims;
 
-        const bool types_match = (a_type == halide_type_t()) ||
-                                 (e_type == halide_type_t()) ||
-                                 (a_type == e_type);
-
-        const bool dims_match = a_dims < 0 ||
-                                e_dims < 0 ||
-                                a_dims == e_dims;
-
-        return a_is_buffer == e_is_buffer && types_match && dims_match;
+        return actual.is_buffer == expected.is_buffer && types_match && dims_match;
     }
 
     template<typename T>

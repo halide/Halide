@@ -89,13 +89,7 @@ public:
         Stmt new_body = mutate(op->body);
         hidden.pop(op->name);
 
-        if (new_min.same_as(op->min) &&
-            new_max.same_as(op->max) &&
-            new_body.same_as(op->body)) {
-            return op;
-        } else {
-            return For::make(op->name, new_min, new_max, op->for_type, op->partition_policy, op->device_api, new_body);
-        }
+        return op->with(new_min, new_max, new_body);
     }
 };
 
@@ -168,9 +162,9 @@ protected:
     Expr visit(const Let *op) override {
         Expr new_value = mutate(op->value);
         if (op->name == var) {
-            return Let::make(op->name, new_value, op->body);
+            return op->with(new_value, op->body);
         } else {
-            return Let::make(op->name, new_value, mutate(op->body));
+            return op->with(new_value, mutate(op->body));
         }
     }
 

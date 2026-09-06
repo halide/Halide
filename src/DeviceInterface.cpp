@@ -169,7 +169,7 @@ DeviceAPI get_default_device_api_for_target(const Target &target) {
 
 namespace Internal {
 Expr make_device_interface_call(DeviceAPI device_api, MemoryType memory_type) {
-    if (device_api == DeviceAPI::Host) {
+    if (device_api == DeviceAPI::Host || device_api == DeviceAPI::SMEStreaming) {
         return make_zero(type_of<const halide_device_interface_t *>());
     }
 
@@ -195,7 +195,11 @@ Expr make_device_interface_call(DeviceAPI device_api, MemoryType memory_type) {
         interface_name = "halide_hexagon_dma_device_interface";
         break;
     case DeviceAPI::D3D12Compute:
-        interface_name = "halide_d3d12compute_device_interface";
+        if (memory_type == MemoryType::GPUTexture) {
+            interface_name = "halide_d3d12compute_image_device_interface";
+        } else {
+            interface_name = "halide_d3d12compute_device_interface";
+        }
         break;
     case DeviceAPI::Vulkan:
         interface_name = "halide_vulkan_device_interface";

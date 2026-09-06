@@ -1,4 +1,5 @@
-#include "StageStridedLoads.h"
+#include <tuple>
+
 #include "CSE.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
@@ -7,6 +8,7 @@
 #include "IRVisitor.h"
 #include "Scope.h"
 #include "Simplify.h"
+#include "StageStridedLoads.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -39,31 +41,15 @@ public:
 
         bool operator<(const Key &other) const {
             // Check fields in order of cost to compare
-            if (stride < other.stride) {
+            auto lhs = std::tie(stride, lanes, scope, allocation, type, buf);
+            auto rhs = std::tie(other.stride, other.lanes, other.scope,
+                                other.allocation, other.type, other.buf);
+            if (lhs < rhs) {
                 return true;
-            } else if (stride > other.stride) {
-                return false;
-            } else if (lanes < other.lanes) {
-                return true;
-            } else if (lanes > other.lanes) {
-                return false;
-            } else if (scope < other.scope) {
-                return true;
-            } else if (scope > other.scope) {
-                return false;
-            } else if (allocation < other.allocation) {
-                return true;
-            } else if (allocation > other.allocation) {
-                return false;
-            } else if (type < other.type) {
-                return true;
-            } else if (other.type < type) {
-                return false;
-            } else if (buf < other.buf) {
-                return true;
-            } else if (buf > other.buf) {
+            } else if (rhs < lhs) {
                 return false;
             } else {
+                // base compares by graph equivalence, so it can't go in the tuple.
                 return graph_less_than(base, other.base);
             }
         }
@@ -104,13 +90,16 @@ protected:
                 // TODO: We do not yet handle nested vectorization here for
                 // ramps which have not already collapsed. We could potentially
                 // handle more interesting types of shuffle than simple flat slices.
-                if (stride >= 2 && stride <= r->lanes && r->stride.type().is_scalar()) {
+                if (stride >= 2 && r->stride.type().is_scalar()) {
                     const IRNode *s = scope;
                     const Allocate *a = nullptr;
                     if (const Allocate *const *a_ptr = allocation_scope.find(op->name)) {
                         a = *a_ptr;
                     }
-                    found_loads[Key{op->name, base, stride, r->lanes, op->type, a, s}][offset].push_back(op);
+                    // Don't mess with loads from natively-2D tile memory.
+                    if (!a || !is_tile_memory_type(a->memory_type)) {
+                        found_loads[Key{op->name, base, stride, r->lanes, op->type, a, s}][offset].push_back(op);
+                    }
                 }
             }
         }
@@ -150,6 +139,16 @@ protected:
         // to.
         ScopedBinding<const Allocate *> bind(allocation_scope, op->name, op);
         IRVisitor::visit(op);
+    }
+
+    void visit(const Store *op) override {
+        // Don't mess with stores to natively-2D tile memory.
+        if (const auto *alloc = allocation_scope.find(op->name);
+            alloc && is_tile_memory_type((*alloc)->memory_type)) {
+            return;
+        } else {
+            IRVisitor::visit(op);
+        }
     }
 
     using IRVisitor::visit;
@@ -283,7 +282,7 @@ bool can_hoist_shared_load(const IRNode *n, const std::string &buf, const Expr &
 
 }  // namespace
 
-Stmt stage_strided_loads(const Stmt &stmt) {
+Stmt stage_strided_loads(const Stmt &stmt, const Target &target) {
     FindStridedLoads finder;
     ReplaceStridedLoads replacer;
 
@@ -296,9 +295,13 @@ Stmt stage_strided_loads(const Stmt &stmt) {
             // Definitely not a strided load
             return self->visit_base(l);
         } else {
-            // Might be a strided load after simplification
-            return Load::make(l->type, l->name, self->mutate(l->index), l->image, l->param,
-                              self->mutate(l->predicate), l->alignment);
+            // Might be a strided load after simplification. Note that this
+            // deliberately calls Load::make rather than Load::with, because
+            // Load::with returns the original node when nothing has changed,
+            // and here we want a distinct node even in that case.
+            return Load::make(l->type, l->name, self->mutate(l->index), l->image,
+                              l->param, self->mutate(l->predicate), l->alignment,
+                              l->is_streaming);
         }
     });
 
@@ -334,13 +337,27 @@ Stmt stage_strided_loads(const Stmt &stmt) {
             Type t = k.type.with_lanes(lanes);
             const Load *op = load->second[0];
 
+            int last_offset = first_offset;
+            int64_t biggest_gap = 0;
             std::set<const Load *> all_loads;
             for (auto l = load; l != v.end() && l->first < first_offset + k.stride; l++) {
                 all_loads.insert(l->second.begin(), l->second.end());
+                biggest_gap = std::max(biggest_gap, l->first - last_offset);
+                last_offset = l->first;
+            }
+            biggest_gap = std::max(biggest_gap, (first_offset + k.stride) - last_offset);
+
+            // If our contiguous shared load has contiguous vectors in it of
+            // size at least k.lanes that are going to be entirely unused, this
+            // is a bad idea (e.g. a cluster of {ramp(0, 1024, 8) and ramp(37,
+            // 1024, 8)} should not be staged).
+            if (biggest_gap >= k.lanes) {
+                load++;
+                continue;
             }
 
             Expr shared_load = Load::make(t, k.buf, idx, op->image, op->param,
-                                          const_true(lanes), op->alignment);
+                                          const_true(lanes), op->alignment, op->is_streaming);
 
             // We now need to pick a site to place our shared dense load. We
             // can't lift the shared load further out than k.scope, because that
@@ -353,14 +370,27 @@ Stmt stage_strided_loads(const Stmt &stmt) {
             const IRNode *outermost = k.scope ? k.scope : s.get();
             const IRNode *let_site = innermost_containing_node(outermost, all_loads);
             if (can_hoist_shared_load(let_site, k.buf, idx)) {
+                // For larger strides we can do a better job at shuffling if we
+                // do it as one big task. For stride 2 it interferes with
+                // horizontal add pattern matching. On ARM it also interferes
+                // with LLVM's pattern matching for vld3 and vld4.
+                bool transpose_shared_load = k.stride > 2;
+                if (target.arch == Target::ARM || target.arch == Target::Hexagon) {
+                    transpose_shared_load = k.stride > 4;
+                }
                 std::string name = unique_name('t');
                 Expr var = Variable::make(shared_load.type(), name);
                 for (; load != v.end() && load->first < first_offset + k.stride; load++) {
                     int row = load->first - first_offset;
-                    Expr shuf = Shuffle::make_slice(var, row, k.stride, k.lanes);
+                    Expr shuf = transpose_shared_load ?
+                                    Shuffle::make_slice(var, row * k.lanes, 1, k.lanes) :
+                                    Shuffle::make_slice(var, row, k.stride, k.lanes);
                     for (const Load *l : load->second) {
                         replacer.replacements.emplace(l, shuf);
                     }
+                }
+                if (transpose_shared_load) {
+                    shared_load = Shuffle::make_transpose(shared_load, k.stride);
                 }
                 replacer.let_injections[let_site].emplace_back(name, shared_load);
             } else {
@@ -378,7 +408,7 @@ Stmt stage_strided_loads(const Stmt &stmt) {
         // picked up in a cluster, but for whom we know it's safe to do a
         // dense load before their start.
         for (const auto &[offset, loads] : reverse_view(v)) {
-            if (replacer.replacements.count(loads[0])) {
+            if (replacer.replacements.count(loads[0]) || k.lanes < k.stride) {
                 continue;
             }
             int64_t delta = k.stride - 1;
@@ -392,7 +422,7 @@ Stmt stage_strided_loads(const Stmt &stmt) {
             Type t = k.type.with_lanes(lanes);
             const Load *op = loads[0];
             Expr dense_load = Load::make(t, k.buf, idx, op->image, op->param,
-                                         const_true(lanes), op->alignment - delta);
+                                         const_true(lanes), op->alignment - delta, op->is_streaming);
             dense_load = common_subexpression_elimination(dense_load);
             Expr shuf = Shuffle::make_slice(dense_load, delta, k.stride, k.lanes);
             for (const Load *l : loads) {
@@ -403,7 +433,7 @@ Stmt stage_strided_loads(const Stmt &stmt) {
         // Look for any loads we can densify because an overlapping load occurs
         // in any parent scope.
         for (const auto &[offset, loads] : reverse_view(v)) {
-            if (replacer.replacements.count(loads[0])) {
+            if (replacer.replacements.count(loads[0]) || k.lanes < k.stride) {
                 continue;
             }
             int64_t min_offset = offset;
@@ -430,7 +460,7 @@ Stmt stage_strided_loads(const Stmt &stmt) {
             Type t = k.type.with_lanes(lanes);
             const Load *op = loads[0];
             Expr dense_load = Load::make(t, k.buf, idx, op->image, op->param,
-                                         const_true(lanes), op->alignment);
+                                         const_true(lanes), op->alignment, op->is_streaming);
             dense_load = common_subexpression_elimination(dense_load);
             Expr shuf = Shuffle::make_slice(dense_load, offset - final_offset, k.stride, k.lanes);
             for (const Load *l : loads) {
@@ -443,7 +473,7 @@ Stmt stage_strided_loads(const Stmt &stmt) {
         // external allocations by doing a dense load at a trimmed size. We rely
         // on codegen to do a good job at loading vectors of a funny size.
         for (const auto &[offset, loads] : v) {
-            if (replacer.replacements.count(loads[0])) {
+            if (replacer.replacements.count(loads[0]) || k.lanes < k.stride) {
                 continue;
             }
 
@@ -463,7 +493,7 @@ Stmt stage_strided_loads(const Stmt &stmt) {
                 Type t = k.type.with_lanes(lanes);
                 const Load *op = loads[0];
                 Expr dense_load = Load::make(t, k.buf, idx, op->image, op->param,
-                                             const_true(lanes), op->alignment);
+                                             const_true(lanes), op->alignment, op->is_streaming);
                 dense_load = common_subexpression_elimination(dense_load);
                 Expr shuf = Shuffle::make_slice(dense_load, offset - first_offset, k.stride, k.lanes);
                 for (const Load *l : loads) {
@@ -481,9 +511,9 @@ Stmt stage_strided_loads(const Stmt &stmt) {
                 Type t = k.type.with_lanes(half_lanes);
                 const Load *op = loads[0];
                 Expr dense_load1 = Load::make(t, k.buf, idx1, op->image, op->param,
-                                              const_true(half_lanes), op->alignment);
+                                              const_true(half_lanes), op->alignment, op->is_streaming);
                 Expr dense_load2 = Load::make(t, k.buf, idx2, op->image, op->param,
-                                              const_true(half_lanes), op->alignment + half_lanes - delta);
+                                              const_true(half_lanes), op->alignment + half_lanes - delta, op->is_streaming);
                 dense_load1 = common_subexpression_elimination(dense_load1);
                 dense_load2 = common_subexpression_elimination(dense_load2);
                 Expr shuf1 = Shuffle::make_slice(dense_load1, 0, k.stride, k.lanes / 2);

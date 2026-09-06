@@ -43,15 +43,6 @@ int main(int argc, char **argv) {
 
     Buffer<float, 4> output(CO, W, H, N);
 
-// This is necessary to get the PTX compiler to do a good
-// job. TODO: This should be a scheduling directive or a runtime
-// function.
-#ifdef _WIN32
-    _putenv_s("HL_CUDA_JIT_MAX_REGISTERS", "256");
-#else
-    setenv("HL_CUDA_JIT_MAX_REGISTERS", "256", 1);
-#endif
-
     conv_layer(input, filter, bias, output);
 
     // Timing code

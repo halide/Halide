@@ -1,7 +1,6 @@
 #include "SimplifyCorrelatedDifferences.h"
 
 #include "CSE.h"
-#include "CompilerLogger.h"
 #include "ExprUsesVar.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
@@ -230,16 +229,16 @@ protected:
             e = PartiallyCancelDifferences()(e);
             e = simplify(e);
 
-            const bool check_non_monotonic = debug_is_active(1) || get_compiler_logger() != nullptr;
-            if (check_non_monotonic &&
-                is_monotonic(e, loop_var) == Monotonic::Unknown) {
-                // Might be a missed simplification opportunity. Log to help improve the simplifier.
-                if (get_compiler_logger()) {
-                    get_compiler_logger()->record_non_monotonic_loop_var(loop_var, e);
+            debug(1) << [&]() -> std::string {
+                if (is_monotonic(e, loop_var) != Monotonic::Unknown) {
+                    return "";
                 }
-                debug(1) << "Warning: expression is non-monotonic in loop variable "
-                         << loop_var << ": " << e << "\n";
-            }
+                // Might be a missed simplification opportunity.
+                std::ostringstream ss;
+                ss << "Warning: expression is non-monotonic in loop variable "
+                   << loop_var << ": " << e << "\n";
+                return ss.str();
+            }();
         }
         return e;
     }

@@ -38,7 +38,10 @@ set(blas_levels L1 L2 L3)
 list(APPEND benchmark_sizes 64 128 256 512 1280 2560)
 list(APPEND L1_functions scopy dcopy sscal dscal saxpy daxpy sdot ddot sasum dasum)
 list(APPEND L2_functions sgemv_notrans dgemv_notrans sgemv_trans dgemv_trans sger dger)
-list(APPEND L3_functions sgemm_notrans dgemm_notrans sgemm_transA dgemm_transA sgemm_transB dgemm_transB sgemm_transAB dgemm_transAB)
+list(APPEND L3_functions
+    sgemm_notrans dgemm_notrans sgemm_transA dgemm_transA sgemm_transB dgemm_transB sgemm_transAB
+    dgemm_transAB
+)
 
 foreach (benchmark IN LISTS benchmark_targets)
     string(REPLACE "_benchmarks" "" vendor "${benchmark}")
@@ -47,13 +50,15 @@ foreach (benchmark IN LISTS benchmark_targets)
             foreach (size IN LISTS benchmark_sizes)
                 set(test_name ${vendor}_${func}_${size})
 
-                add_test(NAME ${test_name}
-                         COMMAND ${benchmark} ${func} ${size})
+                add_test(NAME ${test_name} COMMAND ${benchmark} ${func} ${size})
 
-                set_tests_properties("${test_name}" PROPERTIES
-                                     LABELS "linear_algebra;${vendor};${level};slow_tests"
-                                     PASS_REGULAR_EXPRESSION "${func}[ \t]+${size}"
-                                     SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
+                set_tests_properties(
+                    "${test_name}"
+                    PROPERTIES
+                    LABELS "linear_algebra;${vendor};${level};slow_tests"
+                    PASS_REGULAR_EXPRESSION "${func}[ \t]+${size}"
+                    SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
+                )
             endforeach ()
         endforeach ()
     endforeach ()

@@ -6,6 +6,7 @@
 #include <map>
 #include <regex>
 #include <set>
+#include <tuple>
 #include <utility>
 
 namespace Halide {
@@ -203,22 +204,8 @@ struct DependenceAnalysis {
                    (only_regions_computed == other.only_regions_computed);
         }
         bool operator<(const RegionsRequiredQuery &other) const {
-            if (f < other.f) {
-                return true;
-            } else if (f > other.f) {
-                return false;
-            }
-            if (stage < other.stage) {
-                return true;
-            } else if (stage > other.stage) {
-                return false;
-            }
-            if (only_regions_computed < other.only_regions_computed) {
-                return true;
-            } else if (only_regions_computed > other.only_regions_computed) {
-                return false;
-            }
-            return prods < other.prods;
+            return std::tie(f, stage, only_regions_computed, prods) <
+                   std::tie(other.f, other.stage, other.only_regions_computed, other.prods);
         }
     };
     struct RegionsRequired {

@@ -161,6 +161,30 @@ ALWAYS_INLINE size_t conform_size(size_t offset, size_t size, size_t alignment, 
     }
 }
 
+// Updates request with conformed alignment, offset and size, computed from the given required size and alignment constraints,
+// rounding up to the nearest multiple if specified. The request is updated in-place.
+// -- Required alignment must be power of two!
+ALWAYS_INLINE void conform_memory_request(MemoryRequest *request, size_t required_size, size_t required_alignment, size_t nearest_multiple) {
+    size_t actual_alignment = conform_alignment(request->alignment, required_alignment);
+
+    // Ensure the request ends on an aligned address.
+    // NOTE: use the conformed alignment and not the input alignment. Otherwise, conform is not idempotent:
+    // A first pass that uses the original nearest_multiple writes a new alignment such that a subsequent pass
+    // sees a larger alignment and writes a larger nearest_multiple, which results in a larger size calculated
+    // in the second pass. The block allocator requires that conform is idempotent because it calls conform
+    // defensively several times at different layers.
+    if (actual_alignment > nearest_multiple) {
+        request->properties.nearest_multiple = actual_alignment;
+    }
+
+    size_t actual_offset = aligned_offset(request->offset, actual_alignment);
+    size_t actual_size = conform_size(actual_offset, required_size, actual_alignment, request->properties.nearest_multiple);
+
+    request->size = actual_size;
+    request->alignment = actual_alignment;
+    request->offset = actual_offset;
+}
+
 // Clamps the given value to be within the [min_value, max_value] range
 ALWAYS_INLINE size_t clamped_size(size_t value, size_t min_value, size_t max_value) {
     size_t result = (value < min_value) ? min_value : value;

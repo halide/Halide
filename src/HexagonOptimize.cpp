@@ -1404,9 +1404,6 @@ class EliminateInterleaves : public IRMutator {
     // We need to know when loads are a multiple of 2 native vectors.
     int native_vector_bits;
 
-    // Alignment analyzer for loads and stores
-    HexagonAlignmentAnalyzer alignment_analyzer;
-
     // Check if x is an expression that is either an interleave, or
     // transitively is an interleave.
     bool yields_removable_interleave(const Expr &x) {
@@ -1514,7 +1511,7 @@ class EliminateInterleaves : public IRMutator {
         if (const Let *let = x.as<Let>()) {
             Expr body = remove_interleave(let->body);
             if (!body.same_as(let->body)) {
-                return Let::make(let->name, let->value, body);
+                return let->with(let->value, body);
             } else {
                 return x;
             }
@@ -1675,7 +1672,7 @@ class EliminateInterleaves : public IRMutator {
         // Lift interleaves out of Let expression bodies.
         const Let *let = expr.as<Let>();
         if (let && yields_removable_interleave(let->body)) {
-            expr = native_interleave(Let::make(let->name, let->value, remove_interleave(let->body)));
+            expr = native_interleave(let->with(let->value, remove_interleave(let->body)));
         }
         return expr;
     }
@@ -1810,8 +1807,7 @@ class EliminateInterleaves : public IRMutator {
             for (Expr &i : args) {
                 i = remove_interleave(i);
             }
-            Expr expr = Call::make(op->type, op->name, args, op->call_type,
-                                   op->func, op->value_index, op->image, op->param);
+            Expr expr = op->with(args);
             // Add the interleave back to the result of the call.
             return native_interleave(expr);
         } else if (auto it = deinterleaving_alts.find(op->name);
@@ -1837,8 +1833,7 @@ class EliminateInterleaves : public IRMutator {
             return Call::make(op->type, it->second.second, {arg}, op->call_type,
                               op->func, op->value_index, op->image, op->param);
         } else if (changed) {
-            return Call::make(op->type, op->name, args, op->call_type,
-                              op->func, op->value_index, op->image, op->param);
+            return op->with(args);
         } else {
             return op;
         }
@@ -1883,13 +1878,7 @@ class EliminateInterleaves : public IRMutator {
 
         aligned_buffer_access.pop(op->name);
 
-        if (!body.same_as(op->body) || !condition.same_as(op->condition)) {
-            return Allocate::make(op->name, op->type, op->memory_type,
-                                  op->extents, condition, body,
-                                  op->new_expr, op->free_function);
-        } else {
-            return op;
-        }
+        return op->with(op->extents, condition, body);
     }
 
     Stmt visit(const Store *op) override {
@@ -1920,9 +1909,8 @@ class EliminateInterleaves : public IRMutator {
             }
             bool *aligned_accesses = aligned_buffer_access.shallow_find(op->name);
             internal_assert(aligned_accesses) << "Buffer not found in scope";
-            int64_t aligned_offset = 0;
 
-            if (!alignment_analyzer.is_aligned(op, &aligned_offset)) {
+            if (!is_hexagon_aligned(op, native_vector_bits / 8, nullptr)) {
                 *aligned_accesses = false;
             }
         }
@@ -1933,11 +1921,7 @@ class EliminateInterleaves : public IRMutator {
             value = remove_interleave(value);
         }
 
-        if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
-            return op;
-        } else {
-            return Store::make(op->name, value, index, op->param, predicate, op->alignment);
-        }
+        return op->with(value, index, predicate, op->alignment);
     }
 
     Expr visit(const Load *op) override {
@@ -1955,9 +1939,7 @@ class EliminateInterleaves : public IRMutator {
                 bool *aligned_accesses = aligned_buffer_access.shallow_find(op->name);
                 internal_assert(aligned_accesses) << "Buffer not found in scope";
 
-                int64_t aligned_offset = 0;
-
-                if (!alignment_analyzer.is_aligned(op, &aligned_offset)) {
+                if (!is_hexagon_aligned(op, native_vector_bits / 8, nullptr)) {
                     *aligned_accesses = false;
                 }
             } else {
@@ -1977,7 +1959,7 @@ class EliminateInterleaves : public IRMutator {
 
 public:
     EliminateInterleaves(const Target &t, int native_vector_bytes)
-        : native_vector_bits(native_vector_bytes * 8), alignment_analyzer(native_vector_bytes) {
+        : native_vector_bits(native_vector_bytes * 8) {
         if (t.features_any_of({Target::HVX_v65})) {
             hvx_target = HvxTarget::v65orLater;
         } else if (t.features_any_of({Target::HVX_v66})) {
@@ -2124,7 +2106,7 @@ class ScatterGatherGenerator : public IRMutator {
     // the input parameter value.
     Expr is_scatter_acc(const Store *op) {
         Expr lhs = Load::make(op->value.type(), op->name, op->index, Buffer<>(),
-                              Parameter(), const_true(op->value.type().lanes()), op->alignment);
+                              Parameter(), const_true(op->value.type().lanes()), op->alignment, false);
         Expr wild = Variable::make(op->value.type(), "*");
         vector<Expr> matches;
         if (expr_match(lhs + wild, op->value, matches) ||

@@ -53,6 +53,9 @@
 #ifdef WITH_HEXAGON
 #include <llvm/IR/IntrinsicsHexagon.h>
 #endif
+#ifdef WITH_X86
+#include <llvm/IR/IntrinsicsX86.h>
+#endif
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/MDBuilder.h>
 #include <llvm/IR/Metadata.h>

@@ -64,7 +64,7 @@ inline HALIDE_NO_USER_CODE_INLINE void collect_region(Region &collected_args,
 
 template<typename T>
 Func func_like_to_func(T &&func_like) {
-    if constexpr (std::is_same_v<std::decay_t<T>, Func>) {
+    if constexpr (std::is_convertible_v<T, Func>) {
         return std::forward<T>(func_like);
     } else {
         return lambda(_, func_like(_));

@@ -217,6 +217,9 @@ string unique_name(const std::string &prefix) {
         if (sanitized[i] == '$') {
             num_dollars++;
             sanitized[i] = '_';
+            // The '$' itself isn't part of the numeric suffix that must
+            // follow it, so don't let it trip the checks below.
+            continue;
         }
         if (i > 0 && !isdigit(sanitized[i])) {
             // Found a non-digit after the first char

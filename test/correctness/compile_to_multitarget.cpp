@@ -154,7 +154,7 @@ void test_compile_to_everything(Func j, bool do_object) {
     std::vector<std::string> files;
 
     // single-file outputs
-    for (const char *ext : {".h", ".halide_generated.cpp", ".halide_compiler_log", ".py.cpp", ".pytorch.h", ".registration.cpp", ".schedule.h", a}) {
+    for (const char *ext : {".h", ".halide_generated.cpp", ".py.cpp", ".pytorch.h", ".registration.cpp", ".schedule.h", a}) {
         if (do_object && !strcmp(ext, a)) continue;
         files.push_back(filename_prefix + ext);
     }
@@ -182,11 +182,10 @@ void test_compile_to_everything(Func j, bool do_object) {
         return j.compile_to_module(args, name, target);
     };
     std::map<OutputFileType, std::string> outputs = {
-        {OutputFileType::assembly, filename_prefix + ".s"},                        // IsMulti
-        {OutputFileType::bitcode, filename_prefix + ".bc"},                        // IsMulti
-        {OutputFileType::c_header, filename_prefix + ".h"},                        // IsSingle
-        {OutputFileType::c_source, filename_prefix + ".halide_generated.cpp"},     // IsSingle
-        {OutputFileType::compiler_log, filename_prefix + ".halide_compiler_log"},  // IsSingle
+        {OutputFileType::assembly, filename_prefix + ".s"},                     // IsMulti
+        {OutputFileType::bitcode, filename_prefix + ".bc"},                     // IsMulti
+        {OutputFileType::c_header, filename_prefix + ".h"},                     // IsSingle
+        {OutputFileType::c_source, filename_prefix + ".halide_generated.cpp"},  // IsSingle
         // Note: compile_multitarget() doesn't produce cpp_stub output,
         // even if you pass this in.
         // {OutputFileType::cpp_stub, filename_prefix + ".stub.h"},  // IsSingle
@@ -210,15 +209,9 @@ void test_compile_to_everything(Func j, bool do_object) {
     } else {
         outputs.erase(OutputFileType::object);
     }
-    const CompilerLoggerFactory compiler_logger_factory =
-        [](const std::string &, const Target &) -> std::unique_ptr<Internal::CompilerLogger> {
-        // We don't care about the contents of the compiler log - only whether
-        // it exists or not --  so just fill in with arbitrary strings.
-        return std::unique_ptr<Internal::CompilerLogger>(new Internal::JSONCompilerLogger("generator_name", "function_name", "autoscheduler_name", Target(), "generator_args", false));
-    };
     // The first argument to compile_multitarget is *function* name, not filename
     std::string function_name = leaf_name(filename_prefix);
-    compile_multitarget(function_name, outputs, targets, target_strings, module_producer, compiler_logger_factory);
+    compile_multitarget(function_name, outputs, targets, target_strings, module_producer);
 
     for (auto f : files) {
         Internal::assert_file_exists(f);

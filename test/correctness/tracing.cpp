@@ -34,8 +34,10 @@ void print_event(const event &e) {
                                  "End consume",
                                  "Begin pipeline",
                                  "End pipeline",
-                                 "Tag"};
-    assert(e.event_type >= 0 && e.event_type <= 10);
+                                 "Tag",
+                                 "Begin parallel task",
+                                 "End parallel task"};
+    assert(e.event_type >= 0 && e.event_type <= 12);
     printf("%d %s ", e.event_type, event_types[e.event_type]);
 
     printf("%c.%d[", e.func, e.value_index);
@@ -90,7 +92,7 @@ bool events_match(const event &a, const event &b) {
 }
 
 int my_trace(JITUserContext *, const halide_trace_event_t *ev) {
-    assert(ev->dimensions <= 4 && ev->type.lanes <= 4);
+    assert(ev->dimensions <= 4 && ev->lanes <= 4);
 
     // Record this event in the trace array
     event e{};
@@ -99,13 +101,13 @@ int my_trace(JITUserContext *, const halide_trace_event_t *ev) {
     e.event_type = ev->event;
     e.type_code = ev->type.code;
     e.bits = ev->type.bits;
-    e.width = ev->type.lanes;
+    e.width = ev->lanes;
     e.value_index = ev->value_index;
     e.num_int_args = ev->dimensions;
     for (int i = 0; i < ev->dimensions; i++) {
         e.int_args[i] = ev->coordinates[i];
     }
-    for (int i = 0; i < ev->type.lanes; i++) {
+    for (int i = 0; i < ev->lanes; i++) {
         e.value[i] = static_cast<const float *>(ev->value)[i];
     }
     if (ev->trace_tag) {

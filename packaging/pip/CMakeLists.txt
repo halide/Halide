@@ -10,13 +10,17 @@ function(configure_trampoline PACKAGE INSTALL_DIR)
 endfunction()
 
 configure_trampoline(Halide "${Halide_INSTALL_CMAKEDIR}")
-configure_trampoline(HalideHelpers "${Halide_INSTALL_HELPERSDIR}")
+configure_trampoline(HalideCompiler "${Halide_INSTALL_COMPILERDIR}")
+if (WITH_AUTOSCHEDULERS)
+    configure_trampoline(HalideAutoschedulers "${Halide_INSTALL_AUTOSCHEDULERSDIR}")
+endif ()
 
 install(
-    FILES "${CMAKE_CURRENT_BINARY_DIR}/HalideConfig.cmake"
-    # It's better to duplicate the version file than to trampoline to it, as
-    # this would require calling find_package(Python) in the version file.
-    "${CMAKE_CURRENT_BINARY_DIR}/../HalideConfigVersion.cmake"
+    FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/HalideConfig.cmake"
+        # It's better to duplicate the version file than to trampoline to it, as
+        # this would require calling find_package(Python) in the version file.
+        "${CMAKE_CURRENT_BINARY_DIR}/../HalideConfigVersion.cmake"
     # It's okay to hard-code the destination because this code is only
     # called by scikit-build-core. Installing to /data ultimately installs
     # to the Python root installation directory, whose bin/ directory is
@@ -28,13 +32,25 @@ install(
     COMPONENT Halide_Python
 )
 
-# Same thing for HalideHelpers
+# Same thing for HalideCompiler
 install(
-    FILES "${CMAKE_CURRENT_BINARY_DIR}/HalideHelpersConfig.cmake"
-    "${CMAKE_CURRENT_BINARY_DIR}/../HalideHelpersConfigVersion.cmake"
-    DESTINATION "${SKBUILD_DATA_DIR}/share/cmake/HalideHelpers"
+    FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/HalideCompilerConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/../HalideCompilerConfigVersion.cmake"
+    DESTINATION "${SKBUILD_DATA_DIR}/share/cmake/HalideCompiler"
     COMPONENT Halide_Python
 )
+
+# Same thing for HalideAutoschedulers
+if (WITH_AUTOSCHEDULERS)
+    install(
+        FILES
+            "${CMAKE_CURRENT_BINARY_DIR}/HalideAutoschedulersConfig.cmake"
+            "${CMAKE_CURRENT_BINARY_DIR}/../HalideAutoschedulersConfigVersion.cmake"
+        DESTINATION "${SKBUILD_DATA_DIR}/share/cmake/HalideAutoschedulers"
+        COMPONENT Halide_Python
+    )
+endif ()
 
 ##
 # Set up RPATH for the Python bindings plugin.

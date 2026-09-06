@@ -29,6 +29,8 @@ set(DOXYGEN_SORT_MEMBER_DOCS NO)
 set(DOXYGEN_SOURCE_BROWSER YES)
 set(DOXYGEN_STRIP_CODE_COMMENTS NO)
 
-doxygen_add_docs(doc "doc/" "src/" "test/" ALL
-                 WORKING_DIRECTORY "${Halide_SOURCE_DIR}"
-                 COMMENT "Generate HTML documentation")
+doxygen_add_docs(
+    doc "doc/" "src/" "test/" ALL
+    WORKING_DIRECTORY "${Halide_SOURCE_DIR}"
+    COMMENT "Generate HTML documentation"
+)

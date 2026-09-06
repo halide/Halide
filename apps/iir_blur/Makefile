@@ -10,11 +10,11 @@ $(GENERATOR_BIN)/iir_blur.generator: iir_blur_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/%/iir_blur.a: $(GENERATOR_BIN)/iir_blur.generator
 	@mkdir -p $(@D)
-	$< -g iir_blur -f iir_blur -o $(BIN)/$* target=$*-no_runtime
+	$< -g iir_blur -f iir_blur -e $(GENERATOR_OUTPUTS) -o $(BIN)/$* target=$*-no_runtime
 
 $(BIN)/%/iir_blur_auto_schedule.a: $(GENERATOR_BIN)/iir_blur.generator
 	@mkdir -p $(@D)
-	$< -g iir_blur -f iir_blur_auto_schedule -o $(BIN)/$* target=$*-no_runtime autoscheduler=Mullapudi2016
+	$< -g iir_blur -f iir_blur_auto_schedule -e $(GENERATOR_OUTPUTS) -o $(BIN)/$* target=$*-no_runtime autoscheduler=Mullapudi2016
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/iir_blur.generator
 	@mkdir -p $(@D)
@@ -25,7 +25,7 @@ $(BIN)/%/filter: filter.cpp $(BIN)/%/iir_blur.a $(BIN)/%/iir_blur_auto_schedule.
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS)
 
 $(BIN)/%/out.png: $(BIN)/%/filter
-	$< ../images/rgba.png $(BIN)/$*/out.png
+	$< ../images/rgb.png $(BIN)/$*/out.png
 
 clean:
 	rm -rf $(BIN)

@@ -6,28 +6,41 @@
 #if defined(TEST_OPENCL)
 #include "HalideRuntimeOpenCL.h"
 #endif
+#if defined(TEST_D3D12COMPUTE)
+#include "HalideRuntimeD3D12Compute.h"
+#endif
 
 #include "gpu_texture.h"
 using namespace Halide::Runtime;
 
 #if defined(TEST_OPENCL)
-
 #if !defined(HALIDE_RUNTIME_OPENCL)
 #error "TEST_OPENCL defined but HALIDE_RUNTIME_OPENCL not defined"
 #endif
+#endif
 
+#if defined(TEST_D3D12COMPUTE)
+#if !defined(HALIDE_RUNTIME_D3D12COMPUTE)
+#error "TEST_D3D12COMPUTE defined but HALIDE_RUNTIME_D3D12COMPUTE not defined"
+#endif
 #endif
 
 int main(int argc, char **argv) {
+#if !defined(TEST_OPENCL) && !defined(TEST_D3D12COMPUTE)
+    printf("[SKIP] No GPU texture target enabled.\n");
+    return 0;
+#else
+
 #if defined(TEST_OPENCL)
     const auto *interface = halide_opencl_device_interface();
     assert(interface->compute_capability != nullptr);
     int major, minor;
     int err = interface->compute_capability(nullptr, &major, &minor);
     if (err != 0 || (major == 1 && minor < 2)) {
-        printf("[SKIP] OpenCl %d.%d is less than required 1.2.\n", major, minor);
+        printf("[SKIP] OpenCL %d.%d is less than required 1.2.\n", major, minor);
         return 0;
     }
+#endif
 
     const int W = 32, H = 32;
     Buffer<int, 2> input(W, H);
@@ -44,13 +57,23 @@ int main(int argc, char **argv) {
 
     gpu_texture(input, output);
 
-    if (input.raw_buffer()->device_interface != halide_opencl_image_device_interface()) {
-        printf("Expected input to be copied to texture storage");
-        return 1;
-    }
-    if (output.raw_buffer()->device_interface != halide_opencl_image_device_interface()) {
-        printf("Expected output to be copied to texture storage");
-        return 1;
+    {
+        using image_device_interface_fn = const struct halide_device_interface_t *(*)();
+#if defined(TEST_OPENCL)
+        image_device_interface_fn image_device_interface = halide_opencl_image_device_interface;
+        constexpr const char *image_device_name = "OpenCL";
+#elif defined(TEST_D3D12COMPUTE)
+        image_device_interface_fn image_device_interface = halide_d3d12compute_image_device_interface;
+        constexpr const char *image_device_name = "D3D12";
+#endif
+        if (input.raw_buffer()->device_interface != image_device_interface()) {
+            printf("Expected input to be copied to %s texture storage\n", image_device_name);
+            return 1;
+        }
+        if (output.raw_buffer()->device_interface != image_device_interface()) {
+            printf("Expected output to be copied to %s texture storage\n", image_device_name);
+            return 1;
+        }
     }
 
     output.copy_to_host();
@@ -66,8 +89,6 @@ int main(int argc, char **argv) {
     }
 
     printf("Success!\n");
-#else
-    printf("[SKIP] No OpenCL target enabled.\n");
-#endif
     return 0;
+#endif
 }

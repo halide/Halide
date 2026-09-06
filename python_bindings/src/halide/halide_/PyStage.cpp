@@ -14,10 +14,20 @@ void define_stage(py::module &m) {
             .def("dump_argument_list", &Stage::dump_argument_list)
             .def("name", &Stage::name)
 
+            .def("stream_stores", &Stage::stream_stores)
+            .def("stream_loads", static_cast<Stage &(Stage::*)()>(&Stage::stream_loads))
+            .def("stream_loads", static_cast<Stage &(Stage::*)(const std::vector<Func> &)>(&Stage::stream_loads),
+                 py::arg("funcs"))
+
             .def("rfactor", static_cast<Func (Stage::*)(const std::vector<std::pair<RVar, Var>> &)>(&Stage::rfactor),
                  py::arg("preserved"))
             .def("rfactor", static_cast<Func (Stage::*)(const RVar &, const Var &)>(&Stage::rfactor),
                  py::arg("r"), py::arg("v"))
+
+            .def("eager_inline", (Stage & (Stage::*)(const std::vector<Func> &)) & Stage::eager_inline, py::arg("fs"))
+            .def("eager_inline", [](Stage &stage, const py::args &args) -> Stage & {
+                return stage.eager_inline(args_to_vector<Func>(args));
+            })
 
             .def("split_vars", [](const Stage &stage) -> py::list {
                 auto vars = stage.split_vars();

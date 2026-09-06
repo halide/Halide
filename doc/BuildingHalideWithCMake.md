@@ -397,21 +397,56 @@ To use these, you must build LLVM with additional options:
 -DLLVM_ENABLE_RUNTIMES="compiler-rt;libcxx;libcxxabi;libunwind"
 ```
 
+### Valgrind and Intel SDE presets
+
+These presets rerun the ordinary test suite under an external tool, using
+CTest's native mechanisms.
+
+The `valgrind` preset reruns every registered test under [valgrind] via CTest's
+built-in [MemCheck][ctest_memcheck] action. It configures a Debug build with
+`Halide_ENABLE_MEMCHECK=ON`, which pulls in the [CTest module][ctest_module] so
+that `ctest -T memcheck` works directly in the build tree (no CDash/dashboard
+submission required):
+
+```shell
+$ cmake --preset valgrind
+$ cmake --build --preset valgrind
+$ ctest --preset valgrind -T memcheck
+```
+
+The `valgrind` test preset excludes the `no_memcheck` label. Valgrind (and its
+options and suppressions file) is configured via the standard
+`MEMORYCHECK_COMMAND`, `MEMORYCHECK_COMMAND_OPTIONS`, and
+`MEMORYCHECK_SUPPRESSIONS_FILE` (`test/valgrind.supp`) cache variables.
+
+The `avx512-cannonlake` and `avx512-knights-landing` presets rerun every test
+under [Intel SDE][intel_sde] to emulate an AVX-512-capable CPU on a host that
+lacks one. They set
+[`CMAKE_CROSSCOMPILING_EMULATOR`][cmake_crosscompiling_emulator] to
+`sde -cnl --` and `sde -knl --` respectively, so every `add_test`-registered
+executable runs under the emulator automatically. `sde` must be on your `PATH`:
+
+```shell
+$ cmake --preset avx512-cannonlake
+$ cmake --build --preset avx512-cannonlake
+$ ctest --preset avx512-cannonlake
+```
+
 ## Build options
 
 Halide reads and understands several options that can configure the build. The
 following are the most consequential and control how Halide is actually
 compiled.
 
-| Option                                   | Default               | Description                                                                                       |
-| ---------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------- |
-| [`BUILD_SHARED_LIBS`][build_shared_libs] | `ON`                  | Standard CMake variable that chooses whether to build as a static or shared library.              |
-| `Halide_LLVM_SHARED_LIBS`                | `OFF`                 | Link to the shared version of LLVM. Not available on Windows.                                     |
-| `Halide_ENABLE_RTTI`                     | _inherited from LLVM_ | Enable RTTI when building Halide. Recommended to be set to `ON`                                   |
-| `Halide_ENABLE_EXCEPTIONS`               | `ON`                  | Enable exceptions when building Halide                                                            |
-| `Halide_TARGET`                          | _empty_               | The default target triple to use for `add_halide_library` (and the generator tests, by extension) |
-| `WITH_AUTOSCHEDULERS`                    | `ON`                  | Enable building the autoschedulers. Requires `BUILD_SHARED_LIBS`.                                 |
-| `WITH_SERIALIZATION`                     | `ON`                  | Include experimental Serialization/Deserialization features                                       |
+| Option                                   | Default               | Description                                                                                                                     |
+| ---------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| [`BUILD_SHARED_LIBS`][build_shared_libs] | `ON`                  | Standard CMake variable that chooses whether to build as a static or shared library.                                            |
+| `Halide_LLVM_SHARED_LIBS`                | `OFF`                 | Link to the shared version of LLVM. Not available on Windows.                                                                   |
+| `Halide_ENABLE_RTTI`                     | _inherited from LLVM_ | Enable RTTI when building Halide. Recommended to be set to `ON`                                                                 |
+| `Halide_ENABLE_EXCEPTIONS`               | `ON`                  | Enable exceptions when building Halide                                                                                          |
+| `Halide_TARGET`                          | _empty_               | The default target triple to use for `add_halide_library` (and the generator tests, by extension)                               |
+| `WITH_AUTOSCHEDULERS`                    | `ON`                  | Enable building the autoschedulers. Requires `BUILD_SHARED_LIBS`.                                                               |
+| `WITH_SERIALIZATION`                     | `ON`                  | Include experimental Serialization/Deserialization features; also required for the [generator compile cache](GeneratorCache.md) |
 
 The following options are disabled by default when building Halide through the
 [ `add_subdirectory`][add_subdirectory] or [`FetchContent`][fetchcontent]
@@ -431,12 +466,13 @@ The following options are _advanced_ and should not be required in typical
 workflows. Generally, these are used by Halide's own CI infrastructure, or as
 escape hatches for third-party packagers.
 
-| Option                      | Default                                                            | Description                                                                            |
-| --------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
-| `Halide_CCACHE_BUILD`       | `OFF`                                                              | Use ccache with Halide-recommended settings to accelerate rebuilds.                    |
-| `Halide_CCACHE_PARAMS`      | `CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines` | Options to pass to `ccache` when using `Halide_CCACHE_BUILD`.                          |
-| `Halide_VERSION_OVERRIDE`   | `${Halide_VERSION}`                                                | Override the VERSION for libHalide.                                                    |
-| `Halide_SOVERSION_OVERRIDE` | `${Halide_VERSION_MAJOR}`                                          | Override the SOVERSION for libHalide. Expects a positive integer (i.e. not a version). |
+| Option                      | Default                                                            | Description                                                                                                 |
+| --------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `Halide_CCACHE_BUILD`       | `OFF`                                                              | Use ccache with Halide-recommended settings to accelerate rebuilds.                                         |
+| `Halide_ENABLE_MEMCHECK`    | `OFF`                                                              | Pull in the CTest module so `ctest -T memcheck` reruns the tests under valgrind. See the `valgrind` preset. |
+| `Halide_CCACHE_PARAMS`      | `CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines` | Options to pass to `ccache` when using `Halide_CCACHE_BUILD`.                                               |
+| `Halide_VERSION_OVERRIDE`   | `${Halide_VERSION}`                                                | Override the VERSION for libHalide.                                                                         |
+| `Halide_SOVERSION_OVERRIDE` | `${Halide_VERSION_MAJOR}`                                          | Override the SOVERSION for libHalide. Expects a positive integer (i.e. not a version).                      |
 
 The following options control whether to build certain test subsets. They only
 apply when `WITH_TESTS=ON`:
@@ -578,9 +614,12 @@ On this test system (an M3 MacBook Pro), the build is three times faster, with a
 [cmake-install]: https://cmake.org/cmake/help/latest/manual/cmake.1.html#install-a-project
 [cmake-user-interaction]: https://cmake.org/cmake/help/latest/guide/user-interaction/index.html#setting-build-variables
 [cmake_build_type]: https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html
+[cmake_crosscompiling_emulator]: https://cmake.org/cmake/help/latest/variable/CMAKE_CROSSCOMPILING_EMULATOR.html
 [cmake_presets]: https://cmake.org/cmake/help/latest/manual/cmake-presets.7.html
 [codestylecmake.md]: ./CodeStyleCMake.md
 [compiling in different directories]: https://ccache.dev/manual/4.11.3.html#_compiling_in_different_directories
+[ctest_memcheck]: https://cmake.org/cmake/help/latest/manual/ctest.1.html#dashboard-client-steps
+[ctest_module]: https://cmake.org/cmake/help/latest/module/CTest.html
 [doxygen]: https://www.doxygen.nl/index.html
 [doxygen-download]: https://www.doxygen.nl/download.html
 [eigen3cmake]: https://eigen.tuxfamily.org/dox/TopicCMakeGuide.html
@@ -595,6 +634,7 @@ On this test system (an M3 MacBook Pro), the build is three times faster, with a
 [flatbuffers]: https://github.com/google/flatbuffers
 [halidecmakepackage.md]: ./HalideCMakePackage.md
 [homebrew]: https://brew.sh
+[intel_sde]: https://www.intel.com/content/www/us/en/developer/articles/tool/software-development-emulator.html
 [lld]: https://lld.llvm.org/
 [llvm]: https://github.com/llvm/llvm-project
 [msvc-cmd]: https://learn.microsoft.com/en-us/cpp/build/building-on-the-command-line
@@ -608,6 +648,7 @@ On this test system (an M3 MacBook Pro), the build is three times faster, with a
 [python]: https://www.python.org/downloads/
 [snap store]: https://snapcraft.io/cmake
 [v8]: https://v8.dev
+[valgrind]: https://valgrind.org/
 [vcpkg]: https://github.com/Microsoft/vcpkg
 [vcpkg-overlay]: https://learn.microsoft.com/en-us/vcpkg/concepts/overlay-ports
 [vcvarsall]: https://docs.microsoft.com/en-us/cpp/build/building-on-the-command-line#developer_command_file_locations

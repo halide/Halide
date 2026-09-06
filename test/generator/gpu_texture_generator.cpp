@@ -13,7 +13,8 @@ public:
         // Create a simple pipeline that scales pixel values by 2.
         output(x, y) = input(x, y) * 2;
 
-        if (get_target().has_feature(Target::OpenCL)) {
+        if (get_target().has_feature(Target::OpenCL) ||
+            get_target().has_feature(Target::D3D12Compute)) {
             input.store_in(MemoryType::GPUTexture);
             output.store_in(MemoryType::GPUTexture);
         }

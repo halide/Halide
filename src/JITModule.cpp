@@ -408,14 +408,28 @@ void compile_module_impl(
         // i386: "JIT session error: Unsupported i386 relocation:4" (R_386_PLT32)
         // ARM 32bit: Unsupported target machine architecture in ELF object shared runtime-jitted-objectbuffer
         // Windows 64-bit: JIT session error: could not register eh-frame: __register_frame function not found
-        linkerBuilder = [&](llvm::orc::ExecutionSession &session) {
+        linkerBuilder = [&](llvm::orc::ExecutionSession &session
+#if LLVM_VERSION >= 230
+                            ,
+                            llvm::jitlink::JITLinkMemoryManager &
+#endif
+                        ) {
             return std::make_unique<llvm::orc::RTDyldObjectLinkingLayer>(session, [&](const llvm::MemoryBuffer &) {
                 return std::make_unique<HalideJITMemoryManager>(dependencies);
             });
         };
     } else {
-        linkerBuilder = [](llvm::orc::ExecutionSession &session) {
+        linkerBuilder = [](llvm::orc::ExecutionSession &session
+#if LLVM_VERSION >= 230
+                           ,
+                           llvm::jitlink::JITLinkMemoryManager &memMgr
+#endif
+                        ) {
+#if LLVM_VERSION >= 230
+            return std::make_unique<llvm::orc::ObjectLinkingLayer>(session, memMgr);
+#else
             return std::make_unique<llvm::orc::ObjectLinkingLayer>(session);
+#endif
         };
     }
 
@@ -434,7 +448,21 @@ void compile_module_impl(
     dtorRunner->add(dtors);
 
     // Resolve system symbols (like pthread, dl and others)
+#if defined(__GNUC__) && !defined(__clang__)
+    // GCC's -Wuninitialized/-Wmaybe-uninitialized misfires on the move
+    // constructor of the default-constructed llvm::unique_function
+    // (AddAbsoluteSymbolsFn) that GetForCurrentProcess() takes by default
+    // argument, after LLVM's unique_function was refactored upstream
+    // (llvm/llvm-project#208251). Which of the two warnings fires depends
+    // on the GCC version, so both are silenced here.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wuninitialized"
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
     auto gen = llvm::orc::DynamicLibrarySearchGenerator::GetForCurrentProcess(target_data_layout.getGlobalPrefix());
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
     internal_assert(gen) << llvm::toString(gen.takeError()) << "\n";
     JIT->getMainJITDylib().addGenerator(std::move(gen.get()));
 
@@ -1221,6 +1249,16 @@ int JITSharedRuntime::get_num_threads() {
 int JITSharedRuntime::set_num_threads(int n) {
     std::scoped_lock lock(shared_runtimes_mutex);
     return shared_runtimes(MainShared).set_num_threads(n);
+}
+
+void *JITSharedRuntime::find_symbol(const Target &target, const std::string &name) {
+    for (const JITModule &m : JITSharedRuntime::get(nullptr, target, false)) {
+        JITModule::Symbol sym = m.find_symbol_by_name(name);
+        if (sym.address) {
+            return sym.address;
+        }
+    }
+    return nullptr;
 }
 
 JITCache::JITCache(Target jit_target,

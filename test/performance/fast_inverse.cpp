@@ -12,6 +12,17 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (target.arch == Target::X86 && target.bits == 32) {
+        // The 32-bit x86 ABI only exposes 8 XMM registers, but this
+        // benchmark's vectorized recurrence needs 9 live values at once
+        // (8 independent lane groups plus the shared "+1" constant). That
+        // forces a stack spill/reload into the tightly-coupled loop-carried
+        // dependency chain every iteration, adding enough latency to erase
+        // rcpps's tiny edge over divps.
+        printf("[SKIP] x86-32 doesn't have enough XMM registers to avoid spilling.\n");
+        return 0;
+    }
+
     if (target.arch == Target::ARM &&
         target.os == Target::OSX) {
         // vrecpe, vrecps, fmul have inverse throughputs of 1, 0.25, 0.25

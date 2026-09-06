@@ -120,14 +120,24 @@ std::vector<DebugRule> parse_rules(const std::string &env) {
     return rules;
 }
 
+bool rules_accept(const std::vector<DebugRule> &rules, const int verbosity,
+                  const char *file, const char *function, const int line) {
+    return std::any_of(rules.begin(), rules.end(), [&](const auto &rule) {
+        return rule.accepts(verbosity, file, function, line);
+    });
+}
+
 }  // namespace
 
 bool debug_is_active_impl(const int verbosity, const char *file, const char *function,
                           const int line) {
     static const std::vector<DebugRule> rules = parse_rules(get_env_variable("HL_DEBUG_CODEGEN"));
-    return std::any_of(rules.begin(), rules.end(), [&](const auto &rule) {
-        return rule.accepts(verbosity, file, function, line);
-    });
+    return rules_accept(rules, verbosity, file, function, line);
+}
+
+bool debug_spec_accepts(const std::string &spec, const int verbosity,
+                        const char *file, const char *function, const int line) {
+    return rules_accept(parse_rules(spec), verbosity, file, function, line);
 }
 
 }  // namespace Halide::Internal

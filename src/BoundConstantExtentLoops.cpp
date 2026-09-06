@@ -103,8 +103,7 @@ protected:
                 << "Loop over " << op->name << " has extent " << extent << ".\n";
             body = mutate(body);
 
-            return For::make(op->name, op->min, (op->min + e) - 1,
-                             op->for_type, op->partition_policy, op->device_api, std::move(body));
+            return op->with(op->min, (op->min + e) - 1, body);
         } else {
             return IRMutator::visit(op);
         }

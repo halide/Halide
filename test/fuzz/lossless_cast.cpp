@@ -9,17 +9,34 @@ namespace {
 constexpr int size = 1024;
 Buffer<uint8_t> buf_u8(size, "buf_u8");
 Buffer<int8_t> buf_i8(size, "buf_i8");
+Buffer<float> buf_f32(size, "buf_f32");
 Var x{"x"};
 
 Expr random_expr(FuzzingContext &fuzz) {
+    // Decide up front whether to build an integer or a floating-point
+    // expression. The two must not mix: casting an out-of-range float to an
+    // integer is undefined behavior, which would break the integer bounds and
+    // overflow checks below. Integer expressions are the main event; floats
+    // are a minority that exist only to smoke-test the float paths of
+    // find_intrinsics (in particular strip_widening_cast on bfloat16).
+    const bool make_float = fuzz.ConsumeIntegralInRange(0, 3) == 0;
+
     std::vector<Expr> exprs;
-    // Add some atoms
-    exprs.push_back(cast<uint8_t>(fuzz.ConsumeIntegral<uint8_t>()));
-    exprs.push_back(cast<int8_t>(fuzz.ConsumeIntegral<int8_t>()));
-    exprs.push_back(cast<uint8_t>(fuzz.ConsumeIntegral<uint8_t>()));
-    exprs.push_back(cast<int8_t>(fuzz.ConsumeIntegral<int8_t>()));
-    exprs.push_back(buf_u8(x));
-    exprs.push_back(buf_i8(x));
+    if (make_float) {
+        exprs.push_back(buf_f32(x));
+        // The narrow floats are only ever used as the source of a widening
+        // cast to float32 (see below).
+        exprs.push_back(cast(BFloat(16), buf_f32(x)));
+        exprs.push_back(cast(Float(16), buf_f32(x)));
+    } else {
+        // Add some atoms
+        exprs.push_back(cast<uint8_t>(fuzz.ConsumeIntegral<uint8_t>()));
+        exprs.push_back(cast<int8_t>(fuzz.ConsumeIntegral<int8_t>()));
+        exprs.push_back(cast<uint8_t>(fuzz.ConsumeIntegral<uint8_t>()));
+        exprs.push_back(cast<int8_t>(fuzz.ConsumeIntegral<int8_t>()));
+        exprs.push_back(buf_u8(x));
+        exprs.push_back(buf_i8(x));
+    }
 
     // Make random combinations of them
     while (true) {
@@ -29,6 +46,48 @@ Expr random_expr(FuzzingContext &fuzz) {
         Expr e2 = fuzz.PickValueInVector(exprs);
         Expr e2_narrow = e2;
         e2 = cast(e1.type(), e2);
+
+        if (make_float) {
+            // Arithmetic on float16/bfloat16 isn't widely supported, so keep
+            // narrow floats as widening-cast sources only and do plain
+            // arithmetic in float32/float64.
+            if (e1.type().bits() < 32) {
+                // e.g. float32(bfloat16(...)) - the pattern that made
+                // strip_widening_cast peel back to a bfloat and (via match_bits
+                // against a wider operand) synthesize an uncodegen-able
+                // bfloat32.
+                e = cast(Float(32), e1);
+            } else {
+                switch (fuzz.ConsumeIntegralInRange(0, 4)) {
+                case 0:
+                    e = e1 + e2;
+                    break;
+                case 1:
+                    e = e1 - e2;
+                    break;
+                case 2:
+                    e = e1 * e2;
+                    break;
+                case 3:
+                    e = e1 / e2;
+                    break;
+                case 4:
+                    if (e1.type().bits() < 64) {
+                        e = cast(e1.type().widen(), e1);
+                    }
+                    break;
+                }
+            }
+
+            if (!e.defined()) {
+                continue;
+            }
+            if (e.type().bits() == 64 && (e.as<Cast>() == nullptr || fuzz.ConsumeIntegralInRange(0, 7) == 0)) {
+                return e;
+            }
+            exprs.push_back(e);
+            continue;
+        }
 
         Expr e3 = cast(e1.type().with_code(halide_type_uint), fuzz.PickValueInVector(exprs));
         bool may_widen = e1.type().bits() < 64;
@@ -266,6 +325,7 @@ bool might_have_ub(Expr e) {
 FUZZ_TEST(lossless_cast, FuzzingContext &fuzz) {
     buf_u8.fill(fuzz);
     buf_i8.fill(fuzz);
+    buf_f32.fill(fuzz);
 
     Expr e1 = random_expr(fuzz);
     Expr simplified = simplify(e1);
@@ -273,6 +333,21 @@ FUZZ_TEST(lossless_cast, FuzzingContext &fuzz) {
     if (might_have_ub(e1) ||
         might_have_ub(simplified) ||
         might_have_ub(lower_intrinsics(simplified))) {
+        return 0;
+    }
+
+    if (e1.type().is_float()) {
+        // We don't have an integer lossless_cast to compare against for float
+        // expressions. They exist purely to smoke-test that find_intrinsics
+        // and the rest of lowering can handle them without crashing or
+        // producing invalid IR - in particular, strip_widening_cast peeling a
+        // float32(bfloat16) back to a bfloat and forming a widening_mul must
+        // stay well-typed (bfloat16 widens to float32, not bfloat32).
+        // Vectorizing is required for find_intrinsics to run on the multiply.
+        Func f;
+        f(x) = e1;
+        f.vectorize(x, 4, TailStrategy::RoundUp);
+        f.realize({size});
         return 0;
     }
 

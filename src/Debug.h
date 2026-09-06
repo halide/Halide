@@ -33,7 +33,6 @@ struct LoweredFunc;
 std::ostream &operator<<(std::ostream &, const LoweredFunc &);
 
 bool debug_is_active_impl(int verbosity, const char *file, const char *function, int line);
-#define debug_is_active(n) (::Halide::Internal::debug_is_active_impl((n), __FILE__, __FUNCTION__, __LINE__))
 
 /** For optional debugging during codegen, use the debug macro as
  * follows:
@@ -51,7 +50,7 @@ bool debug_is_active_impl(int verbosity, const char *file, const char *function,
 
 #define debug(n)                                     \
     /* NOLINTNEXTLINE(bugprone-macro-parentheses) */ \
-    if (debug_is_active((n))) std::cerr
+    if (::Halide::Internal::debug_is_active_impl((n), __FILE__, __FUNCTION__, __LINE__)) std::cerr
 
 /** Allow easily printing the contents of containers, or std::vector-like containers,
  *  in debug output. Used like so:
@@ -112,6 +111,14 @@ inline StreamT &operator<<(StreamT &stream, const PrintSpanLn<T> &wrapper) {
     stream << "}\n";
     return stream;
 }
+
+/** Internal-only accessor for test/correctness/debug_helpers.cpp.
+ * debug_is_active_impl() only ever parses HL_DEBUG_CODEGEN once (cached in a
+ * function-local static), so it can't be exercised against multiple specs
+ * from a single process; this re-parses `spec` fresh on every call using the
+ * same grammar, so the parser/matcher can be unit tested directly. */
+bool debug_spec_accepts(const std::string &spec, int verbosity,
+                        const char *file, const char *function, int line);
 
 }  // namespace Internal
 }  // namespace Halide

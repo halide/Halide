@@ -74,15 +74,15 @@ void define_pipeline(py::module &m) {
 
             .def("apply_autoscheduler", &Pipeline::apply_autoscheduler,
                  py::arg("target"), py::arg("autoscheduler_params"))
-            .def("get_func", &Pipeline::get_func,
-                 py::arg("index"))
+            .def(
+                "apply_runtime_prefixes", [](Pipeline &p, const Target &target, const std::map<RuntimeLinkage, std::string> &namespace_map) {
+                    p.apply_runtime_prefixes(target, RuntimePrefixParams(namespace_map));
+                },
+                py::arg("target"), py::arg("namespace_map"))
+            .def("get_func", &Pipeline::get_func, py::arg("index"))
             .def("print_loop_nest", &Pipeline::print_loop_nest)
 
-            .def(
-                "compile_to", [](Pipeline &p, const std::map<OutputFileType, std::string> &output_files, const std::vector<Argument> &args, const std::string &fn_name, const Target &target) {
-                    p.compile_to(output_files, args, fn_name, to_aot_target(target));
-                },
-                py::arg("outputs"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = Target())
+            .def("compile_to", [](Pipeline &p, const std::map<OutputFileType, std::string> &output_files, const std::vector<Argument> &args, const std::string &fn_name, const Target &target) { p.compile_to(output_files, args, fn_name, to_aot_target(target)); }, py::arg("outputs"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = Target())
 
             .def("compile_to_bitcode",  //
                  [](Pipeline &p, const std::string &filename, const std::vector<Argument> &args, const std::string &fn_name, const Target &target) {

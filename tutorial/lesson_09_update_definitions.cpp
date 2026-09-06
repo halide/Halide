@@ -15,7 +15,9 @@
 // source tree.
 
 #include "Halide.h"
+#include <cmath>
 #include <cstdio>
+#include <vector>
 
 // We're going to be using x86 SSE intrinsics later on in this lesson.
 #ifdef __SSE2__
@@ -174,7 +176,7 @@ int main() {
         // Check the results match:
         for (int y = 0; y < 100; y++) {
             for (int x = 0; x < 100; x++) {
-                if (fabs(halide_result(x, y) - c_result[y][x]) > 0.01f) {
+                if (std::abs(halide_result(x, y) - c_result[y][x]) > 0.01f) {
                     printf("halide_result(%d, %d) = %f instead of %f\n",
                            x, y, halide_result(x, y), c_result[y][x]);
                     return -1;
@@ -810,8 +812,8 @@ int main() {
                 // (smallest power of two greater than 5). Each thread
                 // needs its own allocation, so it must occur here.
 
-                int clamped_width = input.width() + 4;
-                uint8_t *clamped_storage = (uint8_t *)malloc(clamped_width * 8);
+                size_t clamped_width = input.width() + 4;
+                std::vector<uint8_t> clamped_storage(clamped_width * 8);
 
                 for (int yi = 0; yi < 32; yi++) {
                     int y = y_base + yi;
@@ -826,7 +828,7 @@ int main() {
                         // Figure out which row of the circular buffer
                         // we're filling in using bitmasking:
                         uint8_t *clamped_row =
-                            clamped_storage + (cy & 7) * clamped_width;
+                            &clamped_storage[(cy & 7) * clamped_width];
 
                         // Figure out which row of the input we're reading
                         // from by clamping the y coordinate:
@@ -854,7 +856,7 @@ int main() {
                         // The update step for maximum
                         for (int max_y = y - 2; max_y <= y + 2; max_y++) {
                             uint8_t *clamped_row =
-                                clamped_storage + (max_y & 7) * clamped_width;
+                                &clamped_storage[(max_y & 7) * clamped_width];
                             for (int max_x = x_base - 2; max_x <= x_base + 2; max_x++) {
                                 __m128i v = _mm_loadu_si128(
                                     (__m128i const *)(clamped_row + max_x + 2));
@@ -871,7 +873,7 @@ int main() {
                         // The update step for minimum.
                         for (int min_y = y - 2; min_y <= y + 2; min_y++) {
                             uint8_t *clamped_row =
-                                clamped_storage + (min_y & 7) * clamped_width;
+                                &clamped_storage[(min_y & 7) * clamped_width];
                             for (int min_x = x_base - 2; min_x <= x_base + 2; min_x++) {
                                 __m128i v = _mm_loadu_si128(
                                     (__m128i const *)(clamped_row + min_x + 2));
@@ -886,8 +888,6 @@ int main() {
                         _mm_storeu_si128((__m128i *)(output_row + x_base), spread);
                     }
                 }
-
-                free(clamped_storage);
             }
         }
 

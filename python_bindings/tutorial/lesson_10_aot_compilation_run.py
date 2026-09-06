@@ -7,7 +7,6 @@
 # Instead, it depends on the header file that lesson_10_generate
 # produced when we ran it:
 import lesson_10_halide
-
 import numpy as np
 
 
@@ -27,14 +26,15 @@ def main():
     # In other words, you can pass numpy arrays directly to the generated
     # code.
 
-    # Let's make some input data to test with:
-    input = np.empty((640, 480), dtype=np.uint8, order="F")
+    # Let's make some input data to test with. Note that when a numpy array is
+    # passed to the generated code, its axes are always reversed.
+    input = np.empty((640, 480), dtype=np.uint8)
     for y in range(480):
         for x in range(640):
             input[x, y] = (x ^ (y + 1)) & 0xFF
 
     # And the memory where we want to write our output:
-    output = np.empty((640, 480), dtype=np.uint8, order="F")
+    output = np.empty((640, 480), dtype=np.uint8)
 
     offset_value = 5
 

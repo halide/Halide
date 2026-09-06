@@ -12,11 +12,14 @@
 extern "C" {
 #endif
 
+#define HALIDE_RUNTIME_D3D12COMPUTE
+
 /** \file
  *  Routines specific to the Halide Direct3D 12 Compute runtime.
  */
 
 extern const struct halide_device_interface_t *halide_d3d12compute_device_interface();
+extern const struct halide_device_interface_t *halide_d3d12compute_image_device_interface();
 
 /** These are forward declared here to allow clients to override the
  *  Halide Direct3D 12 Compute runtime. Do not call them. */

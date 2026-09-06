@@ -253,6 +253,46 @@ try the static libs first then fall back to the shared libs.
 To ensure that the Python bindings are available, include the `Python`
 component.
 
+Finally, when [cross compiling](#cross-compiling),
+`find_package(Halide REQUIRED)` never pulls in the compiled compiler/JIT library
+(`Halide::Halide`, `Halide::Generator`, etc.) unless you explicitly ask for it.
+Add the `JIT` component (or `Python`) to force it to be loaded even while
+cross-compiling:
+
+```cmake
+find_package(Halide REQUIRED COMPONENTS JIT)
+```
+
+This looks for a `HalideCompiler` package matching your current (target)
+platform and fails with a normal `find_package` error if none is found.
+`HalideCompiler` is the name of the underlying platform-specific package that
+actually contains the compiled libraries; you generally don't need to
+`find_package(HalideCompiler)` directly, but its name is useful for
+`HalideCompiler_ROOT`/`-DHalideCompiler_DIR=...` when pointing CMake at a
+specific installed build.
+
+Autoscheduler plugins (see [Autoschedulers](#autoschedulers)) are resolved
+separately, via a `HalideAutoschedulers` package, and are always available to
+`add_halide_library(... AUTOSCHEDULER ...)` regardless of cross-compiling --
+unlike `HalideCompiler`, this package's targets are never linked against (only
+dlopen()'d, by their build path, at Generator run time), so there's no reason to
+gate them behind the `JIT`/`Python` components.
+
+Note that `static`/`shared`, unlike `JIT`/`Python`, never force this load by
+themselves -- requesting one merely records your preference for whichever
+package eventually loads the compiled compiler (whether that's this same
+`find_package(Halide ...)` call, because you're not cross-compiling or also
+requested `JIT`/`Python`, or a later, unrelated one, such as the internal lookup
+`add_halide_generator` performs when it needs to build a generator). This
+preference is scoped to the current directory (and any subdirectories added
+after it), so independent parts of a project -- so long as neither is a
+subdirectory of the other -- can request different linkage without conflicting
+with each other. If one directory's `find_package` call ends up loading the
+compiled compiler before a subdirectory requests the other flavor, that's a real
+conflict (CMake can only load one flavor of `Halide::Halide` per directory
+scope) and fails cleanly with a descriptive error rather than silently keeping
+whichever flavor loaded first.
+
 ## Variables
 
 Variables that control package loading:
@@ -280,10 +320,11 @@ Variables set by the package:
 
 Variables that control package behavior:
 
-| Variable                  | Description                                                                                                                                     |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Halide_PYTHON_LAUNCHER`  | Semicolon separated list containing a command to launch the Python interpreter. Can be used to set environment variables for Python generators. |
-| `Halide_NO_DEFAULT_FLAGS` | Off by default. When enabled, suppresses recommended compiler flags that would be added by `add_halide_generator`                               |
+| Variable                  | Description                                                                                                                                                                                                    |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Halide_PYTHON_LAUNCHER`  | Semicolon separated list containing a command to launch the Python interpreter. Can be used to set environment variables for Python generators.                                                                |
+| `Halide_NO_DEFAULT_FLAGS` | Off by default. When enabled, suppresses recommended compiler flags that would be added by `add_halide_generator`                                                                                              |
+| `Halide_CACHE_DIR`        | Defaults to `$ENV{HL_CACHE_DIR}`. When set, routes `HL_CACHE_DIR` to every generator/GenRT invocation so it can reuse cached artifacts instead of recompiling. See [doc/GeneratorCache.md](GeneratorCache.md). |
 
 ## Imported targets
 
@@ -314,6 +355,11 @@ The following targets only guaranteed when `WITH_AUTOSCHEDULERS` is true:
 | `Halide::Anderson2021`  | the Anderson, et.al. 2021 autoscheduler (full GPU support)      |
 | `Halide::Li2018`        | the Li et.al. 2018 gradient autoscheduler (limited GPU support) |
 | `Halide::Mullapudi2016` | the Mullapudi et.al. 2016 autoscheduler (no GPU support)        |
+
+These come from a separate `HalideAutoschedulers` package (distinct from
+`HalideCompiler`), loaded automatically the first time
+`add_halide_library(... AUTOSCHEDULER ...)` needs one -- including while
+cross-compiling.
 
 ## Functions
 
@@ -578,6 +624,11 @@ of CMake in these scenarios.
 If you are writing new programs that use Halide, you might wish to use
 `add_halide_generator`. When using this helper, you are expected to build your
 project twice: once for your build host and again for your intended target.
+
+On the target-side build, a plain `find_package(Halide REQUIRED)` is all you
+need (no separate package name): it never pulls in the compiled compiler, and
+`add_halide_generator` will lazily load it under the hood only if it can't find
+a prebuilt host generators package to import instead.
 
 When building the host build, you can use the `<package-name>` (see the
 documentation above) target to build _just_ the generators. Then, in the target

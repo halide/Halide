@@ -808,13 +808,4 @@ std::ostream &operator<<(std::ostream &stream, const SpvInstruction &);
 
 #endif  // WITH_SPIRV
 
-namespace Halide {
-namespace Internal {
-
-/** Internal test for SPIR-V IR **/
-void spirv_ir_test();
-
-}  // namespace Internal
-}  // namespace Halide
-
 #endif  // HALIDE_SPIRV_IR_H

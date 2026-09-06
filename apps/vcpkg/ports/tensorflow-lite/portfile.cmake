@@ -5,17 +5,14 @@ vcpkg_from_github(
     REPO tensorflow/tensorflow
     REF a344c313f75bbe28d00abe63f5d49cd6f233b6d0  # 2.21.0-rc0
     SHA512 48463c1dde438f18bf8d17104537258d6edf308be9f48af4fb40abee011a6f8c1c8aa50220fd1928bdfb8f251b8a9c764a1db50c9b7b9b0fe34d9e11d5273e4e
-    PATCHES
-    fix-neon2sse-config.patch
-    fix-msvc-friend-access.patch
+    PATCHES fix-neon2sse-config.patch fix-msvc-friend-access.patch
 )
 
 # Protobuf is used by subdirectories (profiling/proto, tools/benchmark).
 # Injecting find_package at TFLite's top-level scope ensures that
 # protobuf::libprotobuf is visible to all subdirectories regardless
 # how upstream structures its find_package/add_subdirectory ordering.
-file(WRITE "${CURRENT_BUILDTREES_DIR}/inject_protobuf.cmake"
-     "find_package(Protobuf REQUIRED)\n")
+file(WRITE "${CURRENT_BUILDTREES_DIR}/inject_protobuf.cmake" "find_package(Protobuf REQUIRED)\n")
 
 vcpkg_cmake_configure(
     SOURCE_PATH "${SOURCE_PATH}/tensorflow/lite"
@@ -43,27 +40,23 @@ vcpkg_cmake_configure(
 vcpkg_cmake_install()
 
 # Upstream install omits headers used by Hannk delegate/logging.
-file(
-    INSTALL "${SOURCE_PATH}/tensorflow/lite/tools"
+file(INSTALL
+    "${SOURCE_PATH}/tensorflow/lite/tools"
     DESTINATION "${CURRENT_PACKAGES_DIR}/include/tensorflow/lite"
-    FILES_MATCHING
-    PATTERN "*.h"
+    FILES_MATCHING PATTERN "*.h"
 )
-file(
-    INSTALL "${SOURCE_PATH}/tensorflow/compiler/mlir/lite"
+file(INSTALL
+    "${SOURCE_PATH}/tensorflow/compiler/mlir/lite"
     DESTINATION "${CURRENT_PACKAGES_DIR}/include/tensorflow/compiler/mlir"
-    FILES_MATCHING
-    PATTERN "*.h"
+    FILES_MATCHING PATTERN "*.h"
 )
 
 vcpkg_cmake_config_fixup(PACKAGE_NAME tensorflow-lite CONFIG_PATH lib/cmake/tensorflow-lite)
 
 vcpkg_install_copyright(FILE_LIST "${SOURCE_PATH}/LICENSE")
 
-file(
-    REMOVE_RECURSE
-    "${CURRENT_PACKAGES_DIR}/debug/include"
-    "${CURRENT_PACKAGES_DIR}/debug/share"
+file(REMOVE_RECURSE
+    "${CURRENT_PACKAGES_DIR}/debug/include" "${CURRENT_PACKAGES_DIR}/debug/share"
     # The tools and mlir/lite header installs above replicate the full source
     # directory tree, including subdirectories with no headers (testdata, tests,
     # Android/iOS app scaffolding, cmake module scripts, etc.).

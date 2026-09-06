@@ -16,7 +16,6 @@
 #include "SlidingWindow.h"
 #include "Target.h"
 #include "UniquifyVariableNames.h"
-#include "WrapCalls.h"
 
 #include <tuple>
 
@@ -179,9 +178,6 @@ string print_loop_nest(const vector<Function> &output_funcs) {
     for (auto &iter : env) {
         iter.second.lock_loop_levels();
     }
-
-    // Substitute in wrapper Funcs
-    env = wrap_func_calls(env);
 
     // Compute a realization order and determine group of functions which loops
     // are to be fused together

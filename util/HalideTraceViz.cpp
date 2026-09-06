@@ -107,28 +107,28 @@ struct fail {
 
 template<typename T>
 T value_as(const halide_type_t &type, const halide_scalar_value_t &value) {
-    switch (type.element_of().as_u32()) {
-    case halide_type_t(halide_type_int, 8).as_u32():
+    switch (type) {
+    case halide_type_t(halide_type_int, 8):
         return (T)value.u.i8;
-    case halide_type_t(halide_type_int, 16).as_u32():
+    case halide_type_t(halide_type_int, 16):
         return (T)value.u.i16;
-    case halide_type_t(halide_type_int, 32).as_u32():
+    case halide_type_t(halide_type_int, 32):
         return (T)value.u.i32;
-    case halide_type_t(halide_type_int, 64).as_u32():
+    case halide_type_t(halide_type_int, 64):
         return (T)value.u.i64;
-    case halide_type_t(halide_type_uint, 1).as_u32():
+    case halide_type_t(halide_type_uint, 1):
         return (T)value.u.b;
-    case halide_type_t(halide_type_uint, 8).as_u32():
+    case halide_type_t(halide_type_uint, 8):
         return (T)value.u.u8;
-    case halide_type_t(halide_type_uint, 16).as_u32():
+    case halide_type_t(halide_type_uint, 16):
         return (T)value.u.u16;
-    case halide_type_t(halide_type_uint, 32).as_u32():
+    case halide_type_t(halide_type_uint, 32):
         return (T)value.u.u32;
-    case halide_type_t(halide_type_uint, 64).as_u32():
+    case halide_type_t(halide_type_uint, 64):
         return (T)value.u.u64;
-    case halide_type_t(halide_type_float, 32).as_u32():
+    case halide_type_t(halide_type_float, 32):
         return (T)value.u.f32;
-    case halide_type_t(halide_type_float, 64).as_u32():
+    case halide_type_t(halide_type_float, 64):
         return (T)value.u.f64;
     default:
         fail() << "Can't convert packet with type: " << (int)type.code << "bits: " << type.bits;
@@ -138,14 +138,16 @@ T value_as(const halide_type_t &type, const halide_scalar_value_t &value) {
 
 template<typename T>
 T get_value_as(const halide_trace_packet_t &p, int idx) {
-    const uint8_t *val = (const uint8_t *)(p.value()) + idx * p.type.bytes();
+    const halide_type_t type = p.type();
+    const uint8_t *val = (const uint8_t *)(p.value()) + idx * type.bytes();
     // 'val' may not be aligned: memcpy it to an aligned local
     // so that value_as<>() won't complain under sanitizers.
     halide_scalar_value_t aligned_value;
     // Only copy the number of bytes in the type: the stream isn't guaranteed
-    // to be padded to sizeof(halide_scalar_value_t).
-    memcpy(&aligned_value, val, p.type.bits / 8);
-    return value_as<double>(p.type, aligned_value);
+    // to be padded to sizeof(halide_scalar_value_t). type.bits comes from the
+    // stream, so cap the copy so a bogus type can't overrun aligned_value.
+    memcpy(&aligned_value, val, std::min<size_t>(type.bits / 8, sizeof(aligned_value)));
+    return value_as<double>(type, aligned_value);
 }
 
 struct PacketAndPayload : public halide_trace_packet_t {
@@ -173,10 +175,33 @@ struct PacketAndPayload : public halide_trace_packet_t {
             return false;  // EOF
         }
 
+        if (this->size < header_size) {
+            fail() << "Malformed trace packet: size " << this->size << " smaller than header";
+        }
         const size_t payload_size = this->size - header_size;
         if (payload_size > sizeof(this->payload) || !read_or_die(this->payload, payload_size)) {
             // Shouldn't ever get EOF here
             fail() << "Unable to read packet payload of size " << payload_size;
+        }
+        // dimensions and type come straight from the untrusted header, and
+        // coordinates()/value()/func()/trace_tag() use them to index into
+        // payload. Reject any packet whose declared layout doesn't fit the
+        // bytes we read so those accessors stay in bounds.
+        if (this->dimensions < 0) {
+            fail() << "Malformed trace packet: negative dimensions " << this->dimensions;
+        }
+        const size_t fixed_bytes = (size_t)this->dimensions * sizeof(int32_t) + this->value_bytes();
+        if (fixed_bytes > payload_size) {
+            fail() << "Malformed trace packet: coordinates/value exceed payload";
+        }
+        int terminators = 0;
+        for (size_t i = fixed_bytes; i < payload_size; i++) {
+            if (this->payload[i] == 0 && ++terminators == 2) {
+                break;
+            }
+        }
+        if (terminators < 2) {
+            fail() << "Malformed trace packet: func/trace_tag not terminated within payload";
         }
         return true;
     }
@@ -214,19 +239,19 @@ struct FuncInfo {
 
         void observe_load(const halide_trace_packet_t &p) {
             observe_load_or_store(p);
-            loads += p.type.lanes;
+            loads += p.lanes;
         }
 
         void observe_store(const halide_trace_packet_t &p) {
             observe_load_or_store(p);
-            stores += p.type.lanes;
+            stores += p.lanes;
         }
 
         void observe_load_or_store(const halide_trace_packet_t &p) {
             const int *coords = p.coordinates();
-            for (int i = 0; i < std::min(16, p.dimensions / p.type.lanes); i++) {
-                for (int lane = 0; lane < p.type.lanes; lane++) {
-                    int coord = coords[i * p.type.lanes + lane];
+            for (int i = 0; i < std::min(16, p.dimensions / p.lanes); i++) {
+                for (int lane = 0; lane < p.lanes; lane++) {
+                    int coord = coords[i * p.lanes + lane];
                     if (loads + stores == 0 && lane == 0) {
                         min_coord[i] = coord;
                         max_coord[i] = coord + 1;
@@ -237,7 +262,7 @@ struct FuncInfo {
                 }
             }
 
-            for (int i = 0; i < p.type.lanes; i++) {
+            for (int i = 0; i < p.lanes; i++) {
                 double value = get_value_as<double>(p, i);
                 if (stores + loads == 0) {
                     min_value = value;
@@ -304,10 +329,10 @@ The arguments to HalideTraceViz specify how to lay out and render the
 Funcs of interest. It acts like a stateful drawing API. The following
 parameters should be set zero or one times:
 
- --size width height: The size of the output frames. Defaults to
+ --size, -s width height: The size of the output frames. Defaults to
      1920x1080.
 
- --timestep timestep: How many Halide computations should be covered
+ --timestep, -t timestep: How many Halide computations should be covered
      by each frame. Defaults to 10000.
 
  --decay A B: How quickly should the yellow and blue highlights decay
@@ -712,7 +737,7 @@ void process_args(int argc, char **argv, VizState *state) {
     int i = 1;
     while (i < argc) {
         std::string next = argv[i];
-        if (next == "--size") {
+        if (next == "--size" || next == "-s") {
             expect(i + 2 < argc, i);
             globals.frame_size.x = parse_int(argv[++i]);
             globals.frame_size.y = parse_int(argv[++i]);
@@ -772,8 +797,10 @@ void process_args(int argc, char **argv, VizState *state) {
             config.strides.clear();
             while (i + 1 < argc) {
                 const char *next_arg = argv[i + 1];
-                if (next_arg[0] == '-' &&
-                    next_arg[1] == '-') {
+                if ((next_arg[0] == '-' &&
+                     next_arg[1] == '-') ||
+                    !strcmp(next_arg, "-s") ||
+                    !strcmp(next_arg, "-t")) {
                     break;
                 }
                 expect(i + 2 < argc, i);
@@ -816,7 +843,7 @@ void process_args(int argc, char **argv, VizState *state) {
                 labels_seen.insert(func);
             }
             fi.config.labels.emplace_back(text, offset, n);
-        } else if (next == "--timestep") {
+        } else if (next == "--timestep" || next == "-t") {
             expect(i + 1 < argc, i);
             globals.timestep = parse_int(argv[++i]);
         } else if (next == "--decay") {
@@ -1266,14 +1293,21 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
 
         if (p.event == halide_trace_begin_realization ||
             p.event == halide_trace_produce ||
-            p.event == halide_trace_consume) {
+            p.event == halide_trace_consume ||
+            p.event == halide_trace_begin_parallel_task) {
             assert(!pipeline_info.count(p.id));
             pipeline_info[p.id] = pipeline;
         } else if (p.event == halide_trace_end_realization ||
                    p.event == halide_trace_end_produce ||
-                   p.event == halide_trace_end_consume) {
+                   p.event == halide_trace_end_consume ||
+                   p.event == halide_trace_end_parallel_task) {
             assert(pipeline_info.count(p.parent_id));
             pipeline_info.erase(p.parent_id);
+        }
+
+        if (p.event == halide_trace_begin_parallel_task ||
+            p.event == halide_trace_end_parallel_task) {
+            continue;
         }
 
         std::string qualified_name = pipeline.name + ":" + p.func();
@@ -1315,10 +1349,10 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
             if (p.event == halide_trace_store) {
                 // Stores take time proportional to the number of
                 // items stored times the cost of the func.
-                halide_clock += fi.config.store_cost * p.type.lanes;
+                halide_clock += fi.config.store_cost * p.lanes;
                 fi.stats.observe_store(p);
             } else {
-                halide_clock += fi.config.load_cost * p.type.lanes;
+                halide_clock += fi.config.load_cost * p.lanes;
                 fi.stats.observe_load(p);
             }
 
@@ -1327,15 +1361,15 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
             // fi.config.strides are provided by the --stride flag, so it can contain anything; i
             // if you don't specify them at all, they default to {{1,0},{0,1} (aka size=2).
             // So if we have excess strides, just ignore them.
-            const int dims = std::min(p.dimensions / p.type.lanes, (int)fi.config.strides.size());
+            const int dims = std::min(p.dimensions / p.lanes, (int)fi.config.strides.size());
             const int *coords = p.coordinates();
-            for (int lane = 0; lane < p.type.lanes; lane++) {
+            for (int lane = 0; lane < p.lanes; lane++) {
                 // Compute the screen-space x, y coord to draw this.
                 int x = fi.config.pos.x;
                 int y = fi.config.pos.y;
                 const float z = fi.config.zoom;
                 for (int d = 0; d < dims; d++) {
-                    const int coord = d * p.type.lanes + lane;
+                    const int coord = d * p.lanes + lane;
                     assert(coord < p.dimensions);
                     const int a = coords[coord];
                     const auto &stride = fi.config.strides[d];
@@ -1372,7 +1406,7 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
                         image_color = (int_value * 0x00010101) | 0xff000000;
                     } else {
                         // Color
-                        uint32_t channel = coords[fi.config.color_dim * p.type.lanes + lane];
+                        uint32_t channel = coords[fi.config.color_dim * p.lanes + lane];
                         uint32_t mask = ~(255 << (channel * 8));
                         image_color &= mask;
                         image_color |= int_value << (channel * 8);
@@ -1401,6 +1435,8 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
         case halide_trace_end_produce:
         case halide_trace_consume:
         case halide_trace_end_consume:
+        case halide_trace_begin_parallel_task:
+        case halide_trace_end_parallel_task:
         // Note that you can get nested pipeline begin/end events when you trace
         // something that has extern stages that are also Halide-being-traced;
         // these should just be ignored.

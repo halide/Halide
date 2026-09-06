@@ -76,6 +76,8 @@ class IRVisitor;
     X(Evaluate)                    \
     X(Prefetch)                    \
     X(Atomic)                      \
+    X(StreamingStore)              \
+    X(StreamingLoads)              \
     X(HoistedStorage)
 
 #define HALIDE_FOR_EACH_IR_NODE(X) \
@@ -403,7 +405,30 @@ enum class MemoryType {
     /** AMX Tile register for X86. Any data that would be used in an AMX matrix
      * multiplication must first be loaded into an AMX tile register. */
     AMXTile,
+
+    /** GPU shared memory, written by an asynchronous copy instruction that
+     * moves data straight from global memory without routing it through
+     * registers. The only stores allowed to such an allocation are unpredicated
+     * copies of a whole number of 4, 8 or 16 byte chunks from a densely indexed
+     * global buffer, because that is all the hardware can do. On GPU APIs with
+     * no such instruction this is ordinary shared memory. */
+    GPUSharedAsync,
 };
+
+/** Whether a MemoryType places an allocation in GPU shared memory. */
+inline bool is_gpu_shared(MemoryType t) {
+    return t == MemoryType::GPUShared || t == MemoryType::GPUSharedAsync;
+}
+
+/** Whether a MemoryType is backed by tile-shaped storage with native 2D
+ * loads and stores. Generic optimizations that rewrite the structure of
+ * loads or stores (deinterleaving, strided-load staging, etc.) should
+ * skip allocations of these types — the IR for them is consumed by a
+ * dedicated lowering pass that requires the original 2D-shaped loads
+ * and stores to remain intact. */
+inline bool is_tile_memory_type(MemoryType t) {
+    return t == MemoryType::AMXTile;
+}
 
 namespace Internal {
 
