@@ -1,3 +1,4 @@
+#include "ExprInterpreter.h"
 #include "Halide.h"
 
 using namespace Halide;
@@ -121,7 +122,6 @@ void test_let_and_scoping() {
     internal_assert(std::get<int64_t>(res.lanes[0]) == 100)
         << "Variable scoping / Let evaluation failed.";
 }
-}  // namespace
 
 int main() {
     test_scalar_equivalence();

@@ -74,3 +74,17 @@ endif ()
 foreach (fuzzer IN LISTS TEST_NAMES)
     target_link_libraries("${fuzzer}" PRIVATE Halide::fuzz)
 endforeach ()
+
+# expr_interpreter.cpp and ir_graph_cxx_printer.cpp are plain correctness
+# tests (their own main(), prints "Success!") rather than libFuzzer harnesses,
+# so they get their own tests() call instead of joining the GROUPS fuzz
+# sources above. They live here so they can #include their headers directly,
+# with no extra include path needed.
+tests(
+    GROUPS correctness
+    SOURCES
+        expr_interpreter.cpp
+        ir_graph_cxx_printer.cpp
+)
+target_sources(correctness_expr_interpreter PRIVATE ExprInterpreter.cpp)
+target_sources(correctness_ir_graph_cxx_printer PRIVATE IRGraphCXXPrinter.cpp)

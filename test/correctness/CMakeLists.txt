@@ -110,7 +110,6 @@ tests(
     error_macro_unreachable.cpp
     exception.cpp
     explicit_inline_reductions.cpp
-    expr_interpreter.cpp
     expr_match.cpp
     extern_bounds_inference.cpp
     extern_consumer.cpp
