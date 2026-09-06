@@ -596,6 +596,13 @@ bool intersect_if_nonempty(ConstantInterval &acc, const ConstantInterval &d) {
 ConstantInterval structural_difference(const BaseExprNode *a, const BaseExprNode *b) {
     ConstantInterval result;
 
+    // Same restriction as learning a fact: a difference only means what we take
+    // it to mean for integers that don't wrap. It keeps floats, where a NaN
+    // makes even min(p, q) <= p false, out of it too.
+    if (!(a->type.is_int() && a->type.bits() >= 32) || a->type != b->type) {
+        return result;
+    }
+
     auto is_operand_of = [](const BaseExprNode *e, const BaseExprNode *node) {
         if (node->node_type == IRNodeType::Min) {
             const Min *m = (const Min *)node;
@@ -624,27 +631,27 @@ ConstantInterval structural_difference(const BaseExprNode *a, const BaseExprNode
 
 }  // namespace
 
-Simplify::KnownDiff Simplify::known_difference(const BaseExprNode *a, const BaseExprNode *b) {
-    KnownDiff result;
+ConstantInterval Simplify::known_difference(const BaseExprNode *a, const BaseExprNode *b) {
+    ConstantInterval result;
 
     // Canonicalize the query the way the facts were canonicalized when learned.
     int64_t offset = 0;
     peel_constant_offsets(a, b, offset);
 
     if (equal(*a, *b)) {
-        result.bounds = ConstantInterval::single_point(0);
+        result = ConstantInterval::single_point(0);
     } else {
         if (a->node_type == IRNodeType::IntImm && b->node_type == IRNodeType::IntImm &&
             !sub_would_overflow(64, ((const IntImm *)a)->value, ((const IntImm *)b)->value)) {
             // Two constants need no facts to compare.
-            result.bounds = ConstantInterval::single_point(((const IntImm *)a)->value -
-                                                           ((const IntImm *)b)->value);
+            result = ConstantInterval::single_point(((const IntImm *)a)->value -
+                                                    ((const IntImm *)b)->value);
         } else {
-            intersect_if_nonempty(result.bounds, structural_difference(a, b));
+            intersect_if_nonempty(result, structural_difference(a, b));
         }
     }
 
-    if (!result.bounds.is_single_point() && !known_bounds.empty()) {
+    if (!result.is_single_point() && !known_bounds.empty()) {
         // A hole only tightens the bounds once we know where the ends are, so
         // collect them as we go and apply them below. There are hardly ever any.
         constexpr int max_holes = 4;
@@ -654,7 +661,7 @@ Simplify::KnownDiff Simplify::known_difference(const BaseExprNode *a, const Base
         const uint32_t fa = expr_fingerprint(a), fb = expr_fingerprint(b);
         // One test against the whole table before looking at any record.
         if (!difference_key_present(difference_key(fa, fb))) {
-            result.bounds += offset;
+            result += offset;
             return result;
         }
         for (const KnownBound &kb : known_bounds) {
@@ -681,47 +688,41 @@ Simplify::KnownDiff Simplify::known_difference(const BaseExprNode *a, const Base
                 if (num_holes < max_holes) {
                     holes[num_holes++] = d.min;
                 }
-            } else if (!intersect_if_nonempty(result.bounds, d)) {
+            } else if (!intersect_if_nonempty(result, d)) {
                 break;
             }
         }
 
         for (int i = 0; i < num_holes; i++) {
             const int64_t hole = holes[i];
-            // Removing a point only narrows the bounds if it is at one end.
-            if (result.bounds.min_defined && result.bounds.min == hole &&
+            // Removing a point only narrows the bounds if it is at one end,
+            // and only if something is left afterwards: a hole that swallows
+            // the whole interval means the facts contradict each other, so the
+            // code is unreachable. Say nothing rather than describe an empty
+            // set with a backwards interval.
+            if (result.min_defined && result.max_defined &&
+                result.min == hole && result.max == hole) {
+                continue;
+            }
+            if (result.min_defined && result.min == hole &&
                 !add_would_overflow(64, hole, 1)) {
-                result.bounds.min = hole + 1;
+                result.min = hole + 1;
             }
-            if (result.bounds.max_defined && result.bounds.max == hole &&
+            if (result.max_defined && result.max == hole &&
                 !sub_would_overflow(64, hole, 1)) {
-                result.bounds.max = hole - 1;
-            }
-            // Whether the difference can be zero matters even when the hole is
-            // in the interior, where it can't be captured by the bounds.
-            if (!add_would_overflow(64, hole, offset) && hole + offset == 0) {
-                result.excludes_zero = true;
+                result.max = hole - 1;
             }
         }
     }
 
     // Undo the canonicalization: (a - b) = (peeled a - peeled b) + offset.
-    result.bounds += offset;
+    result += offset;
 
     return result;
 }
 
-bool Simplify::is_known_equal(const BaseExprNode *a, const BaseExprNode *b) {
-    return known_difference(a, b).bounds.is_single_point(0);
-}
-
-bool Simplify::is_known_not_equal(const BaseExprNode *a, const BaseExprNode *b) {
-    KnownDiff d = known_difference(a, b);
-    return d.excludes_zero || !d.bounds.contains((int64_t)0);
-}
-
 bool Simplify::known_min_diff(const BaseExprNode *a, const BaseExprNode *b, int64_t *result) {
-    ConstantInterval bounds = known_difference(a, b).bounds;
+    ConstantInterval bounds = known_difference(a, b);
     if (bounds.min_defined) {
         *result = bounds.min;
         return true;
@@ -730,7 +731,7 @@ bool Simplify::known_min_diff(const BaseExprNode *a, const BaseExprNode *b, int6
 }
 
 bool Simplify::known_max_diff(const BaseExprNode *a, const BaseExprNode *b, int64_t *result) {
-    ConstantInterval bounds = known_difference(a, b).bounds;
+    ConstantInterval bounds = known_difference(a, b);
     if (bounds.max_defined) {
         *result = bounds.max;
         return true;

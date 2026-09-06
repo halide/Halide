@@ -2693,62 +2693,6 @@ std::ostream &operator<<(std::ostream &s, const DiffBound<A, B, Prover, is_min> 
     return s;
 }
 
-// Do the facts say these two are equal, or that they differ? Equality is just a
-// difference of zero, but inequality is a hole in the difference rather than a
-// bound on it, so it gets its own predicate.
-template<typename A, typename B, typename Prover, bool want_equal>
-struct KnownComparison {
-    struct pattern_tag {};
-    A a;
-    B b;
-    Prover *prover;
-
-    static_assert(has_bound_node<A>::value && has_bound_node<B>::value,
-                  "The operands of known_equal/known_not_equal must be wildcards, "
-                  "so that testing the predicate doesn't have to construct any IR.");
-
-    constexpr static uint32_t binds = bindings<A>::mask | bindings<B>::mask;
-
-    // This rule is a boolean-valued predicate. Bools have type UIntImm.
-    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
-    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
-    constexpr static bool canonical = true;
-
-    constexpr static bool foldable = true;
-
-    [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, Type &ty, MatcherState &state) const noexcept {
-        if (want_equal) {
-            val.u.u64 = prover->is_known_equal(a.bound_node(state), b.bound_node(state)) ? 1 : 0;
-        } else {
-            val.u.u64 = prover->is_known_not_equal(a.bound_node(state), b.bound_node(state)) ? 1 : 0;
-        }
-        ty = Bool();
-        return false;
-    }
-};
-
-template<typename A, typename B, typename Prover>
-HALIDE_ALWAYS_INLINE auto known_equal(A &&a, B &&b, Prover *p) noexcept
-    -> KnownComparison<decltype(pattern_arg(a)), decltype(pattern_arg(b)), Prover, true> {
-    assert_is_lvalue_if_expr<A>();
-    assert_is_lvalue_if_expr<B>();
-    return {pattern_arg(a), pattern_arg(b), p};
-}
-
-template<typename A, typename B, typename Prover>
-HALIDE_ALWAYS_INLINE auto known_not_equal(A &&a, B &&b, Prover *p) noexcept
-    -> KnownComparison<decltype(pattern_arg(a)), decltype(pattern_arg(b)), Prover, false> {
-    assert_is_lvalue_if_expr<A>();
-    assert_is_lvalue_if_expr<B>();
-    return {pattern_arg(a), pattern_arg(b), p};
-}
-
-template<typename A, typename B, typename Prover, bool want_equal>
-std::ostream &operator<<(std::ostream &s, const KnownComparison<A, B, Prover, want_equal> &op) {
-    s << (want_equal ? "known_equal(" : "known_not_equal(") << op.a << ", " << op.b << ")";
-    return s;
-}
-
 template<typename A>
 struct IsFloat {
     struct pattern_tag {};

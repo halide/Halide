@@ -483,25 +483,14 @@ public:
         return h;
     }
 
-    /** What a scan of known_bounds was able to establish about (a - b). A hole
-     * that doesn't touch an end of the interval can't be represented in the
-     * bounds, so it is tracked separately when it matters, which is when the
-     * hole is at zero. */
-    struct KnownDiff {
-        ConstantInterval bounds;
-        bool excludes_zero = false;
-    };
-
     /** Everything the facts tell us about (a - b), without building any IR.
      * The arguments are borrowed, so this is safe to call with the raw nodes a
      * rewrite rule has bound to its wildcards. */
-    KnownDiff known_difference(const BaseExprNode *a, const BaseExprNode *b);
+    ConstantInterval known_difference(const BaseExprNode *a, const BaseExprNode *b);
 
-    // Helpers over known_difference, for use as rewrite rule predicates. The
-    // diffs return false when nothing is known, so that a rule asking for a
-    // bound it can't get simply doesn't fire.
-    bool is_known_equal(const BaseExprNode *a, const BaseExprNode *b);
-    bool is_known_not_equal(const BaseExprNode *a, const BaseExprNode *b);
+    // Helpers over known_difference, for use as rewrite rule predicates. They
+    // return false when nothing is known, so that a rule asking for a bound it
+    // can't get simply doesn't fire.
     bool known_min_diff(const BaseExprNode *a, const BaseExprNode *b, int64_t *result);
     bool known_max_diff(const BaseExprNode *a, const BaseExprNode *b, int64_t *result);
 
