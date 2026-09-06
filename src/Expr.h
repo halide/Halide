@@ -104,7 +104,7 @@ struct IRNode {
      */
     virtual void accept(IRVisitor *v) const = 0;
     IRNode(IRNodeType t)
-        : node_type(t) {
+        : hash((uint32_t)t) {
     }
     virtual ~IRNode() = default;
 
@@ -122,10 +122,31 @@ struct IRNode {
      * external libraries compiled without it), and we only want it
      * for IR nodes. One might want to put this value in the vtable,
      * but that adds another level of indirection, and for Exprs we
-     * have 32 free bits in between the ref count and the Type
-     * anyway, so this doesn't increase the memory footprint of an IR node.
-     */
-    IRNodeType node_type;
+     * have 32 free bits in between the ref count and the Type field
+     * anyway, so we use them to also store a cheap hash of the node,
+     * with the node type packed into the low 8 bits and the rest of
+     * the hash in the upper 24 bits. This doesn't increase the memory
+     * footprint of an IR node. The hash is filled in by the make()
+     * method of each Expr node from the hashes/values of its
+     * arguments (Stmt nodes leave the upper 24 bits zero). It's not a
+     * high-quality hash (e.g. it ignores the identity of any
+     * Buffer/Parameter arguments), but it's cheap enough that
+     * IREquality.h can use it as a fast pre-check before doing a full
+     * IR comparison, and it can be used as a hash table key elsewhere,
+     * so long as some hash collisions are tolerated. */
+    union {
+        IRNodeType node_type;
+        uint32_t hash;
+    };
+
+    /** Set hash from a combined hash of this node's arguments (see
+     * combine_hash below), keeping the node type in the low 8 bits. The
+     * low bits of a multiply-add hash are of poor quality, so we discard
+     * them (rather than shifting them up) in favor of the node type. */
+    HALIDE_ALWAYS_INLINE
+    void set_hash(uint32_t args_hash) {
+        hash = (args_hash & 0xffffff00u) | (uint32_t)node_type;
+    }
 };
 
 template<>
@@ -161,27 +182,20 @@ struct BaseExprNode : public IRNode {
     }
     virtual Expr mutate_expr(IRMutator *v) const = 0;
     Type type;
-
-    /** A cheap hash of the node, filled in by the make() method of each
-     * node from the node type and the hashes/values of its arguments. Not a
-     * high-quality hash (e.g. it ignores the identity of any Buffer/Parameter
-     * arguments), but it's cheap enough that it can be used as a fast
-     * pre-check in IREquality.h before doing a full IR comparison, and as a
-     * hash table key elsewhere, so long as some hash collisions are tolerated. */
-    uint64_t hash = 0;
 };
 
-/** Combine one or more child hashes (or plain uint64_t fields) into a
- * running hash, for use in the make() methods of Expr nodes below when
- * setting BaseExprNode::hash. */
+/** Combine one or more child hashes (or plain uint32_t fields) into a
+ * running hash, for use in the make() methods of Expr nodes below. Pass
+ * the result to IRNode::set_hash to fold in the node type and get the
+ * final hash - see the make() methods below for examples. */
 // @{
 HALIDE_ALWAYS_INLINE
-uint64_t combine_hash(uint64_t hash, uint64_t child_hash) {
-    return hash * 6364136223846793005ULL + child_hash;
+uint32_t combine_hash(uint32_t hash, uint32_t child_hash) {
+    return hash * 2654435761u + child_hash;
 }
 
 template<typename... Rest>
-HALIDE_ALWAYS_INLINE uint64_t combine_hash(uint64_t hash, uint64_t child_hash, Rest... rest) {
+HALIDE_ALWAYS_INLINE uint32_t combine_hash(uint32_t hash, uint32_t child_hash, Rest... rest) {
     return combine_hash(combine_hash(hash, child_hash), rest...);
 }
 // @}
@@ -366,9 +380,9 @@ struct Expr : public Internal::IRHandle {
         return get()->type;
     }
 
-    /** Get the cheap hash of this expression node. See BaseExprNode::hash. */
+    /** Get the cheap hash of this expression node. See IRNode::hash. */
     HALIDE_ALWAYS_INLINE
-    uint64_t hash() const {
+    uint32_t hash() const {
         return get()->hash;
     }
 };

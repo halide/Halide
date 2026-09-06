@@ -38,13 +38,11 @@ HALIDE_ALWAYS_INLINE
 bool equal(const IRNode &a, const IRNode &b) {
     if (&a == &b) {
         return true;
-    } else if (a.node_type != b.node_type) {
-        return false;
-    } else if (a.node_type <= StrongestExprNodeType &&
-               ((const BaseExprNode &)a).hash != ((const BaseExprNode &)b).hash) {
-        // Exprs (unlike Stmts) carry a cheap hash of their subtree. Equal
-        // Exprs always have equal hashes, so a mismatch here means we can
-        // skip the full recursive comparison below.
+    } else if (a.hash != b.hash) {
+        // IRNode::hash packs the node type into its low 8 bits, so a
+        // mismatch here also covers the a.node_type != b.node_type case.
+        // Equal nodes always have equal hashes, so this lets us skip the
+        // full recursive comparison below.
         return false;
     } else {
         return equal_impl(a, b);
@@ -69,10 +67,7 @@ HALIDE_ALWAYS_INLINE
 bool graph_equal(const IRNode &a, const IRNode &b) {
     if (&a == &b) {
         return true;
-    } else if (a.node_type != b.node_type) {
-        return false;
-    } else if (a.node_type <= StrongestExprNodeType &&
-               ((const BaseExprNode &)a).hash != ((const BaseExprNode &)b).hash) {
+    } else if (a.hash != b.hash) {
         return false;
     } else {
         return graph_equal_impl(a, b);
@@ -98,18 +93,11 @@ HALIDE_ALWAYS_INLINE
 bool less_than(const IRNode &a, const IRNode &b) {
     if (&a == &b) {
         return false;
-    } else if (a.node_type < b.node_type) {
-        return true;
-    } else if (a.node_type == b.node_type && a.node_type <= StrongestExprNodeType) {
+    } else if (a.hash != b.hash) {
         // This ordering is arbitrary (it's just used for map keys), so we're
-        // free to use the cheap hash to distinguish unequal Exprs instead of
+        // free to use the cheap hash to distinguish unequal nodes instead of
         // doing a full comparison.
-        const uint64_t ha = ((const BaseExprNode &)a).hash;
-        const uint64_t hb = ((const BaseExprNode &)b).hash;
-        if (ha != hb) {
-            return ha < hb;
-        }
-        return less_than_impl(a, b);
+        return a.hash < b.hash;
     } else {
         return less_than_impl(a, b);
     }
@@ -137,15 +125,8 @@ HALIDE_ALWAYS_INLINE
 bool graph_less_than(const IRNode &a, const IRNode &b) {
     if (&a == &b) {
         return false;
-    } else if (a.node_type < b.node_type) {
-        return true;
-    } else if (a.node_type == b.node_type && a.node_type <= StrongestExprNodeType) {
-        const uint64_t ha = ((const BaseExprNode &)a).hash;
-        const uint64_t hb = ((const BaseExprNode &)b).hash;
-        if (ha != hb) {
-            return ha < hb;
-        }
-        return graph_less_than_impl(a, b);
+    } else if (a.hash != b.hash) {
+        return a.hash < b.hash;
     } else {
         return graph_less_than_impl(a, b);
     }
