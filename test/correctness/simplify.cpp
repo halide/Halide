@@ -2420,6 +2420,10 @@ void check_unreachable() {
 void check_facts() {
     Expr x = Var("x"), y = Var("y"), z = Var("z");
 
+    // These rules are for the part of lowering that runs once regions and
+    // allocation sizes have been read out of the IR, so test them there.
+    ScopedRegionsInferred regions_inferred;
+
     // A fact stated in any comparison direction should let the simplifier pick
     // the winning side of a max or min.
     check_with_assumptions(max(x, y), x, {x > y});
@@ -2440,15 +2444,15 @@ void check_facts() {
     check_with_assumptions(max(x + z, y * 3), x + z, {x + z > y * 3});
     check_with_assumptions(max(max(x, y), z), z, {max(x, y) < z});
 
-    // The condition of an if is deliberately not used to order a min or max.
-    // Removing one of those is not only a statement about a value: a clamp
-    // around an index is what holds bounds inference's idea of the region
-    // required inside the buffer, and bounds inference only partly models the
-    // conditions of ifs -- a reduction domain's predicate among them. Dropping
-    // a clamp on the strength of such a condition leaves it asking for a region
-    // the clamp had been keeping in range.
-    check(IfThenElse::make(x < y, not_no_op(max(x, y)), not_no_op(z)),
-          IfThenElse::make(x < y, not_no_op(max(x, y)), not_no_op(z)));
+    // Both branches of an if learn from the condition, in opposite directions.
+    check(IfThenElse::make(x < y, not_no_op(max(x, y)), not_no_op(max(x, y))),
+          IfThenElse::make(x < y, not_no_op(y), not_no_op(x)));
+
+    // A fact only applies where it holds.
+    check(Block::make(not_no_op(max(x, y)),
+                      IfThenElse::make(x < y, not_no_op(max(x, y)))),
+          Block::make(not_no_op(max(x, y)),
+                      IfThenElse::make(x < y, not_no_op(y))));
 
     // A division can cancel a multiplication inside a max or min when we know
     // which side wins after the division.

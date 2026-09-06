@@ -162,7 +162,12 @@ ScopedRegionsInferred::~ScopedRegionsInferred() {
 
 void Simplify::ScopedFact::learn_difference(const Expr &a, const Expr &b,
                                             const ConstantInterval &diff, bool invert) {
-    if (!simplify->record_difference_facts) {
+    // Nothing may be ordered from a fact until lowering has finished reading
+    // regions and allocation sizes out of the IR. A clamp around an index is
+    // part of how those are derived, so removing one on the strength of
+    // something we happen to know leaves the region asked for as wide as the
+    // unclamped index could reach.
+    if (!regions_have_been_inferred()) {
         return;
     }
     // Differences are only meaningful where they can't wrap.
