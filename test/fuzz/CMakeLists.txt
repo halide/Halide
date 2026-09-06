@@ -58,10 +58,16 @@ if (NOT HAVE_LIBFUZZER_FLAGS)
         )
     endif ()
     target_sources(Halide_fuzz PRIVATE halide_fuzz_main.cpp halide_fuzz_main.h)
-    target_compile_definitions(Halide_fuzz PUBLIC HALIDE_FUZZER_BACKEND=HALIDE_FUZZER_BACKEND_STDLIB)
+    target_compile_definitions(
+        Halide_fuzz
+        PUBLIC HALIDE_FUZZER_BACKEND=HALIDE_FUZZER_BACKEND_STDLIB
+    )
 else ()
     target_link_libraries(Halide_fuzz PUBLIC ${LIB_FUZZING_ENGINE})
-    target_compile_definitions(Halide_fuzz PUBLIC HALIDE_FUZZER_BACKEND=HALIDE_FUZZER_BACKEND_LIBFUZZER)
+    target_compile_definitions(
+        Halide_fuzz
+        PUBLIC HALIDE_FUZZER_BACKEND=HALIDE_FUZZER_BACKEND_LIBFUZZER
+    )
 endif ()
 
 
