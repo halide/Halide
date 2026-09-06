@@ -124,28 +124,34 @@ struct IRNode {
      * but that adds another level of indirection, and for Exprs we
      * have 32 free bits in between the ref count and the Type field
      * anyway, so we use them to also store a cheap hash of the node,
-     * with the node type packed into the low 8 bits and the rest of
-     * the hash in the upper 24 bits. This doesn't increase the memory
-     * footprint of an IR node. The hash is filled in by the make()
-     * method of each Expr node from the hashes/values of its
-     * arguments (Stmt nodes leave the upper 24 bits zero). It's not a
-     * high-quality hash (e.g. it ignores the identity of any
-     * Buffer/Parameter arguments), but it's cheap enough that
-     * IREquality.h can use it as a fast pre-check before doing a full
-     * IR comparison, and it can be used as a hash table key elsewhere,
-     * so long as some hash collisions are tolerated. */
+     * packed into the same 32-bit word as the node type (see
+     * set_hash below). This doesn't increase the memory footprint of
+     * an IR node. The hash is filled in by the make() method of each
+     * Expr node from the hashes/values of its arguments (Stmt nodes
+     * leave the rest of the word zero). It's not a high-quality hash
+     * (e.g. it ignores the identity of any Buffer/Parameter
+     * arguments), but it's cheap enough that IREquality.h can use it
+     * as a fast pre-check before doing a full IR comparison, and it
+     * can be used as a hash table key elsewhere, so long as some hash
+     * collisions are tolerated. */
     union {
         IRNodeType node_type;
         uint32_t hash;
     };
 
     /** Set hash from a combined hash of this node's arguments (see
-     * combine_hash below), keeping the node type in the low 8 bits. The
-     * low bits of a multiply-add hash are of poor quality, so we discard
-     * them (rather than shifting them up) in favor of the node type. */
+     * combine_hash below), keeping the node type intact. The low bits of a
+     * multiply-add hash are of poor quality, so we discard them (rather
+     * than shifting them up) in favor of the node type. Which end of the
+     * word the node type landed in when we wrote it via the node_type
+     * member of the union depends on the endianness of the machine. */
     HALIDE_ALWAYS_INLINE
     void set_hash(uint32_t args_hash) {
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+        hash = (args_hash >> 8) | ((uint32_t)node_type << 24);
+#else
         hash = (args_hash & 0xffffff00u) | (uint32_t)node_type;
+#endif
     }
 };
 
