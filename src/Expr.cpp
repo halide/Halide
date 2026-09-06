@@ -1,3 +1,5 @@
+#include <functional>
+
 #include "Expr.h"
 #include "IROperator.h"  // for lossless_cast()
 
@@ -35,6 +37,7 @@ const IntImm *IntImm::make(Type t, int64_t value) {
     IntImm *node = new IntImm;
     node->type = t;
     node->value = value;
+    node->hash = combine_hash((uint64_t)node->node_type, (uint64_t)value);
     return node;
 }
 
@@ -51,6 +54,7 @@ const UIntImm *UIntImm::make(Type t, uint64_t value) {
     UIntImm *node = new UIntImm;
     node->type = t;
     node->value = value;
+    node->hash = combine_hash((uint64_t)node->node_type, value);
     return node;
 }
 
@@ -77,6 +81,7 @@ const FloatImm *FloatImm::make(Type t, double value) {
         internal_error << "FloatImm must be 16, 32, or 64-bit\n";
     }
 
+    node->hash = combine_hash((uint64_t)node->node_type, std::hash<double>{}(node->value));
     return node;
 }
 
@@ -84,6 +89,7 @@ const StringImm *StringImm::make(const std::string &val) {
     StringImm *node = new StringImm;
     node->type = type_of<const char *>();
     node->value = val;
+    node->hash = combine_hash((uint64_t)node->node_type, std::hash<std::string>{}(val));
     return node;
 }
 

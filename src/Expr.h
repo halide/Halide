@@ -161,7 +161,30 @@ struct BaseExprNode : public IRNode {
     }
     virtual Expr mutate_expr(IRMutator *v) const = 0;
     Type type;
+
+    /** A cheap hash of the node, filled in by the make() method of each
+     * node from the node type and the hashes/values of its arguments. Not a
+     * high-quality hash (e.g. it ignores the identity of any Buffer/Parameter
+     * arguments), but it's cheap enough that it can be used as a fast
+     * pre-check in IREquality.h before doing a full IR comparison, and as a
+     * hash table key elsewhere, so long as some hash collisions are tolerated. */
+    uint64_t hash = 0;
 };
+
+/** Combine one or more child hashes (or plain uint64_t fields) into a
+ * running hash, for use in the make() methods of Expr nodes below when
+ * setting BaseExprNode::hash. */
+// @{
+HALIDE_ALWAYS_INLINE
+uint64_t combine_hash(uint64_t hash, uint64_t child_hash) {
+    return hash * 6364136223846793005ULL + child_hash;
+}
+
+template<typename... Rest>
+HALIDE_ALWAYS_INLINE uint64_t combine_hash(uint64_t hash, uint64_t child_hash, Rest... rest) {
+    return combine_hash(combine_hash(hash, child_hash), rest...);
+}
+// @}
 
 /** We use the "curiously recurring template pattern" to avoid
    duplicated code in the IR Nodes. These classes live between the
@@ -341,6 +364,12 @@ struct Expr : public Internal::IRHandle {
     HALIDE_ALWAYS_INLINE
     Type type() const {
         return get()->type;
+    }
+
+    /** Get the cheap hash of this expression node. See BaseExprNode::hash. */
+    HALIDE_ALWAYS_INLINE
+    uint64_t hash() const {
+        return get()->hash;
     }
 };
 

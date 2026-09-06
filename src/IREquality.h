@@ -40,6 +40,12 @@ bool equal(const IRNode &a, const IRNode &b) {
         return true;
     } else if (a.node_type != b.node_type) {
         return false;
+    } else if (a.node_type <= StrongestExprNodeType &&
+               ((const BaseExprNode &)a).hash != ((const BaseExprNode &)b).hash) {
+        // Exprs (unlike Stmts) carry a cheap hash of their subtree. Equal
+        // Exprs always have equal hashes, so a mismatch here means we can
+        // skip the full recursive comparison below.
+        return false;
     } else {
         return equal_impl(a, b);
     }
@@ -64,6 +70,9 @@ bool graph_equal(const IRNode &a, const IRNode &b) {
     if (&a == &b) {
         return true;
     } else if (a.node_type != b.node_type) {
+        return false;
+    } else if (a.node_type <= StrongestExprNodeType &&
+               ((const BaseExprNode &)a).hash != ((const BaseExprNode &)b).hash) {
         return false;
     } else {
         return graph_equal_impl(a, b);
@@ -91,6 +100,16 @@ bool less_than(const IRNode &a, const IRNode &b) {
         return false;
     } else if (a.node_type < b.node_type) {
         return true;
+    } else if (a.node_type == b.node_type && a.node_type <= StrongestExprNodeType) {
+        // This ordering is arbitrary (it's just used for map keys), so we're
+        // free to use the cheap hash to distinguish unequal Exprs instead of
+        // doing a full comparison.
+        const uint64_t ha = ((const BaseExprNode &)a).hash;
+        const uint64_t hb = ((const BaseExprNode &)b).hash;
+        if (ha != hb) {
+            return ha < hb;
+        }
+        return less_than_impl(a, b);
     } else {
         return less_than_impl(a, b);
     }
@@ -120,6 +139,13 @@ bool graph_less_than(const IRNode &a, const IRNode &b) {
         return false;
     } else if (a.node_type < b.node_type) {
         return true;
+    } else if (a.node_type == b.node_type && a.node_type <= StrongestExprNodeType) {
+        const uint64_t ha = ((const BaseExprNode &)a).hash;
+        const uint64_t hb = ((const BaseExprNode &)b).hash;
+        if (ha != hb) {
+            return ha < hb;
+        }
+        return graph_less_than_impl(a, b);
     } else {
         return graph_less_than_impl(a, b);
     }
