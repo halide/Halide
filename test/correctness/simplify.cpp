@@ -2472,6 +2472,24 @@ void check_facts() {
     check_with_assumptions(max(x * 8, y) / 8, x, {x > y / 8});
     check_with_assumptions(min(x * 8, y) / 8, x, {x < y / 8});
 
+    // A difference only means what we take it to mean where the type cannot
+    // wrap. Given x >= y + 5 over uint8, y = 253 makes y + 5 equal 2, so x = 10
+    // satisfies it while sitting far below y: ordering the min from that would
+    // pick the wrong side. Only the types whose overflow is undefined, and so
+    // may be assumed not to happen, are eligible.
+    for (Type t : {UInt(8), Int(8), Int(16), UInt(32)}) {
+        Expr a = Variable::make(t, "wrap_a");
+        Expr b = Variable::make(t, "wrap_b");
+        check_with_assumptions(min(a, b), min(a, b), {a >= b + cast(t, 5)});
+        check_with_assumptions(max(a, b), max(a, b), {a >= b + cast(t, 5)});
+    }
+    for (Type t : {Int(32), Int(64)}) {
+        Expr a = Variable::make(t, "wrap_a");
+        Expr b = Variable::make(t, "wrap_b");
+        check_with_assumptions(min(a, b), b, {a >= b + cast(t, 5)});
+        check_with_assumptions(max(a, b), a, {a >= b + cast(t, 5)});
+    }
+
     // A min is at most either of its operands and a max is at least either of
     // them, which needs no facts at all. That only bounds the difference on one
     // side, but knowing the two are unequal removes the endpoint, and the two
