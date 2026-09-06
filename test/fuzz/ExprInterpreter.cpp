@@ -816,4 +816,5 @@ void ExprInterpreter::visit(const Call *op) {
     }
 }
 
+}  // namespace Internal
 }  // namespace Halide
