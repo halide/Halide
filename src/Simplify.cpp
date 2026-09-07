@@ -187,7 +187,7 @@ void Simplify::ScopedFact::learn_difference(const Expr &a, const Expr &b,
         return;
     }
 
-    const uint32_t fa = Simplify::expr_fingerprint(pa), fb = Simplify::expr_fingerprint(pb);
+    const uint32_t fa = pa->hash, fb = pb->hash;
     simplify->add_difference_key(Simplify::difference_key(fa, fb));
     simplify->known_bounds.push_back(
         Simplify::KnownBound{Expr(pa), Expr(pb), peeled, fa, fb, invert});
@@ -663,18 +663,18 @@ ConstantInterval Simplify::known_difference(const BaseExprNode *a, const BaseExp
         int64_t holes[max_holes];
         int num_holes = 0;
 
-        const uint32_t fa = expr_fingerprint(a), fb = expr_fingerprint(b);
+        const uint32_t fa = a->hash, fb = b->hash;
         // One test against the whole table before looking at any record.
         if (!difference_key_present(difference_key(fa, fb))) {
             result += offset;
             return result;
         }
         for (const KnownBound &kb : known_bounds) {
-            // Reject on the summaries first. They live in the record, so a
-            // record about some other pair costs a pair of integer compares
-            // and never follows a pointer.
-            const bool same_order = (fa == kb.fingerprint_a && fb == kb.fingerprint_b);
-            const bool swapped = (fa == kb.fingerprint_b && fb == kb.fingerprint_a);
+            // Reject on the hashes first. They live in the record, so a record
+            // about some other pair costs a pair of integer compares and never
+            // follows a pointer.
+            const bool same_order = (fa == kb.hash_a && fb == kb.hash_b);
+            const bool swapped = (fa == kb.hash_b && fb == kb.hash_a);
             if (!same_order && !swapped) {
                 continue;
             }

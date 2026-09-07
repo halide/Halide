@@ -450,11 +450,11 @@ public:
     struct KnownBound {
         Expr a, b;
         ConstantInterval diff;
-        // Cheap structural summaries of a and b. Equal Exprs always summarize
-        // to the same value, so a mismatch rules a record out without touching
-        // the Exprs at all. Almost every query is about a pair nothing is known
-        // about, so what this scan needs to be good at is saying no.
-        uint32_t fingerprint_a = 0, fingerprint_b = 0;
+        // The hashes of a and b. Equal Exprs hash alike, so a mismatch rules a
+        // record out without touching the Exprs at all. Almost every query is
+        // about a pair nothing is known about, so what this scan needs to be
+        // good at is saying no.
+        uint32_t hash_a = 0, hash_b = 0;
         // If set, a - b is known *not* to lie in diff, which is always a single
         // point. Only a != b (or !(a == b)) produces one of these.
         bool invert = false;
@@ -467,14 +467,6 @@ public:
     // table saturates and lets four queries in ten through to the scan.
     static constexpr int difference_key_words = 4;
     uint64_t difference_keys[difference_key_words] = {0};
-
-    // Every Expr carries a cheap hash of its children, kept in the spare bits
-    // of its node type for exactly this sort of pre-check. Equal Exprs hash
-    // alike, which is all a filter needs of it.
-    HALIDE_ALWAYS_INLINE
-    static uint32_t expr_fingerprint(const BaseExprNode *e) {
-        return e->hash;
-    }
 
     /** Everything the facts tell us about (a - b), without building any IR.
      * The arguments are borrowed, so this is safe to call with the raw nodes a
@@ -517,9 +509,9 @@ public:
         return !known_bounds.empty();
     }
 
-    // Symmetric key for a pair. Equal summaries say only that the two nodes are
-    // the same kind, and xoring them throws even that away, so key those by the
-    // kind instead of letting every same-type pair share one bit.
+    // Symmetric key for a pair. Xoring two equal hashes gives zero whatever
+    // they were, so key that case by the hash itself rather than letting every
+    // pair of equal-hashing operands share the one bit.
     HALIDE_ALWAYS_INLINE
     static uint32_t difference_key(uint32_t fa, uint32_t fb) {
         return fa == fb ? fa * 0x9e3779b9u : (fa ^ fb);
