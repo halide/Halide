@@ -468,19 +468,12 @@ public:
     static constexpr int difference_key_words = 4;
     uint64_t difference_keys[difference_key_words] = {0};
 
-    // Summarize an Expr by its node type, plus the name or value of the leaves
-    // that distinguish otherwise identical-looking nodes. Deliberately ignores
-    // children: this only has to be equal for equal Exprs, not unique.
+    // Every Expr carries a cheap hash of its children, kept in the spare bits
+    // of its node type for exactly this sort of pre-check. Equal Exprs hash
+    // alike, which is all a filter needs of it.
+    HALIDE_ALWAYS_INLINE
     static uint32_t expr_fingerprint(const BaseExprNode *e) {
-        uint32_t h = ((uint32_t)e->node_type + 1) * 2654435761u;
-        if (e->node_type == IRNodeType::Variable) {
-            for (char c : ((const Variable *)e)->name) {
-                h = h * 31u + (uint32_t)(unsigned char)c;
-            }
-        } else if (e->node_type == IRNodeType::IntImm) {
-            h ^= (uint32_t)((const IntImm *)e)->value;
-        }
-        return h;
+        return e->hash;
     }
 
     /** Everything the facts tell us about (a - b), without building any IR.
@@ -532,16 +525,26 @@ public:
         return fa == fb ? fa * 0x9e3779b9u : (fa ^ fb);
     }
 
-    // One bit per pair key.
+    // One bit per pair key. Which bit has to come from mixed bits rather than
+    // from the bottom of the key: an Expr's hash carries its node type in the
+    // low bits, so indexing by those puts every pair of the same two kinds on
+    // one bit, and a few dozen facts then light only a handful of them.
+    HALIDE_ALWAYS_INLINE
+    static uint32_t difference_key_bit_index(uint32_t key) {
+        constexpr int bits = 8;  // log2(difference_key_words * 64)
+        static_assert(difference_key_words * 64 == (1 << bits));
+        return (key * 0x9e3779b9u) >> (32 - bits);
+    }
+
     HALIDE_ALWAYS_INLINE
     bool difference_key_present(uint32_t key) const {
-        const uint32_t bit = key % (difference_key_words * 64);
+        const uint32_t bit = difference_key_bit_index(key);
         return (difference_keys[bit / 64] >> (bit % 64)) & 1;
     }
 
     HALIDE_ALWAYS_INLINE
     void add_difference_key(uint32_t key) {
-        const uint32_t bit = key % (difference_key_words * 64);
+        const uint32_t bit = difference_key_bit_index(key);
         difference_keys[bit / 64] |= (uint64_t)1 << (bit % 64);
     }
 
