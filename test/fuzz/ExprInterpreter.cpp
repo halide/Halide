@@ -787,7 +787,9 @@ void ExprInterpreter::visit(const Call *op) {
     } else if (op->is_intrinsic({Call::likely, Call::likely_if_innermost, Call::promise_clamped, Call::unsafe_promise_clamped})) {
         result = args[0];
     } else if (op->is_intrinsic({Call::return_second, Call::require})) {
+        bool overflow = result.did_overflow;
         result = args[1];
+        result.did_overflow |= overflow;
     } else if (starts_with(op->name, "sin_")) {
         result = apply_unary(op->type, args[0], [](auto a, bool &) { return std::sin(a); });
     } else if (starts_with(op->name, "cos_")) {
