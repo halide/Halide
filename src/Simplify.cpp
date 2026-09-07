@@ -150,6 +150,7 @@ void Simplify::ScopedFact::learn_false(const Expr &fact) {
     }
     if (simplify->falsehoods.insert(fact).second) {
         falsehoods.insert(fact);
+        Profiling::simplify_fact_learned();
     }
 }
 
@@ -343,6 +344,7 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
     }
     if (simplify->truths.insert(fact).second) {
         truths.insert(fact);
+        Profiling::simplify_fact_learned();
     }
 }
 
@@ -382,9 +384,11 @@ Simplify::ScopedFact::~ScopedFact() {
     }
     for (const auto &e : truths) {
         simplify->truths.erase(e);
+        Profiling::simplify_fact_forgotten();
     }
     for (const auto &e : falsehoods) {
         simplify->falsehoods.erase(e);
+        Profiling::simplify_fact_forgotten();
     }
 }
 
@@ -393,6 +397,7 @@ Expr simplify(const Expr &e,
               const Scope<ModulusRemainder> &alignment,
               const std::vector<Expr> &assumptions) {
     ZoneScoped;
+    Profiling::simplify_invoked();
     Simplify m(&bounds, &alignment);
     std::vector<Simplify::ScopedFact> facts;
     facts.reserve(assumptions.size());
@@ -411,6 +416,7 @@ Stmt simplify(const Stmt &s,
               const Scope<ModulusRemainder> &alignment,
               const std::vector<Expr> &assumptions) {
     ZoneScoped;
+    Profiling::simplify_invoked();
     Simplify m(&bounds, &alignment);
     std::vector<Simplify::ScopedFact> facts;
     facts.reserve(assumptions.size());

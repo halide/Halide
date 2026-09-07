@@ -5,6 +5,7 @@
 
 #include "IR.h"
 
+#include <algorithm>
 #include <chrono>
 #include <list>
 #include <mutex>
@@ -216,6 +217,47 @@ public:
 
 void write_halide_profiling_trace(const std::string &file);
 
+/** Bookkeeping for the simplifier: how many times it was invoked, how
+ * many rewrite rules fired, and how many facts it has learned (e.g. via
+ * scoped assumptions injected by If/Select conditions) at once. Counters
+ * are thread-local, so that multiple pipelines lowering concurrently on
+ * different threads don't stomp on each other's stats. */
+struct SimplifierStats {
+    uint64_t invocations = 0;
+    uint64_t rewrites = 0;
+    uint64_t live_facts = 0;
+    uint64_t peak_facts = 0;
+
+    void reset() {
+        invocations = 0;
+        rewrites = 0;
+        peak_facts = live_facts;
+    }
+};
+
+inline thread_local SimplifierStats simplifier_stats;
+
+inline void simplify_invoked() {
+    simplifier_stats.invocations++;
+}
+
+inline void simplify_rewrote() {
+    simplifier_stats.rewrites++;
+}
+
+inline void simplify_fact_learned() {
+    simplifier_stats.live_facts++;
+    simplifier_stats.peak_facts = std::max(simplifier_stats.peak_facts, simplifier_stats.live_facts);
+}
+
+inline void simplify_fact_forgotten() {
+    simplifier_stats.live_facts--;
+}
+
+inline void simplify_stats_reset_pass() {
+    simplifier_stats.reset();
+}
+
 }  // namespace Profiling
 
 template<typename Base>
@@ -230,6 +272,16 @@ namespace Profiling {
 inline void generic_zone_begin(const char *src_tag, unsigned data = 0) {
 }
 inline void generic_zone_end(const char *src_tag, unsigned data = 0) {
+}
+inline void simplify_invoked() {
+}
+inline void simplify_rewrote() {
+}
+inline void simplify_fact_learned() {
+}
+inline void simplify_fact_forgotten() {
+}
+inline void simplify_stats_reset_pass() {
 }
 }  // namespace Profiling
 

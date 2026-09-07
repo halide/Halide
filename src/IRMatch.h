@@ -10,6 +10,7 @@
 #include <set>
 #include <vector>
 
+#include "CompilerProfiling.h"
 #include "IR.h"
 #include "IREquality.h"
 #include "IROperator.h"
@@ -3047,6 +3048,7 @@ struct Rewriter {
 #if HALIDE_DEBUG_MATCHED_RULES
             debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
 #endif
+            Profiling::simplify_rewrote();
             return true;
         } else {
 #if HALIDE_DEBUG_UNMATCHED_RULES
@@ -3065,6 +3067,7 @@ struct Rewriter {
 #if HALIDE_DEBUG_MATCHED_RULES
             debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
 #endif
+            Profiling::simplify_rewrote();
             return true;
         } else {
 #if HALIDE_DEBUG_UNMATCHED_RULES
@@ -3086,6 +3089,7 @@ struct Rewriter {
 #if HALIDE_DEBUG_MATCHED_RULES
             debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
 #endif
+            Profiling::simplify_rewrote();
             return true;
         } else {
 #if HALIDE_DEBUG_UNMATCHED_RULES
@@ -3117,6 +3121,7 @@ struct Rewriter {
 #if HALIDE_DEBUG_MATCHED_RULES
             debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
 #endif
+            Profiling::simplify_rewrote();
             return true;
         } else {
 #if HALIDE_DEBUG_UNMATCHED_RULES
@@ -3140,6 +3145,7 @@ struct Rewriter {
 #if HALIDE_DEBUG_MATCHED_RULES
             debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
 #endif
+            Profiling::simplify_rewrote();
             return true;
         } else {
 #if HALIDE_DEBUG_UNMATCHED_RULES
@@ -3165,6 +3171,7 @@ struct Rewriter {
 #if HALIDE_DEBUG_MATCHED_RULES
             debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
 #endif
+            Profiling::simplify_rewrote();
             return true;
         } else {
 #if HALIDE_DEBUG_UNMATCHED_RULES
