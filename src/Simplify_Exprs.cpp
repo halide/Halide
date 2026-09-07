@@ -200,6 +200,19 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
         break;
     }
     case VectorReduce::And: {
+        // The ramp/broadcast comparison rules below reason about the ramp's
+        // endpoints using unbounded arithmetic, so they're only sound when
+        // the *compared values'* type has no well-defined overflow. That's
+        // not op->type -- the reduction of a comparison is always Bool(),
+        // regardless of the operand type -- so pull the operand type out of
+        // the comparison itself when there is one.
+        Type cmp_type = op->type;
+        if (const LT *lt = value.as<LT>()) {
+            cmp_type = lt->a.type();
+        } else if (const LE *le = value.as<LE>()) {
+            cmp_type = le->a.type();
+        }
+
         auto rewrite = IRMatcher::rewriter(IRMatcher::h_and(value, lanes), op->type);
         if (rewrite(h_and(x || broadcast(y, arg_lanes), lanes), h_and(x, lanes) || broadcast(y, lanes)) ||
             rewrite(h_and(broadcast(x, arg_lanes) || y, lanes), h_and(y, lanes) || broadcast(x, lanes)) ||
@@ -208,20 +221,30 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
             rewrite(h_and(broadcast(x, arg_lanes), lanes), broadcast(x, lanes)) ||
             rewrite(h_and(broadcast(x, c0), lanes), broadcast(h_and(x, lanes / c0), c0), lanes % c0 == 0) ||
             rewrite(h_and(broadcast(x, c0), lanes), broadcast(h_and(x, 1), lanes), c0 >= lanes) ||
-            rewrite(h_and(ramp(x, y, arg_lanes) < broadcast(z, arg_lanes), 1),
-                    x + max(y * (arg_lanes - 1), 0) < z) ||
-            rewrite(h_and(ramp(x, y, arg_lanes) <= broadcast(z, arg_lanes), 1),
-                    x + max(y * (arg_lanes - 1), 0) <= z) ||
-            rewrite(h_and(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), 1),
-                    x < y + min(z * (arg_lanes - 1), 0)) ||
-            rewrite(h_and(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), 1),
-                    x <= y + min(z * (arg_lanes - 1), 0)) ||
+            (no_overflow(cmp_type) &&
+             (rewrite(h_and(ramp(x, y, arg_lanes) < broadcast(z, arg_lanes), 1),
+                      x + max(y * (arg_lanes - 1), 0) < z) ||
+              rewrite(h_and(ramp(x, y, arg_lanes) <= broadcast(z, arg_lanes), 1),
+                      x + max(y * (arg_lanes - 1), 0) <= z) ||
+              rewrite(h_and(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), 1),
+                      x < y + min(z * (arg_lanes - 1), 0)) ||
+              rewrite(h_and(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), 1),
+                      x <= y + min(z * (arg_lanes - 1), 0)))) ||
             false) {
             return mutate(rewrite.result, info);
         }
         break;
     }
     case VectorReduce::Or: {
+        // See the comment in the And case above: op->type is always Bool()
+        // here, so the overflow check needs the compared values' type instead.
+        Type cmp_type = op->type;
+        if (const LT *lt = value.as<LT>()) {
+            cmp_type = lt->a.type();
+        } else if (const LE *le = value.as<LE>()) {
+            cmp_type = le->a.type();
+        }
+
         auto rewrite = IRMatcher::rewriter(IRMatcher::h_or(value, lanes), op->type);
         if (rewrite(h_or(x || broadcast(y, arg_lanes), lanes), h_or(x, lanes) || broadcast(y, lanes)) ||
             rewrite(h_or(broadcast(x, arg_lanes) || y, lanes), h_or(y, lanes) || broadcast(x, lanes)) ||
@@ -230,15 +253,16 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
             rewrite(h_or(broadcast(x, arg_lanes), lanes), broadcast(x, lanes)) ||
             rewrite(h_or(broadcast(x, c0), lanes), broadcast(h_or(x, lanes / c0), c0), lanes % c0 == 0) ||
             rewrite(h_or(broadcast(x, c0), lanes), broadcast(h_or(x, 1), lanes), c0 >= lanes) ||
-            // type of arg_lanes is somewhat indeterminate
-            rewrite(h_or(ramp(x, y, arg_lanes) < broadcast(z, arg_lanes), 1),
-                    x + min(y * (arg_lanes - 1), 0) < z) ||
-            rewrite(h_or(ramp(x, y, arg_lanes) <= broadcast(z, arg_lanes), 1),
-                    x + min(y * (arg_lanes - 1), 0) <= z) ||
-            rewrite(h_or(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), 1),
-                    x < y + max(z * (arg_lanes - 1), 0)) ||
-            rewrite(h_or(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), 1),
-                    x <= y + max(z * (arg_lanes - 1), 0)) ||
+            (no_overflow(cmp_type) &&
+             // type of arg_lanes is somewhat indeterminate
+             (rewrite(h_or(ramp(x, y, arg_lanes) < broadcast(z, arg_lanes), 1),
+                      x + min(y * (arg_lanes - 1), 0) < z) ||
+              rewrite(h_or(ramp(x, y, arg_lanes) <= broadcast(z, arg_lanes), 1),
+                      x + min(y * (arg_lanes - 1), 0) <= z) ||
+              rewrite(h_or(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), 1),
+                      x < y + max(z * (arg_lanes - 1), 0)) ||
+              rewrite(h_or(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), 1),
+                      x <= y + max(z * (arg_lanes - 1), 0)))) ||
             false) {
             return mutate(rewrite.result, info);
         }
