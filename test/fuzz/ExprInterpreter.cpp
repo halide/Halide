@@ -94,7 +94,7 @@ ExprInterpreter::EvalValue ExprInterpreter::apply_unary(Type t, const EvalValue 
             },
             a.lanes[i]);
     }
-    res.did_overflow = a.did_overflow;
+    res.did_overflow |= a.did_overflow;
     return res;
 }
 
