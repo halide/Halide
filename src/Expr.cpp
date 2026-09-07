@@ -37,7 +37,12 @@ const IntImm *IntImm::make(Type t, int64_t value) {
     IntImm *node = new IntImm;
     node->type = t;
     node->value = value;
-    node->set_hash(combine_hash((uint32_t)((uint64_t)value >> 32), (uint32_t)value));
+    // Small values are extremely common, so a hash that just slices up the
+    // bits of the value (like combine_hash below) would put all the entropy
+    // for those in the low bits, which get discarded by set_hash. Multiply
+    // by a large odd constant and keep the high bits instead, which mixes
+    // in the low bits of the value even when the value itself is small.
+    node->set_hash((uint32_t)((((uint64_t)value) * 0x9e3779b97f4a7c15ULL) >> 32));
     return node;
 }
 
@@ -54,7 +59,9 @@ const UIntImm *UIntImm::make(Type t, uint64_t value) {
     UIntImm *node = new UIntImm;
     node->type = t;
     node->value = value;
-    node->set_hash(combine_hash((uint32_t)(value >> 32), (uint32_t)value));
+    // See the comment in IntImm::make about why we multiply rather than
+    // just slicing up the bits of the value.
+    node->set_hash((uint32_t)((value * 0x9e3779b97f4a7c15ULL) >> 32));
     return node;
 }
 
