@@ -342,8 +342,20 @@ protected:
     }
 
     Expr visit(const Call *op) override {
-        // We should not vectorize calls with side-effects
-        valid = valid && op->is_pure();
+        // We should not vectorize calls with side-effects.
+        //
+        // promise_clamped and unsafe_promise_clamped are rebuilt as impure
+        // intrinsics by the simplifier (see Simplify_Call.cpp), so that they do
+        // not get lifted out of the if they sit in. They have no side-effects
+        // though, and predicating them is safe: it turns the surrounding if
+        // into a mask on the load/store rather than moving the promise. Without
+        // this, a boundary condition written as
+        //   f(x) = branch(x >= 0 && x < w, in(unsafe_promise_clamped(x, ...)), 0)
+        // would scalarize instead of becoming a predicated load. Other passes
+        // whitelist these the same way (see Deinterleave.cpp).
+        valid = valid && (op->is_pure() ||
+                          op->is_intrinsic(Call::unsafe_promise_clamped) ||
+                          op->is_intrinsic(Call::promise_clamped));
         return IRMutator::visit(op);
     }
 
