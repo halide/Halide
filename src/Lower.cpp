@@ -1,4 +1,3 @@
-#include <algorithm>
 #include <chrono>
 #include <iomanip>
 #include <iostream>
@@ -99,16 +98,29 @@ class LoweringLogger {
     std::chrono::time_point<std::chrono::high_resolution_clock> last_time;
     const char *last_msg;
 
-    std::vector<std::pair<double, std::string>> timings;
     bool time_lowering_passes = false;
 
-#ifdef WITH_COMPILER_PROFILING
-    struct SimplifyPassStats {
+    struct PassStats {
         std::string msg;
-        uint64_t invocations, rewrites, peak_facts;
-    };
-    std::vector<SimplifyPassStats> simplify_stats;
+        double time_ms;
+#ifdef WITH_COMPILER_PROFILING
+        uint64_t simplify_invocations, simplify_rewrites, simplify_peak_facts;
 #endif
+    };
+    std::vector<PassStats> pass_stats;
+
+    void record_pass(double time_ms) {
+        PassStats p;
+        p.msg = last_msg;
+        p.time_ms = time_ms;
+#ifdef WITH_COMPILER_PROFILING
+        const auto &s = Profiling::simplifier_stats;
+        p.simplify_invocations = s.invocations;
+        p.simplify_rewrites = s.rewrites;
+        p.simplify_peak_facts = s.peak_facts;
+#endif
+        pass_stats.push_back(std::move(p));
+    }
 
 public:
     LoweringLogger() {
@@ -134,24 +146,16 @@ public:
 
     void end() {
         Profiling::generic_zone_end(last_msg);
-#ifdef WITH_COMPILER_PROFILING
-        const auto &s = Profiling::simplifier_stats;
-        simplify_stats.push_back({last_msg, s.invocations, s.rewrites, s.peak_facts});
-#endif
         auto t = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> diff = t - last_time;
-        timings.emplace_back(diff.count() * 1000, last_msg);
+        record_pass(diff.count() * 1000);
     }
 
     void end(const Stmt &s) {
         Profiling::generic_zone_end(last_msg);
-#ifdef WITH_COMPILER_PROFILING
-        const auto &stats = Profiling::simplifier_stats;
-        simplify_stats.push_back({last_msg, stats.invocations, stats.rewrites, stats.peak_facts});
-#endif
         auto t = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> diff = t - last_time;
-        timings.emplace_back(diff.count() * 1000, last_msg);
+        record_pass(diff.count() * 1000);
         if (!s.same_as(last_written)) {
             debug(2) << "Lowering after " << last_msg << "\n"
                      << s << "\n";
@@ -166,26 +170,29 @@ public:
     ~LoweringLogger() {
         if (time_lowering_passes) {
             double total = 0.0;
-            debug(0) << "Lowering pass runtimes:\n";
-            std::sort(timings.begin(), timings.end());
-            for (const auto &p : timings) {
-                total += p.first;
-                debug(0) << std::setw(10) << std::fixed << std::setprecision(3) << p.first << " ms : "
-                         << p.second << "\n";
-            }
-            debug(0) << std::setw(10) << std::fixed << std::setprecision(3) << total << " ms in total\n";
-        }
+            debug(0) << "Lowering pass stats:\n"
+                     << std::left << std::setw(52) << "Pass"
+                     << std::right << std::setw(12) << "Time (ms)"
 #ifdef WITH_COMPILER_PROFILING
-        if (time_lowering_passes) {
-            debug(0) << "Simplifier stats per lowering pass:\n";
-            for (const auto &p : simplify_stats) {
-                debug(0) << std::setw(10) << p.invocations << " invocations, "
-                         << std::setw(10) << p.rewrites << " rewrites, "
-                         << std::setw(10) << p.peak_facts << " peak facts : "
-                         << p.msg << "\n";
-            }
-        }
+                     << std::setw(14) << "Invocations"
+                     << std::setw(12) << "Rewrites"
+                     << std::setw(14) << "Peak facts"
 #endif
+                     << "\n";
+            for (const auto &p : pass_stats) {
+                total += p.time_ms;
+                debug(0) << std::left << std::setw(52) << p.msg
+                         << std::right << std::fixed << std::setprecision(3) << std::setw(12) << p.time_ms
+#ifdef WITH_COMPILER_PROFILING
+                         << std::setw(14) << p.simplify_invocations
+                         << std::setw(12) << p.simplify_rewrites
+                         << std::setw(14) << p.simplify_peak_facts
+#endif
+                         << "\n";
+            }
+            debug(0) << std::left << std::setw(52) << "Total"
+                     << std::right << std::fixed << std::setprecision(3) << std::setw(12) << total << "\n";
+        }
     }
 };
 
