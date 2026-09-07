@@ -121,6 +121,15 @@ public:
         timings.emplace_back(diff.count() * 1000, message);
     }
 
+    // For front-of-pipeline setup steps that run before there's an initial
+    // Stmt to pass to operator().
+    void mark_untimed_step(const string &message) {
+        auto t = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> diff = t - last_time;
+        last_time = t;
+        timings.emplace_back(diff.count() * 1000, message);
+    }
+
     ~LoweringLogger() {
         if (time_lowering_passes) {
             double total = 0.0;
@@ -147,28 +156,36 @@ void lower_impl(const vector<Function> &output_funcs,
                 Module &result_module) {
     size_t initial_lowered_function_count = result_module.functions().size();
 
+    // Timed from here so the front-of-pipeline setup steps below (which run
+    // before there's an initial Stmt to log) show up in HL_TIME_LOWERING_PASSES
+    // too, rather than being silently folded into process startup time.
+    LoweringLogger log;
+
     // Create a deep-copy of the entire graph of Funcs.
     auto [outputs, env] = deep_copy(output_funcs, build_environment(output_funcs));
+    log.mark_untimed_step("Lowering after deep-copying the Func graph");
 
     lower_target_query_ops(env, t);
 
     bool any_strict_float = strictify_float(env, t);
     result_module.set_any_strict_float(any_strict_float);
+    log.mark_untimed_step("Lowering after lowering target query ops and strictifying float");
 
     // Finalize all the LoopLevels
     for (auto &iter : env) {
         iter.second.lock_loop_levels();
     }
+    log.mark_untimed_step("Lowering after locking loop levels");
 
     // Compute a realization order and determine group of functions which loops
     // are to be fused together
     auto [order, fused_groups] = realization_order(outputs, env);
+    log.mark_untimed_step("Lowering after computing realization order");
 
     // Try to simplify the RHS/LHS of a function definition by propagating its
     // specializations' conditions
     simplify_specializations(env);
-
-    LoweringLogger log;
+    log.mark_untimed_step("Lowering after simplifying specializations");
 
     debug(1) << "Creating initial loop nests...\n";
     bool any_memoized = false;
