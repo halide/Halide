@@ -115,25 +115,15 @@ struct IRNode {
      */
     mutable RefCount ref_count;
 
-    /** Each IR node subclass has a unique identifier. We can compare
-     * these values to do runtime type identification. We don't
-     * compile with rtti because that injects run-time type
-     * identification stuff everywhere (and often breaks when linking
-     * external libraries compiled without it), and we only want it
-     * for IR nodes. One might want to put this value in the vtable,
-     * but that adds another level of indirection, and for Exprs we
-     * have 32 free bits in between the ref count and the Type field
-     * anyway, so we use them to also store a cheap hash of the node,
-     * packed into the same 32-bit word as the node type (see
-     * set_hash below). This doesn't increase the memory footprint of
-     * an IR node. The hash is filled in by the make() method of each
-     * Expr node from the hashes/values of its arguments (Stmt nodes
-     * leave the rest of the word zero). It's not a high-quality hash
-     * (e.g. it ignores the identity of any Buffer/Parameter
-     * arguments), but it's cheap enough that IREquality.h can use it
-     * as a fast pre-check before doing a full IR comparison, and it
-     * can be used as a hash table key elsewhere, so long as some hash
-     * collisions are tolerated. */
+    /** Each IR node subclass has a unique identifier. We can compare these
+     * values to do runtime type identification. We don't compile with rtti
+     * because that injects run-time type identification stuff everywhere (and
+     * often breaks when linking external libraries compiled without it), and we
+     * only want it for IR nodes. One might want to put this value in the
+     * vtable, but that adds another level of indirection, and for Exprs we have
+     * 32 free bits in between the ref count and the Type field anyway. We use
+     * the first 8 to store the node type, and the next 24 as a hash of the
+     * children of the node, to make syntactic comparisons faster. */
     union {
         IRNodeType node_type;
         uint32_t hash;
