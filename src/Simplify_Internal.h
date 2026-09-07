@@ -450,11 +450,6 @@ public:
     struct KnownBound {
         Expr a, b;
         ConstantInterval diff;
-        // The hashes of a and b. Equal Exprs hash alike, so a mismatch rules a
-        // record out without touching the Exprs at all. Almost every query is
-        // about a pair nothing is known about, so what this scan needs to be
-        // good at is saying no.
-        uint32_t hash_a = 0, hash_b = 0;
         // If set, a - b is known *not* to lie in diff, which is always a single
         // point. Only a != b (or !(a == b)) produces one of these.
         bool invert = false;

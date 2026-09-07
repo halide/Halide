@@ -187,10 +187,9 @@ void Simplify::ScopedFact::learn_difference(const Expr &a, const Expr &b,
         return;
     }
 
-    const uint32_t fa = pa->hash, fb = pb->hash;
-    simplify->add_difference_key(Simplify::difference_key(fa, fb));
+    simplify->add_difference_key(Simplify::difference_key(pa->hash, pb->hash));
     simplify->known_bounds.push_back(
-        Simplify::KnownBound{Expr(pa), Expr(pb), peeled, fa, fb, invert});
+        Simplify::KnownBound{Expr(pa), Expr(pb), peeled, invert});
 }
 
 void Simplify::ScopedFact::learn_false(const Expr &fact) {
@@ -670,11 +669,11 @@ ConstantInterval Simplify::known_difference(const BaseExprNode *a, const BaseExp
             return result;
         }
         for (const KnownBound &kb : known_bounds) {
-            // Reject on the hashes first. They live in the record, so a record
-            // about some other pair costs a pair of integer compares and never
-            // follows a pointer.
-            const bool same_order = (fa == kb.hash_a && fb == kb.hash_b);
-            const bool swapped = (fa == kb.hash_b && fb == kb.hash_a);
+            // Reject on the hashes first: a record about some other pair costs
+            // a pair of integer compares rather than a walk over two Exprs.
+            const uint32_t kba = kb.a.get()->hash, kbb = kb.b.get()->hash;
+            const bool same_order = (fa == kba && fb == kbb);
+            const bool swapped = (fa == kbb && fb == kba);
             if (!same_order && !swapped) {
                 continue;
             }
