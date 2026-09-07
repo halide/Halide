@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <iomanip>
 #include <iostream>
 #include <set>
@@ -178,29 +179,59 @@ public:
                 std::sort(pass_stats.begin(), pass_stats.end(),
                           [](const PassStats &a, const PassStats &b) { return a.time_ms < b.time_ms; });
             }
+
+            // Build the whole table in one DebugStream, so it appears as a
+            // single atomic write (matching what a single `debug(0) << ...;`
+            // statement would do), while still letting us check up front
+            // whether this particular destination can render ANSI colors.
+            DebugStream out_stream;
+            std::ostream &out = out_stream.stream();
+            bool colorize = stream_supports_ansi_colors(out);
+
+            // Color-scale the time column from green (fast) to red (slow),
+            // rescaled against the slowest pass only (no min-rescaling: a
+            // pass that takes close to zero time still reads as green,
+            // rather than everything being spread out relative to the
+            // fastest pass).
+            double max_time_ms = 0.0;
+            for (const auto &p : pass_stats) {
+                max_time_ms = std::max(max_time_ms, p.time_ms);
+            }
+            auto format_time = [&](double time_ms) {
+                std::ostringstream ss;
+                ss << std::right << std::fixed << std::setprecision(3) << std::setw(12) << time_ms;
+                if (!colorize || max_time_ms <= 0.0) {
+                    return ss.str();
+                }
+                double ratio = time_ms / max_time_ms;
+                int r = static_cast<int>(std::lround(ratio * 255.0));
+                int g = static_cast<int>(std::lround((1.0 - ratio) * 255.0));
+                return "\033[38;2;" + std::to_string(r) + ";" + std::to_string(g) + ";0m" + ss.str() + "\033[0m";
+            };
+
             double total = 0.0;
-            debug(0) << "Lowering pass stats:\n"
-                     << std::left << std::setw(52) << "Pass"
-                     << std::right << std::setw(12) << "Time (ms)"
+            out << "Lowering pass stats:\n"
+                << std::left << std::setw(60) << "Pass"
+                << std::right << std::setw(12) << "Time (ms)"
 #ifdef WITH_COMPILER_PROFILING
-                     << std::setw(14) << "Invocations"
-                     << std::setw(12) << "Rewrites"
-                     << std::setw(14) << "Peak facts"
+                << std::setw(14) << "Invocations"
+                << std::setw(12) << "Rewrites"
+                << std::setw(14) << "Peak facts"
 #endif
-                     << "\n";
+                << "\n";
             for (const auto &p : pass_stats) {
                 total += p.time_ms;
-                debug(0) << std::left << std::setw(52) << p.msg
-                         << std::right << std::fixed << std::setprecision(3) << std::setw(12) << p.time_ms
+                out << std::left << std::setw(60) << p.msg
+                    << format_time(p.time_ms)
 #ifdef WITH_COMPILER_PROFILING
-                         << std::setw(14) << p.simplify_invocations
-                         << std::setw(12) << p.simplify_rewrites
-                         << std::setw(14) << p.simplify_peak_facts
+                    << std::right << std::setw(14) << p.simplify_invocations
+                    << std::setw(12) << p.simplify_rewrites
+                    << std::setw(14) << p.simplify_peak_facts
 #endif
-                         << "\n";
+                    << "\n";
             }
-            debug(0) << std::left << std::setw(52) << "Total"
-                     << std::right << std::fixed << std::setprecision(3) << std::setw(12) << total << "\n";
+            out << std::left << std::setw(60) << "Total"
+                << std::right << std::fixed << std::setprecision(3) << std::setw(12) << total << "\n";
         }
     }
 };

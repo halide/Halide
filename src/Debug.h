@@ -46,6 +46,17 @@ enum class DebugStreamSink {
 };
 DebugStreamSink debug_stream_sink(std::ostream &os);
 
+/** Whether ANSI color escape codes should be emitted when writing to the
+ * given stream. Honors the HL_COLORS override (an explicit "1" forces
+ * colors on, any other explicit value forces them off); absent that,
+ * auto-detects based on whether the stream's underlying sink (stdout,
+ * stderr, or -- via debug_stream_sink -- whatever a DebugStream is
+ * currently routed to) is a color-capable terminal. A shared log file
+ * never auto-detects colors. Shared by IRPrinter and any other caller
+ * that wants its own ANSI-colored output to agree with debug/IR-printing
+ * output on whether colors are appropriate. */
+bool stream_supports_ansi_colors(std::ostream &os);
+
 /** Backs the debug() macro. Buffers everything written to it in memory, then
  * emits the whole statement's accumulated output as a single write when the
  * temporary is destroyed (i.e. at the end of the debug(n) << ...; statement).
