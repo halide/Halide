@@ -71,7 +71,7 @@ struct Context {
 inline Context ctx;
 
 inline ThreadTrace &init_thread_profiler() {
-    std::lock_guard<std::mutex> lock(ctx.mutex);
+    std::unique_lock<std::mutex> lock(ctx.mutex);
 
     // Hash thread ID to get a clean 32-bit integer for the Chrome UI
     uint32_t tid = static_cast<uint32_t>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
