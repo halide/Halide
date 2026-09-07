@@ -227,10 +227,14 @@ struct SimplifierStats {
     uint64_t rewrites = 0;
     uint64_t live_facts = 0;
     uint64_t peak_facts = 0;
+    uint64_t expr_nodes_visited = 0;
+    uint64_t stmt_nodes_visited = 0;
 
     void reset() {
         invocations = 0;
         rewrites = 0;
+        expr_nodes_visited = 0;
+        stmt_nodes_visited = 0;
         peak_facts = live_facts;
     }
 };
@@ -239,10 +243,6 @@ inline thread_local SimplifierStats simplifier_stats;
 
 inline void simplify_invoked() {
     simplifier_stats.invocations++;
-}
-
-inline void simplify_rewrote() {
-    simplifier_stats.rewrites++;
 }
 
 inline void simplify_fact_learned() {
@@ -274,8 +274,6 @@ inline void generic_zone_begin(const char *src_tag, unsigned data = 0) {
 inline void generic_zone_end(const char *src_tag, unsigned data = 0) {
 }
 inline void simplify_invoked() {
-}
-inline void simplify_rewrote() {
 }
 inline void simplify_fact_learned() {
 }

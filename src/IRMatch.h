@@ -3048,7 +3048,9 @@ struct Rewriter {
 #if HALIDE_DEBUG_MATCHED_RULES
             debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
 #endif
-            Profiling::simplify_rewrote();
+#if WITH_COMPILER_PROFILING
+            Profiling::simplifier_stats.rewrites++;
+#endif
             return true;
         } else {
 #if HALIDE_DEBUG_UNMATCHED_RULES
@@ -3067,7 +3069,9 @@ struct Rewriter {
 #if HALIDE_DEBUG_MATCHED_RULES
             debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
 #endif
-            Profiling::simplify_rewrote();
+#if WITH_COMPILER_PROFILING
+            Profiling::simplifier_stats.rewrites++;
+#endif
             return true;
         } else {
 #if HALIDE_DEBUG_UNMATCHED_RULES
@@ -3089,7 +3093,9 @@ struct Rewriter {
 #if HALIDE_DEBUG_MATCHED_RULES
             debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
 #endif
-            Profiling::simplify_rewrote();
+#if WITH_COMPILER_PROFILING
+            Profiling::simplifier_stats.rewrites++;
+#endif
             return true;
         } else {
 #if HALIDE_DEBUG_UNMATCHED_RULES
@@ -3121,7 +3127,9 @@ struct Rewriter {
 #if HALIDE_DEBUG_MATCHED_RULES
             debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
 #endif
-            Profiling::simplify_rewrote();
+#if WITH_COMPILER_PROFILING
+            Profiling::simplifier_stats.rewrites++;
+#endif
             return true;
         } else {
 #if HALIDE_DEBUG_UNMATCHED_RULES
@@ -3145,7 +3153,9 @@ struct Rewriter {
 #if HALIDE_DEBUG_MATCHED_RULES
             debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
 #endif
-            Profiling::simplify_rewrote();
+#if WITH_COMPILER_PROFILING
+            Profiling::simplifier_stats.rewrites++;
+#endif
             return true;
         } else {
 #if HALIDE_DEBUG_UNMATCHED_RULES
@@ -3171,7 +3181,9 @@ struct Rewriter {
 #if HALIDE_DEBUG_MATCHED_RULES
             debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
 #endif
-            Profiling::simplify_rewrote();
+#if WITH_COMPILER_PROFILING
+            Profiling::simplifier_stats.rewrites++;
+#endif
             return true;
         } else {
 #if HALIDE_DEBUG_UNMATCHED_RULES

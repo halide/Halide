@@ -106,7 +106,11 @@ class LoweringLogger {
         std::string msg;
         double time_ms;
 #ifdef WITH_COMPILER_PROFILING
-        uint64_t simplify_invocations, simplify_rewrites, simplify_peak_facts;
+        uint64_t simplify_invocations;
+        uint64_t simplify_rewrites;
+        uint64_t simplify_peak_facts;
+        uint64_t simplify_expr_nodes_visited;
+        uint64_t simplify_stmt_nodes_visited;
 #endif
     };
     std::vector<PassStats> pass_stats;
@@ -120,6 +124,8 @@ class LoweringLogger {
         p.simplify_invocations = s.invocations;
         p.simplify_rewrites = s.rewrites;
         p.simplify_peak_facts = s.peak_facts;
+        p.simplify_expr_nodes_visited = s.expr_nodes_visited;
+        p.simplify_stmt_nodes_visited = s.stmt_nodes_visited;
 #endif
         pass_stats.push_back(std::move(p));
     }
@@ -214,24 +220,50 @@ public:
                 << std::left << std::setw(60) << "Pass"
                 << std::right << std::setw(12) << "Time (ms)"
 #ifdef WITH_COMPILER_PROFILING
-                << std::setw(14) << "Invocations"
-                << std::setw(12) << "Rewrites"
-                << std::setw(14) << "Peak facts"
+                << std::setw(8) << "#Simfy"
+                << std::setw(8) << "#SfyRW"
+                << std::setw(8) << "MaxFact"
+                << std::setw(8) << "ExprVst"
+                << std::setw(8) << "StmtVst"
 #endif
                 << "\n";
+#ifdef WITH_COMPILER_PROFILING
+            uint64_t total_simplify_invocations = 0;
+            uint64_t total_simplify_rewrites = 0;
+            uint64_t overall_peak_facts = 0;
+            uint64_t total_simplify_expr_nodes_visited = 0;
+            uint64_t total_simplify_stmt_nodes_visited = 0;
+#endif
             for (const auto &p : pass_stats) {
                 total += p.time_ms;
+#ifdef WITH_COMPILER_PROFILING
+                total_simplify_invocations += p.simplify_invocations;
+                total_simplify_rewrites += p.simplify_rewrites;
+                total_simplify_expr_nodes_visited += p.simplify_expr_nodes_visited;
+                total_simplify_stmt_nodes_visited += p.simplify_stmt_nodes_visited;
+                overall_peak_facts = std::max(overall_peak_facts, p.simplify_peak_facts);
+#endif
                 out << std::left << std::setw(60) << p.msg
                     << format_time(p.time_ms)
 #ifdef WITH_COMPILER_PROFILING
-                    << std::right << std::setw(14) << p.simplify_invocations
-                    << std::setw(12) << p.simplify_rewrites
-                    << std::setw(14) << p.simplify_peak_facts
+                    << std::right << std::setw(8) << p.simplify_invocations
+                    << std::setw(8) << p.simplify_rewrites
+                    << std::setw(8) << p.simplify_peak_facts
+                    << std::setw(8) << p.simplify_expr_nodes_visited
+                    << std::setw(8) << p.simplify_stmt_nodes_visited
 #endif
                     << "\n";
             }
             out << std::left << std::setw(60) << "Total"
-                << std::right << std::fixed << std::setprecision(3) << std::setw(12) << total << "\n";
+                << std::right << std::fixed << std::setprecision(3) << std::setw(12) << total
+#ifdef WITH_COMPILER_PROFILING
+                << std::setw(8) << total_simplify_invocations
+                << std::setw(8) << total_simplify_rewrites
+                << std::setw(8) << overall_peak_facts
+                << std::setw(8) << total_simplify_expr_nodes_visited
+                << std::setw(8) << total_simplify_stmt_nodes_visited
+#endif
+                << "\n";
         }
     }
 };
@@ -246,8 +278,6 @@ void lower_impl(const vector<Function> &output_funcs,
                 const vector<IRMutator *> &custom_passes,
                 Module &result_module) {
     ZoneScoped;
-    auto time_start = std::chrono::high_resolution_clock::now();
-
     size_t initial_lowered_function_count = result_module.functions().size();
 
     // Create a deep-copy of the entire graph of Funcs.
