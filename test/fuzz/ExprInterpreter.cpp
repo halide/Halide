@@ -234,71 +234,93 @@ void ExprInterpreter::visit(const Cast *op) {
     });
 }
 
+namespace {
+
+// Reinterpret operates at the bit level, and lane types can be narrower than
+// a byte (e.g. UInt(1) mask vectors), so lanes aren't necessarily byte
+// aligned. These helpers pack/unpack values a bit at a time (LSB first)
+// instead of assuming every lane starts on a byte boundary.
+void write_bits(std::vector<uint8_t> &buf, size_t bit_offset, int nbits, uint64_t value) {
+    for (int b = 0; b < nbits; b++) {
+        size_t bit = bit_offset + b;
+        size_t byte_idx = bit / 8;
+        int bit_idx = bit % 8;
+        uint8_t bitval = (value >> b) & 1;
+        buf[byte_idx] = (buf[byte_idx] & ~(uint8_t(1) << bit_idx)) | (bitval << bit_idx);
+    }
+}
+
+uint64_t read_bits(const std::vector<uint8_t> &buf, size_t bit_offset, int nbits) {
+    uint64_t value = 0;
+    for (int b = 0; b < nbits; b++) {
+        size_t bit = bit_offset + b;
+        size_t byte_idx = bit / 8;
+        int bit_idx = bit % 8;
+        uint64_t bitval = (buf[byte_idx] >> bit_idx) & 1;
+        value |= (bitval << b);
+    }
+    return value;
+}
+
+}  // namespace
+
 void ExprInterpreter::visit(const Reinterpret *op) {
     EvalValue val = eval(op->value);
     result = EvalValue(op->type);
+    result.did_overflow = val.did_overflow;
 
     int in_lanes = val.type.lanes();
     int in_bits = val.type.bits();
-    int in_bytes = in_bits / 8;
 
     int out_lanes = op->type.lanes();
     int out_bits = op->type.bits();
-    int out_bytes = out_bits / 8;
 
-    int total_bytes = std::max(1, (in_bits * in_lanes) / 8);
-    if (in_bytes == 0) {
-        in_bytes = 1;
-    }
-    if (out_bytes == 0) {
-        out_bytes = 1;
-    }
+    size_t total_bits = (size_t)in_bits * in_lanes;
+    internal_assert(total_bits == (size_t)out_bits * out_lanes)
+        << "Reinterpret between types of different total bit width.";
 
-    std::vector<char> buffer(total_bytes, 0);
+    std::vector<uint8_t> buffer((total_bits + 7) / 8, 0);
 
     for (int j = 0; j < in_lanes; j++) {
-        char *dst = buffer.data() + j * in_bytes;
         std::visit(
             [&](auto x) {
                 if constexpr (std::is_floating_point_v<decltype(x)>) {
+                    uint64_t bits = 0;
                     if (in_bits == 32) {
                         float f = static_cast<float>(x);
-                        std::memcpy(dst, &f, 4);
+                        std::memcpy(&bits, &f, 4);
                     } else if (in_bits == 64) {
-                        std::memcpy(dst, &x, 8);
+                        std::memcpy(&bits, &x, 8);
                     } else {
                         internal_error << "Unsupported float bit width in Reinterpret input";
                     }
+                    write_bits(buffer, (size_t)j * in_bits, in_bits, bits);
                 } else {
                     uint64_t u = static_cast<uint64_t>(x);
-                    std::memcpy(dst, &u, in_bytes);
+                    write_bits(buffer, (size_t)j * in_bits, in_bits, u);
                 }
             },
             val.lanes[j]);
     }
 
     for (int j = 0; j < out_lanes; j++) {
-        const char *src = buffer.data() + j * out_bytes;
+        uint64_t bits = read_bits(buffer, (size_t)j * out_bits, out_bits);
         if (op->type.is_float()) {
             if (out_bits == 32) {
                 float f = 0.0f;
-                std::memcpy(&f, src, 4);
+                std::memcpy(&f, &bits, 4);
                 result.lanes[j] = static_cast<double>(f);
             } else if (out_bits == 64) {
                 double f = 0.0;
-                std::memcpy(&f, src, 8);
+                std::memcpy(&f, &bits, 8);
                 result.lanes[j] = f;
             } else {
                 internal_error << "Unsupported float bit width in Reinterpret output";
             }
         } else if (op->type.is_int()) {
-            uint64_t u = 0;
-            std::memcpy(&u, src, out_bytes);
-            result.lanes[j] = static_cast<int64_t>(u);
+            result.lanes[j] = static_cast<int64_t>(bits);
         } else {
-            uint64_t u = 0;
-            std::memcpy(&u, src, out_bytes);
-            result.lanes[j] = u;
+            result.lanes[j] = bits;
         }
     }
 }
