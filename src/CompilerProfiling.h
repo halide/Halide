@@ -39,9 +39,9 @@ inline uint64_t performance_counter() {
 struct Event {
     const char *src_tag;
     uint32_t timer;
-    uint8_t event_type : 1;  // 0 for Start, 1 for Stop
+    uint32_t event_type : 1;  // 0 for Start, 1 for Stop
 
-    enum Tag : uint8_t {
+    enum Tag : uint32_t {
         Generic,
         Visitor,
     } tag : 1;
