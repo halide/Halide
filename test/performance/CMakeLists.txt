@@ -15,9 +15,9 @@ tests(
     clamped_vector_load.cpp
     const_division.cpp
     device_copy.cpp
+    fast_function_approximations.cpp
     fast_inverse.cpp
     fast_pow.cpp
-    fast_sine_cosine.cpp
     gpu_half_throughput.cpp
     interleave.cpp
     irmatch_throughput.cpp

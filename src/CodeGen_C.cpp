@@ -456,6 +456,13 @@ extern "C" {
 }
 
 string CodeGen_C::print_type(Type type, AppendSpaceIfNeeded space_option) {
+    if (type == Float(16) && !float16_datatype.empty()) {
+        std::string result = float16_datatype;
+        if (space_option == AppendSpace) {
+            result += " ";
+        }
+        return result;
+    }
     return type_to_c_type(type, space_option == AppendSpace);
 }
 
@@ -1550,28 +1557,83 @@ void CodeGen_C::visit(const StringImm *op) {
 }
 
 void CodeGen_C::visit(const FloatImm *op) {
-    if (std::isnan(op->value)) {
-        id = "nan_f32()";
-    } else if (std::isinf(op->value)) {
-        if (op->value > 0) {
-            id = "inf_f32()";
+    if (op->type == Float(16) && !float16_datatype.empty()) {
+        float16_t f(op->value);
+        if (f.is_nan()) {
+            id = "nan_f16()";
+        } else if (f.is_infinity()) {
+            if (!f.is_negative()) {
+                id = "inf_f16()";
+            } else {
+                id = "neg_inf_f16()";
+            }
         } else {
-            id = "neg_inf_f32()";
+            ostringstream oss;
+            if (floating_point_style == FloatingPointStyle::SCIENTIFIC) {
+                oss.precision(std::numeric_limits<float>::digits10 + 1);
+                oss << std::scientific << op->value << "h";
+            } else {
+                // Note: hexfloat not supported by std::ostream for f16.
+                // Write the constant as reinterpreted uint to avoid any bits lost in conversion.
+                oss << "half_from_bits(" << f.to_bits() << " /* " << float(f) << " */)";
+            }
+            print_assignment(op->type, oss.str());
+        }
+    } else if (op->type == Float(32)) {
+        if (std::isnan(op->value)) {
+            id = "nan_f32()";
+        } else if (std::isinf(op->value)) {
+            if (op->value > 0) {
+                id = "inf_f32()";
+            } else {
+                id = "neg_inf_f32()";
+            }
+        } else {
+            // Write the constant as reinterpreted uint to avoid any bits lost in conversion.
+            ostringstream oss;
+            if (floating_point_style == FloatingPointStyle::SCIENTIFIC) {
+                oss.precision(std::numeric_limits<float>::digits10 + 1);
+                oss << std::scientific << op->value << "f";
+            } else if (floating_point_style == FloatingPointStyle::HEXFLOAT) {
+                oss << std::hexfloat << float(op->value);
+            } else if (floating_point_style == FloatingPointStyle::CONVERT_FROM_BITS) {
+                union {
+                    uint32_t as_uint;
+                    float as_float;
+                } u;
+                u.as_float = op->value;
+                oss << "float_from_bits(" << u.as_uint << " /* " << u.as_float << " */)";
+            }
+            print_assignment(op->type, oss.str());
+        }
+    } else if (op->type == Float(64)) {
+        if (std::isnan(op->value)) {
+            id = "nan_f64()";
+        } else if (std::isinf(op->value)) {
+            if (op->value > 0) {
+                id = "inf_f64()";
+            } else {
+                id = "neg_inf_f64()";
+            }
+        } else {
+            ostringstream oss;
+            if (floating_point_style == FloatingPointStyle::SCIENTIFIC) {
+                oss.precision(std::numeric_limits<double>::digits10 + 1);
+                oss << std::scientific << op->value << "f";
+            } else if (floating_point_style == FloatingPointStyle::HEXFLOAT) {
+                oss << std::hexfloat << op->value;
+            } else if (floating_point_style == FloatingPointStyle::CONVERT_FROM_BITS) {
+                union {
+                    uint64_t as_uint;
+                    double as_double;
+                } u;
+                u.as_double = op->value;
+                oss << "double_from_bits(" << u.as_uint << " /* " << u.as_double << " */)";
+            }
+            print_assignment(op->type, oss.str());
         }
     } else {
-        // Write the constant as reinterpreted uint to avoid any bits lost in conversion.
-        union {
-            uint32_t as_uint;
-            float as_float;
-        } u;
-        u.as_float = op->value;
-
-        ostringstream oss;
-        if (op->type.bits() == 64) {
-            oss << "(double) ";
-        }
-        oss << "float_from_bits(" << u.as_uint << " /* " << u.as_float << " */)";
-        print_assignment(op->type, oss.str());
+        internal_error << "Unsupported float type in C: " << op->type;
     }
 }
 

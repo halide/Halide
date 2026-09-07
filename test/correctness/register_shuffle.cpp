@@ -542,9 +542,9 @@ int main(int argc, char **argv) {
     {
         // Test a case that caused combinatorial explosion
         Var x;
-        Expr e = x;
+        Expr e = cast<float>(x);
         for (int i = 0; i < 10; i++) {
-            e = fast_pow(e, e + 1);
+            e = fast_pow(e, e + 1, Halide::ApproximationPrecision::poly_mae(6));
         }
 
         Func f;

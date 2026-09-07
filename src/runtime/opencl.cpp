@@ -633,22 +633,34 @@ WEAK cl_program compile_kernel(void *user_context, cl_context ctx, const char *s
             }
         };
 
+        cl_int err_log;
         // Allocate an appropriately sized buffer for the build log.
         // (Don't even try to use the stack, we may be on a stack-constrained OS.)
-        constexpr size_t build_log_size = 16384;
+        size_t build_log_size = 16384;
+        err_log = clGetProgramBuildInfo(program, dev, CL_PROGRAM_BUILD_LOG, 0, nullptr, &build_log_size);
+        if (err_log != CL_SUCCESS) {
+            error(user_context) << "CL: clBuildProgram failed: " << get_opencl_error_name(err)
+                                << "\nUnable to retrieve build log: " << get_opencl_error_name(err_log) << "\n";
+            return nullptr;
+        }
         Alloc alloc(build_log_size);
 
         const char *log = (const char *)alloc.mem;
-        if (!alloc.mem || clGetProgramBuildInfo(program, dev,
-                                                CL_PROGRAM_BUILD_LOG,
-                                                build_log_size,
-                                                alloc.mem,
-                                                nullptr) != CL_SUCCESS) {
-            log = "(Unable to get build log)";
+        if (!alloc.mem) {
+            log = "(Unable to allocate memory for build log)";
+        } else {
+            err_log = clGetProgramBuildInfo(program, dev, CL_PROGRAM_BUILD_LOG,
+                                            build_log_size, alloc.mem, nullptr);
+            if (err_log != CL_SUCCESS) {
+                error(user_context) << "CL: clBuildProgram failed: " << get_opencl_error_name(err)
+                                    << "\nUnable to retrieve build log: " << get_opencl_error_name(err_log) << "\n";
+                return nullptr;
+            }
         }
 
-        error(user_context) << "CL: clBuildProgram failed: "
-                            << get_opencl_error_name(err)
+        halide_print(user_context, "OpenCL compilation log:");
+        halide_print(user_context, log);
+        error(user_context) << "CL: clBuildProgram failed: " << get_opencl_error_name(err)
                             << "\nBuild Log:\n"
                             << log << "\n";
         return nullptr;

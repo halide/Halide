@@ -95,6 +95,7 @@ tests(
     deinterleave4.cpp
     deinterleave_lets.cpp
     deinterleave_vector.cpp
+    determine_fast_function_approximation_metrics.cpp
     device_buffer_copies_with_profile.cpp
     device_buffer_copy.cpp
     device_copy_at_inner_loop.cpp
@@ -126,6 +127,7 @@ tests(
     extract_concat_bits.cpp
     failed_unroll.cpp
     fallback_vscale_sve.cpp
+    fast_function_approximations.cpp
     fast_trigonometric.cpp
     fibonacci.cpp
     fit_function.cpp

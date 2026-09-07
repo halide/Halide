@@ -57,6 +57,7 @@ protected:
         CodeGen_WGSL(std::ostream &s, Target t)
             : CodeGen_GPU_C(s, t) {
             vector_declaration_style = VectorDeclarationStyle::WGSLSyntax;
+            float16_datatype = "f16";
             abs_returns_unsigned_type = false;
 
 #define alias(x, y)                         \
@@ -582,30 +583,10 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const UIntImm *op) {
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const FloatImm *op) {
-    string rhs;
-    if (std::isnan(op->value)) {
-        rhs = "0x7FFFFFFF";
-    } else if (std::isinf(op->value)) {
-        if (op->value > 0) {
-            rhs = "0x7F800000";
-        } else {
-            rhs = "0xFF800000";
-        }
-    } else {
-        // Write the constant as reinterpreted uint to avoid any bits lost in
-        // conversion.
-        union {
-            uint32_t as_uint;
-            float as_float;
-        } u;
-        u.as_float = op->value;
-
-        ostringstream oss;
-        oss << "float_from_bits("
-            << u.as_uint << "u /* " << u.as_float << " */)";
-        rhs = oss.str();
+    if (op->type == Float(16)) {
+        internal_error << "WGSL fp16 supported not implemented in Halide yet.";
     }
-    print_assignment(op->type, rhs);
+    CodeGen_C::visit(op);
 }
 
 namespace {
