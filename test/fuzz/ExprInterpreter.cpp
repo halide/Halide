@@ -613,12 +613,12 @@ void ExprInterpreter::visit(const VectorReduce *op) {
                         switch (op->op) {
                         case VectorReduce::Add:
                             if (check_overflow) {
-                                result.did_overflow = add_would_overflow(bits, a, b);
+                                result.did_overflow |= add_would_overflow(bits, a, b);
                             }
                             return a + b;
                         case VectorReduce::Mul:
                             if (check_overflow) {
-                                result.did_overflow = mul_would_overflow(bits, a, b);
+                                result.did_overflow |= mul_would_overflow(bits, a, b);
                             }
                             return a * b;
                         case VectorReduce::Min:
