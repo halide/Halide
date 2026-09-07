@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <chrono>
 #include <iomanip>
 #include <iostream>
@@ -122,10 +123,14 @@ class LoweringLogger {
         pass_stats.push_back(std::move(p));
     }
 
+    bool sort_by_time = false;
+
 public:
     LoweringLogger() {
         static bool should_time = !get_env_variable("HL_TIME_LOWERING_PASSES").empty();
         time_lowering_passes = should_time;
+        static bool should_sort = !get_env_variable("HL_SORT_LOWERING_PASSES").empty();
+        sort_by_time = should_sort;
     }
 
     void begin(const char *msg) {
@@ -169,6 +174,10 @@ public:
 
     ~LoweringLogger() {
         if (time_lowering_passes) {
+            if (sort_by_time) {
+                std::sort(pass_stats.begin(), pass_stats.end(),
+                          [](const PassStats &a, const PassStats &b) { return a.time_ms < b.time_ms; });
+            }
             double total = 0.0;
             debug(0) << "Lowering pass stats:\n"
                      << std::left << std::setw(52) << "Pass"
