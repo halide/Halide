@@ -1,0 +1,81 @@
+/* Captured tutorial output (tutorial_website/render.py's "Show output"
+   dropdowns) wraps plain text in a bare <pre>. pydata-sphinx-theme's own
+   generic `pre` styling (background/border/padding, normally meant for
+   un-highlighted literal blocks) doubles up visually with sphinx-design's
+   card styling already wrapping it, so it's suppressed here. */
+.sd-card-body pre {
+    background: none;
+    border: none;
+    margin: 0;
+    padding: 0;
+}
+
+/* Tutorial pages' C++/Python tab-set (tutorial_website/render.py, wrapped in
+   a "lesson-tabs" div precisely so these rules don't affect any other
+   tab-set that might get added elsewhere on the site later). Both sphinx-
+   design's own defaults *and* pydata-sphinx-theme's own, more specific
+   ".bd-content .sd-tab-set ..." overrides (border/background/padding
+   boxing in the content pane, an underlined-label tab strip) need
+   overriding here, and the theme's rules include a bare element selector
+   (e.g. "label") that makes them win on specificity over an equivalent
+   ".lesson-tabs"-scoped rule even when loaded later -- so every rule in
+   this block uses `!important` rather than relying on specificity/load
+   order to beat them. Labels are restyled as plain buttons; the content
+   pane's border/background/padding are dropped entirely. */
+.lesson-tabs .sd-tab-set > label {
+    background: transparent !important;
+    border: 1px solid var(--pst-color-border) !important;
+    border-radius: 0.25rem !important;
+    padding: 0.25rem 0.75rem !important;
+    margin: 0 0.35rem 0.5rem 0 !important;
+    line-height: normal !important;
+    transform: none !important;
+}
+
+.lesson-tabs .sd-tab-set > input:checked + label {
+    background: var(--pst-color-accent-bg) !important;
+    border-color: var(--pst-color-accent) !important;
+    color: var(--pst-color-accent) !important;
+}
+
+.lesson-tabs .sd-tab-set > input:not(:checked) + label:hover {
+    border-color: var(--pst-color-accent) !important;
+    color: inherit !important;
+    text-decoration: none !important;
+}
+
+.lesson-tabs .sd-tab-content {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+}
+
+/* Applied synchronously by the inline script render.py emits just before
+   this tab-set, from sessionStorage, before design-tabs.js's own
+   DOMContentLoaded handler gets a chance to run -- without this, a reader
+   who chose Python sees a flash of the (statically `checked`-in-markup) C++
+   tab on every page load before JS switches it over. These also need
+   `!important`, for the same reason as above: the actual radio input is
+   still `checked` for C++ at this point, so this is overriding the
+   *display*, ahead of the checked state catching up, not just relying on
+   which selector is "more checked." */
+html.pref-python .lesson-tabs .sd-tab-content {
+    display: none !important;
+}
+
+html.pref-python .lesson-tabs label[data-sync-id="python"] + .sd-tab-content {
+    display: block !important;
+}
+
+html.pref-python .lesson-tabs label[data-sync-id="cpp"] {
+    background: transparent !important;
+    border-color: var(--pst-color-border) !important;
+    color: inherit !important;
+}
+
+html.pref-python .lesson-tabs label[data-sync-id="python"] {
+    background: var(--pst-color-accent-bg) !important;
+    border-color: var(--pst-color-accent) !important;
+    color: var(--pst-color-accent) !important;
+}

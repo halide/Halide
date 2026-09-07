@@ -3,18 +3,12 @@
 // This lesson demonstrates how to follow what Halide is doing at runtime.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_04*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_04 -std=c++17
-// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_04
+// g++ lesson_04*.cpp -g -I <path/to/include> -L <path/to/lib> -lHalide -lpthread -ldl -o lesson_04 -std=c++17
+// LD_LIBRARY_PATH=<path/to/lib> ./lesson_04
 
-// On os x:
-// g++ lesson_04*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_04 -std=c++17
-// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_04
-
-// If you have the entire Halide source tree, you can also build it by
-// running:
-//    make tutorial_lesson_04_debugging_2
-// in a shell with the current directory at the top of the halide
-// source tree.
+// On macOS:
+// g++ lesson_04*.cpp -g -I <path/to/include> -L <path/to/lib> -lHalide -o lesson_04 -std=c++17
+// DYLD_LIBRARY_PATH=<path/to/lib> ./lesson_04
 
 #include "Halide.h"
 #include <cstdio>
@@ -56,16 +50,15 @@ int main() {
         // that describes the algorithm.
 
         // Now we tell Halide to use a parallel for loop over the y
-        // coordinate. On Linux we run this using a thread pool and a task
-        // queue. On OS X we call into grand central dispatch, which does
-        // the same thing for us.
+        // coordinate. Halide's runtime maintains its own pool of worker
+        // threads and a task queue.
         parallel_gradient.parallel(y);
 
         // This time the printfs should come out of order, because each
         // scanline is potentially being processed in a different
         // thread. The number of threads should adapt to your system, but
-        // on linux you can control it manually using the environment
-        // variable HL_NUM_THREADS.
+        // you can control it manually using the environment variable
+        // HL_NUM_THREADS.
         printf("\nEvaluating parallel_gradient\n");
         parallel_gradient.realize({8, 8});
     }

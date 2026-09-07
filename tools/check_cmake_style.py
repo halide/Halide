@@ -49,6 +49,11 @@ SPECIAL_PATTERNS: list[tuple[re.Pattern[str], str]] = [
         "cmake_policy(... OLD) is deprecated; fix code for new policy",
     ),
     (
+        re.compile(r"\bconfigure_file\s*\([^)]*\bCOPYONLY\b", re.IGNORECASE),
+        "configure_file(... COPYONLY) forces a reconfigure on change; use file(COPY_FILE ...), "
+        "add_custom_command with copy_if_different, or reference the source path directly",
+    ),
+    (
         re.compile(r"\binclude\s*\(\s*FetchContent\s*\)", re.IGNORECASE),
         "include(FetchContent) is prohibited; use find_package instead",
     ),

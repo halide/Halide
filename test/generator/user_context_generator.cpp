@@ -18,10 +18,6 @@ public:
 
         output.parallel(y);
         trace_pipeline();
-
-        // This test won't work in the profiler, because the profiler
-        // insists on calling malloc with nullptr user context.
-        assert(!get_target().has_feature(Target::Profile));
     }
 };
 

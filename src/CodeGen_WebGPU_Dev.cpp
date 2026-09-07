@@ -410,7 +410,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Allocate *op) {
-    if (op->memory_type == MemoryType::GPUShared) {
+    if (is_gpu_shared(op->memory_type)) {
         internal_assert(!workgroup_allocations.count(op->name));
         workgroup_allocations.insert({op->name, op});
         op->body.accept(this);

@@ -54,9 +54,9 @@ constexpr int max_intrinsic_args = 4;
 
 struct WasmIntrinsic {
     const char *intrin_name;
-    halide_type_t ret_type;
+    Type ret_type;
     const char *name;
-    halide_type_t arg_types[max_intrinsic_args];
+    Type arg_types[max_intrinsic_args];
     Target::Feature feature = Target::FeatureEnd;
 };
 
@@ -124,8 +124,8 @@ void CodeGen_WebAssembly::init_module() {
         Type ret_type = i.ret_type;
         vector<Type> arg_types;
         arg_types.reserve(max_intrinsic_args);
-        for (halide_type_t i : i.arg_types) {
-            if (i.bits == 0) {
+        for (const Type &i : i.arg_types) {
+            if (i.bits() == 0) {
                 break;
             }
             arg_types.emplace_back(i);

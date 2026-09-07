@@ -27,8 +27,10 @@ int main(int argc, char **argv) {
         im(pos) *= 3;
     });
 
-    im.for_each_element([&](int x, int y) {
-        for (int c = 0; c < 3; c++) {
+    // Slice off a channel to get a two-dimensional domain to iterate
+    // over, then handle all channels inside the callable.
+    im.sliced(2, im.dim(2).min()).for_each_element([&](int x, int y) {
+        for (int c : im.dim(2)) {
             int correct = (10 * x + 5 * y + c) * 3;
             if (im(x, y, c) != correct) {
                 printf("im(%d, %d, %d) = %d instead of %d\n",

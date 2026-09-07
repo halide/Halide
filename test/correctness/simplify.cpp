@@ -224,6 +224,14 @@ void check_algebra() {
     check(x * y + z * x, (y + z) * x);
     check(y * x + x * z, (y + z) * x);
     check(y * x + z * x, (y + z) * x);
+    check((x - y) * z + (y * z + w), x * z + w);
+    check((x - y) * z + (w + y * z), x * z + w);
+    check((x - y) * z + (y * z - w), x * z - w);
+    // The same cancellation reached by hoisting the common factor instead.
+    check((x - y) * z + y * z, x * z);
+    // The shape this comes up in: an index whose dimensions have a term
+    // shuffled between them, which cancels once the factors are distributed.
+    check(((y * 8 - z) * 16 + (z * 16 + x)) * 4, (y * 128 + x) * 4);
 
     check(x - 0, x);
     check((x / y) - (x / y), 0);
@@ -430,6 +438,14 @@ void check_algebra() {
     check((y - 8) % 4, y % 4);
     check((y - x * 8) % 4, y % 4);
     check((x * 8 - y) % 4, (-y) % 4);
+    check((x + 31) % 32 == 31, x % 32 == 0);
+    check((x - 1) % 32 == 31, x % 32 == 0);
+    // A remainder lies in [0, |c|), for negative divisors too
+    check((x + 3) % 14 == 1, x % 14 == 12);
+    check((x + 3) % -14 == 1, x % -14 == 12);
+    check((x + 3) % 14 == -1, f);
+    check((x + 3) % 14 == 20, f);
+    check((x + 3) % -14 == -1, f);
 
     // Check an optimization important for fusing dimensions
     check((x / 3) * 3 + x % 3, x);
@@ -559,6 +575,22 @@ void check_algebra() {
     // The condition is enough to imply that y == 21, x == 339
     check(require(complex_cond, select(x % 2 == 0, 1237, y)),
           require(complex_cond, 21));
+
+    // Regrouping a shared addend
+    check(min(min(x, y + z), (w + z) + v), min(min(v + w, y) + z, x));
+    check(max(max(x, y + z), (w + z) + v), max(max(v + w, y) + z, x));
+
+    // A shared term that appears with both signs
+    check(min(x - y, x + z), x - max(0 - z, y));
+    check(max(x - y, x + z), x - min(0 - z, y));
+
+    // Clamped differences
+    check(min(min(x, y) - x, 0), min(y - x, 0));
+    check(max(max(x, y) - x, 0), max(y - x, 0));
+    check(min(min(x, 5) - min(y, 3), 2), min(x - min(y, 3), 2));
+    check(max(max(x, 3) - max(y, 5), 2), max(x - max(y, 5), 2));
+    check(max(min(x + (-3), y), x), x);
+    check(max(max((y + (-2)) / 4, x) * 4, y + 1), max(x * 4, y + 1));
 }
 
 void check_vectors() {
@@ -605,6 +637,26 @@ void check_vectors() {
     // Ramp-combining should also work in the presence of well-defined overflow
     check(ramp(ramp(cast<uint8_t>(x), cast<uint8_t>(-1), 4), cast(UInt(8, 4), -4), 3),
           ramp(cast<uint8_t>(x), cast<uint8_t>(-1), 12));
+
+    // Dividing a nested vector by a broadcast should give the same answer as
+    // dividing the equivalent flat one, even though the lanes are laid out
+    // differently.
+    check(ramp(broadcast(x * 16, 16), broadcast(1, 16), 16) / broadcast(16, 256),
+          broadcast(x, 256));
+    check(broadcast(ramp(broadcast(x * 16, 16), broadcast(1, 16), 16), 16) / broadcast(16, 4096),
+          broadcast(x, 4096));
+    check(broadcast(ramp(x, 1, 4), 2) / broadcast(y, 8),
+          broadcast(ramp(x, 1, 4) / broadcast(y, 4), 2));
+
+    // An affine base works too, as long as the offset leaves room within its
+    // own multiple of the denominator for the rest of the ramp.
+    check(ramp(x * 16 + 4, 1, 4) / broadcast(16, 4), broadcast(x, 4));
+    check(ramp(x * 16 - 4, 1, 4) / broadcast(16, 4), broadcast(x + (-1), 4));
+    check(ramp(broadcast(x * 16 + 4, 16), broadcast(1, 16), 4) / broadcast(16, 64),
+          broadcast(x, 64));
+    // ... but not when it spills over into the next one.
+    check(ramp(x * 16 + 14, 1, 4) / broadcast(16, 4),
+          ramp(x * 16 + 14, 1, 4) / broadcast(16, 4));
 
     // Any linear combination of simple ramps and broadcasts should
     // reduce to a single ramp or broadcast.
@@ -707,9 +759,9 @@ void check_vectors() {
 
     // Now check that an interleave of some collapsible loads collapses into a single dense load
     {
-        Expr load1 = Load::make(Float(32, 4), "buf", ramp(x, 2, 4), Buffer<>(), Parameter(), const_true(4), ModulusRemainder());
-        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x + 1, 2, 4), Buffer<>(), Parameter(), const_true(4), ModulusRemainder());
-        Expr load12 = Load::make(Float(32, 8), "buf", ramp(x, 1, 8), Buffer<>(), Parameter(), const_true(8), ModulusRemainder());
+        Expr load1 = Load::make(Float(32, 4), "buf", ramp(x, 2, 4));
+        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x + 1, 2, 4));
+        Expr load12 = Load::make(Float(32, 8), "buf", ramp(x, 1, 8));
         check(interleave_vectors({load1, load2}), load12);
 
         // They don't collapse in the other order
@@ -717,7 +769,7 @@ void check_vectors() {
         check(e, e);
 
         // Or if the buffers are different
-        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x + 1, 2, 4), Buffer<>(), Parameter(), const_true(4), ModulusRemainder());
+        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x + 1, 2, 4));
         e = interleave_vectors({load1, load3});
         check(e, e);
     }
@@ -727,10 +779,10 @@ void check_vectors() {
         int lanes = 4;
         std::vector<Expr> loads;
         for (int i = 0; i < lanes; i++) {
-            loads.push_back(Load::make(Float(32), "buf", 4 * x + i, Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
+            loads.push_back(Load::make(Float(32), "buf", 4 * x + i));
         }
 
-        check(concat_vectors(loads), Load::make(Float(32, lanes), "buf", ramp(x * 4, 1, lanes), Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder(4, 0)));
+        check(concat_vectors(loads), Load::make(Float(32, lanes), "buf", ramp(x * 4, 1, lanes), Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder(4, 0), false));
     }
 
     // Check that concatenated loads of adjacent vectors collapse into a vector load, with appropriate alignment.
@@ -739,10 +791,10 @@ void check_vectors() {
         int vectors = 4;
         std::vector<Expr> loads;
         for (int i = 0; i < vectors; i++) {
-            loads.push_back(Load::make(Float(32, lanes), "buf", ramp(i * lanes, 1, lanes), Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder(4, 0)));
+            loads.push_back(Load::make(Float(32, lanes), "buf", ramp(i * lanes, 1, lanes), Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder(4, 0), false));
         }
 
-        check(concat_vectors(loads), Load::make(Float(32, lanes * vectors), "buf", ramp(0, 1, lanes * vectors), Buffer<>(), Parameter(), const_true(vectors * lanes), ModulusRemainder(0, 0)));
+        check(concat_vectors(loads), Load::make(Float(32, lanes * vectors), "buf", ramp(0, 1, lanes * vectors), Buffer<>(), Parameter(), const_true(vectors * lanes), ModulusRemainder(0, 0), false));
     }
 
     {
@@ -766,8 +818,8 @@ void check_vectors() {
         // A predicated store with a provably-false predicate.
         Expr pred = ramp(x * y + x * z, 2, 8) > 2;
         Expr index = ramp(x + y, 1, 8);
-        Expr value = Load::make(index.type(), "f", index, Buffer<>(), Parameter(), const_true(index.type().lanes()), ModulusRemainder());
-        Stmt stmt = Store::make("f", value, index, Parameter(), pred, ModulusRemainder());
+        Expr value = Load::make(index.type(), "f", index);
+        Stmt stmt = Store::make("f", value, index, Parameter(), pred, ModulusRemainder(), false);
         check(stmt, Evaluate::make(0));
     }
 
@@ -779,7 +831,7 @@ void check_vectors() {
         // A store completely out of bounds.
         Expr index = ramp(-8, 1, 8);
         Expr value = Broadcast::make(0, 8);
-        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(8, 0));
+        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(8, 0), false);
         stmt = make_allocation("f", value.type(), stmt);
         check(stmt, Evaluate::make(unreachable()));
     }
@@ -788,7 +840,7 @@ void check_vectors() {
         // A store with one lane in bounds at the min.
         Expr index = ramp(-7, 1, 8);
         Expr value = Broadcast::make(0, 8);
-        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(0, -7));
+        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(0, -7), false);
         stmt = make_allocation("f", value.type(), stmt);
         check(stmt, stmt);
     }
@@ -797,7 +849,7 @@ void check_vectors() {
         // A store with one lane in bounds at the max.
         Expr index = ramp(7, 1, 8);
         Expr value = Broadcast::make(0, 8);
-        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(0, 7));
+        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(0, 7), false);
         stmt = make_allocation("f", value.type(), stmt);
         check(stmt, stmt);
     }
@@ -806,7 +858,7 @@ void check_vectors() {
         // A store completely out of bounds.
         Expr index = ramp(8, 1, 8);
         Expr value = Broadcast::make(0, 8);
-        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(8, 0));
+        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(8, 0), false);
         stmt = make_allocation("f", value.type(), stmt);
         check(stmt, Evaluate::make(unreachable()));
     }
@@ -1105,7 +1157,26 @@ void check_bounds() {
     check(select(x < y, x + y, x), select(x < y, y, 0) + x);
     check(select(x < y, x, x + y), select(x < y, 0, y) + x);
 
+    // A select nested in a branch of a select on the same condition, under
+    // some affine arithmetic. The inner select's outcome is known.
+    check(select(x < y, z, select(x < y, w, x) + 3), select(x < y, z, x + 3));
+    check(select(x < y, select(x < y, w, x) + 3, z), select(x < y, w + 3, z));
+    check(select(x < y, z, 3 - select(x < y, w, x)), select(x < y, z, 3 - x));
+    check(select(x < y, z, (select(x < y, w, x) + 3) / 2), select(x < y, z, (x + 3) / 2));
+    check(select(x < y, (select(x < y, w, x) + 3) / 2, z), select(x < y, (w + 3) / 2, z));
+    check(select(x < y, z, select(x < y, w, x) / 2), select(x < y, z, x / 2));
+    check(min(select(x < y, z, w), select(x < y, x, z) / 2), select(x < y, min(x / 2, z), min(z / 2, w)));
+    check(max(select(x < y, z, w), select(x < y, x, z) / 2), select(x < y, max(x / 2, z), max(z / 2, w)));
+
     check(min(x + 1, y) - min(x, y - 1), 1);
+
+    // A clamp at one bound and a shifted clamp at the same effective bound.
+    // The clamps coincide, so the shift can be pushed inside.
+    check(min(max(x, 3), max(y, -1) + 4), max(min(y + 4, x), 3));
+    check(max(min(x, 3), min(y, -1) + 4), min(max(y + 4, x), 3));
+    // The condition c0 == c1 + c2 is necessary; these must not fire.
+    check(min(max(x, 3), max(y, -1) + 5), min(max(x, 3), max(y, -1) + 5));
+    check(max(min(x, 3), min(y, -1) + 5), max(min(x, 3), min(y, -1) + 5));
     check(max(x + 1, y) - max(x, y - 1), 1);
     check(min(x + 1, y) - min(y - 1, x), 1);
     check(max(x + 1, y) - max(y - 1, x), 1);
@@ -1472,6 +1543,12 @@ void check_boolean() {
 
     check(select(x > 5, 2, 3) + select(x > 5, 6, 2), select(5 < x, 8, 5));
     check(select(x > 5, 8, 3) - select(x > 5, 6, 2), select(5 < x, 2, 1));
+
+    // A comparison of a constant against a select of constants folds for
+    // any type, including unsigned ones (which don't satisfy no_overflow).
+    check(0 < select(x < 5, 4, 0), x < 5);
+    check(make_zero(UInt(32)) < select(x < 5, make_const(UInt(32), 4), make_const(UInt(32), 0)), x < 5);
+    check(select(x < 5, make_const(UInt(32), 0), make_const(UInt(32), 4)) < make_const(UInt(32), 1), x < 5);
 
     check(select(x < 5, select(x < 5, 0, 1), 2), select(x < 5, 0, 2));
     check(select(x < 5, 0, select(x < 5, 1, 2)), select(x < 5, 0, 2));
@@ -1976,6 +2053,21 @@ void check_boolean() {
         internal_assert(!can_prove(!likely(t)));
         internal_assert(!can_prove(!likely(x == 2)));
     }
+
+    // Comparing divisions with a rounded offset on both sides
+    check((x + 5) / 4 < (x + 2) / 4, f);
+    check(max((x + 5) / 4, y) < max((x + 2) / 4, y), f);
+
+    // Two equalities on the same variable, in different halves of a conjunction
+    check(((x == 1) && b1) && ((x == 2) && b2), f);
+
+    // Absorption through a negated conjunction
+    check(!(b1 && b2) || b2, t);
+    check((x < 5) || (x != 3), t);
+
+    // De Morgan collects negations into the smaller form
+    check(!b1 || !b2, !(b1 && b2));
+    check(!b1 && !b2, !(b1 || b2));
 }
 
 void check_math() {
@@ -2104,30 +2196,30 @@ void check_overflow() {
 
 template<typename T>
 void check_clz(uint64_t value, uint64_t result) {
-    Expr x = Variable::make(halide_type_of<T>(), "x");
+    Expr x = Variable::make(type_of<T>(), "x");
     check(Let::make("x", cast<T>(Expr(value)), count_leading_zeros(x)), cast<T>(Expr(result)));
 
-    Type vt = halide_type_of<T>().with_lanes(4);
+    Type vt = type_of<T>().with_lanes(4);
     Expr xv = Variable::make(vt, "x");
     check(Let::make("x", cast(vt, broadcast(Expr(value), 4)), count_leading_zeros(xv)), cast(vt, broadcast(Expr(result), 4)));
 }
 
 template<typename T>
 void check_ctz(uint64_t value, uint64_t result) {
-    Expr x = Variable::make(halide_type_of<T>(), "x");
+    Expr x = Variable::make(type_of<T>(), "x");
     check(Let::make("x", cast<T>(Expr(value)), count_trailing_zeros(x)), cast<T>(Expr(result)));
 
-    Type vt = halide_type_of<T>().with_lanes(4);
+    Type vt = type_of<T>().with_lanes(4);
     Expr xv = Variable::make(vt, "x");
     check(Let::make("x", cast(vt, broadcast(Expr(value), 4)), count_trailing_zeros(xv)), cast(vt, broadcast(Expr(result), 4)));
 }
 
 template<typename T>
 void check_popcount(uint64_t value, uint64_t result) {
-    Expr x = Variable::make(halide_type_of<T>(), "x");
+    Expr x = Variable::make(type_of<T>(), "x");
     check(Let::make("x", cast<T>(Expr(value)), popcount(x)), cast<T>(Expr(result)));
 
-    Type vt = halide_type_of<T>().with_lanes(4);
+    Type vt = type_of<T>().with_lanes(4);
     Expr xv = Variable::make(vt, "x");
     check(Let::make("x", cast(vt, broadcast(Expr(value), 4)), popcount(xv)), cast(vt, broadcast(Expr(result), 4)));
 }
@@ -2218,8 +2310,29 @@ void check_lets() {
     check(Let::make("x", 0, 0), 0);
 
     // Check that lets inside an evaluate node get lifted
-    check(Evaluate::make(Let::make("x", Call::make(Int(32), "dummy", {3, x, 4}, Call::Extern), Let::make("y", 10, x + y + 2))),
-          LetStmt::make("x", Call::make(Int(32), "dummy", {3, x, 4}, Call::Extern), Evaluate::make(x + 12)));
+    check(Evaluate::make(Let::make("x", Call::make(Int(32), "dummy", {3, b, 4}, Call::Extern), Let::make("y", 10, x * x + y))),
+          LetStmt::make("x", Call::make(Int(32), "dummy", {3, b, 4}, Call::Extern), Evaluate::make(x * x + 10)));
+
+    // A let with a single use is substituted in, even when the value isn't of
+    // a shape that gets pushed inwards piecewise.
+    check(Let::make("a", min(x, y), a + 1), min(x, y) + 1);
+    // Values that get peeled apart are bound under a new name, and that name
+    // gets substituted too when it's only used once.
+    check(Let::make("a", min(x, y) * b, a + 1), min(x, y) * b + 1);
+
+    // Substituting can expose simplifications that were hidden behind the name
+    check(Let::make("a", min(x, y), (min(x, y) + 5) - a), 5);
+
+    // A let with more than one use is kept
+    check(Let::make("a", min(x, y), a * a), Let::make("a", min(x, y), a * a));
+
+    {
+        // Single-use LetStmts are not substituted in. Doing so would move the
+        // value's evaluation later, past whatever happens in between.
+        Expr t = Variable::make(Int(32), "t");
+        Stmt sink = Evaluate::make(Call::make(Int(32), "dummy", {t + 1}, Call::Extern));
+        check(LetStmt::make("t", min(x, y), sink), LetStmt::make("t", min(x, y), sink));
+    }
 }
 
 void check_inv(Expr before) {

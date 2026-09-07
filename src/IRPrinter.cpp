@@ -7,6 +7,7 @@
 #include "Associativity.h"
 #include "Closure.h"
 #include "ConstantInterval.h"
+#include "Debug.h"
 #include "Expr.h"
 #include "IROperator.h"
 #include "Interval.h"
@@ -24,7 +25,6 @@
 namespace Halide {
 
 using std::ostream;
-using std::ostringstream;
 using std::string;
 using std::vector;
 
@@ -93,7 +93,8 @@ ostream &operator<<(ostream &stream, const Module &m) {
         stream << s << "\n";
     }
 
-    stream << "module name=" << m.name() << ", target=" << m.target().to_string() << "\n";
+    // The module retains implied features, but print it in minimal form.
+    stream << "module name=" << m.name() << ", target=" << m.target().without_implied_features().to_string() << "\n";
     for (const auto &b : m.buffers()) {
         stream << b << "\n";
     }
@@ -135,6 +136,9 @@ ostream &operator<<(ostream &out, const DeviceAPI &api) {
     case DeviceAPI::WebGPU:
         out << "<WebGPU>";
         break;
+    case DeviceAPI::SMEStreaming:
+        out << "<SMEStreaming>";
+        break;
     }
     return out;
 }
@@ -152,6 +156,9 @@ std::ostream &operator<<(std::ostream &out, const MemoryType &t) {
         break;
     case MemoryType::Register:
         out << "Register";
+        break;
+    case MemoryType::GPUSharedAsync:
+        out << "GPUSharedAsync";
         break;
     case MemoryType::GPUShared:
         out << "GPUShared";
@@ -232,59 +239,6 @@ ostream &operator<<(ostream &stream, const Target &target) {
 
 namespace Internal {
 
-void IRPrinter::test() {
-    Type i32 = Int(32);
-    Type f32 = Float(32);
-    Expr x = Variable::make(Int(32), "x");
-    Expr y = Variable::make(Int(32), "y");
-    ostringstream expr_source;
-    expr_source << (x + 3) * (y / 2 + 17);
-    internal_assert(expr_source.str() == "((x + 3)*((y/2) + 17))");
-
-    Stmt store = Store::make("buf", (x * 17) / (x - 3), y - 1, Parameter(), const_true(), ModulusRemainder());
-    Stmt for_loop = For::make("x", -2, y + 2, ForType::Parallel, Partition::Auto, DeviceAPI::Host, store);
-    vector<Expr> args(1);
-    args[0] = x % 3;
-    Expr call = Call::make(i32, "buf", args, Call::Extern);
-    Stmt store2 = Store::make("out", call + 1, x, Parameter(), const_true(), ModulusRemainder(3, 5));
-    Stmt for_loop2 = For::make("x", 0, y, ForType::Vectorized, Partition::Auto, DeviceAPI::Host, store2);
-
-    Stmt producer = ProducerConsumer::make_produce("buf", for_loop);
-    Stmt consumer = ProducerConsumer::make_consume("buf", for_loop2);
-    Stmt pipeline = Block::make(producer, consumer);
-
-    Stmt assertion = AssertStmt::make(y >= 3, Call::make(Int(32), "halide_error_param_too_small_i64",
-                                                         {string("y"), y, 3}, Call::Extern));
-    Stmt block = Block::make(assertion, pipeline);
-    Stmt let_stmt = LetStmt::make("y", 17, block);
-    Stmt allocate = Allocate::make("buf", f32, MemoryType::Stack, {1023}, const_true(), let_stmt);
-
-    ostringstream source;
-    source << allocate;
-    std::string correct_source =
-        "allocate buf[float32 * 1023] in Stack\n"
-        "let y = 17\n"
-        "assert(y >= 3, halide_error_param_too_small_i64(\"y\", y, 3))\n"
-        "produce buf {\n"
-        " parallel (x, -2, y + 2) {\n"
-        "  buf[y - 1] = (x*17)/(x - 3)\n"
-        " }\n"
-        "}\n"
-        "consume buf {\n"
-        " vectorized (x, 0, y) {\n"
-        "  out[x] = buf(x % 3) + 1\n"
-        " }\n"
-        "}\n";
-
-    if (source.str() != correct_source) {
-        internal_error << "Correct output:\n"
-                       << correct_source
-                       << "Actual output:\n"
-                       << source.str();
-    }
-    std::cout << "IRPrinter test passed\n";
-}
-
 std::ostream &operator<<(std::ostream &stream, IRNodeType type) {
 #define CASE(e)         \
     case IRNodeType::e: \
@@ -339,6 +293,8 @@ std::ostream &operator<<(std::ostream &stream, IRNodeType type) {
         CASE(Evaluate)
         CASE(Prefetch)
         CASE(Atomic)
+        CASE(StreamingStore)
+        CASE(StreamingLoads)
         CASE(HoistedStorage)
     }
 #undef CASE
@@ -564,9 +520,11 @@ std::ostream &operator<<(std::ostream &out, const ModulusRemainder &c) {
 }
 
 namespace {
-bool supports_ansi(std::ostream &os) {
-    const char *term = getenv("TERM");
-    if (term) {
+bool supports_ansi(const std::ostream *os) {
+    if (!os) {
+        return false;
+    }
+    if (const char *term = getenv("TERM")) {
         // Check if the terminal supports colors
         if (!(strstr(term, "color") || strstr(term, "xterm"))) {
             return false;
@@ -574,9 +532,9 @@ bool supports_ansi(std::ostream &os) {
     }
 #if _WIN32
     HANDLE h;
-    if (&os == &std::cout) {
+    if (os == &std::cout) {
         h = GetStdHandle(STD_OUTPUT_HANDLE);
-    } else if (&os == &std::cerr) {
+    } else if (os == &std::cerr) {
         h = GetStdHandle(STD_ERROR_HANDLE);
     } else {
         return false;
@@ -586,9 +544,9 @@ bool supports_ansi(std::ostream &os) {
     return GetConsoleMode(h, &mode) &&
            SetConsoleMode(h, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
 #else
-    if (&os == &std::cout) {
+    if (os == &std::cout) {
         return isatty(fileno(stdout));
-    } else if (&os == &std::cerr) {
+    } else if (os == &std::cerr) {
         return isatty(fileno(stderr));
     }
     return false;
@@ -599,15 +557,11 @@ bool supports_ansi(std::ostream &os) {
 IRPrinter::IRPrinter(ostream &s)
     : stream(s) {
     s.setf(std::ios::fixed, std::ios::floatfield);
-    if (&stream == &std::cout || &stream == &std::cerr) {
-        bool use_colors = false;
-        const char *opt = getenv("HL_COLORS");
-        if (opt) {
-            int val = std::atoi(opt);
-            use_colors = val != 0;
-        } else {
-            use_colors = supports_ansi(stream);
-        }
+
+    auto detect_color = [&](const std::ostream *terminal) {
+        std::string opt = get_env_variable("HL_COLORS");
+        bool use_colors = !opt.empty() ? opt == "1" : supports_ansi(terminal);
+
         if (use_colors) {
             ansi = true;
             // Simple palette using standard VGA colors.
@@ -626,6 +580,26 @@ IRPrinter::IRPrinter(ostream &s)
             ansi_reset     = "\033[0m";
             // clang-format on
         }
+    };
+
+    switch (debug_stream_sink(stream)) {
+    case DebugStreamSink::Cout:
+        detect_color(&std::cout);
+        break;
+    case DebugStreamSink::Cerr:
+        detect_color(&std::cerr);
+        break;
+    case DebugStreamSink::File:
+        // A shared log file: never auto-detect colors, but still honor an
+        // explicit HL_COLORS override.
+        detect_color(nullptr);
+        break;
+    case DebugStreamSink::None:
+        // It's not a DebugStream. Is it cout or cerr identically?
+        if (&stream == &std::cout || &stream == &std::cerr) {
+            detect_color(&stream);
+        }
+        break;
     }
 }
 
@@ -996,6 +970,9 @@ void IRPrinter::visit(const Load *op) {
     if (has_pred) {
         open();
     }
+    if (op->is_streaming) {
+        stream << kw("streaming ");
+    }
     if (!known_type.contains(op->name)) {
         stream << typep(op->type);
     }
@@ -1205,6 +1182,9 @@ void IRPrinter::visit(const Store *op) {
         stream << kw(")\n");
         indent++;
         stream << get_indent();
+    }
+    if (op->is_streaming) {
+        stream << kw("streaming ");
     }
     stream << buf(op->name) << paren("[");
     print_no_parens(op->index);
@@ -1505,6 +1485,29 @@ void IRPrinter::visit(const Atomic *op) {
     print_braced_stmt(op->body);
 }
 
+void IRPrinter::visit(const StreamingStore *op) {
+    stream << get_indent();
+    stream << kw("streaming_store (") << op->producer_name << kw(") ");
+    print_braced_stmt(op->body);
+}
+
+void IRPrinter::visit(const StreamingLoads *op) {
+    stream << get_indent();
+    if (!op->names) {
+        stream << kw("streaming_loads (") << kw("all") << kw(") ");
+    } else {
+        stream << kw("streaming_loads (");
+        for (size_t i = 0; i < op->names->size(); i++) {
+            if (i > 0) {
+                stream << kw(", ");
+            }
+            stream << (*op->names)[i];
+        }
+        stream << kw(") ");
+    }
+    print_braced_stmt(op->body);
+}
+
 void IRPrinter::visit(const HoistedStorage *op) {
     if (op->name.empty()) {
         stream << get_indent() << kw("hoisted_storage ");
@@ -1515,22 +1518,70 @@ void IRPrinter::visit(const HoistedStorage *op) {
     print_braced_stmt(op->body);
 }
 
-std::string lldb_string(const Expr &ir) {
+namespace {
+// Render any type that has an operator<< into a std::string. The public
+// debug_string overloads below are deliberately concrete so their symbols are
+// emitted into libHalide and stay callable from a debugger.
+template<typename T>
+std::string stream_to_string(const T &value) {
+    std::stringstream s{};
+    s << value;
+    return s.str();
+}
+}  // namespace
+
+std::string debug_string(const Expr &ir) {
     std::stringstream s{};
     IRPrinter p(s);
     p.print_no_parens(ir);
     return s.str();
 }
 
-std::string lldb_string(const Internal::BaseExprNode *n) {
-    return lldb_string(Expr(n));
+std::string debug_string(const BaseExprNode *n) {
+    return debug_string(Expr(n));
 }
 
-std::string lldb_string(const Stmt &ir) {
+std::string debug_string(const Stmt &ir) {
     std::stringstream s{};
     IRPrinter p(s);
     p.print_summary(ir);
     return s.str();
+}
+
+std::string debug_string(const BaseStmtNode *n) {
+    return debug_string(Stmt(n));
+}
+
+std::string debug_string(const Type &t) {
+    return stream_to_string(t);
+}
+
+std::string debug_string(const Target &t) {
+    return stream_to_string(t);
+}
+
+std::string debug_string(const Module &m) {
+    return stream_to_string(m);
+}
+
+std::string debug_string(const Tuple &t) {
+    return stream_to_string(t);
+}
+
+std::string debug_string(const Interval &i) {
+    return stream_to_string(i);
+}
+
+std::string debug_string(const ConstantInterval &i) {
+    return stream_to_string(i);
+}
+
+std::string debug_string(const ModulusRemainder &m) {
+    return stream_to_string(m);
+}
+
+std::string debug_string(const LoweredFunc &f) {
+    return stream_to_string(f);
 }
 
 }  // namespace Internal

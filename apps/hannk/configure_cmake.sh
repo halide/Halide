@@ -23,8 +23,7 @@ HANNK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 SOURCE_DIR="${HANNK_DIR}"
 CMAKE_DEFS=(
     -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
-    -DHalide_DIR="${HALIDE_INSTALL_PATH}/lib/cmake/Halide"
-    -DHalideHelpers_DIR="${HALIDE_INSTALL_PATH}/lib/cmake/HalideHelpers"
+    -DHalide_ROOT="${HALIDE_INSTALL_PATH}"
     -DHalide_TARGET="${HL_TARGET}"
 )
 
@@ -38,8 +37,7 @@ if [[ ! ${HL_TARGET} =~ ^host*|${HL_HOST_TARGET}* ]]; then
     SOURCE_DIR="${HANNK_DIR}/cmake/superbuild"
     CMAKE_DEFS=(
         "${CMAKE_DEFS[@]}"
-        -DHANNK_HOST_Halide_DIR="${HALIDE_INSTALL_PATH}/lib/cmake/Halide"
-        -DHANNK_HOST_HalideHelpers_DIR="${HALIDE_INSTALL_PATH}/lib/cmake/HalideHelpers"
+        -DHANNK_HOST_Halide_ROOT="${HALIDE_INSTALL_PATH}"
     )
 
     # Special settings for cross-compiling targets with known quirks

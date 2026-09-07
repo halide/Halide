@@ -491,6 +491,9 @@ public:
     }
 
     template<typename T, typename Body>
+    HALIDE_NEVER_INLINE Body simplify_let_inner(const T *op, ExprInfo *info, std::vector<ScopedBinding<VarInfo>> &substituted);
+
+    template<typename T, typename Body>
     Body simplify_let(const T *op, ExprInfo *info);
 
     Expr visit(const IntImm *op, ExprInfo *info);
@@ -540,6 +543,8 @@ public:
     Stmt visit(const Acquire *op);
     Stmt visit(const Fork *op);
     Stmt visit(const Atomic *op);
+    Stmt visit(const StreamingStore *op);
+    Stmt visit(const StreamingLoads *op);
     Stmt visit(const HoistedStorage *op);
 
     std::pair<std::vector<Expr>, bool> mutate_with_changes(const std::vector<Expr> &old_exprs);

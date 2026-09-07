@@ -11,6 +11,7 @@
 #include "AddImageChecks.h"
 #include "AddParameterChecks.h"
 #include "AddSplitFactorChecks.h"
+#include "AddTypeChangeChecks.h"
 #include "AllocationBoundsInference.h"
 #include "AsyncProducers.h"
 #include "BoundConstantExtentLoops.h"
@@ -19,8 +20,8 @@
 #include "BoundsInference.h"
 #include "CSE.h"
 #include "CanonicalizeGPUVars.h"
+#include "CheckGPUCrossTalk.h"
 #include "ClampUnsafeAccesses.h"
-#include "CompilerLogger.h"
 #include "CompilerProfiling.h"
 #include "Debug.h"
 #include "DebugArguments.h"
@@ -45,12 +46,14 @@
 #include "LICM.h"
 #include "LoopCarry.h"
 #include "LowerParallelTasks.h"
+#include "LowerSMEStreamingTasks.h"
 #include "LowerWarpShuffles.h"
 #include "Memoization.h"
 #include "OffloadGPULoops.h"
 #include "PartitionLoops.h"
 #include "Prefetch.h"
 #include "Profiling.h"
+#include "PromoteGPURegisters.h"
 #include "PurifyIndexMath.h"
 #include "Qualify.h"
 #include "RealizationOrder.h"
@@ -81,7 +84,6 @@
 #include "UnrollLoops.h"
 #include "UnsafePromises.h"
 #include "VectorizeLoops.h"
-#include "WrapCalls.h"
 
 namespace Halide {
 namespace Internal {
@@ -185,9 +187,6 @@ void lower_impl(const vector<Function> &output_funcs,
         iter.second.lock_loop_levels();
     }
 
-    // Substitute in wrapper Funcs
-    env = wrap_func_calls(env);
-
     // Compute a realization order and determine group of functions which loops
     // are to be fused together
     auto [order, fused_groups] = realization_order(outputs, env);
@@ -239,6 +238,10 @@ void lower_impl(const vector<Function> &output_funcs,
 
     log.begin("Asserting that all split factors are positive");
     s = add_split_factor_checks(s, env);
+    log.end(s);
+
+    log.begin("Asserting that change_type() accumulations cannot overflow");
+    s = add_type_change_checks(s, env);
     log.end(s);
 
     log.begin("Removing extern loops");
@@ -320,6 +323,13 @@ void lower_impl(const vector<Function> &output_funcs,
     s = bound_small_allocations(s);
     log.end(s);
 
+    // After storage folding, which can make two threads touch the same part of
+    // an allocation, and before storage flattening, which makes the check much
+    // harder. See CheckGPUCrossTalk.h.
+    log.begin("Checking for GPU cross-talk");
+    check_gpu_cross_talk(s);
+    log.end(s);
+
     log.begin("Performing storage flattening");
     s = storage_flattening(s, outputs, env, t);
     log.end(s);
@@ -389,6 +399,10 @@ void lower_impl(const vector<Function> &output_funcs,
         log.begin("Injecting per-block gpu synchronization");
         s = fuse_gpu_thread_loops(s);
         log.end(s);
+
+        log.begin("Promoting GPU register allocations");
+        s = promote_gpu_registers(s);
+        log.end(s);
     }
 
     log.begin("Detecting vector interleavings");
@@ -437,7 +451,7 @@ void lower_impl(const vector<Function> &output_funcs,
 
     if (t.has_feature(Target::Profile) || t.has_feature(Target::ProfileByTimer)) {
         log.begin("Injecting profiling");
-        s = inject_profiling(s, pipeline_name, env);
+        s = inject_profiling(s, pipeline_name, env, t);
         log.end(s);
     }
 
@@ -475,6 +489,7 @@ void lower_impl(const vector<Function> &output_funcs,
     log.begin("Finding intrinsics");
     // Must be run after the last simplification, because it turns
     // divisions into shifts, which the simplifier reverses.
+    s = simplify(s);
     s = find_intrinsics(s);
     log.end(s);
 
@@ -488,9 +503,6 @@ void lower_impl(const vector<Function> &output_funcs,
         log.end(s);
     }
 
-    debug(1) << "Lowering after final simplification:\n"
-             << s << "\n\n";
-
     if (!custom_passes.empty()) {
         for (size_t i = 0; i < custom_passes.size(); i++) {
             log.begin("Custom lowering pass", i);
@@ -501,6 +513,8 @@ void lower_impl(const vector<Function> &output_funcs,
 
     // Make a copy of the Stmt code, before we lower anything to less human-readable code.
     result_module.set_conceptual_code_stmt(s);
+    debug(1) << "Lowering after reaching conceptual Stmt:\n"
+             << s << "\n\n";
 
     if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {
         log.begin("Splitting off Hexagon offload");
@@ -544,6 +558,21 @@ void lower_impl(const vector<Function> &output_funcs,
         result_module.append(lowered_func);
     }
     log.end(s);
+
+    debug(1) << "Lowering SME Streaming Tasks...\n";
+    closure_implementations.clear();
+    s = lower_sme_streaming_tasks(s, closure_implementations, pipeline_name, t);
+    for (size_t i = initial_lowered_function_count; i < result_module.functions().size(); i++) {
+        // Note that lower_parallel_tasks() appends to the end of closure_implementations
+        result_module.functions()[i].body =
+            lower_sme_streaming_tasks(result_module.functions()[i].body, closure_implementations,
+                                      result_module.functions()[i].name, t);
+    }
+    for (auto &lowered_func : closure_implementations) {
+        result_module.append(lowered_func);
+    }
+    debug(2) << "Lowering after generating SME streaming tasks and closures:\n"
+             << s << "\n\n";
 
     vector<Argument> public_args = args;
     for (const auto &out : outputs) {
@@ -622,13 +651,6 @@ void lower_impl(const vector<Function> &output_funcs,
     }
 
     result_module.append(main_func);
-
-    auto *logger = get_compiler_logger();
-    if (logger) {
-        auto time_end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> diff = time_end - time_start;
-        logger->record_compilation_time(CompilerLogger::Phase::HalideLowering, diff.count());
-    }
 }
 
 }  // namespace
@@ -641,9 +663,14 @@ Module lower(const vector<Function> &output_funcs,
              const vector<Stmt> &requirements,
              bool trace_pipeline,
              const vector<IRMutator *> &custom_passes) {
-    Module result_module{strip_namespaces(pipeline_name), t};
+    // Lowering and code generation inspect a target with all implied features
+    // set, so that (e.g.) a check for SSE41 succeeds on an AVX2 target.
+    // Normalize once here; the module retains the implied features, and is
+    // printed back in minimal form by unsetting them at the print sites.
+    Target target = t.with_implied_features();
+    Module result_module{strip_namespaces(pipeline_name), target};
     run_with_large_stack([&]() {
-        lower_impl(output_funcs, pipeline_name, t, args, linkage_type, requirements, trace_pipeline, custom_passes, result_module);
+        lower_impl(output_funcs, pipeline_name, target, args, linkage_type, requirements, trace_pipeline, custom_passes, result_module);
     });
     return result_module;
 }

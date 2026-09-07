@@ -68,7 +68,7 @@ Callable::Callable(const std::string &name,
     for (const Argument &a : contents->jit_cache.arguments) {
         const auto qcci = (a.name == "__user_context") ?
                               Callable::make_ucon_qcci() :
-                              (a.is_scalar() ? Callable::make_scalar_qcci(a.type) : Callable::make_buffer_qcci());
+                              (a.is_scalar() ? Callable::make_scalar_qcci(a.type.to_abi()) : Callable::make_buffer_qcci());
         contents->quick_call_check_info.push_back(qcci);
     }
 
@@ -146,7 +146,7 @@ Callable::FailureFn Callable::check_fcci(size_t argc, const FullCallCheckInfo *a
     if (contents->full_call_check_info.empty()) {
         contents->full_call_check_info.reserve(contents->jit_cache.arguments.size());
         for (const Argument &a : contents->jit_cache.arguments) {
-            const auto fcci = a.is_scalar() ? Callable::make_scalar_fcci(a.type) : Callable::make_buffer_fcci(a.type, a.dimensions);
+            const auto fcci = a.is_scalar() ? Callable::make_scalar_fcci(a.type.to_abi()) : Callable::make_buffer_fcci(a.type.to_abi(), a.dimensions);
             contents->full_call_check_info.push_back(fcci);
         }
     }

@@ -6,6 +6,7 @@
 #include "Util.h"
 #include "runtime/HalideRuntime.h"
 #include <cstdint>
+#include <optional>
 
 /** \file
  * Defines halide types
@@ -269,7 +270,17 @@ namespace Halide {
 
 namespace Internal {
 struct ConstantInterval;
-}
+
+/** Handle (C++ pointer) types carry a pointer to externally-owned metadata
+ * describing the pointee type. To keep `Type` small (8 bytes) that metadata is
+ * referenced by a 4-byte index into a process-wide intern table rather than by
+ * an 8-byte pointer. Index 0 means "no handle metadata" (i.e. void *). The
+ * table stores the (non-owning) pointers callers supply — the pointees must
+ * outlive all `Type`s, exactly as before. `intern_handle_type(nullptr)` returns
+ * 0 without locking, so non-handle type construction pays nothing. */
+uint32_t intern_handle_type(const halide_handle_cplusplus_type *handle_type);
+const halide_handle_cplusplus_type *get_interned_handle_type(uint32_t index);
+}  // namespace Internal
 
 struct Expr;
 
@@ -280,7 +291,12 @@ struct Expr;
  * types. Instead vectorize a function. */
 struct Type {
 private:
-    halide_type_t type;
+    halide_type_code_t type_code;
+    uint8_t type_bits;
+    uint16_t type_lanes;
+    // Index into the process-wide handle-type intern table (0 == no handle
+    // metadata).
+    uint32_t handle_index_ = 0;
 
 public:
     /** Aliases for halide_type_code_t values for legacy compatibility
@@ -293,26 +309,35 @@ public:
     static constexpr halide_type_code_t Handle = halide_type_handle;
     // @}
 
+    /** Exposed so code that needs to reason about the maximum representable
+     * lanes count (e.g. overflow checks when combining vectors) can derive
+     * it from Type itself instead of hardcoding a width. */
+    static constexpr int kLanesBits = 8 * sizeof(type_lanes);
+
     /** The number of bytes required to store a single scalar value of this type. Ignores vector lanes. */
     int bytes() const {
         return (bits() + 7) / 8;
     }
 
     // Default ctor initializes everything to predictable-but-unlikely values
-    Type()
-        : type(Handle, 0, 0) {
+    constexpr Type()
+        : type_code(Handle), type_bits(0), type_lanes(0) {
     }
 
     /** Construct a runtime representation of a Halide type from:
      * code: The fundamental type from an enum.
      * bits: The bit size of one element.
      * lanes: The number of vector elements in the type. */
+    HALIDE_ALWAYS_INLINE
     Type(halide_type_code_t code, int bits, int lanes, const halide_handle_cplusplus_type *handle_type = nullptr)
-        : type(code, (uint8_t)bits, (uint16_t)lanes), handle_type(handle_type) {
-        user_assert(lanes == type.lanes)
+        : type_code(code), type_bits((uint8_t)bits), type_lanes((uint16_t)lanes),
+          handle_index_(handle_type ? Internal::intern_handle_type(handle_type) : 0) {
+        internal_assert(lanes == (int)type_lanes)
             << "Halide only supports vector types with up to 65535 lanes. " << lanes << " lanes requested.";
-        user_assert(bits == type.bits)
+        internal_assert(bits == (int)type_bits)
             << "Halide only supports types with up to 255 bits. " << bits << " bits requested.";
+        internal_assert(code == Handle || !handle_type)
+            << "Cannot construct a non-handle Type with handle metadata.\n";
     }
 
     /** Trivial copy constructor. */
@@ -321,59 +346,77 @@ public:
     /** Trivial copy assignment operator. */
     Type &operator=(const Type &that) = default;
 
-    /** Type is a wrapper around halide_type_t with more methods for use
-     * inside the compiler. This simply constructs the wrapper around
-     * the runtime value. */
+    /** Construct a (scalar) language Type from an ABI element type. */
     HALIDE_ALWAYS_INLINE
-    Type(const halide_type_t &that, const halide_handle_cplusplus_type *handle_type = nullptr)
-        : type(that), handle_type(handle_type) {
+    Type(halide_type_t that, const halide_handle_cplusplus_type *handle_type = nullptr)
+        : Type(that.code, that.bits, 1, handle_type) {
     }
 
-    /** Unwrap the runtime halide_type_t for use in runtime calls, etc.
-     * Representation is exactly equivalent. */
+    /** Erase this language Type to the ABI/runtime halide_type_t for use in
+     * runtime calls, buffer/argument metadata, etc. This is a *checked*
+     * erasure: the ABI element type has no lanes, so a vector type
+     * (lanes >= 2) has no image here and asserts rather than silently
+     * dropping its lanes. */
     HALIDE_ALWAYS_INLINE
-    operator halide_type_t() const {
-        return type;
+    halide_type_t to_abi() const {
+        internal_assert(type_lanes < 2)
+            << "Cannot erase a vector type with " << type_lanes
+            << " lanes to a scalar ABI halide_type_t.\n";
+        return halide_type_t(code(), type_bits);
     }
 
     /** Return the underlying data type of an element as an enum value. */
     HALIDE_ALWAYS_INLINE
     halide_type_code_t code() const {
-        return (halide_type_code_t)type.code;
+        return type_code;
     }
 
     /** Return the bit size of a single element of this type. */
     HALIDE_ALWAYS_INLINE
     int bits() const {
-        return type.bits;
+        return type_bits;
     }
 
     /** Return the number of vector elements in this type. */
     HALIDE_ALWAYS_INLINE
     int lanes() const {
-        return type.lanes;
+        return type_lanes;
     }
 
     /** Return Type with same number of bits and lanes, but new_code for a type code. */
+    HALIDE_ALWAYS_INLINE
     Type with_code(halide_type_code_t new_code) const {
-        return Type(new_code, bits(), lanes(),
-                    (new_code == code()) ? handle_type : nullptr);
+        Type t = *this;
+        t.type_code = new_code;
+        t.handle_index_ = new_code != code() ? 0 : handle_index_;  // Changing the type code invalidates any handle metadata.
+        return t;
     }
 
     /** Return Type with same type code and lanes, but new_bits for the number of bits. */
+    HALIDE_ALWAYS_INLINE
     Type with_bits(int new_bits) const {
-        return Type(code(), new_bits, lanes(),
-                    (new_bits == bits()) ? handle_type : nullptr);
+        Type t = *this;
+        t.type_bits = (uint8_t)new_bits;
+        t.handle_index_ = new_bits != bits() ? 0 : handle_index_;  // Changing the bit width invalidates any handle metadata.
+        return t;
     }
 
     /** Return Type with same type code and number of bits,
      * but new_lanes for the number of vector lanes. */
+    HALIDE_ALWAYS_INLINE
     Type with_lanes(int new_lanes) const {
-        return Type(code(), bits(), new_lanes, handle_type);
+        Type t = *this;
+        t.type_lanes = (uint16_t)new_lanes;
+        return t;
     }
 
     /** Return Type with the same type code and number of lanes, but with at least twice as many bits. */
+    HALIDE_ALWAYS_INLINE
     Type widen() const {
+        if (is_bfloat()) {
+            // Widening a bfloat16 should produce a float32.
+            return with_code(Float).with_bits(32);
+        }
         if (bits() == 1) {
             // Widening a 1-bit type should produce an 8-bit type.
             return with_bits(8);
@@ -383,6 +426,7 @@ public:
     }
 
     /** Return Type with the same type code and number of lanes, but with at most half as many bits. */
+    HALIDE_ALWAYS_INLINE
     Type narrow() const {
         internal_assert(bits() != 1) << "Attempting to narrow a 1-bit type\n";
         if (bits() == 8) {
@@ -393,8 +437,15 @@ public:
         }
     }
 
-    /** Type to be printed when declaring handles of this type. */
-    const halide_handle_cplusplus_type *handle_type = nullptr;
+    /** The externally-owned C++ type metadata for a handle type (null for a
+     * plain void * handle or a non-handle type). Backed by a 4-byte intern
+     * index rather than stored inline, so this is now an accessor rather than a
+     * public field. */
+    const halide_handle_cplusplus_type *handle_type() const {
+        // Inline the common (non-handle) case so it needs no call or table
+        // lookup; only a real handle index reaches the intern table.
+        return handle_index_ == 0 ? nullptr : Internal::get_interned_handle_type(handle_index_);
+    }
 
     /** Is this type boolean (represented as UInt(1))? */
     HALIDE_ALWAYS_INLINE
@@ -468,37 +519,42 @@ public:
     bool same_handle_type(const Type &other) const;
 
     /** Compare two types for equality */
+    HALIDE_ALWAYS_INLINE
     bool operator==(const Type &other) const {
-        return type == other.type && (code() != Handle || same_handle_type(other));
+        return type_code == other.type_code && type_bits == other.type_bits &&
+               type_lanes == other.type_lanes && (code() != Handle || same_handle_type(other));
     }
 
     /** Compare two types for inequality */
     bool operator!=(const Type &other) const {
-        return type != other.type || (code() == Handle && !same_handle_type(other));
+        return !(*this == other);
     }
 
-    /** Compare two types for equality */
+    /** Compare a language type to an ABI element type. Equal iff this type is a
+     * single element (not a vector) with the same code and bits. */
     bool operator==(const halide_type_t &other) const {
-        return type == other;
+        return type_lanes < 2 && (uint8_t)type_code == (uint8_t)other.code && type_bits == other.bits;
     }
 
     /** Compare two types for inequality */
     bool operator!=(const halide_type_t &other) const {
-        return type != other;
+        return !(*this == other);
     }
 
     /** Compare ordering of two types so they can be used in certain containers and algorithms */
     bool operator<(const Type &other) const {
-        if (type < other.type) {
+        if (std::tie(type_code, type_bits, type_lanes) <
+            std::tie(other.type_code, other.type_bits, other.type_lanes)) {
             return true;
         }
         if (code() == Handle) {
-            return handle_type < other.handle_type;
+            return handle_type() < other.handle_type();
         }
         return false;
     }
 
     /** Produce the scalar type (that of a single element) of this vector type */
+    HALIDE_ALWAYS_INLINE
     Type element_of() const {
         return with_lanes(1);
     }
@@ -535,34 +591,37 @@ public:
     Expr min() const;
 };
 
+static_assert(sizeof(Type) == 8, "Halide::Type is a code+bits+lanes triple plus a 4-byte handle-type index");
+static_assert(std::is_trivially_copyable_v<Type>, "Type must stay trivially copyable");
+
 /** Constructing a signed integer type */
-inline Type Int(int bits, int lanes = 1) {
+HALIDE_ALWAYS_INLINE Type Int(int bits, int lanes = 1) {
     return Type(Type::Int, bits, lanes);
 }
 
 /** Constructing an unsigned integer type */
-inline Type UInt(int bits, int lanes = 1) {
+HALIDE_ALWAYS_INLINE Type UInt(int bits, int lanes = 1) {
     return Type(Type::UInt, bits, lanes);
 }
 
 /** Construct a floating-point type */
-inline Type Float(int bits, int lanes = 1) {
+HALIDE_ALWAYS_INLINE Type Float(int bits, int lanes = 1) {
     return Type(Type::Float, bits, lanes);
 }
 
 /** Construct a floating-point type in the bfloat format. Only 16-bit currently supported. */
-inline Type BFloat(int bits, int lanes = 1) {
+HALIDE_ALWAYS_INLINE Type BFloat(int bits, int lanes = 1) {
     return Type(Type::BFloat, bits, lanes);
 }
 
 /** Construct a boolean type */
-inline Type Bool(int lanes = 1) {
+HALIDE_ALWAYS_INLINE Type Bool(int lanes = 1) {
     return UInt(1, lanes);
 }
 
 /** Construct a handle type */
-inline Type Handle(int lanes = 1, const halide_handle_cplusplus_type *handle_type = nullptr) {
-    return Type(Type::Handle, 64, lanes, handle_type);
+HALIDE_ALWAYS_INLINE Type Handle(const halide_handle_cplusplus_type *handle_type = nullptr) {
+    return Type(Type::Handle, 64, 1, handle_type);
 }
 
 /** Construct the halide equivalent of a C type */

@@ -5,17 +5,12 @@
 // from a Func or an ImageParam.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_19*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_19 -std=c++17
-// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_19
+// g++ lesson_19*.cpp -g -I <path/to/include> -L <path/to/lib> -lHalide -lpthread -ldl -o lesson_19 -std=c++17
+// LD_LIBRARY_PATH=<path/to/lib> ./lesson_19
 
-// On os x:
-// g++ lesson_19*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_19 -std=c++17
-// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_19
-
-// If you have the entire Halide source tree, you can also build it by
-// running:
-//    make tutorial_lesson_19_wrapper_funcs
-// in a shell at the top of the halide source tree.
+// On macOS:
+// g++ lesson_19*.cpp -g -I <path/to/include> -L <path/to/lib> -lHalide -o lesson_19 -std=c++17
+// DYLD_LIBRARY_PATH=<path/to/lib> ./lesson_19
 
 // The only Halide header file you need is Halide.h. It includes all of Halide.
 #include "Halide.h"

@@ -46,6 +46,9 @@ void validate(halide_profiler_state *s) {
 
         for (int i = 0; i < p->num_funcs; i++) {
             halide_profiler_func_stats *fs = p->funcs + i;
+            if (fs->kind != halide_profiler_func_kind_func) {
+                continue;
+            }
             if (strncmp(fs->name, "argmin", 6) == 0) {
                 assert(fs->stack_peak == argmin_stack_peak);
             } else if (strncmp(fs->name, "mandelbrot", 10) == 0) {

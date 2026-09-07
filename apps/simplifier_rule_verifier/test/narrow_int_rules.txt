@@ -1,0 +1,6 @@
+# Halide's integer division and modulo are Euclidean at every width, so the
+# remainder is never negative even when the denominator is. SMT-LIB's
+# bit-vector ops don't work that way, so this pins down the encoding the tool
+# uses for types narrower than 32 bits.
+rewrite((int8)x % (int8)c0 < 0, false, c0 != 0)
+rewrite((int16)x % (int16)c0 < 0, false, c0 != 0)

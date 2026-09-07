@@ -1,0 +1,2 @@
+min(x, y) + max(x, y)
+select(x < y, x, y)

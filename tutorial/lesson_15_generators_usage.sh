@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Halide tutorial lesson 15: Generators part 2
+# Halide tutorial lesson 15: Generators: command-line usage
 
 # This shell script demonstrates how to use a binary containing
 # Generators from the command line. Normally you'd call these binaries
@@ -13,6 +13,19 @@
 
 # To run this script:
 # bash lesson_15_generators_usage.sh
+
+# Later on, we'll cross-compile object files for other targets (e.g. Linux and
+# Windows, from macOS). The system nm/ar on macOS only understand Mach-O, so on
+# macOS we prefer llvm-nm/llvm-ar (from Homebrew LLVM, if installed) since they
+# can read object files for any platform.
+NM="nm"
+AR="ar"
+if [ "$(uname)" = "Darwin" ] && command -v brew >/dev/null && LLVM_PREFIX=$(brew --prefix llvm 2>/dev/null); then
+    if [ -x "$LLVM_PREFIX/bin/llvm-nm" ] && [ -x "$LLVM_PREFIX/bin/llvm-ar" ]; then
+        NM="$LLVM_PREFIX/bin/llvm-nm"
+        AR="$LLVM_PREFIX/bin/llvm-ar"
+    fi
+fi
 
 # First we define a helper function that checks that a file exists
 check_file_exists() {
@@ -27,7 +40,7 @@ check_file_exists() {
 check_symbol() {
     FILE=$1
     SYM=$2
-    if ! nm "$FILE" | grep "$SYM" >/dev/null; then
+    if ! "$NM" "$FILE" | grep "$SYM" >/dev/null; then
         echo "$SYM not found in $FILE"
         exit 1
     fi
@@ -152,18 +165,18 @@ check_symbol my_second_generator_3.a my_second_generator_3
 # files.
 
 echo "The halide runtime:"
-nm my_second_generator_1.a | grep "[SWT] _\?halide_"
+"$NM" my_second_generator_1.a | grep "[SWT] _\?halide_"
 
 # Let's define some functions to check that the runtime exists in a file.
 check_runtime() {
-    if ! (nm "$1" | grep "[TSW] _\?halide_" >/dev/null); then
+    if ! ("$NM" "$1" | grep "[TSW] _\?halide_" >/dev/null); then
         echo "Halide runtime not found in $1"
         exit 1
     fi
 }
 
 check_no_runtime() {
-    if nm "$1" | grep "[TSW] _\?halide_" >/dev/null; then
+    if "$NM" "$1" | grep "[TSW] _\?halide_" >/dev/null; then
         echo "Halide runtime found in $1"
         exit 1
     fi
@@ -224,7 +237,7 @@ check_runtime halide_runtime_x86.o
 # gives us three versions of the pipeline for varying levels of x86,
 # combined with a single runtime that will work on nearly all x86
 # processors.
-ar q my_first_generator_multi.a \
+"$AR" q my_first_generator_multi.a \
     my_first_generator_basic.o \
     my_first_generator_sse41.o \
     my_first_generator_avx.o \

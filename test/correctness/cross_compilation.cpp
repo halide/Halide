@@ -35,6 +35,10 @@ int main(int argc, char **argv) {
         "arm-64-noos-semihosting",
         "arm-64-windows",
         "arm-64-windows-d3d12compute",
+        "arm-64-windows-d3d12compute-hlsl_sm60",
+        "arm-64-windows-d3d12compute-hlsl_sm62",
+        "arm-64-windows-d3d12compute-hlsl_sm66",
+        "arm-64-windows-d3d12compute-hlsl_sm69",
         "wasm-32-wasmrt",
         "x86-32-linux",
         "x86-32-osx",
@@ -43,6 +47,11 @@ int main(int argc, char **argv) {
         "x86-64-osx",
         "x86-64-windows",
         "x86-64-windows-d3d12compute",
+        "x86-64-windows-d3d12compute-hlsl_sm60",
+        "x86-64-windows-d3d12compute-hlsl_sm62",
+        "x86-64-windows-d3d12compute-hlsl_sm66",
+        "x86-64-windows-d3d12compute-hlsl_sm68",
+        "x86-64-windows-d3d12compute-hlsl_sm69",
     };
 
     const auto tmp = Internal::get_test_tmp_dir();
@@ -92,6 +101,17 @@ int main(int argc, char **argv) {
 
         for (auto &it : outputs) {
             Internal::assert_file_exists(it.second);
+        }
+
+        if (target.os == Target::Windows) {
+            const std::vector<char> object_data = Internal::read_entire_file(outputs.at(OutputFileType::object));
+            const std::string object_contents(object_data.begin(), object_data.end());
+            if (object_contents.find("/EXPORT:") == std::string::npos ||
+                object_contents.find("_argv") == std::string::npos ||
+                object_contents.find("_metadata") == std::string::npos) {
+                std::cerr << "Windows object is missing exported AOT entry points: " << outputs.at(OutputFileType::object) << "\n";
+                return 1;
+            }
         }
     }
 

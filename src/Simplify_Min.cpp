@@ -205,6 +205,7 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
          rewrite(min(z, select(x, y, max(z, w))), select(x, min(z, y), z)) ||
 
          rewrite(min(select(x, y, z), select(x, w, u)), select(x, min(y, w), min(z, u))) ||
+         rewrite(min(select(x, y, z), select(x, w, u) / c0), select(x, min(y, w / c0), min(z, u / c0))) ||
          rewrite(min(select(x, min(z, y), w), y), min(select(x, z, w), y)) ||
          rewrite(min(select(x, min(z, y), w), z), min(select(x, y, w), z)) ||
          rewrite(min(select(x, w, min(z, y)), y), min(select(x, w, z), y)) ||
@@ -218,7 +219,12 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
          rewrite(min(slice(x, c0, c1, c2), min(z, slice(y, c0, c1, c2))), min(slice(min(x, y), c0, c1, c2), z), c2 > 1 && lanes_of(x) == lanes_of(y)) ||
          rewrite(min(transpose(x, c0), transpose(y, c0)), transpose(min(x, y), c0)) ||
          (no_overflow(op->type) &&
-          (rewrite(min(min(x, y) + c0, x), min(x, y + c0), c0 > 0) ||
+          (rewrite(min(max(x, c0), max(y, c1) + c2), max(min(x, y + c2), c0), c0 == c1 + c2) ||
+
+           rewrite(min(min(x, y) + c0, x), min(x, y + c0), c0 > 0) ||
+           rewrite(min(min(x, y + z), (w + z) + u), min(x, min(y, w + u) + z)) ||
+           rewrite(min(min(y + z, x), (w + z) + u), min(x, min(y, w + u) + z)) ||
+
            rewrite(min(min(x, y) + c0, x), min(x, y) + c0, c0 < 0) ||
            rewrite(min(min(y, x) + c0, x), min(y + c0, x), c0 > 0) ||
            rewrite(min(min(y, x) + c0, x), min(y, x) + c0, c0 < 0) ||
@@ -279,6 +285,14 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
 
            rewrite(min(y - x, z - x), min(y, z) - x) ||
            rewrite(min(x - y, x - z), x - max(y, z)) ||
+           rewrite(min(x - y, x + z), x - max(y, 0 - z)) ||
+           rewrite(min(min(x, y) - x, 0), min(y - x, 0)) ||
+           rewrite(min(min(x, y) - y, 0), min(x - y, 0)) ||
+           rewrite(min(min(x, y) - min(z, x), 0), min(y - min(z, x), 0)) ||
+           rewrite(min(min(x, y) - min(z, y), 0), min(x - min(z, y), 0)) ||
+           rewrite(min(min(x, y) - min(x, z), 0), min(y - min(x, z), 0)) ||
+           rewrite(min(min(x, y) - min(y, z), 0), min(x - min(y, z), 0)) ||
+           rewrite(min(min(x, c0) - min(y, c1), c2), min(x - min(y, c1), c2), c0 >= c1 + c2) ||
            rewrite(min(x - y, (z - y) + w), min(x, z + w) - y) ||
            rewrite(min(x - y, w + (z - y)), min(x, w + z) - y) ||
 

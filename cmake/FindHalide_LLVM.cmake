@@ -5,12 +5,11 @@
 set(REASON_FAILURE_MESSAGE "")
 
 set(llvm_paths "")
-foreach (
-    template IN ITEMS
-    "/opt/homebrew/opt/llvm@@VERSION@" # Homebrew on macOS
-    "/usr/lib/llvm-@VERSION@" # Debian/Ubuntu packages
-    "/usr/local/lib/llvm-@VERSION@" # Third-party packages
-    "/opt/llvm-@VERSION@" # Third-party packages
+foreach (template IN ITEMS
+    "/opt/homebrew/opt/llvm@@VERSION@"  # Homebrew on macOS
+    "/usr/lib/llvm-@VERSION@"  # Debian/Ubuntu packages
+    "/usr/local/lib/llvm-@VERSION@"  # Third-party packages
+    "/opt/llvm-@VERSION@"  # Third-party packages
 )
     foreach (VERSION RANGE 21 23) # inclusive!
         string(CONFIGURE "${template}" path @ONLY)
@@ -52,9 +51,9 @@ if (LLVM_FOUND)
     find_package(
         Clang "${Halide_LLVM_VERSION}" EXACT
         HINTS
-        "${LLVM_INSTALL_PREFIX}" # Same root as the LLVM we found
-        "${LLVM_DIR}/../clang" # LLVM found in $ROOT/lib/cmake/llvm
-        "${LLVM_DIR}/../lib/cmake/clang" # LLVM found in $ROOT/cmake
+        "${LLVM_INSTALL_PREFIX}"  # Same root as the LLVM we found
+        "${LLVM_DIR}/../clang"  # LLVM found in $ROOT/lib/cmake/llvm
+        "${LLVM_DIR}/../lib/cmake/clang"  # LLVM found in $ROOT/cmake
     )
 
     foreach (comp IN LISTS LLVM_TARGETS_TO_BUILD)
@@ -74,8 +73,9 @@ if (LLVM_FOUND)
             )
             if (NOT LLD_FOUND)
                 string(APPEND REASON_FAILURE_MESSAGE
-                       "WebAssembly was not found because liblld is missing. "
-                       "Did you `apt install liblld-dev` or `brew install lld`?\n")
+                    "WebAssembly was not found because liblld is missing. "
+                    "Did you `apt install liblld-dev` or `brew install lld`?\n"
+                )
                 continue()
             endif ()
 
@@ -85,9 +85,10 @@ if (LLVM_FOUND)
             # runtime. See: https://github.com/halide/Halide/issues/5471
             if (LLVM_LINK_LLVM_DYLIB AND NOT Halide_LLVM_SHARED_LIBS)
                 string(APPEND REASON_FAILURE_MESSAGE
-                       "WebAssembly was not found because LLD required by was linked to shared LLVM "
-                       "(LLVM_LINK_LLVM_DYLIB=${LLVM_LINK_LLVM_DYLIB}) but static LLVM was requested "
-                       "(Halide_LLVM_SHARED_LIBS=${Halide_LLVM_SHARED_LIBS}).\n")
+                    "WebAssembly was not found because LLD required by was linked to shared LLVM "
+                    "(LLVM_LINK_LLVM_DYLIB=${LLVM_LINK_LLVM_DYLIB}) but static LLVM was requested "
+                    "(Halide_LLVM_SHARED_LIBS=${Halide_LLVM_SHARED_LIBS}).\n"
+                )
                 continue()
             endif ()
         endif ()
@@ -99,18 +100,21 @@ if (LLVM_FOUND)
     if (Halide_LLVM_SHARED_LIBS AND NOT TARGET "${Halide_LLVM_SHARED_LIBRARY}")
         string(APPEND Halide_LLVM_SHARED_LIBRARY "-NOTFOUND")
         string(APPEND REASON_FAILURE_MESSAGE
-               "Halide_LLVM_SHARED_LIBS=${Halide_LLVM_SHARED_LIBS} but the shared LLVM target does not exist.\n")
+            "Halide_LLVM_SHARED_LIBS=${Halide_LLVM_SHARED_LIBS} but the shared LLVM target does not exist.\n"
+        )
     endif ()
 endif ()
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(
     Halide_LLVM
-    REQUIRED_VARS LLVM_CONFIG Clang_CONFIG Halide_LLVM_SHARED_LIBRARY
+    REQUIRED_VARS
+        LLVM_CONFIG
+        Clang_CONFIG
+        Halide_LLVM_SHARED_LIBRARY
     VERSION_VAR Halide_LLVM_VERSION
     REASON_FAILURE_MESSAGE "${REASON_FAILURE_MESSAGE}"
-    HANDLE_COMPONENTS
-    HANDLE_VERSION_RANGE
+    HANDLE_COMPONENTS HANDLE_VERSION_RANGE
 )
 
 function(_Halide_LLVM_link target)

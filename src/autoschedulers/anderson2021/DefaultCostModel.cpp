@@ -328,7 +328,6 @@ void DefaultCostModel::evaluate_costs() {
     }
 
     cursor = 0;
-    cost_per_stage_ptrs.clear();
 }
 
 void DefaultCostModel::load_weights() {

@@ -26,29 +26,34 @@ modify some parts if you target for different setup.
 
 ## How to build
 
+Unlike most other apps in this repo, there is no top-level `CMakeLists.txt` here
+-- each of the three `cmake-<xxx>` subdirectories below is an independent CMake
+project you build directly.
+
 ### Cross compilation
 
 Halide cross-compiling in CMake is tricky and there are a couple of ways to
 realize it. This application demonstrates 3 different ways with concrete code,
-located in `CMakeLists.txt` in the following sub directories.
+located in `CMakeLists.txt` in the following subdirectories.
 
 1. cmake-twice
 2. cmake-super_build
 3. cmake-external_project
 
 If you want to understand the detail of build steps, please read "Cross
-compiling" section of [README_cmake](../../README_cmake.md#cross-compiling), and
-then `build.sh` and `CMakeLists.txt` in each sub directories.
+compiling" section of
+[HalideCMakePackage](../../doc/HalideCMakePackage.md#cross-compiling), and then
+`build.sh` and `CMakeLists.txt` in each subdirectory.
 
 ### Build procedure
 
 #### Baremetal target
 
 As a prerequisite, toolchain described above needs to be installed in your host
-machine. The detail of the toolchanin configuration is set in
-[toolchain.arm-32-sample.cmake](cmake/toolchain.arm-32-sample.cmake), which you
-might need to modify depending on the target baremetal system. Then, just run
-the build script in one of the aforementioned sub directories.
+machine. The detail of the toolchain configuration is set in
+[toolchain.noos-arm32-sample.cmake](cmake/toolchain.noos-arm32-sample.cmake),
+which you might need to modify depending on the target baremetal system. Then,
+just run the build script in one of the aforementioned subdirectories.
 
 ```
 cd cmake-<xxx>/
@@ -68,5 +73,14 @@ cmake --build build/
 
 ## How to run
 
-`run.sh` in each sub directories is a sample script that shows how to run the
-executable on QEMU Arm System emulator with semihosting mode.
+After building for the bare-metal target, `ctest` runs the executable on QEMU
+Arm System emulator with semihosting mode:
+
+```
+ctest --test-dir build-target --output-on-failure  # cmake-twice
+ctest --test-dir build/app --output-on-failure      # cmake-super_build
+ctest --test-dir build --output-on-failure          # cmake-external_project
+```
+
+`run_baremetal.sh` (the script `ctest` invokes under the hood) can also be run
+directly against any executable built for this target.

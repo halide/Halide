@@ -26,7 +26,7 @@ struct TraceEventBuilder {
     vector<Expr> coordinates;
     Type type;
     halide_trace_event_code_t event;
-    Expr parent_id, value_index;
+    Expr parent_id, thread_id, value_index;
 
     Expr build() const {
         Expr values = Call::make(type_of<void *>(), Call::make_struct,
@@ -37,6 +37,10 @@ struct TraceEventBuilder {
         if (!idx.defined()) {
             idx = 0;
         }
+        Expr tid = thread_id;
+        if (!tid.defined()) {
+            tid = 0;
+        }
 
         // Note: if these arguments are changed in any meaningful way,
         // VectorizeLoops will likely need attention; it does nontrivial
@@ -45,7 +49,7 @@ struct TraceEventBuilder {
                              values, coords,
                              (int)type.code(), type.bits(), type.lanes(),
                              (int)event,
-                             parent_id, idx, (int)coordinates.size(),
+                             parent_id, tid, idx, (int)coordinates.size(),
                              trace_tag_expr};
         return Call::make(Int(32), Call::trace, args, Call::Extern);
     }
@@ -69,9 +73,10 @@ public:
         : env(e),
           trace_all_loads(t.has_feature(Target::TraceLoads)),
           trace_all_stores(t.has_feature(Target::TraceStores)),
-          // Set trace_all_realizations to true if either trace_loads or trace_stores is on too:
-          // They don't work without trace_all_realizations being on (and the errors are missing symbol mysterious nonsense).
-          trace_all_realizations(t.features_any_of({Target::TraceLoads, Target::TraceStores, Target::TraceRealizations})) {
+          // TraceLoads and TraceStores imply TraceRealizations (see
+          // set_implied_features), because tracing loads or stores doesn't work
+          // without the enclosing realization begin/end events.
+          trace_all_realizations(t.has_feature(Target::TraceRealizations)) {
     }
 
 private:
@@ -211,12 +216,61 @@ protected:
                 }
             }
 
-            stmt = Provide::make(op->name, traces, args, op->predicate);
+            stmt = op->with(traces, args, op->predicate);
             for (const auto &p : lets) {
                 stmt = LetStmt::make(p.first, p.second, stmt);
             }
         }
         return stmt;
+    }
+
+    Stmt trace_parallel_task(const string &task_name, Stmt body,
+                             const vector<Expr> &coordinates) {
+        const Stmt original = body;
+        const string task_stack = unique_name("parallel_task");
+        {
+            ScopedValue new_func{call_stack, task_stack};
+            body = mutate(body);
+        }
+        if (body.same_as(original)) {
+            return body;
+        }
+
+        TraceEventBuilder builder;
+        builder.func = task_name;
+        builder.coordinates = coordinates;
+        builder.parent_id = Variable::make(Int(32), call_stack + ".trace_id");
+        builder.thread_id = Call::make(Int(32), "halide_current_thread_id", {}, Call::Extern);
+        builder.event = halide_trace_begin_parallel_task;
+        Expr begin_task = builder.build();
+
+        builder.parent_id = Variable::make(Int(32), task_stack + ".trace_id");
+        builder.thread_id = Expr();
+        builder.event = halide_trace_end_parallel_task;
+        Expr end_task = builder.build();
+
+        return LetStmt::make(task_stack + ".trace_id", begin_task,
+                             Block::make(std::move(body), Evaluate::make(end_task)));
+    }
+
+    Stmt visit(const For *op) override {
+        Expr min = mutate(op->min);
+        Expr max = mutate(op->max);
+
+        Stmt body;
+        if (op->for_type == ForType::Parallel) {
+            const Expr extent = max - min + 1;
+            body = trace_parallel_task(op->name, op->body, {min, extent});
+        } else {
+            body = mutate(op->body);
+        }
+
+        if (min.same_as(op->min) &&
+            max.same_as(op->max) &&
+            body.same_as(op->body)) {
+            return op;
+        }
+        return op->with(min, max, body);
     }
 
     Stmt visit(const Realize *op) override {
@@ -234,9 +288,7 @@ protected:
                 Stmt _keep_alive = IRMutator::visit(op);
                 op = _keep_alive.as<Realize>();
                 internal_assert(op);
-                return Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition,
-                                     LetStmt::make(op->name + ".trace_id", 0,
-                                                   op->body));
+                return op->with(op->bounds, op->condition, LetStmt::make(op->name + ".trace_id", 0, op->body));
             } else {
                 return IRMutator::visit(op);
             }
@@ -273,9 +325,7 @@ protected:
         builder.parent_id = Variable::make(Int(32), op->name + ".trace_id");
         Expr call_after = builder.build();
 
-        return Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition,
-                             LetStmt::make(op->name + ".trace_id", call_before,
-                                           Block::make(op->body, Evaluate::make(call_after))));
+        return op->with(op->bounds, op->condition, LetStmt::make(op->name + ".trace_id", call_before, Block::make(op->body, Evaluate::make(call_after))));
     }
 
     Stmt visit(const ProducerConsumer *op) override {
@@ -321,10 +371,7 @@ protected:
         Expr end_op_call = builder.build();
 
         return LetStmt::make(op->name + ".trace_id", begin_op_call,
-                             ProducerConsumer::make(op->name, op->is_producer,
-                                                    Block::make(
-                                                        op->body,
-                                                        Evaluate::make(end_op_call))));
+                             op->with(Block::make(op->body, Evaluate::make(end_op_call))));
     }
 };
 }  // namespace

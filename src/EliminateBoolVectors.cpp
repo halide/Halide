@@ -154,11 +154,7 @@ private:
         value = mutate(value);
         Expr index = mutate(op->index);
 
-        if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
-            return op;
-        } else {
-            return Store::make(op->name, value, index, op->param, predicate, op->alignment);
-        }
+        return op->with(value, index, predicate, op->alignment);
     }
 
     Expr visit(const Load *op) override {
@@ -167,13 +163,7 @@ private:
             predicate = mutate(predicate);
         }
         Expr index = mutate(op->index);
-        if (predicate.same_as(op->predicate) && index.same_as(op->index)) {
-            return op;
-        } else {
-            return Load::make(op->type, op->name, std::move(index),
-                              op->image, op->param, std::move(predicate),
-                              op->alignment);
-        }
+        return op->with(index, predicate, op->alignment);
     }
 
     // Assuming that a and b should have the same scalar type and they might have

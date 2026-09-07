@@ -25,6 +25,7 @@ namespace Halide {
 struct Argument;
 class Callable;
 class Func;
+class FuncVec;
 struct PipelineContents;
 
 /** Special the Autoscheduler to be used (if any), along with arbitrary
@@ -58,6 +59,22 @@ struct AutoschedulerParams {
     }
 
     std::string to_string() const;
+};
+
+/** Special directives for renaming Runtime API methods with explicit prefixes
+ *
+ * The "import" prefix corresponds to the method names called from within a generated kernel
+ * The "export" prefix corresponds to the method names externally visible in the runtime library
+ * The "internal" prefix corresponds to the method names called within the runtime library
+ *
+ */
+struct RuntimePrefixParams {
+    std::map<RuntimeLinkage, std::string> prefixes;
+
+    RuntimePrefixParams() = default;
+    /*not-explicit*/ RuntimePrefixParams(const std::map<RuntimeLinkage, std::string> &m)
+        : prefixes(m) {
+    }
 };
 
 namespace Internal {
@@ -189,7 +206,7 @@ public:
     std::vector<Argument> infer_arguments(const Internal::Stmt &body);
 
     /** Get the Funcs this pipeline outputs. */
-    std::vector<Func> outputs() const;
+    FuncVec outputs() const;
 
     /** Get the requirements of this pipeline. */
     std::vector<Internal::Stmt> requirements() const;
@@ -201,6 +218,10 @@ public:
     /** Add a new the autoscheduler method with the given name. Does not affect the current default autoscheduler.
      * It is an error to call this with the same name multiple times. */
     static void add_autoscheduler(const std::string &autoscheduler_name, const AutoSchedulerFn &autoscheduler);
+
+    /** Apply any runtime namespace prefixes to allow custom runtime method names to be emitted */
+    void apply_runtime_prefixes(const Target &target,
+                                const RuntimePrefixParams &runtime_prefixes_params) const;
 
     /** Return handle to the index-th Func within the pipeline based on the
      * topological order. */

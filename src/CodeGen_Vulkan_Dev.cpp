@@ -1877,7 +1877,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
     uint32_t array_size = 0;
 
     SpvStorageClass storage_class = SpvStorageClassGeneric;
-    if (op->memory_type == MemoryType::GPUShared) {
+    if (is_gpu_shared(op->memory_type)) {
 
         // Allocation of shared memory must be declared at global scope
         storage_class = SpvStorageClassWorkgroup;  // shared across workgroup

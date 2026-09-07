@@ -2,6 +2,7 @@
 #include "IRPrinter.h"
 
 #include <mutex>
+#include <tuple>
 
 namespace Halide {
 namespace Internal {
@@ -93,21 +94,17 @@ struct TableKey {
         return (types == other.types) && (root == other.root) && (dim == other.dim);
     }
     bool operator<(const TableKey &other) const {
-        if (types < other.types) {
-            return true;
-        } else if (types > other.types) {
-            return false;
-        }
-        if (root < other.root) {
-            return true;
-        } else if (root > other.root) {
-            return false;
-        }
-        return (dim < other.dim);
+        return std::tie(types, root, dim) <
+               std::tie(other.types, other.root, other.dim);
     }
 };
 
 map<TableKey, vector<AssociativePattern>> pattern_tables;
+
+std::mutex &ops_table_lock() {
+    static std::mutex lock;
+    return lock;
+}
 
 #define declare_vars(t, index)                                        \
     Expr x##index = Variable::make((t), "x" + std::to_string(index)); \
@@ -362,8 +359,7 @@ const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
     const vector<AssociativePattern> &table = [&]() -> decltype(auto) {
         // get_ops_table_helper() lazily initializes the table, so ensure
         // that multiple threads can't try to do so at the same time.
-        static std::mutex ops_table_lock;
-        std::scoped_lock lock_guard(ops_table_lock);
+        std::scoped_lock lock_guard(ops_table_lock());
 
         return get_ops_table_helper(types, exprs[0].node_type(), exprs.size());
     }();
@@ -374,6 +370,25 @@ const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
     }
 
     return table;
+}
+
+Expr get_associative_identity(Type type, IRNodeType root) {
+    std::scoped_lock lock_guard(ops_table_lock());
+
+    const vector<Type> types{type};
+    const vector<AssociativePattern> &table = get_ops_table_helper(types, root, 1);
+    if (table.empty()) {
+        return Expr();
+    }
+
+    const Expr &identity = table.front().identities.front();
+    for (const AssociativePattern &pattern : table) {
+        internal_assert(pattern.size() == 1);
+        if (!equal(pattern.identities.front(), identity)) {
+            return Expr();
+        }
+    }
+    return identity;
 }
 
 }  // namespace Internal

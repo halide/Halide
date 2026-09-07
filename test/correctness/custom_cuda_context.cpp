@@ -58,25 +58,14 @@ int main(int argc, char **argv) {
         // cuda-using application but is helpful for our
         // build-and-test infrastructure.
 
-        // We'll find cuda module in the Halide runtime so
-        // that we can use it resolve symbols into libcuda in a
-        // portable way.
+        // We'll find the cuda module in the Halide runtime so we can
+        // use it to resolve symbols into libcuda in a portable way.
 
         // Force-initialize the cuda runtime module by running something trivial.
         evaluate_may_gpu<float>(Expr(0.f));
 
-        // Go get it, and dig out the method used to resolve symbols in libcuda.
-        auto runtime_modules = Internal::JITSharedRuntime::get(nullptr, target, false);
-        void *(*halide_cuda_get_symbol)(void *, const char *) = nullptr;
-        for (Internal::JITModule &m : runtime_modules) {
-            // Just rifle through all the runtime modules for this
-            // target until we find the method we want.
-            auto sym = m.find_symbol_by_name("halide_cuda_get_symbol");
-            if (sym.address != nullptr) {
-                halide_cuda_get_symbol = (decltype(halide_cuda_get_symbol))sym.address;
-                break;
-            }
-        }
+        auto halide_cuda_get_symbol = (void *(*)(void *, const char *))
+            Internal::JITSharedRuntime::find_symbol(target, "halide_cuda_get_symbol");
 
         if (halide_cuda_get_symbol == nullptr) {
             printf("Failed to extract halide_cuda_get_symbol from Halide cuda runtime\n");

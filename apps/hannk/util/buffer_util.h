@@ -36,11 +36,11 @@ template<template<typename> class Functor, typename... Args>
 auto dynamic_type_dispatch(const halide_type_t &type, Args &&...args)
     -> decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...)) {
 
-#define HANDLE_CASE(CODE, BITS, TYPE)        \
-    case halide_type_t(CODE, BITS).as_u32(): \
+#define HANDLE_CASE(CODE, BITS, TYPE) \
+    case halide_type_t(CODE, BITS):   \
         return Functor<TYPE>()(std::forward<Args>(args)...);
 
-    switch (type.element_of().as_u32()) {
+    switch (type) {
         // HANDLE_CASE(halide_type_float, 16, float)  // TODO
         HANDLE_CASE(halide_type_float, 32, float)
         HANDLE_CASE(halide_type_float, 64, double)

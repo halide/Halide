@@ -1,0 +1,5 @@
+# Halide's printer emits float literals in scientific notation when they're
+# small enough, so the parser has to accept an exponent. Parsing 2.5e3
+# correctly turns it back into 2500.
+2.500000e+03f
+1.000000e-16f

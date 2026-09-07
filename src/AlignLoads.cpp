@@ -36,10 +36,7 @@ private:
     // Rewrite a load to have a new index, updating the type if necessary.
     Expr make_load(const Load *load, const Expr &index, ModulusRemainder alignment) {
         internal_assert(is_const_one(load->predicate)) << "Load should not be predicated.\n";
-        return mutate(Load::make(load->type.with_lanes(index.type().lanes()), load->name,
-                                 index, load->image, load->param,
-                                 const_true(index.type().lanes()),
-                                 alignment));
+        return mutate(load->with(index, const_true(index.type().lanes()), alignment));
     }
 
     Expr visit(const Load *op) override {

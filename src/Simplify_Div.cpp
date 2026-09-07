@@ -204,9 +204,34 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
            (op->type.is_float() && rewrite(x / c0, x * fold(1 / c0))))) ||
          (no_overflow_int(op->type) &&
           (rewrite(ramp(x, c0, lanes) / broadcast(c1, lanes), ramp(x / c1, fold(c0 / c1), lanes), (c0 % c1 == 0)) ||
-           rewrite(ramp(x, c0, lanes) / broadcast(c1, lanes), broadcast(x / c1, lanes),
-                   // First and last lanes are the same when...
-                   can_prove((x % c1 + c0 * (lanes - 1)) / c1 == 0, this)))) ||
+           // Every lane gives the same quotient when the base is a multiple of
+           // the denominator and the ramp doesn't span far enough to reach the
+           // next one. In the affine case the offset just has to leave room
+           // within its own multiple for the rest of the ramp.
+           rewrite(ramp(x * c1, c0, lanes) / broadcast(c2, lanes),
+                   broadcast(x * fold(c1 / c2), lanes),
+                   c2 > 0 && c1 % c2 == 0 && c0 >= 0 && c0 * (lanes - 1) < c2) ||
+           rewrite(ramp(x * c1 + c5, c0, lanes) / broadcast(c2, lanes),
+                   broadcast(x * fold(c1 / c2) + fold(c5 / c2), lanes),
+                   c2 > 0 && c1 % c2 == 0 && c0 >= 0 &&
+                       c5 % c2 + c0 * (lanes - 1) < c2) ||
+           // The rules above require the numerator and the denominator to be
+           // vectorized the same way, which they aren't when the numerator is
+           // a nested vector. Push the division inwards to line them up.
+           rewrite(broadcast(x, c0) / broadcast(y, c1),
+                   broadcast(x / broadcast(y, fold(c1 / c0)), c0),
+                   c0 < c1 && c1 % c0 == 0) ||
+           // The same argument, for a ramp whose lanes are each repeated by an
+           // inner broadcast. Repeating a lane doesn't change the set of
+           // values, so the span condition is unchanged.
+           rewrite(ramp(broadcast(x * c1, c3), broadcast(c0, c3), c4) / broadcast(c2, lanes),
+                   broadcast(x * fold(c1 / c2), lanes),
+                   c2 > 0 && c1 % c2 == 0 && c0 >= 0 && c0 * (c4 - 1) < c2 &&
+                       c3 * c4 == lanes) ||
+           rewrite(ramp(broadcast(x * c1 + c5, c3), broadcast(c0, c3), c4) / broadcast(c2, lanes),
+                   broadcast(x * fold(c1 / c2) + fold(c5 / c2), lanes),
+                   c2 > 0 && c1 % c2 == 0 && c0 >= 0 &&
+                       c5 % c2 + c0 * (c4 - 1) < c2 && c3 * c4 == lanes))) ||
          (no_overflow_scalar_int(op->type) &&
           (rewrite(x / -1, -x) ||
            (denominator_non_zero && rewrite(c0 / y, select(y < 0, fold(-c0), c0), c0 == -1)) ||

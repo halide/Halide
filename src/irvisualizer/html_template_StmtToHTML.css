@@ -1,14 +1,12 @@
 /* General CSS Rules*/
 * {
-    --font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace;
-    font-size: 12px;
-    font-family: Consolas, 'Fira Code',Courier New,Monaco,Andale Mono,Ubuntu Mono,monospace;
+    font-size: 13px;
+    font-family: monospace;
 }
 
 body {
     padding: 0;
     margin: 0;
-    line-height: 14px;
 }
 
 [data-theme="classic-light"] {
@@ -26,7 +24,7 @@ body {
     --fg1:      #333;
     --red:      #c00;
     --orange:   #a50;
-    --yellow:   #bb0;
+    --yellow:   #880;
     --green:    #080;
     --aqua:     #099;
     --blue:     #01a;
@@ -49,6 +47,49 @@ body {
     --grey0:            #aaa;
     --grey1:            #999;
     --grey2:            #555;
+
+    --cost-Lf: 1.0;
+}
+
+
+[data-theme="classic-dark"] {
+    --bg-color: #000;
+    --fg-color: #fff;
+
+    --bg0:      #111;
+    --bg1:      #222;
+    --bg2:      #333;
+    --bg3:      #444;
+    --bg4:      #555;
+    --bg5:      #111;
+
+    --fg0:      #fff;
+    --fg1:      #eee;
+    --red:      #f00;
+    --orange:   #f80;
+    --yellow:   #ff0;
+    --green:    #080;
+    --aqua:     #0ff;
+    --blue:     #35f;
+    --purple:   #d4b;
+
+
+    --bg_diff_green:    #e4edc8;
+    --bg_visual_green:  #dde5c2;
+    --bg_diff_red:      #f8e4c9;
+    --bg_visual_red:    #f0ddc3;
+    --bg_diff_blue:     #e0e9d3;
+    --bg_visual_blue:   #d9e1cc;
+    --bg_visual_yellow: #f9eabf;
+    --bg_current_word:  #f3eac7;
+
+    --bg_red:           #a55;
+    --bg_green:         #4b4;
+    --bg_yellow:        #ca0;
+
+    --grey0:            #888;
+    --grey1:            #aaa;
+    --grey2:            #ccc;
 
     --cost-Lf: 1.0;
 }
@@ -152,6 +193,7 @@ body {
     --cs-line-num: var(--grey0);
     --cs-register: var(--orange);
     --cs-variable: var(--grey2);
+    --cs-alignment: var(--yellow);
 }
 
 
@@ -162,12 +204,16 @@ span.UIntImm      { color: var(--cs-uint); }
 span.FloatImm     { color: var(--cs-float); }
 span.StringImm    { color: var(--cs-str); }
 span.Type         { color: var(--cs-type); font-weight: bold; }
-span.Symbol       { color: var(--cs-symbol); }
 span.Assign       { color: var(--cs-operator); }
 span.Comment      { color: var(--cs-comment); font-style: italic; }
-span.Operator     { color: var(--cs-operator); }
+span.Alignment    { color: var(--cs-alignment); opacity: 0.75; }
 #ir-code-pane     b.variable     { color: var(--cs-variable); }
 #device-code-pane b.variable     { color: var(--cs-register); }
+
+[data-rainbow-parens="false"] {
+    span.Operator     { color: var(--cs-operator); }
+    span.Symbol       { color: var(--cs-symbol); }
+}
 
 b.Highlight, b.Highlight *   {
     font-weight: bold;
@@ -254,6 +300,20 @@ span.Label b { background-color: var(--bg_visual_red); font-weight: bold !import
     -webkit-user-select: none;
 }
 
+
+[data-rainbow-parens="true"] {
+    #ir-code-pane {
+        color: var(--aqua);
+        span.expr-depth-1 { color: var(--red); }
+        span.expr-depth-2 { color: var(--blue); }
+        span.expr-depth-3 { color: var(--green); }
+        span.expr-depth-4 { color: var(--yellow); }
+        span.expr-depth-5 { color: var(--purple); }
+        span.expr-depth-6 { color: var(--aqua); }
+        span.expr-depth-7 { color: var(--orange); }
+        span.expr-depth-8 { color: var(--green); }
+    }
+}
 
 a,
 a:hover,
@@ -510,7 +570,7 @@ div.For { border-radius: 8px; }
 div.For.for-type-parallel,
 div.For.for-type-gpu_block {
     min-width: fit-content;
-    background-color: rgba(240, 200, 0, 0.03);
+    background-color: rgba(240, 200, 0, 0.04);
     border: 3px solid rgba(240, 200, 0, 0.10);
     margin: 0.2em 0.0em;
     padding: 0.1em;
@@ -525,7 +585,7 @@ div.For.for-type-gpu_block div.For.for-type-gpu_block {
     padding: 0;
 }
 div.For.for-type-gpu_thread {
-    background-color: rgba(240, 100, 50, 0.03);
+    background-color: rgba(240, 100, 50, 0.04);
     border: 3px solid rgba(240, 100, 50, 0.10);
     margin: 0.2em 0.0em;
     padding: 0.1em;
@@ -644,16 +704,17 @@ div.icon-btn {
     margin-right: 0px;
     width: 24px;
     height: 12px;
-    line-height: 16px;
     vertical-align: middle;
+    position: relative;
     background: transparent;
-    font-size: 22px;
+    font-size: 20px;
     outline: 1px solid black;
     top: -1px;
     border-radius: 4px;
     display: inline-block;
     text-align: center;
     box-sizing: border-box;
+    line-height: 10px;
 }
 div.icon-btn:before {
     margin: 0;
@@ -746,8 +807,16 @@ div.Evaluate:before {
 }
 }
 
+div.EmptyLine {
+    visibility: hidden;
+}
+div.Let {
+    display: block;
+    padding-left: 15px;
+}
+
 .tooltip-parent {
-    position: relative;
+    position: absolute;
     overflow: visible;
 }
 
@@ -756,10 +825,10 @@ span.tooltip {
     color: black;
     font-weight: normal;
     visibility: hidden;
+    position: absolute;
     left: 50px;
     top: -10px;
     width: max-content;
-    position: relative;
     display: block;
     padding: 8px;
     background: #fff7e0;

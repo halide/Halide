@@ -52,6 +52,21 @@ Expr Simplify::visit(const Or *op, ExprInfo *info) {
          rewrite((y || x) || (neg(x) || z), true) ||
          rewrite((y || x) || (z || neg(x)), true) ||
          rewrite(!((x && z) && y) || x, true) ||
+         // The same absorptions, but where the term that survives is the
+         // second operand of the conjunction rather than the first.
+         rewrite(x || !(y && x), true) ||
+         rewrite(x || !((y && x) && z), true) ||
+         rewrite(x || !(y && (z && x)), true) ||
+         rewrite(x || !(y && (x && z)), true) ||
+         rewrite(!(x && y) || y, true) ||
+         rewrite(!((x && y) && z) || y, true) ||
+         rewrite(!(x && (y && z)) || y, true) ||
+         rewrite(!(x && (y && z)) || z, true) ||
+         // If x is at least c0 it can't equal any smaller constant.
+         rewrite((x < c0) || (x != c1), true, c1 < c0) ||
+         // A variable can't be equal to two different constants at once.
+         rewrite(!((x == c0) && y) || (x != c1), true, c0 != c1) ||
+         rewrite(!(x && (y == c0)) || (y != c1), true, c0 != c1) ||
          rewrite((!(x && z) || y) || x, true) ||
          rewrite((y || !(x && z)) || x, true) ||
          rewrite((!(z && x) || y) || x, true) ||
@@ -132,6 +147,8 @@ Expr Simplify::visit(const Or *op, ExprInfo *info) {
     // Cases that need remutation
     if (EVAL_IN_LAMBDA  //
         (rewrite(broadcast(x, c0) || broadcast(y, c0), broadcast(x || y, c0)) ||
+         // Collect negations, which is the smaller form.
+         rewrite(!x || !y, !(x && y)) ||
          rewrite((x || broadcast(y, c0)) || broadcast(z, c0), x || broadcast(y || z, c0)) ||
          rewrite((broadcast(x, c0) || y) || broadcast(z, c0), broadcast(x || z, c0) || y) ||
 

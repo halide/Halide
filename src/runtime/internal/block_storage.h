@@ -396,9 +396,12 @@ void BlockStorage::allocate(void *user_context, size_t new_capacity) {
                             << "block_count=" << (int32_t)block_count << " "
                             << "alloc_size=" << (int32_t)alloc_size << ") ...\n";
 #endif
+        // resize() assigns the requested count before growing, so the existing
+        // allocation may hold fewer than count entries.
+        size_t copy_count = min(count, capacity);
         void *new_ptr = alloc_size ? allocator.allocate(user_context, alloc_size) : nullptr;
-        if (count != 0 && ptr != nullptr && new_ptr != nullptr) {
-            memcpy(new_ptr, ptr, count * config.entry_size);
+        if (copy_count != 0 && ptr != nullptr && new_ptr != nullptr) {
+            memcpy(new_ptr, ptr, copy_count * config.entry_size);
         }
         if (ptr != nullptr) {
             halide_abort_if_false(user_context, allocator.deallocate != nullptr);

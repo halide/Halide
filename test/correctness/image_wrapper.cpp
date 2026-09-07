@@ -200,13 +200,13 @@ int update_defined_after_wrapper_test() {
 
     g(x, y) = img(x, y);
 
-    Func wrapper = img.in(g);
-
-    // Update of 'g' is defined after img.in(g) is called. g's updates should
-    // still call img's wrapper.
+    // in() rewrites the call graph eagerly, so it only affects the stages of 'g'
+    // that exist when it is called. Define g's update first, then wrap.
     RDom r(0, 100, 0, 100);
     r.where(r.x < r.y);
     g(r.x, r.y) += 2 * img(r.x, r.y);
+
+    Func wrapper = img.in(g);
 
     Param<bool> param;
 

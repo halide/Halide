@@ -105,7 +105,6 @@ int main(int argc, char **argv) {
             "#undef internal_assert\n"
             "#undef halide_runtime_error\n"
             "#undef debug\n"
-            "#undef debug_is_active\n"
             "#endif\n"
             "#endif  // HALIDE_H\n");
 

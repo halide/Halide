@@ -104,6 +104,7 @@ enum DeviceAPI: byte {
     D3D12Compute,
     Vulkan,
     WebGPU,
+    SMEStreaming,
 }
 
 enum MemoryType: byte {
@@ -116,6 +117,7 @@ enum MemoryType: byte {
     LockedCache,
     VTCM,
     AMXTile,
+    GPUSharedAsync,
 }
 
 table Range {
@@ -162,6 +164,7 @@ table Store {
     index: Expr;
     param_name: string;
     alignment: ModulusRemainder;
+    is_streaming: bool;
 }
 
 table Provide {
@@ -382,6 +385,7 @@ table Load {
     param_name: string;
     alignment: ModulusRemainder;
     type: Type;
+    is_streaming: bool;
 }
 
 table Ramp {
@@ -511,6 +515,11 @@ table WrapperRef {
     func_index: int32;
 }
 
+table TypeChangeCheck {
+    condition: Expr;
+    message: string;
+}
+
 table FuncSchedule {
     store_level: LoopLevel;
     compute_level: LoopLevel;
@@ -524,6 +533,7 @@ table FuncSchedule {
     async: bool;
     ring_buffer: Expr;
     memoize_eviction_key: Expr;
+    type_change_checks: [TypeChangeCheck];
 }
 
 table Specialization {
@@ -606,6 +616,9 @@ table StageSchedule {
     allow_race_conditions: bool = false;
     atomic: bool = false;
     override_atomic_associativity_test: bool = false;
+    stream_stores: bool = false;
+    stream_loads_all: bool = false;
+    stream_loads_names: [string];
 }
 
 table Definition {
@@ -713,7 +726,9 @@ table Func {
     trace_realizations: bool = false;
     trace_tags: [string];
     no_profiling: bool = false;
+    profiler_display_name: string;
     frozen: bool = false;
+    global_wrapper: WrapperRef;
 }
 
 table Pipeline {

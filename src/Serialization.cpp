@@ -150,6 +150,8 @@ Serialize::MemoryType Serializer::serialize_memory_type(const MemoryType &memory
         return Serialize::MemoryType::Register;
     case MemoryType::GPUShared:
         return Serialize::MemoryType::GPUShared;
+    case MemoryType::GPUSharedAsync:
+        return Serialize::MemoryType::GPUSharedAsync;
     case MemoryType::GPUTexture:
         return Serialize::MemoryType::GPUTexture;
     case MemoryType::LockedCache:
@@ -226,6 +228,8 @@ Serialize::DeviceAPI Serializer::serialize_device_api(const DeviceAPI &device_ap
         return Serialize::DeviceAPI::Vulkan;
     case DeviceAPI::WebGPU:
         return Serialize::DeviceAPI::WebGPU;
+    case DeviceAPI::SMEStreaming:
+        return Serialize::DeviceAPI::SMEStreaming;
     default:
         user_error << "Unsupported device API\n";
         return Serialize::DeviceAPI::None;
@@ -474,7 +478,8 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
                                                      predicate_serialized.first, predicate_serialized.second,
                                                      value_serialized.first, value_serialized.second,
                                                      index_serialized.first, index_serialized.second,
-                                                     param_name_serialized, alignment_serialized)
+                                                     param_name_serialized, alignment_serialized,
+                                                     store_stmt->is_streaming)
                                   .Union());
     }
     case IRNodeType::Provide: {
@@ -841,7 +846,8 @@ std::pair<Serialize::Expr, Offset<void>> Serializer::serialize_expr(FlatBufferBu
                                                     predicate_serialized.first, predicate_serialized.second,
                                                     index_serialized.first, index_serialized.second,
                                                     image_name_serialized, param_name_serialized,
-                                                    alignment_serialized, type_serialized)
+                                                    alignment_serialized, type_serialized,
+                                                    load_expr->is_streaming)
                                   .Union());
     }
     case IRNodeType::Ramp: {
@@ -1028,7 +1034,20 @@ Offset<Serialize::Func> Serializer::serialize_function(FlatBufferBuilder &builde
         trace_tags_serialized.push_back(serialize_string(builder, tag));
     }
     const bool no_profiling = function.should_not_profile();
+    const auto profiler_display_name_serialized = serialize_string(builder, function.profiler_display_name());
     const bool frozen = function.frozen();
+
+    Offset<Serialize::WrapperRef> global_wrapper_serialized = 0;
+    const Function global_wrapper = function.global_wrapper();
+    if (global_wrapper.get_contents().defined()) {
+        auto global_wrapper_name_serialized = serialize_string(builder, global_wrapper.name());
+        int func_index = -1;
+        if (auto it = this->func_mappings.find(global_wrapper.name()); it != this->func_mappings.end()) {
+            func_index = it->second;
+        }
+        global_wrapper_serialized = Serialize::CreateWrapperRef(builder, global_wrapper_name_serialized, func_index);
+    }
+
     auto func = Serialize::CreateFunc(builder,
                                       name_serialized,
                                       origin_name_serialized,
@@ -1051,7 +1070,9 @@ Offset<Serialize::Func> Serializer::serialize_function(FlatBufferBuilder &builde
                                       trace_realizations,
                                       builder.CreateVector(trace_tags_serialized),
                                       no_profiling,
-                                      frozen);
+                                      profiler_display_name_serialized,
+                                      frozen,
+                                      global_wrapper_serialized);
     return func;
 }
 
@@ -1118,14 +1139,27 @@ Offset<Serialize::FuncSchedule> Serializer::serialize_func_schedule(FlatBufferBu
     const auto async = func_schedule.async();
     const auto ring_buffer = serialize_expr(builder, func_schedule.ring_buffer());
     const auto memoize_eviction_key_serialized = serialize_expr(builder, func_schedule.memoize_eviction_key());
+    std::vector<Offset<Serialize::TypeChangeCheck>> type_change_checks_serialized;
+    type_change_checks_serialized.reserve(func_schedule.type_change_checks().size());
+    for (const auto &[condition, message] : func_schedule.type_change_checks()) {
+        const auto condition_serialized = serialize_expr(builder, condition);
+        const auto message_serialized = serialize_string(builder, message);
+        type_change_checks_serialized.push_back(
+            Serialize::CreateTypeChangeCheck(builder,
+                                             condition_serialized.first,
+                                             condition_serialized.second,
+                                             message_serialized));
+    }
     return Serialize::CreateFuncSchedule(builder, store_level_serialized, compute_level_serialized,
                                          hoist_storage_level_serialized,
                                          builder.CreateVector(storage_dims_serialized),
                                          builder.CreateVector(bounds_serialized),
                                          builder.CreateVector(estimates_serialized),
                                          builder.CreateVector(wrappers_serialized),
-                                         memory_type, memoized, async, ring_buffer.first, ring_buffer.second,
-                                         memoize_eviction_key_serialized.first, memoize_eviction_key_serialized.second);
+                                         memory_type, memoized, async,
+                                         ring_buffer.first, ring_buffer.second,
+                                         memoize_eviction_key_serialized.first, memoize_eviction_key_serialized.second,
+                                         builder.CreateVector(type_change_checks_serialized));
 }
 
 Offset<Serialize::Specialization> Serializer::serialize_specialization(FlatBufferBuilder &builder, const Specialization &specialization) {
@@ -1292,6 +1326,16 @@ Offset<Serialize::StageSchedule> Serializer::serialize_stage_schedule(FlatBuffer
     const bool allow_race_conditions = stage_schedule.allow_race_conditions();
     const bool atomic = stage_schedule.atomic();
     const bool override_atomic_associativity_test = stage_schedule.override_atomic_associativity_test();
+    const bool stream_stores = stage_schedule.stream_stores();
+    const auto &stream_loads_names_opt = stage_schedule.stream_loads_names();
+    const bool stream_loads_all = !stream_loads_names_opt.has_value();
+    std::vector<Offset<String>> stream_loads_names_serialized;
+    if (stream_loads_names_opt) {
+        stream_loads_names_serialized.reserve(stream_loads_names_opt->size());
+        for (const auto &name : *stream_loads_names_opt) {
+            stream_loads_names_serialized.push_back(serialize_string(builder, name));
+        }
+    }
     return Serialize::CreateStageSchedule(builder,
                                           builder.CreateVector(rvars_serialized),
                                           builder.CreateVector(splits_serialized),
@@ -1300,7 +1344,9 @@ Offset<Serialize::StageSchedule> Serializer::serialize_stage_schedule(FlatBuffer
                                           fuse_level_serialized,
                                           builder.CreateVector(fused_pairs_serialized),
                                           touched, allow_race_conditions, atomic,
-                                          override_atomic_associativity_test);
+                                          override_atomic_associativity_test,
+                                          stream_stores, stream_loads_all,
+                                          builder.CreateVector(stream_loads_names_serialized));
 }
 
 Offset<Serialize::BufferConstraint> Serializer::serialize_buffer_constraint(FlatBufferBuilder &builder, const BufferConstraint &buffer_constraint) {
@@ -1338,7 +1384,9 @@ Offset<Serialize::Parameter> Serializer::serialize_parameter(FlatBufferBuilder &
         }
         const auto memory_type_serialized = serialize_memory_type(parameter.memory_type());
         return Serialize::CreateParameter(builder, defined, is_buffer, type_serialized, dimensions, name_serialized, host_alignment,
-                                          builder.CreateVector(buffer_constraints_serialized), memory_type_serialized);
+                                          builder.CreateVector(buffer_constraints_serialized), memory_type_serialized, std::nullopt,
+                                          Serialize::Expr::NONE, 0, Serialize::Expr::NONE, 0,
+                                          Serialize::Expr::NONE, 0, Serialize::Expr::NONE, 0);
     } else {
         static_assert(FLATBUFFERS_USE_STD_OPTIONAL);
         const auto make_optional_u64 = [](const std::optional<halide_scalar_value_t> &v) -> std::optional<uint64_t> {

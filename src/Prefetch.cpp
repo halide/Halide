@@ -166,11 +166,11 @@ protected:
                 condition = simplify(prefetch_box.used && condition);
             }
             internal_assert(!new_bounds.empty());
-            return Prefetch::make(op->name, op->types, new_bounds, op->prefetch, std::move(condition), std::move(body));
+            return op->with(new_bounds, condition, body);
         }
 
         if (!body.same_as(op->body)) {
-            return Prefetch::make(op->name, op->types, op->bounds, op->prefetch, op->condition, std::move(body));
+            return op->with(op->bounds, op->condition, body);
         } else if (op->bounds.empty()) {
             // Remove the Prefetch IR since it is prefetching an empty region
             user_warning << "Removing prefetch of " << p.name
@@ -249,12 +249,7 @@ protected:
             }
         }
 
-        Stmt stmt;
-        if (!body.same_as(op->body)) {
-            stmt = For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, std::move(body));
-        } else {
-            stmt = op;
-        }
+        Stmt stmt = op->with(op->min, op->max, body);
 
         internal_assert(loop_nest.back() == op->name);
         loop_nest.pop_back();
@@ -395,43 +390,23 @@ public:
     }
 };
 
-template<typename Fn>
-void traverse_block(const Stmt &s, Fn &&f) {
-    const Block *b = s.as<Block>();
-    if (!b) {
-        f(s);
-    } else {
-        traverse_block(b->first, f);
-        traverse_block(b->rest, f);
-    }
-}
-
 class HoistPrefetches : public IRMutator {
 protected:
     using IRMutator::visit;
 
     Stmt visit(const Block *op) override {
-        Stmt s = op;
-
-        Stmt prefetches, body;
-        traverse_block(s, [this, &prefetches, &body](const Stmt &s_in) {
+        vector<Stmt> prefetches, body;
+        for (const Stmt &s_in : Block::to_vector(op)) {
             Stmt s = IRMutator::mutate(s_in);
             const Evaluate *eval = s.as<Evaluate>();
             if (eval && Call::as_intrinsic(eval->value, {Call::prefetch})) {
-                prefetches = prefetches.defined() ? Block::make(prefetches, s) : s;
+                prefetches.push_back(std::move(s));
             } else {
-                body = body.defined() ? Block::make(body, s) : s;
+                body.push_back(std::move(s));
             }
-        });
-        if (prefetches.defined()) {
-            if (body.defined()) {
-                return Block::make(prefetches, body);
-            } else {
-                return prefetches;
-            }
-        } else {
-            return body;
         }
+        prefetches.insert(prefetches.end(), body.begin(), body.end());
+        return Block::make(prefetches);
     }
 };
 

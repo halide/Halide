@@ -1,5 +1,6 @@
 #include <limits>
 #include <memory>
+#include <set>
 #include <sstream>
 
 #include "CPlusPlusMangle.h"
@@ -8,7 +9,6 @@
 #include "CodeGen_Internal.h"
 #include "CodeGen_LLVM.h"
 #include "CodeGen_Targets.h"
-#include "CompilerLogger.h"
 #include "CompilerProfiling.h"
 #include "Debug.h"
 #include "Deinterleave.h"
@@ -135,6 +135,13 @@ using std::vector;
 
 namespace {
 
+// AArch64's full-width non-temporal vector accesses are LDNP/STNP pairs of
+// 128-bit NEON registers. Keeping streaming slices at least this wide gives
+// LLVM a 256-bit access that it can select to those instructions instead of
+// splitting it into ordinary 128-bit loads or stores before instruction
+// selection. Other backends can still legalize this width as needed.
+constexpr int minimum_streaming_vector_bits = 256;
+
 llvm::Value *CreateConstGEP1_32(IRBuilderBase *builder, llvm::Type *gep_type,
                                 Value *ptr, unsigned index) {
     return builder->CreateConstGEP1_32(gep_type, ptr, index);
@@ -180,6 +187,7 @@ CodeGen_LLVM::CodeGen_LLVM(const Target &t)
       wild_u64x_(Variable::make(UInt(64, 0), "*")),
       wild_f32x_(Variable::make(Float(32, 0), "*")),
       wild_f64x_(Variable::make(Float(64, 0), "*")),
+      wild_bf16x_(Variable::make(BFloat(16, 0), "*")),
 
       wild_u1_(Variable::make(UInt(1), "*")),
       wild_i8_(Variable::make(Int(8), "*")),
@@ -200,10 +208,15 @@ CodeGen_LLVM::CodeGen_LLVM(const Target &t)
 
 void CodeGen_LLVM::set_context(llvm::LLVMContext &context) {
     this->context = &context;
-    effective_vscale = target_vscale();
+    set_effective_vscale(target_vscale());
 }
 
 std::unique_ptr<CodeGen_LLVM> CodeGen_LLVM::new_for_target(const Target &target, llvm::LLVMContext &context) {
+    // Code generation inspects the target's features to decide which
+    // instructions are available, so it expects a target with all implied
+    // features already set (e.g. AVX2 implies AVX, SSE41, ...). This is
+    // guaranteed for the module produced by lower(), and for the host target
+    // used to compile JIT trampolines.
     std::unique_ptr<CodeGen_LLVM> result;
     if (target.arch == Target::X86) {
         result = new_CodeGen_X86(target);
@@ -309,6 +322,17 @@ void CodeGen_LLVM::init_module() {
 
     // Start with a module containing the initial module for this target.
     module = get_initial_module_for_target(target, context);
+
+    // Record the runtime's symbols now, before any pipeline functions are
+    // emitted, so that runtime-namespace renaming can identify runtime-internal
+    // symbols precisely (see apply_runtime_prefixes_prefixes).
+    runtime_symbols.clear();
+    for (const llvm::Function &f : module->functions()) {
+        runtime_symbols.insert(f.getName().str());
+    }
+    for (const llvm::GlobalVariable &g : module->globals()) {
+        runtime_symbols.insert(g.getName().str());
+    }
 }
 
 namespace {
@@ -348,7 +372,7 @@ MangledNames get_mangled_names(const std::string &name,
         names.extern_name = cplusplus_function_mangled_name(names.simple_name, namespaces, type_of<int>(), mangle_args, target);
         halide_handle_cplusplus_type inner_type(halide_cplusplus_type_name(halide_cplusplus_type_name::Simple, "void"), {}, {},
                                                 {halide_handle_cplusplus_type::Pointer, halide_handle_cplusplus_type::Pointer});
-        Type void_star_star(Handle(1, &inner_type));
+        Type void_star_star(Handle(&inner_type));
         names.argv_name = cplusplus_function_mangled_name(names.argv_name, namespaces, type_of<int>(), {ExternFuncArgument(make_zero(void_star_star))}, target);
         names.metadata_name = cplusplus_function_mangled_name(names.metadata_name, namespaces, type_of<const struct halide_filter_metadata_t *>(), {}, target);
     }
@@ -499,6 +523,187 @@ CodeGen_LLVM::ScopedFastMath::~ScopedFastMath() {
     }
 }
 
+namespace {
+
+// Rename the halide runtime symbols in the module according to the
+// user-supplied prefixes.
+//
+// Two families of symbols are renamed:
+//
+// (a) The halide_-prefixed C ABI (extern "C" functions), replacing the leading
+//     "halide_" with the appropriate prefix. Its scope is the function's role:
+//       - Export:   a halide_-prefixed *definition* -- a runtime method this
+//                   module exports (externally visible in the runtime library).
+//       - Import:   a halide_-prefixed *declaration* whose call sites are in the
+//                   generated kernel -- a runtime method the kernel imports from
+//                   a separately-compiled runtime.
+//       - Internal: a halide_-prefixed *declaration* whose call sites are inside
+//                   *other runtime methods* -- one runtime method calling
+//                   another that is defined in a different compilation unit.
+//     Import vs. Internal is decided by who calls the (external) declaration:
+//     the pipeline's own entry functions (import) vs. any other defined
+//     function, i.e. a runtime method (internal). `pipeline_functions` lists the
+//     kernel entry-point symbol names so we can tell them apart.
+//
+// (b) The runtime's *other* internal symbols -- functions and global variables
+//     that carry no "halide_" to replace (the Halide::Runtime::Internal C++
+//     symbols, and non-namespaced device-runtime helpers such as
+//     `is_compiled_metallib`). These are exactly the symbols present in the
+//     runtime-only module (`runtime_symbols`), minus the halide_ C ABI handled
+//     in (a). The Internal prefix is *prepended*. This is what keeps two
+//     differently-namespaced runtimes from sharing runtime state (and from
+//     colliding on externally-linked device-runtime symbols): renaming e.g.
+//     `Halide::Runtime::Internal::custom_malloc` gives each runtime its own
+//     copy, so their renamed halide_set_*/halide_get_* methods operate on
+//     independent state.
+//
+// The pipeline's own entry points and any libc symbols are left alone. Because
+// LLVM call sites and initializers refer to the llvm::GlobalValue object (not
+// its name), renaming a symbol automatically updates every in-module reference;
+// no separate call-site rewriting is needed.
+
+// Rename a runtime symbol, keeping its COMDAT (if any) in sync. On Windows/COFF
+// each weak runtime symbol lives in a COMDAT, and the COFF backend emits
+// associative sections (e.g. exception-handling data) and weak-external
+// fallbacks that reference the COMDAT's leader by name. Renaming a symbol
+// without fixing up its COMDAT leaves a dangling leader ("Associative COMDAT
+// symbol '...' does not exist") or, when symbols share a group, a leader that
+// no longer matches ("conflicting weak extern definition").
+//
+// Since every renamed symbol gets a unique name, give each its own fresh COMDAT
+// named after that new name; this keeps every leader well-defined and dissolves
+// any stale shared/associative grouping from before the rename. On targets that
+// strip COMDATs (Mac) getComdat() is null and this is just a setName().
+void rename_runtime_symbol(llvm::GlobalValue &g, const std::string &new_name) {
+    auto *go = llvm::dyn_cast<llvm::GlobalObject>(&g);
+    llvm::Comdat *old_comdat = go ? go->getComdat() : nullptr;
+
+    g.setName(new_name);
+
+    if (old_comdat != nullptr) {
+        llvm::Comdat *new_comdat = g.getParent()->getOrInsertComdat(new_name);
+        new_comdat->setSelectionKind(old_comdat->getSelectionKind());
+        go->setComdat(new_comdat);
+    }
+}
+
+void apply_runtime_prefixes_prefixes(llvm::Module &module,
+                                     const RuntimeNamespaceMap &prefixes,
+                                     const std::set<std::string> &pipeline_functions,
+                                     const std::set<std::string> &runtime_symbols) {
+    if (prefixes.empty()) {
+        return;
+    }
+
+    const std::string halide_prefix = "halide_";
+
+    auto find_prefix = [&prefixes](RuntimeLinkage v) -> const std::string * {
+        auto it = prefixes.find(v);
+        return (it != prefixes.end()) ? &it->second : nullptr;
+    };
+    const std::string *import_prefix = find_prefix(RuntimeLinkage::Import);
+    const std::string *export_prefix = find_prefix(RuntimeLinkage::Export);
+    const std::string *internal_prefix = find_prefix(RuntimeLinkage::Internal);
+
+    // Is `f` one of the generated kernel's own entry points?
+    auto is_kernel_function = [&pipeline_functions](const llvm::Function *f) {
+        return f != nullptr &&
+               pipeline_functions.count(get_llvm_function_name(*f)) != 0;
+    };
+
+    // Does any call site of `f` live inside a function matching `pred`?
+    auto called_from = [](llvm::Function &f, const auto &pred) {
+        for (llvm::User *u : f.users()) {
+            if (auto *inst = llvm::dyn_cast<llvm::Instruction>(u)) {
+                if (pred(inst->getFunction())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+
+    // (a) The halide_-prefixed extern "C" ABI.
+    for (llvm::Function &f : module.functions()) {
+        const std::string name = get_llvm_function_name(f);
+        if (!starts_with(name, halide_prefix)) {
+            continue;
+        }
+
+        const std::string *prefix = nullptr;
+        if (!f.isDeclaration()) {
+            // A runtime method defined (and thus exported) by this module.
+            prefix = export_prefix;
+        } else if (called_from(f, is_kernel_function)) {
+            // An external runtime method the generated kernel calls: the kernel
+            // "imports" it, and its name must match the runtime it links
+            // against, so kernel-import takes precedence over any in-module
+            // runtime helper that also happens to call it.
+            prefix = import_prefix;
+        } else if (called_from(f, [&is_kernel_function](const llvm::Function *c) {
+                       return c != nullptr && !c->isDeclaration() && !is_kernel_function(c);
+                   })) {
+            // An external runtime method called *only* from other runtime
+            // methods in this module (never from the kernel).
+            prefix = internal_prefix;
+        } else {
+            // An unused external declaration; treat it as a kernel import.
+            prefix = import_prefix;
+        }
+
+        if (prefix != nullptr) {
+            rename_runtime_symbol(f, *prefix + name.substr(halide_prefix.size()));
+        }
+    }
+
+    // (a2) halide_-prefixed *global variables*. Some runtime state is exposed
+    // with C linkage and a halide_ name (e.g. halide_reference_clock_inited in
+    // windows_clock.cpp), so it isn't a function and isn't in the
+    // Halide::Runtime::Internal namespace -- it would otherwise be missed by
+    // both (a) and (b) and collide across runtimes. Globals are not "called", so
+    // the import/internal caller distinction does not apply: a definition is
+    // exported; a (rare) external declaration is an import.
+    for (llvm::GlobalVariable &g : module.globals()) {
+        const std::string name = g.getName().str();
+        if (!starts_with(name, halide_prefix)) {
+            continue;
+        }
+        const std::string *prefix = g.isDeclaration() ? import_prefix : export_prefix;
+        if (prefix != nullptr) {
+            rename_runtime_symbol(g, *prefix + name.substr(halide_prefix.size()));
+        }
+    }
+
+    // (b) The runtime's other internal symbols: everything that was in the
+    // runtime-only module except the halide_ C ABI handled above. Prepend the
+    // Internal prefix so each namespaced runtime keeps its own state and does
+    // not collide on externally-linked runtime helpers.
+    if (internal_prefix != nullptr) {
+        auto rename_internal = [&](llvm::GlobalValue &g) {
+            const std::string name = g.getName().str();
+            // Only rename symbols *defined* by the runtime. Declarations are
+            // things the runtime imports from libc etc. (strstr, write, ...) and
+            // must keep their real names. Never rename the halide_ C ABI (handled
+            // in (a)) or LLVM's own reserved globals.
+            if (g.isDeclaration() ||
+                runtime_symbols.count(name) == 0 ||
+                starts_with(name, halide_prefix) ||
+                starts_with(name, "llvm.")) {
+                return;
+            }
+            rename_runtime_symbol(g, *internal_prefix + name);
+        };
+        for (llvm::Function &f : module.functions()) {
+            rename_internal(f);
+        }
+        for (llvm::GlobalVariable &g : module.globals()) {
+            rename_internal(g);
+        }
+    }
+}
+
+}  // namespace
+
 std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     ZoneScoped;
     any_strict_float = input.any_strict_float();
@@ -515,6 +720,11 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     }
 
     vector<MangledNames> function_names;
+    auto export_from_windows_dll = [&](llvm::Function *f) {
+        if (target.os == Target::Windows) {
+            f->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
+        }
+    };
 
     // Declare all functions
     for (const auto &f : input.functions()) {
@@ -533,6 +743,9 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         FunctionType *func_t = FunctionType::get(i32_t, arg_types, false);
         function = llvm::Function::Create(func_t, llvm_linkage(f.linkage), names.extern_name, module.get());
         set_function_attributes_from_halide_target_options(*function);
+        if (f.linkage != LinkageType::Internal) {
+            export_from_windows_dll(function);
+        }
 
         // Mark the buffer args as no alias and save indication for add_argv_wrapper if needed
         std::vector<bool> buffer_args(f.args.size());
@@ -550,10 +763,10 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         // If the Func is externally visible, also create the argv wrapper and metadata.
         // (useful for calling from JIT and other machine interfaces).
         if (f.linkage == LinkageType::ExternalPlusArgv || f.linkage == LinkageType::ExternalPlusMetadata) {
-            add_argv_wrapper(function, names.argv_name, false, buffer_args);
+            export_from_windows_dll(add_argv_wrapper(function, names.argv_name, false, buffer_args));
             if (f.linkage == LinkageType::ExternalPlusMetadata) {
-                embed_metadata_getter(names.metadata_name,
-                                      names.simple_name, f.args, input.get_metadata_name_map());
+                export_from_windows_dll(embed_metadata_getter(
+                    names.metadata_name, names.simple_name, f.args, input.get_metadata_name_map()));
             }
         }
 
@@ -598,6 +811,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
                                                                       wrapper_names.extern_name,
                                                                       module.get());
                 set_function_attributes_from_halide_target_options(*wrapper_func);
+                export_from_windows_dll(wrapper_func);
                 llvm::BasicBlock *wrapper_block = llvm::BasicBlock::Create(module->getContext(), "entry", wrapper_func);
                 builder->SetInsertPoint(wrapper_block);
 
@@ -625,6 +839,20 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     }
 
     debug(2) << "llvm::Module pointer: " << module.get() << "\n";
+
+    // Rename halide_-prefixed runtime symbols if the user requested a runtime
+    // namespace. Done here (after all functions are declared/defined but before
+    // optimization) so that both linked-in runtime definitions and any external
+    // runtime declarations are covered in one pass. The set of pipeline entry
+    // points lets us tell "import" (kernel-called) from "internal"
+    // (runtime-called) declarations.
+    std::set<std::string> pipeline_functions;
+    for (const auto &names : function_names) {
+        pipeline_functions.insert(names.extern_name);
+        pipeline_functions.insert(names.argv_name);
+        pipeline_functions.insert(names.metadata_name);
+    }
+    apply_runtime_prefixes_prefixes(*module, input.get_runtime_prefixes_map(), pipeline_functions, runtime_symbols);
 
     return finish_codegen();
 }
@@ -848,10 +1076,16 @@ void CodeGen_LLVM::compile_buffer(const Buffer<> &buf) {
         << "Can't embed Image \"" << buf.name() << "\""
         << " because it has a dirty device pointer\n";
 
+    // The ABI halide_type_t is a scalar element type: {code, bits, reserved}.
+    // A buffer's element type is always scalar, and the wire struct does not
+    // carry lanes (the third field is now reserved and must be zero).
+    internal_assert(buf.type().lanes() == 1)
+        << "Embedded buffer " << buf.name()
+        << " has a non-scalar element type with " << buf.type().lanes() << " lanes.\n";
     Constant *type_fields[] = {
         ConstantInt::get(i8_t, buf.type().code()),
         ConstantInt::get(i8_t, buf.type().bits()),
-        ConstantInt::get(i16_t, buf.type().lanes())};
+        ConstantInt::get(i16_t, 0)};
 
     Constant *shape = nullptr;
     if (buf.dimensions()) {
@@ -1046,7 +1280,7 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
         Constant *type_fields[] = {
             ConstantInt::get(i8_t, args[arg].type.code()),
             ConstantInt::get(i8_t, args[arg].type.bits()),
-            ConstantInt::get(i16_t, 1)};
+            ConstantInt::get(i16_t, 0)};  // reserved (formerly lanes); must be 0
         Constant *type = ConstantStruct::get(type_t_type, type_fields);
 
         auto argument_estimates = args[arg].argument_estimates;
@@ -1143,8 +1377,6 @@ void CodeGen_LLVM::optimize_module() {
     ZoneScoped;
     debug(3) << "Optimizing module\n";
 
-    auto time_start = std::chrono::high_resolution_clock::now();
-
     debug(3) << [&] {
         module->print(dbgs(), nullptr, false, true);
         return "";
@@ -1166,7 +1398,28 @@ void CodeGen_LLVM::optimize_module() {
     // 21.04 -> 14.78 using current ToT release build. (See also https://reviews.llvm.org/rL358304)
     pto.ForgetAllSCEVInLoopUnroll = true;
 
-    llvm::PassBuilder pb(tm.get(), pto);
+    llvm::PassInstrumentationCallbacks pic;
+#if LLVM_VERSION < 220
+    if (get_target().has_feature(Target::SVE) || get_target().has_feature(Target::SVE2)) {
+        // LLVM 21's LoopAccessAnalysis::getStrideFromAddRec() queries a
+        // scalable-vector access type's fixed element count, which hits a
+        // fatal assertion (TypeSize::getFixedValue on a scalable TypeSize).
+        // This is reached from LoopLoadEliminationPass, which the default
+        // pipeline always runs (independent of Halide's own loop-opt
+        // settings). Fixed upstream in LLVM 22 by guarding that query
+        // against ScalableVectorType. Loop load elimination looks for
+        // opportunities to forward a store to a later load across loop
+        // iterations, which Halide-generated code essentially never
+        // benefits from, so skip it entirely on affected SVE targets rather
+        // than accept a compiler crash (or, in a no-asserts LLVM build, a
+        // silently bogus stride).
+        pic.registerShouldRunOptionalPassCallback(
+            [](llvm::StringRef pass_name, const llvm::Any &) {
+                return pass_name != "LoopLoadEliminationPass";
+            });
+    }
+#endif
+    llvm::PassBuilder pb(tm.get(), pto, /*PGOOpt=*/std::nullopt, &pic);
 
     // These analysis managers have to be declared in this order.
     llvm::LoopAnalysisManager lam;
@@ -1276,13 +1529,6 @@ void CodeGen_LLVM::optimize_module() {
         module->print(dbgs(), nullptr, false, true);
         return "";
     }();
-
-    auto *logger = get_compiler_logger();
-    if (logger) {
-        auto time_end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> diff = time_end - time_start;
-        logger->record_compilation_time(CompilerLogger::Phase::LLVM, diff.count());
-    }
 }
 
 void CodeGen_LLVM::sym_push(const string &name, llvm::Value *value) {
@@ -2023,19 +2269,29 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, con
                 // We want to find the smallest aligned width and offset
                 // that contains this ramp.
                 int64_t stride = *pstride;
-                base = *pbase;
-                internal_assert(base >= 0);
-                width = next_power_of_two(ramp->lanes * stride);
-
-                while (base % width) {
-                    base -= base % width;
-                    width *= 2;
+                int64_t lo = *pbase;
+                int64_t hi = lo + (ramp->lanes - 1) * stride;
+                if (stride < 0) {
+                    std::swap(lo, hi);
                 }
-                constant_index = true;
+                // Indices below zero can only come from lanes masked off by
+                // a predicate. The blocks below are aligned relative to the
+                // start of the buffer, so they can't describe a range that
+                // straddles it. Fall back to just the buffer-level node.
+                if (lo >= 0) {
+                    base = lo;
+                    width = next_power_of_two(hi - lo + 1);
+
+                    while (base % width) {
+                        base -= base % width;
+                        width *= 2;
+                    }
+                    constant_index = true;
+                }
             }
         } else {
             auto pbase = as_const_int(index);
-            if (pbase) {
+            if (pbase && *pbase >= 0) {
                 base = *pbase;
                 constant_index = true;
             }
@@ -2071,13 +2327,22 @@ void CodeGen_LLVM::function_does_not_access_memory(llvm::Function *fn) {
     fn->addFnAttr("memory(none)");
 }
 
+void CodeGen_LLVM::emit_streaming_store_fence() {
+}
+
+void CodeGen_LLVM::add_streaming_metadata(llvm::Instruction *inst) {
+    llvm::MDNode *nontemporal_node = llvm::MDNode::get(
+        *context, llvm::ConstantAsMetadata::get(ConstantInt::get(i32_t, 1)));
+    inst->setMetadata(llvm::LLVMContext::MD_nontemporal, nontemporal_node);
+}
+
 void CodeGen_LLVM::visit(const Load *op) {
     // If the type should be stored as some other type, insert a reinterpret cast.
     Type storage_type = upgrade_type_for_storage(op->type);
     if (op->type != storage_type) {
         codegen(reinterpret(op->type, Load::make(storage_type, op->name,
                                                  op->index, op->image,
-                                                 op->param, op->predicate, op->alignment)));
+                                                 op->param, op->predicate, op->alignment, op->is_streaming)));
         return;
     }
 
@@ -2093,6 +2358,9 @@ void CodeGen_LLVM::visit(const Load *op) {
         Value *ptr = codegen_buffer_pointer(op->name, op->type, op->index);
         LoadInst *load = builder->CreateAlignedLoad(llvm_type_of(op->type), ptr, llvm::Align(op->type.bytes()));
         add_tbaa_metadata(load, op->name, op->index);
+        if (op->is_streaming) {
+            add_streaming_metadata(load);
+        }
         value = load;
     } else {
         const Ramp *ramp = op->index.as<Ramp>();
@@ -2109,7 +2377,7 @@ void CodeGen_LLVM::visit(const Load *op) {
             ModulusRemainder align = op->alignment;
             // Switch to the alignment of the last lane
             align = align - (ramp->lanes - 1);
-            Expr flipped_load = Load::make(op->type, op->name, flipped_index, op->image, op->param, op->predicate, align);
+            Expr flipped_load = op->with(flipped_index, op->predicate, align);
 
             Value *flipped = codegen(flipped_load);
 
@@ -2123,6 +2391,9 @@ void CodeGen_LLVM::visit(const Load *op) {
                 Value *lane = ConstantInt::get(i32_t, i);
                 LoadInst *val = builder->CreateLoad(load_type, ptr);
                 add_tbaa_metadata(val, op->name, op->index);
+                if (op->is_streaming) {
+                    add_streaming_metadata(val);
+                }
                 value = builder->CreateInsertElement(value, val, lane);
                 ptr = CreateInBoundsGEP(builder.get(), load_type, ptr, stride);
             }
@@ -2138,6 +2409,9 @@ void CodeGen_LLVM::visit(const Load *op) {
                 Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
                 LoadInst *val = builder->CreateLoad(load_type, ptr);
                 add_tbaa_metadata(val, op->name, op->index);
+                if (op->is_streaming) {
+                    add_streaming_metadata(val);
+                }
                 vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32_t, i));
             }
             value = vec;
@@ -2150,6 +2424,9 @@ void CodeGen_LLVM::visit(const Load *op) {
                 Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
                 LoadInst *val = builder->CreateLoad(load_type, ptr);
                 add_tbaa_metadata(val, op->name, op->index);
+                if (op->is_streaming) {
+                    add_streaming_metadata(val);
+                }
                 vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32_t, i));
             }
             value = vec;
@@ -2522,6 +2799,9 @@ void CodeGen_LLVM::codegen_predicated_store(const Store *op) {
         // width, bust them up into native vectors.
         int store_lanes = value_type.lanes();
         int native_lanes = maximum_vector_bits() / value_type.bits();
+        if (op->is_streaming) {
+            native_lanes = std::max(native_lanes, minimum_streaming_vector_bits / value_type.bits());
+        }
 
         for (int i = 0; i < store_lanes; i += native_lanes) {
             int slice_lanes = std::min(native_lanes, store_lanes - i);
@@ -2546,6 +2826,9 @@ void CodeGen_LLVM::codegen_predicated_store(const Store *op) {
                 store = builder->CreateMaskedStore(slice_val, vec_ptr, llvm::Align(alignment), slice_mask);
             }
             add_tbaa_metadata(store, op->name, slice_index);
+            if (op->is_streaming) {
+                add_streaming_metadata(store);
+            }
         }
     } else {  // It's not dense vector store, we need to scalarize it
         debug(4) << "Scalarize predicated vector store\n";
@@ -2580,6 +2863,8 @@ void CodeGen_LLVM::codegen_predicated_store(const Store *op) {
             StoreInst *store = builder->CreateAlignedStore(v, ptr, llvm::Align(value_type.bytes()));
             if (emit_atomic_stores) {
                 store->setAtomic(AtomicOrdering::Monotonic);
+            } else if (op->is_streaming) {
+                add_streaming_metadata(store);
             }
 
             builder->CreateBr(after_bb);
@@ -2590,7 +2875,7 @@ void CodeGen_LLVM::codegen_predicated_store(const Store *op) {
 
 llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::string &name, const Expr &base,
                                                const Buffer<> &image, const Parameter &param, const ModulusRemainder &alignment,
-                                               llvm::Value *vpred, bool slice_to_native, llvm::Value *stride) {
+                                               bool is_streaming, llvm::Value *vpred, bool slice_to_native, llvm::Value *stride) {
     debug(4) << "Vectorize predicated dense vector load:\n\t"
              << "(" << type << ")" << name << "[ramp(base, 1, " << type.lanes() << ")]\n";
     int align_bytes = type.bytes();  // The size of a single element
@@ -2627,6 +2912,9 @@ llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::stri
     // width, bust them up into native vectors
     int load_lanes = type.lanes();
     int native_lanes = slice_to_native ? std::max(1, maximum_vector_bits() / type.bits()) : load_lanes;
+    if (slice_to_native && is_streaming) {
+        native_lanes = std::max(native_lanes, minimum_streaming_vector_bits / type.bits());
+    }
     vector<Value *> slices;
     for (int i = 0; i < load_lanes; i += native_lanes) {
         int slice_lanes = std::min(native_lanes, load_lanes - i);
@@ -2672,6 +2960,9 @@ llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::stri
             }
         }
         add_tbaa_metadata(load_inst, name, slice_index);
+        if (is_streaming) {
+            add_streaming_metadata(load_inst);
+        }
         slices.push_back(load_inst);
     }
     value = concat_vectors(slices);
@@ -2683,7 +2974,7 @@ Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred, b
     internal_assert(ramp && is_const_one(ramp->stride)) << "Should be dense vector load\n";
 
     return codegen_vector_load(load->type, load->name, ramp->base, load->image, load->param,
-                               load->alignment, vpred, slice_to_native, nullptr);
+                               load->alignment, load->is_streaming, vpred, slice_to_native, nullptr);
 }
 
 void CodeGen_LLVM::codegen_predicated_load(const Load *op) {
@@ -2697,7 +2988,7 @@ void CodeGen_LLVM::codegen_predicated_load(const Load *op) {
         Value *vpred = codegen(op->predicate);
         Value *llvm_stride = codegen(stride);  // Not 1 (dense) as that was caught above.
         value = codegen_vector_load(op->type, op->name, ramp->base, op->image, op->param,
-                                    op->alignment, vpred, true, llvm_stride);
+                                    op->alignment, op->is_streaming, vpred, true, llvm_stride);
     } else if (ramp && stride && stride->value == -1) {
         debug(4) << "Predicated dense vector load with stride -1\n\t" << Expr(op) << "\n";
 
@@ -2712,14 +3003,12 @@ void CodeGen_LLVM::codegen_predicated_load(const Load *op) {
         ModulusRemainder align = op->alignment;
         align = align - (ramp->lanes - 1);
 
-        Expr flipped_load = Load::make(op->type, op->name, flipped_index, op->image,
-                                       op->param, const_true(op->type.lanes()), align);
+        Expr flipped_load = op->with(flipped_index, const_true(op->type.lanes()), align);
 
         Value *flipped = codegen_dense_vector_load(flipped_load.as<Load>(), vpred);
         value = reverse_vector(flipped);
     } else {  // It's not dense vector load, we need to scalarize it
-        Expr load_expr = Load::make(op->type, op->name, op->index, op->image,
-                                    op->param, const_true(op->type.lanes()), op->alignment);
+        Expr load_expr = op->with(op->index, const_true(op->type.lanes()), op->alignment);
         debug(4) << "Scalarize predicated vector load\n\t" << load_expr << "\n";
         Expr pred_load = Call::make(load_expr.type(),
                                     Call::if_then_else,
@@ -2746,7 +3035,7 @@ void CodeGen_LLVM::codegen_atomic_rmw(const Store *op) {
                                  Buffer<>(),
                                  op->param,
                                  op->predicate,
-                                 op->alignment);
+                                 op->alignment, false);
     Expr delta = simplify(common_subexpression_elimination(op->value - equiv_load));
     bool is_atomic_add = supports_atomic_add(value_type) && !expr_uses_var(delta, op->name);
     if (is_atomic_add) {
@@ -3360,29 +3649,57 @@ void CodeGen_LLVM::visit(const Call *op) {
         //    ...
         //    cond_N, "sub_function_name_N"
         //
+        // Unlike standard boolean conditions, these evaluate to one of four integer states:
+        //    0: Stable False   (Skip this function, try the next one)
+        //    1: Stable True    (Use this function, and cache the result)
+        //    2: Volatile False (Skip this function, but disable caching)
+        //    3: Volatile True  (Use this function, but disable caching)
+        //
         // This will generate code that corresponds (roughly) to
         //
-        //    static FunctionPtr f = []{
-        //      if (cond_1) return sub_function_name_1;
-        //      if (cond_2) return sub_function_name_2;
-        //      ...
-        //      if (cond_N) return sub_function_name_N;
+        //    static FunctionPtr cached_f = nullptr;
+        //    if (cached_f != nullptr) return cached_f(args);
+        //
+        //    FunctionPtr selected_f = nullptr;
+        //    bool should_cache = true;
+        //
+        //    int c1 = cond_1;
+        //    if (c1 == 2 || c1 == 3) should_cache = false;
+        //    if (c1 == 1 || c1 == 3) {
+        //        selected_f = sub_function_name_1;
+        //    } else {
+        //        int c2 = cond_2;
+        //        if (c2 == 2 || c2 == 3) should_cache = false;
+        //        if (c2 == 1 || c2 == 3) {
+        //            selected_f = sub_function_name_2;
+        //        } else {
+        //            ...
+        //        }
         //    }
-        //    return f(args)
         //
-        // i.e.: the conditions will be evaluated *in order*; the first one
-        // evaluating to true will have its corresponding function cached,
-        // which will be used to complete this (and all subsequent) calls.
+        //    if (should_cache) cached_f = selected_f;
+        //    return selected_f(args);
         //
-        // The final condition (cond_N) must evaluate to a constant TRUE
-        // value (so that the final function will be selected if all others
+        // i.e.: the conditions conceptually evaluate *in order*; the first one
+        // evaluating to True (1 or 3) will have its corresponding function selected.
+        // However, if the selected condition is Volatile True (3), or if *any*
+        // preceding skipped condition evaluated to Volatile False (2), the
+        // caching mechanism is bypassed for the current invocation.
+        //
+        // (Note: In the actual emitted LLVM IR, all conditions are evaluated
+        // unconditionally using `select` instructions to avoid basic-block explosion,
+        // but the semantic result is identical to short-circuiting.)
+        //
+        // The final condition (cond_N) must evaluate to a constant Stable True (1)
+        // value (so that the final function will be selected and cached if all others
         // fail); failure to do so will cause unpredictable results.
         //
-        // There is currently no way to clear the cached function pointer.
+        // There is currently no way to clear the cached function pointer manually.
         //
-        // It is assumed/required that all of the conditions are "pure"; each
-        // must evaluate to the same value (within a given runtime environment)
-        // across multiple evaluations.
+        // It is assumed/required that all of the conditions are side-effect free.
+        // Conditions returning 0 or 1 must be "pure" (evaluating to the same value
+        // across multiple evaluations within a given runtime environment), while
+        // conditions returning 2 or 3 are expected to be dynamic/volatile.
         //
         // It is assumed/required that all of the sub-functions have arguments
         // (and return values) that are identical to those of this->function.
@@ -3466,15 +3783,40 @@ void CodeGen_LLVM::visit(const Call *op) {
 
         // Build the not-already-inited case
         builder->SetInsertPoint(global_not_inited_bb);
-        llvm::Value *selected_value = nullptr;
+        Value *selected_value = nullptr;
+        // Keep track of whether any of the results was marked as a non-cacheable value (2 or 3).
+        Value *should_cache = builder->getInt1(true);
         for (const auto &sub_fn : reverse_view(sub_fns)) {
             if (!selected_value) {
                 selected_value = sub_fn.fn_ptr;
             } else {
                 Value *c = codegen(sub_fn.cond);
-                selected_value = builder->CreateSelect(c, sub_fn.fn_ptr, selected_value);
+                Value *c_ext = builder->CreateZExtOrTrunc(c, builder->getInt32Ty());
+                // Check the lower bit: 0:no or 1:yes
+                Value *is_true = builder->CreateICmpNE(
+                    builder->CreateAnd(c_ext, builder->getInt32(1)),
+                    builder->getInt32(0));
+                // Check the upper bit: 0:cacheable or 1:volatile
+                Value *is_volatile = builder->CreateICmpNE(
+                    builder->CreateAnd(c_ext, builder->getInt32(2)),
+                    builder->getInt32(0));
+
+                // Update the selected function to the current one under test, as it passes
+                // the test, and is earlier in the list.
+                selected_value = builder->CreateSelect(is_true, sub_fn.fn_ptr, selected_value);
+
+                // Update should_cache.
+                Value *stable_true = builder->CreateAnd(is_true, builder->CreateNot(is_volatile));
+                Value *new_should_cache = builder->CreateSelect(stable_true, builder->getInt1(true), should_cache);
+                should_cache = builder->CreateSelect(is_volatile, builder->getInt1(false), new_should_cache);
             }
         }
+        // Create a basic block for storing
+        BasicBlock *store_bb = BasicBlock::Create(*context, "store_bb", function);
+        builder->CreateCondBr(should_cache, store_bb, call_fn_bb);
+
+        // Build the store bb
+        builder->SetInsertPoint(store_bb);
         builder->CreateStore(selected_value, global);
         builder->CreateBr(call_fn_bb);
 
@@ -3483,9 +3825,10 @@ void CodeGen_LLVM::visit(const Call *op) {
         builder->CreateBr(call_fn_bb);
 
         builder->SetInsertPoint(call_fn_bb);
-        PHINode *phi = builder->CreatePHI(selected_value->getType(), 2);
-        phi->addIncoming(selected_value, global_not_inited_bb);
-        phi->addIncoming(loaded_value, global_inited_bb);
+        PHINode *phi = builder->CreatePHI(selected_value->getType(), 3);
+        phi->addIncoming(selected_value, global_not_inited_bb);  // Selected it, but not cached it.
+        phi->addIncoming(selected_value, store_bb);              // Selected and cached it.
+        phi->addIncoming(loaded_value, global_inited_bb);        // It was already cached.
 
         std::vector<llvm::Value *> call_args;
         for (auto &arg : function->args()) {
@@ -3527,6 +3870,9 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         const llvm::DataLayout &d = module->getDataLayout();
         value = ConstantInt::get(i32_t, (int)d.getTypeAllocSize(halide_buffer_t_type));
+    } else if (op->is_intrinsic(Call::stream_store_fence)) {
+        emit_streaming_store_fence();
+        value = ConstantInt::get(i32_t, 0);
     } else if (op->is_strict_float_intrinsic()) {
         // Evaluate the args first outside the strict scope, as they may use
         // non-strict operations.
@@ -4015,7 +4361,7 @@ void CodeGen_LLVM::visit(const Store *op) {
         // Peel lets off the index to make us more likely to pattern
         // match a ramp.
         if (const Let *let = op->index.as<Let>()) {
-            Stmt s = Store::make(op->name, op->value, let->body, op->param, op->predicate, op->alignment);
+            Stmt s = op->with(op->value, let->body, op->predicate, op->alignment);
             codegen(LetStmt::make(let->name, let->value, s));
             return;
         }
@@ -4026,7 +4372,7 @@ void CodeGen_LLVM::visit(const Store *op) {
     Halide::Type storage_type = upgrade_type_for_storage(value_type);
     if (value_type != storage_type) {
         Expr v = reinterpret(storage_type, op->value);
-        codegen(Store::make(op->name, v, op->index, op->param, op->predicate, op->alignment));
+        codegen(op->with(v, op->index, op->predicate, op->alignment));
         return;
     }
 
@@ -4052,6 +4398,9 @@ void CodeGen_LLVM::visit(const Store *op) {
 
     auto annotate_store = [&](StoreInst *store, const Expr &index) {
         add_tbaa_metadata(store, op->name, index);
+        if (op->is_streaming && !emit_atomic_stores) {
+            add_streaming_metadata(store);
+        }
         if (emit_atomic_stores) {
             store->setAtomic(AtomicOrdering::Monotonic);
         }
@@ -4065,7 +4414,7 @@ void CodeGen_LLVM::visit(const Store *op) {
         StoreInst *store = builder->CreateAlignedStore(val, ptr, llvm::Align(value_type.bytes()));
         annotate_store(store, op->index);
     } else if (const Let *let = op->index.as<Let>()) {
-        Stmt s = Store::make(op->name, op->value, let->body, op->param, op->predicate, op->alignment);
+        Stmt s = op->with(op->value, let->body, op->predicate, op->alignment);
         codegen(LetStmt::make(let->name, let->value, s));
     } else {
         int alignment = value_type.bytes();
@@ -4101,6 +4450,9 @@ void CodeGen_LLVM::visit(const Store *op) {
             // width, bust them up into native vectors.
             int store_lanes = value_type.lanes();
             int native_lanes = maximum_vector_bits() / value_type.bits();
+            if (op->is_streaming) {
+                native_lanes = std::max(native_lanes, minimum_streaming_vector_bits / value_type.bits());
+            }
 
             Expr base = ramp ? ramp->base : 0;
             Expr stride = ramp ? ramp->stride : 0;
@@ -4295,7 +4647,7 @@ void CodeGen_LLVM::visit(const IfThenElse *op) {
         for (int i = 0; i < (int)blocks.size(); i++) {
             string name = "case_" + std::to_string(rhs[i]) + "_bb";
             BasicBlock *case_bb = BasicBlock::Create(*context, name, function);
-            switch_inst->addCase(ConstantInt::get(IntegerType::get(*context, 32), rhs[i]), case_bb);
+            switch_inst->addCase(ConstantInt::get(IntegerType::get(*context, 32), rhs[i], /*isSigned=*/true), case_bb);
             builder->SetInsertPoint(case_bb);
             codegen(blocks[i].second);
             builder->CreateBr(after_bb);

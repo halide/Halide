@@ -169,15 +169,13 @@ struct Comparer {
 
     HALIDE_ALWAYS_INLINE
     void cmp(const Type &a, const Type &b) {
-        uint32_t ta = ((halide_type_t)a).as_u32();
-        uint32_t tb = ((halide_type_t)b).as_u32();
-        if (ta < tb) {
+        if (a < b) {
             result = Order::LessThan;
-        } else if (ta > tb) {
+        } else if (b < a) {
             result = Order::GreaterThan;
         } else {
-            if (a.handle_type || b.handle_type) {
-                cmp(a.handle_type, b.handle_type);
+            if (a.handle_type() || b.handle_type()) {
+                cmp(a.handle_type(), b.handle_type());
             }
         }
     }
@@ -380,6 +378,7 @@ struct Comparer {
             case IRNodeType::Load:
                 cmp(&Load::name);
                 cmp(&Load::alignment);
+                cmp(&Load::is_streaming);
                 cmp(&Load::index);
                 cmp(&Load::predicate);
                 break;
@@ -437,6 +436,7 @@ struct Comparer {
             case IRNodeType::Store:
                 cmp(&Store::name);
                 cmp(&Store::alignment);
+                cmp(&Store::is_streaming);
                 cmp(&Store::predicate);
                 cmp(&Store::value);
                 cmp(&Store::index);
@@ -494,6 +494,14 @@ struct Comparer {
                 cmp(&Atomic::mutex_name);
                 cmp(&Atomic::body);
                 break;
+            case IRNodeType::StreamingStore:
+                cmp(&StreamingStore::producer_name);
+                cmp(&StreamingStore::body);
+                break;
+            case IRNodeType::StreamingLoads:
+                cmp(&StreamingLoads::names);
+                cmp(&StreamingLoads::body);
+                break;
             case IRNodeType::HoistedStorage:
                 cmp(&HoistedStorage::name);
                 cmp(&HoistedStorage::body);
@@ -525,90 +533,6 @@ bool less_than_impl(const IRNode &a, const IRNode &b) {
 bool graph_less_than_impl(const IRNode &a, const IRNode &b) {
     const IRNode *cache[256] = {};
     return Comparer<128>(cache).compare(a, b) == Order::LessThan;
-}
-
-// Testing code
-namespace {
-
-Order flip_result(Order r) {
-    switch (r) {
-    case Order::Equal:
-        r = Order::Equal;
-        break;
-    case Order::LessThan:
-        r = Order::GreaterThan;
-        break;
-    case Order::GreaterThan:
-        r = Order::LessThan;
-        break;
-    }
-    return r;
-}
-
-std::ostream &operator<<(std::ostream &s, Order o) {
-    switch (o) {
-    case Order::Equal:
-        s << "Equal";
-        break;
-    case Order::LessThan:
-        s << "LessThan";
-        break;
-    case Order::GreaterThan:
-        s << "GreaterThan";
-        break;
-    }
-    return s;
-}
-
-void check_equal(const Expr &a, const Expr &b) {
-    const IRNode *cache[256] = {};
-    Order r = Comparer<128>(cache).compare(*(a.get()), *(b.get()));
-    internal_assert(r == Order::Equal)
-        << "Error in ir_equality_test: " << r
-        << " instead of " << Order::Equal
-        << " when comparing:\n"
-        << a
-        << "\nand\n"
-        << b << "\n";
-}
-
-void check_not_equal(const Expr &a, const Expr &b) {
-    const IRNode *cache[256] = {};
-    Order r1 = Comparer<128>(cache).compare(*(a.get()), *(b.get()));
-    Order r2 = Comparer<128>(cache).compare(*(b.get()), *(a.get()));
-    internal_assert(r1 != Order::Equal &&
-                    flip_result(r1) == r2)
-        << "Error in ir_equality_test: " << r1
-        << " is not the opposite of " << r2
-        << " when comparing:\n"
-        << a
-        << "\nand\n"
-        << b << "\n";
-}
-
-}  // namespace
-
-void ir_equality_test() {
-    Expr x = Variable::make(Int(32), "x");
-    check_equal(Ramp::make(x, 4, 3), Ramp::make(x, 4, 3));
-    check_not_equal(Ramp::make(x, 2, 3), Ramp::make(x, 4, 3));
-
-    check_equal(x, Variable::make(Int(32), "x"));
-    check_not_equal(x, Variable::make(Int(32), "y"));
-
-    // Something that will hang if IREquality has poor computational
-    // complexity.
-    Expr e1 = x, e2 = x;
-    for (int i = 0; i < 100; i++) {
-        e1 = e1 * e1 + e1;
-        e2 = e2 * e2 + e2;
-    }
-    check_equal(e1, e2);
-    // These are only discovered to be not equal way down the tree:
-    e2 = e2 * e2 + e2;
-    check_not_equal(e1, e2);
-
-    std::cout << "ir_equality_test passed\n";
 }
 
 }  // namespace Internal

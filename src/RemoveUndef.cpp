@@ -208,11 +208,7 @@ private:
         if (!index.defined()) {
             return Expr();
         }
-        if (pred.same_as(op->predicate) && index.same_as(op->index)) {
-            return op;
-        } else {
-            return Load::make(op->type, op->name, index, op->image, op->param, pred, op->alignment);
-        }
+        return op->with(index, pred, op->alignment);
     }
 
     Expr visit(const Ramp *op) override {
@@ -268,8 +264,7 @@ private:
         if (!changed) {
             return op;
         } else {
-            return Call::make(op->type, op->name, new_args, op->call_type,
-                              op->func, op->value_index, op->image, op->param);
+            return op->with(new_args);
         }
     }
 
@@ -343,11 +338,7 @@ private:
         if (!body.defined()) {
             return Stmt();
         }
-        if (body.same_as(op->body)) {
-            return op;
-        } else {
-            return ProducerConsumer::make(op->name, op->is_producer, body);
-        }
+        return op->with(body);
     }
 
     Stmt visit(const For *op) override {
@@ -363,13 +354,7 @@ private:
         if (!body.defined()) {
             return Stmt();
         }
-        if (min.same_as(op->min) &&
-            max.same_as(op->max) &&
-            body.same_as(op->body)) {
-            return op;
-        } else {
-            return For::make(op->name, min, max, op->for_type, op->partition_policy, op->device_api, body);
-        }
+        return op->with(min, max, body);
     }
 
     Stmt visit(const Store *op) override {
@@ -388,7 +373,7 @@ private:
 
         if (predicate.defined()) {
             // This becomes a conditional store
-            Stmt stmt = IfThenElse::make(predicate, Store::make(op->name, value, index, op->param, pred, op->alignment));
+            Stmt stmt = IfThenElse::make(predicate, op->with(value, index, pred, op->alignment));
             predicate = Expr();
             return stmt;
         } else if (pred.same_as(op->predicate) &&
@@ -396,7 +381,7 @@ private:
                    index.same_as(op->index)) {
             return op;
         } else {
-            return Store::make(op->name, value, index, op->param, pred, op->alignment);
+            return op->with(value, index, pred, op->alignment);
         }
     }
 
@@ -462,13 +447,13 @@ private:
         Expr new_pred = mutate(op->predicate);
 
         if (predicate.defined()) {
-            Stmt stmt = IfThenElse::make(predicate, Provide::make(op->name, new_values, new_args, new_pred));
+            Stmt stmt = IfThenElse::make(predicate, op->with(new_values, new_args, new_pred));
             predicate = Expr();
             return stmt;
         } else if (!changed && new_pred.same_as(op->predicate)) {
             return op;
         } else {
-            return Provide::make(op->name, new_values, new_args, new_pred);
+            return op->with(new_values, new_args, new_pred);
         }
     }
 
@@ -515,7 +500,6 @@ private:
 
     Stmt visit(const Realize *op) override {
         Region new_bounds(op->bounds.size());
-        bool bounds_changed = false;
 
         // Mutate the bounds
         for (size_t i = 0; i < op->bounds.size(); i++) {
@@ -528,12 +512,6 @@ private:
             Expr new_extent = mutate(old_extent);
             if (!new_extent.defined()) {
                 return Stmt();
-            }
-            if (!new_min.same_as(old_min)) {
-                bounds_changed = true;
-            }
-            if (!new_extent.same_as(old_extent)) {
-                bounds_changed = true;
             }
             new_bounds[i] = Range(new_min, new_extent);
         }
@@ -548,41 +526,29 @@ private:
             return Stmt();
         }
 
-        if (!bounds_changed &&
-            body.same_as(op->body) &&
-            condition.same_as(op->condition)) {
-            return op;
-        } else {
-            return Realize::make(op->name, op->types, op->memory_type, new_bounds, condition, body);
-        }
+        return op->with(new_bounds, condition, body);
     }
 
     Stmt visit(const Block *op) override {
         // Visit a sequence of blocks in a single method to conserve stack space.
-        Stmt result;
-        vector<std::pair<const Block *, Stmt>> frames;
-
-        do {
-            Stmt next = mutate(op->first);
-            if (next.defined()) {
-                frames.emplace_back(op, std::move(next));
-            }
-            result = op->rest;
-        } while ((op = result.as<Block>()));
-
-        result = mutate(result);
-
-        for (const auto &[block, stmt] : reverse_view(frames)) {
-            Stmt new_first = stmt;
-            if (!result.defined()) {
-                result = new_first;
-            } else if (new_first.same_as(block->first) && result.same_as(block->rest)) {
-                result = block;
-            } else {
-                result = Block::make(new_first, result);
+        vector<Stmt> stmts = Block::to_vector(op);
+        vector<Stmt> new_stmts;
+        new_stmts.reserve(stmts.size());
+        bool unchanged = true;
+        for (const Stmt &s : stmts) {
+            Stmt new_s = mutate(s);
+            unchanged &= new_s.same_as(s);
+            if (new_s.defined()) {
+                new_stmts.push_back(std::move(new_s));
             }
         }
-        return result;
+
+        if (unchanged) {
+            return op;
+        } else {
+            // Returns an undefined Stmt if everything was removed.
+            return Block::make(new_stmts);
+        }
     }
 
     Stmt visit(const IfThenElse *op) override {

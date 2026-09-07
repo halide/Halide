@@ -86,7 +86,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
                 t = first_load->type;
                 t = t.with_lanes(op->indices.size());
                 return Load::make(t, first_load->name, shuffled_index, first_load->image,
-                                  first_load->param, shuffled_predicate, alignment);
+                                  first_load->param, shuffled_predicate, alignment, first_load->is_streaming);
             }
         }
     }
@@ -111,6 +111,20 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
                 return b1->value;
             } else {
                 return Broadcast::make(b1->value, op->indices.size());
+            }
+        }
+    }
+
+    // Simplify a slice of a broadcast, where the slice lies within a single
+    // copy of the value being broadcast, into a slice of that value.
+    if (op->is_slice() && new_vectors.size() == 1) {
+        if (const Broadcast *b = new_vectors[0].as<Broadcast>()) {
+            int lanes = b->value.type().lanes();
+            int first = op->indices.front(), last = op->indices.back();
+            if (first / lanes == last / lanes) {
+                return mutate(Shuffle::make_slice(b->value, first % lanes, op->slice_stride(),
+                                                  (int)op->indices.size()),
+                              info);
             }
         }
     }

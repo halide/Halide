@@ -192,8 +192,6 @@ FuncValueBounds compute_function_value_bounds(const std::vector<std::string> &or
 /* Find an upper bound of bounds.max - bounds.min. */
 Expr span_of_bounds(const Interval &bounds);
 
-void bounds_test();
-
 }  // namespace Internal
 }  // namespace Halide
 

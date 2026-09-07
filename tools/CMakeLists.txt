@@ -22,15 +22,19 @@ add_library(Halide_ImageIO INTERFACE)
 add_library(Halide::ImageIO ALIAS Halide_ImageIO)
 set_target_properties(Halide_ImageIO PROPERTIES EXPORT_NAME ImageIO)
 
-target_link_libraries(Halide_ImageIO
-                      INTERFACE
-                      Halide::Runtime
-                      $<TARGET_NAME_IF_EXISTS:PNG::PNG>
-                      $<TARGET_NAME_IF_EXISTS:JPEG::JPEG>)
-target_compile_definitions(Halide_ImageIO
-                           INTERFACE
-                           $<$<NOT:$<TARGET_EXISTS:PNG::PNG>>:HALIDE_NO_PNG>
-                           $<$<NOT:$<TARGET_EXISTS:JPEG::JPEG>>:HALIDE_NO_JPEG>)
+target_link_libraries(
+    Halide_ImageIO
+    INTERFACE
+    Halide::Runtime
+    $<TARGET_NAME_IF_EXISTS:PNG::PNG>
+    $<TARGET_NAME_IF_EXISTS:JPEG::JPEG>
+)
+target_compile_definitions(
+    Halide_ImageIO
+    INTERFACE
+    $<$<NOT:$<TARGET_EXISTS:PNG::PNG>>:HALIDE_NO_PNG>
+    $<$<NOT:$<TARGET_EXISTS:JPEG::JPEG>>:HALIDE_NO_JPEG>
+)
 target_sources(Halide_ImageIO INTERFACE FILE_SET HEADERS FILES halide_image_io.h)
 
 ##
@@ -41,7 +45,10 @@ add_library(Halide_RunGenMain INTERFACE)
 add_library(Halide::RunGenMain ALIAS Halide_RunGenMain)
 set_target_properties(Halide_RunGenMain PROPERTIES EXPORT_NAME RunGenMain)
 
-target_sources(Halide_RunGenMain INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/RunGenMain.cpp>)
+target_sources(
+    Halide_RunGenMain
+    INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/RunGenMain.cpp>
+)
 target_sources(Halide_RunGenMain INTERFACE FILE_SET HEADERS FILES RunGen.h)
 target_link_libraries(Halide_RunGenMain INTERFACE Halide::Runtime Halide::ImageIO Halide::Tools)
 target_compile_features(Halide_RunGenMain INTERFACE cxx_std_17)
@@ -60,9 +67,7 @@ add_library(Halide_Generator INTERFACE)
 add_library(Halide::Generator ALIAS Halide_Generator)
 set_target_properties(Halide_Generator PROPERTIES EXPORT_NAME Generator)
 
-target_link_libraries(
-    Halide_Generator INTERFACE "$<LINK_LIBRARY:WHOLE_ARCHIVE,Halide::GenGen>"
-)
+target_link_libraries(Halide_Generator INTERFACE "$<LINK_LIBRARY:WHOLE_ARCHIVE,Halide::GenGen>")
 
 ## gengen tool for building runtimes in add_halide_runtime
 add_executable(Halide_GenRT GenGen.cpp)

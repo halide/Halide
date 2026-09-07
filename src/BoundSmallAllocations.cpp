@@ -39,7 +39,7 @@ class BoundSmallAllocations : public IRMutator {
         result = mutate(result);
 
         for (const auto &frame : reverse_view(frames)) {
-            result = LetOrLetStmt::make(frame.op->name, frame.op->value, result);
+            result = frame.op->with(frame.op->value, result);
         }
 
         return result;
@@ -102,7 +102,7 @@ class BoundSmallAllocations : public IRMutator {
 
             Stmt body = mutate(op->body);
             if (changed || !body.same_as(op->body)) {
-                return Realize::make(op->name, op->types, op->memory_type, region, op->condition, body);
+                return op->with(region, op->condition, body);
             } else {
                 return op;
             }
@@ -130,8 +130,7 @@ class BoundSmallAllocations : public IRMutator {
 
         if (size_ptr && size == 0 && !op->new_expr.defined()) {
             // This allocation is dead
-            return Allocate::make(op->name, op->type, op->memory_type, {0}, const_false(),
-                                  mutate(op->body), op->new_expr, op->free_function, op->padding);
+            return op->with({0}, const_false(), mutate(op->body));
         }
 
         // 128 bytes is a typical minimum allocation size in
@@ -145,8 +144,7 @@ class BoundSmallAllocations : public IRMutator {
              (op->memory_type == MemoryType::Auto && size <= malloc_overhead))) {
             user_assert(size >= 0 && size < (int64_t)1 << 31)
                 << "Allocation " << op->name << " has a size greater than 2^31: " << bound << "\n";
-            return Allocate::make(op->name, op->type, op->memory_type, {(int32_t)size}, op->condition,
-                                  mutate(op->body), op->new_expr, op->free_function, op->padding);
+            return op->with({(int32_t)size}, op->condition, mutate(op->body));
         } else {
             return IRMutator::visit(op);
         }
