@@ -200,6 +200,12 @@ public:
 // The pass above can lift out the value of lets entirely, leaving
 // them as just renamings of other variables. Easier to substitute
 // them in as a post-pass rather than make the pass above more clever.
+//
+// Like LiftLoopInvariants above, this only needs to look at the lets
+// wrapping the current loop level: nested For loops get their own
+// SubstituteTrivialLets application when LICM's recursive descent
+// reaches them, so descending into them here too would just redo the
+// same substitution checks once per enclosing loop level.
 class SubstituteTrivialLets : public IRMutator {
 protected:
     using IRMutator::visit;
@@ -218,6 +224,10 @@ protected:
         } else {
             return IRMutator::visit(op);
         }
+    }
+
+    Stmt visit(const For *op) override {
+        return op;
     }
 };
 
