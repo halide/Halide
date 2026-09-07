@@ -379,6 +379,7 @@ void lower_impl(const vector<Function> &output_funcs,
 
     debug(1) << "Partitioning loops to simplify boundary conditions...\n";
     s = partition_loops(s);
+    log("Lowering after partitioning loops (partition_loops):", s);
     s = simplify(s);
     log("Lowering after partitioning loops:", s);
 
@@ -442,8 +443,11 @@ void lower_impl(const vector<Function> &output_funcs,
 
     debug(1) << "Removing dead allocations and moving loop invariant code...\n";
     s = remove_dead_allocations(s);
+    log("Lowering after removing dead allocations (remove_dead_allocations):", s);
     s = simplify(s);
+    log("Lowering after removing dead allocations (simplify):", s);
     s = hoist_loop_invariant_values(s);
+    log("Lowering after removing dead allocations (hoist_loop_invariant_values):", s);
     s = hoist_loop_invariant_if_statements(s);
     log("Lowering after removing dead allocations and hoisting loop invariants:", s);
 
@@ -457,6 +461,7 @@ void lower_impl(const vector<Function> &output_funcs,
     // Must be run after the last simplification, because it turns
     // divisions into shifts, which the simplifier reverses.
     s = simplify(s);
+    log("Lowering after finding intrinsics (simplify):", s);
     s = find_intrinsics(s);
     log("Lowering after finding intrinsics:", s);
 
