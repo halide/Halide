@@ -2817,6 +2817,33 @@ public:
     }
 };
 
+/** A vector of Funcs with conveniences for constructing and consuming
+ * collections of Funcs. */
+class FuncVec : public std::vector<Func> {
+    using Base = std::vector<Func>;
+
+public:
+    using Base::Base;
+    using Base::operator=;
+
+    FuncVec() = default;
+    FuncVec(const Base &funcs)
+        : Base(funcs) {
+    }
+    FuncVec(Base &&funcs)
+        : Base(std::move(funcs)) {
+    }
+
+    /** Construct count undefined Funcs. A singleton is named base_name; otherwise
+     * the Funcs are named base_name + their index. suffix, if given, is appended
+     * after the name. */
+    FuncVec(const std::string &base_name, size_t count, const std::string &suffix = "");
+
+    /** Convert a singleton FuncVec to its sole Func. It is a user error if
+     * the FuncVec does not contain exactly one Func. */
+    operator Func() const;
+};
+
 template<typename... Args>
 HALIDE_NO_USER_CODE_INLINE std::enable_if_t<Internal::all_are_convertible<Func, Args...>::value, Stage &>
 Stage::eager_inline(const Func &first, Args &&...args) {

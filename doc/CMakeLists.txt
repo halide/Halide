@@ -256,6 +256,17 @@ foreach (_pair IN LISTS _tutorial_source_targets)
     list(APPEND _tutorial_manifest_entries "  \"${_source}\": \"$<TARGET_FILE:${_target}>\"")
     list(APPEND _tutorial_source_files "${Halide_SOURCE_DIR}/tutorial/${_source}")
 endforeach ()
+
+# Python-only tutorial lessons (e.g. lesson_15_runtime, which demonstrates the
+# standalone halide.runtime module and has no C++ counterpart) aren't covered
+# by HALIDE_TUTORIAL_SOURCE_TARGETS -- that only tracks compiled lesson
+# binaries. List their sources explicitly (file(GLOB) is disallowed by this
+# repo's CMake style checks) so each still gets its own generated page; they
+# need no manifest entry, having no binary to run.
+list(APPEND _tutorial_source_files
+    "${Halide_SOURCE_DIR}/python_bindings/halide/tutorial/lesson_15_runtime.py"
+)
+
 list(JOIN _tutorial_manifest_entries ",\n" _tutorial_manifest_body)
 
 set(_tutorial_manifest_file "${CMAKE_CURRENT_BINARY_DIR}/tutorial_manifest.json")

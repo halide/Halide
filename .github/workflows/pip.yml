@@ -139,7 +139,7 @@ jobs:
           fetch-tags: true
 
       - uses: ilammy/msvc-dev-cmd@v1
-      - uses: lukka/get-cmake@v4.4.0
+      - uses: lukka/get-cmake@v4.4.2
         with:
           cmakeVersion: "~3.28.0"
 
@@ -175,12 +175,12 @@ jobs:
       #- uses: mxschmitt/action-tmate@v3
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v4.1.1
+        uses: pypa/cibuildwheel@v4.2.0
         with:
           package-dir: python_bindings/halide
         env:
           CIBW_BUILD: "cp3*-${{ matrix.platform_tag }}"
-          CIBW_SKIP: "cp3{5,6,7,8,9}* cp314t-*"
+          CIBW_SKIP: "cp3{5,6,7,8,9}* cp3??t-*"
           CIBW_ENVIRONMENT_LINUX: >
             PIP_FIND_LINKS=/project/dist-bin
             SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE='{local_scheme="no-local-version"}'
@@ -262,7 +262,7 @@ jobs:
           fetch-tags: true
 
       - uses: ilammy/msvc-dev-cmd@v1
-      - uses: lukka/get-cmake@v4.4.0
+      - uses: lukka/get-cmake@v4.4.2
         with:
           cmakeVersion: "~3.28.0"
 
@@ -285,12 +285,12 @@ jobs:
       ########################################################################
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v4.1.1
+        uses: pypa/cibuildwheel@v4.2.0
         with:
           package-dir: python_bindings/halide-runtime
         env:
           CIBW_BUILD: "cp3*-${{ matrix.platform_tag }}"
-          CIBW_SKIP: "cp3{5,6,7,8,9}* cp314t-*"
+          CIBW_SKIP: "cp3{5,6,7,8,9}* cp3??t-*"
           CIBW_ENVIRONMENT_LINUX: >
             PIP_FIND_LINKS=/project/dist-bin
             SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE_RUNTIME='{local_scheme="no-local-version"}'

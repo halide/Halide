@@ -153,9 +153,7 @@ def lesson_asset_paths(lesson: Lesson, asset_root: Path) -> list[Path]:
     page after the asset is later added, without depending on the whole
     figures directory.
     """
-    variants = [lesson.cpp]
-    if lesson.python is not None:
-        variants.append(lesson.python)
+    variants = [v for v in (lesson.cpp, lesson.python) if v is not None]
     return sorted(
         {
             asset_root / figure_ref
@@ -173,9 +171,7 @@ def lesson_input_paths(lesson: Lesson, asset_root: Path) -> list[Path]:
     Python translations run to capture their output. Keep missing paths too,
     so Ninja retries a page when a newly referenced image is added.
     """
-    variants = [lesson.cpp]
-    if lesson.python is not None:
-        variants.append(lesson.python)
+    variants = [v for v in (lesson.cpp, lesson.python) if v is not None]
     return sorted(
         {
             asset_root / "images" / name
@@ -346,7 +342,13 @@ def render_lesson_page(
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    if lesson.python is None:
+    if lesson.cpp is None:
+        # Python-only lesson: no C++/Python tab-set, just the Python source.
+        body = "\n".join(
+            _block_to_myst(block)
+            for block in _variant_blocks(lesson.python, python_snippets, output_dir)
+        )
+    elif lesson.python is None:
         body = "\n".join(
             _block_to_myst(block)
             for block in _variant_blocks(lesson.cpp, snippets, output_dir)

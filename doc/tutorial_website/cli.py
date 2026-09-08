@@ -171,7 +171,7 @@ def _main_lesson(args: argparse.Namespace) -> int:
 
     available = capture.find_backends(args.gdb, args.lldb)
     backend = capture.pick_backend(available, args.prefer) if available else None
-    if backend is None and lesson.cpp.interesting_lines:
+    if backend is None and lesson.cpp is not None and lesson.cpp.interesting_lines:
         print(
             f"warning: no gdb/lldb backend available; rendering {lesson.slug} "
             "without captured C++ output",
