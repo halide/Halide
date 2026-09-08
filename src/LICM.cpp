@@ -153,23 +153,7 @@ protected:
         return visit_let(op);
     }
 
-    // The top-level For loop this instance was invoked on. Nested For
-    // loops are left alone here: LICM's own recursive descent (see
-    // LICM::visit(const For *) below) will construct a fresh
-    // LiftLoopInvariants for each of them. Descending into nested loops
-    // from here as well would redo the same (expensive: it simplifies
-    // and interns every lifted expr) work once per enclosing loop level,
-    // i.e. O(depth) times over the same nodes for deeply-nested loop
-    // nests. Invariants found this way still migrate all the way to
-    // their outermost legal loop, just one level per LICM recursion
-    // step instead of all at once.
-    bool at_top_level = true;
-
     Stmt visit(const For *op) override {
-        if (!at_top_level) {
-            return op;
-        }
-        at_top_level = false;
         ScopedBinding<> p(varying, op->name);
         return IRMutator::visit(op);
     }
@@ -200,12 +184,6 @@ public:
 // The pass above can lift out the value of lets entirely, leaving
 // them as just renamings of other variables. Easier to substitute
 // them in as a post-pass rather than make the pass above more clever.
-//
-// Like LiftLoopInvariants above, this only needs to look at the lets
-// wrapping the current loop level: nested For loops get their own
-// SubstituteTrivialLets application when LICM's recursive descent
-// reaches them, so descending into them here too would just redo the
-// same substitution checks once per enclosing loop level.
 class SubstituteTrivialLets : public IRMutator {
 protected:
     using IRMutator::visit;
@@ -224,10 +202,6 @@ protected:
         } else {
             return IRMutator::visit(op);
         }
-    }
-
-    Stmt visit(const For *op) override {
-        return op;
     }
 };
 
