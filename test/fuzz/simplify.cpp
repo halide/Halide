@@ -1,6 +1,7 @@
 #include "Halide.h"
 #include <functional>
 
+#include "ExprInterpreter.h"
 #include "IRGraphCXXPrinter.h"
 #include "fuzz_helpers.h"
 #include "random_expr_generator.h"
@@ -148,6 +149,53 @@ bool test_expression(RandomExpressionGenerator &reg, Expr test, int samples) {
             return false;
         }
     }
+
+    // Additionally test a few rounds with the ExprInterpreter to test
+    // if the simplification was correct.
+    for (int i = 0; i < samples; ++i) {
+        ExprInterpreter ei;
+        for (const auto &fuzz_var : reg.fuzz_vars) {
+            ExprInterpreter::EvalValue val(Int(32));
+            val.lanes[0] = reg.fuzz.ConsumeIntegral<int32_t>();
+            ei.var_env[fuzz_var.name()] = std::move(val);
+        }
+        ExprInterpreter::EvalValue eval_test = ei.eval(test);
+        ExprInterpreter::EvalValue eval_simplified = ei.eval(simplified);
+        if (eval_test.did_overflow || eval_simplified.did_overflow) {
+            // The expression interpreter detected overflow on types that are
+            // defined by halide to be not-overflowable. So the simplifier will
+            // have done transformations which don't hold when the numbers do overflow.
+            continue;  // Try different numbers instead!
+        }
+        bool good = true;
+        if (eval_test.type != eval_simplified.type) {
+            good = false;
+        } else {
+            if (eval_test.type.is_float()) {
+                if (!eval_test.is_close(eval_simplified, 1e-5)) {
+                    good = false;
+                }
+            } else {
+                if (eval_test != eval_simplified) {
+                    good = false;
+                }
+            }
+        }
+        if (!good) {
+            std::cerr << "ExprInterpreter of the following Exprs did not match:\n\n";
+            std::cerr << "Original: " << test << "\n";
+            std::cerr << "Value: " << eval_test << "\n\n";
+            std::cerr << "Simplified: " << simplified << "\n";
+            std::cerr << "Value: " << eval_simplified << "\n\n";
+            std::cerr << "With the following variables values:\n";
+            for (const auto &var : ei.var_env) {
+                std::cerr << "\t" << var.first << " = " << var.second << "\n";
+            }
+
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -185,6 +233,7 @@ FUZZ_TEST(simplify, FuzzingContext &fuzz) {
 
     int width = fuzz.PickValueInArray({1, 2, 3, 4, 6, 8});
     Expr test = reg.random_expr(reg.random_type(width), depth);
+    debug(1) << "Testing " << test << "\n";
 
     if (!test_expression(reg, test, samples)) {
         // Failure. Find the minimal subexpression that failed.
