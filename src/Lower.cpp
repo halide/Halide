@@ -123,7 +123,7 @@ public:
 
     // For front-of-pipeline setup steps that run before there's an initial
     // Stmt to pass to operator().
-    void mark_untimed_step(const string &message) {
+    void mark_step(const string &message) {
         auto t = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> diff = t - last_time;
         last_time = t;
@@ -163,29 +163,29 @@ void lower_impl(const vector<Function> &output_funcs,
 
     // Create a deep-copy of the entire graph of Funcs.
     auto [outputs, env] = deep_copy(output_funcs, build_environment(output_funcs));
-    log.mark_untimed_step("Lowering after deep-copying the Func graph");
+    log.mark_step("Lowering after deep-copying the Func graph");
 
     lower_target_query_ops(env, t);
 
     bool any_strict_float = strictify_float(env, t);
     result_module.set_any_strict_float(any_strict_float);
-    log.mark_untimed_step("Lowering after lowering target query ops and strictifying float");
+    log.mark_step("Lowering after lowering target query ops and strictifying float");
 
     // Finalize all the LoopLevels
     for (auto &iter : env) {
         iter.second.lock_loop_levels();
     }
-    log.mark_untimed_step("Lowering after locking loop levels");
+    log.mark_step("Lowering after locking loop levels");
 
     // Compute a realization order and determine group of functions which loops
     // are to be fused together
     auto [order, fused_groups] = realization_order(outputs, env);
-    log.mark_untimed_step("Lowering after computing realization order");
+    log.mark_step("Lowering after computing realization order");
 
     // Try to simplify the RHS/LHS of a function definition by propagating its
     // specializations' conditions
     simplify_specializations(env);
-    log.mark_untimed_step("Lowering after simplifying specializations");
+    log.mark_step("Lowering after simplifying specializations");
 
     debug(1) << "Creating initial loop nests...\n";
     bool any_memoized = false;
