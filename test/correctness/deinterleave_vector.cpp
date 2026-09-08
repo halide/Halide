@@ -6,8 +6,9 @@ using namespace Halide::Internal;
 namespace {
 void check(Expr a, const Expr &even, const Expr &odd) {
     a = simplify(a);
-    Expr correct_even = extract_even_lanes(a);
-    Expr correct_odd = extract_odd_lanes(a);
+    int lanes = a.type().lanes();
+    Expr correct_even = extract_lanes(a, 0, 2, (lanes + 1) / 2);
+    Expr correct_odd = extract_lanes(a, 1, 2, lanes / 2);
     if (!equal(correct_even, even)) {
         internal_error << correct_even << " != " << even << "\n";
     }

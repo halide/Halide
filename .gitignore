@@ -243,6 +243,9 @@ xcuserdata
 # NeoVim + clangd
 .cache
 
+# CCLS
+.ccls-cache
+
 # Emacs
 tags
 TAGS
