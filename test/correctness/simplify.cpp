@@ -2472,6 +2472,29 @@ void check_facts() {
     check_with_assumptions(max(x * 8, y) / 8, x, {x > y / 8});
     check_with_assumptions(min(x * 8, y) / 8, x, {x < y / 8});
 
+    // Coefficients are reduced to a coprime pair and a scale, so a fact and a
+    // query that differ only by an overall factor meet.
+    check_with_assumptions(max(x * 2, y), y, {x * 4 <= y * 2});
+    check_with_assumptions(min(x * 3, y * 6), x * 3, {x <= y * 2});
+
+    // Offsets peeled from under a factor are scaled by it on the way out, so
+    // the two spellings of the same affine term meet.
+    check_with_assumptions(max((x + 3) * 4, y), y, {x * 4 + 12 <= y});
+
+    // A fact over a division orders the multiplied-out terms, and vice versa:
+    // for c > 0, x <= y / c iff c * x <= y.
+    check_with_assumptions(min(x * 8, y), x * 8, {x <= y / 8});
+    check_with_assumptions(max(x, y / 8), y / 8, {x * 8 <= y});
+
+    // Divisions on both sides are peeled over a common denominator. The
+    // remainders they discard cost a little precision, but x <= y is a wide
+    // enough margin to survive it.
+    check_with_assumptions(max(x / 4, y / 4), y / 4, {x <= y});
+
+    // Coefficients that don't reduce to the same coprime pair don't match:
+    // 2 * x <= y says nothing about 3 * x against y.
+    check_with_assumptions(min(x * 3, y), min(x * 3, y), {x * 2 <= y});
+
     // A difference only means what we take it to mean where the type cannot
     // wrap. Given x >= y + 5 over uint8, y = 253 makes y + 5 equal 2, so x = 10
     // satisfies it while sitting far below y: ordering the min from that would

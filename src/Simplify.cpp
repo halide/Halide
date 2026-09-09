@@ -248,6 +248,38 @@ bool reduce_affine_coeffs(int64_t ca, int64_t cb, int64_t &pa, int64_t &pb, int6
     return true;
 }
 
+// Solve a bound on (d * v) for a bound on v, where v is an integer. Rounding
+// inwards at both ends is what makes this exact: a plain interval divide
+// floors the low end where it should ceil, losing the last integer whenever d
+// doesn't divide it (a bound of >= -7 on 8 * v is >= 0 on v, not >= -1).
+ConstantInterval solve_scaled_bound(const ConstantInterval &bound, int64_t d) {
+    internal_assert(d != 0);
+
+    auto round_up = [=](int64_t v) {
+        int64_t q = v / d, r = v % d;
+        return q + ((r != 0 && ((r > 0) == (d > 0))) ? 1 : 0);
+    };
+    auto round_down = [=](int64_t v) {
+        int64_t q = v / d, r = v % d;
+        return q - ((r != 0 && ((r > 0) != (d > 0))) ? 1 : 0);
+    };
+
+    ConstantInterval result;
+    // A negative d swaps which end is which.
+    const bool flip = d < 0;
+    const bool lo_defined = flip ? bound.max_defined : bound.min_defined;
+    const bool hi_defined = flip ? bound.min_defined : bound.max_defined;
+    if (lo_defined) {
+        result.min_defined = true;
+        result.min = round_up(flip ? bound.max : bound.min);
+    }
+    if (hi_defined) {
+        result.max_defined = true;
+        result.max = round_down(flip ? bound.min : bound.max);
+    }
+    return result;
+}
+
 }  // namespace
 
 namespace {
@@ -308,9 +340,7 @@ void Simplify::ScopedFact::learn_difference(const Expr &a, const Expr &b,
         }
     }
 
-    // Down from a bound on (scale * primitive) to one on the primitive. Sound
-    // but not tightest: [5, 9] / 3 keeps [1, 3] where [2, 3] would do.
-    ConstantInterval primitive_bound = peeled / scale;
+    ConstantInterval primitive_bound = solve_scaled_bound(peeled, scale);
 
     simplify->add_difference_key(Simplify::difference_key(pa->hash, pb->hash));
     simplify->known_bounds.push_back(
@@ -865,9 +895,8 @@ ConstantInterval Simplify::known_affine_difference(const BaseExprNode *a, int64_
         }
     }
 
-    // Undo the canonicalization. The final divide floors where it could ceil,
-    // so the low end is sound but not tightest.
-    result = (result + offset + err) / denom;
+    // Undo the canonicalization.
+    result = solve_scaled_bound(result + offset + err, denom);
 
     return result;
 }
