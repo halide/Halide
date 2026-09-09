@@ -2544,7 +2544,10 @@ void check_facts() {
 
     // Facts that don't strictly order the operands don't fire these rules.
     check_with_assumptions(max(x, y), max(x, y), {x != y});
-    check_with_assumptions(max(x * 8, y) / 8, max(x * 8, y) / 8, {x < y / 8});
+
+    // A fact over a division is learned multiplied out, so it orders the
+    // operands as well as one spelled that way: x < y / 8 means 8 * x <= y - 8.
+    check_with_assumptions(max(x * 8, y) / 8, y / 8, {x < y / 8});
 }
 
 int main(int argc, char **argv) {

@@ -441,18 +441,21 @@ public:
 
     std::set<Expr, IRDeepCompare> truths, falsehoods;
 
-    /** What we know about the difference between a pair of Exprs. Every
-     * comparison we can learn from is a statement about (a - b): a < b means it
-     * is at most -1, !(a < b) means it is at least 0, a == b means it is zero.
-     * Because the complement of a half-line is a half-line, only the negation
-     * of an equality fails to be an interval, and that is always a single point
-     * removed, which is what invert represents. */
+    /** What we know about an affine difference between a pair of Exprs. Every
+     * comparison we learn from becomes a statement about (coeff_a * a -
+     * coeff_b * b), with a and b peeled down to base terms and (coeff_a,
+     * coeff_b) the coprime, sign-canonical coefficient pair (see
+     * peel_affine_terms). For a plain comparison both are 1: a < b puts it at
+     * most -1, !(a < b) at least 0, a == b exactly 0. The complement of a
+     * half-line is a half-line, so only a negated equality fails to be an
+     * interval, and that is a single point removed -- hence invert. */
     struct KnownBound {
         Expr a, b;
         ConstantInterval diff;
-        // If set, a - b is known *not* to lie in diff, which is always a single
-        // point. Only a != b (or !(a == b)) produces one of these.
+        // If set, the combination is known *not* to lie in diff, which is
+        // then always a single point. Only a != b produces one of these.
         bool invert = false;
+        int64_t coeff_a = 1, coeff_b = 1;
     };
     std::vector<KnownBound> known_bounds;
 
@@ -468,11 +471,18 @@ public:
      * rewrite rule has bound to its wildcards. */
     ConstantInterval known_difference(const BaseExprNode *a, const BaseExprNode *b);
 
-    // Helpers over known_difference, for use as rewrite rule predicates. They
-    // return false when nothing is known, so that a rule asking for a bound it
-    // can't get simply doesn't fire.
+    /** As known_difference, but for the affine combination (ca * a - cb * b).
+     * For rules holding a constant multiplier (a matched WildConst, say) that
+     * sits outside a or b's own IR, where peeling can't find it. */
+    ConstantInterval known_affine_difference(const BaseExprNode *a, int64_t ca,
+                                             const BaseExprNode *b, int64_t cb);
+
+    // Helpers over the above, for use as rewrite rule predicates. They return
+    // false when nothing is known, so such a rule simply doesn't fire.
     bool known_min_diff(const BaseExprNode *a, const BaseExprNode *b, int64_t *result);
     bool known_max_diff(const BaseExprNode *a, const BaseExprNode *b, int64_t *result);
+    bool known_min_diff(const BaseExprNode *a, int64_t ca, const BaseExprNode *b, int64_t cb, int64_t *result);
+    bool known_max_diff(const BaseExprNode *a, int64_t ca, const BaseExprNode *b, int64_t cb, int64_t *result);
 
     // How deeply are we nested inside the conditions of can_prove predicates?
     // Proving such a condition recursively invokes the simplifier on it, so a

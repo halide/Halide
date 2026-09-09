@@ -86,57 +86,166 @@ void Simplify::found_buffer_reference(const string &name, size_t dimensions) {
 
 namespace {
 
-// Rewrite (a - b) as (a' - b') + offset by stripping constant terms off either
-// side, so that a fact about x and y + 3 and a query about x and y meet at the
-// same pair. Walks the existing nodes; builds nothing.
-void peel_constant_offsets(const BaseExprNode *&a, const BaseExprNode *&b, int64_t &offset) {
-    // Peels one constant term off e if there is one, returning whether it did.
-    // The constant is added to delta, which the caller applies with the sign
-    // appropriate to the side e is on.
-    auto peel_one = [](const BaseExprNode *&e, int64_t &delta) {
+// Each peeled division multiplies denom by its divisor, so nested ones grow it
+// geometrically. Stop well before that stops fitting.
+constexpr int64_t max_peel_denominator = 1 << 20;
+
+// Peel constant add/mul/div terms off e, maintaining
+//
+//     denom * coeff_in * e_in == coeff * e + off + err
+//
+// All five accumulate into the caller's running totals, so peels compose: an
+// additive term under an already-peeled factor is scaled by it first ((x + c0)
+// * c1 -> coeff = c1, off = c1 * c0, e = x). Division is the inexact one --
+// e / c drops a remainder in [0, c - 1] -- so it scales everything by c and
+// banks the remainder in err. Walks existing nodes; builds nothing.
+void peel_affine_term(const BaseExprNode *&e, int64_t &coeff, int64_t &off,
+                      int64_t &denom, ConstantInterval &err) {
+    bool progress = true;
+    while (progress) {
+        progress = false;
         if (e->node_type == IRNodeType::Add) {
             const Add *add = (const Add *)e;
             if (const IntImm *i = add->b.as<IntImm>()) {
-                if (add_would_overflow(64, delta, i->value)) {
-                    return false;
+                if (mul_would_overflow(64, coeff, i->value)) {
+                    break;
                 }
-                delta += i->value;
+                int64_t term = coeff * i->value;
+                if (add_would_overflow(64, off, term)) {
+                    break;
+                }
+                off += term;
                 e = add->a.get();
-                return true;
+                progress = true;
             } else if (const IntImm *i = add->a.as<IntImm>()) {
-                if (add_would_overflow(64, delta, i->value)) {
-                    return false;
+                if (mul_would_overflow(64, coeff, i->value)) {
+                    break;
                 }
-                delta += i->value;
+                int64_t term = coeff * i->value;
+                if (add_would_overflow(64, off, term)) {
+                    break;
+                }
+                off += term;
                 e = add->b.get();
-                return true;
+                progress = true;
             }
         } else if (e->node_type == IRNodeType::Sub) {
             const Sub *sub = (const Sub *)e;
             if (const IntImm *i = sub->b.as<IntImm>()) {
-                if (sub_would_overflow(64, delta, i->value)) {
-                    return false;
+                if (mul_would_overflow(64, coeff, i->value)) {
+                    break;
                 }
-                delta -= i->value;
+                int64_t term = coeff * i->value;
+                if (sub_would_overflow(64, off, term)) {
+                    break;
+                }
+                off -= term;
                 e = sub->a.get();
-                return true;
+                progress = true;
+            }
+        } else if (e->node_type == IRNodeType::Mul) {
+            const Mul *mul = (const Mul *)e;
+            if (const IntImm *i = mul->b.as<IntImm>()) {
+                if (mul_would_overflow(64, coeff, i->value)) {
+                    break;
+                }
+                coeff *= i->value;
+                e = mul->a.get();
+                progress = true;
+            } else if (const IntImm *i = mul->a.as<IntImm>()) {
+                if (mul_would_overflow(64, coeff, i->value)) {
+                    break;
+                }
+                coeff *= i->value;
+                e = mul->b.get();
+                progress = true;
+            }
+        } else if (e->node_type == IRNodeType::Div) {
+            const Div *div = (const Div *)e;
+            const IntImm *i = div->b.as<IntImm>();
+            // Positive divisors only; a negative one floors the other way.
+            if (i && i->value > 0 && i->value <= max_peel_denominator) {
+                const int64_t c = i->value;
+                if (mul_would_overflow(64, denom, c) || denom * c > max_peel_denominator ||
+                    mul_would_overflow(64, off, c) || mul_would_overflow(64, coeff, c - 1)) {
+                    break;
+                }
+                // c * coeff * (a / c) == coeff * a - coeff * r, r == a % c.
+                denom *= c;
+                off *= c;
+                err *= c;
+                err -= ConstantInterval(0, c - 1) * coeff;
+                e = div->a.get();
+                progress = true;
             }
         }
-        return false;
-    };
+    }
+}
 
-    // A constant on the left of the difference adds to the offset; one on the
-    // right subtracts from it, so accumulate it negated and subtract at the end.
-    int64_t from_a = 0, from_b = 0;
-    while (peel_one(a, from_a)) {
+// Rewrite (ca * a - cb * b) as
+//
+//     denom * (ca * a - cb * b) == coeff_a * a' - coeff_b * b' + offset + err
+//
+// peeling each side independently, so that facts and queries meet at a common
+// pair however each was spelled: x vs y + 3, 2 * x vs 4 * x, x vs y / c
+// against c * x vs y. Absent a division denom is 1 and err is 0.
+void peel_affine_terms(const BaseExprNode *&a, const BaseExprNode *&b,
+                       int64_t &coeff_a, int64_t &coeff_b, int64_t &offset,
+                       int64_t &denom, ConstantInterval &err) {
+    const BaseExprNode *const a_in = a;
+    const BaseExprNode *const b_in = b;
+    const int64_t ca_in = coeff_a, cb_in = coeff_b;
+
+    int64_t off_a = 0, off_b = 0, denom_a = 1, denom_b = 1;
+    ConstantInterval err_a(0, 0), err_b(0, 0);
+    peel_affine_term(a, coeff_a, off_a, denom_a, err_a);
+    peel_affine_term(b, coeff_b, off_b, denom_b, err_b);
+
+    // Put the two sides over a common denominator.
+    if (mul_would_overflow(64, denom_a, denom_b) ||
+        mul_would_overflow(64, coeff_a, denom_b) || mul_would_overflow(64, coeff_b, denom_a) ||
+        mul_would_overflow(64, off_a, denom_b) || mul_would_overflow(64, off_b, denom_a)) {
+        // Nothing useful to say about numbers this large.
+        a = a_in;
+        b = b_in;
+        coeff_a = ca_in;
+        coeff_b = cb_in;
+        denom = 1;
+        err = ConstantInterval(0, 0);
+        offset = 0;
+        return;
     }
-    while (peel_one(b, from_b)) {
-    }
-    if (!sub_would_overflow(64, from_a, from_b)) {
-        offset = from_a - from_b;
+    denom = denom_a * denom_b;
+    coeff_a *= denom_b;
+    coeff_b *= denom_a;
+    off_a *= denom_b;
+    off_b *= denom_a;
+    err = err_a * denom_b - err_b * denom_a;
+    if (!sub_would_overflow(64, off_a, off_b)) {
+        offset = off_a - off_b;
     } else {
         offset = 0;
     }
+}
+
+// Reduce (ca, cb) to a coprime, sign-canonical (pa, pb) and a scale s with
+// (ca, cb) == s * (pa, pb). False if both coefficients are zero. Facts and
+// queries both go through this, so a fact about 2 * x - 4 * y and a query
+// about 3 * x - 6 * y meet at the pair (1, 2) with scales 2 and 3.
+bool reduce_affine_coeffs(int64_t ca, int64_t cb, int64_t &pa, int64_t &pb, int64_t &s) {
+    if (ca == 0 && cb == 0) {
+        return false;
+    }
+    int64_t g = gcd(ca, cb);
+    pa = ca / g;
+    pb = cb / g;
+    s = g;
+    if (pa < 0 || (pa == 0 && pb < 0)) {
+        pa = -pa;
+        pb = -pb;
+        s = -s;
+    }
+    return true;
 }
 
 }  // namespace
@@ -176,20 +285,36 @@ void Simplify::ScopedFact::learn_difference(const Expr &a, const Expr &b,
     }
 
     const BaseExprNode *pa = a.get(), *pb = b.get();
-    int64_t offset = 0;
-    peel_constant_offsets(pa, pb, offset);
+    int64_t coeff_a = 1, coeff_b = 1, offset = 0, denom = 1;
+    ConstantInterval err(0, 0);
+    peel_affine_terms(pa, pb, coeff_a, coeff_b, offset, denom, err);
 
-    // (a - b) = (pa - pb) + offset, so the bound on the peeled pair is the
-    // bound we were given shifted the other way.
-    ConstantInterval peeled = diff - offset;
-    if (invert && !peeled.is_single_point()) {
-        // Only a single removed point is representable.
+    // denom * (a - b) == (coeff_a * pa - coeff_b * pb) + offset + err, so
+    // solve for the peeled quantity: scale the given bound up by denom and
+    // take back the offset and the remainder any peeled division discarded.
+    ConstantInterval peeled = diff * denom - offset - err;
+
+    int64_t prim_a, prim_b, scale;
+    if (!reduce_affine_coeffs(coeff_a, coeff_b, prim_a, prim_b, scale)) {
+        // Both coefficients vanished (something peeled down to 0 * ...).
         return;
     }
 
+    if (invert) {
+        // Only a single point is representable, and only on a lattice point:
+        // off-lattice, no integer primitive quantity could have hit it anyway.
+        if (!peeled.is_single_point() || peeled.min % scale != 0) {
+            return;
+        }
+    }
+
+    // Down from a bound on (scale * primitive) to one on the primitive. Sound
+    // but not tightest: [5, 9] / 3 keeps [1, 3] where [2, 3] would do.
+    ConstantInterval primitive_bound = peeled / scale;
+
     simplify->add_difference_key(Simplify::difference_key(pa->hash, pb->hash));
     simplify->known_bounds.push_back(
-        Simplify::KnownBound{Expr(pa), Expr(pb), peeled, invert});
+        Simplify::KnownBound{Expr(pa), Expr(pb), primitive_bound, invert, prim_a, prim_b});
 }
 
 void Simplify::ScopedFact::learn_false(const Expr &fact) {
@@ -636,91 +761,113 @@ ConstantInterval structural_difference(const BaseExprNode *a, const BaseExprNode
 }  // namespace
 
 ConstantInterval Simplify::known_difference(const BaseExprNode *a, const BaseExprNode *b) {
+    return known_affine_difference(a, 1, b, 1);
+}
+
+ConstantInterval Simplify::known_affine_difference(const BaseExprNode *a, int64_t ca,
+                                                   const BaseExprNode *b, int64_t cb) {
     ConstantInterval result;
 
-    // Canonicalize the query the way the facts were canonicalized when learned.
-    int64_t offset = 0;
-    peel_constant_offsets(a, b, offset);
+    // Canonicalize the query the way facts are canonicalized when learned.
+    // ca/cb seed the coefficients: they already apply to the unpeeled a/b (a
+    // matched WildConst, say), so peeling can't discover them itself.
+    int64_t coeff_a = ca, coeff_b = cb, offset = 0, denom = 1;
+    ConstantInterval err(0, 0);
+    peel_affine_terms(a, b, coeff_a, coeff_b, offset, denom, err);
 
-    if (equal(*a, *b)) {
+    if (coeff_a == coeff_b && equal(*a, *b)) {
         result = ConstantInterval::single_point(0);
-    } else {
-        if (a->node_type == IRNodeType::IntImm && b->node_type == IRNodeType::IntImm &&
-            !sub_would_overflow(64, ((const IntImm *)a)->value, ((const IntImm *)b)->value)) {
-            // Two constants need no facts to compare.
-            result = ConstantInterval::single_point(((const IntImm *)a)->value -
-                                                    ((const IntImm *)b)->value);
-        } else {
-            intersect_if_nonempty(result, structural_difference(a, b));
+    } else if (a->node_type == IRNodeType::IntImm && b->node_type == IRNodeType::IntImm) {
+        // Two constants need no facts to compare.
+        int64_t va = ((const IntImm *)a)->value, vb = ((const IntImm *)b)->value;
+        if (!mul_would_overflow(64, coeff_a, va) && !mul_would_overflow(64, coeff_b, vb)) {
+            int64_t ta = coeff_a * va, tb = coeff_b * vb;
+            if (!sub_would_overflow(64, ta, tb)) {
+                result = ConstantInterval::single_point(ta - tb);
+            }
         }
+    } else if (coeff_a == 1 && coeff_b == 1) {
+        // The structural heuristic is about (a - b) alone; it doesn't
+        // generalize to a scaled combination.
+        intersect_if_nonempty(result, structural_difference(a, b));
     }
 
     if (!result.is_single_point() && !known_bounds.empty()) {
-        // A hole only tightens the bounds once we know where the ends are, so
-        // collect them as we go and apply them below. There are hardly ever any.
-        constexpr int max_holes = 4;
-        int64_t holes[max_holes];
-        int num_holes = 0;
+        int64_t prim_a, prim_b, scale;
+        if (reduce_affine_coeffs(coeff_a, coeff_b, prim_a, prim_b, scale)) {
+            // A hole only bites once the ends are known, so collect and apply
+            // them below. There are hardly ever any.
+            constexpr int max_holes = 4;
+            int64_t holes[max_holes];
+            int num_holes = 0;
 
-        const uint32_t fa = a->hash, fb = b->hash;
-        // One test against the whole table before looking at any record.
-        if (!difference_key_present(difference_key(fa, fb))) {
-            result += offset;
-            return result;
-        }
-        for (const KnownBound &kb : known_bounds) {
-            // Reject on the hashes first: a record about some other pair costs
-            // a pair of integer compares rather than a walk over two Exprs.
-            const uint32_t kba = kb.a.get()->hash, kbb = kb.b.get()->hash;
-            const bool same_order = (fa == kba && fb == kbb);
-            const bool swapped = (fa == kbb && fb == kba);
-            if (!same_order && !swapped) {
-                continue;
-            }
+            const uint32_t fa = a->hash, fb = b->hash;
+            // One test against the whole table before looking at any record.
+            if (difference_key_present(difference_key(fa, fb))) {
+                for (const KnownBound &kb : known_bounds) {
+                    // Hashes first: a record about another pair costs two
+                    // integer compares, not a walk over two Exprs.
+                    const uint32_t kba = kb.a.get()->hash, kbb = kb.b.get()->hash;
+                    const bool same_order = (fa == kba && fb == kbb);
+                    const bool swapped = (fa == kbb && fb == kba);
+                    if (!same_order && !swapped) {
+                        continue;
+                    }
 
-            ConstantInterval d;
-            if (same_order && equal(*a, *kb.a.get()) && equal(*b, *kb.b.get())) {
-                d = kb.diff;
-            } else if (swapped && equal(*a, *kb.b.get()) && equal(*b, *kb.a.get())) {
-                // We know about (b - a), and this is the other direction.
-                d = -kb.diff;
-            } else {
-                continue;
-            }
+                    ConstantInterval d;
+                    if (same_order && equal(*a, *kb.a.get()) && equal(*b, *kb.b.get()) &&
+                        prim_a == kb.coeff_a && prim_b == kb.coeff_b) {
+                        d = kb.diff * scale;
+                    } else if (swapped && equal(*a, *kb.b.get()) && equal(*b, *kb.a.get())) {
+                        // The fact runs the other way. Reduce (coeff_b,
+                        // coeff_a) -- this query in the fact's operand order --
+                        // then negate to flip back.
+                        int64_t sw_prim_a, sw_prim_b, sw_scale;
+                        if (reduce_affine_coeffs(coeff_b, coeff_a, sw_prim_a, sw_prim_b, sw_scale) &&
+                            sw_prim_a == kb.coeff_a && sw_prim_b == kb.coeff_b) {
+                            d = -(kb.diff * sw_scale);
+                        } else {
+                            continue;
+                        }
+                    } else {
+                        continue;
+                    }
 
-            if (kb.invert) {
-                if (num_holes < max_holes) {
-                    holes[num_holes++] = d.min;
+                    if (kb.invert) {
+                        if (num_holes < max_holes) {
+                            holes[num_holes++] = d.min;
+                        }
+                    } else if (!intersect_if_nonempty(result, d)) {
+                        break;
+                    }
                 }
-            } else if (!intersect_if_nonempty(result, d)) {
-                break;
             }
-        }
 
-        for (int i = 0; i < num_holes; i++) {
-            const int64_t hole = holes[i];
-            // Removing a point only narrows the bounds if it is at one end,
-            // and only if something is left afterwards: a hole that swallows
-            // the whole interval means the facts contradict each other, so the
-            // code is unreachable. Say nothing rather than describe an empty
-            // set with a backwards interval.
-            if (result.min_defined && result.max_defined &&
-                result.min == hole && result.max == hole) {
-                continue;
-            }
-            if (result.min_defined && result.min == hole &&
-                !add_would_overflow(64, hole, 1)) {
-                result.min = hole + 1;
-            }
-            if (result.max_defined && result.max == hole &&
-                !sub_would_overflow(64, hole, 1)) {
-                result.max = hole - 1;
+            for (int i = 0; i < num_holes; i++) {
+                const int64_t hole = holes[i];
+                // A point only narrows the bounds from an end, and only if
+                // something survives: a hole swallowing the interval means the
+                // facts contradict and the code is unreachable. Say nothing
+                // rather than hand back a backwards interval.
+                if (result.min_defined && result.max_defined &&
+                    result.min == hole && result.max == hole) {
+                    continue;
+                }
+                if (result.min_defined && result.min == hole &&
+                    !add_would_overflow(64, hole, 1)) {
+                    result.min = hole + 1;
+                }
+                if (result.max_defined && result.max == hole &&
+                    !sub_would_overflow(64, hole, 1)) {
+                    result.max = hole - 1;
+                }
             }
         }
     }
 
-    // Undo the canonicalization: (a - b) = (peeled a - peeled b) + offset.
-    result += offset;
+    // Undo the canonicalization. The final divide floors where it could ceil,
+    // so the low end is sound but not tightest.
+    result = (result + offset + err) / denom;
 
     return result;
 }
@@ -729,6 +876,24 @@ bool Simplify::known_min_diff(const BaseExprNode *a, const BaseExprNode *b, int6
     ConstantInterval bounds = known_difference(a, b);
     if (bounds.min_defined) {
         *result = bounds.min;
+        return true;
+    }
+    return false;
+}
+
+bool Simplify::known_min_diff(const BaseExprNode *a, int64_t ca, const BaseExprNode *b, int64_t cb, int64_t *result) {
+    ConstantInterval bounds = known_affine_difference(a, ca, b, cb);
+    if (bounds.min_defined) {
+        *result = bounds.min;
+        return true;
+    }
+    return false;
+}
+
+bool Simplify::known_max_diff(const BaseExprNode *a, int64_t ca, const BaseExprNode *b, int64_t cb, int64_t *result) {
+    ConstantInterval bounds = known_affine_difference(a, ca, b, cb);
+    if (bounds.max_defined) {
+        *result = bounds.max;
         return true;
     }
     return false;
