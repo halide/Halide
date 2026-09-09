@@ -6,8 +6,8 @@
  * a Stmt tree.
  */
 
+#include <set>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "Bounds.h"
@@ -31,11 +31,20 @@ namespace Internal {
  * has always used to find constant loop extents, generalized so other
  * passes that infer constant bounds (e.g. BoundSmallAllocations,
  * AllocationBoundsInference) can use it too.
+ *
+ * Pushing a binding is deliberately cheap: it only records the Expr. None of
+ * the derived information -- the constant bounds of a let's value, whether
+ * it's pure, the symbolic facts implied by a loop's range -- is computed
+ * until something actually asks a question. Passes that walk a whole tree
+ * but only query at a handful of nodes therefore pay almost nothing for the
+ * bindings they descend through. Once computed, the derived information is
+ * memoized for as long as the binding is alive, so repeated queries under
+ * the same bindings don't redo the work.
  */
 class BoundsTracker {
 public:
-    /** An RAII binding produced by push_for/push_let. Pops everything it
-     * pushed when destroyed. */
+    /** An RAII binding produced by push_for/push_let/push_interval. Pops
+     * what it pushed when destroyed. */
     class Binding {
     public:
         Binding() = default;
@@ -46,13 +55,9 @@ public:
 
     private:
         friend class BoundsTracker;
-        Binding(BoundsTracker *tracker, ScopedBinding<Interval> scope_binding, bool recorded_let,
-                bool recorded_loop = false);
+        explicit Binding(BoundsTracker *tracker);
 
         BoundsTracker *tracker = nullptr;
-        ScopedBinding<Interval> scope_binding;
-        bool recorded_let = false;
-        bool recorded_loop = false;
     };
 
     /** Push the bounds of a for loop variable: the envelope [lower bound of
@@ -72,11 +77,11 @@ public:
      * find_constant_bound_aggressive()'s let-substitution. */
     Binding push_interval(const std::string &name, const Interval &interval);
 
-    /** Push a let binding. Always updates the fast-path scope with a
-     * constant-bounds estimate of the value. Additionally records the
-     * syntactic binding for find_constant_bound_aggressive()'s slow path,
-     * but only if the value is pure -- substituting an impure expression
-     * into multiple places would change its meaning. */
+    /** Push a let binding. Feeds both the fast-path scope (via a constant
+     * bounds estimate of the value) and find_constant_bound_aggressive()'s
+     * slow path (via the syntactic binding, but only if the value turns out
+     * to be pure -- substituting an impure expression into multiple places
+     * would change its meaning). Both of those are derived lazily. */
     Binding push_let(const std::string &name, const Expr &value);
 
     /** An RAII guard produced by push_fact. Pops the fact when destroyed. */
@@ -141,19 +146,21 @@ public:
      * at ingestion), so this scope -- itself always constant-or-unbounded --
      * loses nothing for that use case. It is not, however, suitable for
      * general symbolic interval arithmetic (e.g. bounds_of_expr_in_scope)
-     * where a non-constant symbolic bound would otherwise be useful. */
-    const Scope<Interval> &interval_scope() const {
-        return scope;
-    }
+     * where a non-constant symbolic bound would otherwise be useful.
+     *
+     * Asking for the scope forces every pending binding to be evaluated, so
+     * prefer find_constant_bound() where it suffices. */
+    const Scope<Interval> &interval_scope() const;
 
-    /** The dominating conditions currently known to hold (see push_fact()),
+    /** The dominating conditions that could possibly say something about e --
+     * those passed to push_fact(), plus the range of every enclosing loop --
      * for passes that want to feed them directly into simplify() as
      * assumptions alongside interval_scope(), without paying for the more
      * expensive wrap-in-every-pending-let-and-resimplify path that
-     * find_constant_bound_aggressive()/simplify_with_context() use. */
-    const std::vector<Expr> &known_facts() const {
-        return facts;
-    }
+     * find_constant_bound_aggressive()/simplify_with_context() use. Facts
+     * sharing no variable (even transitively, via another fact) with e are
+     * dropped: they can't help, and the simplifier pays to ingest each one. */
+    std::vector<Expr> relevant_facts(const Expr &e) const;
 
 private:
     /** Tighten an interval by exploiting monotonicity in an enclosing loop
@@ -164,15 +171,60 @@ private:
      * symbol shared by e and the loop's range correlated. */
     Interval tighten_using_loop_monotonicity(const Expr &e, Interval interval) const;
 
-    struct LoopRange {
-        std::string name;
-        Expr min, max;
+    /** Wrap e in the enclosing pure lets it refers to, innermost first,
+     * skipping those it can't reach. Returns the names it ended up
+     * mentioning in *used, so a caller can go on to pick out the facts that
+     * could say something about it. */
+    Expr wrap_in_used_lets(const Expr &e, std::set<std::string> *used) const;
+
+    /** The facts mentioning any name in *used, growing *used with the names
+     * each selected fact brings in, until it reaches a fixed point. */
+    std::vector<Expr> facts_mentioning(std::set<std::string> *used) const;
+
+    enum class Kind {
+        Let,      //< lo is the value
+        Loop,     //< lo and hi are the loop min and max
+        Explicit  //< bounds is given up front
     };
 
-    Scope<Interval> scope;
-    std::vector<std::pair<std::string, Expr>> lets;
+    struct Entry {
+        Kind kind;
+        std::string name;
+        Expr lo, hi;
+        /** Only meaningful once this entry has been realized into `scope`,
+         * i.e. once its index is below `realized`. */
+        Interval bounds;
+        /** Whether the bound Exprs are pure, and so safe to substitute into
+         * multiple places. Computed on first use. */
+        enum class Purity {
+            Unknown,
+            Pure,
+            Impure
+        };
+        mutable Purity purity = Purity::Unknown;
+    };
+
+    /** Realize every entry not yet reflected in `scope`, outermost first, so
+     * that each one's bounds are derived in the scope of the entries that
+     * enclose it. */
+    void realize_all() const;
+    Interval bounds_of(const Entry &entry) const;
+    bool entry_is_pure(const Entry &entry) const;
+    void pop_entry();
+    void pop_fact();
+
+    /** The bindings in scope, outermost first. Mutable because realizing an
+     * entry -- a pure memoization of what the entry already implies -- has
+     * to be possible from the const query methods. */
+    mutable std::vector<Entry> entries;
+
+    /** entries[0, realized) have been pushed into `scope`, in that order. */
+    mutable size_t realized = 0;
+    mutable Scope<Interval> scope;
+
+    /** The conditions passed to push_fact(). Those implied by enclosing
+     * loops are materialized on demand by relevant_facts(). */
     std::vector<Expr> facts;
-    std::vector<LoopRange> loops;
 };
 
 }  // namespace Internal

@@ -281,7 +281,7 @@ protected:
             // whole tree several times, so that would be too expensive
             // here): just hand the already-computed constant scope and
             // dominating facts to the simplifier directly.
-            e = simplify(e, tracker.interval_scope(), Scope<ModulusRemainder>::empty_scope(), tracker.known_facts());
+            e = simplify(e, tracker.interval_scope(), Scope<ModulusRemainder>::empty_scope(), tracker.relevant_facts(e));
 
             debug(1, "non-monotonic") << [&]() -> std::string {
                 if (is_monotonic(e, loop_var) != Monotonic::Unknown) {
