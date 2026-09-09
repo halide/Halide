@@ -131,6 +131,16 @@ bool BoundsTracker::entry_is_pure(const Entry &entry) const {
 Interval BoundsTracker::bounds_of(const Entry &entry) const {
     switch (entry.kind) {
     case Kind::Let:
+        // A pure let gets inlined by wrap_in_used_lets before anything asks
+        // for a bound, and bounding the expression that results is both
+        // cheaper and sharper than bounding the value here and looking it up
+        // through an opaque variable. It still has to occupy a slot in the
+        // scope, though: a let shadowing an outer variable that does have a
+        // bound must hide it, not let lookups fall through to it. An impure
+        // let is never inlined, so it needs a real bound.
+        if (entry_is_pure(entry)) {
+            return Interval::everything();
+        }
         return Halide::Internal::find_constant_bounds(entry.lo, scope);
     case Kind::Loop: {
         Interval b = Interval::make_union(Halide::Internal::find_constant_bounds(entry.lo, scope),
