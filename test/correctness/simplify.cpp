@@ -2495,6 +2495,20 @@ void check_facts() {
     // 2 * x <= y says nothing about 3 * x against y.
     check_with_assumptions(min(x * 3, y), min(x * 3, y), {x * 2 <= y});
 
+    // Comparing a sum or difference against a constant is a comparison
+    // between its two terms, so a fact about the pair settles it.
+    check_with_assumptions(max(x - y * 5, 0), x - y * 5, {x > y * 5});
+    check_with_assumptions(min(x - y * 5, 0), 0, {x > y * 5});
+    check_with_assumptions(max(x + y * 5, 0), y * 5 + x, {x > y * -5});
+
+    // The constant comes back as an offset, so it needn't be zero.
+    check_with_assumptions(max(x - y * 5, 3), x - y * 5, {x > y * 5 + 3});
+    check_with_assumptions(max(x - y * 5, -2), x - y * 5, {x >= y * 5});
+    check_with_assumptions(min(x - y * 5, 7), 7, {x > y * 5 + 7});
+
+    // The margin has to actually cover the constant.
+    check_with_assumptions(max(x - y * 5, 3), max(x - y * 5, 3), {x > y * 5});
+
     // A difference only means what we take it to mean where the type cannot
     // wrap. Given x >= y + 5 over uint8, y = 253 makes y + 5 equal 2, so x = 10
     // satisfies it while sitting far below y: ordering the min from that would
