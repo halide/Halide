@@ -196,6 +196,17 @@ void peel_affine_terms(const BaseExprNode *&a, const BaseExprNode *&b,
     const BaseExprNode *const b_in = b;
     const int64_t ca_in = coeff_a, cb_in = coeff_b;
 
+    // Peeled nothing: the pair as it came in, which every caller can still use.
+    auto give_up = [&]() {
+        a = a_in;
+        b = b_in;
+        coeff_a = ca_in;
+        coeff_b = cb_in;
+        denom = 1;
+        err = ConstantInterval(0, 0);
+        offset = 0;
+    };
+
     int64_t off_a = 0, off_b = 0, denom_a = 1, denom_b = 1;
     ConstantInterval err_a(0, 0), err_b(0, 0);
     peel_affine_term(a, coeff_a, off_a, denom_a, err_a);
@@ -206,13 +217,7 @@ void peel_affine_terms(const BaseExprNode *&a, const BaseExprNode *&b,
         mul_would_overflow(64, coeff_a, denom_b) || mul_would_overflow(64, coeff_b, denom_a) ||
         mul_would_overflow(64, off_a, denom_b) || mul_would_overflow(64, off_b, denom_a)) {
         // Nothing useful to say about numbers this large.
-        a = a_in;
-        b = b_in;
-        coeff_a = ca_in;
-        coeff_b = cb_in;
-        denom = 1;
-        err = ConstantInterval(0, 0);
-        offset = 0;
+        give_up();
         return;
     }
     denom = denom_a * denom_b;
@@ -221,11 +226,13 @@ void peel_affine_terms(const BaseExprNode *&a, const BaseExprNode *&b,
     off_a *= denom_b;
     off_b *= denom_a;
     err = err_a * denom_b - err_b * denom_a;
-    if (!sub_would_overflow(64, off_a, off_b)) {
-        offset = off_a - off_b;
-    } else {
-        offset = 0;
+    // An offset we can't represent has to sink the whole rewrite: dropping it
+    // would leave a and b peeled but the relation between them misstated.
+    if (sub_would_overflow(64, off_a, off_b)) {
+        give_up();
+        return;
     }
+    offset = off_a - off_b;
 }
 
 // Reduce (ca, cb) to a coprime, sign-canonical (pa, pb) and a scale s with
