@@ -183,10 +183,20 @@ Box expand_to_include_base_case(const vector<string> &vars, const vector<bool> &
     Box box2 = box_required;
     BaseCaseSolver b(vars, is_inductive_var, func, box_required.bounds, is_update);
     substed.accept(&b);
+
+    Scope<Interval> non_inductive_scope;
+    for (size_t i = 0; i < vars.size(); i++) {
+        if (!is_inductive_var[i]) {
+            non_inductive_scope.push(vars[i], box_required[i]);
+        }
+    }
+
     for (size_t i = 0; i < vars.size(); i++) {
         user_assert(b.result_intervals[i].is_bounded() || b.result_intervals[i].is_empty()) << "Unable to prove that the inductive function " << func << " uses a bounded interval";
         if (!b.result_intervals[i].is_empty()) {
             Interval new_interval(min(b.result_intervals[i].min, box_required[i].min), box_required[i].max);
+
+            new_interval.min = bounds_of_expr_in_scope(new_interval.min, non_inductive_scope).min;
             box2[i] = new_interval;
         }
     }

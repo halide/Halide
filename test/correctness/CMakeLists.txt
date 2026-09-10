@@ -208,6 +208,7 @@ tests(
     in_place.cpp
     indexing_access_undef.cpp
     inductive.cpp
+    inductive_base_case_bounds.cpp
     fold_inductive_keeps_step.cpp
     inductive_folding.cpp
     inductive_ring_buffer.cpp
