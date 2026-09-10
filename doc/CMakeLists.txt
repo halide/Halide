@@ -130,6 +130,7 @@ set(_sphinx_static_files
     "${CMAKE_CURRENT_SOURCE_DIR}/Hexagon.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/Python.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/RunGen.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/SchedulingHalidePipelines.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/Testing.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/Vulkan.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/WebAssembly.md"
@@ -148,6 +149,55 @@ add_custom_command(
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${_sphinx_static_files} "${_sphinx_src_dir}/"
     DEPENDS ${_sphinx_static_files}
     COMMENT "Staging Sphinx source files into the build tree"
+    VERBATIM
+)
+
+# The scheduling guide (doc/SchedulingHalidePipelines.md, staged above) is a
+# landing page whose toctree pulls in one chapter per file under
+# doc/scheduling/. Those chapters are hand-authored prose like the root pages,
+# but have to be staged into a scheduling/ subdirectory of the Sphinx source
+# tree (rather than flattened alongside the root files) so the guide's
+# scheduling/NN-... toctree entries and inter-chapter links resolve. This
+# repo's CMake style checks disallow file(GLOB ...), so the chapter list is
+# spelled out explicitly.
+set(_sphinx_scheduling_files
+    "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/01-introduction.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/02-the-programming-model.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/03-realizing-a-pipeline.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/04-bounds-inference.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/05-scheduling-for-cpus.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/06-scheduling-for-gpus.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/07-what-to-schedule.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/08-benchmarking-and-the-profiler.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/09-reading-the-stmt-file.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/10-recipes.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/11-pitfalls.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/12-reading-a-loop-nest.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/13-defaults-and-inlining.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/14-placement-compute-root-and-compute-at.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/15-storage-levels.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/16-reshaping-loops.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/17-loop-types.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/18-advanced-directives.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/19-how-the-loop-nest-is-built.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/20-directive-reference.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/21-checklist-and-worked-example.md"
+)
+
+set(_staged_scheduling_files "")
+foreach (_src_file IN LISTS _sphinx_scheduling_files)
+    cmake_path(GET _src_file FILENAME _file_name)
+    list(APPEND _staged_scheduling_files "${_sphinx_src_dir}/scheduling/${_file_name}")
+endforeach ()
+
+add_custom_command(
+    OUTPUT ${_staged_scheduling_files}
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${_sphinx_src_dir}/scheduling"
+    COMMAND
+        "${CMAKE_COMMAND}" -E copy_if_different ${_sphinx_scheduling_files}
+        "${_sphinx_src_dir}/scheduling/"
+    DEPENDS ${_sphinx_scheduling_files}
+    COMMENT "Staging scheduling guide chapters into the build tree"
     VERBATIM
 )
 
@@ -438,8 +488,9 @@ add_custom_command(
         -d "${CMAKE_CURRENT_BINARY_DIR}/sphinx/doctrees"
         "${_sphinx_src_dir}" "${_sphinx_output_dir}"
     DEPENDS
-        doc_doxygen ${_staged_static_files} ${_staged_static_css_files} ${_staged_static_api_files}
-        "${_api_reference_marker}" "${_tutorial_index_file}" ${_tutorial_pages}
+        doc_doxygen ${_staged_static_files} ${_staged_scheduling_files} ${_staged_static_css_files}
+        ${_staged_static_api_files} "${_api_reference_marker}" "${_tutorial_index_file}"
+        ${_tutorial_pages}
     COMMENT "Generating Halide documentation website (Sphinx)"
     VERBATIM
 )
