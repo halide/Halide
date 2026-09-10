@@ -25,6 +25,12 @@ struct CodeGen_GPU_Dev {
                             const std::string &name,
                             const std::vector<DeviceArgument> &args) = 0;
 
+    /** Cap the registers a thread of the next kernel added may use. Zero, the
+     * default, leaves it to the backend compiler. Only CUDA does anything with
+     * this; the other APIs offer no equivalent and ignore it. */
+    virtual void set_kernel_max_registers(int n) {
+    }
+
     /** (Re)initialize the GPU kernel module. This is separate from compile,
      * since a GPU device module will often have many kernels compiled into it
      * for a single pipeline. */
