@@ -637,6 +637,14 @@ bool GeneratorCache::try_restore(const std::string &key,
         if (ec) {
             // Fall back to a copy if rename across the tmp/dest pair failed.
             fs::copy_file(p.first, p.second, fs::copy_options::overwrite_existing, ec);
+            if (ec) {
+                const std::string message = ec.message();
+                for (const auto &pending_file : pending) {
+                    fs::remove(pending_file.first, ec);
+                }
+                user_error << "GeneratorCache: failed to restore " << p.second.string()
+                           << ": " << message << "\n";
+            }
             fs::remove(p.first, ec);
         }
     }
