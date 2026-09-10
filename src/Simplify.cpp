@@ -107,56 +107,45 @@ void peel_affine_term(const BaseExprNode *&e, int64_t &coeff, int64_t &off,
         if (e->node_type == IRNodeType::Add) {
             const Add *add = (const Add *)e;
             if (const IntImm *i = add->b.as<IntImm>()) {
-                if (mul_would_overflow(64, coeff, i->value)) {
+                int64_t term;
+                if (!mul_with_overflow(64, coeff, i->value, &term) ||
+                    !add_with_overflow(64, off, term, &off)) {
                     break;
                 }
-                int64_t term = coeff * i->value;
-                if (add_would_overflow(64, off, term)) {
-                    break;
-                }
-                off += term;
                 e = add->a.get();
                 progress = true;
             } else if (const IntImm *i = add->a.as<IntImm>()) {
-                if (mul_would_overflow(64, coeff, i->value)) {
+                int64_t term;
+                if (!mul_with_overflow(64, coeff, i->value, &term) ||
+                    !add_with_overflow(64, off, term, &off)) {
                     break;
                 }
-                int64_t term = coeff * i->value;
-                if (add_would_overflow(64, off, term)) {
-                    break;
-                }
-                off += term;
                 e = add->b.get();
                 progress = true;
             }
         } else if (e->node_type == IRNodeType::Sub) {
             const Sub *sub = (const Sub *)e;
             if (const IntImm *i = sub->b.as<IntImm>()) {
-                if (mul_would_overflow(64, coeff, i->value)) {
+                int64_t term;
+                if (!mul_with_overflow(64, coeff, i->value, &term) ||
+                    !sub_with_overflow(64, off, term, &off)) {
                     break;
                 }
-                int64_t term = coeff * i->value;
-                if (sub_would_overflow(64, off, term)) {
-                    break;
-                }
-                off -= term;
                 e = sub->a.get();
                 progress = true;
             }
         } else if (e->node_type == IRNodeType::Mul) {
             const Mul *mul = (const Mul *)e;
             if (const IntImm *i = mul->b.as<IntImm>()) {
-                if (mul_would_overflow(64, coeff, i->value)) {
+                if (!mul_with_overflow(64, coeff, i->value, &coeff)) {
                     break;
                 }
-                coeff *= i->value;
                 e = mul->a.get();
                 progress = true;
             } else if (const IntImm *i = mul->a.as<IntImm>()) {
-                if (mul_would_overflow(64, coeff, i->value)) {
+                if (!mul_with_overflow(64, coeff, i->value, &coeff)) {
                     break;
                 }
-                coeff *= i->value;
                 e = mul->b.get();
                 progress = true;
             }
@@ -166,13 +155,16 @@ void peel_affine_term(const BaseExprNode *&e, int64_t &coeff, int64_t &off,
             // Positive divisors only; a negative one floors the other way.
             if (i && i->value > 0 && i->value <= max_peel_denominator) {
                 const int64_t c = i->value;
-                if (mul_would_overflow(64, denom, c) || denom * c > max_peel_denominator ||
-                    mul_would_overflow(64, off, c) || mul_would_overflow(64, coeff, c - 1)) {
+                int64_t new_denom, new_off, tmp;
+                if (!mul_with_overflow(64, denom, c, &new_denom) ||
+                    new_denom > max_peel_denominator ||
+                    !mul_with_overflow(64, off, c, &new_off) ||
+                    !mul_with_overflow(64, coeff, c - 1, &tmp)) {
                     break;
                 }
                 // c * coeff * (a / c) == coeff * a - coeff * r, r == a % c.
-                denom *= c;
-                off *= c;
+                denom = new_denom;
+                off = new_off;
                 err *= c;
                 err -= ConstantInterval(0, c - 1) * coeff;
                 e = div->a.get();
@@ -213,26 +205,30 @@ void peel_affine_terms(const BaseExprNode *&a, const BaseExprNode *&b,
     peel_affine_term(b, coeff_b, off_b, denom_b, err_b);
 
     // Put the two sides over a common denominator.
-    if (mul_would_overflow(64, denom_a, denom_b) ||
-        mul_would_overflow(64, coeff_a, denom_b) || mul_would_overflow(64, coeff_b, denom_a) ||
-        mul_would_overflow(64, off_a, denom_b) || mul_would_overflow(64, off_b, denom_a)) {
+    if (!mul_with_overflow(64, denom_a, denom_b, &denom)) {
         // Nothing useful to say about numbers this large.
         give_up();
         return;
     }
-    denom = denom_a * denom_b;
-    coeff_a *= denom_b;
-    coeff_b *= denom_a;
-    off_a *= denom_b;
-    off_b *= denom_a;
-    err = err_a * denom_b - err_b * denom_a;
+    if (denom == 1) {
+        // Common-case optimization
+        err = err_a - err_b;
+    } else {
+        if (!mul_with_overflow(64, coeff_a, denom_b, &coeff_a) ||
+            !mul_with_overflow(64, coeff_b, denom_a, &coeff_b) ||
+            !mul_with_overflow(64, off_a, denom_b, &off_a) ||
+            !mul_with_overflow(64, off_b, denom_a, &off_b)) {
+            give_up();
+            return;
+        }
+        err = err_a * denom_b - err_b * denom_a;
+    }
     // An offset we can't represent has to sink the whole rewrite: dropping it
     // would leave a and b peeled but the relation between them misstated.
-    if (sub_would_overflow(64, off_a, off_b)) {
+    if (!sub_with_overflow(64, off_a, off_b, &offset)) {
         give_up();
         return;
     }
-    offset = off_a - off_b;
 }
 
 // Reduce (ca, cb) to a coprime, sign-canonical (pa, pb) and a scale s with
@@ -326,7 +322,10 @@ void Simplify::ScopedFact::learn_difference(const Expr &a, const Expr &b,
     const BaseExprNode *pa = a.get(), *pb = b.get();
     int64_t coeff_a = 1, coeff_b = 1, offset = 0, denom = 1;
     ConstantInterval err(0, 0);
-    peel_affine_terms(pa, pb, coeff_a, coeff_b, offset, denom, err);
+    if ((pa->node_type >= IRNodeType::Add && pa->node_type <= IRNodeType::Div) ||
+        (pb->node_type >= IRNodeType::Add && pb->node_type <= IRNodeType::Div)) {
+        peel_affine_terms(pa, pb, coeff_a, coeff_b, offset, denom, err);
+    }
 
     // denom * (a - b) == (coeff_a * pa - coeff_b * pb) + offset + err, so
     // solve for the peeled quantity: scale the given bound up by denom and
@@ -810,18 +809,21 @@ ConstantInterval Simplify::known_affine_difference(const BaseExprNode *a, int64_
     // matched WildConst, say), so peeling can't discover them itself.
     int64_t coeff_a = ca, coeff_b = cb, offset = 0, denom = 1;
     ConstantInterval err(0, 0);
-    peel_affine_terms(a, b, coeff_a, coeff_b, offset, denom, err);
+    if ((a->node_type >= IRNodeType::Add && a->node_type <= IRNodeType::Div) ||
+        (b->node_type >= IRNodeType::Add && b->node_type <= IRNodeType::Div)) {
+        peel_affine_terms(a, b, coeff_a, coeff_b, offset, denom, err);
+    }
 
     if (coeff_a == coeff_b && equal(*a, *b)) {
         result = ConstantInterval::single_point(0);
     } else if (a->node_type == IRNodeType::IntImm && b->node_type == IRNodeType::IntImm) {
         // Two constants need no facts to compare.
         int64_t va = ((const IntImm *)a)->value, vb = ((const IntImm *)b)->value;
-        if (!mul_would_overflow(64, coeff_a, va) && !mul_would_overflow(64, coeff_b, vb)) {
-            int64_t ta = coeff_a * va, tb = coeff_b * vb;
-            if (!sub_would_overflow(64, ta, tb)) {
-                result = ConstantInterval::single_point(ta - tb);
-            }
+        int64_t ta, tb, diff;
+        if (mul_with_overflow(64, coeff_a, va, &ta) &&
+            mul_with_overflow(64, coeff_b, vb, &tb) &&
+            sub_with_overflow(64, ta, tb, &diff)) {
+            result = ConstantInterval::single_point(diff);
         }
     } else if (coeff_a == 1 && coeff_b == 1) {
         // The structural heuristic is about (a - b) alone; it doesn't
@@ -890,13 +892,14 @@ ConstantInterval Simplify::known_affine_difference(const BaseExprNode *a, int64_
                     result.min == hole && result.max == hole) {
                     continue;
                 }
+                int64_t new_min, new_max;
                 if (result.min_defined && result.min == hole &&
-                    !add_would_overflow(64, hole, 1)) {
-                    result.min = hole + 1;
+                    add_with_overflow(64, hole, 1, &new_min)) {
+                    result.min = new_min;
                 }
                 if (result.max_defined && result.max == hole &&
-                    !sub_would_overflow(64, hole, 1)) {
-                    result.max = hole - 1;
+                    sub_with_overflow(64, hole, 1, &new_max)) {
+                    result.max = new_max;
                 }
             }
         }
