@@ -101,6 +101,7 @@ class LoweringLogger {
     const char *last_msg;
 
     bool time_lowering_passes = false;
+    bool sort_by_time = false;
 
     struct PassStats {
         std::string msg;
@@ -130,14 +131,24 @@ class LoweringLogger {
         pass_stats.push_back(std::move(p));
     }
 
-    bool sort_by_time = false;
-
 public:
     LoweringLogger() {
-        static bool should_time = !get_env_variable("HL_TIME_LOWERING_PASSES").empty();
-        time_lowering_passes = should_time;
-        static bool should_sort = !get_env_variable("HL_SORT_LOWERING_PASSES").empty();
-        sort_by_time = should_sort;
+        std::string var = get_env_variable("HL_TIME_LOWERING_PASSES");
+        if (var.empty()) {
+            time_lowering_passes = false;
+            sort_by_time = false;
+        } else if (starts_with(var, "chrono")) {
+            time_lowering_passes = true;
+            sort_by_time = false;
+        } else if (starts_with(var, "sort")) {
+            time_lowering_passes = true;
+            sort_by_time = true;
+        } else {
+            user_error << "Usage: HL_TIME_LOWERING_PASSES=... has two valid arguments:\n"
+                          " - 'chrono' for chronological printing, and\n"
+                          " - 'sort' for printing with the slowest passes at the sorted to the bottom.\n"
+                          "Or is omitted or the empty string to not time the lowering passes.\n";
+        }
     }
 
     void begin(const char *msg) {
