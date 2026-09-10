@@ -6,7 +6,7 @@ When a schedule seems done, it's worth a quick pass before moving on.
 
 **Profile-driven.** For what to fix first when the profile shows a problem,
 follow the priority list in
-[Benchmarking and the Profiler](08-benchmarking-and-the-profiler.md).
+[Benchmarking & Profiling](08-benchmarking-and-profiling.md).
 
 **Schedule shape** (read the generator):
 

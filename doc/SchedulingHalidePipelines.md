@@ -27,7 +27,7 @@ scheduling/04-bounds-inference
 scheduling/05-scheduling-for-cpus
 scheduling/06-scheduling-for-gpus
 scheduling/07-what-to-schedule
-scheduling/08-benchmarking-and-the-profiler
+scheduling/08-benchmarking-and-profiling
 scheduling/09-reading-the-stmt-file
 scheduling/10-recipes
 scheduling/11-pitfalls
@@ -64,7 +64,7 @@ scheduling/21-checklist-and-worked-example
     onto GPU blocks and threads.
 07. [What to Schedule](scheduling/07-what-to-schedule.md): inline vs
     `compute_at` vs `compute_root`.
-08. [Benchmarking and the Profiler](scheduling/08-benchmarking-and-the-profiler.md):
+08. [Benchmarking & Profiling](scheduling/08-benchmarking-and-profiling.md):
     measuring, and reading the profile.
 09. [Reading the `.stmt` File](scheduling/09-reading-the-stmt-file.md): checking
     the vectorization shape.

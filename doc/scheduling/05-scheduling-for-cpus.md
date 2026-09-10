@@ -38,7 +38,7 @@ intermediates spilling to DRAM. Collapse everything into one fused parallel
 region and the whole pipeline stays in cache.
 
 **How to check it:** the profiler's pipeline-level `parallel loops` count should
-be 1 (see [Benchmarking and the Profiler](08-benchmarking-and-the-profiler.md)).
+be 1 (see [Benchmarking & Profiling](08-benchmarking-and-profiling.md)).
 Per-Func, intermediates should show `parallel loops: 0`, folded into the
 consumer.
 

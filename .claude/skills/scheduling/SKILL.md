@@ -67,7 +67,7 @@ Jump to what the task needs instead of reading front to back.
 - `doc/scheduling/05-scheduling-for-cpus.md` — the canonical fast-CPU shape.
 - `doc/scheduling/06-scheduling-for-gpus.md` — mapping loops onto blocks/threads.
 - `doc/scheduling/07-what-to-schedule.md` — inline vs compute_at vs compute_root.
-- `doc/scheduling/08-benchmarking-and-the-profiler.md` — measure; read the profile.
+- `doc/scheduling/08-benchmarking-and-profiling.md` — measure; read the profile.
 - `doc/scheduling/09-reading-the-stmt-file.md` — check the vectorization shape.
 - `doc/scheduling/10-recipes.md` — sliding windows, tiling, pyramids, stencils, histograms.
 - `doc/scheduling/11-pitfalls.md` — recurrences, parallel placement, recompute traps.

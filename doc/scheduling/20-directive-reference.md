@@ -66,5 +66,5 @@ how a split handles an extent that isn't a multiple of the factor:
 | Directive                                            | Effect                                                                                                                                         |
 | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `f.never_partition(var)` / `f.never_partition_all()` | Disable loop partitioning (prologue/steady-state/epilogue). A code-size and clarity knob, not a parallelism one.                               |
-| `Target::Profile` (`HL_TARGET=host-profile`)         | Emit the per-Func profiler table. The primary diagnostic. ([Ch. 8](08-benchmarking-and-the-profiler.md))                                       |
+| `Target::Profile` (`HL_TARGET=host-profile`)         | Emit the per-Func profiler table. The primary diagnostic. ([Ch. 8](08-benchmarking-and-profiling.md))                                          |
 | `f.print_loop_nest()`                                | Print the loop structure; check placement and vectorization shape. ([Ch. 12](12-reading-a-loop-nest.md), [Ch. 9](09-reading-the-stmt-file.md)) |

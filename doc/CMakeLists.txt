@@ -168,7 +168,7 @@ set(_sphinx_scheduling_files
     "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/05-scheduling-for-cpus.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/06-scheduling-for-gpus.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/07-what-to-schedule.md"
-    "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/08-benchmarking-and-the-profiler.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/08-benchmarking-and-profiling.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/09-reading-the-stmt-file.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/10-recipes.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/scheduling/11-pitfalls.md"
