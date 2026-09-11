@@ -85,24 +85,23 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
          (!op->type.is_float() &&
           rewrite(x / x, select(x == 0, 0, 1))) ||
 
-         (no_overflow(op->type) &&
-          // Facts learned higher up may say which side of a max or min
-          // survives the division. Test them before the rewrites below, which
-          // would destroy the form.
-          //
-          // For c0 > 0 and floor division, x >= y/c0 iff c0*x - y >= 1 - c0,
-          // and x <= y/c0 iff c0*x - y <= 0. The c0 on x isn't in x's own IR,
-          // so scaled_{min,max}_diff take it explicitly. Learning peels
-          // divisions too, so a fact spelled either way round (c0*x < y or
-          // x < y/c0) is stored in the multiplied-out form asked for here.
-          // Unlike known_true this only looks facts up, never building an Expr
-          // and so never recursing back into the simplifier.
-          (has_facts() &&
-           (rewrite(max(x * c0, y) / c0, x, c0 > 0 && scaled_min_diff(x, c0, y, 1, this) >= fold(1 - c0)) ||
-            rewrite(max(y, x * c0) / c0, x, c0 > 0 && scaled_min_diff(x, c0, y, 1, this) >= fold(1 - c0)) ||
-            rewrite(min(x * c0, y) / c0, x, c0 > 0 && scaled_max_diff(x, c0, y, 1, this) <= 0) ||
-            rewrite(min(y, x * c0) / c0, x, c0 > 0 && scaled_max_diff(x, c0, y, 1, this) <= 0) ||
-            false))) ||
+         // Facts learned higher up may say which side of a max or min
+         // survives the division. Test them before the rewrites below, which
+         // would destroy the form.
+         //
+         // For c0 > 0 and floor division, x >= y/c0 iff c0*x - y >= 1 - c0,
+         // and x <= y/c0 iff c0*x - y <= 0. The c0 on x isn't in x's own IR,
+         // so scaled_{min,max}_diff take it explicitly. Learning peels
+         // divisions too, so a fact spelled either way round (c0*x < y or
+         // x < y/c0) is stored in the multiplied-out form asked for here.
+         // Unlike known_true this only looks facts up, never building an Expr
+         // and so never recursing back into the simplifier.
+         (no_overflow(op->type) && has_facts() &&
+          (rewrite(max(x * c0, y) / c0, x, c0 > 0 && scaled_min_diff(x, c0, y, 1, this) >= fold(1 - c0)) ||
+           rewrite(max(y, x * c0) / c0, x, c0 > 0 && scaled_min_diff(x, c0, y, 1, this) >= fold(1 - c0)) ||
+           rewrite(min(x * c0, y) / c0, x, c0 > 0 && scaled_max_diff(x, c0, y, 1, this) <= 0) ||
+           rewrite(min(y, x * c0) / c0, x, c0 > 0 && scaled_max_diff(x, c0, y, 1, this) <= 0) ||
+           false)) ||
 
          (no_overflow(op->type) &&
           // Fold repeated division

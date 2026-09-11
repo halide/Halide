@@ -1,11 +1,5 @@
 // A fact in scope must not change how an unrelated expression folds.
 //
-// Written in the style of test/correctness/simplify.cpp so it can be folded
-// into check_bounds() there.
-//
-//   g++ -std=c++17 -I <build>/include simplify_region_bound_regression.cpp \
-//       -L <build>/src -lHalide -Wl,-rpath,<build>/src -o t && ./t
-//
 // Where this comes from
 // ---------------------
 // Lowering apps/local_laplacian at pyramid_levels=6 widens two allocations
