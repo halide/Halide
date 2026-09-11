@@ -546,8 +546,12 @@ void check_algebra() {
     check(5 % x > 0, 5 % x != 0);
 
     // Test case with most negative 32-bit number, as constant to check that it is not negated.
+    // The two terms sharing that same coefficient do get collected into one
+    // multiply (sound: multiplication distributes over addition mod 2^32
+    // regardless of intermediate overflow), but the coefficient itself must
+    // survive untouched, in particular never negated -- that's not representable.
     check(((x * (int32_t)0x80000000) + (z * (int32_t)0x80000000 + y)),
-          ((x * (int32_t)0x80000000) + (z * (int32_t)0x80000000 + y)));
+          ((x + z) * (int32_t)0x80000000 + y));
 
     // Use a require with no error message to test chains of reasoning
     auto require = [](Expr cond, Expr val) {
