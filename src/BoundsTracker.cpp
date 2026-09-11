@@ -244,7 +244,12 @@ Expr BoundsTracker::simplify_with_context(const Expr &e) const {
     std::set<std::string> used;
     Expr wrapped = wrap_in_used_lets(e, &used);
     wrapped = remove_likelies(wrapped);
-    wrapped = substitute_in_all_lets(wrapped);
+    // Leave the lets standing and let simplify() pick the ones worth
+    // inlining. Inlining them all up front repeats each value at every use,
+    // which costs nothing in the resulting graph but a great deal in the tree
+    // the simplifier actually walks, since it does not memoize on the shared
+    // nodes -- a few hundred nodes of graph can become tens of thousands of
+    // nodes of walk.
     std::vector<Expr> relevant = facts_mentioning(&used);
     // Deliberately pass an empty bounds scope here, not `scope`: mixing a
     // bounds scope with equality facts can make the simplifier represent a
@@ -259,12 +264,12 @@ Expr BoundsTracker::simplify_with_context(const Expr &e) const {
     wrapped = Halide::Internal::simplify(wrapped, Scope<Interval>::empty_scope(),
                                          Scope<ModulusRemainder>::empty_scope(), relevant);
 
-    // Now that the lets are inlined, a dependence on an enclosing loop
-    // variable may appear on both sides of a subtraction. Cancel those out
-    // and simplify again -- the facts recorded by push_for can only relate
-    // the loop variable to the rest of the expression once the expression
-    // mentions it directly. This can grow the expression, so only keep the
-    // result if it actually bought us something.
+    // A dependence on an enclosing loop variable may now appear on both sides
+    // of a subtraction. Cancel those out and simplify again -- the facts
+    // recorded by push_for can only relate the loop variable to the rest of
+    // the expression once the expression mentions it directly. This can grow
+    // the expression, so only keep the result if it actually bought us
+    // something.
     Expr cancelled = bound_correlated_differences(wrapped);
     if (!cancelled.same_as(wrapped)) {
         cancelled = Halide::Internal::simplify(cancelled, Scope<Interval>::empty_scope(),

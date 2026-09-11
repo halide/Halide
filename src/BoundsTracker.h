@@ -26,11 +26,10 @@ namespace Internal {
  * In addition to the usual scope-based lookup (cheap, but only sees a bound
  * if every intermediate variable it passes through was itself pushed with an
  * already-constant bound), find_constant_bound_aggressive() falls back to
- * literally wrapping an expression in all enclosing pure lets, inlining
- * them, and re-simplifying. This is the trick bound_constant_extent_loops
- * has always used to find constant loop extents, generalized so other
- * passes that infer constant bounds (e.g. BoundSmallAllocations,
- * AllocationBoundsInference) can use it too.
+ * literally wrapping an expression in the enclosing pure lets it refers to
+ * and re-simplifying. This is the trick bound_constant_extent_loops uses to
+ * find constant loop extents, generalized so other passes that infer
+ * constant bounds (e.g. BoundSmallAllocations) can use it too.
  *
  * Pushing a binding is deliberately cheap: it only records the Expr. None of
  * the derived information -- the constant bounds of a let's value, whether
@@ -112,24 +111,24 @@ public:
     Expr find_constant_bound(const Expr &e, Direction d) const;
     Interval find_constant_bounds(const Expr &e) const;
 
-    /** Fast path first; on failure, wrap e in all pending pure lets
-     * (producing a self-contained copy with no free references to enclosing
-     * lets), inline them with substitute_in_all_lets, and simplify before
-     * retrying against the resulting expression and the scope. Any endpoint
-     * still missing after that is attempted once more by substituting the
-     * range of an enclosing loop e is monotonic in. More expensive than
-     * find_constant_bound(), but succeeds far more often, because the
-     * simplifier can cancel terms across let boundaries that interval
-     * arithmetic through opaque variable lookups cannot.
+    /** Fast path first; on failure, wrap e in the pending pure lets it refers
+     * to (producing a self-contained copy with no free references to
+     * enclosing lets) and simplify before retrying against the resulting
+     * expression and the scope. Any endpoint still missing after that is
+     * attempted once more by substituting the range of an enclosing loop e is
+     * monotonic in. More expensive than find_constant_bound(), but succeeds
+     * far more often, because the simplifier can cancel terms across let
+     * boundaries that interval arithmetic through opaque variable lookups
+     * cannot.
      *
      * The single-Direction form is a wrapper around the Interval form; it
      * returns an undefined Expr if no bound in that direction was found. */
     Interval find_constant_bounds_aggressive(const Expr &e) const;
     Expr find_constant_bound_aggressive(const Expr &e, Direction d) const;
 
-    /** Wrap e in all pending pure lets, inline them with
-     * substitute_in_all_lets, and simplify under the current scope and
-     * dominating facts. Unlike find_constant_bound_aggressive(), the result
+    /** Wrap e in the pending pure lets it refers to and simplify under the
+     * current scope and dominating facts. Unlike
+     * find_constant_bound_aggressive(), the result
      * need not be a constant -- this is just a plain simplify() call that
      * can see context (enclosing let values, dominating conditions) that a
      * caller holding only a bare Expr has no way to pass in. Useful for
