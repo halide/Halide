@@ -320,6 +320,7 @@ tests(
     runtime_prefixes.cpp
     saturating_casts.cpp
     scatter.cpp
+    serialization.cpp
     set_custom_trace.cpp
     shadowed_bound.cpp
     shared_self_references.cpp
@@ -577,4 +578,5 @@ set_target_properties(
 if (WITH_SERIALIZATION)
     target_compile_definitions(correctness_streaming PRIVATE TEST_WITH_SERIALIZATION)
     target_compile_definitions(correctness_generator_cache PRIVATE TEST_WITH_SERIALIZATION)
+    target_compile_definitions(correctness_serialization PRIVATE TEST_WITH_SERIALIZATION)
 endif ()

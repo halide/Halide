@@ -1446,6 +1446,18 @@ Pipeline Deserializer::deserialize(std::istream &in) {
 }
 
 Pipeline Deserializer::deserialize(const std::vector<uint8_t> &data) {
+    // The accessors below chase offsets straight out of the buffer with no
+    // structural check unless we ask for one, so a malformed .hlpipe can read
+    // out of bounds (Finish() writes no file identifier, so verify without
+    // one). Each IR node is one flatbuffer table, and deserialize_stmt/
+    // deserialize_expr recurse to a depth matching the buffer's nesting, so
+    // max_depth is raised well past the default of 64 -- enough for deeply
+    // nested Exprs, but still a real bound on that recursion.
+    flatbuffers::Verifier::Options verifier_options;
+    verifier_options.max_depth = 1000;
+    flatbuffers::Verifier verifier(data.data(), data.size(), verifier_options);
+    user_assert(verifier.VerifyBuffer<Serialize::Pipeline>())
+        << "malformed serialized pipeline: failed flatbuffer verification\n";
     const auto *pipeline_obj = Serialize::GetPipeline(data.data());
     if (pipeline_obj == nullptr) {
         user_warning << "deserialized pipeline is empty\n";
@@ -1573,6 +1585,12 @@ std::map<std::string, Parameter> Deserializer::deserialize_parameters(std::istre
 
 std::map<std::string, Parameter> Deserializer::deserialize_parameters(const std::vector<uint8_t> &data) {
     std::map<std::string, Parameter> external_parameters_by_name;
+    // See the matching verifier in deserialize() above for why max_depth is raised.
+    flatbuffers::Verifier::Options verifier_options;
+    verifier_options.max_depth = 1000;
+    flatbuffers::Verifier verifier(data.data(), data.size(), verifier_options);
+    user_assert(verifier.VerifyBuffer<Serialize::Pipeline>())
+        << "malformed serialized pipeline: failed flatbuffer verification\n";
     const auto *pipeline_obj = Serialize::GetPipeline(data.data());
     if (pipeline_obj == nullptr) {
         user_warning << "deserialized pipeline is empty\n";
