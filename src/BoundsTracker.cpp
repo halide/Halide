@@ -91,7 +91,6 @@ BoundsTracker::FactGuard::~FactGuard() {
 
 BoundsTracker::Binding BoundsTracker::push_for(const std::string &name, const Expr &min, const Expr &max) {
     entries.push_back(Entry{Kind::Loop, name, min, max});
-    facts_version++;
     return Binding(this);
 }
 
@@ -107,7 +106,6 @@ BoundsTracker::Binding BoundsTracker::push_let(const std::string &name, const Ex
 
 BoundsTracker::FactGuard BoundsTracker::push_fact(const Expr &condition) {
     facts.push_back(Fact{condition});
-    facts_version++;
     return FactGuard(this);
 }
 
@@ -117,8 +115,12 @@ void BoundsTracker::pop_entry() {
         scope.pop(entries.back().name);
         realized--;
     }
-    if (entries.back().kind == Kind::Loop) {
-        facts_version++;
+    if (candidates_built == entries.size()) {
+        size_t idx = entries.size() - 1;
+        while (!all_candidates.empty() && all_candidates.back().entry == idx) {
+            all_candidates.pop_back();
+        }
+        candidates_built--;
     }
     entries.pop_back();
 }
@@ -126,7 +128,6 @@ void BoundsTracker::pop_entry() {
 void BoundsTracker::pop_fact() {
     internal_assert(!facts.empty());
     facts.pop_back();
-    facts_version++;
 }
 
 bool BoundsTracker::entry_is_pure(const Entry &entry) const {
@@ -220,11 +221,8 @@ const BoundsTracker::VarSet &BoundsTracker::candidate_vars(const Candidate &c) c
 }
 
 const std::vector<BoundsTracker::Candidate> &BoundsTracker::candidates() const {
-    if (candidates_version == facts_version) {
-        return all_candidates;
-    }
-    all_candidates.clear();
-    for (size_t i = 0; i < entries.size(); i++) {
+    for (; candidates_built < entries.size(); candidates_built++) {
+        size_t i = candidates_built;
         const Entry &entry = entries[i];
         if (entry.kind != Kind::Loop ||
             entry.lo.type() != Int(32) || entry.hi.type() != Int(32) ||
@@ -249,7 +247,6 @@ const std::vector<BoundsTracker::Candidate> &BoundsTracker::candidates() const {
         all_candidates.push_back(Candidate{i, false});
         all_candidates.push_back(Candidate{i, true});
     }
-    candidates_version = facts_version;
     return all_candidates;
 }
 

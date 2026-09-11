@@ -269,8 +269,9 @@ private:
     const Expr &candidate_expr(const Candidate &c) const;
     const VarSet &candidate_vars(const Candidate &c) const;
 
-    /** Every condition currently in force. Rebuilt only when a fact or an
-     * enclosing loop is pushed or popped. */
+    /** The conditions every enclosing loop implies. Extended as the bindings
+     * below it are pushed and trimmed as they are popped, so that asking
+     * costs only what the bindings pushed since the last question cost. */
     const std::vector<Candidate> &candidates() const;
 
     /** Realize every entry not yet reflected in `scope`, outermost first, so
@@ -301,10 +302,9 @@ private:
     std::vector<Fact> facts;
 
     mutable std::vector<Candidate> all_candidates;
-    /** Bumped whenever a fact or a loop entry is pushed or popped, to
-     * invalidate `all_candidates`. */
-    size_t facts_version = 0;
-    mutable size_t candidates_version = (size_t)-1;
+    /** entries[0, candidates_built) have contributed whatever conditions
+     * they imply to `all_candidates`, in that order. */
+    mutable size_t candidates_built = 0;
 };
 
 }  // namespace Internal
