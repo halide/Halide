@@ -530,7 +530,8 @@ public:
                 LoopLevel compute_at = func.schedule().compute_level();
                 LoopLevel store_at = func.schedule().store_level();
 
-                for (auto bound : func.schedule().bounds()) {
+                for (const auto &entry : func.schedule().bounds()) {
+                    Bound bound = entry.second;
                     string min_var = prefix + bound.var + ".min";
                     string max_var = prefix + bound.var + ".max";
                     Expr min_required = Variable::make(Int(32), min_var);

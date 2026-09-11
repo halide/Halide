@@ -57,10 +57,9 @@ class AllocationInference : public IRMutator {
         for (size_t i = 0; i < b.size(); i++) {
             // Get any applicable bound on this dimension
             Bound bound;
-            for (const auto &b : f.schedule().bounds()) {
-                if (f_args[i] == b.var) {
-                    bound = b;
-                }
+            auto it = f.schedule().bounds().find(f_args[i]);
+            if (it != f.schedule().bounds().end()) {
+                bound = it->second;
             }
 
             string prefix = op->name + "." + f_args[i];

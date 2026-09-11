@@ -18,6 +18,7 @@ tests(
     bool_compute_root_vectorize.cpp
     bool_predicate_cast.cpp
     bound.cpp
+    bound_merge_order.cpp
     bound_small_allocations.cpp
     bound_storage.cpp
     boundary_conditions.cpp

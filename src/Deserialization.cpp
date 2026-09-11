@@ -1025,8 +1025,12 @@ FuncSchedule Deserializer::deserialize_func_schedule(const Serialize::FuncSchedu
     const std::vector<StorageDim> storage_dims =
         deserialize_vector<Serialize::StorageDim, StorageDim>(func_schedule->storage_dims(),
                                                               &Deserializer::deserialize_storage_dim);
-    const std::vector<Bound> bounds = deserialize_vector<Serialize::Bound, Bound>(func_schedule->bounds(),
-                                                                                  &Deserializer::deserialize_bound);
+    const std::vector<Bound> bounds_vec = deserialize_vector<Serialize::Bound, Bound>(func_schedule->bounds(),
+                                                                                      &Deserializer::deserialize_bound);
+    std::map<std::string, Bound> bounds;
+    for (const auto &b : bounds_vec) {
+        merge_bound(bounds, b);
+    }
     const std::vector<Bound> estimates = deserialize_vector<Serialize::Bound, Bound>(func_schedule->estimates(),
                                                                                      &Deserializer::deserialize_bound);
     const std::map<std::string, FunctionPtr> wrappers = deserialize_wrapper_refs(func_schedule->wrappers());

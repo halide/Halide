@@ -2760,7 +2760,7 @@ Func &Func::bound(const Var &var, Expr min, Expr extent) {
         << " is not one of the pure variables of " << name() << ".\n";
 
     Bound b = {var.name(), min, extent, Expr(), Expr()};
-    func.schedule().bounds().push_back(b);
+    merge_bound(func.schedule().bounds(), b);
 
     // Propagate constant bounds into estimates as well.
     if (!is_const(min)) {
@@ -2845,7 +2845,7 @@ Func &Func::align_bounds(const Var &var, Expr modulus, Expr remainder) {
         << " is not one of the pure variables of " << name() << ".\n";
 
     Bound b = {var.name(), Expr(), Expr(), modulus, remainder};
-    func.schedule().bounds().push_back(b);
+    merge_bound(func.schedule().bounds(), b);
     return *this;
 }
 
@@ -2865,7 +2865,7 @@ Func &Func::align_extent(const Var &var, Expr modulus) {
         << " is not one of the pure variables of " << name() << ".\n";
 
     Bound b = {var.name(), Expr(), Expr(), modulus, Expr()};
-    func.schedule().bounds().push_back(b);
+    merge_bound(func.schedule().bounds(), b);
     return *this;
 }
 
