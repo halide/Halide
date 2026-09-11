@@ -41,17 +41,21 @@ public:
     }
 };
 
-bool mentions_any(const Expr &e, const std::set<std::string> &names) {
-    std::set<std::string> used;
-    CollectUsedNames collect(&used);
-    e.accept(&collect);
-    for (const std::string &name : used) {
-        if (names.count(name)) {
-            return true;
-        }
+/** Every variable an Expr mentions, as the hash a Variable node carries. */
+class CollectVarHashes : public IRGraphVisitor {
+    using IRGraphVisitor::visit;
+
+    void visit(const Variable *op) override {
+        out->push_back(op->hash);
     }
-    return false;
-}
+
+public:
+    std::vector<uint32_t> *out;
+
+    explicit CollectVarHashes(std::vector<uint32_t> *out)
+        : out(out) {
+    }
+};
 
 }  // namespace
 
@@ -87,6 +91,7 @@ BoundsTracker::FactGuard::~FactGuard() {
 
 BoundsTracker::Binding BoundsTracker::push_for(const std::string &name, const Expr &min, const Expr &max) {
     entries.push_back(Entry{Kind::Loop, name, min, max});
+    facts_version++;
     return Binding(this);
 }
 
@@ -101,7 +106,8 @@ BoundsTracker::Binding BoundsTracker::push_let(const std::string &name, const Ex
 }
 
 BoundsTracker::FactGuard BoundsTracker::push_fact(const Expr &condition) {
-    facts.push_back(condition);
+    facts.push_back(Fact{condition});
+    facts_version++;
     return FactGuard(this);
 }
 
@@ -111,12 +117,16 @@ void BoundsTracker::pop_entry() {
         scope.pop(entries.back().name);
         realized--;
     }
+    if (entries.back().kind == Kind::Loop) {
+        facts_version++;
+    }
     entries.pop_back();
 }
 
 void BoundsTracker::pop_fact() {
     internal_assert(!facts.empty());
     facts.pop_back();
+    facts_version++;
 }
 
 bool BoundsTracker::entry_is_pure(const Entry &entry) const {
@@ -171,8 +181,9 @@ const Scope<Interval> &BoundsTracker::interval_scope() const {
     return scope;
 }
 
-Expr BoundsTracker::wrap_in_used_lets(const Expr &e, std::set<std::string> *used) const {
-    CollectUsedNames collect(used);
+Expr BoundsTracker::wrap_in_used_lets(const Expr &e) const {
+    std::set<std::string> used;
+    CollectUsedNames collect(&used);
     e.accept(&collect);
     Expr result = e;
     // Innermost first, so that a let picked up along the way can still pull in
@@ -180,7 +191,7 @@ Expr BoundsTracker::wrap_in_used_lets(const Expr &e, std::set<std::string> *used
     // body mentions as a possible reference to an enclosing let, even where an
     // inner let shadows it.
     for (const Entry &entry : reverse_view(entries)) {
-        if (entry.kind == Kind::Let && used->count(entry.name) && entry_is_pure(entry)) {
+        if (entry.kind == Kind::Let && used.count(entry.name) && entry_is_pure(entry)) {
             entry.lo.accept(&collect);
             result = Let::make(entry.name, entry.lo, result);
         }
@@ -188,48 +199,106 @@ Expr BoundsTracker::wrap_in_used_lets(const Expr &e, std::set<std::string> *used
     return result;
 }
 
-std::vector<Expr> BoundsTracker::facts_mentioning(std::set<std::string> *used) const {
-    std::vector<Expr> result;
-    std::vector<Expr> candidates = facts;
-    for (const Entry &entry : entries) {
-        // The scope can only hold constants, so it drops any relationship
-        // between a loop variable and a symbol appearing in its min or max
-        // (e.g. the tile index of a split being bounded by a ceiling-divide of
-        // the extent being split). Record the range symbolically as well.
-        if (entry.kind == Kind::Loop &&
-            entry.lo.type() == Int(32) && entry.hi.type() == Int(32) &&
-            entry_is_pure(entry)) {
-            Expr loop_var = Variable::make(Int(32), entry.name);
-            candidates.push_back(loop_var >= entry.lo);
-            candidates.push_back(loop_var <= entry.hi);
-        }
+BoundsTracker::VarSet BoundsTracker::vars_of(const Expr &e) {
+    VarSet result;
+    CollectVarHashes collect(&result.hashes);
+    e.accept(&collect);
+    for (uint32_t h : result.hashes) {
+        result.bloom |= (uint64_t)1 << (h & 63);
     }
-
-    // A fact that shares no variable with what we're asking about can't say
-    // anything about it, but a fact it does share one with can bring in
-    // variables that make a third fact relevant, so keep sweeping until
-    // nothing new is picked up.
-    bool changed = true;
-    while (changed) {
-        changed = false;
-        for (Expr &candidate : candidates) {
-            if (candidate.defined() && mentions_any(candidate, *used)) {
-                CollectUsedNames collect(used);
-                candidate.accept(&collect);
-                result.push_back(candidate);
-                candidate = Expr();
-                changed = true;
-            }
-        }
-    }
+    result.sort_unique();
     return result;
 }
 
+const Expr &BoundsTracker::candidate_expr(const Candidate &c) const {
+    const Entry &entry = entries[c.entry];
+    return c.use_hi ? entry.fact_hi : entry.fact_lo;
+}
+
+const BoundsTracker::VarSet &BoundsTracker::candidate_vars(const Candidate &c) const {
+    return entries[c.entry].fact_vars;
+}
+
+const std::vector<BoundsTracker::Candidate> &BoundsTracker::candidates() const {
+    if (candidates_version == facts_version) {
+        return all_candidates;
+    }
+    all_candidates.clear();
+    for (size_t i = 0; i < entries.size(); i++) {
+        const Entry &entry = entries[i];
+        if (entry.kind != Kind::Loop ||
+            entry.lo.type() != Int(32) || entry.hi.type() != Int(32) ||
+            !entry_is_pure(entry)) {
+            continue;
+        }
+        if (!entry.facts_built) {
+            // The scope can only hold constants, so it drops any
+            // relationship between a loop variable and a symbol appearing in
+            // its min or max (e.g. the tile index of a split being bounded
+            // by a ceiling-divide of the extent being split). Record the
+            // range symbolically too. One variable summary covers both ends:
+            // over-estimating what a condition mentions only costs an extra
+            // condition handed to the simplifier.
+            Expr loop_var = Variable::make(Int(32), entry.name);
+            entry.fact_lo = loop_var >= entry.lo;
+            entry.fact_hi = loop_var <= entry.hi;
+            entry.fact_vars = vars_of(entry.fact_lo);
+            entry.fact_vars.merge(vars_of(entry.fact_hi));
+            entry.facts_built = true;
+        }
+        all_candidates.push_back(Candidate{i, false});
+        all_candidates.push_back(Candidate{i, true});
+    }
+    candidates_version = facts_version;
+    return all_candidates;
+}
+
 std::vector<Expr> BoundsTracker::relevant_facts(const Expr &e) const {
-    std::set<std::string> used;
-    CollectUsedNames collect(&used);
-    e.accept(&collect);
-    return facts_mentioning(&used);
+    std::vector<Expr> result;
+    const std::vector<Candidate> &cands = candidates();
+    if (cands.empty() && facts.empty()) {
+        return result;
+    }
+
+    VarSet used = vars_of(e);
+
+    // A condition sharing no variable with what we're asking about can't say
+    // anything about it, but one that does can bring in variables that make
+    // a third condition relevant, so keep sweeping until nothing new is
+    // picked up.
+    std::vector<bool> taken_fact(facts.size(), false);
+    std::vector<bool> taken(cands.size(), false);
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (size_t i = 0; i < facts.size(); i++) {
+            const Fact &fact = facts[i];
+            if (taken_fact[i]) {
+                continue;
+            }
+            if (!fact.vars_built) {
+                fact.vars = vars_of(fact.condition);
+                fact.vars_built = true;
+            }
+            if (!fact.vars.intersects(used)) {
+                continue;
+            }
+            taken_fact[i] = true;
+            result.push_back(fact.condition);
+            used.merge(fact.vars);
+            changed = true;
+        }
+        for (size_t i = 0; i < cands.size(); i++) {
+            if (taken[i] || !candidate_vars(cands[i]).intersects(used)) {
+                continue;
+            }
+            taken[i] = true;
+            result.push_back(candidate_expr(cands[i]));
+            used.merge(candidate_vars(cands[i]));
+            changed = true;
+        }
+    }
+    return result;
 }
 
 Expr BoundsTracker::find_constant_bound(const Expr &e, Direction d) const {
@@ -241,8 +310,7 @@ Interval BoundsTracker::find_constant_bounds(const Expr &e) const {
 }
 
 Expr BoundsTracker::simplify_with_context(const Expr &e) const {
-    std::set<std::string> used;
-    Expr wrapped = wrap_in_used_lets(e, &used);
+    Expr wrapped = wrap_in_used_lets(e);
     wrapped = remove_likelies(wrapped);
     // Leave the lets standing and let simplify() pick the ones worth
     // inlining. Inlining them all up front repeats each value at every use,
@@ -250,7 +318,7 @@ Expr BoundsTracker::simplify_with_context(const Expr &e) const {
     // the simplifier actually walks, since it does not memoize on the shared
     // nodes -- a few hundred nodes of graph can become tens of thousands of
     // nodes of walk.
-    std::vector<Expr> relevant = facts_mentioning(&used);
+    std::vector<Expr> relevant = relevant_facts(e);
     // Deliberately pass an empty bounds scope here, not `scope`: mixing a
     // bounds scope with equality facts can make the simplifier represent a
     // variable by its (wide) interval instead of substituting the exact

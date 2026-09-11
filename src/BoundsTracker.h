@@ -6,6 +6,8 @@
  * a Stmt tree.
  */
 
+#include <algorithm>
+#include <cstdint>
 #include <set>
 #include <string>
 #include <vector>
@@ -171,14 +173,60 @@ private:
     Interval tighten_using_loop_monotonicity(const Expr &e, Interval interval) const;
 
     /** Wrap e in the enclosing pure lets it refers to, innermost first,
-     * skipping those it can't reach. Returns the names it ended up
-     * mentioning in *used, so a caller can go on to pick out the facts that
-     * could say something about it. */
-    Expr wrap_in_used_lets(const Expr &e, std::set<std::string> *used) const;
+     * skipping those it can't reach. */
+    Expr wrap_in_used_lets(const Expr &e) const;
 
-    /** The facts mentioning any name in *used, growing *used with the names
-     * each selected fact brings in, until it reaches a fixed point. */
-    std::vector<Expr> facts_mentioning(std::set<std::string> *used) const;
+    /** The set of variables an Expr mentions, identified by the hash a
+     * Variable node carries. That hash is derived from the name, so equal
+     * names hash equally, and two sets can be tested for a shared variable
+     * without touching a string. Held sorted, alongside a Bloom filter over
+     * the same hashes, so the common case of sharing nothing is one AND.
+     *
+     * Hashes collide, which here costs one extra condition handed to the
+     * simplifier and nothing else: picking out relevant conditions only has
+     * to avoid dropping one that matters. */
+    struct VarSet {
+        std::vector<uint32_t> hashes;
+        uint64_t bloom = 0;
+
+        void add(uint32_t h) {
+            hashes.push_back(h);
+            bloom |= (uint64_t)1 << (h & 63);
+        }
+
+        void sort_unique() {
+            std::sort(hashes.begin(), hashes.end());
+            hashes.erase(std::unique(hashes.begin(), hashes.end()), hashes.end());
+        }
+
+        bool intersects(const VarSet &other) const {
+            if (!(bloom & other.bloom)) {
+                return false;
+            }
+            auto a = hashes.begin();
+            auto b = other.hashes.begin();
+            while (a != hashes.end() && b != other.hashes.end()) {
+                if (*a == *b) {
+                    return true;
+                }
+                if (*a < *b) {
+                    ++a;
+                } else {
+                    ++b;
+                }
+            }
+            return false;
+        }
+
+        void merge(const VarSet &other) {
+            hashes.insert(hashes.end(), other.hashes.begin(), other.hashes.end());
+            bloom |= other.bloom;
+            sort_unique();
+        }
+    };
+
+    /** The variables e mentions. */
+    static VarSet vars_of(const Expr &e);
 
     enum class Kind {
         Let,      //< lo is the value
@@ -201,7 +249,29 @@ private:
             Impure
         };
         mutable Purity purity = Purity::Unknown;
+        /** For a Loop entry, the two conditions its range implies and the
+         * variables they mention between them. Built on first use; an
+         * entry's range never changes, so this outlives any number of
+         * queries. */
+        mutable Expr fact_lo, fact_hi;
+        mutable VarSet fact_vars;
+        mutable bool facts_built = false;
     };
+
+    /** One of the two conditions an enclosing loop implies, as an index into
+     * `entries` plus which end it is. An index rather than a pointer,
+     * because pushing a binding can reallocate `entries`. */
+    struct Candidate {
+        size_t entry;
+        bool use_hi;
+    };
+
+    const Expr &candidate_expr(const Candidate &c) const;
+    const VarSet &candidate_vars(const Candidate &c) const;
+
+    /** Every condition currently in force. Rebuilt only when a fact or an
+     * enclosing loop is pushed or popped. */
+    const std::vector<Candidate> &candidates() const;
 
     /** Realize every entry not yet reflected in `scope`, outermost first, so
      * that each one's bounds are derived in the scope of the entries that
@@ -221,9 +291,20 @@ private:
     mutable size_t realized = 0;
     mutable Scope<Interval> scope;
 
-    /** The conditions passed to push_fact(). Those implied by enclosing
-     * loops are materialized on demand by relevant_facts(). */
-    std::vector<Expr> facts;
+    /** A condition passed to push_fact(), alongside the variables it
+     * mentions, collected on first use since most are never consulted. */
+    struct Fact {
+        Expr condition;
+        mutable VarSet vars;
+        mutable bool vars_built = false;
+    };
+    std::vector<Fact> facts;
+
+    mutable std::vector<Candidate> all_candidates;
+    /** Bumped whenever a fact or a loop entry is pushed or popped, to
+     * invalidate `all_candidates`. */
+    size_t facts_version = 0;
+    mutable size_t candidates_version = (size_t)-1;
 };
 
 }  // namespace Internal
