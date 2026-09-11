@@ -133,6 +133,7 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
 
          rewrite(x * c0 + y * c1, (x + y * fold(c1 / c0)) * c0, c1 % c0 == 0) ||
          rewrite(x * c0 + y * c1, (x * fold(c0 / c1) + y) * c1, c0 % c1 == 0) ||
+         rewrite(x * c0 + (y * c1 + z), (x * fold(c0 / c1) + y) * c1 + z, c0 % c1 == 0) ||
 
          // Hoist shuffles. The Shuffle visitor wants to sink
          // extract_elements to the leaves, and those count as degenerate
