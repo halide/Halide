@@ -57,8 +57,8 @@ int main(int argc, char **argv) {
     // Unrolling those inner loops should give each mux a constant index, so
     // every mux folds away to the single way it selects.
     f
-        .split(x, xo, xi, 3, offset_x, Halide::TailStrategy::GuardWithIf)
-        .split(y, yo, yi, 3, offset_y, Halide::TailStrategy::GuardWithIf)
+        .split_aligned(x, xo, xi, 3, offset_x, Halide::TailStrategy::GuardWithIf)
+        .split_aligned(y, yo, yi, 3, offset_y, Halide::TailStrategy::GuardWithIf)
         .never_partition_all()
         .reorder(c, xi, yi, xo, yo)
         .unroll(xi)

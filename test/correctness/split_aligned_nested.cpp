@@ -52,8 +52,8 @@ int main(int argc, char **argv) {
             f(x) = mux((x - p1) % 4, {x, x * x, 2 * x, -x * (x + 1)});
             f.output_buffer().dim(0).set_min(0);
 
-            f.split(x, xo, xi, 4, p1, ts1)
-                .split(xo, xoo, xoi, 3, p2, ts2)
+            f.split_aligned(x, xo, xi, 4, p1, ts1)
+                .split_aligned(xo, xoo, xoi, 3, p2, ts2)
                 .unroll(xi);
 
             Module module = f.compile_to_module({p1, p2});

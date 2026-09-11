@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
 
         RVar ro{"ro"}, ri{"ri"};
         f.update(0)
-            .split(r, ro, ri, 4, offset, TailStrategy::GuardWithIf)
+            .split_aligned(r, ro, ri, 4, offset, TailStrategy::GuardWithIf)
             .unroll(ri);
 
         Var u{"u"}, uo{"uo"}, ui{"ui"};
@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
         Func intm = f.update(0).rfactor(ro, u);
         intm.compute_root();
         intm.update(0)
-            .split(u, uo, ui, 2, p2, ts)
+            .split_aligned(u, uo, ui, 2, p2, ts)
             .vectorize(ui);
 
         Module module = f.compile_to_module({offset, p2});

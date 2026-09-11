@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
 
     RVar ro{"ro"}, ri{"ri"};
     f.update(0)
-        .split(r, ro, ri, 4, offset, TailStrategy::GuardWithIf)
+        .split_aligned(r, ro, ri, 4, offset, TailStrategy::GuardWithIf)
         .unroll(ri);
 
     Var u{"u"};

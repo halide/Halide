@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
 
     RVar ryo{"ryo"}, ryi{"ryi"};
     f.update(0)
-        .split(r.y, ryo, ryi, 4, offset, TailStrategy::GuardWithIf)
+        .split_aligned(r.y, ryo, ryi, 4, offset, TailStrategy::GuardWithIf)
         .unroll(ryi);
 
     Var u{"u"};

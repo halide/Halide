@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
         f(x) = mux((x - offset) % 4, {x, x * x, 2 * x, -x * (x + 1)});
         f.output_buffer().dim(0).set_min(0);
         f
-            .split(x, xo, xi, 4, offset, ts)
+            .split_aligned(x, xo, xi, 4, offset, ts)
             .unroll(xi);
 
         Module module = f.compile_to_module({offset});

@@ -63,7 +63,7 @@ int test_fixed_extent() {
 
     RVar ro{"ro"}, ri{"ri"};
     f.update(0)
-        .split(r, ro, ri, 4, offset, TailStrategy::GuardWithIf)
+        .split_aligned(r, ro, ri, 4, offset, TailStrategy::GuardWithIf)
         .unroll(ri);
 
     Var u{"u"};
@@ -113,7 +113,7 @@ int test_param_extent() {
 
     RVar ro{"ro"}, ri{"ri"};
     f.update(0)
-        .split(r, ro, ri, 4, offset, TailStrategy::GuardWithIf)
+        .split_aligned(r, ro, ri, 4, offset, TailStrategy::GuardWithIf)
         .unroll(ri);
 
     Var u{"u"};

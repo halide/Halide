@@ -367,7 +367,7 @@ public:
     // @{
 
     Stage &split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
-    Stage &split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, const Expr &align, TailStrategy tail = TailStrategy::Auto);
+    Stage &split_aligned(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, const Expr &align, TailStrategy tail = TailStrategy::Auto);
     Stage &fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRVar &fused);
     Stage &serial(const VarOrRVar &var);
     Stage &parallel(const VarOrRVar &var);
@@ -1546,7 +1546,7 @@ public:
      Var x, xo, xi;
      Param<int> offset;
      f(x) = mux((x - offset) % 4, {a(x), b(x), c(x), d(x)});
-     f.split(x, xo, xi, 4, offset, TailStrategy::GuardWithIf)
+     f.split_aligned(x, xo, xi, 4, offset, TailStrategy::GuardWithIf)
       .unroll(xi);
      \endcode
      * Without 'align', the compiler can't tell at compile time which of
@@ -1555,7 +1555,7 @@ public:
      * ``(x - offset) % 4`` simplifies to a distinct compile-time
      * constant for each unrolled value of 'xi', and each mux() call
      * collapses to its selected case. */
-    Func &split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, const Expr &align, TailStrategy tail = TailStrategy::Auto);
+    Func &split_aligned(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, const Expr &align, TailStrategy tail = TailStrategy::Auto);
 
     /** Join two dimensions into a single fused dimension. The fused dimension
      * covers the product of the extents of the inner and outer dimensions

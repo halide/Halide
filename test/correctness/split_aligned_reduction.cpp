@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
         h.compute_root();
 
         h.update(0)
-            .split(x, xo, xi, 4, p, ts)
+            .split_aligned(x, xo, xi, 4, p, ts)
             .vectorize(xi);
 
         // h is read through a further Func rather than realized directly,
