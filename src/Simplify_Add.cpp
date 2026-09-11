@@ -80,6 +80,16 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
          rewrite((c0 - x) + y, (y - x) + c0) ||
          rewrite(max(x, y * c0 + z) + (u - y) * c0, max(x - y * c0, z) + u * c0) ||
 
+         // Collect a repeated term across a nested sum, so that facts about
+         // it become visible to the rules and to modulus_remainder. For
+         // example, x + y + y is even in y, but only once written as x + y*2.
+         rewrite((x + y) + y, x + y * 2) ||
+         rewrite((y + x) + y, x + y * 2) ||
+         rewrite((x + (y + z)) + z, z * 2 + (x + y)) ||
+         rewrite((x + (z + y)) + z, z * 2 + (x + y)) ||
+         rewrite(((y + z) + x) + z, z * 2 + (x + y)) ||
+         rewrite(((z + y) + x) + z, z * 2 + (x + y)) ||
+
          rewrite((x - y) + y, x) ||
          rewrite(x + (y - x), y) ||
 
@@ -123,6 +133,7 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
 
          rewrite(x * c0 + y * c1, (x + y * fold(c1 / c0)) * c0, c1 % c0 == 0) ||
          rewrite(x * c0 + y * c1, (x * fold(c0 / c1) + y) * c1, c0 % c1 == 0) ||
+         rewrite(x * c0 + (y * c1 + z), (x * fold(c0 / c1) + y) * c1 + z, c0 % c1 == 0) ||
 
          // Hoist shuffles. The Shuffle visitor wants to sink
          // extract_elements to the leaves, and those count as degenerate
@@ -198,9 +209,12 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
            rewrite((x / w) * w + (z + x % w), select(w == 0, 0, x) + z) ||
            rewrite(x / 2 + x % 2, (x + 1) / 2) ||
 
+           rewrite((0 - (x % 2)) / 2 * 2 + (x % 2), 0 - (x % 2)) ||
+
            rewrite(x + ((c0 - x) / c1) * c1, c0 - ((c0 - x) % c1), c1 > 0) ||
            rewrite(x + ((c0 - x) / c1 + y) * c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0) ||
            rewrite(x + (y + (c0 - x) / c1) * c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0) ||
+           rewrite(((0 - x) / c0) + ((x % c0 + c1) / c0), fold(c1 / c0) - (x / c0), c0 > 0 && (c1 + 1) % c0 == 0) ||
 
            false)))) {
         return mutate(rewrite.result, info);

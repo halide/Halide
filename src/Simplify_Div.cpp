@@ -95,6 +95,7 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
            rewrite(max((x * c0), c1) / c2, max(x * fold(c0 / c2), fold(c1 / c2)), c0 % c2 == 0 && c2 > 0) ||
 
            rewrite((x * c0 + y) / c1, y / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+           rewrite((x * c0 - y) / c1, (0 - y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
            rewrite((x * c0 - y) / c0, x + (0 - y) / c0) ||
            rewrite((x * c1 - y) / c0, (0 - y) / c0 - x, c0 + c1 == 0) ||
            rewrite((y + x * c0) / c1, y / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
@@ -130,6 +131,8 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
            rewrite((w + ((y + x * c0) + z)) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
            rewrite((w + (z + (x * c0 + y))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
            rewrite((w + (z + (y + x * c0))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+
+           rewrite(((0 - x) - x) / 2, -x) ||
 
            /** In (x + c0) / c1, when can we pull the constant
                addition out of the numerator? An obvious answer is
