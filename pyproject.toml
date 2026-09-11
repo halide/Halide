@@ -73,6 +73,14 @@ conflicts = [
     { package = "halide-workspace", group = "ci-llvm-21" },
   ],
 ]
+# numpy 2.4.6 and 2.5.2 only have piwheels ARM wheels locked; without this
+# constraint uv may pick one of them to satisfy ml-dtypes' build-time numpy
+# requirement even on platforms (e.g. linux-32) that need to build numpy from
+# sdist, and then fail hash verification against the ARM wheel's hash.
+# Excluding just those two lets uv fall back to whichever already
+# fully-locked numpy version (2.2.6 or 2.4.2, depending on Python version)
+# applies to the current platform.
+build-constraint-dependencies = ["numpy!=2.4.6,!=2.5.2"]
 
 # Package builds use build-backend hooks to resolve sibling requirements from
 # the SCM-derived version. Supplying the resolution metadata here lets uv resolve

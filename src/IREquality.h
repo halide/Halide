@@ -38,7 +38,11 @@ HALIDE_ALWAYS_INLINE
 bool equal(const IRNode &a, const IRNode &b) {
     if (&a == &b) {
         return true;
-    } else if (a.node_type != b.node_type) {
+    } else if (a.hash != b.hash) {
+        // IRNode::hash packs the node type into its low 8 bits, so a
+        // mismatch here also covers the a.node_type != b.node_type case.
+        // Equal nodes always have equal hashes, so this lets us skip the
+        // full recursive comparison below.
         return false;
     } else {
         return equal_impl(a, b);
@@ -63,7 +67,7 @@ HALIDE_ALWAYS_INLINE
 bool graph_equal(const IRNode &a, const IRNode &b) {
     if (&a == &b) {
         return true;
-    } else if (a.node_type != b.node_type) {
+    } else if (a.hash != b.hash) {
         return false;
     } else {
         return graph_equal_impl(a, b);
@@ -89,8 +93,11 @@ HALIDE_ALWAYS_INLINE
 bool less_than(const IRNode &a, const IRNode &b) {
     if (&a == &b) {
         return false;
-    } else if (a.node_type < b.node_type) {
-        return true;
+    } else if (a.hash != b.hash) {
+        // This ordering is arbitrary (it's just used for map keys), so we're
+        // free to use the cheap hash to distinguish unequal nodes instead of
+        // doing a full comparison.
+        return a.hash < b.hash;
     } else {
         return less_than_impl(a, b);
     }
@@ -118,8 +125,8 @@ HALIDE_ALWAYS_INLINE
 bool graph_less_than(const IRNode &a, const IRNode &b) {
     if (&a == &b) {
         return false;
-    } else if (a.node_type < b.node_type) {
-        return true;
+    } else if (a.hash != b.hash) {
+        return a.hash < b.hash;
     } else {
         return graph_less_than_impl(a, b);
     }

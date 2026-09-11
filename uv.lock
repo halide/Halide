@@ -23,6 +23,10 @@ members = [
     "halide-runtime",
     "halide-workspace",
 ]
+build-constraints = [
+    { name = "numpy", marker = "platform_machine != 'armv7l' and platform_machine != 'armv8l'", specifier = "!=2.4.6,!=2.5.2" },
+    { name = "numpy", marker = "platform_machine == 'armv7l' or platform_machine == 'armv8l'", specifier = "!=2.4.6,!=2.5.2", index = "https://piwheels.org/simple" },
+]
 
 [[manifest.dependency-metadata]]
 name = "halide"
