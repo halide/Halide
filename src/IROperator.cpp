@@ -1734,8 +1734,8 @@ Tuple select(const Expr &condition, const Tuple &true_value, const Tuple &false_
     return result;
 }
 
-Expr select(const Expr &condition, const FuncRef &true_value, const FuncRef &false_value) {
-    return select(condition, (Expr)true_value, (Expr)false_value);
+Tuple select(const Expr &condition, const FuncRef &true_value, const FuncRef &false_value) {
+    return select(condition, Tuple(true_value), Tuple(false_value));
 }
 
 Expr mux(const Expr &id, const std::vector<Expr> &values) {
@@ -2922,8 +2922,44 @@ Expr likely_if_innermost(Expr e) {
                       {std::move(e)}, Call::PureIntrinsic);
 }
 
+Tuple likely(const Tuple &t) {
+    Tuple result = t;
+    for (Expr &e : result) {
+        e = likely(e);
+    }
+    return result;
+}
+
+Tuple likely(const FuncRef &f) {
+    return likely(Tuple(f));
+}
+
+Tuple likely_if_innermost(const Tuple &t) {
+    Tuple result = t;
+    for (Expr &e : result) {
+        e = likely_if_innermost(e);
+    }
+    return result;
+}
+
+Tuple likely_if_innermost(const FuncRef &f) {
+    return likely_if_innermost(Tuple(f));
+}
+
 Expr strict_float(const Expr &e) {
     return strictify_float(e);
+}
+
+Tuple strict_float(const Tuple &t) {
+    Tuple result = t;
+    for (Expr &e : result) {
+        e = strict_float(e);
+    }
+    return result;
+}
+
+Tuple strict_float(const FuncRef &f) {
+    return strict_float(Tuple(f));
 }
 
 Expr undef(Type t) {

@@ -13,9 +13,11 @@
 namespace Halide {
 
 struct Expr;
+class Tuple;
 struct Type;
 // Forward declare some things from IRPrinter, which we can't include yet.
 std::ostream &operator<<(std::ostream &stream, const Expr &);
+std::ostream &operator<<(std::ostream &stream, const Tuple &);
 std::ostream &operator<<(std::ostream &stream, const Type &);
 
 class Module;

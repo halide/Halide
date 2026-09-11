@@ -28,6 +28,14 @@ Tuple to_halide_tuple(const py::object &o) {
     throw py::value_error("Expected an Expr or tuple-of-Expr.");
 }
 
+namespace {
+
+py::iterator tuple_iterator(const Tuple &t) {
+    return py::make_iterator(t.begin(), t.end());
+}
+
+}  // namespace
+
 void define_tuple(py::module &m) {
     // Halide::Tuple isn't surfaced to the user in Python;
     // we define it here to allow PyBind to do some automatic
@@ -62,6 +70,13 @@ void define_tuple(py::module &m) {
             .def(py::init([](const std::vector<Expr> &v) -> Tuple {
                 return Tuple(v);
             }))
+            .def("__len__", &Tuple::size)
+            .def("__getitem__", [](const Tuple &t, size_t i) -> Expr {
+                if (i >= t.size()) {
+                    throw py::index_error();
+                }
+                return t[i];
+            })
             .def("__repr__", [](const Tuple &t) -> std::string {
                 std::ostringstream o;
                 o << "<halide.Tuple of size " << t.size() << ">";
@@ -71,7 +86,8 @@ void define_tuple(py::module &m) {
                 std::ostringstream o;
                 o << t;
                 return o.str();
-            });
+            })
+            .def("__iter__", &tuple_iterator, py::keep_alive<0, 1>());
 
     py::implicitly_convertible<py::tuple, Tuple>();
 
