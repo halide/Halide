@@ -323,6 +323,7 @@ tests(
     side_effects.cpp
     simplified_away_embedded_image.cpp
     simplify.cpp
+    simplify_region_bound_regression.cpp
     skip_stages.cpp
     skip_stages_cse_bug.cpp
     skip_stages_external_array_functions.cpp

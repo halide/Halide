@@ -305,6 +305,11 @@ void lower_impl(const vector<Function> &output_funcs,
     s = storage_flattening(s, outputs, env, t);
     log("Lowering after storage flattening:", s);
 
+    // Every pass that reads a region or an allocation size out of the IR has
+    // now run, so from here a clamp is only worth what its value is worth, and
+    // the simplifier may use what it knows to remove a redundant one.
+    ScopedRegionsInferred regions_inferred;
+
     debug(1) << "Adding atomic mutex allocation...\n";
     s = add_atomic_mutex(s, outputs);
     log("Lowering after adding atomic mutex allocation:", s);
