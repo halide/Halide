@@ -1,6 +1,6 @@
 [package]
 name = "halidoscope"
-version = "0.1.0"
+version = "22.0.0"
 description = "An interactive visualizer for Halide traces."
 authors = ["Parker Ziegler <pziegler@adobe.com>"]
 edition = "2021"
