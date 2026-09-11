@@ -16,12 +16,6 @@
 #include "Target.h"
 #include "Util.h"
 
-#if _WIN32
-#include <windows.h>
-#else
-#include <unistd.h>
-#endif
-
 namespace Halide {
 
 using std::ostream;
@@ -519,87 +513,27 @@ std::ostream &operator<<(std::ostream &out, const ModulusRemainder &c) {
     return out;
 }
 
-namespace {
-bool supports_ansi(const std::ostream *os) {
-    if (!os) {
-        return false;
-    }
-    if (const char *term = getenv("TERM")) {
-        // Check if the terminal supports colors
-        if (!(strstr(term, "color") || strstr(term, "xterm"))) {
-            return false;
-        }
-    }
-#if _WIN32
-    HANDLE h;
-    if (os == &std::cout) {
-        h = GetStdHandle(STD_OUTPUT_HANDLE);
-    } else if (os == &std::cerr) {
-        h = GetStdHandle(STD_ERROR_HANDLE);
-    } else {
-        return false;
-    }
-
-    DWORD mode;
-    return GetConsoleMode(h, &mode) &&
-           SetConsoleMode(h, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
-#else
-    if (os == &std::cout) {
-        return isatty(fileno(stdout));
-    } else if (os == &std::cerr) {
-        return isatty(fileno(stderr));
-    }
-    return false;
-#endif
-}
-}  // namespace
-
 IRPrinter::IRPrinter(ostream &s)
     : stream(s) {
     s.setf(std::ios::fixed, std::ios::floatfield);
 
-    auto detect_color = [&](const std::ostream *terminal) {
-        std::string opt = get_env_variable("HL_COLORS");
-        bool use_colors = !opt.empty() ? opt == "1" : supports_ansi(terminal);
-
-        if (use_colors) {
-            ansi = true;
-            // Simple palette using standard VGA colors.
-            // clang-format off
-            ansi_hl        = "\033[4m";
-            ansi_dim       = "\033[2m";
-            ansi_kw        = "\033[35;1m";
-            ansi_imm_int   = "\033[36m";
-            ansi_imm_float = "\033[96m";
-            ansi_imm_str   = "\033[32m";
-            ansi_var       = "";
-            ansi_buf       = "\033[33m";
-            ansi_fn        = "\033[31m";
-            ansi_type      = "\033[34m";
-            ansi_reset_col = "\033[39m";
-            ansi_reset     = "\033[0m";
-            // clang-format on
-        }
-    };
-
-    switch (debug_stream_sink(stream)) {
-    case DebugStreamSink::Cout:
-        detect_color(&std::cout);
-        break;
-    case DebugStreamSink::Cerr:
-        detect_color(&std::cerr);
-        break;
-    case DebugStreamSink::File:
-        // A shared log file: never auto-detect colors, but still honor an
-        // explicit HL_COLORS override.
-        detect_color(nullptr);
-        break;
-    case DebugStreamSink::None:
-        // It's not a DebugStream. Is it cout or cerr identically?
-        if (&stream == &std::cout || &stream == &std::cerr) {
-            detect_color(&stream);
-        }
-        break;
+    if (stream_supports_ansi_colors(stream)) {
+        ansi = true;
+        // Simple palette using standard VGA colors.
+        // clang-format off
+        ansi_hl        = "\033[4m";
+        ansi_dim       = "\033[2m";
+        ansi_kw        = "\033[35;1m";
+        ansi_imm_int   = "\033[36m";
+        ansi_imm_float = "\033[96m";
+        ansi_imm_str   = "\033[32m";
+        ansi_var       = "";
+        ansi_buf       = "\033[33m";
+        ansi_fn        = "\033[31m";
+        ansi_type      = "\033[34m";
+        ansi_reset_col = "\033[39m";
+        ansi_reset     = "\033[0m";
+        // clang-format on
     }
 }
 

@@ -1,4 +1,5 @@
 #include "AddImageChecks.h"
+#include "CompilerProfiling.h"
 #include "ExternFuncArgument.h"
 #include "Function.h"
 #include "IRMutator.h"
@@ -162,6 +163,7 @@ Stmt add_image_checks_inner(Stmt s,
                             const map<string, Function> &env,
                             const FuncValueBounds &fb,
                             bool will_inject_host_copies) {
+    ZoneScoped;
 
     bool no_bounds_query = t.has_feature(Target::NoBoundsQuery);
 

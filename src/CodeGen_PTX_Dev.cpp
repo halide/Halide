@@ -197,6 +197,7 @@ public:
 void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
                                  const std::string &name,
                                  const std::vector<DeviceArgument> &args) {
+    ZoneScoped;
     internal_assert(module != nullptr);
 
     debug(2) << "In CodeGen_PTX_Dev::add_kernel\n";
@@ -301,6 +302,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 }
 
 void CodeGen_PTX_Dev::init_module() {
+    ZoneScoped;
     // This class uses multiple inheritance. It's a GPU device code generator,
     // and also an llvm-based one. Both of these track strict_float presence,
     // but OffloadGPULoops only sets the GPU device code generator flag, so here

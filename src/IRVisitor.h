@@ -3,6 +3,7 @@
 
 #include <set>
 
+#include "CompilerProfiling.h"
 #include "IR.h"
 
 /** \file
@@ -22,15 +23,18 @@ public:
     virtual ~IRVisitor() = default;
 
     inline void operator()(const Stmt &s) {
+        ZoneScopedN(HalideVisitorDynamicNameTag);
         s.accept(this);
     }
 
     inline void operator()(const Expr &e) {
+        ZoneScopedN(HalideVisitorDynamicNameTag);
         e.accept(this);
     }
 
     template<typename T>
     inline void operator()(const T *op) {
+        ZoneScopedN(HalideVisitorDynamicNameTag);
         visit(op);
     }
 
@@ -120,9 +124,11 @@ void visit_with(const IRHandle &ir, Lambdas &&...lambdas) {
 class IRGraphVisitor : public IRVisitor {
 public:
     inline void operator()(const Expr &e) {
+        ZoneScopedN(HalideVisitorDynamicNameTag);
         include(e);
     }
     inline void operator()(const Stmt &s) {
+        ZoneScopedN(HalideVisitorDynamicNameTag);
         include(s);
     }
 
@@ -160,11 +166,20 @@ protected:
 template<typename T, typename ExprRet, typename StmtRet>
 class VariadicVisitor {
 private:
+#ifdef WITH_COMPILER_PROFILING
+#ifdef HALIDE_ENABLE_RTTI
+    const char *name = typeid(T).name();
+#else
+    const char *name = "VariadicVisitor";
+#endif
+#endif
+
     template<typename... Args>
     ExprRet dispatch_expr(const BaseExprNode *node, Args &&...args) {
         if (node == nullptr) {
             return ExprRet{};
         }
+        ZoneScopedVisitor(node->node_type, name, Profiling::BIT_EXPR);
         switch (node->node_type) {
 #define HALIDE_SWITCH_EXPR(NT) \
     case IRNodeType::NT:       \
@@ -183,6 +198,7 @@ private:
         if (node == nullptr) {
             return StmtRet{};
         }
+        ZoneScopedVisitor(node->node_type, name, Profiling::BIT_STMT);
         switch (node->node_type) {
 #define HALIDE_SWITCH_STMT(NT) \
     case IRNodeType::NT:       \

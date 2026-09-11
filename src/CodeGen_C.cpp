@@ -259,6 +259,7 @@ CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const 
                      const std::string &runtime_prefixes_import_prefix)
     : IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind),
       runtime_prefixes_import_prefix(runtime_prefixes_import_prefix) {
+    ZoneScoped;
 
     if (output_kind == CPlusPlusFunctionInfoHeader) {
         // If it's a header, emit an include guard.
