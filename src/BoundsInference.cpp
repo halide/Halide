@@ -225,6 +225,12 @@ public:
         size_t fused_group_index;
         Inliner *inliner;
 
+        // Which dimensions of 'func' are pure (i.e. equal to the pure
+        // Var/RVar in that position) across the pure definition and every
+        // update definition. Shared by every Stage of the same Func, and
+        // computed once by compute_always_pure_dims() below.
+        vector<bool> always_pure_dims;
+
         // Computed expressions on the left and right-hand sides.
         // Note that a function definition might have different LHS or reduction domain
         // (if it's an update def) or RHS per specialization. All specializations
@@ -377,6 +383,24 @@ public:
             return true;
         }
 
+        // Populate 'always_pure_dims': for each dimension of 'func', whether
+        // it's pure (i.e. equal to the pure Var/RVar in that position) across
+        // the pure definition and every update definition. Only depends on
+        // 'func', so it only needs to be computed once and shared across all
+        // Stages of the same Func.
+        void compute_always_pure_dims() {
+            const vector<string> func_args = func.args();
+            always_pure_dims.assign(func_args.size(), true);
+            for (const Definition &def : func.updates()) {
+                for (size_t j = 0; j < always_pure_dims.size(); j++) {
+                    if (always_pure_dims[j] &&
+                        !is_dim_always_pure(def, func_args[j], (int)j)) {
+                        always_pure_dims[j] = false;
+                    }
+                }
+            }
+        }
+
         // Wrap a statement in let stmts defining the box
         Stmt define_bounds(Stmt s,
                            const Function &producing_func,
@@ -414,21 +438,13 @@ public:
             internal_assert(b.empty() || b.size() == func_args.size());
 
             if (!b.empty()) {
-                // Optimization: If a dimension is pure in every update
-                // step of a func, then there exists a single bound for
-                // that dimension, instead of one bound per stage. Let's
-                // figure out what those dimensions are, and just have all
-                // stages but the last use the bounds for the last stage.
-                vector<bool> always_pure_dims(func_args.size(), true);
-                for (const Definition &def : func.updates()) {
-                    for (size_t j = 0; j < always_pure_dims.size(); j++) {
-                        bool pure = is_dim_always_pure(def, func_args[j], j);
-                        if (!pure) {
-                            always_pure_dims[j] = false;
-                        }
-                    }
-                }
-
+                // Optimization: If a dimension is pure in every update step
+                // of a func, then there's a single bound for that dimension,
+                // instead of one bound per stage. All stages but the last use
+                // the bounds for the last stage. populate_scope already keys
+                // the required region of pure dims off the last stage's bound
+                // variables, so here we just define the current stage's bound
+                // variables to alias the last stage's.
                 if (stage < func.updates().size()) {
                     size_t stages = func.updates().size();
                     string last_stage = func.name() + ".s" + std::to_string(stages) + ".";
@@ -769,8 +785,17 @@ public:
         // We need to take into account specializations which may refer to
         // different reduction variables as well.
         void populate_scope(Scope<Interval> &result) {
-            for (const string &farg : func.args()) {
-                string arg = name + ".s" + std::to_string(stage) + "." + farg;
+            const vector<string> func_args = func.args();
+            for (size_t i = 0; i < func_args.size(); i++) {
+                const string &farg = func_args[i];
+                // If a dimension is pure in every stage, all stages share a
+                // single bound (that of the last stage), so key the required
+                // region off the last stage's bound variables. This keeps the
+                // per-stage boxes structurally identical in this dimension, so
+                // they collapse when merged rather than growing one term per
+                // stage.
+                size_t bound_stage = always_pure_dims[i] ? func.updates().size() : stage;
+                string arg = name + ".s" + std::to_string(bound_stage) + "." + farg;
                 result.push(farg,
                             Interval(Variable::make(Int(32), arg + ".min"),
                                      Variable::make(Int(32), arg + ".max")));
@@ -842,6 +867,7 @@ public:
             s.stage = 0;
             s.name = s.func.name();
             s.fused_group_index = find_fused_group_index(s.func, fused_groups);
+            s.compute_always_pure_dims();
             s.compute_exprs();
             s.stage_prefix = s.name + ".s0.";
             s.inliner = &inliner;
