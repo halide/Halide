@@ -42,14 +42,15 @@ assuming.
 Read the landing page first — it has the full table of contents and the
 four-part structure:
 
-- **`doc/SchedulingHalidePipelines.md`**
+- **`references/guide/README.md`**
 
 For a fast, one-screen lookup — every directive's signature and effect, the tail
 strategies, and the common gotchas — without opening a chapter, read the bundled
 **`references/directive-cheatsheet.md`** (alongside this skill).
 
-The chapters live under **`doc/scheduling/`**. Repo paths below are relative to
-the repository root; the cheat-sheet path is relative to this skill.
+The chapters live under **`references/guide/`**. The guide and cheat-sheet paths
+below are relative to this skill; the `src/`, `tutorial/`, and `python_bindings/`
+paths are relative to the repository root.
 
 ## Which chapter to read
 
@@ -57,36 +58,36 @@ Jump to what the task needs instead of reading front to back.
 
 **The model** (what is being scheduled)
 
-- `doc/scheduling/01-introduction.md` — algorithm vs schedule; the three levers.
-- `doc/scheduling/02-the-programming-model.md` — Funcs, stages, RDoms, the graph.
-- `doc/scheduling/03-realizing-a-pipeline.md` — when computation runs; JIT vs AOT.
-- `doc/scheduling/04-bounds-inference.md` — how buffers and loops get sized.
+- `references/guide/01-introduction.md` — algorithm vs schedule; the three levers.
+- `references/guide/02-the-programming-model.md` — Funcs, stages, RDoms, the graph.
+- `references/guide/03-realizing-a-pipeline.md` — when computation runs; JIT vs AOT.
+- `references/guide/04-bounds-inference.md` — how buffers and loops get sized.
 
 **Making it fast** (start here for "make this faster")
 
-- `doc/scheduling/05-scheduling-for-cpus.md` — the canonical fast-CPU shape.
-- `doc/scheduling/06-scheduling-for-gpus.md` — mapping loops onto blocks/threads.
-- `doc/scheduling/07-what-to-schedule.md` — inline vs compute_at vs compute_root.
-- `doc/scheduling/08-benchmarking-and-profiling.md` — measure; read the profile.
-- `doc/scheduling/09-reading-the-stmt-file.md` — check the vectorization shape.
-- `doc/scheduling/10-recipes.md` — sliding windows, tiling, pyramids, stencils, histograms.
-- `doc/scheduling/11-pitfalls.md` — recurrences, parallel placement, recompute traps.
+- `references/guide/05-scheduling-for-cpus.md` — the canonical fast-CPU shape.
+- `references/guide/06-scheduling-for-gpus.md` — mapping loops onto blocks/threads.
+- `references/guide/07-what-to-schedule.md` — inline vs compute_at vs compute_root.
+- `references/guide/08-benchmarking-and-profiling.md` — measure; read the profile.
+- `references/guide/09-reading-the-stmt-file.md` — check the vectorization shape.
+- `references/guide/10-recipes.md` — sliding windows, tiling, pyramids, stencils, histograms.
+- `references/guide/11-pitfalls.md` — recurrences, parallel placement, recompute traps.
 
 **Directive mechanics** (what a directive does to the loop nest)
 
-- `doc/scheduling/12-reading-a-loop-nest.md` — the `print_loop_nest` notation.
-- `doc/scheduling/13-defaults-and-inlining.md` — the inline default; three compute levels.
-- `doc/scheduling/14-placement-compute-root-and-compute-at.md` — where a Func is built.
-- `doc/scheduling/15-storage-levels.md` — `store_at`, `store_root`, `hoist_storage`.
-- `doc/scheduling/16-reshaping-loops.md` — `split`, `fuse`, `reorder`, `tile`.
-- `doc/scheduling/17-loop-types.md` — serial, parallel, vectorized, unrolled, GPU.
-- `doc/scheduling/18-advanced-directives.md` — `rfactor`, `in`/`clone_in`, `compute_with`, `specialize`.
-- `doc/scheduling/19-how-the-loop-nest-is-built.md` — the full assembly order.
+- `references/guide/12-reading-a-loop-nest.md` — the `print_loop_nest` notation.
+- `references/guide/13-defaults-and-inlining.md` — the inline default; three compute levels.
+- `references/guide/14-placement-compute-root-and-compute-at.md` — where a Func is built.
+- `references/guide/15-storage-levels.md` — `store_at`, `store_root`, `hoist_storage`.
+- `references/guide/16-reshaping-loops.md` — `split`, `fuse`, `reorder`, `tile`.
+- `references/guide/17-loop-types.md` — serial, parallel, vectorized, unrolled, GPU.
+- `references/guide/18-advanced-directives.md` — `rfactor`, `in`/`clone_in`, `compute_with`, `specialize`.
+- `references/guide/19-how-the-loop-nest-is-built.md` — the full assembly order.
 
 **Reference**
 
-- `doc/scheduling/20-directive-reference.md` — every directive, its signature and effect.
-- `doc/scheduling/21-checklist-and-worked-example.md` — pre-flight checklist + end-to-end example.
+- `references/guide/20-directive-reference.md` — every directive, its signature and effect.
+- `references/guide/21-checklist-and-worked-example.md` — pre-flight checklist + end-to-end example.
 
 ## Inspecting a schedule
 

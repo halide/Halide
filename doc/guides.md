@@ -4,7 +4,6 @@
 :titlesonly:
 :maxdepth: 1
 
-SchedulingHalidePipelines
 BuildingHalideWithCMake
 HalideCMakePackage
 CodeStyleCMake

@@ -2,8 +2,8 @@
 
 A compact, one-screen lookup. Each directive is a method on `Func` (or, for an
 update stage, `Func::update(int)`). For the full prose reference and examples,
-see `doc/scheduling/20-directive-reference.md`; the group headings below note
-the chapter that explains the mechanics.
+see `guide/20-directive-reference.md`; the group headings below note the chapter
+that explains the mechanics.
 
 ## Where to compute and store — ch. 13–15
 
