@@ -1,4 +1,11 @@
 #include <algorithm>
+#include <atomic>
+#include <cstdlib>
+#include <cstring>
+#include <fstream>
+#include <iostream>
+#include <mutex>
+#include <sstream>
 #include <utility>
 
 #include "Argument.h"
@@ -16,6 +23,7 @@
 #include "PrintLoopNest.h"
 #include "RealizationOrder.h"
 #include "Serialization.h"
+#include "Util.h"
 #include "WasmExecutor.h"
 
 using namespace Halide::Internal;
@@ -150,6 +158,8 @@ struct PipelineContents {
     std::vector<Stmt> requirements;
 
     bool trace_pipeline = false;
+
+    bool defer_profile_flush = false;
 
     /** Optional prefixes used to rename halide_-prefixed runtime symbols.
      * Empty unless set via Pipeline::apply_runtime_prefixes(). */
@@ -837,7 +847,11 @@ Realization Pipeline::realize(JITUserContext *context,
     }
 
     // If we're profiling, report runtimes and reset profiler stats.
-    contents->jit_cache.finish_profiling(context);
+    // Condition based on whether or not calling code has chosen to defer
+    // flushing profile information (e.g., to accumulate results across runs).
+    if (!contents->defer_profile_flush) {
+        contents->jit_cache.finish_profiling(context);
+    }
     jit_context.finalize(exit_status);
 
     // Crop back to the requested size if necessary
@@ -898,6 +912,321 @@ void Pipeline::add_requirement(const Expr &condition, const std::vector<Expr> &e
 void Pipeline::trace_pipeline() {
     user_assert(defined()) << "Pipeline is undefined\n";
     contents->trace_pipeline = true;
+}
+
+void Pipeline::set_defer_profile_flush(bool defer) {
+    user_assert(defined()) << "Pipeline is undefined\n";
+    contents->defer_profile_flush = defer;
+}
+
+void Pipeline::flush_profiler_state(JITUserContext *context) {
+    user_assert(defined()) << "Pipeline is undefined\n";
+    JITUserContext empty{};
+    contents->jit_cache.finish_profiling(context ? context : &empty);
+}
+
+namespace {
+
+// State for the halidoscope_capture_trace callback below. custom_trace is a
+// plain C function pointer (see JITHandlers in JITModule.h), so it can't
+// capture anything -- this mirrors the approach taken by
+// test/performance/profiler.cpp.
+//
+// halidoscope_trace_stream is not thread-safe to mutate, but
+// Pipeline::halidoscope() is documented as non-reentrant (i.e. not to be called
+// concurrently with itself), so that's fine; the trace writer below does still
+// need to support *this* pipeline's own worker threads emitting trace events
+// concurrently during a single run.
+
+std::ofstream *halidoscope_trace_stream = nullptr;
+std::mutex halidoscope_trace_mutex;
+std::atomic<int32_t> halidoscope_trace_next_id{1};
+
+// Writes the same on-disk packet format as halide_default_trace's
+// HL_TRACE_FILE path (src/runtime/tracing.cpp), but owns the output stream
+// directly in host code instead of going through the runtime's env-var
+// triggered, process-global file handle. That global (halide_trace_file) is
+// cached per JIT-shared-runtime instance and halide_shutdown_trace() only
+// ever resets it to a permanently-disabled state (0, not -1), so it cannot
+// be safely reopened for a second trace within the same process -- writing
+// packets ourselves sidesteps that entirely and works for any number of
+// halidoscope() calls in one process.
+int32_t halidoscope_capture_trace(JITUserContext *, const halide_trace_event_t *e) {
+    // The return value becomes the parent_id of any trace events nested
+    // inside this one (see halide_default_trace's use of `my_id`), so this
+    // must be computed regardless of whether we're actually writing it out.
+    int32_t my_id = halidoscope_trace_next_id.fetch_add(1);
+    if (!halidoscope_trace_stream) {
+        return my_id;
+    }
+
+    const bool is_load_or_store = (e->event == halide_trace_load || e->event == halide_trace_store);
+    uint32_t value_bytes = is_load_or_store ? (uint32_t)(e->lanes * e->type.bytes()) : 0;
+    uint32_t header_bytes = (uint32_t)sizeof(halide_trace_packet_t);
+    uint32_t coords_bytes = (uint32_t)e->dimensions * (uint32_t)sizeof(int32_t);
+    uint32_t name_bytes = (uint32_t)strlen(e->func) + 1;
+    uint32_t trace_tag_bytes = e->trace_tag ? (uint32_t)strlen(e->trace_tag) + 1 : 1;
+    uint32_t total_size_without_padding = header_bytes + value_bytes + coords_bytes + name_bytes + trace_tag_bytes;
+    uint32_t total_size = (total_size_without_padding + 3) & ~3u;
+
+    std::vector<uint8_t> buf(total_size, 0);
+    auto *packet = reinterpret_cast<halide_trace_packet_t *>(buf.data());
+    packet->size = total_size;
+    packet->event = e->event;
+    packet->parent_id = e->parent_id;
+    packet->dimensions = e->dimensions;
+    if (is_load_or_store) {
+        packet->value_index = e->value_index;
+        packet->type_code = (uint8_t)e->type.code;
+        packet->type_bits = (uint8_t)e->type.bits;
+        packet->lanes = (uint16_t)e->lanes;
+    } else {
+        packet->id = my_id;
+        packet->thread_id = (e->event == halide_trace_begin_parallel_task) ? e->thread_id : 0;
+    }
+    if (e->coordinates) {
+        memcpy(packet->coordinates(), e->coordinates, coords_bytes);
+    }
+    if (e->value) {
+        memcpy(packet->value(), e->value, value_bytes);
+    }
+    memcpy(packet->func(), e->func, name_bytes);
+    memcpy(packet->trace_tag(), e->trace_tag ? e->trace_tag : "", trace_tag_bytes);
+
+    {
+        std::scoped_lock<std::mutex> lock(halidoscope_trace_mutex);
+        halidoscope_trace_stream->write(reinterpret_cast<const char *>(buf.data()), total_size);
+    }
+
+    return my_id;
+}
+
+void halidoscope_append_func_stats(std::ostringstream &out,
+                                   const halide_profiler_func_stats &stats) {
+    out << "{"
+        << "\"name\":\"" << stats.name << "\","
+        << "\"parent\":" << stats.parent << ","
+        << "\"canonical_id\":" << stats.canonical_id << ","
+        << "\"kind\":" << (int)stats.kind << ","
+        << "\"buffer_func_id\":" << stats.buffer_func_id << ","
+        << "\"time_ns\":" << stats.time << ","
+        << "\"memory_current\":" << stats.memory_current << ","
+        << "\"memory_peak\":" << stats.memory_peak << ","
+        << "\"memory_total\":" << stats.memory_total << ","
+        << "\"stack_peak\":" << stats.stack_peak << ","
+        << "\"active_threads_numerator\":" << stats.active_threads_numerator << ","
+        << "\"active_threads_denominator\":" << stats.active_threads_denominator << ","
+        << "\"num_allocs\":" << stats.num_allocs
+        << "}";
+}
+
+// Snapshots the profiler's pipeline-level stats into `profile_json`. Must be
+// called after the profiling loop has finished (i.e. every profiled
+// realize() call has returned) but before the stats are reset -- each
+// realize() call's halide_profiler_instance_end runs (and merges that run's
+// counters into halide_profiler_pipeline_stats) before the call returns to
+// this C++ code, so by the time the loop finishes, the pipeline stats
+// reflect all of the runs merged together, with per-Func times correctly
+// averaged across billed_runs. (Pipeline::flush_profiler_state(), called via
+// DeferredProfileFlush's destructor once this scope ends, is what resets
+// them, so this needs to run before that.)
+void halidoscope_write_profile_json(const Target &target, std::string &profile_json) {
+    using GetStateFn = halide_profiler_state *(*)();
+    auto get_state = (GetStateFn)JITSharedRuntime::find_symbol(target, "halide_profiler_get_state");
+    if (!get_state) {
+        return;
+    }
+
+    // halidoscope() only ever has one instrumented pipeline running at a
+    // time, so the head of the pipeline list is always ours.
+    halide_profiler_pipeline_stats *ps = get_state()->pipelines;
+    if (!ps) {
+        return;
+    }
+
+    std::ostringstream out;
+    out << "{\"pipelines\":[{"
+        << "\"name\":\"" << ps->name << "\","
+        << "\"runs\":" << ps->runs << ","
+        << "\"billed_runs\":" << ps->billed_runs << ","
+        << "\"samples\":" << ps->samples << ","
+        << "\"num_allocs\":" << ps->num_allocs << ","
+        << "\"time_ns\":" << ps->time << ","
+        << "\"memory_current\":" << ps->memory_current << ","
+        << "\"memory_peak\":" << ps->memory_peak << ","
+        << "\"memory_total\":" << ps->memory_total << ","
+        << "\"active_threads_numerator\":" << ps->active_threads_numerator << ","
+        << "\"active_threads_denominator\":" << ps->active_threads_denominator << ","
+        << "\"funcs\":[";
+    for (int i = 0; i < ps->num_funcs; i++) {
+        if (i > 0) {
+            out << ",";
+        }
+        halidoscope_append_func_stats(out, ps->funcs[i]);
+    }
+    out << "]}]}";
+
+    profile_json = out.str();
+}
+
+// Builds a fresh, independent view over the same underlying output storage
+// as `from`. RealizationArg is move-only and single-use by convention (its
+// public realize() overload consumes it by value), but halidoscope() needs
+// to realize into the same output twice (once per instrumented run; the
+// results are discarded either way, so writing into the same storage twice
+// is harmless). We can't just move `from` twice, so instead we copy out its
+// (public) fields by hand.
+Pipeline::RealizationArg halidoscope_clone_output(const Pipeline::RealizationArg &from) {
+    Pipeline::RealizationArg view(static_cast<halide_buffer_t *>(nullptr));
+    if (from.r) {
+        view.r = from.r;
+    } else if (from.buf) {
+        view.buf = from.buf;
+    } else if (from.buffer_list) {
+        view.buffer_list = std::make_unique<std::vector<Buffer<>>>(*from.buffer_list);
+    }
+    return view;
+}
+
+}  // namespace
+
+void Pipeline::halidoscope_impl(const std::function<void(Pipeline &, const Target &)> &do_realize,
+                                const HalidoscopeOptions &options,
+                                const Target &target_arg) {
+    user_assert(defined()) << "Pipeline is undefined\n";
+
+    std::string halidoscope_path = options.halidoscope_path.value_or("halidoscope");
+    int profile_runs = options.halidoscope_profile_runs.value_or(1);
+
+    user_assert(profile_runs >= 0)
+        << "halidoscope: HalidoscopeOptions::halidoscope_profile_runs must be a non-negative integer, got "
+        << profile_runs << ".\n";
+
+    // Fail fast if halidoscope_path looks like an explicit path (as opposed
+    // to a bare name meant to be resolved via $PATH, e.g. the default
+    // "halidoscope") and nothing exists there -- no need to burn two full
+    // pipeline realizations before discovering the binary is missing. A bare
+    // name can't be checked this way (file_exists() just wraps access(),
+    // which won't search $PATH), so that case is instead caught below, after
+    // actually trying to launch it.
+    if (halidoscope_path.find('/') != std::string::npos) {
+        user_assert(file_exists(halidoscope_path))
+            << "halidoscope: no file found at HalidoscopeOptions::halidoscope_path='"
+            << halidoscope_path << "'.\n";
+    }
+
+    // Pipeline::compile_jit() discards the *entire* target (feature bits
+    // included) and replaces it with get_jit_target_from_environment()
+    // whenever has_unknowns() is true -- so an unresolved target_arg (e.g.
+    // the default Target()) would silently lose the trace/profile features
+    // we're about to add. Resolve it first so those features actually reach
+    // lowering/codegen.
+    Target base_target = target_arg.has_unknowns() ? get_jit_target_from_environment() : target_arg;
+
+    std::map<std::string, Parameter> external_params;
+    std::vector<uint8_t> data;
+    serialize_pipeline(*this, data, external_params);
+
+    std::string dir = options.halidoscope_output_dir ? *options.halidoscope_output_dir : dir_make_temp();
+    std::string trace_path = dir + "/trace.hltrace";
+    std::string profile_path = dir + "/profile.json";
+
+    // --- Trace run: every Func's loads/stores/realizations, dumped to a
+    // binary trace file in the same format Halide's HL_TRACE_FILE path
+    // writes (see halidoscope_capture_trace above for why we write it
+    // ourselves instead of using HL_TRACE_FILE directly). ---
+    {
+        Pipeline traced = deserialize_pipeline(data, external_params);
+        traced.trace_pipeline();
+        Target trace_target = base_target
+                                  .with_feature(Target::TraceLoads)
+                                  .with_feature(Target::TraceStores)
+                                  .with_feature(Target::TraceRealizations);
+
+        std::ofstream trace_stream(trace_path, std::ios::binary);
+        user_assert(trace_stream.good()) << "halidoscope: unable to open " << trace_path << " for writing\n";
+        halidoscope_trace_next_id = 1;
+        halidoscope_trace_stream = &trace_stream;
+        traced.jit_handlers().custom_trace = halidoscope_capture_trace;
+
+        do_realize(traced, trace_target);
+
+        halidoscope_trace_stream = nullptr;
+        trace_stream.close();
+    }
+
+    // --- Profile run: Halide's sampling profiler, captured into JSON. ---
+    struct DeferredProfileFlush {
+        Pipeline &p;
+        explicit DeferredProfileFlush(Pipeline &pipeline) : p(pipeline) {
+            p.set_defer_profile_flush(true);
+        }
+        ~DeferredProfileFlush() {
+            p.set_defer_profile_flush(false);
+            p.flush_profiler_state();
+        }
+    };
+
+    if (profile_runs > 0) {
+        Pipeline profiled = deserialize_pipeline(data, external_params);
+        Target profile_target = base_target.with_feature(Target::Profile);
+
+        std::string profile_json;
+
+        {
+            DeferredProfileFlush guard(profiled);
+            for (int i = 0; i < profile_runs; i++) {
+                std::cout << "Halidoscope profiling run " << i + 1 << " of " << profile_runs << "\n";
+                do_realize(profiled, profile_target);
+            }
+            // Snapshot the merged stats now, while the guard is still
+            // deferring the flush that would otherwise reset them.
+            halidoscope_write_profile_json(profile_target, profile_json);
+        }
+
+        write_entire_file(profile_path, profile_json.data(), profile_json.size());
+    }
+
+    // --- Launch Halidoscope, blocking until the window is closed. ---
+    std::string binary = halidoscope_path;
+
+    std::vector<std::string> halidoscope_args = {binary, "--trace", trace_path};
+    if (profile_runs > 0) {
+        halidoscope_args.emplace_back("--profile");
+        halidoscope_args.emplace_back(profile_path);
+    }
+
+    int halidoscope_rc = run_process(halidoscope_args);
+
+    // If we did not specify a persistent output directory, clean up the
+    // temporary directory storing trace and profile data.
+    if (!options.halidoscope_output_dir) {
+        file_unlink(trace_path);
+        if (profile_runs > 0) {
+            file_unlink(profile_path);
+        }
+        dir_rmdir(dir);
+    }
+
+    // run_process() returns -1 if the binary couldn't be started at all (as
+    // opposed to running and exiting with a nonzero status) -- for a bare
+    // name like the default "halidoscope", that almost always means it
+    // wasn't found on $PATH (an explicit path is already checked above).
+    user_assert(halidoscope_rc != -1)
+        << "halidoscope: could not find or launch the Halidoscope binary '" << binary
+        << "'. Make sure it is installed and on $PATH, or set "
+           "HalidoscopeOptions::halidoscope_path to point at it directly.\n";
+}
+
+void Pipeline::halidoscope(std::vector<int32_t> sizes, const HalidoscopeOptions &options, const Target &target) {
+    halidoscope_impl([&sizes](Pipeline &p, const Target &t) { p.realize(sizes, t); }, options, target);
+}
+
+void Pipeline::halidoscope(RealizationArg output, const HalidoscopeOptions &options, const Target &target) {
+    halidoscope_impl([&output](Pipeline &p, const Target &t) {
+        p.realize(halidoscope_clone_output(output), t);
+    },
+                     options, target);
 }
 
 // Make a vector of void *'s to pass to the jit call using the
@@ -1114,7 +1443,12 @@ void Pipeline::realize(JITUserContext *context,
     debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
 
     // If we're profiling, report runtimes and reset profiler stats.
-    contents->jit_cache.finish_profiling(context);
+    // Condition based on whether or not calling code has chosen to defer
+    // flushing profile information (e.g., to accumulate results across
+    // many runs).
+    if (!contents->defer_profile_flush) {
+        contents->jit_cache.finish_profiling(context);
+    }
 
     jit_call_context.finalize(exit_status);
 }

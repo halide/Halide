@@ -19,10 +19,18 @@
 ################################################################################
 ## Halide-specific exclusions
 
-# Images only allowed in apps and directories named "images"
+# Images only allowed in apps, directories named "images", and Halidoscope's
+# icon set
 *.png
 !apps/**/*.png
 !**/images/**/*.png
+!tools/halidoscope/src-tauri/icons/*.png
+
+# Halidoscope is desktop-only; `tauri icon` also emits mobile (Android/iOS)
+# assets we don't want to commit.
+tools/halidoscope/src-tauri/icons/android/
+tools/halidoscope/src-tauri/icons/ios/
+
 
 # Pre-trained weights only allowed in autoscheduler directories
 *.weights
