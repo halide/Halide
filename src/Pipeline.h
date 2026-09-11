@@ -25,6 +25,7 @@ namespace Halide {
 struct Argument;
 class Callable;
 class Func;
+class FuncVec;
 struct PipelineContents;
 
 /** Special the Autoscheduler to be used (if any), along with arbitrary
@@ -205,7 +206,7 @@ public:
     std::vector<Argument> infer_arguments(const Internal::Stmt &body);
 
     /** Get the Funcs this pipeline outputs. */
-    std::vector<Func> outputs() const;
+    FuncVec outputs() const;
 
     /** Get the requirements of this pipeline. */
     std::vector<Internal::Stmt> requirements() const;

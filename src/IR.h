@@ -602,6 +602,11 @@ struct Block : public StmtNode<Block> {
      * This method may not return a Block statement if stmts.size() <= 1. */
     static Stmt make(const std::vector<Stmt> &stmts);
 
+    /** The inverse of the vector form of make. Unpacks a Stmt into the
+     * sequence of non-Block Stmts it runs. An undefined Stmt unpacks to an
+     * empty vector, and a non-Block Stmt unpacks to a vector of size one. */
+    static std::vector<Stmt> to_vector(const Stmt &s);
+
     static const IRNodeType _node_type = IRNodeType::Block;
 };
 

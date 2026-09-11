@@ -229,7 +229,7 @@ protected:
             e = PartiallyCancelDifferences()(e);
             e = simplify(e);
 
-            debug(1) << [&]() -> std::string {
+            debug(1, "non-monotonic") << [&]() -> std::string {
                 if (is_monotonic(e, loop_var) != Monotonic::Unknown) {
                     return "";
                 }
