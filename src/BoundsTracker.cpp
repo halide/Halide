@@ -273,12 +273,16 @@ std::vector<Expr> BoundsTracker::relevant_facts(const Expr &e) const {
     // A condition sharing no variable with what we're asking about can't say
     // anything about it, but one that does can bring in variables that make
     // a third condition relevant, so keep sweeping until nothing new is
-    // picked up.
+    // picked up. After the first sweep only the variables picked up by the
+    // one before can make a condition relevant, so later sweeps skip
+    // anything that shares none of those.
     std::vector<bool> taken_fact(facts.size(), false);
     std::vector<bool> taken(cands.size(), false);
+    uint64_t fresh = (uint64_t)-1;
     bool changed = true;
     while (changed) {
         changed = false;
+        uint64_t next_fresh = 0;
         for (size_t i = 0; i < facts.size(); i++) {
             const Fact &fact = facts[i];
             if (taken_fact[i]) {
@@ -288,23 +292,30 @@ std::vector<Expr> BoundsTracker::relevant_facts(const Expr &e) const {
                 fact.vars = vars_of(fact.condition);
                 fact.vars_built = true;
             }
-            if (!fact.vars.intersects(used)) {
+            if (!(fact.vars.bloom & fresh) || !fact.vars.intersects(used)) {
                 continue;
             }
             taken_fact[i] = true;
             result.push_back(fact.condition);
+            next_fresh |= fact.vars.bloom & ~used.bloom;
             used.merge(fact.vars);
             changed = true;
         }
         for (size_t i = 0; i < cands.size(); i++) {
-            if (taken[i] || !candidate_vars(cands[i]).intersects(used)) {
+            if (taken[i]) {
+                continue;
+            }
+            const VarSet &vars = candidate_vars(cands[i]);
+            if (!(vars.bloom & fresh) || !vars.intersects(used)) {
                 continue;
             }
             taken[i] = true;
             result.push_back(candidate_expr(cands[i]));
-            used.merge(candidate_vars(cands[i]));
+            next_fresh |= vars.bloom & ~used.bloom;
+            used.merge(vars);
             changed = true;
         }
+        fresh = next_fresh;
     }
     return result;
 }
