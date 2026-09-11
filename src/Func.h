@@ -794,6 +794,8 @@ class Func {
      * creating it (and freezing the Func) if necessary. */
     Pipeline pipeline();
 
+    friend class ProfilerScope;
+
     // Helper function for recursive reordering support
     Func &reorder_storage(const std::vector<Var> &dims, size_t start);
 

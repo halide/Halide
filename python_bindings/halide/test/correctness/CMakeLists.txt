@@ -24,6 +24,7 @@ set(tests
     memoize.py
     multi_method_module_test.py
     multipass_constraints.py
+    profiler_scope.py
     pystub.py
     rdom.py
     realize_warnings.py
