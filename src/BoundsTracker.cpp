@@ -112,7 +112,9 @@ BoundsTracker::FactGuard BoundsTracker::push_fact(const Expr &condition) {
 void BoundsTracker::pop_entry() {
     internal_assert(!entries.empty());
     if (realized == entries.size()) {
-        scope.pop(entries.back().name);
+        if (entries.back().in_scope) {
+            scope.pop(entries.back().name);
+        }
         realized--;
     }
     if (candidates_built == entries.size()) {
@@ -173,7 +175,16 @@ void BoundsTracker::realize_all() const {
     for (; realized < entries.size(); realized++) {
         Entry &entry = entries[realized];
         entry.bounds = bounds_of(entry);
-        scope.push(entry.name, entry.bounds);
+        // A binding that bounds nothing reads the same as no binding at all:
+        // a lookup that misses falls back to the bounds of the type, which
+        // is what an unbounded interval would have narrowed it to anyway. So
+        // it is only worth a slot when there is an enclosing binding of the
+        // same name for it to hide. Most names are unique by this point, so
+        // this keeps the scope down to the bindings that say something.
+        entry.in_scope = !entry.bounds.is_everything() || scope.contains(entry.name);
+        if (entry.in_scope) {
+            scope.push(entry.name, entry.bounds);
+        }
     }
 }
 

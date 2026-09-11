@@ -249,6 +249,10 @@ private:
             Impure
         };
         mutable Purity purity = Purity::Unknown;
+        /** Whether this entry has a binding of its own in `scope`. An entry
+         * that bounds nothing only needs one to hide an enclosing binding of
+         * the same name. */
+        mutable bool in_scope = false;
         /** For a Loop entry, the two conditions its range implies and the
          * variables they mention between them. Built on first use; an
          * entry's range never changes, so this outlives any number of
