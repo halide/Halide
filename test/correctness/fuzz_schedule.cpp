@@ -45,8 +45,8 @@ int main(int argc, char **argv) {
         local_sum(x, y) += input(x + r.x, y + r.y);
         blurry(x, y) = cast<int32_t>(local_sum(x, y) / 25);
         Var yo("yo"), yi("yi"), xo("xo"), xi("xi"), yo_x_f("yo_x_f"), yo_x_fo("yo_x_fo"), yo_x_fi("yo_x_fi");
-        blurry.split(y, yo, yi, 2, TailStrategy::RoundUp).fuse(yo, x, yo_x_f).vectorize(yi).split(yo_x_f, yo_x_fo, yo_x_fi, 2, TailStrategy::Predicate).reorder(yo_x_fo, yo_x_fi, yi);
-        input.split(y, yo, yi, 2, TailStrategy::PredicateStores).fuse(yo, x, yo_x_f).vectorize(yi).split(yo_x_f, yo_x_fo, yo_x_fi, 2, TailStrategy::Predicate).reorder(yo_x_fo, yo_x_fi, yi);
+        blurry.split(y, yo, yi, 2, TailStrategy::RoundUp).fuse(yo, x, yo_x_f).vectorize(yi).split(yo_x_f, yo_x_fo, yo_x_fi, 2, TailStrategy::GuardWithIf).reorder(yo_x_fo, yo_x_fi, yi);
+        input.split(y, yo, yi, 2, TailStrategy::PredicateStores).fuse(yo, x, yo_x_f).vectorize(yi).split(yo_x_f, yo_x_fo, yo_x_fi, 2, TailStrategy::GuardWithIf).reorder(yo_x_fo, yo_x_fi, yi);
         blurry.store_root();
         input.compute_at(blurry, yi);
         Pipeline p({blurry});
@@ -194,7 +194,7 @@ int main(int argc, char **argv) {
         local_sum(x, y) = 0;
         local_sum(x, y) += input(x + r.x, y + r.y);
         blurry(x, y) = cast<int32_t>(local_sum(x, y) / 25);
-        local_sum.split(y, yi, yo, 2, TailStrategy::GuardWithIf).split(x, xi, xo, 5, TailStrategy::Predicate).fuse(yo, xi, yofxi).split(yofxi, yofxio, yofxii, 8, TailStrategy::ShiftInwards).fuse(yofxii, yi, yofxiifyi).split(yofxio, yofxioo, yofxioi, 5, TailStrategy::ShiftInwards).vectorize(yofxiifyi).vectorize(yofxioi);
+        local_sum.split(y, yi, yo, 2, TailStrategy::GuardWithIf).split(x, xi, xo, 5, TailStrategy::GuardWithIf).fuse(yo, xi, yofxi).split(yofxi, yofxio, yofxii, 8, TailStrategy::ShiftInwards).fuse(yofxii, yi, yofxiifyi).split(yofxio, yofxioo, yofxioi, 5, TailStrategy::ShiftInwards).vectorize(yofxiifyi).vectorize(yofxioi);
         local_sum.update(0).unscheduled();
         blurry.split(x, xo, xi, 5, TailStrategy::Auto);
         Pipeline p({blurry});

@@ -51,14 +51,9 @@ enum class TailStrategy {
      * case to handle the if statement. */
     GuardWithIf,
 
-    /** Guard the loads and stores in the loop with an if statement
-     * that prevents evaluation beyond the original extent. Always
-     * legal. The if statement is treated like a boundary condition,
-     * and factored out into a loop epilogue if possible.
-     * Pros: no redundant re-evaluation; does not constrain input or
-     * output sizes. Cons: increases code size due to separate
-     * tail-case handling. */
-    Predicate,
+    /** Identical to GuardWithIf. Kept only for backwards
+     * compatibility; use GuardWithIf instead. */
+    Predicate [[deprecated("Use TailStrategy::GuardWithIf instead. TailStrategy::Predicate is identical to it and will be removed in a future release.")]] = GuardWithIf,
 
     /** Guard the loads in the loop with an if statement that
      * prevents evaluation beyond the original extent. Only legal
