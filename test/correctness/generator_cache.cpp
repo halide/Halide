@@ -51,7 +51,16 @@ int generate_one(const std::string &outdir, const std::string &offset) {
     args.targets = {get_host_target()};
     args.generator_name = "cache_add";
     args.generator_params = {{"offset", offset}};
-    Internal::execute_generator(args);
+#ifdef HALIDE_WITH_EXCEPTIONS
+    try {
+#endif
+        Internal::execute_generator(args);
+#ifdef HALIDE_WITH_EXCEPTIONS
+    } catch (const CompileError &e) {
+        std::cerr << e.what();
+        return 1;
+    }
+#endif
     return 0;
 }
 
