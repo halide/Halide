@@ -261,7 +261,7 @@ public:
         const int vector_size = natural_vector_size<uint8_t>();
 
         output_.compute_root()
-            .vectorize(c, vector_size, TailStrategy::Predicate);
+            .vectorize(c, vector_size, TailStrategy::GuardWithIf);
 
         output_.specialize(factor_ == 8);
         // In this case, we should be reading scalars and broadcasting them.

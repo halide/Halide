@@ -345,7 +345,9 @@ TailStrategy Deserializer::deserialize_tail_strategy(Serialize::TailStrategy tai
     case Serialize::TailStrategy::GuardWithIf:
         return TailStrategy::GuardWithIf;
     case Serialize::TailStrategy::Predicate:
-        return TailStrategy::Predicate;
+        // Predicate is deprecated and identical to GuardWithIf; old
+        // serialized pipelines that used it deserialize to GuardWithIf.
+        return TailStrategy::GuardWithIf;
     case Serialize::TailStrategy::PredicateLoads:
         return TailStrategy::PredicateLoads;
     case Serialize::TailStrategy::PredicateStores:
