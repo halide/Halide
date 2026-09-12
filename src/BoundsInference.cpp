@@ -11,6 +11,7 @@
 #include "Qualify.h"
 #include "Scope.h"
 #include "Simplify.h"
+#include "Substitute.h"
 
 #include <algorithm>
 #include <iterator>
@@ -144,6 +145,22 @@ size_t find_fused_group_index(const Function &producing_func,
     return iter - fused_groups.begin();
 }
 
+Box substitute_in_box(const map<string, Expr> &replacements, const Box &b) {
+    Box result = b;
+    for (size_t i = 0; i < result.size(); i++) {
+        if (result[i].min.defined()) {
+            result[i].min = substitute(replacements, result[i].min);
+        }
+        if (result[i].max.defined()) {
+            result[i].max = substitute(replacements, result[i].max);
+        }
+    }
+    if (result.used.defined()) {
+        result.used = substitute(replacements, result.used);
+    }
+    return result;
+}
+
 // Determine if the current producing stage is fused with other
 // stage (i.e. the consumer stage) at dimension 'var'.
 bool is_fused_with_others(const vector<vector<Function>> &fused_groups,
@@ -213,12 +230,27 @@ public:
         }
     };
 
+    // The region required of one Func by one stage of one of its consumers,
+    // in two equivalent-but-not-interchangeable forms.
+    struct RequiredRegion {
+        // Phrased in terms of the consumer stage's own bound variables
+        // (c.sK.x.min/.max). Correct at any loop level.
+        Box per_stage;
+
+        // The same region with the consumer's always-pure dimensions phrased
+        // in terms of its *last* stage's bound variables instead. Only
+        // correct at loop levels where every stage of the consumer has its
+        // bounds defined, because that's what makes the two alias each other
+        // (see define_bounds). Empty when the rewrite would change nothing.
+        Box canonical;
+    };
+
     struct Stage {
         Function func;
         size_t stage;  // 0 is the pure definition, 1 is the first update
         string name;
         vector<int> consumers;
-        map<pair<string, int>, Box> bounds;
+        map<pair<string, int>, RequiredRegion> bounds;
         vector<CondValue> exprs;
         set<ReductionVariable, ReductionVariable::Compare> rvars;
         string stage_prefix;
@@ -230,6 +262,12 @@ public:
         // update definition. Shared by every Stage of the same Func, and
         // computed once by compute_always_pure_dims() below.
         vector<bool> always_pure_dims;
+
+        // The last stage's bound variables for each always-pure dimension.
+        // These Exprs are built once and shared by every Stage of the same
+        // Func, so that when they end up in several stages' boxes,
+        // merge_boxes' same_as fast path fires and the merge is free.
+        vector<Expr> last_stage_min, last_stage_max;
 
         // Computed expressions on the left and right-hand sides.
         // Note that a function definition might have different LHS or reduction domain
@@ -399,6 +437,36 @@ public:
                     }
                 }
             }
+
+            const string last_stage =
+                func.name() + ".s" + std::to_string(func.updates().size()) + ".";
+            last_stage_min.resize(func_args.size());
+            last_stage_max.resize(func_args.size());
+            for (size_t j = 0; j < func_args.size(); j++) {
+                if (always_pure_dims[j]) {
+                    last_stage_min[j] = Variable::make(Int(32), last_stage + func_args[j] + ".min");
+                    last_stage_max[j] = Variable::make(Int(32), last_stage + func_args[j] + ".max");
+                }
+            }
+        }
+
+        // The substitution that rewrites this stage's bound variables for the
+        // always-pure dimensions into those of the Func's last stage. Empty if
+        // this *is* the last stage, or if no dimension is always pure.
+        map<string, Expr> pure_dim_aliases() const {
+            map<string, Expr> aliases;
+            if (stage >= func.updates().size()) {
+                return aliases;
+            }
+            const vector<string> func_args = func.args();
+            const string prefix = name + ".s" + std::to_string(stage) + ".";
+            for (size_t j = 0; j < func_args.size(); j++) {
+                if (always_pure_dims[j]) {
+                    aliases[prefix + func_args[j] + ".min"] = last_stage_min[j];
+                    aliases[prefix + func_args[j] + ".max"] = last_stage_max[j];
+                }
+            }
+            return aliases;
         }
 
         // Wrap a statement in let stmts defining the box
@@ -422,16 +490,38 @@ public:
             size_t last_dot = loop_level.rfind('.');
             string var = loop_level.substr(last_dot + 1);
 
-            for (const pair<const pair<string, int>, Box> &i : bounds) {
+            // Whether the stage we're producing has any fused partners at all.
+            // If it doesn't, no consumer can be fused with it, and we can skip
+            // the per-entry test below.
+            const bool maybe_fused =
+                producing_func.get_contents().defined() &&
+                !producing_func.has_extern_definition() &&
+                !fused_pairs_in_groups[find_fused_group_index(producing_func, fused_groups)].empty();
+
+            for (const pair<const pair<string, int>, RequiredRegion> &i : bounds) {
                 string func_name = i.first.first;
                 int func_stage_index = i.first.second;
                 string stage_name = func_name + ".s" + std::to_string(func_stage_index);
-                if (stage_name == producing_stage_index ||
-                    inner_productions.count(func_name) ||
-                    is_fused_with_others(fused_groups, fused_pairs_in_groups,
-                                         producing_func, producing_stage_index_index,
-                                         func_name, func_stage_index, var)) {
-                    merge_boxes(b, i.second);
+
+                // A consumer stage that owns the loop nest we're in, or that
+                // shares it by fusion, has had only its *own* bound variables
+                // narrowed to the current iteration, so we have to use its
+                // per-stage box. Any other relevant consumer is produced
+                // further in, which means every one of its stages has its
+                // bounds defined at this loop level, and the always-pure
+                // dimensions of all of them alias the last stage's. There the
+                // canonical box says the same thing in fewer terms.
+                const bool owns_loop_nest =
+                    stage_name == producing_stage_index ||
+                    (maybe_fused &&
+                     is_fused_with_others(fused_groups, fused_pairs_in_groups,
+                                          producing_func, producing_stage_index_index,
+                                          func_name, func_stage_index, var));
+
+                if (owns_loop_nest) {
+                    merge_boxes(b, i.second.per_stage);
+                } else if (inner_productions.count(func_name)) {
+                    merge_boxes(b, i.second.canonical.empty() ? i.second.per_stage : i.second.canonical);
                 }
             }
 
@@ -785,17 +875,14 @@ public:
         // We need to take into account specializations which may refer to
         // different reduction variables as well.
         void populate_scope(Scope<Interval> &result) {
-            const vector<string> func_args = func.args();
-            for (size_t i = 0; i < func_args.size(); i++) {
-                const string &farg = func_args[i];
-                // If a dimension is pure in every stage, all stages share a
-                // single bound (that of the last stage), so key the required
-                // region off the last stage's bound variables. This keeps the
-                // per-stage boxes structurally identical in this dimension, so
-                // they collapse when merged rather than growing one term per
-                // stage.
-                size_t bound_stage = always_pure_dims[i] ? func.updates().size() : stage;
-                string arg = name + ".s" + std::to_string(bound_stage) + "." + farg;
+            for (const string &farg : func.args()) {
+                // Must be this stage's own bound variables: they're the ones
+                // narrowed to the current iteration as we descend this stage's
+                // loop nest. The bounds of a dimension that is pure in every
+                // stage still collapse across stages on merge, but that
+                // happens in define_bounds, which knows what loop level it is
+                // at. See RequiredRegion.
+                string arg = name + ".s" + std::to_string(stage) + "." + farg;
                 result.push(farg,
                             Interval(Variable::make(Int(32), arg + ".min"),
                                      Variable::make(Int(32), arg + ".max")));
@@ -948,6 +1035,22 @@ public:
                 }
             }
 
+            // A dimension that is pure in every stage of this consumer has a
+            // single bound shared by all of them, so phrase those dimensions
+            // in terms of the last stage's bound variables as well. Doing it
+            // once here, per consumer stage, means every stage's box is
+            // structurally identical in those dimensions (and shares the very
+            // same Exprs), so they collapse when merged instead of growing one
+            // term per stage. Only define_bounds knows whether this form is
+            // usable at a given loop level, so keep both.
+            const map<string, Expr> pure_aliases = consumer.pure_dim_aliases();
+            map<string, Box> canonical_boxes;
+            if (!pure_aliases.empty()) {
+                for (const auto &p : boxes) {
+                    canonical_boxes.emplace(p.first, substitute_in_box(pure_aliases, p.second));
+                }
+            }
+
             // Expand the bounds required of all the producers found
             // (and we are checking until i, because stages are topologically sorted).
             for (size_t j = 0; j < i; j++) {
@@ -984,7 +1087,11 @@ public:
                     debug(0) << "\n";
                     */
 
-                    producer.bounds[{consumer.name, consumer.stage}] = b;
+                    RequiredRegion &required = producer.bounds[{consumer.name, consumer.stage}];
+                    required.per_stage = b;
+                    if (!canonical_boxes.empty()) {
+                        required.canonical = canonical_boxes[producer.func.name()];
+                    }
                     producer.consumers.push_back((int)i);
                 }
             }
@@ -1020,7 +1127,7 @@ public:
                 if (!s.func.same_as(output)) {
                     continue;
                 }
-                s.bounds[{s.name, s.stage}] = output_box;
+                s.bounds[{s.name, s.stage}].per_stage = output_box;
             }
         }
     }
