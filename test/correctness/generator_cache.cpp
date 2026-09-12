@@ -51,7 +51,16 @@ int generate_one(const std::string &outdir, const std::string &offset) {
     args.targets = {get_host_target()};
     args.generator_name = "cache_add";
     args.generator_params = {{"offset", offset}};
-    Internal::execute_generator(args);
+#ifdef HALIDE_WITH_EXCEPTIONS
+    try {
+#endif
+        Internal::execute_generator(args);
+#ifdef HALIDE_WITH_EXCEPTIONS
+    } catch (const CompileError &e) {
+        std::cerr << e.what();
+        return 1;
+    }
+#endif
     return 0;
 }
 
@@ -161,6 +170,25 @@ int main(int argc, char **argv) {
     const fs::path obj_c = run("c", "2");
     check(read_all(obj_c) != sentinel);
     check(read_all(obj_c) != real_obj);
+
+    // A complete cache entry is not a hit if its output cannot be replaced.
+    // A nonempty directory blocks both rename and copy on every platform,
+    // including when the test runs with permission to write read-only files.
+    const fs::path blocked_dir = tmp / "blocked";
+    const fs::path blocked_obj = blocked_dir / ("cache_add" + obj_ext);
+    fs::create_directories(blocked_obj);
+    { std::ofstream marker(blocked_obj / "keep"); }
+    const int blocked_status = Internal::run_process(
+        {self, "--gen", blocked_dir.string(), "2"});
+    check(blocked_status != 0);
+    check(fs::exists(blocked_obj / "keep"));
+    check(!fs::exists(blocked_obj.string() + ".hlcache.tmp"));
+    check(!fs::exists((blocked_dir / "cache_add.h").string() + ".hlcache.tmp"));
+
+    // Once the obstruction is removed, the cached implementation restores.
+    fs::remove_all(blocked_obj);
+    check(Internal::run_process({self, "--gen", blocked_dir.string(), "2"}) == 0);
+    check(read_all(blocked_obj) == read_all(obj_c));
 
     // 4. Corrupt every cache entry (drop manifests): the next offset=1 run must
     //    treat the entry as a miss and recompile the real object.
