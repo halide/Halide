@@ -53,8 +53,30 @@ protected:
                 rewrite(min(x, y) - max(x, z), min(min(x, y) - max(x, z), 0)) ||
                 rewrite(max(x, y) - min(x, z), max(max(x, y) - min(x, z), 0)) ||
 
+                //   min(x + c0, y) - max(x, z)
+                // = min(x, y - c0) - max(x, z) + c0
+                // = min(min(x, y - c0) - max(x, z), 0) + c0
+                // = min(min(x, y - c0) - max(x, z) + c0, c0)
+                // = min(min(x + c0, y) - max(x, z), c0)
+                rewrite(min(x + c0, y) - max(x, z), min(min(x, y) - max(x, z), c0)) ||
+
                 rewrite(min(x + c0, y) - select(z, min(x, y) + c1, x), select(z, (max(min(y - x, c0), 0) - c1), min(y - x, c0)), c0 > 0) ||
                 rewrite(min(y, x + c0) - select(z, min(y, x) + c1, x), select(z, (max(min(y - x, c0), 0) - c1), min(y - x, c0)), c0 > 0) ||
+
+                // Sink a correlated term that solve_expression has pulled
+                // leftmost inside a min/max into the other side, so that it
+                // cancels. Doing it here rather than leaving it to the
+                // simplifier matters: the simplifier may first collect the
+                // term into a product with an unrelated one, after which it
+                // is no longer syntactically available to cancel.
+                rewrite(min(x + y, z) - x, min(y, z - x)) ||
+                rewrite(min(y + x, z) - x, min(y, z - x)) ||
+                rewrite(min(z, x + y) - x, min(y, z - x)) ||
+                rewrite(min(z, y + x) - x, min(y, z - x)) ||
+                rewrite(max(x + y, z) - x, max(y, z - x)) ||
+                rewrite(max(y + x, z) - x, max(y, z - x)) ||
+                rewrite(max(z, x + y) - x, max(y, z - x)) ||
+                rewrite(max(z, y + x) - x, max(y, z - x)) ||
 
                 false) {
                 return rewrite.result;

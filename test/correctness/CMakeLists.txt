@@ -345,6 +345,13 @@ tests(
     specialize_to_gpu.cpp
     specialize_trim_condition.cpp
     spirv_ir.cpp
+    split_aligned.cpp
+    split_aligned_2d.cpp
+    split_aligned_2d_3x3.cpp
+    split_aligned_mux_phase.cpp
+    split_aligned_nested.cpp
+    split_aligned_partition.cpp
+    split_aligned_reduction.cpp
     split_by_non_factor.cpp
     split_factor_type.cpp
     split_fuse_rvar.cpp
@@ -487,6 +494,10 @@ tests(
     random.cpp
     reorder_rvars.cpp
     rfactor.cpp
+    rfactor_split_aligned.cpp
+    rfactor_split_aligned_2d.cpp
+    rfactor_split_aligned_nested.cpp
+    rfactor_split_aligned_phases.cpp
     ring_buffer.cpp
     stream_compaction.cpp
     thread_safety.cpp
