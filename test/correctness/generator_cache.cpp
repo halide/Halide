@@ -44,11 +44,12 @@ public:
 
 // Run one generation into `outdir` with the given offset. Used by the --gen
 // child process. HL_CACHE_DIR is inherited from the parent's environment.
-int generate_one(const std::string &outdir, const std::string &offset) {
+int generate_one(const std::string &outdir, const std::string &offset, bool coff = false) {
     Internal::ExecuteGeneratorArgs args;
     args.output_dir = outdir;
-    args.output_types = {OutputFileType::object, OutputFileType::c_header};
-    args.targets = {get_host_target()};
+    args.output_types = {coff ? OutputFileType::static_library : OutputFileType::object,
+                         OutputFileType::c_header};
+    args.targets = {coff ? Target("x86-64-windows-no_runtime") : get_host_target()};
     args.generator_name = "cache_add";
     args.generator_params = {{"offset", offset}};
     Internal::execute_generator(args);
@@ -109,6 +110,9 @@ int main(int argc, char **argv) {
     // Child mode: perform exactly one generation and exit.
     if (argc == 4 && std::string(argv[1]) == "--gen") {
         return generate_one(argv[2], argv[3]);
+    }
+    if (argc == 5 && std::string(argv[1]) == "--gen" && std::string(argv[4]) == "--coff") {
+        return generate_one(argv[2], argv[3], true);
     }
 
     const std::string self = fs::absolute(argv[0]).string();
@@ -171,6 +175,42 @@ int main(int argc, char **argv) {
     }
     const fs::path obj_d = run("d", "1");
     check(read_all(obj_d) == real_obj);
+
+    if (Target("x86-64-windows-no_runtime").supported()) {
+        // A failed fresh COFF archive write must not publish a cache entry.
+        const fs::path coff_cache = tmp / "coff-cache";
+        const fs::path coff_entries = coff_cache / "entries";
+        const fs::path coff_dir = tmp / "coff";
+        const fs::path archive = coff_dir / "cache_add.lib";
+        fs::create_directories(coff_cache);
+        fs::create_directories(archive);
+        { std::ofstream marker(archive / "keep"); }
+        set_cache_dir(coff_cache.string());
+        const std::vector<std::string> command = {self, "--gen", coff_dir.string(), "1", "--coff"};
+        check(Internal::run_process(command) != 0);
+        check(fs::exists(archive / "keep"));
+        if (fs::exists(coff_entries)) {
+            for (const auto &entry : fs::recursive_directory_iterator(coff_entries)) {
+                check(entry.path().filename() != "manifest.txt");
+            }
+        }
+
+        fs::remove_all(archive);
+        check(Internal::run_process(command) == 0);
+        check(!read_all(archive).empty());
+
+        // Tampering with the published archive makes a normal hit observable.
+        const fs::path archive_blob = find_blob(coff_entries, OutputFileType::static_library);
+        check(!archive_blob.empty());
+        {
+            std::ofstream f(archive_blob, std::ios::binary | std::ios::trunc);
+            f.write((const char *)sentinel.data(), sentinel.size());
+        }
+        check(Internal::run_process(command) == 0);
+        check(read_all(archive) == sentinel);
+        check(Internal::run_process({self, "--gen", coff_dir.string(), "2", "--coff"}) == 0);
+        check(!read_all(archive).empty() && read_all(archive) != sentinel);
+    }
 
     fs::remove_all(tmp);
     std::cout << "Success!\n";
