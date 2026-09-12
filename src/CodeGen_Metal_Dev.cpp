@@ -142,6 +142,7 @@ protected:
         void visit(const Cast *op) override;
         void visit(const VectorReduce *op) override;
         void visit(const Atomic *op) override;
+        void visit(const AssertStmt *op) override;
         void visit(const FloatImm *op) override;
     };
 
@@ -593,6 +594,10 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Atomic *op) {
     // It might be possible to support atomic but this is not trivial.
     // Metal requires atomic data types to be wrapped in an atomic integer data type.
     user_assert(false) << "Atomic updates are not supported inside Metal kernels";
+}
+
+void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const AssertStmt *op) {
+    user_warning << "Ignoring assertion inside Metal kernel: " << op->condition << "\n";
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const FloatImm *op) {
