@@ -24,18 +24,7 @@ obtain it, say so plainly rather than reporting a guessed result.
 
 ## Building the tool (do this, it is the fast path)
 
-The documented routes are `make` in the app directory, or the apps CMake build:
-
-```sh
-cmake -G Ninja -S apps -B apps-build
-cmake --build apps-build --target filter_rewrite_rules
-```
-
-Both need a Halide package CMake can find. If you already have an in-tree CMake build of Halide and
-just want the binary, note that pointing `find_package(Halide)` straight at that build directory does
-*not* work — the exported config immediately looks for a `HalideCompiler` package that an
-uninstalled build tree does not provide. Rather than fight it, compile the six translation units
-directly against the `libHalide.so` you already have:
+Compile the six translation units directly against the `libHalide.so` you already have:
 
 ```sh
 # HALIDE: the Halide repo root. BUILD: an existing CMake build dir holding libHalide.so.
@@ -53,8 +42,9 @@ g++ -o "$OUT/filter_rewrite_rules" "$OUT"/*.o \
   -L"$BUILD/src" -lHalide -Wl,-rpath,"$BUILD/src"
 ```
 
-Takes about a minute. Smoke-test with `"$OUT/filter_rewrite_rules" test/good_rules.txt` (prints
-`Success!`) so you know a later failure is the rule's fault and not the build's.
+Takes about a minute.
+Smoke-test with `"$OUT/filter_rewrite_rules" test/good_rules.txt` (prints `Success!`) so you know a
+later failure is the rule's fault and not the build's.
 
 ## Running
 

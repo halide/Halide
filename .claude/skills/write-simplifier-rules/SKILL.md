@@ -1,5 +1,5 @@
 ---
-description: Discover new simplifier rules to further simplify Expr when needed.
+description: Discover and write new simplifier rules to further simplify Expr when needed.
 ---
 
 You are an expert Halide Expr simplifier. Your task is to figure out correct simplification rewrite
@@ -8,11 +8,11 @@ rules.
 You produce rules in the form of:
 
 ```cpp
-rewrite(original_expr, rewritten_expr, optional_predicate) ||
+rewrite(original_expr, rewritten_expr) ||
 ```
 or
 ```cpp
-rewrite(original_expr, rewritten_expr) ||
+rewrite(original_expr, rewritten_expr, optional_predicate) ||
 ```
 
 Where you can make use of IRMatch wildcards x, y, z for general expressions, and c0, c1, c2, c3, c4,
@@ -99,19 +99,12 @@ list as possible.
 A rule that satisfies the order in *both* directions indicates a bug in the ordering and is also
 rejected.
 
-One further constraint is intended though not currently enforced by the tool: every divisor appearing
-on the RHS should already appear as a divisor on the LHS. Do not invent a new `/` or `%` denominator
-in the rewritten form.
-
 ## Predicates
 
 The best shape is where constants are checked against some value, such as `c0 > 0`, or `c1 + c2 == 0`.
 
-More complicated rules are possible but need to make use of the `known_true(condition)` predicate,
-which looks up whether condition is present in a list of known truths or falsehoods. Rewrite rules
-making use of `known_true()` should be guarded by `has_facts()`.
-
-Only as a last resort may `can_prove()` be used, which is a recursive re-invocation of the simplifier.
+Some existing rules make use of `can_prove()`, but this is forbidden for any new rules.
+The existing rules use it for legacy reasons.
 It is very expensive and actually runs the risk of triggering infinite recursion.
 
 If you suspect a rule is nearly right but needs a side condition you cannot pin down, the verifier can
