@@ -29,6 +29,7 @@ set(tests
     realize_warnings.py
     runtime_prefixes.py
     serialization.py
+    struct_type.py
     target.py
     tuple_select.py
     type.py

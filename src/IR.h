@@ -890,6 +890,15 @@ struct Call : public ExprNode<Call> {
         strict_sub,
         // Convert a list of Exprs to a string
         stringify,
+        // Read one element of one field out of a struct-typed value.
+        // args = {struct value, field index as an IntImm, element index}.
+        // The field's name is resolved to its index eagerly; the element index
+        // is 0 for a scalar field.
+        struct_field_read,
+        // Construct a value of a struct type from its field elements, in
+        // declaration order, flattened element-by-element (an array field
+        // contributes array_extent args).
+        struct_pack,
         // Query properties of the compiled-for target (resolved at compile-time)
         target_arch_is,
         target_bits,
