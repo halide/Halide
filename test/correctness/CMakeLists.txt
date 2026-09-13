@@ -5,6 +5,8 @@ tests(
     SOURCES
     # keep-sorted start case=no
     align_bounds.cpp
+    approximate_by.cpp
+    approximation_components.cpp
     argmax.cpp
     arm_cpu_detect.cpp
     associativity.cpp
@@ -60,6 +62,7 @@ tests(
     compute_at_reordered_update_stage.cpp
     compute_at_split_rvar.cpp
     compute_inside_guard.cpp
+    compute_offline.cpp
     compute_with_in.cpp
     compute_with_inlined.cpp
     computed_index.cpp

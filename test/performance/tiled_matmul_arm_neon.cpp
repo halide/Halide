@@ -107,7 +107,7 @@ int main(int argc, char **argv) {
             // and Acc's own update collapses to one multiply per row,
             // Acc(i) = WtScale(i) * VecScale * Acc_wb(i). Acc_wb still accumulates
             // at Float(32) at this point.
-            Func Acc_wb = Acc.update().eager_inline(Wt, VecDq).hoist_invariants();
+            Func Acc_wb = Acc.update().eager_inline(Wt, VecDq).hoist_invariants()[0];
 
             // Second, factor Acc_wb's own (now scale-free) reduction by block.
             // Preserving ro turns it into a new dimension u of Acc_dot, so

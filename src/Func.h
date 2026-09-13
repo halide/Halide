@@ -60,6 +60,8 @@ struct VarOrRVar {
 
 class ImageParam;
 class FuncVec;
+class Approximation;
+struct ApproximationResult;
 
 namespace Internal {
 struct AssociativeOp;
@@ -257,6 +259,32 @@ public:
      * factor nor more than one outer term to split.
      */
     FuncVec hoist_invariants();
+
+    /** Multiply out products over sums in this update definition's increment,
+     * so that hoist_invariants() sees a flat sum of terms. Like rfactor(), this
+     * must be called on an update definition, and it rewrites that definition in
+     * place. Returns this Stage, so it can be chained.
+     *
+     * (a + b) * c becomes a * c + b * c, recursively. Subtraction is left alone.
+     *
+     * This is a schedule decision, not a normalization: whether it pays depends
+     * on what the terms turn out to contain. It pays when the sum hides operands
+     * with different loop-invariant factors, since each then reduces to a
+     * factor-free body of its own:
+     * \code
+     * f() += (d*q(r) + m) * (e*p(r));
+     * \endcode
+     * multiplies out to d*e * q(r)*p(r) + m*e * p(r), which hoist_invariants()
+     * turns into two factor-free accumulators. Left alone, the best it could do
+     * is hoist e and reduce over the sum.
+     *
+     * It costs an accumulator per distinct factor, so it is a pessimization when
+     * the terms share a factor that was already hoistable -- s * (r + 1) is
+     * better left as one accumulator with factor s than split into two.
+     *
+     * It is an error if there is no product over a sum to multiply out.
+     */
+    Stage &distribute();
 
     /** Schedule the iteration over this stage to be fused with another
      * stage 's' from outermost loop to a given LoopLevel. 'this' stage will
@@ -1530,6 +1558,18 @@ public:
     Func clone_in(const Func &f);
     Func clone_in(const std::vector<Func> &fs);
     //@}
+
+    /** Eagerly and destructively replace every call to this Func inside
+     * each Func in 'consumers' with a call to the round trip
+     * p.decode(p.encode(*this)) instead. The substitution happens
+     * immediately, the same way Func::rfactor() immediately rewrites a
+     * Func's definition, rather than being deferred to lowering the way
+     * Func::in() is -- see Approximation.h and doc/ApproximationDesign.md
+     * for the rationale. Because the substitution is eager, it can only
+     * rewrite Funcs that are already fully defined at the point of the
+     * call -- there is no "global" mode that also covers Funcs written
+     * later, unlike Func::in(). */
+    ApproximationResult approximate_by(Approximation &p, const std::vector<Func> &consumers);
 
     /** Declare that this function should be implemented by a call to
      * halide_buffer_copy with the given target device API. Asserts
