@@ -963,9 +963,9 @@ public:
                     }
                 }
 
+                // Dump out the region required of each stage for debugging.
                 debug(4) << [&] {
                     std::ostringstream s;
-                    // Dump out the region required of each stage for debugging.
                     s << "Box required of " << producer.name
                       << " stage " << producer.stage << ":\n"
                       << " by " << consumer.name
