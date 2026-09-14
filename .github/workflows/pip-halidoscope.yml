@@ -1,0 +1,109 @@
+name: Build Halidoscope wheels
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'tools/halidoscope/**'
+      - '.github/workflows/pip-halidoscope.yml'
+  push:
+    branches: [ main ]
+    paths:
+      - 'tools/halidoscope/**'
+      - '.github/workflows/pip-halidoscope.yml'
+
+concurrency:
+  group: '${{ github.workflow }}-${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# Halidoscope is a companion CLI/GUI packaged independently of Halide's own
+# Python wheels (halide, halide-bin, halide-runtime): it doesn't depend on
+# them, and this workflow doesn't participate in pip.yml's publish job. Its
+# version is kept in sync with Halide's release version via tbump (see
+# tool.tbump.file entries for tools/halidoscope/src-tauri/Cargo.toml et al.
+# in the top-level pyproject.toml), not via a per-commit dynamic version.
+jobs:
+  build:
+    name: Build wheel for ${{ matrix.platform_tag }}
+
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform_tag: manylinux_x86_64
+          - os: windows-latest
+            platform_tag: win_amd64
+          - os: macos-15-intel
+            platform_tag: macosx_x86_64
+          - os: macos-15
+            platform_tag: macosx_arm64
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Tauri's Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            build-essential \
+            libxdo-dev \
+            libssl-dev \
+            libsoup-3.0-dev \
+            xvfb
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+          package_json_file: tools/halidoscope/package.json
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: tools/halidoscope/pnpm-lock.yaml
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Build frontend
+        working-directory: tools/halidoscope
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Build wheel
+        working-directory: tools/halidoscope
+        run: uvx maturin build --release --out wheelhouse
+
+      - name: Smoke-test wheel
+        working-directory: tools/halidoscope
+        shell: bash
+        run: |
+          uv venv .smoke-test-venv
+          uv pip install --python .smoke-test-venv --no-index --find-links wheelhouse halidoscope
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            ./.smoke-test-venv/Scripts/halidoscope --version
+          elif [[ "${{ runner.os }}" == "Linux" ]]; then
+            # tauri::Builder::run() initializes tao's GTK-backed event loop
+            # before dispatching to any CLI subcommand, so even `--version`
+            # needs a display on Linux.
+            xvfb-run -a ./.smoke-test-venv/bin/halidoscope --version
+          else
+            ./.smoke-test-venv/bin/halidoscope --version
+          fi
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheels-halidoscope-${{ matrix.platform_tag }}
+          path: tools/halidoscope/wheelhouse/*.whl
