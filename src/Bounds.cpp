@@ -1857,6 +1857,13 @@ void merge_boxes(Box &a, const Box &b) {
                          (equal(a.used, !b.used) || equal(!a.used, b.used));
 
     for (size_t i = 0; i < a.size(); i++) {
+        if (b[i].is_empty()) {
+            continue;
+        }
+        if (a[i].is_empty()) {
+            a[i] = b[i];
+            continue;
+        }
         if (!a[i].min.same_as(b[i].min)) {
             if (a[i].has_lower_bound() && b[i].has_lower_bound()) {
                 if (a_maybe_unused && b_maybe_unused) {
