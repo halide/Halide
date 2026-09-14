@@ -561,7 +561,10 @@ IRPrinter::IRPrinter(ostream &s)
             int val = std::atoi(opt);
             use_colors = val != 0;
         } else {
-            use_colors = supports_ansi(stream);
+            // Respect NO_COLOR in addition to whether we're writing to a
+            // terminal, matching the profiler report's color gate.
+            const char *no_color = getenv("NO_COLOR");
+            use_colors = !(no_color && no_color[0]) && supports_ansi(stream);
         }
         if (use_colors) {
             ansi = true;
