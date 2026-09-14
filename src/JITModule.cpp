@@ -746,6 +746,36 @@ void merge_handlers(JITHandlers &base, const JITHandlers &addins) {
     if (addins.custom_cuda_get_stream) {
         base.custom_cuda_get_stream = addins.custom_cuda_get_stream;
     }
+    if (addins.custom_opencl_acquire_context) {
+        base.custom_opencl_acquire_context = addins.custom_opencl_acquire_context;
+    }
+    if (addins.custom_opencl_release_context) {
+        base.custom_opencl_release_context = addins.custom_opencl_release_context;
+    }
+    if (addins.custom_metal_acquire_context) {
+        base.custom_metal_acquire_context = addins.custom_metal_acquire_context;
+    }
+    if (addins.custom_metal_release_context) {
+        base.custom_metal_release_context = addins.custom_metal_release_context;
+    }
+    if (addins.custom_d3d12compute_acquire_context) {
+        base.custom_d3d12compute_acquire_context = addins.custom_d3d12compute_acquire_context;
+    }
+    if (addins.custom_d3d12compute_release_context) {
+        base.custom_d3d12compute_release_context = addins.custom_d3d12compute_release_context;
+    }
+    if (addins.custom_vulkan_acquire_context) {
+        base.custom_vulkan_acquire_context = addins.custom_vulkan_acquire_context;
+    }
+    if (addins.custom_vulkan_release_context) {
+        base.custom_vulkan_release_context = addins.custom_vulkan_release_context;
+    }
+    if (addins.custom_webgpu_acquire_context) {
+        base.custom_webgpu_acquire_context = addins.custom_webgpu_acquire_context;
+    }
+    if (addins.custom_webgpu_release_context) {
+        base.custom_webgpu_release_context = addins.custom_webgpu_release_context;
+    }
 }
 
 void print_handler(JITUserContext *context, const char *msg) {
@@ -839,6 +869,93 @@ int cuda_get_stream_handler(JITUserContext *context, void *cuda_context, void **
         return context->handlers.custom_cuda_get_stream(context, cuda_context, cuda_stream_ptr);
     } else {
         return active_handlers.custom_cuda_get_stream(context, cuda_context, cuda_stream_ptr);
+    }
+}
+
+int opencl_acquire_context_handler(JITUserContext *context, void **cl_context_ptr, void **cl_command_queue_ptr, bool create) {
+    if (context && context->handlers.custom_opencl_acquire_context) {
+        return context->handlers.custom_opencl_acquire_context(context, cl_context_ptr, cl_command_queue_ptr, create);
+    } else {
+        return active_handlers.custom_opencl_acquire_context(context, cl_context_ptr, cl_command_queue_ptr, create);
+    }
+}
+
+int opencl_release_context_handler(JITUserContext *context) {
+    if (context && context->handlers.custom_opencl_release_context) {
+        return context->handlers.custom_opencl_release_context(context);
+    } else {
+        return active_handlers.custom_opencl_release_context(context);
+    }
+}
+
+int metal_acquire_context_handler(JITUserContext *context, void **metal_device_ptr, void **metal_command_queue_ptr, bool create) {
+    if (context && context->handlers.custom_metal_acquire_context) {
+        return context->handlers.custom_metal_acquire_context(context, metal_device_ptr, metal_command_queue_ptr, create);
+    } else {
+        return active_handlers.custom_metal_acquire_context(context, metal_device_ptr, metal_command_queue_ptr, create);
+    }
+}
+
+int metal_release_context_handler(JITUserContext *context) {
+    if (context && context->handlers.custom_metal_release_context) {
+        return context->handlers.custom_metal_release_context(context);
+    } else {
+        return active_handlers.custom_metal_release_context(context);
+    }
+}
+
+int d3d12compute_acquire_context_handler(JITUserContext *context, void **d3d12_device_ptr, void **d3d12_command_queue_ptr, bool create) {
+    if (context && context->handlers.custom_d3d12compute_acquire_context) {
+        return context->handlers.custom_d3d12compute_acquire_context(context, d3d12_device_ptr, d3d12_command_queue_ptr, create);
+    } else {
+        return active_handlers.custom_d3d12compute_acquire_context(context, d3d12_device_ptr, d3d12_command_queue_ptr, create);
+    }
+}
+
+int d3d12compute_release_context_handler(JITUserContext *context) {
+    if (context && context->handlers.custom_d3d12compute_release_context) {
+        return context->handlers.custom_d3d12compute_release_context(context);
+    } else {
+        return active_handlers.custom_d3d12compute_release_context(context);
+    }
+}
+
+int vulkan_acquire_context_handler(JITUserContext *context, void **allocator_ptr, void **instance_ptr, void **device_ptr,
+                                   void **physical_device_ptr, void **queue_ptr, uint32_t *queue_family_index_ptr,
+                                   void **messenger_ptr, bool create) {
+    if (context && context->handlers.custom_vulkan_acquire_context) {
+        return context->handlers.custom_vulkan_acquire_context(context, allocator_ptr, instance_ptr, device_ptr,
+                                                               physical_device_ptr, queue_ptr, queue_family_index_ptr,
+                                                               messenger_ptr, create);
+    } else {
+        return active_handlers.custom_vulkan_acquire_context(context, allocator_ptr, instance_ptr, device_ptr,
+                                                             physical_device_ptr, queue_ptr, queue_family_index_ptr,
+                                                             messenger_ptr, create);
+    }
+}
+
+int vulkan_release_context_handler(JITUserContext *context, void *instance, void *device, void *queue, uint64_t messenger) {
+    if (context && context->handlers.custom_vulkan_release_context) {
+        return context->handlers.custom_vulkan_release_context(context, instance, device, queue, messenger);
+    } else {
+        return active_handlers.custom_vulkan_release_context(context, instance, device, queue, messenger);
+    }
+}
+
+int webgpu_acquire_context_handler(JITUserContext *context, void **instance_ptr, void **adapter_ptr,
+                                   void **device_ptr, void **staging_buffer_ptr, bool create) {
+    if (context && context->handlers.custom_webgpu_acquire_context) {
+        return context->handlers.custom_webgpu_acquire_context(context, instance_ptr, adapter_ptr, device_ptr, staging_buffer_ptr, create);
+    } else {
+        return active_handlers.custom_webgpu_acquire_context(context, instance_ptr, adapter_ptr, device_ptr, staging_buffer_ptr, create);
+    }
+}
+
+int webgpu_release_context_handler(JITUserContext *context) {
+    if (context && context->handlers.custom_webgpu_release_context) {
+        return context->handlers.custom_webgpu_release_context(context);
+    } else {
+        return active_handlers.custom_webgpu_release_context(context);
     }
 }
 
@@ -1105,6 +1222,102 @@ JITModule &make_module(llvm::Module *for_module, Target target,
                 } else {
                     // The CUDA module has already been created.
                     runtime.add_dependency(shared_runtimes(CUDA));
+                }
+            }
+
+            // The same reasoning as for CUDA above applies to each of
+            // the other GPU backends: the debug and non-debug modules
+            // share a single set of context management handlers, and
+            // whichever module is created second declares a dependency
+            // on the first so things are destroyed in the correct order.
+
+            if (runtime_kind == OpenCL || runtime_kind == OpenCLDebug) {
+                if (!runtime_internal_handlers.custom_opencl_acquire_context) {
+                    // Neither module has been created.
+                    runtime_internal_handlers.custom_opencl_acquire_context =
+                        hook_function(runtime.exports(), "halide_set_acquire_cl_context", opencl_acquire_context_handler);
+
+                    runtime_internal_handlers.custom_opencl_release_context =
+                        hook_function(runtime.exports(), "halide_set_release_cl_context", opencl_release_context_handler);
+
+                    active_handlers = runtime_internal_handlers;
+                    merge_handlers(active_handlers, default_handlers);
+                } else if (runtime_kind == OpenCL) {
+                    runtime.add_dependency(shared_runtimes(OpenCLDebug));
+                } else {
+                    runtime.add_dependency(shared_runtimes(OpenCL));
+                }
+            }
+
+            if (runtime_kind == Metal || runtime_kind == MetalDebug) {
+                if (!runtime_internal_handlers.custom_metal_acquire_context) {
+                    // Neither module has been created.
+                    runtime_internal_handlers.custom_metal_acquire_context =
+                        hook_function(runtime.exports(), "halide_set_metal_acquire_context", metal_acquire_context_handler);
+
+                    runtime_internal_handlers.custom_metal_release_context =
+                        hook_function(runtime.exports(), "halide_set_metal_release_context", metal_release_context_handler);
+
+                    active_handlers = runtime_internal_handlers;
+                    merge_handlers(active_handlers, default_handlers);
+                } else if (runtime_kind == Metal) {
+                    runtime.add_dependency(shared_runtimes(MetalDebug));
+                } else {
+                    runtime.add_dependency(shared_runtimes(Metal));
+                }
+            }
+
+            if (runtime_kind == D3D12Compute || runtime_kind == D3D12ComputeDebug) {
+                if (!runtime_internal_handlers.custom_d3d12compute_acquire_context) {
+                    // Neither module has been created.
+                    runtime_internal_handlers.custom_d3d12compute_acquire_context =
+                        hook_function(runtime.exports(), "halide_set_d3d12compute_acquire_context", d3d12compute_acquire_context_handler);
+
+                    runtime_internal_handlers.custom_d3d12compute_release_context =
+                        hook_function(runtime.exports(), "halide_set_d3d12compute_release_context", d3d12compute_release_context_handler);
+
+                    active_handlers = runtime_internal_handlers;
+                    merge_handlers(active_handlers, default_handlers);
+                } else if (runtime_kind == D3D12Compute) {
+                    runtime.add_dependency(shared_runtimes(D3D12ComputeDebug));
+                } else {
+                    runtime.add_dependency(shared_runtimes(D3D12Compute));
+                }
+            }
+
+            if (runtime_kind == Vulkan || runtime_kind == VulkanDebug) {
+                if (!runtime_internal_handlers.custom_vulkan_acquire_context) {
+                    // Neither module has been created.
+                    runtime_internal_handlers.custom_vulkan_acquire_context =
+                        hook_function(runtime.exports(), "halide_set_vulkan_acquire_context", vulkan_acquire_context_handler);
+
+                    runtime_internal_handlers.custom_vulkan_release_context =
+                        hook_function(runtime.exports(), "halide_set_vulkan_release_context", vulkan_release_context_handler);
+
+                    active_handlers = runtime_internal_handlers;
+                    merge_handlers(active_handlers, default_handlers);
+                } else if (runtime_kind == Vulkan) {
+                    runtime.add_dependency(shared_runtimes(VulkanDebug));
+                } else {
+                    runtime.add_dependency(shared_runtimes(Vulkan));
+                }
+            }
+
+            if (runtime_kind == WebGPU || runtime_kind == WebGPUDebug) {
+                if (!runtime_internal_handlers.custom_webgpu_acquire_context) {
+                    // Neither module has been created.
+                    runtime_internal_handlers.custom_webgpu_acquire_context =
+                        hook_function(runtime.exports(), "halide_set_webgpu_acquire_context", webgpu_acquire_context_handler);
+
+                    runtime_internal_handlers.custom_webgpu_release_context =
+                        hook_function(runtime.exports(), "halide_set_webgpu_release_context", webgpu_release_context_handler);
+
+                    active_handlers = runtime_internal_handlers;
+                    merge_handlers(active_handlers, default_handlers);
+                } else if (runtime_kind == WebGPU) {
+                    runtime.add_dependency(shared_runtimes(WebGPUDebug));
+                } else {
+                    runtime.add_dependency(shared_runtimes(WebGPU));
                 }
             }
         }
