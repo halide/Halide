@@ -834,12 +834,14 @@ public:
         }
 
         // Dump the stages post-inlining for debugging
-        /*
-        debug(0) << "Bounds inference stages after inlining: \n";
-        for (size_t i = 0; i < stages.size(); i++) {
-            debug(0) << " " << i << ") " << stages[i].name << "\n";
-        }
-        */
+        debug(4) << [&] {
+            std::ostringstream s;
+            s << "Bounds inference stages after inlining: \n";
+            for (size_t i = 0; i < stages.size(); i++) {
+                s << " " << i << ") " << stages[i].name << "\n";
+            }
+            return s.str();
+        }();
 
         // Then compute relationships between them.
         for (size_t i = 0; i < stages.size(); i++) {
@@ -961,18 +963,20 @@ public:
                     }
                 }
 
-                /*
-                // Dump out the region required of each stage for debugging.
-                debug(0) << "Box required of " << producer.name
-                         << " stage " << producer.stage << ":\n"
-                         << " by " << consumer.name
-                         << " stage " << consumer.stage << ":\n"
-                         << " used: " << b.used << "\n";
-                for (size_t k = 0; k < b.size(); k++) {
-                    debug(0) << "  " << b[k].min << " ... " << b[k].max << "\n";
-                }
-                debug(0) << "\n";
-                */
+                debug(4) << [&] {
+                    std::ostringstream s;
+                    // Dump out the region required of each stage for debugging.
+                    s << "Box required of " << producer.name
+                      << " stage " << producer.stage << ":\n"
+                      << " by " << consumer.name
+                      << " stage " << consumer.stage << ":\n"
+                      << " used: " << b.used << "\n";
+                    for (size_t k = 0; k < b.size(); k++) {
+                        s << "  " << b[k].min << " ... " << b[k].max << "\n";
+                    }
+                    s << "\n";
+                    return s.str();
+                }();
 
                 producer.bounds[{consumer.name, consumer.stage}] = std::move(b);
                 producer.consumers.push_back((int)i);
