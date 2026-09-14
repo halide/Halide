@@ -508,6 +508,15 @@ struct Bound {
     Expr modulus, remainder;
 };
 
+/** Merge \p b into \p bounds, keyed by \p b.var. Func::bound/bound_extent/
+ * align_bounds/align_extent each set one or more of a Var's four Bound
+ * fields (min, extent, modulus, remainder) and leave the rest undefined.
+ * A field that \p b doesn't set is left untouched on an existing entry for
+ * that Var; a field it does set overwrites whatever was there, so every
+ * consumer of FuncSchedule::bounds() sees at most one constraint per Var,
+ * with no ordering between calls left for them to get wrong. */
+void merge_bound(std::map<std::string, Bound> &bounds, const Bound &b);
+
 /** Properties of one axis of the storage of a Func */
 struct StorageDim {
     /** The var in the pure definition corresponding to this axis */
@@ -635,10 +644,11 @@ public:
 
     /** You may explicitly bound some of the dimensions of a function,
      * or constrain them to lie on multiples of a given factor. See
-     * \ref Func::bound and \ref Func::align_bounds and \ref Func::align_extent. */
+     * \ref Func::bound and \ref Func::align_bounds and \ref Func::align_extent.
+     * At most one Bound is kept per Var, keyed by its name. */
     // @{
-    const std::vector<Bound> &bounds() const;
-    std::vector<Bound> &bounds();
+    const std::map<std::string, Bound> &bounds() const;
+    std::map<std::string, Bound> &bounds();
     // @}
 
     /** You may explicitly specify an estimate of some of the function
