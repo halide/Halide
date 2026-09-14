@@ -1,0 +1,351 @@
+import {
+  getIncomers,
+  getOutgoers,
+  Handle,
+  NodeToolbar,
+  Position,
+  useEdges,
+  useNodes,
+  useViewport,
+  type Node,
+  type NodeProps,
+} from "@xyflow/react";
+import { clsx } from "clsx";
+import { useAtomValue, useSetAtom } from "jotai";
+import * as React from "react";
+
+import HandleCircle from "@/components/trace/canvas/HandleCircle";
+import { useTraceContext } from "@/hooks/trace";
+import { funcAtom } from "@/state/func";
+import { livenessAtom } from "@/state/liveness";
+import { infAtom, nanAtom } from "@/state/nan-inf";
+import { packetAtom } from "@/state/packet";
+import { renderAtom } from "@/state/render";
+import { tabularDataAtom } from "@/state/tabularData";
+import { threadAtom } from "@/state/thread";
+import type { FuncMeta } from "@/types/trace";
+import {
+  renderGrayscale,
+  renderLoadFrequency,
+  renderRedundantStores,
+  renderReuseDistance,
+  renderRgb,
+  renderStoreFrequency,
+  renderThread,
+  type RenderFuncParams,
+  type RenderFuncResponse,
+} from "@/utils/api";
+import { isEdgeLive, isFuncBufferLive } from "@/utils/liveness";
+
+function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
+  const { name, width, height, buffer_liveness, max_store_count } = data;
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const nanOverlayRef = React.useRef<HTMLCanvasElement>(null);
+  const infOverlayRef = React.useRef<HTMLCanvasElement>(null);
+
+  const { funcs } = useTraceContext();
+  const liveness = useAtomValue(livenessAtom);
+  const packetIndex = useAtomValue(packetAtom);
+  const render = useAtomValue(renderAtom);
+  const activeFunc = useAtomValue(funcAtom);
+  const setTabularData = useSetAtom(tabularDataAtom);
+  const nan = useAtomValue(nanAtom);
+  const inf = useAtomValue(infAtom);
+  const thread = useAtomValue(threadAtom);
+
+  const nodes = useNodes();
+  const edges = useEdges();
+
+  const active = activeFunc === name;
+  const bufferLive = React.useMemo(
+    () =>
+      liveness.active &&
+      liveness.mode === "realizations" &&
+      isFuncBufferLive(data, packetIndex),
+    [liveness, data, packetIndex],
+  );
+  const producing = React.useMemo(
+    () =>
+      liveness.active &&
+      liveness.mode === "produce-consume" &&
+      edges.some(
+        (edge) =>
+          edge.source === name &&
+          isEdgeLive(funcs, edge.source, edge.target, packetIndex),
+      ),
+    [liveness, edges, funcs, name, packetIndex],
+  );
+  const consuming = React.useMemo(
+    () =>
+      liveness.active &&
+      liveness.mode === "produce-consume" &&
+      edges.some(
+        (edge) =>
+          edge.target === name &&
+          isEdgeLive(funcs, edge.source, edge.target, packetIndex),
+      ),
+    [liveness, edges, funcs, name, packetIndex],
+  );
+
+  const incomingEdgeCount = React.useMemo(
+    () => getIncomers({ id: name }, nodes, edges).length,
+    [name, nodes, edges],
+  );
+  const outgoingEdgeCount = React.useMemo(
+    () => getOutgoers({ id: name }, nodes, edges).length,
+    [name, nodes, edges],
+  );
+
+  const { zoom } = useViewport();
+
+  // Track the playhead position as a ref to avoid re-rendering on every scrub.
+  const latestIndexRef = React.useRef(packetIndex);
+
+  // Track whether an active render is in progress.
+  const renderingRef = React.useRef(false);
+
+  // Cache render responses if we are outside of a Func's liveness range.
+  // In addition, add a useEffect call to invalidate the cache if any
+  // application state affecting the RenderFuncResponse changes.
+  const cachedPreLiveResultRef = React.useRef<RenderFuncResponse | null>(null);
+  const cachedPostLiveResultRef = React.useRef<RenderFuncResponse | null>(null);
+
+  React.useEffect(() => {
+    cachedPreLiveResultRef.current = null;
+    cachedPostLiveResultRef.current = null;
+  }, [render, nan, inf, thread, active]);
+
+  React.useEffect(() => {
+    latestIndexRef.current = packetIndex;
+
+    // Return early if we're actively writing a tensor.
+    if (renderingRef.current) {
+      return;
+    }
+
+    renderingRef.current = true;
+
+    async function draw() {
+      try {
+        // Funcs with no stores (pipeline inputs) never see a Begin/EndRealization
+        // pair, so `buffer_liveness` defaults to (0, 0) rather than a real teardown
+        // point — treat those as always live instead of "dead" past index 0.
+        const isRealized = max_store_count > 0;
+
+        while (true) {
+          const target = latestIndexRef.current;
+          const notYetLive = target < buffer_liveness.start;
+          const noLongerLive = isRealized && target > buffer_liveness.end;
+
+          let result: RenderFuncResponse;
+
+          if (notYetLive && cachedPreLiveResultRef.current) {
+            result = cachedPreLiveResultRef.current;
+          } else if (noLongerLive && cachedPostLiveResultRef.current) {
+            result = cachedPostLiveResultRef.current;
+          } else {
+            const params: RenderFuncParams = {
+              func: name,
+              globalIndex: target,
+              normalizationMode: render.normalizationMode,
+              width,
+              height,
+              includeTabularData: active,
+              includeNan: {
+                active: nan.active,
+                ...nan.color,
+              },
+              includeInf: {
+                active: inf.active,
+                ...inf.color,
+              },
+            };
+
+            switch (render.renderMode) {
+              case "Grayscale":
+                result = await renderGrayscale(params);
+                break;
+              case "RGB":
+                result = await renderRgb(params);
+                break;
+              case "Store Frequency":
+                result = await renderStoreFrequency(params);
+                break;
+              case "Load Frequency":
+                result = await renderLoadFrequency(params);
+                break;
+              case "Redundant Stores":
+                result = await renderRedundantStores(params);
+                break;
+              case "Reuse Distance":
+                result = await renderReuseDistance(params);
+                break;
+              case "Thread Coverage":
+                result = await renderThread({
+                  ...params,
+                  threadOpMode: thread.op,
+                  threadId: thread.id,
+                });
+                break;
+            }
+
+            // Cache the fetch if we fall outside the Func's buffer liveness range.
+            if (notYetLive) {
+              cachedPreLiveResultRef.current = result;
+            } else if (noLongerLive) {
+              cachedPostLiveResultRef.current = result;
+            }
+          }
+
+          const ctx = canvasRef.current?.getContext("2d");
+          if (ctx) {
+            ctx.putImageData(
+              new ImageData(result.tensorData, width, height),
+              0,
+              0,
+            );
+          }
+
+          const nanCtx = nanOverlayRef.current?.getContext("2d");
+          if (nanCtx && result.nanOverlayData) {
+            nanCtx.putImageData(
+              new ImageData(result.nanOverlayData, width, height),
+              0,
+              0,
+            );
+          }
+
+          const infCtx = infOverlayRef.current?.getContext("2d");
+          if (infCtx && result.infOverlayData) {
+            infCtx.putImageData(
+              new ImageData(result.infOverlayData, width, height),
+              0,
+              0,
+            );
+          }
+
+          // Update the histogram data for the currently active Func.
+          if (active) {
+            setTabularData((prev) => ({
+              ...prev,
+              tabularData: result.tabularData,
+            }));
+          }
+
+          if (latestIndexRef.current === target) {
+            break;
+          }
+        }
+      } catch (err) {
+        console.error(
+          `Failed to render ${name} at index ${latestIndexRef.current}: ${err}`,
+        );
+      } finally {
+        renderingRef.current = false;
+      }
+    }
+
+    draw();
+  }, [
+    active,
+    packetIndex,
+    name,
+    width,
+    height,
+    render,
+    activeFunc,
+    setTabularData,
+    thread,
+    nan,
+    inf,
+    buffer_liveness.start,
+    buffer_liveness.end,
+    max_store_count,
+  ]);
+
+  return (
+    <>
+      <NodeToolbar
+        isVisible
+        position={Position.Top}
+        align="start"
+        offset={2}
+        style={{ maxWidth: `${width * zoom}px` }}
+        className="truncate"
+      >
+        <span
+          className={clsx("text-ps-text-primary font-mono whitespace-nowrap", {
+            "text-tiny": zoom < 0.5,
+            "text-xs": zoom >= 0.5,
+          })}
+        >
+          {name}
+        </span>
+      </NodeToolbar>
+      <div
+        className={clsx("relative ring-transparent", {
+          "ring-oxide-yellow/30!": bufferLive,
+          "ring-oxide-green/30!": producing,
+          "ring-oxide-purple/30!": consuming,
+          "ring-4": zoom < 1,
+          "ring-2": zoom >= 1,
+        })}
+      >
+        <canvas
+          ref={canvasRef}
+          width={width}
+          height={height}
+          className={clsx("ring-transparent", {
+            "ring-oxide-yellow!": bufferLive,
+            "ring-oxide-green!": producing,
+            "ring-oxide-purple!": consuming,
+            "ring-2": zoom < 1,
+            "ring-1": zoom >= 1,
+          })}
+        />
+        <canvas
+          ref={nanOverlayRef}
+          width={width}
+          height={height}
+          className={clsx("absolute top-0 left-0", {
+            hidden: !nan.active,
+            "animate-blink": nan.active && nan.animationMode === "Blink",
+            "animate-pulse": nan.active && nan.animationMode === "Pulse",
+          })}
+        />
+        <canvas
+          ref={infOverlayRef}
+          width={width}
+          height={height}
+          className={clsx("absolute top-0 left-0", {
+            hidden: !inf.active,
+            "animate-blink": inf.active && inf.animationMode === "Blink",
+            "animate-pulse": inf.active && inf.animationMode === "Pulse",
+          })}
+        />
+      </div>
+      {incomingEdgeCount > 0 && edges.every((edge) => !edge.hidden) ? (
+        <Handle
+          type="target"
+          position={Position.Left}
+          className="bg-transparent"
+          style={{ border: "none" }}
+        >
+          <HandleCircle />
+        </Handle>
+      ) : null}
+      {outgoingEdgeCount > 0 && edges.every((edge) => !edge.hidden) ? (
+        <Handle
+          type="source"
+          position={Position.Right}
+          className="bg-transparent"
+          style={{ border: "none" }}
+        >
+          <HandleCircle />
+        </Handle>
+      ) : null}
+    </>
+  );
+}
+
+export default FuncNode;
