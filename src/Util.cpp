@@ -104,13 +104,9 @@ std::wstring from_utf8(const std::string &str) {
     return wstr;
 }
 
-// A path made of a temp dir plus a long, descriptive filename (e.g. one
-// per-subtarget object file name in compile_multitarget(), which embeds every
-// feature name) can exceed the legacy MAX_PATH (260 chars); DeleteFileW()/
-// RemoveDirectoryW() then silently fail (or fail with ERROR_FILE_NOT_FOUND/
-// ERROR_PATH_NOT_FOUND) even though nothing else has the file open. The
-// `\\?\` prefix opts out of that limit, but only for an absolute,
-// backslash-separated path, so convert both before prepending it.
+// Prepend \\?\ to the path if it's an absolute drive path and doesn't
+// already have it. This is needed for some Windows APIs that don't
+// support long paths otherwise.
 std::wstring to_long_path(const std::string &str) {
     std::wstring wstr = from_utf8(str);
     for (auto &c : wstr) {
@@ -355,8 +351,6 @@ void assert_no_file_exists(const std::string &name) {
 
 void file_unlink(const std::string &name) {
 #ifdef _MSC_VER
-    // DeleteFileW() (rather than _unlink(), which is subject to MAX_PATH)
-    // with the long-path form of the name -- see to_long_path()'s comment.
     DeleteFileW(to_long_path(name).c_str());
 #else
     ::unlink(name.c_str());
