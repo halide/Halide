@@ -410,12 +410,13 @@ def test_requirements():
     delta.set(1)
     p.realize([10])
 
-    with assert_throws(hl.HalideError, r"Requirement Failed: \(false\)"):
+    with assert_throws(hl.HalideError, r"Requirement Failed: \(\(delta != 0\)\)"):
         delta.set(0)
         p.realize([10])
 
     with assert_throws(
-        hl.HalideError, r"Requirement Failed: \(false\) negative values are bad -1"
+        hl.HalideError,
+        r"Requirement Failed: \(\(delta > 0\)\) negative values are bad -1",
     ):
         delta.set(-1)
         p.realize([10])

@@ -70,7 +70,7 @@ public:
 
 int predicated_tail_test(const Target &t) {
     int size = 73;
-    for (auto i : {TailStrategy::Predicate, TailStrategy::PredicateLoads, TailStrategy::PredicateStores}) {
+    for (auto i : {TailStrategy::GuardWithIf, TailStrategy::PredicateLoads, TailStrategy::PredicateStores}) {
         Var x("x"), y("y");
         Func f("f"), g("g");
 
@@ -120,7 +120,7 @@ int predicated_tail_with_scalar_test(const Target &t) {
     f(x, y) = x + g(0);
 
     g.compute_at(f, y);
-    f.vectorize(x, 32, TailStrategy::Predicate);
+    f.vectorize(x, 32, TailStrategy::GuardWithIf);
     if (t.has_feature(Target::HVX)) {
         f.hexagon();
     }
@@ -181,7 +181,7 @@ int vectorized_dense_load_with_stride_minus_one_test(const Target &t) {
 
     f(x, y) = select(x < 23, g(size - x, y) * 2 + g(20 - x, y), undef<int>());
 
-    f.vectorize(x, 32, TailStrategy::Predicate);
+    f.vectorize(x, 32, TailStrategy::GuardWithIf);
     if (t.has_feature(Target::HVX)) {
         f.hexagon();
     }
@@ -486,15 +486,6 @@ int predicated_atomic_store_test(const Target &t) {
 
 int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
-
-    // LLVM 21 calls getFixedValue() on scalable TypeSize objects in the
-    // AArch64 backend, triggering an assertion. Fixed in LLVM 22 by:
-    // https://github.com/llvm/llvm-project/commit/d1500d12be60 (PR #169764)
-    if (Internal::get_llvm_version() < 220 &&
-        t.has_feature(Target::SVE2)) {
-        printf("[SKIP] LLVM 21 has known getFixedValue() assertion failures on SVE scalable types.\n");
-        return 0;
-    }
 
     printf("Running vectorized dense load test\n");
     if (predicated_tail_test(t) != 0) {

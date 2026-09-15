@@ -71,12 +71,12 @@ void wgpuDeviceTick(WGPUDevice) {
 //   halide_webgpu_release_context. halide_webgpu_acquire_context should block
 //   while a previous call (if any) has not yet been released via
 //   halide_webgpu_release_context.
-WEAK int halide_webgpu_acquire_context(void *user_context,
-                                       WGPUInstance *instance_ret,
-                                       WGPUAdapter *adapter_ret,
-                                       WGPUDevice *device_ret,
-                                       WGPUBuffer *staging_buffer_ret,
-                                       bool create = true) {
+WEAK int halide_default_webgpu_acquire_context(void *user_context,
+                                               WGPUInstance *instance_ret,
+                                               WGPUAdapter *adapter_ret,
+                                               WGPUDevice *device_ret,
+                                               WGPUBuffer *staging_buffer_ret,
+                                               bool create = true) {
     debug(user_context)
         << "WGPU: halide_webgpu_acquire_context (user_context: " << user_context
         << ")\n";
@@ -104,9 +104,52 @@ WEAK int halide_webgpu_acquire_context(void *user_context,
     return halide_error_code_success;
 }
 
-WEAK int halide_webgpu_release_context(void *user_context) {
+WEAK int halide_default_webgpu_release_context(void *user_context) {
     __atomic_clear(&context_lock, __ATOMIC_RELEASE);
     return halide_error_code_success;
+}
+
+}  // extern "C" linkage
+
+namespace Halide {
+namespace Runtime {
+namespace Internal {
+namespace WebGPU {
+
+WEAK halide_webgpu_acquire_context_t acquire_context = (halide_webgpu_acquire_context_t)halide_default_webgpu_acquire_context;
+WEAK halide_webgpu_release_context_t release_context = (halide_webgpu_release_context_t)halide_default_webgpu_release_context;
+
+}  // namespace WebGPU
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
+
+extern "C" {
+
+WEAK int halide_webgpu_acquire_context(void *user_context,
+                                       WGPUInstance *instance_ret,
+                                       WGPUAdapter *adapter_ret,
+                                       WGPUDevice *device_ret,
+                                       WGPUBuffer *staging_buffer_ret,
+                                       bool create = true) {
+    return WebGPU::acquire_context(user_context, (void **)instance_ret, (void **)adapter_ret,
+                                   (void **)device_ret, (void **)staging_buffer_ret, create);
+}
+
+WEAK halide_webgpu_acquire_context_t halide_set_webgpu_acquire_context(halide_webgpu_acquire_context_t handler) {
+    halide_webgpu_acquire_context_t result = WebGPU::acquire_context;
+    WebGPU::acquire_context = handler;
+    return result;
+}
+
+WEAK int halide_webgpu_release_context(void *user_context) {
+    return WebGPU::release_context(user_context);
+}
+
+WEAK halide_webgpu_release_context_t halide_set_webgpu_release_context(halide_webgpu_release_context_t handler) {
+    halide_webgpu_release_context_t result = WebGPU::release_context;
+    WebGPU::release_context = handler;
+    return result;
 }
 
 }  // extern "C" linkage
