@@ -11,6 +11,7 @@
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "LowerParallelTasks.h"
+#include "LowerStructTypes.h"
 #include "Module.h"
 #include "Param.h"
 #include "Substitute.h"
@@ -764,7 +765,13 @@ class InjectHexagonRpc : public IRMutator {
 
         std::vector<LoweredFunc> closure_implementations;
         body = lower_parallel_tasks(body, closure_implementations, hex_name, device_code.target());
+        // Unlike the main pipeline (Lower.cpp), device_code's LoweredFuncs
+        // aren't otherwise passed through lower_struct_types(), so closures'
+        // struct type usage (see Closure::pack_into_struct/unpack_from_struct)
+        // generated just above needs to be lowered explicitly here.
+        body = lower_struct_types(body);
         for (auto &lowered_func : closure_implementations) {
+            lowered_func.body = lower_struct_types(lowered_func.body);
             device_code.append(lowered_func);
         }
 
@@ -863,33 +870,37 @@ class InjectHexagonRpc : public IRMutator {
         std::vector<Expr> arg_sizes;
         std::vector<Expr> arg_ptrs;
         std::vector<Expr> arg_flags;
+        std::vector<DynamicArray> pending_arrays;
+
+        // Buffers are passed to the hexagon host runtime as a pointer to a
+        // {device: uint64, host: void*} pair, corresponding to the
+        // 'hexagon_device_pointer' struct declared elsewhere (we don't use
+        // that struct here so as not to depend on the runtime header, but
+        // give it the same natural alignment/layout via StructLayout::Natural).
+        Type pseudo_buffer_t = Type::Struct({{"device", UInt(64)}, {"host", Handle()}}, StructLayout::Natural);
 
         for (const auto &i : c.buffers) {
-            // Buffers are passed to the hexagon host runtime as just device
-            // handles (uint64) and host (uint8*) fields. They correspond
-            // to the 'hexagon_device_pointer' struct declared elsewhere;
-            // we don't use that struct here because it's simple enough that
-            // just using `make_struct`() for it is simpler.
+            Expr device, host;
             if (i.first != scalars_buffer_name) {
                 // If this isn't the scalars buffer, assume it has a '.buffer'
                 // description in the IR.
                 Expr buf = Variable::make(type_of<halide_buffer_t *>(), i.first + ".buffer");
-                Expr device = Call::make(UInt(64), Call::buffer_get_device, {buf}, Call::Extern);
-                Expr host = Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern);
-                Expr pseudo_buffer = Call::make(Handle(), Call::make_struct, {device, host}, Call::Intrinsic);
-                arg_ptrs.push_back(pseudo_buffer);
-                arg_sizes.emplace_back((uint64_t)(pseudo_buffer.type().bytes()));
+                device = Call::make(UInt(64), Call::buffer_get_device, {buf}, Call::Extern);
+                host = Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern);
+                arg_sizes.emplace_back((uint64_t)(Handle().bytes()));
             } else {
                 // If this is the scalars buffer, it doesn't have a .buffer
                 // field. Rather than make one, It's easier to just skip the
                 // buffer_get_host call and reference the allocation directly.
                 // TODO: This is a bit of an ugly hack, it would be nice to find
                 // a better way to identify buffers without a '.buffer' description.
-                Expr host = Variable::make(Handle(), i.first);
-                Expr pseudo_buffer = Call::make(Handle(), Call::make_struct, {make_zero(UInt(64)), host}, Call::Intrinsic);
-                arg_ptrs.push_back(pseudo_buffer);
+                device = make_zero(UInt(64));
+                host = Variable::make(Handle(), i.first);
                 arg_sizes.emplace_back((uint64_t)scalars_buffer_extent * scalars_buffer_type.bytes());
             }
+            std::string pseudo_buffer_name = unique_name("hexagon_pseudo_buffer");
+            pending_arrays.push_back({pseudo_buffer_name, pseudo_buffer_t, {pack_struct(pseudo_buffer_t, {device, host})}});
+            arg_ptrs.push_back(Variable::make(Handle(), pseudo_buffer_name));
 
             // In the flags parameter, bit 0 set indicates the
             // buffer is read, bit 1 set indicates the buffer is
@@ -905,9 +916,10 @@ class InjectHexagonRpc : public IRMutator {
         }
         for (const auto &i : c.vars) {
             Expr arg = Variable::make(i.second, i.first);
-            Expr arg_ptr = Call::make(type_of<void *>(), Call::make_struct, {arg}, Call::Intrinsic);
+            std::string arg_box_name = unique_name("hexagon_arg_box");
+            pending_arrays.push_back({arg_box_name, i.second, {arg}});
             arg_sizes.emplace_back((uint64_t)i.second.bytes());
-            arg_ptrs.push_back(arg_ptr);
+            arg_ptrs.push_back(Variable::make(Handle(), arg_box_name));
             arg_flags.emplace_back(0x0);
         }
 
@@ -915,13 +927,20 @@ class InjectHexagonRpc : public IRMutator {
         arg_sizes.emplace_back((uint64_t)0);
 
         std::string pipeline_name = hex_name + "_argv";
+        std::string arg_sizes_name = unique_name("hexagon_arg_sizes");
+        std::string arg_ptrs_name = unique_name("hexagon_arg_ptrs");
+        std::string arg_flags_name = unique_name("hexagon_arg_flags");
+        pending_arrays.push_back({arg_sizes_name, UInt(64), std::move(arg_sizes)});
+        pending_arrays.push_back({arg_ptrs_name, Handle(), std::move(arg_ptrs)});
+        pending_arrays.push_back({arg_flags_name, Int(32), std::move(arg_flags)});
+
         std::vector<Expr> params;
         params.push_back(module_state());
         params.emplace_back(pipeline_name);
         params.push_back(state_var_ptr(hex_name, type_of<int>()));
-        params.push_back(Call::make(type_of<uint64_t *>(), Call::make_struct, arg_sizes, Call::Intrinsic));
-        params.push_back(Call::make(type_of<void **>(), Call::make_struct, arg_ptrs, Call::Intrinsic));
-        params.push_back(Call::make(type_of<int *>(), Call::make_struct, arg_flags, Call::Intrinsic));
+        params.push_back(Variable::make(Handle(), arg_sizes_name));
+        params.push_back(Variable::make(Handle(), arg_ptrs_name));
+        params.push_back(Variable::make(Handle(), arg_flags_name));
 
         Stmt offload_call = call_extern_and_assert("halide_hexagon_run", params);
         if (!scalars_buffer_init.empty()) {
@@ -929,7 +948,7 @@ class InjectHexagonRpc : public IRMutator {
         }
         offload_call = Allocate::make(scalars_buffer_name, scalars_buffer_type, MemoryType::Auto,
                                       {Expr(scalars_buffer_extent)}, const_true(), offload_call);
-        return offload_call;
+        return wrap_dynamic_arrays(pending_arrays, offload_call);
     }
 
 public:
