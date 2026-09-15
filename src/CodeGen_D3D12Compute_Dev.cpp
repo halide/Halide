@@ -1017,6 +1017,13 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
         }
         Type target_type = op->type;
         Type source_type = allocations.get(op->name).type;
+        // A struct-backed array is declared as a raw byte store (see the
+        // Allocate visitor); print_cast only knows about numeric types, so
+        // reason about it as the int8 HLSL storage actually uses (its element
+        // is always signed, per print_type_maybe_storage's bits()==8 case).
+        if (source_type.is_struct()) {
+            source_type = Int(8);
+        }
         rhs << print_cast(target_type, source_type, element.str());
     } else {
         // Vector cases handled below
@@ -1237,6 +1244,12 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
         const auto *alloc = allocations.find(op->name);
         internal_assert(alloc);
         Type promoted_type = alloc->type;
+        // A struct-backed array is declared as a raw byte store (see the
+        // Allocate visitor); its element is always signed int8, per
+        // print_type_maybe_storage's bits()==8 case.
+        if (promoted_type.is_struct()) {
+            promoted_type = Int(8);
+        }
         if (promoted_type != op->value.type()) {
             shared_promotion_required = true;
             // NOTE(marcos): might need to resort to StoragePackUnpack::pack_store() here
@@ -1856,6 +1869,11 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             ss << op->extents[0];
             size_t elements = 0;
             ss >> elements;
+            // A struct is stored as a raw byte array (print_storage_type emits a byte
+            // element type), so elements is an instance count and must be scaled to bytes.
+            if (op->type.is_struct()) {
+                elements *= op->type.bytes();
+            }
             size_t bytesize = elements * sizeof(uint32_t);
             // NOTE(marcos): might need to resort to StoragePackUnpack::pack_storage() here...
             internal_assert(bytesize <= StoragePackUnpack::ThreadGroupSharedStorageLimit);
