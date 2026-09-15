@@ -1,3 +1,4 @@
+import warnings
 from pathlib import Path
 
 # halide-bin owns library discovery and loads its bundled libHalide before the
@@ -9,6 +10,24 @@ from . import bin as _bin  # noqa: F401
 # halide.runtime.Type Python class.
 from . import runtime as runtime
 from .halide_ import *  # noqa: F403
+
+
+class _DeprecatedEnumValue:
+    """Descriptor that returns a replacement enum value, after warning."""
+
+    def __init__(self, replacement, message):
+        self._replacement = replacement
+        self._message = message
+
+    def __get__(self, obj, owner):
+        warnings.warn(self._message, DeprecationWarning, stacklevel=2)
+        return self._replacement
+
+
+# TargetOS.OSX is deprecated in favor of TargetOS.MacOS; accessing it warns.
+TargetOS.OSX = _DeprecatedEnumValue(
+    TargetOS.MacOS, "TargetOS.OSX is deprecated; use TargetOS.MacOS instead."
+)
 
 # The implicit-argument placeholders are deliberately imported explicitly;
 # `from .halide_ import *` skips them because they begin with an underscore.
