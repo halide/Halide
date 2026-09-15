@@ -1,5 +1,7 @@
 #include "ConstantBounds.h"
 #include "IR.h"
+#include "Util.h"
+#include <algorithm>
 #include <cfloat>
 #include <map>
 #include <mutex>
@@ -58,7 +60,27 @@ int Type::bytes() const {
     return (bits() + 7) / 8;
 }
 
-Type Type::Struct(const std::vector<StructField> &fields) {
+namespace {
+
+// A field's natural (C-like) alignment: its own size, capped at pointer size,
+// or -- for a nested struct field -- whatever alignment that struct already
+// computed for itself.
+int natural_alignment(const Type &t) {
+    if (t.is_struct()) {
+        const StructTypeInfo *info = t.struct_type();
+        return info ? info->alignment : 1;
+    }
+    constexpr int max_alignment = 8;  // pointer size
+    return (int)std::min<int64_t>(Internal::next_power_of_two(t.bytes()), max_alignment);
+}
+
+int round_up_to_multiple(int offset, int alignment) {
+    return (offset + alignment - 1) / alignment * alignment;
+}
+
+}  // namespace
+
+Type Type::Struct(const std::vector<StructField> &fields, StructLayout layout) {
     user_assert(!fields.empty()) << "Type::Struct requires at least one field.\n";
 
     // Deliberately leaked: like halide_handle_cplusplus_type, this info table
@@ -70,15 +92,25 @@ Type Type::Struct(const std::vector<StructField> &fields) {
     info->offsets.reserve(fields.size());
 
     int offset = 0;
+    int struct_alignment = 1;
     for (const auto &f : fields) {
         user_assert(!f.type.is_struct() || f.type.struct_type() != nullptr)
             << "Struct field \"" << f.name << "\" has an invalid nested struct type.\n";
         user_assert(f.array_extent.value_or(1) > 0)
             << "Struct field \"" << f.name << "\" has a non-positive array extent.\n";
+        if (layout == StructLayout::Natural) {
+            int field_alignment = natural_alignment(f.type);
+            offset = round_up_to_multiple(offset, field_alignment);
+            struct_alignment = std::max(struct_alignment, field_alignment);
+        }
         info->offsets.push_back(offset);
         offset += f.type.bytes() * f.array_extent.value_or(1);
     }
+    if (layout == StructLayout::Natural) {
+        offset = round_up_to_multiple(offset, struct_alignment);
+    }
     info->total_bytes = offset;
+    info->alignment = struct_alignment;
 
     // A struct has its own honest type code; its byte size lives in the interned
     // StructTypeInfo (and is carried in the ABI's reserved field, see to_abi()).

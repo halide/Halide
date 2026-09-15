@@ -274,6 +274,13 @@ namespace Halide {
 struct StructField;
 struct StructTypeInfo;
 
+/** How `Type::Struct` lays out its fields in memory. See `Type::Struct` for
+ * the full description of each mode. */
+enum class StructLayout {
+    Packed,
+    Natural,
+};
+
 namespace Internal {
 struct ConstantInterval;
 
@@ -342,11 +349,23 @@ public:
      * size of the whole struct. */
     int bytes() const;
 
-    /** Construct a packed, named-field aggregate type, matching a C struct
-     * with no alignment padding. The resulting Type has its own honest type
-     * code (Type::Struct); its packed byte size is recorded so it survives
-     * erasure to the ABI (see to_abi()). */
-    static Type Struct(const std::vector<StructField> &fields);
+    /** Construct a named-field aggregate type. The resulting Type has its own
+     * honest type code (Type::Struct); its byte size is recorded so it
+     * survives erasure to the ABI (see to_abi()).
+     *
+     * `Packed` (the default) lays out fields densely with no alignment
+     * padding, matching a C struct declared with `#pragma pack(1)` -- this is
+     * what a struct type interfacing with an external wire/data format (e.g.
+     * a packed file-format block) wants.
+     *
+     * `Natural` lays out fields the way a C/C++ compiler would: each field is
+     * placed at the next offset that is a multiple of its own natural
+     * alignment (its byte size, capped at pointer size; a nested struct field
+     * uses its own computed alignment), and the total size is rounded up to
+     * the struct's own alignment (the max of its fields'). Use this when the
+     * struct must match a real ABI struct (e.g. one from a C header) that
+     * relies on ordinary alignment rules. */
+    static Type Struct(const std::vector<StructField> &fields, StructLayout layout = StructLayout::Packed);
 
     /** Is this type a struct type, as constructed by `Type::Struct`? */
     HALIDE_ALWAYS_INLINE
@@ -723,6 +742,11 @@ struct StructTypeInfo {
     std::vector<StructField> fields;
     std::vector<int> offsets;  // one per field, in bytes
     int total_bytes = 0;
+
+    /** The struct's own alignment in bytes: 1 for `StructLayout::Packed`, or
+     * the max of its fields' natural alignments for `StructLayout::Natural`.
+     * `total_bytes` is already a multiple of this. */
+    int alignment = 1;
 
     /** Find a field by name. Returns -1 if not found. */
     int find_field(const std::string &name) const;

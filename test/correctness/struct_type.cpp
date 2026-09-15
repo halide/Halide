@@ -1,5 +1,7 @@
 #include "Halide.h"
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <stdio.h>
 
@@ -738,8 +740,93 @@ void test_pack_struct_field_copy() {
 
 }  // namespace
 
+// C++ mirrors of the two real ABI structs (halide_semaphore_acquire_t,
+// halide_parallel_task_t -- see src/runtime/HalideRuntime.h) that
+// LowerParallelTasks.cpp builds with StructLayout::Natural, so their array
+// stride matches what the runtime (a plain C compiler) expects.
+namespace {
+struct MirrorSemaphoreAcquire {
+    void *semaphore;
+    int count;
+};
+
+struct MirrorParallelTask {
+    void *fn;
+    uint8_t *closure;
+    const char *name;
+    void *semaphores;
+    int num_semaphores;
+    int min, extent;
+    int min_threads;
+    bool serial;
+};
+}  // namespace
+
+// StructLayout::Natural must reproduce ordinary C struct alignment/padding,
+// since these two struct shapes are read back by the runtime as raw
+// halide_semaphore_acquire_t*/halide_parallel_task_t* arrays, not through
+// field()/pack_struct() -- a layout mismatch here would corrupt them.
+void test_struct_layout_natural_matches_c_abi() {
+    Type sem_t = Type::Struct({{"semaphore", Handle()}, {"count", Int(32)}}, StructLayout::Natural);
+    if (sem_t.bytes() != (int)sizeof(MirrorSemaphoreAcquire)) {
+        printf("Expected Natural-layout semaphore struct size %d to match sizeof(MirrorSemaphoreAcquire) == %d\n",
+              sem_t.bytes(), (int)sizeof(MirrorSemaphoreAcquire));
+        exit(1);
+    }
+    const StructTypeInfo *sem_info = sem_t.struct_type();
+    if (sem_info->offsets[0] != (int)offsetof(MirrorSemaphoreAcquire, semaphore) ||
+        sem_info->offsets[1] != (int)offsetof(MirrorSemaphoreAcquire, count)) {
+        printf("Natural-layout semaphore struct field offsets don't match the C struct\n");
+        exit(1);
+    }
+
+    Type task_t = Type::Struct({{"fn", Handle()},
+                                {"closure", Handle()},
+                                {"name", Handle()},
+                                {"semaphores", Handle()},
+                                {"num_semaphores", Int(32)},
+                                {"min", Int(32)},
+                                {"extent", Int(32)},
+                                {"min_threads", Int(32)},
+                                {"serial", Bool()}},
+                               StructLayout::Natural);
+    if (task_t.bytes() != (int)sizeof(MirrorParallelTask)) {
+        printf("Expected Natural-layout task struct size %d to match sizeof(MirrorParallelTask) == %d\n",
+              task_t.bytes(), (int)sizeof(MirrorParallelTask));
+        exit(1);
+    }
+    const StructTypeInfo *task_info = task_t.struct_type();
+    int expected_offsets[] = {
+        (int)offsetof(MirrorParallelTask, fn),
+        (int)offsetof(MirrorParallelTask, closure),
+        (int)offsetof(MirrorParallelTask, name),
+        (int)offsetof(MirrorParallelTask, semaphores),
+        (int)offsetof(MirrorParallelTask, num_semaphores),
+        (int)offsetof(MirrorParallelTask, min),
+        (int)offsetof(MirrorParallelTask, extent),
+        (int)offsetof(MirrorParallelTask, min_threads),
+        (int)offsetof(MirrorParallelTask, serial),
+    };
+    for (int i = 0; i < (int)task_info->offsets.size(); i++) {
+        if (task_info->offsets[i] != expected_offsets[i]) {
+            printf("Natural-layout task struct field %d offset %d doesn't match C struct offset %d\n",
+                  i, task_info->offsets[i], expected_offsets[i]);
+            exit(1);
+        }
+    }
+
+    // StructLayout::Packed (the default) must stay dense with no padding,
+    // unaffected by adding StructLayout::Natural.
+    Type packed = Type::Struct({{"semaphore", Handle()}, {"count", Int(32)}});
+    if (packed.bytes() != 8 + 4) {
+        printf("Expected Packed-layout struct to have no padding, got %d bytes\n", packed.bytes());
+        exit(1);
+    }
+}
+
 int main(int argc, char **argv) {
     test_type_struct_basics();
+    test_struct_layout_natural_matches_c_abi();
     test_struct_type_ordering_consistent_with_equality();
     test_constant_integer_bounds_of_struct();
     test_read_from_buffer();

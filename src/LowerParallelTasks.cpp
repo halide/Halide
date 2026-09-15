@@ -12,6 +12,7 @@
 #include "Module.h"
 #include "Param.h"
 #include "Simplify.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {
@@ -25,6 +26,20 @@ LoweredArgument make_scalar_arg(const std::string &name, const Type &type) {
 template<typename T>
 LoweredArgument make_scalar_arg(const std::string &name) {
     return make_scalar_arg(name, type_of<T>());
+}
+
+// Allocate a struct array named `name` holding one packed `struct_t`-typed
+// element per entry of `elements` (each already a pack_struct() value), and
+// wrap `body` so the allocation lives for its duration.
+Stmt wrap_struct_array(const std::string &name, const Type &struct_t,
+                       const std::vector<Expr> &elements, Stmt body) {
+    std::vector<Stmt> stmts;
+    stmts.reserve(elements.size() + 1);
+    for (int i = 0; i < (int)elements.size(); i++) {
+        stmts.push_back(Store::make(name, elements[i], i, Parameter(), const_true(), ModulusRemainder(), false));
+    }
+    stmts.push_back(std::move(body));
+    return Allocate::make(name, struct_t, MemoryType::Stack, {(int)elements.size()}, const_true(), Block::make(stmts));
 }
 
 std::string task_debug_name(const std::pair<std::string, int> &prefix) {
@@ -213,8 +228,37 @@ struct LowerParallelTasks : public IRMutator {
         }
 
         int num_tasks = (int)(tasks.size());
-        std::vector<Expr> tasks_array_args;
-        tasks_array_args.reserve(num_tasks * 9);
+
+        // A single struct type describing a halide_semaphore_acquire_t, and one
+        // describing a halide_parallel_task_t (see src/runtime/HalideRuntime.h),
+        // shared by every task pushed below. StructLayout::Natural gives these
+        // the same C alignment/padding as the real runtime structs, since they're
+        // read back by the runtime as raw halide_semaphore_acquire_t*/halide_parallel_task_t*
+        // arrays, not through field()/pack_struct().
+        const Type sem_t = Type::Struct({{"semaphore", type_of<halide_semaphore_t *>()},
+                                         {"count", Int(32)}},
+                                        StructLayout::Natural);
+        const Type task_t = Type::Struct({{"fn", type_of<halide_loop_task_t>()},
+                                          {"closure", type_of<uint8_t *>()},
+                                          {"name", type_of<const char *>()},
+                                          {"semaphores", Handle()},
+                                          {"num_semaphores", Int(32)},
+                                          {"min", Int(32)},
+                                          {"extent", Int(32)},
+                                          {"min_threads", Int(32)},
+                                          {"serial", Bool()}},
+                                         StructLayout::Natural);
+        // One pack_struct(task_t, ...) per task pushed onto the tasks array below.
+        std::vector<Expr> task_elements;
+
+        // Struct arrays allocated while building the tasks below, wrapping the
+        // final Stmt right before it's returned (see the end of this function).
+        struct PendingStructArray {
+            std::string name;
+            Type struct_t;
+            std::vector<Expr> elements;
+        };
+        std::vector<PendingStructArray> pending_struct_arrays;
 
         std::string closure_name = unique_name("parallel_closure");
         Expr closure_struct = Variable::make(Handle(), closure_name);
@@ -324,28 +368,37 @@ struct LowerParallelTasks : public IRMutator {
                 result = Call::make(Int(32), "halide_do_par_for", args, Call::Extern);
             } else {
                 const int semaphores_size = (int)t.semaphores.size();
-                std::vector<Expr> semaphore_args(semaphores_size * 2);
-                for (int i = 0; i < semaphores_size; i++) {
-                    semaphore_args[i * 2] = t.semaphores[i].semaphore;
-                    semaphore_args[i * 2 + 1] = t.semaphores[i].count;
+                Expr semaphores_array;
+                if (semaphores_size == 0) {
+                    semaphores_array = reinterpret(Handle(), make_zero(UInt(64)));
+                } else {
+                    std::string sem_array_name = unique_name("semaphores");
+                    std::vector<Expr> sem_elements;
+                    sem_elements.reserve(semaphores_size);
+                    for (int i = 0; i < semaphores_size; i++) {
+                        sem_elements.push_back(pack_struct(sem_t, {t.semaphores[i].semaphore, t.semaphores[i].count}));
+                    }
+                    pending_struct_arrays.push_back({sem_array_name, sem_t, std::move(sem_elements)});
+                    semaphores_array = Variable::make(Handle(), sem_array_name);
                 }
-                Expr semaphores_array = Call::make(type_of<halide_semaphore_acquire_t *>(), Call::make_struct, semaphore_args, Call::PureIntrinsic);
 
-                tasks_array_args.emplace_back(std::move(new_function_name_arg));
-                tasks_array_args.emplace_back(std::move(closure_struct_arg));
-                tasks_array_args.emplace_back(StringImm::make(t.name));
-                tasks_array_args.emplace_back(std::move(semaphores_array));
-                tasks_array_args.emplace_back((int)t.semaphores.size());
-                tasks_array_args.emplace_back(t.min);
-                tasks_array_args.emplace_back(t.extent);
-                tasks_array_args.emplace_back(min_threads);
-                tasks_array_args.emplace_back(Cast::make(Bool(), t.serial));
+                task_elements.push_back(pack_struct(task_t, {new_function_name_arg,
+                                                             closure_struct_arg,
+                                                             StringImm::make(t.name),
+                                                             semaphores_array,
+                                                             (int)t.semaphores.size(),
+                                                             t.min,
+                                                             t.extent,
+                                                             min_threads,
+                                                             Cast::make(Bool(), t.serial)}));
             }
         }
 
-        if (!tasks_array_args.empty()) {
+        if (!task_elements.empty()) {
             // Allocate task list array
-            Expr tasks_list = Call::make(type_of<halide_parallel_task_t *>(), Call::make_struct, tasks_array_args, Call::PureIntrinsic);
+            std::string tasks_list_name = unique_name("tasks");
+            pending_struct_arrays.push_back({tasks_list_name, task_t, task_elements});
+            Expr tasks_list = Variable::make(Handle(), tasks_list_name);
             Expr user_context = Call::make(type_of<void *>(), Call::get_user_context, {}, Call::PureIntrinsic);
             Expr task_parent = has_task_parent ? task_parents.top() : make_zero(Handle());
             result = Call::make(Int(32), "halide_do_parallel_tasks",
@@ -357,6 +410,13 @@ struct LowerParallelTasks : public IRMutator {
         Expr closure_result = Variable::make(Int(32), closure_result_name);
         Stmt stmt = AssertStmt::make(closure_result == 0, closure_result);
         stmt = LetStmt::make(closure_result_name, result, stmt);
+        // Wrap in reverse of push order: each array's Store may reference an
+        // earlier (semaphores) array's pointer (e.g. the tasks array's
+        // "semaphores" field), so that array's Allocate must already be in
+        // scope -- i.e. it must end up further out, wrapped later.
+        for (const auto &a : reverse_view(pending_struct_arrays)) {
+            stmt = wrap_struct_array(a.name, a.struct_t, a.elements, stmt);
+        }
         stmt = closure.pack_into_struct(closure_name, stmt);
         return stmt;
     }
