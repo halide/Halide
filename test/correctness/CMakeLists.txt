@@ -18,6 +18,7 @@ tests(
     bool_compute_root_vectorize.cpp
     bool_predicate_cast.cpp
     bound.cpp
+    bound_merge_order.cpp
     bound_small_allocations.cpp
     bound_storage.cpp
     boundary_conditions.cpp
@@ -78,9 +79,14 @@ tests(
     custom_allocator.cpp
     custom_auto_scheduler.cpp
     custom_cuda_context.cpp
+    custom_d3d12compute_context.cpp
     custom_error_reporter.cpp
     custom_jit_context.cpp
     custom_lowering_pass.cpp
+    custom_metal_context.cpp
+    custom_opencl_context.cpp
+    custom_vulkan_context.cpp
+    custom_webgpu_context.cpp
     d3d12compute_sm6x.cpp
     d3d12compute_strict_float.cpp
     dead_realization_in_specialization.cpp
@@ -139,6 +145,7 @@ tests(
     force_onto_stack.cpp
     func_lifetime.cpp
     func_lifetime_2.cpp
+    func_vec.cpp
     fuse.cpp
     fuse_gpu_threads.cpp
     fused_where_inner_extent_is_zero.cpp
@@ -196,6 +203,7 @@ tests(
     hexagon_scatter.cpp
     histogram.cpp
     histogram_equalize.cpp
+    hoist_invariants.cpp
     hoist_loop_invariant_if_statements.cpp
     hoist_storage.cpp
     host_alignment.cpp
@@ -314,6 +322,7 @@ tests(
     runtime_prefixes.cpp
     saturating_casts.cpp
     scatter.cpp
+    serialization.cpp
     set_custom_trace.cpp
     shadowed_bound.cpp
     shared_self_references.cpp
@@ -572,4 +581,5 @@ set_target_properties(
 if (WITH_SERIALIZATION)
     target_compile_definitions(correctness_streaming PRIVATE TEST_WITH_SERIALIZATION)
     target_compile_definitions(correctness_generator_cache PRIVATE TEST_WITH_SERIALIZATION)
+    target_compile_definitions(correctness_serialization PRIVATE TEST_WITH_SERIALIZATION)
 endif ()

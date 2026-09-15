@@ -390,43 +390,23 @@ public:
     }
 };
 
-template<typename Fn>
-void traverse_block(const Stmt &s, Fn &&f) {
-    const Block *b = s.as<Block>();
-    if (!b) {
-        f(s);
-    } else {
-        traverse_block(b->first, f);
-        traverse_block(b->rest, f);
-    }
-}
-
 class HoistPrefetches : public IRMutator {
 protected:
     using IRMutator::visit;
 
     Stmt visit(const Block *op) override {
-        Stmt s = op;
-
-        Stmt prefetches, body;
-        traverse_block(s, [this, &prefetches, &body](const Stmt &s_in) {
+        vector<Stmt> prefetches, body;
+        for (const Stmt &s_in : Block::to_vector(op)) {
             Stmt s = IRMutator::mutate(s_in);
             const Evaluate *eval = s.as<Evaluate>();
             if (eval && Call::as_intrinsic(eval->value, {Call::prefetch})) {
-                prefetches = prefetches.defined() ? Block::make(prefetches, s) : s;
+                prefetches.push_back(std::move(s));
             } else {
-                body = body.defined() ? Block::make(body, s) : s;
+                body.push_back(std::move(s));
             }
-        });
-        if (prefetches.defined()) {
-            if (body.defined()) {
-                return Block::make(prefetches, body);
-            } else {
-                return prefetches;
-            }
-        } else {
-            return body;
         }
+        prefetches.insert(prefetches.end(), body.begin(), body.end());
+        return Block::make(prefetches);
     }
 };
 

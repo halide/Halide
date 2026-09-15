@@ -47,15 +47,36 @@ void set_env(const char *name, const std::string &val) {
 #endif
 }
 
+void unset_env(const char *name) {
+#ifdef _WIN32
+    _putenv_s(name, "");
+#else
+    unsetenv(name);
+#endif
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
+    // HL_DEBUG_CODEGEN is read once per process (cached in a function-local
+    // static) on first use. Clear any ambient value from the invoking shell
+    // before it's read anywhere below (parent or re-exec'd --child alike):
+    // an inherited tag-only rule would otherwise silently suppress the
+    // untagged debug(0) call in --child mode.
+    unset_env("HL_DEBUG_CODEGEN");
+
     // Child mode: emit one line of debug(0) output, honoring
     // HL_DEBUG_CODEGEN_LOG_FILE as inherited from the parent's environment.
     if (argc == 2 && std::string(argv[1]) == "--child") {
         debug(0) << "marker\n";
         return 0;
     }
+
+    // HL_DEBUG_CODEGEN_LOG_FILE is also read once per process, but unlike
+    // HL_DEBUG_CODEGEN above, --child is meant to inherit whatever value the
+    // parent (here) sets for each scenario below, so it's only cleared in
+    // the parent, before the first scenario overrides it.
+    unset_env("HL_DEBUG_CODEGEN_LOG_FILE");
 
     const std::string self = fs::absolute(argv[0]).string();
     const fs::path tmp =

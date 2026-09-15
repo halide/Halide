@@ -251,6 +251,18 @@ protected:
             // Lift invariants
             LiftLoopInvariants lifter;
             Stmt new_stmt = lifter(op);
+
+            if (lifter.lifted.empty()) {
+                // Nothing was lifted at this loop level, so all of the
+                // register-pressure-reduction bookkeeping below (which
+                // walks the entire loop body to collect variable names,
+                // regardless of whether there's anything to substitute)
+                // would be pure overhead. Just recurse.
+                const For *loop = new_stmt.as<For>();
+                internal_assert(loop);
+                return loop->with(loop->min, loop->max, mutate(loop->body));
+            }
+
             new_stmt = SubstituteTrivialLets()(new_stmt);
 
             // As an optimization to reduce register pressure, take
