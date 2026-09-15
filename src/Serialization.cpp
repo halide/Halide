@@ -314,8 +314,6 @@ Serialize::TailStrategy Serializer::serialize_tail_strategy(const TailStrategy &
         return Serialize::TailStrategy::RoundUp;
     case TailStrategy::GuardWithIf:
         return Serialize::TailStrategy::GuardWithIf;
-    case TailStrategy::Predicate:
-        return Serialize::TailStrategy::Predicate;
     case TailStrategy::PredicateLoads:
         return Serialize::TailStrategy::PredicateLoads;
     case TailStrategy::PredicateStores:
