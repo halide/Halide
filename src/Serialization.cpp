@@ -399,15 +399,25 @@ Offset<String> Serializer::serialize_string(FlatBufferBuilder &builder, const st
 }
 
 Offset<Serialize::Type> Serializer::serialize_type(FlatBufferBuilder &builder, const Type &type) {
-    // The serialization schema's TypeCode has no struct variant (a struct also
-    // carries a field layout the flat Type table can't hold), so reject struct
-    // types outright rather than emitting an out-of-range code.
-    user_assert(!type.is_struct())
-        << "Serialization of struct types is not supported.\n";
     const int bits = type.bits();
     const int lanes = type.lanes();
-    halide_type_code_t code = type.code();
-    const auto code_serialized = Serialize::TypeCode(code);
+
+    if (type.is_struct()) {
+        const StructTypeInfo *info = type.struct_type();
+        internal_assert(info != nullptr) << "Struct type is missing its field layout.\n";
+        std::vector<Offset<Serialize::StructField>> fields_serialized;
+        fields_serialized.reserve(info->fields.size());
+        for (const StructField &field : info->fields) {
+            const auto name_serialized = serialize_string(builder, field.name);
+            const auto field_type_serialized = serialize_type(builder, field.type);
+            fields_serialized.push_back(Serialize::CreateStructField(
+                builder, name_serialized, field_type_serialized, field.array_extent.value_or(-1)));
+        }
+        const auto fields_vector_serialized = builder.CreateVector(fields_serialized);
+        return Serialize::CreateType(builder, Serialize::TypeCode::Struct, bits, lanes, fields_vector_serialized);
+    }
+
+    const auto code_serialized = Serialize::TypeCode(type.code());
     return Serialize::CreateType(builder, code_serialized, bits, lanes);
 }
 
