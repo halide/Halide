@@ -1141,7 +1141,8 @@ public:
                 builder.strides.push_back(next_stride);
                 builder.extents.emplace_back(bs.num_blocks(d));
             }
-            Expr buffer = builder.build();
+            vector<DynamicArray> pending_arrays;
+            Expr buffer = builder.build(pending_arrays);
             Expr allocate_heap_call = Call::make(Int(32), "halide_device_malloc",
                                                  {buffer_var, device_interface}, Call::Extern);
             string allocate_heap_result_var_name = unique_name('t');
@@ -1155,6 +1156,7 @@ public:
             s = Allocate::make(buffer_name, alloc.type,
                                MemoryType::Auto, {}, const_true(), s,
                                buffer, "halide_device_free_as_destructor");
+            s = wrap_dynamic_arrays(pending_arrays, s);
         }
 
         s = compute_shared_memory_sizes_on_host(s);

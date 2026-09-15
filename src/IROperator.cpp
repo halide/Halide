@@ -1041,7 +1041,7 @@ void split_into_ands(const Expr &cond, std::vector<Expr> &result) {
     }
 }
 
-Expr BufferBuilder::build() const {
+Expr BufferBuilder::build(std::vector<DynamicArray> &pending_arrays) const {
     std::vector<Expr> args(11);
     if (buffer_memory.defined()) {
         args[0] = buffer_memory;
@@ -1086,31 +1086,38 @@ Expr BufferBuilder::build() const {
     args[7] = (int)type.to_abi().reserved;
     args[8] = dimensions;
 
-    std::vector<Expr> shape;
-    for (size_t i = 0; i < (size_t)dimensions; i++) {
-        if (i < mins.size()) {
-            shape.push_back(mins[i]);
-        } else {
+    // Only build a backing array when there's actually shape data to hold --
+    // an unused array would otherwise be allocated whenever dimensions == 0.
+    Expr shape_arg = make_zero(type_of<halide_dimension_t *>());
+    if (dimensions != 0) {
+        std::vector<Expr> shape;
+        for (size_t i = 0; i < (size_t)dimensions; i++) {
+            if (i < mins.size()) {
+                shape.push_back(mins[i]);
+            } else {
+                shape.emplace_back(0);
+            }
+            if (i < extents.size()) {
+                shape.push_back(extents[i]);
+            } else {
+                shape.emplace_back(0);
+            }
+            if (i < strides.size()) {
+                shape.push_back(strides[i]);
+            } else {
+                shape.emplace_back(0);
+            }
+            // per-dimension flags, currently unused.
             shape.emplace_back(0);
         }
-        if (i < extents.size()) {
-            shape.push_back(extents[i]);
-        } else {
-            shape.emplace_back(0);
+        for (const Expr &e : shape) {
+            internal_assert(e.type() == Int(32))
+                << "Buffer shape fields must be int32_t:" << e << "\n";
         }
-        if (i < strides.size()) {
-            shape.push_back(strides[i]);
-        } else {
-            shape.emplace_back(0);
-        }
-        // per-dimension flags, currently unused.
-        shape.emplace_back(0);
+        std::string shape_array_name = unique_name("buffer_shape");
+        pending_arrays.push_back({shape_array_name, Int(32), std::move(shape)});
+        shape_arg = Variable::make(type_of<halide_dimension_t *>(), shape_array_name);
     }
-    for (const Expr &e : shape) {
-        internal_assert(e.type() == Int(32))
-            << "Buffer shape fields must be int32_t:" << e << "\n";
-    }
-    Expr shape_arg = Call::make(type_of<halide_dimension_t *>(), Call::make_struct, shape, Call::Intrinsic);
     if (shape_memory.defined()) {
         args[9] = shape_arg;
     } else if (dimensions == 0) {

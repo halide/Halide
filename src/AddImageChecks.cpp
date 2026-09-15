@@ -490,7 +490,9 @@ Stmt add_image_checks_inner(Stmt s,
             builder.extents.push_back(Variable::make(Int(32), extent_proposed));
             builder.strides.push_back(Variable::make(Int(32), stride_proposed));
         }
-        Stmt rewrite = Evaluate::make(builder.build());
+        std::vector<DynamicArray> pending_arrays;
+        Stmt rewrite = Evaluate::make(builder.build(pending_arrays));
+        rewrite = wrap_dynamic_arrays(pending_arrays, rewrite);
 
         rewrite = IfThenElse::make(inference_mode, rewrite);
         buffer_rewrites.push_back(rewrite);

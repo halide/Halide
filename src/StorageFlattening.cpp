@@ -230,7 +230,9 @@ public:
             builder.extents.push_back(extent_var[i]);
             builder.strides.push_back(stride_var[i]);
         }
-        stmt = LetStmt::make(op->name + ".buffer", builder.build(), stmt);
+        vector<DynamicArray> pending_arrays;
+        stmt = LetStmt::make(op->name + ".buffer", builder.build(pending_arrays), stmt);
+        stmt = wrap_dynamic_arrays(pending_arrays, stmt);
 
         // Make the allocation node
         stmt = Allocate::make(op->name, op->types[0], op->memory_type, allocation_extents, condition, stmt);

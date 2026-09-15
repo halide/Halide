@@ -630,6 +630,7 @@ public:
             vector<Expr> bounds_inference_args;
 
             vector<pair<string, Expr>> lets;
+            vector<DynamicArray> pending_arrays;
 
             // Iterate through all of the input args to the extern
             // function building a suitable argument list for the
@@ -650,7 +651,7 @@ public:
                         BufferBuilder builder;
                         builder.type = input.output_types()[k];
                         builder.dimensions = input.dimensions();
-                        Expr buf = builder.build();
+                        Expr buf = builder.build(pending_arrays);
 
                         lets.emplace_back(name, buf);
                         bounds_inference_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), name));
@@ -700,7 +701,7 @@ public:
                     builder.extents.push_back(max + 1 - min);
                     builder.strides.emplace_back(0);
                 }
-                Expr output_buffer_t = builder.build();
+                Expr output_buffer_t = builder.build(pending_arrays);
 
                 string buf_name = func.name() + ".o" + std::to_string(j) + ".bounds_query";
                 bounds_inference_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
@@ -762,6 +763,7 @@ public:
             for (const auto &let : lets) {
                 s = LetStmt::make(let.first, let.second, s);
             }
+            s = wrap_dynamic_arrays(pending_arrays, s);
 
             return s;
         }

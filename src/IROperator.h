@@ -229,6 +229,16 @@ Expr raise_to_integer_power(Expr a, int64_t b);
  * return an empty vector. */
 void split_into_ands(const Expr &cond, std::vector<Expr> &result);
 
+/** Describes one dynamically-sized array to allocate for wrap_dynamic_arrays():
+ * `name` will be bound (within the wrapped body) to a Handle() pointer to
+ * `elements.size()` contiguous values of type `element_type`, one per
+ * `elements[i]`, stored at index i. */
+struct DynamicArray {
+    std::string name;
+    Type element_type;
+    std::vector<Expr> elements;
+};
+
 /** A builder to help create Exprs representing halide_buffer_t
  * structs (e.g. foo.buffer) via calls to halide_buffer_init. Fill out
  * the fields and then call build. The resulting Expr will be a call
@@ -238,7 +248,12 @@ void split_into_ands(const Expr &cond, std::vector<Expr> &result);
  * undefined, it similarly uses stack memory for the shape. If the
  * shape_memory field is null, it uses the dim field already in the
  * buffer. Other uninitialized fields will take on a value of zero in
- * the constructed buffer. */
+ * the constructed buffer.
+ *
+ * build() may need to allocate a backing array for the buffer's shape;
+ * any such array is appended to `pending_arrays`, which the caller must
+ * wrap the Stmt that puts the returned Expr's value in scope with
+ * wrap_dynamic_arrays(pending_arrays, ...). */
 struct BufferBuilder {
     Expr buffer_memory, shape_memory;
     Expr host, device, device_interface;
@@ -246,7 +261,7 @@ struct BufferBuilder {
     int dimensions = 0;
     std::vector<Expr> mins, extents, strides;
     Expr host_dirty, device_dirty;
-    Expr build() const;
+    Expr build(std::vector<DynamicArray> &pending_arrays) const;
 };
 
 /** If e is a ramp expression with stride, default 1, return the base,
@@ -357,16 +372,6 @@ Stmt peel_lets(const Stmt &s, std::vector<std::pair<std::string, Expr>> *lets);
 Expr rewrap_used_lets(const Expr &body, const std::vector<std::pair<std::string, Expr>> &lets);
 Stmt rewrap_used_lets(const Stmt &body, const std::vector<std::pair<std::string, Expr>> &lets);
 // @}
-
-/** Describes one dynamically-sized array to allocate for wrap_dynamic_arrays():
- * `name` will be bound (within the wrapped body) to a Handle() pointer to
- * `elements.size()` contiguous values of type `element_type`, one per
- * `elements[i]`, stored at index i. */
-struct DynamicArray {
-    std::string name;
-    Type element_type;
-    std::vector<Expr> elements;
-};
 
 /** Allocate each array in `arrays`, storing its elements, and wrap `body` so
  * every allocation lives for its duration. Arrays are wrapped outermost-first

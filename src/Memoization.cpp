@@ -309,8 +309,7 @@ public:
         // doesn't have access to the Store that fills in buffers_ptr's
         // Allocate). return_second is a no-op at runtime (it just evaluates
         // first_buffer and returns buffers_ptr), but keeps that name
-        // inspectable directly on the Call, the same way the old
-        // make_struct-based array (which had it as args[0]) did.
+        // inspectable directly on the Call.
         args.push_back(Call::make(type_of<halide_buffer_t **>(), Call::return_second, {first_buffer, buffers_ptr}, Call::PureIntrinsic));
 
         return Call::make(Int(32), "halide_memoization_cache_lookup", args, Call::Extern);
@@ -427,9 +426,11 @@ private:
                 builder.mins.push_back(min);
                 builder.extents.push_back(max + 1 - min);
             }
-            Expr computed_bounds = builder.build();
+            std::vector<DynamicArray> bounds_pending_arrays;
+            Expr computed_bounds = builder.build(bounds_pending_arrays);
 
             Stmt computed_bounds_let = LetStmt::make(computed_bounds_name, computed_bounds, cache_lookup);
+            computed_bounds_let = wrap_dynamic_arrays(bounds_pending_arrays, computed_bounds_let);
 
             Stmt generate_key = Block::make(key_info.generate_key(cache_key_name), computed_bounds_let);
             Stmt cache_key_alloc =
