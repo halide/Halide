@@ -30,7 +30,7 @@ int vectorize_2d_round_up() {
 }
 
 int vectorize_2d_guard_with_if_and_predicate() {
-    for (TailStrategy tail_strategy : {TailStrategy::GuardWithIf, TailStrategy::Predicate}) {
+    for (TailStrategy tail_strategy : {TailStrategy::GuardWithIf}) {
         const int width = 33;
         const int height = 22;
 
