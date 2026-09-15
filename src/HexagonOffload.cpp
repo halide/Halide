@@ -943,12 +943,16 @@ class InjectHexagonRpc : public IRMutator {
         params.push_back(Variable::make(Handle(), arg_flags_name));
 
         Stmt offload_call = call_extern_and_assert("halide_hexagon_run", params);
+        offload_call = wrap_dynamic_arrays(pending_arrays, offload_call);
         if (!scalars_buffer_init.empty()) {
             offload_call = Block::make(Block::make(scalars_buffer_init), offload_call);
         }
+        // scalar_indices must enclose the pending_arrays wrapping above, since
+        // one of those arrays (the scalars buffer's pseudo_buffer entry) holds
+        // a pointer into this allocation.
         offload_call = Allocate::make(scalars_buffer_name, scalars_buffer_type, MemoryType::Auto,
                                       {Expr(scalars_buffer_extent)}, const_true(), offload_call);
-        return wrap_dynamic_arrays(pending_arrays, offload_call);
+        return offload_call;
     }
 
 public:
