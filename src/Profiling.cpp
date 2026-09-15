@@ -1550,6 +1550,23 @@ private:
 
 }  // namespace
 
+namespace {
+
+// Allocate an array named `name` holding `values.size()` elements of type
+// `elem_type`, storing each value at its index, and wrap `body` so the
+// allocation lives for its duration -- mirrors the profiler_func_stack_peak_buf
+// pattern in inject_profiling() below, but as a reusable helper for the
+// several per-Func profiler metadata arrays there.
+Stmt wrap_profiler_array(const std::string &name, Type elem_type, const std::vector<Expr> &values, Stmt body) {
+    for (int i = (int)values.size() - 1; i >= 0; i--) {
+        body = Block::make(Store::make(name, values[i], i), body);
+    }
+    body = Block::make(body, Free::make(name));
+    return Allocate::make(name, elem_type, MemoryType::Auto, {(int)values.size()}, const_true(), body);
+}
+
+}  // namespace
+
 Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::map<string, Function> &env, const Target &target) {
     Names names(pipeline_name, env);
 
@@ -1649,12 +1666,12 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
         func_counters_approximated[i] = make_const(UInt(32), injector.approximated_counters(i));
     }
 
-    s = LetStmt::make(names.profiler_func_names, Call::make(Handle(), Call::make_struct, func_names, Call::Intrinsic), s);
-    s = LetStmt::make(names.profiler_func_parents, Call::make(Handle(), Call::make_struct, func_parents, Call::Intrinsic), s);
-    s = LetStmt::make(names.profiler_func_canonical_ids, Call::make(Handle(), Call::make_struct, func_canonical_ids, Call::Intrinsic), s);
-    s = LetStmt::make(names.profiler_func_kinds, Call::make(Handle(), Call::make_struct, func_kinds, Call::Intrinsic), s);
-    s = LetStmt::make(names.profiler_func_buffer_func_ids, Call::make(Handle(), Call::make_struct, func_buffer_func_ids, Call::Intrinsic), s);
-    s = LetStmt::make(names.profiler_func_counters_approximated, Call::make(Handle(), Call::make_struct, func_counters_approximated, Call::Intrinsic), s);
+    s = wrap_profiler_array(names.profiler_func_names, type_of<const char *>(), func_names, s);
+    s = wrap_profiler_array(names.profiler_func_parents, Int(32), func_parents, s);
+    s = wrap_profiler_array(names.profiler_func_canonical_ids, Int(32), func_canonical_ids, s);
+    s = wrap_profiler_array(names.profiler_func_kinds, Int(32), func_kinds, s);
+    s = wrap_profiler_array(names.profiler_func_buffer_func_ids, Int(32), func_buffer_func_ids, s);
+    s = wrap_profiler_array(names.profiler_func_counters_approximated, UInt(32), func_counters_approximated, s);
     s = Block::make(Evaluate::make(stop_profiler), s);
 
     // Allocate memory for the profiler instance state
