@@ -72,11 +72,10 @@ struct LowerSMEStreamingTasks : public IRMutator {
 
         const std::string closure_name = unique_name("streaming_closure");
         const std::string closure_arg_name = unique_name("closure_arg");
-        Expr closure_struct_allocation = closure.pack_into_struct();
         Expr closure_struct = Variable::make(Handle(), closure_name);
         Expr closure_struct_arg = Cast::make(type_of<uint8_t *>(), closure_struct);
         auto closure_arg = make_scalar_arg<uint8_t *>(closure_arg_name);
-        Expr closure_arg_var = Variable::make(closure_struct_allocation.type(), closure_arg_name);
+        Expr closure_arg_var = Variable::make(Handle(), closure_arg_name);
 
         // Mutate body recursively, where further transition may happen
         body = mutate(body);
@@ -94,7 +93,7 @@ struct LowerSMEStreamingTasks : public IRMutator {
         closure_implementations.emplace_back(std::move(closure_func));
 
         Stmt stmt = call_extern_and_assert(new_function_name, {std::move(closure_struct_arg)});
-        stmt = LetStmt::make(closure_name, closure_struct_allocation, stmt);
+        stmt = closure.pack_into_struct(closure_name, stmt);
         return stmt;
     }
 

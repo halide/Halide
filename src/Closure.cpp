@@ -1,7 +1,6 @@
 #include "Closure.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
-#include "IRMutator.h"
 #include "IROperator.h"
 
 namespace Halide {
@@ -109,67 +108,87 @@ void Closure::visit(const Atomic *op) {
     op->body.accept(this);
 }
 
-Expr Closure::pack_into_struct() const {
-    std::vector<Expr> elements;
-
+std::vector<Closure::ClosureField> Closure::sorted_fields() const {
+    std::vector<ClosureField> fields;
+    fields.reserve(buffers.size() + vars.size());
     for (const auto &b : buffers) {
-        Expr ptr_var = Variable::make(type_of<void *>(), b.first);
-        elements.emplace_back(ptr_var);
+        fields.push_back({b.first, type_of<void *>()});
     }
     for (const auto &v : vars) {
-        Expr var = Variable::make(v.second, v.first);
-        elements.emplace_back(var);
+        fields.push_back({v.first, v.second});
     }
 
     // Sort by decreasing size, to guarantee the struct is densely packed in
     // memory. We don't actually rely on this, it's just nice to have.
-    std::stable_sort(elements.begin(), elements.end(),
-                     [&](const Expr &a, const Expr &b) {
-                         return a.type().bytes() > b.type().bytes();
+    std::stable_sort(fields.begin(), fields.end(),
+                     [](const ClosureField &a, const ClosureField &b) {
+                         return a.type.bytes() > b.type.bytes();
                      });
+    return fields;
+}
 
-    Expr result = Call::make(Handle(),
-                             Call::make_struct, elements, Call::Intrinsic);
-    return result;
+Type Closure::struct_type() const {
+    std::vector<StructField> struct_fields;
+    for (const auto &f : sorted_fields()) {
+        struct_fields.push_back({f.name, f.type});
+    }
+    return Type::Struct(struct_fields);
+}
+
+Stmt Closure::pack_into_struct(const std::string &alloc_name, const Stmt &body) const {
+    std::vector<ClosureField> fields = sorted_fields();
+    if (fields.empty()) {
+        // Nothing captured: bind the closure pointer to null rather than
+        // allocating a (disallowed) zero-field struct.
+        return LetStmt::make(alloc_name, reinterpret(Handle(), make_zero(UInt(64))), body);
+    }
+
+    std::vector<StructField> struct_fields;
+    std::vector<Expr> values;
+    struct_fields.reserve(fields.size());
+    values.reserve(fields.size());
+    for (const auto &f : fields) {
+        struct_fields.push_back({f.name, f.type});
+        values.push_back(Variable::make(f.type, f.name));
+    }
+    Type struct_t = Type::Struct(struct_fields);
+
+    Stmt store = Store::make(alloc_name, pack_struct(struct_t, values), make_zero(Int(32)),
+                             Parameter(), const_true(), ModulusRemainder(), false);
+    Stmt result = Block::make(store, body);
+    return Allocate::make(alloc_name, struct_t, MemoryType::Stack, {1}, const_true(), result);
 }
 
 Stmt Closure::unpack_from_struct(const Expr &e, const Stmt &s) const {
-    // Use the struct-packing code just to make sure the order of elements is
-    // the same.
-    Expr packed = pack_into_struct();
+    std::vector<ClosureField> fields = sorted_fields();
+    if (fields.empty()) {
+        return s;
+    }
 
-    // Make a prototype of the packed struct
-    Expr prototype =
-        mutate_with(packed,
-                    [](auto *self, const Expr &e) {
-                        if (!e.as<Call>()) {
-                            return make_zero(e.type());
-                        } else {
-                            return self->mutate_base(e);
-                        }
-                    });
-    string prototype_name = unique_name("closure_prototype");
-    Expr prototype_var = Variable::make(Handle(), prototype_name);
+    const Variable *ptr = e.as<Variable>();
+    internal_assert(ptr) << "Closure::unpack_from_struct expects a Variable naming the "
+                         << "pointer to the packed struct, not: " << e << "\n";
 
-    const Call *c = packed.as<Call>();
+    std::vector<StructField> struct_fields;
+    struct_fields.reserve(fields.size());
+    for (const auto &f : fields) {
+        struct_fields.push_back({f.name, f.type});
+    }
+    Type struct_t = Type::Struct(struct_fields);
+
+    Expr struct_value = Load::make(struct_t, ptr->name, make_zero(Int(32)),
+                                   Halide::Buffer<>(), Parameter(),
+                                   const_true(), ModulusRemainder(), false);
 
     // If a closure is generated for multiple consuming blocks of IR, then some
     // of those blocks might only need some of the fields, so only bind the ones
     // that are used.
     std::vector<std::pair<std::string, Expr>> lets;
-    lets.reserve(c->args.size());
-    for (int idx = 0; idx < (int)c->args.size(); idx++) {
-        const Variable *var = c->args[idx].as<Variable>();
-        lets.emplace_back(var->name,
-                          Call::make(var->type,
-                                     Call::load_typed_struct_member,
-                                     {e, prototype_var, idx},
-                                     Call::Intrinsic));
+    lets.reserve(fields.size());
+    for (int idx = 0; idx < (int)fields.size(); idx++) {
+        lets.emplace_back(fields[idx].name, field(struct_value, idx));
     }
-    Stmt result = rewrap_used_lets(s, lets);
-    result = LetStmt::make(prototype_name, prototype, result);
-
-    return result;
+    return rewrap_used_lets(s, lets);
 }
 
 }  // namespace Internal

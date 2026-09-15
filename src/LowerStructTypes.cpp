@@ -96,7 +96,16 @@ class LowerStructTypesMutator : public IRMutator {
 
         if (elem_bytes == 1) {
             Expr bl = byte_load(0);
-            return field_type == UInt(8) ? bl : Reinterpret::make(field_type, bl);
+            if (field_type == UInt(8)) {
+                return bl;
+            }
+            if (field_type.bits() == 8) {
+                return Reinterpret::make(field_type, bl);
+            }
+            // A sub-byte field (e.g. bool, which is UInt(1)) doesn't have as many
+            // bits as its packed byte: Reinterpret requires equal bit widths, so
+            // narrow with a cast instead, taking the value from the low bits.
+            return cast(field_type, bl);
         }
 
         vector<Expr> bytes;
@@ -242,7 +251,15 @@ protected:
             int elem_bytes = f.type.bytes();
             for (int e = 0; e < extent; e++) {
                 Expr value = project_field(op->value, field_index, make_const(Int(32), e));
-                Expr bits = elem_bytes == 1 ? value : Reinterpret::make(UInt(8 * elem_bytes), value);
+                // A sub-byte field (e.g. bool, which is UInt(1)) doesn't have as many bits as
+                // its packed byte: widen it with a cast, since Reinterpret requires equal bit
+                // widths and byte-sized fields are handled below anyway.
+                Expr bits;
+                if (elem_bytes == 1) {
+                    bits = value.type().bits() == 8 ? value : cast(UInt(8), value);
+                } else {
+                    bits = Reinterpret::make(UInt(8 * elem_bytes), value);
+                }
                 Expr elem_byte_base = dest_byte_base +
                                       make_const(index_type, info.offsets[field_index] + e * elem_bytes);
                 for (int b = 0; b < elem_bytes; b++) {

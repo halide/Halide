@@ -217,7 +217,6 @@ struct LowerParallelTasks : public IRMutator {
         tasks_array_args.reserve(num_tasks * 9);
 
         std::string closure_name = unique_name("parallel_closure");
-        Expr closure_struct_allocation = closure.pack_into_struct();
         Expr closure_struct = Variable::make(Handle(), closure_name);
 
         const bool has_task_parent = !task_parents.empty() && task_parents.top_ref().defined();
@@ -298,7 +297,7 @@ struct LowerParallelTasks : public IRMutator {
 
             const std::string new_function_name = c_print_name(unique_name(t.name), false);
             {
-                Expr closure_arg_var = Variable::make(closure_struct_allocation.type(), closure_arg_name);
+                Expr closure_arg_var = Variable::make(Handle(), closure_arg_name);
                 Stmt wrapped_body = closure.unpack_from_struct(closure_arg_var, t.body);
 
                 // TODO(zvookin): Figure out how we want to handle name mangling of closures.
@@ -358,7 +357,7 @@ struct LowerParallelTasks : public IRMutator {
         Expr closure_result = Variable::make(Int(32), closure_result_name);
         Stmt stmt = AssertStmt::make(closure_result == 0, closure_result);
         stmt = LetStmt::make(closure_result_name, result, stmt);
-        stmt = LetStmt::make(closure_name, closure_struct_allocation, stmt);
+        stmt = closure.pack_into_struct(closure_name, stmt);
         return stmt;
     }
 

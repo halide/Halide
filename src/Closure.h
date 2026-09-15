@@ -66,6 +66,19 @@ protected:
     void found_buffer_ref(const std::string &name, Type type,
                           bool read, bool written, const Halide::Buffer<> &image);
 
+    /** One field of the closure's struct layout: a captured buffer's host
+     * pointer or a captured variable, in the same order pack_into_struct()
+     * and unpack_from_struct() lay them out. */
+    struct ClosureField {
+        std::string name;
+        Type type;
+    };
+
+    /** The fields of the closure's struct, sorted by decreasing size so the
+     * struct is densely packed. Shared by pack_into_struct() and
+     * unpack_from_struct() so they always agree on layout. */
+    std::vector<ClosureField> sorted_fields() const;
+
 public:
     Closure() = default;
 
@@ -96,11 +109,22 @@ public:
     /** External allocations referenced. */
     std::map<std::string, Buffer> buffers;
 
-    /** Pack a closure into a struct. */
-    Expr pack_into_struct() const;
+    /** The struct type describing this closure's packed layout: one field
+     * per captured buffer pointer and variable, in the order used by
+     * pack_into_struct()/unpack_from_struct(). */
+    Type struct_type() const;
 
-    /** Unpack a closure around a Stmt, putting all the names in scope. */
-    Stmt unpack_from_struct(const Expr &, const Stmt &) const;
+    /** Allocate a struct named `alloc_name` holding the current values of
+     * this closure's captured symbols, and wrap `body` so the allocation
+     * lives for its duration. Within `body` (and after this call returns),
+     * the packed struct's address is `Variable::make(Handle(), alloc_name)`. */
+    Stmt pack_into_struct(const std::string &alloc_name, const Stmt &body) const;
+
+    /** Unpack a closure around a Stmt, putting all the names in scope. `e`
+     * must be the Variable naming the raw pointer to the packed struct, as
+     * bound by pack_into_struct() (or an equivalent incoming argument of
+     * type Handle() pointing at a struct with the same layout). */
+    Stmt unpack_from_struct(const Expr &e, const Stmt &s) const;
 };
 
 }  // namespace Internal

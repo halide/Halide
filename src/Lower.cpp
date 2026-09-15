@@ -551,8 +551,16 @@ void lower_impl(const vector<Function> &output_funcs,
             lower_parallel_tasks(result_module.functions()[i].body, closure_implementations,
                                  result_module.functions()[i].name, t);
     }
+    // Closures are packed/unpacked using struct types (see Closure::pack_into_struct/
+    // unpack_from_struct), generated after the main struct type lowering pass above ran, so
+    // any struct type usage they introduced needs to be lowered here too.
     for (auto &lowered_func : closure_implementations) {
+        lowered_func.body = lower_struct_types(lowered_func.body);
         result_module.append(lowered_func);
+    }
+    s = lower_struct_types(s);
+    for (size_t i = initial_lowered_function_count; i < result_module.functions().size(); i++) {
+        result_module.functions()[i].body = lower_struct_types(result_module.functions()[i].body);
     }
     debug(2) << "Lowering after generating parallel tasks and closures:\n"
              << s << "\n\n";
@@ -566,8 +574,15 @@ void lower_impl(const vector<Function> &output_funcs,
             lower_sme_streaming_tasks(result_module.functions()[i].body, closure_implementations,
                                       result_module.functions()[i].name, t);
     }
+    // As above: newly generated closures may have introduced struct type usage
+    // that needs lowering before it reaches codegen.
     for (auto &lowered_func : closure_implementations) {
+        lowered_func.body = lower_struct_types(lowered_func.body);
         result_module.append(lowered_func);
+    }
+    s = lower_struct_types(s);
+    for (size_t i = initial_lowered_function_count; i < result_module.functions().size(); i++) {
+        result_module.functions()[i].body = lower_struct_types(result_module.functions()[i].body);
     }
     debug(2) << "Lowering after generating SME streaming tasks and closures:\n"
              << s << "\n\n";
