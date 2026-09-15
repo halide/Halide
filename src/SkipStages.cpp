@@ -11,6 +11,7 @@
 #include "Simplify.h"
 #include "Substitute.h"
 #include "UniquifyVariableNames.h"
+#include "Util.h"
 
 #include <iterator>
 #include <utility>
@@ -332,7 +333,7 @@ protected:
             Expr last_arg = op->args.back();
             const Call *c = last_arg.as<Call>();
             internal_assert(c &&
-                            c->is_intrinsic(Call::make_struct) &&
+                            c->is_intrinsic(Call::return_second) &&
                             !c->args.empty())
                 << last_arg;
             const Variable *v = c->args[0].as<Variable>();
@@ -357,6 +358,20 @@ protected:
             }
         }
         return e;
+    }
+
+    Stmt visit(const Store *op) override {
+        if (starts_with(op->name, "cache_lookup_buffers") || starts_with(op->name, "cache_store_buffers")) {
+            // Mirrors the halide_memoization_cache_lookup special-case in
+            // visit(Call*) above: these buffer-pointer values are memoization
+            // out-parameters, not real Func uses (see Memoization.cpp's
+            // generate_lookup/store_computation), so don't let the
+            // conservative "any .buffer Variable" rule in visit(Variable*)
+            // below mistake this Store's value for a real, unconditional use
+            // of the Func whose buffer it references.
+            return op;
+        }
+        return IRMutator::visit(op);
     }
 
     Expr visit(const Variable *op) override {

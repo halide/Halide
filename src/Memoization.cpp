@@ -266,17 +266,7 @@ public:
         return blocks;
     }
 
-    // Returns a bool expression, which either evaluates to true,
-    // in which case the Allocation named by storage will be computed,
-    // or false, in which case it will be assumed the buffer was populated
-    // by the code in this call.
-    Expr generate_lookup(const std::string &key_allocation_name, const std::string &computed_bounds_name,
-                         int32_t tuple_count, const std::string &storage_base_name) {
-        std::vector<Expr> args;
-        args.push_back(Variable::make(type_of<uint8_t *>(), key_allocation_name));
-        args.push_back(key_size());
-        args.push_back(Variable::make(type_of<halide_buffer_t *>(), computed_bounds_name));
-        args.emplace_back(tuple_count);
+    static std::vector<Expr> buffer_pointers(int32_t tuple_count, const std::string &storage_base_name) {
         std::vector<Expr> buffers;
         if (tuple_count == 1) {
             buffers.push_back(Variable::make(type_of<halide_buffer_t *>(), storage_base_name + ".buffer"));
@@ -285,7 +275,43 @@ public:
                 buffers.push_back(Variable::make(type_of<halide_buffer_t *>(), storage_base_name + "." + std::to_string(i) + ".buffer"));
             }
         }
-        args.push_back(Call::make(type_of<halide_buffer_t **>(), Call::make_struct, buffers, Call::Intrinsic));
+        return buffers;
+    }
+
+    // Returns a bool expression, which either evaluates to true, in which case
+    // the Allocation named by storage will be computed, or false, in which
+    // case it will be assumed the buffer was populated by the code in this
+    // call. Appends the backing array this expression depends on to
+    // `pending_arrays`; the caller must wrap the Stmt that puts the returned
+    // Expr's value in scope with wrap_dynamic_arrays(pending_arrays, ...).
+    Expr generate_lookup(const std::string &key_allocation_name, const std::string &computed_bounds_name,
+                         int32_t tuple_count, const std::string &storage_base_name,
+                         std::vector<DynamicArray> &pending_arrays) {
+        std::vector<Expr> args;
+        args.push_back(Variable::make(type_of<uint8_t *>(), key_allocation_name));
+        args.push_back(key_size());
+        args.push_back(Variable::make(type_of<halide_buffer_t *>(), computed_bounds_name));
+        args.emplace_back(tuple_count);
+        // Named with a "cache_lookup_buffers" prefix that SkipStages.cpp's
+        // SkipStages mutator recognizes (see its visit(const Store *)): values
+        // stored here are memoization out-parameters, not real Func uses, and
+        // must not be mistaken for an unconditional use of the Funcs they
+        // reference just because this array is a Store rather than an inline
+        // expression -- mirroring the same pass's existing special-case for
+        // the (now return_second-wrapped) lookup call itself.
+        std::string buffers_name = unique_name("cache_lookup_buffers");
+        std::vector<Expr> buffers = buffer_pointers(tuple_count, storage_base_name);
+        Expr first_buffer = buffers[0];
+        pending_arrays.push_back({buffers_name, type_of<halide_buffer_t *>(), std::move(buffers)});
+        Expr buffers_ptr = Variable::make(type_of<halide_buffer_t **>(), buffers_name);
+        // SkipStages.cpp's mutation pass also needs the name of the Func this
+        // lookup targets, recoverable from this call's last arg alone (it
+        // doesn't have access to the Store that fills in buffers_ptr's
+        // Allocate). return_second is a no-op at runtime (it just evaluates
+        // first_buffer and returns buffers_ptr), but keeps that name
+        // inspectable directly on the Call, the same way the old
+        // make_struct-based array (which had it as args[0]) did.
+        args.push_back(Call::make(type_of<halide_buffer_t **>(), Call::return_second, {first_buffer, buffers_ptr}, Call::PureIntrinsic));
 
         return Call::make(Int(32), "halide_memoization_cache_lookup", args, Call::Extern);
     }
@@ -298,15 +324,12 @@ public:
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<halide_buffer_t *>(), computed_bounds_name));
         args.emplace_back(tuple_count);
-        std::vector<Expr> buffers;
-        if (tuple_count == 1) {
-            buffers.push_back(Variable::make(type_of<halide_buffer_t *>(), storage_base_name + ".buffer"));
-        } else {
-            for (int32_t i = 0; i < tuple_count; i++) {
-                buffers.push_back(Variable::make(type_of<halide_buffer_t *>(), storage_base_name + "." + std::to_string(i) + ".buffer"));
-            }
-        }
-        args.push_back(Call::make(type_of<halide_buffer_t **>(), Call::make_struct, buffers, Call::Intrinsic));
+        // Named with a "cache_store_buffers" prefix -- see the matching
+        // SkipStages.cpp exemption and the comment on generate_lookup() above.
+        std::string buffers_name = unique_name("cache_store_buffers");
+        std::vector<DynamicArray> pending_arrays;
+        pending_arrays.push_back({buffers_name, type_of<halide_buffer_t *>(), buffer_pointers(tuple_count, storage_base_name)});
+        args.push_back(Variable::make(type_of<halide_buffer_t **>(), buffers_name));
         if (!eviction_key_name.empty()) {
             args.push_back(make_const(Bool(), true));
             args.push_back(Variable::make(UInt(64), eviction_key_name));
@@ -315,7 +338,8 @@ public:
             args.push_back(make_const(UInt(64), 0));
         }
         // This is actually a void call. How to indicate that? Look at Extern_ stuff.
-        return Evaluate::make(Call::make(Int(32), "halide_memoization_cache_store", args, Call::Extern));
+        Stmt result = Evaluate::make(Call::make(Int(32), "halide_memoization_cache_store", args, Call::Extern));
+        return wrap_dynamic_arrays(pending_arrays, result);
     }
 };
 
@@ -387,9 +411,11 @@ private:
                                                                    Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern)),
                                                   cache_miss_marker);
 
+            std::vector<DynamicArray> lookup_pending_arrays;
             Stmt cache_lookup = LetStmt::make(cache_result_name,
-                                              key_info.generate_lookup(cache_key_name, computed_bounds_name, f.outputs(), op->name),
+                                              key_info.generate_lookup(cache_key_name, computed_bounds_name, f.outputs(), op->name, lookup_pending_arrays),
                                               cache_lookup_check);
+            cache_lookup = wrap_dynamic_arrays(lookup_pending_arrays, cache_lookup);
 
             BufferBuilder builder;
             builder.dimensions = f.dimensions();
