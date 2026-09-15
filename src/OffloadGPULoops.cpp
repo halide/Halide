@@ -185,14 +185,17 @@ protected:
         bool runtime_run_takes_types = gpu_codegen->kernel_run_takes_types();
         Type target_size_t_type = target.bits == 32 ? Int(32) : Int(64);
 
+        vector<DynamicArray> pending_arrays;
         vector<Expr> args, arg_types_or_sizes, arg_is_buffer;
         for (const DeviceArgument &i : closure_args) {
             Expr val;
             if (i.is_buffer) {
                 val = Variable::make(Handle(), i.name + ".buffer");
             } else {
-                val = Variable::make(i.type, i.name);
-                val = Call::make(type_of<void *>(), Call::make_struct, {val}, Call::Intrinsic);
+                Expr scalar_val = Variable::make(i.type, i.name);
+                std::string box_name = unique_name("gpu_arg_box");
+                pending_arrays.push_back({box_name, i.type, {scalar_val}});
+                val = Variable::make(Handle(), box_name);
             }
             args.emplace_back(val);
 
@@ -207,10 +210,15 @@ protected:
 
         // nullptr-terminate the lists
         args.emplace_back(reinterpret(Handle(), make_zero(UInt(64))));
+        Type arg_types_or_sizes_type;
         if (runtime_run_takes_types) {
             internal_assert(sizeof(halide_type_t) == sizeof(uint32_t));
-            arg_types_or_sizes.emplace_back(make_zero(UInt(32)));
+            // i.type.to_abi() above implicitly converts (via halide_type_t's
+            // operator uint32_t()) to Expr(int32_t), so match that here.
+            arg_types_or_sizes_type = Int(32);
+            arg_types_or_sizes.emplace_back(make_zero(Int(32)));
         } else {
+            arg_types_or_sizes_type = target_size_t_type;
             arg_types_or_sizes.emplace_back(cast(target_size_t_type, 0));
         }
         arg_is_buffer.emplace_back(make_zero(UInt(8)));
@@ -221,6 +229,13 @@ protected:
         debug(3) << "bounds.num_threads[0] = " << bounds.num_threads[0] << "\n";
         debug(3) << "bounds.num_threads[1] = " << bounds.num_threads[1] << "\n";
         debug(3) << "bounds.num_threads[2] = " << bounds.num_threads[2] << "\n";
+
+        std::string arg_types_or_sizes_name = unique_name("gpu_arg_types_or_sizes");
+        std::string args_name = unique_name("gpu_args");
+        std::string arg_is_buffer_name = unique_name("gpu_arg_is_buffer");
+        pending_arrays.push_back({arg_types_or_sizes_name, arg_types_or_sizes_type, std::move(arg_types_or_sizes)});
+        pending_arrays.push_back({args_name, Handle(), std::move(args)});
+        pending_arrays.push_back({arg_is_buffer_name, UInt(8), std::move(arg_is_buffer)});
 
         string api_unique_name = gpu_codegen->api_unique_name();
         vector<Expr> run_args = {
@@ -233,17 +248,20 @@ protected:
             Expr(bounds.num_threads[1]),
             Expr(bounds.num_threads[2]),
             Expr(bounds.shared_mem_size),
-            Call::make(Handle(), Call::make_struct, arg_types_or_sizes, Call::Intrinsic),
-            Call::make(Handle(), Call::make_struct, args, Call::Intrinsic),
-            Call::make(Handle(), Call::make_struct, arg_is_buffer, Call::Intrinsic),
+            Variable::make(Handle(), arg_types_or_sizes_name),
+            Variable::make(Handle(), args_name),
+            Variable::make(Handle(), arg_is_buffer_name),
         };
         Stmt run_and_assert = call_extern_and_assert("halide_" + api_unique_name + "_run", run_args);
+        Stmt result;
         if (target.has_feature(Target::Profile) || target.has_feature(Target::ProfileByTimer)) {
             Expr device_interface = make_device_interface_call(loop->device_api, MemoryType::Auto);
             Stmt sync_and_assert = call_extern_and_assert("halide_device_sync_global", {device_interface});
-            return Block::make(run_and_assert, sync_and_assert);
+            result = Block::make(run_and_assert, sync_and_assert);
+        } else {
+            result = run_and_assert;
         }
-        return run_and_assert;
+        return wrap_dynamic_arrays(pending_arrays, result);
     }
 
 public:
