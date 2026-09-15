@@ -501,6 +501,13 @@ typedef enum halide_type_code_t
     halide_type_bfloat = 4,  ///< floating point numbers in the bfloat format
     halide_type_struct = 5,  ///< a packed, by-value aggregate; its total byte
                              ///< size is carried in halide_type_t::reserved
+    halide_type_typed_handle = 6,  ///< compiler-internal only: a pointer to a
+                             ///< known Halide::Type (see Halide::Type::HandleTo),
+                             ///< used to give a struct field's pointer element
+                             ///< type information. Always erases to plain
+                             ///< halide_type_handle via Halide::Type::to_abi(),
+                             ///< so this code never appears in a real ABI
+                             ///< halide_type_t at runtime.
 } halide_type_code_t;
 
 // Note that while __attribute__ can go before or after the declaration,
@@ -2510,6 +2517,9 @@ inline std::ostream &operator<<(std::ostream &os, const halide_type_t &type) {
         return os << "bfloat" << (int)type.bits;
     case halide_type_struct:
         return os << "struct(" << (int)type.reserved << " bytes)";
+    case halide_type_typed_handle:
+        // Never actually appears in an ABI halide_type_t (see its declaration above).
+        return os << "(void*)";
     }
     return os;
 }

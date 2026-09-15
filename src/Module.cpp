@@ -15,6 +15,7 @@
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "LLVM_Runtime_Linker.h"
+#include "LowerStructTypes.h"
 #include "Pipeline.h"
 #include "PythonExtensionGen.h"
 #include "StmtToHTML.h"
@@ -892,6 +893,9 @@ void compile_multitarget(const std::string &fn_name,
     std::vector<LoweredArgument> base_target_args;
     std::vector<AutoSchedulerResults> auto_scheduler_results;
     MetadataNameMap metadata_name_map;
+    // Backing arrays for the per-target halide_can_use_target_features() calls
+    // below, wrapping wrapper_body once it's built (see needs_wrapper below).
+    std::vector<DynamicArray> pending_arrays;
 
     for (size_t i = 0; i < targets.size(); ++i) {
         const Target &target = targets[i];
@@ -963,12 +967,29 @@ void compile_multitarget(const std::string &fn_name,
 
         Expr can_use;
         if (target != base_target) {
-            std::vector<Expr> features_struct_args;
+            // Model the (count, data) pair passed to halide_can_use_target_features()
+            // as a 2-field struct, with the data pointer typed as Type::HandleTo(UInt(64))
+            // rather than a plain Handle() -- see Type::HandleTo's doc comment.
+            std::vector<Expr> word_elements;
+            word_elements.reserve(kFeaturesWordCount);
             for (uint64_t feature : cur_target_features) {
-                features_struct_args.emplace_back(UIntImm::make(UInt(64), feature));
+                word_elements.emplace_back(UIntImm::make(UInt(64), feature));
             }
+            std::string words_name = unique_name("target_features_words");
+            pending_arrays.push_back({words_name, UInt(64), word_elements});
+
+            Type holder_t = Type::Struct({{"count", Int(32)}, {"data", Type::HandleTo(UInt(64))}},
+                                         StructLayout::Natural);
+            Expr holder_value = pack_struct(holder_t, {kFeaturesWordCount,
+                                                       Variable::make(Type::HandleTo(UInt(64)), words_name)});
+            std::string holder_name = unique_name("target_features");
+            pending_arrays.push_back({holder_name, holder_t, {holder_value}});
+
+            Expr holder_load = Load::make(holder_t, holder_name, 0, Buffer<>(), Parameter(),
+                                          const_true(), ModulusRemainder(), false);
             can_use = Call::make(Int(32), "halide_can_use_target_features",
-                                 {kFeaturesWordCount, Call::make(type_of<uint64_t *>(), Call::make_struct, features_struct_args, Call::Intrinsic)},
+                                 {field(holder_load, "count"),
+                                  Cast::make(type_of<uint64_t *>(), field(holder_load, "data"))},
                                  Call::Extern);
         } else {
             can_use = IntImm::make(Int(32), 1);
@@ -1015,6 +1036,11 @@ void compile_multitarget(const std::string &fn_name,
         Expr private_result_var = Variable::make(Int(32), private_result_name);
         Stmt wrapper_body = AssertStmt::make(private_result_var == 0, private_result_var);
         wrapper_body = LetStmt::make(private_result_name, indirect_result, wrapper_body);
+        wrapper_body = wrap_dynamic_arrays(pending_arrays, wrapper_body);
+        // wrapper_body is built directly here rather than via lower_impl(), so
+        // (unlike ordinary pipeline lowering) nothing has lowered its struct
+        // type usage yet.
+        wrapper_body = lower_struct_types(wrapper_body);
 
         // Always build with NoRuntime: that's handled as a separate module.
         //

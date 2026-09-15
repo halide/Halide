@@ -824,9 +824,57 @@ void test_struct_layout_natural_matches_c_abi() {
     }
 }
 
+// Type::HandleTo(pointee) is a handle type that additionally records what
+// Halide Type it points to -- an independent mechanism from is_struct()'s
+// StructTypeInfo and from a C++-facing Handle(handle_cplusplus_type*), used
+// to give a struct field's pointer element type information (e.g. modeling
+// a dynamically-sized array as a {count, data} struct).
+void test_handle_to() {
+    Type int_ptr_a = Type::HandleTo(Int(32));
+    Type int_ptr_b = Type::HandleTo(Int(32));  // independently constructed, same pointee
+    Type float_ptr = Type::HandleTo(Float(32));
+
+    if (!int_ptr_a.is_handle() || !int_ptr_a.is_typed_handle()) {
+        printf("Expected Type::HandleTo() to report is_handle() and is_typed_handle()\n");
+        exit(1);
+    }
+    if (int_ptr_a.bytes() != 8) {
+        printf("Expected Type::HandleTo() to be pointer-sized (8 bytes), got %d\n", int_ptr_a.bytes());
+        exit(1);
+    }
+    if (!int_ptr_a.pointee_type() || *int_ptr_a.pointee_type() != Int(32)) {
+        printf("Expected Type::HandleTo(Int(32)).pointee_type() == Int(32)\n");
+        exit(1);
+    }
+    if (!(int_ptr_a == int_ptr_b)) {
+        printf("Two independently-constructed Type::HandleTo() with the same pointee should compare equal\n");
+        exit(1);
+    }
+    if (int_ptr_a == float_ptr) {
+        printf("Type::HandleTo() with different pointees should not compare equal\n");
+        exit(1);
+    }
+    if (int_ptr_a == Handle()) {
+        printf("Type::HandleTo() should not compare equal to a plain Handle()\n");
+        exit(1);
+    }
+    if (Handle().pointee_type() || Handle().is_typed_handle()) {
+        printf("A plain Handle() should not report a pointee_type() or is_typed_handle()\n");
+        exit(1);
+    }
+
+    // Use it as a struct field, matching the {count, data} array-describing shape.
+    Type holder_t = Type::Struct({{"count", Int(32)}, {"data", int_ptr_a}}, StructLayout::Natural);
+    if (holder_t.struct_type()->fields[1].type.pointee_type() != int_ptr_a.pointee_type()) {
+        printf("Expected the struct field's pointee type to survive Type::Struct()\n");
+        exit(1);
+    }
+}
+
 int main(int argc, char **argv) {
     test_type_struct_basics();
     test_struct_layout_natural_matches_c_abi();
+    test_handle_to();
     test_struct_type_ordering_consistent_with_equality();
     test_constant_integer_bounds_of_struct();
     test_read_from_buffer();

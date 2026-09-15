@@ -134,6 +134,19 @@ bool Type::same_struct_type(const Type &other) const {
     return a->fields == b->fields;
 }
 
+Type Type::HandleTo(Type pointee) {
+    // Deliberately leaked, like every other interned Type metadata pointer
+    // (StructTypeInfo, halide_handle_cplusplus_type).
+    auto *p = new Type(pointee);
+    Type t(TypedHandleKind, 64, 1);
+    t.metadata_index_ = Internal::intern_typed_handle_pointee(p);
+    return t;
+}
+
+bool Type::same_typed_handle_pointee(const Type &other) const {
+    return pointee_type() == other.pointee_type();
+}
+
 bool Type::operator<(const Type &other) const {
     if (std::tie(type_code, type_bits, type_lanes) <
         std::tie(other.type_code, other.type_bits, other.type_lanes)) {
@@ -156,6 +169,14 @@ bool Type::operator<(const Type &other) const {
             return false;
         }
         return struct_type()->fields < other.struct_type()->fields;
+    }
+    if (is_typed_handle()) {
+        // Equal (type_code, type_bits, type_lanes) above already implies both
+        // are typed handles here, so we only order by pointee type.
+        if (same_typed_handle_pointee(other)) {
+            return false;
+        }
+        return *pointee_type() < *other.pointee_type();
     }
     return false;
 }
@@ -410,6 +431,11 @@ InternTable<StructTypeInfo> &struct_type_intern_table() {
     return t;
 }
 
+InternTable<Type> &typed_handle_intern_table() {
+    static InternTable<Type> t;
+    return t;
+}
+
 }  // namespace
 
 uint32_t intern_handle_type(const halide_handle_cplusplus_type *handle_type) {
@@ -429,6 +455,15 @@ uint32_t intern_struct_type(const StructTypeInfo *struct_type) {
 
 const StructTypeInfo *get_interned_struct_type(uint32_t index) {
     return struct_type_intern_table().get(index);
+}
+
+uint32_t intern_typed_handle_pointee(const Type *pointee) {
+    internal_assert(pointee != nullptr) << "intern_typed_handle_pointee(nullptr)";
+    return typed_handle_intern_table().intern(pointee);
+}
+
+const Type *get_interned_typed_handle_pointee(uint32_t index) {
+    return typed_handle_intern_table().get(index);
 }
 
 uint32_t intern_opaque_struct_type(int total_bytes) {

@@ -271,6 +271,7 @@ struct halide_handle_traits {
 
 namespace Halide {
 
+struct Type;
 struct StructField;
 struct StructTypeInfo;
 
@@ -306,6 +307,13 @@ const StructTypeInfo *get_interned_struct_type(uint32_t index);
  * size, used to reconstruct a struct Type from its ABI form, which records
  * only the size. Returns a nonzero struct-table index. */
 uint32_t intern_opaque_struct_type(int total_bytes);
+
+/** A `Type::HandleTo` type's pointee, interned the same way (a leaked,
+ * program-lifetime `Type`), in its own table -- separate from the handle and
+ * struct tables above, since a `Type::HandleTo` type is neither a plain
+ * `Handle` nor a `Type::Struct`. */
+uint32_t intern_typed_handle_pointee(const Type *pointee);
+const Type *get_interned_typed_handle_pointee(uint32_t index);
 }  // namespace Internal
 
 struct Expr;
@@ -337,6 +345,7 @@ public:
     static constexpr halide_type_code_t BFloat = halide_type_bfloat;
     static constexpr halide_type_code_t Handle = halide_type_handle;
     static constexpr halide_type_code_t StructKind = halide_type_struct;
+    static constexpr halide_type_code_t TypedHandleKind = halide_type_typed_handle;
     // @}
 
     /** Exposed so code that needs to reason about the maximum representable
@@ -384,6 +393,35 @@ public:
      * (same field names, types, order, and array extents), not just by
      * pointer identity of the interned `StructTypeInfo`. */
     bool same_struct_type(const Type &other) const;
+
+    /** Construct a handle type that additionally records what Halide `Type`
+     * it points to (as opposed to a plain `Handle()`, which records nothing,
+     * or a C++-facing `Handle(const halide_handle_cplusplus_type *)`, which
+     * records a C++-interop name/namespace descriptor instead). Compiler-
+     * internal: this is for giving a struct field's pointer element some
+     * type information (e.g. a `{count, data}` array-describing struct
+     * field), not for user-facing APIs. Always erases to plain `Handle` via
+     * `to_abi()` -- see `halide_type_typed_handle`'s doc comment. */
+    static Type HandleTo(Type pointee);
+
+    /** Is this type a handle constructed by `Type::HandleTo`? */
+    HALIDE_ALWAYS_INLINE
+    bool is_typed_handle() const {
+        return code() == TypedHandleKind;
+    }
+
+    /** If this is a handle constructed by `Type::HandleTo`, the `Type` it
+     * points to. `std::nullopt` otherwise. */
+    std::optional<Type> pointee_type() const {
+        if (!is_typed_handle() || metadata_index_ == 0) {
+            return std::nullopt;
+        }
+        return *Internal::get_interned_typed_handle_pointee(metadata_index_);
+    }
+
+    /** Check that two `Type::HandleTo` types point to the same (structurally
+     * equal) Type. */
+    bool same_typed_handle_pointee(const Type &other) const;
 
     // Default ctor initializes everything to predictable-but-unlikely values
     constexpr Type()
@@ -438,7 +476,10 @@ public:
         internal_assert(type_lanes < 2)
             << "Cannot erase a vector type with " << type_lanes
             << " lanes to a scalar ABI halide_type_t.\n";
-        halide_type_t t(code(), type_bits);
+        // A Type::HandleTo type erases to a plain handle: its pointee Type is
+        // compiler-internal-only information that never crosses the ABI
+        // boundary (see halide_type_typed_handle's doc comment).
+        halide_type_t t(is_typed_handle() ? Handle : code(), type_bits);
         if (is_struct()) {
             int n = bytes();
             internal_assert(n <= 0xffff)
@@ -611,10 +652,11 @@ public:
         return code() == Int || code() == UInt;
     }
 
-    /** Is this type an opaque handle type (void *) */
+    /** Is this type an opaque handle type (void *), including one
+     * constructed by `Type::HandleTo` */
     HALIDE_ALWAYS_INLINE
     bool is_handle() const {
-        return code() == Handle;
+        return code() == Handle || code() == TypedHandleKind;
     }
 
     // Returns true iff type is a signed integral type where overflow is defined.
@@ -640,7 +682,8 @@ public:
         return type_code == other.type_code && type_bits == other.type_bits &&
                type_lanes == other.type_lanes &&
                (code() != Handle || same_handle_type(other)) &&
-               (code() != StructKind || same_struct_type(other));
+               (code() != StructKind || same_struct_type(other)) &&
+               (code() != TypedHandleKind || same_typed_handle_pointee(other));
     }
 
     /** Compare two types for inequality */

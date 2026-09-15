@@ -1249,6 +1249,19 @@ Stmt rewrap_used_lets(const Stmt &body, const std::vector<std::pair<std::string,
     return rewrap_used_lets_impl(body, lets);
 }
 
+Stmt wrap_dynamic_arrays(const std::vector<DynamicArray> &arrays, Stmt body) {
+    for (const auto &a : reverse_view(arrays)) {
+        std::vector<Stmt> stmts;
+        stmts.reserve(a.elements.size() + 1);
+        for (int i = 0; i < (int)a.elements.size(); i++) {
+            stmts.push_back(Store::make(a.name, a.elements[i], i, Parameter(), const_true(), ModulusRemainder(), false));
+        }
+        stmts.push_back(std::move(body));
+        body = Allocate::make(a.name, a.element_type, MemoryType::Stack, {(int)a.elements.size()}, const_true(), Block::make(stmts));
+    }
+    return body;
+}
+
 Expr rewrap_all_lets(const Expr &body, const std::vector<std::pair<std::string, Expr>> &lets) {
     Expr result = body;
     for (const auto &[name, value] : reverse_view(lets)) {

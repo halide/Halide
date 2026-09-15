@@ -358,6 +358,24 @@ Expr rewrap_used_lets(const Expr &body, const std::vector<std::pair<std::string,
 Stmt rewrap_used_lets(const Stmt &body, const std::vector<std::pair<std::string, Expr>> &lets);
 // @}
 
+/** Describes one dynamically-sized array to allocate for wrap_dynamic_arrays():
+ * `name` will be bound (within the wrapped body) to a Handle() pointer to
+ * `elements.size()` contiguous values of type `element_type`, one per
+ * `elements[i]`, stored at index i. */
+struct DynamicArray {
+    std::string name;
+    Type element_type;
+    std::vector<Expr> elements;
+};
+
+/** Allocate each array in `arrays`, storing its elements, and wrap `body` so
+ * every allocation lives for its duration. Arrays are wrapped outermost-first
+ * in *reverse* list order: if a later array's elements reference an earlier
+ * array's pointer (e.g. a struct field holding that array's address), the
+ * earlier array must already be allocated by the time the later one's
+ * elements are stored, so it needs to end up further out (wrapped later). */
+Stmt wrap_dynamic_arrays(const std::vector<DynamicArray> &arrays, Stmt body);
+
 /** Rewrap a list of lets produced by peel_lets around a new body, without
  * checking whether the body uses them. */
 // @{

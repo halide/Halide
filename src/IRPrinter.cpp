@@ -60,6 +60,13 @@ ostream &operator<<(ostream &out, const Type &type) {
         }
         out << "}";
         break;
+    case Type::TypedHandleKind:
+        if (auto pointee = type.pointee_type()) {
+            out << "(" << *pointee << " *)";
+        } else {
+            out << "(void *)";
+        }
+        break;
     }
     if (!type.is_handle() && !type.is_struct()) {
         out << type.bits();

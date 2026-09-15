@@ -12,7 +12,6 @@
 #include "Module.h"
 #include "Param.h"
 #include "Simplify.h"
-#include "Util.h"
 
 namespace Halide {
 namespace Internal {
@@ -26,20 +25,6 @@ LoweredArgument make_scalar_arg(const std::string &name, const Type &type) {
 template<typename T>
 LoweredArgument make_scalar_arg(const std::string &name) {
     return make_scalar_arg(name, type_of<T>());
-}
-
-// Allocate a struct array named `name` holding one packed `struct_t`-typed
-// element per entry of `elements` (each already a pack_struct() value), and
-// wrap `body` so the allocation lives for its duration.
-Stmt wrap_struct_array(const std::string &name, const Type &struct_t,
-                       const std::vector<Expr> &elements, Stmt body) {
-    std::vector<Stmt> stmts;
-    stmts.reserve(elements.size() + 1);
-    for (int i = 0; i < (int)elements.size(); i++) {
-        stmts.push_back(Store::make(name, elements[i], i, Parameter(), const_true(), ModulusRemainder(), false));
-    }
-    stmts.push_back(std::move(body));
-    return Allocate::make(name, struct_t, MemoryType::Stack, {(int)elements.size()}, const_true(), Block::make(stmts));
 }
 
 std::string task_debug_name(const std::pair<std::string, int> &prefix) {
@@ -251,14 +236,9 @@ struct LowerParallelTasks : public IRMutator {
         // One pack_struct(task_t, ...) per task pushed onto the tasks array below.
         std::vector<Expr> task_elements;
 
-        // Struct arrays allocated while building the tasks below, wrapping the
-        // final Stmt right before it's returned (see the end of this function).
-        struct PendingStructArray {
-            std::string name;
-            Type struct_t;
-            std::vector<Expr> elements;
-        };
-        std::vector<PendingStructArray> pending_struct_arrays;
+        // Arrays allocated while building the tasks below, wrapping the final
+        // Stmt right before it's returned (see the end of this function).
+        std::vector<DynamicArray> pending_arrays;
 
         std::string closure_name = unique_name("parallel_closure");
         Expr closure_struct = Variable::make(Handle(), closure_name);
@@ -378,7 +358,7 @@ struct LowerParallelTasks : public IRMutator {
                     for (int i = 0; i < semaphores_size; i++) {
                         sem_elements.push_back(pack_struct(sem_t, {t.semaphores[i].semaphore, t.semaphores[i].count}));
                     }
-                    pending_struct_arrays.push_back({sem_array_name, sem_t, std::move(sem_elements)});
+                    pending_arrays.push_back({sem_array_name, sem_t, std::move(sem_elements)});
                     semaphores_array = Variable::make(Handle(), sem_array_name);
                 }
 
@@ -397,7 +377,7 @@ struct LowerParallelTasks : public IRMutator {
         if (!task_elements.empty()) {
             // Allocate task list array
             std::string tasks_list_name = unique_name("tasks");
-            pending_struct_arrays.push_back({tasks_list_name, task_t, task_elements});
+            pending_arrays.push_back({tasks_list_name, task_t, task_elements});
             Expr tasks_list = Variable::make(Handle(), tasks_list_name);
             Expr user_context = Call::make(type_of<void *>(), Call::get_user_context, {}, Call::PureIntrinsic);
             Expr task_parent = has_task_parent ? task_parents.top() : make_zero(Handle());
@@ -410,13 +390,7 @@ struct LowerParallelTasks : public IRMutator {
         Expr closure_result = Variable::make(Int(32), closure_result_name);
         Stmt stmt = AssertStmt::make(closure_result == 0, closure_result);
         stmt = LetStmt::make(closure_result_name, result, stmt);
-        // Wrap in reverse of push order: each array's Store may reference an
-        // earlier (semaphores) array's pointer (e.g. the tasks array's
-        // "semaphores" field), so that array's Allocate must already be in
-        // scope -- i.e. it must end up further out, wrapped later.
-        for (const auto &a : reverse_view(pending_struct_arrays)) {
-            stmt = wrap_struct_array(a.name, a.struct_t, a.elements, stmt);
-        }
+        stmt = wrap_dynamic_arrays(pending_arrays, stmt);
         stmt = closure.pack_into_struct(closure_name, stmt);
         return stmt;
     }
