@@ -7,6 +7,7 @@
 #include "Associativity.h"
 #include "Closure.h"
 #include "ConstantInterval.h"
+#include "Debug.h"
 #include "Expr.h"
 #include "IROperator.h"
 #include "Interval.h"
@@ -185,9 +186,6 @@ std::ostream &operator<<(std::ostream &out, const TailStrategy &t) {
         break;
     case TailStrategy::GuardWithIf:
         out << "GuardWithIf";
-        break;
-    case TailStrategy::Predicate:
-        out << "Predicate";
         break;
     case TailStrategy::PredicateLoads:
         out << "PredicateLoads";
@@ -519,9 +517,11 @@ std::ostream &operator<<(std::ostream &out, const ModulusRemainder &c) {
 }
 
 namespace {
-bool supports_ansi(std::ostream &os) {
-    const char *term = getenv("TERM");
-    if (term) {
+bool supports_ansi(const std::ostream *os) {
+    if (!os) {
+        return false;
+    }
+    if (const char *term = getenv("TERM")) {
         // Check if the terminal supports colors
         if (!(strstr(term, "color") || strstr(term, "xterm"))) {
             return false;
@@ -529,9 +529,9 @@ bool supports_ansi(std::ostream &os) {
     }
 #if _WIN32
     HANDLE h;
-    if (&os == &std::cout) {
+    if (os == &std::cout) {
         h = GetStdHandle(STD_OUTPUT_HANDLE);
-    } else if (&os == &std::cerr) {
+    } else if (os == &std::cerr) {
         h = GetStdHandle(STD_ERROR_HANDLE);
     } else {
         return false;
@@ -541,9 +541,9 @@ bool supports_ansi(std::ostream &os) {
     return GetConsoleMode(h, &mode) &&
            SetConsoleMode(h, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
 #else
-    if (&os == &std::cout) {
+    if (os == &std::cout) {
         return isatty(fileno(stdout));
-    } else if (&os == &std::cerr) {
+    } else if (os == &std::cerr) {
         return isatty(fileno(stderr));
     }
     return false;
@@ -554,17 +554,17 @@ bool supports_ansi(std::ostream &os) {
 IRPrinter::IRPrinter(ostream &s)
     : stream(s) {
     s.setf(std::ios::fixed, std::ios::floatfield);
-    if (&stream == &std::cout || &stream == &std::cerr) {
-        bool use_colors = false;
-        const char *opt = getenv("HL_COLORS");
-        if (opt) {
-            int val = std::atoi(opt);
-            use_colors = val != 0;
+    auto detect_color = [&](const std::ostream *terminal) {
+        // Keep this color gate identical to the profiler report's in
+        // src/runtime/profiler_common.cpp: HL_COLORS, if set, is an explicit
+        // override (atoi() != 0); otherwise honor NO_COLOR in addition to
+        // detecting a color-capable terminal.
+        bool use_colors;
+        if (const char *opt = getenv("HL_COLORS")) {
+            use_colors = std::atoi(opt) != 0;
         } else {
-            // Respect NO_COLOR in addition to whether we're writing to a
-            // terminal, matching the profiler report's color gate.
             const char *no_color = getenv("NO_COLOR");
-            use_colors = !(no_color && no_color[0]) && supports_ansi(stream);
+            use_colors = !(no_color && no_color[0]) && supports_ansi(terminal);
         }
         if (use_colors) {
             ansi = true;
@@ -584,6 +584,26 @@ IRPrinter::IRPrinter(ostream &s)
             ansi_reset     = "\033[0m";
             // clang-format on
         }
+    };
+
+    switch (debug_stream_sink(stream)) {
+    case DebugStreamSink::Cout:
+        detect_color(&std::cout);
+        break;
+    case DebugStreamSink::Cerr:
+        detect_color(&std::cerr);
+        break;
+    case DebugStreamSink::File:
+        // A shared log file: never auto-detect colors, but still honor an
+        // explicit HL_COLORS override.
+        detect_color(nullptr);
+        break;
+    case DebugStreamSink::None:
+        // It's not a DebugStream. Is it cout or cerr identically?
+        if (&stream == &std::cout || &stream == &std::cerr) {
+            detect_color(&stream);
+        }
+        break;
     }
 }
 

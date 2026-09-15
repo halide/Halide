@@ -1,3 +1,5 @@
+#include <functional>
+
 #include "Expr.h"
 #include "IROperator.h"  // for lossless_cast()
 
@@ -35,6 +37,12 @@ const IntImm *IntImm::make(Type t, int64_t value) {
     IntImm *node = new IntImm;
     node->type = t;
     node->value = value;
+    // Small values are extremely common, so a hash that just slices up the
+    // bits of the value (like combine_hash below) would put all the entropy
+    // for those in the low bits, which get discarded by set_hash. Multiply
+    // by a large odd constant and keep the high bits instead, which mixes
+    // in the low bits of the value even when the value itself is small.
+    node->set_hash((uint32_t)((((uint64_t)value) * 0x9e3779b97f4a7c15ULL) >> 32));
     return node;
 }
 
@@ -51,6 +59,9 @@ const UIntImm *UIntImm::make(Type t, uint64_t value) {
     UIntImm *node = new UIntImm;
     node->type = t;
     node->value = value;
+    // See the comment in IntImm::make about why we multiply rather than
+    // just slicing up the bits of the value.
+    node->set_hash((uint32_t)((value * 0x9e3779b97f4a7c15ULL) >> 32));
     return node;
 }
 
@@ -77,6 +88,7 @@ const FloatImm *FloatImm::make(Type t, double value) {
         internal_error << "FloatImm must be 16, 32, or 64-bit\n";
     }
 
+    node->set_hash((uint32_t)std::hash<double>{}(node->value));
     return node;
 }
 
@@ -84,6 +96,7 @@ const StringImm *StringImm::make(const std::string &val) {
     StringImm *node = new StringImm;
     node->type = type_of<const char *>();
     node->value = val;
+    node->set_hash((uint32_t)std::hash<std::string>{}(val));
     return node;
 }
 

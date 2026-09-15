@@ -2,14 +2,6 @@
 
 namespace {
 
-std::vector<Halide::Func> func_vector(const std::string &name, int size) {
-    std::vector<Halide::Func> funcs;
-    for (int i = 0; i < size; i++) {
-        funcs.emplace_back(Halide::Func{name + "_" + std::to_string(i)});
-    }
-    return funcs;
-}
-
 class Interpolate : public Halide::Generator<Interpolate> {
 public:
     GeneratorParam<int> levels{"levels", 10};
@@ -23,11 +15,11 @@ public:
         // Input must have four color channels - rgba
         input.dim(2).set_bounds(0, 4);
 
-        auto downsampled = func_vector("downsampled", levels);
-        auto downx = func_vector("downx", levels);
-        auto interpolated = func_vector("interpolated", levels);
-        auto upsampled = func_vector("upsampled", levels);
-        auto upsampledx = func_vector("upsampledx", levels);
+        FuncVec downsampled("downsampled_", levels);
+        FuncVec downx("downx_", levels);
+        FuncVec interpolated("interpolated_", levels);
+        FuncVec upsampled("upsampled_", levels);
+        FuncVec upsampledx("upsampledx_", levels);
 
         Func clamped = Halide::BoundaryConditions::repeat_edge(input);
 

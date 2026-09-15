@@ -37,6 +37,22 @@ extern int halide_webgpu_run(void *user_context,
 extern void halide_webgpu_finalize_kernels(void *user_context, void *state_ptr);
 // @}
 
+// These typedefs treat the WGPUInstance, WGPUAdapter, WGPUDevice, and
+// WGPUBuffer handles as a void *, to avoid dependencies on the WebGPU headers.
+typedef int (*halide_webgpu_acquire_context_t)(void *,   // user_context
+                                               void **,  // WGPUInstance out parameter
+                                               void **,  // WGPUAdapter out parameter
+                                               void **,  // WGPUDevice out parameter
+                                               void **,  // WGPUBuffer staging buffer out parameter
+                                               bool);    // should create a context if none exist
+typedef int (*halide_webgpu_release_context_t)(void * /* user_context */);
+
+/** Set custom methods to acquire and release WebGPU contexts */
+// @{
+extern halide_webgpu_acquire_context_t halide_set_webgpu_acquire_context(halide_webgpu_acquire_context_t handler);
+extern halide_webgpu_release_context_t halide_set_webgpu_release_context(halide_webgpu_release_context_t handler);
+// @}
+
 #ifdef __cplusplus
 }  // End extern "C"
 #endif

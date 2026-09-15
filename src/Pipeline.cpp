@@ -219,8 +219,8 @@ Pipeline::Pipeline(const std::vector<Func> &outputs, const std::vector<Internal:
     }
 }
 
-vector<Func> Pipeline::outputs() const {
-    vector<Func> funcs;
+FuncVec Pipeline::outputs() const {
+    FuncVec funcs;
     for (const Function &f : contents->outputs) {
         funcs.emplace_back(f);
     }

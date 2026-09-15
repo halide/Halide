@@ -72,6 +72,46 @@ int main(int argc, char **argv) {
         }
     }
 
+    {
+        // Same as above, but arranged so that the base of the load's index
+        // ramp is a constant.
+        Func f("f"), g("g"), h("h");
+        Var x("x"), t("t");
+
+        f(x, t) = cast<uint64_t>(x + t) * 12345;
+        g(x, t) = extract_bits<uint32_t>(f(x / 2, t), 32 * (x % 2));
+        h(x, t) = g(x, t);
+
+        h.vectorize(x, 64);
+        h.output_buffer().dim(0).set_min(0).set_extent(64);
+        f.compute_at(h, t).vectorize(x);
+        g.compute_at(h, t).vectorize(x);
+
+        CountOps counter;
+        h.add_custom_lowering_pass(&counter, nullptr);
+
+        Buffer<uint32_t> out = h.realize({64, 4});
+
+        if (counter.extracts > 0) {
+            printf("Saw an unwanted extract_bits call in lowered code\n");
+            return 1;
+        } else if (counter.reinterprets == 0) {
+            printf("Did not see a vector reinterpret in lowered code\n");
+            return 1;
+        }
+
+        for (int t = 0; t < out.height(); t++) {
+            for (int x = 0; x < out.width(); x++) {
+                uint64_t wide = (uint64_t)(x / 2 + t) * 12345;
+                uint32_t correct = (uint32_t)(wide >> (32 * (x % 2)));
+                if (out(x, t) != correct) {
+                    printf("out(%d, %d) = %u instead of %u\n", x, t, out(x, t), correct);
+                    return 1;
+                }
+            }
+        }
+    }
+
     for (bool vectorize : {false, true}) {
         // Reinterpret an array of a narrow type as a smaller array of a wide type
         Func f, g;

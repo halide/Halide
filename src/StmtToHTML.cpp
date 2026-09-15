@@ -1262,11 +1262,8 @@ private:
 
     // To avoid generating ridiculously deep DOMs, we flatten blocks here.
     void print_block_stmt(const Stmt &stmt) {
-        if (const Block *b = stmt.as<Block>()) {
-            print_block_stmt(b->first);
-            print_block_stmt(b->rest);
-        } else if (stmt.defined()) {
-            print(stmt);
+        for (const Stmt &s : Block::to_vector(stmt)) {
+            print(s);
         }
     }
 

@@ -31,7 +31,7 @@ function(add_wasm_executable TARGET)
     #     target_link_libraries(${TARGET} PRIVATE ${args_DEPS})
     # endif ()
 
-    find_program(EMCC emcc REQUIRED PATH_SUFFIXES upstream/emscripten HINTS ENV EMSDK)
+    find_program(EMCXX em++ REQUIRED PATH_SUFFIXES upstream/emscripten HINTS ENV EMSDK)
 
     # TODO: this is currently hardcoded to settings that are sensible for most of Halide's
     # internal purposes. Consider adding ways to customize this as appropriate.
@@ -82,8 +82,8 @@ function(add_wasm_executable TARGET)
         OUTPUT
             "${TARGET}.wasm"
             "${TARGET}.js"
-        COMMAND ${EMCC} ${EMCC_FLAGS} ${INCLUDES} ${SRCS} ${DEPS} -o "${TARGET}.js"
-        DEPENDS ${EMCC} ${SRCS} ${DEPS}
+        COMMAND ${EMCXX} ${EMCC_FLAGS} ${INCLUDES} ${SRCS} ${DEPS} -o "${TARGET}.js"
+        DEPENDS ${EMCXX} ${SRCS} ${DEPS}
         VERBATIM
     )
 
@@ -817,7 +817,6 @@ if (NOT ${_USING_WASM})
         FROM runtime_prefixes_iso.generator
         GENERATOR runtime_prefixes_iso
         FUNCTION_NAME pipe_none_c
-        USE_RUNTIME rniso_rt_none
     )
 
     # a: export/import prefix "runtime_a_", internal prefix "runtime_ai_".
@@ -838,7 +837,6 @@ if (NOT ${_USING_WASM})
         FROM runtime_prefixes_iso.generator
         GENERATOR runtime_prefixes_iso
         FUNCTION_NAME pipe_a_c
-        USE_RUNTIME rniso_rt_a
         PARAMS runtime_prefixes.import=runtime_a_ runtime_prefixes.internal=runtime_ai_
     )
 
@@ -860,7 +858,6 @@ if (NOT ${_USING_WASM})
         FROM runtime_prefixes_iso.generator
         GENERATOR runtime_prefixes_iso
         FUNCTION_NAME pipe_b_c
-        USE_RUNTIME rniso_rt_b
         PARAMS runtime_prefixes.import=runtime_b_ runtime_prefixes.internal=runtime_bi_
     )
 
