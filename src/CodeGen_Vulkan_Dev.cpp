@@ -1872,7 +1872,13 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Provide *) {
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
 
-    SpvId storage_type_id = builder.declare_type(op->type);
+    // SPIR-V has no notion of a struct type here: a struct-backed allocation
+    // is stored as a raw array of bytes (individual fields are read/written
+    // one byte at a time by LowerStructTypes), so its element type is UInt(8)
+    // rather than the struct type itself.
+    Type element_type = op->type.is_struct() ? UInt(8) : op->type;
+
+    SpvId storage_type_id = builder.declare_type(element_type);
     SpvId array_type_id = SpvInvalidId;
     SpvId variable_id = SpvInvalidId;
     uint32_t array_size = 0;
@@ -1883,7 +1889,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
         // Allocation of shared memory must be declared at global scope
         storage_class = SpvStorageClassWorkgroup;  // shared across workgroup
         std::string variable_name = std::string("k") + std::to_string(kernel_index) + std::string("_") + op->name;
-        uint32_t type_size = op->type.bytes();
+        uint32_t type_size = element_type.bytes();
         uint32_t constant_id = 0;
 
         // static fixed size allocation
@@ -1894,7 +1900,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
             if (op->type.is_struct()) {
                 array_size *= op->type.bytes();
             }
-            array_type_id = builder.declare_type(op->type, array_size);
+            array_type_id = builder.declare_type(element_type, array_size);
             builder.add_symbol(variable_name + "_array_type", array_type_id, builder.current_module().id());
             debug(2) << "Vulkan: Allocate (fixed-size) " << op->name << " type=" << op->type << " array_size=" << array_size << " in shared memory on device in global scope\n";
 
@@ -1950,7 +1956,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
 
         debug(2) << "Vulkan: Allocate " << op->name << " type=" << op->type << " size=" << array_size << " on device in function scope\n";
 
-        array_type_id = builder.declare_type(op->type, array_size);
+        array_type_id = builder.declare_type(element_type, array_size);
         storage_class = SpvStorageClassFunction;  // function scope
         std::string variable_name = std::string("k") + std::to_string(kernel_index) + std::string("_") + op->name;
         SpvId ptr_type_id = builder.declare_pointer_type(array_type_id, storage_class);
@@ -1961,7 +1967,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
     access.storage_class = storage_class;
     access.storage_array_size = array_size;
     access.storage_type_id = storage_type_id;
-    access.storage_type = op->type;
+    access.storage_type = element_type;
     storage_access_map[variable_id] = access;
 
     debug(3) << "Vulkan: Pushing allocation called " << op->name << " onto the symbol table\n";
