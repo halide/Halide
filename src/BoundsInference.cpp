@@ -55,23 +55,6 @@ bool depends_on_bounds_inference(const Expr &e) {
     return result;
 }
 
-// Check if the dimension at index 'dim_idx' is always pure (i.e. equal to 'dim')
-// in the definition (including in its specializations)
-bool is_dim_always_pure(const Definition &def, const string &dim, int dim_idx) {
-    const Variable *var = def.args()[dim_idx].as<Variable>();
-    if ((!var) || (var->name != dim)) {
-        return false;
-    }
-
-    for (const Specialization &s : def.specializations()) {
-        bool pure = is_dim_always_pure(s.definition, dim, dim_idx);
-        if (!pure) {
-            return false;
-        }
-    }
-    return true;
-}
-
 /** Compute the bounds of the value of some variable defined by an
  * inner let stmt or for loop. E.g. for the stmt:
  *
@@ -241,6 +224,49 @@ public:
         string stage_prefix;
         size_t fused_group_index;
         Inliner *inliner;
+        vector<int> pure_dims_shared_with_next_stage;
+
+        Stage(const Function &func, size_t stage, size_t fused_group_index, Inliner *inliner)
+            : func(func),
+              stage(stage),
+              name(func.name()),
+              stage_prefix(func.name() + ".s" + std::to_string(stage) + "."),
+              fused_group_index(fused_group_index),
+              inliner(inliner) {
+
+            compute_exprs();
+
+            const Definition &this_def = stage == 0 ? func.definition() : func.updates()[stage - 1];
+            if (stage < func.updates().size()) {
+                const Definition &next_def = func.updates()[stage];
+                for (int k = 0; k < func.dimensions(); k++) {
+                    const string &arg = func.args()[k];
+                    if (is_dim_always_pure(this_def, arg, k) &&
+                        is_dim_always_pure(next_def, arg, k)) {
+                        pure_dims_shared_with_next_stage.push_back(k);
+                    }
+                }
+            }
+        }
+
+        // Check if the dimension at index 'dim_idx' is always pure (i.e. equal to 'dim')
+        // in the definition (including in its specializations)
+        static bool is_dim_always_pure(const Definition &def, const string &dim, int dim_idx) {
+            internal_assert(def.defined());
+            internal_assert((size_t)dim_idx < def.args().size());
+            const Variable *var = def.args()[dim_idx].as<Variable>();
+            if ((!var) || (var->name != dim)) {
+                return false;
+            }
+
+            for (const Specialization &s : def.specializations()) {
+                bool pure = is_dim_always_pure(s.definition, dim, dim_idx);
+                if (!pure) {
+                    return false;
+                }
+            }
+            return true;
+        }
 
         // Computed expressions on the left and right-hand sides.
         // Note that a function definition might have different LHS or reduction domain
@@ -807,21 +833,10 @@ public:
                 continue;
             }
 
-            Stage s;
-            s.func = f[i];
-            s.stage = 0;
-            s.name = s.func.name();
-            s.fused_group_index = find_fused_group_index(s.func, fused_groups);
-            s.compute_exprs();
-            s.stage_prefix = s.name + ".s0.";
-            s.inliner = &inliner;
-            stages.push_back(s);
-
+            int fused_group_index = find_fused_group_index(f[i], fused_groups);
+            stages.emplace_back(f[i], 0, fused_group_index, &inliner);
             for (size_t j = 0; j < f[i].updates().size(); j++) {
-                s.stage = (int)(j + 1);
-                s.stage_prefix = s.name + ".s" + std::to_string(s.stage) + ".";
-                s.compute_exprs();
-                stages.push_back(s);
+                stages.emplace_back(f[i], (int)(j + 1), fused_group_index, &inliner);
             }
         }
 
@@ -894,25 +909,6 @@ public:
                 }
             }
 
-            // For update defs, figure out dimensions where the var is pure, and
-            // there's another update def after this one where the var is also
-            // pure. This is used to skip some relationships along some axes
-            // below.
-            vector<int> masked_dims;
-            if (consumer.stage > 0 &&
-                i + 1 < stages.size() &&
-                stages[i + 1].func.same_as(consumer.func)) {
-                const Definition &this_def = consumer.func.updates()[consumer.stage - 1];
-                const Definition &next_def = consumer.func.updates()[consumer.stage];
-                for (int k = 0; k < consumer.func.dimensions(); k++) {
-                    const string &arg = consumer.func.args()[k];
-                    if (is_dim_always_pure(this_def, arg, k) &&
-                        is_dim_always_pure(next_def, arg, k)) {
-                        masked_dims.push_back(k);
-                    }
-                }
-            }
-
             // Expand the bounds required of all the producers found
             // (and we are checking until i, because stages are topologically sorted).
             for (size_t j = 0; j < i; j++) {
@@ -927,7 +923,8 @@ public:
                 }
 
                 if (producer.func.same_as(consumer.func) &&
-                    masked_dims.size() == (size_t)producer.func.dimensions()) {
+                    consumer.pure_dims_shared_with_next_stage.size() ==
+                        (size_t)producer.func.dimensions()) {
                     // This self-bounds relationship is completely masked by
                     // another one, so just skip it.
                     continue;
@@ -952,13 +949,29 @@ public:
                 }
 
                 // If producer = consumer, and a dim is pure, and there's
-                // another update def after this consumer where the dim is
-                // also pure, forget the dependence along this axis - it's
-                // redundant with the next stage. This avoids quadratic
-                // blow-up of bounds expressions for Funcs with lots of
-                // update stages where long runs of them share pure vars.
+                // another update def after this consumer where the dim is also
+                // pure, forget the dependence along this axis - it's redundant
+                // with the next stage. This avoids quadratic blow-up of bounds
+                // expressions for Funcs with lots of update stages where long
+                // runs of them share pure vars.
                 if (producer.func.same_as(consumer.func)) {
-                    for (int k : masked_dims) {
+                    for (int k : consumer.pure_dims_shared_with_next_stage) {
+                        b[k] = Interval::nothing();
+                    }
+                }
+
+                // On the other hand, if the producer has another stage after it
+                // that shares the same pure vars, and that second stage refers
+                // to the earlier stage, we don't need to register our
+                // dependence on that consumer. It happens transitively via the
+                // next stage, and the dependence between update stages is
+                // constrained to be elementwise in the pure vars.
+                const Stage &next = stages[j + 1];
+                if (!consumer.func.same_as(producer.func) &&
+                    j + 1 < i &&
+                    next.func.same_as(producer.func) &&
+                    producer.bounds.find({next.func.name(), next.stage}) != producer.bounds.end()) {
+                    for (int k : producer.pure_dims_shared_with_next_stage) {
                         b[k] = Interval::nothing();
                     }
                 }
