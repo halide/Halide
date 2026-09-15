@@ -206,7 +206,8 @@ Stmt build_loop_nest(
     map<string, Expr> dim_extent_alignment;
 
     // First hunt through the bounds for them.
-    for (const Bound &i : func_s.bounds()) {
+    for (const auto &entry : func_s.bounds()) {
+        const Bound &i = entry.second;
         if (i.extent.defined()) {
             dim_extent_alignment[i.var] = i.extent;
         }
@@ -950,7 +951,8 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
 Stmt inject_explicit_bounds(Stmt body, Function func) {
     const FuncSchedule &s = func.schedule();
     for (size_t stage = 0; stage <= func.updates().size(); stage++) {
-        for (auto b : s.bounds()) {
+        for (const auto &entry : s.bounds()) {
+            Bound b = entry.second;
             string prefix = func.name() + ".s" + std::to_string(stage) + "." + b.var;
             string min_name = prefix + ".min_unbounded";
             string max_name = prefix + ".max_unbounded";

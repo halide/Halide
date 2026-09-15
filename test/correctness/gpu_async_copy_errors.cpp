@@ -125,7 +125,7 @@ void scenario_predicated() {
         .store_in(MemoryType::GPUSharedAsync)
         .align_storage(x, 4)
         .gpu_threads(y)
-        .vectorize(x, 4, TailStrategy::Predicate);
+        .vectorize(x, 4, TailStrategy::GuardWithIf);
     out.compile_jit(async_target());
 }
 

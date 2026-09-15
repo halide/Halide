@@ -51,14 +51,9 @@ enum class TailStrategy {
      * case to handle the if statement. */
     GuardWithIf,
 
-    /** Guard the loads and stores in the loop with an if statement
-     * that prevents evaluation beyond the original extent. Always
-     * legal. The if statement is treated like a boundary condition,
-     * and factored out into a loop epilogue if possible.
-     * Pros: no redundant re-evaluation; does not constrain input or
-     * output sizes. Cons: increases code size due to separate
-     * tail-case handling. */
-    Predicate,
+    /** Identical to GuardWithIf. Kept only for backwards
+     * compatibility; use GuardWithIf instead. */
+    Predicate [[deprecated("Use TailStrategy::GuardWithIf instead. TailStrategy::Predicate is identical to it and will be removed in a future release.")]] = GuardWithIf,
 
     /** Guard the loads in the loop with an if statement that
      * prevents evaluation beyond the original extent. Only legal
@@ -508,6 +503,15 @@ struct Bound {
     Expr modulus, remainder;
 };
 
+/** Merge \p b into \p bounds, keyed by \p b.var. Func::bound/bound_extent/
+ * align_bounds/align_extent each set one or more of a Var's four Bound
+ * fields (min, extent, modulus, remainder) and leave the rest undefined.
+ * A field that \p b doesn't set is left untouched on an existing entry for
+ * that Var; a field it does set overwrites whatever was there, so every
+ * consumer of FuncSchedule::bounds() sees at most one constraint per Var,
+ * with no ordering between calls left for them to get wrong. */
+void merge_bound(std::map<std::string, Bound> &bounds, const Bound &b);
+
 /** Properties of one axis of the storage of a Func */
 struct StorageDim {
     /** The var in the pure definition corresponding to this axis */
@@ -635,10 +639,11 @@ public:
 
     /** You may explicitly bound some of the dimensions of a function,
      * or constrain them to lie on multiples of a given factor. See
-     * \ref Func::bound and \ref Func::align_bounds and \ref Func::align_extent. */
+     * \ref Func::bound and \ref Func::align_bounds and \ref Func::align_extent.
+     * At most one Bound is kept per Var, keyed by its name. */
     // @{
-    const std::vector<Bound> &bounds() const;
-    std::vector<Bound> &bounds();
+    const std::map<std::string, Bound> &bounds() const;
+    std::map<std::string, Bound> &bounds();
     // @}
 
     /** You may explicitly specify an estimate of some of the function
