@@ -57,8 +57,8 @@ that end, we have a few ground rules that we ask people to adhere to:
   model) must be clearly identified as such in the commit message using
   "Co-authored-by: The name of the tool". Any communication to other Halide
   developers or users that was substantially AI-authored must also be clearly
-  identified as such with a footer that says "Generated with (the name of
-  the tool)". This includes github comments and PR descriptions. We all like
+  identified as such with a footer that says "Generated with (the name of the
+  tool)". This includes github comments and PR descriptions. We all like
   recognition for our work. To that end...
 
 **Acknowledgements.** This code of conduct is a mix of
