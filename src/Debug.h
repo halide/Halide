@@ -34,6 +34,7 @@ struct LoweredFunc;
 std::ostream &operator<<(std::ostream &, const LoweredFunc &);
 
 bool debug_is_active_impl(int verbosity, const char *file, const char *function, int line);
+bool debug_is_active_impl(int verbosity, const char *tag, const char *file, const char *function, int line);
 
 /** Ask an arbitrary std::ostream whether it is a DebugStream and,
  * if so, where the output is being routed to. */
@@ -84,11 +85,21 @@ public:
  * is determined by the value of the environment variable
  * HL_DEBUG_CODEGEN. Output goes to stderr by default, but can be
  * redirected via HL_DEBUG_CODEGEN_LOG_FILE (see DebugStream above).
+ *
+ * A call site can optionally be given a stable tag, independent of its
+ * file/line, so it can be selected on its own via
+ * HL_DEBUG_CODEGEN=tag:my-tag (or a comma-separated
+ * HL_DEBUG_CODEGEN=tag:my-tag,other-tag to select either) regardless of the
+ * configured verbosity:
+ *
+ * \code
+ * debug(verbosity, "my-tag") << "The expression is " << expr << "\n";
+ * \endcode
  */
 
-#define debug(n)                                     \
+#define debug(...)                                   \
     /* NOLINTNEXTLINE(bugprone-macro-parentheses) */ \
-    if (::Halide::Internal::debug_is_active_impl((n), __FILE__, __FUNCTION__, __LINE__)) ::Halide::Internal::DebugStream().stream()
+    if (::Halide::Internal::debug_is_active_impl(__VA_ARGS__, __FILE__, __FUNCTION__, __LINE__)) ::Halide::Internal::DebugStream().stream()
 
 /** Allow easily printing the contents of containers, or std::vector-like containers,
  *  in debug output. Used like so:
@@ -155,7 +166,7 @@ inline StreamT &operator<<(StreamT &stream, const PrintSpanLn<T> &wrapper) {
  * function-local static), so it can't be exercised against multiple specs
  * from a single process; this re-parses `spec` fresh on every call using the
  * same grammar, so the parser/matcher can be unit tested directly. */
-bool debug_spec_accepts(const std::string &spec, int verbosity,
+bool debug_spec_accepts(const std::string &spec, int verbosity, const char *tag,
                         const char *file, const char *function, int line);
 
 }  // namespace Internal

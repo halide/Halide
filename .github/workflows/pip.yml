@@ -180,7 +180,7 @@ jobs:
           package-dir: python_bindings/halide
         env:
           CIBW_BUILD: "cp3*-${{ matrix.platform_tag }}"
-          CIBW_SKIP: "cp3{5,6,7,8,9}* cp314t-*"
+          CIBW_SKIP: "cp3{5,6,7,8,9}* cp3??t-*"
           CIBW_ENVIRONMENT_LINUX: >
             PIP_FIND_LINKS=/project/dist-bin
             SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE='{local_scheme="no-local-version"}'
@@ -290,7 +290,7 @@ jobs:
           package-dir: python_bindings/halide-runtime
         env:
           CIBW_BUILD: "cp3*-${{ matrix.platform_tag }}"
-          CIBW_SKIP: "cp3{5,6,7,8,9}* cp314t-*"
+          CIBW_SKIP: "cp3{5,6,7,8,9}* cp3??t-*"
           CIBW_ENVIRONMENT_LINUX: >
             PIP_FIND_LINKS=/project/dist-bin
             SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE_RUNTIME='{local_scheme="no-local-version"}'

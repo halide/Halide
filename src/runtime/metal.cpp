@@ -363,8 +363,8 @@ extern "C" {
 // - A call to halide_acquire_metal_context is followed by a matching call to
 //   halide_release_metal_context. halide_acquire_metal_context should block while a
 //   previous call (if any) has not yet been released via halide_release_metal_context.
-WEAK int halide_metal_acquire_context(void *user_context, mtl_device **device_ret,
-                                      mtl_command_queue **queue_ret, bool create) {
+WEAK int halide_default_metal_acquire_context(void *user_context, mtl_device **device_ret,
+                                              mtl_command_queue **queue_ret, bool create) {
     halide_debug_assert(user_context, &thread_lock != nullptr);
     halide_mutex_lock(&thread_lock);
 
@@ -403,9 +403,47 @@ WEAK int halide_metal_acquire_context(void *user_context, mtl_device **device_re
     return halide_error_code_success;
 }
 
-WEAK int halide_metal_release_context(void *user_context) {
+WEAK int halide_default_metal_release_context(void *user_context) {
     halide_mutex_unlock(&thread_lock);
     return halide_error_code_success;
+}
+
+}  // extern "C"
+
+namespace Halide {
+namespace Runtime {
+namespace Internal {
+namespace Metal {
+
+WEAK halide_metal_acquire_context_t acquire_context = halide_default_metal_acquire_context;
+WEAK halide_metal_release_context_t release_context = halide_default_metal_release_context;
+
+}  // namespace Metal
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
+
+extern "C" {
+
+WEAK int halide_metal_acquire_context(void *user_context, mtl_device **device_ret,
+                                      mtl_command_queue **queue_ret, bool create) {
+    return Metal::acquire_context(user_context, device_ret, queue_ret, create);
+}
+
+WEAK halide_metal_acquire_context_t halide_set_metal_acquire_context(halide_metal_acquire_context_t handler) {
+    halide_metal_acquire_context_t result = Metal::acquire_context;
+    Metal::acquire_context = handler;
+    return result;
+}
+
+WEAK int halide_metal_release_context(void *user_context) {
+    return Metal::release_context(user_context);
+}
+
+WEAK halide_metal_release_context_t halide_set_metal_release_context(halide_metal_release_context_t handler) {
+    halide_metal_release_context_t result = Metal::release_context;
+    Metal::release_context = handler;
+    return result;
 }
 
 }  // extern "C"
