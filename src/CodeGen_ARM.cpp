@@ -1199,7 +1199,7 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
     internal_assert(llvm_func);
     bool is_streaming_task = (f.attributes & LoweredFunc::Attribute::SME_STREAMING_TASK) && target.has_feature(Target::SME2);
 
-    if (target.os != Target::IOS && target.os != Target::OSX) {
+    if (target.os != Target::IOS && target.os != Target::MacOS) {
         // Substitute in strided loads to get vld2/3/4 emission. We don't do it
         // on Apple silicon, because doing a dense load and then shuffling is
         // actually faster.
@@ -2032,7 +2032,7 @@ void CodeGen_ARM::visit(const Shuffle *op) {
     // load.
     int stride = op->slice_stride();
     const Load *load = op->vectors[0].as<Load>();
-    if (target.os != Target::IOS && target.os != Target::OSX &&
+    if (target.os != Target::IOS && target.os != Target::MacOS &&
         load &&
         op->vectors.size() == 1 &&
         op->is_slice() &&
@@ -2932,7 +2932,7 @@ string CodeGen_ARM::mcpu_target() const {
     } else {
         if (target.os == Target::IOS) {
             return "apple-a7";
-        } else if (target.os == Target::OSX) {
+        } else if (target.os == Target::MacOS) {
             return "apple-m1";
         } else if (target.has_feature(Target::SVE2)) {
             return "cortex-x1";
@@ -3011,7 +3011,7 @@ string CodeGen_ARM::mattrs() const {
         if (target.has_feature(Target::SME2)) {
             attrs.emplace_back("+sme2");
         }
-        if (target.os == Target::IOS || target.os == Target::OSX) {
+        if (target.os == Target::IOS || target.os == Target::MacOS) {
             attrs.emplace_back("+reserve-x18");
         }
     }

@@ -280,7 +280,7 @@ def find_gpu_target():
             # D3D12Compute support is only available on 64-bit systems at present.
             features_to_try.append(hl.TargetFeature.D3D12Compute)
         features_to_try.append(hl.TargetFeature.OpenCL)
-    elif target.os == hl.TargetOS.OSX:
+    elif target.os == hl.TargetOS.MacOS:
         features_to_try.append(hl.TargetFeature.Metal)
     else:
         features_to_try.append(hl.TargetFeature.OpenCL)
