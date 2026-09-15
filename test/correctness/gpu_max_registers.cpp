@@ -41,7 +41,7 @@ std::string assembly_for(int max_registers) {
     Func f = make_pipeline(x, y);
     f.gpu_tile(x, y, xi, yi, 8, 8);
     if (max_registers >= 0) {
-        f.gpu_max_registers(max_registers);
+        f.gpu_max_registers(DeviceAPI::CUDA, max_registers);
     }
     Target t = get_host_target()
                    .with_feature(Target::CUDA)
@@ -79,7 +79,7 @@ bool check_answer() {
     }
     Var x("x"), y("y"), xi("xi"), yi("yi");
     Func f = make_pipeline(x, y);
-    f.gpu_tile(x, y, xi, yi, 8, 8).gpu_max_registers(32);
+    f.gpu_tile(x, y, xi, yi, 8, 8).gpu_max_registers(DeviceAPI::CUDA, 32);
     Buffer<float> out = f.realize({64, 64}, t);
     for (int y = 0; y < out.height(); y++) {
         for (int x = 0; x < out.width(); x++) {
@@ -111,7 +111,7 @@ int main(int argc, char **argv) {
         ok &= expect_user_error("gpu_max_registers", "gpu_max_registers", [&]() {
             Var x("x"), y("y"), xi("xi"), yi("yi");
             Func f = make_pipeline(x, y);
-            f.gpu_tile(x, y, xi, yi, 8, 8).gpu_max_registers(bad);
+            f.gpu_tile(x, y, xi, yi, 8, 8).gpu_max_registers(DeviceAPI::CUDA, bad);
         });
     }
     if (!ok) {

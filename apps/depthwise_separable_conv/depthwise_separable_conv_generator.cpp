@@ -128,7 +128,7 @@ public:
             // keeps more warps in flight, 5.63 active warps per scheduler
             // against 5.56. The effect is not monotonic in the number, so it
             // is worth sweeping: 72 is worse than either.
-            output.gpu_max_registers(64);
+            output.gpu_max_registers(DeviceAPI::CUDA, 64);
 
             pointwise_convolved.compute_at(output, di)
                 .reorder(x, y, d)
