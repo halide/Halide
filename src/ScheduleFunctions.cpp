@@ -901,7 +901,7 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
         // outputs in case any of them have device allocations.
         vector<Expr> cleanup_args;
 
-        // Make a struct with the buffers and their uncropped parents
+        // Interleave the cropped buffers and their uncropped parents
         for (const auto &p : cropped_buffers) {
             // The cropped halide_buffer_t
             cleanup_args.push_back(p.first);
@@ -914,16 +914,17 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
             cleanup_args.push_back(make_zero(type_of<struct halide_buffer_t *>()));
         }
 
-        Expr cleanup_struct = Call::make(Handle(),
-                                         Call::make_struct,
-                                         cleanup_args,
-                                         Call::Intrinsic);
+        vector<DynamicArray> cleanup_pending_arrays;
+        string cleanup_array_name = unique_name("buffer_retire_crop_args");
+        cleanup_pending_arrays.push_back({cleanup_array_name, type_of<halide_buffer_t *>(), std::move(cleanup_args)});
+        Expr cleanup_struct = Variable::make(Handle(), cleanup_array_name);
 
         // Insert cleanup before checking the result of the extern stage.
         string destructor_name = unique_name('d');
         const char *fn = (cropped_buffers.size() == 1 ? "_halide_buffer_retire_crop_after_extern_stage" : "_halide_buffer_retire_crops_after_extern_stage");
         Expr cleanup = Call::make(Int(32), fn, {cleanup_struct}, Call::Extern);
         check = Block::make(Evaluate::make(cleanup), check);
+        check = wrap_dynamic_arrays(cleanup_pending_arrays, check);
     }
 
     check = LetStmt::make(result_name, e, check);
