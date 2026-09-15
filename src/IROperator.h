@@ -250,10 +250,12 @@ struct DynamicArray {
  * buffer. Other uninitialized fields will take on a value of zero in
  * the constructed buffer.
  *
- * build() may need to allocate a backing array for the buffer's shape;
- * any such array is appended to `pending_arrays`, which the caller must
- * wrap the Stmt that puts the returned Expr's value in scope with
- * wrap_dynamic_arrays(pending_arrays, ...). */
+ * build() embeds the shape values directly in the returned Expr (via the
+ * make_struct intrinsic) rather than a separately-scoped backing array,
+ * because halide_buffer_t construction Exprs are pervasively treated as
+ * self-contained, freely-duplicable pure Exprs elsewhere in the compiler
+ * (e.g. bounds-inference-driven loop-partitioning prologue/epilogue
+ * analysis, and if-hoisting over a Realize's ".buffer" Let). */
 struct BufferBuilder {
     Expr buffer_memory, shape_memory;
     Expr host, device, device_interface;
@@ -261,7 +263,7 @@ struct BufferBuilder {
     int dimensions = 0;
     std::vector<Expr> mins, extents, strides;
     Expr host_dirty, device_dirty;
-    Expr build(std::vector<DynamicArray> &pending_arrays) const;
+    Expr build() const;
 };
 
 /** If e is a ramp expression with stride, default 1, return the base,

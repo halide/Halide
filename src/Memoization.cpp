@@ -426,11 +426,9 @@ private:
                 builder.mins.push_back(min);
                 builder.extents.push_back(max + 1 - min);
             }
-            std::vector<DynamicArray> bounds_pending_arrays;
-            Expr computed_bounds = builder.build(bounds_pending_arrays);
+            Expr computed_bounds = builder.build();
 
             Stmt computed_bounds_let = LetStmt::make(computed_bounds_name, computed_bounds, cache_lookup);
-            computed_bounds_let = wrap_dynamic_arrays(bounds_pending_arrays, computed_bounds_let);
 
             Stmt generate_key = Block::make(key_info.generate_key(cache_key_name), computed_bounds_let);
             Stmt cache_key_alloc =

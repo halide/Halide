@@ -1041,7 +1041,7 @@ void split_into_ands(const Expr &cond, std::vector<Expr> &result) {
     }
 }
 
-Expr BufferBuilder::build(std::vector<DynamicArray> &pending_arrays) const {
+Expr BufferBuilder::build() const {
     std::vector<Expr> args(11);
     if (buffer_memory.defined()) {
         args[0] = buffer_memory;
@@ -1086,38 +1086,37 @@ Expr BufferBuilder::build(std::vector<DynamicArray> &pending_arrays) const {
     args[7] = (int)type.to_abi().reserved;
     args[8] = dimensions;
 
-    // Only build a backing array when there's actually shape data to hold --
-    // an unused array would otherwise be allocated whenever dimensions == 0.
-    Expr shape_arg = make_zero(type_of<halide_dimension_t *>());
-    if (dimensions != 0) {
-        std::vector<Expr> shape;
-        for (size_t i = 0; i < (size_t)dimensions; i++) {
-            if (i < mins.size()) {
-                shape.push_back(mins[i]);
-            } else {
-                shape.emplace_back(0);
-            }
-            if (i < extents.size()) {
-                shape.push_back(extents[i]);
-            } else {
-                shape.emplace_back(0);
-            }
-            if (i < strides.size()) {
-                shape.push_back(strides[i]);
-            } else {
-                shape.emplace_back(0);
-            }
-            // per-dimension flags, currently unused.
+    std::vector<Expr> shape;
+    for (size_t i = 0; i < (size_t)dimensions; i++) {
+        if (i < mins.size()) {
+            shape.push_back(mins[i]);
+        } else {
             shape.emplace_back(0);
         }
-        for (const Expr &e : shape) {
-            internal_assert(e.type() == Int(32))
-                << "Buffer shape fields must be int32_t:" << e << "\n";
+        if (i < extents.size()) {
+            shape.push_back(extents[i]);
+        } else {
+            shape.emplace_back(0);
         }
-        std::string shape_array_name = unique_name("buffer_shape");
-        pending_arrays.push_back({shape_array_name, Int(32), std::move(shape)});
-        shape_arg = Variable::make(type_of<halide_dimension_t *>(), shape_array_name);
+        if (i < strides.size()) {
+            shape.push_back(strides[i]);
+        } else {
+            shape.emplace_back(0);
+        }
+        // per-dimension flags, currently unused.
+        shape.emplace_back(0);
     }
+    for (const Expr &e : shape) {
+        internal_assert(e.type() == Int(32))
+            << "Buffer shape fields must be int32_t:" << e << "\n";
+    }
+    // The shape values are embedded directly as a make_struct call (rather
+    // than a backing array) so that the entire result remains a single, pure
+    // Expr: callers (e.g. BoundsInference.cpp's bounds queries) need to
+    // freely duplicate or inline the returned Expr into other Exprs (e.g. for
+    // loop-partitioning prologue/epilogue analysis), which isn't safe if part
+    // of its value instead lived in a separately-scoped Allocate.
+    Expr shape_arg = Call::make(type_of<halide_dimension_t *>(), Call::make_struct, shape, Call::Intrinsic);
     if (shape_memory.defined()) {
         args[9] = shape_arg;
     } else if (dimensions == 0) {
