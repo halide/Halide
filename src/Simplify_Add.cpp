@@ -221,7 +221,9 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
            rewrite(x + ((c0 - x) / c1) * c1, c0 - ((c0 - x) % c1), c1 > 0) ||
            rewrite(x + ((c0 - x) / c1 + y) * c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0) ||
            rewrite(x + (y + (c0 - x) / c1) * c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0) ||
-           rewrite(((0 - x) / c0) + ((x % c0 + c1) / c0), fold(c1 / c0) - (x / c0), c0 > 0 && (c1 + 1) % c0 == 0) ||
+
+           // Very specific form that shows up with working with aligned_splits:
+           rewrite(((c2 - x) / c0) + ((x % c0 + c1) / c0), fold(c2 / c0 + c1 / c0) - (x / c0), c0 > 0 && (c1 + 1) % c0 == 0 && c2 % c0 == 0) ||
 
            false)))) {
         return mutate(rewrite.result, info);
