@@ -40,7 +40,15 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
 
     if (EVAL_IN_LAMBDA  //
         (rewrite(c0 + c1, fold(c0 + c1)) ||
+         // Simple linear combinations of one Expr:
          rewrite(x + x, x * 2) ||
+         rewrite(x * y + x, x * (y + 1)) ||
+         rewrite(x + x * y, x * (y + 1)) ||
+         rewrite(x * y + z * y, (x + z) * y) ||
+         rewrite(x * y + y * z, (x + z) * y) ||
+         rewrite(y * x + z * y, y * (x + z)) ||
+         rewrite(y * x + y * z, y * (x + z)) ||
+
          rewrite(ramp(x, y, c0) + ramp(z, w, c0), ramp(x + z, y + w, c0)) ||
          rewrite(ramp(x, y, c0) + broadcast(z, c0), ramp(x + z, y, c0)) ||
          rewrite(broadcast(x, c0) + broadcast(y, c1), broadcast(x + broadcast(y, fold(c1 / c0)), c0), c1 % c0 == 0) ||
@@ -80,9 +88,7 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
          rewrite((c0 - x) + y, (y - x) + c0) ||
          rewrite(max(x, y * c0 + z) + (u - y) * c0, max(x - y * c0, z) + u * c0) ||
 
-         // Collect a repeated term across a nested sum, so that facts about
-         // it become visible to the rules and to modulus_remainder. For
-         // example, x + y + y is even in y, but only once written as x + y*2.
+         // Collect a repeated term across a nested sum.
          rewrite((x + y) + y, x + y * 2) ||
          rewrite((y + x) + y, x + y * 2) ||
          rewrite((x + (y + z)) + z, z * 2 + (x + y)) ||
@@ -121,11 +127,6 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
          rewrite(((0 - x) - y) + z, z - (x + y)) ||
          rewrite(((c0 - x) - y) + c1, (fold(c0 + c1) - y) - x) ||
 
-         rewrite(x * y + z * y, (x + z) * y) ||
-         rewrite(x * y + y * z, (x + z) * y) ||
-         rewrite(y * x + z * y, y * (x + z)) ||
-         rewrite(y * x + y * z, y * (x + z)) ||
-
          rewrite((x * y) + (z - (w * x)), z + (x * (y - w))) ||
          rewrite((x * y) + (z - (w * y)), z + (y * (x - w))) ||
          rewrite((x * y) + (z - (x * w)), z + (x * (y - w))) ||
@@ -133,6 +134,7 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
 
          rewrite(x * c0 + y * c1, (x + y * fold(c1 / c0)) * c0, c1 % c0 == 0) ||
          rewrite(x * c0 + y * c1, (x * fold(c0 / c1) + y) * c1, c0 % c1 == 0) ||
+         rewrite(x * c0 + (y * c1 + z), (x + y * fold(c1 / c0)) * c0 + z, c1 % c0 == 0) ||
          rewrite(x * c0 + (y * c1 + z), (x * fold(c0 / c1) + y) * c1 + z, c0 % c1 == 0) ||
 
          // Hoist shuffles. The Shuffle visitor wants to sink

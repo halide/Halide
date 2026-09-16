@@ -224,6 +224,7 @@ void check_algebra() {
     check(x * y + z * x, (y + z) * x);
     check(y * x + x * z, (y + z) * x);
     check(y * x + z * x, (y + z) * x);
+    check((0 - x) * 3 + x, x * -2);
     check((x - y) * z + (y * z + w), x * z + w);
     check((x - y) * z + (w + y * z), x * z + w);
     check((x - y) * z + (y * z - w), x * z - w);
