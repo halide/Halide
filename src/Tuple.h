@@ -56,13 +56,33 @@ public:
         user_assert(!e.empty()) << "Tuples must have at least one element\n";
     }
 
-    /** Construct a Tuple from a function reference. */
+    /** Construct a Tuple from a function reference. A call to a
+     * single-valued Func makes a one-element Tuple. */
     Tuple(const FuncRef &);
+
+    /** One-element Tuples can be used as Exprs directly. */
+    operator Expr() const;
 
     /** Treat the tuple as a vector of Exprs */
     const std::vector<Expr> &as_vector() const {
         return exprs;
     }
+
+    /** Iterate over the elements. */
+    // @{
+    std::vector<Expr>::iterator begin() {
+        return exprs.begin();
+    }
+    std::vector<Expr>::iterator end() {
+        return exprs.end();
+    }
+    std::vector<Expr>::const_iterator begin() const {
+        return exprs.begin();
+    }
+    std::vector<Expr>::const_iterator end() const {
+        return exprs.end();
+    }
+    // @}
 };
 
 }  // namespace Halide
