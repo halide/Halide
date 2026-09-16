@@ -554,11 +554,18 @@ bool supports_ansi(const std::ostream *os) {
 IRPrinter::IRPrinter(ostream &s)
     : stream(s) {
     s.setf(std::ios::fixed, std::ios::floatfield);
-
     auto detect_color = [&](const std::ostream *terminal) {
-        std::string opt = get_env_variable("HL_COLORS");
-        bool use_colors = !opt.empty() ? opt == "1" : supports_ansi(terminal);
-
+        // Keep this color gate identical to the profiler report's in
+        // src/runtime/profiler_common.cpp: HL_COLORS, if set, is an explicit
+        // override (atoi() != 0); otherwise honor NO_COLOR in addition to
+        // detecting a color-capable terminal.
+        bool use_colors;
+        if (const char *opt = getenv("HL_COLORS")) {
+            use_colors = std::atoi(opt) != 0;
+        } else {
+            const char *no_color = getenv("NO_COLOR");
+            use_colors = !(no_color && no_color[0]) && supports_ansi(terminal);
+        }
         if (use_colors) {
             ansi = true;
             // Simple palette using standard VGA colors.
