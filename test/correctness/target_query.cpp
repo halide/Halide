@@ -6,7 +6,7 @@ using namespace Halide;
 int main(int argc, char **argv) {
     // For simplicity, only run this test on hosts that we can predict.
     Target t = get_host_target();
-    if (t.arch != Target::X86 || t.bits != 64 || t.os != Target::OSX) {
+    if (t.arch != Target::X86 || t.bits != 64 || t.os != Target::MacOS) {
         printf("[SKIP] This test only runs on x86-64-osx.\n");
         return 0;
     }
@@ -14,14 +14,14 @@ int main(int argc, char **argv) {
     t = t.with_feature(Target::Debug);
 
     // Full specification round-trip, crazy features
-    Target t1 = Target(Target::OSX, Target::X86, 64,
+    Target t1 = Target(Target::MacOS, Target::X86, 64,
                        {Target::CUDA, Target::Debug});
 
     Expr is_arm = target_arch_is(Target::ARM);
     Expr is_x86 = target_arch_is(Target::X86);
     Expr bits = target_bits();
     Expr is_android = target_os_is(Target::Android);
-    Expr is_osx = target_os_is(Target::OSX);
+    Expr is_osx = target_os_is(Target::MacOS);
     Expr vec = target_natural_vector_size<float>();
     Expr has_cuda = target_has_feature(Target::CUDA);
     Expr has_vulkan = target_has_feature(Target::Vulkan);

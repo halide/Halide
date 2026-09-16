@@ -280,7 +280,7 @@ def main():
 
         # Select an appropriate GPU API, as we did in lesson 12.
         target = hl.get_host_target()
-        if target.os == hl.TargetOS.OSX:
+        if target.os == hl.TargetOS.MacOS:
             target = target.with_feature(hl.TargetFeature.Metal)
         else:
             target = target.with_feature(hl.TargetFeature.OpenCL)
