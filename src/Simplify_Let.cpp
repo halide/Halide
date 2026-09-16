@@ -136,9 +136,15 @@ HALIDE_NEVER_INLINE Body Simplify::simplify_let_inner(const LetOrLetStmt *op, Ex
             const Variable *var_a = nullptr;
             const Call *tag = nullptr;
 
+            const Variable *var_bb = nullptr;
+            const Add *add_b = nullptr;
             if (add) {
                 var_a = add->a.as<Variable>();
                 var_b = add->b.as<Variable>();
+                add_b = add->b.as<Add>();
+                if (add_b) {
+                    var_bb = add_b->b.as<Variable>();
+                }
             } else if (sub) {
                 var_b = sub->b.as<Variable>();
             } else if (mul) {
@@ -148,12 +154,8 @@ HALIDE_NEVER_INLINE Body Simplify::simplify_let_inner(const LetOrLetStmt *op, Ex
                 var_b = shuffle->vectors[1].as<Variable>();
             }
 
-            if (is_const(f.new_value)) {
+            if (is_const(f.new_value) || var) {
                 replacement = substitute(f.new_name, f.new_value, replacement);
-                f.new_value = Expr();
-                break;
-            } else if (var) {
-                replacement = substitute(f.new_name, var, replacement);
                 f.new_value = Expr();
                 break;
             } else if (add && (is_const(add->b) || var_b)) {
@@ -162,6 +164,18 @@ HALIDE_NEVER_INLINE Body Simplify::simplify_let_inner(const LetOrLetStmt *op, Ex
             } else if (add && var_a) {
                 replacement = substitute(f.new_name, Add::make(add->a, new_var), replacement);
                 f.new_value = add->b;
+            } else if (var_bb && var_bb->param.defined()) {
+                // (a + v) + b
+                // (v + a) + b
+                // a + (b + v)
+                // a + (v + b)
+                //
+                //
+                // a + (b + v): a variable or constant one level down is
+                // just as worth exposing at the use sites as one at the
+                // top, so that it can cancel against terms there.
+                replacement = substitute(f.new_name, Add::make(new_var, var_bb), replacement);
+                f.new_value = Add::make(add->a, add_b->a);
             } else if (mul && (is_const(mul->b) || var_b)) {
                 replacement = substitute(f.new_name, Mul::make(new_var, mul->b), replacement);
                 f.new_value = mul->a;

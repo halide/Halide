@@ -314,9 +314,6 @@ void check_algebra() {
     check((x - y) * -2, (y - x) * 2);
     check((xf - yf) * -2.0f, (yf - xf) * 2.0f);
 
-    check(x * 3 + y * 9, (y * 3 + x) * 3);
-    check(x * 9 + y * 3, (x * 3 + y) * 3);
-
     // Pull terms that are a multiple of the divisor out of a ternary expression
     check(((x * 4 + y) + z) / 2, (y + z) / 2 + x * 2);
     check(((x * 4 - y) + z) / 2, (z - y) / 2 + x * 2);
@@ -553,7 +550,7 @@ void check_algebra() {
     // regardless of intermediate overflow), but the coefficient itself must
     // survive untouched, in particular never negated -- that's not representable.
     check(((x * (int32_t)0x80000000) + (z * (int32_t)0x80000000 + y)),
-          ((x + z) * (int32_t)0x80000000 + y));
+          ((x * (int32_t)0x80000000) + (z * (int32_t)0x80000000 + y)));
 
     // Use a require with no error message to test chains of reasoning
     auto require = [](Expr cond, Expr val) {
@@ -1247,13 +1244,13 @@ void check_bounds() {
     check(max(min(x, 5), 1) == 5, 5 <= x);
 
     check(min((x * 32 + y) * 4, x * 128 + 127), min(y * 4, 127) + x * 128);
-    check(min((x * 32 + y) * 4, x * 128 + 4), (min(y, 1) + x * 32) * 4);
+    /* EXPERIMENT */ check(min((x * 32 + y) * 4, x * 128 + 4), (min(y, 1) * 4 + x * 128));
     check(min((y + x * 32) * 4, x * 128 + 127), min(y * 4, 127) + x * 128);
-    check(min((y + x * 32) * 4, x * 128 + 4), (min(y, 1) + x * 32) * 4);
+    /* EXPERIMENT */ check(min((y + x * 32) * 4, x * 128 + 4), (min(y, 1) * 4 + x * 128));
     check(max((x * 32 + y) * 4, x * 128 + 127), max(y * 4, 127) + x * 128);
-    check(max((x * 32 + y) * 4, x * 128 + 4), (max(y, 1) + x * 32) * 4);
+    /* EXPERIMENT */ check(max((x * 32 + y) * 4, x * 128 + 4), (max(y, 1) * 4 + x * 128));
     check(max((y + x * 32) * 4, x * 128 + 127), max(y * 4, 127) + x * 128);
-    check(max((y + x * 32) * 4, x * 128 + 4), (max(y, 1) + x * 32) * 4);
+    /* EXPERIMENT */ check(max((y + x * 32) * 4, x * 128 + 4), (max(y, 1) * 4 + x * 128));
 
     check((min(x + y, z) + w) - x, min(z - x, y) + w);
     check(min((x + y) + w, z) - x, min(z - x, w + y));

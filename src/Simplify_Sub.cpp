@@ -244,6 +244,12 @@ Expr Simplify::visit(const Sub *op, ExprInfo *info) {
            rewrite(min(y + x, z) - x, min(z - x, y)) ||
            rewrite(min(z, x + y) - x, min(z - x, y)) ||
            rewrite(min(z, y + x) - x, min(z - x, y)) ||
+           // The clamped term hides a multiple of x that cancels against
+           // the subtracted one, leaving a constant upper bound.
+           rewrite(min(min(x, c0) * c1 + c2, y) - x * c1, min(min(y, fold(c0 * c1 + c2)) - x * c1, c2), c1 > 0) ||
+           rewrite(min(y, min(x, c0) * c1 + c2) - x * c1, min(min(y, fold(c0 * c1 + c2)) - x * c1, c2), c1 > 0) ||
+           rewrite(min(min(x, c0) * c1, y) - x * c1, min(min(y, fold(c0 * c1)) - x * c1, 0), c1 > 0) ||
+           rewrite(min(y, min(x, c0) * c1) - x * c1, min(min(y, fold(c0 * c1)) - x * c1, 0), c1 > 0) ||
            rewrite((min(x, (w + (y + z))) - z), min(x - z, w + y)) ||
            rewrite((min(x, (w + (z + y))) - z), min(x - z, w + y)) ||
            rewrite((min(x, ((y + z) + w)) - z), min(x - z, y + w)) ||
