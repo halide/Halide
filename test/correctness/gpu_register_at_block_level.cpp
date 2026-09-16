@@ -186,6 +186,31 @@ int main(int argc, char **argv) {
         }
     }
 
+    {
+        // An allocation stored on the stack, but computed entirely on the
+        // host and outside any GPU loop at all. This is ordinary host memory
+        // read by every thread of the kernel, not a separate copy per thread,
+        // so there is no cross-talk to check for.
+        Func f("f"), g("g");
+        Var x("x"), y("y"), xi("xi"), yi("yi");
+        f(x) = x * 2;
+        f.compute_root().store_in(MemoryType::Stack);
+        g(x, y) = f(x) + f(x + 1);
+        g.gpu_tile(x, y, x, y, xi, yi, 8, 8);
+
+        Buffer<int> result = g.realize({32, 32}, target);
+        for (int y = 0; y < 32; y++) {
+            for (int x = 0; x < 32; x++) {
+                int correct = x * 2 + (x + 1) * 2;
+                if (result(x, y) != correct) {
+                    printf("host stack input: result(%d, %d) = %d instead of %d\n",
+                           x, y, result(x, y), correct);
+                    return 1;
+                }
+            }
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }
