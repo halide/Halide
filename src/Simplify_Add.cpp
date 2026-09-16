@@ -132,10 +132,17 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
          rewrite((x * y) + (z - (x * w)), z + (x * (y - w))) ||
          rewrite((x * y) + (z - (y * w)), z + (y * (x - w))) ||
 
+         // The 3 (and 1 commented) rules below do not follow the reduction order
+         // according to the verifier. Yet they are considered "valid" today
+         // because the constant reduces in amplitude. If all rules never make a
+         // constant bigger, this is another safe way to rewrite things.
          rewrite(x * c0 + y * c1, (x + y * fold(c1 / c0)) * c0, c1 % c0 == 0) ||
          rewrite(x * c0 + y * c1, (x * fold(c0 / c1) + y) * c1, c0 % c1 == 0) ||
-         rewrite(x * c0 + (y * c1 + z), (x + y * fold(c1 / c0)) * c0 + z, c1 % c0 == 0) ||
          rewrite(x * c0 + (y * c1 + z), (x * fold(c0 / c1) + y) * c1 + z, c0 % c1 == 0) ||
+         // The rule above has the following counterpart:
+         //   rewrite(x * c0 + (y * c1 + z), (x + y * fold(c1 / c0)) * c0 + z, c1 % c0 == 0) ||
+         // which is an "equally valid" rewrite rule, but trips up nested_tail_strategies
+         // where the found bounds on allocations become worse.
 
          // Hoist shuffles. The Shuffle visitor wants to sink
          // extract_elements to the leaves, and those count as degenerate
