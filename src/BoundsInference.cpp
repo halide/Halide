@@ -224,6 +224,49 @@ public:
         string stage_prefix;
         size_t fused_group_index;
         Inliner *inliner;
+        vector<int> pure_dims_shared_with_next_stage;
+
+        Stage(const Function &func, size_t stage, size_t fused_group_index, Inliner *inliner)
+            : func(func),
+              stage(stage),
+              name(func.name()),
+              stage_prefix(func.name() + ".s" + std::to_string(stage) + "."),
+              fused_group_index(fused_group_index),
+              inliner(inliner) {
+
+            compute_exprs();
+
+            const Definition &this_def = stage == 0 ? func.definition() : func.updates()[stage - 1];
+            if (stage < func.updates().size()) {
+                const Definition &next_def = func.updates()[stage];
+                for (int k = 0; k < func.dimensions(); k++) {
+                    const string &arg = func.args()[k];
+                    if (is_dim_always_pure(this_def, arg, k) &&
+                        is_dim_always_pure(next_def, arg, k)) {
+                        pure_dims_shared_with_next_stage.push_back(k);
+                    }
+                }
+            }
+        }
+
+        // Check if the dimension at index 'dim_idx' is always pure (i.e. equal to 'dim')
+        // in the definition (including in its specializations)
+        static bool is_dim_always_pure(const Definition &def, const string &dim, int dim_idx) {
+            internal_assert(def.defined());
+            internal_assert((size_t)dim_idx < def.args().size());
+            const Variable *var = def.args()[dim_idx].as<Variable>();
+            if ((!var) || (var->name != dim)) {
+                return false;
+            }
+
+            for (const Specialization &s : def.specializations()) {
+                bool pure = is_dim_always_pure(s.definition, dim, dim_idx);
+                if (!pure) {
+                    return false;
+                }
+            }
+            return true;
+        }
 
         // Computed expressions on the left and right-hand sides.
         // Note that a function definition might have different LHS or reduction domain
@@ -360,23 +403,6 @@ public:
             }
         }
 
-        // Check if the dimension at index 'dim_idx' is always pure (i.e. equal to 'dim')
-        // in the definition (including in its specializations)
-        bool is_dim_always_pure(const Definition &def, const string &dim, int dim_idx) {
-            const Variable *var = def.args()[dim_idx].as<Variable>();
-            if ((!var) || (var->name != dim)) {
-                return false;
-            }
-
-            for (const Specialization &s : def.specializations()) {
-                bool pure = is_dim_always_pure(s.definition, dim, dim_idx);
-                if (!pure) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
         // Wrap a statement in let stmts defining the box
         Stmt define_bounds(Stmt s,
                            const Function &producing_func,
@@ -412,36 +438,6 @@ public:
             }
 
             internal_assert(b.empty() || b.size() == func_args.size());
-
-            if (!b.empty()) {
-                // Optimization: If a dimension is pure in every update
-                // step of a func, then there exists a single bound for
-                // that dimension, instead of one bound per stage. Let's
-                // figure out what those dimensions are, and just have all
-                // stages but the last use the bounds for the last stage.
-                vector<bool> always_pure_dims(func_args.size(), true);
-                for (const Definition &def : func.updates()) {
-                    for (size_t j = 0; j < always_pure_dims.size(); j++) {
-                        bool pure = is_dim_always_pure(def, func_args[j], j);
-                        if (!pure) {
-                            always_pure_dims[j] = false;
-                        }
-                    }
-                }
-
-                if (stage < func.updates().size()) {
-                    size_t stages = func.updates().size();
-                    string last_stage = func.name() + ".s" + std::to_string(stages) + ".";
-                    for (size_t i = 0; i < always_pure_dims.size(); i++) {
-                        if (always_pure_dims[i]) {
-                            const string &dim = func_args[i];
-                            Expr min = Variable::make(Int(32), last_stage + dim + ".min");
-                            Expr max = Variable::make(Int(32), last_stage + dim + ".max");
-                            b[i] = Interval(min, max);
-                        }
-                    }
-                }
-            }
 
             if (func.has_extern_definition() &&
                 !func.extern_definition_proxy_expr().defined()) {
@@ -838,21 +834,10 @@ public:
                 continue;
             }
 
-            Stage s;
-            s.func = f[i];
-            s.stage = 0;
-            s.name = s.func.name();
-            s.fused_group_index = find_fused_group_index(s.func, fused_groups);
-            s.compute_exprs();
-            s.stage_prefix = s.name + ".s0.";
-            s.inliner = &inliner;
-            stages.push_back(s);
-
+            int fused_group_index = find_fused_group_index(f[i], fused_groups);
+            stages.emplace_back(f[i], 0, fused_group_index, &inliner);
             for (size_t j = 0; j < f[i].updates().size(); j++) {
-                s.stage = (int)(j + 1);
-                s.stage_prefix = s.name + ".s" + std::to_string(s.stage) + ".";
-                s.compute_exprs();
-                stages.push_back(s);
+                stages.emplace_back(f[i], (int)(j + 1), fused_group_index, &inliner);
             }
         }
 
@@ -865,12 +850,14 @@ public:
         }
 
         // Dump the stages post-inlining for debugging
-        /*
-        debug(0) << "Bounds inference stages after inlining: \n";
-        for (size_t i = 0; i < stages.size(); i++) {
-            debug(0) << " " << i << ") " << stages[i].name << "\n";
-        }
-        */
+        debug(4) << [&] {
+            std::ostringstream s;
+            s << "Bounds inference stages after inlining: \n";
+            for (size_t i = 0; i < stages.size(); i++) {
+                s << " " << i << ") " << stages[i].name << "\n";
+            }
+            return s.str();
+        }();
 
         // Then compute relationships between them.
         for (size_t i = 0; i < stages.size(); i++) {
@@ -927,41 +914,86 @@ public:
             // (and we are checking until i, because stages are topologically sorted).
             for (size_t j = 0; j < i; j++) {
                 Stage &producer = stages[j];
+
                 // A consumer depends on *all* stages of a producer, not just the last one.
-                const Box &b = boxes[producer.func.name()];
-
-                if (!b.empty()) {
-                    // Check for unboundedness
-                    for (size_t k = 0; k < b.size(); k++) {
-                        if (!b[k].is_bounded()) {
-                            std::ostringstream err;
-                            if (consumer.stage == 0) {
-                                err << "The pure definition ";
-                            } else {
-                                err << "Update definition number " << (consumer.stage - 1);
-                            }
-                            err << " of Function " << consumer.name
-                                << " calls function " << producer.name
-                                << " in an unbounded way in dimension " << k << "\n";
-                            user_error << err.str();
-                        }
-                    }
-
-                    // Dump out the region required of each stage for debugging.
-                    /*
-                    debug(0) << "Box required of " << producer.name
-                             << " by " << consumer.name
-                             << " stage " << consumer.stage << ":\n"
-                             << " used: " << b.used << "\n";
-                    for (size_t k = 0; k < b.size(); k++) {
-                        debug(0) << "  " << b[k].min << " ... " << b[k].max << "\n";
-                    }
-                    debug(0) << "\n";
-                    */
-
-                    producer.bounds[{consumer.name, consumer.stage}] = b;
-                    producer.consumers.push_back((int)i);
+                auto it = boxes.find(producer.func.name());
+                if (it == boxes.end() ||
+                    it->second.empty()) {
+                    // No dependence
+                    continue;
                 }
+
+                if (producer.func.same_as(consumer.func) &&
+                    consumer.pure_dims_shared_with_next_stage.size() ==
+                        (size_t)producer.func.dimensions()) {
+                    // This self-bounds relationship is completely masked by
+                    // another one, so just skip it.
+                    continue;
+                }
+
+                Box b = it->second;
+
+                // Check for unboundedness
+                for (size_t k = 0; k < b.size(); k++) {
+                    if (!b[k].is_bounded()) {
+                        std::ostringstream err;
+                        if (consumer.stage == 0) {
+                            err << "The pure definition ";
+                        } else {
+                            err << "Update definition number " << (consumer.stage - 1);
+                        }
+                        err << " of Function " << consumer.name
+                            << " calls function " << producer.name
+                            << " in an unbounded way in dimension " << k << "\n";
+                        user_error << err.str();
+                    }
+                }
+
+                // If producer = consumer, and a dim is pure, and there's
+                // another update def after this consumer where the dim is also
+                // pure, forget the dependence along this axis - it's redundant
+                // with the next stage. This avoids quadratic blow-up of bounds
+                // expressions for Funcs with lots of update stages where long
+                // runs of them share pure vars.
+                if (producer.func.same_as(consumer.func)) {
+                    for (int k : consumer.pure_dims_shared_with_next_stage) {
+                        b[k] = Interval::nothing();
+                    }
+                }
+
+                // On the other hand, if the producer has another stage after it
+                // that shares the same pure vars, and that second stage refers
+                // to the earlier stage, we don't need to register our
+                // dependence on that consumer. It happens transitively via the
+                // next stage, and the dependence between update stages is
+                // constrained to be elementwise in the pure vars.
+                const Stage &next = stages[j + 1];
+                if (!consumer.func.same_as(producer.func) &&
+                    j + 1 < i &&
+                    next.func.same_as(producer.func) &&
+                    producer.bounds.find({next.func.name(), next.stage}) != producer.bounds.end()) {
+                    for (int k : producer.pure_dims_shared_with_next_stage) {
+                        b[k] = Interval::nothing();
+                    }
+                }
+
+                // Dump out the region required of each stage for debugging.
+                debug(4) << [&] {
+                    std::ostringstream s;
+                    s << "Box required of " << producer.name
+                      << " stage " << producer.stage << ":\n"
+                      << " by " << consumer.name
+                      << " stage " << consumer.stage << ":\n"
+                      << " used: " << b.used << "\n";
+                    for (size_t k = 0; k < b.size(); k++) {
+                        s << "  " << b[k].min << " ... " << b[k].max << "\n";
+                    }
+                    s << "\n";
+                    return s.str();
+                }();
+
+                producer.bounds[{consumer.name, consumer.stage}] = std::move(b);
+                producer.consumers.push_back((int)i);
             }
         }
 
