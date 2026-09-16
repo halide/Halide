@@ -245,7 +245,9 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
                    x * fold(c0 / c2) + fold(c1 / c2),
                    c2 > 0 && c0 % c2 == 0) ||
            // A very specific pattern that comes up in bounds in upsampling code.
-           rewrite((x % 2 + c0) / 2, x % 2 + fold(c0 / 2), c0 % 2 == 1))))) {
+           rewrite((x % 2 + c0) / 2, x % 2 + fold(c0 / 2), c0 % 2 == 1) ||
+           rewrite((0 - x % 2) / 2, (0 - x % 2)) ||
+           false)))) {
         return mutate(rewrite.result, info);
     }
 

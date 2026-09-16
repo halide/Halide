@@ -447,6 +447,7 @@ void check_algebra() {
     check((x + 3) % 14 == -1, f);
     check((x + 3) % 14 == 20, f);
     check((x + 3) % -14 == -1, f);
+    check((0 - (x % 2)) / 2 * 2 + (x % 2), 0 - (x % 2));
 
     // Check an optimization important for fusing dimensions
     check((x / 3) * 3 + x % 3, x);
