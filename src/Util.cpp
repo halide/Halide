@@ -335,7 +335,7 @@ std::string strip_namespaces(const std::string &name) {
 
 bool file_exists(const std::string &name) {
 #ifdef _MSC_VER
-    return _access(name.c_str(), 0) == 0;
+    return _waccess(to_long_path(name).c_str(), 0) == 0;
 #else
     return ::access(name.c_str(), F_OK) == 0;
 #endif
@@ -378,7 +378,7 @@ void dir_rmdir(const std::string &name) {
 FileStat file_stat(const std::string &name) {
 #ifdef _MSC_VER
     struct _stat a;
-    if (_stat(name.c_str(), &a) != 0) {
+    if (_wstat(to_long_path(name).c_str(), &a) != 0) {
         user_error << "Could not stat " << name << "\n";
     }
 #else
@@ -482,7 +482,7 @@ std::string dir_make_temp() {
             name << (int)guid.Data4[i];
         }
         std::string dir = tmp_dir + name.str();
-        std::wstring wdir = from_utf8(dir);
+        std::wstring wdir = to_long_path(dir);
         BOOL success = CreateDirectoryW(wdir.c_str(), nullptr);
         if (success) {
             debug(1) << "temp dir is: " << dir << "\n";
@@ -508,7 +508,11 @@ std::string dir_make_temp() {
 }
 
 std::vector<char> read_entire_file(const std::string &pathname) {
+#ifdef _MSC_VER
+    std::ifstream f(to_long_path(pathname).c_str(), std::ios::in | std::ios::binary);
+#else
     std::ifstream f(pathname, std::ios::in | std::ios::binary);
+#endif
     std::vector<char> result;
 
     f.seekg(0, std::ifstream::end);
@@ -522,7 +526,11 @@ std::vector<char> read_entire_file(const std::string &pathname) {
 }
 
 void write_entire_file(const std::string &pathname, const void *source, size_t source_len) {
+#ifdef _MSC_VER
+    std::ofstream f(to_long_path(pathname).c_str(), std::ios::out | std::ios::binary);
+#else
     std::ofstream f(pathname, std::ios::out | std::ios::binary);
+#endif
 
     f.write(reinterpret_cast<const char *>(source), source_len);
     f.flush();
@@ -555,7 +563,7 @@ int run_process(std::vector<std::string> args, const std::string &stdout_path, c
     int saved_stdout = -1, saved_stderr = -1;
     if (!stdout_path.empty()) {
         saved_stdout = _dup(_fileno(stdout));
-        int fd = _open(stdout_path.c_str(), _O_WRONLY | _O_CREAT | _O_TRUNC | _O_BINARY, _S_IWRITE);
+        int fd = _wopen(to_long_path(stdout_path).c_str(), _O_WRONLY | _O_CREAT | _O_TRUNC | _O_BINARY, _S_IWRITE);
         if (fd == -1) {
             if (saved_stdout != -1) {
                 _close(saved_stdout);
@@ -574,7 +582,7 @@ int run_process(std::vector<std::string> args, const std::string &stdout_path, c
             // writes would clobber each other instead of concatenating.
             _dup2(_fileno(stdout), _fileno(stderr));
         } else {
-            int fd = _open(stderr_path.c_str(), _O_WRONLY | _O_CREAT | _O_TRUNC | _O_BINARY, _S_IWRITE);
+            int fd = _wopen(to_long_path(stderr_path).c_str(), _O_WRONLY | _O_CREAT | _O_TRUNC | _O_BINARY, _S_IWRITE);
             if (fd == -1) {
                 if (saved_stdout != -1) {
                     _dup2(saved_stdout, _fileno(stdout));
