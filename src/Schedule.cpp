@@ -239,6 +239,9 @@ struct FuncScheduleContents {
     std::vector<Bound> estimates;
     std::map<std::string, Internal::FunctionPtr> wrappers;
     MemoryType memory_type = MemoryType::Auto;
+    // If this is supported by more than just cuda, this will need to be a
+    // map<DeviceAPI, int>, not just an int, so that the correct limit (or lack
+    // thereof) is picked up by each backend.
     int gpu_max_registers = 0;
     bool memoized = false;
     bool async = false;
