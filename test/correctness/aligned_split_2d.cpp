@@ -43,8 +43,8 @@ int main(int argc, char **argv) {
     f.output_buffer().dim(1).set_min(0);
 
     f
-        .split_aligned(x, xo, xi, 2, offset_x, Halide::TailStrategy::GuardWithIf)
-        .split_aligned(y, yo, yi, 2, offset_y, Halide::TailStrategy::GuardWithIf)
+        .aligned_split(x, xo, xi, 2, offset_x, Halide::TailStrategy::GuardWithIf)
+        .aligned_split(y, yo, yi, 2, offset_y, Halide::TailStrategy::GuardWithIf)
         .never_partition_all()
         .reorder(xi, yi, xo, yo)
         .unroll(xi)

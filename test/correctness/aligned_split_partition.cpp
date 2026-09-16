@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
                   x < 7, likely(x % 2),
                   200);
     f.bound(x, 0, 8);
-    f.split_aligned(x, xo, xi, 2, 1, TailStrategy::GuardWithIf)
+    f.aligned_split(x, xo, xi, 2, 1, TailStrategy::GuardWithIf)
         .always_partition(xo)
         .unroll(xi);
 

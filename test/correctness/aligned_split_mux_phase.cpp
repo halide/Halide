@@ -61,7 +61,7 @@ int test(int period) {
 
     // The consumer is tiled with a split aligned to the same offset, so every
     // tile starts at a position congruent to off.
-    out.split_aligned(x, xo, xi, tile, off, TailStrategy::GuardWithIf)
+    out.aligned_split(x, xo, xi, tile, off, TailStrategy::GuardWithIf)
         .vectorize(xi)
         .never_partition_all();
 
@@ -76,7 +76,7 @@ int test(int period) {
     Pipeline p(out);
 
     // Every phase is known at compile time, so no mux should survive lowering.
-    Module m = p.compile_to_module({off}, "split_aligned_mux_phase");
+    Module m = p.compile_to_module({off}, "aligned_split_mux_phase");
     MuxCounter checker;
     m.functions().front().body.accept(&checker);
     if (checker.mux_count != 0) {

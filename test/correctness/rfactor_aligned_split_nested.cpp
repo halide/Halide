@@ -1,7 +1,7 @@
 #include "Halide.h"
 #include <stdio.h>
 
-// A companion to rfactor_split_aligned.cpp and split_aligned_nested.cpp:
+// A companion to rfactor_aligned_split.cpp and aligned_split_nested.cpp:
 // after r's aligned split (factor 4, aligned to offset) is rfactored on its
 // outer half into a preserved pure var u, u is itself split again with a
 // second, independent alignment (p2), tried with GuardWithIf,
@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
 
         RVar ro{"ro"}, ri{"ri"};
         f.update(0)
-            .split_aligned(r, ro, ri, 4, offset, TailStrategy::GuardWithIf)
+            .aligned_split(r, ro, ri, 4, offset, TailStrategy::GuardWithIf)
             .unroll(ri);
 
         Var u{"u"}, uo{"uo"}, ui{"ui"};
@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
         Func intm = f.update(0).rfactor(ro, u);
         intm.compute_root();
         intm.update(0)
-            .split_aligned(u, uo, ui, 2, p2, ts)
+            .aligned_split(u, uo, ui, 2, p2, ts)
             .vectorize(ui);
 
         Module module = f.compile_to_module({offset, p2});

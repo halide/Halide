@@ -15,7 +15,7 @@
 //
 // This is the same boundary-handling code in ApplySplit.cpp's
 // ShiftInwardsAndBlend/RoundUpAndBlend branches exercised by
-// rfactor_split_aligned_nested.cpp, but without rfactor's extra layer of
+// rfactor_aligned_split_nested.cpp, but without rfactor's extra layer of
 // indirection (splitting a var that's already itself the result of an
 // aligned split) -- here x's own bounds are simple compile-time constants,
 // so this isolates the aligned-split-plus-blend mechanics on their own.
@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
         h.compute_root();
 
         h.update(0)
-            .split_aligned(x, xo, xi, 4, p, ts)
+            .aligned_split(x, xo, xi, 4, p, ts)
             .vectorize(xi);
 
         // h is read through a further Func rather than realized directly,

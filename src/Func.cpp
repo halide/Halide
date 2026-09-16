@@ -1607,11 +1607,7 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
     definition.schedule().splits().push_back(split);
 }
 
-void Stage::split(const std::string &old, const std::string &outer, const std::string &inner, const Expr &factor, bool exact, TailStrategy tail) {
-    split(old, outer, inner, factor, Expr(), exact, tail);
-}
-
-Stage &Stage::split_aligned(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, const Expr &align, TailStrategy tail) {
+Stage &Stage::aligned_split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, const Expr &align, TailStrategy tail) {
     definition.schedule().touched() = true;
     if (old.is_rvar) {
         user_assert(outer.is_rvar) << "Can't split RVar " << old.name() << " into Var " << outer.name() << "\n";
@@ -2840,9 +2836,9 @@ Func &Func::split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar 
     return *this;
 }
 
-Func &Func::split_aligned(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, const Expr &align, TailStrategy tail) {
+Func &Func::aligned_split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, const Expr &align, TailStrategy tail) {
     invalidate_cache();
-    Stage(func, func.definition(), 0).split_aligned(old, outer, inner, factor, align, tail);
+    Stage(func, func.definition(), 0).aligned_split(old, outer, inner, factor, align, tail);
     return *this;
 }
 

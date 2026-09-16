@@ -82,8 +82,6 @@ class Stage {
     void set_dim_type(const VarOrRVar &var, Internal::ForType t);
     void set_dim_device_api(const VarOrRVar &var, DeviceAPI device_api);
     void split(const std::string &old, const std::string &outer, const std::string &inner,
-               const Expr &factor, bool exact, TailStrategy tail);
-    void split(const std::string &old, const std::string &outer, const std::string &inner,
                const Expr &factor, const Expr &align, bool exact, TailStrategy tail);
     void remove(const std::string &var);
 
@@ -412,7 +410,7 @@ public:
     // @{
 
     Stage &split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
-    Stage &split_aligned(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, const Expr &align, TailStrategy tail = TailStrategy::Auto);
+    Stage &aligned_split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, const Expr &align, TailStrategy tail = TailStrategy::Auto);
     Stage &fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRVar &fused);
     Stage &serial(const VarOrRVar &var);
     Stage &parallel(const VarOrRVar &var);
@@ -1591,7 +1589,7 @@ public:
      Var x, xo, xi;
      Param<int> offset;
      f(x) = mux((x - offset) % 4, {a(x), b(x), c(x), d(x)});
-     f.split_aligned(x, xo, xi, 4, offset, TailStrategy::GuardWithIf)
+     f.aligned_split(x, xo, xi, 4, offset, TailStrategy::GuardWithIf)
       .unroll(xi);
      \endcode
      * Without 'align', the compiler can't tell at compile time which of
@@ -1600,7 +1598,7 @@ public:
      * ``(x - offset) % 4`` simplifies to a distinct compile-time
      * constant for each unrolled value of 'xi', and each mux() call
      * collapses to its selected case. */
-    Func &split_aligned(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, const Expr &align, TailStrategy tail = TailStrategy::Auto);
+    Func &aligned_split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, const Expr &align, TailStrategy tail = TailStrategy::Auto);
 
     /** Join two dimensions into a single fused dimension. The fused dimension
      * covers the product of the extents of the inner and outer dimensions

@@ -1,7 +1,7 @@
 #include "Halide.h"
 #include <stdio.h>
 
-// A 2D companion to rfactor_split_aligned.cpp. Here rfactor() is applied to
+// A 2D companion to rfactor_aligned_split.cpp. Here rfactor() is applied to
 // an RVar (r.x) that is unrelated to the one carrying the aligned split
 // (r.y), which is the more common pattern in practice: factor out one
 // reduction dimension for parallel/vector reduction while a separate
@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
 
     RVar ryo{"ryo"}, ryi{"ryi"};
     f.update(0)
-        .split_aligned(r.y, ryo, ryi, 4, offset, TailStrategy::GuardWithIf)
+        .aligned_split(r.y, ryo, ryi, 4, offset, TailStrategy::GuardWithIf)
         .unroll(ryi);
 
     Var u{"u"};

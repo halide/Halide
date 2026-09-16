@@ -1,7 +1,7 @@
 #include "Halide.h"
 #include <stdio.h>
 
-// A variant of rfactor_split_aligned.cpp that preserves the *inner* (aligned,
+// A variant of rfactor_aligned_split.cpp that preserves the *inner* (aligned,
 // unrolled) half of the split via rfactor() instead of the outer half,
 // turning it into four separate per-phase partial-sum accumulators that get
 // combined at the end. rfactor() must still produce correct results here:
@@ -63,7 +63,7 @@ int test_fixed_extent() {
 
     RVar ro{"ro"}, ri{"ri"};
     f.update(0)
-        .split_aligned(r, ro, ri, 4, offset, TailStrategy::GuardWithIf)
+        .aligned_split(r, ro, ri, 4, offset, TailStrategy::GuardWithIf)
         .unroll(ri);
 
     Var u{"u"};
@@ -113,7 +113,7 @@ int test_param_extent() {
 
     RVar ro{"ro"}, ri{"ri"};
     f.update(0)
-        .split_aligned(r, ro, ri, 4, offset, TailStrategy::GuardWithIf)
+        .aligned_split(r, ro, ri, 4, offset, TailStrategy::GuardWithIf)
         .unroll(ri);
 
     Var u{"u"};

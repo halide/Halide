@@ -11,7 +11,7 @@
 // exact loop bounds computed by compute_loop_bounds_after_split (rather than
 // being re-derived by general bounds inference), so unrolling it still lets
 // the compiler resolve the runtime-offset mux() to a compile-time constant
-// per lane, exactly as it does without rfactor in split_aligned.cpp.
+// per lane, exactly as it does without rfactor in aligned_split.cpp.
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
 
     RVar ro{"ro"}, ri{"ri"};
     f.update(0)
-        .split_aligned(r, ro, ri, 4, offset, TailStrategy::GuardWithIf)
+        .aligned_split(r, ro, ri, 4, offset, TailStrategy::GuardWithIf)
         .unroll(ri);
 
     Var u{"u"};
