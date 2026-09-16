@@ -151,6 +151,10 @@ struct PipelineContents {
 
     bool trace_pipeline = false;
 
+    /** The number of live ProfilerScopes for this pipeline. While
+     * nonzero, realize leaves the profiler's statistics in place. */
+    int profiler_scopes = 0;
+
     /** Optional prefixes used to rename halide_-prefixed runtime symbols.
      * Empty unless set via Pipeline::apply_runtime_prefixes(). */
     RuntimePrefixParams runtime_prefixes_params;
@@ -837,7 +841,9 @@ Realization Pipeline::realize(JITUserContext *context,
     }
 
     // If we're profiling, report runtimes and reset profiler stats.
-    contents->jit_cache.finish_profiling(context);
+    if (contents->profiler_scopes == 0) {
+        contents->jit_cache.finish_profiling(context);
+    }
     jit_context.finalize(exit_status);
 
     // Crop back to the requested size if necessary
@@ -898,6 +904,88 @@ void Pipeline::add_requirement(const Expr &condition, const std::vector<Expr> &e
 void Pipeline::trace_pipeline() {
     user_assert(defined()) << "Pipeline is undefined\n";
     contents->trace_pipeline = true;
+}
+
+ProfilerScope::ProfilerScope(Pipeline p)
+    : pipeline(std::move(p)) {
+    user_assert(pipeline.defined()) << "Pipeline is undefined\n";
+    pipeline.contents->profiler_scopes++;
+}
+
+ProfilerScope::ProfilerScope(Func &f)
+    : ProfilerScope(f.pipeline()) {
+}
+
+ProfilerScope::~ProfilerScope() {
+    if (--pipeline.contents->profiler_scopes > 0) {
+        return;
+    }
+    // Report and reset as a realize outside of any scope would have.
+    JITUserContext context{};
+    JITFuncCallContext jit_context(&context, pipeline.jit_handlers());
+    pipeline.contents->jit_cache.finish_profiling(&context);
+    jit_context.finalize(0);
+}
+
+const halide_profiler_pipeline_stats *ProfilerScope::pipeline_stats() const {
+    const JITCache &cache = pipeline.contents->jit_cache;
+    if (!cache.jit_target.has_feature(Target::Profile) &&
+        !cache.jit_target.has_feature(Target::ProfileByTimer)) {
+        return nullptr;
+    }
+    // The profiler lives in the shared JIT runtime, which the wasm
+    // module does not link against, so the symbols may not exist.
+    using GetStateFn = halide_profiler_state *(*)();
+    using LockFn = void (*)(halide_profiler_state *);
+    auto find = [&](const char *symbol) {
+        return cache.jit_module.find_symbol_by_name(symbol).address;
+    };
+    auto get_state = (GetStateFn)find("halide_profiler_get_state");
+    auto lock = (LockFn)find("halide_profiler_lock");
+    auto unlock = (LockFn)find("halide_profiler_unlock");
+    if (!get_state || !lock || !unlock) {
+        return nullptr;
+    }
+
+    // halide_profiler_get_pipeline_state compares names by pointer, so
+    // walk the list comparing by string instead. Recompiling the
+    // pipeline produces a new entry with the same name; the newest is
+    // at the head of the list.
+    const std::string name = pipeline.generate_function_name();
+    halide_profiler_state *state = get_state();
+    const halide_profiler_pipeline_stats *result = nullptr;
+    lock(state);
+    for (const halide_profiler_pipeline_stats *p = state->pipelines; p;
+         p = (const halide_profiler_pipeline_stats *)p->next) {
+        if (name == p->name) {
+            result = p;
+            break;
+        }
+    }
+    unlock(state);
+    return result;
+}
+
+const halide_profiler_func_stats *ProfilerScope::func_stats(const std::string &name) const {
+    const halide_profiler_pipeline_stats *p = pipeline_stats();
+    if (!p) {
+        return nullptr;
+    }
+    for (int i = 0; i < p->num_funcs; i++) {
+        const halide_profiler_func_stats &f = p->funcs[i];
+        if (f.kind == halide_profiler_func_kind_func &&
+            f.canonical_id == i &&
+            name == f.name) {
+            return &f;
+        }
+    }
+    return nullptr;
+}
+
+const halide_profiler_func_stats *ProfilerScope::func_stats(const Func &f) const {
+    // The profiler reports a Func under its display name if it has one.
+    const std::string &display_name = f.function().profiler_display_name();
+    return func_stats(display_name.empty() ? f.name() : display_name);
 }
 
 // Make a vector of void *'s to pass to the jit call using the
@@ -1114,7 +1202,9 @@ void Pipeline::realize(JITUserContext *context,
     debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
 
     // If we're profiling, report runtimes and reset profiler stats.
-    contents->jit_cache.finish_profiling(context);
+    if (contents->profiler_scopes == 0) {
+        contents->jit_cache.finish_profiling(context);
+    }
 
     jit_call_context.finalize(exit_status);
 }
