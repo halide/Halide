@@ -108,8 +108,10 @@ It runs `clang-format` (C++, sorted includes), `clang-tidy` (via
   benchmarks in the PR description.
 - Keep unrelated fixes out of feature/bugfix PRs, even tempting drive-by CI
   fixes — open a separate PR.
-- AI-assisted contributions require a `Co-authored-by:` trailer identifying the
-  tool (see `CONTRIBUTING.md` for the exact format Halide expects).
+- AI-assisted commits require a `Co-authored-by:` trailer identifying the tool
+  (see `CONTRIBUTING.md` for the exact format Halide expects).
+- Any AI-assisted github comments or PR descriptions require a 'Generated with'
+  footer that names the tool used.
 - Documentation, comments, and tutorials should match the existing style and
   prose — keep explanations simple and concise. If a change makes any of these
   out of date, identify and update them to match the implementation.
