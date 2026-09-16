@@ -21,6 +21,34 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
         std::swap(a_info, b_info);
     }
 
+    // Reassociate/commute Param variables to the right.
+    auto is_param = [](const Expr &e) {
+        const auto *v = e.as<Variable>();
+        return v && v->param.defined();
+    };
+    if (!is_param(b) && !is_const(b)) {
+        if (const Add *add_a = a.as<Add>()) {
+            if (is_param(add_a->a)) {
+                // (p + x) + y => (x + y) + p
+                return mutate((add_a->b + b) + add_a->a, info);
+            }
+            if (is_param(add_a->b)) {
+                // (x + p) + y => (x + y) + p
+                return mutate((add_a->a + b) + add_a->b, info);
+            }
+        }
+        if (const Add *add_b = b.as<Add>()) {
+            if (is_param(add_b->a)) {
+                // x + (p + y) => (x + y) + p
+                return mutate((a + add_b->b) + add_b->a, info);
+            }
+            if (is_param(add_b->b)) {
+                // x + (y + p) => (x + y) + p
+                return mutate((a + add_b->a) + add_b->b, info);
+            }
+        }
+    }
+
     auto rewrite = IRMatcher::rewriter(IRMatcher::add(a, b), op->type);
 
     if (rewrite(IRMatcher::Overflow() + x, a) ||
