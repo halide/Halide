@@ -488,6 +488,7 @@ tests(
     parallel_reductions.cpp
     parallel_rvar.cpp
     parallel_scatter.cpp
+    parallel_size_one.cpp
     random.cpp
     reorder_rvars.cpp
     rfactor.cpp
