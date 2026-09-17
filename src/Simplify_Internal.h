@@ -7,6 +7,7 @@
  * exported in Halide.h. */
 
 #include "Bounds.h"
+#include "CompilerProfiling.h"
 #include "ConstantInterval.h"
 #include "IRMatch.h"
 #include "IRPrinter.h"
@@ -299,6 +300,9 @@ public:
 
 #if LOG_EXPR_MUTATIONS
     Expr mutate(const Expr &e, ExprInfo *b) {
+#ifdef WITH_COMPILER_PROFILING
+        Profiling::simplifier_stats.expr_nodes_visited++;
+#endif
         internal_assert(debug_indent >= 0);
         const std::string spaces(debug_indent, ' ');
         debug(1) << spaces << "Simplifying Expr: " << e << "\n";
@@ -341,12 +345,18 @@ public:
     HALIDE_ALWAYS_INLINE
     Expr mutate(const Expr &e, ExprInfo *b) {
         // This gets inlined into every call to mutate, so do not add any code here.
+#ifdef WITH_COMPILER_PROFILING
+        Profiling::simplifier_stats.expr_nodes_visited++;
+#endif
         return Super::dispatch(e, b);
     }
 #endif
 
 #if LOG_STMT_MUTATIONS
     Stmt mutate(const Stmt &s) {
+#ifdef WITH_COMPILER_PROFILING
+        Profiling::simplifier_stats.stmt_nodes_visited++;
+#endif
         const std::string spaces(debug_indent, ' ');
         debug(1) << spaces << "Simplifying Stmt: " << s << "\n";
         debug_indent++;
@@ -361,6 +371,9 @@ public:
     }
 #else
     Stmt mutate(const Stmt &s) {
+#ifdef WITH_COMPILER_PROFILING
+        Profiling::simplifier_stats.stmt_nodes_visited++;
+#endif
         return Super::dispatch(s);
     }
 #endif

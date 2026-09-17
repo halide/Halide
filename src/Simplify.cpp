@@ -2,6 +2,7 @@
 #include "Simplify_Internal.h"
 
 #include "CSE.h"
+#include "CompilerProfiling.h"
 #include "IRMutator.h"
 #include "Substitute.h"
 
@@ -15,6 +16,7 @@ using std::string;
 using std::vector;
 
 Simplify::Simplify(const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai) {
+    ZoneScoped;
     // Only respect the constant bounds from the containing scope.
     for (auto iter = bi->cbegin(); iter != bi->cend(); ++iter) {
         ExprInfo info;
@@ -148,6 +150,7 @@ void Simplify::ScopedFact::learn_false(const Expr &fact) {
     }
     if (simplify->falsehoods.insert(fact).second) {
         falsehoods.insert(fact);
+        Profiling::simplify_fact_learned();
     }
 }
 
@@ -341,6 +344,7 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
     }
     if (simplify->truths.insert(fact).second) {
         truths.insert(fact);
+        Profiling::simplify_fact_learned();
     }
 }
 
@@ -349,6 +353,7 @@ template<typename T>
 T substitute_facts_impl(const T &t,
                         const std::set<Expr, IRDeepCompare> &truths,
                         const std::set<Expr, IRDeepCompare> &falsehoods) {
+    ZoneScoped;
     return mutate_with(t, [&](auto *self, const Expr &e) {
         if (e.type().is_bool()) {
             if (truths.count(e)) {
@@ -379,9 +384,11 @@ Simplify::ScopedFact::~ScopedFact() {
     }
     for (const auto &e : truths) {
         simplify->truths.erase(e);
+        Profiling::simplify_fact_forgotten();
     }
     for (const auto &e : falsehoods) {
         simplify->falsehoods.erase(e);
+        Profiling::simplify_fact_forgotten();
     }
 }
 
@@ -389,6 +396,8 @@ Expr simplify(const Expr &e,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment,
               const std::vector<Expr> &assumptions) {
+    ZoneScoped;
+    Profiling::simplify_invoked();
     Simplify m(&bounds, &alignment);
     std::vector<Simplify::ScopedFact> facts;
     facts.reserve(assumptions.size());
@@ -406,6 +415,8 @@ Stmt simplify(const Stmt &s,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment,
               const std::vector<Expr> &assumptions) {
+    ZoneScoped;
+    Profiling::simplify_invoked();
     Simplify m(&bounds, &alignment);
     std::vector<Simplify::ScopedFact> facts;
     facts.reserve(assumptions.size());
@@ -428,10 +439,12 @@ public:
 };
 
 Stmt simplify_exprs(const Stmt &s) {
+    ZoneScoped;
     return SimplifyExprs().mutate(s);
 }
 
 bool can_prove(Expr e, const Scope<Interval> &bounds) {
+    ZoneScoped;
     internal_assert(e.type().is_bool())
         << "Argument to can_prove is not a boolean Expr: " << e << "\n";
 

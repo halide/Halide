@@ -9,6 +9,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "CompilerProfiling.h"
 #include "IR.h"
 
 namespace Halide {
@@ -35,15 +36,18 @@ public:
      * sub-statements.
      */
     inline Expr operator()(const Expr &expr) {
+        ZoneScopedN(HalideVisitorDynamicNameTag);
         return mutate(expr);
     }
 
     inline Stmt operator()(const Stmt &stmt) {
+        ZoneScopedN(HalideVisitorDynamicNameTag);
         return mutate(stmt);
     }
 
     // Like mutate_with_changes, but discard the changes flag.
     std::vector<Expr> operator()(const std::vector<Expr> &exprs) {
+        ZoneScopedN(HalideVisitorDynamicNameTag);
         return mutate_with_changes(exprs).first;
     }
 
@@ -92,9 +96,11 @@ protected:
 
 public:
     inline Expr operator()(const Expr &expr) {
+        ZoneScopedN(HalideVisitorDynamicNameTag);
         return mutate(expr);
     }
     inline Stmt operator()(const Stmt &stmt) {
+        ZoneScopedN(HalideVisitorDynamicNameTag);
         return mutate(stmt);
     }
 };
@@ -134,15 +140,17 @@ private:
     }
 
 protected:
-#define HALIDE_CALL_VISIT_EXPR_IMPL(T) \
-    Expr visit(const T *op) override { \
-        return this->visit_impl(op);   \
+#define HALIDE_CALL_VISIT_EXPR_IMPL(T)                                          \
+    Expr visit(const T *op) override {                                          \
+        ZoneScopedVisitor(IRNodeType::T, "LambdaMutator", Profiling::BIT_EXPR); \
+        return this->visit_impl(op);                                            \
     }
     HALIDE_FOR_EACH_IR_EXPR(HALIDE_CALL_VISIT_EXPR_IMPL)
 #undef HALIDE_CALL_VISIT_EXPR_IMPL
-#define HALIDE_CALL_VISIT_STMT_IMPL(T) \
-    Stmt visit(const T *op) override { \
-        return this->visit_impl(op);   \
+#define HALIDE_CALL_VISIT_STMT_IMPL(T)                                          \
+    Stmt visit(const T *op) override {                                          \
+        ZoneScopedVisitor(IRNodeType::T, "LambdaMutator", Profiling::BIT_STMT); \
+        return this->visit_impl(op);                                            \
     }
     HALIDE_FOR_EACH_IR_STMT(HALIDE_CALL_VISIT_STMT_IMPL)
 #undef HALIDE_CALL_VISIT_STMT_IMPL

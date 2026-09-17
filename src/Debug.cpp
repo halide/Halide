@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <cerrno>
 #include <climits>
+#include <cstdio>
+#include <cstring>
 #include <functional>
 #include <iostream>
 #include <optional>
@@ -14,6 +16,7 @@
 
 #ifdef _WIN32
 #include <io.h>
+#include <windows.h>
 #else
 #include <unistd.h>
 #endif
@@ -252,11 +255,70 @@ void write_all(int fd, const char *data, size_t size) {
     }
 }
 
+// Is the given stream, known to be either std::cout or std::cerr (or
+// nullptr, meaning "not a terminal at all"), a color-capable terminal?
+bool is_color_capable_terminal(const std::ostream *os) {
+    if (!os) {
+        return false;
+    }
+    if (const char *term = getenv("TERM")) {
+        // Check if the terminal supports colors
+        if (!(strstr(term, "color") || strstr(term, "xterm"))) {
+            return false;
+        }
+    }
+#if _WIN32
+    HANDLE h;
+    if (os == &std::cout) {
+        h = GetStdHandle(STD_OUTPUT_HANDLE);
+    } else if (os == &std::cerr) {
+        h = GetStdHandle(STD_ERROR_HANDLE);
+    } else {
+        return false;
+    }
+
+    DWORD mode;
+    return GetConsoleMode(h, &mode) &&
+           SetConsoleMode(h, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+#else
+    if (os == &std::cout) {
+        return isatty(fileno(stdout));
+    } else if (os == &std::cerr) {
+        return isatty(fileno(stderr));
+    }
+    return false;
+#endif
+}
+
 }  // namespace
 
 DebugStreamSink debug_stream_sink(std::ostream &os) {
     const long tag = os.iword(debug_stream_sink_xalloc());
     return tag ? static_cast<DebugStreamSink>(tag) : DebugStreamSink::None;
+}
+
+bool stream_supports_ansi_colors(std::ostream &os) {
+    std::string opt = get_env_variable("HL_COLORS");
+    if (!opt.empty()) {
+        return opt == "1";
+    }
+
+    switch (debug_stream_sink(os)) {
+    case DebugStreamSink::Cout:
+        return is_color_capable_terminal(&std::cout);
+    case DebugStreamSink::Cerr:
+        return is_color_capable_terminal(&std::cerr);
+    case DebugStreamSink::File:
+        // A shared log file: never auto-detect colors.
+        return false;
+    case DebugStreamSink::None:
+        // Not a DebugStream. Is it cout or cerr identically?
+        if (&os == &std::cout || &os == &std::cerr) {
+            return is_color_capable_terminal(&os);
+        }
+        return false;
+    }
+    return false;
 }
 
 DebugStream::DebugStream() {

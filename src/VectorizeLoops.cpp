@@ -1674,6 +1674,7 @@ public:
     }
 };
 bool all_stores_in_scope(const Stmt &stmt, const Scope<> &scope) {
+    ZoneScoped;
     AllStoresInScope checker(scope);
     stmt.accept(&checker);
     return checker.result;
@@ -1722,6 +1723,7 @@ Stmt vectorize_statement(const Stmt &stmt) {
 
 }  // namespace
 Stmt vectorize_loops(const Stmt &stmt, const map<string, Function> &env) {
+    ZoneScoped;
     // Limit the scope of atomic nodes to just the necessary stuff.
     // TODO: Should this be an earlier pass? It's probably a good idea
     // for non-vectorizing stuff too.

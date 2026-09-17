@@ -1,4 +1,5 @@
 #include "UnrollLoops.h"
+#include "CompilerProfiling.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Simplify.h"
@@ -16,6 +17,7 @@ protected:
 
     Stmt visit(const For *for_loop) override {
         if (for_loop->for_type == ForType::Unrolled) {
+            ZoneScopedN("UnrollForLoop");
             Stmt body = for_loop->body;
             Expr extent = simplify(for_loop->extent());
             const IntImm *e = extent.as<IntImm>();

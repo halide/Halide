@@ -1875,6 +1875,7 @@ protected:
 }  // namespace
 
 Stmt fuse_gpu_thread_loops(Stmt s) {
+    ZoneScoped;
     // NormalizeIfStatements pushes the predicates between GPU blocks
     // into the innermost GPU block. FuseGPUThreadLoops would then
     // merge the predicate into the merged GPU thread.

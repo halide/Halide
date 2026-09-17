@@ -909,6 +909,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Atomic *op) {
 void CodeGen_OpenCL_Dev::add_kernel(Stmt s,
                                     const string &name,
                                     const vector<DeviceArgument> &args) {
+    ZoneScoped;
     debug(2) << "CodeGen_OpenCL_Dev::compile " << name << "\n";
 
     // We need to scalarize/de-predicate any loads/stores, since OpenCL does not
@@ -943,6 +944,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
                                                       const string &name,
                                                       const vector<DeviceArgument> &args) {
 
+    ZoneScoped;
     debug(2) << "Adding OpenCL kernel " << name << "\n";
 
     debug(2) << "Eliminating bool vectors\n";
