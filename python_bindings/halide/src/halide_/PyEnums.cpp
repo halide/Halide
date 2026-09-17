@@ -18,6 +18,16 @@ void define_enums(py::module &m) {
         .value("Input", Internal::ArgInfoDirection::Input)
         .value("Output", Internal::ArgInfoDirection::Output);
 
+    py::enum_<halide_profiler_func_kind>(m, "ProfilerFuncKind")
+        .value("Func", halide_profiler_func_kind_func)
+        .value("Overhead", halide_profiler_func_kind_overhead)
+        .value("ThreadIdle", halide_profiler_func_kind_thread_idle)
+        .value("Malloc", halide_profiler_func_kind_malloc)
+        .value("Free", halide_profiler_func_kind_free)
+        .value("CopyToHost", halide_profiler_func_kind_copy_to_host)
+        .value("CopyToDevice", halide_profiler_func_kind_copy_to_device)
+        .value("Allocation", halide_profiler_func_kind_allocation);
+
     py::enum_<DeviceAPI>(m, "DeviceAPI")
         .value("None", DeviceAPI::None)
         .value("Host", DeviceAPI::Host)
@@ -72,16 +82,27 @@ void define_enums(py::module &m) {
         .value("Text", StmtOutputFormat::Text)
         .value("HTML", StmtOutputFormat::HTML);
 
-    py::enum_<TailStrategy>(m, "TailStrategy")
+    py::enum_<TailStrategy> tail_strategy(m, "TailStrategy");
+    tail_strategy
         .value("RoundUp", TailStrategy::RoundUp)
         .value("GuardWithIf", TailStrategy::GuardWithIf)
-        .value("Predicate", TailStrategy::Predicate)
         .value("PredicateLoads", TailStrategy::PredicateLoads)
         .value("PredicateStores", TailStrategy::PredicateStores)
         .value("ShiftInwards", TailStrategy::ShiftInwards)
         .value("ShiftInwardsAndBlend", TailStrategy::ShiftInwardsAndBlend)
         .value("RoundUpAndBlend", TailStrategy::RoundUpAndBlend)
         .value("Auto", TailStrategy::Auto);
+
+    // Predicate is deprecated in C++ (identical to GuardWithIf), but the
+    // Python binding is kept for one release for backwards compatibility.
+#if defined(__clang__) || defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+    tail_strategy.value("Predicate", TailStrategy::Predicate);
+#if defined(__clang__) || defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 
     py::enum_<Target::OS>(m, "TargetOS")
         .value("OSUnknown", Target::OS::OSUnknown)

@@ -882,15 +882,14 @@ inline Tuple select(const Expr &c0, const Tuple &v0, const Expr &c1, const Tuple
 }
 // @}
 
-/** select applied to FuncRefs (e.g. select(x < 100, f(x), g(x))) is assumed to
- * return an Expr. A runtime error is produced if this is applied to
- * tuple-valued Funcs. In that case you should explicitly cast the second and
- * third args to Tuple to remove the ambiguity. */
+/** select applied to FuncRefs (e.g. select(x < 100, f(x), g(x))) selects
+ * between all of the values of the Funcs, and returns a Tuple. If the Funcs
+ * are single-valued, the Tuple has one element and can be used as an Expr. */
 // @{
-Expr select(const Expr &condition, const FuncRef &true_value, const FuncRef &false_value);
+Tuple select(const Expr &condition, const FuncRef &true_value, const FuncRef &false_value);
 template<typename... Args>
-inline Expr select(const Expr &c0, const FuncRef &v0, const Expr &c1, const FuncRef &v1, Args &&...args) {
-    return select(c0, v0, select(c1, v1, std::forward<Args>(args)...));
+inline Tuple select(const Expr &c0, const FuncRef &v0, const Expr &c1, const FuncRef &v1, Args &&...args) {
+    return select(c0, Tuple(v0), c1, Tuple(v1), std::forward<Args>(args)...);
 }
 // @}
 
@@ -1340,6 +1339,27 @@ inline HALIDE_NO_USER_CODE_INLINE Expr print(Expr a, Args &&...args) {
 }
 //@}
 
+/** Create a Tuple that prints out all of its values whenever it is
+ * evaluated, followed by everything else in the arguments list. The
+ * print is attached to the first element of the Tuple; the other
+ * elements are returned unchanged. */
+template<typename... Args>
+inline HALIDE_NO_USER_CODE_INLINE Tuple print(const Tuple &a, Args &&...args) {
+    std::vector<Expr> collected_args = a.as_vector();
+    Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
+    Tuple result = a;
+    result[0] = print(collected_args);
+    return result;
+}
+
+/** print applied to a FuncRef prints all of the values of the Func,
+ * and returns a Tuple. If the Func is single-valued, the Tuple has
+ * one element and can be used as an Expr. */
+template<typename... Args>
+inline HALIDE_NO_USER_CODE_INLINE Tuple print(const FuncRef &a, Args &&...args) {
+    return print(Tuple(a), std::forward<Args>(args)...);
+}
+
 /** Create an Expr that prints whenever it is evaluated, provided that
  * the condition is true. */
 // @{
@@ -1351,8 +1371,28 @@ inline HALIDE_NO_USER_CODE_INLINE Expr print_when(Expr condition, Expr a, Args &
     Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
     return print_when(std::move(condition), collected_args);
 }
-
 // @}
+
+/** Create a Tuple that prints out all of its values whenever it is
+ * evaluated, provided that the condition is true. The print is
+ * attached to the first element of the Tuple; the other elements are
+ * returned unchanged. */
+template<typename... Args>
+inline HALIDE_NO_USER_CODE_INLINE Tuple print_when(Expr condition, const Tuple &a, Args &&...args) {
+    std::vector<Expr> collected_args = a.as_vector();
+    Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
+    Tuple result = a;
+    result[0] = print_when(std::move(condition), collected_args);
+    return result;
+}
+
+/** print_when applied to a FuncRef prints all of the values of the
+ * Func, and returns a Tuple. If the Func is single-valued, the Tuple
+ * has one element and can be used as an Expr. */
+template<typename... Args>
+inline HALIDE_NO_USER_CODE_INLINE Tuple print_when(Expr condition, const FuncRef &a, Args &&...args) {
+    return print_when(std::move(condition), Tuple(a), std::forward<Args>(args)...);
+}
 
 /** Create an Expr that that guarantees a precondition.
  * If 'condition' is true, the return value is equal to the first Expr.
@@ -1385,6 +1425,29 @@ inline HALIDE_NO_USER_CODE_INLINE Expr require(Expr condition, Expr value, Args 
     return require(std::move(condition), collected_args);
 }
 // @}
+
+/** Create a Tuple that guarantees a precondition. Each element of the
+ * result is the corresponding element of 'value' guarded by
+ * 'condition', as if by require. */
+template<typename... Args>
+inline HALIDE_NO_USER_CODE_INLINE Tuple require(const Expr &condition, const Tuple &value, Args &&...args) {
+    std::vector<Expr> collected_args = {Expr()};
+    Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
+    Tuple result = value;
+    for (Expr &e : result) {
+        collected_args[0] = e;
+        e = require(condition, collected_args);
+    }
+    return result;
+}
+
+/** require applied to a FuncRef guards all of the values of the Func,
+ * and returns a Tuple. If the Func is single-valued, the Tuple has
+ * one element and can be used as an Expr. */
+template<typename... Args>
+inline HALIDE_NO_USER_CODE_INLINE Tuple require(const Expr &condition, const FuncRef &value, Args &&...args) {
+    return require(condition, Tuple(value), std::forward<Args>(args)...);
+}
 
 /** Return an undef value of the given type. Halide skips stores that
  * depend on undef values, so you can use this to mean "do not modify
@@ -1460,6 +1523,26 @@ inline HALIDE_NO_USER_CODE_INLINE Expr memoize_tag(Expr result, Args &&...args) 
 }
 // @}
 
+/** Tag each element of a Tuple with the same cache key values, as if
+ * by memoize_tag. */
+template<typename... Args>
+inline HALIDE_NO_USER_CODE_INLINE Tuple memoize_tag(const Tuple &result, Args &&...args) {
+    std::vector<Expr> collected_args{std::forward<Args>(args)...};
+    Tuple tagged = result;
+    for (Expr &e : tagged) {
+        e = Internal::memoize_tag_helper(e, collected_args);
+    }
+    return tagged;
+}
+
+/** memoize_tag applied to a FuncRef tags all of the values of the
+ * Func, and returns a Tuple. If the Func is single-valued, the Tuple
+ * has one element and can be used as an Expr. */
+template<typename... Args>
+inline HALIDE_NO_USER_CODE_INLINE Tuple memoize_tag(const FuncRef &result, Args &&...args) {
+    return memoize_tag(Tuple(result), std::forward<Args>(args)...);
+}
+
 /** Expressions tagged with this intrinsic are considered to be part
  * of the steady state of some loop with a nasty beginning and end
  * (e.g. a boundary condition). When Halide encounters likely
@@ -1475,9 +1558,21 @@ inline HALIDE_NO_USER_CODE_INLINE Expr memoize_tag(Expr result, Args &&...args) 
  */
 Expr likely(Expr e);
 
+/** Mark each element of a Tuple as likely. */
+Tuple likely(const Tuple &t);
+
+/** likely applied to a FuncRef marks all of the values of the Func as
+ * likely, and returns a Tuple. If the Func is single-valued, the
+ * Tuple has one element and can be used as an Expr. */
+Tuple likely(const FuncRef &f);
+
 /** Equivalent to likely, but only triggers a loop partitioning if
  * found in an innermost loop. */
+// @{
 Expr likely_if_innermost(Expr e);
+Tuple likely_if_innermost(const Tuple &t);
+Tuple likely_if_innermost(const FuncRef &f);
+// @}
 
 /** Cast an expression to the halide type corresponding to the C++
  * type T. As part of the cast, clamp to the minimum and maximum
@@ -1496,7 +1591,11 @@ Expr saturating_cast(Type t, Expr e);
  * all backends. (E.g. it is difficult to do this for C++ code
  * generation as it depends on the compiler flags used to compile the
  * generated code. */
+// @{
 Expr strict_float(const Expr &e);
+Tuple strict_float(const Tuple &t);
+Tuple strict_float(const FuncRef &f);
+// @}
 
 /** Create an Expr that that promises another Expr is clamped but do
  * not generate code to check the assertion or modify the value. No

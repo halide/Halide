@@ -25,6 +25,7 @@ tests(
     bool_compute_root_vectorize.cpp
     bool_predicate_cast.cpp
     bound.cpp
+    bound_merge_order.cpp
     bound_small_allocations.cpp
     bound_storage.cpp
     boundary_conditions.cpp
@@ -328,6 +329,7 @@ tests(
     runtime_prefixes.cpp
     saturating_casts.cpp
     scatter.cpp
+    serialization.cpp
     set_custom_trace.cpp
     shadowed_bound.cpp
     shared_self_references.cpp
@@ -387,6 +389,7 @@ tests(
     transpose_idioms.cpp
     transposed_vector_reduce.cpp
     trim_no_ops.cpp
+    tuple_helpers.cpp
     tuple_partial_update.cpp
     tuple_reduction.cpp
     tuple_select.cpp
@@ -589,4 +592,5 @@ set_target_properties(
 if (WITH_SERIALIZATION)
     target_compile_definitions(correctness_streaming PRIVATE TEST_WITH_SERIALIZATION)
     target_compile_definitions(correctness_generator_cache PRIVATE TEST_WITH_SERIALIZATION)
+    target_compile_definitions(correctness_serialization PRIVATE TEST_WITH_SERIALIZATION)
 endif ()

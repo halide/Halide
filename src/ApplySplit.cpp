@@ -67,7 +67,6 @@ vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
             // The split factor trivially divides the old extent,
             // but we know nothing new about the outer dimension.
         } else if (tail == TailStrategy::GuardWithIf ||
-                   tail == TailStrategy::Predicate ||
                    tail == TailStrategy::PredicateLoads ||
                    tail == TailStrategy::PredicateStores) {
             // It's an exact split but we failed to prove that the
@@ -97,10 +96,6 @@ vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
             ApplySplitResult::Type predicate_type, substitution_type;
             switch (tail) {
             case TailStrategy::GuardWithIf:
-                substitution_type = ApplySplitResult::Substitution;
-                predicate_type = ApplySplitResult::Predicate;
-                break;
-            case TailStrategy::Predicate:
                 substitution_type = ApplySplitResult::Substitution;
                 predicate_type = ApplySplitResult::Predicate;
                 break;
