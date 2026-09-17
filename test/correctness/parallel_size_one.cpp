@@ -25,21 +25,46 @@ int main(int argc, char **argv) {
     // statically-known extent of one. Such a loop must still be dispatched
     // through the thread pool via halide_do_task, rather than being simplified
     // away into a serial loop body.
-    Var x("x");
-    Func f("f"), g("g");
-    f(x) = x;
-    g(x) = f(x);
+    {
+        Var x("x");
+        Func f("f"), g("g");
+        f(x) = x;
+        g(x) = f(x);
 
-    f.compute_at(g, x).parallel(x);
+        f.compute_at(g, x).parallel(x);
 
-    JITUserContext context;
-    context.handlers.custom_do_task = counting_do_task;
-    g.realize(&context, {1024});
+        task_count = 0;
+        JITUserContext context;
+        context.handlers.custom_do_task = counting_do_task;
+        g.realize(&context, {1024});
 
-    if (task_count.load() == 0) {
-        printf("halide_do_task was not called for a size-one parallel loop. "
-               "The loop was incorrectly simplified into a serial body.\n");
-        return 1;
+        if (task_count.load() == 0) {
+            printf("halide_do_task was not called for a size-one parallel "
+                   "loop.\n");
+            return 1;
+        }
+    }
+
+    // Parallelizing over the outermost var is a way to isolate a body into its
+    // own task without otherwise changing the loop nest. The outermost loop is
+    // always of extent one, but marking it parallel should still route the body
+    // through the task system.
+    {
+        Var x("x");
+        Func f("f");
+        f(x) = x;
+        f.parallel(Var::outermost());
+
+        task_count = 0;
+        JITUserContext context;
+        context.handlers.custom_do_task = counting_do_task;
+        f.realize(&context, {1024});
+
+        if (task_count.load() == 0) {
+            printf("halide_do_task was not called for a parallel outermost "
+                   "loop.\n");
+            return 1;
+        }
     }
 
     printf("Success!\n");
