@@ -105,15 +105,17 @@ std::wstring from_utf8(const std::string &str) {
     return wstr;
 }
 
-// Prepend \\?\ to the path if it's an absolute drive path and doesn't
-// already have it. This opts out of MAX_PATH, but only for the raw Win32
-// file APIs (CreateFileW, CreateDirectoryW, DeleteFileW, RemoveDirectoryW,
-// GetFileAttributes(Ex)W, ...) -- not for CRT-level path functions (_open,
-// _stat, _access, <fstream>, ... and their wide-char counterparts), which
-// normalize the path via GetFullPathName() internally and don't understand
-// the prefix. Callers needing long-path support at a site that would
-// otherwise use one of those CRT functions must go through the
-// corresponding raw Win32 API instead.
+// Prepend \\?\ (or, for a UNC path, replace the leading \\ with \\?\UNC\) so
+// the raw Win32 file APIs (CreateFileW, CreateDirectoryW, DeleteFileW,
+// RemoveDirectoryW, GetFileAttributes(Ex)W, ...) treat the path verbatim
+// instead of subjecting it to MAX_PATH. Both prefixed forms start with a
+// backslash, so a path that's already in one of them passes through
+// unchanged rather than getting double-prefixed. This does not help
+// CRT-level path functions (_open, _stat, _access, <fstream>, ... and their
+// wide-char counterparts), which normalize the path via GetFullPathName()
+// internally and don't understand either prefix; callers needing long-path
+// support at a site that would otherwise use one of those CRT functions
+// must go through the corresponding raw Win32 API instead.
 std::wstring to_long_path(const std::string &str) {
     std::wstring wstr = from_utf8(str);
     for (auto &c : wstr) {
@@ -121,14 +123,33 @@ std::wstring to_long_path(const std::string &str) {
             c = L'\\';
         }
     }
-    bool is_absolute_drive_path = wstr.size() >= 2 &&
+    bool is_absolute_drive_path = wstr.size() >= 3 &&
                                   ((wstr[0] >= L'A' && wstr[0] <= L'Z') || (wstr[0] >= L'a' && wstr[0] <= L'z')) &&
-                                  wstr[1] == L':';
-    if (is_absolute_drive_path && wstr.rfind(LR"(\\?\)", 0) != 0) {
+                                  wstr[1] == L':' && wstr[2] == L'\\';
+    bool is_unc_path = wstr.size() >= 2 && wstr[0] == L'\\' && wstr[1] == L'\\';
+    if (is_absolute_drive_path) {
         wstr = LR"(\\?\)" + wstr;
+    } else if (is_unc_path) {
+        wstr = LR"(\\?\UNC\)" + wstr.substr(2);
     }
     return wstr;
 }
+
+// Closes a HANDLE on scope exit, including when unwinding past it due to an
+// internal_assert()/user_error thrown while the handle is open.
+struct AutoHandle {
+    HANDLE h;
+    explicit AutoHandle(HANDLE h)
+        : h(h) {
+    }
+    AutoHandle(const AutoHandle &) = delete;
+    AutoHandle &operator=(const AutoHandle &) = delete;
+    ~AutoHandle() {
+        if (h != INVALID_HANDLE_VALUE) {
+            CloseHandle(h);
+        }
+    }
+};
 
 // Opens (creating/truncating) path for writing via CreateFileW() using the
 // long-path form of the name, then wraps the resulting handle in a CRT file
@@ -365,9 +386,8 @@ std::string strip_namespaces(const std::string &name) {
 
 bool file_exists(const std::string &name) {
 #ifdef _MSC_VER
-    // GetFileAttributesW() (rather than _access(), which is subject to
-    // MAX_PATH -- see to_long_path()'s comment) with the long-path form of
-    // the name.
+    // A raw Win32 API call, so it can use the long-path form of the name
+    // (see to_long_path()'s comment).
     return GetFileAttributesW(to_long_path(name).c_str()) != INVALID_FILE_ATTRIBUTES;
 #else
     return ::access(name.c_str(), F_OK) == 0;
@@ -410,26 +430,36 @@ void dir_rmdir(const std::string &name) {
 
 FileStat file_stat(const std::string &name) {
 #ifdef _MSC_VER
-    // GetFileAttributesExW() (rather than _stat(), which is subject to
-    // MAX_PATH -- see to_long_path()'s comment) with the long-path form of
-    // the name. Windows has no uid/gid concept, so _stat() always reports 0
-    // for those anyway; st_mode is likewise synthesized by the CRT from the
-    // directory/read-only attribute bits, which we replicate here.
-    WIN32_FILE_ATTRIBUTE_DATA a;
-    if (!GetFileAttributesExW(to_long_path(name).c_str(), GetFileExInfoStandard, &a)) {
+    // Raw Win32 API calls, so they can use the long-path form of the name
+    // (see to_long_path()'s comment). FILE_FLAG_BACKUP_SEMANTICS is required
+    // to open a directory handle; CreateFileW() follows reparse points by
+    // default, so symlinks and junctions report the target's data. Windows
+    // has no uid/gid concept, so those are always reported as 0. mode is
+    // synthesized from the directory/read-only attribute bits; it omits an
+    // executable-extension bit (for .exe/.bat/.cmd/.com), since nothing in
+    // this codebase inspects that bit.
+    AutoHandle ah(CreateFileW(to_long_path(name).c_str(), GENERIC_READ,
+                              FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                              OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr));
+    if (ah.h == INVALID_HANDLE_VALUE) {
         user_error << "Could not stat " << name << "\n";
     }
 
-    uint64_t file_size = (static_cast<uint64_t>(a.nFileSizeHigh) << 32) | a.nFileSizeLow;
+    BY_HANDLE_FILE_INFORMATION info;
+    if (!GetFileInformationByHandle(ah.h, &info)) {
+        user_error << "Could not stat " << name << "\n";
+    }
+
+    uint64_t file_size = (static_cast<uint64_t>(info.nFileSizeHigh) << 32) | info.nFileSizeLow;
 
     // FILETIME is in 100ns ticks since 1601-01-01; convert to a Unix epoch time.
     ULARGE_INTEGER t;
-    t.LowPart = a.ftLastWriteTime.dwLowDateTime;
-    t.HighPart = a.ftLastWriteTime.dwHighDateTime;
+    t.LowPart = info.ftLastWriteTime.dwLowDateTime;
+    t.HighPart = info.ftLastWriteTime.dwHighDateTime;
     uint32_t mod_time = static_cast<uint32_t>((t.QuadPart - 116444736000000000ULL) / 10000000ULL);
 
-    uint32_t mode = (a.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? _S_IFDIR : _S_IFREG;
-    mode |= (a.dwFileAttributes & FILE_ATTRIBUTE_READONLY) ? _S_IREAD : (_S_IREAD | _S_IWRITE);
+    uint32_t mode = (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? _S_IFDIR : _S_IFREG;
+    mode |= (info.dwFileAttributes & FILE_ATTRIBUTE_READONLY) ? _S_IREAD : (_S_IREAD | _S_IWRITE);
 
     return {file_size, mod_time, 0, 0, mode};
 #else
@@ -486,17 +516,46 @@ std::string file_make_temp(const std::string &prefix, const std::string &suffix)
                     suffix.find('/') == string::npos &&
                     suffix.find('\\') == string::npos);
 #ifdef _WIN32
-    // Windows implementations of mkstemp() try to create the file in the root
-    // directory Unfortunately, that requires ADMIN privileges, which are not
-    // guaranteed here.
-    std::wstring tmp_dir = from_utf8(get_windows_tmp_dir());
-    std::wstring wprefix = from_utf8(prefix);
-
-    WCHAR tmp_file[MAX_PATH];
-    // Note that GetTempFileNameW() actually creates the file.
-    DWORD ret = GetTempFileNameW(tmp_dir.c_str(), wprefix.c_str(), 0, tmp_file);
-    internal_assert(ret != 0) << "GetTempFileNameW() failed; error " << GetLastError() << "\n";
-    return from_utf16(tmp_file);
+    // GetTempFileNameW()'s output buffer is a fixed-size WCHAR[MAX_PATH], so
+    // unlike the rest of this file's Windows implementations, it can't be
+    // made to opt out of MAX_PATH via to_long_path() -- the API itself has
+    // no long-path form. Synthesize a probably-unique name via
+    // CoCreateGuid() and create it directly instead, the same way
+    // dir_make_temp() does for directories.
+    std::string tmp_dir = get_windows_tmp_dir();
+    for (int tries = 0; tries < 100; ++tries) {
+        GUID guid;
+        HRESULT hr = CoCreateGuid(&guid);
+        internal_assert(hr == S_OK);
+        std::ostringstream name;
+        name << prefix << std::hex
+             << std::setfill('0')
+             << std::setw(8)
+             << guid.Data1
+             << std::setw(4)
+             << guid.Data2
+             << guid.Data3
+             << std::setw(2);
+        for (int i = 0; i < 8; i++) {
+            name << (int)guid.Data4[i];
+        }
+        name << suffix;
+        std::string path = tmp_dir + name.str();
+        HANDLE h = CreateFileW(to_long_path(path).c_str(), GENERIC_WRITE,
+                               FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                               CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (h != INVALID_HANDLE_VALUE) {
+            CloseHandle(h);
+            return path;
+        }
+        // If name already existed, just loop and try again.
+        // Any other error, break from loop and fail.
+        if (GetLastError() != ERROR_FILE_EXISTS) {
+            break;
+        }
+    }
+    internal_error << "Unable to create temp file in " << tmp_dir << "\n";
+    return "";
 #else
     std::string templ = "/tmp/" + prefix + "XXXXXX" + suffix;
     // Copy into a temporary buffer, since mkstemp modifies the buffer in place.
@@ -560,30 +619,28 @@ std::string dir_make_temp() {
 
 std::vector<char> read_entire_file(const std::string &pathname) {
 #ifdef _MSC_VER
-    // CreateFileW()+ReadFile() (rather than <fstream>, which is subject to
-    // MAX_PATH -- see to_long_path()'s comment) with the long-path form of
-    // the name.
-    HANDLE h = CreateFileW(to_long_path(pathname).c_str(), GENERIC_READ,
-                           FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
-                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    internal_assert(h != INVALID_HANDLE_VALUE) << "Unable to read file: " << pathname;
+    // Raw Win32 API calls, so they can use the long-path form of the name
+    // (see to_long_path()'s comment).
+    AutoHandle ah(CreateFileW(to_long_path(pathname).c_str(), GENERIC_READ,
+                              FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                              OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
+    internal_assert(ah.h != INVALID_HANDLE_VALUE) << "Unable to read file: " << pathname;
 
     LARGE_INTEGER size;
-    internal_assert(GetFileSizeEx(h, &size)) << "Unable to read file: " << pathname;
+    internal_assert(GetFileSizeEx(ah.h, &size)) << "Unable to read file: " << pathname;
 
     std::vector<char> result(static_cast<size_t>(size.QuadPart));
     size_t total_read = 0;
     while (total_read < result.size()) {
         DWORD to_read = static_cast<DWORD>(std::min<size_t>(result.size() - total_read, size_t(1) << 30));
         DWORD n = 0;
-        BOOL ok = ReadFile(h, result.data() + total_read, to_read, &n, nullptr);
-        internal_assert(ok) << "Unable to read file: " << pathname;
+        internal_assert(ReadFile(ah.h, result.data() + total_read, to_read, &n, nullptr))
+            << "Unable to read file: " << pathname;
         if (n == 0) {
             break;
         }
         total_read += n;
     }
-    CloseHandle(h);
     internal_assert(total_read == result.size()) << "Unable to read file: " << pathname;
     return result;
 #else
@@ -603,21 +660,22 @@ std::vector<char> read_entire_file(const std::string &pathname) {
 
 void write_entire_file(const std::string &pathname, const void *source, size_t source_len) {
 #ifdef _MSC_VER
-    HANDLE h = CreateFileW(to_long_path(pathname).c_str(), GENERIC_WRITE,
-                           FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
-                           CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    internal_assert(h != INVALID_HANDLE_VALUE) << "Unable to write file: " << pathname;
+    // Raw Win32 API calls, so they can use the long-path form of the name
+    // (see to_long_path()'s comment).
+    AutoHandle ah(CreateFileW(to_long_path(pathname).c_str(), GENERIC_WRITE,
+                              FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                              CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr));
+    internal_assert(ah.h != INVALID_HANDLE_VALUE) << "Unable to write file: " << pathname;
 
     const char *p = reinterpret_cast<const char *>(source);
     size_t total_written = 0;
     while (total_written < source_len) {
         DWORD to_write = static_cast<DWORD>(std::min<size_t>(source_len - total_written, size_t(1) << 30));
         DWORD n = 0;
-        BOOL ok = WriteFile(h, p + total_written, to_write, &n, nullptr);
-        internal_assert(ok) << "Unable to write file: " << pathname;
+        internal_assert(WriteFile(ah.h, p + total_written, to_write, &n, nullptr))
+            << "Unable to write file: " << pathname;
         total_written += n;
     }
-    CloseHandle(h);
 #else
     std::ofstream f(pathname, std::ios::out | std::ios::binary);
 
