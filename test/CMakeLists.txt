@@ -8,6 +8,15 @@ include(CheckCXXCompilerFlag)
 add_executable(_test_internal EXCLUDE_FROM_ALL pch_helper.cpp)
 target_link_libraries(_test_internal PRIVATE Halide::Test Halide::TerminateHandler)
 target_precompile_headers(_test_internal PRIVATE <Halide.h>)
+# The PCH must be compiled with the same visibility settings as the targets
+# that reuse it (via REUSE_FROM, applied in add_halide_test()) -- otherwise
+# Clang rejects the PCH with "default visibility for functions and variables
+# differs in PCH file vs. current file".
+set_target_properties(_test_internal
+    PROPERTIES
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN TRUE
+)
 if (NOT Halide_TARGET MATCHES "wasm")
     # The PCH must be compiled with the same warning flags as the targets that
     # reuse it (via REUSE_FROM) -- MSVC in particular treats a mismatched
