@@ -300,7 +300,6 @@ int main(int argc, char **argv) {
             return 1;
         }
     }
-    printf("Success!\n");
 
     // 8-bit sparse blur into 32-bit accumulator
     {
@@ -396,5 +395,6 @@ int main(int argc, char **argv) {
         }
     }
 
+    printf("Success!\n");
     return 0;
 }

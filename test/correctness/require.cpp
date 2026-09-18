@@ -9,7 +9,7 @@ void halide_error(JITUserContext *ctx, const char *msg) {
     // Emitting "error.*:" to stdout or stderr will cause CMake to report the
     // test as a failure on Windows, regardless of error code returned,
     // hence the abbreviation to "err".
-    printf("Saw (Expected) Halide Err: %s\n", msg);
+    printf("Saw (Expected) Halide Err: %s", msg);
     error_occurred = true;
 }
 
@@ -46,14 +46,18 @@ static void test(int vector_width) {
     if (!error_occurred) {
         printf("There should have been a requirement error (vector_width = %d)\n", vector_width);
         exit(1);
+    } else {
+        printf("OK\n");
     }
+
+    printf("\n");
 
     p1.set(1);
     p2.set(kPrime1 - 1);
     error_occurred = false;
     result = f.realize({realize_width});
     if (error_occurred) {
-        printf("There should not have been a requirement error (vector_width = %d)\n", vector_width);
+        printf("There should NOT have been a requirement error (vector_width = %d)\n", vector_width);
         exit(1);
     }
     for (int i = 0; i < realize_width; ++i) {
@@ -64,6 +68,8 @@ static void test(int vector_width) {
             exit(1);
         }
     }
+    printf("OK\n");
+    printf("\n");
 
     ImageParam input(Int(32), 2);
     Expr h = require(p1 == p2, p1);
@@ -81,7 +87,11 @@ static void test(int vector_width) {
     if (!error_occurred) {
         printf("There should have been a requirement error (vector_width = %d)\n", vector_width);
         exit(1);
+    } else {
+        printf("OK\n");
     }
+
+    printf("\n");
 
     p1.set(16);
     p2.set(16);
@@ -91,6 +101,8 @@ static void test(int vector_width) {
     if (error_occurred) {
         printf("There should NOT have been a requirement error (vector_width = %d)\n", vector_width);
         exit(1);
+    } else {
+        printf("OK\n");
     }
 }
 
