@@ -1244,13 +1244,13 @@ void check_bounds() {
     check(max(min(x, 5), 1) == 5, 5 <= x);
 
     check(min((x * 32 + y) * 4, x * 128 + 127), min(y * 4, 127) + x * 128);
-    /* EXPERIMENT */ check(min((x * 32 + y) * 4, x * 128 + 4), (min(y, 1) * 4 + x * 128));
+    check(min((x * 32 + y) * 4, x * 128 + 4), min(y, 1) * 4 + x * 128);
     check(min((y + x * 32) * 4, x * 128 + 127), min(y * 4, 127) + x * 128);
-    /* EXPERIMENT */ check(min((y + x * 32) * 4, x * 128 + 4), (min(y, 1) * 4 + x * 128));
+    check(min((y + x * 32) * 4, x * 128 + 4), min(y, 1) * 4 + x * 128);
     check(max((x * 32 + y) * 4, x * 128 + 127), max(y * 4, 127) + x * 128);
-    /* EXPERIMENT */ check(max((x * 32 + y) * 4, x * 128 + 4), (max(y, 1) * 4 + x * 128));
+    check(max((x * 32 + y) * 4, x * 128 + 4), max(y, 1) * 4 + x * 128);
     check(max((y + x * 32) * 4, x * 128 + 127), max(y * 4, 127) + x * 128);
-    /* EXPERIMENT */ check(max((y + x * 32) * 4, x * 128 + 4), (max(y, 1) * 4 + x * 128));
+    check(max((y + x * 32) * 4, x * 128 + 4), max(y, 1) * 4 + x * 128);
 
     check((min(x + y, z) + w) - x, min(z - x, y) + w);
     check(min((x + y) + w, z) - x, min(z - x, w + y));

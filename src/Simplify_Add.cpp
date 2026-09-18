@@ -160,12 +160,6 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
          rewrite((x * y) + (z - (x * w)), z + (x * (y - w))) ||
          rewrite((x * y) + (z - (y * w)), z + (y * (x - w))) ||
 
-         // todo(mcourteaux): These do not obey reduction order; but were
-         // pre-existing; and indirectly required for "train Andresson2021
-         // cost model". To be removed later.
-         rewrite(x * c0 + y * c1, (x + y * fold(c1 / c0)) * c0, c1 % c0 == 0) ||
-         rewrite(x * c0 + y * c1, (x * fold(c0 / c1) + y) * c1, c0 % c1 == 0) ||
-
          // Hoist shuffles. The Shuffle visitor wants to sink
          // extract_elements to the leaves, and those count as degenerate
          // slices, so only hoist shuffles that grab more than one lane.

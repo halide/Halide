@@ -244,6 +244,16 @@ Expr Simplify::visit(const Sub *op, ExprInfo *info) {
            rewrite(min(y + x, z) - x, min(z - x, y)) ||
            rewrite(min(z, x + y) - x, min(z - x, y)) ||
            rewrite(min(z, y + x) - x, min(z - x, y)) ||
+           // The same, where the subtracted sum appears with its terms in
+           // the other order inside the min/max.
+           rewrite(min(x + (y + z), w) - (z + y), min(x, w - (z + y))) ||
+           rewrite(min(x, (y + z) + w) - (z + y), min(x - (y + z), w)) ||
+           rewrite(min(x, y + (z + w)) - (w + z), min(x - (z + w), y)) ||
+           rewrite(min((x + y) + z, w) - (y + x), min(z, (w - y) - x)) ||
+           rewrite(max(x + (y + z), w) - (z + y), max(x, w - (z + y))) ||
+           rewrite(max(x, (y + z) + w) - (z + y), max(x - (y + z), w)) ||
+           rewrite(max(x, y + (z + w)) - (w + z), max(x - (z + w), y)) ||
+           rewrite(max((x + y) + z, w) - (y + x), max(z, (w - y) - x)) ||
            // The clamped term hides a multiple of x that cancels against
            // the subtracted one, leaving a constant upper bound.
            rewrite(min(min(x, c0) * c1 + c2, y) - x * c1, min(min(y, fold(c0 * c1 + c2)) - x * c1, c2), c1 > 0) ||
