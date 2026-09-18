@@ -105,8 +105,11 @@ std::wstring from_utf8(const std::string &str) {
 }
 
 // Prepend \\?\ to the path if it's an absolute drive path and doesn't
-// already have it. This is needed for some Windows APIs that don't
-// support long paths otherwise.
+// already have it. This opts out of MAX_PATH for the raw Win32 file APIs
+// (CreateFileW, CreateDirectoryW, DeleteFileW, RemoveDirectoryW, ...), but
+// not for CRT-level path functions (_open, _stat, _access, <fstream>, ...
+// and their wide-char counterparts), which normalize the path via
+// GetFullPathName() internally and don't understand the prefix.
 std::wstring to_long_path(const std::string &str) {
     std::wstring wstr = from_utf8(str);
     for (auto &c : wstr) {
@@ -335,7 +338,7 @@ std::string strip_namespaces(const std::string &name) {
 
 bool file_exists(const std::string &name) {
 #ifdef _MSC_VER
-    return _waccess(to_long_path(name).c_str(), 0) == 0;
+    return _access(name.c_str(), 0) == 0;
 #else
     return ::access(name.c_str(), F_OK) == 0;
 #endif
@@ -378,7 +381,7 @@ void dir_rmdir(const std::string &name) {
 FileStat file_stat(const std::string &name) {
 #ifdef _MSC_VER
     struct _stat a;
-    if (_wstat(to_long_path(name).c_str(), &a) != 0) {
+    if (_stat(name.c_str(), &a) != 0) {
         user_error << "Could not stat " << name << "\n";
     }
 #else
@@ -508,11 +511,7 @@ std::string dir_make_temp() {
 }
 
 std::vector<char> read_entire_file(const std::string &pathname) {
-#ifdef _MSC_VER
-    std::ifstream f(to_long_path(pathname).c_str(), std::ios::in | std::ios::binary);
-#else
     std::ifstream f(pathname, std::ios::in | std::ios::binary);
-#endif
     std::vector<char> result;
 
     f.seekg(0, std::ifstream::end);
@@ -526,11 +525,7 @@ std::vector<char> read_entire_file(const std::string &pathname) {
 }
 
 void write_entire_file(const std::string &pathname, const void *source, size_t source_len) {
-#ifdef _MSC_VER
-    std::ofstream f(to_long_path(pathname).c_str(), std::ios::out | std::ios::binary);
-#else
     std::ofstream f(pathname, std::ios::out | std::ios::binary);
-#endif
 
     f.write(reinterpret_cast<const char *>(source), source_len);
     f.flush();
@@ -563,7 +558,7 @@ int run_process(std::vector<std::string> args, const std::string &stdout_path, c
     int saved_stdout = -1, saved_stderr = -1;
     if (!stdout_path.empty()) {
         saved_stdout = _dup(_fileno(stdout));
-        int fd = _wopen(to_long_path(stdout_path).c_str(), _O_WRONLY | _O_CREAT | _O_TRUNC | _O_BINARY, _S_IWRITE);
+        int fd = _open(stdout_path.c_str(), _O_WRONLY | _O_CREAT | _O_TRUNC | _O_BINARY, _S_IWRITE);
         if (fd == -1) {
             if (saved_stdout != -1) {
                 _close(saved_stdout);
@@ -582,7 +577,7 @@ int run_process(std::vector<std::string> args, const std::string &stdout_path, c
             // writes would clobber each other instead of concatenating.
             _dup2(_fileno(stdout), _fileno(stderr));
         } else {
-            int fd = _wopen(to_long_path(stderr_path).c_str(), _O_WRONLY | _O_CREAT | _O_TRUNC | _O_BINARY, _S_IWRITE);
+            int fd = _open(stderr_path.c_str(), _O_WRONLY | _O_CREAT | _O_TRUNC | _O_BINARY, _S_IWRITE);
             if (fd == -1) {
                 if (saved_stdout != -1) {
                     _dup2(saved_stdout, _fileno(stdout));
