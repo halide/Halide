@@ -1,6 +1,15 @@
 include(HalideTestHelpers)
 include(CheckCXXCompilerFlag)
 
+# All test targets in this directory (and its subdirectories) must be built
+# with the same visibility settings, since they reuse a common precompiled
+# <Halide.h> header via target_precompile_headers(REUSE_FROM) -- otherwise
+# Clang rejects the PCH with "default visibility for functions and variables
+# differs in PCH file vs. current file".
+set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS OFF)
+set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+set(CMAKE_VISIBILITY_INLINES_HIDDEN TRUE)
+
 # _test_internal is not itself a test; it exists purely so that the other
 # test executables below can reuse its precompiled <Halide.h> header via
 # target_precompile_headers(REUSE_FROM). HalideTestHelpers depends on this
@@ -8,15 +17,6 @@ include(CheckCXXCompilerFlag)
 add_executable(_test_internal EXCLUDE_FROM_ALL pch_helper.cpp)
 target_link_libraries(_test_internal PRIVATE Halide::Test Halide::TerminateHandler)
 target_precompile_headers(_test_internal PRIVATE <Halide.h>)
-# The PCH must be compiled with the same visibility settings as the targets
-# that reuse it (via REUSE_FROM, applied in add_halide_test()) -- otherwise
-# Clang rejects the PCH with "default visibility for functions and variables
-# differs in PCH file vs. current file".
-set_target_properties(_test_internal
-    PROPERTIES
-    CXX_VISIBILITY_PRESET hidden
-    VISIBILITY_INLINES_HIDDEN TRUE
-)
 if (NOT Halide_TARGET MATCHES "wasm")
     # The PCH must be compiled with the same warning flags as the targets that
     # reuse it (via REUSE_FROM) -- MSVC in particular treats a mismatched
