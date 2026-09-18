@@ -441,30 +441,173 @@ public:
 
     std::set<Expr, IRDeepCompare> truths, falsehoods;
 
+    /** What we know about an affine difference between a pair of Exprs. Every
+     * comparison we learn from becomes a statement about (coeff_a * a -
+     * coeff_b * b), with a and b peeled down to base terms and (coeff_a,
+     * coeff_b) the coprime, sign-canonical coefficient pair (see
+     * peel_affine_terms). For a plain comparison both are 1: a < b puts it at
+     * most -1, !(a < b) at least 0, a == b exactly 0. The complement of a
+     * half-line is a half-line, so only a negated equality fails to be an
+     * interval, and that is a single point removed -- hence invert. */
+    struct KnownBound {
+        Expr a, b;
+        ConstantInterval diff;
+        // If set, the combination is known *not* to lie in diff, which is
+        // then always a single point. Only a != b produces one of these.
+        bool invert = false;
+        int64_t coeff_a = 1, coeff_b = 1;
+    };
+    std::vector<KnownBound> known_bounds;
+
+    // A bit per pair key, over every record in the table. A query whose bit is
+    // clear cannot match anything, which is the answer almost every query gets.
+    // Wide enough that a few dozen facts leave it sparse: at 64 bits a typical
+    // table saturates and lets four queries in ten through to the scan.
+    static constexpr int difference_key_words = 4;
+    uint64_t difference_keys[difference_key_words] = {0};
+
+    /** Everything the facts tell us about (a - b), without building any IR.
+     * The arguments are borrowed, so this is safe to call with the raw nodes a
+     * rewrite rule has bound to its wildcards. */
+    ConstantInterval known_difference(const BaseExprNode *a, const BaseExprNode *b);
+
+    /** As known_difference, but for the affine combination (ca * a - cb * b).
+     * For rules holding a constant multiplier (a matched WildConst, say) that
+     * sits outside a or b's own IR, where peeling can't find it. */
+    ConstantInterval known_affine_difference(const BaseExprNode *a, int64_t ca,
+                                             const BaseExprNode *b, int64_t cb);
+
+    // Helpers over the above, for use as rewrite rule predicates. They return
+    // false when nothing is known, so such a rule simply doesn't fire.
+    bool known_min_diff(const BaseExprNode *a, const BaseExprNode *b, int64_t *result);
+    bool known_max_diff(const BaseExprNode *a, const BaseExprNode *b, int64_t *result);
+    bool known_min_diff(const BaseExprNode *a, int64_t ca, const BaseExprNode *b, int64_t cb, int64_t *result);
+    bool known_max_diff(const BaseExprNode *a, int64_t ca, const BaseExprNode *b, int64_t cb, int64_t *result);
+
+    // How deeply are we nested inside the conditions of can_prove predicates?
+    // Proving such a condition recursively invokes the simplifier on it, so a
+    // rule whose left-hand side also matches something built while proving its
+    // own predicate recurses without bound. Bound it.
+    //
+    // The work grows sharply with this limit -- on an adversarial nest of
+    // min(x, y) - min(z, w) it is roughly 0.02s at 1 or 2, 0.11s at 3 and 0.72s
+    // at 4 -- while no rule needs the depth: instrumenting every correctness
+    // test shows the deepest nesting any of them reaches is one. So this is
+    // already a level of headroom over anything observed.
+    int can_prove_depth = 0;
+    static constexpr int max_can_prove_depth = 2;
+
+    // Is there anything a known_true predicate could look up? Used to gate rules
+    // whose predicates are only ever provable from facts learned higher up in
+    // the IR, so that we don't pay for them in the common case.
+    bool has_facts() const {
+        return !truths.empty() || !falsehoods.empty();
+    }
+
+    // Is there anything a min_diff or max_diff predicate could look up? Only a
+    // comparison of non-overflowing integers leaves a record here, so this is
+    // strictly narrower than has_facts: a boolean fact, or a fact about a type
+    // that can wrap, satisfies that one while leaving this table empty. Rules
+    // that ask about differences must gate on this, or they spend a lookup on
+    // a table that cannot answer.
+    bool has_difference_facts() const {
+        return !known_bounds.empty();
+    }
+
+    // Symmetric key for a pair. Xoring two equal hashes gives zero whatever
+    // they were, so key that case by the hash itself rather than letting every
+    // pair of equal-hashing operands share the one bit.
+    HALIDE_ALWAYS_INLINE
+    static uint32_t difference_key(uint32_t fa, uint32_t fb) {
+        return fa == fb ? fa * 0x9e3779b9u : (fa ^ fb);
+    }
+
+    // One bit per pair key. Which bit has to come from mixed bits rather than
+    // from the bottom of the key: an Expr's hash carries its node type in the
+    // low bits, so indexing by those puts every pair of the same two kinds on
+    // one bit, and a few dozen facts then light only a handful of them.
+    HALIDE_ALWAYS_INLINE
+    static uint32_t difference_key_bit_index(uint32_t key) {
+        constexpr int bits = 8;  // log2(difference_key_words * 64)
+        static_assert(difference_key_words * 64 == (1 << bits));
+        return (key * 0x9e3779b9u) >> (32 - bits);
+    }
+
+    HALIDE_ALWAYS_INLINE
+    bool difference_key_present(uint32_t key) const {
+        const uint32_t bit = difference_key_bit_index(key);
+        return (difference_keys[bit / 64] >> (bit % 64)) & 1;
+    }
+
+    HALIDE_ALWAYS_INLINE
+    void add_difference_key(uint32_t key) {
+        const uint32_t bit = difference_key_bit_index(key);
+        difference_keys[bit / 64] |= (uint64_t)1 << (bit % 64);
+    }
+
+    // Replace exprs known to be truths or falsehoods with const_true or
+    // const_false. Used to inject everything currently known into the
+    // conditions of can_prove predicates in rewrite rules.
+    Expr substitute_facts(const Expr &e);
+
+    // Simplify the condition of a can_prove predicate in a rewrite rule, using
+    // everything currently known.
+    Expr simplify_can_prove_condition(const Expr &e);
+
+    // Is a boolean Expr already known to be true? Unlike can_prove this only
+    // looks the condition up in the facts, without simplifying anything.
+    bool is_known_true(const Expr &e);
+
     struct ScopedFact {
         Simplify *simplify;
 
         std::vector<const Variable *> pop_list;
         std::vector<const Variable *> bounds_pop_list;
         std::set<Expr, IRDeepCompare> truths, falsehoods;
+        // Everything in the simplifier's known_bounds from this index on was
+        // pushed by this scope, and is truncated away again when it ends.
+        size_t known_bounds_size = 0;
+        // Bits can't be cleared one at a time, so keep the summary from before
+        // this scope and put it back wholesale.
+        uint64_t saved_difference_keys[difference_key_words] = {0};
 
         void learn_false(const Expr &fact);
         void learn_true(const Expr &fact);
         void learn_upper_bound(const Variable *v, int64_t val);
         void learn_lower_bound(const Variable *v, int64_t val);
+        // Record what a comparison says about the difference between its sides.
+        void learn_difference(const Expr &a, const Expr &b, const ConstantInterval &diff, bool invert);
 
         // Replace exprs known to be truths or falsehoods with const_true or const_false.
         Expr substitute_facts(const Expr &e);
         Stmt substitute_facts(const Stmt &s);
 
         ScopedFact(Simplify *s)
-            : simplify(s) {
+            : simplify(s), known_bounds_size(s->known_bounds.size()) {
+            for (int i = 0; i < difference_key_words; i++) {
+                saved_difference_keys[i] = s->difference_keys[i];
+            }
         }
         ~ScopedFact();
 
         // allow move but not copy
         ScopedFact(const ScopedFact &that) = delete;
-        ScopedFact(ScopedFact &&that) = default;
+        // Not defaulted: the moved-from object must not undo anything in its
+        // destructor. The containers below would be empty after a move and so
+        // would be harmless, but known_bounds_size would survive and truncate
+        // away the facts this scope had just learned.
+        ScopedFact(ScopedFact &&that) noexcept
+            : simplify(that.simplify),
+              pop_list(std::move(that.pop_list)),
+              bounds_pop_list(std::move(that.bounds_pop_list)),
+              truths(std::move(that.truths)),
+              falsehoods(std::move(that.falsehoods)),
+              known_bounds_size(that.known_bounds_size) {
+            for (int i = 0; i < difference_key_words; i++) {
+                saved_difference_keys[i] = that.saved_difference_keys[i];
+            }
+            that.simplify = nullptr;
+        }
     };
 
     // Tell the simplifier to learn from and exploit a boolean
