@@ -1,0 +1,844 @@
+#include "ExprInterpreter.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstring>
+
+namespace Halide {
+namespace Internal {
+
+bool has_undefined_overflow(Type t) {
+    return t.is_int() && t.bits() >= 32;
+}
+
+std::ostream &operator<<(std::ostream &o, const ExprInterpreter::EvalValue &val) {
+    o << "(" << val.type << ")";
+    if (val.lanes.size() > 1) {
+        o << "[";
+    }
+    bool first = true;
+    for (const auto &l : val.lanes) {
+        if (!first) {
+            o << ",";
+        }
+        first = false;
+        std::visit(
+            [&o](auto x) {
+                o << x;
+            },
+            l);
+    }
+    if (val.lanes.size() > 1) {
+        o << "]";
+    }
+    if (val.did_overflow) {
+        o << " (did overflow)";
+    }
+    return o;
+}
+
+bool ExprInterpreter::EvalValue::is_close(const ExprInterpreter::EvalValue &o, double threshold) const {
+    internal_assert(type.is_float());
+    internal_assert(type == o.type);
+    for (size_t i = 0; i < lanes.size(); ++i) {
+        if (std::abs(std::get<double>(lanes[i]) - std::get<double>(o.lanes[i])) > threshold) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool ExprInterpreter::EvalValue::operator==(const ExprInterpreter::EvalValue &o) const {
+    internal_assert(type == o.type);
+    for (size_t i = 0; i < lanes.size(); ++i) {
+        bool equal = std::visit(
+            [&](auto x) {
+                return x == std::get<std::decay_t<decltype(x)>>(o.lanes[i]);
+            },
+            lanes[i]);
+        if (!equal) {
+            return false;
+        }
+    }
+    return true;
+}
+
+ExprInterpreter::EvalValue::EvalValue(Type t) : type(t), lanes(t.lanes()) {
+    for (int i = 0; i < t.lanes(); ++i) {
+        if (t.is_float()) {
+            lanes[i] = double{0.0};
+        } else if (t.is_int()) {
+            lanes[i] = int64_t{0};
+        } else {
+            lanes[i] = uint64_t{0};
+        }
+    }
+}
+
+template<typename F>
+ExprInterpreter::EvalValue ExprInterpreter::apply_unary(Type t, const EvalValue &a, F f) {
+    EvalValue res(t);
+    for (int i = 0; i < t.lanes(); ++i) {
+        res.lanes[i] = std::visit(
+            [&f, &t, &res](auto x) -> Scalar {
+                bool overflow = false;
+                auto out = f(x, overflow);
+                res.did_overflow |= overflow;
+                if (t.is_float()) {
+                    return static_cast<double>(out);
+                }
+                if (t.is_int()) {
+                    return static_cast<int64_t>(out);
+                }
+                return static_cast<uint64_t>(out);
+            },
+            a.lanes[i]);
+    }
+    res.did_overflow |= a.did_overflow;
+    return res;
+}
+
+template<bool StrictTypeMatch, typename F>
+ExprInterpreter::EvalValue ExprInterpreter::apply_binary(Type t, const EvalValue &a, const EvalValue &b, F f) {
+    EvalValue res(t);
+    if constexpr (StrictTypeMatch) {
+        internal_assert(a.type == b.type) << "Binary Type mismatch " << a.type << " != " << b.type;
+    } else {
+        internal_assert(a.type.lanes() == b.type.lanes()) << "Lanes mismatch " << a.type << " != " << b.type;
+    }
+    for (int i = 0; i < t.lanes(); ++i) {
+        res.lanes[i] = std::visit(
+            [&f, &t, &res](auto x, auto y) -> Scalar {
+                if constexpr (!StrictTypeMatch || std::is_same_v<decltype(x), decltype(y)>) {
+                    bool overflow = false;
+                    auto out = f(x, y, overflow);
+                    res.did_overflow |= overflow;
+                    if (t.is_float()) {
+                        return static_cast<double>(out);
+                    }
+                    if (t.is_int()) {
+                        return static_cast<int64_t>(out);
+                    }
+                    return static_cast<uint64_t>(out);
+                } else {
+                    internal_error << "Binary operator has incompatible types";
+                }
+            },
+            a.lanes[i], b.lanes[i]);
+    }
+    res.did_overflow |= a.did_overflow || b.did_overflow;
+    return res;
+}
+
+template<typename F>
+ExprInterpreter::EvalValue ExprInterpreter::apply_cmp(Type t, const EvalValue &a, const EvalValue &b, F f) {
+    EvalValue res(t);
+    res.did_overflow = a.did_overflow || b.did_overflow;
+    internal_assert(a.type == b.type);
+    for (int i = 0; i < t.lanes(); ++i) {
+        res.lanes[i] = std::visit(
+            [&f](auto x, auto y) -> Scalar {
+                if constexpr (std::is_same_v<decltype(x), decltype(y)>) {
+                    static_assert(std::is_same_v<decltype(f(x, y)), bool>);
+                    bool out = f(x, y);
+                    return static_cast<uint64_t>(out);
+                } else {
+                    internal_error << "Binary operator type mismatch";
+                }
+            },
+            a.lanes[i], b.lanes[i]);
+    }
+    return res;
+}
+
+ExprInterpreter::EvalValue ExprInterpreter::eval(const Expr &e) {
+    if (!e.defined()) {
+        return EvalValue();
+    }
+    e.accept(this);
+    internal_assert((int)result.lanes.size() == result.type.lanes());
+    truncate(result);
+    debug(2) << "Evaluated " << e << " to be " << result << "\n";
+    return result;
+}
+
+void ExprInterpreter::truncate(EvalValue &v) {
+    int b = v.type.bits();
+
+    // Floats do not overflow/truncate in the same way,
+    // and shifts >= 64 are Undefined Behavior in C++.
+    if (v.type.is_float() || b >= 64) {
+        return;
+    }
+
+    uint64_t mask = (1ULL << b) - 1;
+    uint64_t sign_bit = 1ULL << (b - 1);
+
+    for (int j = 0; j < v.type.lanes(); j++) {
+        std::visit(
+            [&](auto &x) {
+                // Only apply truncation to integer variants (int64_t, uint64_t)
+                if constexpr (std::is_integral_v<std::decay_t<decltype(x)>>) {
+                    uint64_t u = static_cast<uint64_t>(x) & mask;
+
+                    // If the underlying variant is signed, perform sign-extension
+                    if constexpr (std::is_signed_v<std::decay_t<decltype(x)>>) {
+                        if (u & sign_bit) {
+                            u |= ~mask;
+                        }
+                    }
+
+                    x = static_cast<std::decay_t<decltype(x)>>(u);
+                }
+            },
+            v.lanes[j]);
+    }
+}
+
+void ExprInterpreter::visit(const IntImm *op) {
+    result = EvalValue(op->type);
+    result.lanes[0] = (int64_t)op->value;
+}
+
+void ExprInterpreter::visit(const UIntImm *op) {
+    result = EvalValue(op->type);
+    result.lanes[0] = (uint64_t)op->value;
+}
+
+void ExprInterpreter::visit(const FloatImm *op) {
+    result = EvalValue(op->type);
+    result.lanes[0] = (double)op->value;
+}
+
+void ExprInterpreter::visit(const StringImm *op) {
+    internal_error << "Cannot evaluate StringImm as a vector representation.";
+}
+
+void ExprInterpreter::visit(const Variable *op) {
+    auto it = var_env.find(op->name);
+    if (it != var_env.end()) {
+        result = it->second;
+    } else {
+        internal_error << "Unbound variable in ExprInterpreter: " << op->name;
+    }
+}
+
+void ExprInterpreter::visit(const Cast *op) {
+    result = apply_unary(op->type, eval(op->value), [&op](auto x, bool &overflow) {
+        if (has_undefined_overflow(op->type)) {
+            if (!op->type.can_represent(x)) {
+                overflow = true;
+            }
+        }
+        return x;
+    });
+}
+
+namespace {
+
+// Reinterpret operates at the bit level, and lane types can be narrower than
+// a byte (e.g. UInt(1) mask vectors), so lanes aren't necessarily byte
+// aligned. These helpers pack/unpack values a bit at a time (LSB first)
+// instead of assuming every lane starts on a byte boundary.
+void write_bits(std::vector<uint8_t> &buf, size_t bit_offset, int nbits, uint64_t value) {
+    for (int b = 0; b < nbits; b++) {
+        size_t bit = bit_offset + b;
+        size_t byte_idx = bit / 8;
+        int bit_idx = bit % 8;
+        uint8_t bitval = (value >> b) & 1;
+        buf[byte_idx] = (buf[byte_idx] & ~(uint8_t(1) << bit_idx)) | (bitval << bit_idx);
+    }
+}
+
+uint64_t read_bits(const std::vector<uint8_t> &buf, size_t bit_offset, int nbits) {
+    uint64_t value = 0;
+    for (int b = 0; b < nbits; b++) {
+        size_t bit = bit_offset + b;
+        size_t byte_idx = bit / 8;
+        int bit_idx = bit % 8;
+        uint64_t bitval = (buf[byte_idx] >> bit_idx) & 1;
+        value |= (bitval << b);
+    }
+    return value;
+}
+
+}  // namespace
+
+void ExprInterpreter::visit(const Reinterpret *op) {
+    EvalValue val = eval(op->value);
+    result = EvalValue(op->type);
+    result.did_overflow = val.did_overflow;
+
+    int in_lanes = val.type.lanes();
+    int in_bits = val.type.bits();
+
+    int out_lanes = op->type.lanes();
+    int out_bits = op->type.bits();
+
+    size_t total_bits = (size_t)in_bits * in_lanes;
+    internal_assert(total_bits == (size_t)out_bits * out_lanes)
+        << "Reinterpret between types of different total bit width.";
+
+    std::vector<uint8_t> buffer((total_bits + 7) / 8, 0);
+
+    for (int j = 0; j < in_lanes; j++) {
+        std::visit(
+            [&](auto x) {
+                if constexpr (std::is_floating_point_v<decltype(x)>) {
+                    uint64_t bits = 0;
+                    if (in_bits == 32) {
+                        float f = static_cast<float>(x);
+                        std::memcpy(&bits, &f, 4);
+                    } else if (in_bits == 64) {
+                        std::memcpy(&bits, &x, 8);
+                    } else {
+                        internal_error << "Unsupported float bit width in Reinterpret input";
+                    }
+                    write_bits(buffer, (size_t)j * in_bits, in_bits, bits);
+                } else {
+                    uint64_t u = static_cast<uint64_t>(x);
+                    write_bits(buffer, (size_t)j * in_bits, in_bits, u);
+                }
+            },
+            val.lanes[j]);
+    }
+
+    for (int j = 0; j < out_lanes; j++) {
+        uint64_t bits = read_bits(buffer, (size_t)j * out_bits, out_bits);
+        if (op->type.is_float()) {
+            if (out_bits == 32) {
+                float f = 0.0f;
+                std::memcpy(&f, &bits, 4);
+                result.lanes[j] = static_cast<double>(f);
+            } else if (out_bits == 64) {
+                double f = 0.0;
+                std::memcpy(&f, &bits, 8);
+                result.lanes[j] = f;
+            } else {
+                internal_error << "Unsupported float bit width in Reinterpret output";
+            }
+        } else if (op->type.is_int()) {
+            result.lanes[j] = static_cast<int64_t>(bits);
+        } else {
+            result.lanes[j] = bits;
+        }
+    }
+}
+
+void ExprInterpreter::visit(const Add *op) {
+    result = apply_binary(op->type, eval(op->a), eval(op->b), [&](auto x, auto y, bool &overflow) -> decltype(x) {
+        if (has_undefined_overflow(op->type)) {
+            int64_t r;
+            overflow = !add_with_overflow(op->a.type().bits(), x, y, &r);
+            return r;
+        } else {
+            return x + y;
+        }
+    });
+}
+void ExprInterpreter::visit(const Sub *op) {
+    result = apply_binary(op->type, eval(op->a), eval(op->b), [&](auto x, auto y, bool &overflow) -> decltype(x) {
+        if (has_undefined_overflow(op->type)) {
+            int64_t r;
+            overflow = !sub_with_overflow(op->a.type().bits(), x, y, &r);
+            return r;
+        } else {
+            return x - y;
+        }
+    });
+}
+void ExprInterpreter::visit(const Mul *op) {
+    result = apply_binary(op->type, eval(op->a), eval(op->b), [&](auto x, auto y, bool &overflow) -> decltype(x) {
+        if (has_undefined_overflow(op->type)) {
+            int64_t r;
+            overflow = !mul_with_overflow(op->a.type().bits(), x, y, &r);
+            return r;
+        } else {
+            return x * y;
+        }
+    });
+}
+void ExprInterpreter::visit(const Min *op) {
+    result = apply_binary(op->type, eval(op->a), eval(op->b), [](auto x, auto y, bool &) { return std::min(x, y); });
+}
+void ExprInterpreter::visit(const Max *op) {
+    result = apply_binary(op->type, eval(op->a), eval(op->b), [](auto x, auto y, bool &) { return std::max(x, y); });
+}
+
+void ExprInterpreter::visit(const EQ *op) {
+    result = apply_cmp(op->type, eval(op->a), eval(op->b), [](auto x, auto y) { return x == y; });
+}
+void ExprInterpreter::visit(const NE *op) {
+    result = apply_cmp(op->type, eval(op->a), eval(op->b), [](auto x, auto y) { return x != y; });
+}
+void ExprInterpreter::visit(const LT *op) {
+    result = apply_cmp(op->type, eval(op->a), eval(op->b), [](auto x, auto y) { return x < y; });
+}
+void ExprInterpreter::visit(const LE *op) {
+    result = apply_cmp(op->type, eval(op->a), eval(op->b), [](auto x, auto y) { return x <= y; });
+}
+void ExprInterpreter::visit(const GT *op) {
+    result = apply_cmp(op->type, eval(op->a), eval(op->b), [](auto x, auto y) { return x > y; });
+}
+void ExprInterpreter::visit(const GE *op) {
+    result = apply_cmp(op->type, eval(op->a), eval(op->b), [](auto x, auto y) { return x >= y; });
+}
+
+void ExprInterpreter::visit(const Div *op) {
+    result = apply_binary(op->type, eval(op->a), eval(op->b), [](auto x, auto y, bool &) {
+        if constexpr (std::is_floating_point_v<decltype(x)>) {
+            return x / y;
+        } else if constexpr (std::is_signed_v<decltype(x)>) {
+            if (y == 0) return decltype(x){0};
+            // Prevent C++ hardware crash (SIGFPE) on INT_MIN / -1
+            if (y == -1) return static_cast<decltype(x)>(~static_cast<uint64_t>(x) + 1);
+
+            auto q = x / y;
+            auto r = x % y;
+
+            // Euclidean division correction: if the C++ remainder is negative,
+            // the quotient must shift so the remainder becomes positive.
+            if (r < 0) {
+                q += (y < 0) ? 1 : -1;
+            }
+            return q;
+        } else {
+            if (y == 0) return decltype(x){0};
+            return x / y;
+        }
+    });
+}
+
+void ExprInterpreter::visit(const Mod *op) {
+    result = apply_binary(op->type, eval(op->a), eval(op->b), [](auto x, auto y, bool &) {
+        if constexpr (std::is_floating_point_v<decltype(x)>) {
+            // Halide doc states floats fallback to fmod
+            if (y == 0.0) return decltype(x){0};
+
+            auto r = std::fmod(x, y);
+
+            // Guarantee positive remainder for floats as well
+            if (r < 0) {
+                r += std::abs(y);
+            }
+
+            return r;
+
+        } else if constexpr (std::is_signed_v<decltype(x)>) {
+            if (y == 0) return decltype(x){0};
+
+            // Prevent C++ hardware crash (SIGFPE) on INT_MIN % -1
+            if (y == -1) return decltype(x){0};
+
+            auto r = x % y;
+
+            // Euclidean modulo correction:
+            // If the C++ remainder is negative, add the absolute value of the divisor.
+            if (r < 0) {
+                r += (y < 0) ? -y : y;
+            }
+
+            return r;
+
+        } else {
+            // Unsigned integers natively produce positive remainders
+            // and cannot be negative.
+            if (y == 0) return decltype(x){0};
+
+            return x % y;
+        }
+    });
+}
+
+void ExprInterpreter::visit(const And *op) {
+    result = apply_binary(op->type, eval(op->a), eval(op->b), [](auto x, auto y, bool &) {
+        if constexpr (std::is_integral_v<decltype(x)>) {
+            return x & y;
+        } else {
+            internal_error << "Bitwise AND on floats";
+            return x;
+        }
+    });
+}
+
+void ExprInterpreter::visit(const Or *op) {
+    result = apply_binary(op->type, eval(op->a), eval(op->b), [](auto x, auto y, bool &) {
+        if constexpr (std::is_integral_v<decltype(x)>) {
+            return x | y;
+        } else {
+            internal_error << "Bitwise OR on floats";
+            return x;
+        }
+    });
+}
+
+void ExprInterpreter::visit(const Not *op) {
+    result = apply_unary(op->type, eval(op->a), [](auto x, bool &) {
+        if constexpr (std::is_integral_v<decltype(x)>) {
+            return ~x;
+        } else {
+            internal_error << "Bitwise NOT on floats";
+            return x;
+        }
+    });
+}
+
+void ExprInterpreter::visit(const Select *op) {
+    EvalValue cond = eval(op->condition), t = eval(op->true_value), f = eval(op->false_value);
+    result = EvalValue(op->type);
+    result.did_overflow = cond.did_overflow || t.did_overflow || f.did_overflow;
+    for (int j = 0; j < op->type.lanes(); j++) {
+        bool c = std::visit([](auto x) { return x != 0; }, cond.lanes[j]);
+        result.lanes[j] = c ? t.lanes[j] : f.lanes[j];
+    }
+}
+
+void ExprInterpreter::visit(const Load *op) {
+    internal_error << "Load nodes are unsupported without memory mapping in ExprInterpreter.";
+}
+
+void ExprInterpreter::visit(const Let *op) {
+    EvalValue val = eval(op->value);
+    auto old_val = var_env.find(op->name);
+    bool had_old = (old_val != var_env.end());
+    EvalValue old;
+    if (had_old) {
+        old = old_val->second;
+    }
+
+    var_env[op->name] = val;
+    result = eval(op->body);
+
+    if (had_old) {
+        var_env[op->name] = old;
+    } else {
+        var_env.erase(op->name);
+    }
+}
+
+void ExprInterpreter::visit(const Ramp *op) {
+    EvalValue base = eval(op->base), stride = eval(op->stride);
+    result = EvalValue(op->type);
+    result.did_overflow = base.did_overflow || stride.did_overflow;
+
+    int n = base.type.lanes();  // The lane-width of the base and stride
+
+    // ramp(b, s, l) = concat_vectors(b, b + s, b + 2*s, ... b + (l-1)*s)
+    for (int j = 0; j < op->lanes; j++) {
+        for (int k = 0; k < n; k++) {
+            std::visit(
+                [&](auto b, auto s) {
+                    if constexpr (std::is_same_v<decltype(b), decltype(s)>) {
+                        auto res = b + j * s;
+                        if (has_undefined_overflow(op->type)) {
+                            const int bits = op->type.bits();
+                            int64_t r;
+                            bool overflow = false;
+                            overflow |= !mul_with_overflow(bits, j, s, &r);
+                            overflow |= !add_with_overflow(bits, b, r, &r);
+                            result.did_overflow |= overflow;
+                        }
+                        if (op->type.is_float()) {
+                            result.lanes[j * n + k] = static_cast<double>(res);
+                        } else if (op->type.is_int()) {
+                            result.lanes[j * n + k] = static_cast<int64_t>(res);
+                        } else {
+                            result.lanes[j * n + k] = static_cast<uint64_t>(res);
+                        }
+                    } else {
+                        internal_error << "Ramp base and stride type mismatch";
+                    }
+                },
+                base.lanes[k], stride.lanes[k]);
+        }
+    }
+}
+
+void ExprInterpreter::visit(const Broadcast *op) {
+    EvalValue val = eval(op->value);
+    result = EvalValue(op->type);
+    result.did_overflow = val.did_overflow;
+    int v_lanes = op->value.type().lanes();
+    for (int j = 0; j < op->lanes; j++) {
+        for (int k = 0; k < v_lanes; k++) {
+            result.lanes[j * v_lanes + k] = val.lanes[k];
+        }
+    }
+}
+
+void ExprInterpreter::visit(const Shuffle *op) {
+    result = EvalValue(op->type);
+    std::vector<EvalValue> vecs;
+    vecs.reserve(op->vectors.size());
+    for (const Expr &e : op->vectors) {
+        vecs.push_back(eval(e));
+    }
+
+    std::vector<Scalar> flat;
+    for (const EvalValue &v : vecs) {
+        result.did_overflow |= v.did_overflow;
+        for (int j = 0; j < v.type.lanes(); j++) {
+            flat.push_back(v.lanes[j]);
+        }
+    }
+
+    for (int j = 0; j < (int)op->indices.size(); j++) {
+        int idx = op->indices[j];
+        if (idx >= 0 && idx < (int)flat.size()) {
+            result.lanes[j] = flat[idx];
+        } else {
+            internal_error << "Shuffle index out of bounds.";
+        }
+    }
+}
+
+void ExprInterpreter::visit(const VectorReduce *op) {
+    EvalValue val = eval(op->value);
+    result = EvalValue(op->type);
+    result.did_overflow |= val.did_overflow;
+    int in_lanes = op->value.type().lanes();
+    int out_lanes = op->type.lanes();
+    int factor = in_lanes / out_lanes;
+
+    bool check_overflow = has_undefined_overflow(op->type);
+    int bits = op->type.bits();
+
+    for (int j = 0; j < out_lanes; j++) {
+        Scalar res = val.lanes[j * factor];
+        for (int k = 1; k < factor; k++) {
+            Scalar next = val.lanes[j * factor + k];
+            res = std::visit(
+                [&](auto a, auto b) -> Scalar {
+                    if constexpr (std::is_same_v<decltype(a), decltype(b)>) {
+                        switch (op->op) {
+                        case VectorReduce::Add:
+                            if (check_overflow) {
+                                result.did_overflow |= add_would_overflow(bits, a, b);
+                            }
+                            return a + b;
+                        case VectorReduce::Mul:
+                            if (check_overflow) {
+                                result.did_overflow |= mul_would_overflow(bits, a, b);
+                            }
+                            return a * b;
+                        case VectorReduce::Min:
+                            return std::min(a, b);
+                        case VectorReduce::Max:
+                            return std::max(a, b);
+                        case VectorReduce::And:
+                            if constexpr (std::is_integral_v<decltype(a)>) {
+                                return a & b;
+                            } else {
+                                internal_error << "And on floats";
+                                return a;
+                            }
+                        case VectorReduce::Or:
+                            if constexpr (std::is_integral_v<decltype(a)>) {
+                                return a | b;
+                            } else {
+                                internal_error << "Or on floats";
+                                return a;
+                            }
+                        default:
+                            internal_error << "Unhandled VectorReduce op";
+                            return a;
+                        }
+                    } else {
+                        internal_error << "VectorReduce type mismatch";
+                        return a;
+                    }
+                },
+                res, next);
+        }
+
+        std::visit(
+            [&](auto x) {
+                if (op->type.is_float()) {
+                    result.lanes[j] = static_cast<double>(x);
+                } else if (op->type.is_int()) {
+                    result.lanes[j] = static_cast<int64_t>(x);
+                } else {
+                    result.lanes[j] = static_cast<uint64_t>(x);
+                }
+            },
+            res);
+    }
+}
+
+void ExprInterpreter::visit(const Call *op) {
+    result = EvalValue(op->type);
+    std::vector<EvalValue> args;
+    args.reserve(op->args.size());
+    for (const Expr &e : op->args) {
+        auto arg_val = eval(e);
+        result.did_overflow |= arg_val.did_overflow;
+        args.push_back(std::move(arg_val));
+    }
+
+    if (op->is_intrinsic(Call::bitwise_and)) {
+        result = apply_binary(op->type, args[0], args[1], [](auto a, auto b, bool &) {
+            if constexpr (std::is_integral_v<decltype(a)>) {
+                return a & b;
+            } else {
+                internal_error << "bitwise_and on float";
+                return a;
+            }
+        });
+    } else if (op->is_intrinsic(Call::bitwise_or)) {
+        result = apply_binary(op->type, args[0], args[1], [](auto a, auto b, bool &) {
+            if constexpr (std::is_integral_v<decltype(a)>) {
+                return a | b;
+            } else {
+                internal_error << "bitwise_or on float";
+                return a;
+            }
+        });
+    } else if (op->is_intrinsic(Call::bitwise_xor)) {
+        result = apply_binary(op->type, args[0], args[1], [](auto a, auto b, bool &) {
+            if constexpr (std::is_integral_v<decltype(a)>) {
+                return a ^ b;
+            } else {
+                internal_error << "bitwise_xor on float";
+                return a;
+            }
+        });
+    } else if (op->is_intrinsic(Call::bitwise_not)) {
+        result = apply_unary(op->type, args[0], [](auto a, bool &) {
+            if constexpr (std::is_integral_v<decltype(a)>) {
+                return ~a;
+            } else {
+                internal_error << "bitwise_not on float";
+                return a;
+            }
+        });
+    } else if (op->is_intrinsic(Call::shift_left)) {
+        result = apply_binary<false>(op->type, args[0], args[1], [&op](auto a, auto b, bool &overflow) {
+            if constexpr (std::is_integral_v<decltype(a)> && std::is_integral_v<decltype(b)>) {
+                if constexpr (std::is_same_v<decltype(a), int64_t>) {
+                    if (has_undefined_overflow(op->type)) {
+                        internal_assert((std::is_same_v<decltype(a), int64_t>));
+
+                        int bits = op->type.bits();
+                        int64_t shift_amount = static_cast<int64_t>(b);
+
+                        // Shifting by a negative amount or >= the bit-width drops bits / triggers overflow
+                        if (shift_amount < 0 || shift_amount >= bits) {
+                            overflow = true;
+                        } else {
+                            // To avoid dropping the most significant bits (including the sign bit),
+                            // 'a' must be strictly bounded by [-2^(bits - 1 - b), 2^(bits - 1 - b) - 1].
+                            // We use 1ULL to prevent C++ UB when shifting into the sign bit.
+                            int64_t max_val = static_cast<int64_t>((1ULL << (bits - 1 - shift_amount)) - 1);
+                            int64_t min_val = -max_val - 1;
+
+                            if (a < min_val || a > max_val) {
+                                overflow = true;
+                            }
+                        }
+                    }
+                }
+
+                // Safe Evaluation (Preventing host C++ UB):
+                // 1. Cast 'a' to uint64_t because left-shifting negative signed values was UB prior to C++20.
+                // 2. Mask 'b' to 63 to prevent host hardware crashes when shift_amount >= 64.
+                uint64_t safe_b = static_cast<uint64_t>(b) & 63;
+                return static_cast<decltype(a)>(static_cast<uint64_t>(a) << safe_b);
+            } else {
+                internal_error << "shift_left on float";
+                return a;
+            }
+        });
+    } else if (op->is_intrinsic(Call::shift_right)) {
+        result = apply_binary<false>(op->type, args[0], args[1], [](auto a, auto b, bool &) {
+            if constexpr (std::is_integral_v<decltype(a)> && std::is_integral_v<decltype(b)>) {
+                return a >> b;
+            } else {
+                internal_error << "shift_right on float";
+                return a;
+            }
+        });
+    } else if (op->is_intrinsic(Call::abs)) {
+        result = apply_unary(op->type, args[0], [](auto a, bool &) {
+            if constexpr (std::is_floating_point_v<decltype(a)>) {
+                return std::abs(a);
+            } else if constexpr (std::is_signed_v<decltype(a)>) {
+                if (a == std::numeric_limits<int64_t>::min()) {
+                    return (uint64_t)(1ULL << 63);
+                }
+                return (uint64_t)std::abs(a);
+            } else {
+                return a;
+            }
+        });
+    } else if (op->is_intrinsic(Call::bool_to_mask) || op->is_intrinsic(Call::cast_mask)) {
+        result = apply_unary(op->type, args[0], [](auto a, bool &) {
+            if constexpr (std::is_integral_v<decltype(a)>) {
+                return a ? static_cast<decltype(a)>(-1) : 0;
+            } else {
+                internal_error << "mask intrinsic on float";
+                return int64_t{0};
+            }
+        });
+    } else if (op->is_intrinsic(Call::select_mask) || op->is_intrinsic({Call::if_then_else, Call::if_then_else_mask})) {
+        for (int j = 0; j < op->type.lanes(); j++) {
+            bool cond = std::visit([](auto x) { return x != 0; }, args[0].lanes[j]);
+            result.lanes[j] = cond ? args[1].lanes[j] : args[2].lanes[j];
+        }
+    } else if (op->is_intrinsic({Call::likely, Call::likely_if_innermost, Call::promise_clamped, Call::unsafe_promise_clamped})) {
+        result = args[0];
+    } else if (op->is_intrinsic({Call::return_second, Call::require})) {
+        bool overflow = result.did_overflow;
+        result = args[1];
+        result.did_overflow |= overflow;
+    } else if (starts_with(op->name, "sin_")) {
+        result = apply_unary(op->type, args[0], [](auto a, bool &) { return std::sin(a); });
+    } else if (starts_with(op->name, "cos_")) {
+        result = apply_unary(op->type, args[0], [](auto a, bool &) { return std::cos(a); });
+    } else if (starts_with(op->name, "exp_")) {
+        result = apply_unary(op->type, args[0], [](auto a, bool &) { return std::exp(a); });
+    } else if (starts_with(op->name, "log_")) {
+        result = apply_unary(op->type, args[0], [](auto a, bool &) { return std::log(a); });
+    } else if (starts_with(op->name, "sqrt_")) {
+        result = apply_unary(op->type, args[0], [](auto a, bool &) { return std::sqrt(a); });
+    } else if (op->is_intrinsic(Call::strict_fma)) {
+        internal_assert(op->args.size() == 3);
+        internal_assert(op->args[0].type().is_float());
+        for (int j = 0; j < op->type.lanes(); j++) {
+            result.lanes[j] = std::visit(
+                [&](auto a, auto b, auto c) -> Scalar {
+                    if constexpr (std::is_same_v<decltype(a), decltype(b)> && std::is_same_v<decltype(b), decltype(c)>) {
+                        auto out = std::fma(a, b, c);
+                        if (op->type.is_float()) {
+                            return static_cast<double>(out);
+                        }
+                        if (op->type.is_int()) {
+                            return static_cast<int64_t>(out);
+                        }
+                        return static_cast<uint64_t>(out);
+                    } else {
+                        internal_error << "Type mismatch in strict_fma";
+                        return double{0};
+                    }
+                },
+                args[0].lanes[j], args[1].lanes[j], args[2].lanes[j]);
+        }
+    } else if (op->is_strict_float_intrinsic()) {
+        Expr unstrict = unstrictify_float(op);
+        unstrict.accept(this);
+    } else if (op->is_arithmetic_intrinsic()) {
+        Expr lower = lower_intrinsic(op);
+        lower.accept(this);
+    } else if (op->is_intrinsic(Call::absd)) {
+        result = apply_binary(op->type, args[0], args[1], [](auto a, auto b, bool &) {
+            return a < b ? b - a : a - b;
+        });
+    } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
+        result = EvalValue(op->type);
+        result.did_overflow = true;
+    } else {
+        internal_error << "Unhandled Call intrinsic / function in ExprInterpreter: " << op->name;
+    }
+}
+
+}  // namespace Internal
+}  // namespace Halide
