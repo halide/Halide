@@ -7,6 +7,7 @@
 #include "Util.h"
 #include "Debug.h"
 #include "Error.h"
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -105,11 +106,14 @@ std::wstring from_utf8(const std::string &str) {
 }
 
 // Prepend \\?\ to the path if it's an absolute drive path and doesn't
-// already have it. This opts out of MAX_PATH for the raw Win32 file APIs
-// (CreateFileW, CreateDirectoryW, DeleteFileW, RemoveDirectoryW, ...), but
-// not for CRT-level path functions (_open, _stat, _access, <fstream>, ...
-// and their wide-char counterparts), which normalize the path via
-// GetFullPathName() internally and don't understand the prefix.
+// already have it. This opts out of MAX_PATH, but only for the raw Win32
+// file APIs (CreateFileW, CreateDirectoryW, DeleteFileW, RemoveDirectoryW,
+// GetFileAttributes(Ex)W, ...) -- not for CRT-level path functions (_open,
+// _stat, _access, <fstream>, ... and their wide-char counterparts), which
+// normalize the path via GetFullPathName() internally and don't understand
+// the prefix. Callers needing long-path support at a site that would
+// otherwise use one of those CRT functions must go through the
+// corresponding raw Win32 API instead.
 std::wstring to_long_path(const std::string &str) {
     std::wstring wstr = from_utf8(str);
     for (auto &c : wstr) {
@@ -124,6 +128,29 @@ std::wstring to_long_path(const std::string &str) {
         wstr = LR"(\\?\)" + wstr;
     }
     return wstr;
+}
+
+// Opens (creating/truncating) path for writing via CreateFileW() using the
+// long-path form of the name, then wraps the resulting handle in a CRT file
+// descriptor via _open_osfhandle() so it can be used with _dup2()/_fileno().
+// The handle is explicitly created inheritable (matching _open()'s default)
+// since CreateFileW() defaults to non-inheritable when given a null security
+// descriptor; run_process() relies on the fd it's dup2'd onto being
+// inherited by the spawned child. Returns -1 on failure, as _open() would.
+int open_inheritable_long_path_for_write(const std::string &path) {
+    SECURITY_ATTRIBUTES sa = {sizeof(sa), nullptr, TRUE};
+    HANDLE h = CreateFileW(to_long_path(path).c_str(), GENERIC_WRITE,
+                           FILE_SHARE_READ | FILE_SHARE_WRITE, &sa,
+                           CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) {
+        return -1;
+    }
+    int fd = static_cast<int>(_open_osfhandle(reinterpret_cast<intptr_t>(h), _O_WRONLY | _O_BINARY));
+    if (fd == -1) {
+        CloseHandle(h);
+        return -1;
+    }
+    return fd;
 }
 
 }  // namespace
@@ -338,7 +365,10 @@ std::string strip_namespaces(const std::string &name) {
 
 bool file_exists(const std::string &name) {
 #ifdef _MSC_VER
-    return _access(name.c_str(), 0) == 0;
+    // GetFileAttributesW() (rather than _access(), which is subject to
+    // MAX_PATH -- see to_long_path()'s comment) with the long-path form of
+    // the name.
+    return GetFileAttributesW(to_long_path(name).c_str()) != INVALID_FILE_ATTRIBUTES;
 #else
     return ::access(name.c_str(), F_OK) == 0;
 #endif
@@ -380,21 +410,39 @@ void dir_rmdir(const std::string &name) {
 
 FileStat file_stat(const std::string &name) {
 #ifdef _MSC_VER
-    struct _stat a;
-    if (_stat(name.c_str(), &a) != 0) {
+    // GetFileAttributesExW() (rather than _stat(), which is subject to
+    // MAX_PATH -- see to_long_path()'s comment) with the long-path form of
+    // the name. Windows has no uid/gid concept, so _stat() always reports 0
+    // for those anyway; st_mode is likewise synthesized by the CRT from the
+    // directory/read-only attribute bits, which we replicate here.
+    WIN32_FILE_ATTRIBUTE_DATA a;
+    if (!GetFileAttributesExW(to_long_path(name).c_str(), GetFileExInfoStandard, &a)) {
         user_error << "Could not stat " << name << "\n";
     }
+
+    uint64_t file_size = (static_cast<uint64_t>(a.nFileSizeHigh) << 32) | a.nFileSizeLow;
+
+    // FILETIME is in 100ns ticks since 1601-01-01; convert to a Unix epoch time.
+    ULARGE_INTEGER t;
+    t.LowPart = a.ftLastWriteTime.dwLowDateTime;
+    t.HighPart = a.ftLastWriteTime.dwHighDateTime;
+    uint32_t mod_time = static_cast<uint32_t>((t.QuadPart - 116444736000000000ULL) / 10000000ULL);
+
+    uint32_t mode = (a.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? _S_IFDIR : _S_IFREG;
+    mode |= (a.dwFileAttributes & FILE_ATTRIBUTE_READONLY) ? _S_IREAD : (_S_IREAD | _S_IWRITE);
+
+    return {file_size, mod_time, 0, 0, mode};
 #else
     struct stat a;
     if (::stat(name.c_str(), &a) != 0) {
         user_error << "Could not stat " << name << "\n";
     }
-#endif
     return {static_cast<uint64_t>(a.st_size),
             static_cast<uint32_t>(a.st_mtime),
             static_cast<uint32_t>(a.st_uid),
             static_cast<uint32_t>(a.st_gid),
             static_cast<uint32_t>(a.st_mode)};
+#endif
 }
 
 #ifdef _WIN32
@@ -511,6 +559,34 @@ std::string dir_make_temp() {
 }
 
 std::vector<char> read_entire_file(const std::string &pathname) {
+#ifdef _MSC_VER
+    // CreateFileW()+ReadFile() (rather than <fstream>, which is subject to
+    // MAX_PATH -- see to_long_path()'s comment) with the long-path form of
+    // the name.
+    HANDLE h = CreateFileW(to_long_path(pathname).c_str(), GENERIC_READ,
+                           FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    internal_assert(h != INVALID_HANDLE_VALUE) << "Unable to read file: " << pathname;
+
+    LARGE_INTEGER size;
+    internal_assert(GetFileSizeEx(h, &size)) << "Unable to read file: " << pathname;
+
+    std::vector<char> result(static_cast<size_t>(size.QuadPart));
+    size_t total_read = 0;
+    while (total_read < result.size()) {
+        DWORD to_read = static_cast<DWORD>(std::min<size_t>(result.size() - total_read, size_t(1) << 30));
+        DWORD n = 0;
+        BOOL ok = ReadFile(h, result.data() + total_read, to_read, &n, nullptr);
+        internal_assert(ok) << "Unable to read file: " << pathname;
+        if (n == 0) {
+            break;
+        }
+        total_read += n;
+    }
+    CloseHandle(h);
+    internal_assert(total_read == result.size()) << "Unable to read file: " << pathname;
+    return result;
+#else
     std::ifstream f(pathname, std::ios::in | std::ios::binary);
     std::vector<char> result;
 
@@ -522,15 +598,34 @@ std::vector<char> read_entire_file(const std::string &pathname) {
     internal_assert(f.good()) << "Unable to read file: " << pathname;
     f.close();
     return result;
+#endif
 }
 
 void write_entire_file(const std::string &pathname, const void *source, size_t source_len) {
+#ifdef _MSC_VER
+    HANDLE h = CreateFileW(to_long_path(pathname).c_str(), GENERIC_WRITE,
+                           FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                           CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    internal_assert(h != INVALID_HANDLE_VALUE) << "Unable to write file: " << pathname;
+
+    const char *p = reinterpret_cast<const char *>(source);
+    size_t total_written = 0;
+    while (total_written < source_len) {
+        DWORD to_write = static_cast<DWORD>(std::min<size_t>(source_len - total_written, size_t(1) << 30));
+        DWORD n = 0;
+        BOOL ok = WriteFile(h, p + total_written, to_write, &n, nullptr);
+        internal_assert(ok) << "Unable to write file: " << pathname;
+        total_written += n;
+    }
+    CloseHandle(h);
+#else
     std::ofstream f(pathname, std::ios::out | std::ios::binary);
 
     f.write(reinterpret_cast<const char *>(source), source_len);
     f.flush();
     internal_assert(f.good()) << "Unable to write file: " << pathname;
     f.close();
+#endif
 }
 
 int run_process(std::vector<std::string> args) {
@@ -558,7 +653,7 @@ int run_process(std::vector<std::string> args, const std::string &stdout_path, c
     int saved_stdout = -1, saved_stderr = -1;
     if (!stdout_path.empty()) {
         saved_stdout = _dup(_fileno(stdout));
-        int fd = _open(stdout_path.c_str(), _O_WRONLY | _O_CREAT | _O_TRUNC | _O_BINARY, _S_IWRITE);
+        int fd = open_inheritable_long_path_for_write(stdout_path);
         if (fd == -1) {
             if (saved_stdout != -1) {
                 _close(saved_stdout);
@@ -577,7 +672,7 @@ int run_process(std::vector<std::string> args, const std::string &stdout_path, c
             // writes would clobber each other instead of concatenating.
             _dup2(_fileno(stdout), _fileno(stderr));
         } else {
-            int fd = _open(stderr_path.c_str(), _O_WRONLY | _O_CREAT | _O_TRUNC | _O_BINARY, _S_IWRITE);
+            int fd = open_inheritable_long_path_for_write(stderr_path);
             if (fd == -1) {
                 if (saved_stdout != -1) {
                     _dup2(saved_stdout, _fileno(stdout));
