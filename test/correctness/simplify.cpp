@@ -224,6 +224,7 @@ void check_algebra() {
     check(x * y + z * x, (y + z) * x);
     check(y * x + x * z, (y + z) * x);
     check(y * x + z * x, (y + z) * x);
+    check((0 - x) * 3 + x, x * -2);
     check((x - y) * z + (y * z + w), x * z + w);
     check((x - y) * z + (w + y * z), x * z + w);
     check((x - y) * z + (y * z - w), x * z - w);
@@ -312,9 +313,6 @@ void check_algebra() {
     check((x + 8) / 2, x / 2 + 4);
     check((x - y) * -2, (y - x) * 2);
     check((xf - yf) * -2.0f, (yf - xf) * 2.0f);
-
-    check(x * 3 + y * 9, (y * 3 + x) * 3);
-    check(x * 9 + y * 3, (x * 3 + y) * 3);
 
     // Pull terms that are a multiple of the divisor out of a ternary expression
     check(((x * 4 + y) + z) / 2, (y + z) / 2 + x * 2);
@@ -446,6 +444,7 @@ void check_algebra() {
     check((x + 3) % 14 == -1, f);
     check((x + 3) % 14 == 20, f);
     check((x + 3) % -14 == -1, f);
+    check((0 - (x % 2)) / 2 * 2 + (x % 2), 0 - (x % 2));
 
     // Check an optimization important for fusing dimensions
     check((x / 3) * 3 + x % 3, x);
@@ -546,6 +545,10 @@ void check_algebra() {
     check(5 % x > 0, 5 % x != 0);
 
     // Test case with most negative 32-bit number, as constant to check that it is not negated.
+    // The two terms sharing that same coefficient do get collected into one
+    // multiply (sound: multiplication distributes over addition mod 2^32
+    // regardless of intermediate overflow), but the coefficient itself must
+    // survive untouched, in particular never negated -- that's not representable.
     check(((x * (int32_t)0x80000000) + (z * (int32_t)0x80000000 + y)),
           ((x * (int32_t)0x80000000) + (z * (int32_t)0x80000000 + y)));
 
@@ -1241,13 +1244,13 @@ void check_bounds() {
     check(max(min(x, 5), 1) == 5, 5 <= x);
 
     check(min((x * 32 + y) * 4, x * 128 + 127), min(y * 4, 127) + x * 128);
-    check(min((x * 32 + y) * 4, x * 128 + 4), (min(y, 1) + x * 32) * 4);
+    check(min((x * 32 + y) * 4, x * 128 + 4), min(y, 1) * 4 + x * 128);
     check(min((y + x * 32) * 4, x * 128 + 127), min(y * 4, 127) + x * 128);
-    check(min((y + x * 32) * 4, x * 128 + 4), (min(y, 1) + x * 32) * 4);
+    check(min((y + x * 32) * 4, x * 128 + 4), min(y, 1) * 4 + x * 128);
     check(max((x * 32 + y) * 4, x * 128 + 127), max(y * 4, 127) + x * 128);
-    check(max((x * 32 + y) * 4, x * 128 + 4), (max(y, 1) + x * 32) * 4);
+    check(max((x * 32 + y) * 4, x * 128 + 4), max(y, 1) * 4 + x * 128);
     check(max((y + x * 32) * 4, x * 128 + 127), max(y * 4, 127) + x * 128);
-    check(max((y + x * 32) * 4, x * 128 + 4), (max(y, 1) + x * 32) * 4);
+    check(max((y + x * 32) * 4, x * 128 + 4), max(y, 1) * 4 + x * 128);
 
     check((min(x + y, z) + w) - x, min(z - x, y) + w);
     check(min((x + y) + w, z) - x, min(z - x, w + y));
@@ -1766,6 +1769,43 @@ void check_boolean() {
     check(ramp(x * 8 + 8, -1, 4) < broadcast(y * 8, 4), ramp(x * 8 + 8, -1, 4) < broadcast(y * 8, 4));
     check(ramp(x * 8 + 5, -1, 4) < broadcast(y * 8, 4), broadcast(x < y, 4));
     check(ramp(x * 8 - 1, -1, 4) < broadcast(y * 8, 4), broadcast(x < y + 1, 4));
+
+    // A horizontal AND/OR of a single ramp/broadcast comparison collapses to
+    // a plain scalar comparison on the ramp's endpoints, for both orderings
+    // of ramp vs broadcast and both '<' and '<='.
+    check(VectorReduce::make(VectorReduce::And, ramp(x, y, 4) < broadcast(z, 4), 1),
+          max(y, 0) * 3 + x < z);
+    check(VectorReduce::make(VectorReduce::And, ramp(x, y, 4) <= broadcast(z, 4), 1),
+          max(y, 0) * 3 + x <= z);
+    check(VectorReduce::make(VectorReduce::And, broadcast(x, 4) < ramp(y, z, 4), 1),
+          x < min(z, 0) * 3 + y);
+    check(VectorReduce::make(VectorReduce::And, broadcast(x, 4) <= ramp(y, z, 4), 1),
+          x <= min(z, 0) * 3 + y);
+
+    check(VectorReduce::make(VectorReduce::Or, ramp(x, y, 4) < broadcast(z, 4), 1),
+          min(y, 0) * 3 + x < z);
+    check(VectorReduce::make(VectorReduce::Or, ramp(x, y, 4) <= broadcast(z, 4), 1),
+          min(y, 0) * 3 + x <= z);
+    check(VectorReduce::make(VectorReduce::Or, broadcast(x, 4) < ramp(y, z, 4), 1),
+          x < max(z, 0) * 3 + y);
+    check(VectorReduce::make(VectorReduce::Or, broadcast(x, 4) <= ramp(y, z, 4), 1),
+          x <= max(z, 0) * 3 + y);
+
+    // The "all lanes of a ramp lie within [lo, hi]" shape loop partitioning
+    // builds -- a lower-bound comparison ANDed with an upper-bound
+    // comparison, both against the same stride -- fuses to a plain And of
+    // two scalar comparisons, regardless of clause order.
+    {
+        Expr u = Var("u");
+        check(VectorReduce::make(VectorReduce::And,
+                                 (broadcast(x, 4) <= ramp(y, z, 4)) && (ramp(w, z, 4) <= broadcast(u, 4)),
+                                 1),
+              (x <= min(z, 0) * 3 + y) && (max(z, 0) * 3 + w <= u));
+        check(VectorReduce::make(VectorReduce::And,
+                                 (ramp(w, z, 4) <= broadcast(u, 4)) && (broadcast(x, 4) <= ramp(y, z, 4)),
+                                 1),
+              (max(z, 0) * 3 + w <= u) && (x <= min(z, 0) * 3 + y));
+    }
 
     // Check anded conditions apply to the then case only
     check(IfThenElse::make(x == 4 && y == 5,

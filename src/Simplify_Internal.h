@@ -425,18 +425,21 @@ public:
     bool should_commute(const Expr &a, const Expr &b) {
         if (a.node_type() < b.node_type()) {
             return true;
-        }
-        if (a.node_type() > b.node_type()) {
+        } else if (a.node_type() > b.node_type()) {
             return false;
-        }
-
-        if (a.node_type() == IRNodeType::Variable) {
+        } else if (a.node_type() == IRNodeType::Variable) {
             const Variable *va = a.as<Variable>();
             const Variable *vb = b.as<Variable>();
-            return va->name.compare(vb->name) > 0;
+            if (va->param.defined() && !vb->param.defined()) {
+                return true;
+            } else if (!va->param.defined() && vb->param.defined()) {
+                return false;
+            } else {
+                return va->name.compare(vb->name) > 0;
+            }
+        } else {
+            return false;
         }
-
-        return false;
     }
 
     std::set<Expr, IRDeepCompare> truths, falsehoods;
