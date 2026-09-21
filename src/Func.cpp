@@ -2892,6 +2892,20 @@ Func &Func::store_in(MemoryType t) {
     return *this;
 }
 
+Func &Func::gpu_max_registers(DeviceAPI device_api, int n) {
+    invalidate_cache();
+    user_assert(n >= 0) << "gpu_max_registers must be given a non-negative number "
+                        << "of registers, but " << name() << " was given " << n
+                        << ".\n";
+    if (device_api != DeviceAPI::CUDA) {
+        user_warning << "gpu_max_registers only has an effect when compiling for "
+                     << "CUDA. " << name() << " requested it for " << device_api
+                     << ", which offers no equivalent and will ignore it.\n";
+    }
+    func.schedule().gpu_max_registers() = n;
+    return *this;
+}
+
 Func &Func::stream_loads() {
     invalidate_cache();
     Stage(func, func.definition(), 0).stream_loads();
