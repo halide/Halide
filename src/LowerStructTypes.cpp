@@ -61,8 +61,11 @@ class LowerStructTypesMutator : public IRMutator {
     }
 
     // Rewrite `field(e, field_index)[elem_index]`, where e is a real (already
-    // flattened) struct-typed Load into byte-addressed Loads plus a Reinterpret.
-    Expr lower_field_read_from_load(const Load *load, const Type &field_type, int field_base_offset, const Expr &elem_index_in) {
+    // flattened) struct-typed Load. Naturally aligned fields use a scalar load
+    // of the field type; packed fields use one byte-vector load plus a
+    // Reinterpret.
+    Expr lower_field_read_from_load(const Load *load, const Type &field_type, int field_base_offset,
+                                    bool field_is_aligned, const Expr &elem_index_in) {
         // A field whose own type is itself Type::Struct (a sub-struct field)
         // can't be read this way: the byte-combine-and-Reinterpret trick
         // below fundamentally assumes field_type's *bits* describe its
@@ -81,59 +84,27 @@ class LowerStructTypesMutator : public IRMutator {
 
         Expr elem_index = mutate(elem_index_in);
         Expr flat_index = mutate(load->index);
+        Expr predicate = mutate(load->predicate);
         Type index_type = flat_index.type();
         int elem_bytes = field_type.bytes();
+
+        if (field_is_aligned) {
+            Expr field_index = flat_index * make_const(index_type, load->type.bytes() / elem_bytes) +
+                               make_const(index_type, field_base_offset / elem_bytes) +
+                               cast(index_type, elem_index);
+            return Load::make(field_type, load->name, field_index, load->image, load->param,
+                              predicate, ModulusRemainder(), load->is_streaming);
+        }
 
         Expr byte_offset = flat_index * make_const(index_type, load->type.bytes()) +
                            make_const(index_type, field_base_offset) +
                            cast(index_type, elem_index) * make_const(index_type, elem_bytes);
-
-        auto byte_load = [&](int b) {
-            Expr idx = b == 0 ? byte_offset : byte_offset + make_const(index_type, b);
-            return Load::make(UInt(8), load->name, idx, load->image, load->param,
-                              const_true(), ModulusRemainder(), load->is_streaming);
-        };
-
-        if (elem_bytes == 1) {
-            Expr bl = byte_load(0);
-            return field_type == UInt(8) ? bl : Reinterpret::make(field_type, bl);
-        }
-
-        vector<Expr> bytes;
-        bytes.reserve(elem_bytes);
-        for (int b = 0; b < elem_bytes; b++) {
-            bytes.push_back(byte_load(b));
-        }
-
-        if (field_type.is_float()) {
-            // A float field (e.g. a packed fp16 delta) is built as a genuine
-            // shift/or chain of the bytes rather than through concat_bits's
-            // vector-shuffle-then-reinterpret lowering. Some AArch64 backends
-            // (LLVM < 23) cannot legalize a bitcast straight from a vector to
-            // a scalar half, and unlike the integer case below, there's no way
-            // to route around that once the value is vector-shaped: any chain
-            // of pure bitcasts collapses back to the direct (illegal) one
-            // during optimization. Building the packed bits with real ALU ops
-            // keeps the final Reinterpret's input a plain scalar integer, so
-            // the last step is an always-legal scalar-to-scalar bitcast; LLVM's
-            // load-combiner still typically recovers a single wide load.
-            Type uint_t = UInt(8 * elem_bytes);
-            Expr combined = cast(uint_t, bytes[0]);
-            for (int b = 1; b < elem_bytes; b++) {
-                combined = combined | (cast(uint_t, bytes[b]) << (8 * b));
-            }
-            return Reinterpret::make(field_type, combined);
-        }
-
-        // Keep a packed scalar field as a bit-concatenation of adjacent bytes
-        // rather than immediately expanding it to a shift/or tree. The
-        // concat_bits lowering turns this into a dense byte shuffle followed
-        // by a vector reinterpret, which gives LLVM enough structure to issue
-        // one (possibly unaligned) wide load. Expanding here obscures that the
-        // byte loads are adjacent once individual extracts of the field have
-        // simplified, and commonly leaves one scalar load per byte.
-        Expr combined = concat_bits(bytes);
-        return field_type == combined.type() ? combined : Reinterpret::make(field_type, combined);
+        Type byte_vector_type = UInt(8, elem_bytes);
+        Expr byte_indices = Ramp::make(byte_offset, 1, elem_bytes);
+        Expr byte_predicate = Broadcast::make(predicate, elem_bytes);
+        Expr bytes = Load::make(byte_vector_type, load->name, byte_indices, load->image, load->param,
+                                byte_predicate, ModulusRemainder(), load->is_streaming);
+        return Reinterpret::make(field_type, bytes);
     }
 
     // Project field field_index's element elem_index (0 for a scalar
@@ -178,7 +149,8 @@ class LowerStructTypesMutator : public IRMutator {
             << "This struct-typed Expr cannot be read with field(): a struct-typed Expr may only "
             << "be a literal pack_struct(), a Select between two struct-typed Exprs, or the direct "
             << "result of calling a struct-typed ImageParam/Buffer/Func, not: " << e << "\n";
-        return lower_field_read_from_load(load, info->fields[field_index].type, info->offsets[field_index], elem_index);
+        return lower_field_read_from_load(load, info->fields[field_index].type, info->offsets[field_index],
+                                          info->field_is_aligned(field_index), elem_index);
     }
 
 protected:
@@ -240,15 +212,22 @@ protected:
                 << op->name << " was requested this way.\n";
             int extent = f.array_extent.value_or(1);
             int elem_bytes = f.type.bytes();
+            bool aligned = info.field_is_aligned(field_index);
             for (int e = 0; e < extent; e++) {
                 Expr value = project_field(op->value, field_index, make_const(Int(32), e));
-                Expr bits = elem_bytes == 1 ? value : Reinterpret::make(UInt(8 * elem_bytes), value);
-                Expr elem_byte_base = dest_byte_base +
-                                      make_const(index_type, info.offsets[field_index] + e * elem_bytes);
-                for (int b = 0; b < elem_bytes; b++) {
-                    Expr byte_val = elem_bytes == 1 ? bits : extract_bits(UInt(8), bits, make_const(Int(32), 8 * b));
-                    Expr byte_idx = b == 0 ? elem_byte_base : elem_byte_base + make_const(index_type, b);
-                    stores.push_back(Store::make(op->name, byte_val, byte_idx, op->param, predicate, ModulusRemainder(), op->is_streaming));
+                if (aligned) {
+                    Expr field_dest_index = dest_index * make_const(index_type, struct_t.bytes() / elem_bytes) +
+                                            make_const(index_type, info.offsets[field_index] / elem_bytes + e);
+                    stores.push_back(Store::make(op->name, value, field_dest_index, op->param, predicate,
+                                                 ModulusRemainder(), op->is_streaming));
+                } else {
+                    Expr bytes = Reinterpret::make(UInt(8, elem_bytes), value);
+                    Expr elem_byte_base = dest_byte_base +
+                                          make_const(index_type, info.offsets[field_index] + e * elem_bytes);
+                    Expr byte_indices = Ramp::make(elem_byte_base, 1, elem_bytes);
+                    Expr byte_predicate = Broadcast::make(predicate, elem_bytes);
+                    stores.push_back(Store::make(op->name, bytes, byte_indices, op->param, byte_predicate,
+                                                 ModulusRemainder(), op->is_streaming));
                 }
             }
         }
