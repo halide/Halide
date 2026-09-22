@@ -2,7 +2,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
-#include "Scope.h"
+#include "Substitute.h"
 #include "Util.h"
 
 namespace Halide {
@@ -24,28 +24,10 @@ int flat_start_of_field(const StructTypeInfo &info, int field_index) {
 class LowerStructTypesMutator : public IRMutator {
     using IRMutator::visit;
 
-    // Struct-typed Let bindings are tracked here because project_field() needs
-    // direct syntactic access to the underlying struct_pack()/Select/Load. Because
-    // struct-typed values are never materialized (only individual fields are),
-    // inlining it back in at each field() use site costs nothing at runtime.
-    Scope<Expr> struct_lets;
-
     struct ScalarizedStructValue {
         vector<std::pair<std::string, Expr>> lets;
         Expr replacement;
     };
-
-    Expr resolve_struct_value(Expr e) const {
-        while (const Variable *v = e.as<Variable>()) {
-            internal_assert(v->type.is_struct());
-            user_assert(struct_lets.contains(v->name))
-                << "Struct-typed variable \"" << v->name << "\" is unbound; a struct-typed Expr "
-                << "may only be the value of a struct-typed Func/Store, or a direct field() "
-                << "argument, in v1.\n";
-            e = struct_lets.get(v->name);
-        }
-        return e;
-    }
 
     static Expr fold_field_of_pack(const Call *pack, const StructTypeInfo &info, int field_index, const Expr &elem_index) {
         const StructField &f = info.fields[field_index];
@@ -117,9 +99,9 @@ class LowerStructTypesMutator : public IRMutator {
     // field) out of a struct-typed Expr. Recurses through the only shapes a
     // struct-typed Expr can legally have at this point in lowering: a
     // literal struct_pack(), a Select between two struct-typed branches, a
-    // struct-typed Let (via struct_lets), or a genuine flattened Load.
+    // struct-typed Let, or a genuine flattened Load.
     Expr project_field(const Expr &struct_expr, int field_index, const Expr &elem_index) {
-        Expr e = resolve_struct_value(struct_expr);
+        Expr e = struct_expr;
         const StructTypeInfo *info = e.type().struct_type();
         internal_assert(info != nullptr) << "project_field applied to a non-struct-typed Expr.\n";
         internal_assert(field_index >= 0 && field_index < (int)info->fields.size());
@@ -148,8 +130,8 @@ class LowerStructTypesMutator : public IRMutator {
         if (const Let *let = e.as<Let>()) {
             if (let->value.type().is_struct()) {
                 ScalarizedStructValue scalarized = scalarize_struct_value(let->name, let->value);
-                ScopedBinding<Expr> bind(struct_lets, let->name, scalarized.replacement);
-                Expr result = project_field(let->body, field_index, elem_index);
+                Expr body = substitute(let->name, scalarized.replacement, let->body);
+                Expr result = project_field(body, field_index, elem_index);
                 return rewrap_all_lets(result, scalarized.lets);
             } else {
                 Expr value = mutate(let->value);
@@ -197,8 +179,8 @@ class LowerStructTypesMutator : public IRMutator {
         if (const Let *let = value.as<Let>()) {
             if (let->value.type().is_struct()) {
                 ScalarizedStructValue scalarized = scalarize_struct_value(let->name, let->value);
-                ScopedBinding<Expr> bind(struct_lets, let->name, scalarized.replacement);
-                Stmt body = lower_struct_store(op, let->body);
+                Expr value_body = substitute(let->name, scalarized.replacement, let->body);
+                Stmt body = lower_struct_store(op, value_body);
                 return rewrap_all_lets(body, scalarized.lets);
             } else {
                 Expr let_value = mutate(let->value);
@@ -293,8 +275,8 @@ protected:
     Expr visit(const Let *op) override {
         if (op->value.type().is_struct()) {
             ScalarizedStructValue scalarized = scalarize_struct_value(op->name, op->value);
-            ScopedBinding bind(struct_lets, op->name, scalarized.replacement);
-            return rewrap_all_lets(mutate(op->body), scalarized.lets);
+            Expr body = substitute(op->name, scalarized.replacement, op->body);
+            return rewrap_all_lets(mutate(body), scalarized.lets);
         }
         return IRMutator::visit(op);
     }
@@ -302,19 +284,16 @@ protected:
     Stmt visit(const LetStmt *op) override {
         if (op->value.type().is_struct()) {
             ScalarizedStructValue scalarized = scalarize_struct_value(op->name, op->value);
-            ScopedBinding bind(struct_lets, op->name, scalarized.replacement);
-            return rewrap_all_lets(mutate(op->body), scalarized.lets);
+            Stmt body = substitute(op->name, scalarized.replacement, op->body);
+            return rewrap_all_lets(mutate(body), scalarized.lets);
         }
         return IRMutator::visit(op);
     }
 
     Expr visit(const Variable *op) override {
         if (op->type.is_struct()) {
-            user_assert(struct_lets.contains(op->name))
-                << "Struct-typed variable \"" << op->name << "\" is unbound; a struct-typed Expr "
-                << "may only be the value of a struct-typed Func/Store, or a direct field() "
-                << "argument, in v1.\n";
-            return mutate(struct_lets.get(op->name));
+            internal_error << "Struct-typed variable \"" << op->name
+                           << "\" survived scalarization.\n";
         }
         return op;
     }
