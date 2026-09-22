@@ -430,7 +430,45 @@ protected:
             internal_assert(value.type().lanes() % op->value.type().lanes() == 0);
             int widening = value.type().lanes() / op->value.type().lanes();
             Type t = op->type.with_lanes(op->type.lanes() * widening);
-            return Reinterpret::make(t, value);
+
+            // VectorSubs represents a vector-valued expression widened across
+            // a loop as one vector per original lane. A lane-changing
+            // reinterpret instead needs all source lanes for one loop
+            // iteration to be adjacent. Transpose to iteration-major order,
+            // reinterpret, then transpose the result back to the convention
+            // expected by the rest of vectorization.
+            if (widening > 1 && op->value.type().lanes() > 1) {
+                vector<Expr> source_lanes;
+                source_lanes.reserve(op->value.type().lanes());
+                for (int i = 0; i < op->value.type().lanes(); i++) {
+                    source_lanes.push_back(Shuffle::make_slice(value, i * widening, 1, widening));
+                }
+                value = Shuffle::make_interleave(source_lanes);
+            }
+
+            Expr result = Reinterpret::make(t, value);
+            if (widening > 1 && op->type.lanes() > 1) {
+                vector<int> indices;
+                indices.reserve(t.lanes());
+                for (int result_lane = 0; result_lane < op->type.lanes(); result_lane++) {
+                    for (int iteration = 0; iteration < widening; iteration++) {
+                        indices.push_back(iteration * op->type.lanes() + result_lane);
+                    }
+                }
+                result = Shuffle::make({result}, indices);
+            }
+            return result;
+        }
+    }
+
+    Expr visit(const Ramp *op) override {
+        Expr base = mutate(op->base);
+        Expr stride = mutate(op->stride);
+        if (base.same_as(op->base) && stride.same_as(op->stride)) {
+            return op;
+        } else {
+            int lanes = std::max(base.type().lanes(), stride.type().lanes());
+            return Ramp::make(widen(base, lanes), widen(stride, lanes), op->lanes);
         }
     }
 

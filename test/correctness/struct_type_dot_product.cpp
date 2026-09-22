@@ -21,7 +21,9 @@ namespace {
 //   block_q4_0 { fp16 d; uint8 qs[16]; }   // 32 quants, 2 nibbles per byte
 //   block_q8_0 { fp16 d; int8  qs[32]; }   // 32 quants
 //
-// This mirrors ggml_vec_dot_q4_0_q8_0 (ggml-cpu/arch/arm/quants.c): for each
+// This mirrors ggml_vec_dot_q4_0_q8_0:
+// https://github.com/ggml-org/ggml/blob/eced84c86f8b012c752c016f7fe789adea168e1e/src/ggml-cpu/arch/arm/quants.c#L223
+// For each
 // pair of blocks, the 16 q4_0 bytes hold 32 signed 4-bit weights (low nibbles
 // map to quants 0..15, high nibbles to 16..31, each biased by -8), dotted with
 // the 32 int8 q8_0 activations, scaled by the product of the two fp16 deltas,
@@ -284,12 +286,40 @@ void test_packed_scalar_field_codegen() {
     }
 }
 
+void test_packed_scalar_field_store_codegen() {
+    Type packed_t = Type::Struct({{"lead", UInt(8)}, {"value", UInt(32)}, {"tail", UInt(8)}});
+    Var b("b");
+    Func blocks("write_blocks");
+    blocks(b) = pack_struct(packed_t,
+                            {cast<uint8_t>(b),
+                             cast<uint32_t>(b) + 0x12340000,
+                             cast<uint8_t>(b + 1)});
+
+    std::string s_path = Internal::get_test_tmp_dir() + "struct_type_packed_scalar_store.s";
+    blocks.compile_to_assembly(s_path, {}, "write_blocks", arm_target());
+    std::string asm_text = read_file(s_path);
+
+    // The two one-byte fields account for at most two byte stores. The packed
+    // UInt(32) in between must remain one unaligned word store.
+    int byte_stores = count_occurrences(asm_text, "strb");
+    int word_stores = count_occurrences(asm_text, "str\tw") +
+                      count_occurrences(asm_text, "stur\tw");
+    if (byte_stores > 2 || word_stores < 1) {
+        printf("Unexpected packed UInt(32) struct-field ARM stores: byte_stores=%d (want <= 2), "
+               "word_stores=%d (want >= 1).\n",
+               byte_stores, word_stores);
+        printf("---- ARM assembly ----\n%s\n", asm_text.c_str());
+        exit(1);
+    }
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
     test_correctness();
     test_arm_codegen();
     test_packed_scalar_field_codegen();
+    test_packed_scalar_field_store_codegen();
     printf("Success!\n");
     return 0;
 }

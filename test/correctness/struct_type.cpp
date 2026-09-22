@@ -524,6 +524,65 @@ void test_vectorized_array_index() {
     }
 }
 
+// A multi-byte field that is not naturally aligned within its containing
+// struct lowers to a byte-vector load/store plus a lane-changing reinterpret.
+// Vectorizing the surrounding loop must scale both sides of that reinterpret
+// by the same factor.
+void test_vectorized_unaligned_scalar_field() {
+    Type packed_t = Type::Struct({{"lead", UInt(8)}, {"value", UInt(32)}, {"tail", UInt(8)}});
+    Var i("i");
+    const int n = 8;
+    const int packed_bytes = packed_t.bytes();
+
+    std::vector<uint8_t> input_data((size_t)n * packed_bytes);
+    for (int idx = 0; idx < n; idx++) {
+        input_data[idx * packed_bytes] = (uint8_t)(idx + 1);
+        uint32_t value = 0x12340000u + (uint32_t)idx;
+        memcpy(&input_data[idx * packed_bytes + 1], &value, sizeof(value));
+        input_data[idx * packed_bytes + 5] = (uint8_t)(idx + 2);
+    }
+
+    halide_dimension_t shape[1] = {{0, n, 1, 0}};
+    Buffer<> input_buffer(packed_t, input_data.data(), 1, shape);
+    ImageParam input(packed_t, 1, "packed_input");
+    input.set(input_buffer);
+
+    Func loaded("loaded");
+    loaded(i) = field(input(i), "value");
+    loaded.vectorize(i, 4);
+    Buffer<uint32_t> loaded_result = loaded.realize({n});
+    for (int idx = 0; idx < n; idx++) {
+        uint32_t expected = 0x12340000u + (uint32_t)idx;
+        if (loaded_result(idx) != expected) {
+            printf("vectorized packed load at %d produced %u instead of %u\n",
+                   idx, loaded_result(idx), expected);
+            exit(1);
+        }
+    }
+
+    Func stored("stored");
+    stored(i) = pack_struct(packed_t,
+                            {cast<uint8_t>(i + 10),
+                             cast<uint32_t>(0x56780000) + cast<uint32_t>(i),
+                             cast<uint8_t>(i + 20)});
+    stored.vectorize(i, 4);
+    Buffer<> stored_result = stored.realize({n});
+    const uint8_t *stored_data = stored_result.raw_buffer()->host;
+    for (int idx = 0; idx < n; idx++) {
+        uint32_t actual;
+        memcpy(&actual, &stored_data[idx * packed_bytes + 1], sizeof(actual));
+        uint32_t expected = 0x56780000u + (uint32_t)idx;
+        if (stored_data[idx * packed_bytes] != idx + 10 ||
+            actual != expected ||
+            stored_data[idx * packed_bytes + 5] != idx + 20) {
+            printf("vectorized packed store at %d produced (%u, %u, %u) instead of (%d, %u, %d)\n",
+                   idx, stored_data[idx * packed_bytes], actual, stored_data[idx * packed_bytes + 5],
+                   idx + 10, expected, idx + 20);
+            exit(1);
+        }
+    }
+}
+
 // Torture test: a struct field whose own type is itself Type::Struct (a
 // sub-struct field), read through two chained front-end field() calls. Only
 // supported for the fully-inlined case (see test/error/struct_nested_field_store.cpp
@@ -802,6 +861,7 @@ int main(int argc, char **argv) {
     test_select_between_structs();
     test_cse_shared_struct_let();
     test_vectorized_array_index();
+    test_vectorized_unaligned_scalar_field();
     test_nested_struct();
     test_nested_struct_cse_shared_inner();
     test_non_dense_stride();
