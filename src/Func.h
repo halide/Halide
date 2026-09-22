@@ -2246,6 +2246,31 @@ public:
     }
     // @}
 
+    /** Split a storage dimension into two sub-dimensions, analogous to
+     * how \ref Func::split splits a loop dimension. The storage axis
+     * "old" is replaced (in the storage nesting order) by "inner"
+     * (innermost) and "outer", where "inner" has extent "factor". The
+     * newly created axes are ordinary storage axes: they can be
+     * reordered relative to the other storage axes with
+     * reorder_storage, and bounded/aligned with bound_storage and
+     * align_storage.
+     *
+     * This lets you describe blocked/tiled storage layouts. For
+     * example, given foo(x, y), splitting x into (xo, xi) by 8 and then
+     * reordering to (xi, y, xo) lays foo out as a sequence of 8-wide
+     * column strips.
+     *
+     * Unlike a loop split there is no TailStrategy: the allocation is
+     * always rounded up so that the outer extent is
+     * ceil(old_extent / factor), over-allocating when the factor does
+     * not divide the extent.
+     *
+     * This is a prototype: it is only supported for functions with
+     * internal storage (i.e. not the pipeline output, an input, or an
+     * extern stage), and cannot currently be combined with
+     * fold_storage on the same axis. */
+    Func &split_storage(const Var &old, const Var &outer, const Var &inner, const Expr &factor);
+
     /** Pad the storage extent of a particular dimension of
      * realizations of this function up to be a multiple of the
      * specified alignment. This guarantees that the strides for the

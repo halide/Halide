@@ -947,6 +947,16 @@ class StorageFolding : public IRMutator {
         auto func_it = env.find(op->name);
         Function func = func_it != env.end() ? func_it->second : Function();
 
+        // Storage folding reasons about storage dims as pure args, which
+        // does not hold once storage has been split. Skip folding such
+        // Funcs (split_storage cannot be combined with fold_storage).
+        if (func_it != env.end() && !func.schedule().storage_splits().empty()) {
+            if (body.same_as(op->body)) {
+                return op;
+            }
+            return op->with(op->bounds, op->condition, body);
+        }
+
         // Don't attempt automatic storage folding if there is
         // more than one produce node for this func.
         bool explicit_only = count_producers(body, op->name) != 1;

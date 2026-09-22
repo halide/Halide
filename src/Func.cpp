@@ -3350,6 +3350,38 @@ Func &Func::prefetch(const Parameter &param, const VarOrRVar &at, const VarOrRVa
     return *this;
 }
 
+Func &Func::split_storage(const Var &old, const Var &outer, const Var &inner, const Expr &factor) {
+    invalidate_cache();
+
+    user_assert(factor.defined())
+        << "In schedule for " << name()
+        << ", split_storage of " << old.name() << " has an undefined factor.\n";
+    user_assert(outer.name() != inner.name())
+        << "In schedule for " << name()
+        << ", split_storage of " << old.name()
+        << " uses the same name for the inner and outer axis.\n";
+
+    vector<StorageDim> &dims = func.schedule().storage_dims();
+    for (size_t i = 0; i < dims.size(); i++) {
+        if (var_name_match(dims[i].var, old.name())) {
+            // Record the split so storage flattening can reconstruct
+            // the storage layout, then replace the old axis with the
+            // inner (innermost) and outer axes.
+            func.schedule().storage_splits().push_back({dims[i].var, outer.name(), inner.name(), factor});
+            StorageDim inner_dim = {inner.name()};
+            StorageDim outer_dim = {outer.name()};
+            dims[i] = inner_dim;
+            dims.insert(dims.begin() + i + 1, outer_dim);
+            return *this;
+        }
+    }
+    user_error << "In schedule for " << name()
+               << ", could not find var " << old.name()
+               << " to split the storage of.\n"
+               << dump_dim_list(dims);
+    return *this;
+}
+
 Func &Func::reorder_storage(const Var &x, const Var &y) {
     invalidate_cache();
 

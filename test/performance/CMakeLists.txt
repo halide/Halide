@@ -48,6 +48,8 @@ tests(
     profiler.cpp
     rfactor.cpp
     sort.cpp
+    split_storage.cpp
+    split_storage_bank_conflict.cpp
     stack_vs_heap.cpp
     thread_safe_jit_callable.cpp
 )

@@ -2342,6 +2342,7 @@ public:
     HALIDE_FORWARD_METHOD(Func, set_estimate)
     HALIDE_FORWARD_METHOD(Func, specialize)
     HALIDE_FORWARD_METHOD(Func, specialize_fail)
+    HALIDE_FORWARD_METHOD(Func, split_storage)
     HALIDE_FORWARD_METHOD(Func, split)
     HALIDE_FORWARD_METHOD(Func, store_at)
     HALIDE_FORWARD_METHOD(Func, store_root)

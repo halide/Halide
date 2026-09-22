@@ -17,17 +17,6 @@ void fill_buffer_a_bf16(Buffer<bfloat16_t> &buf, int row, int acc) {
     }
 }
 
-void fill_buffer_b_bf16(Buffer<bfloat16_t> &buf, int col, int acc) {
-    for (int iy = 0; iy < acc / 2; ++iy) {
-        for (int ix = 0; ix < col; ++ix) {
-            for (int ik = 0; ik < 2; ++ik) {
-                bfloat16_t val = bfloat16_t(((float)rand() / (float)(RAND_MAX)) * 100.f);
-                buf(ik, ix, iy) = val;
-            }
-        }
-    }
-}
-
 struct make_uint_t {
     template<typename... Args>
     Type operator()(Args &&...args) const {
@@ -51,17 +40,6 @@ void fill_buffer_a(Buffer<IntT> &buf, int row, int acc) {
     }
 }
 
-template<typename IntT>
-void fill_buffer_b(Buffer<IntT> &buf, int col, int acc) {
-    for (int iy = 0; iy < acc / 4; iy++) {
-        for (int ix = 0; ix < col; ix++) {
-            for (int ik = 0; ik < 4; ++ik) {
-                buf(ik, ix, iy) = rand() % 256 + std::numeric_limits<IntT>::min();
-            }
-        }
-    }
-}
-
 template<typename LhsInt8, typename RhsInt8>
 bool matmul(Halide::Target target) {
     // used for compiling to llvm IR or asm
@@ -79,24 +57,13 @@ bool matmul(Halide::Target target) {
 
     Var x("x"), y("y");
     ImageParam A(lhs(8), 2, "lhs");
-    // NB the RHS matrix in AMX instructions should be tiled in "VNNI format",
-    // where instead of being (cols, rows) where rows are adjacent in memory it
-    // should be (4, cols, rows / 4) for int8, or (2, cols, rows / 2) for bf16.
-    // This means that the rows must always be divisible by 4 (or 2 for bf16).
-    ImageParam B(rhs(8), 3, "rhs");
-    // Constrain B's innermost dim to exactly 4 contiguous elements (the
-    // VNNI K-pack), and the next dim's stride to 4. AMX's tile_load expects
-    // each output column to be K bytes packed contiguously; without these
-    // constraints the strides are symbolic and the AMX matcher conservatively
-    // rejects.
-    B.dim(0).set_stride(1).set_extent(4);
-    B.dim(1).set_stride(4);
+    ImageParam B(rhs(8), 2, "rhs");
 
     RDom r(0, acc);
 
     Func mm("matmul");
-    mm(y, x) = cast<int32_t>(0);
-    mm(y, x) += cast<int32_t>(A(r.x, x)) * B(r.x % 4, y, r.x / 4);
+    mm(x, y) = cast<int32_t>(0);
+    mm(x, y) += cast<int32_t>(A(r.x, y)) * B(x, r.x);
 
     // Ensure all (x, y) tile sizes are the same so that loops are fused.
     int tile_y = 8;
@@ -104,42 +71,49 @@ bool matmul(Halide::Target target) {
     int tile_r = 4;
 
     // Schedule the reduction
-    Var rxi("rxi"), ryi("ryi");
-    RVar rri("rri"), rro("rro");
+    Var xi("xi"), yi("yi");
+    RVar ri("ri"), ro("ro");
     mm.compute_at(mm.in(), y)
         .store_in(MemoryType::AMXTile)
         .update()
         // Split into (x,y) tile
-        .tile(y, x, ryi, rxi, tile_y, tile_x, TailStrategy::GuardWithIf)
+        .tile(x, y, xi, yi, tile_x, tile_y, TailStrategy::GuardWithIf)
         // Split reduction dim by tile_r
-        .split(r.x, rro, rri, tile_r)
+        .split(r.x, ro, ri, tile_r)
         // Reorder so that the (x,y) tile is inside the inner ro loop
-        .reorder({rri, ryi, rxi, rro, y, x})
+        .reorder({ri, xi, yi, ro, x, y})
         .atomic()
-        .vectorize(rri)
-        .vectorize(ryi)
-        .vectorize(rxi);
+        .vectorize(ri)
+        .vectorize(xi)
+        .vectorize(yi);
 
     // Schedule the initialization
-    Var ixi("ixi"), iyi("iyi");
-    mm.compute_at(mm.in(), y)
-        .tile(y, x, iyi, ixi, tile_y, tile_x)
-        .vectorize(iyi)
-        .vectorize(ixi);
+    mm.compute_at(mm.in(), x)
+        .tile(x, y, xi, yi, tile_x, tile_y)
+        .vectorize(xi)
+        .vectorize(yi);
 
     // Schedule the consumer
-    Var mmxi("mmxi"), mmyi("mmyi");
     mm.in()
-        .tile(y, x, mmyi, mmxi, tile_y, tile_x)
-        .vectorize(mmyi)
-        .vectorize(mmxi);
+        .tile(x, y, xi, yi, tile_x, tile_y)
+        .vectorize(xi)
+        .vectorize(yi);
+
+    // Stage the VNNI repack of B per strip of rows of output.
+    // split the K axis into runs of four with the run innermost, so a load of
+    // B(col, k) becomes the ki + col*4 + ko*(4*col) layout AMX's tile_load
+    // wants.
+    B.in()
+        .compute_at(mm.in(), y)
+        .split_storage(_1, y, yi, 4)
+        .reorder_storage(yi, _0, y);
 
     Buffer<LhsInt8> a_buf(acc, row);
     fill_buffer_a(a_buf, row, acc);
     A.set(a_buf);
 
-    Buffer<RhsInt8> b_buf(4, col, acc / 4);
-    fill_buffer_b(b_buf, col, acc);
+    Buffer<RhsInt8> b_buf(acc, col);
+    fill_buffer_a(b_buf, col, acc);  // a natural 2D (k, col) matrix
     B.set(b_buf);
 
     Buffer<int32_t> out(col, row);
@@ -149,6 +123,22 @@ bool matmul(Halide::Target target) {
     // Uncomment to check the asm
     // result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.ll", {A, B}, target);
     // result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
+
+    // Verify correctness against a reference.
+    result.realize(out);
+    for (int yy = 0; yy < row; yy++) {
+        for (int xx = 0; xx < col; xx++) {
+            int32_t ref = 0;
+            for (int k = 0; k < acc; k++) {
+                ref += (int32_t)a_buf(k, yy) * (int32_t)b_buf(xx, k);
+            }
+            if (out(xx, yy) != ref) {
+                std::cout << "Incorrect result at (" << xx << ", " << yy << "): "
+                          << out(xx, yy) << " vs " << ref << "\n";
+                return false;
+            }
+        }
+    }
 
     auto time = Tools::benchmark(20, 20, [&]() {
         result.realize(out);
@@ -177,63 +167,87 @@ bool matmul_bf16(Halide::Target target) {
 
     Var x("x"), y("y");
     ImageParam A(BFloat(16), 2, "lhs");
-    ImageParam B(BFloat(16), 3, "rhs");
-    // Same VNNI-pack constraint as the int8 case, but with K=2 for bf16.
-    B.dim(0).set_stride(1).set_extent(2);
-    B.dim(1).set_stride(2);
+    ImageParam B(BFloat(16), 2, "rhs");
 
-    RDom r(0, acc, "acc");
+    RDom r(0, acc);
 
     Func mm("matmul");
     mm(x, y) = cast<float>(0);
-    mm(x, y) += cast<float>(cast<float>(A(r.x, y))) * cast<float>(B(r.x % 2, x, r.x / 2));
+    mm(x, y) += cast<float>(A(r.x, y)) * cast<float>(B(x, r.x));
 
-    int tile_x = 8;
+    // Ensure all (x, y) tile sizes are the same so that loops are fused.
     int tile_y = 8;
+    int tile_x = 8;
     int tile_r = 2;
 
-    Var rxi("rxi"), ryi("ryi");
-    RVar rri("rri"), rro("rro");
-
-    mm.compute_at(mm.in(), x)
+    // Schedule the reduction
+    Var xi("xi"), yi("yi");
+    RVar ri("ri"), ro("ro");
+    mm.compute_at(mm.in(), y)
         .store_in(MemoryType::AMXTile)
         .update()
-        .tile(x, y, rxi, ryi, tile_x, tile_y, TailStrategy::GuardWithIf)
-        .split(r.x, rro, rri, tile_r)
-        .reorder({rri, rxi, ryi, rro, x, y})
+        // Split into (x,y) tile
+        .tile(x, y, xi, yi, tile_x, tile_y, TailStrategy::GuardWithIf)
+        // Split reduction dim by tile_r
+        .split(r.x, ro, ri, tile_r)
+        // Reorder so that the (x,y) tile is inside the inner ro loop
+        .reorder({ri, xi, yi, ro, x, y})
         .atomic()
-        .vectorize(rri)
-        .vectorize(rxi)
-        .vectorize(ryi);
+        .vectorize(ri)
+        .vectorize(xi)
+        .vectorize(yi);
 
-    Var ixi("ixi"), iyi("iyi");
+    // Schedule the initialization
     mm.compute_at(mm.in(), x)
-        .tile(x, y, ixi, iyi, tile_x, tile_y)
-        .vectorize(ixi)
-        .vectorize(iyi);
+        .tile(x, y, xi, yi, tile_x, tile_y)
+        .vectorize(xi)
+        .vectorize(yi);
 
-    // schedule the consumer
-    Var mmxi("mmxi"), mmyi("mmyi");
+    // Schedule the consumer
     mm.in()
-        .tile(x, y, mmxi, mmyi, tile_x, tile_y)
-        .vectorize(mmxi)
-        .vectorize(mmyi);
+        .tile(x, y, xi, yi, tile_x, tile_y)
+        .vectorize(xi)
+        .vectorize(yi);
 
-    Func result = mm.in();
+    // Repack B to VNNI format once on first run, interleaving groups of two
+    // rows.
+    // Stage the VNNI repack of B (K-run of two for bf16), as in the int8 case.
+    B.in()
+        .compute_at(mm.in(), y)
+        .split_storage(_1, y, yi, 2)
+        .reorder_storage(yi, _0, y);
 
     Buffer<bfloat16_t> a_buf(acc, row);
     fill_buffer_a_bf16(a_buf, row, acc);
     A.set(a_buf);
 
-    Buffer<bfloat16_t> b_buf(2, col, acc / 2);
-    fill_buffer_b_bf16(b_buf, col, acc);
+    Buffer<bfloat16_t> b_buf(col, acc);
+    fill_buffer_a_bf16(b_buf, acc, col);  // a natural 2D (col, k) matrix
     B.set(b_buf);
 
     Buffer<float> out(col, row);
 
+    Func result = mm.in();
+
     // Uncomment to check the asm
     // result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.ll", {A, B}, target);
     // result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
+
+    // Verify correctness against a reference.
+    result.realize(out);
+    for (int yy = 0; yy < row; yy++) {
+        for (int xx = 0; xx < col; xx++) {
+            float ref = 0;
+            for (int k = 0; k < acc; k++) {
+                ref += (float)a_buf(k, yy) * (float)b_buf(xx, k);
+            }
+            if (!equal_eps(out(xx, yy), ref, std::abs(ref) * 1e-2f + 1.0f)) {
+                std::cout << "Incorrect result at (" << xx << ", " << yy << "): "
+                          << out(xx, yy) << " vs " << ref << "\n";
+                return false;
+            }
+        }
+    }
 
     auto time = Tools::benchmark(20, 20, [&]() {
         result.realize(out);
