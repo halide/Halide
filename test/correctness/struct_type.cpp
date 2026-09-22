@@ -755,6 +755,38 @@ void test_pack_struct_field_copy() {
     }
 }
 
+// A tuple update must compute all new tuple components before storing any of
+// them. In particular, swapping two struct-valued components requires both
+// struct loads to remain ahead of the first split field store.
+void test_tuple_of_structs_update_cross_talk() {
+    Type value_t = Type::Struct({{"value", Int(32)}});
+    Var x("x");
+    const int n = 8;
+
+    Func pair("pair");
+    pair(x) = Tuple(pack_struct(value_t, {cast<int32_t>(x)}),
+                    pack_struct(value_t, {cast<int32_t>(100 + x)}));
+
+    RDom r(0, n);
+    pair(r) = Tuple(pair(r)[1], pair(r)[0]);
+    pair.compute_root();
+
+    Func result("result");
+    result(x) = Tuple(field(pair(x)[0], "value"),
+                      field(pair(x)[1], "value"));
+
+    Realization realized = result.realize({n});
+    Buffer<int32_t> first = realized[0];
+    Buffer<int32_t> second = realized[1];
+    for (int i = 0; i < n; i++) {
+        if (first(i) != 100 + i || second(i) != i) {
+            printf("tuple struct swap at %d produced (%d, %d) instead of (%d, %d)\n",
+                   i, first(i), second(i), 100 + i, i);
+            exit(1);
+        }
+    }
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -777,6 +809,7 @@ int main(int argc, char **argv) {
     test_parallel_schedule();
     test_runtime_index_into_inlined_pack();
     test_pack_struct_field_copy();
+    test_tuple_of_structs_update_cross_talk();
     printf("Success!\n");
     return 0;
 }

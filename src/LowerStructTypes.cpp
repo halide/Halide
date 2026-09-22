@@ -3,6 +3,7 @@
 #include "IROperator.h"
 #include "IRVisitor.h"
 #include "Scope.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {
@@ -28,6 +29,11 @@ class LowerStructTypesMutator : public IRMutator {
     // struct-typed values are never materialized (only individual fields are),
     // inlining it back in at each field() use site costs nothing at runtime.
     Scope<Expr> struct_lets;
+
+    struct ScalarizedStructValue {
+        vector<std::pair<std::string, Expr>> lets;
+        Expr replacement;
+    };
 
     Expr resolve_struct_value(Expr e) const {
         while (const Variable *v = e.as<Variable>()) {
@@ -140,8 +146,16 @@ class LowerStructTypesMutator : public IRMutator {
         }
 
         if (const Let *let = e.as<Let>()) {
-            ScopedBinding<Expr> bind(struct_lets, let->name, let->value);
-            return project_field(let->body, field_index, elem_index);
+            if (let->value.type().is_struct()) {
+                ScalarizedStructValue scalarized = scalarize_struct_value(let->name, let->value);
+                ScopedBinding<Expr> bind(struct_lets, let->name, scalarized.replacement);
+                Expr result = project_field(let->body, field_index, elem_index);
+                return rewrap_all_lets(result, scalarized.lets);
+            } else {
+                Expr value = mutate(let->value);
+                Expr result = project_field(let->body, field_index, elem_index);
+                return Let::make(let->name, value, result);
+            }
         }
 
         const Load *load = e.as<Load>();
@@ -151,6 +165,92 @@ class LowerStructTypesMutator : public IRMutator {
             << "result of calling a struct-typed ImageParam/Buffer/Func, not: " << e << "\n";
         return lower_field_read_from_load(load, info->fields[field_index].type, info->offsets[field_index],
                                           info->field_is_aligned(field_index), elem_index);
+    }
+
+    ScalarizedStructValue scalarize_struct_value(const std::string &name, const Expr &value) {
+        internal_assert(value.type().is_struct());
+        const StructTypeInfo &info = *value.type().struct_type();
+
+        ScalarizedStructValue result;
+        vector<Expr> replacement_fields;
+        for (int field_index = 0; field_index < (int)info.fields.size(); field_index++) {
+            const StructField &field = info.fields[field_index];
+            int extent = field.array_extent.value_or(1);
+            for (int elem_index = 0; elem_index < extent; elem_index++) {
+                Expr field_value = project_field(value, field_index, make_const(Int(32), elem_index));
+                std::string field_name = unique_name(name + "." + field.name);
+                if (field.type.is_struct()) {
+                    ScalarizedStructValue nested = scalarize_struct_value(field_name, field_value);
+                    result.lets.insert(result.lets.end(), nested.lets.begin(), nested.lets.end());
+                    replacement_fields.push_back(nested.replacement);
+                } else {
+                    result.lets.emplace_back(field_name, std::move(field_value));
+                    replacement_fields.push_back(Variable::make(field.type, field_name));
+                }
+            }
+        }
+        result.replacement = Call::make(value.type(), Call::struct_pack, replacement_fields, Call::PureIntrinsic);
+        return result;
+    }
+
+    Stmt lower_struct_store(const Store *op, const Expr &value) {
+        if (const Let *let = value.as<Let>()) {
+            if (let->value.type().is_struct()) {
+                ScalarizedStructValue scalarized = scalarize_struct_value(let->name, let->value);
+                ScopedBinding<Expr> bind(struct_lets, let->name, scalarized.replacement);
+                Stmt body = lower_struct_store(op, let->body);
+                return rewrap_all_lets(body, scalarized.lets);
+            } else {
+                Expr let_value = mutate(let->value);
+                Stmt body = lower_struct_store(op, let->body);
+                return LetStmt::make(let->name, let_value, body);
+            }
+        }
+
+        Type struct_t = value.type();
+        const StructTypeInfo &info = *struct_t.struct_type();
+        Expr dest_index = mutate(op->index);
+        Type index_type = dest_index.type();
+        Expr dest_byte_base = dest_index * make_const(index_type, struct_t.bytes());
+        Expr predicate = mutate(op->predicate);
+
+        vector<Stmt> stores;
+        for (int field_index = 0; field_index < (int)info.fields.size(); field_index++) {
+            const StructField &f = info.fields[field_index];
+            // A field whose own type is itself Type::Struct (a nested struct field) can't be
+            // split into byte-stores this way: the Reinterpret below fundamentally assumes
+            // f.type's *bits* describe its *bytes* (true for every ordinary scalar type), but a
+            // struct's bits() is not its (packed, possibly not power-of-two) byte size --
+            // Reinterpret would be asked to reinterpret between mismatched bit widths. Only
+            // supported for a fully-inlined struct producer (see lower_field_read_from_load's
+            // matching restriction on the read side).
+            user_assert(!f.type.is_struct())
+                << "Storing a nested struct field (a field whose own type is Type::Struct) as "
+                << "part of a materialized (non-inlined) struct-typed Store is not supported. "
+                << "Field \"" << f.name << "\" of type " << f.type << " in a Store to "
+                << op->name << " was requested this way.\n";
+            int extent = f.array_extent.value_or(1);
+            int elem_bytes = f.type.bytes();
+            bool aligned = info.field_is_aligned(field_index);
+            for (int e = 0; e < extent; e++) {
+                Expr field_value = project_field(value, field_index, make_const(Int(32), e));
+                if (aligned) {
+                    Expr field_dest_index = dest_index * make_const(index_type, struct_t.bytes() / elem_bytes) +
+                                            make_const(index_type, info.offsets[field_index] / elem_bytes + e);
+                    stores.push_back(Store::make(op->name, field_value, field_dest_index, op->param, predicate,
+                                                 ModulusRemainder(), op->is_streaming));
+                } else {
+                    Expr bytes = Reinterpret::make(UInt(8, elem_bytes), field_value);
+                    Expr elem_byte_base = dest_byte_base +
+                                          make_const(index_type, info.offsets[field_index] + e * elem_bytes);
+                    Expr byte_indices = Ramp::make(elem_byte_base, 1, elem_bytes);
+                    Expr byte_predicate = Broadcast::make(predicate, elem_bytes);
+                    stores.push_back(Store::make(op->name, bytes, byte_indices, op->param, byte_predicate,
+                                                 ModulusRemainder(), op->is_streaming));
+                }
+            }
+        }
+        return Block::make(stores);
     }
 
 protected:
@@ -187,57 +287,23 @@ protected:
         if (!op->value.type().is_struct()) {
             return IRMutator::visit(op);
         }
-
-        Type struct_t = op->value.type();
-        const StructTypeInfo &info = *struct_t.struct_type();
-        Expr dest_index = mutate(op->index);
-        Type index_type = dest_index.type();
-        Expr dest_byte_base = dest_index * make_const(index_type, struct_t.bytes());
-        Expr predicate = mutate(op->predicate);
-
-        vector<Stmt> stores;
-        for (int field_index = 0; field_index < (int)info.fields.size(); field_index++) {
-            const StructField &f = info.fields[field_index];
-            // A field whose own type is itself Type::Struct (a nested struct field) can't be
-            // split into byte-stores this way: the Reinterpret below fundamentally assumes
-            // f.type's *bits* describe its *bytes* (true for every ordinary scalar type), but a
-            // struct's bits() is not its (packed, possibly not power-of-two) byte size --
-            // Reinterpret would be asked to reinterpret between mismatched bit widths. Only
-            // supported for a fully-inlined struct producer (see lower_field_read_from_load's
-            // matching restriction on the read side).
-            user_assert(!f.type.is_struct())
-                << "Storing a nested struct field (a field whose own type is Type::Struct) as "
-                << "part of a materialized (non-inlined) struct-typed Store is not supported. "
-                << "Field \"" << f.name << "\" of type " << f.type << " in a Store to "
-                << op->name << " was requested this way.\n";
-            int extent = f.array_extent.value_or(1);
-            int elem_bytes = f.type.bytes();
-            bool aligned = info.field_is_aligned(field_index);
-            for (int e = 0; e < extent; e++) {
-                Expr value = project_field(op->value, field_index, make_const(Int(32), e));
-                if (aligned) {
-                    Expr field_dest_index = dest_index * make_const(index_type, struct_t.bytes() / elem_bytes) +
-                                            make_const(index_type, info.offsets[field_index] / elem_bytes + e);
-                    stores.push_back(Store::make(op->name, value, field_dest_index, op->param, predicate,
-                                                 ModulusRemainder(), op->is_streaming));
-                } else {
-                    Expr bytes = Reinterpret::make(UInt(8, elem_bytes), value);
-                    Expr elem_byte_base = dest_byte_base +
-                                          make_const(index_type, info.offsets[field_index] + e * elem_bytes);
-                    Expr byte_indices = Ramp::make(elem_byte_base, 1, elem_bytes);
-                    Expr byte_predicate = Broadcast::make(predicate, elem_bytes);
-                    stores.push_back(Store::make(op->name, bytes, byte_indices, op->param, byte_predicate,
-                                                 ModulusRemainder(), op->is_streaming));
-                }
-            }
-        }
-        return Block::make(stores);
+        return lower_struct_store(op, op->value);
     }
 
     Expr visit(const Let *op) override {
         if (op->value.type().is_struct()) {
-            ScopedBinding bind(struct_lets, op->name, op->value);
-            return mutate(op->body);
+            ScalarizedStructValue scalarized = scalarize_struct_value(op->name, op->value);
+            ScopedBinding bind(struct_lets, op->name, scalarized.replacement);
+            return rewrap_all_lets(mutate(op->body), scalarized.lets);
+        }
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        if (op->value.type().is_struct()) {
+            ScalarizedStructValue scalarized = scalarize_struct_value(op->name, op->value);
+            ScopedBinding bind(struct_lets, op->name, scalarized.replacement);
+            return rewrap_all_lets(mutate(op->body), scalarized.lets);
         }
         return IRMutator::visit(op);
     }
@@ -285,6 +351,12 @@ protected:
     void visit(const Let *op) override {
         if (op->value.type().is_struct()) {
             fail(op->value, "Let value");
+        }
+        IRGraphVisitor::visit(op);
+    }
+    void visit(const LetStmt *op) override {
+        if (op->value.type().is_struct()) {
+            fail(op->value, "LetStmt value");
         }
         IRGraphVisitor::visit(op);
     }
