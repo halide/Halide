@@ -81,7 +81,7 @@ Type Type::Struct(const std::vector<StructField> &fields) {
     info->total_bytes = offset;
 
     // A struct has its own honest type code; its byte size lives in the interned
-    // StructTypeInfo (and is carried in the ABI's reserved field, see to_abi()).
+    // StructTypeInfo (and is carried in the ABI's info field, see to_abi()).
     // type_bits is not meaningful for a struct -- it's set to a byte's worth so
     // the erased ABI tag is well-formed, but bytes() is the real size.
     Type t(StructKind, 8, 1);
