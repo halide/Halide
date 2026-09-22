@@ -50,6 +50,14 @@ int StructTypeInfo::find_field(const std::string &name) const {
     return -1;
 }
 
+bool StructTypeInfo::field_is_aligned(int field_index) const {
+    internal_assert(field_index >= 0 && field_index < (int)fields.size());
+    const int field_bytes = fields[field_index].type.bytes();
+    internal_assert(field_bytes > 0);
+    return offsets[field_index] % field_bytes == 0 &&
+           total_bytes % field_bytes == 0;
+}
+
 int Type::bytes() const {
     if (is_struct()) {
         const StructTypeInfo *info = struct_type();

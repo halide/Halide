@@ -427,7 +427,9 @@ protected:
         if (value.same_as(op->value)) {
             return op;
         } else {
-            Type t = op->type.with_lanes(value.type().lanes());
+            internal_assert(value.type().lanes() % op->value.type().lanes() == 0);
+            int widening = value.type().lanes() / op->value.type().lanes();
+            Type t = op->type.with_lanes(op->type.lanes() * widening);
             return Reinterpret::make(t, value);
         }
     }

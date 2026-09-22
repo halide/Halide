@@ -726,6 +726,10 @@ struct StructTypeInfo {
 
     /** Find a field by name. Returns -1 if not found. */
     int find_field(const std::string &name) const;
+
+    /** True if every instance of this field in an array of this struct is
+     * naturally addressable in units of the field's scalar type. */
+    bool field_is_aligned(int field_index) const;
 };
 
 /** Constructing a signed integer type */
