@@ -402,7 +402,7 @@ public:
     Type(halide_type_t that, const halide_handle_cplusplus_type *handle_type = nullptr)
         : Type(that.code, that.bits, 1, handle_type) {
         if (that.code == halide_type_struct) {
-            metadata_index_ = Internal::intern_opaque_struct_type(that.reserved);
+            metadata_index_ = Internal::intern_opaque_struct_type(that.info);
         }
     }
 
@@ -411,9 +411,9 @@ public:
      * erasure: the ABI element type has no lanes, so a vector type
      * (lanes >= 2) has no image here and asserts rather than silently
      * dropping its lanes. A struct type erases to code halide_type_struct
-     * carrying its packed byte size in the reserved field, so the aggregate's
+     * carrying its packed byte size in the info field, so the aggregate's
      * true size survives the boundary (an ordinary numeric type erases with
-     * reserved == 0). */
+     * info == 0). */
     HALIDE_ALWAYS_INLINE
     halide_type_t to_abi() const {
         internal_assert(type_lanes < 2)
@@ -425,7 +425,7 @@ public:
             internal_assert(n <= 0xffff)
                 << "Struct type of " << n << " bytes is too large to erase to "
                 << "the ABI; the halide_type_t size field is 16 bits.\n";
-            t.reserved = (uint16_t)n;
+            t.info = (uint16_t)n;
         }
         return t;
     }
@@ -636,7 +636,7 @@ public:
      * packed byte size -- the buffer only carries the ABI halide_type_t, which
      * forgets a struct's field layout (like a buffer of handles forgets its
      * pointee type), so two structs of equal size are ABI-compatible. */
-    bool is_compatible_for_buffer_bind(const Type &buffer_type) const {
+    bool matches_buffer_abi_type(const Type &buffer_type) const {
         if (*this == buffer_type) {
             return true;
         }

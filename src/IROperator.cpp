@@ -1080,10 +1080,10 @@ Expr BufferBuilder::build() const {
 
     args[5] = (int)type.code();
     args[6] = type.bits();
-    // A struct element type carries its packed byte size in the ABI's reserved
+    // A struct element type carries its packed byte size in the ABI's info
     // field; thread it through so the runtime buffer's type is faithful (and
     // its element stride/allocation size correct). Zero for ordinary types.
-    args[7] = (int)type.to_abi().reserved;
+    args[7] = (int)type.to_abi().info;
     args[8] = dimensions;
 
     std::vector<Expr> shape;

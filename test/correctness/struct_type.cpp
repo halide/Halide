@@ -51,6 +51,25 @@ void test_type_struct_basics() {
         printf("A struct type should not compare equal to a plain UInt(8)\n");
         exit(1);
     }
+    halide_type_t abi = block_a.to_abi();
+    if (abi.code != halide_type_struct || abi.info != 18 || abi.bytes() != 18) {
+        printf("Struct ABI type should carry its 18-byte size in info\n");
+        exit(1);
+    }
+    if (UInt(16).to_abi().info != 0) {
+        printf("Ordinary ABI types should have zero info\n");
+        exit(1);
+    }
+    Type abi_round_trip(abi);
+    if (!abi_round_trip.is_struct() || abi_round_trip.bytes() != 18) {
+        printf("Struct ABI type should round-trip its byte size\n");
+        exit(1);
+    }
+    if (!block_a.matches_buffer_abi_type(reordered) ||
+        block_a.matches_buffer_abi_type(different_field)) {
+        printf("Struct buffer ABI matching should compare packed byte sizes\n");
+        exit(1);
+    }
     // A struct's type code carries its struct-ness, so with_bits/with_lanes
     // (which never change the code) always preserve it -- bits() and lanes()
     // aren't meaningful for a struct, and a struct-typed Load/Store must not
