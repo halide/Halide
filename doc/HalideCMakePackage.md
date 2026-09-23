@@ -431,7 +431,7 @@ add_halide_library(<target> FROM <generator-target>
 triple = <arch>-<bits>-<os>
 arch   = x86 | arm | powerpc | hexagon | wasm | riscv
 bits   = 32 | 64
-os     = linux | windows | osx | android | ios | qurt | noos | fuchsia | wasmrt
+os     = linux | windows | macos | android | ios | qurt | noos | fuchsia | wasmrt
 
 extra-output = ASSEMBLY | BITCODE | COMPILER_LOG | C_SOURCE | FEATURIZATION
              | HLPIPE | LLVM_ASSEMBLY | PYTHON_EXTENSION | PYTORCH_WRAPPER

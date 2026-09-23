@@ -2775,6 +2775,23 @@ public:
      * on MemoryType for more detail. */
     Func &store_in(MemoryType memory_type);
 
+    /** Tell the GPU shader compiler to fit the kernel this Func's loop over gpu
+     * blocks becomes under a given number of registers per thread. A smaller
+     * budget allows more blocks to be resident on one of the GPU's processors
+     * at once, but constrains the compiler's instruction scheduling, and may
+     * make it spill values to memory.
+     *
+     * Leaving this unset does not mean no limit. It means the GPU driver picks
+     * a value automatically, so asking for more registers than it would have
+     * chosen is also a meaningful thing to do. Zero asks for that automatic
+     * choice, which is what an unscheduled Func gets.
+     *
+     * Only CUDA offers this level of control, so the device API must be given
+     * explicitly and must be DeviceAPI::CUDA; passing anything else warns and
+     * has no effect. Even for CUDA it only takes effect when the PTX version in
+     * use has the .maxnreg directive. */
+    Func &gpu_max_registers(DeviceAPI device_api, int n);
+
     /** Use non-temporal (streaming) loads for every direct read this Func's
      * pure (initial) definition makes of another Func. Equivalent to calling
      * stream_loads() on Stage 0; see \ref Stage::stream_loads. To stream the

@@ -121,6 +121,7 @@ int fclose(void *);
 int close(int);
 size_t fwrite(const void *, size_t, size_t, void *);
 ssize_t write(int fd, const void *buf, size_t bytes);
+int isatty(int fd);
 int remove(const char *pathname);
 int ioctl(int fd, unsigned long request, ...);
 char *strncpy(char *dst, const char *src, size_t n);

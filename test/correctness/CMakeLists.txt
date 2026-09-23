@@ -174,6 +174,7 @@ tests(
     gpu_jit_explicit_copy_to_device.cpp
     gpu_large_alloc.cpp
     gpu_many_kernels.cpp
+    gpu_max_registers.cpp
     gpu_metal_completion_handler_error_check.cpp
     gpu_mixed_dimensionality.cpp
     gpu_mixed_shared_mem_types.cpp
@@ -488,6 +489,7 @@ tests(
     parallel_reductions.cpp
     parallel_rvar.cpp
     parallel_scatter.cpp
+    parallel_size_one.cpp
     random.cpp
     reorder_rvars.cpp
     rfactor.cpp

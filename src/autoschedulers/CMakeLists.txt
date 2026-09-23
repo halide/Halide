@@ -2,7 +2,7 @@
 # Everything else should be omitted to keep binary size low.
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS OFF)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
-set(CMAKE_VISIBILITY_INLINES_HIDDEN YES)
+set(CMAKE_VISIBILITY_INLINES_HIDDEN TRUE)
 
 function(add_autoscheduler)
     set(options)

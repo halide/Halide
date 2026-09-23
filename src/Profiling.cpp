@@ -45,11 +45,15 @@ using std::vector;
 //     in the runtime's halide_profiler_func_stats array. The walk order
 //     fixes the id order, which the reporter then walks as a tree.
 //
-//  2) InjectProfiling — emits the runtime calls
-//     (halide_profiler_set_current_func, _memory_allocate/_free,
-//     _incr/decr_active_threads, sampling-token plumbing,
-//     copy-to-host/device timing) and wraps the whole IR with
-//     halide_profiler_instance_start / _end.
+//  2) InjectCounters — accumulates per-Func counters (memory peak/total,
+//     stack peak, points computed, loads/stores, etc.) symbolically and
+//     flushes them via halide_profiler_update_counters, hoisted out of loops
+//     and batched through thread-local storage where possible.
+//
+//  3) InjectProfiling — emits the remaining runtime calls
+//     (halide_profiler_set_current_func, _incr/decr_active_threads,
+//     sampling-token plumbing, copy-to-host/device timing) and wraps the whole
+//     IR with halide_profiler_instance_start / _end.
 //
 // Entries (rows in the stats array):
 //

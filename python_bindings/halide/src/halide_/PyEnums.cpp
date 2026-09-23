@@ -104,16 +104,28 @@ void define_enums(py::module &m) {
 #pragma GCC diagnostic pop
 #endif
 
-    py::enum_<Target::OS>(m, "TargetOS")
-        .value("OSUnknown", Target::OS::OSUnknown)
-        .value("Linux", Target::OS::Linux)
-        .value("Windows", Target::OS::Windows)
-        .value("OSX", Target::OS::OSX)
-        .value("Android", Target::OS::Android)
-        .value("IOS", Target::OS::IOS)
-        .value("QuRT", Target::OS::QuRT)
-        .value("NoOS", Target::OS::NoOS)
-        .value("wasmrt", Target::OS::WebAssemblyRuntime);
+    auto target_os =
+        py::enum_<Target::OS>(m, "TargetOS")
+            .value("OSUnknown", Target::OS::OSUnknown)
+            .value("Linux", Target::OS::Linux)
+            .value("Windows", Target::OS::Windows)
+            .value("MacOS", Target::OS::MacOS)
+            .value("Android", Target::OS::Android)
+            .value("IOS", Target::OS::IOS)
+            .value("QuRT", Target::OS::QuRT)
+            .value("NoOS", Target::OS::NoOS)
+            .value("wasmrt", Target::OS::WebAssemblyRuntime);
+
+    // OSX is deprecated in C++ (identical to MacOS), but the Python binding
+    // is kept for one release for backwards compatibility.
+#if defined(__clang__) || defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+    target_os.value("OSX", Target::OS::OSX);
+#if defined(__clang__) || defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 
     py::enum_<Target::Arch>(m, "TargetArch")
         .value("ArchUnknown", Target::Arch::ArchUnknown)
