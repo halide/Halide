@@ -1173,6 +1173,12 @@ private:
 
     bool profiling_memory = true;
 
+    // Per in-scope allocation: does it go through the allocator (heap or
+    // pseudostack) rather than being a plain alloca? If so, we mark
+    // current_func as malloc/free around it so the sampler bills allocator time
+    // to the malloc/free rows. Pushed at Allocate, popped at the matching Free.
+    Scope<bool> alloc_uses_allocator;
+
     enum class Kind { ProfiledFunc = 0,
                       NonProfiledFunc,
                       NotAFunc };
@@ -1221,6 +1227,59 @@ private:
                                            {profiler_instance, id, last_arg}, Call::Extern));
 
         return s;
+    }
+
+    // Memory *accounting* (peak/total/num_allocs) is done by the counters in
+    // InjectCounters. Here we only mark current_func as malloc/free around
+    // allocations that actually go through the allocator, so the sampler
+    // attributes allocator time to the malloc/free rows.
+    Stmt visit(const Allocate *op) override {
+        auto [new_extents, changed] = mutate_with_changes(op->extents);
+        Expr condition = mutate(op->condition);
+
+        bool can_fit_on_stack;
+        Expr size = compute_allocation_size(new_extents, condition, op->type, op->name, can_fit_on_stack);
+        // A constant size that fits is a plain alloca; everything else (heap or
+        // pseudostack) goes through the allocator.
+        bool on_stack = can_fit_on_stack && !op->new_expr.defined();
+        bool bill = !is_const_zero(size) && !on_stack && profiling_memory &&
+                    classify(op->name) != Kind::NotAFunc;
+        alloc_uses_allocator.push(op->name, bill);
+
+        // Set current_func to malloc before the allocation (the body's produce
+        // resets it). Called before mutating the body so the ordering of
+        // set_current_func's dedup is right.
+        Stmt set_malloc = bill ? set_current_func(names.malloc_id) : Stmt();
+
+        Stmt body = mutate(op->body);
+        Expr new_expr = op->new_expr.defined() ? mutate(op->new_expr) : Expr();
+
+        Stmt stmt;
+        if (!changed && body.same_as(op->body) &&
+            condition.same_as(op->condition) && new_expr.same_as(op->new_expr)) {
+            stmt = op;
+        } else {
+            stmt = Allocate::make(op->name, op->type, op->memory_type,
+                                  new_extents, condition, body, new_expr,
+                                  op->free_function, op->padding);
+        }
+
+        if (bill) {
+            stmt = Block::make(set_malloc, stmt);
+        }
+        return stmt;
+    }
+
+    Stmt visit(const Free *op) override {
+        bool bill = alloc_uses_allocator.get(op->name);
+        alloc_uses_allocator.pop(op->name);
+        Stmt stmt = IRMutator::visit(op);
+        if (bill) {
+            stmt = Block::make({set_current_func(names.free_id),
+                                stmt,
+                                set_current_func(stack.back())});
+        }
+        return stmt;
     }
 
     Expr visit(const Call *op) override {
