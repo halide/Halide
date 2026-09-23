@@ -101,10 +101,12 @@ WEAK_INLINE int halide_profiler_update_counters(struct halide_profiler_instance_
     halide_profiler_func_stats &stats = instance->funcs[id];
 
     // memory_peak and stack_peak are high-water marks, so they're
-    // max-aggregated rather than summed.
+    // max-aggregated rather than summed. The instance-level (and pipeline-level)
+    // peak isn't a max of these per-Func peaks -- it's the max concurrent sum,
+    // computed from the per-Func peaks and their overlap in
+    // halide_profiler_instance_end -- so we only touch the per-Func fields here.
     if (memory_peak) {
         halide_profiler_max_and_swap(&stats.memory_peak, memory_peak);
-        halide_profiler_max_and_swap(&instance->memory_peak, memory_peak);
     }
     if (stack_peak) {
         halide_profiler_max_and_swap(&stats.stack_peak, stack_peak);

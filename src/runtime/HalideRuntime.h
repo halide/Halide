@@ -2052,6 +2052,15 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
      * canonical id of the Func whose buffer is being copied. -1 otherwise. */
     int buffer_func_id;
 
+    /** The program-order interval [alloc_order, free_order) over which this
+     * Func's allocation is live, from a static walk of the lowered IR. Two
+     * Funcs' allocations overlap in time iff their intervals intersect. Used by
+     * the reporter to compute the pipeline's peak heap usage as the maximum,
+     * over all allocation points, of the summed memory_peak of the Funcs live
+     * there -- overlapping lifetimes add, disjoint ones don't. Both are 0 for a
+     * Func with no heap/stack allocation of its own (it doesn't participate). */
+    int alloc_order, free_order;
+
     /** A bitmask flagging which of this Func's aggregated counters are
      * conservative upper bounds rather than exact values. Bit i corresponds
      * to the i'th counter passed to halide_profiler_update_counters, in the

@@ -81,6 +81,8 @@ struct Names {
     std::string profiler_func_kinds;
     std::string profiler_func_buffer_func_ids;
     std::string profiler_func_counters_approximated;
+    std::string profiler_func_alloc_orders;
+    std::string profiler_func_free_orders;
     std::string profiler_start_error_code;
 
     // IDs 0-3 are reserved for bookkeeping slots, in this order.
@@ -99,6 +101,8 @@ struct Names {
           profiler_func_kinds(unique_name("profiler_func_kinds")),
           profiler_func_buffer_func_ids(unique_name("profiler_func_buffer_func_ids")),
           profiler_func_counters_approximated(unique_name("profiler_func_counters_approximated")),
+          profiler_func_alloc_orders(unique_name("profiler_func_alloc_orders")),
+          profiler_func_free_orders(unique_name("profiler_func_free_orders")),
           profiler_start_error_code(unique_name("profiler_start_error_code")) {
 
         // Reserve the bookkeeping slots first so their ids match the
@@ -1163,6 +1167,18 @@ public:
                             incr_active_threads(profiler_instance)});
     }
 
+    // Program-order allocation-lifetime interval for entry `id` (0 if the entry
+    // has no allocation of its own). Read by inject_profiling to fill the
+    // per-Func alloc_order/free_order shipped to the reporter.
+    int entry_alloc_order(int id) const {
+        auto it = entry_alloc_time.find(id);
+        return it == entry_alloc_time.end() ? 0 : it->second;
+    }
+    int entry_free_order(int id) const {
+        auto it = entry_free_time.find(id);
+        return it == entry_free_time.end() ? 0 : it->second;
+    }
+
 private:
     using IRMutator::visit;
 
@@ -1177,11 +1193,22 @@ private:
 
     bool profiling_memory = true;
 
-    // Per in-scope allocation: does it go through the allocator (heap or
-    // pseudostack) rather than being a plain alloca? If so, we mark
-    // current_func as malloc/free around it so the sampler bills allocator time
-    // to the malloc/free rows. Pushed at Allocate, popped at the matching Free.
-    Scope<bool> alloc_uses_allocator;
+    // Per in-scope allocation. `uses_allocator`: does it go through the
+    // allocator (heap or pseudostack) rather than being a plain alloca? If so,
+    // we mark current_func as malloc/free around it so the sampler bills
+    // allocator time to the malloc/free rows. `id`: the entry it belongs to, or
+    // -1 if none. Pushed at Allocate, popped at the matching Free.
+    struct AllocState {
+        bool uses_allocator;
+        int id;
+    };
+    Scope<AllocState> alloc_state;
+
+    // A monotonic program-order clock, ticked at each Allocate and Free, used to
+    // stamp per-entry allocation-lifetime intervals for the reporter's
+    // pipeline-peak sweep. Starts at 1 so 0 means "no allocation".
+    int alloc_clock = 1;
+    std::map<int, int> entry_alloc_time, entry_free_time;
 
     enum class Kind { ProfiledFunc = 0,
                       NonProfiledFunc,
@@ -1248,7 +1275,16 @@ private:
         bool on_stack = can_fit_on_stack && !op->new_expr.defined();
         bool bill = !is_const_zero(size) && !on_stack && profiling_memory &&
                     classify(op->name) != Kind::NotAFunc;
-        alloc_uses_allocator.push(op->name, bill);
+
+        // Stamp this entry's allocation-lifetime interval (program order) for the
+        // reporter's pipeline-peak sweep. Only Funcs with their own entry get an
+        // interval; their weight in the sweep is their memory_peak.
+        int id = classify(op->name) == Kind::ProfiledFunc ? get_func_entry_id(op->name) : -1;
+        if (id >= 0 && entry_alloc_time.find(id) == entry_alloc_time.end()) {
+            entry_alloc_time[id] = alloc_clock;
+        }
+        alloc_clock++;
+        alloc_state.push(op->name, {bill, id});
 
         // Set current_func to malloc before the allocation (the body's produce
         // resets it). Called before mutating the body so the ordering of
@@ -1275,10 +1311,14 @@ private:
     }
 
     Stmt visit(const Free *op) override {
-        bool bill = alloc_uses_allocator.get(op->name);
-        alloc_uses_allocator.pop(op->name);
+        AllocState st = alloc_state.get(op->name);
+        alloc_state.pop(op->name);
+        if (st.id >= 0) {
+            entry_free_time[st.id] = alloc_clock;
+        }
+        alloc_clock++;
         Stmt stmt = IRMutator::visit(op);
-        if (bill) {
+        if (st.uses_allocator) {
             stmt = Block::make({set_current_func(names.free_id),
                                 stmt,
                                 set_current_func(stack.back())});
@@ -1549,6 +1589,8 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     Expr func_kinds_buf = Variable::make(Handle(), names.profiler_func_kinds);
     Expr func_buffer_func_ids_buf = Variable::make(Handle(), names.profiler_func_buffer_func_ids);
     Expr func_counters_approximated_buf = Variable::make(Handle(), names.profiler_func_counters_approximated);
+    Expr func_alloc_orders_buf = Variable::make(Handle(), names.profiler_func_alloc_orders);
+    Expr func_free_orders_buf = Variable::make(Handle(), names.profiler_func_free_orders);
 
     Expr start_profiler = Call::make(Int(32), "halide_profiler_instance_start",
                                      {pipeline_name,
@@ -1559,6 +1601,8 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
                                       func_kinds_buf,
                                       func_buffer_func_ids_buf,
                                       func_counters_approximated_buf,
+                                      func_alloc_orders_buf,
+                                      func_free_orders_buf,
                                       make_const(UInt(64), target.natural_vector_size(UInt(8))),
                                       instance},
                                      Call::Extern);
@@ -1590,6 +1634,8 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     std::vector<Expr> func_kinds(num_funcs);
     std::vector<Expr> func_buffer_func_ids(num_funcs);
     std::vector<Expr> func_counters_approximated(num_funcs);
+    std::vector<Expr> func_alloc_orders(num_funcs);
+    std::vector<Expr> func_free_orders(num_funcs);
     for (int i = 0; i < num_funcs; i++) {
         const auto &info = names.entry_info[i];
         func_names[i] = info.name;
@@ -1598,6 +1644,8 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
         func_kinds[i] = make_const(Int(32), (int)info.kind);
         func_buffer_func_ids[i] = info.buffer_func_id;
         func_counters_approximated[i] = make_const(UInt(32), injector.approximated_counters(i));
+        func_alloc_orders[i] = make_const(Int(32), profiling.entry_alloc_order(i));
+        func_free_orders[i] = make_const(Int(32), profiling.entry_free_order(i));
     }
 
     s = LetStmt::make(names.profiler_func_names, Call::make(Handle(), Call::make_struct, func_names, Call::Intrinsic), s);
@@ -1606,6 +1654,8 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     s = LetStmt::make(names.profiler_func_kinds, Call::make(Handle(), Call::make_struct, func_kinds, Call::Intrinsic), s);
     s = LetStmt::make(names.profiler_func_buffer_func_ids, Call::make(Handle(), Call::make_struct, func_buffer_func_ids, Call::Intrinsic), s);
     s = LetStmt::make(names.profiler_func_counters_approximated, Call::make(Handle(), Call::make_struct, func_counters_approximated, Call::Intrinsic), s);
+    s = LetStmt::make(names.profiler_func_alloc_orders, Call::make(Handle(), Call::make_struct, func_alloc_orders, Call::Intrinsic), s);
+    s = LetStmt::make(names.profiler_func_free_orders, Call::make(Handle(), Call::make_struct, func_free_orders, Call::Intrinsic), s);
     s = Block::make(Evaluate::make(stop_profiler), s);
 
     // Allocate memory for the profiler instance state

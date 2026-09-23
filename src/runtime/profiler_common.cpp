@@ -69,7 +69,9 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
                                                              const int *func_canonical_ids,
                                                              const int *func_kinds,
                                                              const int *func_buffer_func_ids,
-                                                             const uint32_t *func_counters_approximated) {
+                                                             const uint32_t *func_counters_approximated,
+                                                             const int *func_alloc_orders,
+                                                             const int *func_free_orders) {
     halide_profiler_state *s = halide_profiler_get_state();
 
     for (halide_profiler_pipeline_stats *p = s->pipelines; p;
@@ -105,6 +107,8 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
         p->funcs[i].kind = (halide_profiler_func_kind)func_kinds[i];
         p->funcs[i].buffer_func_id = func_buffer_func_ids[i];
         p->funcs[i].counters_approximated = func_counters_approximated[i];
+        p->funcs[i].alloc_order = func_alloc_orders[i];
+        p->funcs[i].free_order = func_free_orders[i];
     }
     s->pipelines = p;
     return p;
@@ -236,6 +240,8 @@ WEAK int halide_profiler_instance_start(void *user_context,
                                         const int *func_kinds,
                                         const int *func_buffer_func_ids,
                                         const uint32_t *func_counters_approximated,
+                                        const int *func_alloc_orders,
+                                        const int *func_free_orders,
                                         uint64_t native_vector_bytes,
                                         halide_profiler_instance_state *instance) {
     // Tell the instance where we stashed the per-func state - just after the
@@ -277,7 +283,8 @@ WEAK int halide_profiler_instance_start(void *user_context,
             find_or_create_pipeline(pipeline_name, num_funcs,
                                     func_names, func_parents, func_canonical_ids,
                                     func_kinds, func_buffer_func_ids,
-                                    func_counters_approximated);
+                                    func_counters_approximated,
+                                    func_alloc_orders, func_free_orders);
         if (!p) {
             // Allocating space to track the statistics failed.
             return halide_error_out_of_memory(user_context);
@@ -322,7 +329,6 @@ WEAK int halide_profiler_instance_end(void *user_context, halide_profiler_instan
         p->active_threads_numerator += instance->active_threads_numerator;
         p->active_threads_denominator += instance->active_threads_denominator;
         p->memory_total += instance->memory_total;
-        p->memory_peak = max(p->memory_peak, instance->memory_peak);
         p->num_allocs += instance->num_allocs;
         p->runs++;
         p->samples += instance->samples;
@@ -350,6 +356,36 @@ WEAK int halide_profiler_instance_end(void *user_context, halide_profiler_instan
             while (counter != end) {
                 *counter++ += *instance++;
             }
+        }
+
+        // The pipeline's peak heap usage is the max, over all allocation points,
+        // of the summed memory_peak of the Funcs live there -- overlapping
+        // lifetimes add, disjoint ones don't. Two Funcs' allocations overlap iff
+        // their [alloc_order, free_order) intervals intersect, and the running
+        // total only peaks right after an allocation, so checking each Func's
+        // allocation point suffices. Recomputed here from the just-updated
+        // per-Func peaks so p->memory_peak is correct for API readers too, not
+        // only in the report. O(num_funcs^2), but only once per run.
+        {
+            uint64_t peak = 0;
+            for (int i = 0; i < p->num_funcs; i++) {
+                int t = p->funcs[i].alloc_order;
+                if (t == 0) {
+                    continue;  // no allocation of its own
+                }
+                uint64_t live = 0;
+                for (int j = 0; j < p->num_funcs; j++) {
+                    if (p->funcs[j].alloc_order != 0 &&
+                        p->funcs[j].alloc_order <= t &&
+                        p->funcs[j].free_order > t) {
+                        live += p->funcs[j].memory_peak;
+                    }
+                }
+                if (live > peak) {
+                    peak = live;
+                }
+            }
+            p->memory_peak = peak;
         }
 
         // Then per-Func time, only for runs the sampler reached. Compute

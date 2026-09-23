@@ -170,6 +170,8 @@ WEAK int halide_profiler_instance_start(void *user_context,
                                         const int *func_kinds,
                                         const int *func_buffer_func_ids,
                                         const uint32_t *func_counters_approximated,
+                                        const int *func_alloc_orders,
+                                        const int *func_free_orders,
                                         uint64_t native_vector_bytes,
                                         halide_profiler_instance_state *instance);
 WEAK int halide_profiler_instance_end(void *user_context,
