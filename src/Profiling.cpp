@@ -20,6 +20,7 @@
 #include "Substitute.h"
 #include "UniquifyVariableNames.h"
 #include "Util.h"
+#include "runtime/constants.h"
 
 namespace Halide {
 namespace Internal {
@@ -73,7 +74,6 @@ struct Names {
     std::string profiler_func_names;
     std::string profiler_func_parents;
     std::string profiler_func_canonical_ids;
-    std::string profiler_func_stack_peak_buf;
     std::string profiler_func_kinds;
     std::string profiler_func_buffer_func_ids;
     std::string profiler_func_counters_approximated;
@@ -92,7 +92,6 @@ struct Names {
           profiler_func_names(unique_name("profiler_func_names")),
           profiler_func_parents(unique_name("profiler_func_parents")),
           profiler_func_canonical_ids(unique_name("profiler_func_canonical_ids")),
-          profiler_func_stack_peak_buf(unique_name("profiler_func_stack_peak_buf")),
           profiler_func_kinds(unique_name("profiler_func_kinds")),
           profiler_func_buffer_func_ids(unique_name("profiler_func_buffer_func_ids")),
           profiler_func_counters_approximated(unique_name("profiler_func_counters_approximated")),
@@ -345,13 +344,18 @@ protected:
     // Store consults the flag for its own Func.
     std::map<std::string, bool> func_in_pure_stage;
 
-    // The counters we track. This list must be kept in sync with multiple other
-    // things. If you add a counter, also update:
-    // - the num_counters int below the enum
+    // The counters we track. Most are summed over time; MemoryPeak and
+    // StackPeak are instead max-aggregated (they're high-water marks, so a loop
+    // doesn't multiply them and sibling scopes take the max — see
+    // is_max_counter). All of them ride the same flush path and are shipped to
+    // halide_profiler_update_counters. This list must be kept in sync with
+    // multiple other things. If you add a counter, also update:
     // - halide_profiler_update_counters in profiler_inlined.cpp
     // - the fields of halide_profiler_func_stats in HalideRuntime.h
     // - the block of code that prints counters to json in profiler_common.cpp
-    enum { MemoryTotal = 0,
+    enum { MemoryPeak = 0,
+           StackPeak,
+           MemoryTotal,
            NumAllocs,
            ParallelLoops,
            ParallelTasks,
@@ -374,15 +378,26 @@ protected:
 
     static constexpr int num_counters = ProductionsIfInwards + 1;
 
+    // Max-aggregated (over time) rather than summed.
+    static bool is_max_counter(int c) {
+        return c == MemoryPeak || c == StackPeak;
+    }
+
     struct Counters {
 
         Expr counters[num_counters];
 
+        // Combine two scopes. For summed counters this is disjoint-in-time
+        // addition; for max counters (a high-water mark) it's the max.
         void add(const Counters &other) {
             for (int i = 0; i < num_counters; i++) {
                 if (counters[i].defined()) {
                     if (other.counters[i].defined()) {
-                        counters[i] += other.counters[i];
+                        if (is_max_counter(i)) {
+                            counters[i] = max(counters[i], other.counters[i]);
+                        } else {
+                            counters[i] += other.counters[i];
+                        }
                     }
                 } else {
                     counters[i] = other.counters[i];
@@ -391,10 +406,13 @@ protected:
             vars.insert(other.vars.begin(), other.vars.end());
         }
 
+        // Scale a scope's summed counters by a loop trip count. A max counter is
+        // a per-iteration high-water mark that allocations free each iteration,
+        // so the loop's peak is one iteration's peak: leave it unscaled.
         void mul(const Expr &e) {
-            for (auto &counter : counters) {
-                if (counter.defined()) {
-                    counter *= e;
+            for (int i = 0; i < num_counters; i++) {
+                if (counters[i].defined() && !is_max_counter(i)) {
+                    counters[i] *= e;
                 }
             }
             add_vars(e);
@@ -476,7 +494,8 @@ protected:
                 int idx =
                     local_counters_indices.try_emplace({id, i}, n).first->second;
                 Expr old = Load::make(UInt(64), local_counters, idx);
-                stores.push_back(Store::make(local_counters, old + c.counters[i], idx));
+                Expr combined = is_max_counter(i) ? max(old, c.counters[i]) : old + c.counters[i];
+                stores.push_back(Store::make(local_counters, combined, idx));
             }
             stores.push_back(s);
             return Block::make(stores);
@@ -555,6 +574,17 @@ protected:
             for (int ci = 0; ci < num_counters; ci++) {
                 Expr &counter = c.counters[ci];
                 if (!counter.defined()) {
+                    continue;
+                }
+                if (is_max_counter(ci)) {
+                    // A high-water mark is maxed over the loop, not summed: bound
+                    // the per-iteration value by its max. Drop it if unbounded.
+                    Interval val = bounds_of_expr_in_scope(counter, scope);
+                    if (val.has_upper_bound()) {
+                        counter = simplify(val.max);
+                    } else {
+                        counter = Expr();
+                    }
                     continue;
                 }
                 // A counter that varies over the loop is summed as val.max ×
@@ -718,14 +748,13 @@ protected:
             auto eit = env.find(fname);
             if (eit != env.end() && !eit->second.should_not_profile()) {
                 int id = names.id_for_entry(fname, producer_id);
+                Expr size = cast(UInt(64), op->args[1]);
                 counters[id].count(NumAllocs);
-                counters[id].count(MemoryTotal, cast(UInt(64), op->args[1]));
+                counters[id].count(MemoryTotal, size);
+                counters[id].count(MemoryPeak, size);
             }
-            // Leave the marker in the IR (rather than stripping it) so
-            // InjectProfiling can also emit the memory_current/peak
-            // tracking calls for it — those aren't counters and can't be
-            // handled here.
-            return op;
+            // Strip the marker; InjectProfiling doesn't need it any more.
+            return make_zero(op->type);
         } else if (op->is_intrinsic(Call::declare_stage)) {
             // Marker from ScheduleFunctions saying "we're starting stage N
             // of Func F here". Update our per-Func pure-def flag and strip
@@ -827,18 +856,60 @@ protected:
     }
 
     Stmt visit(const Allocate *op) override {
-        // Bill heap allocations to NumAllocs and MemoryTotal.
+        // Split an allocation's bytes between the stack and heap high-water
+        // marks. Where it lands can depend on the runtime size: a
+        // MemoryType::Stack allocation (pseudostack) stays on the real stack
+        // while small and spills to the heap once large, so it contributes to
+        // both counters via complementary selects. Everything else resolves at
+        // compile time. A peak counter is billed the full size (the allocation
+        // is live across its whole body); see is_max_counter for how that
+        // composes over loops and sibling scopes.
         std::string fname = names.prefix(op->name);
         auto eit = env.find(fname);
         if (eit != env.end() && !eit->second.should_not_profile()) {
             bool can_fit_on_stack;
             Expr size = compute_allocation_size(op->extents, op->condition,
                                                 op->type, op->name, can_fit_on_stack);
-            bool on_stack = can_fit_on_stack && !op->new_expr.defined();
-            if (!is_const_zero(size) && !on_stack) {
+            if (!is_const_zero(size)) {
                 int id = names.id_for_entry(fname, producer_id);
-                counters[id].count(NumAllocs, cast(UInt(64), op->condition));
-                counters[id].count(MemoryTotal, size);
+                Counters &c = counters[id];
+
+                Expr stack_bytes, heap_bytes;
+                if (op->new_expr.defined()) {
+                    // Custom allocator: heap.
+                    heap_bytes = size;
+                } else if (op->memory_type == MemoryType::Stack && !can_fit_on_stack) {
+                    // Pseudostack: on the real stack while small, on the heap
+                    // once it exceeds the threshold. (A constant size too large
+                    // for the stack folds these selects to the heap branch.)
+                    Expr threshold = make_const(UInt(64), Runtime::Internal::Constants::maximum_stack_allocation_bytes);
+                    stack_bytes = select(size <= threshold, size, make_zero(UInt(64)));
+                    heap_bytes = select(size > threshold, size, make_zero(UInt(64)));
+                } else if (can_fit_on_stack && op->memory_type != MemoryType::Heap) {
+                    // Constant size that fits and isn't forced onto the heap.
+                    stack_bytes = size;
+                } else {
+                    // Heap: MemoryType::Heap, a dynamic non-Stack allocation, or
+                    // a constant too large for the stack.
+                    heap_bytes = size;
+                }
+
+                if (stack_bytes.defined()) {
+                    stack_bytes = simplify(stack_bytes);
+                    if (!is_const_zero(stack_bytes)) {
+                        c.count(StackPeak, stack_bytes);
+                    }
+                }
+                if (heap_bytes.defined()) {
+                    heap_bytes = simplify(heap_bytes);
+                    if (!is_const_zero(heap_bytes)) {
+                        c.count(MemoryPeak, heap_bytes);
+                        c.count(MemoryTotal, heap_bytes);
+                        // A heap allocation actually happens (a malloc) whenever
+                        // heap_bytes is nonzero.
+                        c.count(NumAllocs, cast(UInt(64), heap_bytes > 0));
+                    }
+                }
             }
         }
         return IRMutator::visit(op);
@@ -1056,9 +1127,6 @@ public:
         profiler_shared_sampling_token = Variable::make(Handle(), names.profiler_shared_sampling_token);
     }
 
-    map<int, uint64_t> func_stack_current;  // map from func id -> current stack allocation
-    map<int, uint64_t> func_stack_peak;     // map from func id -> peak stack allocation
-
     Stmt activate_thread(const Stmt &s) {
         return activate_thread_helper(s, names.thread_idle_id);
     }
@@ -1103,16 +1171,6 @@ private:
     // the same most_recently_set_func.
     int most_recently_set_func = -1;
 
-    struct AllocSize {
-        bool on_stack;
-        Expr size;
-        // Entry id resolved at Allocate time; Free uses the cached value
-        // since the producer stack may differ at the two sites.
-        int id;
-    };
-
-    Scope<AllocSize> func_alloc_sizes;
-
     bool profiling_memory = true;
 
     enum class Kind { ProfiledFunc = 0,
@@ -1152,16 +1210,6 @@ private:
         return s;
     }
 
-    // Bill a heap allocation of `size` bytes to entry `idx`, bumping its
-    // memory_current/peak. Shared by the Allocate visitor and the
-    // declare_allocation marker (device-only buffers whose host Allocate
-    // was nulled out). num_allocs/memory_total are handled separately via
-    // the counter path.
-    Expr memory_allocate_call(int idx, const Expr &size) {
-        return Call::make(Int(32), "halide_profiler_memory_allocate",
-                          {profiler_instance, idx, size}, Call::Extern);
-    }
-
     Stmt set_current_func(int id) {
         if (most_recently_set_func == id) {
             return Evaluate::make(0);
@@ -1180,148 +1228,9 @@ private:
             // End of the bounds-query prelude — start collecting samples.
             return Call::make(Int(32), "halide_profiler_enable_instance",
                               {profiler_instance}, Call::Extern);
-        } else if (op->is_intrinsic(Call::declare_allocation)) {
-            // A device-only buffer: InjectHostDevBufferCopies nulled its
-            // host Allocate (condition false), so visit(Allocate) pushed a
-            // zero-size func_alloc_sizes entry and emitted no tracking. The
-            // device storage is real, and its Free node still brackets the
-            // lifetime, so rewrite the entry to the device size — the
-            // matching Free then emits a memory_free — and emit the
-            // memory_allocate here. (num_allocs/memory_total are billed via
-            // the counter path.)
-            internal_assert(op->args.size() == 3);
-            std::string name = handle_name(op->args[0]);
-            Expr size = simplify(cast<uint64_t>(op->args[1]));
-            int idx = -1;
-            if (func_alloc_sizes.contains(name)) {
-                idx = func_alloc_sizes.get(name).id;
-                func_alloc_sizes.pop(name);
-            }
-            func_alloc_sizes.push(name, {/*on_stack=*/false, size, idx});
-            if (profiling_memory && idx >= 0 && !is_const_zero(size)) {
-                return memory_allocate_call(idx, size);
-            }
-            return make_zero(op->type);
         } else {
             return IRMutator::visit(op);
         }
-    }
-
-    Stmt visit(const Allocate *op) override {
-
-        auto [new_extents, changed] = mutate_with_changes(op->extents);
-        Expr condition = mutate(op->condition);
-
-        bool can_fit_on_stack;
-        Expr size = compute_allocation_size(new_extents, condition, op->type, op->name, can_fit_on_stack);
-        internal_assert(size.type() == UInt(64));
-
-        bool on_stack = can_fit_on_stack && !op->new_expr.defined();
-
-        // Resolve and cache the entry id here so visit(Free) can use it;
-        // Allocate may have been hoisted out of the producer that
-        // surrounds Free.
-        int idx;
-        switch (classify(op->name)) {
-        case Kind::ProfiledFunc:
-            idx = get_func_entry_id(op->name);
-            break;
-        case Kind::NonProfiledFunc:
-            // Attribute the stack size contribution to the deepest _profiled_ func.
-            idx = stack.back();
-            break;
-        case Kind::NotAFunc:
-            // Ignore allocations that don't correspond to a Func
-            idx = -1;
-            break;
-        }
-
-        func_alloc_sizes.push(op->name, {on_stack, size, idx});
-
-        // compute_allocation_size() might return a zero size, if the allocation is
-        // always conditionally false. remove_dead_allocations() is called after
-        // inject_profiling() so this is a possible scenario.
-        if (!is_const_zero(size) && on_stack && idx >= 0) {
-            auto int_size = as_const_uint(size);
-            internal_assert(int_size);  // Stack size is always a const int
-            func_stack_current[idx] += *int_size;
-            func_stack_peak[idx] = std::max(func_stack_peak[idx], func_stack_current[idx]);
-            debug(3) << "  Allocation on stack: " << op->name
-                     << "(" << size << ") in pipeline " << names.pipeline_name
-                     << "; current: " << func_stack_current[idx]
-                     << "; peak: " << func_stack_peak[idx] << "\n";
-        }
-
-        vector<Stmt> tasks;
-        bool track_heap_allocation = !is_const_zero(size) && !on_stack && profiling_memory && idx >= 0;
-        if (track_heap_allocation) {
-            debug(3) << "  Allocation on heap: " << op->name
-                     << "(" << size << ") in pipeline "
-                     << names.pipeline_name << "\n";
-
-            tasks.push_back(set_current_func(names.malloc_id));
-            tasks.push_back(Evaluate::make(memory_allocate_call(idx, size)));
-        }
-
-        Stmt body = mutate(op->body);
-
-        Expr new_expr;
-        Stmt stmt;
-        if (op->new_expr.defined()) {
-            new_expr = mutate(op->new_expr);
-        }
-        if (!changed &&
-            body.same_as(op->body) &&
-            condition.same_as(op->condition) &&
-            new_expr.same_as(op->new_expr)) {
-            stmt = op;
-        } else {
-            stmt = Allocate::make(op->name, op->type, op->memory_type,
-                                  new_extents, condition, body, new_expr,
-                                  op->free_function, op->padding);
-        }
-
-        tasks.push_back(stmt);
-
-        return Block::make(tasks);
-    }
-
-    Stmt visit(const Free *op) override {
-        AllocSize alloc = func_alloc_sizes.get(op->name);
-        internal_assert(alloc.size.type() == UInt(64));
-        func_alloc_sizes.pop(op->name);
-
-        Stmt stmt = IRMutator::visit(op);
-
-        if (!is_const_zero(alloc.size)) {
-            int idx = alloc.id;
-            if (!alloc.on_stack) {
-                if (profiling_memory && idx >= 0) {
-                    debug(3) << "  Free on heap: " << op->name << "(" << alloc.size << ") in pipeline " << names.pipeline_name << "\n";
-
-                    vector<Stmt> tasks{
-                        set_current_func(names.free_id),
-                        Evaluate::make(Call::make(Int(32), "halide_profiler_memory_free",
-                                                  {profiler_instance, idx, alloc.size}, Call::Extern)),
-                        stmt,
-                        set_current_func(stack.back())};
-
-                    stmt = Block::make(tasks);
-                }
-            } else {
-                auto int_size = as_const_uint(alloc.size);
-                internal_assert(int_size);
-
-                if (idx >= 0) {
-                    func_stack_current[idx] -= *int_size;
-                    debug(3) << "  Free on stack: " << op->name
-                             << "(" << alloc.size << ") in pipeline " << names.pipeline_name
-                             << "; current: " << func_stack_current[idx]
-                             << "; peak: " << func_stack_peak[idx] << "\n";
-                }
-            }
-        }
-        return stmt;
     }
 
     Stmt visit(const ProducerConsumer *op) override {
@@ -1596,15 +1505,6 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     Expr stop_profiler = Call::make(Handle(), Call::register_destructor,
                                     {Expr("halide_profiler_instance_end"), instance}, Call::Intrinsic);
 
-    bool no_stack_alloc = profiling.func_stack_peak.empty();
-    if (!no_stack_alloc) {
-        Expr func_stack_peak_buf = Variable::make(Handle(), names.profiler_func_stack_peak_buf);
-
-        Stmt update_stack = Evaluate::make(Call::make(Int(32), "halide_profiler_stack_peak_update",
-                                                      {instance, func_stack_peak_buf}, Call::Extern));
-        s = Block::make(update_stack, s);
-    }
-
     s = profiling.activate_main_thread(s);
 
     // Initialize the shared sampling token
@@ -1620,18 +1520,6 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     // (negative) error code as the token.
     s = Block::make(AssertStmt::make(profiler_start_error_code == 0, profiler_start_error_code), s);
     s = LetStmt::make(names.profiler_start_error_code, start_profiler, s);
-
-    if (!no_stack_alloc) {
-        for (int i = num_funcs - 1; i >= 0; --i) {
-            s = Block::make(Store::make(names.profiler_func_stack_peak_buf,
-                                        make_const(UInt(64), profiling.func_stack_peak[i]),
-                                        i),
-                            s);
-        }
-        s = Block::make(s, Free::make(names.profiler_func_stack_peak_buf));
-        s = Allocate::make(names.profiler_func_stack_peak_buf, UInt(64),
-                           MemoryType::Auto, {num_funcs}, const_true(), s);
-    }
 
     std::vector<Expr> func_names(num_funcs);
     std::vector<Expr> func_parents(num_funcs);

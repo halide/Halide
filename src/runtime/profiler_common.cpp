@@ -208,22 +208,6 @@ WEAK void print_wrapped(void *user_context, int indent, int max_cols, const char
 }  // namespace Runtime
 }  // namespace Halide
 
-namespace {
-
-template<typename T>
-void sync_compare_max_and_swap(T *ptr, T val) {
-    using namespace Halide::Runtime::Internal::Synchronization;
-
-    T old_val = *ptr;
-    while (val > old_val) {
-        if (atomic_cas_strong_sequentially_consistent(ptr, &old_val, &val)) {
-            return;
-        }
-    }
-}
-
-}  // namespace
-
 extern "C" {
 // Returns the address of the pipeline state associated with pipeline_name.
 WEAK halide_profiler_pipeline_stats *halide_profiler_get_pipeline_state(const char *pipeline_name) {
@@ -400,110 +384,31 @@ WEAK int halide_profiler_instance_end(void *user_context, halide_profiler_instan
     return 0;
 }
 
-WEAK void halide_profiler_stack_peak_update(void *user_context,
-                                            halide_profiler_instance_state *instance,
-                                            uint64_t *f_values) {
-    // Note: Update to the counter is done without grabbing the state's lock to
-    // reduce lock contention. One potential issue is that other call that frees the
-    // pipeline and function stats structs may be running in parallel. However, the
-    // current destructor (called on profiler shutdown) does not free the structs
-    // unless user specifically calls halide_profiler_reset().
-
-    // Update per-func memory stats
-    for (int i = 0; i < instance->pipeline_stats->num_funcs; ++i) {
-        if (f_values[i] != 0) {
-            sync_compare_max_and_swap(&(instance->funcs[i]).stack_peak, f_values[i]);
-        }
-    }
-}
-
-WEAK void halide_profiler_memory_allocate(void *user_context,
-                                          halide_profiler_instance_state *instance,
-                                          int func_id,
-                                          uint64_t incr) {
-    using namespace Halide::Runtime::Internal::Synchronization;
-
-    // It's possible to have 'incr' equal to zero if the allocation is not
-    // executed conditionally.
-    if (incr == 0) {
-        return;
-    }
-
-    halide_abort_if_false(user_context, instance != nullptr);
-    halide_abort_if_false(user_context, func_id >= 0);
-    halide_abort_if_false(user_context, func_id < instance->pipeline_stats->num_funcs);
-
-    halide_profiler_func_stats *func = &instance->funcs[func_id];
-
-    // Note: Update to the counter is done without grabbing the state's lock to
-    // reduce lock contention. One potential issue is that another call that
-    // frees the pipeline and function stats structs may be running in
-    // parallel. However, the current destructor (called on profiler shutdown)
-    // does not free the structs unless user specifically calls
-    // halide_profiler_reset().
-
-    // num_allocs and memory_total go through halide_profiler_update_counters.
-    uint64_t p_mem_current = atomic_add_fetch_sequentially_consistent(&instance->memory_current, incr);
-    sync_compare_max_and_swap(&instance->memory_peak, p_mem_current);
-
-    uint64_t f_mem_current = atomic_add_fetch_sequentially_consistent(&func->memory_current, incr);
-    sync_compare_max_and_swap(&func->memory_peak, f_mem_current);
-}
-
-WEAK void halide_profiler_memory_free(void *user_context,
-                                      halide_profiler_instance_state *instance,
-                                      int func_id,
-                                      uint64_t decr) {
-    using namespace Halide::Runtime::Internal::Synchronization;
-
-    // It's possible to have 'decr' equal to zero if the allocation is not
-    // executed conditionally.
-    if (decr == 0) {
-        return;
-    }
-
-    halide_abort_if_false(user_context, instance != nullptr);
-    halide_abort_if_false(user_context, func_id >= 0);
-    halide_abort_if_false(user_context, func_id < instance->pipeline_stats->num_funcs);
-
-    halide_profiler_func_stats *func = &instance->funcs[func_id];
-
-    // Note: Update to the counter is done without grabbing the state's lock to
-    // reduce lock contention. One potential issue is that other call that frees the
-    // pipeline and function stats structs may be running in parallel. However, the
-    // current destructor (called on profiler shutdown) does not free the structs
-    // unless user specifically calls halide_profiler_reset().
-
-    // Update per-pipeline memory stats
-    atomic_sub_fetch_sequentially_consistent(&instance->memory_current, decr);
-
-    // Update per-func memory stats
-    atomic_sub_fetch_sequentially_consistent(&func->memory_current, decr);
-}
-
 // Bit positions in halide_profiler_func_stats::counters_approximated. Must
 // stay in sync with the counter enum in src/Profiling.cpp.
 enum {
-    counter_memory_total = 0,
-    counter_num_allocs = 1,
-    counter_parallel_loops = 2,
-    counter_parallel_tasks = 3,
-    counter_points_required_at_root = 4,
-    counter_points_computed = 5,
-    counter_scalar_loads = 6,
-    counter_vector_loads = 7,
-    counter_gathers = 8,
-    counter_bytes_loaded = 9,
-    counter_scalar_stores = 10,
-    counter_vector_stores = 11,
-    counter_scatters = 12,
-    counter_bytes_stored = 13,
-    counter_realizations = 14,
-    counter_productions = 15,
-    counter_points_required_at_realization = 16,
-    counter_points_required_at_production = 17,
-    counter_points_required_inwards = 18,
-    counter_productions_if_inwards = 19,
+    counter_memory_peak = 0,
+    counter_stack_peak = 1,
+    counter_memory_total = 2,
+    counter_num_allocs = 3,
+    counter_parallel_loops = 4,
+    counter_parallel_tasks = 5,
+    counter_points_required_at_root = 6,
+    counter_points_computed = 7,
+    counter_scalar_loads = 8,
+    counter_vector_loads = 9,
+    counter_gathers = 10,
+    counter_bytes_loaded = 11,
+    counter_scalar_stores = 12,
+    counter_vector_stores = 13,
+    counter_scatters = 14,
+    counter_bytes_stored = 15,
+    counter_realizations = 16,
+    counter_productions = 17,
+    counter_points_required_at_realization = 18,
+    counter_points_required_at_production = 19,
+    counter_points_required_inwards = 20,
+    counter_productions_if_inwards = 21,
 };
 
 ALWAYS_INLINE bool counter_is_approximate(const halide_profiler_func_stats *fs, int counter) {
@@ -1696,7 +1601,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 field_i("      ", "samples", pp->samples);
                 field_i("      ", "num_allocs", pp->num_allocs);
                 field_u64("      ", "time_ns", pp->time);
-                field_u64("      ", "memory_current", pp->memory_current);
                 field_u64("      ", "memory_peak", pp->memory_peak);
                 field_u64("      ", "memory_total", pp->memory_total);
                 field_u64("      ", "active_threads_numerator", pp->active_threads_numerator);
@@ -1715,7 +1619,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     field_i("          ", "buffer_func_id", fs->buffer_func_id);
                     field_u64("          ", "counters_approximated", fs->counters_approximated);
                     field_u64("          ", "time_ns", fs->time);
-                    field_u64("          ", "memory_current", fs->memory_current);
                     field_u64("          ", "memory_peak", fs->memory_peak);
                     field_u64("          ", "memory_total", fs->memory_total);
                     field_u64("          ", "stack_peak", fs->stack_peak);
@@ -1775,9 +1678,9 @@ WEAK void halide_profiler_reset_unlocked(halide_profiler_state *s) {
 
 WEAK void halide_profiler_reset() {
     // WARNING: Do not call this method while any other halide
-    // pipeline is running; halide_profiler_memory_allocate/free and
-    // halide_profiler_stack_peak_update update the profiler pipeline's
-    // state without grabbing the global profiler state's lock.
+    // pipeline is running; halide_profiler_update_counters updates the
+    // profiler pipeline's state without grabbing the global profiler
+    // state's lock.
     halide_profiler_state *s = halide_profiler_get_state();
     LockProfiler lock(s);
     halide_profiler_reset_unlocked(s);

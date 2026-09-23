@@ -375,7 +375,6 @@ void define_pipeline(py::module &m) {
     HALIDE_PROFILER_FUNC_FIELD(buffer_func_id);
     HALIDE_PROFILER_FUNC_FIELD(counters_approximated);
     HALIDE_PROFILER_FUNC_FIELD(time);
-    HALIDE_PROFILER_FUNC_FIELD(memory_current);
     HALIDE_PROFILER_FUNC_FIELD(memory_peak);
     HALIDE_PROFILER_FUNC_FIELD(stack_peak);
     HALIDE_PROFILER_FUNC_FIELD(memory_total);
@@ -411,7 +410,6 @@ void define_pipeline(py::module &m) {
 #define HALIDE_PROFILER_PIPELINE_FIELD(field) \
     pipeline_stats_class.def_property_readonly(#field, [](const ProfilerPipelineStats &s) { return s.stats.field; })
     HALIDE_PROFILER_PIPELINE_FIELD(time);
-    HALIDE_PROFILER_PIPELINE_FIELD(memory_current);
     HALIDE_PROFILER_PIPELINE_FIELD(memory_peak);
     HALIDE_PROFILER_PIPELINE_FIELD(memory_total);
     HALIDE_PROFILER_PIPELINE_FIELD(active_threads_numerator);

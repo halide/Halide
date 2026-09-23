@@ -160,17 +160,6 @@ WEAK void halide_device_and_host_free_as_destructor(void *user_context, void *ob
 WEAK void halide_device_host_nop_free(void *user_context, void *obj);
 
 struct halide_profiler_instance_state;
-WEAK void halide_profiler_stack_peak_update(void *user_context,
-                                            halide_profiler_instance_state *instance,
-                                            uint64_t *f_values);
-WEAK void halide_profiler_memory_allocate(void *user_context,
-                                          halide_profiler_instance_state *instance,
-                                          int func_id,
-                                          uint64_t incr);
-WEAK void halide_profiler_memory_free(void *user_context,
-                                      halide_profiler_instance_state *instance,
-                                      int func_id,
-                                      uint64_t decr);
 WEAK int halide_profiler_instance_start(void *user_context,
                                         const char *pipeline_name,
                                         int num_funcs,

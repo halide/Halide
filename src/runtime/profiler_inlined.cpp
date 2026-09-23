@@ -61,8 +61,21 @@ WEAK_INLINE int halide_profiler_decr_active_threads(halide_profiler_instance_sta
     return atomic_fetch_sub_sequentially_consistent(&(instance->active_threads), 1);
 }
 
+// Atomically raise *ptr to at least val (a high-water mark).
+WEAK_INLINE void halide_profiler_max_and_swap(uint64_t *ptr, uint64_t val) {
+    using namespace Halide::Runtime::Internal::Synchronization;
+    uint64_t old_val = *ptr;
+    while (val > old_val) {
+        if (atomic_cas_strong_sequentially_consistent(ptr, &old_val, &val)) {
+            return;
+        }
+    }
+}
+
 WEAK_INLINE int halide_profiler_update_counters(struct halide_profiler_instance_state *instance,
                                                 int id,
+                                                uint64_t memory_peak,
+                                                uint64_t stack_peak,
                                                 uint64_t memory_total,
                                                 uint64_t num_allocs,
                                                 uint64_t parallel_loops,
@@ -86,6 +99,16 @@ WEAK_INLINE int halide_profiler_update_counters(struct halide_profiler_instance_
     using namespace Halide::Runtime::Internal::Synchronization;
 
     halide_profiler_func_stats &stats = instance->funcs[id];
+
+    // memory_peak and stack_peak are high-water marks, so they're
+    // max-aggregated rather than summed.
+    if (memory_peak) {
+        halide_profiler_max_and_swap(&stats.memory_peak, memory_peak);
+        halide_profiler_max_and_swap(&instance->memory_peak, memory_peak);
+    }
+    if (stack_peak) {
+        halide_profiler_max_and_swap(&stats.stack_peak, stack_peak);
+    }
 
     // This gets inlined. If this is in an inner loop, most of the args will be
     // the constant zero. We therefore test for zero before adding to every

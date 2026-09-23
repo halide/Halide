@@ -2042,8 +2042,8 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
     /** A bitmask flagging which of this Func's aggregated counters are
      * conservative upper bounds rather than exact values. The bits index the
      * counters passed to halide_profiler_update_counters, in that order:
-     * bit 0 = memory_total, 1 = num_allocs, 2 = parallel_loops,
-     * 3 = parallel_tasks, 4 = points_required_at_root, 5 = points_computed.
+     * bit 0 = memory_peak, 1 = stack_peak, 2 = memory_total, 3 = num_allocs,
+     * 4 = parallel_loops, 5 = parallel_tasks, 6 = points_required_at_root.
      * (active_threads_numerator/denominator are sampled at runtime rather
      * than summed over loops, so they are never approximated and have no
      * bit.) A set bit only happens on GPU, where a guarded contribution
@@ -2055,13 +2055,12 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
     /** Total time taken evaluating this Func (in nanoseconds). */
     uint64_t HALIDE_ATTRIBUTE_ALIGN(8) time;
 
-    /** The current memory allocation of this Func. */
-    uint64_t memory_current;
-
-    /** The peak memory allocation of this Func. */
+    /** The peak memory allocation of this Func. Max-aggregated by
+     * halide_profiler_update_counters. */
     uint64_t memory_peak;
 
-    /** The peak stack allocation of this Func's threads. */
+    /** The peak stack allocation of this Func's threads. Max-aggregated by
+     * halide_profiler_update_counters. */
     uint64_t stack_peak;
 
     // Everything field after this point is a counter. They are aggregated by
@@ -2132,9 +2131,6 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_pipeline_stats {
     /** Total time spent in this pipeline (in nanoseconds) */
     uint64_t time;
 
-    /** The current memory allocation of funcs in this pipeline. */
-    uint64_t memory_current;
-
     /** The peak memory allocation of funcs in this pipeline. */
     uint64_t memory_peak;
 
@@ -2188,9 +2184,6 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_instance_state {
 
     /** Wall clock time of the start of the instance. */
     uint64_t start_time;
-
-    /** The current memory allocation of funcs in this instance. */
-    uint64_t memory_current;
 
     /** The peak memory allocation of funcs in this instance. */
     uint64_t memory_peak;
