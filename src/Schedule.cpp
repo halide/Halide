@@ -261,6 +261,11 @@ struct FuncScheduleContents {
 
     // Pass an IRMutator through to all Exprs referenced in the FuncScheduleContents
     void mutate(IRMutator &mutator) {
+        for (StorageSplit &split : storage_splits) {
+            if (split.factor.defined()) {
+                split.factor = mutator(split.factor);
+            }
+        }
         for (auto &entry : bounds) {
             Bound &b = entry.second;
             if (b.min.defined()) {
@@ -556,6 +561,11 @@ const LoopLevel &FuncSchedule::hoist_storage_level() const {
 }
 
 void FuncSchedule::accept(IRVisitor *visitor) const {
+    for (const StorageSplit &split : storage_splits()) {
+        if (split.factor.defined()) {
+            split.factor.accept(visitor);
+        }
+    }
     for (const auto &entry : bounds()) {
         const Bound &b = entry.second;
         if (b.min.defined()) {

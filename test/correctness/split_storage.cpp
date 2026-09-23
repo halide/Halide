@@ -11,8 +11,6 @@ static int ref_value(int x, int y, int c) {
     return x * 1 + y * 100 + c * 10000 + 7;
 }
 
-namespace {
-
 const int W = 7, H = 5, C = 3;
 
 // Check that realizing a pipeline whose intermediate g has some storage
@@ -46,8 +44,6 @@ Func make_pipeline(Func &g, Var x, Var y, Var c) {
     g.compute_root();
     return f;
 }
-
-}  // namespace
 
 int main(int argc, char **argv) {
     Var x("x"), y("y"), c("c");
@@ -122,7 +118,7 @@ int main(int argc, char **argv) {
     }
 
     // Randomized fuzzing over combinations of storage directives.
-    uint32_t seed = argc > 1 ? (uint32_t)atoi(argv[1]) : std::random_device{}();
+    uint32_t seed = argc > 1 ? (uint32_t)atoi(argv[1]) : 0;
     printf("Fuzzing split_storage with seed %u\n", seed);
     std::mt19937 rng(seed);
 

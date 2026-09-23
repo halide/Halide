@@ -131,6 +131,13 @@ tests(
     split_inner_wrong_tail_strategy.cpp
     split_non_innermost_predicated.cpp
     split_same_var_names.cpp
+    split_storage_axis_collision.cpp
+    split_storage_factor_type.cpp
+    split_storage_fold_axis.cpp
+    split_storage_nonpositive_factor.cpp
+    split_storage_output.cpp
+    split_storage_prefetch.cpp
+    split_storage_ring_buffer.cpp
     store_at_without_compute_at.cpp
     store_root_without_compute_root.cpp
     stream_loads_illegal_self.cpp

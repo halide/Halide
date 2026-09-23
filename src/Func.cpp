@@ -3370,18 +3370,37 @@ Func &Func::split_storage(const Var &old, const Var &outer, const Var &inner, co
     user_assert(factor.defined())
         << "In schedule for " << name()
         << ", split_storage of " << old.name() << " has an undefined factor.\n";
+    user_assert(Int(32).can_represent(factor.type()))
+        << "In schedule for " << name()
+        << ", split_storage factor for splitting " << old.name()
+        << " has type " << factor.type()
+        << ", which is not representable as int32.\n";
     user_assert(outer.name() != inner.name())
         << "In schedule for " << name()
         << ", split_storage of " << old.name()
         << " uses the same name for the inner and outer axis.\n";
 
     vector<StorageDim> &dims = func.schedule().storage_dims();
+    for (const StorageDim &dim : dims) {
+        for (const Var *new_var : {&outer, &inner}) {
+            if (var_name_match(dim.var, new_var->name()) &&
+                !var_name_match(dim.var, old.name())) {
+                user_error << "In schedule for " << name()
+                           << ", can't create storage axis " << new_var->name()
+                           << " using split_storage, because it is already used "
+                              "in this Func's storage schedule.\n"
+                           << dump_dim_list(dims);
+            }
+        }
+    }
+
     for (size_t i = 0; i < dims.size(); i++) {
         if (var_name_match(dims[i].var, old.name())) {
             // Record the split so storage flattening can reconstruct
             // the storage layout, then replace the old axis with the
             // inner (innermost) and outer axes.
-            func.schedule().storage_splits().push_back({dims[i].var, outer.name(), inner.name(), factor});
+            func.schedule().storage_splits().push_back(
+                {dims[i].var, outer.name(), inner.name(), cast<int32_t>(factor)});
             StorageDim inner_dim = {inner.name()};
             StorageDim outer_dim = {outer.name()};
             dims[i] = inner_dim;
