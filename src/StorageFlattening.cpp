@@ -185,6 +185,8 @@ public:
         const bool ring = f.schedule().ring_buffer().defined();
         const bool splits = func_has_storage_splits(f);
         const int num_dims = (int)args.size();
+        const int num_args = (int)f.args().size();
+        internal_assert(num_dims == num_args + (ring ? 1 : 0));
 
         // Peel constant offsets off the args so that multiple stencil taps can
         // share a base address. Only valid where the arg feeds a linear
@@ -209,8 +211,12 @@ public:
         // separately as name.arg_min.<a>.
         vector<Expr> per_arg_coord(num_dims);
         for (int a = 0; a < num_dims; a++) {
-            Expr arg_min = splits ? Variable::make(Int(32), name + ".arg_min." + std::to_string(a)) : make_shape_var(name, "min", a, buf, param);
-            per_arg_coord[a] = args[a] - arg_min;
+            if (ring && a == num_args) {
+                per_arg_coord[a] = args[a];
+            } else {
+                Expr arg_min = splits ? Variable::make(Int(32), name + ".arg_min." + std::to_string(a)) : make_shape_var(name, "min", a, buf, param);
+                per_arg_coord[a] = args[a] - arg_min;
+            }
         }
 
         // A split of a coordinate c by s gives inner = c % s, outer = c / s.
@@ -267,8 +273,6 @@ public:
         const Function &f = iter->second.first;
         const bool ring = f.schedule().ring_buffer().defined();
         const bool splits = func_has_storage_splits(f);
-        user_assert(!(splits && ring))
-            << "split_storage cannot currently be combined with ring_buffer() (" << op->name << ").\n";
 
         // A split of an extent e by s gives inner = s, outer = ceil(e / s).
         const vector<StorageAxis> layout = storage_layout(

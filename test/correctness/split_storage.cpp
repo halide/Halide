@@ -86,6 +86,32 @@ int main(int argc, char **argv) {
         }
     }
 
+    // split_storage and ring_buffer add independent storage axes.
+    {
+        Func producer("producer"), consumer("consumer");
+        Var xo("xo"), yo("yo"), xi("xi"), yi("yi");
+        Var so("so"), si("si");
+
+        producer(x, y) = x + y;
+        consumer(x, y) = producer(x, y);
+        consumer.compute_root().tile(x, y, xo, yo, xi, yi, 8, 8);
+        producer.compute_at(consumer, xo)
+            .hoist_storage(consumer, yo)
+            .ring_buffer(2)
+            .split_storage(x, so, si, 4);
+
+        Buffer<int> out = consumer.realize({16, 16});
+        for (int yy = 0; yy < out.height(); yy++) {
+            for (int xx = 0; xx < out.width(); xx++) {
+                if (out(xx, yy) != xx + yy) {
+                    printf("Ring buffer mismatch at (%d, %d): got %d, expected %d\n",
+                           xx, yy, out(xx, yy), xx + yy);
+                    return 1;
+                }
+            }
+        }
+    }
+
     // split_storage on one axis combined with fold_storage on a different axis.
     // g slides over y (a two-tap stencil), so its y storage can be folded into a
     // circular buffer, while its x storage is split into tiles. Storage folding

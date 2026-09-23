@@ -51,6 +51,14 @@ int count_producers(const Stmt &in, const std::string &name) {
     return counter.count;
 }
 
+bool storage_arg_was_split(const Function &func, const std::string &arg) {
+    const vector<StorageSplit> &splits = func.schedule().storage_splits();
+    return std::any_of(splits.begin(), splits.end(),
+                       [&](const StorageSplit &split) {
+                           return split.old_var == arg;
+                       });
+}
+
 // Fold the storage of a function in a particular dimension by a particular factor
 class FoldStorageOfFunction : public IRMutator {
     string func;
@@ -597,16 +605,16 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr extent = Max::make(extent_initial, extent_steady);
             extent = simplify(common_subexpression_elimination(extent), bounds);
 
-            // Find the StorageDim corresponding to dim. If this arg was carved
-            // up by split_storage it no longer maps to a single storage dim;
-            // folding a split axis is unsupported, so skip it. Folding of the
-            // Func's other (unsplit) dims can still proceed.
-            const std::vector<StorageDim> &storage_dims = func.schedule().storage_dims();
-            auto storage_dim_i = std::find_if(storage_dims.begin(), storage_dims.end(),
-                                              [&](const StorageDim &i) { return i.var == func.args()[dim]; });
-            if (storage_dim_i == storage_dims.end()) {
+            const string &arg = func.args()[dim];
+            if (storage_arg_was_split(func, arg)) {
                 continue;
             }
+
+            // Find the StorageDim corresponding to this unsplit arg.
+            const std::vector<StorageDim> &storage_dims = func.schedule().storage_dims();
+            auto storage_dim_i = std::find_if(storage_dims.begin(), storage_dims.end(),
+                                              [&](const StorageDim &i) { return i.var == arg; });
+            internal_assert(storage_dim_i != storage_dims.end());
             const StorageDim &storage_dim = *storage_dim_i;
 
             Expr explicit_factor;
@@ -972,7 +980,8 @@ class StorageFolding : public IRMutator {
                 continue;
             }
             auto arg_it = std::find(args.begin(), args.end(), sd.var);
-            user_assert(arg_it != args.end())
+            user_assert(arg_it != args.end() &&
+                        !storage_arg_was_split(func, *arg_it))
                 << "fold_storage of Func " << op->name << " along " << sd.var
                 << " is not supported: it is a split_storage axis.\n";
             int d = (int)(arg_it - args.begin());

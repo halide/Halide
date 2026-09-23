@@ -24,14 +24,14 @@ void factor_type() {
 
 void fold_axis() {
     Func f("f"), g("g");
-    Var x("x"), y("y"), xo("xo"), xi("xi");
+    Var x("x"), y("y"), xi("xi");
 
     f(x, y) = x + y;
     g(x, y) = f(x, y) + f(x + 1, y);
     f.compute_at(g, y)
         .store_root()
-        .split_storage(x, xo, xi, 4)
-        .fold_storage(xi, 4);
+        .split_storage(x, x, xi, 4)
+        .fold_storage(x, 4);
 
     g.realize({16, 16});
 }
@@ -55,22 +55,6 @@ void prefetch() {
     g.prefetch(f, x, x, 8);
 
     g.realize({16});
-}
-
-void ring_buffer() {
-    Func producer("producer"), consumer("consumer");
-    Var x("x"), y("y"), xo("xo"), yo("yo"), xi("xi"), yi("yi");
-    Var so("so"), si("si");
-
-    producer(x, y) = x + y;
-    consumer(x, y) = producer(x, y);
-    consumer.compute_root().tile(x, y, xo, yo, xi, yi, 8, 8);
-    producer.compute_at(consumer, xo)
-        .hoist_storage(consumer, yo)
-        .ring_buffer(2)
-        .split_storage(x, so, si, 4);
-
-    consumer.realize({16, 16});
 }
 
 bool nonpositive_factor() {
@@ -114,7 +98,6 @@ int main(int argc, char **argv) {
     failures += !nonpositive_factor();
     failures += !expect_user_error("output", "only supported for internal allocations", output);
     failures += !expect_user_error("prefetch", "prefetch is not supported", prefetch);
-    failures += !expect_user_error("ring_buffer", "cannot currently be combined", ring_buffer);
 
     if (failures != 0) {
         printf("%d scenario(s) failed to produce the expected error\n", failures);
