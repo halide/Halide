@@ -153,14 +153,14 @@ def test_target():
     assert not t2.supports_device_api(hl.DeviceAPI.CUDA)
 
     # supports_type (deprecated version)
-    t1 = hl.Target(hl.TargetOS.OSX, hl.TargetArch.X86, 64, [hl.TargetFeature.Metal])
-    t2 = hl.Target(hl.TargetOS.OSX, hl.TargetArch.X86, 64)
+    t1 = hl.Target(hl.TargetOS.MacOS, hl.TargetArch.X86, 64, [hl.TargetFeature.Metal])
+    t2 = hl.Target(hl.TargetOS.MacOS, hl.TargetArch.X86, 64)
     assert not t1.supports_type(hl.Float(64))
     assert t2.supports_type(hl.Float(64))
 
     # supports_type (preferred version)
-    t1 = hl.Target(hl.TargetOS.OSX, hl.TargetArch.X86, 64, [hl.TargetFeature.Metal])
-    t2 = hl.Target(hl.TargetOS.OSX, hl.TargetArch.X86, 64)
+    t1 = hl.Target(hl.TargetOS.MacOS, hl.TargetArch.X86, 64, [hl.TargetFeature.Metal])
+    t2 = hl.Target(hl.TargetOS.MacOS, hl.TargetArch.X86, 64)
     assert not t1.supports_type(hl.Float(64), hl.DeviceAPI.Metal)
     assert not t2.supports_type(hl.Float(64), hl.DeviceAPI.Metal)
 

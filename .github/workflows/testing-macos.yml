@@ -163,14 +163,14 @@ jobs:
           build
         working-directory: apps/HelloiOS
 
-      # --- x86-64-osx correctness. No no-SSE4.1 variant: no real Intel Mac
+      # --- x86-64-macos correctness. No no-SSE4.1 variant: no real Intel Mac
       # lacks SSE4.1, and that hypothetical baseline is already exercised by
       # Linux/Windows CI, where it's an actually reachable target. ---
 
-      - name: Test (x86-64-osx, SSE4.1)
+      - name: Test (x86-64-macos, SSE4.1)
         if: matrix.arch == 'x86-64'
         run: |
-          cmake -S . -B build -DHalide_TARGET=x86-64-osx-sse41
+          cmake -S . -B build -DHalide_TARGET=x86-64-macos-sse41
           cmake --build build
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
             -L correctness -j "$(sysctl -n hw.logicalcpu)"

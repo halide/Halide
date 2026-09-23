@@ -13,7 +13,7 @@ function(_Halide_target_arch_os OUT_ARCH OUT_OS raw_arch raw_os)
     list(TRANSFORM arch REPLACE "^aarch(64)?$" "arm")
 
     string(TOLOWER "${raw_os}" os)
-    list(TRANSFORM os REPLACE "^darwin$" "osx")
+    list(TRANSFORM os REPLACE "^darwin$" "macos")
     list(TRANSFORM os REPLACE "^emscripten$" "wasmrt")
 
     # Fix up emscripten usage
