@@ -10,7 +10,6 @@
 #include "Parameter.h"
 #include "Scope.h"
 #include "Simplify.h"
-#include "Substitute.h"
 
 #include <optional>
 #include <sstream>
@@ -27,60 +26,57 @@ using std::vector;
 
 namespace {
 
-// One axis of a Func's storage layout -- there is one per dimension of the
-// allocated halide_buffer_t. coord and extent are written symbolically in terms
-// of per-arg placeholders: the relative coordinate "__ss_rel.<j>" (the j'th pure
-// arg minus its min) and the extent "__ss_ext.<j>", which are substituted with
-// concrete values at each use site. With no storage splits there is one axis per
-// storage dim (a permutation of the pure args, plus a ring-buffer axis if any);
-// split_storage expands a storage dim into two axes.
+// One axis of a Func's storage layout -- one per dimension of the allocated
+// halide_buffer_t, innermost first. `value` is the axis's coordinate or its
+// extent, depending on the per-arg values the layout was built from (see
+// storage_layout). With no storage splits there is one axis per storage dim (a
+// permutation of the pure args, plus a ring-buffer axis if any); split_storage
+// expands a storage dim into two axes.
 struct StorageAxis {
-    Expr coord;
-    Expr extent;
+    Expr value;
     Expr bound;       // explicit bound_storage, may be undefined
     Expr alignment;   // explicit align_storage, may be undefined
     int arg;          // the pure arg this axis derives from (or the ring dim)
-    bool split;       // did this axis come from split_storage?
     std::string var;  // the storage-dim name (for error messages)
 };
 
-// The storage axes of f, innermost first, replaying any storage splits.
-std::vector<StorageAxis> storage_layout(const Function &f, bool ring_buffered) {
+// The storage axes of f, innermost first. per_arg gives a value for each pure
+// arg (plus one more for a ring buffer) -- its coordinate or its extent -- and
+// storage splits are replayed via combine(parent, factor), which returns the
+// {outer, inner} values a split produces from its parent's value.
+template<typename Combine>
+std::vector<StorageAxis> storage_layout(const Function &f, bool ring_buffered,
+                                        const std::vector<Expr> &per_arg, Combine combine) {
     const std::vector<StorageDim> &sdims = f.schedule().storage_dims();
     const std::vector<StorageSplit> &splits = f.schedule().storage_splits();
     const std::vector<std::string> &args = f.args();
     const int num_args = (int)args.size();
 
     struct Info {
-        Expr coord, extent;
+        Expr value;
         int arg;
-        bool split;
     };
     std::map<std::string, Info> info;
     for (int j = 0; j < num_args; j++) {
-        info[args[j]] = Info{Variable::make(Int(32), "__ss_rel." + std::to_string(j)),
-                             Variable::make(Int(32), "__ss_ext." + std::to_string(j)),
-                             j, false};
+        info[args[j]] = Info{per_arg[j], j};
     }
     for (const StorageSplit &s : splits) {
         Info p = info.at(s.old_var);
         info.erase(s.old_var);
-        Expr fac = s.factor;
-        info[s.inner] = Info{p.coord % fac, fac, p.arg, true};
-        info[s.outer] = Info{p.coord / fac, (p.extent + fac - 1) / fac, p.arg, true};
+        std::pair<Expr, Expr> outer_inner = combine(p.value, s.factor);
+        info[s.outer] = Info{outer_inner.first, p.arg};
+        info[s.inner] = Info{outer_inner.second, p.arg};
     }
 
     std::vector<StorageAxis> result;
     result.reserve(sdims.size() + (ring_buffered ? 1 : 0));
     for (const StorageDim &d : sdims) {
         const Info &i = info.at(d.var);
-        result.push_back({i.coord, i.extent, d.bound, d.alignment, i.arg, i.split, d.var});
+        result.push_back({i.value, d.bound, d.alignment, i.arg, d.var});
     }
     if (ring_buffered) {
         // The ring buffer is an extra outermost axis, beyond the pure args.
-        result.push_back({Variable::make(Int(32), "__ss_rel." + std::to_string(num_args)),
-                          Variable::make(Int(32), "__ss_ext." + std::to_string(num_args)),
-                          Expr(), Expr(), num_args, false, "__ring_buffer"});
+        result.push_back({per_arg[num_args], Expr(), Expr(), num_args, "__ring_buffer"});
     }
     return result;
 }
@@ -188,18 +184,14 @@ public:
         const Function &f = it->second.first;
         const bool ring = f.schedule().ring_buffer().defined();
         const bool splits = func_has_storage_splits(f);
-        vector<StorageAxis> layout = storage_layout(f, ring);
+        const int num_dims = (int)args.size();
 
-        // The buffer dimension an axis lives in: its pure arg when there are no
-        // splits (so the buffer stays in arg order), else its storage position.
-        auto buffer_dim = [&](int p) { return splits ? p : layout[p].arg; };
-
-        // Peel constant offsets off args feeding a linear (non-split) axis, so
-        // that stencil taps can share a base address.
+        // Peel constant offsets off the args so that multiple stencil taps can
+        // share a base address. Only valid where the arg feeds a linear
+        // (non-split) axis, i.e. when there are no splits.
         Expr constant_term = zero;
         if (!splits) {
-            for (size_t p = 0; p < layout.size(); p++) {
-                int a = layout[p].arg;
+            for (int a = 0; a < num_dims; a++) {
                 const Add *add = args[a].as<Add>();
                 if (add && is_const(add->b)) {
                     Expr stride = make_shape_var(name, "stride", a, buf, param);
@@ -212,14 +204,26 @@ public:
             }
         }
 
+        // The relative coordinate of each pure arg (its coordinate minus its
+        // min). For split funcs the buffer mins are zero, so the mins are bound
+        // separately as name.arg_min.<a>.
+        vector<Expr> per_arg_coord(num_dims);
+        for (int a = 0; a < num_dims; a++) {
+            Expr arg_min = splits ? Variable::make(Int(32), name + ".arg_min." + std::to_string(a)) : make_shape_var(name, "min", a, buf, param);
+            per_arg_coord[a] = args[a] - arg_min;
+        }
+
+        // A split of a coordinate c by s gives inner = c % s, outer = c / s.
+        vector<StorageAxis> layout = storage_layout(
+            f, ring, per_arg_coord,
+            [](const Expr &c, const Expr &s) { return std::pair<Expr, Expr>{c / s, c % s}; });
+
         Expr idx = zero;
         for (size_t p = 0; p < layout.size(); p++) {
-            int a = layout[p].arg;
-            // For split funcs the buffer mins are zero, so the arg min is bound
-            // separately as name.arg_min.<a>; otherwise it is the buffer min.
-            Expr arg_min = splits ? Variable::make(Int(32), name + ".arg_min." + std::to_string(a)) : make_shape_var(name, "min", a, buf, param);
-            Expr coord = substitute("__ss_rel." + std::to_string(a), args[a] - arg_min, layout[p].coord);
-            Expr stride = make_shape_var(name, "stride", buffer_dim(p), buf, param);
+            // The buffer stays in arg order when there are no splits, so the
+            // stride lives in dimension `arg`; otherwise in storage position p.
+            Expr coord = layout[p].value;
+            Expr stride = make_shape_var(name, "stride", splits ? p : layout[p].arg, buf, param);
             if (wide) {
                 coord = cast<int64_t>(coord);
                 stride = cast<int64_t>(stride);
@@ -266,7 +270,10 @@ public:
         user_assert(!(splits && ring))
             << "split_storage cannot currently be combined with ring_buffer() (" << op->name << ").\n";
 
-        const vector<StorageAxis> layout = storage_layout(f, ring);
+        // A split of an extent e by s gives inner = s, outer = ceil(e / s).
+        const vector<StorageAxis> layout = storage_layout(
+            f, ring, extents,
+            [](const Expr &e, const Expr &s) { return std::pair<Expr, Expr>{(e + s - 1) / s, s}; });
         const int n = (int)layout.size();
         const int num_args = (int)f.args().size();
 
@@ -276,12 +283,6 @@ public:
         // permutation of the pure args, just as before.
         auto buffer_dim = [&](int p) { return splits ? p : layout[p].arg; };
 
-        // The extent placeholders resolve to the (mutated) per-arg extents.
-        map<string, Expr> ext_subs;
-        for (int j = 0; j < (int)op->bounds.size(); j++) {
-            ext_subs["__ss_ext." + std::to_string(j)] = extents[j];
-        }
-
         // The stored extent (taking bound_storage into account) and the
         // allocated extent (also taking align_storage into account) of each
         // buffer dimension.
@@ -289,7 +290,7 @@ public:
         vector<Stmt> bound_asserts;
         for (int p = 0; p < n; p++) {
             int d = buffer_dim(p);
-            Expr e = substitute(ext_subs, layout[p].extent);
+            Expr e = layout[p].value;
             if (layout[p].bound.defined()) {
                 Expr bound = layout[p].bound;
                 if (can_prove(e > bound)) {
@@ -360,8 +361,8 @@ public:
         // Mins and extents of each buffer dimension.
         for (int p = n - 1; p >= 0; p--) {
             int d = buffer_dim(p);
-            Expr min = splits ? Expr(0) : op->bounds[layout[p].arg].min;
-            stmt = LetStmt::make(min_name[d], min, stmt);
+            Expr min_val = splits ? Expr(0) : op->bounds[layout[p].arg].min;
+            stmt = LetStmt::make(min_name[d], min_val, stmt);
             stmt = LetStmt::make(extent_name[d], stored_extent[d], stmt);
         }
 
