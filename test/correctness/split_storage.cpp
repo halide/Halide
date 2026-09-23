@@ -90,6 +90,37 @@ int main(int argc, char **argv) {
         }
     }
 
+    // split_storage on one axis combined with fold_storage on a different axis.
+    // g slides over y (a two-tap stencil), so its y storage can be folded into a
+    // circular buffer, while its x storage is split into tiles. Storage folding
+    // errors if a requested fold is not applied, so reaching a correct result
+    // here verifies that folding an unsplit axis of a split Func works.
+    {
+        Func g("g"), fold_f("fold_f");
+        g(x, y) = x * 2 + y * 3 + 1;
+        fold_f(x, y) = g(x, y) + g(x, y + 1);
+        Var xo("xo"), xi("xi");
+        g.compute_at(fold_f, y)
+            .store_root()
+            .split_storage(x, xo, xi, 4)
+            .reorder_storage(xi, y, xo)
+            .fold_storage(y, 2);
+
+        const int fw = 30, fh = 20;
+        Buffer<int> out = fold_f.realize({fw, fh});
+        for (int yy = 0; yy < fh; yy++) {
+            for (int xx = 0; xx < fw; xx++) {
+                int ref = (xx * 2 + yy * 3 + 1) + (xx * 2 + (yy + 1) * 3 + 1);
+                if (out(xx, yy) != ref) {
+                    printf("Mismatch at (%d, %d): got %d, expected %d\n"
+                           "Schedule: split x, fold y\n",
+                           xx, yy, out(xx, yy), ref);
+                    return 1;
+                }
+            }
+        }
+    }
+
     // Randomized fuzzing over combinations of storage directives.
     uint32_t seed = argc > 1 ? (uint32_t)atoi(argv[1]) : std::random_device{}();
     printf("Fuzzing split_storage with seed %u\n", seed);

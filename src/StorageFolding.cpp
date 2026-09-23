@@ -597,11 +597,16 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr extent = Max::make(extent_initial, extent_steady);
             extent = simplify(common_subexpression_elimination(extent), bounds);
 
-            // Find the StorageDim corresponding to dim.
+            // Find the StorageDim corresponding to dim. If this arg was carved
+            // up by split_storage it no longer maps to a single storage dim;
+            // folding a split axis is unsupported, so skip it. Folding of the
+            // Func's other (unsplit) dims can still proceed.
             const std::vector<StorageDim> &storage_dims = func.schedule().storage_dims();
             auto storage_dim_i = std::find_if(storage_dims.begin(), storage_dims.end(),
                                               [&](const StorageDim &i) { return i.var == func.args()[dim]; });
-            internal_assert(storage_dim_i != storage_dims.end());
+            if (storage_dim_i == storage_dims.end()) {
+                continue;
+            }
             const StorageDim &storage_dim = *storage_dim_i;
 
             Expr explicit_factor;
@@ -947,16 +952,6 @@ class StorageFolding : public IRMutator {
         auto func_it = env.find(op->name);
         Function func = func_it != env.end() ? func_it->second : Function();
 
-        // Storage folding reasons about storage dims as pure args, which
-        // does not hold once storage has been split. Skip folding such
-        // Funcs (split_storage cannot be combined with fold_storage).
-        if (func_it != env.end() && !func.schedule().storage_splits().empty()) {
-            if (body.same_as(op->body)) {
-                return op;
-            }
-            return op->with(op->bounds, op->condition, body);
-        }
-
         // Don't attempt automatic storage folding if there is
         // more than one produce node for this func.
         bool explicit_only = count_producers(body, op->name) != 1;
@@ -977,7 +972,9 @@ class StorageFolding : public IRMutator {
                 continue;
             }
             auto arg_it = std::find(args.begin(), args.end(), sd.var);
-            internal_assert(arg_it != args.end());
+            user_assert(arg_it != args.end())
+                << "fold_storage of Func " << op->name << " along " << sd.var
+                << " is not supported: it is a split_storage axis.\n";
             int d = (int)(arg_it - args.begin());
             bool folded = std::any_of(folder.dims_folded.begin(), folder.dims_folded.end(),
                                       [&](const AttemptStorageFoldingOfFunction::Fold &f) {

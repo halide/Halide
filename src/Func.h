@@ -2267,8 +2267,8 @@ public:
      *
      * This is a prototype: it is only supported for functions with
      * internal storage (i.e. not the pipeline output, an input, or an
-     * extern stage), and cannot currently be combined with
-     * fold_storage on the same axis. */
+     * extern stage). You may fold_storage the other (unsplit) axes of
+     * the same Func, but folding a split axis itself is not supported. */
     Func &split_storage(const Var &old, const Var &outer, const Var &inner, const Expr &factor);
 
     /** Pad the storage extent of a particular dimension of
