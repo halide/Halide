@@ -1,5 +1,6 @@
 #include "Halide.h"
 #include "halide_benchmark.h"
+#include <cassert>
 #include <cstdio>
 
 using namespace Halide;
@@ -67,7 +68,7 @@ Func build(int mode, ImageParam in) {
             .unroll(xo);
     } else if (mode == 2) {
         // Shared memory staging plus padding. Unfortunately we can't vectorize
-        // the staging as anymore because we don't have the alignment we need.
+        // the staging anymore because we don't have the alignment we need.
         in.in(out)
             .compute_at(out, x)
             .store_in(MemoryType::GPUSharedAsync)

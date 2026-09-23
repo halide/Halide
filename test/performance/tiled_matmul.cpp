@@ -112,8 +112,8 @@ bool matmul(Halide::Target target) {
     fill_buffer_a(a_buf, row, acc);
     A.set(a_buf);
 
-    Buffer<RhsInt8> b_buf(acc, col);
-    fill_buffer_a(b_buf, col, acc);  // a natural 2D (k, col) matrix
+    Buffer<RhsInt8> b_buf(col, acc);
+    fill_buffer_a(b_buf, acc, col);  // a natural 2D (col, k) matrix
     B.set(b_buf);
 
     Buffer<int32_t> out(col, row);
@@ -209,8 +209,6 @@ bool matmul_bf16(Halide::Target target) {
         .vectorize(xi)
         .vectorize(yi);
 
-    // Repack B to VNNI format once on first run, interleaving groups of two
-    // rows.
     // Stage the VNNI repack of B (K-run of two for bf16), as in the int8 case.
     B.in()
         .compute_at(mm.in(), y)

@@ -3367,6 +3367,11 @@ Func &Func::prefetch(const Parameter &param, const VarOrRVar &at, const VarOrRVa
 Func &Func::split_storage(const Var &old, const Var &outer, const Var &inner, const Expr &factor) {
     invalidate_cache();
 
+    user_assert(!func.has_extern_definition())
+        << "In schedule for " << name()
+        << ", split_storage is not supported because " << name()
+        << " has an extern definition.\n";
+
     user_assert(factor.defined())
         << "In schedule for " << name()
         << ", split_storage of " << old.name() << " has an undefined factor.\n";
@@ -3396,6 +3401,13 @@ Func &Func::split_storage(const Var &old, const Var &outer, const Var &inner, co
 
     for (size_t i = 0; i < dims.size(); i++) {
         if (var_name_match(dims[i].var, old.name())) {
+            user_assert(!dims[i].bound.defined() &&
+                        !dims[i].alignment.defined() &&
+                        !dims[i].fold_factor.defined())
+                << "In schedule for " << name()
+                << ", can't split_storage " << old.name()
+                << " because it already has a bound_storage, align_storage, or "
+                   "fold_storage setting. Apply these to the split axes instead.\n";
             // Record the split so storage flattening can reconstruct
             // the storage layout, then replace the old axis with the
             // inner (innermost) and outer axes.

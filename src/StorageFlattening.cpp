@@ -2,6 +2,7 @@
 
 #include "Bounds.h"
 #include "CSE.h"
+#include "ExternFuncArgument.h"
 #include "Function.h"
 #include "FuseGPUThreadLoops.h"
 #include "IRMutator.h"
@@ -140,7 +141,7 @@ public:
             auto it = env.find(name);
             user_assert(it == env.end() || !func_has_storage_splits(it->second.first))
                 << "split_storage is only supported for internal allocations, but "
-                << name << " has external storage (it is an output or extern stage).\n";
+                << name << " is a pipeline output.\n";
             vector<Expr> mins(args.size()), strides(args.size());
             for (size_t i = 0; i < args.size(); i++) {
                 strides[i] = make_shape_var(name, "stride", i, buf, param);
@@ -273,6 +274,25 @@ public:
         const Function &f = iter->second.first;
         const bool ring = f.schedule().ring_buffer().defined();
         const bool splits = func_has_storage_splits(f);
+
+        if (splits) {
+            user_assert(op->memory_type != MemoryType::GPUTexture)
+                << "split_storage is not supported for Func " << op->name
+                << " because it is stored in MemoryType::GPUTexture.\n";
+            internal_assert(!f.has_extern_definition())
+                << "split_storage on extern-defined Func " << op->name << "\n";
+            for (const auto &p : env) {
+                const Function &g = p.second.first;
+                if (!g.has_extern_definition()) {
+                    continue;
+                }
+                for (const ExternFuncArgument &arg : g.extern_arguments()) {
+                    user_assert(!arg.is_func() || Function(arg.func).name() != op->name)
+                        << "split_storage is not supported for Func " << op->name
+                        << " because it is consumed by the extern stage " << g.name() << ".\n";
+                }
+            }
+        }
 
         // A split of an extent e by s gives inner = s, outer = ceil(e / s).
         const vector<StorageAxis> layout = storage_layout(

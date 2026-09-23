@@ -20,7 +20,7 @@ using namespace Halide::Tools;
 //   2D panel  : B.in() stored [x][k]  -- the vpdpbusd operand must be built
 //               each iteration by interleaving strided lanes (a vpunpck/shuffle
 //               in the inner loop).
-//   swizzled  : B.in() stored [ki][x][ko] via split_storage(k -> ko, ki, 4) --
+//   swizzled  : B.in() stored [ko][x][ki] via split_storage(k -> ko, ki, 4) --
 //               the operand is exactly the contiguous panel layout, so the
 //               shuffle is done once during the pack and the hot loop is
 //               shuffle-free.
@@ -28,11 +28,9 @@ using namespace Halide::Tools;
 // The [ko][x][ki] block structure cannot be expressed by reorder_storage (which
 // only permutes the (x, k) axes); it requires splitting the k storage axis.
 
-namespace {
-
 const int N = 1024;
 
-// swizzle: false = 2D [x][k] panel, true = split_storage [ki][x][ko] panel.
+// swizzle: false = 2D [x][k] panel, true = split_storage [ko][x][ki] panel.
 Func build(bool swizzle, ImageParam A, ImageParam B) {
     Var x("x"), y("y");
     RDom k(0, N);
@@ -70,8 +68,6 @@ double measure(Func &m, Buffer<int32_t> &out) {
     std::sort(s.begin(), s.end());
     return s[s.size() / 2];
 }
-
-}  // namespace
 
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
@@ -113,7 +109,7 @@ int main(int argc, char **argv) {
 
     const double gop = 2.0 * N * N * N / 1e9;
     printf("2D panel [x][k]      : %6.2f ms  %7.2f GOP/s\n", t_flat * 1e3, gop / t_flat);
-    printf("swizzled [ki][x][ko] : %6.2f ms  %7.2f GOP/s\n", t_swizzled * 1e3, gop / t_swizzled);
+    printf("swizzled [ko][x][ki] : %6.2f ms  %7.2f GOP/s\n", t_swizzled * 1e3, gop / t_swizzled);
     printf("swizzled speedup: %.2fx\n", t_flat / t_swizzled);
 
     // Correctness: both layouts must agree and match a naive reference.

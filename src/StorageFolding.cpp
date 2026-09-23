@@ -59,6 +59,22 @@ bool storage_arg_was_split(const Function &func, const std::string &arg) {
                        });
 }
 
+// The buffer dimension that holds a pure arg of a function. Funcs with storage
+// splits have buffers in storage order.
+int storage_position(const Function &func, int arg) {
+    if (func.schedule().storage_splits().empty()) {
+        return arg;
+    }
+    const vector<StorageDim> &dims = func.schedule().storage_dims();
+    for (size_t i = 0; i < dims.size(); i++) {
+        if (dims[i].var == func.args()[arg]) {
+            return (int)i;
+        }
+    }
+    internal_error << "Arg " << func.args()[arg] << " of " << func.name() << " not found in storage dims\n";
+    return -1;
+}
+
 // Fold the storage of a function in a particular dimension by a particular factor
 class FoldStorageOfFunction : public IRMutator {
     string func;
@@ -923,7 +939,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
             Expr head = Load::make(Int(32), dynamic_footprint + ".head", 0);
             Expr tail = Load::make(Int(32), dynamic_footprint + ".tail", 0);
-            Expr step = Variable::make(Int(32), func.name() + ".extent." + std::to_string(dims_folded.back().dim)) + dims_folded.back().factor;
+            Expr extent = Variable::make(Int(32), func.name() + ".extent." + std::to_string(storage_position(func, dims_folded.back().dim)));
+            Expr step = extent + dims_folded.back().factor;
             Stmt reset_head = Store::make(dynamic_footprint + ".head_next", head - step, 0);
             Stmt reset_tail = Store::make(dynamic_footprint + ".tail_next", tail - step, 0);
             stmt = Block::make({stmt, reset_head, reset_tail});

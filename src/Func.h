@@ -2265,10 +2265,16 @@ public:
      * ceil(old_extent / factor), over-allocating when the factor does
      * not divide the extent.
      *
+     * bound_storage, align_storage, and fold_storage settings must be
+     * applied to the split axes, not to "old" before it is split.
+     *
      * This is a prototype: it is only supported for functions with
-     * internal storage (i.e. not the pipeline output, an input, or an
-     * extern stage). You may fold_storage the other (unsplit) axes of
-     * the same Func, but folding a split axis itself is not supported. */
+     * internal storage (i.e. not a pipeline output, not defined by an
+     * extern stage, and not consumed by an extern stage). It is also
+     * not supported with prefetch or MemoryType::GPUTexture. It may be
+     * combined with ring_buffer. You may fold_storage the other
+     * (unsplit) axes of the same Func, but folding a split axis itself
+     * is not supported. */
     Func &split_storage(const Var &old, const Var &outer, const Var &inner, const Expr &factor);
 
     /** Pad the storage extent of a particular dimension of

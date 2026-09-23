@@ -57,6 +57,33 @@ void prefetch() {
     g.realize({16});
 }
 
+void extern_consumer() {
+    Func f("f"), g("g");
+    Var x("x"), xo("xo"), xi("xi");
+
+    f(x) = x;
+    f.compute_root().split_storage(x, xo, xi, 4);
+    g.define_extern("extern_consumer", {f}, Int(32), {x});
+
+    g.compile_to_module({});
+}
+
+void extern_producer() {
+    Func f("f");
+    Var x("x"), xo("xo"), xi("xi");
+
+    f.define_extern("extern_producer", {}, Int(32), {x});
+    f.split_storage(x, xo, xi, 4);
+}
+
+void pre_split_setting() {
+    Func f("f");
+    Var x("x"), xo("xo"), xi("xi");
+
+    f(x) = x;
+    f.bound_storage(x, 16).split_storage(x, xo, xi, 4);
+}
+
 bool nonpositive_factor() {
     try {
         Func f("f"), g("g");
@@ -93,10 +120,13 @@ int main(int argc, char **argv) {
 
     int failures = 0;
     failures += !expect_user_error("axis_collision", "already used", axis_collision);
+    failures += !expect_user_error("extern_consumer", "consumed by the extern stage", extern_consumer);
+    failures += !expect_user_error("extern_producer", "has an extern definition", extern_producer);
     failures += !expect_user_error("factor_type", "not representable as int32", factor_type);
     failures += !expect_user_error("fold_axis", "split_storage axis", fold_axis);
     failures += !nonpositive_factor();
     failures += !expect_user_error("output", "only supported for internal allocations", output);
+    failures += !expect_user_error("pre_split_setting", "Apply these to the split axes", pre_split_setting);
     failures += !expect_user_error("prefetch", "prefetch is not supported", prefetch);
 
     if (failures != 0) {

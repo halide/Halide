@@ -1,5 +1,7 @@
 #include "Halide.h"
+#include <algorithm>
 #include <random>
+#include <set>
 #include <stdio.h>
 
 using namespace Halide;
@@ -143,6 +145,43 @@ int main(int argc, char **argv) {
         }
     }
 
+    // An async producer with an explicit fold over y and a footprint that
+    // can't be statically proven monotonic, inside an outer loop over c. This
+    // uses the dynamically-tracked fold, whose counters are stepped back by the
+    // folded extent after each iteration of c. x is split, so the folded axis
+    // is not at its arg position in the buffer. The sizes make the wrong buffer
+    // dimension's extent (that of xo) too small to step the counters back far
+    // enough.
+    {
+        Func producer("async_producer"), consumer("async_consumer");
+        Var c("c"), xo("xo"), xi("xi");
+        Param<int> stride("stride");
+        producer(x, y, c) = x + y + c;
+        consumer(x, y, c) = producer(x - 1, y * stride, c) + producer(x + 1, y * stride + 1, c);
+        consumer.compute_root();
+        producer.store_root()
+            .compute_at(consumer, y)
+            .split_storage(x, xo, xi, 4)
+            .fold_storage(y, 16)
+            .async();
+
+        stride.set(1);
+        const int w = 8, h = 40, nc = 3;
+        Buffer<int> out = consumer.realize({w, h, nc});
+        for (int cc = 0; cc < nc; cc++) {
+            for (int yy = 0; yy < h; yy++) {
+                for (int xx = 0; xx < w; xx++) {
+                    int ref = (xx - 1 + yy + cc) + (xx + 1 + yy + 1 + cc);
+                    if (out(xx, yy, cc) != ref) {
+                        printf("Async fold mismatch at (%d, %d, %d): got %d, expected %d\n",
+                               xx, yy, cc, out(xx, yy, cc), ref);
+                        return 1;
+                    }
+                }
+            }
+        }
+    }
+
     // Randomized fuzzing over combinations of storage directives.
     uint32_t seed = argc > 1 ? (uint32_t)atoi(argv[1]) : 0;
     printf("Fuzzing split_storage with seed %u\n", seed);
@@ -153,8 +192,10 @@ int main(int argc, char **argv) {
         Func g("g");
         Func f = make_pipeline(g, x, y, c);
 
-        // The set of storage axes currently available to schedule.
+        // The set of storage axes currently available to schedule, and those
+        // with an alignment or bound, which can't be split.
         std::vector<Var> axes = {x, y, c};
+        std::set<std::string> configured;
         std::string desc = "seed " + std::to_string(seed) + " trial " + std::to_string(trial) + ":";
 
         int fresh = 0;
@@ -163,7 +204,16 @@ int main(int argc, char **argv) {
             int choice = rng() % 4;
             if (choice == 0 && axes.size() < 6) {
                 // split_storage
-                int idx = rng() % axes.size();
+                std::vector<int> splittable;
+                for (int i = 0; i < (int)axes.size(); i++) {
+                    if (!configured.count(axes[i].name())) {
+                        splittable.push_back(i);
+                    }
+                }
+                if (splittable.empty()) {
+                    continue;
+                }
+                int idx = splittable[rng() % splittable.size()];
                 int factor = 2 + rng() % 3;  // 2..4
                 Var outer("so" + std::to_string(fresh));
                 Var inner("si" + std::to_string(fresh));
@@ -188,12 +238,14 @@ int main(int argc, char **argv) {
                 int idx = rng() % axes.size();
                 int align = 1 << (1 + rng() % 3);  // 2,4,8
                 g.align_storage(axes[idx], align);
+                configured.insert(axes[idx].name());
                 desc += " align(" + axes[idx].name() + "," + std::to_string(align) + ")";
             } else {
                 // bound_storage with a bound that is always large enough
                 // (every axis extent here is <= max(W,H,C) <= 7).
                 int idx = rng() % axes.size();
                 g.bound_storage(axes[idx], 8);
+                configured.insert(axes[idx].name());
                 desc += " bound(" + axes[idx].name() + ",8)";
             }
         }
