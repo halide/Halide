@@ -277,7 +277,7 @@ void test_simple_division_cases() {
     // Note: x + (x*2 - y)/2 == (x*4 - y)/2 for all integers (floor division);
     // the split form x*2 - y/2 is incorrect when y is odd.
     check_solve(x + (x * 2 - y) / 2, (x * 4 - y) / 2);
-    check_solve(x + (-(x * 2) / 2), x * 0 + 0);
+    check_solve(x + (-(x * 2) / 2), x * 0);
     check_solve(x + (-(x * 2 + -3)) / 2, x * 0 + 1);
     check_solve(x + (z - (x * 2 + -3)) / 2, x * 0 + (z - (-3)) / 2);
     check_solve(x + (y * 16 + (z - (x * 2 + -1))) / 2,

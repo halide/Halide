@@ -131,6 +131,8 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
            rewrite((w + (z + (x * c0 + y))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
            rewrite((w + (z + (y + x * c0))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
 
+           rewrite(((0 - x) - x) / 2, -x) ||
+
            /** In (x + c0) / c1, when can we pull the constant
                addition out of the numerator? An obvious answer is
                the constant is a multiple of the denominator, but
@@ -242,7 +244,9 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
                    x * fold(c0 / c2) + fold(c1 / c2),
                    c2 > 0 && c0 % c2 == 0) ||
            // A very specific pattern that comes up in bounds in upsampling code.
-           rewrite((x % 2 + c0) / 2, x % 2 + fold(c0 / 2), c0 % 2 == 1))))) {
+           rewrite((x % 2 + c0) / 2, x % 2 + fold(c0 / 2), c0 % 2 == 1) ||
+           rewrite((0 - x % 2) / 2, (0 - x % 2)) ||
+           false)))) {
         return mutate(rewrite.result, info);
     }
 

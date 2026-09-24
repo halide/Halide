@@ -568,6 +568,7 @@ table Split {
     exact: bool;
     tail: TailStrategy;
     split_type: SplitType;
+    align: Expr;
 }
 
 enum DimType: ubyte {

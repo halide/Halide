@@ -64,6 +64,7 @@ Expr Simplify::visit(const Mul *op, ExprInfo *info) {
           rewrite((x * c0 + c1) * (x * c2 + c3), x * (x * fold(c0 * c2) + fold(c0 * c3 + c1 * c2)) + fold(c1 * c3)))) ||
         rewrite((x + c0) * c1, x * c1 + fold(c0 * c1), !overflows(c0 * c1)) ||
         rewrite((c0 - x) * c1, x * fold(-c1) + fold(c0 * c1), !overflows(c0 * c1)) ||
+        rewrite(x * -1, 0 - x) ||
         rewrite((0 - x) * y, 0 - x * y) ||
         rewrite(x * (0 - y), 0 - x * y) ||
         rewrite((x - y) * c0, (y - x) * fold(-c0), c0 < 0 && -c0 > 0) ||
