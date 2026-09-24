@@ -637,7 +637,6 @@ def test_split_vars():
     assert isinstance(vars[4], hl.Var) and vars[4].name() == hl.Var.outermost().name()
 
 
-
 def test_split_storage():
     x, y, xo, xi = hl.vars("x y xo xi")
     f = hl.Func("f")
