@@ -460,7 +460,6 @@ apply when `WITH_TESTS=ON`:
 | ------------------------- | ---------- | ------------------------------------- |
 | `WITH_TEST_AUTO_SCHEDULE` | `ON`       | enable the auto-scheduling tests      |
 | `WITH_TEST_CORRECTNESS`   | `ON`       | enable the correctness tests          |
-| `WITH_TEST_ERROR`         | `ON`       | enable the expected-error tests       |
 | `WITH_TEST_FUZZ`          | _detected_ | enable the libfuzzer-based fuzz tests |
 | `WITH_TEST_GENERATOR`     | `ON`       | enable the AOT generator tests        |
 | `WITH_TEST_PERFORMANCE`   | `ON`       | enable performance testing            |
