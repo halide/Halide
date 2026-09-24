@@ -8,6 +8,7 @@ tests(
     aligned_split.cpp
     aligned_split_2d.cpp
     aligned_split_2d_3x3.cpp
+    aligned_split_blend_small_extent.cpp
     aligned_split_mux_phase.cpp
     aligned_split_nested.cpp
     aligned_split_partition.cpp

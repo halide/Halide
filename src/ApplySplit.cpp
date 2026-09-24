@@ -146,21 +146,26 @@ vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
                 // Because base is anchored to align instead of old_min, the
                 // boundary tile can now be shifted at either end (whereas
                 // without align only the max end is reachable, since base
-                // is structurally >= old_min already). Elements shifted in
-                // from the low end overlap the tile above (mask out the
-                // last shift_low of them); elements shifted in from the
-                // high end overlap the tile below (mask out the first
-                // shift_high of them).
+                // is structurally >= old_min already). Each tile keeps
+                // exactly the elements of its own grid cell
+                // [old_base, old_base + factor), i.e. those with
+                // 0 <= inner + (base - old_base) < factor. Elements shifted
+                // in from outside the cell belong to a neighboring tile.
+                //
+                // When the extent is smaller than the factor, low_bound >
+                // high_bound, so a tile can be moved by *both* clamps (the
+                // Max and then the Min). The shift must therefore be taken
+                // from the final clamped base, not from whichever bound the
+                // unclamped base crossed.
                 Expr low_bound = old_min - split.align;
                 Expr high_bound = old_max + (1 - split.factor) - split.align;
-                Expr shift_low = low_bound - old_base;
-                Expr shift_high = old_base - high_bound;
                 base = Max::make(base, low_bound);
                 base = Min::make(base, high_bound);
-                Expr mask_low = inner < split.factor - shift_low;
-                Expr mask_high = inner >= shift_high;
-                mask = select(old_base < low_bound, mask_low,
-                              select(old_base > high_bound, mask_high, likely(const_true())));
+                Expr shift = Min::make(Max::make(old_base, low_bound), high_bound) - old_base;
+                Expr shifted = inner + shift;
+                Expr own_cell = 0 <= shifted && shifted < split.factor;
+                mask = select(old_base < low_bound || old_base > high_bound, own_cell,
+                              likely(const_true()));
             } else {
                 // Without align, base is structurally >= old_min (outer
                 // starts at 0), so only the max end can ever be shifted.
