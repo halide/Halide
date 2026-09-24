@@ -294,6 +294,7 @@ tests(
     plain_c_includes.c
     popc_clz_ctz_bounds.cpp
     powerpc_cpu_detect.cpp
+    predicate_loads_after_shift_inwards_outer.cpp
     predicated_store_load.cpp
     predicated_store_load_single_lane.cpp
     prefetch.cpp

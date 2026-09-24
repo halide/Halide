@@ -28,6 +28,26 @@ void check_2d(Buffer<int> result, const std::string &case_name, int width, int h
     }
 }
 
+// A single ShiftInwardsAndBlend split must update every point exactly once,
+// whether or not the extent is a multiple of the factor, and also when it is
+// smaller than the factor.
+void test_shift_inwards_and_blend(int extent, int factor, bool vectorized) {
+    Var x("x"), xo("xo"), xi("xi");
+    Func f("shift_inwards_and_blend"), out("out");
+
+    f(x) = 0;
+    f(x) = f(x) + 1;
+    out(x) = f(x);
+    f.compute_root();
+
+    f.update().split(x, xo, xi, factor, TailStrategy::ShiftInwardsAndBlend);
+    if (vectorized) {
+        f.update().vectorize(xi);
+    }
+
+    check_1d(out.realize({extent}), "shift_inwards_and_blend", extent);
+}
+
 void test_split_outer_overhang(TailStrategy child_tail, int extent, int parent_factor, int child_factor) {
     Var x("x"), xo("xo"), xi("xi"), xoo("xoo"), xoi("xoi");
     Func f("split_outer_overhang");
@@ -58,6 +78,13 @@ void test_fused_outer_overhang(TailStrategy child_tail, int width, int height, i
 }
 
 int main(int argc, char **argv) {
+    for (int factor : {3, 8}) {
+        for (int extent = 1; extent <= 20; extent++) {
+            test_shift_inwards_and_blend(extent, factor, false);
+            test_shift_inwards_and_blend(extent, factor, true);
+        }
+    }
+
     for (TailStrategy child_tail : {TailStrategy::RoundUp, TailStrategy::Auto}) {
         for (int extent : {8, 15, 16, 19, 20, 24, 25, 32}) {
             test_split_outer_overhang(child_tail, extent, 8, 2);

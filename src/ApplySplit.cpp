@@ -106,7 +106,15 @@ vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
             base = likely(base);
             base = Min::make(base, old_max + (1 - split.factor));
             // Make a mask which will be a loop invariant if inner gets
-            // vectorized, and apply it if we're in the tail.
+            // vectorized, and apply it if we're in the tail. It keeps the
+            // lanes past the end of the previous tile, i.e. the lanes this
+            // tile owns. On the last in-range tile old_base - base is
+            // (-old_extent) % factor, including when old_extent < factor, so
+            // this is the usual tail mask. A later split of outer (e.g. with
+            // RoundUp) can also run outer past its loop max. Such a tile is
+            // shifted back onto the last tile too, but it owns no lanes
+            // (old_base - base >= factor), so it is masked off entirely rather
+            // than applying the last tile's update a second time.
             Expr mask = inner >= old_base - base;
             mask = select(base == old_base, likely(const_true()), mask);
             result.emplace_back(mask, ApplySplitResult::BlendProvides);
