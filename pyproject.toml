@@ -14,9 +14,10 @@ members = [
 dev = ["pybind11>=2.11.1", "scikit-build-core>=1.0.3", "setuptools-scm>=8.3.1"]
 apps = [
   "imageio>=2",
-  "numpy>=1.26",
+  "numpy>=1.26; platform_machine != 'armv8l' and platform_machine != 'armv7l'",
+  "numpy>=1.26; (platform_machine == 'armv8l' or platform_machine == 'armv7l') and python_full_version >= '3.11'",
   "onnx==1.19.0; platform_machine != 'armv8l' and platform_machine != 'armv7l'",
-  "pillow; platform_machine == 'armv8l' or platform_machine == 'armv7l'",
+  "pillow; (platform_machine == 'armv8l' or platform_machine == 'armv7l') and python_full_version >= '3.11'",
   "protobuf>=7; platform_machine != 'armv8l' and platform_machine != 'armv7l'",
   "pytest; platform_machine != 'armv8l' and platform_machine != 'armv7l'",
 ]
@@ -95,14 +96,17 @@ requires-dist = [
   "halide-bin",
   "halide-runtime",
   "imageio>=2",
-  "pillow; platform_machine == 'armv8l' or platform_machine == 'armv7l'",
+  "pillow; (platform_machine == 'armv8l' or platform_machine == 'armv7l') and python_full_version >= '3.11'",
 ]
 
 [[tool.uv.dependency-metadata]]
 name = "halide-runtime"
 version = "22.0.0"
 requires-python = ">=3.10"
-requires-dist = ["numpy>=1.26"]
+requires-dist = [
+  "numpy>=1.26; platform_machine != 'armv8l' and platform_machine != 'armv7l'",
+  "numpy>=1.26; (platform_machine == 'armv8l' or platform_machine == 'armv7l') and python_full_version >= '3.11'",
+]
 
 [[tool.uv.dependency-metadata]]
 name = "halide-bin"
