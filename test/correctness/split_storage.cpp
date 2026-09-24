@@ -1,5 +1,4 @@
 #include "Halide.h"
-#include <algorithm>
 #include <random>
 #include <set>
 #include <stdio.h>
@@ -46,6 +45,40 @@ Func make_pipeline(Func &g, Var x, Var y, Var c) {
     g.compute_root();
     return f;
 }
+
+std::set<int> prefetch_offsets;
+
+int record_prefetch(int offset) {
+    prefetch_offsets.insert(offset);
+    return 0;
+}
+
+// Replaces each (per-cache-line) prefetch of the named buffer with a call that
+// records its element offset.
+class RecordPrefetches : public Internal::IRMutator {
+    using Internal::IRMutator::visit;
+
+    std::string name;
+
+    Internal::Stmt visit(const Internal::Evaluate *op) override {
+        const Internal::Call *call = Internal::Call::as_intrinsic(op->value, {Internal::Call::prefetch});
+        if (call) {
+            const Internal::Variable *base = call->args[0].as<Internal::Variable>();
+            if (base && base->name == name) {
+                Expr record = Internal::Call::make(Int(32), "record_prefetch",
+                                                   {cast<int>(call->args[1])},
+                                                   Internal::Call::Extern);
+                return Internal::Evaluate::make(record);
+            }
+        }
+        return Internal::IRMutator::visit(op);
+    }
+
+public:
+    RecordPrefetches(const std::string &name)
+        : name(name) {
+    }
+};
 
 int main(int argc, char **argv) {
     Var x("x"), y("y"), c("c");
@@ -145,38 +178,78 @@ int main(int argc, char **argv) {
         }
     }
 
-    // An async producer with an explicit fold over y and a footprint that
-    // can't be statically proven monotonic, inside an outer loop over c. This
-    // uses the dynamically-tracked fold, whose counters are stepped back by the
-    // folded extent after each iteration of c. x is split, so the folded axis
-    // is not at its arg position in the buffer. The sizes make the wrong buffer
-    // dimension's extent (that of xo) too small to step the counters back far
-    // enough.
+    // Prefetching a split Func fetches the bounding box of the region in
+    // storage coordinates. g's storage is [xo][y][xi] with xi of extent 8, so
+    // (for uint8, with 64-byte cache lines and a 128-byte xo stride) a
+    // prefetch of row r touches one cache line at r * 8 + xo * 128 for each xo.
     {
-        Func producer("async_producer"), consumer("async_consumer");
-        Var c("c"), xo("xo"), xi("xi");
-        Param<int> stride("stride");
-        producer(x, y, c) = x + y + c;
-        consumer(x, y, c) = producer(x - 1, y * stride, c) + producer(x + 1, y * stride + 1, c);
-        consumer.compute_root();
-        producer.store_root()
-            .compute_at(consumer, y)
-            .split_storage(x, xo, xi, 4)
-            .fold_storage(y, 16)
-            .async();
+        Func pf_g("pf_g"), pf_f("pf_f");
+        Var xo("xo"), xi("xi");
+        pf_g(x, y) = cast<uint8_t>(x + 3 * y);
+        pf_f(x, y) = pf_g(x, y);
+        pf_g.compute_root().split_storage(x, xo, xi, 8).reorder_storage(xi, y, xo);
+        pf_f.prefetch(pf_g, y, y, 2);
 
-        stride.set(1);
-        const int w = 8, h = 40, nc = 3;
-        Buffer<int> out = consumer.realize({w, h, nc});
-        for (int cc = 0; cc < nc; cc++) {
-            for (int yy = 0; yy < h; yy++) {
-                for (int xx = 0; xx < w; xx++) {
-                    int ref = (xx - 1 + yy + cc) + (xx + 1 + yy + 1 + cc);
-                    if (out(xx, yy, cc) != ref) {
-                        printf("Async fold mismatch at (%d, %d, %d): got %d, expected %d\n",
-                               xx, yy, cc, out(xx, yy, cc), ref);
-                        return 1;
-                    }
+        Target t = get_jit_target_from_environment();
+        Pipeline p(pf_f);
+        if (t.arch == Target::X86) {
+            p.add_custom_lowering_pass(new RecordPrefetches(pf_g.name()));
+            p.set_jit_externs({{"record_prefetch", JITExtern{record_prefetch}}});
+            prefetch_offsets.clear();
+        }
+
+        const int w = 32, h = 16;
+        Buffer<uint8_t> out = p.realize({w, h}, t);
+        for (int yy = 0; yy < h; yy++) {
+            for (int xx = 0; xx < w; xx++) {
+                if (out(xx, yy) != (uint8_t)(xx + 3 * yy)) {
+                    printf("Prefetch mismatch at (%d, %d)\n", xx, yy);
+                    return 1;
+                }
+            }
+        }
+
+        if (t.arch == Target::X86) {
+            std::set<int> expected;
+            for (int r = 2; r < h; r++) {
+                for (int b = 0; b < w / 8; b++) {
+                    expected.insert(r * 8 + b * 128);
+                }
+            }
+            if (prefetch_offsets != expected) {
+                printf("Unexpected prefetch offsets:");
+                for (int o : prefetch_offsets) {
+                    printf(" %d", o);
+                }
+                printf("\n");
+                return 1;
+            }
+        }
+    }
+
+    // Prefetching a ring-buffered Func, with and without split_storage.
+    for (bool split : {false, true}) {
+        Func producer("pf_ring_producer"), consumer("pf_ring_consumer");
+        Var xo("xo"), yo("yo"), xi("xi"), yi("yi");
+        Var so("so"), si("si");
+
+        producer(x, y) = x + y;
+        consumer(x, y) = producer(x, y) + producer(x + 1, y);
+        consumer.compute_root().tile(x, y, xo, yo, xi, yi, 8, 8);
+        producer.compute_at(consumer, xo)
+            .hoist_storage(consumer, yo)
+            .ring_buffer(2);
+        if (split) {
+            producer.split_storage(x, so, si, 4);
+        }
+        consumer.prefetch(producer, yi, yi, 2);
+
+        Buffer<int> out = consumer.realize({16, 16});
+        for (int yy = 0; yy < out.height(); yy++) {
+            for (int xx = 0; xx < out.width(); xx++) {
+                if (out(xx, yy) != 2 * (xx + yy) + 1) {
+                    printf("Ring prefetch mismatch at (%d, %d)\n", xx, yy);
+                    return 1;
                 }
             }
         }

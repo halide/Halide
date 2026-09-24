@@ -45,18 +45,6 @@ void output() {
     f.realize({16});
 }
 
-void prefetch() {
-    Func f("f"), g("g");
-    Var x("x"), xo("xo"), xi("xi");
-
-    f(x) = x;
-    g(x) = f(x);
-    f.compute_root().split_storage(x, xo, xi, 4);
-    g.prefetch(f, x, x, 8);
-
-    g.realize({16});
-}
-
 void extern_consumer() {
     Func f("f"), g("g");
     Var x("x"), xo("xo"), xi("xi");
@@ -127,7 +115,6 @@ int main(int argc, char **argv) {
     failures += !nonpositive_factor();
     failures += !expect_user_error("output", "only supported for internal allocations", output);
     failures += !expect_user_error("pre_split_setting", "Apply these to the split axes", pre_split_setting);
-    failures += !expect_user_error("prefetch", "prefetch is not supported", prefetch);
 
     if (failures != 0) {
         printf("%d scenario(s) failed to produce the expected error\n", failures);
