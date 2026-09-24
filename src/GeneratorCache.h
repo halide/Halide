@@ -79,8 +79,9 @@ struct GeneratorCache {
 
     /** If a complete entry for `key` exists in the cache, copy each cached
      * file into the destination path given by `output_files` and return
-     * true. Otherwise leave the filesystem untouched and return false. A
-     * partial or corrupt entry is treated as a miss. */
+     * true only if all outputs were restored. An output replacement failure
+     * is reported as a user error; some outputs may already have been replaced.
+     * A partial or corrupt entry is treated as a miss. */
     static bool try_restore(const std::string &key,
                             const std::map<OutputFileType, std::string> &output_files);
 

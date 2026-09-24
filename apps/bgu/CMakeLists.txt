@@ -39,8 +39,7 @@ target_link_libraries(bgu_filter PRIVATE Halide::ImageIO bgu bgu_auto_schedule)
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgb.png)
 if (EXISTS ${IMAGE})
-    configure_file(${IMAGE} rgb.png COPYONLY)
-    add_test(NAME bgu_filter COMMAND bgu_filter rgb.png out.png)
+    add_test(NAME bgu_filter COMMAND bgu_filter ${IMAGE} out.png)
     set_tests_properties(
         bgu_filter
         PROPERTIES

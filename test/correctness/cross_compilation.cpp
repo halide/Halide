@@ -102,6 +102,17 @@ int main(int argc, char **argv) {
         for (auto &it : outputs) {
             Internal::assert_file_exists(it.second);
         }
+
+        if (target.os == Target::Windows) {
+            const std::vector<char> object_data = Internal::read_entire_file(outputs.at(OutputFileType::object));
+            const std::string object_contents(object_data.begin(), object_data.end());
+            if (object_contents.find("/EXPORT:") == std::string::npos ||
+                object_contents.find("_argv") == std::string::npos ||
+                object_contents.find("_metadata") == std::string::npos) {
+                std::cerr << "Windows object is missing exported AOT entry points: " << outputs.at(OutputFileType::object) << "\n";
+                return 1;
+            }
+        }
     }
 
     printf("Success!\n");

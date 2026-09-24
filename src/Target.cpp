@@ -231,7 +231,7 @@ Target calculate_host_target() {
     os = Target::Windows;
 #endif
 #ifdef __APPLE__
-    os = Target::OSX;
+    os = Target::MacOS;
 #endif
 
     bool use_64_bits = (sizeof(size_t) == 8);
@@ -456,7 +456,8 @@ const std::map<std::string, Target::OS> os_name_map = {
     {"os_unknown", Target::OSUnknown},
     {"linux", Target::Linux},
     {"windows", Target::Windows},
-    {"osx", Target::OSX},
+    {"macos", Target::MacOS},
+    {"osx", Target::MacOS},  // Deprecated alias for macos.
     {"android", Target::Android},
     {"ios", Target::IOS},
     {"qurt", Target::QuRT},
@@ -468,6 +469,9 @@ bool lookup_os(const std::string &tok, Target::OS &result) {
     auto os_iter = os_name_map.find(tok);
     if (os_iter != os_name_map.end()) {
         result = os_iter->second;
+        if (tok == "osx") {
+            user_warning << "\"osx\" is a deprecated alias for \"macos\" in Halide target strings and will be removed in a future release.\n";
+        }
         return true;
     }
     return false;
@@ -1248,7 +1252,7 @@ void Target::set_implied_features() {
             set_feature(AVX512_SapphireRapids);
         }
     }
-    if (arch == ARM && os == OSX) {
+    if (arch == ARM && os == MacOS) {
         // Apple silicon implements at least the ARM v8.4-A spec.
         set_feature(ARMv84a);
     }
@@ -1285,7 +1289,7 @@ void Target::unset_implied_features() {
             set_feature(AVX2, false);
         }
     }
-    if (arch == ARM && os == OSX) {
+    if (arch == ARM && os == MacOS) {
         set_feature(ARMv84a, false);
     }
 }

@@ -715,6 +715,11 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     }
 
     vector<MangledNames> function_names;
+    auto export_from_windows_dll = [&](llvm::Function *f) {
+        if (target.os == Target::Windows) {
+            f->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
+        }
+    };
 
     // Declare all functions
     for (const auto &f : input.functions()) {
@@ -733,6 +738,9 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         FunctionType *func_t = FunctionType::get(i32_t, arg_types, false);
         function = llvm::Function::Create(func_t, llvm_linkage(f.linkage), names.extern_name, module.get());
         set_function_attributes_from_halide_target_options(*function);
+        if (f.linkage != LinkageType::Internal) {
+            export_from_windows_dll(function);
+        }
 
         // Mark the buffer args as no alias and save indication for add_argv_wrapper if needed
         std::vector<bool> buffer_args(f.args.size());
@@ -750,10 +758,10 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         // If the Func is externally visible, also create the argv wrapper and metadata.
         // (useful for calling from JIT and other machine interfaces).
         if (f.linkage == LinkageType::ExternalPlusArgv || f.linkage == LinkageType::ExternalPlusMetadata) {
-            add_argv_wrapper(function, names.argv_name, false, buffer_args);
+            export_from_windows_dll(add_argv_wrapper(function, names.argv_name, false, buffer_args));
             if (f.linkage == LinkageType::ExternalPlusMetadata) {
-                embed_metadata_getter(names.metadata_name,
-                                      names.simple_name, f.args, input.get_metadata_name_map());
+                export_from_windows_dll(embed_metadata_getter(
+                    names.metadata_name, names.simple_name, f.args, input.get_metadata_name_map()));
             }
         }
 
@@ -798,6 +806,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
                                                                       wrapper_names.extern_name,
                                                                       module.get());
                 set_function_attributes_from_halide_target_options(*wrapper_func);
+                export_from_windows_dll(wrapper_func);
                 llvm::BasicBlock *wrapper_block = llvm::BasicBlock::Create(module->getContext(), "entry", wrapper_func);
                 builder->SetInsertPoint(wrapper_block);
 
@@ -1381,7 +1390,28 @@ void CodeGen_LLVM::optimize_module() {
     // 21.04 -> 14.78 using current ToT release build. (See also https://reviews.llvm.org/rL358304)
     pto.ForgetAllSCEVInLoopUnroll = true;
 
-    llvm::PassBuilder pb(tm.get(), pto);
+    llvm::PassInstrumentationCallbacks pic;
+#if LLVM_VERSION < 220
+    if (get_target().has_feature(Target::SVE) || get_target().has_feature(Target::SVE2)) {
+        // LLVM 21's LoopAccessAnalysis::getStrideFromAddRec() queries a
+        // scalable-vector access type's fixed element count, which hits a
+        // fatal assertion (TypeSize::getFixedValue on a scalable TypeSize).
+        // This is reached from LoopLoadEliminationPass, which the default
+        // pipeline always runs (independent of Halide's own loop-opt
+        // settings). Fixed upstream in LLVM 22 by guarding that query
+        // against ScalableVectorType. Loop load elimination looks for
+        // opportunities to forward a store to a later load across loop
+        // iterations, which Halide-generated code essentially never
+        // benefits from, so skip it entirely on affected SVE targets rather
+        // than accept a compiler crash (or, in a no-asserts LLVM build, a
+        // silently bogus stride).
+        pic.registerShouldRunOptionalPassCallback(
+            [](llvm::StringRef pass_name, const llvm::Any &) {
+                return pass_name != "LoopLoadEliminationPass";
+            });
+    }
+#endif
+    llvm::PassBuilder pb(tm.get(), pto, /*PGOOpt=*/std::nullopt, &pic);
 
     // These analysis managers have to be declared in this order.
     llvm::LoopAnalysisManager lam;

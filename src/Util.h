@@ -89,6 +89,16 @@ void load_plugin(const std::string &lib_name);
 
 namespace Internal {
 
+// Dispatches to multiple lambdas via function overloading (of `operator()`),
+// e.g. for use with std::visit on a std::variant.
+template<typename... Ts>
+struct LambdaOverloads : Ts... {
+    using Ts::operator()...;
+    explicit LambdaOverloads(Ts... ts)
+        : Ts(std::move(ts))... {
+    }
+};
+
 /** Some numeric conversions are UB if the value won't fit in the result;
  * safe_numeric_cast<>() is meant as a drop-in replacement for a C/C++ cast
  * that adds well-defined behavior for the UB cases, attempting to mimic

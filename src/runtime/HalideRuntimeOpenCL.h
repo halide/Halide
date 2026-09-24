@@ -112,6 +112,20 @@ extern uintptr_t halide_opencl_get_cl_mem(void *user_context, struct halide_buff
 /** Returns the offset associated with the OpenCL memory allocation via device_crop or device_slice. */
 extern uint64_t halide_opencl_get_crop_offset(void *user_context, halide_buffer_t *buf);
 
+// These typedefs treat both a cl_context and a cl_command_queue as a
+// void *, to avoid dependencies on the OpenCL headers.
+typedef int (*halide_acquire_cl_context_t)(void *,   // user_context
+                                           void **,  // cl_context out parameter
+                                           void **,  // cl_command_queue out parameter
+                                           bool);    // should create a context if none exist
+typedef int (*halide_release_cl_context_t)(void * /* user_context */);
+
+/** Set custom methods to acquire and release OpenCL contexts and command queues */
+// @{
+extern halide_acquire_cl_context_t halide_set_acquire_cl_context(halide_acquire_cl_context_t handler);
+extern halide_release_cl_context_t halide_set_release_cl_context(halide_release_cl_context_t handler);
+// @}
+
 #ifdef __cplusplus
 }  // End extern "C"
 #endif

@@ -198,7 +198,7 @@ int main(int argc, char **argv) {
 
                 g
                     .never_partition(x, y)
-                    .split(x, x, xi, 13, TailStrategy::Predicate)
+                    .split(x, x, xi, 13, TailStrategy::GuardWithIf)
                     .split(y, y, yi, 11, TailStrategy::ShiftInwards)
                     .reorder(xi, yi, x, y)
                     .vectorize(xi)
@@ -216,7 +216,7 @@ int main(int argc, char **argv) {
             g
                 .never_partition(x, y)
                 .split(x, x, xi, 13, TailStrategy::ShiftInwards)
-                .split(y, y, yi, 11, TailStrategy::Predicate)
+                .split(y, y, yi, 11, TailStrategy::GuardWithIf)
                 .reorder(yi, xi, x, y)
                 .vectorize(xi)
                 .vectorize(yi);

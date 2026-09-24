@@ -6,6 +6,7 @@
 #include "Util.h"
 #include "runtime/HalideRuntime.h"
 #include <cstdint>
+#include <cstring>
 #include <optional>
 
 /** \file
@@ -381,6 +382,16 @@ public:
     HALIDE_ALWAYS_INLINE
     int lanes() const {
         return type_lanes;
+    }
+
+    /** A cheap hash of the type, for use in the hashes of Expr nodes that
+     * embed a Type (see Expr.h). Just the bits of type_code, type_bits, and
+     * type_lanes (which happen to pack into 32 bits), ignoring handle_index_. */
+    HALIDE_ALWAYS_INLINE
+    uint32_t hash() const {
+        uint32_t result;
+        memcpy(&result, this, sizeof(result));
+        return result;
     }
 
     /** Return Type with same number of bits and lanes, but new_code for a type code. */

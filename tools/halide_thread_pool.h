@@ -93,7 +93,7 @@ public:
         // we'll use assert, not internal_assert.
         assert(desired_num_threads > 0);
 
-        std::lock_guard<std::mutex> lock(mutex);
+        std::scoped_lock lock(mutex);
 
         // Create all the threads.
         for (size_t i = 0; i < desired_num_threads; ++i) {
@@ -104,7 +104,7 @@ public:
     ~ThreadPool() {
         // Wake everyone up and tell them the party's over and it's time to go home
         {
-            std::lock_guard<std::mutex> lock(mutex);
+            std::scoped_lock lock(mutex);
             shutting_down = true;
             wakeup_threads.notify_all();
         }
@@ -117,7 +117,7 @@ public:
 
     template<typename Func, typename... Args>
     std::future<T> async(Func func, Args... args) {
-        std::lock_guard<std::mutex> lock(mutex);
+        std::scoped_lock lock(mutex);
 
         Job job;
         // Don't use std::forward here: we never want args passed by reference,

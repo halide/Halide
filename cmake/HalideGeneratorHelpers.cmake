@@ -226,6 +226,7 @@ function(add_halide_generator TARGET)
         )
         set_target_properties(${TARGET}_pystub PROPERTIES OUTPUT_NAME ${MODULE_NAME})
         _Halide_target_export_single_symbol(${TARGET}_pystub "PyInit_${MODULE_NAME}")
+        _Halide_place_dll(${TARGET}_pystub)
     endif ()
 endfunction()
 
@@ -558,9 +559,9 @@ endfunction()
 
 function(_Halide_set_osx_arch TARGET TRIPLE)
     if (APPLE)
-        if (TRIPLE STREQUAL "arm-64-osx")
+        if (TRIPLE STREQUAL "arm-64-macos" OR TRIPLE STREQUAL "arm-64-osx")
             set_property(TARGET "${TARGET}" PROPERTY OSX_ARCHITECTURES "arm64")
-        elseif (TRIPLE STREQUAL "x86-64-osx")
+        elseif (TRIPLE STREQUAL "x86-64-macos" OR TRIPLE STREQUAL "x86-64-osx")
             set_property(TARGET "${TARGET}" PROPERTY OSX_ARCHITECTURES "x86_64")
         else ()
             message(FATAL_ERROR "Could not set OSX_ARCHITECTURES for ${TRIPLE}")
@@ -693,7 +694,7 @@ function(add_halide_library TARGET)
     set(features_args FEATURES)
     foreach (arch IN ITEMS x86 arm powerpc hexagon wasm riscv)
         foreach (bits IN ITEMS 32 64)
-            foreach (os IN ITEMS linux windows osx android ios qurt noos fuchsia wasmrt)
+            foreach (os IN ITEMS linux windows macos osx android ios qurt noos fuchsia wasmrt)
                 list(APPEND features_args "FEATURES[${arch}-${bits}-${os}]")
             endforeach ()
         endforeach ()
@@ -1072,6 +1073,12 @@ function(add_halide_python_extension_library TARGET)
 
     Python_add_library(${TARGET} MODULE WITH_SOABI ${pycpps} ${pyext_module_definition_src})
     target_link_libraries(${TARGET} PRIVATE ${ARG_HALIDE_LIBRARIES})
+    # Generated modules expose halide.runtime.Kernel objects. Keep an in-tree
+    # runtime module available for tests; installed consumers satisfy this as a
+    # Python package dependency instead of a native link dependency.
+    if (TARGET Halide_PythonRuntime)
+        add_dependencies(${TARGET} Halide_PythonRuntime)
+    endif ()
     target_compile_definitions(
         ${TARGET}
         PRIVATE

@@ -293,6 +293,13 @@ private:
             return op;
         } else {
 
+            // The lets below are defined by the mutator further down, which
+            // splits a vector let into exactly two halves or exactly three
+            // thirds. A partial extract doesn't correspond to any of them.
+            if (new_lanes * lane_stride != op->type.lanes()) {
+                return give_up_and_shuffle(op);
+            }
+
             Type t = op->type.with_lanes(new_lanes);
             if (external_lets.contains(op->name) &&
                 starting_lane == 0 &&

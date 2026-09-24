@@ -1,4 +1,4 @@
-// Halide tutorial lesson 16: RGB images and memory layouts part 2
+// Halide tutorial lesson 16: RGB images and memory layouts: running the compiled pipeline
 
 // Before reading this file, see lesson_16_rgb_generate.cpp
 

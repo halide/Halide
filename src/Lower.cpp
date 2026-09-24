@@ -20,6 +20,7 @@
 #include "BoundsInference.h"
 #include "CSE.h"
 #include "CanonicalizeGPUVars.h"
+#include "CheckGPUCrossTalk.h"
 #include "ClampUnsafeAccesses.h"
 #include "Debug.h"
 #include "DebugArguments.h"
@@ -51,6 +52,7 @@
 #include "PartitionLoops.h"
 #include "Prefetch.h"
 #include "Profiling.h"
+#include "PromoteGPURegisters.h"
 #include "PurifyIndexMath.h"
 #include "Qualify.h"
 #include "RealizationOrder.h"
@@ -119,6 +121,15 @@ public:
         timings.emplace_back(diff.count() * 1000, message);
     }
 
+    // For front-of-pipeline setup steps that run before there's an initial
+    // Stmt to pass to operator().
+    void mark_step(const string &message) {
+        auto t = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> diff = t - last_time;
+        last_time = t;
+        timings.emplace_back(diff.count() * 1000, message);
+    }
+
     ~LoweringLogger() {
         if (time_lowering_passes) {
             double total = 0.0;
@@ -145,28 +156,36 @@ void lower_impl(const vector<Function> &output_funcs,
                 Module &result_module) {
     size_t initial_lowered_function_count = result_module.functions().size();
 
+    // Timed from here so the front-of-pipeline setup steps below (which run
+    // before there's an initial Stmt to log) show up in HL_TIME_LOWERING_PASSES
+    // too, rather than being silently folded into process startup time.
+    LoweringLogger log;
+
     // Create a deep-copy of the entire graph of Funcs.
     auto [outputs, env] = deep_copy(output_funcs, build_environment(output_funcs));
+    log.mark_step("Lowering after deep-copying the Func graph");
 
     lower_target_query_ops(env, t);
 
     bool any_strict_float = strictify_float(env, t);
     result_module.set_any_strict_float(any_strict_float);
+    log.mark_step("Lowering after lowering target query ops and strictifying float");
 
     // Finalize all the LoopLevels
     for (auto &iter : env) {
         iter.second.lock_loop_levels();
     }
+    log.mark_step("Lowering after locking loop levels");
 
     // Compute a realization order and determine group of functions which loops
     // are to be fused together
     auto [order, fused_groups] = realization_order(outputs, env);
+    log.mark_step("Lowering after computing realization order");
 
     // Try to simplify the RHS/LHS of a function definition by propagating its
     // specializations' conditions
     simplify_specializations(env);
-
-    LoweringLogger log;
+    log.mark_step("Lowering after simplifying specializations");
 
     debug(1) << "Creating initial loop nests...\n";
     bool any_memoized = false;
@@ -293,6 +312,12 @@ void lower_impl(const vector<Function> &output_funcs,
     s = bound_small_allocations(s);
     log("Lowering after bounding small realizations:", s);
 
+    // After storage folding, which can make two threads touch the same part of
+    // an allocation, and before storage flattening, which makes the check much
+    // harder. See CheckGPUCrossTalk.h.
+    debug(1) << "Checking for GPU cross-talk...\n";
+    check_gpu_cross_talk(s);
+
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, outputs, env, t);
     log("Lowering after storage flattening:", s);
@@ -357,6 +382,10 @@ void lower_impl(const vector<Function> &output_funcs,
         t.has_feature(Target::Vulkan)) {
         debug(1) << "Injecting per-block gpu synchronization...\n";
         s = fuse_gpu_thread_loops(s);
+        log("Lowering after fusing GPU thread loops:", s);
+
+        debug(1) << "Promoting GPU register allocations...\n";
+        s = promote_gpu_registers(s);
         log("Lowering after injecting per-block gpu synchronization:", s);
     }
 
@@ -367,6 +396,7 @@ void lower_impl(const vector<Function> &output_funcs,
 
     debug(1) << "Partitioning loops to simplify boundary conditions...\n";
     s = partition_loops(s);
+    log("Lowering after partitioning loops (partition_loops):", s);
     s = simplify(s);
     log("Lowering after partitioning loops:", s);
 
@@ -430,21 +460,25 @@ void lower_impl(const vector<Function> &output_funcs,
 
     debug(1) << "Removing dead allocations and moving loop invariant code...\n";
     s = remove_dead_allocations(s);
+    log("Lowering after removing dead allocations (remove_dead_allocations):", s);
     s = simplify(s);
+    log("Lowering after removing dead allocations (simplify):", s);
     s = hoist_loop_invariant_values(s);
+    log("Lowering after removing dead allocations (hoist_loop_invariant_values):", s);
     s = hoist_loop_invariant_if_statements(s);
     log("Lowering after removing dead allocations and hoisting loop invariants:", s);
 
     if (t.has_feature(Target::Profile) || t.has_feature(Target::ProfileByTimer)) {
         debug(1) << "Injecting profiling...\n";
         s = inject_profiling(s, pipeline_name, env, t);
-        s = simplify(s);
         log("Lowering after injecting profiling:", s);
     }
 
     debug(1) << "Finding intrinsics...\n";
     // Must be run after the last simplification, because it turns
     // divisions into shifts, which the simplifier reverses.
+    s = simplify(s);
+    log("Lowering after finding intrinsics (simplify):", s);
     s = find_intrinsics(s);
     log("Lowering after finding intrinsics:", s);
 
@@ -458,9 +492,6 @@ void lower_impl(const vector<Function> &output_funcs,
         log("Lowering after stripping asserts:", s);
     }
 
-    debug(1) << "Lowering after final simplification:\n"
-             << s << "\n\n";
-
     if (!custom_passes.empty()) {
         for (size_t i = 0; i < custom_passes.size(); i++) {
             debug(1) << "Running custom lowering pass " << i << "...\n";
@@ -472,6 +503,8 @@ void lower_impl(const vector<Function> &output_funcs,
 
     // Make a copy of the Stmt code, before we lower anything to less human-readable code.
     result_module.set_conceptual_code_stmt(s);
+    debug(1) << "Lowering after reaching conceptual Stmt:\n"
+             << s << "\n\n";
 
     if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {
         debug(1) << "Splitting off Hexagon offload...\n";
@@ -484,7 +517,7 @@ void lower_impl(const vector<Function> &output_funcs,
 
     if (t.has_gpu_feature()) {
         debug(1) << "Offloading GPU loops...\n";
-        s = inject_gpu_offload(s, t, any_strict_float);
+        s = inject_gpu_offload(s, t, any_strict_float, env);
         debug(2) << "Lowering after splitting off GPU loops:\n"
                  << s << "\n\n";
     } else {

@@ -324,7 +324,7 @@ public:
                 check(arm32 ? "vld1.32" : "ldr", 2 * w, in_f32(x + y));
             }
 
-            if (target.os != Target::IOS && target.os != Target::OSX) {
+            if (target.os != Target::IOS && target.os != Target::MacOS) {
                 // VLD* are not profitable on Apple silicon
 
                 // Even on non-Apple silicon, LLVM occasionally decides it's

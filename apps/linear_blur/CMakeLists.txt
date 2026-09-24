@@ -51,8 +51,7 @@ target_link_libraries(linear_blur_process PRIVATE Halide::ImageIO linear_blur si
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgb.png)
 if (EXISTS ${IMAGE})
-    configure_file(${IMAGE} rgb.png COPYONLY)
-    add_test(NAME linear_blur_test COMMAND linear_blur_process 1 rgb.png out.png)
+    add_test(NAME linear_blur_test COMMAND linear_blur_process 1 ${IMAGE} out.png)
     set_tests_properties(
         linear_blur_test
         PROPERTIES

@@ -278,10 +278,12 @@ Stmt Simplify::visit(const For *op) {
     } else if (max_info.bounds < min_info.bounds) {
         return Evaluate::make(0);
     } else if (equal(new_min, new_max) &&
+               op->for_type != ForType::Parallel &&
                op->device_api == DeviceAPI::None) {
         // Loop body runs exactly once
         return mutate(LetStmt::make(op->name, new_min, new_body));
     } else if (max_info.bounds <= min_info.bounds &&
+               op->for_type != ForType::Parallel &&
                op->device_api == DeviceAPI::None) {
         // Loop body runs at most once
         Stmt s = LetStmt::make(op->name, new_min, new_body);

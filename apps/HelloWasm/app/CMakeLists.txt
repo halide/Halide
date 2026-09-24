@@ -17,11 +17,23 @@ find_package(Halide REQUIRED CMAKE_FIND_ROOT_PATH_BOTH)
 find_package(HelloWasm-halide_generators REQUIRED CMAKE_FIND_ROOT_PATH_BOTH)
 set(GEN_TARGET HelloWasm::halide_generators::reaction_diffusion_generator)
 
-# Keep the static assets next to the build outputs they reference (CMake
-# practice: nothing gets written back into the source tree).
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/../index.html index.html COPYONLY)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/../main.js main.js COPYONLY)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/../sw.js sw.js COPYONLY)
+# Keep the static assets next to the build outputs they reference
+set(STATIC_ASSETS index.html main.js sw.js)
+set(STATIC_ASSET_OUTPUTS "")
+foreach (asset IN LISTS STATIC_ASSETS)
+    set(output "${CMAKE_CURRENT_BINARY_DIR}/${asset}")
+    add_custom_command(
+        OUTPUT "${output}"
+        COMMAND
+            ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/../${asset}" "${output}"
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../${asset}"
+        VERBATIM
+    )
+    list(APPEND STATIC_ASSET_OUTPUTS "${output}")
+endforeach ()
+
+# The complete demo webpage: the static assets plus every wasm variant
+add_custom_target(HelloWasm ALL DEPENDS ${STATIC_ASSET_OUTPUTS})
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/js")
 
@@ -71,5 +83,7 @@ foreach (simd IN ITEMS "" "_simd")
             target_link_libraries(${config} PRIVATE Threads::Threads)
             target_link_options(${config} PRIVATE -matomics)
         endif ()
+
+        add_dependencies(HelloWasm ${config})
     endforeach ()
 endforeach ()

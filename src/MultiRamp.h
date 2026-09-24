@@ -124,17 +124,17 @@ struct MultiRamp {
         int dim;
     };
 
-    /** Build an alias-free slice of *this by walking the dims innermost to
+    /** Build an alias-free slice of \*this by walking the dims innermost to
      * outermost and keeping each one only if the slice is still alias-free
      * after adding it. The kept dims are a *subset* of the original dims
      * (preserving their relative order), not necessarily a prefix — e.g. a
      * middle dim may be dropped while both inner and outer dims are kept.
-     * Replace *this with the resulting slice, and return a description of
-     * the dims that weren't kept (innermost first). Always succeeds; *this
+     * Replace \*this with the resulting slice, and return a description of
+     * the dims that weren't kept (innermost first). Always succeeds; \*this
      * may be reduced to a 0-dim scalar if no dim can be kept. The omitted
      * dims' contributions are NOT folded into base — callers usually want
      * to add back `var * omitted.stride` per omitted dim before using
-     * *this.
+     * \*this.
      *
      * All dimensions with stride zero or purely symbolic strides will be
      * peeled, and some constant stride dimensions may also be peeled if

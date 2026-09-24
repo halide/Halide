@@ -364,9 +364,15 @@ protected:
            ScalarStores,
            VectorStores,
            Scatters,
-           BytesStored };
+           BytesStored,
+           Realizations,
+           Productions,
+           PointsRequiredAtRealization,
+           PointsRequiredAtProduction,
+           PointsRequiredInwards,
+           ProductionsIfInwards };
 
-    static constexpr int num_counters = BytesStored + 1;
+    static constexpr int num_counters = ProductionsIfInwards + 1;
 
     struct Counters {
 
@@ -664,7 +670,35 @@ protected:
     }
 
     Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::declare_box_required_at_root)) {
+        if (op->is_intrinsic(Call::declare_box_required_at_realization)) {
+            // Emitted at the Realize node for the func. The Realize sits
+            // inside the parent producer and contains this func's
+            // ProducerConsumer, so the right entry id is parented to the
+            // current producer.
+            Counters &c = counters[names.id_for_entry(handle_name(op->args[0]), producer_id)];
+            c.count(PointsRequiredAtRealization, box_total(op));
+            c.count(Realizations);
+            return make_zero(op->type);
+        } else if (op->is_intrinsic(Call::declare_box_required_at_production)) {
+            // Emitted just inside the ProducerConsumer node. The same
+            // .s0.var.min/.max vars used at the Realize site are also bound
+            // here by bounds inference, but to the per-production values,
+            // so this captures e.g. sliding-window over-computation that
+            // the realize-box counter misses.
+            Counters &c = counters[names.id_for_entry(handle_name(op->args[0]), producer_id)];
+            c.count(PointsRequiredAtProduction, box_total(op));
+            return make_zero(op->type);
+        } else if (op->is_intrinsic(Call::declare_box_required_inwards)) {
+            // Emitted one compute_at level further in than the current
+            // compute_at, to evaluate whether computing further in would be
+            // profitable. Billed to the canonical entry, like the root box.
+            auto it = entries_by_name.find(handle_name(op->args[0]));
+            if (it != entries_by_name.end()) {
+                counters[it->second.front()].count(PointsRequiredInwards, box_total(op));
+                counters[it->second.front()].count(ProductionsIfInwards);
+            }
+            return make_zero(op->type);
+        } else if (op->is_intrinsic(Call::declare_box_required_at_root)) {
             // Bill the pipeline-wide root box to this Func's canonical
             // entry only. It's a Func-level fact, not a per-entry one, so
             // summing it across entries would over-count. The reporter
@@ -784,6 +818,7 @@ protected:
             // One entry per producer node, parented to the surrounding
             // producer. See file-level comment for why this matters.
             int id = names.id_for_entry(op->name, producer_id);
+            counters[id].count(Productions);
             ScopedValue<int> old(producer_id, id);
             return IRMutator::visit(op);
         } else {

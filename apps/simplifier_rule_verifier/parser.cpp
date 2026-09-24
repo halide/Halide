@@ -402,16 +402,28 @@ public:
             return -parse_primary();
         }
 
+        if (peek() == '~') {
+            expect("~");
+            return ~parse_primary();
+        }
+
         // Constants
         if ((peek() >= '0' && peek() <= '9') || peek() == '-') {
             const char *tmp = cursor;
-            Expr e = make_const(Int(32), consume_int());
+            int64_t n = consume_int();
             if (peek() == '.') {
                 // Rewind and parse as float instead
                 cursor = tmp;
-                e = consume_float();
+                return consume_float();
             }
-            return e;
+            // Integers of a type other than Int(32) are printed with a suffix
+            // giving the type, e.g. 255_u8 or -3_i16.
+            if (consume("_u")) {
+                return make_const(UInt((int)consume_int()), (uint64_t)n);
+            } else if (consume("_i")) {
+                return make_const(Int((int)consume_int()), n);
+            }
+            return make_const(Int(32), n);
         }
         if (consume("true")) {
             return const_true();

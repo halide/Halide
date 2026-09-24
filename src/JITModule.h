@@ -124,6 +124,64 @@ struct JITHandlers {
      * stream to use. The cuda context and stream are both modelled
      * as a void *, to avoid a dependence on the cuda headers. */
     int32_t (*custom_cuda_get_stream)(JITUserContext *user_context, void *cuda_context, void **stream_ptr){nullptr};
+
+    /** A custom method for the Halide runtime to acquire an OpenCL
+     * context and command queue. Both are modelled as a void *, to
+     * avoid a dependence on the OpenCL headers. If the create argument
+     * is set to true, a context should be created if one does not
+     * already exist. */
+    int32_t (*custom_opencl_acquire_context)(JITUserContext *user_context, void **cl_context_ptr, void **cl_command_queue_ptr, bool create){nullptr};
+
+    /** The Halide runtime calls this when it is done with an OpenCL
+     * context. The default implementation does nothing. */
+    int32_t (*custom_opencl_release_context)(JITUserContext *user_context){nullptr};
+
+    /** A custom method for the Halide runtime to acquire a Metal device
+     * and command queue. Both are modelled as a void *, to avoid a
+     * dependence on the Metal headers. If the create argument is set to
+     * true, a context should be created if one does not already exist. */
+    int32_t (*custom_metal_acquire_context)(JITUserContext *user_context, void **metal_device_ptr, void **metal_command_queue_ptr, bool create){nullptr};
+
+    /** The Halide runtime calls this when it is done with a Metal
+     * context. The default implementation does nothing. */
+    int32_t (*custom_metal_release_context)(JITUserContext *user_context){nullptr};
+
+    /** A custom method for the Halide runtime to acquire a Direct3D 12
+     * device and command queue. Both are modelled as a void *, to
+     * avoid a dependence on the Direct3D headers. If the create
+     * argument is set to true, a context should be created if one does
+     * not already exist. */
+    int32_t (*custom_d3d12compute_acquire_context)(JITUserContext *user_context, void **d3d12_device_ptr, void **d3d12_command_queue_ptr, bool create){nullptr};
+
+    /** The Halide runtime calls this when it is done with a Direct3D 12
+     * context. The default implementation does nothing. */
+    int32_t (*custom_d3d12compute_release_context)(JITUserContext *user_context){nullptr};
+
+    /** A custom method for the Halide runtime to acquire a Vulkan
+     * context. The allocator and the various Vulkan handles are all
+     * modelled as a void *, to avoid a dependence on the Vulkan
+     * headers. If the create argument is set to true, a context should
+     * be created if one does not already exist. */
+    int32_t (*custom_vulkan_acquire_context)(JITUserContext *user_context, void **allocator_ptr, void **instance_ptr, void **device_ptr, void **physical_device_ptr, void **queue_ptr, uint32_t *queue_family_index_ptr, void **messenger_ptr, bool create){nullptr};
+
+    /** The Halide runtime calls this when it is done with a Vulkan
+     * context. The dispatchable Vulkan handles are modelled as a void *,
+     * to avoid a dependence on the Vulkan headers. The debug messenger is
+     * a non-dispatchable handle, which is a 64-bit integer rather than a
+     * pointer on 32-bit targets, so it is modelled as a uint64_t. The
+     * default implementation does nothing. */
+    int32_t (*custom_vulkan_release_context)(JITUserContext *user_context, void *instance, void *device, void *queue, uint64_t messenger){nullptr};
+
+    /** A custom method for the Halide runtime to acquire a WebGPU
+     * context. The instance, adapter, device, and staging buffer are
+     * all modelled as a void *, to avoid a dependence on the WebGPU
+     * headers. If the create argument is set to true, a context should
+     * be created if one does not already exist. */
+    int32_t (*custom_webgpu_acquire_context)(JITUserContext *user_context, void **instance_ptr, void **adapter_ptr, void **device_ptr, void **staging_buffer_ptr, bool create){nullptr};
+
+    /** The Halide runtime calls this when it is done with a WebGPU
+     * context. The default implementation does nothing. */
+    int32_t (*custom_webgpu_release_context)(JITUserContext *user_context){nullptr};
 };
 
 namespace Internal {

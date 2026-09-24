@@ -575,6 +575,22 @@ void check_algebra() {
     // The condition is enough to imply that y == 21, x == 339
     check(require(complex_cond, select(x % 2 == 0, 1237, y)),
           require(complex_cond, 21));
+
+    // Regrouping a shared addend
+    check(min(min(x, y + z), (w + z) + v), min(min(v + w, y) + z, x));
+    check(max(max(x, y + z), (w + z) + v), max(max(v + w, y) + z, x));
+
+    // A shared term that appears with both signs
+    check(min(x - y, x + z), x - max(0 - z, y));
+    check(max(x - y, x + z), x - min(0 - z, y));
+
+    // Clamped differences
+    check(min(min(x, y) - x, 0), min(y - x, 0));
+    check(max(max(x, y) - x, 0), max(y - x, 0));
+    check(min(min(x, 5) - min(y, 3), 2), min(x - min(y, 3), 2));
+    check(max(max(x, 3) - max(y, 5), 2), max(x - max(y, 5), 2));
+    check(max(min(x + (-3), y), x), x);
+    check(max(max((y + (-2)) / 4, x) * 4, y + 1), max(x * 4, y + 1));
 }
 
 void check_vectors() {
@@ -2037,6 +2053,21 @@ void check_boolean() {
         internal_assert(!can_prove(!likely(t)));
         internal_assert(!can_prove(!likely(x == 2)));
     }
+
+    // Comparing divisions with a rounded offset on both sides
+    check((x + 5) / 4 < (x + 2) / 4, f);
+    check(max((x + 5) / 4, y) < max((x + 2) / 4, y), f);
+
+    // Two equalities on the same variable, in different halves of a conjunction
+    check(((x == 1) && b1) && ((x == 2) && b2), f);
+
+    // Absorption through a negated conjunction
+    check(!(b1 && b2) || b2, t);
+    check((x < 5) || (x != 3), t);
+
+    // De Morgan collects negations into the smaller form
+    check(!b1 || !b2, !(b1 && b2));
+    check(!b1 && !b2, !(b1 || b2));
 }
 
 void check_math() {
@@ -2279,8 +2310,29 @@ void check_lets() {
     check(Let::make("x", 0, 0), 0);
 
     // Check that lets inside an evaluate node get lifted
-    check(Evaluate::make(Let::make("x", Call::make(Int(32), "dummy", {3, x, 4}, Call::Extern), Let::make("y", 10, x + y + 2))),
-          LetStmt::make("x", Call::make(Int(32), "dummy", {3, x, 4}, Call::Extern), Evaluate::make(x + 12)));
+    check(Evaluate::make(Let::make("x", Call::make(Int(32), "dummy", {3, b, 4}, Call::Extern), Let::make("y", 10, x * x + y))),
+          LetStmt::make("x", Call::make(Int(32), "dummy", {3, b, 4}, Call::Extern), Evaluate::make(x * x + 10)));
+
+    // A let with a single use is substituted in, even when the value isn't of
+    // a shape that gets pushed inwards piecewise.
+    check(Let::make("a", min(x, y), a + 1), min(x, y) + 1);
+    // Values that get peeled apart are bound under a new name, and that name
+    // gets substituted too when it's only used once.
+    check(Let::make("a", min(x, y) * b, a + 1), min(x, y) * b + 1);
+
+    // Substituting can expose simplifications that were hidden behind the name
+    check(Let::make("a", min(x, y), (min(x, y) + 5) - a), 5);
+
+    // A let with more than one use is kept
+    check(Let::make("a", min(x, y), a * a), Let::make("a", min(x, y), a * a));
+
+    {
+        // Single-use LetStmts are not substituted in. Doing so would move the
+        // value's evaluation later, past whatever happens in between.
+        Expr t = Variable::make(Int(32), "t");
+        Stmt sink = Evaluate::make(Call::make(Int(32), "dummy", {t + 1}, Call::Extern));
+        check(LetStmt::make("t", min(x, y), sink), LetStmt::make("t", min(x, y), sink));
+    }
 }
 
 void check_inv(Expr before) {

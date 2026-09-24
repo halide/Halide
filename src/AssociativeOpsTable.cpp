@@ -375,7 +375,8 @@ const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
 Expr get_associative_identity(Type type, IRNodeType root) {
     std::scoped_lock lock_guard(ops_table_lock());
 
-    const vector<AssociativePattern> &table = get_ops_table_helper({type}, root, 1);
+    const vector<Type> types{type};
+    const vector<AssociativePattern> &table = get_ops_table_helper(types, root, 1);
     if (table.empty()) {
         return Expr();
     }

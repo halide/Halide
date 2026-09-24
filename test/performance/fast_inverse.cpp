@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
     }
 
     if (target.arch == Target::ARM &&
-        target.os == Target::OSX) {
+        target.os == Target::MacOS) {
         // vrecpe, vrecps, fmul have inverse throughputs of 1, 0.25, 0.25
         // respectively, while fdiv has inverse throughput of 1.
         printf("[SKIP] Apple M1 chips have division performance roughly on par with the reciprocal instruction\n");

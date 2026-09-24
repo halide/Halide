@@ -491,6 +491,9 @@ public:
     }
 
     template<typename T, typename Body>
+    HALIDE_NEVER_INLINE Body simplify_let_inner(const T *op, ExprInfo *info, std::vector<ScopedBinding<VarInfo>> &substituted);
+
+    template<typename T, typename Body>
     Body simplify_let(const T *op, ExprInfo *info);
 
     Expr visit(const IntImm *op, ExprInfo *info);

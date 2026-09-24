@@ -319,8 +319,8 @@ void ReverseAccumulationVisitor::propagate_adjoints(
             vector<Expr> zeros;
             Tuple rhs_tuple = func.values();
             zeros.reserve(rhs_tuple.size());
-            for (int i = 0; i < (int)rhs_tuple.size(); i++) {
-                zeros.push_back(make_zero(rhs_tuple[i].type()));
+            for (const Expr &e : rhs_tuple) {
+                zeros.push_back(make_zero(e.type()));
             }
             self_reference_adjoint = Tuple(zeros);
             self_reference_args.clear();
@@ -393,9 +393,8 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                     // If the pure definition depends on any functions or buffers,
                     // there is no hope since we will overwrite something
                     Tuple rhs_tuple = func.values();
-                    for (int tuple_id = 0; tuple_id < (int)rhs_tuple.size();
-                         tuple_id++) {
-                        if (is_calling_function(rhs_tuple[tuple_id], let_var_mapping)) {
+                    for (const Expr &e : rhs_tuple) {
+                        if (is_calling_function(e, let_var_mapping)) {
                             error();
                         }
                     }
@@ -422,9 +421,8 @@ void ReverseAccumulationVisitor::propagate_adjoints(
 
             // Checking 2. here:
             bool all_zero_or_one_self_adjoint = true;
-            for (int i = 0; i < (int)self_reference_adjoint.size(); i++) {
-                if (!is_const(self_reference_adjoint[i], 0) &&
-                    !is_const(self_reference_adjoint[i], 1)) {
+            for (const Expr &e : self_reference_adjoint) {
+                if (!is_const(e, 0) && !is_const(e, 1)) {
                     all_zero_or_one_self_adjoint = false;
                     break;
                 }
@@ -449,9 +447,8 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                     }
                 }
                 if (!r.defined()) {
-                    for (int tuple_id = 0; tuple_id < (int)update_tuple.size();
-                         tuple_id++) {
-                        r = extract_rdom(update_tuple[tuple_id]);
+                    for (const Expr &e : update_tuple) {
+                        r = extract_rdom(e);
                         if (r.defined()) {
                             break;
                         }

@@ -108,7 +108,7 @@ function(_Halide_install_pkgdeps)
         )
     endforeach ()
 
-    _Halide_install_code("configure_file(\"${depFile}.in\" \"${depFile}\" COPYONLY)")
+    _Halide_install_code("file(COPY_FILE \"${depFile}.in\" \"${depFile}\" ONLY_IF_DIFFERENT)")
 
     install(FILES "${depFile}" DESTINATION "${ARG_DESTINATION}" COMPONENT "${ARG_COMPONENT}")
 endfunction()

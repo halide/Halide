@@ -973,6 +973,22 @@ class SolveForInterval : public IRVisitor {
         equiv.accept(this);
     }
 
+    void visit(const Min *op) override {
+        // min of bools is a logical And. These arise from
+        // and_condition_over_domain and the simplifier. Treat it as such so
+        // that Not distributes correctly (otherwise !min(a, b) is mis-solved).
+        internal_assert(op->type.is_bool());
+        Expr equiv = op->a && op->b;
+        equiv.accept(this);
+    }
+
+    void visit(const Max *op) override {
+        // max of bools is a logical Or.
+        internal_assert(op->type.is_bool());
+        Expr equiv = op->a || op->b;
+        equiv.accept(this);
+    }
+
     void visit(const Not *op) override {
         target = !target;
         op->a.accept(this);

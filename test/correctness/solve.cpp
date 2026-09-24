@@ -420,6 +420,20 @@ void test_interval_solutions() {
 
     check_inner_interval(x / 5 < 17, Interval::neg_inf(), 84);
     check_outer_interval(x / 5 < 17, Interval::neg_inf(), 84);
+
+    // min/max of booleans are logical And/Or (and_condition_over_domain and the
+    // simplifier produce these). Solving must treat them as such so that Not
+    // distributes (De Morgan). Regression: !min(...) was solved like !a && !b
+    // instead of !a || !b.
+    // min(x<0, x<2) == (x<0), so !min(...) == (x>=0):
+    check_inner_interval(!min(x < 0, x < 2), 0, Interval::pos_inf());
+    check_outer_interval(!min(x < 0, x < 2), 0, Interval::pos_inf());
+    // max(x<0, x<2) == (x<2), so !max(...) == (x>=2):
+    check_inner_interval(!max(x < 0, x < 2), 2, Interval::pos_inf());
+    check_outer_interval(!max(x < 0, x < 2), 2, Interval::pos_inf());
+    // Non-negated forms: min(x<5,x<9) == (x<5); max(x<5,x<9) == (x<9):
+    check_outer_interval(min(x < 5, x < 9), Interval::neg_inf(), 4);
+    check_outer_interval(max(x < 5, x < 9), Interval::neg_inf(), 8);
 }
 
 void test_and_condition_over_domain() {

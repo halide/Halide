@@ -160,9 +160,9 @@ void add_tasks(const Target &target, std::vector<Task> &tasks) {
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
-    // LLVM 20 hangs and LLVM 21 asserts (getFixedValue on scalable TypeSize)
-    // in the AArch64 backend for SVE. Fixed in LLVM 22 by:
-    // https://github.com/llvm/llvm-project/commit/d1500d12be60 (PR #169764)
+    // The reduce-padding recursion in CodeGen_ARM::codegen_across_vector_reduce
+    // can fail to converge for some SVE2 vector-reduce shapes under LLVM < 22,
+    // hanging the compiler indefinitely rather than failing outright.
     if (Internal::get_llvm_version() < 220 &&
         target.has_feature(Target::SVE2)) {
         printf("[SKIP] LLVM %d has known SVE backend bugs for this test.\n",
