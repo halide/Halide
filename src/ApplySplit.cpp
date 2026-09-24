@@ -107,8 +107,7 @@ vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
             base = Min::make(base, old_max + (1 - split.factor));
             // Make a mask which will be a loop invariant if inner gets
             // vectorized, and apply it if we're in the tail.
-            Expr unwanted_elems = (-old_extent) % split.factor;
-            Expr mask = inner >= unwanted_elems;
+            Expr mask = inner >= old_base - base;
             mask = select(base == old_base, likely(const_true()), mask);
             result.emplace_back(mask, ApplySplitResult::BlendProvides);
         } else if (tail == TailStrategy::RoundUpAndBlend) {

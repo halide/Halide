@@ -108,6 +108,7 @@ tests(
     output_func_input_buffer_name_collision.cpp
     overflow_during_constant_folding.cpp
     pointer_arithmetic.cpp
+    predicate_loads_after_shift_inwards_outer.cpp
     predicate_loads_used_in_inner_splits.cpp
     race_condition.cpp
     rdom_undefined.cpp

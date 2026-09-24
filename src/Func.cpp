@@ -1484,8 +1484,10 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
     bool predicate_loads_ok = !exact;
     if (predicate_loads_ok && tail == TailStrategy::PredicateLoads) {
         // If it's the outermost split in this dimension, PredicateLoads
-        // is OK. Otherwise, we can't prove it's safe.
+        // is OK unless a prior split clamps this dimension back into
+        // the realized region. Otherwise, we can't prove it's safe.
         std::set<string> inner_vars;
+        std::set<string> clamped_outer_vars;
         for (const Split &s : definition.schedule().splits()) {
             switch (s.split_type) {
             case Split::SplitVar:
@@ -1493,24 +1495,45 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
                 if (inner_vars.count(s.old_var)) {
                     inner_vars.insert(s.outer);
                 }
+                if (s.tail == TailStrategy::ShiftInwards ||
+                    s.tail == TailStrategy::ShiftInwardsAndBlend) {
+                    clamped_outer_vars.insert(s.outer);
+                }
+                if (clamped_outer_vars.count(s.old_var)) {
+                    clamped_outer_vars.insert(s.outer);
+                    clamped_outer_vars.insert(s.inner);
+                }
                 break;
             case Split::RenameVar:
                 if (inner_vars.count(s.old_var)) {
                     inner_vars.insert(s.outer);
+                }
+                if (clamped_outer_vars.count(s.old_var)) {
+                    clamped_outer_vars.insert(s.outer);
                 }
                 break;
             case Split::FuseVars:
                 if (inner_vars.count(s.inner) || inner_vars.count(s.outer)) {
                     inner_vars.insert(s.old_var);
                 }
+                if (clamped_outer_vars.count(s.outer)) {
+                    clamped_outer_vars.insert(s.old_var);
+                }
                 break;
             }
         }
-        predicate_loads_ok = !inner_vars.count(old_name);
-        user_assert(predicate_loads_ok || tail != TailStrategy::PredicateLoads)
+        const bool stems_from_inner = inner_vars.count(old_name);
+        const bool reaches_clamped_overhang = clamped_outer_vars.count(old_name);
+        predicate_loads_ok = !stems_from_inner && !reaches_clamped_overhang;
+        user_assert(!stems_from_inner || tail != TailStrategy::PredicateLoads)
             << "Can't use TailStrategy::PredicateLoads for splitting " << old_name
             << " in the definition of " << name() << ". "
             << "PredicateLoads may not be used to split a Var stemming from the inner Var of a prior split.";
+        user_assert(!reaches_clamped_overhang || tail != TailStrategy::PredicateLoads)
+            << "Can't use TailStrategy::PredicateLoads for splitting " << old_name
+            << " in the definition of " << name() << ". "
+            << "The stores of iterations past the loop end are clamped back into the realized region "
+            << "by an earlier ShiftInwards or ShiftInwardsAndBlend split while their loads are predicated off.";
     }
 
     if (tail == TailStrategy::Auto) {
