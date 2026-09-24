@@ -22,18 +22,28 @@ void factor_type() {
     f.split_storage(x, xo, xi, 4.0f);
 }
 
-void fold_axis() {
-    Func f("f"), g("g");
+void fold_outer_axis() {
+    Func f("f");
     Var x("x"), y("y"), xi("xi");
 
     f(x, y) = x + y;
-    g(x, y) = f(x, y) + f(x + 1, y);
-    f.compute_at(g, y)
-        .store_root()
-        .split_storage(x, x, xi, 4)
-        .fold_storage(x, 4);
+    f.split_storage(x, x, xi, 4).fold_storage(x, 4);
+}
 
-    g.realize({16, 16});
+void fold_inner_axis() {
+    Func f("f");
+    Var x("x"), y("y"), xo("xo"), xi("xi");
+
+    f(x, y) = x + y;
+    f.split_storage(x, xo, xi, 4).fold_storage(xi, 4);
+}
+
+void split_folded_axis() {
+    Func f("f");
+    Var x("x"), y("y"), xo("xo"), xi("xi");
+
+    f(x, y) = x + y;
+    f.fold_storage(x, 4).split_storage(x, xo, xi, 4);
 }
 
 void output() {
@@ -111,10 +121,12 @@ int main(int argc, char **argv) {
     failures += !expect_user_error("extern_consumer", "consumed by the extern stage", extern_consumer);
     failures += !expect_user_error("extern_producer", "has an extern definition", extern_producer);
     failures += !expect_user_error("factor_type", "not representable as int32", factor_type);
-    failures += !expect_user_error("fold_axis", "split_storage axis", fold_axis);
+    failures += !expect_user_error("fold_outer_axis", "because it is a split_storage axis", fold_outer_axis);
+    failures += !expect_user_error("fold_inner_axis", "because it is a split_storage axis", fold_inner_axis);
     failures += !nonpositive_factor();
     failures += !expect_user_error("output", "only supported for internal allocations", output);
     failures += !expect_user_error("pre_split_setting", "Apply these to the split axes", pre_split_setting);
+    failures += !expect_user_error("split_folded_axis", "Apply these to the split axes", split_folded_axis);
 
     if (failures != 0) {
         printf("%d scenario(s) failed to produce the expected error\n", failures);

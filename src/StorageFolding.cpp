@@ -997,10 +997,9 @@ class StorageFolding : public IRMutator {
                 continue;
             }
             auto arg_it = std::find(args.begin(), args.end(), sd.var);
-            user_assert(arg_it != args.end() &&
-                        !storage_arg_was_split(func, *arg_it))
-                << "fold_storage of Func " << op->name << " along " << sd.var
-                << " is not supported: it is a split_storage axis.\n";
+            internal_assert(arg_it != args.end() &&
+                            !storage_arg_was_split(func, *arg_it))
+                << "fold_storage of Func " << op->name << " along split_storage axis " << sd.var << "\n";
             int d = (int)(arg_it - args.begin());
             bool folded = std::any_of(folder.dims_folded.begin(), folder.dims_folded.end(),
                                       [&](const AttemptStorageFoldingOfFunction::Fold &f) {

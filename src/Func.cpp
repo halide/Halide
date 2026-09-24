@@ -3511,6 +3511,14 @@ Func &Func::bound_storage(const Var &dim, const Expr &bound) {
 Func &Func::fold_storage(const Var &dim, const Expr &factor, bool fold_forward) {
     invalidate_cache();
 
+    for (const StorageSplit &split : func.schedule().storage_splits()) {
+        user_assert(!var_name_match(split.outer, dim.name()) &&
+                    !var_name_match(split.inner, dim.name()))
+            << "In schedule for " << name()
+            << ", can't fold_storage " << dim.name()
+            << " because it is a split_storage axis.\n";
+    }
+
     vector<StorageDim> &dims = func.schedule().storage_dims();
     for (auto &d : dims) {
         if (var_name_match(d.var, dim.name())) {
