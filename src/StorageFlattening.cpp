@@ -187,10 +187,7 @@ public:
         const bool splits = func_has_storage_splits(f);
         const int num_dims = (int)args.size();
         const int num_args = (int)f.args().size();
-        // Prefetches of a ring-buffered Func have no ring coordinate, and
-        // address ring slot zero.
-        const bool ring_coord = ring && num_dims == num_args + 1;
-        internal_assert(num_dims == num_args + (ring_coord ? 1 : 0));
+        internal_assert(num_dims == num_args + (ring ? 1 : 0));
 
         // Peel constant offsets off the args so that multiple stencil taps can
         // share a base address. Only valid where the arg feeds a linear
@@ -215,7 +212,7 @@ public:
         // separately as name.arg_min.<a>.
         vector<Expr> per_arg_coord(num_dims);
         for (int a = 0; a < num_dims; a++) {
-            if (ring_coord && a == num_args) {
+            if (ring && a == num_args) {
                 per_arg_coord[a] = args[a];
             } else {
                 Expr arg_min = splits ? Variable::make(Int(32), name + ".arg_min." + std::to_string(a)) : make_shape_var(name, "min", a, buf, param);
@@ -225,7 +222,7 @@ public:
 
         // A split of a coordinate c by s gives inner = c % s, outer = c / s.
         vector<StorageAxis> layout = storage_layout(
-            f, ring_coord, per_arg_coord,
+            f, ring, per_arg_coord,
             [](const Expr &c, const Expr &s) { return std::pair<Expr, Expr>{c / s, c % s}; });
 
         Expr idx = zero;
@@ -551,111 +548,79 @@ public:
         }
     }
 
-    // Prefetch the bounding box, in storage coordinates, of the region of a
-    // Func with storage splits. A split of a range [lo, hi] of relative
-    // coordinates by s covers outer blocks [lo / s, hi / s] and, conservatively,
-    // all of the inner axis [0, s - 1]. The ring axis of a ring-buffered Func
-    // is outermost and is left out, so this addresses ring slot zero.
-    Stmt visit_split_prefetch(const Prefetch *op, const Function &f, const Expr &condition) {
-        const int num_args = (int)f.args().size();
-        internal_assert((int)op->bounds.size() == num_args);
-
-        vector<Expr> lo(num_args), hi(num_args);
-        for (int a = 0; a < num_args; a++) {
-            Expr arg_min = Variable::make(Int(32), op->name + ".arg_min." + std::to_string(a));
-            lo[a] = mutate(op->bounds[a].min) - arg_min;
-            hi[a] = lo[a] + mutate(op->bounds[a].extent) - 1;
-        }
-        vector<StorageAxis> lo_layout = storage_layout(
-            f, false, lo,
-            [](const Expr &c, const Expr &s) { return std::pair<Expr, Expr>{c / s, 0}; });
-        vector<StorageAxis> hi_layout = storage_layout(
-            f, false, hi,
-            [](const Expr &c, const Expr &s) { return std::pair<Expr, Expr>{c / s, s - 1}; });
-
-        const bool wide = target.has_large_buffers();
-        Expr base_offset = wide ? make_zero(Int(64)) : make_zero(Int(32));
-        vector<Expr> args = {Variable::make(Handle(), op->name), Expr()};
-        for (size_t p = 0; p < lo_layout.size(); p++) {
-            Expr stride = Variable::make(Int(32), op->name + ".stride." + std::to_string(p));
-            Expr coord = lo_layout[p].value;
-            if (wide) {
-                base_offset += cast<int64_t>(coord) * cast<int64_t>(stride);
-            } else {
-                base_offset += coord * stride;
-            }
-            args.push_back(hi_layout[p].value - coord + 1);
-            args.push_back(stride);
-        }
-        args[1] = base_offset;
-
-        Stmt prefetch_call = Evaluate::make(Call::make(op->types[0], Call::prefetch, args, Call::Intrinsic));
-        if (!is_const_one(condition)) {
-            prefetch_call = IfThenElse::make(condition, prefetch_call);
-        }
-        Stmt body = mutate(op->body);
-        return Block::make(prefetch_call, body);
-    }
-
     Stmt visit(const Prefetch *op) override {
         internal_assert(op->types.size() == 1)
             << "Prefetch from multi-dimensional halide tuple should have been split\n";
 
         Expr condition = mutate(op->condition);
 
-        {
-            auto iter = env.find(op->name);
-            if (iter != env.end() &&
-                func_has_storage_splits(iter->second.first) &&
-                realizations.contains(op->name)) {
-                return visit_split_prefetch(op, iter->second.first, condition);
-            }
-        }
-
-        vector<Expr> prefetch_min(op->bounds.size());
-        vector<Expr> prefetch_extent(op->bounds.size());
-        vector<Expr> prefetch_stride(op->bounds.size());
-        for (size_t i = 0; i < op->bounds.size(); i++) {
-            prefetch_min[i] = mutate(op->bounds[i].min);
-            prefetch_extent[i] = mutate(op->bounds[i].extent);
-            prefetch_stride[i] = Variable::make(Int(32), op->name + ".stride." + std::to_string(i), op->prefetch.param);
-        }
-
-        Expr base_offset = mutate(flatten_args(op->name, prefetch_min, Buffer<>(), op->prefetch.param));
-        Expr base_address = Variable::make(Handle(), op->name);
-        vector<Expr> args = {base_address, base_offset};
-
         auto iter = env.find(op->name);
-        if (iter != env.end()) {
-            // Order the <min, extent> args based on the storage dims
-            // (i.e. innermost dimension should be first in args)
-            vector<int> storage_permutation;
-            {
-                Function f = iter->second.first;
-                const vector<StorageDim> &storage_dims = f.schedule().storage_dims();
-                const vector<string> &args = f.args();
-                for (size_t i = 0; i < storage_dims.size(); i++) {
-                    for (size_t j = 0; j < args.size(); j++) {
-                        if (args[j] == storage_dims[i].var) {
-                            storage_permutation.push_back((int)j);
-                        }
-                    }
-                    internal_assert(storage_permutation.size() == i + 1);
-                }
-            }
-            internal_assert(storage_permutation.size() == op->bounds.size());
+        const Function *f = iter != env.end() ? &iter->second.first : nullptr;
+        const bool splits = f && func_has_storage_splits(*f);
+        user_assert(!splits || realizations.contains(op->name))
+            << "split_storage is only supported for internal allocations, but "
+            << op->name << " is a pipeline output.\n";
 
-            for (size_t i = 0; i < op->bounds.size(); i++) {
-                internal_assert(storage_permutation[i] < (int)op->bounds.size());
-                args.push_back(prefetch_extent[storage_permutation[i]]);
-                args.push_back(prefetch_stride[storage_permutation[i]]);
+        // The range [lo, hi] of each arg, relative to its min.
+        const int num_args = (int)op->bounds.size();
+        vector<Expr> lo(num_args), hi(num_args);
+        for (int a = 0; a < num_args; a++) {
+            Expr arg_min = splits ?
+                               Variable::make(Int(32), op->name + ".arg_min." + std::to_string(a)) :
+                               make_shape_var(op->name, "min", a, Buffer<>(), op->prefetch.param);
+            lo[a] = mutate(op->bounds[a].min) - arg_min;
+            hi[a] = lo[a] + mutate(op->bounds[a].extent) - 1;
+        }
+
+        // The range of each buffer dimension, innermost first. A split of
+        // [lo, hi] by s covers outer blocks [lo / s, hi / s] and,
+        // conservatively, all of the inner axis [0, s - 1]. The slot of a
+        // ring buffer that will be read isn't known here, so the prefetch
+        // conservatively covers all of them.
+        vector<Expr> dim_lo, dim_hi;
+        vector<int> dim;
+        if (f) {
+            const Expr &ring_extent = f->schedule().ring_buffer();
+            const bool ring = ring_extent.defined();
+            if (ring) {
+                lo.emplace_back(0);
+                hi.push_back(ring_extent - 1);
+            }
+            vector<StorageAxis> lo_layout = storage_layout(
+                *f, ring, lo,
+                [](const Expr &c, const Expr &s) { return std::pair<Expr, Expr>{c / s, 0}; });
+            vector<StorageAxis> hi_layout = storage_layout(
+                *f, ring, hi,
+                [](const Expr &c, const Expr &s) { return std::pair<Expr, Expr>{c / s, s - 1}; });
+            for (size_t p = 0; p < lo_layout.size(); p++) {
+                dim_lo.push_back(lo_layout[p].value);
+                dim_hi.push_back(hi_layout[p].value);
+                dim.push_back(splits ? (int)p : lo_layout[p].arg);
             }
         } else {
-            for (size_t i = 0; i < op->bounds.size(); i++) {
-                args.push_back(prefetch_extent[i]);
-                args.push_back(prefetch_stride[i]);
+            dim_lo = lo;
+            dim_hi = hi;
+            for (int a = 0; a < num_args; a++) {
+                dim.push_back(a);
             }
         }
+
+        // Prefetch: {base, offset, extent0, stride0, extent1, stride1, ...},
+        // where offset is the box's corner.
+        const bool wide = target.has_large_buffers();
+        Expr base_offset = wide ? make_zero(Int(64)) : make_zero(Int(32));
+        vector<Expr> args = {Variable::make(Handle(), op->name), Expr()};
+        for (size_t p = 0; p < dim.size(); p++) {
+            Expr stride = make_shape_var(op->name, "stride", dim[p], Buffer<>(), op->prefetch.param);
+            if (wide) {
+                base_offset += cast<int64_t>(dim_lo[p]) * cast<int64_t>(stride);
+            } else {
+                base_offset += dim_lo[p] * stride;
+            }
+            args.push_back(dim_hi[p] - dim_lo[p] + 1);
+            args.push_back(stride);
+        }
+        args[1] = base_offset;
 
         // TODO: Consider generating a prefetch call for each tuple element.
         Stmt prefetch_call = Evaluate::make(Call::make(op->types[0], Call::prefetch, args, Call::Intrinsic));

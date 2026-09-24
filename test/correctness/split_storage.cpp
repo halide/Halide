@@ -178,16 +178,25 @@ int main(int argc, char **argv) {
         }
     }
 
-    // Prefetching a split Func fetches the bounding box of the region in
-    // storage coordinates. g's storage is [xo][y][xi] with xi of extent 8, so
-    // (for uint8, with 64-byte cache lines and a 128-byte xo stride) a
-    // prefetch of row r touches one cache line at r * 8 + xo * 128 for each xo.
-    {
+    // A prefetch fetches the bounding box of the region in storage
+    // coordinates. On x86 this becomes a loop over all but the innermost
+    // storage dimension, prefetching one 64-byte cache line of that dimension
+    // per iteration. Prefetching row r of a 32x16 uint8 Func touches:
+    //   split: storage [xo][y][xi] with xi of extent 8 and a 128-byte xo
+    //          stride, so r * 8 + xo * 128 for each xo.
+    //   transposed: storage [x][y] with a 16-byte x stride, so r + x * 16 for
+    //          each x.
+    for (bool split : {true, false}) {
         Func pf_g("pf_g"), pf_f("pf_f");
         Var xo("xo"), xi("xi");
         pf_g(x, y) = cast<uint8_t>(x + 3 * y);
         pf_f(x, y) = pf_g(x, y);
-        pf_g.compute_root().split_storage(x, xo, xi, 8).reorder_storage(xi, y, xo);
+        pf_g.compute_root();
+        if (split) {
+            pf_g.split_storage(x, xo, xi, 8).reorder_storage(xi, y, xo);
+        } else {
+            pf_g.reorder_storage(y, x);
+        }
         pf_f.prefetch(pf_g, y, y, 2);
 
         Target t = get_jit_target_from_environment();
@@ -212,12 +221,18 @@ int main(int argc, char **argv) {
         if (t.arch == Target::X86) {
             std::set<int> expected;
             for (int r = 2; r < h; r++) {
-                for (int b = 0; b < w / 8; b++) {
-                    expected.insert(r * 8 + b * 128);
+                if (split) {
+                    for (int b = 0; b < w / 8; b++) {
+                        expected.insert(r * 8 + b * 128);
+                    }
+                } else {
+                    for (int xx = 0; xx < w; xx++) {
+                        expected.insert(r + xx * h);
+                    }
                 }
             }
             if (prefetch_offsets != expected) {
-                printf("Unexpected prefetch offsets:");
+                printf("Unexpected prefetch offsets (split = %d):", split);
                 for (int o : prefetch_offsets) {
                     printf(" %d", o);
                 }
@@ -227,14 +242,15 @@ int main(int argc, char **argv) {
         }
     }
 
-    // Prefetching a ring-buffered Func, with and without split_storage.
+    // Prefetching a ring-buffered Func, with and without split_storage, covers
+    // every ring slot.
     for (bool split : {false, true}) {
         Func producer("pf_ring_producer"), consumer("pf_ring_consumer");
         Var xo("xo"), yo("yo"), xi("xi"), yi("yi");
         Var so("so"), si("si");
 
-        producer(x, y) = x + y;
-        consumer(x, y) = producer(x, y) + producer(x + 1, y);
+        producer(x, y) = cast<uint8_t>(x + y);
+        consumer(x, y) = cast<int>(producer(x, y)) + producer(x + 1, y);
         consumer.compute_root().tile(x, y, xo, yo, xi, yi, 8, 8);
         producer.compute_at(consumer, xo)
             .hoist_storage(consumer, yo)
@@ -244,13 +260,41 @@ int main(int argc, char **argv) {
         }
         consumer.prefetch(producer, yi, yi, 2);
 
-        Buffer<int> out = consumer.realize({16, 16});
+        Target t = get_jit_target_from_environment();
+        Pipeline p(consumer);
+        if (t.arch == Target::X86) {
+            p.add_custom_lowering_pass(new RecordPrefetches(producer.name()));
+            p.set_jit_externs({{"record_prefetch", JITExtern{record_prefetch}}});
+            prefetch_offsets.clear();
+        }
+
+        Buffer<int> out = p.realize({16, 16}, t);
         for (int yy = 0; yy < out.height(); yy++) {
             for (int xx = 0; xx < out.width(); xx++) {
                 if (out(xx, yy) != 2 * (xx + yy) + 1) {
                     printf("Ring prefetch mismatch at (%d, %d)\n", xx, yy);
                     return 1;
                 }
+            }
+        }
+
+        // producer is stored per 8x8 tile as 9 columns (or 3 blocks of 4) by 8
+        // rows by 2 slots, so each row fits in one cache line.
+        if (t.arch == Target::X86) {
+            const int row_stride = split ? 12 : 9;
+            std::set<int> expected;
+            for (int slot = 0; slot < 2; slot++) {
+                for (int r = 2; r < 8; r++) {
+                    expected.insert(r * row_stride + slot * 8 * row_stride);
+                }
+            }
+            if (prefetch_offsets != expected) {
+                printf("Unexpected ring prefetch offsets (split = %d):", split);
+                for (int o : prefetch_offsets) {
+                    printf(" %d", o);
+                }
+                printf("\n");
+                return 1;
             }
         }
     }
