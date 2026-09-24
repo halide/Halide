@@ -1485,7 +1485,19 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
     if (predicate_loads_ok && tail == TailStrategy::PredicateLoads) {
         // If it's the outermost split in this dimension, PredicateLoads
         // is OK. Otherwise, we can't prove it's safe.
+        //
+        // It is also unsafe on a Var that stems from the outer Var of a prior
+        // ShiftInwards or ShiftInwardsAndBlend split. PredicateLoads runs that
+        // outer Var past its loop max, and the prior split shifts those extra
+        // iterations back inwards onto the last tile, so they land inside the
+        // realized region. Their stores are not predicated, but their loads are,
+        // so they overwrite valid values with values computed from
+        // predicated-off loads. For ShiftInwards this is a recompute with
+        // garbage inputs. ShiftInwardsAndBlend masks every lane of such an
+        // iteration, but its blend still stores the predicated-off load of the
+        // old value.
         std::set<string> inner_vars;
+        std::set<string> shifted_outer_vars;
         for (const Split &s : definition.schedule().splits()) {
             switch (s.split_type) {
             case Split::SplitVar:
@@ -1493,24 +1505,48 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
                 if (inner_vars.count(s.old_var)) {
                     inner_vars.insert(s.outer);
                 }
+                if (s.tail == TailStrategy::ShiftInwards ||
+                    s.tail == TailStrategy::ShiftInwardsAndBlend) {
+                    shifted_outer_vars.insert(s.outer);
+                }
+                if (shifted_outer_vars.count(s.old_var)) {
+                    shifted_outer_vars.insert(s.outer);
+                    shifted_outer_vars.insert(s.inner);
+                }
                 break;
             case Split::RenameVar:
                 if (inner_vars.count(s.old_var)) {
                     inner_vars.insert(s.outer);
+                }
+                if (shifted_outer_vars.count(s.old_var)) {
+                    shifted_outer_vars.insert(s.outer);
                 }
                 break;
             case Split::FuseVars:
                 if (inner_vars.count(s.inner) || inner_vars.count(s.outer)) {
                     inner_vars.insert(s.old_var);
                 }
+                // Only the outer operand of a fuse runs past its loop max.
+                if (shifted_outer_vars.count(s.outer)) {
+                    shifted_outer_vars.insert(s.old_var);
+                }
                 break;
             }
         }
-        predicate_loads_ok = !inner_vars.count(old_name);
-        user_assert(predicate_loads_ok || tail != TailStrategy::PredicateLoads)
+        const bool stems_from_inner = inner_vars.count(old_name);
+        const bool stems_from_shifted_outer = shifted_outer_vars.count(old_name);
+        predicate_loads_ok = !stems_from_inner && !stems_from_shifted_outer;
+        user_assert(!stems_from_inner || tail != TailStrategy::PredicateLoads)
             << "Can't use TailStrategy::PredicateLoads for splitting " << old_name
             << " in the definition of " << name() << ". "
             << "PredicateLoads may not be used to split a Var stemming from the inner Var of a prior split.";
+        user_assert(!stems_from_shifted_outer || tail != TailStrategy::PredicateLoads)
+            << "Can't use TailStrategy::PredicateLoads for splitting " << old_name
+            << " in the definition of " << name() << ". "
+            << "PredicateLoads may not be used to split a Var stemming from the outer Var of a prior "
+            << "ShiftInwards or ShiftInwardsAndBlend split: that split would shift the iterations past "
+            << "the loop end back into the realized region, where they would store values computed "
+            << "from predicated-off loads.";
     }
 
     if (tail == TailStrategy::Auto) {
