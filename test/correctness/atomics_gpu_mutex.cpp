@@ -4,6 +4,11 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    if (!get_jit_target_from_environment().has_gpu_feature()) {
+        printf("[SKIP] No GPU target enabled.\n");
+        return 0;
+    }
+
     return error_test("atomics_gpu_mutex", "The atomic update requires a mutex lock, which is not supported in ", []() {
         int img_size = 10000;
 

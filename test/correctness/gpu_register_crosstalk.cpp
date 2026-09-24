@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     return error_test("gpu_register_crosstalk", "is scheduled to live in Register memory, which is private to a GPU "
                                                 "thread, but it is scheduled outside the loops over GPU threads, so "
                                                 "every thread gets its own copy of it rather than sharing one.",
-                      []() {
+                      [&]() {
                           Func f("f"), g("g");
                           Var x("x"), y("y"), xi("xi"), yi("yi");
 

@@ -5,6 +5,12 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s <autoscheduler-lib>\n", argv[0]);
+        return 1;
+    }
+    load_plugin(argv[1]);
+
     return error_test("auto_schedule_no_reorder", "AutoSchedule: cannot auto-schedule function \"f1\" since dim \"v0\" at stage 0 has been reordered", []() {
         Func f, g;
         Var x, y;

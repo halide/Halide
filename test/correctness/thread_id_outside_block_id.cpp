@@ -7,7 +7,7 @@ using namespace Halide;
 int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
     t.set_feature(Target::CUDA);
-    return error_test("thread_id_outside_block_id", "is outside of any loop over a GPU block variable. This schedule is malformed. There must be a GPU block variable, and it must reordered to be outside all GPU thread variables.", []() {
+    return error_test("thread_id_outside_block_id", "must be inside a GPU block loop", [&]() {
         Func f;
         Var x;
         f(x) = x;

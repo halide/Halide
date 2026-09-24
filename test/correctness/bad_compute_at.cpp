@@ -5,8 +5,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    return error_test("bad_compute_at", "Func \"f\" is computed at the following invalid location:\n"
-                                        "  f.compute_at(h, x);",
+    return error_test("bad_compute_at", "is defined with 2 dimensions, but realize() is requesting a realization with 1 dimensions.",
                       []() {
                           Func f("f"), g("g"), h("h"), junk1, junk2, junk3;
                           Var x("x"), y("y");

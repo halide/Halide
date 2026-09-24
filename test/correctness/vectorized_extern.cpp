@@ -5,7 +5,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    return error_test("vectorized_extern", "Externally defined Func f cannot have loop type vectorized (xo)", []() {
+    return error_test("vectorized_extern", "Externally defined Func f0 cannot have loop type vectorized", []() {
         Func f;
         Var x;
         f.define_extern("test", {}, Int(32), {x});

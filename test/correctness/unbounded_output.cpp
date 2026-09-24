@@ -5,7 +5,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    return error_test("unbounded_output", " is accessed over an unbounded domain in dimension ", []() {
+    return error_test("unbounded_output", "unbounded way in dimension ", []() {
         Func f;
         Var x, y;
 

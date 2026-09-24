@@ -6,7 +6,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    return error_test("treat_rvar_as_var", "Var x used in scheduling directive has the same name as existing RVar x", []() {
+    return error_test("treat_rvar_as_var", "Var r4$x used in scheduling directive has the same name as existing RVar r4$x", []() {
         Func f;
         Var x, y;
 

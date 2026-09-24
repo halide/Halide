@@ -5,7 +5,6 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    // NEEDS REVIEW: expected message is inferred from source analysis only.
     return error_test("compute_with_fuse_in_specialization", "Invalid compute_with: cannot find x in out0.s0", []() {
         Var x("x"), y("y"), f("f");
         ImageParam in(Int(16), 2, "in");

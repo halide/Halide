@@ -5,7 +5,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    return error_test("constraint_uses_non_param", "refers to Var or RVar x", []() {
+    return error_test("constraint_uses_non_param", "refers to Var or RVar v0", []() {
         Func f, g;
         Var x, y;
         f(x, y) = 0;

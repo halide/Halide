@@ -5,7 +5,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    return error_test("metal_vector_too_large", "Unsupported vector width in Metal C: uint16x16", []() {
+    return error_test("metal_vector_too_large", "Vectorization by widths greater than 4 is not supported by Metal", []() {
         ImageParam input(UInt(16), 2, "input");
         Func f("f");
         Var x("x"), y("y");

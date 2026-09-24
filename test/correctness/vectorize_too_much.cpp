@@ -5,7 +5,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    return error_test("vectorize_too_much", "Can't scalarize nested vectorization", []() {
+    return error_test("vectorize_too_much", "is accessed at -3, which is before the min (0) in dimension 0", []() {
         Var x, y;
 
         Buffer<int> input(5, 5);

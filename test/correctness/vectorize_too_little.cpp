@@ -5,7 +5,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    return error_test("vectorize_too_little", "Can't split x by 0. Split factors must be strictly positive", []() {
+    return error_test("vectorize_too_little", "Can't split v0 by 0. Split factors must be strictly positive", []() {
         Var x, y;
 
         Buffer<int> input(5, 5);

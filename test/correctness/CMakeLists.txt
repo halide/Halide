@@ -14,8 +14,6 @@ tests(
     atomics_gpu_8_bit.cpp
     atomics_gpu_mutex.cpp
     atomics_self_reference.cpp
-    auto_schedule_no_parallel.cpp
-    auto_schedule_no_reorder.cpp
     autodiff.cpp
     autodiff_unbounded.cpp
     bad_async_producer.cpp
@@ -745,4 +743,12 @@ if (WITH_SERIALIZATION)
     target_compile_definitions(correctness_streaming PRIVATE TEST_WITH_SERIALIZATION)
     target_compile_definitions(correctness_generator_cache PRIVATE TEST_WITH_SERIALIZATION)
     target_compile_definitions(correctness_serialization PRIVATE TEST_WITH_SERIALIZATION)
+endif ()
+
+if (WITH_AUTOSCHEDULERS)
+    tests(
+        GROUPS correctness
+        SOURCES auto_schedule_no_parallel.cpp auto_schedule_no_reorder.cpp
+        ARGS $<TARGET_FILE:Halide::Mullapudi2016>
+    )
 endif ()

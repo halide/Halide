@@ -5,7 +5,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    return error_test("rfactor_inner_dim_non_commutative", "without rfactoring the outer dimensions, since the operator is non-commutative.", []() {
+    return error_test("rfactor_inner_dim_non_commutative", "can't perform rfactor() because we can't prove associativity of the operator", []() {
         Func f("f"), g("g");
         Var x("x"), y("y");
 

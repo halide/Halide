@@ -5,7 +5,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    return error_test("host_inside_gpu_loop", "The host() schedule directive cannot be used inside a <OpenCL> loop. It is currently only supported "
+    return error_test("host_inside_gpu_loop", "The host() schedule directive cannot be used inside a <Default_GPU> loop. It is currently only supported "
                                               "to leave an enclosing sme_streaming() loop or in host loop redundantly.\n",
                       []() {
                           Func f("f");

@@ -9,6 +9,11 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (!get_jit_target_from_environment().has_gpu_feature()) {
+        printf("[SKIP] No GPU target enabled.\n");
+        return 0;
+    }
+
     return error_test("atomics_gpu_8_bit", "8-bit or 16-bit atomics are not supported", []() {
         int img_size = 10000;
         int hist_size = 7;

@@ -10,7 +10,7 @@ int main(int argc, char **argv) {
         printf("[SKIP] Scalable vector is not supported on this target.\n");
         return 0;
     }
-    return error_test("mismatch_runtime_vscale", "is compiled with the assumption that vscale of Scalable Vector is ", []() {
+    return error_test("mismatch_runtime_vscale", "is compiled with the assumption that vscale of Scalable Vector is ", [&]() {
         Func f("f");
         Var x("x");
 

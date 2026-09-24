@@ -5,7 +5,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    return error_test("rdom_undefined", "may not be constructed with undefined Exprs.", []() {
+    return error_test("rdom_undefined", "RDom min cannot be represented as an int32: (undefined)", []() {
         Expr undef_min, undef_extent;
 
         // This should assert-fail

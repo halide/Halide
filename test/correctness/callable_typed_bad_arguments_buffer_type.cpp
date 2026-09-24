@@ -9,7 +9,7 @@ void check(int r) {
 }
 
 int main(int argc, char **argv) {
-    return error_test("callable_typed_bad_arguments_buffer_type", "Error defining 'f': Argument 1 of 4 ('p_img') was expected to be a buffer of type 'uint8' and dimension 2.", []() {
+    return error_test("callable_typed_bad_arguments_buffer_type", "Error defining 'f': Argument 1 of 4 ('p2') was expected to be a buffer of type 'uint8' and dimension 2.", []() {
         Param<int32_t> p_int(42);
         Param<float> p_float(1.0f);
         ImageParam p_img(UInt(8), 2);
@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
         Buffer<float> in1(10, 10), result1(10, 10);
         in1.fill(0);
 
-        // Should fail with "Error defining 'f': Argument 1 of 4 ('p_img') was expected to be a buffer of type 'uint8' and dimension 2."
+        // Should fail with "Error defining 'f': Argument 1 of 4 ('p2') was expected to be a buffer of type 'uint8' and dimension 2."
         auto c = f.compile_to_callable({p_img, p_int, p_float})
                      .make_std_function<Buffer<float, 2>, int32_t, float, Buffer<float, 2>>();
         (void)c;

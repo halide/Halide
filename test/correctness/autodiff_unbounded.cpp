@@ -5,7 +5,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    return error_test("autodiff_unbounded", "f is accessed over an unbounded domain in dimension x", []() {
+    return error_test("autodiff_unbounded", "Access to function or buffer f at dimension 0 is not bounded", []() {
         Buffer<float> b(10);
         Func f("f"), g("g");
         Var x("x");

@@ -5,7 +5,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    return error_test("shift_inwards_and_blend_race", "Tail strategy ShiftInwardsAndBlend may not be used to split x because other vars stemming from the same original Var or RVar are marked as parallel.", []() {
+    return error_test("shift_inwards_and_blend_race", "Tail strategy ShiftInwardsAndBlend may not be used to split v0 because other vars stemming from the same original Var or RVar are marked as parallel.", []() {
         Func f;
         Var x;
 

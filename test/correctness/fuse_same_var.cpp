@@ -3,7 +3,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    return error_test("fuse_same_var", "In schedule for f, inner and outer fuse dimensions must be distinct, both are: x", []() {
+    return error_test("fuse_same_var", "In schedule for f0, inner and outer fuse dimensions must be distinct, both are: v0", []() {
         Func f;
         Var x, y, fused;
 

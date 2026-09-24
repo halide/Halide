@@ -5,7 +5,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    return error_test("bad_const_cast", "Integer constant 256 will be implicitly coerced to type uint8, which changes its value to 0.", []() {
+    return error_test("bad_const_cast", "Integer constant 256 will be implicitly coerced to type uint8, which changes its value to 0_u8.", []() {
         Func f;
         Var x;
 

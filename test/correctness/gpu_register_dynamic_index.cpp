@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
     // PromoteGPURegisters -> get_subtile() rejecting a non-affine index.
     return error_test("gpu_register_dynamic_index", "which is scheduled to live in Register memory outside the loops over "
                                                     "GPU threads not affine:",
-                      []() {
+                      [&]() {
                           Func f("f"), g("g");
                           Var x("x"), y("y"), xo("xo"), yo("yo"), xi("xi"), yi("yi"), xii("xii"), yii("yii");
                           Var fxo("fxo"), fyo("fyo"), fxi("fxi"), fyi("fyi");

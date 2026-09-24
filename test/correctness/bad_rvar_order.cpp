@@ -5,7 +5,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    return error_test("bad_rvar_order", "can't reorder RVars r1.y and r1.x because it may change the meaning of the algorithm.", []() {
+    return error_test("bad_rvar_order", "can't reorder RVars r4$y and r4$x because it may change the meaning of the algorithm.", []() {
         RDom r1(0, 10, 0, 10);
 
         Func f("f");

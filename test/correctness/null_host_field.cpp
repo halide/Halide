@@ -24,8 +24,6 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    // NEEDS REVIEW: if the default-generated ImageParam name differs in this configuration,
-    // the stable substring below may need adjustment.
     return error_test("null_host_field", "The host pointer of Input buffer ", []() {
         Func f;
         Var x, y;

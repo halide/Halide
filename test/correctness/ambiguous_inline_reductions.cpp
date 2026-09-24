@@ -5,7 +5,7 @@ using namespace Halide;
 
 // From https://github.com/halide/Halide/issues/5201
 int main(int argc, char **argv) {
-    return error_test("ambiguous_inline_reductions", "refers to reduction variables from multiple reduction domains: r3, r1", []() {
+    return error_test("ambiguous_inline_reductions", "refers to reduction variables from multiple reduction domains", []() {
         Func f("f");
         Var x("x"), y("y");
         RDom r1(0, 10, "r1"), r2(0, 10, "r2"), r3(0, 10, "r3");

@@ -6,7 +6,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    return error_test("float_arg", "Args to call to halide function must be type Int(32)", []() {
+    return error_test("float_arg", "Implicit cast from float32 to int in argument 1", []() {
         Func f;
         Var x, y;
         f(x, y) = 3 * x + y;

@@ -5,7 +5,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    return error_test("hoist_storage_extern", "Func \"f\" is an extern function with storage hoisted to a different level than store_at. "
+    return error_test("hoist_storage_extern", "Func \"f0\" is an extern function with storage hoisted to a different level than store_at. "
                                               "Func::hoist_storage is not currently supported for extern functions.",
                       []() {
                           Func f, g, h;

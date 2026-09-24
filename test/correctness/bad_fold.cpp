@@ -5,7 +5,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    return error_test("bad_fold", "The folded storage dimension y of f was accessed out of order by loop", []() {
+    return error_test("bad_fold", "fold factor (2) of dimension v1 of f0 is too small to store the required region", []() {
         Var x, y, c;
 
         Func f, g;

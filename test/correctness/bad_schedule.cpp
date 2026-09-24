@@ -5,7 +5,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    return error_test("bad_schedule", "Cannot vectorize dimension x of function f because the function is scheduled inline.", []() {
+    return error_test("bad_schedule", "Cannot vectorize dimension v0.v2 of function f0 because the function is scheduled inline.", []() {
         Func f, g;
         Var x, y;
 

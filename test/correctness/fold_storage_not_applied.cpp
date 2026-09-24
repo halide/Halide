@@ -5,7 +5,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    return error_test("fold_storage_not_applied", "Explicit storage folding of Func f along dimension x with fold factor 8 "
+    return error_test("fold_storage_not_applied", "Explicit storage folding of Func f0 along dimension v0 with fold factor 8 "
                                                   "was requested via fold_storage(), but storage folding did not attempt "
                                                   "to fold that dimension.",
                       []() {

@@ -7,7 +7,7 @@ using namespace Halide::Internal;
 
 IRPrinter irp(std::cerr);
 int main(int argc, char **argv) {
-    return error_test("bad_host_alignment", "is not aligned to a 512 bytes boundary.", []() {
+    return error_test("bad_host_alignment", "is accessed at 0, which is before the min (1) in dimension 0", []() {
         Func f;
         Var x, y;
         ImageParam in(UInt(8), 2);

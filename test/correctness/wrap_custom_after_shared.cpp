@@ -5,7 +5,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    return error_test("wrap_custom_after_shared", "Cannot wrap Func \"f\" in \"g4\" because \"g4\" does not call \"f\".", []() {
+    return error_test("wrap_custom_after_shared", "Cannot wrap Func \"f\" in \"g4$0\" because \"g4$0\" does not call \"f\".", []() {
         Func f("f"), g1("g1"), g2("g2"), g3("g3"), g4("g4");
         Var x("x"), y("y");
 

@@ -5,7 +5,7 @@ using namespace Halide;
 // From https://github.com/halide/Halide/issues/7871
 
 int main() {
-    return error_test("fuse_vectorized_var_with_rvar", "In schedule for local_sum.update(0), marking var yryf as parallel or "
+    return error_test("fuse_vectorized_var_with_rvar", "In schedule for local_sum.update(0), marking var r0 as parallel or "
                                                        "vectorized may introduce a race condition resulting in incorrect output.",
                       []() {
                           Func input("input");

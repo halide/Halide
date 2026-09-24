@@ -1,4 +1,6 @@
-#include <Halide.h>
+#include "Halide.h"
+#include "expect_user_error.h"
+
 using namespace Halide;
 
 int main(int argc, char **argv) {

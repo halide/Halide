@@ -8,9 +8,7 @@ extern "C" int extern_func() {
 }
 
 int main(int argc, char **argv) {
-    // NEEDS REVIEW: best-effort expected substring; this path was inferred
-    // from source analysis rather than a directly obvious user_error site.
-    return error_test("extern_func_self_argument", "Stuck in a loop computing a realization order. Perhaps this pipeline has a loop involving f?", []() {
+    return error_test("extern_func_self_argument", "Extern Func has itself as an argument", []() {
         Func f("f");
 
         f.define_extern("extern_func", {f}, Int(32), 2);

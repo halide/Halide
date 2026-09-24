@@ -5,7 +5,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    return error_test("bad_extern_split", "Externally defined Func f cannot have extern loop", []() {
+    return error_test("bad_extern_split", "Externally defined Func f0 cannot have extern loop", []() {
         Func f;
         Var x;
         f.define_extern("test", {}, Int(32), {x});

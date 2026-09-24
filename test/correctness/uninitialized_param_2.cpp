@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
     args.targets = std::vector<Target>{get_target_from_environment()};
     args.generator_name = "PleaseFail";
 
-    return error_test("uninitialized_param_2", "Parameter scalar_input does not have a valid scalar value.", []() {
+    return error_test("uninitialized_param_2", "Parameter scalar_input does not have a valid scalar value.", [&]() {
         execute_generator(args);
     });
 }

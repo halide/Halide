@@ -9,7 +9,7 @@ using namespace Halide;
 int main(int argc, char **argv) {
     std::string test_object = Internal::get_test_tmp_dir() + "compile_undefined.o";
 
-    return error_test("undefined_pipeline_compile", "Can't compile Pipeline with undefined output Func: f.", []() {
+    return error_test("undefined_pipeline_compile", "Can't compile Pipeline with undefined output Func: f.", [&]() {
         Func f("f");
 
         Pipeline p(f);

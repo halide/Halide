@@ -4,7 +4,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    return error_test("rfactor_fused_var_and_rvar", "can't rfactor an Func that has fused a Var into an RVar: y, r$z", []() {
+    return error_test("rfactor_fused_var_and_rvar", "can't rfactor an Func that has fused a Var into an RVar: r$z, y", []() {
         Func f{"f"};
         RDom r({{0, 5}, {0, 5}, {0, 5}}, "r");
         Var x{"x"}, y{"y"};

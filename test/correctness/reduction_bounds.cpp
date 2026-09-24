@@ -5,9 +5,9 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    return error_test("reduction_bounds", "in an unbounded way in dimension 0", []() {
-        Func f, g;
-        Var x;
+    return error_test("reduction_bounds", "All of a function's recursive references to itself must contain the same pure variables in the same places as on the left-hand-side.", []() {
+        Func f("f"), g("g");
+        Var x("x");
         RDom r(0, 100, "r");
 
         f(x) = x;

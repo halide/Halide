@@ -6,7 +6,7 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
     return error_test("extern_device_function_with_no_target_support", "Func f has an extern definition that may leave the output with a dirty "
-                                                                       "OpenCL device allocation, but no compatible target feature is enabled in target ",
+                                                                       "<OpenCL> device allocation, but no compatible target feature is enabled in target ",
                       []() {
                           Func f{"f"};
 

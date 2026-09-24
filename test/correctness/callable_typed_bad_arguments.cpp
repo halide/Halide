@@ -9,7 +9,7 @@ void check(int r) {
 }
 
 int main(int argc, char **argv) {
-    return error_test("callable_typed_bad_arguments", "Error defining 'f': Argument 1 of 4 ('p_int') was expected to be a scalar of type 'int32' and dimension 0.", []() {
+    return error_test("callable_typed_bad_arguments", "Error defining 'f': Argument 1 of 4 ('p0') was expected to be a scalar of type 'int32' and dimension 0.", []() {
         Param<int32_t> p_int(42);
         Param<float> p_float(1.0f);
         ImageParam p_img(UInt(8), 2);

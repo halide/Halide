@@ -5,7 +5,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    return error_test("bad_reorder", "call to reorder references x twice.", []() {
+    return error_test("bad_reorder", "call to reorder references v0 twice.", []() {
         Var x, y, xi;
 
         Func f;
