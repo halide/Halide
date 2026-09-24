@@ -184,13 +184,103 @@ Stmt add_predicates(const Expr &cond, const Function &func, ApplySplitResult::Ty
     return AddPredicates(cond, func, type)(s);
 }
 
+set<size_t> predicate_stores_splits_requiring_guard(const map<string, Function> &env,
+                                                    const Function &func,
+                                                    int stage_index,
+                                                    const Definition &def) {
+    set<string> compute_at_vars;
+    for (const auto &iter : env) {
+        const LoopLevel &compute_level = iter.second.schedule().compute_level();
+        if (!compute_level.is_inlined() &&
+            !compute_level.is_root() &&
+            compute_level.func() == func.name() &&
+            (compute_level.get_stage_index() == -1 ||
+             compute_level.get_stage_index() == stage_index)) {
+            compute_at_vars.insert(compute_level.var().name());
+        }
+    }
+
+    if (compute_at_vars.empty()) {
+        return {};
+    }
+
+    const vector<Split> &splits = def.schedule().splits();
+    if (splits.empty()) {
+        return {};
+    }
+
+    map<string, set<size_t>> vars_containing_predicate_stores_inner;
+    for (size_t i = 0; i < splits.size(); i++) {
+        const Split &split = splits[i];
+        switch (split.split_type) {
+        case Split::SplitVar: {
+            if (split.tail == TailStrategy::PredicateStores) {
+                vars_containing_predicate_stores_inner[split.inner].insert(i);
+            }
+            auto iter = vars_containing_predicate_stores_inner.find(split.old_var);
+            if (iter != vars_containing_predicate_stores_inner.end()) {
+                vars_containing_predicate_stores_inner[split.inner].insert(iter->second.begin(), iter->second.end());
+                vars_containing_predicate_stores_inner[split.outer].insert(iter->second.begin(), iter->second.end());
+            }
+            break;
+        }
+        case Split::RenameVar: {
+            auto iter = vars_containing_predicate_stores_inner.find(split.old_var);
+            if (iter != vars_containing_predicate_stores_inner.end()) {
+                vars_containing_predicate_stores_inner[split.outer].insert(iter->second.begin(), iter->second.end());
+            }
+            break;
+        }
+        case Split::FuseVars: {
+            set<size_t> split_indices;
+            auto inner_iter = vars_containing_predicate_stores_inner.find(split.inner);
+            if (inner_iter != vars_containing_predicate_stores_inner.end()) {
+                split_indices.insert(inner_iter->second.begin(), inner_iter->second.end());
+            }
+            auto outer_iter = vars_containing_predicate_stores_inner.find(split.outer);
+            if (outer_iter != vars_containing_predicate_stores_inner.end()) {
+                split_indices.insert(outer_iter->second.begin(), outer_iter->second.end());
+            }
+            if (!split_indices.empty()) {
+                vars_containing_predicate_stores_inner[split.old_var].insert(split_indices.begin(), split_indices.end());
+            }
+            break;
+        }
+        }
+    }
+
+    set<size_t> result;
+    const vector<Dim> &dims = def.schedule().dims();
+    for (const string &compute_at_var : compute_at_vars) {
+        auto compute_at_dim = std::find_if(dims.begin(), dims.end(),
+                                           [&compute_at_var](const Dim &d) {
+                                               return var_name_match(d.var, compute_at_var);
+                                           });
+        if (compute_at_dim == dims.end()) {
+            continue;
+        }
+        const int compute_at_idx = (int)(compute_at_dim - dims.begin());
+
+        for (int dim_idx = compute_at_idx; dim_idx < (int)dims.size(); dim_idx++) {
+            auto iter = vars_containing_predicate_stores_inner.find(dims[dim_idx].var);
+            if (iter != vars_containing_predicate_stores_inner.end()) {
+                result.insert(iter->second.begin(), iter->second.end());
+            }
+        }
+    }
+
+    return result;
+}
+
 // Build a loop nest about a provide node using a schedule
 Stmt build_loop_nest(
     const Stmt &body,
     const string &prefix,
     int start_fuse,
     const Function &func,
-    const Definition &def) {
+    const Definition &def,
+    const map<string, Function> &env,
+    int stage_index) {
     const auto &dims = func.args();
     const auto &func_s = func.schedule();
     const auto &stage_s = def.schedule();
@@ -221,6 +311,17 @@ Stmt build_loop_nest(
     }
 
     vector<Split> splits = stage_s.splits();
+    for (size_t idx : predicate_stores_splits_requiring_guard(env, func, stage_index, def)) {
+        internal_assert(idx < splits.size());
+        if (splits[idx].tail == TailStrategy::PredicateStores) {
+            // A producer computed at or inside this split's inner loop would
+            // otherwise execute in masked tail iterations, while its transitive
+            // producers are sized for the guarded store domain. Use
+            // GuardWithIf so InjectFunctionRealization places the producer
+            // inside the same guard as the store.
+            splits[idx].tail = TailStrategy::GuardWithIf;
+        }
+    }
 
     // Find all the predicated inner variables. We can't split these.
     set<string> predicated_vars;
@@ -534,7 +635,8 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
                              const Function &func,
                              const Definition &def,
                              int start_fuse,
-                             bool is_update) {
+                             bool is_update,
+                             int stage_index) {
 
     internal_assert(!is_update == def.is_init());
 
@@ -588,7 +690,7 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     }
 
     // Default schedule/values if there is no specialization
-    Stmt stmt = build_loop_nest(body, prefix, start_fuse, func, def);
+    Stmt stmt = build_loop_nest(body, prefix, start_fuse, func, def, env, stage_index);
     stmt = inject_placeholder_prefetch(stmt, env, prefix, def.schedule().prefetches());
 
     // Make any specialized copies. Mark every sibling branch at this level
@@ -603,7 +705,7 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     for (size_t i = specializations.size(); i > 0; i--) {
         const Specialization &s = specializations[i - 1];
         if (s.failure_message.empty()) {
-            Stmt then_case = build_provide_loop_nest(env, prefix, func, s.definition, start_fuse, is_update);
+            Stmt then_case = build_provide_loop_nest(env, prefix, func, s.definition, start_fuse, is_update, stage_index);
             // Only marks s.definition's own nested specializations, if any --
             // doesn't know it's also our sibling here, so we mark it too.
             then_case = mark_specialization_branch(then_case);
@@ -942,7 +1044,7 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
 
     Definition f_def_no_pred = f.definition().get_copy();
     f_def_no_pred.predicate() = const_true();
-    return build_loop_nest(check, f.name() + ".s0.", -1, f, f_def_no_pred);
+    return build_loop_nest(check, f.name() + ".s0.", -1, f, f_def_no_pred, env, 0);
 }
 
 // A schedule may include explicit bounds on some dimension. This
@@ -1616,6 +1718,7 @@ private:
     }
 
     Stmt build_produce_definition(const Function &f, const string &prefix, const Definition &def, bool is_update,
+                                  int stage_index,
                                   map<string, Interval> &replacements,
                                   vector<pair<string, Expr>> &add_lets,
                                   map<string, set<string>> &aliases) {
@@ -1662,7 +1765,7 @@ private:
             }
         }
 
-        Stmt produce = build_provide_loop_nest(env, prefix, f, def, (int)(start_fuse), is_update);
+        Stmt produce = build_provide_loop_nest(env, prefix, f, def, (int)(start_fuse), is_update, stage_index);
 
         // Strip off the containing lets. The bounds of the parent fused loop
         // (i.e. the union bounds) might refer to them, so we need to move them
@@ -1933,7 +2036,7 @@ private:
             string def_prefix = f.name() + ".s" + std::to_string(func_stage.second) + ".";
             const auto &def = (func_stage.second == 0) ? f.definition() : f.updates()[func_stage.second - 1];
 
-            Stmt produce_def = build_produce_definition(f, def_prefix, def, func_stage.second > 0,
+            Stmt produce_def = build_produce_definition(f, def_prefix, def, func_stage.second > 0, func_stage.second,
                                                         replacements, add_lets, aliases);
             if (target.has_feature(Target::Profile)) {
                 // Mark the start of this Func's stage so InjectCounters can
