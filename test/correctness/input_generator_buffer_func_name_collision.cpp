@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
 
     return error_test("input_generator_buffer_func_name_collision", "The name \"foo\" is used for both an input buffer (ImageParam or Generator Input<Buffer>) "
                                                                     "and a Func in the same pipeline. Input buffers and Funcs must have distinct names.\n",
-                      []() {
+                      [&]() {
                           (void)create_callable_from_generator(ctx, "gen_input_buffer_func_collision");
                       });
 }

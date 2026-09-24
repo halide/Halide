@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
         ten_bit_lut(i) = sin(2 * 3.1415f * i / 1024.0f);
     }
 
-    return error_test("broken_promise", "from unsafe_promise_clamped", []() {
+    return error_test("broken_promise", "from unsafe_promise_clamped", [&]() {
         Var x;
         Func f;
         ImageParam in(UInt(16), 1);
