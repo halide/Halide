@@ -850,7 +850,7 @@ void test_tuple_of_structs_update_cross_talk() {
 
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
-    if (target.arch == Target::ARM && Internal::get_llvm_version() == 210) {
+    if (target.arch == Target::ARM && Internal::get_llvm_version() < 220) {
         printf("[SKIP] LLVM 21 has a known AArch64 codegen failure for this test.\n");
         return 0;
     }
