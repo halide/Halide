@@ -58,6 +58,14 @@ Expr ssa_block(std::vector<Expr> exprs) {
     return e;
 }
 
+Expr masked(const Expr &c, const Expr &e) {
+    return Call::make(e.type(), Call::if_then_else, {c, e}, Call::PureIntrinsic);
+}
+
+Expr load_buf(const Expr &index) {
+    return Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), const_true(), ModulusRemainder(), false);
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -171,6 +179,32 @@ int main(int argc, char **argv) {
         Expr t0 = Variable::make(halide_func.type(), "t0");
         // It's okay to CSE Halide call within an expr
         correct = Let::make("t0", halide_func, t0 * t0);
+        check(e, correct);
+    }
+
+    {
+        // An if_then_else only evaluates the branch it takes, so a load
+        // that is only used under different conditions stays in the
+        // branches...
+        Expr load = load_buf(x * y);
+        e = masked(x > 0, load) + masked(y > 0, load);
+        check(e, e);
+
+        // ...unless it's also used unconditionally.
+        e = masked(x > 0, load) + load;
+        correct = ssa_block({load, masked(x > 0, t[0]) + t[0]});
+        check(e, correct);
+
+        // Pure expressions may still be lifted out of branches.
+        e = masked(x > 0, (x * y) * load) + masked(y > 0, (x * y) * 2);
+        correct = ssa_block({x * y,
+                             masked(x > 0, t[0] * load_buf(t[0])) +
+                                 masked(y > 0, t[0] * 2)});
+        check(e, correct);
+
+        // Repeated loads within a branch are CSE'd there.
+        e = masked(x > 0, load * load + x) + masked(y > 0, load);
+        correct = masked(x > 0, ssa_block({load, t[0] * t[0] + x})) + masked(y > 0, load);
         check(e, correct);
     }
 

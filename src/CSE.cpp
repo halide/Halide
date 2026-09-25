@@ -1,4 +1,5 @@
 #include <map>
+#include <set>
 
 #include "CSE.h"
 #include "IREquality.h"
@@ -88,6 +89,9 @@ public:
 
     int number = 0;
 
+    // Whether the Expr contains an if_then_else.
+    bool conditional = false;
+
     Stmt mutate(const Stmt &s) override {
         internal_error << "Can't call GVN on a Stmt: " << s << "\n";
         return Stmt();
@@ -118,6 +122,7 @@ public:
         bool novel = p.second;
         if (novel) {
             // This is a never-before-seen Expr
+            conditional |= Call::as_intrinsic(new_e, {Call::if_then_else}) != nullptr;
             number = (int)entries.size();
             iter->second = number;
             entries.emplace_back(new Entry(new_e));
@@ -168,6 +173,98 @@ public:
 
         // Visit the children if we haven't been here before.
         IRGraphVisitor::include(e);
+    }
+};
+
+/** Find the nodes of an Expr that are evaluated regardless of which way its
+ * if_then_elses go. */
+class FindUnconditional : public IRGraphVisitor {
+    using IRGraphVisitor::visit;
+
+    void include(const Expr &e) override {
+        if (nodes.insert(e.get()).second) {
+            e.accept(this);
+        }
+    }
+
+    void visit(const Call *op) override {
+        if (op->is_intrinsic(Call::if_then_else)) {
+            include(op->args[0]);
+        } else {
+            IRGraphVisitor::visit(op);
+        }
+    }
+
+public:
+    std::set<const IRNode *> nodes;
+};
+
+/** Find the nodes of an Expr that may not be safe to evaluate where they
+ * aren't needed, because they contain a load or an impure call. */
+class FindUnsafeToSpeculate : public IRGraphVisitor {
+    using IRGraphVisitor::visit;
+
+    map<const IRNode *, bool> memo;
+    bool unsafe = false;
+
+    void include(const Expr &e) override {
+        auto iter = memo.find(e.get());
+        if (iter == memo.end()) {
+            bool outer = unsafe;
+            unsafe = false;
+            e.accept(this);
+            iter = memo.emplace(e.get(), unsafe).first;
+            unsafe = outer;
+        }
+        unsafe |= iter->second;
+    }
+
+    void visit(const Load *op) override {
+        unsafe = true;
+        IRGraphVisitor::visit(op);
+    }
+
+    void visit(const Call *op) override {
+        if (op->is_intrinsic(Call::if_then_else)) {
+            // Guards its own branches.
+            include(op->args[0]);
+            return;
+        }
+        if (op->call_type == Call::Halide || op->call_type == Call::Image || !op->is_pure()) {
+            unsafe = true;
+        }
+        IRGraphVisitor::visit(op);
+    }
+
+public:
+    bool operator()(const Expr &e) {
+        unsafe = false;
+        include(e);
+        return unsafe;
+    }
+};
+
+/** CSE each branch of each if_then_else separately. */
+class CSEBranches : public IRGraphMutator {
+    bool lift_all;
+
+    using IRGraphMutator::visit;
+
+    Expr visit(const Call *op) override {
+        if (!op->is_intrinsic(Call::if_then_else)) {
+            return IRGraphMutator::visit(op);
+        }
+        vector<Expr> args = op->args;
+        args[0] = mutate(args[0]);
+        for (size_t i = 1; i < args.size(); i++) {
+            args[i] = common_subexpression_elimination(args[i], lift_all);
+        }
+        return Call::make(op->type, op->name, args, op->call_type);
+    }
+
+public:
+    CSEBranches(bool lift_all)
+        : lift_all(lift_all) {
     }
 };
 
@@ -345,13 +442,29 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
 
     debug(4) << "Canonical form without lets " << e << "\n";
 
+    // An if_then_else only evaluates the branch it takes. Lifting a load out
+    // of a branch would evaluate it where the if_then_else guards against
+    // it (e.g. a load that is only in bounds under the condition), so only
+    // lift an expression that is only used in branches if it's safe to
+    // speculate. The rest are CSE'd within each branch below.
+    FindUnconditional unconditional;
+    FindUnsafeToSpeculate unsafe_to_speculate;
+    bool kept_in_branches = false;
+    if (gvn.conditional) {
+        unconditional(e);
+    }
+
     // Figure out which ones we'll pull out as lets and variables.
     vector<pair<string, Expr>> lets;
     vector<Expr> new_version(gvn.entries.size());
     map<Expr, Expr, ExprCompare> replacements;
     for (size_t i = 0; i < gvn.entries.size(); i++) {
         const auto &e = gvn.entries[i];
-        if (e->use_count > 1) {
+        if (e->use_count > 1 && gvn.conditional &&
+            !unconditional.nodes.count(e->expr.get()) &&
+            unsafe_to_speculate(e->expr)) {
+            kept_in_branches = true;
+        } else if (e->use_count > 1) {
             string name = namer.make_unique_name();
             lets.emplace_back(name, e->expr);
             // Point references to this expr to the variable instead.
@@ -372,6 +485,10 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
         replacer.erase(value);
         // Use containing lets in the value.
         e = Let::make(var, replacer(value), e);
+    }
+
+    if (kept_in_branches) {
+        e = CSEBranches(lift_all)(e);
     }
 
     debug(4) << "With lets: " << e << "\n";

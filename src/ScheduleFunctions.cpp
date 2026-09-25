@@ -153,8 +153,17 @@ class AddPredicates : public IRGraphMutator {
             for (Expr &v : values) {
                 // A Func referring to its own prior value; must not resolve
                 // through a global wrapper.
-                v = select(cond, v, Call::make(func, args, idx++,
-                                               /*follow_global_wrappers=*/false));
+                Expr load = Call::make(func, args, idx++, /*follow_global_wrappers=*/false);
+                // The blend only needs the old value where the store
+                // happens. If an earlier PredicateStores split guarded the
+                // store, its args are only known to be in bounds under the
+                // store predicate, so predicate the load to match. Once
+                // vectorized, this is a predicated load.
+                if (!is_const_one(predicate)) {
+                    load = Call::make(load.type(), Call::if_then_else, {predicate, load},
+                                      Call::PureIntrinsic);
+                }
+                v = select(cond, v, load);
             }
             return p->with(values, args, predicate);
         } else if (type == ApplySplitResult::PredicateProvides) {
