@@ -325,21 +325,22 @@ that was run earlier.
 ```
 D:\Halide> cmake -G Ninja -S . -B build ^
                  --toolchain D:/vcpkg/scripts/buildsystems/vcpkg.cmake ^
-                 -DCMAKE_BUILD_TYPE=Release
+                 -DCMAKE_BUILD_TYPE=Release ^
+                 -DVCPKG_MANIFEST_FEATURES=developer
 ```
 
 Or use a CMake preset (e.g. for a Visual Studio build):
 
 ```
 D:\Halide> cmake --preset=win64  &:: or win32 for 32-bit
-D:\Halide> cmake --build build\win64
+D:\Halide> cmake --build build\win64 --config Release
 ```
 
-For a Ninja-based build with vcpkg:
+For a Ninja-based build with vcpkg (needs `VCPKG_ROOT` set in the environment):
 
 ```
-D:\Halide> cmake --preset=release-vcpkg -S . -B build
-D:\Halide> cmake --build build
+D:\Halide> cmake --preset=release-vcpkg
+D:\Halide> cmake --build build/release-vcpkg
 ```
 
 To run all the tests:
