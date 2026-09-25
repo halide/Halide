@@ -1,6 +1,12 @@
 #include "Halide.h"
+#include <cstdio>
 #include <cstring>
 #include <string>
+
+#ifndef _WIN32
+#include <sys/mman.h>
+#include <unistd.h>
+#endif
 
 using namespace Halide;
 
@@ -10,8 +16,13 @@ using namespace Halide;
 // the allocation to the realized region, but the load used to run (and read
 // out of bounds) where the store was predicated off.
 
+#ifndef _WIN32
 namespace {
 
+// Scalar code: check traced loads of f against its realization. (Codegen
+// evaluates a predicated store's value before the branch on the predicate,
+// but LLVM is free to sink the load into the branch, so the out-of-bounds
+// access may not happen in the generated code.)
 std::string traced;
 int realization[4];
 int bad_loads = 0;
@@ -28,17 +39,31 @@ int32_t trace_fn(JITUserContext *, const halide_trace_event_t *e) {
     } else if (e->event == halide_trace_end_produce) {
         in_produce = false;
     } else if (e->event == halide_trace_load && in_produce) {
-        int lanes = e->lanes;
-        for (int lane = 0; lane < lanes; lane++) {
-            for (int d = 0; d < 2; d++) {
-                int c = e->coordinates[d * lanes + lane];
-                if (c < realization[2 * d] || c >= realization[2 * d] + realization[2 * d + 1]) {
-                    bad_loads++;
-                }
+        for (int d = 0; d < 2; d++) {
+            int c = e->coordinates[d];
+            if (c < realization[2 * d] || c >= realization[2 * d] + realization[2 * d + 1]) {
+                bad_loads++;
             }
         }
     }
     return 0;
+}
+
+// Vectorized code: a trace of a predicated vector load reports all of its
+// lanes, so instead place each allocation so that its (64-byte rounded) end
+// is followed by an inaccessible page. Allocations are never freed.
+void *guarded_malloc(JITUserContext *, size_t size) {
+    size_t page = getpagesize();
+    size_t n = (size + page - 1) / page * page;
+    char *base = (char *)mmap(nullptr, n + page, PROT_READ | PROT_WRITE,
+                              MAP_PRIVATE | MAP_ANON, -1, 0);
+    if (base == MAP_FAILED || mprotect(base + n, page, PROT_NONE) != 0) {
+        return nullptr;
+    }
+    return base + n - (size + 63) / 64 * 64;
+}
+
+void guarded_free(JITUserContext *, void *) {
 }
 
 bool check(int mode) {
@@ -54,8 +79,7 @@ bool check(int mode) {
         g.compute_root();
     }
     out(x, y) = f(x, y);
-    f.compute_root().trace_loads().trace_realizations();
-    traced = f.name();
+    f.compute_root();
     Stage s = update ? Stage(f.update()) : Stage(f);
     switch (mode) {
     case 0:
@@ -73,16 +97,31 @@ bool check(int mode) {
             .split(y, yo, yi, 4, TailStrategy::ShiftInwardsAndBlend);
         break;
     case 3:
+        // The blend's load of f(x, y) and the update's own load of it (masked
+        // by the PredicateLoads split) are the same load under different
+        // conditions.
         s.split(x, xo, xi, 3, TailStrategy::PredicateStores)
             .split(xo, xoo, xoi, 2, TailStrategy::PredicateLoads)
             .split(y, yo, yi, 4, TailStrategy::RoundUpAndBlend)
             .reorder(xi, yi, xoi, xoo, yo);
         break;
+    case 4:
+        s.split(x, xo, xi, 8, TailStrategy::PredicateStores)
+            .vectorize(xi)
+            .split(xo, xoo, xoi, 2, TailStrategy::ShiftInwardsAndBlend);
+        break;
+    }
+    bool vectorized = mode == 2 || mode == 4;
+    if (!vectorized) {
+        f.trace_loads().trace_realizations();
+        traced = f.name();
     }
     Pipeline p(out);
     p.jit_handlers().custom_trace = trace_fn;
+    p.jit_handlers().custom_malloc = guarded_malloc;
+    p.jit_handlers().custom_free = guarded_free;
     for (int nx = 1; nx <= 17; nx++) {
-        for (int ny = 1; ny <= 6; ny++) {
+        for (int ny = 1; ny <= 8; ny++) {
             Buffer<int> b(nx, ny);
             b.set_min(-1, 2);
             bad_loads = 0;
@@ -109,13 +148,23 @@ bool check(int mode) {
 }
 
 }  // namespace
+#endif
 
 int main(int argc, char **argv) {
-    for (int mode = 0; mode < 4; mode++) {
+#ifdef _WIN32
+    printf("[SKIP] Test requires mmap.\n");
+    return 0;
+#else
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("[SKIP] Test requires custom host allocations.\n");
+        return 0;
+    }
+    for (int mode = 0; mode < 5; mode++) {
         if (!check(mode)) {
             return 1;
         }
     }
     printf("Success!\n");
     return 0;
+#endif
 }
