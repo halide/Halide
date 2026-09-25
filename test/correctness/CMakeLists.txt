@@ -378,6 +378,7 @@ tests(
     tracing.cpp
     tracing_bounds.cpp
     tracing_broadcast.cpp
+    tracing_predicated_loads.cpp
     tracing_stack.cpp
     transitive_bounds.cpp
     transpose_idioms.cpp

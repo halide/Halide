@@ -255,6 +255,31 @@ class SerializeLoops : public IRMutator {
     }
 };
 
+// And a vector condition into the predicate of every Load with the same
+// number of lanes.
+class PredicateLoads : public IRGraphMutator {
+    Expr cond;
+
+    using IRGraphMutator::visit;
+
+    Expr visit(const Load *op) override {
+        Expr index = mutate(op->index);
+        Expr predicate = mutate(op->predicate);
+        if (op->type.lanes() != cond.type().lanes()) {
+            return Load::make(op->type, op->name, index, op->image, op->param,
+                              predicate, op->alignment, op->is_streaming);
+        }
+        predicate = is_const_one(predicate) ? cond : (predicate && cond);
+        return Load::make(op->type, op->name, index, op->image, op->param,
+                          predicate, op->alignment, op->is_streaming);
+    }
+
+public:
+    PredicateLoads(Expr c)
+        : cond(std::move(c)) {
+    }
+};
+
 // Wrap a vectorized predicate around a Load/Store node.
 class PredicateLoadStore : public IRMutator {
 protected:
@@ -634,6 +659,14 @@ protected:
             if (load) {
                 return Load::make(op->type.with_lanes(max_lanes), load->name, load->index, load->image, load->param, cond, load->alignment, load->is_streaming);
             }
+
+            // The true value is needed only where cond holds, but it may
+            // still be evaluated as a whole vector (codegen scalarizes an
+            // if_then_else with a vector condition, and CSE may lift its
+            // subexpressions). Predicate the loads in it, so that a load
+            // wrapped in something else (e.g. by trace_loads) can't read the
+            // masked-off lanes.
+            new_args[1] = PredicateLoads(cond)(true_value);
         }
 
         // Widen the args to have the same lanes as the max lanes found
