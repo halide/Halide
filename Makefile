@@ -2148,9 +2148,21 @@ correctness_opencl_runtime: $(BIN_DIR)/$(TARGET)/correctness_opencl_runtime
 	cd $(TMP_DIR) ; $(CURDIR)/$<
 	@-echo
 
+# auto_schedule_no_parallel/auto_schedule_no_reorder need to load the
+# Mullapudi2016 autoscheduler plugin to exercise their intended error, so
+# (unlike other correctness_% tests) they take the plugin path as argv[1].
+correctness_auto_schedule_no_parallel correctness_auto_schedule_no_reorder: correctness_%: $(BIN_DIR)/correctness_% $(BIN_MULLAPUDI2016)
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR) ; $(CURDIR)/$< $(CURDIR)/$(BIN_MULLAPUDI2016)
+	@-echo
+
 quiet_correctness_%: $(BIN_DIR)/correctness_%
 	@-mkdir -p $(TMP_DIR)
 	@cd $(TMP_DIR) ; ( $(CURDIR)/$< 2>stderr_$*.txt > stdout_$*.txt && echo -n . ) || ( echo ; echo FAILED TEST: $* ; cat stdout_$*.txt stderr_$*.txt ; false )
+
+quiet_correctness_auto_schedule_no_parallel quiet_correctness_auto_schedule_no_reorder: quiet_correctness_%: $(BIN_DIR)/correctness_% $(BIN_MULLAPUDI2016)
+	@-mkdir -p $(TMP_DIR)
+	@cd $(TMP_DIR) ; ( $(CURDIR)/$< $(CURDIR)/$(BIN_MULLAPUDI2016) 2>stderr_$*.txt > stdout_$*.txt && echo -n . ) || ( echo ; echo FAILED TEST: $* ; cat stdout_$*.txt stderr_$*.txt ; false )
 
 fuzz_%: $(BIN_DIR)/fuzz_%
 	@-mkdir -p $(TMP_DIR)
