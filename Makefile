@@ -1294,7 +1294,6 @@ clean:
 
 CORRECTNESS_TESTS = $(shell ls $(ROOT_DIR)/test/correctness/*.cpp) $(shell ls $(ROOT_DIR)/test/correctness/*.c)
 PERFORMANCE_TESTS = $(shell ls $(ROOT_DIR)/test/performance/*.cpp)
-ERROR_TESTS = $(shell ls $(ROOT_DIR)/test/error/*.cpp)
 WARNING_TESTS = $(shell ls $(ROOT_DIR)/test/warning/*.cpp)
 RUNTIME_TESTS = $(shell ls $(ROOT_DIR)/test/runtime/*.cpp)
 FUZZ_TESTS = $(filter-out %halide_fuzz_main.cpp %IRGraphCXXPrinter.cpp, $(shell ls $(ROOT_DIR)/test/fuzz/*.cpp))
@@ -1311,7 +1310,6 @@ COMMON_AUTOSCHEDULER_TESTS = $(shell ls $(ROOT_DIR)/test/autoschedulers/common/*
 
 test_correctness: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=quiet_correctness_%) $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.c=quiet_correctness_%)
 test_performance: $(PERFORMANCE_TESTS:$(ROOT_DIR)/test/performance/%.cpp=performance_%)
-test_error: $(ERROR_TESTS:$(ROOT_DIR)/test/error/%.cpp=error_%)
 test_warning: $(WARNING_TESTS:$(ROOT_DIR)/test/warning/%.cpp=warning_%)
 test_runtime: $(RUNTIME_TESTS:$(ROOT_DIR)/test/runtime/%.cpp=runtime_%)
 test_fuzz: $(FUZZ_TESTS:$(ROOT_DIR)/test/fuzz/%.cpp=fuzz_%)
@@ -1397,7 +1395,7 @@ test_generator: $(GENERATOR_AOT_TESTS) $(GENERATOR_AOTCPP_TESTS) $(GENERATOR_JIT
 	$(FILTERS_DIR)/rungen_test
 	$(FILTERS_DIR)/registration_test
 
-ALL_TESTS = test_correctness test_error test_tutorial test_warning test_runtime test_generator
+ALL_TESTS = test_correctness test_tutorial test_warning test_runtime test_generator
 
 # These targets perform timings of each test. For most tests this includes Halide JIT compile times, and run times.
 # For generator tests they time the compile time only. The times are recorded in CSV files.
@@ -1416,7 +1414,6 @@ run_tests: $(ALL_TESTS)
 .PHONY: build_tests
 build_tests: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=$(BIN_DIR)/correctness_%) \
 	$(PERFORMANCE_TESTS:$(ROOT_DIR)/test/performance/%.cpp=$(BIN_DIR)/performance_%) \
-	$(ERROR_TESTS:$(ROOT_DIR)/test/error/%.cpp=$(BIN_DIR)/error_%) \
 	$(WARNING_TESTS:$(ROOT_DIR)/test/warning/%.cpp=$(BIN_DIR)/warning_%) \
 	$(RUNTIME_TESTS:$(ROOT_DIR)/test/runtime/%.cpp=$(BIN_DIR)/runtime_%) \
 	$(FUZZ_TESTS:$(ROOT_DIR)/test/fuzz/%.cpp=$(BIN_DIR)/fuzz_%) \
@@ -1502,10 +1499,6 @@ $(BIN_DIR)/performance_%: $(ROOT_DIR)/test/performance/%.cpp $(TEST_DEPS)
 
 $(BIN_DIR)/fuzz_%: $(ROOT_DIR)/test/fuzz/%.cpp $(ROOT_DIR)/test/fuzz/halide_fuzz_main.cpp $(ROOT_DIR)/test/fuzz/fuzz_helpers.h $(ROOT_DIR)/test/fuzz/halide_fuzz_main.h $(ROOT_DIR)/test/fuzz/IRGraphCXXPrinter.cpp $(ROOT_DIR)/test/fuzz/IRGraphCXXPrinter.h $(TEST_DEPS)
 	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $(filter %.cpp,$^) -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@ -DHALIDE_FUZZER_BACKEND=0
-
-# Error tests that link against libHalide
-$(BIN_DIR)/error_%: $(ROOT_DIR)/test/error/%.cpp $(TEST_DEPS)
-	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
 
 $(BIN_DIR)/warning_%: $(ROOT_DIR)/test/warning/%.cpp $(TEST_DEPS)
 	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
@@ -2155,9 +2148,21 @@ correctness_opencl_runtime: $(BIN_DIR)/$(TARGET)/correctness_opencl_runtime
 	cd $(TMP_DIR) ; $(CURDIR)/$<
 	@-echo
 
+# auto_schedule_no_parallel/auto_schedule_no_reorder need to load the
+# Mullapudi2016 autoscheduler plugin to exercise their intended error, so
+# (unlike other correctness_% tests) they take the plugin path as argv[1].
+correctness_auto_schedule_no_parallel correctness_auto_schedule_no_reorder: correctness_%: $(BIN_DIR)/correctness_% $(BIN_MULLAPUDI2016)
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR) ; $(CURDIR)/$< $(CURDIR)/$(BIN_MULLAPUDI2016)
+	@-echo
+
 quiet_correctness_%: $(BIN_DIR)/correctness_%
 	@-mkdir -p $(TMP_DIR)
 	@cd $(TMP_DIR) ; ( $(CURDIR)/$< 2>stderr_$*.txt > stdout_$*.txt && echo -n . ) || ( echo ; echo FAILED TEST: $* ; cat stdout_$*.txt stderr_$*.txt ; false )
+
+quiet_correctness_auto_schedule_no_parallel quiet_correctness_auto_schedule_no_reorder: quiet_correctness_%: $(BIN_DIR)/correctness_% $(BIN_MULLAPUDI2016)
+	@-mkdir -p $(TMP_DIR)
+	@cd $(TMP_DIR) ; ( $(CURDIR)/$< $(CURDIR)/$(BIN_MULLAPUDI2016) 2>stderr_$*.txt > stdout_$*.txt && echo -n . ) || ( echo ; echo FAILED TEST: $* ; cat stdout_$*.txt stderr_$*.txt ; false )
 
 fuzz_%: $(BIN_DIR)/fuzz_%
 	@-mkdir -p $(TMP_DIR)
@@ -2185,11 +2190,6 @@ valgrind_tracing_stack: $(BIN_DIR)/correctness_tracing_stack
 performance_%: $(BIN_DIR)/performance_%
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR) ; $(CURDIR)/$<
-	@-echo
-
-error_%: $(BIN_DIR)/error_%
-	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; $(CURDIR)/$< 2>&1 | egrep --q "terminating with uncaught exception|terminating due to uncaught exception|^terminate called|^Error|Assertion.*failed"
 	@-echo
 
 warning_%: $(BIN_DIR)/warning_%
