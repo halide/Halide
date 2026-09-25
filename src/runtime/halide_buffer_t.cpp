@@ -97,14 +97,17 @@ halide_buffer_t *_halide_buffer_init(halide_buffer_t *dst,
                                      void *host,
                                      uint64_t device,
                                      const halide_device_interface_t *device_interface,
-                                     int type_code, int type_bits,
+                                     int type_code, int type_bits, int type_info,
                                      int dimensions,
                                      halide_dimension_t *shape,
                                      uint64_t flags) {
     dst->host = (uint8_t *)host;
     dst->device = device;
     dst->device_interface = device_interface;
+    // type_info carries a struct element type's packed byte size (0 for
+    // ordinary types); see halide_type_t::info and Type::to_abi().
     dst->type = {(halide_type_code_t)type_code, (uint8_t)type_bits};
+    dst->type.info = (uint16_t)type_info;
     dst->dimensions = dimensions;
     dst->dim = dst_shape;
     if (shape != dst->dim) {

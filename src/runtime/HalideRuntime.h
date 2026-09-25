@@ -499,6 +499,8 @@ typedef enum halide_type_code_t
     halide_type_float = 2,   ///< IEEE floating point numbers
     halide_type_handle = 3,  ///< opaque pointer type (void *)
     halide_type_bfloat = 4,  ///< floating point numbers in the bfloat format
+    halide_type_struct = 5,  ///< a packed, by-value aggregate; its total byte
+                             ///< size is carried in halide_type_t::info
 } halide_type_code_t;
 
 // Note that while __attribute__ can go before or after the declaration,
@@ -532,22 +534,24 @@ struct halide_type_t {
     HALIDE_ATTRIBUTE_ALIGN(1)
     uint8_t bits;
 
-    /** Reserved for future element-kind payloads. */
+    /** Element-kind payload. For a struct type (code == halide_type_struct)
+     * this holds the total packed byte size of the aggregate; the ordinary
+     * `bits` field is not meaningful for a struct. Zero for all other types. */
     HALIDE_ATTRIBUTE_ALIGN(2)
-    uint16_t reserved;
+    uint16_t info;
 
 #if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
     /** Construct a runtime representation of a Halide element type from:
      * code: The fundamental type from an enum.
      * bits: The bit size of one element. */
     HALIDE_ALWAYS_INLINE constexpr halide_type_t(halide_type_code_t code, uint8_t bits)
-        : code(code), bits(bits), reserved(0) {
+        : code(code), bits(bits), info(0) {
     }
 
     /** Default constructor is required e.g. to declare halide_trace_event
      * instances. */
     HALIDE_ALWAYS_INLINE constexpr halide_type_t()
-        : code((halide_type_code_t)0), bits(0), reserved(0) {
+        : code((halide_type_code_t)0), bits(0), info(0) {
     }
 
     /** Compare two types for equality. */
@@ -563,9 +567,11 @@ struct halide_type_t {
         return static_cast<uint32_t>(*this) < static_cast<uint32_t>(other);
     }
 
-    /** Size in bytes for a single element of this type. */
+    /** Size in bytes for a single element of this type. For a struct type the
+     * packed aggregate size is carried in `info` rather than derived from
+     * `bits`. */
     HALIDE_ALWAYS_INLINE constexpr int bytes() const {
-        return (bits + 7) / 8;
+        return code == halide_type_struct ? info : (bits + 7) / 8;
     }
 
     HALIDE_ALWAYS_INLINE constexpr operator uint32_t() const {
@@ -575,7 +581,7 @@ struct halide_type_t {
         // (At -O0 it will look awful.)
         return static_cast<uint8_t>(code) |
                static_cast<uint16_t>(bits) << 8 |
-               static_cast<uint32_t>(reserved) << 16;
+               static_cast<uint32_t>(info) << 16;
     }
 #endif
 };
@@ -740,7 +746,7 @@ struct halide_trace_packet_t {
         struct {
             /** The (scalar) element type code of the access (see halide_trace_event_t).
              * Unpacked from halide_type_t rather than storing it directly, since
-             * halide_type_t's `reserved` field carries no meaning here. */
+             * halide_type_t's `info` field carries no meaning here. */
             uint8_t type_code;
             /** The bit-width of the element type of the access. */
             uint8_t type_bits;
@@ -2533,6 +2539,8 @@ inline std::ostream &operator<<(std::ostream &os, const halide_type_t &type) {
         return os << "(void*)";
     case halide_type_bfloat:
         return os << "bfloat" << (int)type.bits;
+    case halide_type_struct:
+        return os << "struct(" << (int)type.info << " bytes)";
     }
     return os;
 }
