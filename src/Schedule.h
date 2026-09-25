@@ -533,6 +533,20 @@ struct StorageDim {
     bool fold_forward;
 };
 
+/** A split of one storage axis into two, created by
+ * Func::split_storage. Storage splits are the storage-layout analogue
+ * of loop splits (\ref Split): the pre-split axis old_var is carved
+ * into an outer and inner axis, where the inner axis has extent
+ * "factor". Unlike loop splits there is no TailStrategy - the
+ * allocation is always rounded up so that the outer extent is
+ * ceil(old_extent / factor). The resulting outer/inner axes appear in
+ * the storage_dims list (in place of old_var) and can be reordered,
+ * bounded and aligned like any other storage axis. */
+struct StorageSplit {
+    std::string old_var, outer, inner;
+    Expr factor;
+};
+
 /** This represents two stages with fused loop nests from outermost to
  * a specific loop level. The loops to compute func_1(stage_1) are
  * fused with the loops to compute func_2(stage_2) from outermost to
@@ -629,6 +643,15 @@ public:
     // @{
     const std::vector<StorageDim> &storage_dims() const;
     std::vector<StorageDim> &storage_dims();
+    // @}
+
+    /** The list of storage-axis splits (see \ref StorageSplit and \ref
+     * Func::split_storage), in the order they were applied. Storage
+     * flattening replays these to derive the storage layout from the
+     * pure args. */
+    // @{
+    const std::vector<StorageSplit> &storage_splits() const;
+    std::vector<StorageSplit> &storage_splits();
     // @}
 
     /** The memory type (heap/stack/shared/etc) used to back this Func. */

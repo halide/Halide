@@ -14,33 +14,11 @@ void fill_buffer_a_bf16(Buffer<bfloat16_t> &buf, int row, int acc) {
     }
 }
 
-void fill_buffer_b_bf16(Buffer<bfloat16_t> &buf, int col, int acc) {
-    for (int iy = 0; iy < acc / 2; ++iy) {
-        for (int ix = 0; ix < col; ++ix) {
-            for (int ik = 0; ik < 2; ++ik) {
-                bfloat16_t val = bfloat16_t(((float)rand() / (float)(RAND_MAX)) * 100.f);
-                buf(ik, ix, iy) = val;
-            }
-        }
-    }
-}
-
 template<typename IntT>
 void fill_buffer_a(Buffer<IntT> &buf, int row, int acc) {
     for (int iy = 0; iy < row; iy++) {
         for (int ix = 0; ix < acc; ix++) {
             buf(ix, iy) = rand() % 256 + std::numeric_limits<IntT>::min();
-        }
-    }
-}
-
-template<typename IntT>
-void fill_buffer_b(Buffer<IntT> &buf, int col, int acc) {
-    for (int iy = 0; iy < acc / 4; iy++) {
-        for (int ix = 0; ix < col; ix++) {
-            for (int ik = 0; ik < 4; ++ik) {
-                buf(ik, ix, iy) = rand() % 256 + std::numeric_limits<IntT>::min();
-            }
         }
     }
 }
@@ -91,19 +69,24 @@ void print_mat_rhs(const Buffer<T> &buf, int rows, int cols) {
 template<typename LhsInt8, typename RhsInt8>
 bool matmul(int col, int row, int acc, int tile_x, int tile_y, int tile_r, bool use_intrinsic) {
     Buffer<LhsInt8> A_buf(acc, row);
-    Buffer<RhsInt8> B_buf(4, col, acc / 4);
+    Buffer<RhsInt8> B_buf(col, acc);  // natural 2D (col, k)
 
     Var x("x"), y("y");
     RDom r(0, acc);
+
+    // Repack B into VNNI format with split_storage instead of requiring a
+    // pre-packed 3D input. Bf wraps the buffer; its storage splits the K axis
+    // into runs of four with the run innermost.
+    Func Bf(B_buf);
 
     Func mm("matmul");
 
     mm(x, y) = 0;
 
     if (use_intrinsic) {
-        mm(x, y) += widening_mul(A_buf(r, y), B_buf(r % 4, x, r / 4));
+        mm(x, y) += widening_mul(A_buf(r, y), Bf(x, r));
     } else {
-        mm(x, y) += cast<int32_t>(A_buf(r, y)) * cast<int32_t>(B_buf(r % 4, x, r / 4));
+        mm(x, y) += cast<int32_t>(A_buf(r, y)) * cast<int32_t>(Bf(x, r));
     }
 
     Var rxi("rxi"), ryi("ryi"), xi("xi"), yi("yi");
@@ -116,7 +99,13 @@ bool matmul(int col, int row, int acc, int tile_x, int tile_y, int tile_r, bool 
     // one matrix multiply operation applied to a single AMXTile allocation.
     int outer_tile_x = col > tile_x ? 2 : 1, outer_tile_y = row > tile_y ? 2 : 1;
 
-    mm.compute_at(mm.in(), x)
+    // Process the output in panels of columns, with the panel loop outermost
+    // and the rows inside it, so the VNNI repack of B can be staged once per
+    // panel and reused across all the rows.
+    int ncol_tiles = col / (tile_x * outer_tile_x);
+    Var xp("xp"), xt("xt");
+
+    mm.compute_at(mm.in(), xt)
         .store_in(MemoryType::AMXTile)
         .update()
         .tile(x, y, rxi, ryi, tile_x, tile_y, TailStrategy::GuardWithIf)
@@ -132,26 +121,40 @@ bool matmul(int col, int row, int acc, int tile_x, int tile_y, int tile_r, bool 
         .unroll(yi);
 
     Var ixi("ixi"), iyi("iyi");
-    mm.compute_at(mm.in(), x)
+    mm.compute_at(mm.in(), xt)
         .tile(x, y, ixi, iyi, tile_x, tile_y)
         .vectorize(ixi)
         .vectorize(iyi)
         .unroll(x)
         .unroll(y);
 
-    // schedule the consumer
+    // schedule the consumer, with a panel loop over columns outermost.
     Var mmxi("mmxi"), mmyi("mmyi");
     mm.in()
         .tile(x, y, mmxi, mmyi, tile_x * outer_tile_x, tile_y * outer_tile_y)
         .vectorize(mmxi, tile_x)
         .vectorize(mmyi, tile_y)
         .unroll(mmxi)
-        .unroll(mmyi);
+        .unroll(mmyi)
+        .split(x, xp, xt, ncol_tiles)
+        .reorder(mmxi, mmyi, xt, y, xp);
+
+    // Repack B into VNNI format, staged once per column panel (reused across
+    // the rows). It's a 4-way interleave, so vectorize across columns entirely
+    // and vectorize the K-run to get vector interleave code.
+    Var ko("ko"), ki("ki"), lko("lko"), lki("lki");
+    Bf.compute_at(mm.in(), xp)
+        .split_storage(_1, ko, ki, 4)
+        .reorder_storage(ki, _0, ko)
+        .split(_1, lko, lki, 4)
+        .reorder(lki, _0, lko)
+        .vectorize(lki)
+        .vectorize(_0);
 
     Func result = mm.in();
 
     fill_buffer_a(A_buf, row, acc);
-    fill_buffer_b(B_buf, col, acc);
+    fill_buffer_a(B_buf, acc, col);  // a natural 2D (col, k) matrix
 
     Buffer<int32_t> out(col, row);
 
@@ -178,7 +181,7 @@ bool matmul(int col, int row, int acc, int tile_x, int tile_y, int tile_r, bool 
         for (int i = 0; i < col; ++i) {
             int32_t val = 0;
             for (int k = 0; k < acc; ++k) {
-                val += static_cast<int32_t>(A_buf(k, j)) * static_cast<int32_t>(B_buf(k % 4, i, k / 4));
+                val += static_cast<int32_t>(A_buf(k, j)) * static_cast<int32_t>(B_buf(i, k));
             }
             if (val != out(i, j)) {
                 std::cerr << "Invalid result at " << i << ", " << j << "\n"
@@ -195,22 +198,30 @@ bool matmul(int col, int row, int acc, int tile_x, int tile_y, int tile_r, bool 
 bool matmul_bf16(int col, int row, int acc, int tile_x, int tile_y, int tile_r, bool use_intrinsics) {
     Var x("x"), y("y");
     Buffer<bfloat16_t> A(acc, row);
-    Buffer<bfloat16_t> B(2, col, acc / 2);
+    Buffer<bfloat16_t> B(col, acc);  // natural 2D (col, k)
 
     RDom r(0, acc, "acc");
+
+    // Repack B into VNNI format with split_storage (K-run of two for bf16).
+    Func Bf(B);
 
     Func mm("matmul");
     mm(x, y) = 0.f;
     if (use_intrinsics) {
-        mm(x, y) += widening_mul(A(r.x, y), B(r.x % 2, x, r.x / 2));
+        mm(x, y) += widening_mul(A(r.x, y), Bf(x, r.x));
     } else {
-        mm(x, y) += cast<float>(A(r.x, y)) * cast<float>(B(r.x % 2, x, r.x / 2));
+        mm(x, y) += cast<float>(A(r.x, y)) * cast<float>(Bf(x, r.x));
     }
 
     Var rxi("rxi"), ryi("ryi");
     RVar rri("rri"), rro("rro");
 
-    mm.compute_at(mm.in(), x)
+    // Panel loop over columns outermost, rows inside, so B's repack is staged
+    // once per panel and reused across rows.
+    int ncol_tiles = col / tile_x;
+    Var xp("xp"), xt("xt");
+
+    mm.compute_at(mm.in(), xt)
         .store_in(MemoryType::AMXTile)
         .update()
         .tile(x, y, rxi, ryi, tile_x, tile_y, TailStrategy::GuardWithIf)
@@ -222,22 +233,36 @@ bool matmul_bf16(int col, int row, int acc, int tile_x, int tile_y, int tile_r, 
         .vectorize(ryi);
 
     Var ixi("ixi"), iyi("iyi");
-    mm.compute_at(mm.in(), x)
+    mm.compute_at(mm.in(), xt)
         .tile(x, y, ixi, iyi, tile_x, tile_y)
         .vectorize(ixi)
         .vectorize(iyi);
 
-    // schedule the consumer
+    // schedule the consumer, with a panel loop over columns outermost.
     Var mmxi("mmxi"), mmyi("mmyi");
     mm.in()
         .tile(x, y, mmxi, mmyi, tile_x, tile_y)
         .vectorize(mmxi)
-        .vectorize(mmyi);
+        .vectorize(mmyi)
+        .split(x, xp, xt, ncol_tiles)
+        .reorder(mmxi, mmyi, xt, y, xp);
+
+    // Repack B into VNNI format, staged once per column panel (reused across
+    // the rows). It's a 2-way interleave, so vectorize across columns entirely
+    // and vectorize the K-run to get vector interleave code.
+    Var ko("ko"), ki("ki"), lko("lko"), lki("lki");
+    Bf.compute_at(mm.in(), xp)
+        .split_storage(_1, ko, ki, 2)
+        .reorder_storage(ki, _0, ko)
+        .split(_1, lko, lki, 2)
+        .reorder(lki, _0, lko)
+        .vectorize(lki)
+        .vectorize(_0);
 
     Func result = mm.in();
 
     fill_buffer_a_bf16(A, row, acc);
-    fill_buffer_b_bf16(B, col, acc);
+    fill_buffer_a_bf16(B, acc, col);  // a natural 2D (col, k) matrix
 
     Buffer<float> out(col, row);
 
@@ -250,7 +275,8 @@ bool matmul_bf16(int col, int row, int acc, int tile_x, int tile_y, int tile_r, 
         result.realize(out);
     } else {
         // Just compile it to see if anything crashes
-        result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, Target{"x86-64-linux-avx512_sapphirerapids"});
+        // result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, Target{"x86-64-linux-avx512_sapphirerapids"});
+        result.compile_to_assembly("/dev/stdout", {A, B}, Target{"x86-64-linux-avx512_sapphirerapids-no_runtime-no_asserts-no_bounds_query"});
         return true;
     }
 
@@ -267,7 +293,7 @@ bool matmul_bf16(int col, int row, int acc, int tile_x, int tile_y, int tile_r, 
         for (int i = 0; i < col; ++i) {
             float val = 0.f;
             for (int k = 0; k < acc; ++k) {
-                val += static_cast<float>(A(k, j)) * static_cast<float>(B(k % 2, i, k / 2));
+                val += static_cast<float>(A(k, j)) * static_cast<float>(B(i, k));
             }
             if (!equal_eps(val, out(i, j), 0.01f)) {
                 std::cerr << "Invalid result at " << i << ", " << j << "\n"

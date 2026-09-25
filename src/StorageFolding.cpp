@@ -51,6 +51,30 @@ int count_producers(const Stmt &in, const std::string &name) {
     return counter.count;
 }
 
+bool storage_arg_was_split(const Function &func, const std::string &arg) {
+    const vector<StorageSplit> &splits = func.schedule().storage_splits();
+    return std::any_of(splits.begin(), splits.end(),
+                       [&](const StorageSplit &split) {
+                           return split.old_var == arg;
+                       });
+}
+
+// The buffer dimension that holds a pure arg of a function. Funcs with storage
+// splits have buffers in storage order.
+int storage_position(const Function &func, int arg) {
+    if (func.schedule().storage_splits().empty()) {
+        return arg;
+    }
+    const vector<StorageDim> &dims = func.schedule().storage_dims();
+    for (size_t i = 0; i < dims.size(); i++) {
+        if (dims[i].var == func.args()[arg]) {
+            return (int)i;
+        }
+    }
+    internal_error << "Arg " << func.args()[arg] << " of " << func.name() << " not found in storage dims\n";
+    return -1;
+}
+
 // Fold the storage of a function in a particular dimension by a particular factor
 class FoldStorageOfFunction : public IRMutator {
     string func;
@@ -597,10 +621,15 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr extent = Max::make(extent_initial, extent_steady);
             extent = simplify(common_subexpression_elimination(extent), bounds);
 
-            // Find the StorageDim corresponding to dim.
+            const string &arg = func.args()[dim];
+            if (storage_arg_was_split(func, arg)) {
+                continue;
+            }
+
+            // Find the StorageDim corresponding to this unsplit arg.
             const std::vector<StorageDim> &storage_dims = func.schedule().storage_dims();
             auto storage_dim_i = std::find_if(storage_dims.begin(), storage_dims.end(),
-                                              [&](const StorageDim &i) { return i.var == func.args()[dim]; });
+                                              [&](const StorageDim &i) { return i.var == arg; });
             internal_assert(storage_dim_i != storage_dims.end());
             const StorageDim &storage_dim = *storage_dim_i;
 
@@ -910,7 +939,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
             Expr head = Load::make(Int(32), dynamic_footprint + ".head", 0);
             Expr tail = Load::make(Int(32), dynamic_footprint + ".tail", 0);
-            Expr step = Variable::make(Int(32), func.name() + ".extent." + std::to_string(dims_folded.back().dim)) + dims_folded.back().factor;
+            Expr extent = Variable::make(Int(32), func.name() + ".extent." + std::to_string(storage_position(func, dims_folded.back().dim)));
+            Expr step = extent + dims_folded.back().factor;
             Stmt reset_head = Store::make(dynamic_footprint + ".head_next", head - step, 0);
             Stmt reset_tail = Store::make(dynamic_footprint + ".tail_next", tail - step, 0);
             stmt = Block::make({stmt, reset_head, reset_tail});
@@ -967,7 +997,9 @@ class StorageFolding : public IRMutator {
                 continue;
             }
             auto arg_it = std::find(args.begin(), args.end(), sd.var);
-            internal_assert(arg_it != args.end());
+            internal_assert(arg_it != args.end() &&
+                            !storage_arg_was_split(func, *arg_it))
+                << "fold_storage of Func " << op->name << " along split_storage axis " << sd.var << "\n";
             int d = (int)(arg_it - args.begin());
             bool folded = std::any_of(folder.dims_folded.begin(), folder.dims_folded.end(),
                                       [&](const AttemptStorageFoldingOfFunction::Fold &f) {

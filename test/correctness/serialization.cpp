@@ -52,6 +52,46 @@ int main() {
         }
     }
 
+    // storage_splits survive a round trip.
+    {
+        Func f("f"), g("g");
+        Var xo("xo"), xi("xi");
+        f(x, y) = x + y;
+        g(x, y) = f(x, y);
+        f.compute_root().split_storage(x, xo, xi, 4).reorder_storage(xi, y, xo);
+
+        std::vector<uint8_t> data;
+        std::map<std::string, Parameter> params;
+        serialize_pipeline(Pipeline(g), data, params);
+        Pipeline deserialized = deserialize_pipeline(data, params);
+
+        bool found = false;
+        std::map<std::string, Internal::Function> env =
+            Internal::find_transitive_calls(deserialized.outputs()[0].function());
+        for (const auto &p : env) {
+            const auto &splits = p.second.schedule().storage_splits();
+            if (p.second.name() == f.name() && splits.size() == 1 &&
+                splits[0].old_var == x.name() && splits[0].outer == xo.name() &&
+                splits[0].inner == xi.name() && is_const(splits[0].factor, 4)) {
+                found = true;
+            }
+        }
+        if (!found) {
+            printf("storage_splits were not preserved by serialization\n");
+            return 1;
+        }
+
+        Buffer<int> result = deserialized.realize({10, 6});
+        for (int j = 0; j < 6; j++) {
+            for (int i = 0; i < 10; i++) {
+                if (result(i, j) != i + j) {
+                    printf("Split storage mismatch at (%d, %d): got %d\n", i, j, result(i, j));
+                    return 1;
+                }
+            }
+        }
+    }
+
     // A corrupted buffer is still rejected: raising max_depth must not
     // disable the structural verification #9395 added.
     {

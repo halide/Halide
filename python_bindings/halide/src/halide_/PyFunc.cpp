@@ -435,6 +435,8 @@ void define_func(py::module &m) {
 
             .def("bound_extent", &Func::bound_extent, py::arg("var"), py::arg("extent"))
 
+            .def("split_storage", &Func::split_storage, py::arg("old"), py::arg("outer"), py::arg("inner"), py::arg("factor"))
+
             .def("align_storage", &Func::align_storage, py::arg("dim"), py::arg("alignment"))
 
             .def("fold_storage", &Func::fold_storage, py::arg("dim"), py::arg("extent"), py::arg("fold_forward") = true)

@@ -3364,6 +3364,69 @@ Func &Func::prefetch(const Parameter &param, const VarOrRVar &at, const VarOrRVa
     return *this;
 }
 
+Func &Func::split_storage(const Var &old, const Var &outer, const Var &inner, const Expr &factor) {
+    invalidate_cache();
+
+    user_assert(!func.has_extern_definition())
+        << "In schedule for " << name()
+        << ", split_storage is not supported because " << name()
+        << " has an extern definition.\n";
+
+    user_assert(factor.defined())
+        << "In schedule for " << name()
+        << ", split_storage of " << old.name() << " has an undefined factor.\n";
+    user_assert(Int(32).can_represent(factor.type()))
+        << "In schedule for " << name()
+        << ", split_storage factor for splitting " << old.name()
+        << " has type " << factor.type()
+        << ", which is not representable as int32.\n";
+    user_assert(outer.name() != inner.name())
+        << "In schedule for " << name()
+        << ", split_storage of " << old.name()
+        << " uses the same name for the inner and outer axis.\n";
+
+    vector<StorageDim> &dims = func.schedule().storage_dims();
+    for (const StorageDim &dim : dims) {
+        for (const Var *new_var : {&outer, &inner}) {
+            if (var_name_match(dim.var, new_var->name()) &&
+                !var_name_match(dim.var, old.name())) {
+                user_error << "In schedule for " << name()
+                           << ", can't create storage axis " << new_var->name()
+                           << " using split_storage, because it is already used "
+                              "in this Func's storage schedule.\n"
+                           << dump_dim_list(dims);
+            }
+        }
+    }
+
+    for (size_t i = 0; i < dims.size(); i++) {
+        if (var_name_match(dims[i].var, old.name())) {
+            user_assert(!dims[i].bound.defined() &&
+                        !dims[i].alignment.defined() &&
+                        !dims[i].fold_factor.defined())
+                << "In schedule for " << name()
+                << ", can't split_storage " << old.name()
+                << " because it already has a bound_storage, align_storage, or "
+                   "fold_storage setting. Apply these to the split axes instead.\n";
+            // Record the split so storage flattening can reconstruct
+            // the storage layout, then replace the old axis with the
+            // inner (innermost) and outer axes.
+            func.schedule().storage_splits().push_back(
+                {dims[i].var, outer.name(), inner.name(), cast<int32_t>(factor)});
+            StorageDim inner_dim = {inner.name()};
+            StorageDim outer_dim = {outer.name()};
+            dims[i] = inner_dim;
+            dims.insert(dims.begin() + i + 1, outer_dim);
+            return *this;
+        }
+    }
+    user_error << "In schedule for " << name()
+               << ", could not find var " << old.name()
+               << " to split the storage of.\n"
+               << dump_dim_list(dims);
+    return *this;
+}
+
 Func &Func::reorder_storage(const Var &x, const Var &y) {
     invalidate_cache();
 
@@ -3447,6 +3510,14 @@ Func &Func::bound_storage(const Var &dim, const Expr &bound) {
 
 Func &Func::fold_storage(const Var &dim, const Expr &factor, bool fold_forward) {
     invalidate_cache();
+
+    for (const StorageSplit &split : func.schedule().storage_splits()) {
+        user_assert(!var_name_match(split.outer, dim.name()) &&
+                    !var_name_match(split.inner, dim.name()))
+            << "In schedule for " << name()
+            << ", can't fold_storage " << dim.name()
+            << " because it is a split_storage axis.\n";
+    }
 
     vector<StorageDim> &dims = func.schedule().storage_dims();
     for (auto &d : dims) {
