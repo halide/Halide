@@ -849,6 +849,12 @@ void test_tuple_of_structs_update_cross_talk() {
 }  // namespace
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::ARM && Internal::get_llvm_version() == 210) {
+        printf("[SKIP] LLVM 21 has a known AArch64 codegen failure for this test.\n");
+        return 0;
+    }
+
     test_type_struct_basics();
     test_struct_type_ordering_consistent_with_equality();
     test_constant_integer_bounds_of_struct();
