@@ -144,6 +144,49 @@ size_t find_fused_group_index(const Function &producing_func,
     return iter - fused_groups.begin();
 }
 
+// A PredicateStores split masks only the store: everything computed inside the
+// split's loops still runs on the rounded-up iterations, as it would for
+// RoundUp. So when computing the box that producers nested in those loops must
+// cover, undo the store-side guarding: use the split var itself in place of
+// its promise-clamped ".guarded" copy, and drop the store predicate.
+class UnguardPredicateStores : public IRMutator {
+    map<string, Expr> unguarded;
+    set<string> funcs;
+
+    using IRMutator::visit;
+
+    Expr visit(const Variable *op) override {
+        auto it = unguarded.find(op->name);
+        return it == unguarded.end() ? op : it->second;
+    }
+
+    Stmt visit(const Provide *op) override {
+        Stmt s = IRMutator::visit(op);
+        if (funcs.count(op->name)) {
+            const Provide *p = s.as<Provide>();
+            s = Provide::make(p->name, p->values, p->args, const_true());
+        }
+        return s;
+    }
+
+public:
+    void add_stage(const Function &f, int stage) {
+        const Definition &def = stage == 0 ? f.definition() : f.update(stage - 1);
+        string prefix = f.name() + ".s" + std::to_string(stage) + ".";
+        for (const Split &split : def.schedule().splits()) {
+            if (split.tail == TailStrategy::PredicateStores) {
+                string var = prefix + split.old_var;
+                unguarded[var + ".guarded"] = Variable::make(Int(32), var);
+                funcs.insert(f.name());
+            }
+        }
+    }
+
+    bool empty() const {
+        return funcs.empty();
+    }
+};
+
 // Determine if the current producing stage is fused with other
 // stage (i.e. the consumer stage) at dimension 'var'.
 bool is_fused_with_others(const vector<vector<Function>> &fused_groups,
@@ -1140,12 +1183,23 @@ public:
                 }
             }
 
+            UnguardPredicateStores unguard;
+            for (const auto &fused : fused_group) {
+                for (const auto &fn : funcs) {
+                    if (fn.name() == fused.first) {
+                        unguard.add_stage(fn, fused.second);
+                        break;
+                    }
+                }
+            }
+            Stmt provided = unguard.empty() ? body : unguard(body);
+
             if (fused_group.size() == 1) {
-                boxes_for_fused_group[stage_name] = box_provided(body, stages[producing].name, empty_scope, func_bounds);
+                boxes_for_fused_group[stage_name] = box_provided(provided, stages[producing].name, empty_scope, func_bounds);
                 stage_name_to_func[stage_name] = f;
                 internal_assert((int)boxes_for_fused_group[stage_name].size() == f.dimensions());
             } else {
-                auto boxes = boxes_provided(body, empty_scope, func_bounds);
+                auto boxes = boxes_provided(provided, empty_scope, func_bounds);
                 for (const auto &fused : fused_group) {
                     string fused_stage_name = fused.first + ".s" + std::to_string(fused.second);
                     auto it = boxes.find(fused.first);
