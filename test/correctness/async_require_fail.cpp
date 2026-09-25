@@ -8,7 +8,7 @@ using namespace Halide;
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
         printf("[SKIP] WebAssembly JIT does not yet support async().\n");
-        _halide_user_assert(0);
+        return 0;
     }
 
     return error_test("async_require_fail", "The parameters should add to exactly 7829 but were 1 2", []() {

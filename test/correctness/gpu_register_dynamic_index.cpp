@@ -11,10 +11,8 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    // NEEDS REVIEW: best-effort expected substring; likely comes from
-    // PromoteGPURegisters -> get_subtile() rejecting a non-affine index.
     return error_test("gpu_register_dynamic_index", "which is scheduled to live in Register memory outside the loops over "
-                                                    "GPU threads not affine:",
+                                                    "GPU threads does not partially overlap another distinct access:",
                       [&]() {
                           Func f("f"), g("g");
                           Var x("x"), y("y"), xo("xo"), yo("yo"), xi("xi"), yi("yi"), xii("xii"), yii("yii");

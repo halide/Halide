@@ -6,6 +6,7 @@
 
 #include "Halide.h"
 
+#include <initializer_list>
 #include <stdio.h>
 #include <string>
 
@@ -34,6 +35,33 @@ bool expect_user_error(const char *name, const char *substring, F body) {
     return false;
 }
 
+/** Run `body` and check it produces a Halide error whose message mentions at
+ * least one of `substrings`. Useful when the exact wording legitimately
+ * varies (e.g. by GPU backend, or by build-time configuration that can't be
+ * queried at runtime). */
+template<typename F>
+bool expect_user_error(const char *name, std::initializer_list<const char *> substrings, F body) {
+    try {
+        body();
+    } catch (const Halide::Error &e) {
+        std::string msg = e.what();
+        for (const char *substring : substrings) {
+            if (msg.find(substring) != std::string::npos) {
+                printf("[%s] OK: %s\n", name, msg.c_str());
+                return true;
+            }
+        }
+        printf("[%s] FAIL: error did not mention any of the expected substrings:\n%s\n",
+               name, msg.c_str());
+        return false;
+    } catch (...) {
+        printf("[%s] FAIL: expected a Halide::Error but got a different exception\n", name);
+        return false;
+    }
+    printf("[%s] FAIL: expected a user error but none was raised\n", name);
+    return false;
+}
+
 /** Run `body` and check it produces a Halide user error, whatever it says. */
 template<typename F>
 bool expect_user_error(const char *name, F body) {
@@ -53,6 +81,22 @@ int error_test(const char *name, const char *substring, F body) {
     return 0;
 #else
     if (!expect_user_error(name, substring, body)) {
+        return 1;
+    }
+    printf("Success!\n");
+    return 0;
+#endif
+}
+
+/** Like `error_test`, but accepts the error if its message mentions any of
+ * `substrings`. */
+template<typename F>
+int error_test(const char *name, std::initializer_list<const char *> substrings, F body) {
+#ifndef HALIDE_WITH_EXCEPTIONS
+    printf("[SKIP] %s requires exceptions\n", name);
+    return 0;
+#else
+    if (!expect_user_error(name, substrings, body)) {
         return 1;
     }
     printf("Success!\n");
