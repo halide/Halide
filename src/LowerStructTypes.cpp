@@ -101,7 +101,7 @@ class LowerStructTypesMutator : public IRMutator {
     // literal struct_pack(), a Select between two struct-typed branches, a
     // struct-typed Let, or a genuine flattened Load.
     Expr project_field(const Expr &struct_expr, int field_index, const Expr &elem_index) {
-        Expr e = struct_expr;
+        const Expr &e = struct_expr;
         const StructTypeInfo *info = e.type().struct_type();
         internal_assert(info != nullptr) << "project_field applied to a non-struct-typed Expr.\n";
         internal_assert(field_index >= 0 && field_index < (int)info->fields.size());
