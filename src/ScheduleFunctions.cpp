@@ -15,6 +15,7 @@
 #include "Prefetch.h"
 #include "Qualify.h"
 #include "ScheduleFunctions.h"
+#include "Scope.h"
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
@@ -142,18 +143,45 @@ class AddPredicates : public IRGraphMutator {
     const Function &func;
     ApplySplitResult::Type type;
 
+    // The promise_clamped guards of enclosing exact splits (see ApplySplit.cpp),
+    // as real clamps.
+    Scope<Expr> clamped_guards;
+
     using IRMutator::visit;
+
+    Stmt visit(const LetStmt *op) override {
+        const Call *c = op->value.as<Call>();
+        bool guard = type == ApplySplitResult::BlendProvides && c &&
+                     c->is_intrinsic(Call::promise_clamped) && ends_with(op->name, ".guarded");
+        ScopedBinding<Expr> bind(guard, clamped_guards, op->name,
+                                 guard ? min(c->args[0], c->args[2]) : Expr());
+        return IRMutator::visit(op);
+    }
 
     Stmt visit(const Provide *p) override {
         auto [args, changed_args] = mutate_with_changes(p->args);
         auto [values, changed_values] = mutate_with_changes(p->values);
         Expr predicate = mutate(p->predicate);
         if (type == ApplySplitResult::BlendProvides) {
+            // The blend loads the value the store would overwrite. If an
+            // earlier PredicateStores split guarded the store's args, that
+            // promise only holds where the store predicate does, but a
+            // predicated store's value is evaluated regardless (and CSE may
+            // merge the load with others). Clamp the load's args for real so
+            // it stays inside the region bounds inference infers from them.
+            vector<Expr> load_args = args;
+            if (!is_const_one(predicate)) {
+                for (Expr &a : load_args) {
+                    for (auto g = clamped_guards.cbegin(); g != clamped_guards.cend(); ++g) {
+                        a = substitute(g.name(), g.value(), a);
+                    }
+                }
+            }
             int idx = 0;
             for (Expr &v : values) {
                 // A Func referring to its own prior value; must not resolve
                 // through a global wrapper.
-                v = select(cond, v, Call::make(func, args, idx++,
+                v = select(cond, v, Call::make(func, load_args, idx++,
                                                /*follow_global_wrappers=*/false));
             }
             return p->with(values, args, predicate);
