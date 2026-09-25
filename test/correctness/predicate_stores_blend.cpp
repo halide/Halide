@@ -67,9 +67,10 @@ void guarded_free(JITUserContext *, void *) {
 }
 
 bool check(int mode) {
-    Var x("x"), y("y"), xo("xo"), xi("xi"), yo("yo"), yi("yi"), xoo("xoo"), xoi("xoi");
+    Var x("x"), y("y"), xo("xo"), xi("xi"), yo("yo"), yi("yi");
+    Var xoo("xoo"), xoi("xoi"), yoo("yoo"), yoi("yoi");
     Func g("g"), f("f"), out("out");
-    bool update = mode == 3;
+    bool update = mode == 3 || mode == 5;
     if (update) {
         f(x, y) = 7;
         f(x, y) = f(x, y) + 1;
@@ -109,6 +110,14 @@ bool check(int mode) {
         s.split(x, xo, xi, 8, TailStrategy::PredicateStores)
             .vectorize(xi)
             .split(xo, xoo, xoi, 2, TailStrategy::ShiftInwardsAndBlend);
+        break;
+    case 5:
+        // As 3, with both loads also masked by a PredicateLoads split on y.
+        s.split(x, xo, xi, 3, TailStrategy::PredicateStores)
+            .split(xo, xoo, xoi, 2, TailStrategy::PredicateLoads)
+            .split(y, yo, yi, 4, TailStrategy::RoundUpAndBlend)
+            .split(yo, yoo, yoi, 2, TailStrategy::PredicateLoads)
+            .reorder(xi, yi, xoi, xoo, yoi, yoo);
         break;
     }
     bool vectorized = mode == 2 || mode == 4;
@@ -159,7 +168,7 @@ int main(int argc, char **argv) {
         printf("[SKIP] Test requires custom host allocations.\n");
         return 0;
     }
-    for (int mode = 0; mode < 5; mode++) {
+    for (int mode = 0; mode < 6; mode++) {
         if (!check(mode)) {
             return 1;
         }

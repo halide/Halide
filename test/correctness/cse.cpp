@@ -202,6 +202,13 @@ int main(int argc, char **argv) {
                                  masked(y > 0, t[0] * 2)});
         check(e, correct);
 
+        // An if_then_else containing a load isn't safe to speculate
+        // either: its condition may only be part of what keeps the load in
+        // bounds.
+        Expr inner = masked(x > y, load);
+        e = masked(x > 0, inner) + masked(y > 0, inner);
+        check(e, e);
+
         // Repeated loads within a branch are CSE'd there.
         e = masked(x > 0, load * load + x) + masked(y > 0, load);
         correct = masked(x > 0, ssa_block({load, t[0] * t[0] + x})) + masked(y > 0, load);

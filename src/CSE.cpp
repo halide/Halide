@@ -200,7 +200,8 @@ public:
 };
 
 /** Find the nodes of an Expr that may not be safe to evaluate where they
- * aren't needed, because they contain a load or an impure call. */
+ * aren't needed, because they contain a load or a call with side effects.
+ * Calls to Funcs and images aren't loads yet. */
 class FindUnsafeToSpeculate : public IRGraphVisitor {
     using IRGraphVisitor::visit;
 
@@ -225,12 +226,11 @@ class FindUnsafeToSpeculate : public IRGraphVisitor {
     }
 
     void visit(const Call *op) override {
-        if (op->is_intrinsic(Call::if_then_else)) {
-            // Guards its own branches.
-            include(op->args[0]);
-            return;
-        }
-        if (op->call_type == Call::Halide || op->call_type == Call::Image || !op->is_pure()) {
+        // Note that an if_then_else containing a load isn't safe either: its
+        // condition may only be part of what keeps the load in bounds.
+        if (op->call_type == Call::Extern ||
+            op->call_type == Call::ExternCPlusPlus ||
+            op->call_type == Call::Intrinsic) {
             unsafe = true;
         }
         IRGraphVisitor::visit(op);
