@@ -49,8 +49,15 @@ class AllocationInference : public IRMutator {
         // If the realization is dead and there is no access to the
         // buffer (e.g. because we're in a specialization), then
         // b.size() may be zero. In this case just drop the realize
-        // node.
+        // node. Other code (e.g. tracing) may still name the realized
+        // bounds, so define them as an empty box.
         if (b.empty() && !op->bounds.empty()) {
+            for (size_t i = 0; i < op->bounds.size(); i++) {
+                string prefix = op->name + "." + f_args[i];
+                new_body = LetStmt::make(prefix + ".extent_realized", 0, new_body);
+                new_body = LetStmt::make(prefix + ".min_realized", 0, new_body);
+                new_body = LetStmt::make(prefix + ".max_realized", -1, new_body);
+            }
             return new_body;
         }
 

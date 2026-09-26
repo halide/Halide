@@ -481,6 +481,7 @@ tests(
     split_reuse_inner_name_bug.cpp
     split_same_var_names.cpp
     split_store_compute.cpp
+    split_tail_preconditions.cpp
     stable_realization_order.cpp
     stack_allocations.cpp
     stage_strided_loads.cpp
