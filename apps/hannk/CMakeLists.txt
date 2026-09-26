@@ -55,6 +55,7 @@ target_include_directories(hannk_headers INTERFACE $<BUILD_INTERFACE:${hannk_SOU
 # ----------------------------
 
 add_subdirectory(halide)
+add_custom_target(hannk DEPENDS halide_op_implementations.build_all)
 if (HANNK_AOT_HOST_ONLY)
     # Don't add anything else to the build... everything for AOT is in the halide subdirectory
     return()
@@ -86,6 +87,10 @@ target_link_libraries(
 add_executable(compare_vs_tflite compare_vs_tflite.cpp)
 target_link_libraries(compare_vs_tflite PRIVATE hannk_log_stderr model_runner Halide::Runtime)
 target_include_directories(compare_vs_tflite PUBLIC $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
+add_dependencies(hannk benchmark compare_vs_tflite)
+if (HANNK_BUILD_TFLITE)
+    add_dependencies(hannk hannk_delegate_external hannk_delegate_registrar)
+endif ()
 
 # TODO: Surely there's a better way to set Emscripten flags.
 if (Halide_TARGET MATCHES "wasm")

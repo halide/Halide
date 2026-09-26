@@ -15,7 +15,13 @@ find_package(Halide REQUIRED)
 add_halide_generator(unsharp.generator SOURCES unsharp_generator.cpp)
 
 # Filters
-add_halide_library(unsharp FROM unsharp.generator)
+add_halide_library(
+    unsharp_pipeline
+    FROM unsharp.generator
+    GENERATOR unsharp
+    FUNCTION_NAME unsharp
+    FILE_BASE_NAME unsharp
+)
 add_halide_library(
     unsharp_auto_schedule
     FROM unsharp.generator
@@ -24,13 +30,15 @@ add_halide_library(
 )
 
 # Main executable
-add_executable(unsharp_filter filter.cpp)
-target_link_libraries(unsharp_filter PRIVATE Halide::ImageIO unsharp unsharp_auto_schedule)
+set_target_properties(unsharp_pipeline PROPERTIES OUTPUT_NAME unsharp)
+set_target_properties(unsharp_pipeline.runtime PROPERTIES OUTPUT_NAME unsharp.runtime)
+add_executable(unsharp filter.cpp)
+target_link_libraries(unsharp PRIVATE Halide::ImageIO unsharp_pipeline unsharp_auto_schedule)
 
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgba.png)
 if (EXISTS ${IMAGE})
-    add_test(NAME unsharp_filter COMMAND unsharp_filter ${IMAGE} out.png)
+    add_test(NAME unsharp_filter COMMAND unsharp ${IMAGE} out.png)
     set_tests_properties(
         unsharp_filter
         PROPERTIES

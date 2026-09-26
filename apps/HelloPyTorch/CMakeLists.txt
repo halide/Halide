@@ -235,6 +235,9 @@ if (HELLO_PYTORCH_CUDA)
     target_link_libraries(halide_ops PRIVATE CUDA::cuda_driver)
 endif ()
 
+add_custom_target(HelloPyTorch)
+add_dependencies(HelloPyTorch halide_ops)
+
 ##
 # Test: run test.py against the freshly built extension.
 ##

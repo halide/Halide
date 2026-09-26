@@ -15,7 +15,16 @@ find_package(Halide REQUIRED)
 add_halide_generator(lens_blur.generator SOURCES lens_blur_generator.cpp)
 
 # Filters
-add_halide_library(lens_blur FROM lens_blur.generator REGISTRATION lens_blur_registration)
+add_halide_library(
+    lens_blur_pipeline
+    FROM lens_blur.generator
+    GENERATOR lens_blur
+    FUNCTION_NAME lens_blur
+    FILE_BASE_NAME lens_blur
+    REGISTRATION lens_blur_registration
+)
+set_target_properties(lens_blur_pipeline PROPERTIES OUTPUT_NAME lens_blur)
+set_target_properties(lens_blur_pipeline.runtime PROPERTIES OUTPUT_NAME lens_blur.runtime)
 add_halide_library(
     lens_blur_auto_schedule
     FROM lens_blur.generator
@@ -26,7 +35,10 @@ add_halide_library(
 
 # Main executable
 add_executable(lens_blur_filter process.cpp)
-target_link_libraries(lens_blur_filter PRIVATE Halide::ImageIO lens_blur lens_blur_auto_schedule)
+target_link_libraries(
+    lens_blur_filter
+    PRIVATE Halide::ImageIO lens_blur_pipeline lens_blur_auto_schedule
+)
 
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgb_small.png)
@@ -59,7 +71,8 @@ endif ()
 # RunGen-based benchmark. Run every app benchmark at once with
 # `ctest -L benchmark_apps`.
 add_executable(lens_blur_rungen ${lens_blur_registration})
-target_link_libraries(lens_blur_rungen PRIVATE Halide::RunGenMain lens_blur)
+target_link_libraries(lens_blur_rungen PRIVATE Halide::RunGenMain lens_blur_pipeline)
+add_custom_target(lens_blur DEPENDS lens_blur_filter lens_blur_rungen)
 add_test(
     NAME lens_blur_benchmark
     COMMAND lens_blur_rungen --benchmarks=all --estimate_all --parsable_output

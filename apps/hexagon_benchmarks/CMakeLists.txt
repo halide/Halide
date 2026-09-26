@@ -25,17 +25,20 @@ add_halide_generator(sobel.generator SOURCES sobel_generator.cpp)
 add_halide_library(sobel FROM sobel.generator)
 
 # Main executable
-add_executable(process process.cpp)
-target_compile_options(process PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-O2>)
-target_compile_definitions(process PRIVATE DILATE3X3 GAUSSIAN5X5 MEDIAN3X3 SOBEL)
-target_link_libraries(process PRIVATE Halide::Tools dilate3x3 gaussian5x5 median3x3 sobel)
+add_executable(hexagon_benchmarks process.cpp)
+target_compile_options(hexagon_benchmarks PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-O2>)
+target_compile_definitions(hexagon_benchmarks PRIVATE DILATE3X3 GAUSSIAN5X5 MEDIAN3X3 SOBEL)
+target_link_libraries(
+    hexagon_benchmarks
+    PRIVATE Halide::Tools dilate3x3 gaussian5x5 median3x3 sobel
+)
 
 if (Halide_TARGET MATCHES "hvx")
-    target_compile_definitions(process PRIVATE TARGET_HAS_HVX)
+    target_compile_definitions(hexagon_benchmarks PRIVATE TARGET_HAS_HVX)
 endif ()
 
 # Test that the app actually works!
-add_test(NAME hexagon_benchmarks COMMAND process -n 1)
+add_test(NAME hexagon_benchmarks COMMAND hexagon_benchmarks -n 1)
 set_tests_properties(
     hexagon_benchmarks
     PROPERTIES

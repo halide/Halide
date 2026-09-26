@@ -32,6 +32,8 @@ foreach (blas IN LISTS FOUND_BLASES)
     list(APPEND benchmark_targets ${blas_benchmarks})
 endforeach ()
 
+add_dependencies(linear_algebra ${benchmark_targets})
+
 # Large powers of two are a pathological case for the cache, so avoid
 # them for the benchmarks.
 set(blas_levels L1 L2 L3)
