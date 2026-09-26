@@ -198,6 +198,7 @@ tests(
     gpu_sum_scan.cpp
     gpu_texture.cpp
     gpu_thread_barrier.cpp
+    gpu_thread_extent_under_outer_split.cpp
     gpu_transpose.cpp
     gpu_vectorize.cpp
     gpu_vectorized_shared_memory.cpp
