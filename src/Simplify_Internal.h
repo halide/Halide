@@ -471,16 +471,14 @@ public:
      * rewrite rule has bound to its wildcards. */
     ConstantInterval known_difference(const BaseExprNode *a, const BaseExprNode *b);
 
-    /** As known_difference, but for the affine combination (ca * a - cb * b).
+    /** As known_difference, but for the linear combination (ca * a - cb * b).
      * For rules holding a constant multiplier (a matched WildConst, say) that
      * sits outside a or b's own IR, where peeling can't find it. */
-    ConstantInterval known_affine_difference(const BaseExprNode *a, int64_t ca,
+    ConstantInterval known_linear_difference(const BaseExprNode *a, int64_t ca,
                                              const BaseExprNode *b, int64_t cb);
 
     // Helpers over the above, for use as rewrite rule predicates. They return
     // false when nothing is known, so such a rule simply doesn't fire.
-    bool known_min_diff(const BaseExprNode *a, const BaseExprNode *b, int64_t *result);
-    bool known_max_diff(const BaseExprNode *a, const BaseExprNode *b, int64_t *result);
     bool known_min_diff(const BaseExprNode *a, int64_t ca, const BaseExprNode *b, int64_t cb, int64_t *result);
     bool known_max_diff(const BaseExprNode *a, int64_t ca, const BaseExprNode *b, int64_t cb, int64_t *result);
 
@@ -497,9 +495,9 @@ public:
     int can_prove_depth = 0;
     static constexpr int max_can_prove_depth = 2;
 
-    // Is there anything a known_true predicate could look up? Used to gate rules
-    // whose predicates are only ever provable from facts learned higher up in
-    // the IR, so that we don't pay for them in the common case.
+    // Is there anything a min_diff/max_diff predicate could look up? Used to
+    // gate rules whose predicates are only ever provable from facts learned
+    // higher up in the IR, so that we don't pay for them in the common case.
     bool has_facts() const {
         return !truths.empty() || !falsehoods.empty();
     }

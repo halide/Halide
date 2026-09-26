@@ -797,10 +797,10 @@ ConstantInterval structural_difference(const BaseExprNode *a, const BaseExprNode
 }  // namespace
 
 ConstantInterval Simplify::known_difference(const BaseExprNode *a, const BaseExprNode *b) {
-    return known_affine_difference(a, 1, b, 1);
+    return known_linear_difference(a, 1, b, 1);
 }
 
-ConstantInterval Simplify::known_affine_difference(const BaseExprNode *a, int64_t ca,
+ConstantInterval Simplify::known_linear_difference(const BaseExprNode *a, int64_t ca,
                                                    const BaseExprNode *b, int64_t cb) {
     ConstantInterval result;
 
@@ -911,17 +911,8 @@ ConstantInterval Simplify::known_affine_difference(const BaseExprNode *a, int64_
     return result;
 }
 
-bool Simplify::known_min_diff(const BaseExprNode *a, const BaseExprNode *b, int64_t *result) {
-    ConstantInterval bounds = known_difference(a, b);
-    if (bounds.min_defined) {
-        *result = bounds.min;
-        return true;
-    }
-    return false;
-}
-
 bool Simplify::known_min_diff(const BaseExprNode *a, int64_t ca, const BaseExprNode *b, int64_t cb, int64_t *result) {
-    ConstantInterval bounds = known_affine_difference(a, ca, b, cb);
+    ConstantInterval bounds = known_linear_difference(a, ca, b, cb);
     if (bounds.min_defined) {
         *result = bounds.min;
         return true;
@@ -930,16 +921,7 @@ bool Simplify::known_min_diff(const BaseExprNode *a, int64_t ca, const BaseExprN
 }
 
 bool Simplify::known_max_diff(const BaseExprNode *a, int64_t ca, const BaseExprNode *b, int64_t cb, int64_t *result) {
-    ConstantInterval bounds = known_affine_difference(a, ca, b, cb);
-    if (bounds.max_defined) {
-        *result = bounds.max;
-        return true;
-    }
-    return false;
-}
-
-bool Simplify::known_max_diff(const BaseExprNode *a, const BaseExprNode *b, int64_t *result) {
-    ConstantInterval bounds = known_difference(a, b);
+    ConstantInterval bounds = known_linear_difference(a, ca, b, cb);
     if (bounds.max_defined) {
         *result = bounds.max;
         return true;

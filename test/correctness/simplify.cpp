@@ -2549,7 +2549,7 @@ void check_facts() {
     // The result isn't interesting; what matters is that we get one at all.
     (void)simplify(nest, Scope<Interval>(), Scope<ModulusRemainder>(), {x < y});
 
-    // can_prove-based rules (unlike the known_true ones above) recursively
+    // can_prove-based rules (unlike the min_diff/max_diff ones above) recursively
     // invoke the simplifier on their own predicate, and that predicate can be
     // a freshly built expression rather than a piece of the original IR (e.g.
     // min(x, y) - min(z, w) -> y - w, can_prove(x - y == z - w)) constructs a

@@ -14,7 +14,7 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
         // it than the two sides do apart.
         if (has_facts() && no_overflow_int(op->type)) {
             info->bounds = ConstantInterval::make_intersection(
-                info->bounds, known_affine_difference(a.get(), 1, b.get(), -1));
+                info->bounds, known_linear_difference(a.get(), 1, b.get(), -1));
         }
         info->alignment = a_info.alignment + b_info.alignment;
         info->cast_to(op->type);

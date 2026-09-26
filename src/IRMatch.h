@@ -2595,46 +2595,6 @@ std::ostream &operator<<(std::ostream &s, const CanProve<A, Prover> &op) {
     return s;
 }
 
-// Like can_prove, but only looks the condition up in the facts the prover
-// already knows, instead of recursively invoking it. Much cheaper, and it
-// cannot recurse, so unlike can_prove it is safe in a rule whose left-hand
-// side matches expressions the prover may construct while proving it.
-template<typename A, typename Prover>
-struct KnownTrue {
-    struct pattern_tag {};
-    A a;
-    Prover *prover;  // An existing simplifying mutator
-
-    constexpr static uint32_t binds = bindings<A>::mask;
-
-    // This rule is a boolean-valued predicate. Bools have type UIntImm.
-    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
-    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
-    constexpr static bool canonical = true;
-
-    constexpr static bool foldable = true;
-
-    // Includes a raw call to an inlined make method, so don't inline.
-    [[nodiscard]] HALIDE_NEVER_INLINE bool make_folded_const(halide_scalar_value_t &val, Type &ty, MatcherState &state) const {
-        Expr condition = a.make(state, {});
-        val.u.u64 = prover->is_known_true(condition) ? 1 : 0;
-        ty = Bool(condition.type().lanes());
-        return false;
-    }
-};
-
-template<typename A, typename Prover>
-HALIDE_ALWAYS_INLINE auto known_true(A &&a, Prover *p) noexcept -> KnownTrue<decltype(pattern_arg(a)), Prover> {
-    assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a), p};
-}
-
-template<typename A, typename Prover>
-std::ostream &operator<<(std::ostream &s, const KnownTrue<A, Prover> &op) {
-    s << "known_true(" << op.a << ")";
-    return s;
-}
-
 // Detects patterns that can hand back the node they matched without building
 // anything. The predicates below are restricted to these, which is what makes
 // them allocation-free: it is a compile error to ask about a derived expression
@@ -2647,67 +2607,6 @@ template<typename A>
 struct has_bound_node<A, std::void_t<decltype(std::declval<const A &>().bound_node(std::declval<MatcherState &>()))>>
     : std::true_type {};
 
-// Bounds on the difference between two matched expressions, derived from the
-// facts the prover has learned. Used as (min_diff(x, y, this) >= 0) and
-// friends. When nothing is known the fold reports overflow, which the rewriter
-// already treats as a failed predicate, so the rule simply doesn't fire.
-template<typename A, typename B, typename Prover, bool is_min>
-struct DiffBound {
-    struct pattern_tag {};
-    A a;
-    B b;
-    Prover *prover;
-
-    static_assert(has_bound_node<A>::value && has_bound_node<B>::value,
-                  "The operands of min_diff/max_diff must be wildcards, so that "
-                  "testing the predicate doesn't have to construct any IR.");
-
-    constexpr static uint32_t binds = bindings<A>::mask | bindings<B>::mask;
-
-    // An integer-valued term of a comparison.
-    constexpr static IRNodeType min_node_type = IRNodeType::IntImm;
-    constexpr static IRNodeType max_node_type = IRNodeType::IntImm;
-    constexpr static bool canonical = true;
-
-    constexpr static bool foldable = true;
-
-    [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, Type &ty, MatcherState &state) const noexcept {
-        int64_t result = 0;
-        bool known;
-        if (is_min) {
-            known = prover->known_min_diff(a.bound_node(state), b.bound_node(state), &result);
-        } else {
-            known = prover->known_max_diff(a.bound_node(state), b.bound_node(state), &result);
-        }
-        val.u.i64 = result;
-        ty = Int(64);
-        // An unknown bound reports as overflow, failing the predicate.
-        return !known;
-    }
-};
-
-template<typename A, typename B, typename Prover>
-HALIDE_ALWAYS_INLINE auto min_diff(A &&a, B &&b, Prover *p) noexcept
-    -> DiffBound<decltype(pattern_arg(a)), decltype(pattern_arg(b)), Prover, true> {
-    assert_is_lvalue_if_expr<A>();
-    assert_is_lvalue_if_expr<B>();
-    return {pattern_arg(a), pattern_arg(b), p};
-}
-
-template<typename A, typename B, typename Prover>
-HALIDE_ALWAYS_INLINE auto max_diff(A &&a, B &&b, Prover *p) noexcept
-    -> DiffBound<decltype(pattern_arg(a)), decltype(pattern_arg(b)), Prover, false> {
-    assert_is_lvalue_if_expr<A>();
-    assert_is_lvalue_if_expr<B>();
-    return {pattern_arg(a), pattern_arg(b), p};
-}
-
-template<typename A, typename B, typename Prover, bool is_min>
-std::ostream &operator<<(std::ostream &s, const DiffBound<A, B, Prover, is_min> &op) {
-    s << (is_min ? "min_diff(" : "max_diff(") << op.a << ", " << op.b << ")";
-    return s;
-}
-
 // As has_bound_node, for terms whose constant reads out as a plain int64_t.
 template<typename A, typename = void>
 struct has_bound_const_int : std::false_type {};
@@ -2716,12 +2615,16 @@ template<typename A>
 struct has_bound_const_int<A, std::void_t<decltype(std::declval<const A &>().bound_const_int(std::declval<MatcherState &>()))>>
     : std::true_type {};
 
-// As DiffBound, but for the affine combination (ca * a - cb * b), where ca and
-// cb are constants already in hand (matched WildConsts, typically) that sit
-// outside a and b's own IR, so peeling can't find them. Allocation-free:
-// ca/cb read as raw ints, a/b as raw bound nodes.
+// Bounds on the linear combination (ca * a - cb * b) of two matched
+// expressions, derived from the facts the prover has learned. Used as
+// (min_diff(x, y, this) >= 0) and friends. ca and cb are constants already in
+// hand (matched WildConsts, typically) that sit outside a and b's own IR, so
+// peeling can't find them. Allocation-free: ca/cb read as raw ints, a/b as raw
+// bound nodes. When nothing is known the fold reports overflow, which the
+// rewriter already treats as a failed predicate, so the rule simply doesn't
+// fire.
 template<typename A, typename CA, typename B, typename CB, typename Prover, bool is_min>
-struct ScaledDiffBound {
+struct LinearDiffBound {
     struct pattern_tag {};
     A a;
     CA ca;
@@ -2730,16 +2633,15 @@ struct ScaledDiffBound {
     Prover *prover;
 
     static_assert(has_bound_node<A>::value && has_bound_node<B>::value,
-                  "The a/b operands of scaled_min_diff/scaled_max_diff must be "
-                  "wildcards, so that testing the predicate doesn't have to "
-                  "construct any IR.");
+                  "The a/b operands of min_diff/max_diff must be wildcards, so "
+                  "that testing the predicate doesn't have to construct any IR.");
     static_assert(has_bound_const_int<CA>::value && has_bound_const_int<CB>::value,
-                  "The coefficient operands of scaled_min_diff/scaled_max_diff "
-                  "must be WildConsts.");
+                  "The coefficient operands of linear_min_diff/linear_max_diff "
+                  "must be WildConsts or integer literals.");
 
     constexpr static uint32_t binds = bindings<A>::mask | bindings<CA>::mask | bindings<B>::mask | bindings<CB>::mask;
 
-    // This is an integer-valued term of a comparison.
+    // An integer-valued term of a comparison.
     constexpr static IRNodeType min_node_type = IRNodeType::IntImm;
     constexpr static IRNodeType max_node_type = IRNodeType::IntImm;
     constexpr static bool canonical = true;
@@ -2758,30 +2660,47 @@ struct ScaledDiffBound {
         }
         val.u.i64 = result;
         ty = Int(64);
-        // Report an unknown bound as an overflow, which fails the predicate.
+        // An unknown bound reports as overflow, failing the predicate.
         return !known;
     }
 };
 
 template<typename A, typename CA, typename B, typename CB, typename Prover>
-HALIDE_ALWAYS_INLINE auto scaled_min_diff(A &&a, CA &&ca, B &&b, CB &&cb, Prover *p) noexcept
-    -> ScaledDiffBound<decltype(pattern_arg(a)), decltype(pattern_arg(ca)), decltype(pattern_arg(b)), decltype(pattern_arg(cb)), Prover, true> {
+HALIDE_ALWAYS_INLINE auto linear_min_diff(A &&a, CA &&ca, B &&b, CB &&cb, Prover *p) noexcept
+    -> LinearDiffBound<decltype(pattern_arg(a)), decltype(pattern_arg(ca)), decltype(pattern_arg(b)), decltype(pattern_arg(cb)), Prover, true> {
     assert_is_lvalue_if_expr<A>();
     assert_is_lvalue_if_expr<B>();
     return {pattern_arg(a), pattern_arg(ca), pattern_arg(b), pattern_arg(cb), p};
 }
 
 template<typename A, typename CA, typename B, typename CB, typename Prover>
-HALIDE_ALWAYS_INLINE auto scaled_max_diff(A &&a, CA &&ca, B &&b, CB &&cb, Prover *p) noexcept
-    -> ScaledDiffBound<decltype(pattern_arg(a)), decltype(pattern_arg(ca)), decltype(pattern_arg(b)), decltype(pattern_arg(cb)), Prover, false> {
+HALIDE_ALWAYS_INLINE auto linear_max_diff(A &&a, CA &&ca, B &&b, CB &&cb, Prover *p) noexcept
+    -> LinearDiffBound<decltype(pattern_arg(a)), decltype(pattern_arg(ca)), decltype(pattern_arg(b)), decltype(pattern_arg(cb)), Prover, false> {
     assert_is_lvalue_if_expr<A>();
     assert_is_lvalue_if_expr<B>();
     return {pattern_arg(a), pattern_arg(ca), pattern_arg(b), pattern_arg(cb), p};
 }
 
+// Bounds on the plain difference (a - b).
+template<typename A, typename B, typename Prover>
+HALIDE_ALWAYS_INLINE auto min_diff(A &&a, B &&b, Prover *p) noexcept
+    -> LinearDiffBound<decltype(pattern_arg(a)), IntLiteral, decltype(pattern_arg(b)), IntLiteral, Prover, true> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
+    return {pattern_arg(a), IntLiteral{1}, pattern_arg(b), IntLiteral{1}, p};
+}
+
+template<typename A, typename B, typename Prover>
+HALIDE_ALWAYS_INLINE auto max_diff(A &&a, B &&b, Prover *p) noexcept
+    -> LinearDiffBound<decltype(pattern_arg(a)), IntLiteral, decltype(pattern_arg(b)), IntLiteral, Prover, false> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
+    return {pattern_arg(a), IntLiteral{1}, pattern_arg(b), IntLiteral{1}, p};
+}
+
 template<typename A, typename CA, typename B, typename CB, typename Prover, bool is_min>
-std::ostream &operator<<(std::ostream &s, const ScaledDiffBound<A, CA, B, CB, Prover, is_min> &op) {
-    s << (is_min ? "scaled_min_diff(" : "scaled_max_diff(") << op.a << ", " << op.ca << ", " << op.b << ", " << op.cb << ")";
+std::ostream &operator<<(std::ostream &s, const LinearDiffBound<A, CA, B, CB, Prover, is_min> &op) {
+    s << (is_min ? "linear_min_diff(" : "linear_max_diff(") << op.a << ", " << op.ca << ", " << op.b << ", " << op.cb << ")";
     return s;
 }
 
