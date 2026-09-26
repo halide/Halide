@@ -147,6 +147,14 @@ function(add_halide_generator TARGET)
         else ()
             add_executable(${TARGET} ${ARG_SOURCES})
             add_executable(${gen} ALIAS ${TARGET})
+            list(LENGTH Halide_CMAKE_TARGET num_platforms)
+            if (
+                APPLE
+                AND num_platforms GREATER 1
+                AND Halide_HOST_TARGET MATCHES "^(arm|x86)-64-macos$"
+            )
+                _Halide_set_osx_arch("${TARGET}" "${Halide_HOST_TARGET}")
+            endif ()
 
             if (NOT TARGET Halide::Generator)
                 find_package(HalideCompiler REQUIRED)
