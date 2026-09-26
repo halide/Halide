@@ -429,16 +429,6 @@ build its own LLVM.
 
 </details>
 
-#### If all else fails...
-
-Do what the buildbots do: https://buildbot.halide-lang.org/master/#/builders
-
-If the row that best matches your system is red, then maybe things aren't just
-broken for you. If it's green, then you can click through to the latest build
-and see the commands that the build bots run. Open a step ("Configure Halide" is
-useful) and look at the "stdio" logs in the viewer. These logs contain the full
-commands that were run, as well as the environment variables they were run with.
-
 ## Building Halide with make
 
 > [!WARNING] We do not provide support for the Makefile. Feel free to use it,
