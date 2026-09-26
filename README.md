@@ -350,7 +350,26 @@ D:\Halide> ctest --test-dir build --output-on-failure
 ```
 
 Subsets of the tests can be selected with `-L` and include `correctness`,
-`generator`, `error`, and the other directory names under `tests/`.
+`generator`, and the other directory names under `tests/`.
+
+To build the apps, you must first install Halide to a local prefix and record
+that prefix in `Halide_ROOT` (or set as `-DHalide_ROOT` on the CMake command
+line):
+
+```
+D:\Halide> cmake --install build\release-vcpkg --prefix build\_local
+D:\Halide> set Halide_ROOT=%PWD%/build/_local
+```
+
+Then move to the `apps` folder:
+
+```
+D:\Halide> cd apps
+D:\Halide\apps> cmake --preset=release-vcpkg
+D:\Halide\apps> cmake --build --preset=release-vcpkg
+```
+
+To build just one app, add `--target <name>` to the `cmake --build` command.
 
 <details>
 <summary>Building LLVM from source on Windows (advanced)</summary>

@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 project(hexagon_dma)
+add_custom_target(hexagon_dma)
 
 enable_testing()
 
@@ -139,11 +140,13 @@ if (NOT MSVC)
         mock_dma_implementation.cpp
     )
     target_link_libraries(process_raw_linear_interleaved_basic PRIVATE Halide::Tools ${raw_libs})
+    add_dependencies(hexagon_dma process_yuv_linear_basic process_raw_linear_interleaved_basic)
 
     if (HEXAGON_DMA_SCHEDULE_ALL)
         target_compile_definitions(process_yuv_linear_basic PRIVATE SCHEDULE_ALL)
         target_compile_definitions(process_raw_linear_interleaved_basic PRIVATE SCHEDULE_ALL)
     endif ()
+    add_dependencies(hexagon_dma ${yuv_libs} ${raw_libs})
 
     # Test that the apps actually work!
     add_test(NAME process_yuv_linear_basic COMMAND process_yuv_linear_basic 256 128 async rw nv12)

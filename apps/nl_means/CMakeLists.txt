@@ -15,7 +15,16 @@ find_package(Halide REQUIRED)
 add_halide_generator(nl_means.generator SOURCES nl_means_generator.cpp)
 
 # Filters
-add_halide_library(nl_means FROM nl_means.generator REGISTRATION nl_means_registration)
+add_halide_library(
+    nl_means_pipeline
+    FROM nl_means.generator
+    GENERATOR nl_means
+    FUNCTION_NAME nl_means
+    FILE_BASE_NAME nl_means
+    REGISTRATION nl_means_registration
+)
+set_target_properties(nl_means_pipeline PROPERTIES OUTPUT_NAME nl_means)
+set_target_properties(nl_means_pipeline.runtime PROPERTIES OUTPUT_NAME nl_means.runtime)
 add_halide_library(
     nl_means_auto_schedule
     FROM nl_means.generator
@@ -25,7 +34,10 @@ add_halide_library(
 
 # Main executable
 add_executable(nl_means_process process.cpp)
-target_link_libraries(nl_means_process PRIVATE Halide::ImageIO nl_means nl_means_auto_schedule)
+target_link_libraries(
+    nl_means_process
+    PRIVATE Halide::ImageIO nl_means_pipeline nl_means_auto_schedule
+)
 
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgb.png)
@@ -43,7 +55,8 @@ endif ()
 # RunGen-based benchmark. Run every app benchmark at once with
 # `ctest -L benchmark_apps`.
 add_executable(nl_means_rungen ${nl_means_registration})
-target_link_libraries(nl_means_rungen PRIVATE Halide::RunGenMain nl_means)
+target_link_libraries(nl_means_rungen PRIVATE Halide::RunGenMain nl_means_pipeline)
+add_custom_target(nl_means DEPENDS nl_means_process nl_means_rungen)
 add_test(
     NAME nl_means_benchmark
     COMMAND nl_means_rungen --benchmarks=all --estimate_all --parsable_output

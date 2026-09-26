@@ -19,7 +19,16 @@ add_halide_generator(
 )
 
 # Filters
-add_halide_library(camera_pipe FROM camera_pipe.generator REGISTRATION camera_pipe_registration)
+add_halide_library(
+    camera_pipe_pipeline
+    FROM camera_pipe.generator
+    GENERATOR camera_pipe
+    FUNCTION_NAME camera_pipe
+    FILE_BASE_NAME camera_pipe
+    REGISTRATION camera_pipe_registration
+)
+set_target_properties(camera_pipe_pipeline PROPERTIES OUTPUT_NAME camera_pipe)
+set_target_properties(camera_pipe_pipeline.runtime PROPERTIES OUTPUT_NAME camera_pipe.runtime)
 add_halide_library(
     camera_pipe_auto_schedule
     FROM camera_pipe.generator
@@ -33,7 +42,7 @@ target_link_libraries(
     camera_pipe_process
     PRIVATE
     Halide::ImageIO
-    camera_pipe
+    camera_pipe_pipeline
     camera_pipe_auto_schedule
 )
 
@@ -56,7 +65,10 @@ endif ()
 # RunGen-based benchmark. Run every app benchmark at once with
 # `ctest -L benchmark_apps`.
 add_executable(camera_pipe_rungen ${camera_pipe_registration})
-target_link_libraries(camera_pipe_rungen PRIVATE Halide::RunGenMain camera_pipe)
+target_link_libraries(camera_pipe_rungen PRIVATE Halide::RunGenMain camera_pipe_pipeline)
+
+add_custom_target(camera_pipe DEPENDS camera_pipe_process camera_pipe_rungen)
+
 add_test(
     NAME camera_pipe_benchmark
     COMMAND camera_pipe_rungen --benchmarks=all --estimate_all --parsable_output

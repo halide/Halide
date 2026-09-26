@@ -27,6 +27,7 @@ target_link_libraries(filter_rewrite_rules PRIVATE rule_verifier_support)
 
 add_executable(super_simplify super_simplify_tool.cpp)
 target_link_libraries(super_simplify PRIVATE rule_verifier_support)
+add_custom_target(simplifier_rule_verifier DEPENDS filter_rewrite_rules super_simplify)
 
 # Both tools shell out to z3, so there's nothing to test without it.
 find_program(Z3_EXECUTABLE z3)

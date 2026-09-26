@@ -16,10 +16,15 @@ add_halide_generator(stencil_chain.generator SOURCES stencil_chain_generator.cpp
 
 # Filters
 add_halide_library(
-    stencil_chain
+    stencil_chain_pipeline
     FROM stencil_chain.generator
+    GENERATOR stencil_chain
+    FUNCTION_NAME stencil_chain
+    FILE_BASE_NAME stencil_chain
     REGISTRATION stencil_chain_registration
 )
+set_target_properties(stencil_chain_pipeline PROPERTIES OUTPUT_NAME stencil_chain)
+set_target_properties(stencil_chain_pipeline.runtime PROPERTIES OUTPUT_NAME stencil_chain.runtime)
 add_halide_library(
     stencil_chain_auto_schedule
     FROM stencil_chain.generator
@@ -33,7 +38,7 @@ target_link_libraries(
     stencil_chain_process
     PRIVATE
     Halide::ImageIO
-    stencil_chain
+    stencil_chain_pipeline
     stencil_chain_auto_schedule
 )
 
@@ -53,7 +58,8 @@ endif ()
 # RunGen-based benchmark. Run every app benchmark at once with
 # `ctest -L benchmark_apps`.
 add_executable(stencil_chain_rungen ${stencil_chain_registration})
-target_link_libraries(stencil_chain_rungen PRIVATE Halide::RunGenMain stencil_chain)
+target_link_libraries(stencil_chain_rungen PRIVATE Halide::RunGenMain stencil_chain_pipeline)
+add_custom_target(stencil_chain DEPENDS stencil_chain_process stencil_chain_rungen)
 add_test(
     NAME stencil_chain_benchmark
     COMMAND stencil_chain_rungen --benchmarks=all --estimate_all --parsable_output
