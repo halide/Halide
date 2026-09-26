@@ -346,7 +346,7 @@ D:\Halide> cmake --build build/release-vcpkg
 To run all the tests:
 
 ```
-D:\Halide> ctest --test-dir build --output-on-failure
+D:\Halide> ctest --test-dir build/release-vcpkg --output-on-failure
 ```
 
 Subsets of the tests can be selected with `-L` and include `correctness`,
