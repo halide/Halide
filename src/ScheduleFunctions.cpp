@@ -184,13 +184,158 @@ Stmt add_predicates(const Expr &cond, const Function &func, ApplySplitResult::Ty
     return AddPredicates(cond, func, type)(s);
 }
 
+bool is_blend(TailStrategy tail) {
+    return tail == TailStrategy::RoundUpAndBlend ||
+           tail == TailStrategy::ShiftInwardsAndBlend;
+}
+
+// Some combinations of splits are known to lower incorrectly (wrong results
+// or out-of-bounds accesses), but only when one particular split has a tail,
+// i.e. when its factor does not divide the extent it splits. Rather than
+// compose the tail strategies in those combinations, we require at runtime
+// that the split has no tail. Returns, for each split of the definition, the
+// reason it must not have a tail, or an empty string if it may have one.
+// compute_levels are the compute levels of the Funcs computed inside this
+// Func's loops.
+vector<string> splits_requiring_no_tail(const string &prefix,
+                                        const Definition &def,
+                                        const vector<LoopLevel> &compute_levels) {
+    const vector<Split> &splits = def.schedule().splits();
+    const vector<Dim> &dims = def.schedule().dims();
+    vector<string> reasons(splits.size());
+
+    bool has_blend = false;
+    for (const Split &s : splits) {
+        has_blend |= s.split_type == Split::SplitVar && is_blend(s.tail);
+    }
+
+    // Dims are listed innermost first.
+    size_t innermost_compute_at = dims.size();
+    for (size_t i = 0; i < dims.size(); i++) {
+        for (const LoopLevel &level : compute_levels) {
+            if (level.match(prefix + dims[i].var)) {
+                innermost_compute_at = std::min(innermost_compute_at, i);
+            }
+        }
+    }
+
+    // Vars stemming from the outer Var of a ShiftInwards or
+    // ShiftInwardsAndBlend split. If a later split runs such a Var past its
+    // loop max, the shifted split maps those iterations back inside the
+    // realized region.
+    set<string> shifted;
+    // Vars stemming from the outer Var of a PredicateStores split that must
+    // not have a tail, mapped to the reason why. A later split that runs such
+    // a Var past its loop max gives that split a tail after all.
+    map<string, string> predicate_stores_outer;
+    for (size_t i = 0; i < splits.size(); i++) {
+        const Split &s = splits[i];
+        switch (s.split_type) {
+        case Split::SplitVar: {
+            const bool from_shifted = shifted.count(s.old_var) != 0;
+            const auto ps_outer = predicate_stores_outer.find(s.old_var);
+            const bool from_ps_outer = ps_outer != predicate_stores_outer.end();
+            // GuardWithIf and the ShiftInwards strategies don't run their Var
+            // past its loop max.
+            const bool overhangs = s.tail == TailStrategy::RoundUp ||
+                                   s.tail == TailStrategy::RoundUpAndBlend ||
+                                   s.tail == TailStrategy::PredicateLoads ||
+                                   s.tail == TailStrategy::PredicateStores;
+            if (s.tail == TailStrategy::PredicateStores) {
+                const auto inner = std::find_if(dims.begin(), dims.end(),
+                                                [&](const Dim &d) { return d.var == s.inner; });
+                if (has_blend) {
+                    // A blend stores back a value it loads from the same
+                    // site. Loads aren't predicated by PredicateStores, so
+                    // in the tail that load is out of bounds.
+                    reasons[i] = "the definition also uses a blend tail strategy "
+                                 "(RoundUpAndBlend or ShiftInwardsAndBlend)";
+                } else if (inner != dims.end() &&
+                           innermost_compute_at <= (size_t)(inner - dims.begin())) {
+                    // Bounds inference sizes the producers from the guarded
+                    // stores, but the tail iterations still run and read
+                    // beyond them.
+                    reasons[i] = "another Func is computed at or inside the inner Var of the split";
+                }
+            }
+            if (reasons[i].empty() && from_ps_outer && overhangs) {
+                reasons[i] = "the split Var stems from the outer Var of a PredicateStores split, and " +
+                             ps_outer->second;
+            }
+            if (reasons[i].empty() && from_shifted && s.tail == TailStrategy::PredicateLoads) {
+                // The iterations past the loop max are shifted back inside
+                // the realized region. Their loads are predicated off but
+                // their stores are not.
+                reasons[i] = "the split Var stems from the outer Var of a prior "
+                             "ShiftInwards or ShiftInwardsAndBlend split";
+            }
+            if (reasons[i].empty() && from_shifted && s.tail == TailStrategy::RoundUp && !def.is_init()) {
+                // The iterations past the loop max are shifted back onto
+                // the last tile, which would then be updated twice.
+                reasons[i] = "the split Var stems from the outer Var of a prior "
+                             "ShiftInwardsAndBlend split in an update definition";
+            }
+            if (s.tail == TailStrategy::ShiftInwards ||
+                s.tail == TailStrategy::ShiftInwardsAndBlend ||
+                from_shifted) {
+                shifted.insert(s.outer);
+            }
+            if (from_shifted) {
+                shifted.insert(s.inner);
+            }
+            if (from_ps_outer) {
+                const string ps_reason = ps_outer->second;
+                predicate_stores_outer[s.outer] = ps_reason;
+                predicate_stores_outer[s.inner] = ps_reason;
+            } else if (s.tail == TailStrategy::PredicateStores && !reasons[i].empty()) {
+                predicate_stores_outer[s.outer] = reasons[i];
+            }
+        } break;
+        case Split::RenameVar:
+            if (shifted.count(s.old_var)) {
+                shifted.insert(s.outer);
+            }
+            if (const auto it = predicate_stores_outer.find(s.old_var);
+                it != predicate_stores_outer.end()) {
+                predicate_stores_outer[s.outer] = it->second;
+            }
+            break;
+        case Split::FuseVars:
+            // Only the outer operand of a fuse runs past its loop max when
+            // the fused Var does.
+            if (shifted.count(s.outer)) {
+                shifted.insert(s.old_var);
+            }
+            if (const auto it = predicate_stores_outer.find(s.outer);
+                it != predicate_stores_outer.end()) {
+                predicate_stores_outer[s.old_var] = it->second;
+            }
+            break;
+        }
+    }
+    return reasons;
+}
+
+// The compute levels of the Funcs computed inside the loops of func.
+vector<LoopLevel> compute_levels_inside(const map<string, Function> &env, const Function &func) {
+    vector<LoopLevel> levels;
+    for (const auto &[name, f] : env) {
+        const LoopLevel &level = f.schedule().compute_level();
+        if (!level.is_inlined() && !level.is_root() && level.func() == func.name()) {
+            levels.push_back(level);
+        }
+    }
+    return levels;
+}
+
 // Build a loop nest about a provide node using a schedule
 Stmt build_loop_nest(
     const Stmt &body,
     const string &prefix,
     int start_fuse,
     const Function &func,
-    const Definition &def) {
+    const Definition &def,
+    const vector<LoopLevel> &compute_levels) {
     const auto &dims = func.args();
     const auto &func_s = func.schedule();
     const auto &stage_s = def.schedule();
@@ -230,10 +375,47 @@ Stmt build_loop_nest(
         }
     }
 
+    const vector<string> no_tail_reasons = splits_requiring_no_tail(prefix, def, compute_levels);
+    vector<Stmt> no_tail_checks;
+    Expr no_tail_cond;
+
     // Define the function args in terms of the loop variables using the splits
-    for (const Split &split : splits) {
+    for (size_t split_idx = 0; split_idx < splits.size(); split_idx++) {
+        const Split &split = splits[split_idx];
         user_assert(predicated_vars.count(split.old_var) == 0)
             << "Cannot split a loop variable resulting from a split using PredicateLoads or PredicateStores.";
+
+        if (!no_tail_reasons[split_idx].empty()) {
+            auto alignment = dim_extent_alignment.find(split.old_var);
+            const bool proven = is_const_one(split.factor) ||
+                                (alignment != dim_extent_alignment.end() &&
+                                 is_const_zero(simplify(alignment->second % split.factor)));
+            if (!proven) {
+                Expr old_min = Variable::make(Int(32), prefix + split.old_var + ".loop_min");
+                Expr old_max = Variable::make(Int(32), prefix + split.old_var + ".loop_max");
+                Expr old_extent = old_max - old_min + 1;
+                Expr no_tail = (old_extent % split.factor) == 0;
+                std::ostringstream msg;
+                msg << "In schedule for " << func.name() << ", splitting "
+                    << split_string(split.old_var, ".").back() << " into "
+                    << split_string(split.outer, ".").back() << " and "
+                    << split_string(split.inner, ".").back() << " with TailStrategy::"
+                    << split.tail << " requires the split factor to divide the extent, because "
+                    << no_tail_reasons[split_idx] << ", but the extent";
+                Expr error = requirement_failed_error(no_tail, {Expr(msg.str()), old_extent, Expr("is not a multiple of"), split.factor});
+                // Use a require rather than an AssertStmt: the simplifier
+                // assumes an assert's condition in the statements after it,
+                // and would shrink the loops accordingly before bounds queries
+                // are computed from them. A bounds query doesn't run this
+                // check, so it would then report a region that only suffices
+                // when the check passes.
+                Expr check = Call::make(Int(32), Call::require,
+                                        {likely(no_tail), make_zero(Int(32)), error},
+                                        Call::Intrinsic);
+                no_tail_checks.push_back(Evaluate::make(check));
+                no_tail_cond = no_tail_cond.defined() ? no_tail_cond && no_tail : no_tail;
+            }
+        }
 
         vector<ApplySplitResult> splits_result = apply_split(split, prefix, dim_extent_alignment);
 
@@ -428,6 +610,15 @@ Stmt build_loop_nest(
         }
     }
 
+    if (no_tail_cond.defined()) {
+        // Also guard the loop nest with the conditions. The simplifier
+        // deletes straight-line code before a statement it proves
+        // unreachable (e.g. an out-of-bounds load in a tail iteration),
+        // which would include the checks. An if stops that.
+        no_tail_checks.push_back(IfThenElse::make(likely(no_tail_cond), stmt));
+        stmt = Block::make(no_tail_checks);
+    }
+
     // Define the bounds on the split dimensions using the bounds
     // on the function args.
     for (const Split &split : reverse_view(splits)) {
@@ -588,7 +779,7 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     }
 
     // Default schedule/values if there is no specialization
-    Stmt stmt = build_loop_nest(body, prefix, start_fuse, func, def);
+    Stmt stmt = build_loop_nest(body, prefix, start_fuse, func, def, compute_levels_inside(env, func));
     stmt = inject_placeholder_prefetch(stmt, env, prefix, def.schedule().prefetches());
 
     // Make any specialized copies. Mark every sibling branch at this level
@@ -942,7 +1133,8 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
 
     Definition f_def_no_pred = f.definition().get_copy();
     f_def_no_pred.predicate() = const_true();
-    return build_loop_nest(check, f.name() + ".s0.", -1, f, f_def_no_pred);
+    const string prefix = f.name() + ".s0.";
+    return build_loop_nest(check, prefix, -1, f, f_def_no_pred, compute_levels_inside(env, f));
 }
 
 // A schedule may include explicit bounds on some dimension. This
