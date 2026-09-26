@@ -353,13 +353,16 @@ Subsets of the tests can be selected with `-L` and include `correctness`,
 `generator`, and the other directory names under `tests/`.
 
 To build the apps, you must first install Halide to a local prefix and record
-that prefix in `Halide_ROOT` (or set as `-DHalide_ROOT` on the CMake command
-line):
+that prefix in `CMAKE_PREFIX_PATH` (or set as `-DCMAKE_PREFIX_PATH` on the CMake
+command line):
 
 ```
-D:\Halide> cmake --install build\release-vcpkg --prefix build\_local
-D:\Halide> set Halide_ROOT=%PWD%/build/_local
+D:\Halide> cmake --build build/release-vcpkg --target install
 ```
+
+By default, this will install to `D:\Halide\install\release-vcpkg`. You can
+choose a different install prefix by manually calling `cmake --install` with
+`--prefix <path>`.
 
 Then move to the `apps` folder:
 
