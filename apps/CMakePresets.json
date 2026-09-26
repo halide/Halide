@@ -10,7 +10,10 @@
       "name": "base",
       "hidden": true,
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/../build/apps/${presetName}"
+      "binaryDir": "${sourceDir}/../build/apps/${presetName}",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "${sourceDir}/../install/${presetName}"
+      }
     },
     {
       "name": "ci",
