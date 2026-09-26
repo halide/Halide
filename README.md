@@ -435,7 +435,7 @@ build its own LLVM.
 > but if anything goes wrong, switch to the CMake build. Note also that the
 > Makefile cannot build the Python bindings or produce install packages.
 
-*TL;DR*: Have LLVM 17 (or greater) installed and run `make` in the root
+*TL;DR*: Have LLVM 22 (or greater) installed and run `make` in the root
 directory of the repository (where this README is).
 
 By default, `make` will use the `llvm-config` tool found in the `PATH`. If you
