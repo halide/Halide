@@ -2486,6 +2486,25 @@ void check_facts() {
     check_with_assumptions(min(x * 8, y), x * 8, {x <= y / 8});
     check_with_assumptions(max(x, y / 8), y / 8, {x * 8 <= y});
 
+    // Large divisors peel too.
+    const int big = 1 << 24;
+    check_with_assumptions(min(x * big, y), x * big, {x <= y / big});
+    check_with_assumptions(max(x * big, y) / big, x, {x >= y / big});
+
+    // Denominators too large to represent stop the peeling, but a fact still
+    // settles a query spelled the same way. Within one term:
+    {
+        Expr x64 = Variable::make(Int(64), "x64"), y64 = Variable::make(Int(64), "y64");
+        Expr c40 = make_const(Int(64), int64_t(1) << 40);
+        Expr c30 = make_const(Int(64), int64_t(1) << 30);
+        Expr e = (x64 / c40) / c30;
+        check_with_assumptions(min(e, y64), e, {e <= y64});
+        // And across the two sides of the difference:
+        Expr a = x64 / c40, b = y64 / c30;
+        check_with_assumptions(min(a, b), a, {a <= b});
+        check_with_assumptions(min(a, b), min(a, b), {a <= b + 1});
+    }
+
     // Divisions on both sides are peeled over a common denominator. The
     // remainders they discard cost a little precision, but x <= y is a wide
     // enough margin to survive it.

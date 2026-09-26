@@ -86,10 +86,6 @@ void Simplify::found_buffer_reference(const string &name, size_t dimensions) {
 
 namespace {
 
-// Each peeled division multiplies denom by its divisor, so nested ones grow it
-// geometrically. Stop well before that stops fitting.
-constexpr int64_t max_peel_denominator = 1 << 20;
-
 // Peel constant add/mul/div terms off e, maintaining
 //
 //     denom * coeff_in * e_in == coeff * e + off + err
@@ -101,9 +97,7 @@ constexpr int64_t max_peel_denominator = 1 << 20;
 // banks the remainder in err. Walks existing nodes; builds nothing.
 void peel_affine_term(const BaseExprNode *&e, int64_t &coeff, int64_t &off,
                       int64_t &denom, ConstantInterval &err) {
-    bool progress = true;
-    while (progress) {
-        progress = false;
+    while (true) {
         if (e->node_type == IRNodeType::Add) {
             const Add *add = (const Add *)e;
             if (const IntImm *i = add->b.as<IntImm>()) {
@@ -113,7 +107,7 @@ void peel_affine_term(const BaseExprNode *&e, int64_t &coeff, int64_t &off,
                     break;
                 }
                 e = add->a.get();
-                progress = true;
+                continue;
             } else if (const IntImm *i = add->a.as<IntImm>()) {
                 int64_t term;
                 if (!mul_with_overflow(64, coeff, i->value, &term) ||
@@ -121,7 +115,7 @@ void peel_affine_term(const BaseExprNode *&e, int64_t &coeff, int64_t &off,
                     break;
                 }
                 e = add->b.get();
-                progress = true;
+                continue;
             }
         } else if (e->node_type == IRNodeType::Sub) {
             const Sub *sub = (const Sub *)e;
@@ -132,7 +126,7 @@ void peel_affine_term(const BaseExprNode *&e, int64_t &coeff, int64_t &off,
                     break;
                 }
                 e = sub->a.get();
-                progress = true;
+                continue;
             }
         } else if (e->node_type == IRNodeType::Mul) {
             const Mul *mul = (const Mul *)e;
@@ -141,23 +135,22 @@ void peel_affine_term(const BaseExprNode *&e, int64_t &coeff, int64_t &off,
                     break;
                 }
                 e = mul->a.get();
-                progress = true;
+                continue;
             } else if (const IntImm *i = mul->a.as<IntImm>()) {
                 if (!mul_with_overflow(64, coeff, i->value, &coeff)) {
                     break;
                 }
                 e = mul->b.get();
-                progress = true;
+                continue;
             }
         } else if (e->node_type == IRNodeType::Div) {
             const Div *div = (const Div *)e;
             const IntImm *i = div->b.as<IntImm>();
             // Positive divisors only; a negative one floors the other way.
-            if (i && i->value > 0 && i->value <= max_peel_denominator) {
+            if (i && i->value > 0) {
                 const int64_t c = i->value;
                 int64_t new_denom, new_off, tmp;
                 if (!mul_with_overflow(64, denom, c, &new_denom) ||
-                    new_denom > max_peel_denominator ||
                     !mul_with_overflow(64, off, c, &new_off) ||
                     !mul_with_overflow(64, coeff, c - 1, &tmp)) {
                     break;
@@ -168,9 +161,11 @@ void peel_affine_term(const BaseExprNode *&e, int64_t &coeff, int64_t &off,
                 err *= c;
                 err -= ConstantInterval(0, c - 1) * coeff;
                 e = div->a.get();
-                progress = true;
+                continue;
             }
         }
+        // Nothing left to peel.
+        break;
     }
 }
 
