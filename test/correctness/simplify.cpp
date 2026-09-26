@@ -2503,6 +2503,15 @@ void check_facts() {
         Expr a = x64 / c40, b = y64 / c30;
         check_with_assumptions(min(a, b), a, {a <= b});
         check_with_assumptions(min(a, b), min(a, b), {a <= b + 1});
+
+        // A bound that solves to INT64_MIN / -1. Peeled, this fact reads
+        // -3 * x - y >= INT64_MIN, i.e. 3 * x + y <= 2^63, which says nothing.
+        // It must not turn into a bound on 3 * x + y (x = y = 0 satisfies the
+        // fact but not the query).
+        Expr k = make_const(Int(64), (int64_t)3074457345618258602);  // (2^63 - 2) / 3
+        Expr three = make_const(Int(64), 3), m5 = make_const(Int(64), -5);
+        Expr q = x64 * three + y64 <= m5;
+        check_with_assumptions(q, q, {!(x64 * make_const(Int(64), -1) + k < y64 / three)});
     }
 
     // Divisions on both sides are peeled over a common denominator. The

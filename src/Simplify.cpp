@@ -280,13 +280,22 @@ ConstantInterval solve_scaled_bound(const ConstantInterval &bound, int64_t d) {
     const bool flip = d < 0;
     const bool lo_defined = flip ? bound.max_defined : bound.min_defined;
     const bool hi_defined = flip ? bound.min_defined : bound.max_defined;
-    if (lo_defined) {
+    // -INT64_MIN doesn't fit, so INT64_MIN / -1 has no representable
+    // quotient. Leave that end open: at the top that's exact (every value is
+    // <= 2^63), and at the bottom it only forgets that the bound was
+    // unsatisfiable.
+    auto fits = [=](int64_t v) {
+        return !(d == -1 && v == INT64_MIN);
+    };
+    const int64_t lo = flip ? bound.max : bound.min;
+    const int64_t hi = flip ? bound.min : bound.max;
+    if (lo_defined && fits(lo)) {
         result.min_defined = true;
-        result.min = round_up(flip ? bound.max : bound.min);
+        result.min = round_up(lo);
     }
-    if (hi_defined) {
+    if (hi_defined && fits(hi)) {
         result.max_defined = true;
-        result.max = round_down(flip ? bound.min : bound.max);
+        result.max = round_down(hi);
     }
     return result;
 }
