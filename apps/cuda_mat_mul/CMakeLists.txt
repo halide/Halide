@@ -6,11 +6,13 @@ project(cuda_mat_mul)
 find_package(CUDAToolkit)
 if (NOT CUDAToolkit_FOUND)
     message(WARNING "Could NOT find CUDA")
+    add_custom_target(cuda_mat_mul)
     return()
 endif ()
 
 if (NOT TARGET CUDA::cublas)
     message(WARNING "Could NOT find cuBLAS")
+    add_custom_target(cuda_mat_mul)
     return()
 endif ()
 
@@ -31,11 +33,11 @@ add_halide_generator(mat_mul.generator SOURCES mat_mul_generator.cpp)
 add_halide_library(mat_mul FROM mat_mul.generator FEATURES cuda cuda_capability_80 PARAMS size=1024)
 
 # Main executable
-add_executable(runner runner.cpp)
-target_link_libraries(runner PRIVATE mat_mul Halide::Tools CUDA::cudart CUDA::cublas)
+add_executable(cuda_mat_mul runner.cpp)
+target_link_libraries(cuda_mat_mul PRIVATE mat_mul Halide::Tools CUDA::cudart CUDA::cublas)
 
 # Test that the app actually works!
-add_test(NAME mat_mul COMMAND runner)
+add_test(NAME mat_mul COMMAND cuda_mat_mul)
 set_tests_properties(
     mat_mul
     PROPERTIES

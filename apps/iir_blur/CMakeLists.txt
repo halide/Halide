@@ -15,7 +15,13 @@ find_package(Halide REQUIRED)
 add_halide_generator(iir_blur.generator SOURCES iir_blur_generator.cpp)
 
 # Filters
-add_halide_library(iir_blur FROM iir_blur.generator)
+add_halide_library(
+    iir_blur_pipeline
+    FROM iir_blur.generator
+    GENERATOR iir_blur
+    FUNCTION_NAME iir_blur
+    FILE_BASE_NAME iir_blur
+)
 add_halide_library(
     iir_blur_auto_schedule
     FROM iir_blur.generator
@@ -25,13 +31,15 @@ add_halide_library(
 )
 
 # Main executable
-add_executable(iir_blur_filter filter.cpp)
+set_target_properties(iir_blur_pipeline PROPERTIES OUTPUT_NAME iir_blur)
+set_target_properties(iir_blur_pipeline.runtime PROPERTIES OUTPUT_NAME iir_blur.runtime)
+add_executable(iir_blur filter.cpp)
 target_link_libraries(
-    iir_blur_filter
+    iir_blur
     PRIVATE
     Halide::Tools
     Halide::ImageIO
-    iir_blur
+    iir_blur_pipeline
     iir_blur_auto_schedule
 )
 
@@ -44,7 +52,7 @@ if (EXISTS ${IMAGE})
         # Error: OpenCL error: CL_INVALID_COMMAND_QUEUE clFinish failed
         message(WARNING "Skipping Mullapudi2016's GPU auto-schedules for OpenCL target.")
     else ()
-        add_test(NAME iir_blur_filter COMMAND iir_blur_filter ${IMAGE} out.png)
+        add_test(NAME iir_blur_filter COMMAND iir_blur ${IMAGE} out.png)
         set_tests_properties(
             iir_blur_filter
             PROPERTIES

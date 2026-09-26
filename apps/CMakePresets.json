@@ -2,13 +2,14 @@
   "version": 3,
   "cmakeMinimumRequired": {
     "major": 3,
-    "minor": 22,
+    "minor": 28,
     "patch": 0
   },
   "configurePresets": [
     {
       "name": "base",
       "hidden": true,
+      "generator": "Ninja",
       "binaryDir": "${sourceDir}/../build/apps/${presetName}"
     },
     {
@@ -39,6 +40,31 @@
       }
     },
     {
+      "name": "vcpkg",
+      "inherits": "base",
+      "displayName": "vcpkg deps",
+      "description": "Build dependencies with vcpkg",
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+    },
+    {
+      "name": "debug-vcpkg",
+      "inherits": [
+        "debug",
+        "vcpkg"
+      ],
+      "displayName": "Debug (vcpkg)",
+      "description": "Debug build for a single-config generator, vcpkg dependencies"
+    },
+    {
+      "name": "release-vcpkg",
+      "inherits": [
+        "release",
+        "vcpkg"
+      ],
+      "displayName": "Release (vcpkg)",
+      "description": "Release build for a single-config generator, vcpkg dependencies"
+    },
+    {
       "name": "linux-x64-asan",
       "inherits": "ci",
       "displayName": "ASAN (Linux x64)",
@@ -60,6 +86,18 @@
       "configurePreset": "release",
       "displayName": "Release",
       "description": "Release build with no special settings"
+    },
+    {
+      "name": "debug-vcpkg",
+      "configurePreset": "debug-vcpkg",
+      "displayName": "Debug (vcpkg)",
+      "description": "Debug build for a single-config generator, vcpkg dependencies"
+    },
+    {
+      "name": "release-vcpkg",
+      "configurePreset": "release-vcpkg",
+      "displayName": "Release (vcpkg)",
+      "description": "Release build for a single-config generator, vcpkg dependencies"
     },
     {
       "name": "linux-x64-asan",
