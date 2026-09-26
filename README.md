@@ -255,8 +255,8 @@ After [acquiring LLVM](#acquiring-llvm), change directory to the Halide
 repository and run:
 
 ```shell
-$ cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release -DHalide_LLVM_ROOT=$LLVM_ROOT
-$ cmake --build build
+$ cmake --preset release -DHalide_LLVM_ROOT=$LLVM_ROOT
+$ cmake --build build/release
 ```
 
 Setting `-DHalide_LLVM_ROOT` is not required if you have a suitable system-wide
@@ -268,8 +268,8 @@ If you use [Homebrew](https://brew.sh/) on macOS, you can use the provided CMake
 preset:
 
 ```shell
-$ cmake --preset=macOS -S . -B build
-$ cmake --build build
+$ cmake --preset=macOS
+$ cmake --build build/macOS
 ```
 
 This automatically finds LLVM from Homebrew's install path.
@@ -340,13 +340,13 @@ For a Ninja-based build with vcpkg (needs `VCPKG_ROOT` set in the environment):
 
 ```
 D:\Halide> cmake --preset=release-vcpkg
-D:\Halide> cmake --build build/release-vcpkg
+D:\Halide> cmake --build build\release-vcpkg
 ```
 
 To run all the tests:
 
 ```
-D:\Halide> ctest --test-dir build/release-vcpkg --output-on-failure
+D:\Halide> ctest --test-dir build\release-vcpkg --output-on-failure
 ```
 
 Subsets of the tests can be selected with `-L` and include `correctness`,
@@ -357,7 +357,7 @@ that prefix in `CMAKE_PREFIX_PATH` (or set as `-DCMAKE_PREFIX_PATH` on the CMake
 command line):
 
 ```
-D:\Halide> cmake --build build/release-vcpkg --target install
+D:\Halide> cmake --build build\release-vcpkg --target install
 ```
 
 By default, this will install to `D:\Halide\install\release-vcpkg`. You can
