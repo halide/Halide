@@ -2377,6 +2377,18 @@ void check_invariant() {
     }
 }
 
+void check_with_assumptions(const Expr &a, const Expr &b, const std::vector<Expr> &assumptions) {
+    Expr simpler = simplify(a, Scope<Interval>(), Scope<ModulusRemainder>(), assumptions);
+    if (!equal(simpler, b)) {
+        std::cerr
+            << "\nSimplification failure:\n"
+            << "Input: " << a << "\n"
+            << "Output: " << simpler << "\n"
+            << "Expected output: " << b << "\n";
+        abort();
+    }
+}
+
 void check_unreachable() {
     Var x("x"), y("y");
 
@@ -2405,6 +2417,176 @@ void check_unreachable() {
           Evaluate::make(0));
 }
 
+void check_facts() {
+    Expr x = Var("x"), y = Var("y"), z = Var("z");
+
+    // These rules are for the part of lowering that runs once regions and
+    // allocation sizes have been read out of the IR, so test them there.
+    ScopedRegionsInferred regions_inferred;
+
+    // A fact stated in any comparison direction should let the simplifier pick
+    // the winning side of a max or min.
+    check_with_assumptions(max(x, y), x, {x > y});
+    check_with_assumptions(max(x, y), x, {y < x});
+    check_with_assumptions(max(x, y), y, {x < y});
+    check_with_assumptions(max(x, y), y, {y > x});
+    check_with_assumptions(min(x, y), y, {x > y});
+    check_with_assumptions(min(x, y), x, {x < y});
+
+    // A non-strict fact is enough to pick a side of a max or min, and a strict
+    // fact implies the non-strict one.
+    check_with_assumptions(max(x, y), x, {x >= y});
+    check_with_assumptions(max(x, y), y, {x <= y});
+    check_with_assumptions(min(x, y), x, {x <= y});
+    check_with_assumptions(min(x, y), y, {x >= y});
+
+    // Facts about compound expressions work too.
+    check_with_assumptions(max(x + z, y * 3), x + z, {x + z > y * 3});
+    check_with_assumptions(max(max(x, y), z), z, {max(x, y) < z});
+
+    // Both branches of an if learn from the condition, in opposite directions.
+    check(IfThenElse::make(x < y, not_no_op(max(x, y)), not_no_op(max(x, y))),
+          IfThenElse::make(x < y, not_no_op(y), not_no_op(x)));
+
+    // A fact only applies where it holds.
+    check(Block::make(not_no_op(max(x, y)),
+                      IfThenElse::make(x < y, not_no_op(max(x, y)))),
+          Block::make(not_no_op(max(x, y)),
+                      IfThenElse::make(x < y, not_no_op(y))));
+
+    // A division can cancel a multiplication inside a max or min when we know
+    // which side wins after the division.
+    check_with_assumptions(max(x * 8, y) / 8, x, {x >= y / 8});
+    check_with_assumptions(max(y, x * 8) / 8, x, {x >= y / 8});
+    check_with_assumptions(min(x * 8, y) / 8, x, {x <= y / 8});
+    check_with_assumptions(min(y, x * 8) / 8, x, {x <= y / 8});
+
+    // The direction in which a fact is stated doesn't matter, on either side:
+    // both the facts and the conditions of can_prove predicates are looked up
+    // in the same canonical form.
+    check_with_assumptions(max(x * 8, y) / 8, x, {y / 8 <= x});
+    check_with_assumptions(max(x * 8, y) / 8, x, {!(x < y / 8)});
+    check_with_assumptions(min(x * 8, y) / 8, x, {y / 8 >= x});
+
+    // A strict fact settles a non-strict predicate too.
+    check_with_assumptions(max(x * 8, y) / 8, x, {x > y / 8});
+    check_with_assumptions(min(x * 8, y) / 8, x, {x < y / 8});
+
+    // Coefficients are reduced to a coprime pair and a scale, so a fact and a
+    // query that differ only by an overall factor meet.
+    check_with_assumptions(max(x * 2, y), y, {x * 4 <= y * 2});
+    check_with_assumptions(min(x * 3, y * 6), x * 3, {x <= y * 2});
+
+    // Offsets peeled from under a factor are scaled by it on the way out, so
+    // the two spellings of the same affine term meet.
+    check_with_assumptions(max((x + 3) * 4, y), y, {x * 4 + 12 <= y});
+
+    // A fact over a division orders the multiplied-out terms, and vice versa:
+    // for c > 0, x <= y / c iff c * x <= y.
+    check_with_assumptions(min(x * 8, y), x * 8, {x <= y / 8});
+    check_with_assumptions(max(x, y / 8), y / 8, {x * 8 <= y});
+
+    // Divisions on both sides are peeled over a common denominator. The
+    // remainders they discard cost a little precision, but x <= y is a wide
+    // enough margin to survive it.
+    check_with_assumptions(max(x / 4, y / 4), y / 4, {x <= y});
+
+    // Coefficients that don't reduce to the same coprime pair don't match:
+    // 2 * x <= y says nothing about 3 * x against y.
+    check_with_assumptions(min(x * 3, y), min(x * 3, y), {x * 2 <= y});
+
+    // Comparing a sum or difference against a constant is a comparison
+    // between its two terms, so a fact about the pair settles it.
+    check_with_assumptions(max(x - y * 5, 0), x - y * 5, {x > y * 5});
+    check_with_assumptions(min(x - y * 5, 0), 0, {x > y * 5});
+    check_with_assumptions(max(x + y * 5, 0), y * 5 + x, {x > y * -5});
+
+    // The constant comes back as an offset, so it needn't be zero.
+    check_with_assumptions(max(x - y * 5, 3), x - y * 5, {x > y * 5 + 3});
+    check_with_assumptions(max(x - y * 5, -2), x - y * 5, {x >= y * 5});
+    check_with_assumptions(min(x - y * 5, 7), 7, {x > y * 5 + 7});
+
+    // The margin has to actually cover the constant.
+    check_with_assumptions(max(x - y * 5, 3), max(x - y * 5, 3), {x > y * 5});
+
+    // A difference only means what we take it to mean where the type cannot
+    // wrap. Given x >= y + 5 over uint8, y = 253 makes y + 5 equal 2, so x = 10
+    // satisfies it while sitting far below y: ordering the min from that would
+    // pick the wrong side. Only the types whose overflow is undefined, and so
+    // may be assumed not to happen, are eligible.
+    for (Type t : {UInt(8), Int(8), Int(16), UInt(32)}) {
+        Expr a = Variable::make(t, "wrap_a");
+        Expr b = Variable::make(t, "wrap_b");
+        check_with_assumptions(min(a, b), min(a, b), {a >= b + cast(t, 5)});
+        check_with_assumptions(max(a, b), max(a, b), {a >= b + cast(t, 5)});
+    }
+    for (Type t : {Int(32), Int(64)}) {
+        Expr a = Variable::make(t, "wrap_a");
+        Expr b = Variable::make(t, "wrap_b");
+        check_with_assumptions(min(a, b), b, {a >= b + cast(t, 5)});
+        check_with_assumptions(max(a, b), a, {a >= b + cast(t, 5)});
+    }
+
+    // A min is at most either of its operands and a max is at least either of
+    // them, which needs no facts at all. That only bounds the difference on one
+    // side, but knowing the two are unequal removes the endpoint, and the two
+    // together settle a comparison that neither settles alone.
+    check_with_assumptions(max(min(x, y) + 1, x), x, {min(x, y) != x});
+    check_with_assumptions(min(max(x, y) - 1, x), x, {max(x, y) != x});
+
+    // Neither ingredient is enough by itself: without the inequality the
+    // difference could still be zero, and without the shape there is no bound
+    // for the inequality to tighten.
+    check_with_assumptions(max(min(x, y) + 1, x), max(min(x, y) + 1, x), {z < z + 1});
+    check_with_assumptions(max(y + 1, x), max(y + 1, x), {y != x});
+
+    // Deeply nested mins and maxes must not make the work of proving the
+    // predicates of the rules above blow up.
+    Expr nest = x;
+    for (int i = 0; i < 24; i++) {
+        nest = min(max(nest + i, y - i), z * i);
+    }
+    // The result isn't interesting; what matters is that we get one at all.
+    (void)simplify(nest, Scope<Interval>(), Scope<ModulusRemainder>(), {x < y});
+
+    // can_prove-based rules (unlike the known_true ones above) recursively
+    // invoke the simplifier on their own predicate, and that predicate can be
+    // a freshly built expression rather than a piece of the original IR (e.g.
+    // min(x, y) - min(z, w) -> y - w, can_prove(x - y == z - w)) constructs a
+    // brand new subtraction). If the operands are themselves unsimplified
+    // instances of the same shape, this recurses; the depth limit must bound
+    // the work rather than let it explode.
+    Expr deep = min(Var("da"), Var("db")) - min(Var("dc"), Var("dd"));
+    for (int i = 0; i < 10; i++) {
+        Expr y = Var("dy" + std::to_string(i));
+        Expr z = Var("dz" + std::to_string(i));
+        Expr w = Var("dw" + std::to_string(i));
+        deep = min(deep, y) - min(z, w);
+    }
+    (void)simplify(deep);
+
+    // Constant offsets are peeled off both the facts and the queries, so a fact
+    // stated about a shifted operand still settles a predicate about the
+    // unshifted one, in either direction.
+    check_with_assumptions(max(x, y), y, {x + 1 <= y});
+    check_with_assumptions(max(x, y), x, {y <= x + 0});
+    check_with_assumptions(max(x + 3, y), y, {x + 4 <= y});
+    check_with_assumptions(min(x, y), x, {x + 1 <= y});
+
+    // But an offset that leaves the order undetermined still doesn't fire.
+    check_with_assumptions(max(x, y), max(x, y), {x <= y + 1});
+
+    // Without the fact, the division stays put.
+    check(max(x * 8, y) / 8, max(x * 8, y) / 8);
+
+    // Facts that don't strictly order the operands don't fire these rules.
+    check_with_assumptions(max(x, y), max(x, y), {x != y});
+
+    // A fact over a division is learned multiplied out, so it orders the
+    // operands as well as one spelled that way: x < y / 8 means 8 * x <= y - 8.
+    check_with_assumptions(max(x * 8, y) / 8, y / 8, {x < y / 8});
+}
+
 int main(int argc, char **argv) {
     check_invariant();
     check_casts();
@@ -2417,6 +2599,7 @@ int main(int argc, char **argv) {
     check_bitwise();
     check_lets();
     check_unreachable();
+    check_facts();
 
     // Miscellaneous cases that don't fit into one of the categories above.
     Expr x = Var("x"), y = Var("y");
