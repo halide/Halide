@@ -253,13 +253,26 @@ bool reduce_affine_coeffs(int64_t ca, int64_t cb, int64_t &pa, int64_t &pb, int6
 ConstantInterval solve_scaled_bound(const ConstantInterval &bound, int64_t d) {
     internal_assert(d != 0);
 
+    // Halide division is Euclidean: div_imp floors for d > 0 and ceils for
+    // d < 0, leaving a remainder r = v - q * d in [0, |d|). The division was
+    // inexact iff r != 0, i.e. iff q * d != v.
+    //
+    // q * d itself can overflow int64 when v is near the ends of the range and
+    // d doesn't divide it (e.g. v = INT64_MIN, d = 3 gives q * d = INT64_MIN -
+    // 1), and signed overflow is undefined behavior. So the comparison must be
+    // done in uint64_t, where arithmetic is defined to wrap mod 2^64. The
+    // wrapped difference v - q * d is then r mod 2^64, and since 0 <= r < 2^64,
+    // that is zero exactly when r is.
+    auto inexact = [=](int64_t v, int64_t q) {
+        return (uint64_t)q * (uint64_t)d != (uint64_t)v;
+    };
     auto round_up = [=](int64_t v) {
-        int64_t q = v / d, r = v % d;
-        return q + ((r != 0 && ((r > 0) == (d > 0))) ? 1 : 0);
+        int64_t q = div_imp(v, d);
+        return q + (d > 0 && inexact(v, q));
     };
     auto round_down = [=](int64_t v) {
-        int64_t q = v / d, r = v % d;
-        return q - ((r != 0 && ((r > 0) != (d > 0))) ? 1 : 0);
+        int64_t q = div_imp(v, d);
+        return q - (d < 0 && inexact(v, q));
     };
 
     ConstantInterval result;
