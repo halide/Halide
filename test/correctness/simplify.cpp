@@ -1252,6 +1252,13 @@ void check_bounds() {
     check(max((y + x * 32) * 4, x * 128 + 127), max(y * 4, 127) + x * 128);
     check(max((y + x * 32) * 4, x * 128 + 4), max(y, 1) * 4 + x * 128);
 
+    // A clamp of x offset by a constant still cancels against a subtracted x.
+    check(min(z, min(x, 3) + 5) - x, min(min(z, 8) - x, 5));
+    check(min(min(x, 3) + 5, z) - x, min(min(z, 8) - x, 5));
+    check(max(z, max(x, 3) + 5) - x, max(max(z, 8) - x, 5));
+    check(max(max(x, 3) + 5, z) - x, max(max(z, 8) - x, 5));
+    check(min(z, min(x * 16 + 15, 1024)) - x * 16, min(min(z, 1024) - x * 16, 15));
+
     check((min(x + y, z) + w) - x, min(z - x, y) + w);
     check(min((x + y) + w, z) - x, min(z - x, w + y));
 

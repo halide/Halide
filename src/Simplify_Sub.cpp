@@ -260,6 +260,12 @@ Expr Simplify::visit(const Sub *op, ExprInfo *info) {
            rewrite(min(y, min(x, c0) * c1 + c2) - x * c1, min(min(y, fold(c0 * c1 + c2)) - x * c1, c2), c1 > 0) ||
            rewrite(min(min(x, c0) * c1, y) - x * c1, min(min(y, fold(c0 * c1)) - x * c1, 0), c1 > 0) ||
            rewrite(min(y, min(x, c0) * c1) - x * c1, min(min(y, fold(c0 * c1)) - x * c1, 0), c1 > 0) ||
+           // The same without the scale. min(x + c1, c2) is canonicalized
+           // to min(x, c2 - c1) + c1, which hides x from the rules above.
+           rewrite(min(min(x, c0) + c1, y) - x, min(min(y, fold(c0 + c1)) - x, c1)) ||
+           rewrite(min(y, min(x, c0) + c1) - x, min(min(y, fold(c0 + c1)) - x, c1)) ||
+           rewrite(max(max(x, c0) + c1, y) - x, max(max(y, fold(c0 + c1)) - x, c1)) ||
+           rewrite(max(y, max(x, c0) + c1) - x, max(max(y, fold(c0 + c1)) - x, c1)) ||
            rewrite((min(x, (w + (y + z))) - z), min(x - z, w + y)) ||
            rewrite((min(x, (w + (z + y))) - z), min(x - z, w + y)) ||
            rewrite((min(x, ((y + z) + w)) - z), min(x - z, y + w)) ||
