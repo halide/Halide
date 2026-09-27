@@ -2378,7 +2378,13 @@ void check_invariant() {
 }
 
 void check_with_assumptions(const Expr &a, const Expr &b, const std::vector<Expr> &assumptions) {
-    Expr simpler = simplify(a, Scope<Interval>(), Scope<ModulusRemainder>(), assumptions);
+    // The simplifier only learns facts in the form it produces itself, so
+    // simplify the assumptions first, as the compiler would have.
+    std::vector<Expr> simplified_assumptions;
+    for (const Expr &e : assumptions) {
+        simplified_assumptions.push_back(simplify(e));
+    }
+    Expr simpler = simplify(a, Scope<Interval>(), Scope<ModulusRemainder>(), simplified_assumptions);
     if (!equal(simpler, b)) {
         std::cerr
             << "\nSimplification failure:\n"
@@ -2504,14 +2510,16 @@ void check_facts() {
         check_with_assumptions(min(a, b), a, {a <= b});
         check_with_assumptions(min(a, b), min(a, b), {a <= b + 1});
 
-        // A bound that solves to INT64_MIN / -1. Peeled, this fact reads
-        // -3 * x - y >= INT64_MIN, i.e. 3 * x + y <= 2^63, which says nothing.
-        // It must not turn into a bound on 3 * x + y (x = y = 0 satisfies the
-        // fact but not the query).
+        // A bound that solves to INT64_MIN / -1. The else branch learns
+        // !(-3 * x < y / 3 - k), which peels to -9 * x - y >= INT64_MIN, i.e.
+        // 9 * x + y <= 2^63, which says nothing. It must not turn into a bound
+        // on 9 * x + y (x = y = 0 satisfies the fact but not the query).
         Expr k = make_const(Int(64), (int64_t)3074457345618258602);  // (2^63 - 2) / 3
-        Expr three = make_const(Int(64), 3), m5 = make_const(Int(64), -5);
-        Expr q = x64 * three + y64 <= m5;
-        check_with_assumptions(q, q, {!(x64 * make_const(Int(64), -1) + k < y64 / three)});
+        Expr cond = x64 * make_const(Int(64), -3) < y64 / make_const(Int(64), 3) - k;
+        cond = simplify(cond);
+        Expr q = x64 * make_const(Int(64), 9) + y64 <= make_const(Int(64), -5);
+        Stmt s = IfThenElse::make(cond, not_no_op(x64), not_no_op(q));
+        check(s, s);
     }
 
     // Divisions on both sides are peeled over a common denominator. The

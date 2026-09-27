@@ -371,15 +371,11 @@ void Simplify::ScopedFact::learn_difference(const Expr &a, const Expr &b,
 }
 
 void Simplify::ScopedFact::learn_false(const Expr &fact) {
-    // Canonicalize the direction of comparisons, so that facts are stored in
-    // the same form the simplifier produces when it visits them.
-    if (const GT *gt = fact.as<GT>()) {
-        learn_false(gt->b < gt->a);
-        return;
-    } else if (const GE *ge = fact.as<GE>()) {
-        learn_false(!(ge->a < ge->b));
-        return;
-    }
+    // Facts must already be simplified, so that they are stored in the same
+    // form the simplifier produces when it visits them. It never produces
+    // > or >=.
+    internal_assert(!fact.as<GT>() && !fact.as<GE>())
+        << "learn_false expects a simplified fact: " << fact << "\n";
 
     // Record what this says about the difference between the two sides. And,
     // Not, and the tag intrinsic are handled by the recursion below instead.
@@ -484,15 +480,11 @@ void Simplify::ScopedFact::learn_lower_bound(const Variable *v, int64_t val) {
 }
 
 void Simplify::ScopedFact::learn_true(const Expr &fact) {
-    // Canonicalize the direction of comparisons, so that facts are stored in
-    // the same form the simplifier produces when it visits them.
-    if (const GT *gt = fact.as<GT>()) {
-        learn_true(gt->b < gt->a);
-        return;
-    } else if (const GE *ge = fact.as<GE>()) {
-        learn_true(!(ge->a < ge->b));
-        return;
-    }
+    // Facts must already be simplified, so that they are stored in the same
+    // form the simplifier produces when it visits them. It never produces
+    // > or >=.
+    internal_assert(!fact.as<GT>() && !fact.as<GE>())
+        << "learn_true expects a simplified fact: " << fact << "\n";
 
     // Record what this says about the difference between the two sides. And,
     // Not, and the tag intrinsic are handled by the recursion below instead.
