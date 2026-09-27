@@ -2426,6 +2426,11 @@ void check_unreachable() {
 void check_facts() {
     Expr x = Var("x"), y = Var("y"), z = Var("z");
 
+    // Several assumptions at once each leave a record. The public simplify()
+    // keeps their scopes in a vector, so they end in the order they were made
+    // rather than in reverse, and each must pop only what is still its own.
+    check_with_assumptions(min(x, z) + max(x, y), x + y, {x < y, x < z});
+
     // A fact stated in any comparison direction should let the simplifier pick
     // the winning side of a max or min.
     check_with_assumptions(max(x, y), x, {x > y});

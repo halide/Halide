@@ -338,9 +338,13 @@ void Simplify::ScopedFact::learn_difference(const Expr &a, const Expr &b,
 
     ConstantInterval primitive_bound = solve_scaled_bound(peeled, scale);
 
-    simplify->add_difference_key(Simplify::difference_key(pa->hash, pb->hash));
+    if (simplify->difference_heads.empty()) {
+        simplify->difference_heads.assign(Simplify::difference_buckets, -1);
+    }
+    int32_t &head = simplify->difference_heads[Simplify::difference_bucket(Simplify::difference_key(pa->hash, pb->hash))];
     simplify->known_bounds.push_back(
-        Simplify::KnownBound{Expr(pa), Expr(pb), primitive_bound, invert, prim_a, prim_b});
+        Simplify::KnownBound{Expr(pa), Expr(pb), primitive_bound, invert, prim_a, prim_b, pa->hash, pb->hash, head});
+    head = (int32_t)simplify->known_bounds.size() - 1;
 }
 
 void Simplify::ScopedFact::learn_false(const Expr &fact) {
@@ -823,44 +827,43 @@ ConstantInterval Simplify::known_linear_difference(const BaseExprNode *a, int64_
             int num_holes = 0;
 
             const uint32_t fa = a->hash, fb = b->hash;
-            // One test against the whole table before looking at any record.
-            if (difference_key_present(difference_key(fa, fb))) {
-                for (const KnownBound &kb : known_bounds) {
-                    // Hashes first: a record about another pair costs two
-                    // integer compares, not a walk over two Exprs.
-                    const uint32_t kba = kb.a.get()->hash, kbb = kb.b.get()->hash;
-                    const bool same_order = (fa == kba && fb == kbb);
-                    const bool swapped = (fa == kbb && fb == kba);
-                    if (!same_order && !swapped) {
-                        continue;
-                    }
+            // Only the records in this pair's bucket can be about it. The
+            // chain runs newest first.
+            for (int32_t i = difference_heads[difference_bucket(difference_key(fa, fb))]; i >= 0; i = known_bounds[i].next) {
+                const KnownBound &kb = known_bounds[i];
+                // Hashes first: a record about another pair costs two
+                // integer compares, not a walk over two Exprs.
+                const bool same_order = (fa == kb.hash_a && fb == kb.hash_b);
+                const bool swapped = (fa == kb.hash_b && fb == kb.hash_a);
+                if (!same_order && !swapped) {
+                    continue;
+                }
 
-                    ConstantInterval d;
-                    if (same_order && equal(*a, *kb.a.get()) && equal(*b, *kb.b.get()) &&
-                        prim_a == kb.coeff_a && prim_b == kb.coeff_b) {
-                        d = kb.diff * scale;
-                    } else if (swapped && equal(*a, *kb.b.get()) && equal(*b, *kb.a.get())) {
-                        // The fact runs the other way. Reduce (coeff_b,
-                        // coeff_a) -- this query in the fact's operand order --
-                        // then negate to flip back.
-                        int64_t sw_prim_a, sw_prim_b, sw_scale;
-                        if (reduce_affine_coeffs(coeff_b, coeff_a, sw_prim_a, sw_prim_b, sw_scale) &&
-                            sw_prim_a == kb.coeff_a && sw_prim_b == kb.coeff_b) {
-                            d = -(kb.diff * sw_scale);
-                        } else {
-                            continue;
-                        }
+                ConstantInterval d;
+                if (same_order && equal(*a, *kb.a.get()) && equal(*b, *kb.b.get()) &&
+                    prim_a == kb.coeff_a && prim_b == kb.coeff_b) {
+                    d = kb.diff * scale;
+                } else if (swapped && equal(*a, *kb.b.get()) && equal(*b, *kb.a.get())) {
+                    // The fact runs the other way. Reduce (coeff_b,
+                    // coeff_a) -- this query in the fact's operand order --
+                    // then negate to flip back.
+                    int64_t sw_prim_a, sw_prim_b, sw_scale;
+                    if (reduce_affine_coeffs(coeff_b, coeff_a, sw_prim_a, sw_prim_b, sw_scale) &&
+                        sw_prim_a == kb.coeff_a && sw_prim_b == kb.coeff_b) {
+                        d = -(kb.diff * sw_scale);
                     } else {
                         continue;
                     }
+                } else {
+                    continue;
+                }
 
-                    if (kb.invert) {
-                        if (num_holes < max_holes) {
-                            holes[num_holes++] = d.min;
-                        }
-                    } else if (!intersect_if_nonempty(result, d)) {
-                        break;
+                if (kb.invert) {
+                    if (num_holes < max_holes) {
+                        holes[num_holes++] = d.min;
                     }
+                } else if (!intersect_if_nonempty(result, d)) {
+                    break;
                 }
             }
 
@@ -955,10 +958,14 @@ Simplify::ScopedFact::~ScopedFact() {
     for (const auto *v : bounds_pop_list) {
         simplify->bounds_and_alignment_info.pop(v->name);
     }
-    internal_assert(simplify->known_bounds.size() >= known_bounds_size);
-    simplify->known_bounds.resize(known_bounds_size);
-    for (int i = 0; i < Simplify::difference_key_words; i++) {
-        simplify->difference_keys[i] = saved_difference_keys[i];
+    // Unchain the records this scope pushed, newest first, which puts each
+    // bucket's head back to what it was. A scope that ends after an enclosing
+    // one (the assumptions of the public simplify() go in a vector) finds its
+    // records already gone.
+    while (simplify->known_bounds.size() > known_bounds_size) {
+        const KnownBound &kb = simplify->known_bounds.back();
+        simplify->difference_heads[Simplify::difference_bucket(Simplify::difference_key(kb.hash_a, kb.hash_b))] = kb.next;
+        simplify->known_bounds.pop_back();
     }
     for (const auto &e : truths) {
         simplify->truths.erase(e);

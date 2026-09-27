@@ -456,15 +456,22 @@ public:
         // then always a single point. Only a != b produces one of these.
         bool invert = false;
         int64_t coeff_a = 1, coeff_b = 1;
+        // The hashes of a and b, kept here so that walking a chain of records
+        // reads only the records, not the nodes they point to.
+        uint32_t hash_a = 0, hash_b = 0;
+        // The next record in the same bucket, or -1 at the end of the chain.
+        int32_t next = -1;
     };
     std::vector<KnownBound> known_bounds;
 
-    // A bit per pair key, over every record in the table. A query whose bit is
-    // clear cannot match anything, which is the answer almost every query gets.
-    // Wide enough that a few dozen facts leave it sparse: at 64 bits a typical
-    // table saturates and lets four queries in ten through to the scan.
-    static constexpr int difference_key_words = 4;
-    uint64_t difference_keys[difference_key_words] = {0};
+    // The records are chained per bucket of their pair key, so that a query
+    // walks the few records that could be about its pair rather than the whole
+    // table. A pipeline's asserts alone can put hundreds of facts in scope for
+    // its entire body. The heads are allocated on the first record, so a
+    // simplifier that never learns a difference, which is most of them, pays
+    // nothing for them.
+    static constexpr int difference_buckets = 256;
+    std::vector<int32_t> difference_heads;
 
     /** Everything the facts tell us about (a - b), without building any IR.
      * The arguments are borrowed, so this is safe to call with the raw nodes a
@@ -520,27 +527,15 @@ public:
         return fa == fb ? fa * 0x9e3779b9u : (fa ^ fb);
     }
 
-    // One bit per pair key. Which bit has to come from mixed bits rather than
+    // The bucket of a pair key. It has to come from mixed bits rather than
     // from the bottom of the key: an Expr's hash carries its node type in the
-    // low bits, so indexing by those puts every pair of the same two kinds on
-    // one bit, and a few dozen facts then light only a handful of them.
+    // low bits, so indexing by those puts every pair of the same two kinds in
+    // one bucket.
     HALIDE_ALWAYS_INLINE
-    static uint32_t difference_key_bit_index(uint32_t key) {
-        constexpr int bits = 8;  // log2(difference_key_words * 64)
-        static_assert(difference_key_words * 64 == (1 << bits));
+    static uint32_t difference_bucket(uint32_t key) {
+        constexpr int bits = 8;
+        static_assert(difference_buckets == (1 << bits));
         return (key * 0x9e3779b9u) >> (32 - bits);
-    }
-
-    HALIDE_ALWAYS_INLINE
-    bool difference_key_present(uint32_t key) const {
-        const uint32_t bit = difference_key_bit_index(key);
-        return (difference_keys[bit / 64] >> (bit % 64)) & 1;
-    }
-
-    HALIDE_ALWAYS_INLINE
-    void add_difference_key(uint32_t key) {
-        const uint32_t bit = difference_key_bit_index(key);
-        difference_keys[bit / 64] |= (uint64_t)1 << (bit % 64);
     }
 
     // Replace exprs known to be truths or falsehoods with const_true or
@@ -563,11 +558,8 @@ public:
         std::vector<const Variable *> bounds_pop_list;
         std::set<Expr, IRDeepCompare> truths, falsehoods;
         // Everything in the simplifier's known_bounds from this index on was
-        // pushed by this scope, and is truncated away again when it ends.
+        // pushed by this scope, and is popped again when it ends.
         size_t known_bounds_size = 0;
-        // Bits can't be cleared one at a time, so keep the summary from before
-        // this scope and put it back wholesale.
-        uint64_t saved_difference_keys[difference_key_words] = {0};
 
         void learn_false(const Expr &fact);
         void learn_true(const Expr &fact);
@@ -582,9 +574,6 @@ public:
 
         ScopedFact(Simplify *s)
             : simplify(s), known_bounds_size(s->known_bounds.size()) {
-            for (int i = 0; i < difference_key_words; i++) {
-                saved_difference_keys[i] = s->difference_keys[i];
-            }
         }
         ~ScopedFact();
 
@@ -601,9 +590,6 @@ public:
               truths(std::move(that.truths)),
               falsehoods(std::move(that.falsehoods)),
               known_bounds_size(that.known_bounds_size) {
-            for (int i = 0; i < difference_key_words; i++) {
-                saved_difference_keys[i] = that.saved_difference_keys[i];
-            }
             that.simplify = nullptr;
         }
     };
