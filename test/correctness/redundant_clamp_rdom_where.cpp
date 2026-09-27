@@ -231,6 +231,71 @@ int where_on_sum_bounds_each_term() {
     return 0;
 }
 
+// The where clause bounds x*2 + r.x + r.y, and the clamp on the input read at
+// it is redundant, but a second input is read at just the x*2 + r.x part. That
+// part must still be bounded by the clause: through what it says about r.x
+// and x on their own, the index stays within [0, 32] for a 16 wide output.
+int where_on_compound_index_bounds_its_parts() {
+    ImageParam input(Int(32), 1, "input"), in2(Int(32), 1, "in2");
+    Param<int> min_x("min_x"), max_x("max_x");
+
+    Var x("x");
+    RDom r(0, 200, 0, 200);
+    Expr xr = x * 2 + r.x;
+    r.where(min_x <= xr + r.y && xr + r.y <= max_x);
+
+    Func m("m");
+    m(x) = 0;
+    m(x) += input(clamp(xr + r.y, min_x, max_x)) + in2(xr);
+
+    Func output("output");
+    output(x) = m(x);
+
+    const int w = 16;
+    min_x.set(1);
+    max_x.set(w);
+    output.infer_input_bounds({w});
+    {
+        Buffer<> b = input.get();
+        if (b.dim(0).min() != 1 || b.dim(0).max() != w) {
+            printf("input is required over [%d, %d] instead of [1, %d]\n",
+                   b.dim(0).min(), b.dim(0).max(), w);
+            return 1;
+        }
+        b = in2.get();
+        if (b.dim(0).min() < 0 || b.dim(0).max() > 32) {
+            printf("in2 is required over [%d, %d], which is wider than [0, 32]\n",
+                   b.dim(0).min(), b.dim(0).max());
+            return 1;
+        }
+    }
+
+    Buffer<int> input_buf(w), in2_buf(33);
+    input_buf.set_min(1);
+    input_buf.for_each_element([&](int i) { input_buf(i) = i; });
+    in2_buf.for_each_element([&](int i) { in2_buf(i) = 1000 * i; });
+    input.set(input_buf);
+    in2.set(in2_buf);
+
+    Buffer<int> out = output.realize({w});
+    for (int i = 0; i < w; i++) {
+        int correct = 0;
+        for (int ry = 0; ry < 200; ry++) {
+            for (int rx = 0; rx < 200; rx++) {
+                int xi = i * 2 + rx;
+                if (1 <= xi + ry && xi + ry <= w) {
+                    correct += input_buf(xi + ry) + in2_buf(xi);
+                }
+            }
+        }
+        if (out(i) != correct) {
+            printf("out(%d) = %d instead of %d\n", i, out(i), correct);
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int main(int argc, char **argv) {
     if (hannk_style_max_pool() != 0) {
         return 1;
@@ -242,6 +307,9 @@ int main(int argc, char **argv) {
         return 1;
     }
     if (where_on_sum_bounds_each_term() != 0) {
+        return 1;
+    }
+    if (where_on_compound_index_bounds_its_parts() != 0) {
         return 1;
     }
     printf("Success!\n");
