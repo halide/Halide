@@ -141,6 +141,7 @@ tests(
     tuple_arg_select_undef.cpp
     tuple_output_bounds_check.cpp
     tuple_realization_to_buffer.cpp
+    tuple_to_expr.cpp
     tuple_val_select_undef.cpp
     unbounded_input.cpp
     unbounded_output.cpp

@@ -235,10 +235,14 @@ struct FuncScheduleContents {
 
     LoopLevel store_level, compute_level, hoist_storage_level;
     std::vector<StorageDim> storage_dims;
-    std::vector<Bound> bounds;
+    std::map<std::string, Bound> bounds;
     std::vector<Bound> estimates;
     std::map<std::string, Internal::FunctionPtr> wrappers;
     MemoryType memory_type = MemoryType::Auto;
+    // If this is supported by more than just cuda, this will need to be a
+    // map<DeviceAPI, int>, not just an int, so that the correct limit (or lack
+    // thereof) is picked up by each backend.
+    int gpu_max_registers = 0;
     bool memoized = false;
     bool async = false;
     // This is an extent of the ring buffer and expected to be a positive integer.
@@ -256,7 +260,8 @@ struct FuncScheduleContents {
 
     // Pass an IRMutator through to all Exprs referenced in the FuncScheduleContents
     void mutate(IRMutator &mutator) {
-        for (Bound &b : bounds) {
+        for (auto &entry : bounds) {
+            Bound &b = entry.second;
             if (b.min.defined()) {
                 b.min = mutator(b.min);
             }
@@ -375,6 +380,7 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->bounds = contents->bounds;
     copy.contents->estimates = contents->estimates;
     copy.contents->memory_type = contents->memory_type;
+    copy.contents->gpu_max_registers = contents->gpu_max_registers;
     copy.contents->memoized = contents->memoized;
     copy.contents->memoize_eviction_key = contents->memoize_eviction_key;
     copy.contents->async = contents->async;
@@ -400,6 +406,14 @@ MemoryType FuncSchedule::memory_type() const {
 
 MemoryType &FuncSchedule::memory_type() {
     return contents->memory_type;
+}
+
+int FuncSchedule::gpu_max_registers() const {
+    return contents->gpu_max_registers;
+}
+
+int &FuncSchedule::gpu_max_registers() {
+    return contents->gpu_max_registers;
 }
 
 bool &FuncSchedule::memoized() {
@@ -450,12 +464,32 @@ const std::vector<StorageDim> &FuncSchedule::storage_dims() const {
     return contents->storage_dims;
 }
 
-std::vector<Bound> &FuncSchedule::bounds() {
+std::map<std::string, Bound> &FuncSchedule::bounds() {
     return contents->bounds;
 }
 
-const std::vector<Bound> &FuncSchedule::bounds() const {
+const std::map<std::string, Bound> &FuncSchedule::bounds() const {
     return contents->bounds;
+}
+
+void merge_bound(std::map<std::string, Bound> &bounds, const Bound &b) {
+    auto [it, inserted] = bounds.try_emplace(b.var, b);
+    if (inserted) {
+        return;
+    }
+    Bound &existing = it->second;
+    if (b.min.defined()) {
+        existing.min = b.min;
+    }
+    if (b.extent.defined()) {
+        existing.extent = b.extent;
+    }
+    if (b.modulus.defined()) {
+        existing.modulus = b.modulus;
+    }
+    if (b.remainder.defined()) {
+        existing.remainder = b.remainder;
+    }
 }
 
 std::vector<Bound> &FuncSchedule::estimates() {
@@ -512,7 +546,8 @@ const LoopLevel &FuncSchedule::hoist_storage_level() const {
 }
 
 void FuncSchedule::accept(IRVisitor *visitor) const {
-    for (const Bound &b : bounds()) {
+    for (const auto &entry : bounds()) {
+        const Bound &b = entry.second;
         if (b.min.defined()) {
             b.min.accept(visitor);
         }

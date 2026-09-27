@@ -69,6 +69,29 @@ py::object py_select(const py::args &args) {
     return py_select_reduce<Tuple, Tuple>(args);  // Otherwise, the value must be a tuple, too.
 }
 
+// Shared by print and print_when. If the value being printed is a
+// Tuple, all of its elements are printed and the print is attached to
+// the first element.
+template<typename F>
+py::object py_print(const py::args &args, F make_print) {
+    if (args.empty()) {
+        throw py::value_error("print() must have at least 1 argument");
+    }
+    if (is_expr(args[0])) {
+        return py::cast(make_print(collect_print_args(args)));
+    }
+    Tuple t = args[0].cast<Tuple>();
+    py::tuple rest(args.size() - 1);
+    for (size_t i = 1; i < args.size(); i++) {
+        rest[i - 1] = args[i];
+    }
+    std::vector<Expr> v = t.as_vector();
+    std::vector<Expr> extra = collect_print_args(py::args(rest));
+    v.insert(v.end(), extra.begin(), extra.end());
+    t[0] = make_print(v);
+    return py::cast(t);
+}
+
 }  // namespace
 
 void define_operators(py::module &m) {
@@ -145,21 +168,33 @@ void define_operators(py::module &m) {
     m.def("reinterpret", static_cast<Expr (*)(Type, Expr)>(&reinterpret));
     m.def("cast", static_cast<Expr (*)(Type, Expr)>(&cast));
 
-    m.def("print", [](const py::args &args) -> Expr {
-        return print(collect_print_args(args));
+    m.def("print", [](const py::args &args) -> py::object {
+        return py_print(args, [](const std::vector<Expr> &v) { return print(v); });
     });
 
     m.def(
-        "print_when", [](const Expr &condition, const py::args &args) -> Expr {
-            return print_when(condition, collect_print_args(args));
+        "print_when", [](const Expr &condition, const py::args &args) -> py::object {
+            return py_print(args, [&](const std::vector<Expr> &v) { return print_when(condition, v); });
         },
         py::arg("condition"));
 
     m.def(
         "require", [](const Expr &condition, const Expr &value, const py::args &args) -> Expr {
-            auto v = args_to_vector<Expr>(args);
+            auto v = collect_print_args(args);
             v.insert(v.begin(), value);
             return require(condition, v);
+        },
+        py::arg("condition"), py::arg("value"));
+    m.def(
+        "require", [](const Expr &condition, const Tuple &value, const py::args &args) -> Tuple {
+            auto v = collect_print_args(args);
+            v.insert(v.begin(), Expr());
+            Tuple result = value;
+            for (Expr &e : result) {
+                v[0] = e;
+                e = require(condition, v);
+            }
+            return result;
         },
         py::arg("condition"), py::arg("value"));
 
@@ -182,11 +217,24 @@ void define_operators(py::module &m) {
             return Internal::memoize_tag_helper(result, args_to_vector<Expr>(cache_key_values));
         },
         py::arg("result"));
+    m.def(
+        "memoize_tag", [](const Tuple &result, const py::args &cache_key_values) -> Tuple {
+            auto v = args_to_vector<Expr>(cache_key_values);
+            Tuple tagged = result;
+            for (Expr &e : tagged) {
+                e = Internal::memoize_tag_helper(e, v);
+            }
+            return tagged;
+        },
+        py::arg("result"));
 
-    m.def("likely", &likely);
-    m.def("likely_if_innermost", &likely_if_innermost);
+    m.def("likely", static_cast<Expr (*)(Expr)>(&likely));
+    m.def("likely", static_cast<Tuple (*)(const Tuple &)>(&likely));
+    m.def("likely_if_innermost", static_cast<Expr (*)(Expr)>(&likely_if_innermost));
+    m.def("likely_if_innermost", static_cast<Tuple (*)(const Tuple &)>(&likely_if_innermost));
     m.def("saturating_cast", static_cast<Expr (*)(Type, Expr)>(&saturating_cast));
-    m.def("strict_float", &strict_float);
+    m.def("strict_float", static_cast<Expr (*)(const Expr &)>(&strict_float));
+    m.def("strict_float", static_cast<Tuple (*)(const Tuple &)>(&strict_float));
     m.def("scatter", static_cast<Expr (*)(const std::vector<Expr> &)>(&scatter));
     m.def("gather", static_cast<Expr (*)(const std::vector<Expr> &)>(&gather));
     m.def("extract_bits", static_cast<Expr (*)(Type, const Expr &, const Expr &)>(&extract_bits));

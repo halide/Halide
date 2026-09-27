@@ -314,8 +314,6 @@ Serialize::TailStrategy Serializer::serialize_tail_strategy(const TailStrategy &
         return Serialize::TailStrategy::RoundUp;
     case TailStrategy::GuardWithIf:
         return Serialize::TailStrategy::GuardWithIf;
-    case TailStrategy::Predicate:
-        return Serialize::TailStrategy::Predicate;
     case TailStrategy::PredicateLoads:
         return Serialize::TailStrategy::PredicateLoads;
     case TailStrategy::PredicateStores:
@@ -1126,8 +1124,8 @@ Offset<Serialize::FuncSchedule> Serializer::serialize_func_schedule(FlatBufferBu
         storage_dims_serialized.push_back(serialize_storage_dim(builder, storage_dim));
     }
     std::vector<Offset<Serialize::Bound>> bounds_serialized;
-    for (const auto &bound : func_schedule.bounds()) {
-        bounds_serialized.push_back(serialize_bound(builder, bound));
+    for (const auto &entry : func_schedule.bounds()) {
+        bounds_serialized.push_back(serialize_bound(builder, entry.second));
     }
     std::vector<Offset<Serialize::Bound>> estimates_serialized;
     for (const auto &estimate : func_schedule.estimates()) {

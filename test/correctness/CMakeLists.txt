@@ -18,6 +18,7 @@ tests(
     bool_compute_root_vectorize.cpp
     bool_predicate_cast.cpp
     bound.cpp
+    bound_merge_order.cpp
     bound_small_allocations.cpp
     bound_storage.cpp
     boundary_conditions.cpp
@@ -79,9 +80,14 @@ tests(
     custom_allocator.cpp
     custom_auto_scheduler.cpp
     custom_cuda_context.cpp
+    custom_d3d12compute_context.cpp
     custom_error_reporter.cpp
     custom_jit_context.cpp
     custom_lowering_pass.cpp
+    custom_metal_context.cpp
+    custom_opencl_context.cpp
+    custom_vulkan_context.cpp
+    custom_webgpu_context.cpp
     d3d12compute_sm6x.cpp
     d3d12compute_strict_float.cpp
     dead_realization_in_specialization.cpp
@@ -169,6 +175,7 @@ tests(
     gpu_jit_explicit_copy_to_device.cpp
     gpu_large_alloc.cpp
     gpu_many_kernels.cpp
+    gpu_max_registers.cpp
     gpu_metal_completion_handler_error_check.cpp
     gpu_mixed_dimensionality.cpp
     gpu_mixed_shared_mem_types.cpp
@@ -198,6 +205,7 @@ tests(
     hexagon_scatter.cpp
     histogram.cpp
     histogram_equalize.cpp
+    hoist_invariants.cpp
     hoist_loop_invariant_if_statements.cpp
     hoist_storage.cpp
     host_alignment.cpp
@@ -316,6 +324,7 @@ tests(
     runtime_prefixes.cpp
     saturating_casts.cpp
     scatter.cpp
+    serialization.cpp
     set_custom_trace.cpp
     shadowed_bound.cpp
     shared_self_references.cpp
@@ -376,6 +385,7 @@ tests(
     transpose_idioms.cpp
     transposed_vector_reduce.cpp
     trim_no_ops.cpp
+    tuple_helpers.cpp
     tuple_partial_update.cpp
     tuple_reduction.cpp
     tuple_select.cpp
@@ -481,6 +491,7 @@ tests(
     parallel_reductions.cpp
     parallel_rvar.cpp
     parallel_scatter.cpp
+    parallel_size_one.cpp
     random.cpp
     reorder_rvars.cpp
     rfactor.cpp
@@ -574,4 +585,5 @@ set_target_properties(
 if (WITH_SERIALIZATION)
     target_compile_definitions(correctness_streaming PRIVATE TEST_WITH_SERIALIZATION)
     target_compile_definitions(correctness_generator_cache PRIVATE TEST_WITH_SERIALIZATION)
+    target_compile_definitions(correctness_serialization PRIVATE TEST_WITH_SERIALIZATION)
 endif ()
