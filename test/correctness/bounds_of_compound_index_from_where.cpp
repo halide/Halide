@@ -3,6 +3,11 @@
 
 using namespace Halide;
 
+// A where clause on an index made of several variables bounds both the index
+// as a whole and each of the variables it is made of. Bounds inference must
+// use it both ways: for the input read at that index, and for any input read
+// at just one of its variables.
+
 // A max pool in the style of hannk's: the input is read through a clamp, and
 // the reduction domain is restricted by a where clause that says the same
 // thing. The simplifier may remove the clamp as redundant, so bounds inference

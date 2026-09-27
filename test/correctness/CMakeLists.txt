@@ -29,6 +29,7 @@ tests(
     bounds_internal.cpp
     bounds_of_abs.cpp
     bounds_of_cast.cpp
+    bounds_of_compound_index_from_where.cpp
     bounds_of_func.cpp
     bounds_of_monotonic_math.cpp
     bounds_of_multiply.cpp
@@ -304,7 +305,6 @@ tests(
     reduction_non_rectangular.cpp
     reduction_predicate_racing.cpp
     reduction_schedule.cpp
-    redundant_clamp_rdom_where.cpp
     register_shuffle.cpp
     reorder_storage.cpp
     require.cpp
