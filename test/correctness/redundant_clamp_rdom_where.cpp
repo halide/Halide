@@ -5,11 +5,11 @@ using namespace Halide;
 
 // A max pool in the style of hannk's: the input is read through a clamp, and
 // the reduction domain is restricted by a where clause that says the same
-// thing. The clamp is redundant for the value, but it is also what bounds
-// inference uses to decide which region of the input is read, so it must not
-// be simplified away on the strength of the where clause. Otherwise the
-// pipeline asks for input it doesn't need and fails its own bounds check.
-int main(int argc, char **argv) {
+// thing. The simplifier may remove the clamp as redundant, so bounds inference
+// must get the region of the input that is read from the where clause alone.
+// Otherwise the pipeline asks for input it doesn't need and fails its own
+// bounds check.
+int hannk_style_max_pool() {
     ImageParam input(UInt(8), 2, "input");
     Param<int> stride_x("stride_x"), stride_y("stride_y");
     Param<int> filter_width("filter_width"), filter_height("filter_height");
@@ -70,7 +70,71 @@ int main(int argc, char **argv) {
             }
         }
     }
+    return 0;
+}
 
+// As above, but the window samples every other input pixel, and the where
+// clause bounds the scaled reduction variable, 2 * r.x, rather than the index
+// itself. The two only agree once the coefficient is taken into account.
+int scaled_rdom_max_pool() {
+    ImageParam input(UInt(8), 1, "input");
+    Param<int> stride_x("stride_x"), filter_width("filter_width");
+
+    Var x("x");
+
+    Expr min_x = input.dim(0).min();
+    Expr max_x = input.dim(0).max();
+
+    Func input_bounded("input_bounded");
+    input_bounded(x) = input(clamp(x, min_x, max_x));
+
+    RDom r(0, filter_width);
+    Expr x_rx = x * stride_x + 2 * r.x;
+    r.where(min_x <= x_rx && 2 * r.x <= max_x - x * stride_x);
+
+    Func maximum("maximum");
+    maximum(x) = cast<uint8_t>(0);
+    maximum(x) = max(maximum(x), input_bounded(x_rx));
+
+    Func output("output");
+    output(x) = maximum(x);
+
+    const int w = 16, fw = 3;
+    Buffer<uint8_t> input_buf(w);
+    input_buf.set_min(1);
+    input_buf.for_each_element([&](int i) {
+        input_buf(i) = (uint8_t)(i * 7);
+    });
+
+    input.set(input_buf);
+    stride_x.set(1);
+    filter_width.set(fw);
+
+    Buffer<uint8_t> out = output.realize({w});
+
+    for (int i = 0; i < w; i++) {
+        uint8_t correct = 0;
+        for (int rx = 0; rx < fw; rx++) {
+            int xi = i + 2 * rx;
+            if (xi >= 1 && xi <= w) {
+                correct = std::max(correct, input_buf(xi));
+            }
+        }
+        if (out(i) != correct) {
+            printf("out(%d) = %d instead of %d\n", i, out(i), correct);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int main(int argc, char **argv) {
+    if (hannk_style_max_pool() != 0) {
+        return 1;
+    }
+    if (scaled_rdom_max_pool() != 0) {
+        return 1;
+    }
     printf("Success!\n");
     return 0;
 }
