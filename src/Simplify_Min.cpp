@@ -57,6 +57,24 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
         std::swap(a_info, b_info);
     }
 
+    // Or when the facts learned higher up in the IR, or the shapes of the two
+    // sides, order them. One lookup answers for both sides.
+    {
+        ConstantInterval d = known_difference(a.get(), b.get());
+        if (d.max_defined && d.max <= 0) {
+            if (info) {
+                *info = a_info;
+            }
+            return a;
+        }
+        if (d.min_defined && d.min >= 0) {
+            if (info) {
+                *info = b_info;
+            }
+            return b;
+        }
+    }
+
     int lanes = op->type.lanes();
     auto rewrite = IRMatcher::rewriter(IRMatcher::min(a, b), op->type);
 
@@ -70,10 +88,6 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
     // RHS for ExprInfo to update correctly.
     if (EVAL_IN_LAMBDA  //
         (rewrite(min(x, x), a) ||
-         // Facts learned higher up in the IR or arithmetic may tell us which side wins.
-         (rewrite(min(x, y), a, max_diff(x, y, this) <= 0) ||
-          rewrite(min(x, y), b, min_diff(x, y, this) >= 0)) ||
-
          rewrite(min(x, c0), b, is_min_value(c0)) ||
          rewrite(min(x, c0), a, is_max_value(c0)) ||
          rewrite(min((x / c0) * c0, x), a, c0 > 0) ||
