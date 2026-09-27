@@ -128,11 +128,68 @@ int scaled_rdom_max_pool() {
     return 0;
 }
 
+// As above, but the input is read at half the position the where clause
+// bounds, so the clamped index is only a part of what the condition mentions.
+int halved_index_max_pool() {
+    ImageParam input(UInt(8), 1, "input");
+    Param<int> stride_x("stride_x"), filter_width("filter_width");
+
+    Var x("x");
+
+    Expr min_x = input.dim(0).min();
+    Expr max_x = input.dim(0).max();
+
+    Func input_bounded("input_bounded");
+    input_bounded(x) = input(clamp(x, min_x, max_x));
+
+    RDom r(0, filter_width);
+    Expr x_rx = x * stride_x + r.x;
+    r.where(2 * min_x <= x_rx && x_rx <= 2 * max_x + 1);
+
+    Func maximum("maximum");
+    maximum(x) = cast<uint8_t>(0);
+    maximum(x) = max(maximum(x), input_bounded(x_rx / 2));
+
+    Func output("output");
+    output(x) = maximum(x);
+
+    const int w = 16, fw = 3;
+    Buffer<uint8_t> input_buf(w);
+    input_buf.set_min(1);
+    input_buf.for_each_element([&](int i) {
+        input_buf(i) = (uint8_t)(i * 7);
+    });
+
+    input.set(input_buf);
+    stride_x.set(1);
+    filter_width.set(fw);
+
+    Buffer<uint8_t> out = output.realize({w});
+
+    for (int i = 0; i < w; i++) {
+        uint8_t correct = 0;
+        for (int rx = 0; rx < fw; rx++) {
+            int xi = i + rx;
+            if (xi >= 2 && xi <= 2 * w + 1) {
+                correct = std::max(correct, input_buf(xi / 2));
+            }
+        }
+        if (out(i) != correct) {
+            printf("out(%d) = %d instead of %d\n", i, out(i), correct);
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int main(int argc, char **argv) {
     if (hannk_style_max_pool() != 0) {
         return 1;
     }
     if (scaled_rdom_max_pool() != 0) {
+        return 1;
+    }
+    if (halved_index_max_pool() != 0) {
         return 1;
     }
     printf("Success!\n");

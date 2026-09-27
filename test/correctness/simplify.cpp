@@ -2426,10 +2426,6 @@ void check_unreachable() {
 void check_facts() {
     Expr x = Var("x"), y = Var("y"), z = Var("z");
 
-    // These rules are for the part of lowering that runs once regions and
-    // allocation sizes have been read out of the IR, so test them there.
-    ScopedRegionsInferred regions_inferred;
-
     // A fact stated in any comparison direction should let the simplifier pick
     // the winning side of a max or min.
     check_with_assumptions(max(x, y), x, {x > y});

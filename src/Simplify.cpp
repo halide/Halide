@@ -302,35 +302,8 @@ ConstantInterval solve_scaled_bound(const ConstantInterval &bound, int64_t d) {
 
 }  // namespace
 
-namespace {
-// Lowering is single-threaded per pipeline, but several pipelines can be
-// lowered at once, so this is per-thread rather than global.
-thread_local bool t_regions_have_been_inferred = false;
-}  // namespace
-
-bool regions_have_been_inferred() {
-    return t_regions_have_been_inferred;
-}
-
-ScopedRegionsInferred::ScopedRegionsInferred()
-    : old_value(t_regions_have_been_inferred) {
-    t_regions_have_been_inferred = true;
-}
-
-ScopedRegionsInferred::~ScopedRegionsInferred() {
-    t_regions_have_been_inferred = old_value;
-}
-
 void Simplify::ScopedFact::learn_difference(const Expr &a, const Expr &b,
                                             const ConstantInterval &diff, bool invert) {
-    // Nothing may be ordered from a fact until lowering has finished reading
-    // regions and allocation sizes out of the IR. A clamp around an index is
-    // part of how those are derived, so removing one on the strength of
-    // something we happen to know leaves the region asked for as wide as the
-    // unclamped index could reach.
-    if (!regions_have_been_inferred()) {
-        return;
-    }
     // Differences are only meaningful where they can't wrap.
     if (!simplify->no_overflow_int(a.type()) || a.type() != b.type()) {
         return;

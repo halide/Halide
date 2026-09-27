@@ -105,10 +105,6 @@ void check_stmt(const Stmt &a, const Stmt &b) {
 }  // namespace
 
 int main() {
-    // Facts are only learned once lowering has finished reading regions out of
-    // the IR, so without this nothing is learned and the test is vacuous.
-    // ScopedRegionsInferred regions_inferred;
-
     Expr e = Variable::make(Int(32), "e");  // output.extent.1
     Expr m = Variable::make(Int(32), "m");  // output.min.1
     Expr E = e + m;

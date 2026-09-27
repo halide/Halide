@@ -22,6 +22,7 @@
 #include "SimplifyCorrelatedDifferences.h"
 #include "Solve.h"
 #include "StrictifyFloat.h"
+#include "Substitute.h"
 #include "Util.h"
 #include "Var.h"
 
@@ -2032,6 +2033,96 @@ private:
     }
 };
 
+// Bind each compound index in the body of an IfThenElse that its condition
+// also mentions to a let around it, e.g.
+//
+//   if (min_x <= x*s + r) { f(x*s + r) }
+//
+// becomes
+//
+//   let t = x*s + r in if (min_x <= t) { f(t) }
+//
+// BoxesTouched bounds an index by an IfThenElse's condition one variable at a
+// time, so it can only use a condition that relates several variables if
+// they're named by one.
+class NameGuardedIndices : public IRMutator {
+    using IRMutator::visit;
+
+    Stmt visit(const IfThenElse *op) override {
+        // Name the indices here before recursing, so that the conditions of
+        // nested IfThenElses that bound the same index refer to the same let.
+        Stmt then_case = op->then_case;
+        vector<Expr> indices;
+        auto add_index = [&](const Expr &e) {
+            if (e.type() != Int(32) || e.as<Variable>() || is_const(e)) {
+                return;
+            }
+            for (const Expr &i : indices) {
+                if (equal(i, e)) {
+                    return;
+                }
+            }
+            indices.push_back(e);
+        };
+        // An index and each compound part of it, outermost first, so that the
+        // largest one the condition mentions gets the name.
+        auto add_index_and_parts = [&](const Expr &arg) {
+            add_index(arg);
+            visit_with(
+                arg,
+                [&](auto *self, const Add *op) { add_index(op); self->visit_base(op); },
+                [&](auto *self, const Sub *op) { add_index(op); self->visit_base(op); },
+                [&](auto *self, const Mul *op) { add_index(op); self->visit_base(op); },
+                [&](auto *self, const Div *op) { add_index(op); self->visit_base(op); },
+                [&](auto *self, const Mod *op) { add_index(op); self->visit_base(op); },
+                [&](auto *self, const Min *op) { add_index(op); self->visit_base(op); },
+                [&](auto *self, const Max *op) { add_index(op); self->visit_base(op); });
+        };
+        visit_with(
+            then_case,
+            [&](auto *self, const Call *call) {
+                if (call->call_type == Call::Halide || call->call_type == Call::Image) {
+                    for (const Expr &arg : call->args) {
+                        add_index_and_parts(arg);
+                    }
+                }
+                self->visit_base(call);
+            },
+            [&](auto *self, const Provide *provide) {
+                for (const Expr &arg : provide->args) {
+                    add_index_and_parts(arg);
+                }
+                self->visit_base(provide);
+            });
+
+        Expr condition = op->condition;
+        vector<pair<string, Expr>> lets;
+        for (const Expr &i : indices) {
+            string name = unique_name('t');
+            Expr var = Variable::make(i.type(), name);
+            Expr new_condition = substitute(i, var, condition);
+            if (!new_condition.same_as(condition)) {
+                condition = new_condition;
+                then_case = substitute(i, var, then_case);
+                lets.emplace_back(name, i);
+            }
+        }
+        then_case = mutate(then_case);
+        Stmt else_case = mutate(op->else_case);
+
+        Stmt stmt;
+        if (lets.empty() && then_case.same_as(op->then_case) && else_case.same_as(op->else_case)) {
+            stmt = op;
+        } else {
+            stmt = IfThenElse::make(condition, then_case, else_case);
+        }
+        for (const auto &let : reverse_view(lets)) {
+            stmt = LetStmt::make(let.first, let.second, stmt);
+        }
+        return stmt;
+    }
+};
+
 // Place innermost vars in an IfThenElse's condition as far to the left as possible.
 class SolveIfThenElse : public IRMutator {
 protected:
@@ -3119,6 +3210,7 @@ map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool 
     // as possible, so that BoxesTouched can prune the variable scope tighter
     // when encountering the IfThenElse.
     if (s.defined()) {
+        s = NameGuardedIndices()(s);
         s = SolveIfThenElse()(s);
     }
 
