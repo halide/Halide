@@ -304,6 +304,7 @@ tests(
     reduction_non_rectangular.cpp
     reduction_predicate_racing.cpp
     reduction_schedule.cpp
+    redundant_clamp_rdom_where.cpp
     register_shuffle.cpp
     reorder_storage.cpp
     require.cpp
