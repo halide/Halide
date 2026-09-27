@@ -234,7 +234,9 @@ bool reduce_affine_coeffs(int64_t ca, int64_t cb, int64_t &pa, int64_t &pb, int6
     if (ca == 0 && cb == 0) {
         return false;
     }
-    int64_t g = gcd(ca, cb);
+    // A unit coefficient, which nearly every query has, makes the pair coprime
+    // already.
+    int64_t g = (ca == 1 || ca == -1 || cb == 1 || cb == -1) ? 1 : gcd(ca, cb);
     pa = ca / g;
     pb = cb / g;
     s = g;
@@ -818,18 +820,20 @@ ConstantInterval Simplify::known_linear_difference(const BaseExprNode *a, int64_
     }
 
     if (!result.is_single_point() && !known_bounds.empty()) {
+        // Only the records in this pair's bucket can be about it. The chain
+        // runs newest first. Almost every query finds the bucket empty, so
+        // look before doing anything else.
+        const uint32_t fa = a->hash, fb = b->hash;
+        const int32_t head = difference_heads[difference_bucket(difference_key(fa, fb))];
         int64_t prim_a, prim_b, scale;
-        if (reduce_affine_coeffs(coeff_a, coeff_b, prim_a, prim_b, scale)) {
+        if (head >= 0 && reduce_affine_coeffs(coeff_a, coeff_b, prim_a, prim_b, scale)) {
             // A hole only bites once the ends are known, so collect and apply
             // them below. There are hardly ever any.
             constexpr int max_holes = 4;
             int64_t holes[max_holes];
             int num_holes = 0;
 
-            const uint32_t fa = a->hash, fb = b->hash;
-            // Only the records in this pair's bucket can be about it. The
-            // chain runs newest first.
-            for (int32_t i = difference_heads[difference_bucket(difference_key(fa, fb))]; i >= 0; i = known_bounds[i].next) {
+            for (int32_t i = head; i >= 0; i = known_bounds[i].next) {
                 const KnownBound &kb = known_bounds[i];
                 // Hashes first: a record about another pair costs two
                 // integer compares, not a walk over two Exprs.
@@ -888,6 +892,11 @@ ConstantInterval Simplify::known_linear_difference(const BaseExprNode *a, int64_
                 }
             }
         }
+    }
+
+    if (!result.min_defined && !result.max_defined) {
+        // Nothing is known, and no canonicalization changes that.
+        return result;
     }
 
     // Undo the canonicalization.
