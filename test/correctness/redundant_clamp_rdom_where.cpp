@@ -182,6 +182,55 @@ int halved_index_max_pool() {
     return 0;
 }
 
+// A where clause on the sum of two reduction variables. Bounds inference names
+// the sum so that the clause can bound it as a whole, but the clause must keep
+// bounding each variable on its own too, for the input that is read at just
+// one of them.
+int where_on_sum_bounds_each_term() {
+    ImageParam in(Int(32), 1, "in"), in2(Int(32), 1, "in2");
+
+    Var x("x");
+    RDom r(0, 200, 0, 200);
+    r.where(r.x + r.y < 50);
+
+    Func f("f");
+    f(x) = 0;
+    f(x) += in(r.x) + in2(r.x + r.y);
+
+    f.infer_input_bounds({4});
+    for (ImageParam *p : {&in, &in2}) {
+        Buffer<> b = p->get();
+        if (b.dim(0).min() != 0 || b.dim(0).extent() != 50) {
+            printf("%s is required over [%d, %d] instead of [0, 49]\n",
+                   p->name().c_str(), b.dim(0).min(), b.dim(0).max());
+            return 1;
+        }
+    }
+
+    Buffer<int> in_buf(50), in2_buf(50);
+    in_buf.for_each_element([&](int i) { in_buf(i) = i; });
+    in2_buf.for_each_element([&](int i) { in2_buf(i) = 1000 * i; });
+    in.set(in_buf);
+    in2.set(in2_buf);
+
+    Buffer<int> out = f.realize({4});
+    int correct = 0;
+    for (int ry = 0; ry < 200; ry++) {
+        for (int rx = 0; rx < 200; rx++) {
+            if (rx + ry < 50) {
+                correct += in_buf(rx) + in2_buf(rx + ry);
+            }
+        }
+    }
+    for (int i = 0; i < 4; i++) {
+        if (out(i) != correct) {
+            printf("out(%d) = %d instead of %d\n", i, out(i), correct);
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int main(int argc, char **argv) {
     if (hannk_style_max_pool() != 0) {
         return 1;
@@ -190,6 +239,9 @@ int main(int argc, char **argv) {
         return 1;
     }
     if (halved_index_max_pool() != 0) {
+        return 1;
+    }
+    if (where_on_sum_bounds_each_term() != 0) {
         return 1;
     }
     printf("Success!\n");

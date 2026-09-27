@@ -2034,17 +2034,20 @@ private:
 };
 
 // Bind each compound index in the body of an IfThenElse that its condition
-// also mentions to a let around it, e.g.
+// also mentions to a let around it, and repeat the condition in terms of the
+// name inside the original one, e.g.
 //
-//   if (min_x <= x*s + r) { f(x*s + r) }
+//   if (min_x <= x*s + r) { f(x*s + r); g(r) }
 //
 // becomes
 //
-//   let t = x*s + r in if (min_x <= t) { f(t) }
+//   let t = x*s + r in if (min_x <= x*s + r) { if (min_x <= t) { f(t); g(r) } }
 //
 // BoxesTouched bounds an index by an IfThenElse's condition one variable at a
 // time, so it can only use a condition that relates several variables if
-// they're named by one.
+// they're named by one. The original condition stays outside so that it keeps
+// bounding each of those variables on its own, for the other indices they
+// appear in.
 class NameGuardedIndices : public IRMutator {
     using IRMutator::visit;
 
@@ -2110,12 +2113,14 @@ class NameGuardedIndices : public IRMutator {
         then_case = mutate(then_case);
         Stmt else_case = mutate(op->else_case);
 
-        Stmt stmt;
-        if (lets.empty() && then_case.same_as(op->then_case) && else_case.same_as(op->else_case)) {
-            stmt = op;
-        } else {
-            stmt = IfThenElse::make(condition, then_case, else_case);
+        if (lets.empty()) {
+            if (then_case.same_as(op->then_case) && else_case.same_as(op->else_case)) {
+                return op;
+            }
+            return IfThenElse::make(op->condition, then_case, else_case);
         }
+        then_case = IfThenElse::make(condition, then_case);
+        Stmt stmt = IfThenElse::make(op->condition, then_case, else_case);
         for (const auto &let : reverse_view(lets)) {
             stmt = LetStmt::make(let.first, let.second, stmt);
         }
