@@ -2083,6 +2083,7 @@ class NameGuardedIndices : public IRMutator {
                 [&](auto *self, const Add *op) { add_index(op); self->visit_base(op); },
                 [&](auto *self, const Sub *op) { add_index(op); self->visit_base(op); },
                 [&](auto *self, const Mul *op) { add_index(op); self->visit_base(op); },
+                [&](auto *self, const Select *op) { add_index(op); self->visit_base(op); },
                 [&](auto *self, const Div *op) { add_index(op); self->visit_base(op); },
                 [&](auto *self, const Mod *op) { add_index(op); self->visit_base(op); },
                 [&](auto *self, const Min *op) { add_index(op); self->visit_base(op); },

@@ -301,6 +301,53 @@ int where_on_compound_index_bounds_its_parts() {
     return 0;
 }
 
+// The where clause bounds a select inside the index. A select can't be solved
+// for the variable it contains, so the clause only helps once the select
+// itself is named.
+int where_on_select_part() {
+    ImageParam in(Int(32), 1, "in");
+    Param<int> p("p"), fw("fw");
+
+    Var x("x");
+    RDom r(0, fw);
+    Expr base = select(p > 0, x * 2, x);
+    Expr idx = base * 2 + r.x;
+    r.where(0 <= base && base <= 10);
+
+    Func f("f");
+    f(x) = 0;
+    f(x) += in(idx);
+
+    p.set(1);
+    fw.set(3);
+    f.infer_input_bounds({100});
+    Buffer<> b = in.get();
+    if (b.dim(0).min() != 0 || b.dim(0).max() != 22) {
+        printf("in is required over [%d, %d] instead of [0, 22]\n",
+               b.dim(0).min(), b.dim(0).max());
+        return 1;
+    }
+
+    Buffer<int> in_buf(23);
+    in_buf.for_each_element([&](int i) { in_buf(i) = i * 7; });
+    in.set(in_buf);
+    Buffer<int> out = f.realize({100});
+    for (int i = 0; i < 100; i++) {
+        int correct = 0;
+        for (int rx = 0; rx < 3; rx++) {
+            int base = i * 2;
+            if (0 <= base && base <= 10) {
+                correct += in_buf(base * 2 + rx);
+            }
+        }
+        if (out(i) != correct) {
+            printf("out(%d) = %d instead of %d\n", i, out(i), correct);
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int main(int argc, char **argv) {
     if (hannk_style_max_pool() != 0) {
         return 1;
@@ -315,6 +362,9 @@ int main(int argc, char **argv) {
         return 1;
     }
     if (where_on_compound_index_bounds_its_parts() != 0) {
+        return 1;
+    }
+    if (where_on_select_part() != 0) {
         return 1;
     }
     printf("Success!\n");
