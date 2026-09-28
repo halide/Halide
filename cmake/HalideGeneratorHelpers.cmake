@@ -147,6 +147,14 @@ function(add_halide_generator TARGET)
         else ()
             add_executable(${TARGET} ${ARG_SOURCES})
             add_executable(${gen} ALIAS ${TARGET})
+            list(LENGTH Halide_CMAKE_TARGET num_platforms)
+            if (
+                APPLE
+                AND num_platforms GREATER 1
+                AND Halide_HOST_TARGET MATCHES "^(arm|x86)-64-macos$"
+            )
+                _Halide_set_osx_arch("${TARGET}" "${Halide_HOST_TARGET}")
+            endif ()
 
             if (NOT TARGET Halide::Generator)
                 find_package(HalideCompiler REQUIRED)
@@ -260,7 +268,7 @@ endfunction()
 
 function(_Halide_library_from_generator TARGET)
     cmake_parse_arguments(
-        PARSE_ARGV 1 ARG ""
+        PARSE_ARGV 1 ARG "INTERNAL"
         "FILE_BASE_NAME;FUNCTION_NAME;GENERATOR;GRADIENT_DESCENT;OUTPUT_DIR;TYPE;USE_RUNTIME"
         "COMMAND;DEPENDS;EXTRA_OUTPUTS;PARAMS;PLUGINS;TARGETS"
     )
@@ -393,12 +401,16 @@ function(_Halide_library_from_generator TARGET)
 
     foreach (out file IN ZIP_LISTS outputs output_files)
         list(APPEND "local_out_${out}" "${file}")
-        list(APPEND "OUT_${out}" "${file}")
+        if (NOT ARG_INTERNAL)
+            list(APPEND "OUT_${out}" "${file}")
+        endif ()
     endforeach ()
 
-    foreach (out IN LISTS outputs)
-        set("OUT_${out}" "${OUT_${out}}" PARENT_SCOPE)
-    endforeach ()
+    if (NOT ARG_INTERNAL)
+        foreach (out IN LISTS outputs)
+            set("OUT_${out}" "${OUT_${out}}" PARENT_SCOPE)
+        endforeach ()
+    endif ()
 
     # Create the filter's library target
     if (ARG_TYPE STREQUAL "static_library")
@@ -433,11 +445,13 @@ function(_Halide_library_from_generator TARGET)
         _Halide_add_targets_to_runtime("${ARG_USE_RUNTIME}" TARGETS ${ARG_TARGETS})
     endif ()
 
-    target_sources(
-        "${TARGET}"
-        INTERFACE
-        FILE_SET HEADERS BASE_DIRS "${ARG_OUTPUT_DIR}" FILES "${local_out_c_header}"
-    )
+    if (NOT ARG_INTERNAL)
+        target_sources(
+            "${TARGET}"
+            INTERFACE
+            FILE_SET HEADERS BASE_DIRS "${ARG_OUTPUT_DIR}" FILES "${local_out_c_header}"
+        )
+    endif ()
 endfunction()
 
 function(_Halide_lipo)
@@ -872,7 +886,6 @@ function(add_halide_library TARGET)
         COMMAND ${generator_cmd}  #
         DEPENDS ${generator_cmd_deps} ${ARG_DEPENDS}  #
         EXTRA_OUTPUTS ${extra_outputs}  #
-        FILE_BASE_NAME "${ARG_FILE_BASE_NAME}"  #
         FUNCTION_NAME "${ARG_FUNCTION_NAME}"  #
         GENERATOR "${ARG_GENERATOR}"  #
         GRADIENT_DESCENT "${ARG_GRADIENT_DESCENT}"  #
@@ -894,6 +907,7 @@ function(add_halide_library TARGET)
     if (common_triple STREQUAL "cmake" AND num_platforms GREATER 1)
         set(merged_base "")
         set(merged_libs "")
+        set(have_public_outputs FALSE)
 
         foreach (triple IN LISTS Halide_CMAKE_TARGET)
             set(features_arch "ARG_FEATURES[${triple}]")
@@ -907,6 +921,7 @@ function(add_halide_library TARGET)
             list(TRANSFORM targets_arch APPEND "-${ARG_FEATURES}")
             list(TRANSFORM targets_arch REPLACE "-$" "")
 
+            set(slice_args "")
             if (NOT merged_base AND NOT ARG_C_BACKEND)
                 set(this_lib "${TARGET}")
                 set(merged_base "${this_lib}")
@@ -915,8 +930,20 @@ function(add_halide_library TARGET)
                 list(APPEND merged_libs "${this_lib}")
             endif ()
 
+            if (NOT have_public_outputs)
+                set(file_base_name "${ARG_FILE_BASE_NAME}")
+                set(have_public_outputs TRUE)
+            else ()
+                set(file_base_name "${ARG_FILE_BASE_NAME}-${triple}")
+                list(APPEND slice_args INTERNAL)
+            endif ()
+
             # Appends to OUT_c_header, OUT_<extra-output>, etc.
-            _Halide_library_from_generator("${this_lib}" ${generator_args} TARGETS ${targets_arch})
+            _Halide_library_from_generator(
+                "${this_lib}" ${generator_args}
+                FILE_BASE_NAME "${file_base_name}"
+                TARGETS ${targets_arch} ${slice_args}
+            )
             _Halide_set_osx_arch("${this_lib}" "${triple}")
         endforeach ()
 
@@ -933,7 +960,11 @@ function(add_halide_library TARGET)
         endif ()
 
         # Appends to OUT_c_header, OUT_<extra-output>, etc.
-        _Halide_library_from_generator("${TARGET}" ${generator_args} TARGETS ${ARG_TARGETS})
+        _Halide_library_from_generator(
+            "${TARGET}" ${generator_args}
+            FILE_BASE_NAME "${ARG_FILE_BASE_NAME}"
+            TARGETS ${ARG_TARGETS}
+        )
     endif ()
 
     # Save metadata on the library target for downstream helpers.
