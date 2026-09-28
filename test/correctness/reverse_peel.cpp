@@ -185,6 +185,17 @@ void test_sink() {
           let("t", v, block({use(t), loop("i", y, Acquire::make(sem, 1, block({use(t * 4), use(t * 4)})))})),
           let("t", v, block({use(t), loop("i", y, Acquire::make(sem, 1, let("t.rp0", t * 4, block({use(rp0), use(rp0)}))))})));
 
+    // An Acquire count is evaluated outside the loop body, so the loop
+    // variable in it is not a root there: nothing to bind, nothing to place
+    // above the loop variable's own scope.
+    check_unchanged("loop variable in an acquire count",
+                    let("t", v, loop("i", y, Acquire::make(sem, var("i") + t, use(t)))));
+
+    // A For directly under a Fork stays there; the let goes above the Fork.
+    check("for under a fork",
+          let("t", v, block({use(t), Fork::make(loop("i", t * 4, use(t * 4), ForType::Parallel), use(x))})),
+          let("t", v, let("t.rp0", t * 4, block({use(t), Fork::make(loop("i", rp0, use(rp0), ForType::Parallel), use(x))}))));
+
     // Uses inside a gpu kernel get their own let inside the kernel rather than
     // a new kernel argument; the single host use stays inline.
     auto kernel = [&](const Expr &thread_max, const Stmt &body) {
@@ -242,6 +253,11 @@ void test_hoist() {
     check("constant pure call out of a loop",
           loop("i", y, use(pure_call + i)),
           let("const.rp0", pure_call, loop("i", y, use(var("const.rp0") + i))));
+    // A pure call on the root is a chain node, so it hoists like arithmetic.
+    Expr call_t = Call::make(Int(32), "pure_fn", {t, 1}, Call::PureExtern);
+    check("pure call hoisted out of a loop",
+          let("t", v, block({use(t), loop("i", y, use(call_t + i))})),
+          let("t", v, let("t.rp0", call_t, block({use(t), loop("i", y, use(rp0 + i))}))));
     check("hoisting stops at an if",
           IfThenElse::make(x < y, loop("i", y, use(pure_call + i))),
           IfThenElse::make(x < y, let("const.rp0", pure_call, loop("i", y, use(var("const.rp0") + i)))));
