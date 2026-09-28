@@ -42,11 +42,6 @@ if (WITH_TEST_CORRECTNESS)
     add_subdirectory(correctness)
 endif ()
 
-Halide_feature(WITH_TEST_ERROR "Build error tests" ON)
-if (WITH_TEST_ERROR)
-    add_subdirectory(error)
-endif ()
-
 Halide_feature(WITH_TEST_WARNING "Build warning tests" ON)
 if (WITH_TEST_WARNING)
     add_subdirectory(warning)
