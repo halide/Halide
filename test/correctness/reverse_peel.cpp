@@ -1,6 +1,7 @@
 #include "Halide.h"
 
 #include <cstdio>
+#include <cstdlib>
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -38,6 +39,19 @@ Stmt block(const std::vector<Stmt> &stmts) {
     return Block::make(stmts);
 }
 
+void set_env(const char *name, const char *value) {
+#ifdef _WIN32
+    _putenv_s(name, value);
+#else
+    setenv(name, value, 1);
+#endif
+}
+
+void set_policy(const char *placement, bool parallel_regions = false) {
+    set_env("HL_REVERSE_PEEL_POLICY", placement);
+    set_env("HL_REVERSE_PEEL_PARALLEL_REGIONS", parallel_regions ? "1" : "0");
+}
+
 int failures = 0;
 
 void check(const char *what, const Stmt &input, const Stmt &expected) {
@@ -58,7 +72,9 @@ void check_unchanged(const char *what, const Stmt &input) {
     check(what, input, input);
 }
 
-void test_ir() {
+void test_sink() {
+    set_policy("sink");
+
     Expr t = var("t"), rp0 = var("t.rp0"), rp1 = var("t.rp1");
     Expr v = opaque(x);
 
@@ -100,14 +116,47 @@ void test_ir() {
           let("t", v, block({use(t), loop("i", t * 4, use(t * 4))})),
           let("t", v, let("t.rp0", t * 4, block({use(t), loop("i", rp0, use(rp0))}))));
 
-    // The other operand must be available where the root is bound.
-    check_unchanged("loop variable operand",
-                    let("t", v, loop("i", y, block({use(t + var("i")), use(t + var("i"))}))));
+    // A loop variable is a root too: the chain belongs to it, as it is bound
+    // inside t, and its let goes inside the loop.
+    Expr i = var("i");
+    check("loop variable root",
+          let("t", v, loop("i", y, block({use(t + i), use(t + i)}))),
+          let("t", v, loop("i", y, let("i.rp0", i + t, block({use(var("i.rp0")), use(var("i.rp0"))})))));
 
-    // With two roots, the chain belongs to the inner one.
+    // So is a free variable; two of them are ordered by first appearance.
+    check("free variable root",
+          block({use(x + y), use(y + x), use(x)}),
+          let("x.rp0", x + y, block({use(var("x.rp0")), use(var("x.rp0")), use(x)})));
+
+    // With two lets, the chain belongs to the inner one.
     check("chain of the inner root",
           let("t", v, let("u", opaque(y), block({use(t + var("u")), use(t + var("u"))}))),
           let("t", v, let("u.rp0", opaque(y) + t, block({use(var("u.rp0")), use(var("u.rp0"))}))));
+
+    // A chain of a root bound further out may be an operand, so a whole
+    // expression over several variables can be shared. The operand's two
+    // occurrences are shared as well, by a let placed before its user's.
+    check("chain as operand",
+          let("t", v, block({use(t), use(t * 2 + x * 3), use(t * 2 + x * 3)})),
+          let("t", v, let("x.rp0", x * 3, let("t.rp0", t * 2 + var("x.rp0"), block({use(t), use(rp0), use(rp0)})))));
+
+    // The root may appear inside an operand too, since that operand is
+    // available where the root is bound.
+    check("root inside its own operand",
+          let("t", v, block({use(t), use(t * t + 1), use(t * t + 1)})),
+          let("t", v, let("t.rp0", t * t + 1, block({use(t), use(rp0), use(rp0)}))));
+
+    // Any pure expression over variables bound outside the root is an operand.
+    Expr a = var("a"), b = var("b");
+    Expr sel = select(x < y, a, b);
+    check("pure expression as operand",
+          let("a", opaque(x), let("b", opaque(y), let("t", v, block({use(t), use((t + sel) * 2), use((t + sel) * 2)})))),
+          let("a", opaque(x), let("b", opaque(y), let("t", v, let("t.rp0", (t + sel) * 2, block({use(t), use(rp0), use(rp0)}))))));
+
+    // A load can't move, so it ends the chain.
+    Expr load = Load::make(Int(32), "buf", x);
+    check_unchanged("load as operand",
+                    let("t", v, block({use(t), use(t + load), use(t + load)})));
 
     // Vectors are left alone.
     Expr vt = Variable::make(Int(32, 4), "t");
@@ -144,15 +193,69 @@ void test_ir() {
 
     // Injected lets must not disturb how the two passes compare binding
     // depths: c is bound after a's injected let, and b's chain uses c.
-    Expr a = var("a"), b = var("b"), c = var("c");
+    Expr c = var("c");
     check("binding depths with injected lets",
           let("a", opaque(x), block({use(a), use(a + 1), use(a + 1), let("c", opaque(y), let("b", opaque(x + y), block({use(c + b), use(c + b)})))})),
           let("a", opaque(x), let("a.rp0", a + 1, block({use(a), use(var("a.rp0")), use(var("a.rp0")), let("c", opaque(y), let("b.rp0", opaque(x + y) + c, block({use(var("b.rp0")), use(var("b.rp0"))})))}))));
 }
 
+void test_hoist() {
+    set_policy("hoist");
+
+    Expr t = var("t"), rp0 = var("t.rp0");
+    Expr v = opaque(x);
+    Expr i = var("i");
+
+    // Shared chains go as far out as the root allows, not to the innermost
+    // common scope.
+    check("hoist out of a loop",
+          let("t", v, block({use(t), loop("i", y, block({use(t * 4), use(t * 4)}))})),
+          let("t", v, let("t.rp0", t * 4, block({use(t), loop("i", y, block({use(rp0), use(rp0)}))}))));
+
+    // A chain used once is hoisted when that takes it out of a loop, and
+    // folds into the let when the variable has no other use.
+    check("hoist a single use out of a loop",
+          let("t", v, loop("i", y, use(t * 4 + 1))),
+          let("t.rp0", v * 4 + 1, loop("i", y, use(rp0))));
+    check("hoist a single use, root kept",
+          let("t", v, block({use(t), loop("i", y, use(t + 1))})),
+          let("t", v, let("t.rp0", t + 1, block({use(t), loop("i", y, use(rp0))}))));
+    check_unchanged("single use not in a loop", let("t", v, use(t * 4 + 1)));
+
+    // A loop variable's chain hoists to the top of its own loop body.
+    check("loop variable chain out of an inner loop",
+          loop("i", y, loop("j", y, use(i * 4 + var("j")))),
+          loop("i", y, let("i.rp0", i * 4, loop("j", y, use(var("i.rp0") + var("j"))))));
+
+    // A free variable's chain hoists to the top of the pipeline.
+    check("free variable chain out of a loop",
+          loop("i", y, use(x * 3 + i)),
+          let("x.rp0", x * 3, loop("i", y, use(var("x.rp0") + i))));
+
+    // An invariant expression over several variables hoists as a whole, and
+    // the let is built with the lets visible where it lands.
+    check("operand chain hoisted with its user",
+          let("t", v, block({use(x * 3), loop("i", y, use((t * 2 + x * 3) * i))})),
+          let("x.rp0", x * 3, let("t.rp0", v * 2 + var("x.rp0"), block({use(var("x.rp0")), loop("i", y, use(rp0 * i))}))));
+
+    // Parallel loop bodies as regions: nothing new crosses into the closure.
+    Stmt par = let("t", v, block({use(t), loop("i", y, block({use(t + 1), use(t + 1)}), ForType::Parallel)}));
+    check("hoist across a parallel loop",
+          par,
+          let("t", v, let("t.rp0", t + 1, block({use(t), loop("i", y, block({use(rp0), use(rp0)}), ForType::Parallel)}))));
+    set_policy("hoist", true);
+    check("parallel loop as a region",
+          par,
+          let("t", v, block({use(t), loop("i", y, let("t.rp0", t + 1, block({use(rp0), use(rp0)})), ForType::Parallel)})));
+
+    set_policy("sink");
+}
+
 // The pass runs in every lowering, so a pipeline with plenty of repeated index
 // arithmetic must still compute the right thing.
-void test_pipeline() {
+void test_pipeline(const char *placement, bool parallel_regions) {
+    set_policy(placement, parallel_regions);
+
     ImageParam in(UInt(8), 2, "in");
     Var x("x"), y("y");
     Func f("f"), g("g"), h("h");
@@ -179,19 +282,23 @@ void test_pipeline() {
         for (int i = 0; i < 60; i++) {
             uint8_t expected = (uint8_t)((uint16_t)(G(i, j) + G(i + 1, j + 1)) / 9);
             if (out(i, j) != expected) {
-                printf("Pipeline mismatch at (%d, %d): %d instead of %d\n", i, j, out(i, j), expected);
+                printf("Pipeline mismatch (%s) at (%d, %d): %d instead of %d\n", placement, i, j, out(i, j), expected);
                 failures++;
                 return;
             }
         }
     }
+    set_policy("sink");
 }
 
 }  // namespace
 
 int main(int argc, char **argv) {
-    test_ir();
-    test_pipeline();
+    test_sink();
+    test_hoist();
+    test_pipeline("sink", false);
+    test_pipeline("hoist", false);
+    test_pipeline("hoist", true);
     if (failures) {
         printf("%d failure(s)\n", failures);
         return 1;

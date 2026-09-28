@@ -5,8 +5,13 @@
 #include "IROperator.h"
 #include "IRVisitor.h"
 #include "Scope.h"
+#include "Util.h"
 
+#include <algorithm>
+#include <climits>
+#include <map>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -17,7 +22,21 @@ namespace {
 
 constexpr int no_node = -1;
 
-// The operations that can form a chain around a let-bound variable.
+// Where a shared chain's let goes. Sink puts it at the innermost let or loop
+// body holding its uses. Hoist puts it as far out as its operands allow, at the
+// top of its region or the root's scope, and also hoists a chain used once when
+// that carries it out of a loop.
+enum class Placement { Sink,
+                       Hoist };
+
+struct Options {
+    Placement placement = Placement::Sink;
+    // Treat the bodies of parallel loops as regions, like gpu kernels, so that
+    // no new value is captured by their closures.
+    bool parallel_regions = false;
+};
+
+// The operations that can form a chain around a root variable.
 enum class ChainOp : uint8_t { Add,
                                Sub,
                                Mul,
@@ -27,7 +46,8 @@ enum class ChainOp : uint8_t { Add,
                                Max };
 
 // One operation applied to a chain: which op, which side the chain sits on, and
-// the other operand, a constant or a variable bound outside the chain's let.
+// the other operand: any pure expression available where the chain's root is
+// bound.
 struct Edge {
     ChainOp op = ChainOp::Add;
     bool chain_on_left = true;
@@ -38,9 +58,9 @@ bool same_edge(const Edge &a, const Edge &b) {
     return a.op == b.op && a.chain_on_left == b.chain_on_left && equal(a.operand, b.operand);
 }
 
-Expr apply_edge(const Edge &e, const Expr &chain) {
-    Expr a = e.chain_on_left ? chain : e.operand;
-    Expr b = e.chain_on_left ? e.operand : chain;
+Expr apply_edge(const Edge &e, const Expr &chain, const Expr &operand) {
+    Expr a = e.chain_on_left ? chain : operand;
+    Expr b = e.chain_on_left ? operand : chain;
     switch (e.op) {
     case ChainOp::Add:
         return Add::make(a, b);
@@ -61,20 +81,23 @@ Expr apply_edge(const Edge &e, const Expr &chain) {
 }
 
 // The uses of a trie node that lie in one region: the host code, or the body of
-// one gpu kernel. A region gets its own let for the node, placed inside the
-// region, so that kernels don't grow extra arguments.
+// one gpu kernel (or parallel loop). A region gets its own let for the node,
+// placed inside the region, so that closures don't grow.
 struct RegionUses {
-    int region = no_node;  // Scope of the kernel's outermost gpu loop, or no_node for the host.
+    int region = no_node;  // Scope of the region's loop, or no_node for the host.
     int direct = 0;
     int subtree = 0;
     int live_children = 0;
     int scope = no_node;          // Innermost scope holding the direct uses.
     int subtree_scope = no_node;  // Innermost scope holding the whole subtree.
     bool materialized = false;
+    // Set by the rewrite when something refers to the let. Uses that were
+    // operands of a chain folded into a let further out leave none.
+    bool referenced = false;
     std::string name;
 };
 
-// A node of the per-variable trie of operation chains. The root node stands for
+// A node of the per-root trie of operation chains. The root node stands for
 // the bare variable; each child applies one more operation to its parent.
 struct TrieNode {
     int root = no_node;  // Index into Analysis::roots.
@@ -113,12 +136,13 @@ struct TrieNode {
         return regions.back();
     }
 
-    const std::string *materialized_name(int region) const {
+    const std::string *materialized_name(int region) {
         if (folded) {
             return &folded_name;
         }
-        for (const RegionUses &r : regions) {
+        for (RegionUses &r : regions) {
             if (r.region == region && r.materialized) {
+                r.referenced = true;
                 return &r.name;
             }
         }
@@ -143,22 +167,30 @@ struct ScopeNode {
     int depth = 0;
     ScopeKind kind = ScopeKind::For;
     const IRNode *node = nullptr;
-    int root = no_node;    // The root bound by this Let/LetStmt, if any.
-    int kernel = no_node;  // Scope of the enclosing kernel's outermost gpu loop.
+    int root = no_node;  // The root bound by this Let/LetStmt/For, if any.
+    // The innermost enclosing region boundary: a kernel's outermost gpu loop,
+    // or a parallel loop when those count.
+    int boundary = no_node;
+    bool in_gpu_kernel = false;
     // A let between two gpu loops is invisible to the host code that launches
     // the kernel, which evaluates the inner loop extents, so no lets go there
     // and uses there count as host uses.
     bool contains_gpu_loop = false;
     int region = no_node;
-    std::vector<Injected> injected;  // Lets bound here, parents first.
+    std::vector<Injected> injected;  // Lets bound here, outermost first.
 };
 
+enum class RootKind : uint8_t { Let,
+                                Loop,
+                                Free };
+
 struct Root {
-    const IRNode *let = nullptr;
+    RootKind kind = RootKind::Let;
+    const IRNode *let = nullptr;  // The binding Let, LetStmt or For.
     std::string name;
     Type type;
-    int scope = no_node;  // The scope node for the let's body.
-    int depth = 0;        // Binding depth of the variable.
+    int scope = no_node;  // The scope node for the binding's body.
+    int depth = 0;        // Binding depth; free variables get distinct negative depths.
     int trie = no_node;
     int folded = no_node;  // Trie node whose chain replaces the let's value.
 };
@@ -173,9 +205,11 @@ bool is_root_type(Type t) {
 }
 
 struct Analysis {
+    Options options;
     std::vector<TrieNode> nodes;
     std::vector<Root> roots;
     std::vector<ScopeNode> scopes;
+    std::map<std::string, int> free_roots;
     int materialized = 0;
 
     int lca(int a, int b) const {
@@ -196,6 +230,22 @@ struct Analysis {
             }
         }
         return a;
+    }
+
+    int add_root(RootKind kind, const IRNode *let, const std::string &name, Type type, int depth) {
+        int root = (int)roots.size();
+        int trie = (int)nodes.size();
+        nodes.emplace_back();
+        nodes.back().root = root;
+        Root r;
+        r.kind = kind;
+        r.let = let;
+        r.name = name;
+        r.type = type;
+        r.depth = depth;
+        r.trie = trie;
+        roots.push_back(std::move(r));
+        return root;
     }
 
     int find_child(int parent, const Edge &e) const {
@@ -262,33 +312,69 @@ struct Analysis {
         }
     }
 
-    // The innermost scope at or above s where a let of root r may be injected.
+    // Can a let go at scope s for root r? Never between gpu loops, and inside a
+    // Let expression only when it is the root's own.
+    bool can_inject(int s, const Root &r) const {
+        const ScopeNode &sn = scopes[s];
+        return !sn.contains_gpu_loop && (sn.kind != ScopeKind::Let || sn.node == r.let);
+    }
+
+    // The scope where a let of root r goes when its uses lie within scope s.
     int injection_scope(int s, const Root &r) const {
-        while (s != r.scope) {
-            internal_assert(s != no_node);
-            const ScopeNode &sn = scopes[s];
-            if (!sn.contains_gpu_loop &&
-                (sn.kind != ScopeKind::Let || sn.node == r.let)) {
-                break;
+        if (options.placement == Placement::Hoist) {
+            // As far out as the region and the root's binding allow.
+            int region = scopes[s].region;
+            int top = s;
+            for (int u = s; u != r.scope; u = scopes[u].parent) {
+                internal_assert(u != no_node);
+                int p = scopes[u].parent;
+                if (p == no_node || scopes[p].region != region) {
+                    break;
+                }
+                top = p;
             }
-            s = sn.parent;
+            s = top;
+        }
+        while (s != r.scope && !can_inject(s, r)) {
+            internal_assert(s != no_node);
+            s = scopes[s].parent;
         }
         return s;
     }
 
+    // Does a let at scope p, used at scope s, sit outside a loop that the use
+    // is in?
+    bool crosses_loop(int p, int s) const {
+        for (int u = s; u != p; u = scopes[u].parent) {
+            internal_assert(u != no_node);
+            if (scopes[u].kind == ScopeKind::For) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // Within one region, a chain prefix used by two or more chains gets its
     // own let, unless it is an unbranched step on the way to one that does;
-    // such steps fold into the value of the let below them.
+    // such steps fold into the value of the let below them. When hoisting, a
+    // chain used once gets a let too if that moves it out of a loop.
     void decide(Root &r, int n, int region, int &k) {
         for (int c = nodes[n].first_child; c != no_node; c = nodes[c].next_sibling) {
             RegionUses *cr = nodes[c].find_region(region);
             if (!cr || cr->subtree == 0) {
                 continue;
             }
-            if (cr->subtree >= 2 && (cr->direct >= 1 || cr->live_children >= 2)) {
+            bool shared = cr->subtree >= 2 && (cr->direct >= 1 || cr->live_children >= 2);
+            bool hoisted = false;
+            int scope = no_node;
+            if (shared || (options.placement == Placement::Hoist && cr->subtree == 1 && cr->direct == 1)) {
+                scope = injection_scope(cr->subtree_scope, r);
+                hoisted = !shared && crosses_loop(scope, cr->subtree_scope);
+            }
+            if (shared || hoisted) {
                 cr->materialized = true;
                 cr->name = r.name + ".rp" + std::to_string(k++);
-                scopes[injection_scope(cr->subtree_scope, r)].injected.push_back(Injected{c, region});
+                scopes[scope].injected.push_back(Injected{c, region});
                 materialized++;
             }
             decide(r, c, region, k);
@@ -296,34 +382,53 @@ struct Analysis {
     }
 
     void resolve() {
-        // Scopes are created parents first.
+        // Scopes are created parents first. A scope between gpu loops belongs
+        // to whatever encloses the kernel.
         for (ScopeNode &s : scopes) {
-            s.region = (s.kernel != no_node && !s.contains_gpu_loop) ? s.kernel : no_node;
+            if (s.contains_gpu_loop) {
+                s.region = scopes[s.parent].region;
+            } else {
+                s.region = s.boundary;
+            }
         }
         for (Root &r : roots) {
             count_subtree(r.trie);
             const TrieNode &rt = nodes[r.trie];
-            if (rt.subtree_uses < 2) {
+            if (rt.subtree_uses == 0) {
                 continue;
             }
             int k = 0;
             int top = r.trie;
-            if (rt.direct_uses == 0 && rt.live_children == 1) {
-                // Every use goes through one chain, so the original let takes
-                // that chain into its value and its variable disappears.
+            if (r.kind == RootKind::Let && rt.direct_uses == 0 && rt.live_children == 1) {
+                // Every use goes through one chain. The original let takes
+                // that chain into its value and its variable disappears, if
+                // the chain is shared or that hoists it out of a loop.
                 int n = live_child(r.trie);
                 while (nodes[n].direct_uses == 0 && nodes[n].live_children == 1) {
                     n = live_child(n);
                 }
-                nodes[n].folded = true;
-                nodes[n].folded_name = r.name + ".rp" + std::to_string(k++);
-                r.folded = n;
-                materialized++;
-                top = n;
+                bool fold = rt.subtree_uses >= 2;
+                if (!fold && options.placement == Placement::Hoist) {
+                    fold = crosses_loop(r.scope, nodes[n].regions[0].subtree_scope);
+                }
+                if (fold) {
+                    nodes[n].folded = true;
+                    nodes[n].folded_name = r.name + ".rp" + std::to_string(k++);
+                    r.folded = n;
+                    materialized++;
+                    top = n;
+                }
             }
             for (size_t i = 0; i < nodes[top].regions.size(); i++) {
                 decide(r, top, nodes[top].regions[i].region, k);
             }
+        }
+        // A let's value may use chains of roots bound further out, so those
+        // lets must come first.
+        for (ScopeNode &s : scopes) {
+            std::stable_sort(s.injected.begin(), s.injected.end(), [&](const Injected &a, const Injected &b) {
+                return roots[nodes[a.node].root].depth < roots[nodes[b.node].root].depth;
+            });
         }
     }
 };
@@ -353,6 +458,10 @@ protected:
     int depth = 0;
     int cur_scope = 0;
     Pending pending;
+    // The innermost binding depth an expression refers to, per node. An
+    // expression that can't be moved (a load, an impure call, a let) gets
+    // INT_MAX.
+    std::unordered_map<const IRNode *, int> depth_cache;
 
     ChainTracker(Analysis &an, bool count_uses)
         : an(an), count_uses(count_uses) {
@@ -413,25 +522,91 @@ protected:
         bindings.pop(name);
     }
 
+    // A free variable of a suitable type is a root bound outside everything.
+    // Free variables are ordered by first appearance so that any two of them
+    // have one bound "outside" the other.
+    int free_root(const Variable *op) {
+        auto it = an.free_roots.find(op->name);
+        if (it != an.free_roots.end()) {
+            return it->second;
+        }
+        if (!count_uses || !is_root_type(op->type)) {
+            return no_node;
+        }
+        int depth = -(int)an.free_roots.size() - 1;
+        int root = an.add_root(RootKind::Free, nullptr, op->name, op->type, depth);
+        an.roots[root].scope = 0;
+        an.free_roots[op->name] = root;
+        return root;
+    }
+
     void pending_variable(const Variable *op) {
         const Binding *b = bindings.find(op->name);
-        if (b && b->root != no_node) {
-            set_pending(op, b->root, an.roots[b->root].trie);
+        int root = b ? b->root : free_root(op);
+        if (root != no_node) {
+            set_pending(op, root, an.roots[root].trie);
         }
     }
 
-    // May e be the other operand of an operation on a chain of this root? It
-    // must be available where the root is bound.
-    bool operand_ok(const Expr &e, int root) const {
-        if (is_const(e)) {
-            return true;
+    int variable_depth(const Variable *v) const {
+        if (const Binding *b = bindings.find(v->name)) {
+            return b->depth;
         }
+        auto it = an.free_roots.find(v->name);
+        return it != an.free_roots.end() ? an.roots[it->second].depth : INT_MIN;
+    }
+
+    class ExprDepth : public IRVisitor {
+        ChainTracker &tracker;
+        using IRVisitor::visit;
+
+        void visit(const Variable *op) override {
+            result = std::max(result, tracker.variable_depth(op));
+        }
+        void visit(const Load *op) override {
+            result = INT_MAX;
+        }
+        void visit(const Let *op) override {
+            result = INT_MAX;
+        }
+        void visit(const Call *op) override {
+            if (op->is_pure()) {
+                IRVisitor::visit(op);
+            } else {
+                result = INT_MAX;
+            }
+        }
+
+    public:
+        int result = INT_MIN;
+        ExprDepth(ChainTracker &tracker)
+            : tracker(tracker) {
+        }
+    };
+
+    int expr_depth(const Expr &e) {
         if (const Variable *v = e.as<Variable>()) {
-            const Binding *b = bindings.find(v->name);
-            int d = b ? b->depth : -1;
-            return d < an.roots[root].depth;
+            return variable_depth(v);
         }
-        return false;
+        if (is_const(e)) {
+            return INT_MIN;
+        }
+        auto it = depth_cache.find(e.get());
+        if (it != depth_cache.end()) {
+            return it->second;
+        }
+        ExprDepth d(*this);
+        e.accept(&d);
+        depth_cache[e.get()] = d.result;
+        return d.result;
+    }
+
+    // May e, with pending chain p, be the other operand of an operation on a
+    // chain of this root? It must be pure and available where the root is
+    // bound: everything it refers to is bound at or outside the root.
+    bool operand_ok(const Expr &e, const Pending &p, int root) {
+        int d = p.valid() ? an.roots[p.root].depth : expr_depth(e);
+        return d <= an.roots[root].depth;
     }
 
     // Given the pending chains of the operands of a binary op, pick the one the
@@ -440,14 +615,14 @@ protected:
     Pending continue_chain(const Pending &pa, const Pending &pb,
                            const Expr &a, const Expr &b,
                            ChainOp op, bool commutative, Edge *edge) {
-        if (pa.valid() && operand_ok(b, pa.root)) {
+        if (pa.valid() && operand_ok(b, pb, pa.root)) {
             if (pb.valid()) {
                 finish(pb);
             }
             *edge = Edge{op, true, b};
             return pa;
         }
-        if (pb.valid() && operand_ok(a, pb.root)) {
+        if (pb.valid() && operand_ok(a, pa, pb.root)) {
             if (pa.valid()) {
                 finish(pa);
             }
@@ -461,6 +636,11 @@ protected:
             finish(pb);
         }
         return Pending();
+    }
+
+    bool is_boundary(const For *op) const {
+        return is_gpu(op->for_type) ||
+               (an.options.parallel_regions && op->is_parallel());
     }
 };
 
@@ -512,7 +692,7 @@ class Analyze : public IRVisitor, public ChainTracker {
         visit_binary(op, ChainOp::Max, true);
     }
 
-    int open_scope(ScopeKind kind, const IRNode *node, int root, bool starts_kernel) {
+    int open_scope(ScopeKind kind, const IRNode *node, int root, bool boundary) {
         int id = (int)an.scopes.size();
         ScopeNode s;
         s.parent = cur_scope;
@@ -520,7 +700,8 @@ class Analyze : public IRVisitor, public ChainTracker {
         s.kind = kind;
         s.node = node;
         s.root = root;
-        s.kernel = starts_kernel ? id : an.scopes[cur_scope].kernel;
+        s.boundary = boundary ? id : an.scopes[cur_scope].boundary;
+        s.in_gpu_kernel = gpu_nesting > 0;
         an.scopes.push_back(std::move(s));
         cur_scope = id;
         return id;
@@ -529,17 +710,7 @@ class Analyze : public IRVisitor, public ChainTracker {
     void open_let(const IRNode *node, const std::string &name, Type type, ScopeKind kind) {
         int root = no_node;
         if (is_root_type(type)) {
-            root = (int)an.roots.size();
-            int trie = (int)an.nodes.size();
-            an.nodes.emplace_back();
-            an.nodes.back().root = root;
-            Root r;
-            r.let = node;
-            r.name = name;
-            r.type = type;
-            r.depth = depth;
-            r.trie = trie;
-            an.roots.push_back(std::move(r));
+            root = an.add_root(RootKind::Let, node, name, type, depth);
         }
         bind(name, root);
         int scope = open_scope(kind, node, root, false);
@@ -588,12 +759,15 @@ class Analyze : public IRVisitor, public ChainTracker {
         op->min.accept(this);
         op->max.accept(this);
         bool gpu = is_gpu(op->for_type);
-        bool starts_kernel = gpu && gpu_nesting == 0;
-        if (gpu && !starts_kernel) {
-            for (int s = cur_scope; an.scopes[s].kernel != no_node; s = an.scopes[s].parent) {
+        if (gpu && gpu_nesting > 0) {
+            for (int s = cur_scope; an.scopes[s].in_gpu_kernel; s = an.scopes[s].parent) {
                 an.scopes[s].contains_gpu_loop = true;
             }
         }
+        // The loop variable is a root for the body only; an Acquire count
+        // that uses it sits outside the body.
+        Type type = op->min.type();
+        int root = is_root_type(type) ? an.add_root(RootKind::Loop, op, op->name, type, depth) : no_node;
         bind(op->name, no_node);
         if (gpu) {
             gpu_nesting++;
@@ -605,7 +779,11 @@ class Analyze : public IRVisitor, public ChainTracker {
             body = acq->body;
         }
         int saved_scope = cur_scope;
-        open_scope(ScopeKind::For, op, no_node, starts_kernel);
+        int scope = open_scope(ScopeKind::For, op, root, is_boundary(op));
+        if (root != no_node) {
+            an.roots[root].scope = scope;
+            bindings.ref(op->name).root = root;
+        }
         body.accept(this);
         cur_scope = saved_scope;
         if (gpu) {
@@ -651,14 +829,14 @@ class Rewrite : public IRMutator, public ChainTracker {
         Pending pa = take(a.get());
         Expr b = mutate(op->b);
         Pending pb = take(b.get());
+        // Decide and look up with the original operands, as the analysis did;
+        // build with the rewritten ones.
         Edge edge;
-        Pending chain = continue_chain(pa, pb, a, b, kind, commutative, &edge);
-        // Only chains the analysis saw count; rewritten operands can look like
-        // new ones.
+        Pending chain = continue_chain(pa, pb, op->a, op->b, kind, commutative, &edge);
         int child = chain.valid() ? an.find_child(chain.trie, edge) : no_node;
         const std::string *name = nullptr;
         if (child != no_node) {
-            name = an.nodes[child].materialized_name(an.scopes[cur_scope].region);
+            name = visible_name(child, an.scopes[cur_scope].region);
         }
         Expr result;
         if (name) {
@@ -696,9 +874,25 @@ class Rewrite : public IRMutator, public ChainTracker {
         return visit_binary(op, ChainOp::Max, true);
     }
 
+    // The name of node n's let for a region, if that let is in scope here. A
+    // let of another root may sit deeper than the position being rewritten.
+    const std::string *visible_name(int n, int region) {
+        TrieNode &node = an.nodes[n];
+        if (node.folded) {
+            return bindings.contains(node.folded_name) ? &node.folded_name : nullptr;
+        }
+        RegionUses *r = node.find_region(region);
+        if (!r || !r->materialized || !bindings.contains(r->name)) {
+            return nullptr;
+        }
+        r->referenced = true;
+        return &r->name;
+    }
+
     // The value of node n's let in a region: its chain applied to the nearest
     // ancestor with a let visible there, or to base when given (the folded
-    // root's value).
+    // root's value). Operands are rewritten here, at the let's own position,
+    // so they pick up the lets visible there.
     Expr value_of(int n, int region, const Expr &base = Expr()) {
         const Root &r = an.roots[an.nodes[n].root];
         std::vector<int> path;
@@ -711,14 +905,15 @@ class Rewrite : public IRMutator, public ChainTracker {
                 name = &r.name;
                 break;
             }
-            name = an.nodes[a].materialized_name(region);
+            name = visible_name(a, region);
             if (name) {
                 break;
             }
         }
         Expr e = base.defined() ? base : Variable::make(r.type, *name);
         for (int p : reverse_view(path)) {
-            e = apply_edge(an.nodes[p].edge, e);
+            const Edge &edge = an.nodes[p].edge;
+            e = apply_edge(edge, e, mutate(edge.operand));
         }
         return e;
     }
@@ -739,16 +934,27 @@ class Rewrite : public IRMutator, public ChainTracker {
         }
     }
 
-    Stmt wrap_injected(int scope, Stmt body) {
-        for (const Injected &i : reverse_view(an.scopes[scope].injected)) {
-            body = LetStmt::make(injected_name(i), value_of(i.node, i.region), std::move(body));
+    // The values of the lets injected at a scope, outermost first. Each is
+    // built with the ones before it in scope, so it may use them.
+    std::vector<Expr> injected_values(int scope) {
+        std::vector<Expr> values;
+        for (const Injected &i : an.scopes[scope].injected) {
+            values.push_back(value_of(i.node, i.region));
+            bind_extra(injected_name(i));
         }
-        return body;
+        unbind_injected(scope);
+        return values;
     }
 
-    Expr wrap_injected(int scope, Expr body) {
-        for (const Injected &i : reverse_view(an.scopes[scope].injected)) {
-            body = Let::make(injected_name(i), value_of(i.node, i.region), std::move(body));
+    template<typename LetOrLetStmt, typename Body>
+    Body wrap_injected(int scope, Body body) {
+        std::vector<Expr> values = injected_values(scope);
+        const auto &injected = an.scopes[scope].injected;
+        for (size_t i = injected.size(); i-- > 0;) {
+            // Everything that could refer to this let has been rewritten by now.
+            if (an.nodes[injected[i].node].find_region(injected[i].region)->referenced) {
+                body = LetOrLetStmt::make(injected_name(injected[i]), std::move(values[i]), std::move(body));
+            }
         }
         return body;
     }
@@ -766,7 +972,11 @@ class Rewrite : public IRMutator, public ChainTracker {
         while (op) {
             Expr value = mutate(op->value);
             int scope = enter_scope(op);
-            bind(op->name, an.scopes[scope].root);
+            int root = an.scopes[scope].root;
+            bind(op->name, root);
+            if (root != no_node && an.roots[root].folded != no_node) {
+                bind_extra(an.nodes[an.roots[root].folded].folded_name);
+            }
             bind_injected(scope);
             frames.push_back(Frame{op, std::move(value), scope});
             body = op->body;
@@ -776,10 +986,13 @@ class Rewrite : public IRMutator, public ChainTracker {
         for (const Frame &f : reverse_view(frames)) {
             unbind_injected(f.scope);
             unbind(f.op->name);
-            result = wrap_injected(f.scope, std::move(result));
+            cur_scope = f.scope;
+            result = wrap_injected<LetOrLetStmt, Body>(f.scope, std::move(result));
             int root = an.scopes[f.scope].root;
             if (root != no_node && an.roots[root].folded != no_node) {
                 int n = an.roots[root].folded;
+                unbind_extra(an.nodes[n].folded_name);
+                cur_scope = an.scopes[f.scope].parent;
                 result = LetOrLetStmt::make(an.nodes[n].folded_name, value_of(n, no_node, f.value), std::move(result));
             } else if (f.value.same_as(f.op->value) && result.same_as(f.op->body)) {
                 result = f.op;
@@ -814,10 +1027,12 @@ class Rewrite : public IRMutator, public ChainTracker {
         }
         int saved_scope = cur_scope;
         int scope = enter_scope(op);
+        bindings.ref(op->name).root = an.scopes[scope].root;
         bind_injected(scope);
         body = mutate(body);
         unbind_injected(scope);
-        body = wrap_injected(scope, std::move(body));
+        cur_scope = scope;
+        body = wrap_injected<LetStmt, Stmt>(scope, std::move(body));
         cur_scope = saved_scope;
         for (size_t i = acquires.size(); i-- > 0;) {
             body = acquires[i]->with(semaphores[i], counts[i], body);
@@ -876,12 +1091,33 @@ public:
     Rewrite(Analysis &an)
         : ChainTracker(an, false) {
     }
+
+    Stmt run(const Stmt &s) {
+        bind_injected(0);
+        Stmt result = mutate(s);
+        unbind_injected(0);
+        cur_scope = 0;
+        return wrap_injected<LetStmt, Stmt>(0, std::move(result));
+    }
 };
+
+Options options_from_env() {
+    Options o;
+    std::string policy = get_env_variable("HL_REVERSE_PEEL_POLICY");
+    if (policy == "hoist") {
+        o.placement = Placement::Hoist;
+    } else {
+        internal_assert(policy.empty() || policy == "sink") << "Unknown HL_REVERSE_PEEL_POLICY: " << policy << "\n";
+    }
+    o.parallel_regions = get_env_variable("HL_REVERSE_PEEL_PARALLEL_REGIONS") == "1";
+    return o;
+}
 
 }  // namespace
 
 Stmt reverse_peel_lets(const Stmt &s) {
     Analysis an;
+    an.options = options_from_env();
     an.scopes.emplace_back();  // The top-level scope.
     Analyze(an).run(s);
     an.resolve();
@@ -889,7 +1125,7 @@ Stmt reverse_peel_lets(const Stmt &s) {
     if (an.materialized == 0) {
         return s;
     }
-    return Rewrite(an)(s);
+    return Rewrite(an).run(s);
 }
 
 }  // namespace Internal
