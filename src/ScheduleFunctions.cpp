@@ -192,9 +192,11 @@ bool is_blend(TailStrategy tail) {
 // Some combinations of splits are known to lower incorrectly (wrong results
 // or out-of-bounds accesses), but only when one particular split has a tail,
 // i.e. when its factor does not divide the extent it splits. Rather than
-// compose the tail strategies in those combinations, we require at runtime
-// that the split has no tail. Returns, for each split of the definition, the
-// reason it must not have a tail, or an empty string if it may have one.
+// compose the tail strategies in those combinations, we forbid them unless
+// the split provably has no tail. Without a tail, every tail strategy
+// computes the same thing, so a different one (e.g. GuardWithIf) can always
+// be used instead. Returns, for each split of the definition, the reason it
+// must not have a tail, or an empty string if it may have one.
 // compute_levels are the compute levels of the Funcs computed inside this
 // Func's loops.
 vector<string> splits_requiring_no_tail(const string &prefix,
@@ -376,8 +378,6 @@ Stmt build_loop_nest(
     }
 
     const vector<string> no_tail_reasons = splits_requiring_no_tail(prefix, def, compute_levels);
-    vector<Stmt> no_tail_checks;
-    Expr no_tail_cond;
 
     // Define the function args in terms of the loop variables using the splits
     for (size_t split_idx = 0; split_idx < splits.size(); split_idx++) {
@@ -390,31 +390,16 @@ Stmt build_loop_nest(
             const bool proven = is_const_one(split.factor) ||
                                 (alignment != dim_extent_alignment.end() &&
                                  is_const_zero(simplify(alignment->second % split.factor)));
-            if (!proven) {
-                Expr old_min = Variable::make(Int(32), prefix + split.old_var + ".loop_min");
-                Expr old_max = Variable::make(Int(32), prefix + split.old_var + ".loop_max");
-                Expr old_extent = old_max - old_min + 1;
-                Expr no_tail = (old_extent % split.factor) == 0;
-                std::ostringstream msg;
-                msg << "In schedule for " << func.name() << ", splitting "
-                    << split_string(split.old_var, ".").back() << " into "
-                    << split_string(split.outer, ".").back() << " and "
-                    << split_string(split.inner, ".").back() << " with TailStrategy::"
-                    << split.tail << " requires the split factor to divide the extent, because "
-                    << no_tail_reasons[split_idx] << ", but the extent";
-                Expr error = requirement_failed_error(no_tail, {Expr(msg.str()), old_extent, Expr("is not a multiple of"), split.factor});
-                // Use a require rather than an AssertStmt: the simplifier
-                // assumes an assert's condition in the statements after it,
-                // and would shrink the loops accordingly before bounds queries
-                // are computed from them. A bounds query doesn't run this
-                // check, so it would then report a region that only suffices
-                // when the check passes.
-                Expr check = Call::make(Int(32), Call::require,
-                                        {likely(no_tail), make_zero(Int(32)), error},
-                                        Call::Intrinsic);
-                no_tail_checks.push_back(Evaluate::make(check));
-                no_tail_cond = no_tail_cond.defined() ? no_tail_cond && no_tail : no_tail;
-            }
+            user_assert(proven)
+                << "In schedule for " << func.name() << ", can't split "
+                << split_string(split.old_var, ".").back() << " into "
+                << split_string(split.outer, ".").back() << " and "
+                << split_string(split.inner, ".").back() << " with TailStrategy::"
+                << split.tail << ", because " << no_tail_reasons[split_idx]
+                << ". This combination is only supported when the split factor "
+                << "provably divides the extent (e.g. via bound()), in which case "
+                << "every tail strategy computes the same thing. "
+                << "Use TailStrategy::GuardWithIf for this split instead.\n";
         }
 
         vector<ApplySplitResult> splits_result = apply_split(split, prefix, dim_extent_alignment);
@@ -608,15 +593,6 @@ Stmt build_loop_nest(
             Expr max = Variable::make(Int(32), container.name + ".loop_max");
             stmt = For::make(container.name, min, max, dim.for_type, dim.partition_policy, dim.device_api, stmt);
         }
-    }
-
-    if (no_tail_cond.defined()) {
-        // Also guard the loop nest with the conditions. The simplifier
-        // deletes straight-line code before a statement it proves
-        // unreachable (e.g. an out-of-bounds load in a tail iteration),
-        // which would include the checks. An if stops that.
-        no_tail_checks.push_back(IfThenElse::make(likely(no_tail_cond), stmt));
-        stmt = Block::make(no_tail_checks);
     }
 
     // Define the bounds on the split dimensions using the bounds
