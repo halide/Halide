@@ -234,12 +234,18 @@ bool reduce_affine_coeffs(int64_t ca, int64_t cb, int64_t &pa, int64_t &pb, int6
     if (ca == 0 && cb == 0) {
         return false;
     }
-    // A unit coefficient, which nearly every query has, makes the pair coprime
-    // already.
-    int64_t g = (ca == 1 || ca == -1 || cb == 1 || cb == -1) ? 1 : gcd(ca, cb);
-    pa = ca / g;
-    pb = cb / g;
-    s = g;
+    if (ca == 1 || ca == -1 || cb == 1 || cb == -1) {
+        // A unit coefficient, which nearly every query has, makes the pair
+        // coprime already: no gcd, and no divisions by it.
+        pa = ca;
+        pb = cb;
+        s = 1;
+    } else {
+        int64_t g = gcd(ca, cb);
+        pa = ca / g;
+        pb = cb / g;
+        s = g;
+    }
     if (pa < 0 || (pa == 0 && pb < 0)) {
         pa = -pa;
         pb = -pb;
