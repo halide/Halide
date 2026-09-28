@@ -111,10 +111,10 @@ void test_sink() {
           let("t", v, block({use(t), loop("i", y, block({use(t * 4), use(t * 4)}))})),
           let("t", v, block({use(t), loop("i", y, let("t.rp0", t * 4, block({use(rp0), use(rp0)})))})));
 
-    // A use in a loop bound lies outside the loop.
+    // A use in a loop bound lies outside the loop body; the let wraps the loop.
     check("loop bound use",
           let("t", v, block({use(t), loop("i", t * 4, use(t * 4))})),
-          let("t", v, let("t.rp0", t * 4, block({use(t), loop("i", rp0, use(rp0))}))));
+          let("t", v, block({use(t), let("t.rp0", t * 4, loop("i", rp0, use(rp0)))})));
 
     // A loop variable is a root too: the chain belongs to it, as it is bound
     // inside t, and its let goes inside the loop.
@@ -146,12 +146,22 @@ void test_sink() {
           let("t", v, block({use(t), use(t * t + 1), use(t * t + 1)})),
           let("t", v, let("t.rp0", t * t + 1, block({use(t), use(rp0), use(rp0)}))));
 
-    // Any pure expression over variables bound outside the root is an operand.
+    // Any pure node continues a chain, so the select is a chain of b (the
+    // innermost of its variables) and folds into b's let, and the comparison
+    // inside it, once shared by a let of x, is left with no use and dropped.
     Expr a = var("a"), b = var("b");
     Expr sel = select(x < y, a, b);
-    check("pure expression as operand",
+    check("select as a chain node",
           let("a", opaque(x), let("b", opaque(y), let("t", v, block({use(t), use((t + sel) * 2), use((t + sel) * 2)})))),
-          let("a", opaque(x), let("b", opaque(y), let("t", v, let("t.rp0", (t + sel) * 2, block({use(t), use(rp0), use(rp0)}))))));
+          let("a", opaque(x), let("b.rp0", select(x < y, a, opaque(y)), let("t", v, let("t.rp0", (t + var("b.rp0")) * 2, block({use(t), use(rp0), use(rp0)}))))));
+
+    // Narrowing casts and pure calls chain; a widening cast does not, since
+    // codegen folds it into the operation around it.
+    check("narrowing cast and pure call",
+          let("t", v, block({use(cast<int16_t>(t) * 2), use(cast<int16_t>(t) * 2), use(abs(t)), use(abs(t))})),
+          let("t", v, let("t.rp0", cast<int16_t>(t) * 2, let("t.rp1", abs(t), block({use(Variable::make(Int(16), "t.rp0")), use(Variable::make(Int(16), "t.rp0")), use(Variable::make(UInt(32), "t.rp1")), use(Variable::make(UInt(32), "t.rp1"))})))));
+    check_unchanged("widening cast ends the chain",
+                    let("t", v, block({use(cast<int64_t>(t) + 1), use(cast<int64_t>(t) + 1)})));
 
     // A load can't move, so it ends the chain.
     Expr load = Load::make(Int(32), "buf", x);
@@ -213,14 +223,28 @@ void test_hoist() {
           let("t", v, let("t.rp0", t * 4, block({use(t), loop("i", y, block({use(rp0), use(rp0)}))}))));
 
     // A chain used once is hoisted when that takes it out of a loop, and
-    // folds into the let when the variable has no other use.
+    // folds into the let when the variable has no other use. A trailing
+    // integer constant stays at the use: loops track those as offsets.
     check("hoist a single use out of a loop",
           let("t", v, loop("i", y, use(t * 4 + 1))),
-          let("t.rp0", v * 4 + 1, loop("i", y, use(rp0))));
+          let("t.rp0", v * 4, loop("i", y, use(rp0 + 1))));
     check("hoist a single use, root kept",
-          let("t", v, block({use(t), loop("i", y, use(t + 1))})),
-          let("t", v, let("t.rp0", t + 1, block({use(t), loop("i", y, use(rp0))}))));
+          let("t", v, block({use(t), loop("i", y, use(t + x))})),
+          let("t", v, let("t.rp0", t + x, block({use(t), loop("i", y, use(rp0))}))));
+    check_unchanged("trailing constant alone is not hoisted",
+                    let("t", v, block({use(t), loop("i", y, use(t + 1))})));
     check_unchanged("single use not in a loop", let("t", v, use(t * 4 + 1)));
+
+    // A pure call over constants alone is hoisted out of the loop, as it
+    // depends on nothing, but not out of the if: the work stays on the paths
+    // that need it.
+    Expr pure_call = Call::make(Int(32), "pure_fn", {0, 1}, Call::PureExtern);
+    check("constant pure call out of a loop",
+          loop("i", y, use(pure_call + i)),
+          let("const.rp0", pure_call, loop("i", y, use(var("const.rp0") + i))));
+    check("hoisting stops at an if",
+          IfThenElse::make(x < y, loop("i", y, use(pure_call + i))),
+          IfThenElse::make(x < y, let("const.rp0", pure_call, loop("i", y, use(var("const.rp0") + i)))));
 
     // A loop variable's chain hoists to the top of its own loop body.
     check("loop variable chain out of an inner loop",

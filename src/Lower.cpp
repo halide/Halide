@@ -466,12 +466,9 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after removing dead allocations (simplify):", s);
     {
         // Experiment: HL_NO_LICM=1 drops loop-invariant code motion, leaving
-        // it to reverse_peel_lets; HL_NO_LICM=cse keeps only its CSE step.
+        // it to reverse_peel_lets.
         std::string no_licm = get_env_variable("HL_NO_LICM");
-        if (no_licm == "cse") {
-            s = common_subexpression_elimination(s);
-            log("Lowering after removing dead allocations (common_subexpression_elimination):", s);
-        } else if (no_licm != "1") {
+        if (no_licm != "1") {
             s = hoist_loop_invariant_values(s);
             log("Lowering after removing dead allocations (hoist_loop_invariant_values):", s);
         }
