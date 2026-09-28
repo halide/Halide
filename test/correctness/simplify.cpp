@@ -2394,10 +2394,17 @@ void check_unreachable() {
     check(IfThenElse::make(x != 0, Evaluate::make(unreachable()), not_no_op(y)),
           not_no_op(y));
 
-    check(y + Call::make(Int(32), Call::if_then_else, {x != 0, unreachable(), unreachable()}, Call::PureIntrinsic),
+    // A predicated unreachable() promises that its predicate is false.
+    auto unreachable_if = [](const Expr &pred) {
+        return Call::make(Int(32), Call::unreachable, {}, Call::Intrinsic,
+                          FunctionPtr(), 0, Buffer<>(), Parameter(), pred);
+    };
+    check(y + select(x != 0, unreachable_if(x != 0), unreachable_if(x == 0)),
           unreachable());
-    check(Call::make(Int(32), Call::if_then_else, {x != 0, y, unreachable()}, Call::PureIntrinsic), y);
-    check(Call::make(Int(32), Call::if_then_else, {x != 0, unreachable(), y}, Call::PureIntrinsic), y);
+    check(select(x != 0, y, unreachable_if(x == 0)), y);
+    check(select(x != 0, unreachable_if(x != 0), y), y);
+    check(unreachable_if(const_true()), unreachable());
+    check(unreachable_if(const_false()), 0);
 
     check(Block::make(not_no_op(y), For::make("i", 0, 1, ForType::Serial, Partition::Auto, DeviceAPI::None, Evaluate::make(unreachable()))),
           Evaluate::make(unreachable()));

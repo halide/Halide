@@ -104,16 +104,13 @@ protected:
     }
 
     Expr visit(const Load *op) override {
-        if (!is_const_one(op->predicate)) {
+        if (!is_const_one(op->predicate) && op->type.is_vector()) {
             std::vector<Expr> lane_values;
             for (int ln = 0; ln < op->type.lanes(); ln++) {
-                Expr load_expr = op->with(extract_lane(op->index, ln), const_true(), op->alignment + ln);
-                lane_values.push_back(Call::make(load_expr.type(),
-                                                 Call::if_then_else,
-                                                 {extract_lane(op->predicate, ln),
-                                                  load_expr,
-                                                  make_zero(op->type.element_of())},
-                                                 Internal::Call::PureIntrinsic));
+                // Scalar predicated loads become branches in codegen.
+                lane_values.push_back(op->with(extract_lane(op->index, ln),
+                                               extract_lane(op->predicate, ln),
+                                               op->alignment + ln));
             }
             Expr pred_load = Shuffle::make_concat(lane_values);
             return pred_load;

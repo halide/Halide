@@ -149,6 +149,17 @@ protected:
     /** Convert a vector Expr into a series of scalar Exprs, then reassemble into vector of original type.  */
     std::string print_scalarized_expr(const Expr &e);
 
+    /** Emit code that evaluates exactly one of true_value and false_value,
+     * depending on a scalar condition. Returns the id of the result. */
+    std::string print_branch(const Expr &cond, const Expr &true_value, const Expr &false_value);
+
+    /** Emit a Call with a non-trivial predicate. The call is only performed
+     * where the predicate is true, and the result is zero elsewhere. */
+    std::string print_predicated_call(const Call *op);
+
+    /** Emit the declaration of an uninitialized local variable. */
+    virtual void print_uninitialized_var_decl(Type t, const std::string &name);
+
     /** Emit an SSA-style assignment, and set id to the freshly generated name. Return id. */
     virtual std::string print_assignment(Type t, const std::string &rhs);
 

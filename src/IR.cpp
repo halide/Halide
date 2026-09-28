@@ -886,8 +886,6 @@ constexpr const char *intrinsic_op_names[] = {
     "hvx_scatter",
     "hvx_scatter_acc",
     "hvx_scatter_release",
-    "if_then_else",
-    "if_then_else_mask",
     "image_load",
     "image_store",
     "lerp",
@@ -970,14 +968,27 @@ const char *Call::get_intrinsic_name(IntrinsicOp op) {
 
 Expr Call::make(Type type, Call::IntrinsicOp op, const std::vector<Expr> &args, CallType call_type,
                 FunctionPtr func, int value_index,
-                const Buffer<> &image, Parameter param) {
+                const Buffer<> &image, Parameter param, Expr predicate) {
     internal_assert(call_type == Call::Intrinsic || call_type == Call::PureIntrinsic);
-    return Call::make(type, intrinsic_op_names[op], args, call_type, std::move(func), value_index, image, std::move(param));
+    return Call::make(type, intrinsic_op_names[op], args, call_type, std::move(func), value_index, image, std::move(param), std::move(predicate));
 }
 
 Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &args, CallType call_type,
                 FunctionPtr func, int value_index,
-                Buffer<> image, Parameter param) {
+                Buffer<> image, Parameter param, Expr predicate) {
+    if (!predicate.defined()) {
+        predicate = const_true(type.lanes());
+    } else if (predicate.type().is_scalar() && type.is_vector()) {
+        predicate = Broadcast::make(std::move(predicate), type.lanes());
+    }
+    // Vector predicates may also be masks (see EliminateBoolVectors).
+    internal_assert((predicate.type().is_bool() ||
+                     (predicate.type().is_int() && predicate.type().is_vector())) &&
+                    predicate.type().lanes() == type.lanes())
+        << "Predicate of call to " << name << " must be a boolean with " << type.lanes()
+        << " lanes: " << predicate << "\n";
+    internal_assert(can_be_predicated(call_type) || is_const_one(predicate))
+        << "Pure call to " << name << " may not be predicated: " << predicate << "\n";
     if (name == intrinsic_op_names[Call::prefetch] && call_type == Call::Intrinsic) {
         internal_assert(args.size() % 2 == 0)
             << "Number of args to a prefetch call should be even: {base, offset, extent0, stride0, extent1, stride1, ...}\n";
@@ -1007,6 +1018,7 @@ Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &arg
     for (const auto &arg : args) {
         h = combine_hash(h, arg.hash());
     }
+    h = combine_hash(h, predicate.hash());
     node->set_hash(h);
     node->args = args;
     node->call_type = call_type;
@@ -1014,6 +1026,7 @@ Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &arg
     node->value_index = value_index;
     node->image = std::move(image);
     node->param = std::move(param);
+    node->predicate = std::move(predicate);
     return node;
 }
 
@@ -1021,7 +1034,22 @@ Expr Call::with(const std::vector<Expr> &args) const {
     if (all_same_as(args, this->args)) {
         return this;
     }
-    return make(type, name, args, call_type, func, value_index, image, param);
+    return make(type, name, args, call_type, func, value_index, image, param, predicate);
+}
+
+Expr Call::with(const std::vector<Expr> &args, const Expr &predicate) const {
+    if (all_same_as(args, this->args) && predicate.same_as(this->predicate)) {
+        return this;
+    }
+    return make(type, name, args, call_type, func, value_index, image, param, predicate);
+}
+
+Expr Call::with_predicate_and(const Expr &cond) const {
+    Expr c = cond;
+    if (c.type().is_scalar() && type.is_vector()) {
+        c = Broadcast::make(c, type.lanes());
+    }
+    return with(args, is_const_one(predicate) ? c : (predicate && c));
 }
 
 Expr Variable::make(Type type, const std::string &name, Buffer<> image, Parameter param, ReductionDomain reduction_domain) {

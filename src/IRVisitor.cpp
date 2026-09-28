@@ -132,6 +132,7 @@ void IRVisitor::visit(const Call *op) {
     for (const auto &arg : op->args) {
         arg.accept(this);
     }
+    op->predicate.accept(this);
 
     // Consider extern call args
     if (op->func.defined()) {
@@ -428,6 +429,7 @@ void IRGraphVisitor::visit(const Call *op) {
     for (const auto &arg : op->args) {
         include(arg);
     }
+    include(op->predicate);
 }
 
 void IRGraphVisitor::visit(const Let *op) {

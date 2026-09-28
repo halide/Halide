@@ -903,7 +903,11 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
             user_error << "unknown parameter used in pipeline '" << param_name << "'\n";
         }
         const auto type = deserialize_type(call_expr->type());
-        return Call::make(type, name, args, call_type, func_ptr, value_index, image, param);
+        Expr predicate;
+        if (call_expr->predicate()) {
+            predicate = deserialize_expr(call_expr->predicate_type(), call_expr->predicate());
+        }
+        return Call::make(type, name, args, call_type, func_ptr, value_index, image, param, predicate);
     }
     case Serialize::Expr::Variable: {
         const auto *variable_expr = (const Serialize::Variable *)expr;

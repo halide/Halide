@@ -298,7 +298,10 @@ public:
                     Expr cond_val = std::accumulate(
                         predicates.begin(), predicates.end(), val,
                         [](const auto &acc, const auto &pred) {
-                            return Call::make(acc.type(), Call::if_then_else, {likely(pred), acc}, Call::PureIntrinsic);
+                            // Bounds inference interprets this select as a
+                            // branch (see compute_exprs), so acc is only
+                            // considered where pred holds.
+                            return select(likely(pred), acc, make_zero(acc.type()));
                         });
                     result[i].emplace_back(const_true(), cond_val);
                 }
@@ -379,28 +382,11 @@ public:
 
             exprs.insert(exprs.end(), result[1].begin(), result[1].end());
 
-            // For the purposes of computation bounds inference, we
-            // don't care what sites are loaded, just what sites need
-            // to have the correct value in them. So remap all selects
-            // to if_then_elses to get tighter bounds.
-            class SelectToIfThenElse : public IRMutator {
-                using IRMutator::visit;
-                Expr visit(const Select *op) override {
-                    if (is_pure(op->condition)) {
-                        return Call::make(op->type, Call::if_then_else,
-                                          {mutate(op->condition),
-                                           mutate(op->true_value),
-                                           mutate(op->false_value)},
-                                          Call::PureIntrinsic);
-                    } else {
-                        return IRMutator::visit(op);
-                    }
-                }
-            } select_to_if_then_else;
-
-            for (auto &e : exprs) {
-                e.value = select_to_if_then_else(e.value);
-            }
+            // Note that for the purposes of computation bounds inference, we
+            // don't care what sites are loaded, just what sites need to have
+            // the correct value in them. So when computing the boxes required
+            // by these exprs, we treat selects as branches to get tighter
+            // bounds.
         }
 
         // Wrap a statement in let stmts defining the box
@@ -900,7 +886,8 @@ public:
             } else {
                 for (const auto &cval : consumer.exprs) {
                     map<string, Box> new_boxes;
-                    new_boxes = boxes_required(cval.value, scope, func_bounds);
+                    new_boxes = boxes_required(cval.value, scope, func_bounds,
+                                               /*selects_are_branches=*/true);
                     for (auto &i : new_boxes) {
                         // Add the condition on which this value is evaluated to the box before merging
                         Box &box = i.second;

@@ -1314,8 +1314,74 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
 
 string CodeGen_C::print_expr(const Expr &e) {
     id = "$$ BAD ID $$";
-    e.accept(this);
+    // Predicated calls and scalar predicated loads need a branch. They're
+    // handled here, rather than in the visitors, so that subclasses
+    // overriding those don't need to be aware of them.
+    const Call *call = e.as<Call>();
+    const Load *load = e.as<Load>();
+    if (call && !is_const_one(call->predicate)) {
+        id = print_predicated_call(call);
+    } else if (load && load->type.is_scalar() && !is_const_one(load->predicate)) {
+        id = print_branch(load->predicate,
+                          load->with(load->index, const_true(), load->alignment),
+                          make_zero(load->type));
+    } else {
+        e.accept(this);
+    }
     return id;
+}
+
+void CodeGen_C::print_uninitialized_var_decl(Type t, const string &name) {
+    stream << get_indent() << print_type(t, AppendSpace) << name << ";\n";
+}
+
+string CodeGen_C::print_branch(const Expr &cond, const Expr &true_value, const Expr &false_value) {
+    internal_assert(cond.type().is_scalar()) << cond << "\n";
+    string result_id = unique_name('_');
+    print_uninitialized_var_decl(true_value.type(), result_id);
+
+    string cond_id = print_expr(cond);
+    stream << get_indent() << "if (" << cond_id << ")\n";
+    open_scope();
+    string true_case = print_expr(true_value);
+    stream << get_indent() << result_id << " = " << true_case << ";\n";
+    close_scope("if " + cond_id);
+    stream << get_indent() << "else\n";
+    open_scope();
+    string false_case = print_expr(false_value);
+    stream << get_indent() << result_id << " = " << false_case << ";\n";
+    close_scope("if " + cond_id + " else");
+    return result_id;
+}
+
+string CodeGen_C::print_predicated_call(const Call *op) {
+    // The args are evaluated regardless of the predicate, so lift any with
+    // side-effects out of the branch.
+    vector<std::pair<string, Expr>> lets;
+    vector<Expr> args = op->args;
+    for (Expr &arg : args) {
+        if (!is_pure(arg)) {
+            string name = unique_name('t');
+            lets.emplace_back(name, arg);
+            arg = Variable::make(arg.type(), name);
+        }
+    }
+    if (!lets.empty()) {
+        Expr e = op->with(args);
+        for (const auto &[n, v] : reverse_view(lets)) {
+            e = Let::make(n, v, e);
+        }
+        return print_expr(e);
+    }
+
+    Expr cond = op->predicate;
+    if (const Broadcast *b = cond.as<Broadcast>()) {
+        cond = b->value;
+    }
+    if (cond.type().is_vector()) {
+        return print_scalarized_expr(op);
+    }
+    return print_branch(cond, op->with(op->args, const_true(op->type.lanes())), make_zero(op->type));
 }
 
 string CodeGen_C::print_cast_expr(const Type &t, const Expr &e) {
@@ -1660,29 +1726,6 @@ void CodeGen_C::visit(const Call *op) {
         string arg0 = print_expr(op->args[0]);
         string arg1 = print_expr(op->args[1]);
         rhs << "return_second(" << arg0 << ", " << arg1 << ")";
-    } else if (op->is_intrinsic(Call::if_then_else)) {
-        internal_assert(op->args.size() == 2 || op->args.size() == 3);
-
-        string result_id = unique_name('_');
-
-        stream << get_indent() << print_type(op->args[1].type(), AppendSpace)
-               << result_id << ";\n";
-
-        string cond_id = print_expr(op->args[0]);
-
-        stream << get_indent() << "if (" << cond_id << ")\n";
-        open_scope();
-        string true_case = print_expr(op->args[1]);
-        stream << get_indent() << result_id << " = " << true_case << ";\n";
-        close_scope("if " + cond_id);
-        if (op->args.size() == 3) {
-            stream << get_indent() << "else\n";
-            open_scope();
-            string false_case = print_expr(op->args[2]);
-            stream << get_indent() << result_id << " = " << false_case << ";\n";
-            close_scope("if " + cond_id + " else");
-        }
-        rhs << result_id;
     } else if (op->is_intrinsic(Call::require)) {
         internal_assert(op->args.size() == 3);
         if (op->args[0].type().is_vector()) {

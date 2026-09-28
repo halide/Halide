@@ -156,42 +156,7 @@ class ExprCost : public IRVisitor {
     }
 
     void visit(const Call *call) override {
-        if (call->is_intrinsic(Call::if_then_else)) {
-            internal_assert(call->args.size() == 2 || call->args.size() == 3);
-
-            int64_t current_arith = arith, current_memory = memory;
-            arith = 0, memory = 0;
-            if (call->args.size() == 3) {
-                call->args[2].accept(this);
-            }
-
-            // Check if this if_then_else is because of tracing or print_when.
-            // If it is, we should only take into account the cost of computing
-            // the false expr since the true expr is debugging/tracing code.
-            const Call *true_value_call = call->args[1].as<Call>();
-            if (!true_value_call || !true_value_call->is_intrinsic(Call::return_second)) {
-                int64_t false_cost_arith = arith;
-                int64_t false_cost_memory = memory;
-
-                // For if_then_else intrinsic, the cost is the max of true and
-                // false branch costs plus the predicate cost.
-                arith = 0, memory = 0;
-                call->args[0].accept(this);
-                int64_t pred_cost_arith = arith;
-                int64_t pred_cost_memory = memory;
-
-                arith = 0, memory = 0;
-                call->args[1].accept(this);
-                int64_t true_cost_arith = arith;
-                int64_t true_cost_memory = memory;
-
-                arith = pred_cost_arith + std::max(true_cost_arith, false_cost_arith);
-                memory = pred_cost_memory + std::max(true_cost_memory, false_cost_memory);
-            }
-            arith += current_arith;
-            memory += current_memory;
-            return;
-        } else if (call->is_intrinsic(Call::return_second)) {
+        if (call->is_intrinsic(Call::return_second)) {
             // For return_second, since the first expr would usually either be a
             // print_when or tracing, we should only take into account the cost
             // of computing the second expr.
@@ -241,6 +206,10 @@ class ExprCost : public IRVisitor {
 
         for (const auto &arg : call->args) {
             arg.accept(this);
+        }
+        if (!is_const_one(call->predicate)) {
+            // Conservatively assume the call is performed.
+            call->predicate.accept(this);
         }
     }
 

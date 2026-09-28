@@ -145,7 +145,7 @@ Expr IRMutator::visit(const Broadcast *op) {
 }
 
 Expr IRMutator::visit(const Call *op) {
-    return op->with(mutate_with_changes(op->args).first);
+    return op->with(mutate_with_changes(op->args).first, mutate(op->predicate));
 }
 
 Expr IRMutator::visit(const Let *op) {
