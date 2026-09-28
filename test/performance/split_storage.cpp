@@ -82,18 +82,18 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    Buffer<uint8_t> matA(N, N);  // A(k, y)
-    Buffer<int8_t> matB(N, N);   // B(x, k)
+    Buffer<uint8_t> a_buf(N, N);  // A(k, y)
+    Buffer<int8_t> b_buf(N, N);   // B(x, k)
     for (int j = 0; j < N; j++) {
         for (int i = 0; i < N; i++) {
-            matA(i, j) = (i + 2 * j) % 7;
-            matB(i, j) = (3 * i + j) % 5 - 2;
+            a_buf(i, j) = (i + 2 * j) % 7;
+            b_buf(i, j) = (3 * i + j) % 5 - 2;
         }
     }
 
     ImageParam A(UInt(8), 2, "A"), B(Int(8), 2, "B");
-    A.set(matA);
-    B.set(matB);
+    A.set(a_buf);
+    B.set(b_buf);
 
     Func flat = build(false, A, B);
     Func swizzled = build(true, A, B);
@@ -126,7 +126,7 @@ int main(int argc, char **argv) {
         int x = (s * 61) % N, y = (s * 97 + 11) % N;
         int64_t ref = 0;
         for (int k = 0; k < N; k++) {
-            ref += (int)matA(k, y) * (int)matB(x, k);
+            ref += (int)a_buf(k, y) * (int)b_buf(x, k);
         }
         if (ref != out_swizzled(x, y)) {
             printf("FAIL: incorrect result at (%d, %d): %d vs ref %lld\n",

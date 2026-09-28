@@ -199,9 +199,11 @@ int main(int argc, char **argv) {
         }
         pf_f.prefetch(pf_g, y, y, 2);
 
+        // The expected offsets assume x86's one-cache-line-at-a-time prefetches.
         Target t = get_jit_target_from_environment();
+        const bool record = t.arch == Target::X86 && !t.has_feature(Target::HVX);
         Pipeline p(pf_f);
-        if (t.arch == Target::X86) {
+        if (record) {
             p.add_custom_lowering_pass(new RecordPrefetches(pf_g.name()));
             p.set_jit_externs({{"record_prefetch", JITExtern{record_prefetch}}});
             prefetch_offsets.clear();
@@ -218,7 +220,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (t.arch == Target::X86) {
+        if (record) {
             std::set<int> expected;
             for (int r = 2; r < h; r++) {
                 if (split) {
@@ -260,9 +262,11 @@ int main(int argc, char **argv) {
         }
         consumer.prefetch(producer, yi, yi, 2);
 
+        // The expected offsets assume x86's one-cache-line-at-a-time prefetches.
         Target t = get_jit_target_from_environment();
+        const bool record = t.arch == Target::X86 && !t.has_feature(Target::HVX);
         Pipeline p(consumer);
-        if (t.arch == Target::X86) {
+        if (record) {
             p.add_custom_lowering_pass(new RecordPrefetches(producer.name()));
             p.set_jit_externs({{"record_prefetch", JITExtern{record_prefetch}}});
             prefetch_offsets.clear();
@@ -280,7 +284,7 @@ int main(int argc, char **argv) {
 
         // producer is stored per 8x8 tile as 9 columns (or 3 blocks of 4) by 8
         // rows by 2 slots, so each row fits in one cache line.
-        if (t.arch == Target::X86) {
+        if (record) {
             const int row_stride = split ? 12 : 9;
             std::set<int> expected;
             for (int slot = 0; slot < 2; slot++) {

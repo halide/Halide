@@ -23,7 +23,7 @@ using namespace Halide::Tools;
 // shared [0 1 2 3 4 ... ]
 
 // The first approach requires the ability to split a storage dimension and then
-// (mis)align or pad the inner axis, and the second approach requires the ability to
+// misalign or pad the inner axis, and the second approach requires the ability to
 // split a storage dimension and then reorder it with the outer dimension.
 
 // Below we try four approaches to this:

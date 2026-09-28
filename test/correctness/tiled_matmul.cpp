@@ -275,8 +275,7 @@ bool matmul_bf16(int col, int row, int acc, int tile_x, int tile_y, int tile_r, 
         result.realize(out);
     } else {
         // Just compile it to see if anything crashes
-        // result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, Target{"x86-64-linux-avx512_sapphirerapids"});
-        result.compile_to_assembly("/dev/stdout", {A, B}, Target{"x86-64-linux-avx512_sapphirerapids-no_runtime-no_asserts-no_bounds_query"});
+        result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, Target{"x86-64-linux-avx512_sapphirerapids"});
         return true;
     }
 
