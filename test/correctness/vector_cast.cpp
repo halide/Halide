@@ -32,7 +32,7 @@ bool is_type_supported(int vec_width, const Target &target) {
     }
     if (target.has_feature(Target::Vulkan)) {
         if (type_of<T>() == Float(64)) {
-            if ((target.os == Target::OSX || target.os == Target::IOS)) {
+            if ((target.os == Target::MacOS || target.os == Target::IOS)) {
                 return false;  // MoltenVK doesn't support Float64
             }
         }

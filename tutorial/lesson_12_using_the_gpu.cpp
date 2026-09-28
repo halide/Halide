@@ -289,7 +289,7 @@ Target find_gpu_target() {
             features_to_try.push_back(Target::D3D12Compute);
         }
         features_to_try.push_back(Target::OpenCL);
-    } else if (target.os == Target::OSX) {
+    } else if (target.os == Target::MacOS) {
         features_to_try.push_back(Target::Metal);
     } else {
         features_to_try.push_back(Target::OpenCL);
