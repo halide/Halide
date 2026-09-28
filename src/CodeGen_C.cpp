@@ -1314,20 +1314,7 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
 
 string CodeGen_C::print_expr(const Expr &e) {
     id = "$$ BAD ID $$";
-    // Predicated calls and scalar predicated loads need a branch. They're
-    // handled here, rather than in the visitors, so that subclasses
-    // overriding those don't need to be aware of them.
-    const Call *call = e.as<Call>();
-    const Load *load = e.as<Load>();
-    if (call && !is_const_one(call->predicate)) {
-        id = print_predicated_call(call);
-    } else if (load && load->type.is_scalar() && !is_const_one(load->predicate)) {
-        id = print_branch(load->predicate,
-                          load->with(load->index, const_true(), load->alignment),
-                          make_zero(load->type));
-    } else {
-        e.accept(this);
-    }
+    e.accept(this);
     return id;
 }
 
@@ -1382,6 +1369,13 @@ string CodeGen_C::print_predicated_call(const Call *op) {
         return print_scalarized_expr(op);
     }
     return print_branch(cond, op->with(op->args, const_true(op->type.lanes())), make_zero(op->type));
+}
+
+string CodeGen_C::print_scalar_predicated_load(const Load *op) {
+    internal_assert(op->type.is_scalar());
+    return print_branch(op->predicate,
+                        op->with(op->index, const_true(), op->alignment),
+                        make_zero(op->type));
 }
 
 string CodeGen_C::print_cast_expr(const Type &t, const Expr &e) {
@@ -1646,6 +1640,10 @@ bool CodeGen_C::is_stack_private_to_thread() const {
 }
 
 void CodeGen_C::visit(const Call *op) {
+    if (!is_const_one(op->predicate)) {
+        id = print_predicated_call(op);
+        return;
+    }
 
     internal_assert(op->is_extern() || op->is_intrinsic())
         << "Can only codegen extern calls and intrinsics\n";
@@ -2074,6 +2072,11 @@ string CodeGen_C::print_extern_call(const Call *op) {
 }
 
 void CodeGen_C::visit(const Load *op) {
+    if (op->type.is_scalar() && !is_const_one(op->predicate)) {
+        id = print_scalar_predicated_load(op);
+        return;
+    }
+
     // TODO: We could replicate the logic in the llvm codegen which decides whether
     // the vector access can be aligned. Doing so would also require introducing
     // aligned type equivalents for all the vector types.

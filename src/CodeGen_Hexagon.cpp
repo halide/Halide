@@ -1893,6 +1893,10 @@ void CodeGen_Hexagon::visit(const Mul *op) {
 }
 
 void CodeGen_Hexagon::visit(const Call *op) {
+    if (!is_const_one(op->predicate)) {
+        value = codegen_predicated_call(op);
+        return;
+    }
     internal_assert(op->is_extern() || op->is_intrinsic())
         << "Can only codegen extern calls and intrinsics\n";
 

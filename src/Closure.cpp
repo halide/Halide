@@ -139,11 +139,21 @@ Stmt Closure::unpack_from_struct(const Expr &e, const Stmt &s) const {
     Expr packed = pack_into_struct();
 
     // Make a prototype of the packed struct
-    std::vector<Expr> prototype_args;
-    for (const Expr &arg : packed.as<Call>()->args) {
-        prototype_args.push_back(make_zero(arg.type()));
-    }
-    Expr prototype = packed.as<Call>()->with(std::move(prototype_args));
+    Expr prototype =
+        mutate_with(packed,
+                    [](auto *self, const Expr &e) -> Expr {
+                        if (const Call *c = e.as<Call>()) {
+                            // Zero the leaves, but not the predicate.
+                            std::vector<Expr> args;
+                            args.reserve(c->args.size());
+                            for (const Expr &arg : c->args) {
+                                args.push_back(self->mutate(arg));
+                            }
+                            return c->with(args);
+                        } else {
+                            return make_zero(e.type());
+                        }
+                    });
     string prototype_name = unique_name("closure_prototype");
     Expr prototype_var = Variable::make(Handle(), prototype_name);
 

@@ -157,6 +157,10 @@ protected:
      * where the predicate is true, and the result is zero elsewhere. */
     std::string print_predicated_call(const Call *op);
 
+    /** Emit a scalar Load with a non-trivial predicate as a branch around an
+     * unpredicated Load. */
+    std::string print_scalar_predicated_load(const Load *op);
+
     /** Emit the declaration of an uninitialized local variable. */
     virtual void print_uninitialized_var_decl(Type t, const std::string &name);
 

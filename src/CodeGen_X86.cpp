@@ -568,6 +568,10 @@ void CodeGen_X86::visit(const Cast *op) {
 }
 
 void CodeGen_X86::visit(const Call *op) {
+    if (!is_const_one(op->predicate)) {
+        value = codegen_predicated_call(op);
+        return;
+    }
     if (!op->type.is_vector()) {
         // We only have peephole optimizations for vectors beyond this point.
         CodeGen_CPU::visit(op);

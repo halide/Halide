@@ -476,6 +476,10 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Broadcast *op) {
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Call *op) {
+    if (!is_const_one(op->predicate)) {
+        id = print_predicated_call(op);
+        return;
+    }
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
         internal_assert(op->args.size() == 1)
             << "gpu_thread_barrier() intrinsic must specify fence type.\n";
@@ -655,8 +659,12 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const For *loop) {
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Load *op) {
+    if (op->type.is_scalar() && !is_const_one(op->predicate)) {
+        id = print_scalar_predicated_load(op);
+        return;
+    }
     user_assert(is_const_one(op->predicate))
-        << "Predicated loads are not supported for WebGPU.\n";
+        << "Vector predicated loads are not supported for WebGPU.\n";
 
     Type result_type = op->type.element_of();
 

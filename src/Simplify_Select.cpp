@@ -10,9 +10,14 @@ Expr Simplify::visit(const Select *op, ExprInfo *info) {
     Expr true_value = mutate(op->true_value, &t_info);
     Expr false_value = mutate(op->false_value, &f_info);
 
-    // A predicated unreachable() promises that its predicate is false. If
-    // one side of the select contains an unreachable() that is performed
-    // whenever that side is selected, then that side is never selected.
+    // Both sides of a select are evaluated, so the condition does not guard
+    // an unreachable() in either side. However, a predicated unreachable()[q]
+    // is only performed when q is true, so it promises that q is false. If
+    // the condition that selects a side implies the predicate of an
+    // unreachable() on that side, then that condition must also be false, and
+    // the other side is always selected. (An unpredicated unreachable() on
+    // either side makes the whole select unreachable, which is handled when
+    // visiting the Call.)
     {
         auto unreachable_when_selected = [&](const Expr &value, const Expr &selected) {
             const Call *c = Call::as_intrinsic(value, {Call::unreachable});

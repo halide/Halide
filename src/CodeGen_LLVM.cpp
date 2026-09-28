@@ -1555,14 +1555,7 @@ Value *CodeGen_LLVM::codegen(const Expr &e) {
     internal_assert(e.defined());
     debug(4) << "Codegen: " << e.type() << ", " << e << "\n";
     value = nullptr;
-    // Predicated calls are handled here, rather than in visit(const Call *),
-    // so that subclasses overriding that don't need to be aware of them.
-    const Call *call = e.as<Call>();
-    if (call && !is_const_one(call->predicate)) {
-        value = codegen_predicated_call(call);
-    } else {
-        e.accept(this);
-    }
+    e.accept(this);
     internal_assert(value) << "Codegen of an expr did not produce an llvm value\n"
                            << e;
 
@@ -3214,6 +3207,10 @@ void CodeGen_LLVM::codegen_atomic_rmw(const Store *op) {
 }
 
 void CodeGen_LLVM::visit(const Call *op) {
+    if (!is_const_one(op->predicate)) {
+        value = codegen_predicated_call(op);
+        return;
+    }
     internal_assert(op->is_extern() || op->is_intrinsic())
         << "Can only codegen extern calls and intrinsics\n";
 
