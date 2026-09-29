@@ -60,7 +60,7 @@ public:
         Func identity("y");
         identity(x) = input(x);
 
-        ApproximationResult r = Func(input).approximate_by(*sb.scheme, {identity});
+        ApproximationResult r = Func(input).approximate_by(sb.scheme, {identity});
         for (Func h : r.handles) {
             h.compute_root();
         }

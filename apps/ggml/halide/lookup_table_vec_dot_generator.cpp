@@ -50,11 +50,11 @@ public:
          {"iq1_m", Family::IQ1_M}}};
 
     // Q8_0 activation codec (block_q8_0 = {fp16 d; qs[32]} = 34 bytes).
-    static std::unique_ptr<Halide::Approximation> q8_0_codec() {
+    static Halide::Approximation q8_0_codec() {
         return make_symmetric_block_scheme(32, 127, RoundingMode::Nearest, ScaleAnchor::AbsMax, 8, Layout::BlockIndexed).scheme;
     }
     // Q8_K activation codec (block_q8_K = {float d; qs[256]; bsums[16]} = 292 bytes).
-    static std::unique_ptr<Halide::Approximation> q8_k_codec() {
+    static Halide::Approximation q8_k_codec() {
         return make_q8_k_scheme(256, 127, Layout::BlockIndexed).scheme;
     }
 

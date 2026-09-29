@@ -47,9 +47,9 @@ struct VecDotSpec {
     // (see quant_components.h) that re-views it at the weight's block_size --
     // the block-structure reconciliation is an Approximation, not something
     // the Generator open-codes into the reduction.
-    std::unique_ptr<Halide::Approximation> weight_codec;
+    Halide::Approximation weight_codec;
     int weight_bytes;
-    std::unique_ptr<Halide::Approximation> act_codec;
+    Halide::Approximation act_codec;
     int act_bytes;
     int block_size;
     ScheduleKind sched;
@@ -75,8 +75,8 @@ struct VecDotSpec {
     // ordinary q4/q8 paths prefer four; q5's table-expansion live ranges make
     // two faster and match GGML's paired-block loop.
     int unroll_blocks = 4;
-    Halide::ApproximationStageKey reconstructed_codes_stage;
-    Halide::ApproximationStageKey packed_high_word_stage;
+    Halide::Approximation reconstructed_codes_stage;
+    Halide::Approximation packed_high_word_stage;
     // Clean core-composed schemes can share one traced decode graph between
     // the four-block main update and its tiny remainder update. Legacy schemes
     // retain separate traces until their representation stages are migrated.
@@ -165,8 +165,8 @@ public:
             Acc() += tail_weight(r_tail.x, r_tail.y) * tail_act(r_tail.x, r_tail.y);
         }
 
-        ApproximationResult wt_r = Wt.approximate_by(*spec.weight_codec, {Acc});
-        ApproximationResult act_r = Vec.approximate_by(*spec.act_codec, {Acc});
+        ApproximationResult wt_r = Wt.approximate_by(spec.weight_codec, {Acc});
+        ApproximationResult act_r = Vec.approximate_by(spec.act_codec, {Acc});
 
         // Both operands' encode halves are severed and bound to the real
         // already-quantized Input buffers (same as symmetric_vec_dot). For the
@@ -178,7 +178,7 @@ public:
         ApproximationResult wtT_r, actT_r;
         if (sdot) {
             if (!share_weight_tail) {
-                wtT_r = WtT.approximate_by(*spec.weight_codec, {Acc});
+                wtT_r = WtT.approximate_by(spec.weight_codec, {Acc});
                 to_sever.insert(to_sever.end(), wtT_r.encoded.begin(), wtT_r.encoded.end());
                 bind_to.push_back(x_blocks);
                 for (Func h : wtT_r.handles) {
@@ -188,7 +188,7 @@ public:
                 }
             }
             if (!share_act_tail) {
-                actT_r = VecT.approximate_by(*spec.act_codec, {Acc});
+                actT_r = VecT.approximate_by(spec.act_codec, {Acc});
                 to_sever.insert(to_sever.end(), actT_r.encoded.begin(), actT_r.encoded.end());
                 bind_to.push_back(y_blocks);
                 for (Func h : actT_r.handles) {
@@ -210,13 +210,15 @@ public:
         // the block loop, kk split as (byte, pos): pos vectorizes the table load,
         // byte unrolls to a scalar index). The odd-block tail decodes through its
         // own inline chain (see above), so it does not need this buffer.
-        Func codes_leaf = wt_r.decoded_by(spec.reconstructed_codes_stage);
-        Func qh_leaf = wt_r.decoded_by(spec.packed_high_word_stage);
-        if (!keyed_q5) {
-            // Transitional q5_1 debt: its legacy composition has not yet
-            // exported stage keys. Keep its existing generated-name discovery
-            // local to that path; all scheduling boundaries below use Func
-            // identity once resolved.
+        Func codes_leaf, qh_leaf;
+        if (keyed_q5) {
+            codes_leaf = wt_r.decoded_by(spec.reconstructed_codes_stage);
+            qh_leaf = wt_r.decoded_by(spec.packed_high_word_stage);
+            _halide_internal_assert(codes_leaf.defined() && qh_leaf.defined());
+        } else {
+            // q5_1's legacy composition has no stage handles for these Funcs
+            // (qh is a scheduling handle of Q5StructBlockLayout, not a port),
+            // so its boundaries are still discovered by generated name.
             for (const Func &h : wt_r.handles) {
                 if (h.name() == "combine_bits_code") {
                     codes_leaf = h;
@@ -225,7 +227,6 @@ public:
                 }
             }
         }
-        _halide_internal_assert(!keyed_q5 || (codes_leaf.defined() && qh_leaf.defined()));
 
         if (share_weight_tail || share_act_tail) {
             // Flatten shared decode stages into this update only. The main

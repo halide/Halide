@@ -33,7 +33,7 @@ inline bool is_kquant(WFamily f) {
 }
 
 struct WeightSpec {
-    std::unique_ptr<Halide::Approximation> scheme;
+    Halide::Approximation scheme;
     int block_bytes;
 };
 
@@ -117,8 +117,8 @@ public:
         s(j, x) = 0.0f;
         s(j, x) += Wt(r.x, r.y, j, x) * Vec(r.x, r.y);
 
-        ApproximationResult wr = Wt.approximate_by(*w.scheme, {s});
-        ApproximationResult ar = Vec.approximate_by(*act, {s});
+        ApproximationResult wr = Wt.approximate_by(w.scheme, {s});
+        ApproximationResult ar = Vec.approximate_by(act, {s});
         s.update().eager_inline({wr.replacement, ar.replacement});
 
         std::vector<Func> sever = wr.encoded;
@@ -172,7 +172,7 @@ public:
 // Q8_0x4 (fp16 scale, 32-block, 136 B) for simple weights; Q8_Kx4 (f32 scale,
 // 256-block, 1168 B incl. dropped bsums) for K-quant weights.
 struct ActSpec {
-    std::unique_ptr<Halide::Approximation> scheme;
+    Halide::Approximation scheme;
     int block_bytes;
     int block_size;
 };
@@ -230,8 +230,8 @@ public:
         s(j, x, m, y) = 0.0f;
         s(j, x, m, y) += Wt(r.x, r.y, j, x) * Act(r.x, r.y, m, y);
 
-        ApproximationResult wr = Wt.approximate_by(*w.scheme, {s});
-        ApproximationResult ar = Act.approximate_by(*a.scheme, {s});
+        ApproximationResult wr = Wt.approximate_by(w.scheme, {s});
+        ApproximationResult ar = Act.approximate_by(a.scheme, {s});
         s.update().eager_inline({wr.replacement, ar.replacement});
 
         std::vector<Func> sever = wr.encoded;

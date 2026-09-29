@@ -62,13 +62,13 @@ struct QuantizeMatPipe {
     ImageParam x;
     Func blocks_out;
 };
-inline QuantizeMatPipe build_quantize_mat(std::unique_ptr<Approximation> scheme, int block_bytes) {
+inline QuantizeMatPipe build_quantize_mat(Approximation scheme, int block_bytes) {
     ImageParam x(Float(32), 2, "x");  // dim 0: col-within-row (mult. of block), dim 1: row (4)
     Var col("col"), row("row"), byte("byte"), ib("ib");
     Func identity("qm_identity");
     identity(col, row) = x(col, row);
 
-    ApproximationResult r = Func(x).approximate_by(*scheme, {identity});
+    ApproximationResult r = Func(x).approximate_by(scheme, {identity});
     for (Func h : r.handles) {
         if (h.has_update_definition()) {
             h.compute_root();
