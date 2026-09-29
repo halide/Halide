@@ -889,7 +889,22 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
     const int sm = target.get_d3d12compute_capability_lower_bound();
     bool shared_promotion_required = false;
     string promotion_str = "";
-    if (groupshared_allocations.contains(op->name) && sm < 62) {
+    // A struct-backed array (register or groupshared) is declared as a raw
+    // byte store (see the Allocate visitor); its element is always signed
+    // int8, emulated as a full 32-bit `int` regardless of SM level, per
+    // print_type_maybe_storage's bits()==8 case. So unlike the generic
+    // sub-32-bit groupshared promotion below (which native SM 6.2+ types make
+    // unnecessary), struct-backed storage always needs this bit-reinterpret,
+    // in any memory space.
+    const auto *struct_alloc = allocations.find(op->name);
+    bool is_struct_backed = struct_alloc && struct_alloc->type.is_struct();
+    if (is_struct_backed) {
+        Type promoted_type = Int(8);
+        if (promoted_type != op->type) {
+            shared_promotion_required = true;
+            promotion_str = hlsl_reinterpret_name(op->type);
+        }
+    } else if (groupshared_allocations.contains(op->name) && sm < 62) {
         internal_assert(allocations.contains(op->name));
         // Promote sub-32-bit types to 32-bit; 64-bit types stay as-is.
         Type promoted_type = op->type.with_bits(std::max((int)op->type.bits(), 32)).with_lanes(1);
@@ -1240,16 +1255,18 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
     const int sm = target.get_d3d12compute_capability_lower_bound();
     bool shared_promotion_required = false;
     string promotion_str = "";
-    if (groupshared_allocations.contains(op->name) && sm < 62) {
-        const auto *alloc = allocations.find(op->name);
+    const auto *alloc = allocations.find(op->name);
+    // A struct-backed array (register or groupshared) is declared as a raw
+    // byte store (see the Allocate visitor); its element is always signed
+    // int8, emulated as a full 32-bit `int` regardless of SM level, per
+    // print_type_maybe_storage's bits()==8 case. So unlike the generic
+    // sub-32-bit groupshared promotion below (which native SM 6.2+ types make
+    // unnecessary), struct-backed storage always needs this bit-reinterpret,
+    // in any memory space.
+    bool is_struct_backed = alloc && alloc->type.is_struct();
+    if (is_struct_backed || (groupshared_allocations.contains(op->name) && sm < 62)) {
         internal_assert(alloc);
-        Type promoted_type = alloc->type;
-        // A struct-backed array is declared as a raw byte store (see the
-        // Allocate visitor); its element is always signed int8, per
-        // print_type_maybe_storage's bits()==8 case.
-        if (promoted_type.is_struct()) {
-            promoted_type = Int(8);
-        }
+        Type promoted_type = is_struct_backed ? Int(8) : alloc->type;
         if (promoted_type != op->value.type()) {
             shared_promotion_required = true;
             // NOTE(marcos): might need to resort to StoragePackUnpack::pack_store() here
