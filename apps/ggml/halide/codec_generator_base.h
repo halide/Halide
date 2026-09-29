@@ -25,9 +25,6 @@
 
 #include "Halide.h"
 
-#include <set>
-#include <string>
-
 #include "quant_components.h"
 
 namespace ggml_halide {
@@ -64,20 +61,12 @@ public:
         identity(x) = input(x);
 
         ApproximationResult r = Func(input).approximate_by(sb.scheme, {identity});
-        // Materialize the reductions and every stage-boundary Func (a stage's
-        // ports); other pure Funcs inside a stage stay inline. The Q5 struct
-        // layout's packed high-bit word is the one non-port pure Func that is
-        // also materialized (found by name, like vec_dot_generator_base.h).
-        std::set<std::string> boundary;
-        for (const auto *stages : {&r.encoded_stage_outputs, &r.decoded_stage_outputs}) {
-            for (const ApproximationStageOutputs &so : *stages) {
-                for (const Func &port : so.ports) {
-                    boundary.insert(port.name());
-                }
-            }
-        }
+        // Materialize the reductions and every stage-boundary Func; other pure
+        // Funcs inside a stage stay inline. The Q5 struct layout's packed
+        // high-bit word is the one non-port pure Func that is also
+        // materialized (found by name, like vec_dot_generator_base.h).
         for (Func h : r.intermediates) {
-            if (h.has_update_definition() || boundary.count(h.name()) ||
+            if (h.has_update_definition() || r.is_stage_port(h) ||
                 h.name() == "q5_struct_block_qh") {
                 h.compute_root();
             }
