@@ -279,8 +279,8 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
             // broadcast predicate as a branch around an unpredicated load.
             return op->with(index, Broadcast::make(condition, op->type.lanes()), op->alignment);
         } else {
-            // It's a predicated vector gather. CodeGen_LLVM scalarizes
-            // it. We'd prefer to keep it in a loop, but that would
+            // It's a predicated vector gather, or a reversed dense
+            // load. CodeGen_Hexagon::visit(const Load *) scalarizes it. We'd prefer to keep it in a loop, but that would
             // require some sort of loop Expr. Another option would be
             // introducing a set of runtime functions to do predicated
             // loads.
@@ -2117,14 +2117,17 @@ void CodeGen_Hexagon::visit(const Min *op) {
 }
 
 void CodeGen_Hexagon::visit(const Load *op) {
-    const Broadcast *b = op->predicate.as<Broadcast>();
-    if (op->type.is_vector() && b && b->value.type().is_scalar() && !is_const_one(b->value)) {
+    if (op->type.is_scalar() || is_const_one(op->predicate)) {
+        CodeGen_CPU::visit(op);
+    } else if (const Broadcast *b = op->predicate.as<Broadcast>()) {
         // Branch around an unpredicated vector load (see the predicated
         // load lowering above).
         Expr load = op->with(op->index, const_true(op->type.lanes()), op->alignment);
         value = codegen_branch(b->value, load, make_zero(op->type));
     } else {
-        CodeGen_CPU::visit(op);
+        // HVX has no masked loads, so scalarize any other predicated vector
+        // load (see the predicated load lowering above).
+        value = codegen_scalarized_predicated_load(op);
     }
 }
 

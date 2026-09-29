@@ -291,6 +291,9 @@ protected:
      * elsewhere. */
     llvm::Value *codegen_predicated_call(const Call *op);
 
+    /** Codegen a predicated vector Load as a branch per lane. */
+    llvm::Value *codegen_scalarized_predicated_load(const Load *op);
+
     /** Some destructors should always be called. Others should only
      * be called if the pipeline is exiting with an error code. */
     enum DestructorType { Always,

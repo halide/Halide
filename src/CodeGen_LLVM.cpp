@@ -3073,17 +3073,21 @@ void CodeGen_LLVM::codegen_predicated_load(const Load *op) {
         Value *flipped = codegen_dense_vector_load(flipped_load.as<Load>(), vpred);
         value = reverse_vector(flipped);
     } else {  // It's not dense vector load, we need to scalarize it
-        Expr load_expr = op->with(op->index, const_true(op->type.lanes()), op->alignment);
-        debug(4) << "Scalarize predicated vector load\n\t" << load_expr << "\n";
-        Value *result = PoisonValue::get(llvm_type_of(op->type));
-        for (int i = 0; i < op->type.lanes(); i++) {
-            Value *v = codegen_branch(extract_lane(op->predicate, i),
-                                      extract_lane(load_expr, i),
-                                      make_zero(op->type.element_of()));
-            result = builder->CreateInsertElement(result, v, ConstantInt::get(i32_t, i));
-        }
-        value = result;
+        value = codegen_scalarized_predicated_load(op);
     }
+}
+
+Value *CodeGen_LLVM::codegen_scalarized_predicated_load(const Load *op) {
+    Expr load_expr = op->with(op->index, const_true(op->type.lanes()), op->alignment);
+    debug(4) << "Scalarize predicated vector load\n\t" << load_expr << "\n";
+    Value *result = PoisonValue::get(llvm_type_of(op->type));
+    for (int i = 0; i < op->type.lanes(); i++) {
+        Value *v = codegen_branch(extract_lane(op->predicate, i),
+                                  extract_lane(load_expr, i),
+                                  make_zero(op->type.element_of()));
+        result = builder->CreateInsertElement(result, v, ConstantInt::get(i32_t, i));
+    }
+    return result;
 }
 
 void CodeGen_LLVM::codegen_atomic_rmw(const Store *op) {
