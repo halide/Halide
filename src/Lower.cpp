@@ -459,22 +459,13 @@ void lower_impl(const vector<Function> &output_funcs,
     s = flatten_nested_ramps(s);
     log("Lowering after flattening nested ramps:", s);
 
-    debug(1) << "Removing dead allocations and moving loop invariant code...\n";
+    debug(1) << "Removing dead allocations and hoisting loop invariant if statements...\n";
     s = remove_dead_allocations(s);
     log("Lowering after removing dead allocations (remove_dead_allocations):", s);
     s = simplify(s);
     log("Lowering after removing dead allocations (simplify):", s);
-    {
-        // Experiment: HL_NO_LICM=1 drops loop-invariant code motion, leaving
-        // it to reverse_peel_lets.
-        std::string no_licm = get_env_variable("HL_NO_LICM");
-        if (no_licm != "1") {
-            s = hoist_loop_invariant_values(s);
-            log("Lowering after removing dead allocations (hoist_loop_invariant_values):", s);
-        }
-    }
     s = hoist_loop_invariant_if_statements(s);
-    log("Lowering after removing dead allocations and hoisting loop invariants:", s);
+    log("Lowering after removing dead allocations and hoisting loop invariant if statements:", s);
 
     if (t.has_feature(Target::Profile) || t.has_feature(Target::ProfileByTimer)) {
         debug(1) << "Injecting profiling...\n";

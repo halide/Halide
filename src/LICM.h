@@ -14,7 +14,7 @@ namespace Internal {
  * important in cases where LLVM would not do it for us
  * automatically. For example, it hoists loop invariants out of cuda
  * kernels. */
-Stmt hoist_loop_invariant_values(Stmt);
+Stmt hoist_loop_invariant_values(const Stmt &);
 
 /** Just hoist loop-invariant if statements as far up as
  * possible. Does not lift other values. It's useful to run this

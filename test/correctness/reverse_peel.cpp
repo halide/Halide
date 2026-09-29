@@ -1,7 +1,6 @@
 #include "Halide.h"
 
 #include <cstdio>
-#include <cstdlib>
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -37,14 +36,6 @@ Stmt let(const std::string &name, const Expr &value, const Stmt &body) {
 
 Stmt block(const std::vector<Stmt> &stmts) {
     return Block::make(stmts);
-}
-
-void set_env(const char *name, const char *value) {
-#ifdef _WIN32
-    _putenv_s(name, value);
-#else
-    setenv(name, value, 1);
-#endif
 }
 
 int failures = 0;
@@ -299,10 +290,8 @@ void test_ir() {
 }
 
 // The pass runs in every lowering, so a pipeline with plenty of repeated index
-// arithmetic must still compute the right thing, with and without the
-// loop-invariant code motion pass before it.
-void test_pipeline(bool with_licm) {
-    set_env("HL_NO_LICM", with_licm ? "0" : "1");
+// arithmetic must still compute the right thing.
+void test_pipeline() {
 
     ImageParam in(UInt(8), 2, "in");
     Var x("x"), y("y");
@@ -330,22 +319,19 @@ void test_pipeline(bool with_licm) {
         for (int i = 0; i < 60; i++) {
             uint8_t expected = (uint8_t)((uint16_t)(G(i, j) + G(i + 1, j + 1)) / 9);
             if (out(i, j) != expected) {
-                printf("Pipeline mismatch (%s LICM) at (%d, %d): %d instead of %d\n",
-                       with_licm ? "with" : "without", i, j, out(i, j), expected);
+                printf("Pipeline mismatch at (%d, %d): %d instead of %d\n", i, j, out(i, j), expected);
                 failures++;
                 return;
             }
         }
     }
-    set_env("HL_NO_LICM", "0");
 }
 
 }  // namespace
 
 int main(int argc, char **argv) {
     test_ir();
-    test_pipeline(true);
-    test_pipeline(false);
+    test_pipeline();
     if (failures) {
         printf("%d failure(s)\n", failures);
         return 1;
