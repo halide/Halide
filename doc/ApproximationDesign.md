@@ -60,24 +60,26 @@ struct DecodeResult {
     std::vector<Func> handles;
 };
 
+// A value-semantic, type-erased handle (like std::function). Any type with
+// const encode()/decode() methods of the shapes below converts implicitly.
 class Approximation {
 public:
-    virtual ~Approximation() = default;
+    template<typename T> Approximation(T &&unit);  // duck-typed on encode/decode
 
     // Both operate purely on Funcs -- no opinion about placement (compute
     // root vs fused, offline vs online). See "Scope: placement is not
     // semantics" below for why that split matters.
-    virtual EncodeResult encode(Func f) = 0;
-    virtual DecodeResult decode(std::vector<Func> encoded) = 0;
+    EncodeResult encode(const std::vector<Func> &inputs) const;
+    DecodeResult decode(const std::vector<Func> &encoded) const;
 };
 ```
 
-Virtual dispatch is used specifically because composed Approximations
+A type-erased handle is used specifically because composed Approximations
 (`Compose`/`Apply`, below) need to hold a runtime-heterogeneous list of
-`Approximation` references and call `encode`/`decode` on each polymorphically.
-(A templated/CRTP alternative was considered and rejected for this reason: it
-would make composed, heterogeneous chains require type erasure some other way,
-for no benefit here.)
+`Approximation` handles and call `encode`/`decode` on each. Copies of a handle
+are the same stage; converting a plain unit twice makes two distinct stages.
+Every stage invoked through a handle is recorded in the result's stage outputs,
+so callers look up a stage's Funcs by keeping a handle to it.
 
 **Signature contract.** `decode(encode(f).encoded).decoded[0]` must reproduce
 `f`'s arg list and value type exactly — that's what makes it valid to splice
@@ -149,8 +151,8 @@ struct ApproximationResult {
                                  // none are part of the signature contract
 };
 
-// Func.h: ApproximationResult approximate_by(Approximation &p, const std::vector<Func> &consumers);
-ApproximationResult Func::approximate_by(Approximation &p, const std::vector<Func> &consumers) {
+// Func.h: ApproximationResult approximate_by(const Approximation &p, const std::vector<Func> &consumers);
+ApproximationResult Func::approximate_by(const Approximation &p, const std::vector<Func> &consumers) {
     EncodeResult enc = p.encode(*this);
     DecodeResult dec = p.decode(enc.encoded);
     Func round_trip = dec.decoded[0];  // signature contract: matches *this exactly
@@ -362,9 +364,9 @@ public:
 
     void generate() {
         Func weight_value = weight_precomputed_
-            ? weight_approx_->decode({Func(*weight_packed_)}).decoded[0]
-            : weight_approx_->decode(weight_approx_->encode(Func(*weight_fp32_)).encoded).decoded[0];
-        EncodeResult activation_enc = activation_approx_->encode(Func(*activation_));
+            ? weight_approx_.decode({Func(*weight_packed_)}).decoded[0]
+            : weight_approx_.decode(weight_approx_.encode(Func(*weight_fp32_)).encoded).decoded[0];
+        EncodeResult activation_enc = activation_approx_.encode(Func(*activation_));
         // activation_enc.encoded / .handles get fused at whatever granularity
         // schedule() picks -- see "Scope: placement is not semantics" above.
         *result_ = /* the actual matmul reduction, calling weight_value / activation_enc.encoded inline */;
@@ -375,7 +377,7 @@ public:
     }
 
 private:
-    std::unique_ptr<Approximation> weight_approx_, activation_approx_;
+    Approximation weight_approx_, activation_approx_;
     Input<Buffer<float>> *x_ = nullptr, *weight_fp32_ = nullptr, *activation_ = nullptr;
     Input<Buffer<void>> *weight_packed_ = nullptr;
     Output<Buffer<float>> *result_ = nullptr;
@@ -392,7 +394,7 @@ design is validated.
 
 | Item                                                                                        | Status                                                                                                                           |
 | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `Approximation`: virtual-dispatch abstract class, operates on `Func`s only                  | Decided                                                                                                                          |
+| `Approximation`: type-erased value-semantic handle, operates on `Func`s only                | Decided                                                                                                                          |
 | `Approximation` makes no placement claims (offline vs fused)                                | Decided                                                                                                                          |
 | `encode`/`decode` return `(funcs, handles)`, not bare `vector<Func>`                        | Decided; handles are scheduling-only intermediates, kept separate from the signature-contract output                             |
 | `decode(encode(f).encoded).decoded[0]` signature contract                                   | Decided; enforced only at `approximate_by`'s substitution time in v1, not at `Approximation`-definition time                     |
