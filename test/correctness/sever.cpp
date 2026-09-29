@@ -207,6 +207,97 @@ int named_bindings_test() {
     return 0;
 }
 
+// The same quantizer expressed as an Approximation, used to check that
+// compute_offline() composes with approximate_by()'s rewritten call graph.
+class ApproxSymmetricQuantize : public Approximation {
+public:
+    explicit ApproxSymmetricQuantize(int k)
+        : k_(k) {
+    }
+
+    EncodeResult encode(std::vector<Func> inputs) override {
+        Func v = inputs[0];
+        Var k("k");
+        RDom r(0, k_, "r");
+
+        Func amax("amax");
+        amax() = 0.0f;
+        amax() = max(amax(), abs(v(r)));
+
+        Func d("scale");
+        d() = amax() / 127.0f;
+
+        Func q("q");
+        Expr id = select(d() != 0.0f, 1.0f / d(), 0.0f);
+        q(k) = cast<int8_t>(clamp(round(v(k) * id), -127, 127));
+
+        return {{q, d}, {amax}};
+    }
+
+    DecodeResult decode(std::vector<Func> encoded) override {
+        Func q = encoded[0], d = encoded[1];
+        Var k("k");
+        Func dequantized("dequantized");
+        dequantized(k) = cast<float>(q(k)) * d();
+        return {{dequantized}, {}};
+    }
+
+private:
+    int k_;
+};
+
+// Sever a quantized vector's encode() outputs from a consumer built via
+// approximate_by(), and check the final result still matches the plain-C++
+// reference round trip.
+int approximate_by_offline_test() {
+    const int K = 64;
+    Var k("k");
+
+    Func Vec("Vec");
+    Vec(k) = cos(cast<float>(k) * 0.05f) * 3.0f;
+
+    ApproxSymmetricQuantize quantize(K);
+
+    Func Result("Result");
+    Result(k) = Vec(k) * 2.0f;
+
+    ApproximationResult result = Vec.approximate_by(quantize, {Result});
+    Result.eager_inline({result.replacement});
+
+    // result.handles is [q, d, amax]: encode()'s two signature-contract
+    // outputs, then its own scheduling-only handle. q and d are the actual
+    // Funcs Result's call graph depends on (approximate_by() calls encode()
+    // internally; a separately-called quantize.encode({Vec}) here would
+    // build an unrelated, unconnected copy of the same graph shape).
+    std::vector<Func> encoded = {result.handles[0], result.handles[1]};
+    for (size_t i = 2; i < result.handles.size(); i++) {
+        result.handles[i].compute_root();
+    }
+
+    ComputeOfflineResult split = Pipeline({Result}).compute_offline(encoded);
+
+    Buffer<int8_t> q_buf(K);
+    Buffer<float> scale_buf = Buffer<float>::make_scalar();
+    split.offline.realize({q_buf, scale_buf});
+    split.online_inputs[0].set(q_buf);
+    split.online_inputs[1].set(scale_buf);
+
+    Buffer<float> out = Result.realize({K});
+
+    std::vector<int8_t> ref_q;
+    float ref_scale;
+    reference_symmetric_quantize(K, [](int kk) { return cosf(kk * 0.05f) * 3.0f; }, ref_q, ref_scale);
+    for (int kk = 0; kk < K; kk++) {
+        float expected = (ref_q[kk] * ref_scale) * 2.0f;
+        if (std::fabs(out(kk) - expected) > 1e-3f * std::fabs(expected)) {
+            printf("approximate_by_offline_test: Result(%d) = %f, expected %f\n", kk, out(kk), expected);
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -217,6 +308,9 @@ int main(int argc, char **argv) {
         return 1;
     }
     if (named_bindings_test()) {
+        return 1;
+    }
+    if (approximate_by_offline_test()) {
         return 1;
     }
 

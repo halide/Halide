@@ -15,6 +15,8 @@ tests(
     aligned_split_reduction.cpp
     ambiguous_inline_reductions.cpp
     amx_matmul.cpp
+    approximate_by.cpp
+    approximation_components.cpp
     argmax.cpp
     arm_bit_field_shift.cpp
     arm_cpu_detect.cpp
