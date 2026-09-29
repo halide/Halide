@@ -147,15 +147,15 @@ int main() {
     std::ostringstream trace;
     trace << et;
     const char *expected_trace =
-        "Compose -> dbl_encode\n"
+        "Compose -> input=dbl_encode\n"
         "  intermediates: neg_encode, inc_encode\n"
-        "  Pointwise -> neg_encode\n"
-        "  Apply[0] -> dbl_encode\n"
+        "  Pointwise -> input=neg_encode\n"
+        "  Apply[0] -> input=dbl_encode\n"
         "    intermediates: inc_encode\n"
-        "    Pair -> dbl_encode\n"
+        "    Pair -> input=dbl_encode\n"
         "      intermediates: inc_encode\n"
-        "      Pointwise -> inc_encode\n"
-        "      Double -> dbl_encode\n";
+        "      Pointwise -> 0=inc_encode\n"
+        "      Double -> 0=dbl_encode\n";
     if (normalize(trace.str()) != expected_trace) {
         printf("Unexpected trace:\n%s", trace.str().c_str());
         return 1;
@@ -165,25 +165,25 @@ int main() {
     full << r;
     const char *expected_full =
         "encode:\n"
-        "  Compose -> dbl_encode\n"
+        "  Compose -> input=dbl_encode\n"
         "    intermediates: neg_encode, inc_encode\n"
-        "    Pointwise -> neg_encode\n"
-        "    Apply[0] -> dbl_encode\n"
+        "    Pointwise -> input=neg_encode\n"
+        "    Apply[0] -> input=dbl_encode\n"
         "      intermediates: inc_encode\n"
-        "      Pair -> dbl_encode\n"
+        "      Pair -> input=dbl_encode\n"
         "        intermediates: inc_encode\n"
-        "        Pointwise -> inc_encode\n"
-        "        Double -> dbl_encode\n"
+        "        Pointwise -> 0=inc_encode\n"
+        "        Double -> 0=dbl_encode\n"
         "decode:\n"
-        "  Compose -> neg_decode\n"
+        "  Compose -> input=neg_decode\n"
         "    intermediates: dbl_decode, inc_decode\n"
-        "    Apply[0] -> inc_decode\n"
+        "    Apply[0] -> input=inc_decode\n"
         "      intermediates: dbl_decode\n"
-        "      Pair -> inc_decode\n"
+        "      Pair -> input=inc_decode\n"
         "        intermediates: dbl_decode\n"
-        "        Double -> dbl_decode\n"
-        "        Pointwise -> inc_decode\n"
-        "    Pointwise -> neg_decode\n";
+        "        Double -> 0=dbl_decode\n"
+        "        Pointwise -> 0=inc_decode\n"
+        "    Pointwise -> input=neg_decode\n";
     if (normalize(full.str()) != expected_full) {
         printf("Unexpected result printout:\n%s", full.str().c_str());
         return 1;

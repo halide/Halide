@@ -12,6 +12,7 @@
 #include <functional>
 #include <iosfwd>
 #include <memory>
+#include <optional>
 #include <string>
 #include <type_traits>
 #include <typeinfo>
@@ -26,6 +27,48 @@ struct EncodeResult;
 struct DecodeResult;
 struct ApproximationResult;
 struct ApproximationTraceNode;
+
+/** A named slot in an Approximation's interface: one Func that flows into or
+ * out of a stage. The name identifies the port (for lookups and for
+ * name-based combinators like Apply); `type` and `dimensions`, when set, are
+ * checked against the actual Func at run time. A port with a multi-valued
+ * (Tuple) Func never has a `type`. */
+struct ApproximationPort {
+    std::string name;
+    std::optional<Type> type;
+    std::optional<int> dimensions;
+
+    ApproximationPort(std::string name, std::optional<Type> type = std::nullopt,
+                      std::optional<int> dimensions = std::nullopt)
+        : name(std::move(name)), type(type), dimensions(dimensions) {
+    }
+    ApproximationPort(const char *name, std::optional<Type> type = std::nullopt,
+                      std::optional<int> dimensions = std::nullopt)
+        : name(name), type(type), dimensions(dimensions) {
+    }
+};
+
+using ApproximationPorts = std::vector<ApproximationPort>;
+
+/** The declared interface of an Approximation, in the encode direction:
+ * `inputs` are consumed by encode() and `outputs` are what it produces.
+ * Decode is the reverse: it consumes `outputs` and produces `inputs`.
+ *
+ * A signature may be *unknown* (`known == false`), meaning the arity of the
+ * unit could not be determined without running it (e.g. an undeclared
+ * unit with a multi-Func encode). An unknown signature's `inputs` echo the
+ * context it was resolved in and its `outputs` are empty. */
+struct ApproximationSignature {
+    ApproximationPorts inputs, outputs;
+    bool known = true;
+
+    static ApproximationSignature unknown(ApproximationPorts inputs = {}) {
+        ApproximationSignature s;
+        s.inputs = std::move(inputs);
+        s.known = false;
+        return s;
+    }
+};
 
 /** Approximation is a value-semantic, type-erased handle (in the style of
  * std::function) to a lossy, quantified transformation of one or more Funcs'
@@ -66,6 +109,44 @@ struct ApproximationTraceNode;
  *     }
  * };
  * Approximation a = Negate{};
+ * \endcode
+ *
+ * Each direction may additionally take a *port-aware* form, which also
+ * receives the ports (names and constraints) of the Funcs being consumed:
+ *
+ * \code
+ * std::vector<Func> encode(const std::vector<Func> &inputs,
+ *                          const ApproximationPorts &input_ports) const;
+ * std::vector<Func> decode(const std::vector<Func> &encoded,
+ *                          const ApproximationPorts &encoded_ports) const;
+ * \endcode
+ *
+ * The port-aware form is preferred when present. Compose and Apply use it so
+ * that they can look ports up by name.
+ *
+ * A unit may declare its interface with ONE of:
+ *
+ * \code
+ * // static: the same ports whatever the context
+ * ApproximationSignature signature() const;
+ * // contextual: given the resolved input ports, return the full signature.
+ * // `.inputs` normally echoes the given ports, possibly with more constraints.
+ * // It is called with an empty vector when the inputs are not known.
+ * ApproximationSignature signature(const ApproximationPorts &inputs) const;
+ * \endcode
+ *
+ * A unit with neither is *undeclared*. Its output ports are named at run
+ * time: if the output count equals the input count, output i takes input i's
+ * name (so a single-Func unit preserves its input's name); otherwise the
+ * outputs are named positionally, "0", "1", .... Declared ports are validated
+ * against the actual Funcs on every call (see encode()).
+ *
+ * A unit may also list the Approximations it is built from, for describe():
+ *
+ * \code
+ * std::vector<Approximation> children() const;
+ * // optional: the input ports each child would receive, parallel to children()
+ * std::vector<ApproximationPorts> child_inputs(const ApproximationPorts &inputs) const;
  * \endcode
  *
  * See also Pointwise for elementwise units. The handle stores a decayed copy
@@ -115,11 +196,22 @@ struct ApproximationTraceNode;
  * about the interface favors one over the other. See Func::approximate_by()
  * for splicing an Approximation into an existing call graph. */
 class Approximation {
+    enum class SignatureForm { None,
+                               Static,
+                               Contextual };
+
     struct Concept {
         virtual ~Concept() = default;
-        virtual std::vector<Func> encode(const std::vector<Func> &inputs) const = 0;
-        virtual std::vector<Func> decode(const std::vector<Func> &encoded) const = 0;
+        virtual std::vector<Func> encode(const std::vector<Func> &inputs,
+                                         const ApproximationPorts &input_ports) const = 0;
+        virtual std::vector<Func> decode(const std::vector<Func> &encoded,
+                                         const ApproximationPorts &encoded_ports) const = 0;
         virtual std::string default_label() const = 0;
+        virtual SignatureForm signature_form() const = 0;
+        virtual ApproximationSignature declared_signature(const ApproximationPorts &inputs) const = 0;
+        virtual bool encode_is_single() const = 0;
+        virtual std::vector<Approximation> children() const = 0;
+        virtual std::vector<ApproximationPorts> child_inputs(const ApproximationPorts &inputs) const = 0;
     };
 
     // The shared identity of a stage: every copy of a handle points at one
@@ -137,6 +229,7 @@ class Approximation {
     struct Model;
 
     enum class Form { None,
+                      Ported,
                       Multi,
                       Single };
 
@@ -199,12 +292,61 @@ class Approximation {
     struct has_name<T, std::void_t<decltype(std::string(std::declval<const T &>().name()))>>
         : std::true_type {};
 
+    template<typename T, typename = void>
+    struct is_ported_encode : std::false_type {};
     template<typename T>
-    static constexpr Form encode_form = form_of<typename detect_encode_vec<T>::type,
-                                                typename detect_encode_one<T>::type>::value;
+    struct is_ported_encode<T, std::enable_if_t<std::is_same_v<
+                                   std::decay_t<decltype(std::declval<const T &>().encode(
+                                       std::declval<const std::vector<Func> &>(),
+                                       std::declval<const ApproximationPorts &>()))>,
+                                   std::vector<Func>>>> : std::true_type {};
+    template<typename T, typename = void>
+    struct is_ported_decode : std::false_type {};
     template<typename T>
-    static constexpr Form decode_form = form_of<typename detect_decode_vec<T>::type,
-                                                typename detect_decode_one<T>::type>::value;
+    struct is_ported_decode<T, std::enable_if_t<std::is_same_v<
+                                   std::decay_t<decltype(std::declval<const T &>().decode(
+                                       std::declval<const std::vector<Func> &>(),
+                                       std::declval<const ApproximationPorts &>()))>,
+                                   std::vector<Func>>>> : std::true_type {};
+
+    template<typename T, typename = void>
+    struct has_static_signature : std::false_type {};
+    template<typename T>
+    struct has_static_signature<T, std::enable_if_t<std::is_same_v<
+                                       std::decay_t<decltype(std::declval<const T &>().signature())>,
+                                       ApproximationSignature>>> : std::true_type {};
+    template<typename T, typename = void>
+    struct has_contextual_signature : std::false_type {};
+    template<typename T>
+    struct has_contextual_signature<T, std::enable_if_t<std::is_same_v<
+                                           std::decay_t<decltype(std::declval<const T &>().signature(
+                                               std::declval<const ApproximationPorts &>()))>,
+                                           ApproximationSignature>>> : std::true_type {};
+
+    template<typename T, typename = void>
+    struct has_children : std::false_type {};
+    template<typename T>
+    struct has_children<T, std::enable_if_t<std::is_same_v<
+                               std::decay_t<decltype(std::declval<const T &>().children())>,
+                               std::vector<Approximation>>>> : std::true_type {};
+    template<typename T, typename = void>
+    struct has_child_inputs : std::false_type {};
+    template<typename T>
+    struct has_child_inputs<T, std::enable_if_t<std::is_same_v<
+                                   std::decay_t<decltype(std::declval<const T &>().child_inputs(
+                                       std::declval<const ApproximationPorts &>()))>,
+                                   std::vector<ApproximationPorts>>>> : std::true_type {};
+
+    template<typename T>
+    static constexpr Form encode_form =
+        is_ported_encode<T>::value ? Form::Ported :
+                                     form_of<typename detect_encode_vec<T>::type,
+                                             typename detect_encode_one<T>::type>::value;
+    template<typename T>
+    static constexpr Form decode_form =
+        is_ported_decode<T>::value ? Form::Ported :
+                                     form_of<typename detect_decode_vec<T>::type,
+                                             typename detect_decode_one<T>::type>::value;
 
     template<typename T>
     using enable_if_unit = std::enable_if_t<
@@ -273,15 +415,64 @@ public:
      * stage itself. `stage_outputs` holds exactly the records appended
      * during this call. Encode and decode share one trace: a decode() call
      * made from inside an encode() (unusual) is recorded in that encode's
-     * `stage_outputs`. */
-    EncodeResult encode(const std::vector<Func> &inputs) const;
+     * `stage_outputs`.
+     *
+     * Ports: `input_ports` name the `inputs`. If non-empty, its size must
+     * equal `inputs.size()`. If empty, the unit's declared signature supplies
+     * the names (when its input count matches), else they are positional:
+     * "0", "1", .... Every input Func is then checked against its port's
+     * `type` and `dimensions` (when set) -- both the given ports and the
+     * unit's declared inputs -- and a mismatch is a user_error naming this
+     * stage, the direction, the port, and expected vs actual. If the unit
+     * declares a static signature, its input names replace the given ones.
+     * The output ports are the declared signature's outputs (which must
+     * match the output count, and are validated like the inputs) or, for an
+     * undeclared or unknown-signature unit, follow the naming rule described
+     * on Approximation. They are returned in EncodeResult::encoded_ports,
+     * with unset types and dimensions filled in from the actual Funcs, so
+     * that they can be handed to the next stage. */
+    EncodeResult encode(const std::vector<Func> &inputs,
+                        const ApproximationPorts &input_ports = {}) const;
 
     /** Reconstruct an approximation of the original Func(s) from their
      * encoded form. See DecodeResult for the constraint on `decoded`'s
-     * size, which depends on how this Approximation is used. */
-    DecodeResult decode(const std::vector<Func> &encoded) const;
+     * size, which depends on how this Approximation is used.
+     *
+     * Ports work as in encode(), with the roles reversed: `encoded_ports`
+     * name `encoded`; when empty they come from the declared signature's
+     * outputs (so a decode run on its own, e.g. after compute_offline severs
+     * the encode, still gets named inputs). The decoded Funcs are named by
+     * the declared signature's inputs -- resolved without an encode-side
+     * context -- or by the naming rule if the unit is undeclared or its
+     * signature is unknown without context (Apply, Identity, ...). */
+    DecodeResult decode(const std::vector<Func> &encoded,
+                        const ApproximationPorts &encoded_ports = {}) const;
+
+    /** The signature of this stage in the encode direction, resolved for
+     * inputs named `inputs` (empty if unknown). Nothing is run.
+     *
+     * - static signature: returned as is (its input names are authoritative);
+     * - contextual signature: computed from `inputs`;
+     * - undeclared single-Func unit: one input (`inputs`, or "0" if none
+     *   were given) and one output with the same name;
+     * - undeclared multi-Func unit: unknown (see ApproximationSignature). */
+    ApproximationSignature signature(const ApproximationPorts &inputs = {}) const;
+
+    /** Render this stage's structure without running anything: one line per
+     * stage, `label (inputs) -> (outputs)`, where a port prints as
+     * `name: type xN` (`N` being its dimensionality; unset parts are left
+     * out), followed by the stage's children (see the `children()` unit
+     * method), indented by two spaces. `inputs` is the context in which the
+     * signature is resolved. */
+    std::string describe(const ApproximationPorts &inputs = {}) const;
 
 private:
+    ApproximationPorts resolve_ports(const std::vector<Func> &funcs, const ApproximationPorts &given,
+                                     bool encode_direction) const;
+    ApproximationPorts output_ports(const std::vector<Func> &outputs, const ApproximationPorts &input_ports,
+                                    bool encode_direction) const;
+    void describe_to(std::string &out, const ApproximationPorts &inputs, int depth) const;
+
     std::shared_ptr<State> state_;
 };
 
@@ -294,6 +485,8 @@ struct ApproximationTraceNode {
     std::string label;
     /** The stage's output Funcs for this call. */
     std::vector<Func> ports;
+    /** The names of `ports` (parallel to it). */
+    std::vector<std::string> port_names;
     /** The Funcs discovered for this stage alone (see Approximation::encode). */
     std::vector<Func> intermediates;
     std::vector<ApproximationTraceNode> children;
@@ -306,6 +499,8 @@ struct ApproximationTraceNode {
 struct ApproximationStageOutputs {
     Approximation stage;
     std::vector<Func> ports;
+    /** The names of `ports` (parallel to it). */
+    std::vector<std::string> port_names;
     std::vector<Func> intermediates;
 };
 
@@ -316,6 +511,9 @@ struct ApproximationStageOutputs {
  * must still be scheduled by whoever calls encode(). */
 struct EncodeResult {
     std::vector<Func> encoded;
+    /** The ports of `encoded` (parallel to it), ready to hand to the next
+     * stage's encode() or to decode(). */
+    ApproximationPorts encoded_ports;
     std::vector<Func> intermediates;
     /** The trace of this call as a flat list: the post-order flattening of
      * `trace` (children first, then the stage itself). */
@@ -332,6 +530,8 @@ struct EncodeResult {
  * decoded may contain however many Funcs the next stage down expects. */
 struct DecodeResult {
     std::vector<Func> decoded;
+    /** The ports of `decoded` (parallel to it). */
+    ApproximationPorts decoded_ports;
     std::vector<Func> intermediates;
     std::vector<ApproximationStageOutputs> stage_outputs;
     ApproximationTraceNode trace;
@@ -346,8 +546,11 @@ struct Approximation::Model final : Approximation::Concept {
         : unit(std::forward<U>(u)) {
     }
 
-    std::vector<Func> encode(const std::vector<Func> &inputs) const override {
-        if constexpr (encode_form<T> == Form::Multi) {
+    std::vector<Func> encode(const std::vector<Func> &inputs,
+                             const ApproximationPorts &input_ports) const override {
+        if constexpr (encode_form<T> == Form::Ported) {
+            return unit.encode(inputs, input_ports);
+        } else if constexpr (encode_form<T> == Form::Multi) {
             return unit.encode(inputs);
         } else {
             check_single_input(inputs, "encode");
@@ -355,8 +558,11 @@ struct Approximation::Model final : Approximation::Concept {
         }
     }
 
-    std::vector<Func> decode(const std::vector<Func> &encoded) const override {
-        if constexpr (decode_form<T> == Form::Multi) {
+    std::vector<Func> decode(const std::vector<Func> &encoded,
+                             const ApproximationPorts &encoded_ports) const override {
+        if constexpr (decode_form<T> == Form::Ported) {
+            return unit.decode(encoded, encoded_ports);
+        } else if constexpr (decode_form<T> == Form::Multi) {
             return unit.decode(encoded);
         } else {
             check_single_input(encoded, "decode");
@@ -369,6 +575,46 @@ struct Approximation::Model final : Approximation::Concept {
             return std::string(unit.name());
         } else {
             return type_label(typeid(T));
+        }
+    }
+
+    SignatureForm signature_form() const override {
+        if constexpr (has_contextual_signature<T>::value) {
+            return SignatureForm::Contextual;
+        } else if constexpr (has_static_signature<T>::value) {
+            return SignatureForm::Static;
+        } else {
+            return SignatureForm::None;
+        }
+    }
+
+    ApproximationSignature declared_signature(const ApproximationPorts &inputs) const override {
+        if constexpr (has_contextual_signature<T>::value) {
+            return unit.signature(inputs);
+        } else if constexpr (has_static_signature<T>::value) {
+            return unit.signature();
+        } else {
+            return ApproximationSignature::unknown(inputs);
+        }
+    }
+
+    bool encode_is_single() const override {
+        return encode_form<T> == Form::Single;
+    }
+
+    std::vector<Approximation> children() const override {
+        if constexpr (has_children<T>::value) {
+            return unit.children();
+        } else {
+            return {};
+        }
+    }
+
+    std::vector<ApproximationPorts> child_inputs(const ApproximationPorts &inputs) const override {
+        if constexpr (has_child_inputs<T>::value) {
+            return unit.child_inputs(inputs);
+        } else {
+            return std::vector<ApproximationPorts>(children().size());
         }
     }
 };
@@ -407,6 +653,8 @@ struct ApproximationResult {
      * exactly this boundary -- e.g. Pipeline::compute_offline(result.encoded)
      * -- without calling Approximation::encode() themselves. */
     std::vector<Func> encoded;
+    /** The ports of `encoded` (parallel to it). */
+    ApproximationPorts encoded_ports;
     std::vector<Func> intermediates;
     std::vector<ApproximationStageOutputs> encoded_stage_outputs;
     std::vector<ApproximationStageOutputs> decoded_stage_outputs;
@@ -421,6 +669,12 @@ struct ApproximationResult {
      * lookup would be ambiguous). */
     Func encoded_by(const Approximation &stage, size_t port = 0) const;
     Func decoded_by(const Approximation &stage, size_t port = 0) const;
+
+    /** As above, but find the port by name. It is an error if `stage` has no
+     * port of that name in this direction (the message lists the ports it
+     * has), or if the name is ambiguous. */
+    Func encoded_by(const Approximation &stage, const std::string &port) const;
+    Func decoded_by(const Approximation &stage, const std::string &port) const;
 
     /** Every Func that is an output port of some stage in either direction,
      * deduplicated by name, in trace order (encode side first, each side
@@ -437,10 +691,13 @@ struct ApproximationResult {
 };
 
 /** Print a trace as an indented tree, one line per call: the label, then
- * `-> ` and the comma-separated port Func names. A non-empty intermediates
+ * `-> ` and the comma-separated ports as `port name=Func name`. A non-empty intermediates
  * list follows on its own line as `intermediates: a, b`, indented under its
  * stage, then the children in invocation order. */
 std::ostream &operator<<(std::ostream &stream, const ApproximationTraceNode &node);
+
+/** Print Approximation::describe(). */
+std::ostream &operator<<(std::ostream &stream, const Approximation &approximation);
 
 /** Print both directions of an ApproximationResult under `encode:` and
  * `decode:` headers. */
@@ -481,19 +738,40 @@ struct Compose {
                  Approximation(std::forward<Rest>(rest))...} {
     }
 
-    std::vector<Func> encode(const std::vector<Func> &inputs) const;
-    std::vector<Func> decode(const std::vector<Func> &encoded) const;
+    /** Each stage receives the ports the previous stage produced. */
+    std::vector<Func> encode(const std::vector<Func> &inputs, const ApproximationPorts &input_ports) const;
+    std::vector<Func> decode(const std::vector<Func> &encoded, const ApproximationPorts &encoded_ports) const;
+
+    /** Chains the stages' signatures from the innermost outward. Unknown if
+     * any stage's signature is unknown. */
+    ApproximationSignature signature(const ApproximationPorts &inputs) const;
+
+    /** The stages, *innermost first* (the order encode() runs them), each
+     * with the ports it would receive. */
+    std::vector<Approximation> children() const;
+    std::vector<ApproximationPorts> child_inputs(const ApproximationPorts &inputs) const;
 
     std::vector<Approximation> stages;
 };
 
-/** Applies `inner` to just the sub-range `[idx, idx + arity)` of a Func
- * vector, passing every other element through unchanged -- e.g. applying a
- * quantizer to just the "shifted" component of an affine (shift + scale)
- * scheme's encoded output while leaving the shift amount itself untouched.
+/** Applies `inner` to just a sub-range of a Func vector, passing every other
+ * element through unchanged -- e.g. applying a quantizer to just the "scale"
+ * component of a scheme's encoded output while leaving the codes untouched.
+ *
+ * The sub-range is chosen either by position, `[idx, idx + arity)`, or by
+ * port name (`Apply("scale", inner)`). By name, the range starts at the
+ * input port called `port` (it is an error if there is none, or more than
+ * one), and its size is the number of inputs `inner` declares (one if it
+ * declares nothing) in encode(); in decode() the range starts at the
+ * position of the first of `inner`'s encoded output ports, and its size is
+ * the number of those outputs (one if `inner` declares nothing). The prefix
+ * before the range is unchanged in both directions. By position,
  * `encode_arity`/`decode_arity` (how many Funcs `inner` consumes at that
  * position for each direction) must be given explicitly, since C++ has no
- * way to infer them generically from `inner` itself. */
+ * way to infer them generically from `inner` itself.
+ *
+ * In both forms the port names propagate: the untouched ports keep theirs,
+ * and the replaced range takes the names of `inner`'s output ports. */
 struct Apply {
     Apply(int idx, int encode_arity, int decode_arity, Approximation inner)
         : idx(idx), encode_arity(encode_arity), decode_arity(decode_arity),
@@ -504,14 +782,34 @@ struct Apply {
         : Apply(idx, 1, 1, std::move(inner)) {
     }
 
-    std::vector<Func> encode(const std::vector<Func> &inputs) const;
-    std::vector<Func> decode(const std::vector<Func> &encoded) const;
+    Apply(std::string port, Approximation inner)
+        : idx(-1), encode_arity(-1), decode_arity(-1), port(std::move(port)), inner(std::move(inner)) {
+    }
 
-    /** "Apply[idx]" */
+    std::vector<Func> encode(const std::vector<Func> &inputs, const ApproximationPorts &input_ports) const;
+    std::vector<Func> decode(const std::vector<Func> &encoded, const ApproximationPorts &encoded_ports) const;
+
+    /** Unknown unless the range can be located in `inputs` and `inner`'s
+     * signature is known for it. */
+    ApproximationSignature signature(const ApproximationPorts &inputs) const;
+
+    /** Just `inner`, with the ports it would receive. */
+    std::vector<Approximation> children() const;
+    std::vector<ApproximationPorts> child_inputs(const ApproximationPorts &inputs) const;
+
+    /** "Apply[idx]" or "Apply[port]" */
     std::string name() const;
 
+    /** The position and arities for the by-position form; -1 by name. */
     int idx, encode_arity, decode_arity;
+    /** The port name for the by-name form; empty by position. */
+    std::string port;
     Approximation inner;
+
+private:
+    // The encode-side range [begin, begin + arity) of `inputs`, or nothing
+    // (with the reason in *problem, if given).
+    bool locate(const ApproximationPorts &inputs, size_t &begin, size_t &arity, std::string *problem) const;
 };
 
 /** Routes encode() to one Approximation and decode() to another, taking each
@@ -554,8 +852,17 @@ struct TrustedInverse {
         : encoder(std::move(encoder)), decoder(std::move(decoder)) {
     }
 
-    std::vector<Func> encode(const std::vector<Func> &inputs) const;
-    std::vector<Func> decode(const std::vector<Func> &encoded) const;
+    std::vector<Func> encode(const std::vector<Func> &inputs, const ApproximationPorts &input_ports) const;
+    std::vector<Func> decode(const std::vector<Func> &encoded, const ApproximationPorts &encoded_ports) const;
+
+    /** The encoder's signature, in both directions: the encoder defines the
+     * encoded representation, and the decoder is trusted to consume it. */
+    ApproximationSignature signature(const ApproximationPorts &inputs) const;
+
+    /** The encoder, then the decoder (which is described without context,
+     * since it runs in the other direction). */
+    std::vector<Approximation> children() const;
+    std::vector<ApproximationPorts> child_inputs(const ApproximationPorts &inputs) const;
 
     Approximation encoder, decoder;
 };
@@ -567,8 +874,15 @@ struct Choose {
         : chosen(cond ? std::move(if_true) : std::move(if_false)) {
     }
 
-    std::vector<Func> encode(const std::vector<Func> &inputs) const;
-    std::vector<Func> decode(const std::vector<Func> &encoded) const;
+    std::vector<Func> encode(const std::vector<Func> &inputs, const ApproximationPorts &input_ports) const;
+    std::vector<Func> decode(const std::vector<Func> &encoded, const ApproximationPorts &encoded_ports) const;
+
+    /** The chosen stage's signature. */
+    ApproximationSignature signature(const ApproximationPorts &inputs) const;
+
+    /** Just the chosen stage. */
+    std::vector<Approximation> children() const;
+    std::vector<ApproximationPorts> child_inputs(const ApproximationPorts &inputs) const;
 
     Approximation chosen;
 };
@@ -615,14 +929,19 @@ private:
     TupleFn encode_fn, decode_fn;
 };
 
-/** Passes Funcs through unchanged in both directions. */
+/** Passes Funcs (and their port names) through unchanged in both directions. */
 struct Identity {
     std::vector<Func> encode(const std::vector<Func> &inputs) const;
     std::vector<Func> decode(const std::vector<Func> &encoded) const;
+
+    /** Echoes `inputs`; unknown if there are none. */
+    ApproximationSignature signature(const ApproximationPorts &inputs) const;
 };
 
 /** Reorders Funcs: encode() outputs `inputs[permutation[i]]` at position i,
- * and decode() inverts that. */
+ * and decode() inverts that. The output port names are permuted the same
+ * way. Without a context (no input ports), the inputs are named positionally,
+ * so a stand-alone decode() names its outputs "0", "1", ... too. */
 struct Permute {
     explicit Permute(std::vector<int> permutation)
         : forward(std::move(permutation)) {
@@ -634,6 +953,8 @@ struct Permute {
 
     std::vector<Func> encode(const std::vector<Func> &inputs) const;
     std::vector<Func> decode(const std::vector<Func> &encoded) const;
+
+    ApproximationSignature signature(const ApproximationPorts &inputs) const;
 
     std::vector<int> forward, backward;
 };
