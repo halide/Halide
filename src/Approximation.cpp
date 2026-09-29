@@ -1,6 +1,12 @@
 #include "Approximation.h"
 
+#include <ostream>
 #include <set>
+
+#if defined(__GNUC__) || defined(__clang__)
+#include <cstdlib>
+#include <cxxabi.h>
+#endif
 
 #include "Error.h"
 #include "FindCalls.h"
@@ -41,6 +47,126 @@ Func ApproximationResult::decoded_by(const Approximation &stage, size_t port) co
     return find_stage_output(decoded_stage_outputs, stage, port, "decode");
 }
 
+std::vector<Func> ApproximationResult::stage_ports() const {
+    std::vector<Func> result;
+    std::set<std::string> seen;
+    if (replacement.defined()) {
+        seen.insert(replacement.name());
+    }
+    for (const auto *outputs : {&encoded_stage_outputs, &decoded_stage_outputs}) {
+        for (const ApproximationStageOutputs &o : *outputs) {
+            for (const Func &p : o.ports) {
+                if (p.defined() && seen.insert(p.name()).second) {
+                    result.push_back(p);
+                }
+            }
+        }
+    }
+    return result;
+}
+
+bool ApproximationResult::is_stage_port(const Func &f) const {
+    if (!f.defined()) {
+        return false;
+    }
+    for (const Func &p : stage_ports()) {
+        if (p.name() == f.name()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+namespace {
+
+void replace_all(std::string &s, const std::string &from, const std::string &to) {
+    for (size_t pos = s.find(from); pos != std::string::npos; pos = s.find(from, pos + to.size())) {
+        s.replace(pos, from.size(), to);
+    }
+}
+
+void print_names(std::ostream &stream, const std::vector<Func> &funcs) {
+    const char *sep = "";
+    for (const Func &f : funcs) {
+        stream << sep << (f.defined() ? f.name() : "<undefined>");
+        sep = ", ";
+    }
+}
+
+void print_node(std::ostream &stream, const ApproximationTraceNode &node, int depth) {
+    std::string indent(depth * 2, ' ');
+    stream << indent << node.label << " -> ";
+    print_names(stream, node.ports);
+    stream << "\n";
+    if (!node.intermediates.empty()) {
+        stream << indent << "  intermediates: ";
+        print_names(stream, node.intermediates);
+        stream << "\n";
+    }
+    for (const ApproximationTraceNode &child : node.children) {
+        print_node(stream, child, depth + 1);
+    }
+}
+
+void flatten(const ApproximationTraceNode &node, std::vector<ApproximationStageOutputs> &out) {
+    for (const ApproximationTraceNode &child : node.children) {
+        flatten(child, out);
+    }
+    out.push_back({node.stage, node.ports, node.intermediates});
+}
+
+}  // namespace
+
+std::ostream &operator<<(std::ostream &stream, const ApproximationTraceNode &node) {
+    print_node(stream, node, 0);
+    return stream;
+}
+
+std::ostream &operator<<(std::ostream &stream, const ApproximationResult &result) {
+    stream << "encode:\n";
+    if (result.encode_trace.stage.defined()) {
+        print_node(stream, result.encode_trace, 1);
+    }
+    stream << "decode:\n";
+    if (result.decode_trace.stage.defined()) {
+        print_node(stream, result.decode_trace, 1);
+    }
+    return stream;
+}
+
+std::string Approximation::type_label(const std::type_info &type) {
+    std::string name = type.name();
+#if defined(__GNUC__) || defined(__clang__)
+    int status = 0;
+    char *demangled = abi::__cxa_demangle(name.c_str(), nullptr, nullptr, &status);
+    if (status == 0 && demangled) {
+        name = demangled;
+    }
+    std::free(demangled);
+#else
+    replace_all(name, "struct ", "");
+    replace_all(name, "class ", "");
+#endif
+    replace_all(name, "(anonymous namespace)::", "");
+    replace_all(name, "`anonymous namespace'::", "");
+    replace_all(name, "std::__1::", "std::");
+    replace_all(name, "Halide::", "");
+    return name;
+}
+
+Approximation Approximation::labelled(std::string label) const {
+    user_assert(defined()) << "labelled called on an undefined Approximation\n";
+    state_->label = std::move(label);
+    return *this;
+}
+
+std::string Approximation::label() const {
+    if (!defined()) {
+        return "";
+    }
+    return state_->label.empty() ? state_->impl->default_label() : state_->label;
+}
+
 void Approximation::check_single_input(const std::vector<Func> &inputs, const char *direction) {
     user_assert(inputs.size() == 1)
         << "Approximation: a unit with a single-Func " << direction << "() was given "
@@ -49,29 +175,32 @@ void Approximation::check_single_input(const std::vector<Func> &inputs, const ch
 
 namespace {
 
-// The trace shared by every handle call nested under the outermost one on this
-// thread. Encode and decode share it.
-thread_local std::vector<ApproximationStageOutputs> *active_trace = nullptr;
+// The children collected so far by the innermost handle call in progress on
+// this thread (null outside any call). Encode and decode share it.
+thread_local std::vector<ApproximationTraceNode> *active_children = nullptr;
 
-struct TraceScope {
-    std::vector<ApproximationStageOutputs> local;
-    bool owner;
+struct CallScope {
+    std::vector<ApproximationTraceNode> children;
+    std::vector<ApproximationTraceNode> *parent;
 
-    TraceScope()
-        : owner(active_trace == nullptr) {
-        if (owner) {
-            active_trace = &local;
-        }
+    CallScope()
+        : parent(active_children) {
+        active_children = &children;
     }
 
-    ~TraceScope() {
-        if (owner) {
-            active_trace = nullptr;
-        }
+    ~CallScope() {
+        active_children = parent;
     }
 
-    std::vector<ApproximationStageOutputs> &trace() {
-        return *active_trace;
+    // Finish the call: nest the node under the enclosing call, if any.
+    ApproximationTraceNode finish(const Approximation &stage, std::vector<Func> ports,
+                                  std::vector<Func> intermediates) {
+        ApproximationTraceNode node{stage, stage.label(), std::move(ports), std::move(intermediates),
+                                    std::move(children)};
+        if (parent) {
+            parent->push_back(node);
+        }
+        return node;
     }
 };
 
@@ -116,24 +245,24 @@ std::vector<Func> find_intermediates(const std::vector<Func> &inputs, const std:
 
 EncodeResult Approximation::encode(const std::vector<Func> &inputs) const {
     user_assert(defined()) << "encode called on an undefined Approximation\n";
-    TraceScope scope;
-    size_t start = scope.trace().size();
-    std::vector<Func> encoded = impl_->encode(inputs);
+    CallScope scope;
+    std::vector<Func> encoded = state_->impl->encode(inputs);
     std::vector<Func> intermediates = find_intermediates(inputs, encoded);
-    scope.trace().push_back({*this, encoded, intermediates});
-    std::vector<ApproximationStageOutputs> stage_outputs(scope.trace().begin() + start, scope.trace().end());
-    return {std::move(encoded), std::move(intermediates), std::move(stage_outputs)};
+    ApproximationTraceNode node = scope.finish(*this, encoded, intermediates);
+    std::vector<ApproximationStageOutputs> stage_outputs;
+    flatten(node, stage_outputs);
+    return {std::move(encoded), std::move(intermediates), std::move(stage_outputs), std::move(node)};
 }
 
 DecodeResult Approximation::decode(const std::vector<Func> &encoded) const {
     user_assert(defined()) << "decode called on an undefined Approximation\n";
-    TraceScope scope;
-    size_t start = scope.trace().size();
-    std::vector<Func> decoded = impl_->decode(encoded);
+    CallScope scope;
+    std::vector<Func> decoded = state_->impl->decode(encoded);
     std::vector<Func> intermediates = find_intermediates(encoded, decoded);
-    scope.trace().push_back({*this, decoded, intermediates});
-    std::vector<ApproximationStageOutputs> stage_outputs(scope.trace().begin() + start, scope.trace().end());
-    return {std::move(decoded), std::move(intermediates), std::move(stage_outputs)};
+    ApproximationTraceNode node = scope.finish(*this, decoded, intermediates);
+    std::vector<ApproximationStageOutputs> stage_outputs;
+    flatten(node, stage_outputs);
+    return {std::move(decoded), std::move(intermediates), std::move(stage_outputs), std::move(node)};
 }
 
 std::vector<Func> Compose::encode(const std::vector<Func> &inputs) const {
@@ -178,6 +307,10 @@ std::vector<Func> Apply::decode(const std::vector<Func> &encoded) const {
     decoded.insert(decoded.end(), inner_decoded.begin(), inner_decoded.end());
     decoded.insert(decoded.end(), encoded.begin() + idx + decode_arity, encoded.end());
     return decoded;
+}
+
+std::string Apply::name() const {
+    return "Apply[" + std::to_string(idx) + "]";
 }
 
 std::vector<Func> TrustedInverse::encode(const std::vector<Func> &inputs) const {
