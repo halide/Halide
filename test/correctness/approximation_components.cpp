@@ -15,7 +15,7 @@ int test_struct_layout_1d() {
     qh(element, record) = cast<uint8_t>(0x80 + element + record);
     d(record) = cast<float16_t>(cast<float>(record) + 0.5f);
 
-    StructLayout layout(record_type, {"qs", "qh", "d"});
+    Approximation layout = StructLayout(record_type, {"qs", "qh", "d"});
     DecodeResult decoded = layout.decode(layout.encode({qs, qh, d}).encoded);
     Buffer<uint8_t> out_qs = decoded.decoded[0].realize({16, 3});
     Buffer<uint8_t> out_qh = decoded.decoded[1].realize({4, 3});
@@ -44,7 +44,7 @@ int test_struct_layout_2d() {
     Func pixels("pixels"), tag("tag");
     pixels(element, x, y) = cast<uint8_t>(element + 10 * x + 30 * y);
     tag(x, y) = cast<uint16_t>(100 + x + 4 * y);
-    StructLayout layout(record_type, {"pixels", "tag"}, 2);
+    Approximation layout = StructLayout(record_type, {"pixels", "tag"}, 2);
     DecodeResult decoded = layout.decode(layout.encode({pixels, tag}).encoded);
     Buffer<uint8_t> out_pixels = decoded.decoded[0].realize({3, 4, 2});
     Buffer<uint16_t> out_tag = decoded.decoded[1].realize({4, 2});
@@ -70,7 +70,7 @@ int test_struct_layout_contract_errors() {
     pixels(element, record) = cast<uint8_t>(element);
     wrong_tag(record) = cast<int16_t>(record);
     try {
-        StructLayout layout(record_type, {"pixels", "tag"});
+        Approximation layout = StructLayout(record_type, {"pixels", "tag"});
         (void)layout.encode({pixels, wrong_tag});
         return 1;
     } catch (const CompileError &) {
@@ -87,7 +87,7 @@ int test_scalar_components() {
     Var record("record");
     Func values("values");
     values(record) = cast<float>(record) / 3.0f;
-    StorageCast<float, float16_t> storage;
+    Approximation storage = StorageCast<float, float16_t>{};
     EncodeResult stored = storage.encode({values});
     DecodeResult cast_roundtrip = storage.decode(stored.encoded);
     Buffer<float> out = cast_roundtrip.decoded[0].realize({8});
@@ -101,7 +101,7 @@ int test_scalar_components() {
 
     Func words("words");
     words(record) = cast<uint32_t>((int32_t)0x10203040) + cast<uint32_t>(record);
-    LittleEndianScalarPack<uint32_t> little_endian;
+    Approximation little_endian = LittleEndianScalarPack<uint32_t>{};
     EncodeResult bytes = little_endian.encode({words});
     DecodeResult word_roundtrip = little_endian.decode(bytes.encoded);
     Buffer<uint8_t> packed = bytes.encoded[0].realize({4, 5});
@@ -121,7 +121,7 @@ int test_code_components() {
     Var element("element"), record("record");
     Func signed_nibbles("signed_nibbles");
     signed_nibbles(element, record) = cast<int8_t>((element % 16) - 8);
-    AdditiveOffset<int8_t, uint8_t> offset(8);
+    Approximation offset = AdditiveOffset<int8_t, uint8_t>(8);
     EncodeResult offset_codes = offset.encode({signed_nibbles});
     DecodeResult signed_roundtrip = offset.decode(offset_codes.encoded);
     Buffer<uint8_t> stored_nibbles = offset_codes.encoded[0].realize({16, 2});
@@ -136,7 +136,7 @@ int test_code_components() {
 
     Func high("high");
     high(element, record) = cast<int8_t>(select(((element + record) & 1) != 0, 0, -16));
-    BinaryAlphabetPack<int8_t> binary(32, UInt(32), -16, 0);
+    Approximation binary = BinaryAlphabetPack<int8_t>(32, UInt(32), -16, 0);
     EncodeResult word = binary.encode({high});
     word.encoded[0].compute_root();
     DecodeResult expanded = binary.decode(word.encoded);
@@ -156,7 +156,7 @@ int test_code_components() {
 
     Func codes("codes");
     codes(element, record) = cast<int8_t>((element % 32) - 16);
-    AdditiveRadixSplit split(16, 16);
+    Approximation split = AdditiveRadixSplit(16, 16);
     EncodeResult parts = split.encode({codes});
     DecodeResult combined = split.decode(parts.encoded);
     Buffer<uint8_t> low = parts.encoded[0].realize({32, 1});
@@ -169,7 +169,7 @@ int test_code_components() {
         }
     }
 
-    PlanarFieldPack planar(4, 16);
+    Approximation planar = PlanarFieldPack(4, 16);
     EncodeResult planar_bytes = planar.encode({parts.encoded[0]});
     planar_bytes.encoded[0].compute_root();
     DecodeResult planar_fields = planar.decode(planar_bytes.encoded);
@@ -188,7 +188,7 @@ int test_block_components() {
     Var k("k");
     Func flat("flat");
     flat(k) = cast<float>(k);
-    BlockReshape reshape(32);
+    Approximation reshape = BlockReshape(32);
     DecodeResult reshaped = reshape.decode(reshape.encode({flat}).encoded);
     Buffer<float> roundtrip = reshaped.decoded[0].realize({96});
     for (int i = 0; i < 96; ++i) {
@@ -200,11 +200,11 @@ int test_block_components() {
     Var element("element"), record("record");
     Func blocks("blocks");
     blocks(element, record) = cast<float>(element - 16);
-    SymmetricBlockQuantize quantize(32, 16, BlockRoundingMode::TruncateHalfUpWithOffset,
-                                    BlockScaleAnchor::ExtremeSignedValue);
+    Approximation quantize = SymmetricBlockQuantize(32, 16, BlockRoundingMode::TruncateHalfUpWithOffset,
+                                                    BlockScaleAnchor::ExtremeSignedValue);
     EncodeResult quantized = quantize.encode({blocks});
-    for (Func handle : quantized.handles) {
-        handle.compute_root();
+    for (Func intermediate : quantized.intermediates) {
+        intermediate.compute_root();
     }
     DecodeResult dequantized = quantize.decode(quantized.encoded);
     Buffer<int8_t> codes = quantized.encoded[0].realize({32, 1});
@@ -227,7 +227,7 @@ int test_standard_quant_compositions() {
     Type q4_type = Type::Struct({{"d", Float(16)}, {"qs", UInt(8), 16}});
     Func q4_values("q4_values");
     q4_values(k) = cast<float>((k % 16) - 8);
-    Compose q4(
+    Approximation q4 = Compose(
         StructLayout{q4_type, {"qs", "d"}},
         Apply{1, StorageCast<float, float16_t>{}},
         Apply{0, PlanarFieldPack{4, 16}},
@@ -236,8 +236,8 @@ int test_standard_quant_compositions() {
                                BlockScaleAnchor::ExtremeSignedValue},
         BlockReshape{32});
     EncodeResult q4_encoded = q4.encode({q4_values});
-    for (Func handle : q4_encoded.handles) {
-        handle.compute_root();
+    for (Func intermediate : q4_encoded.intermediates) {
+        intermediate.compute_root();
     }
     DecodeResult q4_decoded = q4.decode(q4_encoded.encoded);
     Buffer<float> q4_roundtrip = q4_decoded.decoded[0].realize({64});
@@ -251,15 +251,15 @@ int test_standard_quant_compositions() {
     Func q8_values("q8_values");
     Expr local = k % 32;
     q8_values(k) = cast<float>(select(local == 0, -127, local - 16));
-    Compose q8(
+    Approximation q8 = Compose(
         StructLayout{q8_type, {"qs", "d"}},
         Apply{1, StorageCast<float, float16_t>{}},
         SymmetricBlockQuantize{32, 127, BlockRoundingMode::Nearest,
                                BlockScaleAnchor::AbsMax},
         BlockReshape{32});
     EncodeResult q8_encoded = q8.encode({q8_values});
-    for (Func handle : q8_encoded.handles) {
-        handle.compute_root();
+    for (Func intermediate : q8_encoded.intermediates) {
+        intermediate.compute_root();
     }
     DecodeResult q8_decoded = q8.decode(q8_encoded.encoded);
     Buffer<float> q8_roundtrip = q8_decoded.decoded[0].realize({64});
