@@ -332,6 +332,7 @@ tests(
     lerp_mismatch.cpp
     lerp_signed_weight.cpp
     let_in_rdom_bound.cpp
+    licm.cpp
     likely.cpp
     load_library.cpp
     logical.cpp
@@ -432,7 +433,6 @@ tests(
     reuse_stack_alloc.cpp
     reuse_var_in_schedule.cpp
     reused_args.cpp
-    reverse_peel.cpp
     rfactor_after_var_and_rvar_fusion.cpp
     rfactor_fused_var_and_rvar.cpp
     rfactor_inner_dim_non_commutative.cpp

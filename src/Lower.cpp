@@ -60,7 +60,6 @@
 #include "RemoveDeadAllocations.h"
 #include "RemoveExternLoops.h"
 #include "RemoveUndef.h"
-#include "ReversePeel.h"
 #include "ScheduleFunctions.h"
 #include "SelectGPUAPI.h"
 #include "Simplify.h"
@@ -481,9 +480,9 @@ void lower_impl(const vector<Function> &output_funcs,
     s = find_intrinsics(s);
     log("Lowering after finding intrinsics:", s);
 
-    debug(1) << "Binding arithmetic shared by uses of let-bound variables...\n";
-    s = reverse_peel_lets(s);
-    log("Lowering after reverse-peeling lets:", s);
+    debug(1) << "Hoisting loop invariants and binding shared values...\n";
+    s = hoist_loop_invariant_values(s);
+    log("Lowering after hoisting loop invariants:", s);
 
     debug(1) << "Hoisting prefetches...\n";
     s = hoist_prefetches(s);
