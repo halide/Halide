@@ -279,6 +279,17 @@ struct Analysis {
     // Names bound as aliases. Once the chain has a let of its own they are
     // mere renames, and are substituted away.
     std::unordered_set<std::string> alias_names;
+    // Every name the input binds or refers to, so that no new let takes one
+    // of them; an earlier run of the pass leaves .licm names behind.
+    std::unordered_set<std::string> taken_names;
+
+    std::string new_name(Root &r) {
+        std::string name;
+        do {
+            name = r.name + ".licm" + std::to_string(r.next_name++);
+        } while (!taken_names.insert(name).second);
+        return name;
+    }
 
     int lca(int a, int b) const {
         if (a == no_node) {
@@ -442,7 +453,7 @@ struct Analysis {
         internal_assert(!ru.materialized);
         ru.materialized = true;
         ru.inject_scope = scope;
-        ru.name = r.name + ".licm" + std::to_string(r.next_name++);
+        ru.name = new_name(r);
         injected_names.insert(ru.name);
         scopes[scope].injected.push_back(Injected{n, region});
         materialized++;
@@ -650,7 +661,7 @@ struct Analysis {
                 }
                 if (fold && !path_uses_root(n, r)) {
                     nodes[n].folded = true;
-                    nodes[n].folded_name = r.name + ".licm" + std::to_string(r.next_name++);
+                    nodes[n].folded_name = new_name(r);
                     r.folded = n;
                     materialized++;
                     top = n;
@@ -761,6 +772,9 @@ protected:
     }
 
     void bind(const std::string &name, int root, int trie = no_node) {
+        if (count_uses) {
+            an.taken_names.insert(name);
+        }
         bindings.push(name, Binding{depth, root, trie});
         depth++;
     }
@@ -795,6 +809,7 @@ protected:
         int root = an.add_root(RootKind::Free, nullptr, op->name, op->type, depth);
         an.roots[root].scope = 0;
         an.free_roots[op->name] = root;
+        an.taken_names.insert(op->name);
         return root;
     }
 

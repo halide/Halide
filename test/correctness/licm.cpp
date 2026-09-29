@@ -287,6 +287,15 @@ void test_ir() {
     check("binding depths with injected lets",
           let("a", opaque(x), block({use(a), use(a + 1), use(a + 1), let("c", opaque(y), let("b", opaque(x + y), block({use(c + b), use(c + b)})))})),
           let("a", opaque(x), let("a.licm0", a + 1, block({use(a), use(var("a.licm0")), use(var("a.licm0")), let("c", opaque(y), let("b.licm0", opaque(x + y) + c, block({use(var("b.licm0")), use(var("b.licm0"))})))}))));
+
+    // Names the input already binds are never reused, as when the pass runs
+    // on IR it has rewritten before. e.licm1 here is a bool alias of e < 5,
+    // which gets a let of its own once it is shared with the assert.
+    Expr e = var("e"), e1 = Variable::make(Bool(), "e.licm1");
+    Expr bq = Call::make(Bool(), "bq", {}, Call::Extern);
+    check("no new name that is already bound",
+          let("e", v, let("e.licm1", e < 5, block({AssertStmt::make(!bq || e1, 0), use(e * 2 + 1), use(e * 2 + 2), use(e + 5), use(e + 5)}))),
+          let("e", v, let("e.licm0", e < 5, let("e.licm2", e * 2, let("e.licm3", e + 5, block({AssertStmt::make(!bq || Variable::make(Bool(), "e.licm0"), 0), use(var("e.licm2") + 1), use(var("e.licm2") + 2), use(var("e.licm3")), use(var("e.licm3"))}))))));
 }
 
 // The pass runs in every lowering, so a pipeline with plenty of repeated index
