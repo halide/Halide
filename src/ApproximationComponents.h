@@ -7,6 +7,7 @@
  */
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -32,6 +33,14 @@ inline std::vector<Var> approximation_component_vars(int dimensions, const std::
 
 inline std::vector<Expr> approximation_component_exprs(const std::vector<Var> &vars) {
     return std::vector<Expr>(vars.begin(), vars.end());
+}
+
+// The dimensionality of the single port in `inputs`, if there is exactly one.
+inline std::optional<int> approximation_single_dimensions(const ApproximationPorts &inputs) {
+    if (inputs.size() == 1) {
+        return inputs[0].dimensions;
+    }
+    return std::nullopt;
 }
 
 }  // namespace Internal
@@ -84,6 +93,12 @@ struct BlockReshape {
             out(k) = packed(args);
         }
         return {out};
+    }
+
+    /** values (flat) <-> blocks (one extra leading dimension per extent). */
+    ApproximationSignature signature() const {
+        return {{{"values", std::nullopt, block_indexed_ ? 2 : 1}},
+                {{"blocks", std::nullopt, (int)extents_.size() + 1}}};
     }
 
 private:
@@ -189,6 +204,17 @@ struct StructLayout {
         return outputs;
     }
 
+    /** One input per logical field, named after it, and one `record` output. */
+    ApproximationSignature signature() const {
+        ApproximationSignature sig;
+        for (const std::string &name : logical_fields_) {
+            const StructField &f = physical_field(name);
+            sig.inputs.emplace_back(name, f.type, record_dimensions_ + (f.array_extent ? 1 : 0));
+        }
+        sig.outputs = {{"record", record_type_, record_dimensions_}};
+        return sig;
+    }
+
 private:
     Type record_type_;
     std::vector<std::string> logical_fields_;
@@ -231,6 +257,16 @@ struct StorageCast {
         return {pointwise().decode(encoded[0])};
     }
 
+    /** Dimensions and name follow the input port. */
+    ApproximationSignature signature(const ApproximationPorts &inputs) const {
+        if (inputs.size() > 1) {
+            return ApproximationSignature::unknown(inputs);
+        }
+        std::string name = inputs.empty() ? "value" : inputs[0].name;
+        std::optional<int> dims = Internal::approximation_single_dimensions(inputs);
+        return {{{name, type_of<Decoded>(), dims}}, {{name, type_of<Storage>(), dims}}};
+    }
+
 private:
     static Pointwise pointwise() {
         return Pointwise{"storage_cast_stored", "storage_cast_decoded",
@@ -263,6 +299,16 @@ struct AdditiveOffset {
         user_assert(encoded.size() == 1 && encoded[0].types() == std::vector<Type>{type_of<Storage>()})
             << "AdditiveOffset::decode storage type mismatch\n";
         return {pointwise().decode(encoded[0])};
+    }
+
+    /** Dimensions and name follow the input port. */
+    ApproximationSignature signature(const ApproximationPorts &inputs) const {
+        if (inputs.size() > 1) {
+            return ApproximationSignature::unknown(inputs);
+        }
+        std::string name = inputs.empty() ? "value" : inputs[0].name;
+        std::optional<int> dims = Internal::approximation_single_dimensions(inputs);
+        return {{{name, type_of<Decoded>(), dims}}, {{name, type_of<Storage>(), dims}}};
     }
 
 private:
@@ -313,6 +359,16 @@ struct LittleEndianScalarPack {
         Func word("little_endian_scalar_word");
         word(records) = cast<Word>(concat_bits(pieces));
         return {word};
+    }
+
+    /** A word per record <-> its bytes in a new leading dimension. */
+    ApproximationSignature signature(const ApproximationPorts &inputs) const {
+        if (inputs.size() > 1) {
+            return ApproximationSignature::unknown(inputs);
+        }
+        std::optional<int> dims = Internal::approximation_single_dimensions(inputs);
+        return {{{inputs.empty() ? "word" : inputs[0].name, type_of<Word>(), dims}},
+                {{"bytes", UInt(8), dims ? std::optional<int>(*dims + 1) : std::nullopt}}};
     }
 };
 
@@ -370,6 +426,16 @@ struct BinaryAlphabetPack {
         return {values};
     }
 
+    /** (element, record...) values <-> one word per record. */
+    ApproximationSignature signature(const ApproximationPorts &inputs) const {
+        if (inputs.size() > 1) {
+            return ApproximationSignature::unknown(inputs);
+        }
+        std::optional<int> dims = Internal::approximation_single_dimensions(inputs);
+        return {{{inputs.empty() ? "values" : inputs[0].name, type_of<Value>(), dims}},
+                {{"word", word_type_, dims ? std::optional<int>(*dims - 1) : std::nullopt}}};
+    }
+
 private:
     int vector_size_;
     Type word_type_;
@@ -408,6 +474,16 @@ struct AdditiveRadixSplit {
         code(args) = cast<int8_t>(cast<int32_t>(encoded[0](call_args)) +
                                   cast<int32_t>(encoded[1](call_args)));
         return {code};
+    }
+
+    /** A code <-> its unsigned low digit and signed high contribution. */
+    ApproximationSignature signature(const ApproximationPorts &inputs) const {
+        if (inputs.size() > 1) {
+            return ApproximationSignature::unknown(inputs);
+        }
+        std::optional<int> dims = Internal::approximation_single_dimensions(inputs);
+        return {{{inputs.empty() ? "code" : inputs[0].name, std::nullopt, dims}},
+                {{"low", UInt(8), dims}, {"high", Int(8), dims}}};
     }
 
 private:
@@ -451,6 +527,11 @@ struct PlanarFieldPack {
         fields(element, record) = cast<uint8_t>((bytes(position, record) >> (plane * field_bits_)) &
                                                 ((1 << field_bits_) - 1));
         return {fields};
+    }
+
+    /** (element, record) fields <-> (position, record) bytes. */
+    ApproximationSignature signature() const {
+        return {{{"fields", std::nullopt, 2}}, {{"bytes", UInt(8), 2}}};
     }
 
 private:
@@ -538,6 +619,12 @@ struct SymmetricBlockQuantize {
         Func dequantized("symmetric_dequantized");
         dequantized(kk, blk) = cast<float>(encoded[0](kk, blk)) * encoded[1](blk);
         return {dequantized};
+    }
+
+    /** (within, block) floats <-> int8 codes and one float scale per block. */
+    ApproximationSignature signature() const {
+        return {{{"block", Float(32), 2}},
+                {{"codes", Int(8), 2}, {"scale", Float(32), 1}}};
     }
 
 private:
