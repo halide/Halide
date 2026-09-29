@@ -14,9 +14,8 @@ constexpr int kBlockSize = 8;
 // per-block amax reduction), decode() combining them back into a single
 // Func matching the original's signature, and approximate_by()'s eager
 // substitution.
-class SymmetricQuantizer : public Approximation {
-public:
-    EncodeResult encode(std::vector<Func> inputs) override {
+struct SymmetricQuantizer {
+    EncodeResult encode(std::vector<Func> inputs) const {
         Func f = inputs[0];
         Var x("x"), i("i");
         RDom r(0, kBlockSize, "r");
@@ -35,7 +34,7 @@ public:
         return {{q, d}, {amax}};
     }
 
-    DecodeResult decode(std::vector<Func> encoded) override {
+    DecodeResult decode(std::vector<Func> encoded) const {
         Func q = encoded[0], d = encoded[1];
         Var x("x");
         Func dequantized("dequantized");
@@ -65,52 +64,66 @@ int main(int argc, char **argv) {
 
     // Stage tracing preserves opaque identities through nested combinators,
     // including repeated component types and Apply/TrustedInverse ownership.
-    Identity first_identity, second_identity, trusted_encoder, trusted_decoder;
-    const ApproximationStageKey first_key = first_identity.stage_key();
-    const ApproximationStageKey second_key = second_identity.stage_key();
-    const ApproximationStageKey encoder_key = trusted_encoder.stage_key();
-    const ApproximationStageKey decoder_key = trusted_decoder.stage_key();
-    Apply applied(0, second_identity);
-    const ApproximationStageKey apply_key = applied.stage_key();
-    TrustedInverse trusted(trusted_encoder, trusted_decoder);
-    const ApproximationStageKey trusted_key = trusted.stage_key();
-    Compose nested(first_identity, std::move(applied), std::move(trusted));
-    const ApproximationStageKey nested_key = nested.stage_key();
+    Approximation first_identity = Identity{}, second_identity = Identity{};
+    Approximation trusted_encoder = Identity{}, trusted_decoder = Identity{};
+    Approximation applied = Apply(0, second_identity);
+    Approximation trusted = TrustedInverse(trusted_encoder, trusted_decoder);
+    Approximation nested = Compose(first_identity, applied, trusted);
+
+    // A copy of a handle is the same stage; a second conversion is not.
+    Approximation first_copy = first_identity;
+    if (!first_copy.same_as(first_identity) || first_identity.same_as(second_identity) ||
+        Approximation().defined() || !nested.defined()) {
+        printf("Approximation handle identity semantics are wrong\n");
+        return 1;
+    }
 
     Func traced_source("traced_source"), traced_consumer("traced_consumer");
     traced_source(x) = cast<float>(x);
     traced_consumer(x) = traced_source(x);
     ApproximationResult traced = traced_source.approximate_by(nested, {traced_consumer});
 
-    auto require_port = [&](const ApproximationStageKey &key, const char *label) {
-        if (!traced.encoded_by(key).defined() || !traced.decoded_by(key).defined()) {
+    auto require_port = [&](const Approximation &stage, const char *label) {
+        if (!traced.encoded_by(stage).defined() || !traced.decoded_by(stage).defined()) {
             printf("Missing encode/decode stage trace for %s\n", label);
             return false;
         }
         return true;
     };
-    if (!require_port(first_key, "first repeated Identity") ||
-        !require_port(second_key, "second repeated Identity") ||
-        !require_port(apply_key, "Apply") ||
-        !require_port(trusted_key, "TrustedInverse") ||
-        !require_port(nested_key, "outer Compose")) {
+    if (!require_port(first_identity, "first repeated Identity") ||
+        !require_port(second_identity, "second repeated Identity") ||
+        !require_port(first_copy, "copy of first Identity") ||
+        !require_port(applied, "Apply") ||
+        !require_port(trusted, "TrustedInverse") ||
+        !require_port(nested, "outer Compose")) {
         return 1;
     }
-    if (!traced.encoded_by(encoder_key).defined() || traced.decoded_by(encoder_key).defined() ||
-        traced.encoded_by(decoder_key).defined() || !traced.decoded_by(decoder_key).defined()) {
+    // Looking up a stage that wasn't invoked in a direction is an error, so
+    // check direction-specificity against the raw records instead.
+    auto recorded = [](const std::vector<ApproximationStageOutputs> &outputs, const Approximation &stage) {
+        for (const ApproximationStageOutputs &o : outputs) {
+            if (o.stage.same_as(stage)) {
+                return true;
+            }
+        }
+        return false;
+    };
+    if (!recorded(traced.encoded_stage_outputs, trusted_encoder) ||
+        recorded(traced.decoded_stage_outputs, trusted_encoder) ||
+        recorded(traced.encoded_stage_outputs, trusted_decoder) ||
+        !recorded(traced.decoded_stage_outputs, trusted_decoder)) {
         printf("TrustedInverse did not preserve direction-specific child traces\n");
         return 1;
     }
-    if (first_key == second_key) {
-        printf("Distinct Approximation instances unexpectedly share a stage key\n");
+    Approximation unused = Identity{};
+    if (recorded(traced.encoded_stage_outputs, unused) ||
+        recorded(traced.decoded_stage_outputs, unused)) {
+        printf("Unused stage unexpectedly recorded\n");
         return 1;
     }
-    Identity unused;
-    if (traced.encoded_by(unused.stage_key()).defined() ||
-        traced.decoded_by(unused.stage_key()).defined() ||
-        traced.encoded_by(first_key, 1).defined() ||
-        traced.decoded_by(first_key, 1).defined()) {
-        printf("Invalid stage key or port unexpectedly resolved\n");
+    if (traced.encoded_by(first_identity, 1).defined() ||
+        traced.decoded_by(first_identity, 1).defined()) {
+        printf("Out-of-range port unexpectedly resolved\n");
         return 1;
     }
 

@@ -38,8 +38,7 @@ inline std::vector<Expr> approximation_component_exprs(const std::vector<Var> &v
 
 /** Losslessly reshape a flat row into fixed-size records. In block-indexed
  * mode the flat side is `(within, record)` rather than a single flat index. */
-class BlockReshape : public Approximation {
-public:
+struct BlockReshape {
     explicit BlockReshape(int block_size, bool block_indexed = false)
         : extents_{block_size}, block_indexed_(block_indexed) {
     }
@@ -47,7 +46,7 @@ public:
         : extents_(std::move(extents)), block_indexed_(block_indexed) {
     }
 
-    EncodeResult encode(std::vector<Func> inputs) override {
+    EncodeResult encode(std::vector<Func> inputs) const {
         user_assert(inputs.size() == 1) << "BlockReshape::encode expects one input\n";
         Func flat = inputs[0];
         std::vector<Var> dims = block_vars();
@@ -65,7 +64,7 @@ public:
         return {{packed}, {}};
     }
 
-    DecodeResult decode(std::vector<Func> encoded) override {
+    DecodeResult decode(std::vector<Func> encoded) const {
         user_assert(encoded.size() == 1) << "BlockReshape::decode expects one input\n";
         Func packed = encoded[0];
         Var k("k"), kk("kk"), blk("blk");
@@ -111,8 +110,7 @@ private:
 /** Map consecutive logical Func slots to named fields of an exact struct
  * type. Scalar fields have `record_dimensions` dimensions; array fields have
  * an additional leading element dimension. */
-class StructLayout : public Approximation {
-public:
+struct StructLayout {
     StructLayout(Type record_type, std::vector<std::string> logical_fields,
                  int record_dimensions = 1)
         : record_type_(record_type), logical_fields_(std::move(logical_fields)),
@@ -136,7 +134,7 @@ public:
         }
     }
 
-    EncodeResult encode(std::vector<Func> inputs) override {
+    EncodeResult encode(std::vector<Func> inputs) const {
         user_assert(inputs.size() == logical_fields_.size())
             << "StructLayout::encode input count does not match logical field count\n";
         const StructTypeInfo *info = record_type_.struct_type();
@@ -165,7 +163,7 @@ public:
         return {{packed}, {}};
     }
 
-    DecodeResult decode(std::vector<Func> encoded) override {
+    DecodeResult decode(std::vector<Func> encoded) const {
         user_assert(encoded.size() == 1 && encoded[0].outputs() == 1 &&
                     encoded[0].types()[0] == record_type_)
             << "StructLayout::decode requires one Func of the exact record type\n";
@@ -220,9 +218,8 @@ private:
 /** Explicit numeric conversion between a decoded computation type and the
  * exact type stored in a representation. */
 template<typename Decoded, typename Storage>
-class StorageCast : public Approximation {
-public:
-    EncodeResult encode(std::vector<Func> inputs) override {
+struct StorageCast {
+    EncodeResult encode(std::vector<Func> inputs) const {
         user_assert(inputs.size() == 1 && inputs[0].types() == std::vector<Type>{type_of<Decoded>()})
             << "StorageCast::encode input type mismatch\n";
         Func input = inputs[0];
@@ -232,7 +229,7 @@ public:
         return {{stored}, {}};
     }
 
-    DecodeResult decode(std::vector<Func> encoded) override {
+    DecodeResult decode(std::vector<Func> encoded) const {
         user_assert(encoded.size() == 1 && encoded[0].types() == std::vector<Type>{type_of<Storage>()})
             << "StorageCast::decode storage type mismatch\n";
         Func input = encoded[0];
@@ -248,16 +245,15 @@ public:
  * packing: e.g. signed q4 codes [-8, 7] become stored nibbles [0, 15] before
  * PlanarFieldPack handles their physical layout. */
 template<typename Decoded, typename Storage>
-class AdditiveOffset : public Approximation {
+struct AdditiveOffset {
     static_assert(std::is_integral_v<Decoded> && std::is_integral_v<Storage>,
                   "AdditiveOffset requires integral types");
 
-public:
     explicit AdditiveOffset(int64_t offset)
         : offset_(offset) {
     }
 
-    EncodeResult encode(std::vector<Func> inputs) override {
+    EncodeResult encode(std::vector<Func> inputs) const {
         user_assert(inputs.size() == 1 && inputs[0].types() == std::vector<Type>{type_of<Decoded>()})
             << "AdditiveOffset::encode input type mismatch\n";
         Func input = inputs[0];
@@ -269,7 +265,7 @@ public:
         return {{stored}, {}};
     }
 
-    DecodeResult decode(std::vector<Func> encoded) override {
+    DecodeResult decode(std::vector<Func> encoded) const {
         user_assert(encoded.size() == 1 && encoded[0].types() == std::vector<Type>{type_of<Storage>()})
             << "AdditiveOffset::decode storage type mismatch\n";
         Func input = encoded[0];
@@ -289,9 +285,8 @@ private:
  * byte dimension. Decode deliberately uses concat_bits so struct lowering and
  * ordinary byte buffers share the same wide-load optimization path. */
 template<typename Word>
-class LittleEndianScalarPack : public Approximation {
-public:
-    EncodeResult encode(std::vector<Func> inputs) override {
+struct LittleEndianScalarPack {
+    EncodeResult encode(std::vector<Func> inputs) const {
         user_assert(inputs.size() == 1 && inputs[0].types() == std::vector<Type>{type_of<Word>()})
             << "LittleEndianScalarPack::encode word type mismatch\n";
         Func word = inputs[0];
@@ -306,7 +301,7 @@ public:
         return {{bytes}, {}};
     }
 
-    DecodeResult decode(std::vector<Func> encoded) override {
+    DecodeResult decode(std::vector<Func> encoded) const {
         user_assert(encoded.size() == 1 && encoded[0].types() == std::vector<Type>{UInt(8)} &&
                     encoded[0].dimensions() >= 2)
             << "LittleEndianScalarPack::decode requires byte arrays per record\n";
@@ -329,8 +324,7 @@ public:
  * Decode uses an embedded 8x256 byte-expansion LUT, allowing each source byte
  * to expand through one contiguous eight-byte load. */
 template<typename Value>
-class BinaryAlphabetPack : public Approximation {
-public:
+struct BinaryAlphabetPack {
     BinaryAlphabetPack(int vector_size, Type word_type, Value zero_value, Value one_value)
         : vector_size_(vector_size), word_type_(word_type), zero_value_(zero_value), one_value_(one_value),
           expansion_(8, 256) {
@@ -345,7 +339,7 @@ public:
         }
     }
 
-    EncodeResult encode(std::vector<Func> inputs) override {
+    EncodeResult encode(std::vector<Func> inputs) const {
         user_assert(inputs.size() == 1 && inputs[0].dimensions() >= 2)
             << "BinaryAlphabetPack::encode requires (element, record...)\n";
         Func values = inputs[0];
@@ -364,7 +358,7 @@ public:
         return {{word}, {word}};
     }
 
-    DecodeResult decode(std::vector<Func> encoded) override {
+    DecodeResult decode(std::vector<Func> encoded) const {
         user_assert(encoded.size() == 1 && encoded[0].types() == std::vector<Type>{word_type_})
             << "BinaryAlphabetPack::decode word type mismatch\n";
         Func word = encoded[0];
@@ -390,14 +384,13 @@ private:
 /** Split a signed code into an unsigned low digit and an additive weighted
  * high contribution. The second parameter recenters the signed code before
  * taking the low digit; decode is simply `code = low + high`. */
-class AdditiveRadixSplit : public Approximation {
-public:
+struct AdditiveRadixSplit {
     AdditiveRadixSplit(int radix, int offset)
         : radix_(radix), offset_(offset) {
         user_assert(radix_ > 1 && offset_ >= 0) << "Invalid AdditiveRadixSplit parameters\n";
     }
 
-    EncodeResult encode(std::vector<Func> inputs) override {
+    EncodeResult encode(std::vector<Func> inputs) const {
         user_assert(inputs.size() == 1) << "AdditiveRadixSplit::encode expects one code Func\n";
         Func code = inputs[0];
         std::vector<Var> args = Internal::approximation_component_vars(code.dimensions(), "code");
@@ -410,7 +403,7 @@ public:
         return {{low, high}, {}};
     }
 
-    DecodeResult decode(std::vector<Func> encoded) override {
+    DecodeResult decode(std::vector<Func> encoded) const {
         user_assert(encoded.size() == 2 && encoded[0].dimensions() == encoded[1].dimensions())
             << "AdditiveRadixSplit::decode expects low and high contributions\n";
         std::vector<Var> args = Internal::approximation_component_vars(encoded[0].dimensions(), "code");
@@ -428,15 +421,14 @@ private:
 /** Exact fixed-width planar packing. For `(field_bits, positions)`, one byte
  * contains `8/field_bits` planes, each plane spanning `positions` consecutive
  * elements. This component applies no recentering and no lookup policy. */
-class PlanarFieldPack : public Approximation {
-public:
+struct PlanarFieldPack {
     PlanarFieldPack(int field_bits, int positions)
         : field_bits_(field_bits), positions_(positions), planes_(8 / field_bits) {
         user_assert(field_bits_ > 0 && 8 % field_bits_ == 0 && positions_ > 0)
             << "Invalid PlanarFieldPack shape\n";
     }
 
-    EncodeResult encode(std::vector<Func> inputs) override {
+    EncodeResult encode(std::vector<Func> inputs) const {
         user_assert(inputs.size() == 1 && inputs[0].dimensions() == 2)
             << "PlanarFieldPack::encode currently requires (element, record)\n";
         Func fields = inputs[0];
@@ -451,7 +443,7 @@ public:
         return {{bytes}, {bytes}};
     }
 
-    DecodeResult decode(std::vector<Func> encoded) override {
+    DecodeResult decode(std::vector<Func> encoded) const {
         user_assert(encoded.size() == 1 && encoded[0].types() == std::vector<Type>{UInt(8)} &&
                     encoded[0].dimensions() == 2)
             << "PlanarFieldPack::decode currently requires (position, record) bytes\n";
@@ -491,13 +483,12 @@ inline Expr approximation_nearest_int(Expr value) {
 
 /** Symmetric per-block int8 quantization with explicit rounding and scale
  * selection policies. */
-class SymmetricBlockQuantize : public Approximation {
-public:
+struct SymmetricBlockQuantize {
     SymmetricBlockQuantize(int block_size, int qmax, BlockRoundingMode rounding, BlockScaleAnchor anchor)
         : block_size_(block_size), qmax_(qmax), rounding_(rounding), anchor_(anchor) {
     }
 
-    EncodeResult encode(std::vector<Func> inputs) override {
+    EncodeResult encode(std::vector<Func> inputs) const {
         user_assert(inputs.size() == 1) << "SymmetricBlockQuantize::encode expects one block Func\n";
         Func block = inputs[0];
         Var kk("kk"), blk("blk");
@@ -545,7 +536,7 @@ public:
         return {{codes, scale}, {stat}};
     }
 
-    DecodeResult decode(std::vector<Func> encoded) override {
+    DecodeResult decode(std::vector<Func> encoded) const {
         user_assert(encoded.size() == 2) << "SymmetricBlockQuantize::decode expects codes and scale\n";
         Var kk("kk"), blk("blk");
         Func dequantized("symmetric_dequantized");
