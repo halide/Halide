@@ -158,6 +158,13 @@ void test_ir() {
           let("u", x + 5, block({use(u), use(u * 2), use(u * 2)})),
           let("x.rp0", x + 5, let("x.rp1", var("x.rp0") * 2, block({use(var("x.rp0")), use(var("x.rp1")), use(var("x.rp1"))}))));
 
+    // An operation on two aliases of the same root is a chain of that root,
+    // with the second alias's chain as the operand, so it is shared and its
+    // let is built from the chains, not from the alias names.
+    check("operation on two aliases",
+          let("u", x + 1, let("w", x + 2, block({use(w - u), use(w - u)}))),
+          let("x.rp0", x + 1, let("x.rp1", x + 2, let("x.rp2", var("x.rp1") - var("x.rp0"), block({use(var("x.rp2")), use(var("x.rp2"))})))));
+
     // With two lets, the chain belongs to the inner one.
     check("chain of the inner root",
           let("t", v, let("u", opaque(y), block({use(t + var("u")), use(t + var("u"))}))),
@@ -189,13 +196,14 @@ void test_ir() {
           let("t", v, let("t.rp0", t * t + 1, block({use(t), use(rp0), use(rp0)}))));
 
     // Any pure node continues a chain, so the select is a chain of b (the
-    // innermost of its variables) and folds into b's let, and the comparison
-    // inside it, once shared by a let of x, is left with no use and dropped.
+    // innermost of its variables) and folds into b's let. The comparison in
+    // it is a chain of x shared by both sites, and its let is lifted above
+    // the folded let that needs it.
     Expr a = var("a"), b = var("b");
     Expr sel = select(x < y, a, b);
     check("select as a chain node",
           let("a", opaque(x), let("b", opaque(y), let("t", v, block({use(t), use((t + sel) * 2), use((t + sel) * 2)})))),
-          let("a", opaque(x), let("b.rp0", select(x < y, a, opaque(y)), let("t", v, let("t.rp0", (t + var("b.rp0")) * 2, block({use(t), use(rp0), use(rp0)}))))));
+          let("a", opaque(x), let("x.rp0", x < y, let("b.rp0", select(Variable::make(Bool(), "x.rp0"), a, opaque(y)), let("t", v, let("t.rp0", (t + var("b.rp0")) * 2, block({use(t), use(rp0), use(rp0)})))))));
 
     // Narrowing casts and pure calls chain; a widening cast does not, since
     // codegen folds it into the operation around it.

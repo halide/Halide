@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <climits>
+#include <functional>
 #include <map>
 #include <string>
 #include <unordered_map>
@@ -25,13 +26,18 @@ constexpr int no_node = -1;
 
 // One node of a chain: a pure IR node with the chain as one of its children
 // (or none, for a chain of the constant root) and the remaining children as
-// operands, each available where the chain's root is bound.
+// operands, each available where the chain's root is bound. An operand that is
+// itself a chain of a root bound at or outside this one is kept as that
+// chain's trie node: two sites spelling it differently (one through an alias
+// variable, say) then share the edge, and the let's value rebuilds it from the
+// node, so it never names a variable that isn't in scope where the let lands.
 struct Edge {
     IRNodeType kind = IRNodeType::Add;
     int chain_pos = -1;  // Index of the chain among the node's children.
     Type type;
-    std::vector<Expr> operands;  // The other children, in order.
-    Expr node;                   // The node this edge was made from, to rebuild Calls.
+    std::vector<Expr> operands;      // The other children, in order.
+    std::vector<int> operand_nodes;  // Trie node of each operand, or no_node for a plain expression.
+    Expr node;                       // The node this edge was made from, to rebuild Calls.
 };
 
 bool is_commutative(IRNodeType kind) {
@@ -63,7 +69,10 @@ bool same_edge(const Edge &a, const Edge &b) {
         }
     }
     for (size_t i = 0; i < a.operands.size(); i++) {
-        if (!equal(a.operands[i], b.operands[i])) {
+        if (a.operand_nodes[i] != b.operand_nodes[i]) {
+            return false;
+        }
+        if (a.operand_nodes[i] == no_node && !equal(a.operands[i], b.operands[i])) {
             return false;
         }
     }
@@ -136,6 +145,7 @@ struct RegionUses {
     int scope = no_node;          // Innermost scope holding the direct uses.
     int subtree_scope = no_node;  // Innermost scope holding the whole subtree.
     bool materialized = false;
+    int inject_scope = no_node;  // Where the let is, once materialized.
     std::string name;
 };
 
@@ -183,7 +193,8 @@ struct TrieNode {
     // than in a register of its own, so not worth a let when used once.
     bool is_trailing_constant() const {
         return (edge.kind == IRNodeType::Add || edge.kind == IRNodeType::Sub) &&
-               type.is_int_or_uint() && edge.operands.size() == 1 && is_const(edge.operands[0]);
+               type.is_int_or_uint() && edge.operands.size() == 1 &&
+               edge.operand_nodes[0] == no_node && is_const(edge.operands[0]);
     }
 };
 
@@ -241,6 +252,7 @@ struct Root {
     int depth = 0;        // Binding depth; free variables get distinct negative depths.
     int trie = no_node;
     int folded = no_node;  // Trie node whose chain replaces the let's value.
+    int next_name = 0;     // Counter for the .rp names of this root's lets.
 };
 
 struct Binding {
@@ -423,38 +435,184 @@ struct Analysis {
         return n;
     }
 
-    void materialize(Root &r, int n, int region, int scope, int &k) {
-        RegionUses *ru = nodes[n].find_region(region);
-        internal_assert(ru && !ru->materialized);
-        ru->materialized = true;
-        ru->name = r.name + ".rp" + std::to_string(k++);
-        injected_names.insert(ru->name);
+    void materialize(Root &r, int n, int region, int scope) {
+        RegionUses &ru = nodes[n].region_uses(region);
+        internal_assert(!ru.materialized);
+        ru.materialized = true;
+        ru.inject_scope = scope;
+        ru.name = r.name + ".rp" + std::to_string(r.next_name++);
+        injected_names.insert(ru.name);
         scopes[scope].injected.push_back(Injected{n, region});
         materialized++;
+    }
+
+    bool is_ancestor_or_equal(int a, int s) const {
+        while (s != no_node && scopes[s].depth > scopes[a].depth) {
+            s = scopes[s].parent;
+        }
+        return s == a;
+    }
+
+    // The nearest scope at or above s where a let of root r can go.
+    int valid_scope(int s, const Root &r) const {
+        while (s != r.scope && !can_inject(s, r)) {
+            internal_assert(s != no_node);
+            s = scopes[s].parent;
+        }
+        return s;
+    }
+
+    void relocate(int n, int region, int scope) {
+        RegionUses &ru = *nodes[n].find_region(region);
+        auto &from = scopes[ru.inject_scope].injected;
+        for (size_t i = 0; i < from.size(); i++) {
+            if (from[i].node == n && from[i].region == region) {
+                from.erase(from.begin() + i);
+                break;
+            }
+        }
+        ru.inject_scope = scope;
+        scopes[scope].injected.push_back(Injected{n, region});
+    }
+
+    // Is node n's let (or the root's variable, or a folded let) in scope at
+    // scope s for region 'region'?
+    bool visible_at(int n, int region, int s) const {
+        const TrieNode &node = nodes[n];
+        if (node.parent == no_node || node.folded) {
+            return true;
+        }
+        for (const RegionUses &ru : node.regions) {
+            if (ru.region == region && ru.materialized && is_ancestor_or_equal(ru.inject_scope, s)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Give operand node o a let in scope at scope s: a new one there, or its
+    // existing one lifted to a common ancestor. Its own operands are checked
+    // in turn through the worklist.
+    void ensure_visible(int o, int region, int s, std::vector<Injected> &work) {
+        if (visible_at(o, region, s)) {
+            return;
+        }
+        const Root &r = roots[nodes[o].root];
+        RegionUses *ru = nodes[o].find_region(region);
+        if (ru && ru->materialized) {
+            relocate(o, region, valid_scope(lca(ru->inject_scope, s), r));
+        } else {
+            materialize(roots[nodes[o].root], o, region, valid_scope(s, r));
+        }
+        work.push_back(Injected{o, region});
+    }
+
+    // The value of node n's let at scope s in a region is its chain from the
+    // nearest visible ancestor down, and rebuilding an operand chain inline
+    // could repeat work exponentially, so every operand chain on that path
+    // gets a let visible at s.
+    void ensure_operands(int n, int region, int s, std::vector<Injected> &work) {
+        const Root &r = roots[nodes[n].root];
+        int a = n;
+        while (true) {
+            for (int o : nodes[a].edge.operand_nodes) {
+                if (o != no_node) {
+                    ensure_visible(o, region, s, work);
+                }
+            }
+            a = nodes[a].parent;
+            if (a == r.trie || visible_at(a, region, s)) {
+                break;
+            }
+        }
+    }
+
+    // Does the chain from the root down to n use a chain of the root as an
+    // operand? Then it can't replace the root's let: the root's variable is
+    // not bound where that let's value is computed.
+    bool path_uses_root(int n, const Root &r) const {
+        for (int a = n; a != r.trie; a = nodes[a].parent) {
+            for (int o : nodes[a].edge.operand_nodes) {
+                if (o != no_node && nodes[o].root == nodes[n].root) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // Order the lets injected at a scope so that each comes after the lets it
+    // refers to: its visible ancestor and its operand chains at that scope.
+    void order_injected(int scope) {
+        std::vector<Injected> &list = scopes[scope].injected;
+        std::vector<Injected> ordered;
+        std::vector<bool> done(list.size(), false);
+        auto index_of = [&](int n, int region) {
+            for (size_t i = 0; i < list.size(); i++) {
+                if (list[i].node == n && list[i].region == region) {
+                    return (int)i;
+                }
+            }
+            return -1;
+        };
+        std::function<void(int)> visit = [&](int i) {
+            if (done[i]) {
+                return;
+            }
+            done[i] = true;
+            const Injected &e = list[i];
+            const Root &r = roots[nodes[e.node].root];
+            int a = e.node;
+            while (true) {
+                for (int o : nodes[a].edge.operand_nodes) {
+                    int j = o != no_node ? index_of(o, e.region) : -1;
+                    if (j >= 0) {
+                        visit(j);
+                    }
+                }
+                a = nodes[a].parent;
+                if (a == r.trie || nodes[a].folded) {
+                    break;
+                }
+                int j = index_of(a, e.region);
+                if (j >= 0) {
+                    visit(j);
+                    break;
+                }
+                if (visible_at(a, e.region, scope)) {
+                    break;
+                }
+            }
+            ordered.push_back(e);
+        };
+        for (size_t i = 0; i < list.size(); i++) {
+            visit((int)i);
+        }
+        list = std::move(ordered);
     }
 
     // Within one region, a chain prefix used by two or more chains gets its
     // own let, unless it is an unbranched step on the way to one that does;
     // such steps fold into the value of the let below them. A chain used
     // once gets a let too if that moves it out of a loop.
-    void decide(Root &r, int n, int region, int &k) {
+    void decide(Root &r, int n, int region) {
         for (int c = nodes[n].first_child; c != no_node; c = nodes[c].next_sibling) {
             RegionUses *cr = nodes[c].find_region(region);
             if (!cr || cr->subtree == 0) {
                 continue;
             }
             if (cr->subtree >= 2 && (cr->direct >= 1 || cr->live_children >= 2)) {
-                materialize(r, c, region, injection_scope(cr->subtree_scope, r), k);
+                materialize(r, c, region, injection_scope(cr->subtree_scope, r));
             } else if (cr->subtree == 1 && cr->direct == 1) {
                 int m = without_trailing_constants(c, r.trie);
                 if (m != r.trie && !nodes[m].find_region(region)->materialized) {
                     int scope = injection_scope(cr->subtree_scope, r);
                     if (crosses_loop(scope, cr->subtree_scope)) {
-                        materialize(r, m, region, scope, k);
+                        materialize(r, m, region, scope);
                     }
                 }
             }
-            decide(r, c, region, k);
+            decide(r, c, region);
         }
     }
 
@@ -474,7 +632,6 @@ struct Analysis {
             if (rt.subtree_uses == 0) {
                 continue;
             }
-            int k = 0;
             int top = r.trie;
             if (r.kind == RootKind::Let && rt.direct_uses == 0 && rt.live_children == 1) {
                 // Every use goes through one chain. The original let takes
@@ -489,24 +646,45 @@ struct Analysis {
                     n = without_trailing_constants(n, r.trie);
                     fold = n != r.trie && crosses_loop(r.scope, nodes[n].regions[0].subtree_scope);
                 }
-                if (fold) {
+                if (fold && !path_uses_root(n, r)) {
                     nodes[n].folded = true;
-                    nodes[n].folded_name = r.name + ".rp" + std::to_string(k++);
+                    nodes[n].folded_name = r.name + ".rp" + std::to_string(r.next_name++);
                     r.folded = n;
                     materialized++;
                     top = n;
                 }
             }
             for (size_t i = 0; i < nodes[top].regions.size(); i++) {
-                decide(r, top, nodes[top].regions[i].region, k);
+                decide(r, top, nodes[top].regions[i].region);
             }
         }
-        // A let's value may use chains of roots bound further out, so those
-        // lets must come first.
-        for (ScopeNode &s : scopes) {
-            std::stable_sort(s.injected.begin(), s.injected.end(), [&](const Injected &a, const Injected &b) {
-                return roots[nodes[a.node].root].depth < roots[nodes[b.node].root].depth;
-            });
+        // Every let's value must find its operand chains in scope where it
+        // lands; a folded let's value is computed just outside the root's body.
+        std::vector<Injected> work;
+        for (ScopeNode &sc : scopes) {
+            work.insert(work.end(), sc.injected.begin(), sc.injected.end());
+        }
+        for (const Root &r : roots) {
+            if (r.folded != no_node) {
+                int s = scopes[r.scope].parent;
+                for (int a = r.folded; a != r.trie; a = nodes[a].parent) {
+                    for (int o : nodes[a].edge.operand_nodes) {
+                        if (o != no_node) {
+                            ensure_visible(o, scopes[s].region, s, work);
+                        }
+                    }
+                }
+            }
+        }
+        while (!work.empty()) {
+            Injected i = work.back();
+            work.pop_back();
+            ensure_operands(i.node, i.region, nodes[i.node].find_region(i.region)->inject_scope, work);
+        }
+        for (size_t sc = 0; sc < scopes.size(); sc++) {
+            if (!scopes[sc].injected.empty()) {
+                order_injected((int)sc);
+            }
         }
     }
 };
@@ -680,12 +858,13 @@ protected:
     }
 
     // May e, with pending chain p, be an operand of a node on a chain of this
-    // root? It must be pure and available where the root is bound: everything
-    // it refers to is bound at or outside the root. That goes by the variables
-    // e names, not by the root of e's own chain: an alias variable stands for
-    // a chain of some root but is itself bound deeper.
+    // root? It must be pure and available where the root is bound. A chain is,
+    // when its own root is bound at or outside this one: the let's value
+    // rebuilds it from its trie node. Anything else must only name variables
+    // bound at or outside the root.
     bool operand_ok(const Expr &e, const Pending &p, int root) {
-        return expr_depth(e) <= an.roots[root].depth;
+        int d = p.valid() ? an.roots[p.root].depth : expr_depth(e);
+        return d <= an.roots[root].depth;
     }
 
     // Does this node continue a chain through one of its children? The pure
@@ -742,9 +921,11 @@ protected:
                 edge->type = node->type;
                 edge->node = Expr(node);
                 edge->operands.clear();
+                edge->operand_nodes.clear();
                 for (int i = 0; i < n; i++) {
                     if (i != chain) {
                         edge->operands.push_back(kids[i]);
+                        edge->operand_nodes.push_back(pend[i].valid() ? pend[i].trie : no_node);
                     }
                 }
                 // Commutative nodes are normalized to have the chain first.
@@ -1173,6 +1354,20 @@ class Rewrite : public IRMutator, public ChainTracker {
         return visit_nary(op, op->args.data(), (int)op->args.size());
     }
 
+    // An operand that is a chain node, as it reads at the current position:
+    // the root's variable, or its let's variable, which the analysis made
+    // sure is in scope.
+    Expr operand_node_expr(int n, int region) {
+        const TrieNode &node = an.nodes[n];
+        const Root &r = an.roots[node.root];
+        if (node.parent == no_node) {
+            return Variable::make(r.type, r.name);
+        }
+        const std::string *name = visible_name(n, region);
+        internal_assert(name) << "ReversePeel: no let in scope for operand chain of " << r.name << "\n";
+        return Variable::make(node.type, *name);
+    }
+
     // The value of node n's let in a region: its chain applied to the nearest
     // ancestor with a let visible there, or to base when given (the folded
     // root's value). Operands are rewritten here, at the let's own position,
@@ -1203,13 +1398,15 @@ class Rewrite : public IRMutator, public ChainTracker {
         for (int p : reverse_view(path)) {
             const Edge &edge = an.nodes[p].edge;
             internal_assert(e.defined() || edge.chain_pos < 0)
-                << "ReversePeel: chain of " << r.name << " (kind " << (int)r.kind << ") has no base for "
-                << edge.node << " with chain at " << edge.chain_pos << ", parent " << an.nodes[p].parent
-                << ", root trie " << r.trie << ", region " << region << "\n";
+                << "ReversePeel: chain of " << r.name << " has no base for " << edge.node << "\n";
             std::vector<Expr> operands;
             operands.reserve(edge.operands.size());
-            for (const Expr &o : edge.operands) {
-                operands.push_back(mutate(o));
+            for (size_t k = 0; k < edge.operands.size(); k++) {
+                if (edge.operand_nodes[k] != no_node) {
+                    operands.push_back(operand_node_expr(edge.operand_nodes[k], region));
+                } else {
+                    operands.push_back(mutate(edge.operands[k]));
+                }
             }
             e = apply_edge(edge, e, operands);
         }
@@ -1294,7 +1491,7 @@ class Rewrite : public IRMutator, public ChainTracker {
                 int n = an.roots[root].folded;
                 unbind_extra(an.nodes[n].folded_name);
                 cur_scope = an.scopes[f.scope].parent;
-                result = LetOrLetStmt::make(an.nodes[n].folded_name, value_of(n, no_node, f.value), std::move(result));
+                result = LetOrLetStmt::make(an.nodes[n].folded_name, value_of(n, an.scopes[cur_scope].region, f.value), std::move(result));
             } else if (f.value.same_as(f.op->value) && result.same_as(f.op->body)) {
                 result = f.op;
             } else {
