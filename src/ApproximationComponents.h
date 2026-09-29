@@ -222,21 +222,21 @@ struct StorageCast {
     EncodeResult encode(std::vector<Func> inputs) const {
         user_assert(inputs.size() == 1 && inputs[0].types() == std::vector<Type>{type_of<Decoded>()})
             << "StorageCast::encode input type mismatch\n";
-        Func input = inputs[0];
-        std::vector<Var> args = Internal::approximation_component_vars(input.dimensions(), "cast");
-        Func stored("storage_cast_stored");
-        stored(args) = strict_float(cast<Storage>(input(Internal::approximation_component_exprs(args))));
-        return {{stored}, {}};
+        return {{pointwise().encode(inputs[0])}, {}};
     }
 
     DecodeResult decode(std::vector<Func> encoded) const {
         user_assert(encoded.size() == 1 && encoded[0].types() == std::vector<Type>{type_of<Storage>()})
             << "StorageCast::decode storage type mismatch\n";
-        Func input = encoded[0];
-        std::vector<Var> args = Internal::approximation_component_vars(input.dimensions(), "cast");
-        Func decoded("storage_cast_decoded");
-        decoded(args) = strict_float(cast<Decoded>(input(Internal::approximation_component_exprs(args))));
-        return {{decoded}, {}};
+        return {{pointwise().decode(encoded[0])}, {}};
+    }
+
+private:
+    static Pointwise pointwise() {
+        return Pointwise{"storage_cast_stored", "storage_cast_decoded",
+                         [](Expr x) { return strict_float(cast<Storage>(x)); },
+                         [](Expr x) { return strict_float(cast<Decoded>(x)); },
+                         "cast"};
     }
 };
 
@@ -256,29 +256,25 @@ struct AdditiveOffset {
     EncodeResult encode(std::vector<Func> inputs) const {
         user_assert(inputs.size() == 1 && inputs[0].types() == std::vector<Type>{type_of<Decoded>()})
             << "AdditiveOffset::encode input type mismatch\n";
-        Func input = inputs[0];
-        std::vector<Var> args = Internal::approximation_component_vars(input.dimensions(), "offset");
-        std::vector<Expr> call_args = Internal::approximation_component_exprs(args);
-        Func stored("additive_offset_stored");
-        Expr offset = Internal::make_const(Int(64), offset_);
-        stored(args) = cast<Storage>(cast<int64_t>(input(call_args)) + offset);
-        return {{stored}, {}};
+        return {{pointwise().encode(inputs[0])}, {}};
     }
 
     DecodeResult decode(std::vector<Func> encoded) const {
         user_assert(encoded.size() == 1 && encoded[0].types() == std::vector<Type>{type_of<Storage>()})
             << "AdditiveOffset::decode storage type mismatch\n";
-        Func input = encoded[0];
-        std::vector<Var> args = Internal::approximation_component_vars(input.dimensions(), "offset");
-        std::vector<Expr> call_args = Internal::approximation_component_exprs(args);
-        Func decoded("additive_offset_decoded");
-        Expr offset = Internal::make_const(Int(64), offset_);
-        decoded(args) = cast<Decoded>(cast<int64_t>(input(call_args)) - offset);
-        return {{decoded}, {}};
+        return {{pointwise().decode(encoded[0])}, {}};
     }
 
 private:
     int64_t offset_;
+
+    Pointwise pointwise() const {
+        Expr offset = Internal::make_const(Int(64), offset_);
+        return Pointwise{"additive_offset_stored", "additive_offset_decoded",
+                         [offset](Expr x) { return cast<Storage>(cast<int64_t>(x) + offset); },
+                         [offset](Expr x) { return cast<Decoded>(cast<int64_t>(x) - offset); },
+                         "offset"};
+    }
 };
 
 /** Convert a scalar integral word per record to/from a leading little-endian
