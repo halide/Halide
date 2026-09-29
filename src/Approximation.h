@@ -10,9 +10,11 @@
  */
 
 #include <functional>
+#include <iosfwd>
 #include <memory>
 #include <string>
 #include <type_traits>
+#include <typeinfo>
 #include <utility>
 #include <vector>
 
@@ -22,6 +24,8 @@ namespace Halide {
 
 struct EncodeResult;
 struct DecodeResult;
+struct ApproximationResult;
+struct ApproximationTraceNode;
 
 /** Approximation is a value-semantic, type-erased handle (in the style of
  * std::function) to a lossy, quantified transformation of one or more Funcs'
@@ -115,7 +119,19 @@ class Approximation {
         virtual ~Concept() = default;
         virtual std::vector<Func> encode(const std::vector<Func> &inputs) const = 0;
         virtual std::vector<Func> decode(const std::vector<Func> &encoded) const = 0;
+        virtual std::string default_label() const = 0;
     };
+
+    // The shared identity of a stage: every copy of a handle points at one
+    // State, so the label lives here and is seen by all copies.
+    struct State {
+        std::unique_ptr<const Concept> impl;
+        std::string label;
+    };
+
+    /** A readable name for a unit type: demangled, with "Halide::" and
+     * anonymous-namespace qualifiers stripped. */
+    static std::string type_label(const std::type_info &type);
 
     template<typename T>
     struct Model;
@@ -177,6 +193,12 @@ class Approximation {
         using type = std::decay_t<decode_call_t<T, const Func &>>;
     };
 
+    template<typename T, typename = void>
+    struct has_name : std::false_type {};
+    template<typename T>
+    struct has_name<T, std::void_t<decltype(std::string(std::declval<const T &>().name()))>>
+        : std::true_type {};
+
     template<typename T>
     static constexpr Form encode_form = form_of<typename detect_encode_vec<T>::type,
                                                 typename detect_encode_one<T>::type>::value;
@@ -199,15 +221,33 @@ public:
     template<typename T, typename = enable_if_unit<T>>
     Approximation(T &&unit);
 
+    /** Wrap a copy of `unit` as a new stage with an explicit label. */
+    template<typename T, typename = enable_if_unit<T>>
+    Approximation(T &&unit, std::string label);
+
     bool defined() const {
-        return impl_ != nullptr;
+        return state_ != nullptr;
     }
 
     /** Do these handles refer to the same stage? True for copies of one
      * handle; false for two separate conversions of equal units. */
     bool same_as(const Approximation &other) const {
-        return impl_ == other.impl_;
+        return state_ == other.state_;
     }
+
+    /** Set this stage's label and return this handle. The label lives in the
+     * state shared by every copy of the handle (they are all the same stage),
+     * so this affects all existing copies too -- and the result is same_as()
+     * this handle. Typical use: `Approximation q = Approximation(unit).labelled("q");`
+     * or `Approximation q(unit, "q");`. */
+    Approximation labelled(std::string label) const;
+
+    /** A human-readable name for this stage, used when printing traces. It is
+     * the label set by labelled() (or the constructor), if any; otherwise the
+     * unit's `std::string name() const` if it has one; otherwise the unit's
+     * type name with "Halide::" qualifiers stripped (e.g. "Compose",
+     * "StorageCast<float, signed char>"). Empty for an undefined handle. */
+    std::string label() const;
 
     /** Produce the encoded form of `inputs`. EncodeResult::encoded's
      * elements are not required to have the same type, dimensionality, or
@@ -242,7 +282,21 @@ public:
     DecodeResult decode(const std::vector<Func> &encoded) const;
 
 private:
-    std::shared_ptr<const Concept> impl_;
+    std::shared_ptr<State> state_;
+};
+
+/** One handle call (encode or decode) in an execution trace. `children` are
+ * the handle calls that started and finished during this one, in the order
+ * they were invoked; a node completes after all of its children. */
+struct ApproximationTraceNode {
+    Approximation stage;
+    /** stage.label() when the call finished. */
+    std::string label;
+    /** The stage's output Funcs for this call. */
+    std::vector<Func> ports;
+    /** The Funcs discovered for this stage alone (see Approximation::encode). */
+    std::vector<Func> intermediates;
+    std::vector<ApproximationTraceNode> children;
 };
 
 /** The ports produced by one stage during encode or decode, plus the
@@ -263,7 +317,11 @@ struct ApproximationStageOutputs {
 struct EncodeResult {
     std::vector<Func> encoded;
     std::vector<Func> intermediates;
+    /** The trace of this call as a flat list: the post-order flattening of
+     * `trace` (children first, then the stage itself). */
     std::vector<ApproximationStageOutputs> stage_outputs;
+    /** The trace of this call as a tree; its root is this call's stage. */
+    ApproximationTraceNode trace;
 };
 
 /** The result of Approximation::decode(): decoded is the round-trip
@@ -276,6 +334,7 @@ struct DecodeResult {
     std::vector<Func> decoded;
     std::vector<Func> intermediates;
     std::vector<ApproximationStageOutputs> stage_outputs;
+    ApproximationTraceNode trace;
 };
 
 template<typename T>
@@ -304,11 +363,26 @@ struct Approximation::Model final : Approximation::Concept {
             return {unit.decode(encoded[0])};
         }
     }
+
+    std::string default_label() const override {
+        if constexpr (has_name<T>::value) {
+            return std::string(unit.name());
+        } else {
+            return type_label(typeid(T));
+        }
+    }
 };
 
 template<typename T, typename>
 Approximation::Approximation(T &&unit)
-    : impl_(std::make_shared<const Model<std::decay_t<T>>>(std::forward<T>(unit))) {
+    : Approximation(std::forward<T>(unit), std::string()) {
+}
+
+template<typename T, typename>
+Approximation::Approximation(T &&unit, std::string label)
+    : state_(std::make_shared<State>()) {
+    state_->impl = std::make_unique<const Model<std::decay_t<T>>>(std::forward<T>(unit));
+    state_->label = std::move(label);
 }
 
 /** The result of Func::approximate_by(): the primary replacement Func
@@ -336,6 +410,10 @@ struct ApproximationResult {
     std::vector<Func> intermediates;
     std::vector<ApproximationStageOutputs> encoded_stage_outputs;
     std::vector<ApproximationStageOutputs> decoded_stage_outputs;
+    /** The encode and decode traces as trees; the roots are the stages
+     * invoked by approximate_by() itself. */
+    ApproximationTraceNode encode_trace;
+    ApproximationTraceNode decode_trace;
 
     /** Return the given output port of `stage` (found by same_as()), or an
      * undefined Func if the port is out of range. It is an error if `stage`
@@ -343,7 +421,30 @@ struct ApproximationResult {
      * lookup would be ambiguous). */
     Func encoded_by(const Approximation &stage, size_t port = 0) const;
     Func decoded_by(const Approximation &stage, size_t port = 0) const;
+
+    /** Every Func that is an output port of some stage in either direction,
+     * deduplicated by name, in trace order (encode side first, each side
+     * post-order: children before parents). Callers can use it to schedule
+     * stage boundaries (e.g. compute_root them alongside reductions).
+     * `replacement` -- the decode root's output, already spliced into the
+     * consumers -- is excluded. A stage that passes an input through
+     * (Identity, Apply) reports it as a port, so the original Func may appear
+     * if such a stage sits at the very inside of the encode chain. */
+    std::vector<Func> stage_ports() const;
+
+    /** Is `f` (matched by name) one of stage_ports()? */
+    bool is_stage_port(const Func &f) const;
 };
+
+/** Print a trace as an indented tree, one line per call: the label, then
+ * `-> ` and the comma-separated port Func names. A non-empty intermediates
+ * list follows on its own line as `intermediates: a, b`, indented under its
+ * stage, then the children in invocation order. */
+std::ostream &operator<<(std::ostream &stream, const ApproximationTraceNode &node);
+
+/** Print both directions of an ApproximationResult under `encode:` and
+ * `decode:` headers. */
+std::ostream &operator<<(std::ostream &stream, const ApproximationResult &result);
 
 /** Sequentially composes any number of Approximations into a pipeline:
  * encode() runs `stages` back-to-front (the last stage first, on the
@@ -405,6 +506,9 @@ struct Apply {
 
     std::vector<Func> encode(const std::vector<Func> &inputs) const;
     std::vector<Func> decode(const std::vector<Func> &encoded) const;
+
+    /** "Apply[idx]" */
+    std::string name() const;
 
     int idx, encode_arity, decode_arity;
     Approximation inner;
