@@ -2821,7 +2821,8 @@ ApproximationResult Func::approximate_by(const Approximation &p, const vector<Fu
     add(enc.encoded);
     add(enc.intermediates);
     add(dec.intermediates);
-    return {round_trip, enc.encoded, intermediates, enc.stage_outputs, dec.stage_outputs};
+    return {round_trip, enc.encoded, intermediates, enc.stage_outputs, dec.stage_outputs,
+            std::move(enc.trace), std::move(dec.trace)};
 }
 
 Func Func::copy_to_device(DeviceAPI d) {
