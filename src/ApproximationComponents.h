@@ -46,7 +46,7 @@ struct BlockReshape {
         : extents_(std::move(extents)), block_indexed_(block_indexed) {
     }
 
-    EncodeResult encode(std::vector<Func> inputs) const {
+    std::vector<Func> encode(const std::vector<Func> &inputs) const {
         user_assert(inputs.size() == 1) << "BlockReshape::encode expects one input\n";
         Func flat = inputs[0];
         std::vector<Var> dims = block_vars();
@@ -61,10 +61,10 @@ struct BlockReshape {
         args.push_back(blk);
         Func packed("block_reshape_packed");
         packed(args) = block_indexed_ ? flat(within, blk) : flat(blk * block_size() + within);
-        return {{packed}, {}};
+        return {packed};
     }
 
-    DecodeResult decode(std::vector<Func> encoded) const {
+    std::vector<Func> decode(const std::vector<Func> &encoded) const {
         user_assert(encoded.size() == 1) << "BlockReshape::decode expects one input\n";
         Func packed = encoded[0];
         Var k("k"), kk("kk"), blk("blk");
@@ -83,7 +83,7 @@ struct BlockReshape {
         } else {
             out(k) = packed(args);
         }
-        return {{out}, {}};
+        return {out};
     }
 
 private:
@@ -134,7 +134,7 @@ struct StructLayout {
         }
     }
 
-    EncodeResult encode(std::vector<Func> inputs) const {
+    std::vector<Func> encode(const std::vector<Func> &inputs) const {
         user_assert(inputs.size() == logical_fields_.size())
             << "StructLayout::encode input count does not match logical field count\n";
         const StructTypeInfo *info = record_type_.struct_type();
@@ -160,10 +160,10 @@ struct StructLayout {
         }
         Func packed("struct_layout_packed");
         packed(records) = pack_struct(record_type_, values);
-        return {{packed}, {}};
+        return {packed};
     }
 
-    DecodeResult decode(std::vector<Func> encoded) const {
+    std::vector<Func> decode(const std::vector<Func> &encoded) const {
         user_assert(encoded.size() == 1 && encoded[0].outputs() == 1 &&
                     encoded[0].types()[0] == record_type_)
             << "StructLayout::decode requires one Func of the exact record type\n";
@@ -186,7 +186,7 @@ struct StructLayout {
             }
             outputs.push_back(output);
         }
-        return {outputs, {}};
+        return outputs;
     }
 
 private:
@@ -219,16 +219,16 @@ private:
  * exact type stored in a representation. */
 template<typename Decoded, typename Storage>
 struct StorageCast {
-    EncodeResult encode(std::vector<Func> inputs) const {
+    std::vector<Func> encode(const std::vector<Func> &inputs) const {
         user_assert(inputs.size() == 1 && inputs[0].types() == std::vector<Type>{type_of<Decoded>()})
             << "StorageCast::encode input type mismatch\n";
-        return {{pointwise().encode(inputs[0])}, {}};
+        return {pointwise().encode(inputs[0])};
     }
 
-    DecodeResult decode(std::vector<Func> encoded) const {
+    std::vector<Func> decode(const std::vector<Func> &encoded) const {
         user_assert(encoded.size() == 1 && encoded[0].types() == std::vector<Type>{type_of<Storage>()})
             << "StorageCast::decode storage type mismatch\n";
-        return {{pointwise().decode(encoded[0])}, {}};
+        return {pointwise().decode(encoded[0])};
     }
 
 private:
@@ -253,16 +253,16 @@ struct AdditiveOffset {
         : offset_(offset) {
     }
 
-    EncodeResult encode(std::vector<Func> inputs) const {
+    std::vector<Func> encode(const std::vector<Func> &inputs) const {
         user_assert(inputs.size() == 1 && inputs[0].types() == std::vector<Type>{type_of<Decoded>()})
             << "AdditiveOffset::encode input type mismatch\n";
-        return {{pointwise().encode(inputs[0])}, {}};
+        return {pointwise().encode(inputs[0])};
     }
 
-    DecodeResult decode(std::vector<Func> encoded) const {
+    std::vector<Func> decode(const std::vector<Func> &encoded) const {
         user_assert(encoded.size() == 1 && encoded[0].types() == std::vector<Type>{type_of<Storage>()})
             << "AdditiveOffset::decode storage type mismatch\n";
-        return {{pointwise().decode(encoded[0])}, {}};
+        return {pointwise().decode(encoded[0])};
     }
 
 private:
@@ -282,7 +282,7 @@ private:
  * ordinary byte buffers share the same wide-load optimization path. */
 template<typename Word>
 struct LittleEndianScalarPack {
-    EncodeResult encode(std::vector<Func> inputs) const {
+    std::vector<Func> encode(const std::vector<Func> &inputs) const {
         user_assert(inputs.size() == 1 && inputs[0].types() == std::vector<Type>{type_of<Word>()})
             << "LittleEndianScalarPack::encode word type mismatch\n";
         Func word = inputs[0];
@@ -294,10 +294,10 @@ struct LittleEndianScalarPack {
         Func bytes("little_endian_scalar_bytes");
         Expr bits = cast(type_of<Word>(), word(record_args));
         bytes(args) = cast<uint8_t>(bits >> (byte * 8));
-        return {{bytes}, {}};
+        return {bytes};
     }
 
-    DecodeResult decode(std::vector<Func> encoded) const {
+    std::vector<Func> decode(const std::vector<Func> &encoded) const {
         user_assert(encoded.size() == 1 && encoded[0].types() == std::vector<Type>{UInt(8)} &&
                     encoded[0].dimensions() >= 2)
             << "LittleEndianScalarPack::decode requires byte arrays per record\n";
@@ -312,7 +312,7 @@ struct LittleEndianScalarPack {
         }
         Func word("little_endian_scalar_word");
         word(records) = cast<Word>(concat_bits(pieces));
-        return {{word}, {}};
+        return {word};
     }
 };
 
@@ -335,7 +335,7 @@ struct BinaryAlphabetPack {
         }
     }
 
-    EncodeResult encode(std::vector<Func> inputs) const {
+    std::vector<Func> encode(const std::vector<Func> &inputs) const {
         user_assert(inputs.size() == 1 && inputs[0].dimensions() >= 2)
             << "BinaryAlphabetPack::encode requires (element, record...)\n";
         Func values = inputs[0];
@@ -351,10 +351,10 @@ struct BinaryAlphabetPack {
         word(records) = word(record_args) |
                         select(value == cast<Value>(one_value_),
                                cast(word_type_, 1) << bit, cast(word_type_, 0));
-        return {{word}, {word}};
+        return {word};
     }
 
-    DecodeResult decode(std::vector<Func> encoded) const {
+    std::vector<Func> decode(const std::vector<Func> &encoded) const {
         user_assert(encoded.size() == 1 && encoded[0].types() == std::vector<Type>{word_type_})
             << "BinaryAlphabetPack::decode word type mismatch\n";
         Func word = encoded[0];
@@ -367,7 +367,7 @@ struct BinaryAlphabetPack {
         args.insert(args.begin(), element);
         Func values("binary_alphabet_values");
         values(args) = expansion_(element % 8, byte);
-        return {{values}, {}};
+        return {values};
     }
 
 private:
@@ -386,7 +386,7 @@ struct AdditiveRadixSplit {
         user_assert(radix_ > 1 && offset_ >= 0) << "Invalid AdditiveRadixSplit parameters\n";
     }
 
-    EncodeResult encode(std::vector<Func> inputs) const {
+    std::vector<Func> encode(const std::vector<Func> &inputs) const {
         user_assert(inputs.size() == 1) << "AdditiveRadixSplit::encode expects one code Func\n";
         Func code = inputs[0];
         std::vector<Var> args = Internal::approximation_component_vars(code.dimensions(), "code");
@@ -396,10 +396,10 @@ struct AdditiveRadixSplit {
         Func low("additive_radix_low"), high("additive_radix_high");
         low(args) = cast<uint8_t>(low_value);
         high(args) = cast<int8_t>(value - low_value);
-        return {{low, high}, {}};
+        return {low, high};
     }
 
-    DecodeResult decode(std::vector<Func> encoded) const {
+    std::vector<Func> decode(const std::vector<Func> &encoded) const {
         user_assert(encoded.size() == 2 && encoded[0].dimensions() == encoded[1].dimensions())
             << "AdditiveRadixSplit::decode expects low and high contributions\n";
         std::vector<Var> args = Internal::approximation_component_vars(encoded[0].dimensions(), "code");
@@ -407,7 +407,7 @@ struct AdditiveRadixSplit {
         Func code("additive_radix_code");
         code(args) = cast<int8_t>(cast<int32_t>(encoded[0](call_args)) +
                                   cast<int32_t>(encoded[1](call_args)));
-        return {{code}, {}};
+        return {code};
     }
 
 private:
@@ -424,7 +424,7 @@ struct PlanarFieldPack {
             << "Invalid PlanarFieldPack shape\n";
     }
 
-    EncodeResult encode(std::vector<Func> inputs) const {
+    std::vector<Func> encode(const std::vector<Func> &inputs) const {
         user_assert(inputs.size() == 1 && inputs[0].dimensions() == 2)
             << "PlanarFieldPack::encode currently requires (element, record)\n";
         Func fields = inputs[0];
@@ -436,10 +436,10 @@ struct PlanarFieldPack {
         bytes(position, record) = cast<uint8_t>(0);
         bytes(position, record) = bytes(position, record) |
                                   cast<uint8_t>(value << (plane * field_bits_));
-        return {{bytes}, {bytes}};
+        return {bytes};
     }
 
-    DecodeResult decode(std::vector<Func> encoded) const {
+    std::vector<Func> decode(const std::vector<Func> &encoded) const {
         user_assert(encoded.size() == 1 && encoded[0].types() == std::vector<Type>{UInt(8)} &&
                     encoded[0].dimensions() == 2)
             << "PlanarFieldPack::decode currently requires (position, record) bytes\n";
@@ -450,7 +450,7 @@ struct PlanarFieldPack {
         Func fields("planar_field_values");
         fields(element, record) = cast<uint8_t>((bytes(position, record) >> (plane * field_bits_)) &
                                                 ((1 << field_bits_) - 1));
-        return {{fields}, {}};
+        return {fields};
     }
 
 private:
@@ -484,7 +484,7 @@ struct SymmetricBlockQuantize {
         : block_size_(block_size), qmax_(qmax), rounding_(rounding), anchor_(anchor) {
     }
 
-    EncodeResult encode(std::vector<Func> inputs) const {
+    std::vector<Func> encode(const std::vector<Func> &inputs) const {
         user_assert(inputs.size() == 1) << "SymmetricBlockQuantize::encode expects one block Func\n";
         Func block = inputs[0];
         Var kk("kk"), blk("blk");
@@ -529,15 +529,15 @@ struct SymmetricBlockQuantize {
         } else {
             codes(kk, blk) = cast<int8_t>(min(qmax_, approximation_nearest_int(scaled)));
         }
-        return {{codes, scale}, {stat}};
+        return {codes, scale};
     }
 
-    DecodeResult decode(std::vector<Func> encoded) const {
+    std::vector<Func> decode(const std::vector<Func> &encoded) const {
         user_assert(encoded.size() == 2) << "SymmetricBlockQuantize::decode expects codes and scale\n";
         Var kk("kk"), blk("blk");
         Func dequantized("symmetric_dequantized");
         dequantized(kk, blk) = cast<float>(encoded[0](kk, blk)) * encoded[1](blk);
-        return {{dequantized}, {}};
+        return {dequantized};
     }
 
 private:

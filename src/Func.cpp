@@ -3,6 +3,7 @@
 #include <cstring>
 #include <iostream>
 #include <limits>
+#include <set>
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
@@ -2808,10 +2809,19 @@ ApproximationResult Func::approximate_by(const Approximation &p, const vector<Fu
         g.function().substitute_calls(func, round_trip.function());
     }
 
-    vector<Func> handles = enc.encoded;
-    handles.insert(handles.end(), enc.handles.begin(), enc.handles.end());
-    handles.insert(handles.end(), dec.handles.begin(), dec.handles.end());
-    return {round_trip, enc.encoded, handles, enc.stage_outputs, dec.stage_outputs};
+    vector<Func> intermediates;
+    std::set<std::string> seen = {name(), round_trip.name()};
+    auto add = [&](const vector<Func> &fs) {
+        for (const Func &g : fs) {
+            if (seen.insert(g.name()).second) {
+                intermediates.push_back(g);
+            }
+        }
+    };
+    add(enc.encoded);
+    add(enc.intermediates);
+    add(dec.intermediates);
+    return {round_trip, enc.encoded, intermediates, enc.stage_outputs, dec.stage_outputs};
 }
 
 Func Func::copy_to_device(DeviceAPI d) {

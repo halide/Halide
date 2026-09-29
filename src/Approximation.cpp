@@ -1,6 +1,10 @@
 #include "Approximation.h"
 
+#include <set>
+
 #include "Error.h"
+#include "FindCalls.h"
+#include "Function.h"
 
 namespace Halide {
 
@@ -43,100 +47,153 @@ void Approximation::check_single_input(const std::vector<Func> &inputs, const ch
         << inputs.size() << " inputs, but requires exactly one\n";
 }
 
+namespace {
+
+// The trace shared by every handle call nested under the outermost one on this
+// thread. Encode and decode share it.
+thread_local std::vector<ApproximationStageOutputs> *active_trace = nullptr;
+
+struct TraceScope {
+    std::vector<ApproximationStageOutputs> local;
+    bool owner;
+
+    TraceScope()
+        : owner(active_trace == nullptr) {
+        if (owner) {
+            active_trace = &local;
+        }
+    }
+
+    ~TraceScope() {
+        if (owner) {
+            active_trace = nullptr;
+        }
+    }
+
+    std::vector<ApproximationStageOutputs> &trace() {
+        return *active_trace;
+    }
+};
+
+// Post-order DFS over direct calls (visited by name order) so producers come
+// before consumers. Inputs are never entered.
+void discover(const Internal::Function &f, const std::set<std::string> &inputs,
+              const std::set<std::string> &outputs, std::set<std::string> &visited,
+              std::vector<Func> &result) {
+    if (inputs.count(f.name()) || !visited.insert(f.name()).second) {
+        return;
+    }
+    for (const auto &[name, callee] : Internal::find_direct_calls(f)) {
+        discover(callee, inputs, outputs, visited, result);
+    }
+    if (!outputs.count(f.name())) {
+        result.push_back(Func(f));
+    }
+}
+
+std::vector<Func> find_intermediates(const std::vector<Func> &inputs, const std::vector<Func> &outputs) {
+    std::set<std::string> input_names, output_names, visited;
+    for (const Func &f : inputs) {
+        if (f.defined()) {
+            input_names.insert(f.name());
+        }
+    }
+    for (const Func &f : outputs) {
+        if (f.defined()) {
+            output_names.insert(f.name());
+        }
+    }
+    std::vector<Func> result;
+    for (const Func &f : outputs) {
+        if (f.defined()) {
+            discover(f.function(), input_names, output_names, visited, result);
+        }
+    }
+    return result;
+}
+
+}  // namespace
+
 EncodeResult Approximation::encode(const std::vector<Func> &inputs) const {
     user_assert(defined()) << "encode called on an undefined Approximation\n";
-    EncodeResult r = impl_->encode(inputs);
-    r.stage_outputs.push_back({*this, r.encoded});
-    return r;
+    TraceScope scope;
+    size_t start = scope.trace().size();
+    std::vector<Func> encoded = impl_->encode(inputs);
+    std::vector<Func> intermediates = find_intermediates(inputs, encoded);
+    scope.trace().push_back({*this, encoded, intermediates});
+    std::vector<ApproximationStageOutputs> stage_outputs(scope.trace().begin() + start, scope.trace().end());
+    return {std::move(encoded), std::move(intermediates), std::move(stage_outputs)};
 }
 
 DecodeResult Approximation::decode(const std::vector<Func> &encoded) const {
     user_assert(defined()) << "decode called on an undefined Approximation\n";
-    DecodeResult r = impl_->decode(encoded);
-    r.stage_outputs.push_back({*this, r.decoded});
-    return r;
+    TraceScope scope;
+    size_t start = scope.trace().size();
+    std::vector<Func> decoded = impl_->decode(encoded);
+    std::vector<Func> intermediates = find_intermediates(encoded, decoded);
+    scope.trace().push_back({*this, decoded, intermediates});
+    std::vector<ApproximationStageOutputs> stage_outputs(scope.trace().begin() + start, scope.trace().end());
+    return {std::move(decoded), std::move(intermediates), std::move(stage_outputs)};
 }
 
-EncodeResult Compose::encode(std::vector<Func> inputs) const {
+std::vector<Func> Compose::encode(const std::vector<Func> &inputs) const {
     user_assert(!stages.empty()) << "Compose::encode: no stages\n";
-
-    std::vector<Func> handles;
-    std::vector<ApproximationStageOutputs> stage_outputs;
-    std::vector<Func> current = std::move(inputs);
+    std::vector<Func> current = inputs;
     for (int i = (int)stages.size() - 1; i >= 0; i--) {
-        EncodeResult r = stages[i].encode(current);
-        stage_outputs.insert(stage_outputs.end(), r.stage_outputs.begin(), r.stage_outputs.end());
-        if (i > 0) {
-            // Not the final (outermost) stage -- its encoded output is an
-            // intermediate between stages, so it needs scheduling like any
-            // other handle, but isn't part of the signature contract this
-            // Compose itself returns.
-            handles.insert(handles.end(), r.encoded.begin(), r.encoded.end());
-        }
-        handles.insert(handles.end(), r.handles.begin(), r.handles.end());
-        current = std::move(r.encoded);
+        current = stages[i].encode(current).encoded;
     }
-    return {current, handles, stage_outputs};
+    return current;
 }
 
-DecodeResult Compose::decode(std::vector<Func> encoded) const {
+std::vector<Func> Compose::decode(const std::vector<Func> &encoded) const {
     user_assert(!stages.empty()) << "Compose::decode: no stages\n";
-
-    std::vector<Func> handles;
-    std::vector<ApproximationStageOutputs> stage_outputs;
-    std::vector<Func> current = std::move(encoded);
-    for (int i = 0; i < (int)stages.size(); i++) {
-        DecodeResult r = stages[i].decode(current);
-        stage_outputs.insert(stage_outputs.end(), r.stage_outputs.begin(), r.stage_outputs.end());
-        if (i + 1 < (int)stages.size()) {
-            handles.insert(handles.end(), r.decoded.begin(), r.decoded.end());
-        }
-        handles.insert(handles.end(), r.handles.begin(), r.handles.end());
-        current = std::move(r.decoded);
+    std::vector<Func> current = encoded;
+    for (size_t i = 0; i < stages.size(); i++) {
+        current = stages[i].decode(current).decoded;
     }
-    return {current, handles, stage_outputs};
+    return current;
 }
 
-EncodeResult Apply::encode(std::vector<Func> inputs) const {
+std::vector<Func> Apply::encode(const std::vector<Func> &inputs) const {
     user_assert(idx + encode_arity <= (int)inputs.size())
         << "Apply::encode: idx (" << idx << ") + encode_arity (" << encode_arity
         << ") exceeds the input count (" << inputs.size() << ")\n";
     std::vector<Func> target(inputs.begin() + idx, inputs.begin() + idx + encode_arity);
-    EncodeResult inner_result = inner.encode(target);
+    std::vector<Func> inner_encoded = inner.encode(target).encoded;
 
     std::vector<Func> encoded(inputs.begin(), inputs.begin() + idx);
-    encoded.insert(encoded.end(), inner_result.encoded.begin(), inner_result.encoded.end());
+    encoded.insert(encoded.end(), inner_encoded.begin(), inner_encoded.end());
     encoded.insert(encoded.end(), inputs.begin() + idx + encode_arity, inputs.end());
-    return {encoded, inner_result.handles, inner_result.stage_outputs};
+    return encoded;
 }
 
-DecodeResult Apply::decode(std::vector<Func> encoded) const {
+std::vector<Func> Apply::decode(const std::vector<Func> &encoded) const {
     user_assert(idx + decode_arity <= (int)encoded.size())
         << "Apply::decode: idx (" << idx << ") + decode_arity (" << decode_arity
         << ") exceeds the input count (" << encoded.size() << ")\n";
     std::vector<Func> target(encoded.begin() + idx, encoded.begin() + idx + decode_arity);
-    DecodeResult inner_result = inner.decode(target);
+    std::vector<Func> inner_decoded = inner.decode(target).decoded;
 
     std::vector<Func> decoded(encoded.begin(), encoded.begin() + idx);
-    decoded.insert(decoded.end(), inner_result.decoded.begin(), inner_result.decoded.end());
+    decoded.insert(decoded.end(), inner_decoded.begin(), inner_decoded.end());
     decoded.insert(decoded.end(), encoded.begin() + idx + decode_arity, encoded.end());
-    return {decoded, inner_result.handles, inner_result.stage_outputs};
+    return decoded;
 }
 
-EncodeResult TrustedInverse::encode(std::vector<Func> inputs) const {
-    return encoder.encode(inputs);
+std::vector<Func> TrustedInverse::encode(const std::vector<Func> &inputs) const {
+    return encoder.encode(inputs).encoded;
 }
 
-DecodeResult TrustedInverse::decode(std::vector<Func> encoded) const {
-    return decoder.decode(encoded);
+std::vector<Func> TrustedInverse::decode(const std::vector<Func> &encoded) const {
+    return decoder.decode(encoded).decoded;
 }
 
-EncodeResult Choose::encode(std::vector<Func> inputs) const {
-    return chosen.encode(inputs);
+std::vector<Func> Choose::encode(const std::vector<Func> &inputs) const {
+    return chosen.encode(inputs).encoded;
 }
 
-DecodeResult Choose::decode(std::vector<Func> encoded) const {
-    return chosen.decode(encoded);
+std::vector<Func> Choose::decode(const std::vector<Func> &encoded) const {
+    return chosen.decode(encoded).decoded;
 }
 
 namespace {
@@ -209,32 +266,32 @@ Func Pointwise::decode(const Func &encoded) const {
     return apply_pointwise(encoded, decode_fn, decode_name, var_prefix, "decode");
 }
 
-EncodeResult Identity::encode(std::vector<Func> inputs) const {
-    return {inputs, {}, {}};
+std::vector<Func> Identity::encode(const std::vector<Func> &inputs) const {
+    return inputs;
 }
 
-DecodeResult Identity::decode(std::vector<Func> encoded) const {
-    return {encoded, {}, {}};
+std::vector<Func> Identity::decode(const std::vector<Func> &encoded) const {
+    return encoded;
 }
 
-EncodeResult Permute::encode(std::vector<Func> inputs) const {
+std::vector<Func> Permute::encode(const std::vector<Func> &inputs) const {
     user_assert(inputs.size() == forward.size()) << "Permutation size does not match input size";
     std::vector<Func> result;
     result.reserve(inputs.size());
     for (int i = 0; i < (int)inputs.size(); i++) {
         result.push_back(inputs[forward[i]]);
     }
-    return {result, {}, {}};
+    return result;
 }
 
-DecodeResult Permute::decode(std::vector<Func> encoded) const {
+std::vector<Func> Permute::decode(const std::vector<Func> &encoded) const {
     user_assert(encoded.size() == forward.size()) << "Permutation size does not match encoded size";
     std::vector<Func> result;
     result.reserve(encoded.size());
     for (int i = 0; i < (int)encoded.size(); i++) {
         result.push_back(encoded[backward[i]]);
     }
-    return {result, {}, {}};
+    return result;
 }
 
 }  // namespace Halide
