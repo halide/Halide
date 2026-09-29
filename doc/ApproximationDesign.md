@@ -90,8 +90,8 @@ Every stage invoked through a handle, including from inside another unit's
 a stage's Funcs by keeping a handle to it. The outermost handle call on a thread
 opens a trace and nested calls append to it; encode and decode share that one
 trace. The trace is a tree
-(`ApproximationTraceNode{stage, label, ports, intermediates, children}`): a
-call's children are the handle calls made during it, in invocation order, and
+(`ApproximationTraceNode{stage, label, ports, port_names, intermediates, children}`):
+a call's children are the handle calls made during it, in invocation order, and
 each call completes after its children. The flat `stage_outputs` lists are its
 post-order flattening, and `EncodeResult::trace`, `DecodeResult::trace`, and
 `ApproximationResult::encode_trace`/`decode_trace` expose the tree itself.
@@ -102,7 +102,7 @@ else the unit's type name (`Compose`, `StorageCast<float, signed char>`). The
 label lives in state shared by all copies of the handle (they are one stage), so
 `labelled()` affects every copy and returns a handle `same_as` the original.
 `operator<<` prints a trace node, or an `ApproximationResult` (under `encode:`
-and `decode:`), as an indented tree of `label -> port names`, with each stage's
+and `decode:`), as an indented tree of `label -> port=Func`, with each stage's
 intermediates on an `intermediates:` line. `ApproximationResult::stage_ports()`
 returns every stage output Func in either direction (deduplicated, encode side
 first, excluding the replacement), for scheduling stage boundaries.
@@ -119,6 +119,44 @@ the unit references from outside (e.g. a shared lookup table); callers filter.
 Elementwise units need not even write that:
 `Pointwise{name, encode_fn, decode_fn}` builds one from a pair of `Expr -> Expr`
 lambdas (or `std::vector<Expr>` ones for Tuple-valued Funcs).
+
+**Named ports and declared signatures.** Every Func a stage consumes or produces
+is a port: `ApproximationPort{name, optional type, optional dimensions}`. A unit
+may declare its interface with one of a static
+`ApproximationSignature signature() const` or a contextual
+`signature(const ApproximationPorts &inputs) const` (given the resolved input
+ports, return the full signature; combinators and shape-polymorphic units use
+this). The signature is written in the encode direction: decode consumes
+`outputs` and produces `inputs`. Undeclared units are still fine: their outputs
+are named at run time, output `i` taking input `i`'s name if the counts match
+(so single-Func units preserve names), else positionally (`"0"`, `"1"`, ...).
+`Approximation::signature(inputs)` resolves all of this without running
+anything; an undeclared multi-Func unit has an *unknown* signature
+(`known == false`). Units may also take a port-aware form,
+`encode(inputs, input_ports)` / `decode(encoded, encoded_ports)`, which
+`Compose` and `Apply` use. The handle's `encode(inputs, input_ports = {})` and
+`decode(encoded, encoded_ports = {})` resolve the input ports (given, else
+declared, else positional; a size mismatch is an error), check each Func against
+its port's type and dimensions, call the unit, resolve and check the output
+ports the same way, and report them as `encoded_ports`/`decoded_ports` and in
+the trace. Violations are `user_error`s naming the stage, direction, port, and
+expected vs actual. `approximate_by` names its input port after the root's
+declared input, else `"input"`. A decode run with no ports (e.g. after
+`compute_offline` severs the encode) takes its input names from the declared
+outputs; decoded names come from the declared inputs, which for units whose
+signature depends on the encode-side context (`Apply`, `Identity`) falls back to
+the naming rule.
+
+`Apply("scale", inner)` selects its target by port name instead of position: in
+encode it starts at the input port so named (it is an error if there is none or
+several) and spans the inner's declared input count (else one); in decode it
+starts at the inner's first encoded output port. Names propagate through both
+forms. `ApproximationResult::encoded_by`/`decoded_by(stage, "name")` look ports
+up by name. `Approximation::describe()` (also `operator<<`) prints the structure
+without running anything, one `label (inputs) -> (outputs)` line per stage, with
+children (`Compose`: innermost first, `Apply`: the inner, `TrustedInverse`:
+encoder then decoder, `Choose`: the chosen stage) indented beneath and given the
+ports they would receive.
 
 **Signature contract.** `decode(encode(f).encoded).decoded[0]` must reproduce
 `f`'s arg list and value type exactly — that's what makes it valid to splice
