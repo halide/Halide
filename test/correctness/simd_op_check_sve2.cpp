@@ -678,7 +678,7 @@ private:
                 add_arm64("finite", is_vector ? sel_op("", "fcmge", "fcmeq") : "", is_inf(f_1));
             }
 
-            if (bits == 16 && target.os != Target::IOS && target.os != Target::OSX) {
+            if (bits == 16 && target.os != Target::IOS && target.os != Target::MacOS) {
                 // Actually, the following ops are not vectorized because SIMD instruction is unavailable.
                 // The purpose of the test is just to confirm no error.
                 // In case the target has FP16 feature, native type conversion between fp16 and fp32 should be generated
@@ -725,7 +725,7 @@ private:
             // which makes it prone to false-positive detection as we only search strings line-by-line.
 
             // LDn       -       Structured Load strided elements
-            if (target.os != Target::IOS && target.os != Target::OSX &&
+            if (target.os != Target::IOS && target.os != Target::MacOS &&
                 Halide::Internal::get_llvm_version() >= 220) {
                 for (int stride = 2; stride <= 4; ++stride) {
 

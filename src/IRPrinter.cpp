@@ -557,7 +557,14 @@ IRPrinter::IRPrinter(ostream &s)
 
     auto detect_color = [&](const std::ostream *terminal) {
         std::string opt = get_env_variable("HL_COLORS");
-        bool use_colors = !opt.empty() ? opt == "1" : supports_ansi(terminal);
+        bool use_colors;
+        if (!opt.empty()) {
+            use_colors = opt == "1";
+        } else {
+            // Respect NO_COLOR in addition to whether we're writing to a
+            // terminal, matching the profiler report's color gate.
+            use_colors = get_env_variable("NO_COLOR").empty() && supports_ansi(terminal);
+        }
 
         if (use_colors) {
             ansi = true;

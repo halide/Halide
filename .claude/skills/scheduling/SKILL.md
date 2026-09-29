@@ -11,11 +11,10 @@ description: >-
   specialize, bound, ...). Also use it for reading `print_loop_nest` output,
   diagnosing a slow or high-memory Halide pipeline, choosing inline vs
   compute_at vs compute_root, or interpreting bounds inference. Prefer this
-  skill over guessing at directive semantics or schedule shape — it routes to
-  an in-repo guide with a chapter per directive. Trigger it even when the user
-  only says a Halide pipeline is "slow", mentions vectorization/parallelism/
-  tiling/sliding windows, or asks how a `Func` actually gets computed, without
-  saying "scheduling" explicitly.
+  skill over guessing at directive semantics or schedule shape. Trigger it
+  even when the user only says a Halide pipeline is "slow", mentions
+  vectorization/parallelism/tiling/sliding windows, or asks how a `Func`
+  actually gets computed, without saying "scheduling" explicitly.
 ---
 
 # Scheduling Halide Pipelines

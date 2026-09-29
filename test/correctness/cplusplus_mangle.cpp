@@ -326,8 +326,8 @@ int main() {
     Target targets[kTestTargetCount]{
         Target(Target::Linux, Target::X86, 32),
         Target(Target::Linux, Target::X86, 64),
-        Target(Target::OSX, Target::X86, 32),
-        Target(Target::OSX, Target::X86, 64),
+        Target(Target::MacOS, Target::X86, 32),
+        Target(Target::MacOS, Target::X86, 64),
         Target(Target::IOS, Target::ARM, 32),
         Target(Target::IOS, Target::ARM, 64),
         Target(Target::Windows, Target::X86, 32),
