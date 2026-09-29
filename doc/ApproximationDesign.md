@@ -88,8 +88,24 @@ are the same stage; converting a plain unit twice makes two distinct stages.
 Every stage invoked through a handle, including from inside another unit's
 `encode`/`decode`, is recorded in the result's stage outputs, so callers look up
 a stage's Funcs by keeping a handle to it. The outermost handle call on a thread
-opens a trace and nested calls append to it (children first); encode and decode
-share that one trace.
+opens a trace and nested calls append to it; encode and decode share that one
+trace. The trace is a tree
+(`ApproximationTraceNode{stage, label, ports, intermediates, children}`): a
+call's children are the handle calls made during it, in invocation order, and
+each call completes after its children. The flat `stage_outputs` lists are its
+post-order flattening, and `EncodeResult::trace`, `DecodeResult::trace`, and
+`ApproximationResult::encode_trace`/`decode_trace` expose the tree itself.
+
+Each handle has a label for display: `labelled("x")` (or the two-argument
+constructor) sets it, else the unit's `std::string name() const` if it has one,
+else the unit's type name (`Compose`, `StorageCast<float, signed char>`). The
+label lives in state shared by all copies of the handle (they are one stage), so
+`labelled()` affects every copy and returns a handle `same_as` the original.
+`operator<<` prints a trace node, or an `ApproximationResult` (under `encode:`
+and `decode:`), as an indented tree of `label -> port names`, with each stage's
+intermediates on an `intermediates:` line. `ApproximationResult::stage_ports()`
+returns every stage output Func in either direction (deduplicated, encode side
+first, excluding the replacement), for scheduling stage boundaries.
 
 Units only return their outputs. Per direction, a unit provides either
 `std::vector<Func> encode(const std::vector<Func> &) const` or
