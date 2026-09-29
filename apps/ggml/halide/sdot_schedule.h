@@ -14,7 +14,7 @@
 // outermost relayout wrapper; the scale*codes product lives deeper, inside the
 // dequantizer Func the Approximation combinators build. eager_inline() no-ops
 // on any Func not currently directly called and flattens exposed calls left to
-// right, so inlining the whole set of inlinable decode handles -- one pass per
+// right, so inlining the whole set of inlinable decode intermediates -- one pass per
 // possible chain level -- flattens the decode chains of every operand
 // regardless of build order, leaving (codes*scale)*... with the scales as
 // loop-invariant leaves. See doc: the SDOT investigation on ggml-on-qk.
@@ -66,7 +66,7 @@ inline std::vector<Halide::Func> sdot_partial(Halide::Func &acc,
         decode_funcs.push_back(op.replacement);
     }
     for (const ApproximationResult &op : operands) {
-        for (const Func &h : op.handles) {
+        for (const Func &h : op.intermediates) {
             if (h.function().can_be_inlined() && !excluded(h)) {
                 decode_funcs.push_back(h);
             }

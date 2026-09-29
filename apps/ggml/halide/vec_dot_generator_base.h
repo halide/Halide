@@ -181,7 +181,7 @@ public:
                 wtT_r = WtT.approximate_by(spec.weight_codec, {Acc});
                 to_sever.insert(to_sever.end(), wtT_r.encoded.begin(), wtT_r.encoded.end());
                 bind_to.push_back(x_blocks);
-                for (Func h : wtT_r.handles) {
+                for (Func h : wtT_r.intermediates) {
                     if (h.has_update_definition()) {
                         h.compute_root();
                     }
@@ -191,7 +191,7 @@ public:
                 actT_r = VecT.approximate_by(spec.act_codec, {Acc});
                 to_sever.insert(to_sever.end(), actT_r.encoded.begin(), actT_r.encoded.end());
                 bind_to.push_back(y_blocks);
-                for (Func h : actT_r.handles) {
+                for (Func h : actT_r.intermediates) {
                     if (h.has_update_definition()) {
                         h.compute_root();
                     }
@@ -217,9 +217,9 @@ public:
             _halide_internal_assert(codes_leaf.defined() && qh_leaf.defined());
         } else {
             // q5_1's legacy composition has no stage handles for these Funcs
-            // (qh is a scheduling handle of Q5StructBlockLayout, not a port),
+            // (qh is an intermediate of Q5StructBlockLayout, not a port),
             // so its boundaries are still discovered by generated name.
-            for (const Func &h : wt_r.handles) {
+            for (const Func &h : wt_r.intermediates) {
                 if (h.name() == "combine_bits_code") {
                     codes_leaf = h;
                 } else if (h.name() == "q5_struct_block_qh") {
@@ -235,7 +235,7 @@ public:
             std::vector<Func> tail_inline;
             if (share_weight_tail) {
                 tail_inline.push_back(wt_r.replacement);
-                for (const Func &h : wt_r.handles) {
+                for (const Func &h : wt_r.intermediates) {
                     if (h.function().can_be_inlined()) {
                         tail_inline.push_back(h);
                     }
@@ -243,7 +243,7 @@ public:
             }
             if (share_act_tail) {
                 tail_inline.push_back(act_r.replacement);
-                for (const Func &h : act_r.handles) {
+                for (const Func &h : act_r.intermediates) {
                     if (h.function().can_be_inlined()) {
                         tail_inline.push_back(h);
                     }
@@ -272,15 +272,15 @@ public:
             }
         };
 
-        // Only handles with update definitions (per-block stat reductions) need
+        // Only intermediates with update definitions (per-block stat reductions) need
         // explicit scheduling; pure pass-throughs stay inline (same reasoning as
         // symmetric_vec_dot_generator.cpp).
-        for (Func h : wt_r.handles) {
+        for (Func h : wt_r.intermediates) {
             if (h.has_update_definition()) {
                 h.compute_root();
             }
         }
-        for (Func h : act_r.handles) {
+        for (Func h : act_r.intermediates) {
             if (h.has_update_definition()) {
                 h.compute_root();
             }
@@ -294,7 +294,7 @@ public:
             // then fuse their paired-block loops. This mirrors GGML and avoids
             // the generic sever path's horizontal Int(32) reduction per block.
             Func min_leaf, scale_leaf;
-            for (const Func &h : wt_r.handles) {
+            for (const Func &h : wt_r.intermediates) {
                 if (h.name() == "q5_struct_block_min") {
                     min_leaf = h;
                 } else if (h.name() == "q5_struct_block_scale") {
@@ -302,7 +302,7 @@ public:
                 }
             }
             Func codes_tail, scale_tail;
-            for (const Func &h : wtT_r.handles) {
+            for (const Func &h : wtT_r.intermediates) {
                 if (h.name().find("combine_bits_code") == 0) {
                     codes_tail = h;
                 } else if (h.name().find("q5_struct_block_scale") == 0) {
@@ -391,7 +391,7 @@ public:
             Func acc_dot = Acc.update().rfactor({{r.y, u}});
 
             std::vector<Func> winl = {wt_r.replacement};
-            for (const Func &h : wt_r.handles) {
+            for (const Func &h : wt_r.intermediates) {
                 // Keep the materialized codes leaf (Q5_1) out of the flatten, so
                 // its qh table read stays a per-block contiguous load.
                 if (h.function().can_be_inlined() &&
@@ -419,7 +419,7 @@ public:
             // Product term: flatten the activation's full decode chain and
             // re-hoist to pull d_act out, leaving the scale-free Int(32) dot.
             std::vector<Func> ainl = {act_r.replacement};
-            for (const Func &h : act_r.handles) {
+            for (const Func &h : act_r.intermediates) {
                 if (h.function().can_be_inlined()) {
                     ainl.push_back(h);
                 }
