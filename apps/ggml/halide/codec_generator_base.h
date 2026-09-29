@@ -25,6 +25,9 @@
 
 #include "Halide.h"
 
+#include <set>
+#include <string>
+
 #include "quant_components.h"
 
 namespace ggml_halide {
@@ -61,8 +64,23 @@ public:
         identity(x) = input(x);
 
         ApproximationResult r = Func(input).approximate_by(sb.scheme, {identity});
-        for (Func h : r.handles) {
-            h.compute_root();
+        // Materialize the reductions and every stage-boundary Func (a stage's
+        // ports); other pure Funcs inside a stage stay inline. The Q5 struct
+        // layout's packed high-bit word is the one non-port pure Func that is
+        // also materialized (found by name, like vec_dot_generator_base.h).
+        std::set<std::string> boundary;
+        for (const auto *stages : {&r.encoded_stage_outputs, &r.decoded_stage_outputs}) {
+            for (const ApproximationStageOutputs &so : *stages) {
+                for (const Func &port : so.ports) {
+                    boundary.insert(port.name());
+                }
+            }
+        }
+        for (Func h : r.intermediates) {
+            if (h.has_update_definition() || boundary.count(h.name()) ||
+                h.name() == "q5_struct_block_qh") {
+                h.compute_root();
+            }
         }
 
         // Bind compute_offline() to a properly-named ImageParam of the packed

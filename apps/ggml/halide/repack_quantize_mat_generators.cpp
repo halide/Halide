@@ -69,7 +69,7 @@ inline QuantizeMatPipe build_quantize_mat(Approximation scheme, int block_bytes)
     identity(col, row) = x(col, row);
 
     ApproximationResult r = Func(x).approximate_by(scheme, {identity});
-    for (Func h : r.handles) {
+    for (Func h : r.intermediates) {
         if (h.has_update_definition()) {
             h.compute_root();
         }

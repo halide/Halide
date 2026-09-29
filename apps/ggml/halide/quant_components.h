@@ -355,7 +355,7 @@ public:
         : block_size_(block_size), levels_(levels), rounding_(rounding) {
     }
 
-    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) const {
+    std::vector<Halide::Func> encode(const std::vector<Halide::Func> &inputs) const {
         using namespace Halide;
         Func block = inputs[0];  // block(kk, blk)
         Var kk("kk"), blk("blk");
@@ -385,7 +385,7 @@ public:
             codes(kk, blk) = cast<int8_t>(cast<uint8_t>(x0 + 0.5f));
         }
 
-        return {{codes, scale, minv}, {stat}};
+        return {codes, scale, minv};
     }
 
     std::vector<Halide::Func> decode(const std::vector<Halide::Func> &encoded) const {
@@ -695,7 +695,7 @@ public:
           plane_axis_(plane_axis), value_scale_(value_scale) {
     }
 
-    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) const {
+    std::vector<Halide::Func> encode(const std::vector<Halide::Func> &inputs) const {
         using namespace Halide;
         if (plane_axis_) {
             _halide_user_error << "PlanarBitPack plane-axis mode is decode-only "
@@ -715,7 +715,7 @@ public:
         Func bytes("planar_bit_pack_bytes");
         bytes(byte_idx, blk) = cast<uint8_t>(0);
         bytes(byte_idx, blk) = bytes(byte_idx, blk) | cast<uint8_t>(field << (rp * field_bits_));
-        return {{bytes}, {bytes}};
+        return {bytes};
     }
 
     Halide::Func decode(const Halide::Func &bytes) const {
@@ -987,7 +987,7 @@ public:
         : group_size_(group_size), mode_(mode) {
     }
 
-    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) const {
+    std::vector<Halide::Func> encode(const std::vector<Halide::Func> &inputs) const {
         using namespace Halide;
         Func codes = inputs[0], scale = inputs[1];
         Var blk("blk");
@@ -1001,7 +1001,7 @@ public:
             Func sum_f("append_sums_scaled");
             sum_f(blk) = cast<float>(sum_i(blk)) * scale(blk);
 
-            return {{codes, scale, sum_f}, {sum_i}};
+            return {codes, scale, sum_f};
         }
         Var g("g");
         RDom rg(0, group_size_, "rg");
@@ -1013,7 +1013,7 @@ public:
         Func bsums("append_sums_raw");
         bsums(g, blk) = cast<int16_t>(sum_i(g, blk));
 
-        return {{codes, scale, bsums}, {sum_i}};
+        return {codes, scale, bsums};
     }
 
     std::vector<Halide::Func> decode(const std::vector<Halide::Func> &encoded) const {
@@ -1214,7 +1214,7 @@ public:
         return {packed};
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    std::vector<Halide::Func> decode(const std::vector<Halide::Func> &encoded) const {
         using namespace Halide;
         Func packed = encoded[0];
         Var local("local"), blk("blk");
@@ -1235,9 +1235,9 @@ public:
         if (affine_) {
             Func min("q5_struct_block_min");
             min(blk) = cast<float>(field(packed(blk), "m"));
-            return {{codes_bytes, scale, min}, {qh}};
+            return {codes_bytes, scale, min};
         }
-        return {{codes_bytes, scale}, {qh}};
+        return {codes_bytes, scale};
     }
 
 private:
@@ -1331,14 +1331,14 @@ inline BlockLayout make_block_layout(std::vector<FieldSpec> fields) {
 // packed byte buffer as a single 2-D uint8 Func. Wrapped as ExternQuantize
 // below and used as the *encoder* half of a Halide::TrustedInverse, whose
 // decoder half is the Compose that unpacks and dequantizes those bytes.
-inline Halide::EncodeResult extern_quantize_blocks(std::vector<Halide::Func> inputs,
-                                                   const std::string &extern_name) {
+inline std::vector<Halide::Func> extern_quantize_blocks(const std::vector<Halide::Func> &inputs,
+                                                        const std::string &extern_name) {
     using namespace Halide;
     Func flat = inputs[0];
     Func blocks(extern_name + "_blocks");
     std::vector<ExternFuncArgument> args = {flat};
     blocks.define_extern(extern_name, args, UInt(8), 2, NameMangling::C);
-    return {{blocks}, {}};
+    return {blocks};
 }
 
 // Decode the 2-byte little-endian fp16 delta stored at bytes(offset)/
@@ -1432,8 +1432,8 @@ public:
         : extern_name_(std::move(extern_name)) {
     }
 
-    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) const {
-        return extern_quantize_blocks(std::move(inputs), extern_name_);
+    std::vector<Halide::Func> encode(const std::vector<Halide::Func> &inputs) const {
+        return extern_quantize_blocks(inputs, extern_name_);
     }
 
     std::vector<Halide::Func> decode(const std::vector<Halide::Func> &) const {
@@ -2223,7 +2223,7 @@ public:
         : block_size_(block_size), blocklen_(blocklen), delta_bytes_(delta_bytes), with_bsums_(with_bsums) {
     }
 
-    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) const {
+    std::vector<Halide::Func> encode(const std::vector<Halide::Func> &inputs) const {
         using namespace Halide;
         Func code = inputs[0], scale = inputs[1];
         Var byte("byte"), ib("ib");
@@ -2241,7 +2241,7 @@ public:
         Func blocks("repack_interleave_blocks");
         if (!with_bsums_) {
             blocks(byte, ib) = select(byte < header, delta_byte, code_byte);
-            return {{blocks}, {}};
+            return {blocks};
         }
 
         // Q8_K's block_q8_Kx4 appends `bsums`: int16 group-sums of the int8
@@ -2266,7 +2266,7 @@ public:
         Expr bsum_byte = cast<uint8_t>(select(bsum_is_lo, bsum_bits & 0xff, (bsum_bits >> 8) & 0xff));
 
         blocks(byte, ib) = select(byte < header, delta_byte, byte < payload_end, code_byte, bsum_byte);
-        return {{blocks}, {bsums}};
+        return {blocks};
     }
 
     std::vector<Halide::Func> decode(const std::vector<Halide::Func> &encoded) const {

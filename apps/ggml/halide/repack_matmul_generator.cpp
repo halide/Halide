@@ -126,12 +126,12 @@ public:
         std::vector<ImageParam> bind = {weight_blocks, act_blocks};
         Pipeline({s}).compute_offline(sever, bind);
 
-        for (Func h : wr.handles) {
+        for (Func h : wr.intermediates) {
             if (h.has_update_definition()) {
                 h.compute_root();
             }
         }
-        for (Func h : ar.handles) {
+        for (Func h : ar.intermediates) {
             if (h.has_update_definition()) {
                 h.compute_root();
             }
@@ -239,12 +239,12 @@ public:
         std::vector<ImageParam> bind = {weight_blocks, act_blocks};
         Pipeline({s}).compute_offline(sever, bind);
 
-        for (Func h : wr.handles) {
+        for (Func h : wr.intermediates) {
             if (h.has_update_definition()) {
                 h.compute_root();
             }
         }
-        for (Func h : ar.handles) {
+        for (Func h : ar.intermediates) {
             if (h.has_update_definition()) {
                 h.compute_root();
             }
