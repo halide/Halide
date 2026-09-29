@@ -208,6 +208,11 @@ struct ScopeNode {
     ScopeKind kind = ScopeKind::For;
     const IRNode *node = nullptr;
     int root = no_node;  // The root bound by this Let/LetStmt/For, if any.
+    // A let whose value is a chain of another root binds an alias of that
+    // chain's trie node instead of a root of its own, so that its uses and
+    // those of other lets with the same value share one trie.
+    int alias_root = no_node;
+    int alias_trie = no_node;
     // The innermost enclosing region boundary: a kernel's outermost gpu loop.
     int boundary = no_node;
     bool in_gpu_kernel = false;
@@ -240,7 +245,8 @@ struct Root {
 
 struct Binding {
     int depth;
-    int root;  // no_node for anything but a root variable.
+    int root;  // no_node for anything but a root or alias variable.
+    int trie;  // The trie node an alias stands for, else no_node.
 };
 
 bool is_root_type(Type t) {
@@ -256,6 +262,9 @@ struct Analysis {
     int const_root = no_node;
     int materialized = 0;
     std::unordered_set<std::string> injected_names;
+    // Names bound as aliases. Once the chain has a let of its own they are
+    // mere renames, and are substituted away.
+    std::unordered_set<std::string> alias_names;
 
     int lca(int a, int b) const {
         if (a == no_node) {
@@ -571,8 +580,8 @@ protected:
         return p;
     }
 
-    void bind(const std::string &name, int root) {
-        bindings.push(name, Binding{depth, root});
+    void bind(const std::string &name, int root, int trie = no_node) {
+        bindings.push(name, Binding{depth, root, trie});
         depth++;
     }
 
@@ -584,7 +593,7 @@ protected:
     // Bind a name the analysis never saw without moving the depth counter, so
     // that depths keep meaning the same thing in both passes.
     void bind_extra(const std::string &name) {
-        bindings.push(name, Binding{depth, no_node});
+        bindings.push(name, Binding{depth, no_node, no_node});
     }
 
     void unbind_extra(const std::string &name) {
@@ -613,7 +622,7 @@ protected:
         const Binding *b = bindings.find(op->name);
         int root = b ? b->root : free_root(op);
         if (root != no_node) {
-            set_pending(op, root, an.roots[root].trie);
+            set_pending(op, root, b && b->trie != no_node ? b->trie : an.roots[root].trie);
         }
     }
 
@@ -672,10 +681,11 @@ protected:
 
     // May e, with pending chain p, be an operand of a node on a chain of this
     // root? It must be pure and available where the root is bound: everything
-    // it refers to is bound at or outside the root.
+    // it refers to is bound at or outside the root. That goes by the variables
+    // e names, not by the root of e's own chain: an alias variable stands for
+    // a chain of some root but is itself bound deeper.
     bool operand_ok(const Expr &e, const Pending &p, int root) {
-        int d = p.valid() ? an.roots[p.root].depth : expr_depth(e);
-        return d <= an.roots[root].depth;
+        return expr_depth(e) <= an.roots[root].depth;
     }
 
     // Does this node continue a chain through one of its children? The pure
@@ -897,15 +907,29 @@ class Analyze : public IRVisitor, public ChainTracker {
         return id;
     }
 
-    void open_let(const IRNode *node, const std::string &name, Type type, ScopeKind kind) {
-        int root = no_node;
-        if (is_root_type(type)) {
-            root = an.add_root(RootKind::Let, node, name, type, depth);
+    void open_let(const IRNode *node, const std::string &name, const Expr &value, ScopeKind kind) {
+        // A value that is a chain of another root makes the name an alias of
+        // that chain; the value is one use of the chain like any other.
+        Pending pv = take(value.get());
+        if (pv.valid()) {
+            finish(pv);
         }
-        bind(name, root);
+        int root = no_node;
+        if (pv.valid() && pv.trie != an.roots[pv.root].trie) {
+            bind(name, pv.root, pv.trie);
+            an.alias_names.insert(name);
+        } else {
+            if (is_root_type(value.type())) {
+                root = an.add_root(RootKind::Let, node, name, value.type(), depth);
+            }
+            bind(name, root);
+        }
         int scope = open_scope(kind, node, root, false);
         if (root != no_node) {
             an.roots[root].scope = scope;
+        } else if (pv.valid()) {
+            an.scopes[scope].alias_root = pv.root;
+            an.scopes[scope].alias_trie = pv.trie;
         }
     }
 
@@ -915,7 +939,7 @@ class Analyze : public IRVisitor, public ChainTracker {
         Stmt body;
         while (op) {
             op->value.accept(this);
-            open_let(op, op->name, op->value.type(), ScopeKind::LetStmt);
+            open_let(op, op->name, op->value, ScopeKind::LetStmt);
             frames.push_back(op);
             body = op->body;
             op = body.as<LetStmt>();
@@ -933,7 +957,7 @@ class Analyze : public IRVisitor, public ChainTracker {
         Expr body;
         while (op) {
             op->value.accept(this);
-            open_let(op, op->name, op->value.type(), ScopeKind::Let);
+            open_let(op, op->name, op->value, ScopeKind::Let);
             frames.push_back(op);
             body = op->body;
             op = body.as<Let>();
@@ -1170,12 +1194,18 @@ class Rewrite : public IRMutator, public ChainTracker {
                 break;
             }
         }
+        // The constant root has no variable; a chain reaching it starts from
+        // its first node's operands alone.
         Expr e = base;
-        if (!e.defined() && r.kind != RootKind::Constant) {
+        if (!e.defined() && !(a == r.trie && r.kind == RootKind::Constant)) {
             e = Variable::make(an.nodes[a].type, *name);
         }
         for (int p : reverse_view(path)) {
             const Edge &edge = an.nodes[p].edge;
+            internal_assert(e.defined() || edge.chain_pos < 0)
+                << "ReversePeel: chain of " << r.name << " (kind " << (int)r.kind << ") has no base for "
+                << edge.node << " with chain at " << edge.chain_pos << ", parent " << an.nodes[p].parent
+                << ", root trie " << r.trie << ", region " << region << "\n";
             std::vector<Expr> operands;
             operands.reserve(edge.operands.size());
             for (const Expr &o : edge.operands) {
@@ -1238,7 +1268,11 @@ class Rewrite : public IRMutator, public ChainTracker {
             Expr value = mutate(op->value);
             int scope = enter_scope(op);
             int root = an.scopes[scope].root;
-            bind(op->name, root);
+            if (an.scopes[scope].alias_trie != no_node) {
+                bind(op->name, an.scopes[scope].alias_root, an.scopes[scope].alias_trie);
+            } else {
+                bind(op->name, root);
+            }
             if (root != no_node && an.roots[root].folded != no_node) {
                 bind_extra(an.nodes[an.roots[root].folded].folded_name);
             }
@@ -1249,10 +1283,12 @@ class Rewrite : public IRMutator, public ChainTracker {
         }
         Body result = mutate(body);
         for (const Frame &f : reverse_view(frames)) {
+            // The lets injected at this let's body may refer to its variable,
+            // so it stays bound while their values are built.
             unbind_injected(f.scope);
-            unbind(f.op->name);
             cur_scope = f.scope;
             result = wrap_injected<LetOrLetStmt, Body>(f.scope, std::move(result));
+            unbind(f.op->name);
             int root = an.scopes[f.scope].root;
             if (root != no_node && an.roots[root].folded != no_node) {
                 int n = an.roots[root].folded;
@@ -1394,20 +1430,29 @@ public:
     }
 };
 
-// An injected let can end up without references: its uses may have been
-// operands of a chain that folded into a let placed further out, where this
-// let is not in scope, so that let rebuilt the operand inline instead.
+// Cleans up after the rewrite. An injected let can end up without references:
+// its uses may have been operands of a chain that folded into a let placed
+// further out, where this let is not in scope, so that let rebuilt the
+// operand inline instead. An alias let whose chain got a let of its own is a
+// mere rename, and is substituted away.
 class DropUnreferenced : public IRMutator {
     std::unordered_map<std::string, int> refs;
+    const std::unordered_set<std::string> &aliases;
+    std::unordered_map<std::string, Expr> renames;
 
     using IRMutator::visit;
 
     Expr visit(const Variable *op) override {
-        auto it = refs.find(op->name);
+        Expr result = op;
+        auto r = renames.find(op->name);
+        if (r != renames.end()) {
+            result = r->second;
+        }
+        auto it = refs.find(result.as<Variable>()->name);
         if (it != refs.end()) {
             it->second++;
         }
-        return op;
+        return result;
     }
 
     template<typename LetOrLetStmt, typename Body>
@@ -1415,12 +1460,18 @@ class DropUnreferenced : public IRMutator {
         std::vector<const LetOrLetStmt *> frames;
         Body body;
         while (op) {
+            if (aliases.count(op->name) && op->value.template as<Variable>()) {
+                renames[op->name] = mutate(op->value);
+            }
             frames.push_back(op);
             body = op->body;
             op = body.template as<LetOrLetStmt>();
         }
         Body result = mutate(body);
         for (const LetOrLetStmt *f : reverse_view(frames)) {
+            if (renames.erase(f->name)) {
+                continue;
+            }
             auto it = refs.find(f->name);
             if (it != refs.end() && it->second == 0) {
                 // Dropped, value and all, so nothing it refers to counts.
@@ -1445,8 +1496,13 @@ class DropUnreferenced : public IRMutator {
     }
 
 public:
-    DropUnreferenced(const std::unordered_set<std::string> &names) {
-        for (const std::string &n : names) {
+    DropUnreferenced(const std::unordered_set<std::string> &injected,
+                     const std::unordered_set<std::string> &aliases)
+        : aliases(aliases) {
+        for (const std::string &n : injected) {
+            refs[n] = 0;
+        }
+        for (const std::string &n : aliases) {
             refs[n] = 0;
         }
     }
@@ -1466,7 +1522,7 @@ Stmt reverse_peel_lets(const Stmt &s) {
         return s;
     }
     Stmt result = Rewrite(an).run(s);
-    return DropUnreferenced(an.injected_names)(result);
+    return DropUnreferenced(an.injected_names, an.alias_names)(result);
 }
 
 }  // namespace Internal

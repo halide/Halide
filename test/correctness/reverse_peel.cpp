@@ -147,6 +147,17 @@ void test_ir() {
           loop("i", y, use(x * 3 + i)),
           let("x.rp0", x * 3, loop("i", y, use(var("x.rp0") + i))));
 
+    // A let whose value is a chain of another root is an alias of that chain,
+    // so lets with the same value share one trie. Once the chain has a let of
+    // its own the alias is a rename and goes away.
+    Expr u = var("u"), w = var("w");
+    check("lets with the same value",
+          block({let("u", x + 5, use(u % 8 * y)), let("w", x + 5, use(w % 8 * y))}),
+          let("x.rp0", x + 5, let("x.rp1", (var("x.rp0") % 8) * y, block({use(var("x.rp1")), use(var("x.rp1"))}))));
+    check("alias let substituted",
+          let("u", x + 5, block({use(u), use(u * 2), use(u * 2)})),
+          let("x.rp0", x + 5, let("x.rp1", var("x.rp0") * 2, block({use(var("x.rp0")), use(var("x.rp1")), use(var("x.rp1"))}))));
+
     // With two lets, the chain belongs to the inner one.
     check("chain of the inner root",
           let("t", v, let("u", opaque(y), block({use(t + var("u")), use(t + var("u"))}))),
@@ -164,6 +175,12 @@ void test_ir() {
     check("operand chain hoisted with its user",
           block({use(x * 3), let("t", v, loop("i", y, use((t * 2 + x * 3) * i)))}),
           let("x.rp0", x * 3, block({use(var("x.rp0")), let("t.rp0", v * 2 + var("x.rp0"), loop("i", y, use(rp0 * i)))})));
+
+    // A let injected at the root's body may mention the root in an operand,
+    // here through the folded chain: it is built while the root is bound.
+    check("operand mentions a folded root",
+          let("t", v, block({use((t + 1) * (t + 1)), use((t + 1) * (t + 1))})),
+          let("t.rp0", v + 1, let("t.rp1", rp0 * rp0, block({use(rp1), use(rp1)}))));
 
     // The root may appear inside an operand too, since that operand is
     // available where the root is bound.
@@ -203,6 +220,12 @@ void test_ir() {
     check("constant pure call stays inside an if",
           IfThenElse::make(x < y, loop("i", y, use(pure_call + i))),
           IfThenElse::make(x < y, let("const.rp0", pure_call, loop("i", y, use(var("const.rp0") + i)))));
+
+    // A let of a constant expression is an alias of the constant root's
+    // chain; a chain continuing from it starts from that alias.
+    check("chain from an alias of a constant expression",
+          let("k", pure_call, block({use(min(var("k"), 0)), use(min(var("k"), 0))})),
+          let("const.rp0", pure_call, let("const.rp1", min(var("const.rp0"), 0), block({use(var("const.rp1")), use(var("const.rp1"))}))));
 
     // A load can't move, so it ends the chain.
     Expr load = Load::make(Int(32), "buf", x);
