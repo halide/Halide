@@ -3053,11 +3053,17 @@ Func Func::clone_in(const vector<Func> &fs) {
 }
 
 ApproximationResult Func::approximate_by(const Approximation &p, const vector<Func> &consumers) {
-    EncodeResult enc = p.encode({*this});
+    // Name the input port after the root's declared input, if it has one.
+    ApproximationSignature root = p.signature();
+    std::string input_name = "input";
+    if (root.known && root.inputs.size() == 1 && root.inputs[0].name != "0") {
+        input_name = root.inputs[0].name;
+    }
+    EncodeResult enc = p.encode({*this}, {ApproximationPort(input_name)});
     user_assert(!enc.encoded.empty())
         << "approximate_by: Approximation::encode(" << name() << ") returned no Funcs\n";
 
-    DecodeResult dec = p.decode(enc.encoded);
+    DecodeResult dec = p.decode(enc.encoded, enc.encoded_ports);
     user_assert(dec.decoded.size() == 1)
         << "approximate_by: Approximation::decode() must return exactly one Func (the "
         << "round-trip replacement), but returned " << dec.decoded.size() << "\n";
@@ -3093,7 +3099,7 @@ ApproximationResult Func::approximate_by(const Approximation &p, const vector<Fu
     add(enc.encoded);
     add(enc.intermediates);
     add(dec.intermediates);
-    return {round_trip, enc.encoded, intermediates, enc.stage_outputs, dec.stage_outputs,
+    return {round_trip, enc.encoded, enc.encoded_ports, intermediates, enc.stage_outputs, dec.stage_outputs,
             std::move(enc.trace), std::move(dec.trace)};
 }
 
