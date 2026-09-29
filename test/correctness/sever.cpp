@@ -209,13 +209,12 @@ int named_bindings_test() {
 
 // The same quantizer expressed as an Approximation, used to check that
 // compute_offline() composes with approximate_by()'s rewritten call graph.
-class ApproxSymmetricQuantize : public Approximation {
-public:
+struct ApproxSymmetricQuantize {
     explicit ApproxSymmetricQuantize(int k)
         : k_(k) {
     }
 
-    EncodeResult encode(std::vector<Func> inputs) override {
+    EncodeResult encode(std::vector<Func> inputs) const {
         Func v = inputs[0];
         Var k("k");
         RDom r(0, k_, "r");
@@ -234,7 +233,7 @@ public:
         return {{q, d}, {amax}};
     }
 
-    DecodeResult decode(std::vector<Func> encoded) override {
+    DecodeResult decode(std::vector<Func> encoded) const {
         Func q = encoded[0], d = encoded[1];
         Var k("k");
         Func dequantized("dequantized");

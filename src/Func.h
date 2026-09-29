@@ -1596,7 +1596,7 @@ public:
      * substitution is eager, it can only rewrite Funcs that are already
      * fully defined at the point of the call -- there is no counterpart to
      * the global Func::in() that also covers Funcs written later. */
-    ApproximationResult approximate_by(Approximation &p, const std::vector<Func> &consumers);
+    ApproximationResult approximate_by(const Approximation &p, const std::vector<Func> &consumers);
 
     /** Declare that this function should be implemented by a call to
      * halide_buffer_copy with the given target device API. Asserts
