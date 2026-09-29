@@ -23,20 +23,6 @@ namespace {
 
 constexpr int no_node = -1;
 
-// Where a shared chain's let goes. Sink puts it at the innermost let or loop
-// body holding its uses. Hoist puts it as far out as its operands allow, at the
-// top of its region or the root's scope, and also hoists a chain used once when
-// that carries it out of a loop.
-enum class Placement { Sink,
-                       Hoist };
-
-struct Options {
-    Placement placement = Placement::Sink;
-    // Treat the bodies of parallel loops as regions, like gpu kernels, so that
-    // no new value is captured by their closures.
-    bool parallel_regions = false;
-};
-
 // One node of a chain: a pure IR node with the chain as one of its children
 // (or none, for a chain of the constant root) and the remaining children as
 // operands, each available where the chain's root is bound.
@@ -140,8 +126,8 @@ Expr apply_edge(const Edge &e, const Expr &chain, const std::vector<Expr> &opera
 }
 
 // The uses of a trie node that lie in one region: the host code, or the body of
-// one gpu kernel (or parallel loop). A region gets its own let for the node,
-// placed inside the region, so that closures don't grow.
+// one gpu kernel. A region gets its own let for the node, placed inside the
+// region, so that kernels don't gain arguments.
 struct RegionUses {
     int region = no_node;  // Scope of the region's loop, or no_node for the host.
     int direct = 0;
@@ -222,8 +208,7 @@ struct ScopeNode {
     ScopeKind kind = ScopeKind::For;
     const IRNode *node = nullptr;
     int root = no_node;  // The root bound by this Let/LetStmt/For, if any.
-    // The innermost enclosing region boundary: a kernel's outermost gpu loop,
-    // or a parallel loop when those count.
+    // The innermost enclosing region boundary: a kernel's outermost gpu loop.
     int boundary = no_node;
     bool in_gpu_kernel = false;
     // A let between two gpu loops is invisible to the host code that launches
@@ -263,7 +248,6 @@ bool is_root_type(Type t) {
 }
 
 struct Analysis {
-    Options options;
     std::vector<TrieNode> nodes;
     std::vector<Root> roots;
     std::vector<ScopeNode> scopes;
@@ -382,24 +366,26 @@ struct Analysis {
         return !sn.blocked && !sn.contains_gpu_loop && (sn.kind != ScopeKind::Let || sn.node == r.let);
     }
 
-    // The scope where a let of root r goes when its uses lie within scope s.
+    // The scope where a let of root r goes when its uses lie within scope s:
+    // there, the innermost point holding all of them, unless that is inside
+    // a loop the value is invariant in. Then it goes just around the
+    // outermost such loop, within the region and the root's binding, so the
+    // work is not repeated per iteration, but also not moved above anything
+    // else, such as onto the bounds-query path.
     int injection_scope(int s, const Root &r) const {
-        if (options.placement == Placement::Hoist) {
-            // As far out as the region and the root's binding allow, but
-            // never out of an if branch: that would do the work on paths
-            // that don't need it, such as a bounds query.
-            int region = scopes[s].region;
-            int top = s;
-            for (int u = s; u != r.scope; u = scopes[u].parent) {
-                internal_assert(u != no_node);
-                int p = scopes[u].parent;
-                if (scopes[u].kind == ScopeKind::If || p == no_node || scopes[p].region != region) {
-                    break;
-                }
+        int region = scopes[s].region;
+        int top = s;
+        for (int u = s; u != r.scope; u = scopes[u].parent) {
+            internal_assert(u != no_node);
+            int p = scopes[u].parent;
+            if (p == no_node || scopes[p].region != region) {
+                break;
+            }
+            if (scopes[p].kind == ScopeKind::ForOuter) {
                 top = p;
             }
-            s = top;
         }
+        s = top;
         while (s != r.scope && !can_inject(s, r)) {
             internal_assert(s != no_node);
             s = scopes[s].parent;
@@ -440,8 +426,8 @@ struct Analysis {
 
     // Within one region, a chain prefix used by two or more chains gets its
     // own let, unless it is an unbranched step on the way to one that does;
-    // such steps fold into the value of the let below them. When hoisting, a
-    // chain used once gets a let too if that moves it out of a loop.
+    // such steps fold into the value of the let below them. A chain used
+    // once gets a let too if that moves it out of a loop.
     void decide(Root &r, int n, int region, int &k) {
         for (int c = nodes[n].first_child; c != no_node; c = nodes[c].next_sibling) {
             RegionUses *cr = nodes[c].find_region(region);
@@ -450,7 +436,7 @@ struct Analysis {
             }
             if (cr->subtree >= 2 && (cr->direct >= 1 || cr->live_children >= 2)) {
                 materialize(r, c, region, injection_scope(cr->subtree_scope, r), k);
-            } else if (options.placement == Placement::Hoist && cr->subtree == 1 && cr->direct == 1) {
+            } else if (cr->subtree == 1 && cr->direct == 1) {
                 int m = without_trailing_constants(c, r.trie);
                 if (m != r.trie && !nodes[m].find_region(region)->materialized) {
                     int scope = injection_scope(cr->subtree_scope, r);
@@ -490,7 +476,7 @@ struct Analysis {
                     n = live_child(n);
                 }
                 bool fold = rt.subtree_uses >= 2;
-                if (!fold && options.placement == Placement::Hoist) {
+                if (!fold) {
                     n = without_trailing_constants(n, r.trie);
                     fold = n != r.trie && crosses_loop(r.scope, nodes[n].regions[0].subtree_scope);
                 }
@@ -764,9 +750,8 @@ protected:
         return -2;
     }
 
-    bool is_boundary(const For *op) const {
-        return is_gpu(op->for_type) ||
-               (an.options.parallel_regions && op->is_parallel());
+    static bool is_boundary(const For *op) {
+        return is_gpu(op->for_type);
     }
 };
 
@@ -1467,23 +1452,10 @@ public:
     }
 };
 
-Options options_from_env() {
-    Options o;
-    std::string policy = get_env_variable("HL_REVERSE_PEEL_POLICY");
-    if (policy == "hoist") {
-        o.placement = Placement::Hoist;
-    } else {
-        internal_assert(policy.empty() || policy == "sink") << "Unknown HL_REVERSE_PEEL_POLICY: " << policy << "\n";
-    }
-    o.parallel_regions = get_env_variable("HL_REVERSE_PEEL_PARALLEL_REGIONS") == "1";
-    return o;
-}
-
 }  // namespace
 
 Stmt reverse_peel_lets(const Stmt &s) {
     Analysis an;
-    an.options = options_from_env();
     an.scopes.emplace_back();  // The top-level scope.
     an.const_root = an.add_root(RootKind::Constant, nullptr, "const", Type(), INT_MIN + 1);
     an.roots[an.const_root].scope = 0;
