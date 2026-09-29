@@ -184,24 +184,24 @@ public:
         : from_(from_block), to_(to_block) {
     }
 
-    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) const {
+    Halide::Func encode(const Halide::Func &in) const {
         using namespace Halide;
-        Func in = inputs[0];  // (kk, blk) at to_block
+        // (kk, blk) at to_block
         Var kk("kk"), blk("blk");
         Expr g = blk * from_ + kk;
         Func out("reblock_encoded");
         out(kk, blk) = in(g % to_, g / to_);
-        return {{out}, {}};
+        return out;
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    Halide::Func decode(const Halide::Func &in) const {
         using namespace Halide;
-        Func in = encoded[0];  // (kk, blk) at from_block
+        // (kk, blk) at from_block
         Var kk("kk"), blk("blk");
         Expr g = blk * to_ + kk;
         Func out("reblock_decoded");
         out(kk, blk) = in(g % from_, g / from_);
-        return {{out}, {}};
+        return out;
     }
 
 private:
@@ -388,13 +388,13 @@ public:
         return {{codes, scale, minv}, {stat}};
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    std::vector<Halide::Func> decode(const std::vector<Halide::Func> &encoded) const {
         using namespace Halide;
         Func codes = encoded[0], scale = encoded[1], minv = encoded[2];
         Var kk("kk"), blk("blk");
         Func dequantized("affine_dequantized_am");
         dequantized(kk, blk) = cast<float>(codes(kk, blk)) * scale(blk) + minv(blk);
-        return {{dequantized}, {}};
+        return {dequantized};
     }
 
 private:
@@ -454,24 +454,24 @@ inline Halide::Expr le_u16(ByteAt byte_at) {
 // (bits>>8)&0xff).
 class Fp16Pack {
 public:
-    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) const {
+    Halide::Func encode(const Halide::Func &scale) const {
         using namespace Halide;
-        Func scale = inputs[0];  // scale(blk)
+        // scale(blk)
         Var byte("byte"), blk("blk");
         Expr bits = reinterpret<uint16_t>(cast<float16_t>(scale(blk)));
         Func bytes("fp16_pack_bytes");
         bytes(byte, blk) = word_to_le_byte(bits, byte);
-        return {{bytes}, {}};
+        return bytes;
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    Halide::Func decode(const Halide::Func &bytes) const {
         using namespace Halide;
-        Func bytes = encoded[0];  // bytes(byte, blk[, ...]), byte in [0, 2)
+        // bytes(byte, blk[, ...]), byte in [0, 2)
         Var blk("blk");
         Expr bits = le_u16([&](int i) { return bytes(i, blk, _); });
         Func scale("fp16_pack_scale");
         scale(blk, _) = cast<float>(reinterpret<float16_t>(bits));
-        return {{scale}, {}};
+        return scale;
     }
 };
 
@@ -481,19 +481,19 @@ public:
 // GGML's usual `ggml_fp16_t d;`).
 class F32Pack {
 public:
-    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) const {
+    Halide::Func encode(const Halide::Func &scale) const {
         using namespace Halide;
-        Func scale = inputs[0];  // scale(blk)
+        // scale(blk)
         Var byte("byte"), blk("blk");
         Expr bits = reinterpret<uint32_t>(scale(blk));
         Func bytes("f32_pack_bytes");
         bytes(byte, blk) = word_to_le_byte(bits, byte);
-        return {{bytes}, {}};
+        return bytes;
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    Halide::Func decode(const Halide::Func &bytes) const {
         using namespace Halide;
-        Func bytes = encoded[0];  // bytes(byte, blk[, ...]), byte in [0, 4)
+        // bytes(byte, blk[, ...]), byte in [0, 4)
         Var blk("blk");
         // Dimension-general via Halide::_ (matches Fp16Pack): any trailing
         // "lane" dims -- e.g. a repack weight's columns -- ride through, so this
@@ -502,7 +502,7 @@ public:
         Expr b2 = cast<uint32_t>(bytes(2, blk, _)), b3 = cast<uint32_t>(bytes(3, blk, _));
         Func scale("f32_pack_scale");
         scale(blk, _) = reinterpret<float>(b0 | (b1 << 8) | (b2 << 16) | (b3 << 24));
-        return {{scale}, {}};
+        return scale;
     }
 };
 
@@ -511,25 +511,25 @@ public:
 // group, not one per block).
 class Int16Pack {
 public:
-    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) const {
+    Halide::Func encode(const Halide::Func &values) const {
         using namespace Halide;
-        Func values = inputs[0];  // values(g, blk)
+        // values(g, blk)
         Var byte_idx("byte_idx"), blk("blk");
         Expr g = byte_idx / 2;
         Expr bits = reinterpret<uint16_t>(values(g, blk));
         Func bytes("int16_pack_bytes");
         bytes(byte_idx, blk) = word_to_le_byte(bits, byte_idx % 2);
-        return {{bytes}, {}};
+        return bytes;
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    Halide::Func decode(const Halide::Func &bytes) const {
         using namespace Halide;
-        Func bytes = encoded[0];  // bytes(byte_idx, blk), byte_idx in [0, 2*num_groups)
+        // bytes(byte_idx, blk), byte_idx in [0, 2*num_groups)
         Var g("g"), blk("blk");
         Expr bits = le_u16([&](int i) { return bytes(2 * g + i, blk); });
         Func values("int16_pack_values");
         values(g, blk) = reinterpret<int16_t>(bits);
-        return {{values}, {}};
+        return values;
     }
 };
 
@@ -541,14 +541,14 @@ public:
 // MXFP4 quantize is extern-delegated (see ExternQuantize).
 class E8M0Pack {
 public:
-    Halide::EncodeResult encode(std::vector<Halide::Func>) const {
+    std::vector<Halide::Func> encode(const std::vector<Halide::Func> &) const {
         _halide_user_error << "E8M0Pack is decode-only -- quantize is deferred to an ExternQuantize.\n";
         return {};
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    Halide::Func decode(const Halide::Func &byte) const {
         using namespace Halide;
-        Func byte = encoded[0];  // byte(byte_idx, blk[, ...]), byte_idx in [0, 1)
+        // byte(byte_idx, blk[, ...]), byte_idx in [0, 1)
         Var blk("blk");
         // Dimension-general via Halide::_ (matches Fp16Pack/F32Pack) so this pack
         // can decode a repack weight's E8M0 scale header, columns riding through.
@@ -556,7 +556,7 @@ public:
         Expr bits = select(e < 2, cast<uint32_t>(0x00200000) << e, (e - 1) << 23);
         Func scale("e8m0_pack_scale");
         scale(blk, _) = reinterpret<float>(bits);
-        return {{scale}, {}};
+        return scale;
     }
 };
 
@@ -571,14 +571,14 @@ public:
 // extern-delegated (see ExternQuantize).
 class UE4M3Pack {
 public:
-    Halide::EncodeResult encode(std::vector<Halide::Func>) const {
+    std::vector<Halide::Func> encode(const std::vector<Halide::Func> &) const {
         _halide_user_error << "UE4M3Pack is decode-only -- quantize is deferred to an ExternQuantize.\n";
         return {};
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    Halide::Func decode(const Halide::Func &byte) const {
         using namespace Halide;
-        Func byte = encoded[0];  // byte(sub, blk)
+        // byte(sub, blk)
         Var sub("sub"), blk("blk");
         Expr ue = byte(sub, blk);                                  // codespell:ignore ue
         Expr is_zero = (ue == 0) || (ue == 0x7f);                  // codespell:ignore ue
@@ -589,7 +589,7 @@ public:
                           (1.0f + cast<float>(man_) / 8.0f) * pow(2.0f, cast<float>(exp_ - 7)));
         Func scale("ue4m3_pack_scale");
         scale(sub, blk) = select(is_zero, 0.0f, raw * 0.5f);
-        return {{scale}, {}};
+        return scale;
     }
 };
 
@@ -718,9 +718,8 @@ public:
         return {{bytes}, {bytes}};
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    Halide::Func decode(const Halide::Func &bytes) const {
         using namespace Halide;
-        Func bytes = encoded[0];
         Var kk("kk"), blk("blk");
         if (plane_axis_) {
             Var plane("plane"), pos("pos");
@@ -728,7 +727,7 @@ public:
                          ((1u << field_bits_) - 1);
             Func fields("planar_bit_pack_fields");
             fields(plane, pos, blk, _) = cast<uint8_t>(field);
-            return {{fields}, {}};
+            return fields;
         }
         // Lane-general via Halide::_ (see the DIMENSION / WILDCARD CONVENTION
         // in the file's top comment), like the plane-axis mode above.
@@ -792,7 +791,7 @@ public:
         }
         Func codes("planar_bit_pack_codes");
         codes(kk, blk, _) = cast<int8_t>(field);
-        return {{codes}, {}};
+        return codes;
     }
 
 private:
@@ -851,9 +850,8 @@ inline Halide::Approximation le_bit_pack(int value_scale = 1, int qmax = 0) {
 // just one full byte's worth of bits at a time instead of a per-plane field.
 class BitPack {
 public:
-    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) const {
+    Halide::Func encode(const Halide::Func &codes) const {
         using namespace Halide;
-        Func codes = inputs[0];
         Var byte_idx("byte_idx"), blk("blk");
 
         Func bit("bit_pack_bit");
@@ -865,19 +863,19 @@ public:
         bytes(byte_idx, blk) = cast<uint8_t>(0);
         bytes(byte_idx, blk) = bytes(byte_idx, blk) | cast<uint8_t>(bit(byte_idx * 8 + rb, blk) << rb);
 
-        return {{bytes}, {}};
+        return bytes;
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    Halide::Func decode(const Halide::Func &bytes) const {
         using namespace Halide;
-        Func bytes = encoded[0];  // bytes(byte_idx, blk), byte_idx in [0, block_size/8)
+        // bytes(byte_idx, blk), byte_idx in [0, block_size/8)
         Var kk("kk"), blk("blk");
         Expr byte_idx = kk / 8;
         Expr bit_off = kk % 8;
         Expr bit = (cast<uint32_t>(bytes(byte_idx, blk)) >> bit_off) & 1u;
         Func codes("bit_pack_codes");
         codes(kk, blk) = cast<int8_t>(select(bit != 0, 1, -1));
-        return {{codes}, {}};
+        return codes;
     }
 };
 
@@ -889,24 +887,22 @@ public:
 // consumes it.
 class BytePack {
 public:
-    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) const {
+    Halide::Func encode(const Halide::Func &codes) const {
         using namespace Halide;
-        Func codes = inputs[0];
         Var kk("kk"), blk("blk");
         Func bytes("byte_pack_bytes");
         bytes(kk, blk) = reinterpret<uint8_t>(codes(kk, blk));
-        return {{bytes}, {}};
+        return bytes;
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    Halide::Func decode(const Halide::Func &bytes) const {
         using namespace Halide;
-        Func bytes = encoded[0];
         Var kk("kk"), blk("blk");
         // Lane-general via Halide::_ (see the DIMENSION / WILDCARD CONVENTION
         // in the file's top comment): trailing lane dims ride through.
         Func codes("byte_pack_codes");
         codes(kk, blk, _) = reinterpret<int8_t>(bytes(kk, blk, _));
-        return {{codes}, {}};
+        return codes;
     }
 };
 
@@ -921,14 +917,14 @@ public:
 // Decode-only: TQ1_0 quantize is extern-delegated.
 class TritPack {
 public:
-    Halide::EncodeResult encode(std::vector<Halide::Func>) const {
+    std::vector<Halide::Func> encode(const std::vector<Halide::Func> &) const {
         _halide_user_error << "TritPack is decode-only -- quantize is deferred to an ExternQuantize.\n";
         return {};
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    Halide::Func decode(const Halide::Func &bytes) const {
         using namespace Halide;
-        Func bytes = encoded[0];  // bytes(byte_idx, blk), byte_idx in [0, 52)
+        // bytes(byte_idx, blk), byte_idx in [0, 52)
         Var kk("kk"), blk("blk");
 
         Expr n_a = kk / 32;
@@ -953,7 +949,7 @@ public:
 
         Func codes("trit_pack_codes");
         codes(kk, blk) = cast<int8_t>(xi);
-        return {{codes}, {}};
+        return codes;
     }
 };
 
@@ -1020,10 +1016,10 @@ public:
         return {{codes, scale, bsums}, {sum_i}};
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    std::vector<Halide::Func> decode(const std::vector<Halide::Func> &encoded) const {
         // The sum (encoded[2]) is a redundant derived quantity -- pass
         // codes/scale through unchanged.
-        return {{encoded[0], encoded[1]}, {}};
+        return {encoded[0], encoded[1]};
     }
 
 private:
@@ -1055,7 +1051,7 @@ public:
         : field_widths_(std::move(field_widths)) {
     }
 
-    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) const {
+    std::vector<Halide::Func> encode(const std::vector<Halide::Func> &inputs) const {
         using namespace Halide;
         Var byte("byte"), blk("blk");
         std::vector<int> offsets = offsets_in_output_order();
@@ -1072,10 +1068,10 @@ public:
 
         Func packed("struct_pack_packed");
         packed(byte, blk) = result;
-        return {{packed}, {}};
+        return {packed};
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    std::vector<Halide::Func> decode(const std::vector<Halide::Func> &encoded) const {
         using namespace Halide;
         Func packed = encoded[0];
         std::vector<int> offsets = offsets_in_output_order();
@@ -1132,7 +1128,7 @@ public:
         : block_type_(block_type), scale_field_(std::move(scale_field)), codes_field_(std::move(codes_field)) {
     }
 
-    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) const {
+    std::vector<Halide::Func> encode(const std::vector<Halide::Func> &inputs) const {
         using namespace Halide;
         Func codes_bytes = inputs[0];  // codes_bytes(local, blk), UInt(8)
         Func scale = inputs[1];        // scale(blk), Float(32)
@@ -1159,10 +1155,10 @@ public:
 
         Func packed("struct_block_packed");
         packed(blk) = pack_struct(block_type_, vals);
-        return {{packed}, {}};
+        return {packed};
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    std::vector<Halide::Func> decode(const std::vector<Halide::Func> &encoded) const {
         using namespace Halide;
         Func packed = encoded[0];  // packed(blk), struct-typed
         Var local("local"), blk("blk");
@@ -1173,7 +1169,7 @@ public:
         Func codes_bytes("struct_block_codes_bytes");
         codes_bytes(local, blk) = cast<uint8_t>(field(packed(blk), codes_field_)[local]);
 
-        return {{codes_bytes, scale}, {}};
+        return {codes_bytes, scale};
     }
 
 private:
@@ -1193,7 +1189,7 @@ public:
         : block_type_(block_type), affine_(affine) {
     }
 
-    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) const {
+    std::vector<Halide::Func> encode(const std::vector<Halide::Func> &inputs) const {
         using namespace Halide;
         Func codes_bytes = inputs[0];
         Func scale = inputs[1];
@@ -1215,7 +1211,7 @@ public:
 
         Func packed("q5_struct_block_packed");
         packed(blk) = pack_struct(block_type_, vals);
-        return {{packed}, {}};
+        return {packed};
     }
 
     Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
@@ -1440,7 +1436,7 @@ public:
         return extern_quantize_blocks(std::move(inputs), extern_name_);
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func>) const {
+    std::vector<Halide::Func> decode(const std::vector<Halide::Func> &) const {
         _halide_user_error << "ExternQuantize::decode is never valid -- it is only "
                               "the encoder half of a TrustedInverse.\n";
         return {};
@@ -1470,7 +1466,7 @@ public:
         : block_bytes_(block_bytes), dims_(dims) {
     }
 
-    Halide::EncodeResult encode(std::vector<Halide::Func>) const {
+    std::vector<Halide::Func> encode(const std::vector<Halide::Func> &) const {
         using namespace Halide;
         std::vector<Var> args;
         for (int d = 0; d < dims_; d++) {
@@ -1478,10 +1474,10 @@ public:
         }
         Func blocks("severed_encode_blocks");
         blocks(args) = cast<uint8_t>(0);
-        return {{blocks}, {}};
+        return {blocks};
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func>) const {
+    std::vector<Halide::Func> decode(const std::vector<Halide::Func> &) const {
         _halide_user_error << "SeveredEncode::decode is never valid -- it is only "
                               "the (always-severed) encoder half of a TrustedInverse.\n";
         return {};
@@ -1505,15 +1501,14 @@ public:
         : table_(table) {
     }
 
-    Halide::EncodeResult encode(std::vector<Halide::Func>) const {
+    std::vector<Halide::Func> encode(const std::vector<Halide::Func> &) const {
         _halide_user_error << "Codebook::encode is never valid -- the forward "
                               "codeword search is deferred to an ExternQuantize.\n";
         return {};
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    Halide::Func decode(const Halide::Func &codes) const {
         using namespace Halide;
-        Func codes = encoded[0];
         Var kk("kk"), blk("blk");
         Buffer<int8_t> table = table_;
         // Clamp the index to the table's own extent -- a no-op on valid codes
@@ -1527,7 +1522,7 @@ public:
         // familiar (kk, blk). See the DESIGN NOTE by Reblock.
         Func values("codebook_values");
         values(kk, blk, _) = table(clamp(cast<int32_t>(codes(kk, blk, _)), 0, table.dim(0).extent() - 1));
-        return {{values}, {}};
+        return values;
     }
 
 private:
@@ -1578,13 +1573,13 @@ public:
             << "LinearDequant: two-level mode always has a per-sub-block scale.\n";
     }
 
-    Halide::EncodeResult encode(std::vector<Halide::Func>) const {
+    std::vector<Halide::Func> encode(const std::vector<Halide::Func> &) const {
         _halide_user_error << "LinearDequant::encode is never valid -- the forward "
                               "quantize is deferred to an ExternQuantize.\n";
         return {};
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    std::vector<Halide::Func> decode(const std::vector<Halide::Func> &encoded) const {
         using namespace Halide;
         Var kk("kk"), blk("blk");
         Func dequantized("linear_dequantized");
@@ -1609,7 +1604,7 @@ public:
             Func d = encoded[0], scale = encoded[1], codes = encoded[2];
             dequantized(kk, blk, _) = d(blk, _) * cast<float>(scale(kk / sub_size_, blk, _)) * cast<float>(codes(kk, blk, _));
         }
-        return {{dequantized}, {}};
+        return {dequantized};
     }
 
 private:
@@ -1640,7 +1635,7 @@ public:
         : high_weight_(high_weight), offset_(offset), expanded_high_(expanded_high) {
     }
 
-    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) const {
+    std::vector<Halide::Func> encode(const std::vector<Halide::Func> &inputs) const {
         using namespace Halide;
         Func codes = inputs[0];  // codes(kk, blk), the combined (pre-split) value
         // `combined` is always >= 0 by construction (offset_ is exactly what
@@ -1653,17 +1648,17 @@ public:
         high(kk, blk) = cast<int8_t>(expanded_high_ ?
                                          (combined / high_weight_) * high_weight_ - offset_ :
                                          combined / high_weight_);
-        return {{low, high}, {}};
+        return {low, high};
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    std::vector<Halide::Func> decode(const std::vector<Halide::Func> &encoded) const {
         using namespace Halide;
         Func low = encoded[0], high = encoded[1];
         Func code("combine_bits_code");
         code(kk, blk) = cast<int8_t>(expanded_high_ ?
                                          cast<int32_t>(low(kk, blk)) + cast<int32_t>(high(kk, blk)) :
                                          (cast<int32_t>(low(kk, blk)) + high_weight_ * cast<int32_t>(high(kk, blk))) - offset_);
-        return {{code}, {}};
+        return {code};
     }
 
 private:
@@ -1689,14 +1684,14 @@ private:
 // consumes. Decode-only: Q4_K/Q5_K quantize is extern-delegated.
 class K4ScaleMinPack {
 public:
-    Halide::EncodeResult encode(std::vector<Halide::Func>) const {
+    std::vector<Halide::Func> encode(const std::vector<Halide::Func> &) const {
         _halide_user_error << "K4ScaleMinPack is decode-only -- quantize is deferred to an ExternQuantize.\n";
         return {};
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    Halide::Func decode(const Halide::Func &bytes) const {
         using namespace Halide;
-        Func bytes = encoded[0];  // bytes(byte_idx, blk[, ...]), byte_idx in [0, 12)
+        // bytes(byte_idx, blk[, ...]), byte_idx in [0, 12)
         Var plane("plane"), sub("sub"), blk("blk");
 
         Expr jj = clamp(sub - 4, 0, 3);
@@ -1709,7 +1704,7 @@ public:
 
         Func scale_min("k4_scale_min_pack");
         scale_min(plane, sub, blk, _) = cast<uint8_t>(select(plane == 0, sc, m));
-        return {{scale_min}, {}};
+        return scale_min;
     }
 };
 
@@ -1723,14 +1718,14 @@ public:
 // Decode-only: Q3_K quantize is extern-delegated.
 class Q3KScalePack {
 public:
-    Halide::EncodeResult encode(std::vector<Halide::Func>) const {
+    std::vector<Halide::Func> encode(const std::vector<Halide::Func> &) const {
         _halide_user_error << "Q3KScalePack is decode-only -- quantize is deferred to an ExternQuantize.\n";
         return {};
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    Halide::Func decode(const Halide::Func &bytes) const {
         using namespace Halide;
-        Func bytes = encoded[0];  // bytes(byte_idx, blk[, ...]), byte_idx in [0, 12)
+        // bytes(byte_idx, blk[, ...]), byte_idx in [0, 12)
         Var sub("sub"), blk("blk");
 
         // Dimension-general via Halide::_, matching the other scale unpackers.
@@ -1744,7 +1739,7 @@ public:
 
         Func scale("q3k_scale_pack_scale");
         scale(sub, blk, _) = cast<int8_t>((low_val | (high << 4)) - 32);
-        return {{scale}, {}};
+        return scale;
     }
 };
 
@@ -1783,15 +1778,15 @@ public:
         : grid_(make_grid_buffer(iq_grids::iq2s_grid, 1024, "iq2s_grid")) {
     }
 
-    Halide::EncodeResult encode(std::vector<Halide::Func>) const {
+    std::vector<Halide::Func> encode(const std::vector<Halide::Func> &) const {
         _halide_user_error << "IQ2SGridDequantize is decode-only -- quantize is "
                               "deferred to an ExternQuantize via TrustedInverse.\n";
         return {};
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    Halide::Func decode(const Halide::Func &bytes) const {
         using namespace Halide;
-        Func bytes = encoded[0];  // bytes(byte, blk), byte in [0, 82)
+        // bytes(byte, blk), byte in [0, 82)
         // Superblock structure recovered by the composed BlockReshape({8, 4, 8}):
         // j (element in [0,8)), l ([0,4)), ib32 (group in [0,8)).
         Var j("j"), l("l"), ib32("ib32"), blk("blk");
@@ -1824,7 +1819,7 @@ public:
         Func dequantized("iq2s_grid_dequantized");
         dequantized(j, l, ib32, blk) = db * cast<float>(gbyte) * sign_select(sign_bit);
 
-        return {{dequantized}, {}};
+        return dequantized;
     }
 
 private:
@@ -1845,15 +1840,15 @@ public:
           ksigns_(make_grid_buffer(iq_grids::ksigns_iq2xs, 128, "ksigns_iq2xs")) {
     }
 
-    Halide::EncodeResult encode(std::vector<Halide::Func>) const {
+    std::vector<Halide::Func> encode(const std::vector<Halide::Func> &) const {
         _halide_user_error << "IQ3XXSGridDequantize is decode-only -- quantize is "
                               "deferred to an ExternQuantize via TrustedInverse.\n";
         return {};
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    Halide::Func decode(const Halide::Func &bytes) const {
         using namespace Halide;
-        Func bytes = encoded[0];  // bytes(byte, blk), byte in [0, 98)
+        // bytes(byte, blk), byte in [0, 98)
         // Superblock structure recovered by the composed BlockReshape({8, 4, 8}):
         // j8 (element in [0,8)), l ([0,4)), ib32 (group in [0,8)).
         Var j8("j8"), l("l"), ib32("ib32"), blk("blk");
@@ -1878,7 +1873,7 @@ public:
         Func dequantized("iq3xxs_grid_dequantized");
         dequantized(j8, l, ib32, blk) = db * cast<float>(gbyte) * sign_select(sign_bit);
 
-        return {{dequantized}, {}};
+        return dequantized;
     }
 
 private:
@@ -1900,15 +1895,15 @@ public:
         : grid_(make_grid_buffer(iq_grids::iq3s_grid, 512, "iq3s_grid")) {
     }
 
-    Halide::EncodeResult encode(std::vector<Halide::Func>) const {
+    std::vector<Halide::Func> encode(const std::vector<Halide::Func> &) const {
         _halide_user_error << "IQ3SGridDequantize is decode-only -- quantize is "
                               "deferred to an ExternQuantize via TrustedInverse.\n";
         return {};
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    Halide::Func decode(const Halide::Func &bytes) const {
         using namespace Halide;
-        Func bytes = encoded[0];  // bytes(byte, blk), byte in [0, 110)
+        // bytes(byte, blk), byte in [0, 110)
         // Superblock structure recovered by the composed BlockReshape({8, 4, 8}):
         // j8 (element in [0,8)), l ([0,4)), grp (group in [0,8)).
         Var j8("j8"), l("l"), grp("grp"), blk("blk");
@@ -1940,7 +1935,7 @@ public:
         Func dequantized("iq3s_grid_dequantized");
         dequantized(j8, l, grp, blk) = db * cast<float>(gbyte) * sign_select(sign_bit);
 
-        return {{dequantized}, {}};
+        return dequantized;
     }
 
 private:
@@ -1965,14 +1960,13 @@ public:
           ksigns_(make_grid_buffer(iq_grids::ksigns_iq2xs, 128, "ksigns_iq2xs")) {
     }
 
-    Halide::EncodeResult encode(std::vector<Halide::Func>) const {
+    std::vector<Halide::Func> encode(const std::vector<Halide::Func> &) const {
         _halide_user_error << "IQ2XSGridDequantize is decode-only.\n";
         return {};
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    Halide::Func decode(const Halide::Func &bytes) const {
         using namespace Halide;
-        Func bytes = encoded[0];
         Var j("j"), l("l"), ib32("ib32"), blk("blk");
         constexpr int kQsOffset = 2;
         constexpr int kScalesOffset = 66;
@@ -1991,7 +1985,7 @@ public:
 
         Func dequantized("iq2xs_grid_dequantized");
         dequantized(j, l, ib32, blk) = db * cast<float>(gbyte) * sign_select(sign_bit);
-        return {{dequantized}, {}};
+        return dequantized;
     }
 
 private:
@@ -2010,14 +2004,13 @@ public:
           ksigns_(make_grid_buffer(iq_grids::ksigns_iq2xs, 128, "ksigns_iq2xs")) {
     }
 
-    Halide::EncodeResult encode(std::vector<Halide::Func>) const {
+    std::vector<Halide::Func> encode(const std::vector<Halide::Func> &) const {
         _halide_user_error << "IQ2XXSGridDequantize is decode-only.\n";
         return {};
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    Halide::Func decode(const Halide::Func &bytes) const {
         using namespace Halide;
-        Func bytes = encoded[0];
         Var j("j"), l("l"), ib32("ib32"), blk("blk");
         constexpr int kQsOffset = 2;
 
@@ -2031,7 +2024,7 @@ public:
 
         Func dequantized("iq2xxs_grid_dequantized");
         dequantized(j, l, ib32, blk) = db * cast<float>(gbyte) * sign_select(sign_bit);
-        return {{dequantized}, {}};
+        return dequantized;
     }
 
 private:
@@ -2049,14 +2042,13 @@ public:
         : grid_(make_grid_buffer(iq_grids::iq1s_grid, 2048, "iq1s_grid")) {
     }
 
-    Halide::EncodeResult encode(std::vector<Halide::Func>) const {
+    std::vector<Halide::Func> encode(const std::vector<Halide::Func> &) const {
         _halide_user_error << "IQ1SGridDequantize is decode-only.\n";
         return {};
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    Halide::Func decode(const Halide::Func &bytes) const {
         using namespace Halide;
-        Func bytes = encoded[0];
         Var j("j"), l("l"), ib("ib"), blk("blk");
         constexpr float kIQ1S_DELTA = 0.125f;
         constexpr int kQsOffset = 2;
@@ -2075,7 +2067,7 @@ public:
 
         Func dequantized("iq1s_grid_dequantized");
         dequantized(j, l, ib, blk) = dl * (cast<float>(grid_signed) + delta);
-        return {{dequantized}, {}};
+        return dequantized;
     }
 
 private:
@@ -2093,14 +2085,13 @@ public:
         : grid_(make_grid_buffer(iq_grids::iq1s_grid, 2048, "iq1s_grid")) {
     }
 
-    Halide::EncodeResult encode(std::vector<Halide::Func>) const {
+    std::vector<Halide::Func> encode(const std::vector<Halide::Func> &) const {
         _halide_user_error << "IQ1MGridDequantize is decode-only.\n";
         return {};
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    Halide::Func decode(const Halide::Func &bytes) const {
         using namespace Halide;
-        Func bytes = encoded[0];
         Var j("j"), l2("l2"), ib("ib"), blk("blk");
         constexpr float kIQ1S_DELTA = 0.125f;
         constexpr int kQsOffset = 0;
@@ -2136,7 +2127,7 @@ public:
 
         Func dequantized("iq1m_grid_dequantized");
         dequantized(j, l2, ib, blk) = dl * (cast<float>(grid_signed) + delta);
-        return {{dequantized}, {}};
+        return dequantized;
     }
 
 private:
@@ -2152,13 +2143,13 @@ private:
 // separate byte fields. Decode-only: IQ4_XS quantize is extern-delegated.
 class IQ4XSScalePack {
 public:
-    Halide::EncodeResult encode(std::vector<Halide::Func>) const {
+    std::vector<Halide::Func> encode(const std::vector<Halide::Func> &) const {
         _halide_user_error << "IQ4XSScalePack::encode is never valid -- IQ4_XS "
                               "quantize is deferred to an ExternQuantize.\n";
         return {};
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    std::vector<Halide::Func> decode(const std::vector<Halide::Func> &encoded) const {
         using namespace Halide;
         Func scales_h = encoded[0], scales_l = encoded[1];
         Var sub("sub"), blk("blk");
@@ -2172,7 +2163,7 @@ public:
 
         Func scale("iq4xs_scale");
         scale(sub, blk, _) = cast<int8_t>(ls - 32);
-        return {{scale}, {}};
+        return {scale};
     }
 };
 
@@ -2199,22 +2190,22 @@ public:
         : block_size_(block_size), n_rows_(n_rows) {
     }
 
-    Halide::EncodeResult encode(std::vector<Halide::Func> inputs) const {
+    Halide::Func encode(const Halide::Func &x) const {
         using namespace Halide;
-        Func x = inputs[0];  // x(col, row)
+        // x(col, row)
         Var kk("kk"), blk("blk");
         Func block("repack_row_block");
         block(kk, blk) = x((blk / n_rows_) * block_size_ + kk, blk % n_rows_);
-        return {{block}, {}};
+        return block;
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    Halide::Func decode(const Halide::Func &block) const {
         using namespace Halide;
-        Func block = encoded[0];  // block(kk, blk)
+        // block(kk, blk)
         Var col("col"), row("row");
         Func x("repack_row_x");
         x(col, row) = block(col % block_size_, (col / block_size_) * n_rows_ + row);
-        return {{x}, {}};
+        return x;
     }
 
 private:
@@ -2278,7 +2269,7 @@ public:
         return {{blocks}, {bsums}};
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    std::vector<Halide::Func> decode(const std::vector<Halide::Func> &encoded) const {
         using namespace Halide;
         Func blocks = encoded[0];
         Var kk("kk"), blk("blk"), sbyte("sbyte");
@@ -2290,7 +2281,7 @@ public:
         code(kk, blk) = blocks(header + jj, blk / 4);
         Func scaleb("repack_interleave_scale");
         scaleb(sbyte, blk) = blocks((blk % 4) * delta_bytes_ + sbyte, blk / 4);
-        return {{code, scaleb}, {}};
+        return {code, scaleb};
     }
 
 private:
@@ -2347,13 +2338,13 @@ public:
           code_kind_(code_kind), scale_kind_(scale_kind) {
     }
 
-    Halide::EncodeResult encode(std::vector<Halide::Func>) const {
+    std::vector<Halide::Func> encode(const std::vector<Halide::Func> &) const {
         _halide_user_error << "UnInterleaveWeight is decode-only (SeveredEncode is the "
                               "severed encoder half of its TrustedInverse).\n";
         return {};
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    std::vector<Halide::Func> decode(const std::vector<Halide::Func> &encoded) const {
         using namespace Halide;
         Func blocks = encoded[0];  // blocks(byte, k-block, col-group)
         Var byte("byte"), kk("kk"), blk("blk"), j("j"), x("x");
@@ -2380,7 +2371,7 @@ public:
         // float scale, exactly as KQuantDeInterleave emits d_bytes for Fp16Pack.
         Func scale_bytes("uninterleave_scale_bytes");
         scale_bytes(byte, blk, j, x) = blocks(scale_stride * j + byte, blk, x);
-        return {{codes, scale_bytes}, {}};
+        return {codes, scale_bytes};
     }
 
 private:
@@ -2456,12 +2447,12 @@ public:
         : family_(family), blocklen_(blocklen) {
     }
 
-    Halide::EncodeResult encode(std::vector<Halide::Func>) const {
+    std::vector<Halide::Func> encode(const std::vector<Halide::Func> &) const {
         _halide_user_error << "KQuantDeInterleave is decode-only (SeveredEncode is the severed encoder).\n";
         return {};
     }
 
-    Halide::DecodeResult decode(std::vector<Halide::Func> encoded) const {
+    std::vector<Halide::Func> decode(const std::vector<Halide::Func> &encoded) const {
         using namespace Halide;
         Func b = encoded[0];  // blocks(byte, k-superblock, col-group)
         Var byte("byte"), kk("kk"), blk("blk"), sub("sub"), plane("plane"), j("j"), x("x");
@@ -2505,7 +2496,7 @@ public:
 
             d_bytes(byte, blk, j, x) = b(2 * j + byte, blk, x);
             dmin_bytes(byte, blk, j, x) = b(16 + 2 * j + byte, blk, x);
-            return {{d_bytes, dmin_bytes, scale_min, codes}, {}};
+            return {d_bytes, dmin_bytes, scale_min, codes};
         } else if (family_ == KQuantWeightFamily::Q6_K) {
             const int kScalesOffset = 16, kQlOffset = 144, kQhOffset = 1168;
             const int blocks_per_half = 64 / bl;
@@ -2528,7 +2519,7 @@ public:
             // 16 plain signed int8 scales, sub = kk/16 (see class comment).
             scale(sub, blk, j, x) = cast<int32_t>(reinterpret<int8_t>(b(kScalesOffset + sub * nc + j, blk, x)));
             d_bytes(byte, blk, j, x) = b(2 * j + byte, blk, x);
-            return {{d_bytes, scale, codes}, {}};
+            return {d_bytes, scale, codes};
         } else {  // Q2_K (blocklen fixed 8 upstream)
             const int kDminOffset = 16, kScalesOffset = 32, kQsOffset = 160;
             Expr half = kk / 128, local = kk % 128, subg = local / 32, rem32 = local % 32;
@@ -2543,7 +2534,7 @@ public:
             scale_min(plane, sub, blk, j, x) = cast<int32_t>(nibble_of(sm_byte, plane != 0));
             d_bytes(byte, blk, j, x) = b(2 * j + byte, blk, x);
             dmin_bytes(byte, blk, j, x) = b(kDminOffset + 2 * j + byte, blk, x);
-            return {{d_bytes, dmin_bytes, scale_min, codes}, {}};
+            return {d_bytes, dmin_bytes, scale_min, codes};
         }
     }
 
