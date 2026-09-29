@@ -77,12 +77,12 @@ public:
     VecDotSpec build_vec_dot() const {
         int wbs = block_size;
 
-        std::unique_ptr<Halide::Approximation> wc;
+        Halide::Approximation wc;
         int wb;
         ScheduleKind sched;
         bool distribute = false;   // set for the affine (offset-carrying) weights
         Halide::Type weight_type;  // set -> weight blocks are a 1-D Type::Struct buffer
-        Halide::ApproximationStageKey reconstructed_codes_stage, packed_high_word_stage;
+        Halide::Approximation reconstructed_codes_stage, packed_high_word_stage;
         switch (w_kind.value()) {
         case WKind::Symmetric: {
             // Struct-typed weight blocks (`{fp16 d; uint8 qs[...]}`); SDOT still
@@ -144,7 +144,7 @@ public:
         // when they already match, e.g. Q4_0/Q8_0); the byte width stays the
         // natural-block width since y_blocks is stored at 32-element blocks.
         const int a_nat = 32;
-        std::unique_ptr<Halide::Approximation> ac;
+        Halide::Approximation ac;
         int ab;
         bool act_has_block_sums = false;
         Halide::Type act_type;

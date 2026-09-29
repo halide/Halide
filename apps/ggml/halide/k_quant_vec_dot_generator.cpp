@@ -34,7 +34,7 @@ public:
          {"q6_k", Family::Q6_K}}};
 
     // Q8_K activation codec (block_q8_K = {float d; qs[256]; bsums[16]} = 292 bytes).
-    static std::unique_ptr<Halide::Approximation> q8_k_codec() {
+    static Halide::Approximation q8_k_codec() {
         return make_q8_k_scheme(256, 127, Layout::BlockIndexed).scheme;
     }
 
