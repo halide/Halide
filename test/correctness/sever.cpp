@@ -214,7 +214,7 @@ struct ApproxSymmetricQuantize {
         : k_(k) {
     }
 
-    EncodeResult encode(std::vector<Func> inputs) const {
+    std::vector<Func> encode(const std::vector<Func> &inputs) const {
         Func v = inputs[0];
         Var k("k");
         RDom r(0, k_, "r");
@@ -230,15 +230,15 @@ struct ApproxSymmetricQuantize {
         Expr id = select(d() != 0.0f, 1.0f / d(), 0.0f);
         q(k) = cast<int8_t>(clamp(round(v(k) * id), -127, 127));
 
-        return {{q, d}, {amax}};
+        return {q, d};
     }
 
-    DecodeResult decode(std::vector<Func> encoded) const {
+    std::vector<Func> decode(const std::vector<Func> &encoded) const {
         Func q = encoded[0], d = encoded[1];
         Var k("k");
         Func dequantized("dequantized");
         dequantized(k) = cast<float>(q(k)) * d();
-        return {{dequantized}, {}};
+        return {dequantized};
     }
 
 private:
@@ -263,14 +263,14 @@ int approximate_by_offline_test() {
     ApproximationResult result = Vec.approximate_by(quantize, {Result});
     Result.eager_inline({result.replacement});
 
-    // result.handles is [q, d, amax]: encode()'s two signature-contract
-    // outputs, then its own scheduling-only handle. q and d are the actual
+    // result.intermediates is [q, d, amax]: encode()'s two signature-contract
+    // outputs, then the scheduling-only intermediate the framework discovered. q and d are the actual
     // Funcs Result's call graph depends on (approximate_by() calls encode()
     // internally; a separately-called quantize.encode({Vec}) here would
     // build an unrelated, unconnected copy of the same graph shape).
-    std::vector<Func> encoded = {result.handles[0], result.handles[1]};
-    for (size_t i = 2; i < result.handles.size(); i++) {
-        result.handles[i].compute_root();
+    std::vector<Func> encoded = {result.intermediates[0], result.intermediates[1]};
+    for (size_t i = 2; i < result.intermediates.size(); i++) {
+        result.intermediates[i].compute_root();
     }
 
     ComputeOfflineResult split = Pipeline({Result}).compute_offline(encoded);

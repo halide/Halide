@@ -34,14 +34,13 @@ struct SplitParity {
     }
 };
 
-// Mixed: full encode (by value, with a handle) + single decode.
+// Mixed: multi encode + single decode.
 struct AddOne {
-    EncodeResult encode(std::vector<Func> in) const {
+    std::vector<Func> encode(const std::vector<Func> &in) const {
         Var x("x");
-        Func g("plus_one"), h("plus_one_handle");
+        Func g("plus_one");
         g(x) = in[0](x) + 1;
-        h(x) = g(x);
-        return {{g}, {h}, {}};
+        return {g};
     }
     Func decode(const Func &f) const {
         Var x("x");
@@ -59,8 +58,8 @@ struct BothOverloads {
     Func encode(const Func &f) const {
         return f;
     }
-    DecodeResult decode(const std::vector<Func> &in) const {
-        return {in, {}, {}};
+    std::vector<Func> decode(const std::vector<Func> &in) const {
+        return in;
     }
     Func decode(const Func &f) const {
         return f;
@@ -97,6 +96,28 @@ static_assert(std::is_convertible_v<AddOne, Approximation>);
 static_assert(std::is_convertible_v<BothOverloads, Approximation>);
 static_assert(std::is_convertible_v<Pointwise, Approximation>);
 static_assert(std::is_convertible_v<Compose, Approximation>);
+// The unit-side full form is gone: results are not a valid unit return type.
+struct FullForm {
+    EncodeResult encode(const std::vector<Func> &in) const {
+        return {in, {}, {}};
+    }
+    DecodeResult decode(const std::vector<Func> &in) const {
+        return {in, {}, {}};
+    }
+};
+
+// A unit that internally calls two member handles.
+struct Pair {
+    Approximation a, b;
+    std::vector<Func> encode(const std::vector<Func> &in) const {
+        return b.encode(a.encode(in).encoded).encoded;
+    }
+    std::vector<Func> decode(const std::vector<Func> &in) const {
+        return a.decode(b.decode(in).decoded).decoded;
+    }
+};
+
+static_assert(!std::is_convertible_v<FullForm, Approximation>);
 static_assert(!std::is_convertible_v<EncodeOnly, Approximation>);
 static_assert(!std::is_convertible_v<BadReturn, Approximation>);
 static_assert(!std::is_convertible_v<NonConstEncode, Approximation>);
@@ -110,7 +131,7 @@ int check_round_trip(const char *what, const Approximation &a, F expected, int n
     Func g("g");
     g(x) = f(x) * 2;
     ApproximationResult r = f.approximate_by(a, {g});
-    for (Func h : r.handles) {
+    for (Func h : r.intermediates) {
         h.compute_root();
     }
     r.replacement.compute_root();
@@ -187,6 +208,44 @@ int main() {
             !starts_with(r.decoded_by(h_add), "minus_one") || !r.decoded_by(h_parity).defined()) {
             printf("stage lookup returned unexpected Funcs\n");
             return 1;
+        }
+    }
+
+    // A hand-written unit that calls other handles is traced automatically.
+    {
+        Approximation inner_neg = Negate{}, inner_add = AddOne{};
+        Approximation pair = Pair{inner_neg, inner_add};
+        Func f("pair_src");
+        Var x("x");
+        f(x) = x;
+        EncodeResult e = pair.encode({f});
+        DecodeResult d = pair.decode(e.encoded);
+        auto names = [](const std::vector<ApproximationStageOutputs> &so) {
+            std::string s;
+            for (const ApproximationStageOutputs &o : so) {
+                s += o.ports[0].name() + ",";
+            }
+            return s;
+        };
+        if (e.stage_outputs.size() != 3 || !e.stage_outputs[0].stage.same_as(inner_neg) ||
+            !e.stage_outputs[1].stage.same_as(inner_add) || !e.stage_outputs[2].stage.same_as(pair) ||
+            d.stage_outputs.size() != 3 || !d.stage_outputs[0].stage.same_as(inner_add) ||
+            !d.stage_outputs[1].stage.same_as(inner_neg) || !d.stage_outputs[2].stage.same_as(pair)) {
+            printf("nested unit trace wrong: enc [%s] dec [%s]\n", names(e.stage_outputs).c_str(),
+                   names(d.stage_outputs).c_str());
+            return 1;
+        }
+        // The pair's inter-stage Func is discovered as an intermediate.
+        if (e.intermediates.size() != 1 || e.intermediates[0].name().rfind("negated", 0) != 0) {
+            printf("nested unit intermediates wrong\n");
+            return 1;
+        }
+        Buffer<int> out = d.decoded[0].realize({8});
+        for (int i = 0; i < 8; i++) {
+            if (out(i) != i) {
+                printf("nested unit round trip wrong at %d\n", i);
+                return 1;
+            }
         }
     }
 
