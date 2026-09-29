@@ -37,6 +37,12 @@ Func ApproximationResult::decoded_by(const Approximation &stage, size_t port) co
     return find_stage_output(decoded_stage_outputs, stage, port, "decode");
 }
 
+void Approximation::check_single_input(const std::vector<Func> &inputs, const char *direction) {
+    user_assert(inputs.size() == 1)
+        << "Approximation: a unit with a single-Func " << direction << "() was given "
+        << inputs.size() << " inputs, but requires exactly one\n";
+}
+
 EncodeResult Approximation::encode(const std::vector<Func> &inputs) const {
     user_assert(defined()) << "encode called on an undefined Approximation\n";
     EncodeResult r = impl_->encode(inputs);
@@ -131,6 +137,76 @@ EncodeResult Choose::encode(std::vector<Func> inputs) const {
 
 DecodeResult Choose::decode(std::vector<Func> encoded) const {
     return chosen.decode(encoded);
+}
+
+namespace {
+
+Pointwise::TupleFn wrap_expr_fn(Pointwise::ExprFn fn) {
+    return [fn = std::move(fn)](const std::vector<Expr> &values) {
+        user_assert(values.size() == 1)
+            << "Pointwise: an Expr-valued function requires a single-output Func, but the input has "
+            << values.size() << " outputs (use a std::vector<Expr> function instead)\n";
+        return std::vector<Expr>{fn(values[0])};
+    };
+}
+
+Func apply_pointwise(const Func &input, const Pointwise::TupleFn &fn, const std::string &name,
+                     const std::string &var_prefix, const char *direction) {
+    user_assert(input.defined()) << "Pointwise::" << direction << ": undefined Func\n";
+    std::vector<Var> args;
+    std::vector<Expr> call_args;
+    for (int i = 0; i < input.dimensions(); i++) {
+        args.emplace_back(var_prefix + std::to_string(i));
+        call_args.emplace_back(args.back());
+    }
+    std::vector<Expr> values;
+    if (input.outputs() == 1) {
+        values.push_back(input(call_args));
+    } else {
+        for (int i = 0; i < input.outputs(); i++) {
+            values.push_back(input(call_args)[i]);
+        }
+    }
+    std::vector<Expr> results = fn(values);
+    user_assert(!results.empty()) << "Pointwise::" << direction << ": function returned no values\n";
+    Func out(name);
+    if (results.size() == 1) {
+        out(args) = results[0];
+    } else {
+        out(args) = Tuple(results);
+    }
+    return out;
+}
+
+}  // namespace
+
+Pointwise::Pointwise(const std::string &name, ExprFn encode_fn, ExprFn decode_fn)
+    : Pointwise(name + "_encode", name + "_decode", std::move(encode_fn), std::move(decode_fn)) {
+}
+
+Pointwise::Pointwise(const std::string &name, TupleFn encode_fn, TupleFn decode_fn)
+    : Pointwise(name + "_encode", name + "_decode", std::move(encode_fn), std::move(decode_fn)) {
+}
+
+Pointwise::Pointwise(std::string encode_name, std::string decode_name, ExprFn encode_fn, ExprFn decode_fn,
+                     std::string var_prefix)
+    : Pointwise(std::move(encode_name), std::move(decode_name),
+                wrap_expr_fn(std::move(encode_fn)), wrap_expr_fn(std::move(decode_fn)),
+                std::move(var_prefix)) {
+}
+
+Pointwise::Pointwise(std::string encode_name, std::string decode_name, TupleFn encode_fn, TupleFn decode_fn,
+                     std::string var_prefix)
+    : encode_name(std::move(encode_name)), decode_name(std::move(decode_name)),
+      var_prefix(std::move(var_prefix)), encode_fn(std::move(encode_fn)), decode_fn(std::move(decode_fn)) {
+}
+
+Func Pointwise::encode(const Func &input) const {
+    return apply_pointwise(input, encode_fn, encode_name, var_prefix, "encode");
+}
+
+Func Pointwise::decode(const Func &encoded) const {
+    return apply_pointwise(encoded, decode_fn, decode_name, var_prefix, "decode");
 }
 
 EncodeResult Identity::encode(std::vector<Func> inputs) const {
