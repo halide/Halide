@@ -45,19 +45,26 @@ its own footing in the API.
 ## Core concept: `Approximation`
 
 ```cpp
-// encode()/decode() each return (funcs, handles): the "public" Func(s) that
-// participate in the signature contract, plus extra intermediate Funcs
-// (reduction accumulators, per-block stats, etc.) that have no meaning
-// outside scheduling but still need someone to schedule them -- see
-// "approximate_by" below for why silently dropping handles is a real bug,
-// not a simplification.
+// The handle's encode()/decode() return the "public" Func(s) that
+// participate in the signature contract, plus the intermediate Funcs
+// (reduction accumulators, per-block stats, etc.) the framework discovers
+// between the inputs and those outputs. Intermediates have no meaning outside
+// scheduling but still need someone to schedule them -- see "approximate_by"
+// below for why silently dropping them is a real bug, not a simplification.
+struct ApproximationStageOutputs {
+    Approximation stage;
+    std::vector<Func> ports;          // the stage's outputs
+    std::vector<Func> intermediates;  // the stage's own discovered intermediates
+};
 struct EncodeResult {
-    std::vector<Func> encoded;  // the signature-contract output(s)
-    std::vector<Func> handles;  // scheduling-only, no semantic meaning
+    std::vector<Func> encoded;        // the signature-contract output(s)
+    std::vector<Func> intermediates;  // discovered; scheduling-only
+    std::vector<ApproximationStageOutputs> stage_outputs;  // trace of this call
 };
 struct DecodeResult {
-    std::vector<Func> decoded;  // decoded[0] is the round-trip replacement
-    std::vector<Func> handles;
+    std::vector<Func> decoded;        // decoded[0] is the round-trip replacement
+    std::vector<Func> intermediates;
+    std::vector<ApproximationStageOutputs> stage_outputs;
 };
 
 // A value-semantic, type-erased handle (like std::function). Any type with
@@ -78,14 +85,21 @@ A type-erased handle is used specifically because composed Approximations
 (`Compose`/`Apply`, below) need to hold a runtime-heterogeneous list of
 `Approximation` handles and call `encode`/`decode` on each. Copies of a handle
 are the same stage; converting a plain unit twice makes two distinct stages.
-Every stage invoked through a handle is recorded in the result's stage outputs,
-so callers look up a stage's Funcs by keeping a handle to it.
+Every stage invoked through a handle, including from inside another unit's
+`encode`/`decode`, is recorded in the result's stage outputs, so callers look up
+a stage's Funcs by keeping a handle to it. The outermost handle call on a thread
+opens a trace and nested calls append to it (children first); encode and decode
+share that one trace.
 
-Units don't have to spell out the full shape. Per direction, a unit may instead
-provide `std::vector<Func> encode(const std::vector<Func> &) const` (handles and
-stage outputs taken to be empty) or `Func encode(const Func &) const` (exactly
-one input, checked at run time), and likewise for `decode`; the forms can be
-mixed, and if both a vector and a `Func` overload exist the vector one is used.
+Units only return their outputs. Per direction, a unit provides either
+`std::vector<Func> encode(const std::vector<Func> &) const` or
+`Func encode(const Func &) const` (exactly one input, checked at run time), and
+likewise for `decode`; the forms can be mixed, and if both a vector and a `Func`
+overload exist the vector one is used. Intermediates are not declared: after the
+unit returns, the framework walks the outputs' definitions (pure, update, and
+extern arguments), stopping at the stage's inputs, and reports every other Func
+it reaches, producers before consumers. That includes pure-only Funcs, and Funcs
+the unit references from outside (e.g. a shared lookup table); callers filter.
 Elementwise units need not even write that:
 `Pointwise{name, encode_fn, decode_fn}` builds one from a pair of `Expr -> Expr`
 lambdas (or `std::vector<Expr>` ones for Tuple-valued Funcs).
@@ -155,9 +169,10 @@ instead of standing apart as a free function taking `f` as its first argument:
 struct ApproximationResult {
     Func replacement;           // decode's round-trip output; already
                                  // spliced into every Func in `consumers`
-    std::vector<Func> handles;  // encode's output(s) + encode's handles +
-                                 // decode's handles -- all need scheduling,
-                                 // none are part of the signature contract
+    std::vector<Func> intermediates;  // encode's output(s) + encode's
+                                       // intermediates + decode's intermediates
+                                       // -- all need scheduling, none are part
+                                       // of the signature contract
 };
 
 // Func.h: ApproximationResult approximate_by(const Approximation &p, const std::vector<Func> &consumers);
@@ -171,10 +186,10 @@ ApproximationResult Func::approximate_by(const Approximation &p, const std::vect
         g.function().substitute_calls(func, round_trip.function());
     }
 
-    std::vector<Func> handles = enc.encoded;
-    handles.insert(handles.end(), enc.handles.begin(), enc.handles.end());
-    handles.insert(handles.end(), dec.handles.begin(), dec.handles.end());
-    return {round_trip, handles};
+    // enc.encoded, then enc.intermediates, then dec.intermediates;
+    // de-duplicated, and never *this or round_trip
+    std::vector<Func> intermediates = /* ... */;
+    return {round_trip, intermediates};
 }
 ```
 
@@ -192,7 +207,7 @@ overload, or a public wrapper around `substitute_calls`):
 entry point" concern only would have applied if this were being built as
 external, non-core code.
 
-**Returning `handles` is not optional.** Both `encode` and `decode` can
+**Reporting `intermediates` is not optional.** Both `encode` and `decode` can
 introduce intermediate Funcs with update definitions (per-block reductions, a
 shift-by-min helper's own min-reduction, etc.). Left unscheduled, Halide doesn't
 error on these — it computes them at the innermost valid loop level by default
@@ -201,9 +216,10 @@ error on these — it computes them at the innermost valid loop level by default
 definition). But that default placement is exactly that, a default: the caller
 has no way to override it, or to apply the fusion patterns from "Scope:
 placement is not semantics" below (e.g. `compute_at`-ing `enc.encoded` into a
-producer for dynamic activation requantization). The struct above bundles every
-encode/decode handle together for exactly this reason — so the caller can
-schedule all of them, not just the primary output.
+producer for dynamic activation requantization). The framework discovers these
+Funcs automatically (units cannot forget to declare them), and the struct above
+bundles every encode/decode intermediate together for exactly this reason — so
+the caller can schedule all of them, not just the primary output.
 
 ### Consequence: consumers must already exist
 
@@ -251,11 +267,11 @@ at inference time.
 **Consequence, and a scope reduction**: the "fuse encode into producer" / "fuse
 decode into consumer tiles" cases need *no new Halide feature at all*. Ordinary
 `.compute_at()` / `.compute_inline()` on `ApproximationResult`'s `replacement`
-and `handles` (in particular `enc.encoded`, the piece that needs to be fused
-into the producer for the activation case) already achieves this, since they're
-just regular Funcs sitting in the call graph. `compute_offline` (below) is
-needed only for the strictly narrower case of actually severing the graph into
-two separately-compiled artifacts — the static-weight case.
+and `intermediates` (in particular `enc.encoded`, the piece that needs to be
+fused into the producer for the activation case) already achieves this, since
+they're just regular Funcs sitting in the call graph. `compute_offline` (below)
+is needed only for the strictly narrower case of actually severing the graph
+into two separately-compiled artifacts — the static-weight case.
 
 ## `compute_offline`: v1 scope
 
@@ -358,7 +374,7 @@ public:
             for (size_t i = 0; i < enc.encoded.size(); i++) {
                 *add_output<Buffer<void>>("packed_" + std::to_string(i), enc.encoded[i].dimensions()) = enc.encoded[i];
             }
-            // enc.handles (e.g. per-block reduction Funcs) still need scheduling here too.
+            // enc.intermediates (e.g. per-block reduction Funcs) still need scheduling here too.
             return;
         }
 
@@ -376,7 +392,7 @@ public:
             ? weight_approx_.decode({Func(*weight_packed_)}).decoded[0]
             : weight_approx_.decode(weight_approx_.encode(Func(*weight_fp32_)).encoded).decoded[0];
         EncodeResult activation_enc = activation_approx_.encode(Func(*activation_));
-        // activation_enc.encoded / .handles get fused at whatever granularity
+        // activation_enc.encoded / .intermediates get fused at whatever granularity
         // schedule() picks -- see "Scope: placement is not semantics" above.
         *result_ = /* the actual matmul reduction, calling weight_value / activation_enc.encoded inline */;
     }
@@ -405,7 +421,7 @@ design is validated.
 | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | `Approximation`: type-erased value-semantic handle, operates on `Func`s only                | Decided                                                                                                                          |
 | `Approximation` makes no placement claims (offline vs fused)                                | Decided                                                                                                                          |
-| `encode`/`decode` return `(funcs, handles)`, not bare `vector<Func>`                        | Decided; handles are scheduling-only intermediates, kept separate from the signature-contract output                             |
+| `encode`/`decode` return `(funcs, intermediates)`; intermediates are discovered             | Decided; scheduling-only, found by the framework, kept separate from the signature-contract output                               |
 | `decode(encode(f).encoded).decoded[0]` signature contract                                   | Decided; enforced only at `approximate_by`'s substitution time in v1, not at `Approximation`-definition time                     |
 | `encode`'s output arity/layout (packed vs planar)                                           | Left to each `Approximation`; not decided by the framework                                                                       |
 | `approximate_by`: eager, destructive `substitute_calls`, not `Func::in`                     | Decided; `in()` only substitutes identity wrappers, and the global form is deferred to lowering — see "Why not `Func::in`" above |
@@ -423,8 +439,8 @@ design is validated.
 - `apps/ggml/halide/*_generators.cpp` — the manually-duplicated
   quantize/dequantize/vec_dot implementations this design generalizes.
 - A private Python research prototype exploring the same compositional
-  `Approximation` idea, including its `(funcs, handles)` return convention — not
-  a public artifact, referenced here only for context.
+  `Approximation` idea, including its `(funcs, intermediates)` return convention
+  — not a public artifact, referenced here only for context.
 - `apps/hannk/halide/conv_generator.cpp` — sole in-repo precedent for a
   non-trivial `configure()`.
 - `src/Func.cpp: Stage::rfactor` — the eager, destructive graph-editing

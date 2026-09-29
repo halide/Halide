@@ -10,12 +10,12 @@ constexpr int kBlockSize = 8;
 
 // A minimal symmetric integer quantizer -- self-contained (no relation to
 // any specific real-world format), just enough to exercise: encode()
-// returning multiple Funcs plus a genuine scheduling-only handle (the
+// returning multiple Funcs plus a genuine scheduling-only intermediate (the
 // per-block amax reduction), decode() combining them back into a single
 // Func matching the original's signature, and approximate_by()'s eager
 // substitution.
 struct SymmetricQuantizer {
-    EncodeResult encode(std::vector<Func> inputs) const {
+    std::vector<Func> encode(const std::vector<Func> &inputs) const {
         Func f = inputs[0];
         Var x("x"), i("i");
         RDom r(0, kBlockSize, "r");
@@ -31,21 +31,123 @@ struct SymmetricQuantizer {
         Expr id = select(d(x / kBlockSize) != 0.0f, 1.0f / d(x / kBlockSize), 0.0f);
         q(x) = cast<int8_t>(clamp(round(f(x) * id), -127, 127));
 
-        return {{q, d}, {amax}};
+        return {q, d};
     }
 
-    DecodeResult decode(std::vector<Func> encoded) const {
+    std::vector<Func> decode(const std::vector<Func> &encoded) const {
         Func q = encoded[0], d = encoded[1];
         Var x("x");
         Func dequantized("dequantized");
         dequantized(x) = cast<float>(q(x)) * d(x / kBlockSize);
-        return {{dequantized}, {}};
+        return {dequantized};
     }
 };
+
+// A single-form unit whose intermediates are only discovered.
+struct TwoStep {
+    std::string tag = "";
+
+    Func encode(const Func &in) const {
+        Var x("x");
+        Func a("step_a" + tag), b("step_b" + tag);
+        a(x) = in(x) + 1;
+        b(x) = a(x) * 2;
+        return b;
+    }
+    Func decode(const Func &in) const {
+        Var x("x");
+        Func out("step_out");
+        out(x) = in(x) / 2 - 1;
+        return out;
+    }
+};
+
+int check_discovery() {
+    Var x("x");
+    // f has a producer; neither f nor g may show up as an intermediate.
+    Func g("disc_g"), f("disc_f"), c("disc_c");
+    g(x) = x;
+    f(x) = g(x) * 2;
+    c(x) = f(x);
+    ApproximationResult r = f.approximate_by(Approximation(TwoStep{}), {c});
+    std::vector<std::string> names;
+    for (const Func &i : r.intermediates) {
+        names.push_back(i.name());
+        if (i.name() == "disc_f" || i.name() == "disc_g" || i.name() == r.replacement.name()) {
+            printf("Intermediates contain an excluded Func: %s\n", i.name().c_str());
+            return 1;
+        }
+    }
+    // encoded (step_b) first, then the discovered step_a.
+    if (names.size() != 2 || names[0].rfind("step_b", 0) != 0 || names[1].rfind("step_a", 0) != 0) {
+        printf("Unexpected intermediates for TwoStep\n");
+        return 1;
+    }
+    for (Func i : r.intermediates) {
+        i.compute_root();
+    }
+    r.replacement.compute_root();
+    Buffer<int> out = c.realize({8});
+    for (int i = 0; i < 8; i++) {
+        if (out(i) != i * 2) {
+            printf("TwoStep round trip wrong at %d\n", i);
+            return 1;
+        }
+    }
+
+    // Topological order: a producer precedes its consumer.
+    Approximation two = TwoStep{};
+    EncodeResult e = two.encode({f});
+    Func in("topo_in");
+    in(x) = x;
+    Approximation composed = Compose{TwoStep{"_outer"}, TwoStep{"_inner"}};
+    EncodeResult ce = composed.encode({in});
+    auto index_of = [&](const char *n) {
+        for (size_t i = 0; i < ce.intermediates.size(); i++) {
+            if (ce.intermediates[i].name() == n) {
+                return (int)i;
+            }
+        }
+        return -1;
+    };
+    // The Compose reports the inter-stage Func (the inner stage's step_b) and
+    // both stages' step_a Funcs, but not its own output or input.
+    if (ce.intermediates.size() != 3 || index_of("step_b_inner") < 0 || index_of("step_a_inner") < 0 ||
+        index_of("step_a_outer") < 0) {
+        printf("Compose intermediates wrong (%zu)\n", ce.intermediates.size());
+        return 1;
+    }
+    // Each intermediate must appear after everything it calls.
+    for (size_t i = 0; i < ce.intermediates.size(); i++) {
+        for (const auto &[n, callee] : Internal::find_direct_calls(ce.intermediates[i].function())) {
+            for (size_t j = i; j < ce.intermediates.size(); j++) {
+                if (ce.intermediates[j].function().same_as(callee)) {
+                    printf("Intermediates are not in topological order\n");
+                    return 1;
+                }
+            }
+        }
+    }
+    if (e.intermediates.size() != 1 || e.intermediates[0].name().rfind("step_a", 0) != 0) {
+        printf("Unexpected TwoStep encode intermediates\n");
+        return 1;
+    }
+    // Compose's stage_outputs: two children then the Compose itself.
+    if (ce.stage_outputs.size() != 3 || ce.stage_outputs[2].intermediates.size() != 3 ||
+        ce.stage_outputs[0].intermediates.size() != 1) {
+        printf("Compose stage_outputs wrong\n");
+        return 1;
+    }
+    return 0;
+}
 
 }  // namespace
 
 int main(int argc, char **argv) {
+    if (check_discovery()) {
+        return 1;
+    }
+
     Var x("x");
 
     Func f("f");
@@ -127,13 +229,26 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    if (result.handles.empty()) {
-        printf("Expected approximate_by() to return scheduling handles\n");
-        return 1;
+    // encoded (q, d) come first, then amax, discovered without being declared.
+    {
+        std::vector<std::string> names;
+        for (const Func &i : result.intermediates) {
+            names.push_back(i.name());
+        }
+        if (names != std::vector<std::string>{"q", "d", "amax"}) {
+            printf("Unexpected intermediates (%zu)\n", names.size());
+            return 1;
+        }
+        // Stage-local intermediates are reported per stage, too.
+        const ApproximationStageOutputs &enc_stage = result.encoded_stage_outputs.back();
+        if (enc_stage.intermediates.size() != 1 || enc_stage.intermediates[0].name() != "amax") {
+            printf("Unexpected per-stage intermediates\n");
+            return 1;
+        }
     }
     result.replacement.compute_root();
-    for (Func handle : result.handles) {
-        handle.compute_root();
+    for (Func intermediate : result.intermediates) {
+        intermediate.compute_root();
     }
 
     const int kSize = 64;

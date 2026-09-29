@@ -32,15 +32,10 @@ struct DecodeResult;
  *
  * Any type `T` providing const-callable `encode` and `decode` methods
  * implicitly converts to an Approximation; there is no base class to derive
- * from. Each direction independently may take any ONE of three forms:
+ * from. Each direction independently may take either ONE of two forms:
  *
  * \code
- * // full: also reports scheduling handles (and, if forwarding other
- * // Approximations, their stage_outputs)
- * EncodeResult encode(std::vector<Func>) const;      // or const std::vector<Func> &
- * DecodeResult decode(std::vector<Func>) const;
- *
- * // multi: just the Funcs; handles and stage_outputs are taken to be empty
+ * // multi: a vector of Funcs in, a vector of Funcs out
  * std::vector<Func> encode(const std::vector<Func> &) const;
  * std::vector<Func> decode(const std::vector<Func> &) const;
  *
@@ -50,7 +45,7 @@ struct DecodeResult;
  * Func decode(const Func &) const;
  * \endcode
  *
- * The forms may be mixed (e.g. full encode with single decode). If a type
+ * The forms may be mixed (e.g. multi encode with single decode). If a type
  * offers both a vector and a Func overload for one direction, the vector
  * form is used. Types with a non-matching return type (or only one
  * direction) do not convert. A minimal unit:
@@ -82,11 +77,20 @@ struct DecodeResult;
  * stage needs to be able to consume all of them, or select just one to act
  * on.
  *
+ * A unit only returns its output Funcs. The framework discovers the rest:
+ * whatever intermediate Funcs the unit defined along the way (e.g. a
+ * per-block reduction) are found by walking the outputs' definitions, and
+ * are reported in EncodeResult::intermediates / DecodeResult::intermediates
+ * (see Approximation::encode()). A unit that calls other Approximation
+ * handles inside its own encode()/decode() (as Compose does) gets those
+ * calls traced automatically.
+ *
  * Identity semantics: a copy of a handle is the *same* stage (same_as() is
  * true), while converting a plain unit to an Approximation twice produces two
  * *distinct* stages, even if the units compare equal. Every stage invoked
- * through a handle is recorded automatically in the result's `stage_outputs`
- * (children first, then the stage itself), so to find a stage's outputs
+ * through a handle -- including those invoked from inside another unit's
+ * encode()/decode() -- is recorded automatically in the result's
+ * `stage_outputs` (children first, then the stage itself), so to find a stage's outputs
  * later, hold onto a handle to it and hand copies of that handle to the
  * combinators:
  *
@@ -109,15 +113,14 @@ struct DecodeResult;
 class Approximation {
     struct Concept {
         virtual ~Concept() = default;
-        virtual EncodeResult encode(const std::vector<Func> &inputs) const = 0;
-        virtual DecodeResult decode(const std::vector<Func> &encoded) const = 0;
+        virtual std::vector<Func> encode(const std::vector<Func> &inputs) const = 0;
+        virtual std::vector<Func> decode(const std::vector<Func> &encoded) const = 0;
     };
 
     template<typename T>
     struct Model;
 
     enum class Form { None,
-                      Full,
                       Multi,
                       Single };
 
@@ -126,23 +129,18 @@ class Approximation {
     template<typename T, typename Arg>
     using decode_call_t = decltype(std::declval<const T &>().decode(std::declval<Arg>()));
 
-    template<typename Result, typename Vector, typename Single, typename = void>
+    template<typename Vector, typename Single, typename = void>
     struct form_of : std::integral_constant<Form, Form::None> {};
 
     // The vector-argument call is tried first, so a type with both vector
     // and Func overloads uses the vector form.
-    template<typename Result, typename Vector, typename Single>
-    struct form_of<Result, Vector, Single, std::enable_if_t<std::is_same_v<Vector, Result>>>
-        : std::integral_constant<Form, Form::Full> {};
-
-    template<typename Result, typename Vector, typename Single>
-    struct form_of<Result, Vector, Single, std::enable_if_t<std::is_same_v<Vector, std::vector<Func>>>>
+    template<typename Vector, typename Single>
+    struct form_of<Vector, Single, std::enable_if_t<std::is_same_v<Vector, std::vector<Func>>>>
         : std::integral_constant<Form, Form::Multi> {};
 
-    template<typename Result, typename Vector, typename Single>
-    struct form_of<Result, Vector, Single,
-                   std::enable_if_t<!std::is_same_v<Vector, Result> &&
-                                    !std::is_same_v<Vector, std::vector<Func>> &&
+    template<typename Vector, typename Single>
+    struct form_of<Vector, Single,
+                   std::enable_if_t<!std::is_same_v<Vector, std::vector<Func>> &&
                                     std::is_same_v<Single, Func>>>
         : std::integral_constant<Form, Form::Single> {};
 
@@ -180,10 +178,10 @@ class Approximation {
     };
 
     template<typename T>
-    static constexpr Form encode_form = form_of<EncodeResult, typename detect_encode_vec<T>::type,
+    static constexpr Form encode_form = form_of<typename detect_encode_vec<T>::type,
                                                 typename detect_encode_one<T>::type>::value;
     template<typename T>
-    static constexpr Form decode_form = form_of<DecodeResult, typename detect_decode_vec<T>::type,
+    static constexpr Form decode_form = form_of<typename detect_decode_vec<T>::type,
                                                 typename detect_decode_one<T>::type>::value;
 
     template<typename T>
@@ -217,8 +215,25 @@ public:
      * representation (a single opaque byte buffer, fields recovered via
      * reinterpret<>() inside decode) or a planar one (multiple typed Funcs,
      * one per field). Either is legitimate; the framework does not
-     * decide. This stage's outputs are appended to `stage_outputs` after
-     * those of any stages it invoked. */
+     * decide.
+     *
+     * After the unit returns, the framework computes this stage's
+     * `intermediates`: every Func reachable from the outputs' definitions
+     * (pure, update, and extern-argument references) without passing through
+     * one of `inputs`, excluding the inputs and outputs themselves, in
+     * topological order (producers before consumers; ties broken by name).
+     * This includes pure-only Funcs; callers filter as they see fit. Funcs
+     * the unit references from outside (e.g. a shared lookup table Func
+     * defined elsewhere) are reachable and not inputs, so they are reported
+     * too.
+     *
+     * The outermost handle call on a thread opens a trace, and every handle
+     * call nested inside it (directly or from inside any unit's
+     * encode()/decode()) appends a record to it, children first, then the
+     * stage itself. `stage_outputs` holds exactly the records appended
+     * during this call. Encode and decode share one trace: a decode() call
+     * made from inside an encode() (unusual) is recorded in that encode's
+     * `stage_outputs`. */
     EncodeResult encode(const std::vector<Func> &inputs) const;
 
     /** Reconstruct an approximation of the original Func(s) from their
@@ -230,34 +245,36 @@ private:
     std::shared_ptr<const Concept> impl_;
 };
 
-/** The ports produced by one stage during encode or decode. This trace is
- * supplemental scheduling metadata; it does not alter the signature contract
- * or the legacy flat handle lists. */
+/** The ports produced by one stage during encode or decode, plus the
+ * intermediate Funcs discovered for that stage alone. This trace is
+ * supplemental scheduling metadata; it does not alter the signature
+ * contract. */
 struct ApproximationStageOutputs {
     Approximation stage;
     std::vector<Func> ports;
+    std::vector<Func> intermediates;
 };
 
 /** The result of Approximation::encode(): the Func(s) that make up the
- * signature contract other code is expected to consume, plus any extra
- * intermediate Funcs ("handles") that have no meaning outside scheduling
- * (e.g. per-block reduction Funcs) but must still be scheduled by whoever
- * calls encode(). */
+ * signature contract other code is expected to consume, plus the
+ * intermediate Funcs discovered between the inputs and those outputs (e.g.
+ * per-block reduction Funcs), which have no meaning outside scheduling but
+ * must still be scheduled by whoever calls encode(). */
 struct EncodeResult {
     std::vector<Func> encoded;
-    std::vector<Func> handles;
+    std::vector<Func> intermediates;
     std::vector<ApproximationStageOutputs> stage_outputs;
 };
 
 /** The result of Approximation::decode(): decoded is the round-trip
- * replacement for whatever Func(s) were originally encoded, plus any
- * additional scheduling-only handles. When an Approximation is used
+ * replacement for whatever Func(s) were originally encoded, plus the
+ * discovered scheduling-only intermediates. When an Approximation is used
  * directly with Func::approximate_by(), decoded must contain exactly one
  * Func; when it's used as one stage of a larger Compose/Apply chain,
  * decoded may contain however many Funcs the next stage down expects. */
 struct DecodeResult {
     std::vector<Func> decoded;
-    std::vector<Func> handles;
+    std::vector<Func> intermediates;
     std::vector<ApproximationStageOutputs> stage_outputs;
 };
 
@@ -270,27 +287,21 @@ struct Approximation::Model final : Approximation::Concept {
         : unit(std::forward<U>(u)) {
     }
 
-    EncodeResult encode(const std::vector<Func> &inputs) const override {
-        constexpr Form form = encode_form<T>;
-        if constexpr (form == Form::Full) {
+    std::vector<Func> encode(const std::vector<Func> &inputs) const override {
+        if constexpr (encode_form<T> == Form::Multi) {
             return unit.encode(inputs);
-        } else if constexpr (form == Form::Multi) {
-            return {unit.encode(inputs), {}, {}};
         } else {
             check_single_input(inputs, "encode");
-            return {{unit.encode(inputs[0])}, {}, {}};
+            return {unit.encode(inputs[0])};
         }
     }
 
-    DecodeResult decode(const std::vector<Func> &encoded) const override {
-        constexpr Form form = decode_form<T>;
-        if constexpr (form == Form::Full) {
+    std::vector<Func> decode(const std::vector<Func> &encoded) const override {
+        if constexpr (decode_form<T> == Form::Multi) {
             return unit.decode(encoded);
-        } else if constexpr (form == Form::Multi) {
-            return {unit.decode(encoded), {}, {}};
         } else {
             check_single_input(encoded, "decode");
-            return {{unit.decode(encoded[0])}, {}, {}};
+            return {unit.decode(encoded[0])};
         }
     }
 };
@@ -302,24 +313,27 @@ Approximation::Approximation(T &&unit)
 
 /** The result of Func::approximate_by(): the primary replacement Func
  * (already spliced into every Func in `consumers`), plus every
- * intermediate Func produced by encode()/decode() along the way that needs
- * scheduling (compute_root, compute_at, etc.) -- none of `handles` are
+ * intermediate Func discovered by encode()/decode() along the way that needs
+ * scheduling (compute_root, compute_at, etc.) -- none of `intermediates` are
  * part of the Approximation's signature contract, but Halide still
  * requires Funcs with update definitions to be scheduled, and the fusion
  * patterns described on Approximation above (e.g. compute_at-ing the
  * encoded Func into a producer) are only possible if the caller has a
- * handle to schedule. */
+ * Func to schedule. `intermediates` is `encoded`, then the encode side's
+ * discovered intermediates, then the decode side's, without duplicates, and
+ * never contains the original Func or `replacement`. Like all discovered
+ * intermediates, it may include Funcs the units referenced from outside. */
 struct ApproximationResult {
     Func replacement;
     /** The Func(s) produced by encode() -- the signature-contract boundary
      * between the original values and their approximated form (e.g. a
-     * quantizer's packed byte buffer). This is a subset of `handles` (kept
-     * there too, so existing code that schedules everything in `handles`
+     * quantizer's packed byte buffer). This is a subset of `intermediates` (kept
+     * there too, so existing code that schedules everything in `intermediates`
      * doesn't need to change), broken out separately so callers can act on
      * exactly this boundary -- e.g. Pipeline::compute_offline(result.encoded)
      * -- without calling Approximation::encode() themselves. */
     std::vector<Func> encoded;
-    std::vector<Func> handles;
+    std::vector<Func> intermediates;
     std::vector<ApproximationStageOutputs> encoded_stage_outputs;
     std::vector<ApproximationStageOutputs> decoded_stage_outputs;
 
@@ -366,8 +380,8 @@ struct Compose {
                  Approximation(std::forward<Rest>(rest))...} {
     }
 
-    EncodeResult encode(std::vector<Func> inputs) const;
-    DecodeResult decode(std::vector<Func> encoded) const;
+    std::vector<Func> encode(const std::vector<Func> &inputs) const;
+    std::vector<Func> decode(const std::vector<Func> &encoded) const;
 
     std::vector<Approximation> stages;
 };
@@ -389,8 +403,8 @@ struct Apply {
         : Apply(idx, 1, 1, std::move(inner)) {
     }
 
-    EncodeResult encode(std::vector<Func> inputs) const;
-    DecodeResult decode(std::vector<Func> encoded) const;
+    std::vector<Func> encode(const std::vector<Func> &inputs) const;
+    std::vector<Func> decode(const std::vector<Func> &encoded) const;
 
     int idx, encode_arity, decode_arity;
     Approximation inner;
@@ -436,8 +450,8 @@ struct TrustedInverse {
         : encoder(std::move(encoder)), decoder(std::move(decoder)) {
     }
 
-    EncodeResult encode(std::vector<Func> inputs) const;
-    DecodeResult decode(std::vector<Func> encoded) const;
+    std::vector<Func> encode(const std::vector<Func> &inputs) const;
+    std::vector<Func> decode(const std::vector<Func> &encoded) const;
 
     Approximation encoder, decoder;
 };
@@ -449,8 +463,8 @@ struct Choose {
         : chosen(cond ? std::move(if_true) : std::move(if_false)) {
     }
 
-    EncodeResult encode(std::vector<Func> inputs) const;
-    DecodeResult decode(std::vector<Func> encoded) const;
+    std::vector<Func> encode(const std::vector<Func> &inputs) const;
+    std::vector<Func> decode(const std::vector<Func> &encoded) const;
 
     Approximation chosen;
 };
@@ -499,8 +513,8 @@ private:
 
 /** Passes Funcs through unchanged in both directions. */
 struct Identity {
-    EncodeResult encode(std::vector<Func> inputs) const;
-    DecodeResult decode(std::vector<Func> encoded) const;
+    std::vector<Func> encode(const std::vector<Func> &inputs) const;
+    std::vector<Func> decode(const std::vector<Func> &encoded) const;
 };
 
 /** Reorders Funcs: encode() outputs `inputs[permutation[i]]` at position i,
@@ -514,8 +528,8 @@ struct Permute {
         }
     }
 
-    EncodeResult encode(std::vector<Func> inputs) const;
-    DecodeResult decode(std::vector<Func> encoded) const;
+    std::vector<Func> encode(const std::vector<Func> &inputs) const;
+    std::vector<Func> decode(const std::vector<Func> &encoded) const;
 
     std::vector<int> forward, backward;
 };
