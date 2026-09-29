@@ -1578,6 +1578,14 @@ protected:
     void set_inputs(const std::vector<StubInput> &inputs);
     bool inputs_set = false;
 
+    // Adopts `p` (which must be a defined Buffer Parameter) as this Input's
+    // backing Parameter directly, immediately (not waiting for the
+    // ordinary InputsSet phase set_inputs() above is used for) -- sets
+    // inputs_set so init_internals() leaves it alone. Only used by
+    // GeneratorBase::add_input(const ImageParam &); see there for why this
+    // exists.
+    void adopt(const Parameter &p);
+
     virtual void set_def_min_max();
 
     void verify_internals() override;
@@ -2398,6 +2406,15 @@ protected:
         return "Output";
     }
 
+    // Adopts `f` (which must already be defined) as this Output's value
+    // directly, bypassing the usual "generate() assigns via operator()="
+    // path -- so init_internals() must leave `funcs_` alone once this has
+    // been called, the same way GeneratorInputBase::init_internals() skips
+    // its own rebuild when inputs_set is true. Only used by
+    // GeneratorBase::add_output(Func); see there for why this exists.
+    void adopt(const Func &f);
+    bool adopted_ = false;
+
 public:
     ~GeneratorOutputBase() override;
 };
@@ -3087,6 +3104,7 @@ class NamesInterface {
 protected:
     // Import a consistent list of Halide names that can be used in
     // Halide generators without qualification.
+    using ComputeOfflineResult = Halide::ComputeOfflineResult;
     using Expr = Halide::Expr;
     using EvictionKey = Halide::EvictionKey;
     using ExternFuncArgument = Halide::ExternFuncArgument;
@@ -3432,6 +3450,59 @@ public:
         p->generator = this;
         param_info_ptr->owned_extras.push_back(std::unique_ptr<Internal::GIOBase>(p));
         param_info_ptr->filter_outputs.push_back(p);
+        return p;
+    }
+
+    /** Declares an Input<Buffer<>> backed directly by `existing` -- e.g. an
+     * ImageParam that Pipeline::compute_offline() minted or was bound to --
+     * instead of a fresh one. This is useful when a Generator's whole
+     * pipeline is assembled in configure(), leaving generate() an empty
+     * stub. For example, a quantizer and its dequantizer can share one
+     * configure() that builds the round trip and splits it with
+     * compute_offline(); each Generator then adopts whichever half applies
+     * to it as its ports. `existing` must already be defined (have a
+     * concrete type and dimensionality); its own name is used as the port's
+     * name. May only be called from configure().
+     *
+     * The port's type defaults to Input<Buffer<>>, but may be given
+     * explicitly, e.g. add_input<Buffer<int8_t, 1>>(q_in), in which case
+     * any static element type or dimensionality in T must match
+     * `existing`'s. */
+    template<typename T = Buffer<>>
+    GeneratorInput<T> *add_input(const ImageParam &existing) {
+        static_assert(Internal::IsHalideBuffer<T>::value,
+                      "add_input(const ImageParam &) can only declare an Input<Buffer<T, D>>.");
+        check_exact_phase(GeneratorBase::ConfigureCalled);
+        claim_name(existing.name(), "input");
+        auto *p = new GeneratorInput<T>(existing.name());
+        p->generator = this;
+        param_info_ptr->owned_extras.push_back(std::unique_ptr<Internal::GIOBase>(p));
+        param_info_ptr->filter_inputs.push_back(p);
+        p->adopt(existing.parameter());
+        return p;
+    }
+
+    /** Declares an Output<Buffer<>> whose value is `existing` directly --
+     * e.g. either half of a Pipeline::compute_offline() split -- instead of
+     * a fresh, undefined Func for generate() to assign via operator(). See
+     * add_input(const ImageParam &) above for the motivating use.
+     * `existing` must already be defined; its own name is used as the port's
+     * name. May only be called from configure().
+     *
+     * As with add_input(const ImageParam &), the port's type defaults to
+     * Output<Buffer<>> but may be given explicitly, e.g.
+     * add_output<Buffer<float, 1>>(scale). */
+    template<typename T = Buffer<>>
+    GeneratorOutput<T> *add_output(const Func &existing) {
+        static_assert(Internal::IsHalideBuffer<T>::value,
+                      "add_output(const Func &) can only declare an Output<Buffer<T, D>>.");
+        check_exact_phase(GeneratorBase::ConfigureCalled);
+        claim_name(existing.name(), "output");
+        auto *p = new GeneratorOutput<T>(existing.name());
+        p->generator = this;
+        param_info_ptr->owned_extras.push_back(std::unique_ptr<Internal::GIOBase>(p));
+        param_info_ptr->filter_outputs.push_back(p);
+        p->adopt(existing);
         return p;
     }
 
