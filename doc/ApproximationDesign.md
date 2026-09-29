@@ -81,6 +81,15 @@ are the same stage; converting a plain unit twice makes two distinct stages.
 Every stage invoked through a handle is recorded in the result's stage outputs,
 so callers look up a stage's Funcs by keeping a handle to it.
 
+Units don't have to spell out the full shape. Per direction, a unit may instead
+provide `std::vector<Func> encode(const std::vector<Func> &) const` (handles and
+stage outputs taken to be empty) or `Func encode(const Func &) const` (exactly
+one input, checked at run time), and likewise for `decode`; the forms can be
+mixed, and if both a vector and a `Func` overload exist the vector one is used.
+Elementwise units need not even write that:
+`Pointwise{name, encode_fn, decode_fn}` builds one from a pair of `Expr -> Expr`
+lambdas (or `std::vector<Expr>` ones for Tuple-valued Funcs).
+
 **Signature contract.** `decode(encode(f).encoded).decoded[0]` must reproduce
 `f`'s arg list and value type exactly — that's what makes it valid to splice
 back into a call graph in place of `f`. This is not proposed to be enforced

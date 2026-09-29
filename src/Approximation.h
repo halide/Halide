@@ -9,6 +9,7 @@
  * call graph, and doc/ApproximationDesign.md for the design rationale.
  */
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <type_traits>
@@ -29,24 +30,57 @@ struct DecodeResult;
  * just how or where it's computed: decode(encode(f)) is expected to
  * approximately reproduce f, not exactly reproduce it.
  *
- * Any type `T` with the two (const-callable) methods
+ * Any type `T` providing const-callable `encode` and `decode` methods
+ * implicitly converts to an Approximation; there is no base class to derive
+ * from. Each direction independently may take any ONE of three forms:
  *
  * \code
- * EncodeResult encode(std::vector<Func>) const;
+ * // full: also reports scheduling handles (and, if forwarding other
+ * // Approximations, their stage_outputs)
+ * EncodeResult encode(std::vector<Func>) const;      // or const std::vector<Func> &
  * DecodeResult decode(std::vector<Func>) const;
+ *
+ * // multi: just the Funcs; handles and stage_outputs are taken to be empty
+ * std::vector<Func> encode(const std::vector<Func> &) const;
+ * std::vector<Func> decode(const std::vector<Func> &) const;
+ *
+ * // single: one Func in, one Func out. Handing the unit any other number
+ * // of inputs is an error.
+ * Func encode(const Func &) const;
+ * Func decode(const Func &) const;
  * \endcode
  *
- * implicitly converts to an Approximation; there is no base class to derive
- * from. The handle stores a decayed copy of the unit, so methods are always
- * invoked on a const object. (Units needing mutable state must hold it in
- * `mutable` members or behind a pointer.)
+ * The forms may be mixed (e.g. full encode with single decode). If a type
+ * offers both a vector and a Func overload for one direction, the vector
+ * form is used. Types with a non-matching return type (or only one
+ * direction) do not convert. A minimal unit:
  *
- * encode()/decode() take and return a *vector* of Funcs, not a single Func,
- * even though the common case (a leaf Approximation like a plain quantizer)
- * only ever uses one. This is what makes Compose and Apply below possible:
- * a composed Approximation's inner stage can produce multiple Funcs (e.g. a
- * quantized-values Func plus a separate scale Func), and the next stage
- * needs to be able to consume all of them, or select just one to act on.
+ * \code
+ * struct Negate {
+ *     Func encode(const Func &f) const {
+ *         Func g("negated");
+ *         g(_) = -f(_);
+ *         return g;
+ *     }
+ *     Func decode(const Func &f) const {
+ *         return encode(f);
+ *     }
+ * };
+ * Approximation a = Negate{};
+ * \endcode
+ *
+ * See also Pointwise for elementwise units. The handle stores a decayed copy
+ * of the unit, so methods are always invoked on a const object. (Units
+ * needing mutable state must hold it in `mutable` members or behind a
+ * pointer.)
+ *
+ * The handle's own encode()/decode() always take and return a *vector* of
+ * Funcs, even though the common case (a leaf Approximation like a plain
+ * quantizer) only ever uses one. This is what makes Compose and Apply below
+ * possible: a composed Approximation's inner stage can produce multiple Funcs
+ * (e.g. a quantized-values Func plus a separate scale Func), and the next
+ * stage needs to be able to consume all of them, or select just one to act
+ * on.
  *
  * Identity semantics: a copy of a handle is the *same* stage (same_as() is
  * true), while converting a plain unit to an Approximation twice produces two
@@ -82,17 +116,82 @@ class Approximation {
     template<typename T>
     struct Model;
 
+    enum class Form { None,
+                      Full,
+                      Multi,
+                      Single };
+
+    template<typename T, typename Arg>
+    using encode_call_t = decltype(std::declval<const T &>().encode(std::declval<Arg>()));
+    template<typename T, typename Arg>
+    using decode_call_t = decltype(std::declval<const T &>().decode(std::declval<Arg>()));
+
+    template<typename Result, typename Vector, typename Single, typename = void>
+    struct form_of : std::integral_constant<Form, Form::None> {};
+
+    // The vector-argument call is tried first, so a type with both vector
+    // and Func overloads uses the vector form.
+    template<typename Result, typename Vector, typename Single>
+    struct form_of<Result, Vector, Single, std::enable_if_t<std::is_same_v<Vector, Result>>>
+        : std::integral_constant<Form, Form::Full> {};
+
+    template<typename Result, typename Vector, typename Single>
+    struct form_of<Result, Vector, Single, std::enable_if_t<std::is_same_v<Vector, std::vector<Func>>>>
+        : std::integral_constant<Form, Form::Multi> {};
+
+    template<typename Result, typename Vector, typename Single>
+    struct form_of<Result, Vector, Single,
+                   std::enable_if_t<!std::is_same_v<Vector, Result> &&
+                                    !std::is_same_v<Vector, std::vector<Func>> &&
+                                    std::is_same_v<Single, Func>>>
+        : std::integral_constant<Form, Form::Single> {};
+
     template<typename T, typename = void>
-    struct is_unit : std::false_type {};
+    struct detect_encode_vec {
+        using type = void;
+    };
+    template<typename T>
+    struct detect_encode_vec<T, std::void_t<encode_call_t<T, const std::vector<Func> &>>> {
+        using type = std::decay_t<encode_call_t<T, const std::vector<Func> &>>;
+    };
+    template<typename T, typename = void>
+    struct detect_encode_one {
+        using type = void;
+    };
+    template<typename T>
+    struct detect_encode_one<T, std::void_t<encode_call_t<T, const Func &>>> {
+        using type = std::decay_t<encode_call_t<T, const Func &>>;
+    };
+    template<typename T, typename = void>
+    struct detect_decode_vec {
+        using type = void;
+    };
+    template<typename T>
+    struct detect_decode_vec<T, std::void_t<decode_call_t<T, const std::vector<Func> &>>> {
+        using type = std::decay_t<decode_call_t<T, const std::vector<Func> &>>;
+    };
+    template<typename T, typename = void>
+    struct detect_decode_one {
+        using type = void;
+    };
+    template<typename T>
+    struct detect_decode_one<T, std::void_t<decode_call_t<T, const Func &>>> {
+        using type = std::decay_t<decode_call_t<T, const Func &>>;
+    };
 
     template<typename T>
-    struct is_unit<T, std::void_t<decltype(std::declval<const T &>().encode(std::declval<std::vector<Func>>())),
-                                  decltype(std::declval<const T &>().decode(std::declval<std::vector<Func>>()))>>
-        : std::true_type {};
+    static constexpr Form encode_form = form_of<EncodeResult, typename detect_encode_vec<T>::type,
+                                                typename detect_encode_one<T>::type>::value;
+    template<typename T>
+    static constexpr Form decode_form = form_of<DecodeResult, typename detect_decode_vec<T>::type,
+                                                typename detect_decode_one<T>::type>::value;
 
     template<typename T>
     using enable_if_unit = std::enable_if_t<
-        !std::is_base_of_v<Approximation, std::decay_t<T>> && is_unit<std::decay_t<T>>::value>;
+        !std::is_base_of_v<Approximation, std::decay_t<T>> &&
+        encode_form<std::decay_t<T>> != Form::None && decode_form<std::decay_t<T>> != Form::None>;
+
+    static void check_single_input(const std::vector<Func> &inputs, const char *direction);
 
 public:
     /** Construct an undefined handle. */
@@ -172,11 +271,27 @@ struct Approximation::Model final : Approximation::Concept {
     }
 
     EncodeResult encode(const std::vector<Func> &inputs) const override {
-        return unit.encode(inputs);
+        constexpr Form form = encode_form<T>;
+        if constexpr (form == Form::Full) {
+            return unit.encode(inputs);
+        } else if constexpr (form == Form::Multi) {
+            return {unit.encode(inputs), {}, {}};
+        } else {
+            check_single_input(inputs, "encode");
+            return {{unit.encode(inputs[0])}, {}, {}};
+        }
     }
 
     DecodeResult decode(const std::vector<Func> &encoded) const override {
-        return unit.decode(encoded);
+        constexpr Form form = decode_form<T>;
+        if constexpr (form == Form::Full) {
+            return unit.decode(encoded);
+        } else if constexpr (form == Form::Multi) {
+            return {unit.decode(encoded), {}, {}};
+        } else {
+            check_single_input(encoded, "decode");
+            return {{unit.decode(encoded[0])}, {}, {}};
+        }
     }
 };
 
@@ -338,6 +453,48 @@ struct Choose {
     DecodeResult decode(std::vector<Func> encoded) const;
 
     Approximation chosen;
+};
+
+/** An elementwise unit: encode() and decode() each map every value of a
+ * single input Func through a user-supplied function, producing a Func with
+ * the same dimensionality (`out(vs) = fn(in(vs))`).
+ *
+ * The functions take an Expr and return an Expr (the common case, for
+ * single-valued Funcs), or take and return a `std::vector<Expr>` (one element
+ * per Tuple output of the input Func, for Tuple-valued Funcs). Pass
+ * lambdas with concrete parameter types, not `auto`. No type checking of the
+ * input is done here; wrap Pointwise in a unit of your own for that.
+ *
+ * The output Funcs are named `name + "_encode"` and `name + "_decode"`; the
+ * second constructor lets the caller pick both names exactly (and the
+ * prefix of the pure Var names, which are numbered by dimension), so that a
+ * unit built on Pointwise can keep its Func names stable.
+ *
+ * \code
+ * Approximation a = Pointwise{"scale",
+ *                            [](Expr x) { return x * 2; },
+ *                            [](Expr x) { return x / 2; }};
+ * \endcode
+ *
+ * Besides converting to Approximation, Pointwise's encode(Func) and
+ * decode(Func) may be called directly. */
+struct Pointwise {
+    using ExprFn = std::function<Expr(Expr)>;
+    using TupleFn = std::function<std::vector<Expr>(const std::vector<Expr> &)>;
+
+    Pointwise(const std::string &name, ExprFn encode_fn, ExprFn decode_fn);
+    Pointwise(const std::string &name, TupleFn encode_fn, TupleFn decode_fn);
+    Pointwise(std::string encode_name, std::string decode_name, ExprFn encode_fn, ExprFn decode_fn,
+              std::string var_prefix = "pw");
+    Pointwise(std::string encode_name, std::string decode_name, TupleFn encode_fn, TupleFn decode_fn,
+              std::string var_prefix = "pw");
+
+    Func encode(const Func &input) const;
+    Func decode(const Func &encoded) const;
+
+private:
+    std::string encode_name, decode_name, var_prefix;
+    TupleFn encode_fn, decode_fn;
 };
 
 /** Passes Funcs through unchanged in both directions. */
