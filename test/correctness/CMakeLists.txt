@@ -16,6 +16,7 @@ tests(
     ambiguous_inline_reductions.cpp
     approximate_by.cpp
     approximation_components.cpp
+    approximation_trace.cpp
     approximation_unit_forms.cpp
     argmax.cpp
     arm_cpu_detect.cpp
