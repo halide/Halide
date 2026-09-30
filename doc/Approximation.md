@@ -29,7 +29,8 @@ concept, `Approximation`, plus the surrounding API needed to wire one into a
 real pipeline: `Func::approximate_by()`, which splices an approximation's round
 trip into an existing call graph; `Pipeline::compute_offline()`, which
 optionally splits the result across a compile-time boundary; and
-`ApproximationTesting.h`, which checks what an approximation claims.
+`tools/halide_approximation_testing.h`, which checks what an approximation
+claims.
 
 ## Why this can't just be ordinary scheduling
 
@@ -750,11 +751,12 @@ bookkeeping that the static `Input<>`/`Output<>` member style does not.
 
 ## Verification
 
-`ApproximationTesting.h` (namespace `Halide::ApproximationTesting`, header-only,
-part of `Halide.h`) checks what a scheme claims. It is a test-time helper:
-nothing is added to generated pipelines. Everything that runs Halide code uses
-the JIT, with every stage boundary `compute_root`'d and traced so its values can
-be read back; it does not change how a pipeline you build yourself is scheduled.
+`tools/halide_approximation_testing.h` (namespace
+`Halide::ApproximationTesting`, header-only, like `halide_image_io.h`; not part
+of `Halide.h`) checks what a scheme claims. It is a test-time helper: nothing is
+added to generated pipelines. Everything that runs Halide code uses the JIT,
+with every stage boundary `compute_root`'d and traced so its values can be read
+back; it does not change how a pipeline you build yourself is scheduled.
 
 **Declared facts.**
 
@@ -879,7 +881,7 @@ such an input. Properties over the decoded values (`lossless()`,
 | `compute_offline`: true automatic pipeline splitting                                                   | Rejected for v1 (phase-ordering conflict with `configure()`/`generate()`)       |
 | `compute_offline`: cross-compile provenance checking                                                   | Deferred; v1 relies on both sides building the same scheme                      |
 | Fusing `encode`/`decode` into neighboring stages (activation requantization)                           | No new mechanism; ordinary `.compute_at()`/`.compute_inline()`                  |
-| Declared ranges, `error_bound()`, `lossless()`; property-based testing in `Halide.h`                   | Decided; claims are checked in tests, never enforced or used in codegen         |
+| Declared ranges, `error_bound()`, `lossless()`; property-based testing in `tools/`                     | Decided; claims are checked in tests, never enforced or used in codegen         |
 | Generator I/O ergonomics (`add_input`/`add_output` pointer bookkeeping)                                | Accepted rough edge, deferred                                                   |
 
 Open items:

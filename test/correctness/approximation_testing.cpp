@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include "halide_approximation_testing.h"
 
 #include <cstdio>
 #include <sstream>
