@@ -1,4 +1,4 @@
-tests(GROUPS correctness_multi_gpu SOURCES gpu_multi_device.cpp)
+tests(GROUPS correctness_multi_gpu gpu SOURCES gpu_multi_device.cpp)
 
 tests(
     GROUPS correctness
@@ -13,11 +13,7 @@ tests(
     aligned_split_nested.cpp
     aligned_split_partition.cpp
     aligned_split_reduction.cpp
-    argmax.cpp
-    async_device_copy.cpp
     async_require_fail.cpp
-    atomics_gpu_8_bit.cpp
-    atomics_gpu_mutex.cpp
     atomics_self_reference.cpp
     autodiff.cpp
     bad_async_producer.cpp
@@ -37,14 +33,9 @@ tests(
     bad_store_at.cpp
     bit_counting.cpp
     bitwise_ops.cpp
-    bool_compute_root_vectorize.cpp
-    bool_predicate_cast.cpp
     bound.cpp
     bound_small_allocations.cpp
     bound_storage.cpp
-    boundary_conditions.cpp
-    bounds.cpp
-    bounds_inference.cpp
     bounds_inference_chunk.cpp
     bounds_inference_complex.cpp
     bounds_inference_outer_split.cpp
@@ -68,10 +59,8 @@ tests(
     callable_typed_bad_arguments.cpp
     callable_typed_bad_arguments_buffer_dims.cpp
     callable_typed_bad_arguments_buffer_type.cpp
-    cascaded_filters.cpp
     cast_handle.cpp
     change_type.cpp
-    chunk.cpp
     chunk_sharing.cpp
     code_explosion.cpp
     compare_vars.cpp
@@ -93,7 +82,6 @@ tests(
     constant_type.cpp
     constrain_wrong_output_buffer.cpp
     constraints.cpp
-    convolution_multiple_kernels.cpp
     cse_name_collision.cpp
     cse_nan.cpp
     cuda_8_bit_dot_product.cpp
@@ -102,31 +90,20 @@ tests(
     custom_d3d12compute_context.cpp
     custom_jit_context.cpp
     custom_lowering_pass.cpp
-    custom_metal_context.cpp
     custom_opencl_context.cpp
     custom_vulkan_context.cpp
-    custom_webgpu_context.cpp
     d3d12compute_sm6x.cpp
     d3d12compute_strict_float.cpp
     dead_realization_in_specialization.cpp
-    debug_to_file.cpp
     debug_to_file_multiple_outputs.cpp
-    debug_to_file_reorder.cpp
     deep_inline_chain.cpp
     deferred_loop_level.cpp
     define_after_realize.cpp
     deinterleave4.cpp
-    device_buffer_copies_with_profile.cpp
-    device_buffer_copy.cpp
-    device_copy_at_inner_loop.cpp
-    device_crop.cpp
-    device_slice.cpp
-    dilate3x3.cpp
     div_by_zero.cpp
     div_round_to_zero.cpp
     downsampling_reduce.cpp
     dupe_param_name.cpp
-    dynamic_allocation_in_gpu_kernel.cpp
     dynamic_reduction_bounds.cpp
     eager_inline.cpp
     early_out.cpp
@@ -138,30 +115,277 @@ tests(
     extern_error.cpp
     extern_output_expansion.cpp
     extern_partial.cpp
-    extern_producer.cpp
     extern_reorder_storage.cpp
-    extern_sort.cpp
-    extern_stage_on_device.cpp
     extract_concat_bits.cpp
     failed_unroll.cpp
     fast_trigonometric.cpp
     fibonacci.cpp
     fit_function.cpp
-    five_d_gpu_buffer.cpp
     flipped_vector_load_before_buffer_start.cpp
-    float16_t.cpp
     float16_t_neon_op_check.cpp
     fold_storage_not_applied.cpp
     force_onto_stack.cpp
-    func_lifetime.cpp
-    func_lifetime_2.cpp
-    fuse.cpp
-    fuse_gpu_threads.cpp
     fused_where_inner_extent_is_zero.cpp
     fuzz_float_stores.cpp
     fuzz_schedule.cpp
     gameoflife.cpp
     gather.cpp
+    growing_stack.cpp
+    half_native_interleave.cpp
+    handle.cpp
+    heap_cleanup.cpp
+    hexagon_scatter.cpp
+    histogram.cpp
+    histogram_equalize.cpp
+    hoist_invariants.cpp
+    hoist_loop_invariant_if_statements.cpp
+    hoist_storage.cpp
+    hoist_storage_extern.cpp
+    hoist_storage_root_without_compute_root.cpp
+    hoist_storage_without_compute_at.cpp
+    host_alignment.cpp
+    image_io.cpp
+    image_of_lists.cpp
+    implicit_args.cpp
+    implicit_args_tests.cpp
+    implicit_pure_def_with_rvar_args.cpp
+    impossible_constraints.cpp
+    indexing_access_undef.cpp
+    inline_reduction.cpp
+    inlined_generator.cpp
+    input_buffer_func_name_collision.cpp
+    input_func_name_unique.cpp
+    input_generator_buffer_func_name_collision.cpp
+    input_image_bounds_check.cpp
+    input_larger_than_two_gigs.cpp
+    input_param_func_name_collision.cpp
+    integer_powers.cpp
+    interleave.cpp
+    intrinsics.cpp
+    issue_3926.cpp
+    iterate_over_circle.cpp
+    jit_host_environment.cpp
+    lambda.cpp
+    lazy_convolution.cpp
+    left_shift_negative.cpp
+    lerp.cpp
+    let_in_rdom_bound.cpp
+    likely.cpp
+    load_library.cpp
+    loop_carry.cpp
+    loop_level_generator_param.cpp
+    lossless_cast.cpp
+    low_bit_depth_noise.cpp
+    make_struct.cpp
+    many_dimensions.cpp
+    many_inlined_selects.cpp
+    many_small_extern_stages.cpp
+    many_updates.cpp
+    memoize_cloned.cpp
+    memoize_different_compute_store.cpp
+    memoize_output_invalid.cpp
+    min_extent.cpp
+    mismatch_runtime_streaming_vscale.cpp
+    mismatch_runtime_vscale.cpp
+    missing_args.cpp
+    mod.cpp
+    multi_output_pipeline_with_bad_sizes.cpp
+    multi_splits_with_diff_tail_strategies.cpp
+    multipass_constraints.cpp
+    mux.cpp
+    narrow_predicates.cpp
+    negative_split_factors.cpp
+    nested_tail_strategies.cpp
+    non_nesting_extern_bounds_query.cpp
+    non_vector_aligned_embeded_buffer.cpp
+    null_host_field.cpp
+    obscure_image_references.cpp
+    out_constraint.cpp
+    out_of_memory.cpp
+    output_func_input_buffer_name_collision.cpp
+    output_larger_than_two_gigs.cpp
+    overflow_during_constant_folding.cpp
+    parameter_constraints.cpp
+    partial_application.cpp
+    partial_realization.cpp
+    partition_clamped_extent_guard.cpp
+    partition_loops.cpp
+    partition_loops_bug.cpp
+    partition_max_filter.cpp
+    pipeline_set_jit_externs_func.cpp
+    popc_clz_ctz_bounds.cpp
+    predicated_store_load.cpp
+    predicated_store_load_single_lane.cpp
+    prefetch.cpp
+    print.cpp
+    process_some_tiles.cpp
+    profiler_json_output.cpp
+    pseudostack_shares_slots.cpp
+    python_extension_gen.cpp
+    realization_with_too_many_outputs.cpp
+    realize_condition_depends_on_tuple.cpp
+    realize_constantly_larger_than_two_gigs.cpp
+    realize_larger_than_two_gigs.cpp
+    realize_over_shifted_domain.cpp
+    recursive_box_filters.cpp
+    reduction_chain.cpp
+    reduction_schedule.cpp
+    register_shuffle.cpp
+    reorder_storage.cpp
+    require.cpp
+    require_fail.cpp
+    reschedule.cpp
+    respect_input_constraint_in_bounds_inference.cpp
+    reuse_stack_alloc.cpp
+    saturating_casts.cpp
+    scatter.cpp
+    serialization.cpp
+    set_custom_trace.cpp
+    sever.cpp
+    shadowed_bound.cpp
+    shift_by_unsigned_negated.cpp
+    side_effects.cpp
+    simplified_away_embedded_image.cpp
+    skip_stages.cpp
+    skip_stages_cse_bug.cpp
+    skip_stages_external_array_functions.cpp
+    skip_stages_memoize.cpp
+    sliding_backwards.cpp
+    sliding_over_guard_with_if.cpp
+    sliding_reduction.cpp
+    sliding_window.cpp
+    sliding_window_cascade.cpp
+    sme_streaming.cpp
+    sme_streaming_without_target_feature.cpp
+    sort_exprs.cpp
+    specialize.cpp
+    specialize_fail.cpp
+    specialize_stride_lowering.cpp
+    specialize_trim_condition.cpp
+    split_by_non_factor.cpp
+    split_factor_type.cpp
+    split_fuse_rvar.cpp
+    split_non_innermost_predicated.cpp
+    split_reuse_inner_name_bug.cpp
+    split_storage.cpp
+    split_storage_errors.cpp
+    split_store_compute.cpp
+    stack_allocations.cpp
+    stage_strided_loads.cpp
+    stencil_chain_in_update_definitions.cpp
+    stmt_to_html.cpp
+    storage_folding.cpp
+    store_at_without_compute_at.cpp
+    store_in.cpp
+    store_root_without_compute_root.cpp
+    streaming.cpp
+    streaming_in.cpp
+    streaming_specialize.cpp
+    strict_float.cpp
+    strict_float_bounds.cpp
+    strided_load.cpp
+    struct_nested_field_load.cpp
+    struct_nested_field_store.cpp
+    struct_type.cpp
+    struct_type_dot_product.cpp
+    target_query.cpp
+    thread_id_outside_block_id.cpp
+    tiled_matmul.cpp
+    tracing.cpp
+    tracing_bounds.cpp
+    tracing_broadcast.cpp
+    tracing_errors.cpp
+    tracing_stack.cpp
+    transitive_bounds.cpp
+    transpose_idioms.cpp
+    transposed_vector_reduce.cpp
+    tuple_arg_select_undef.cpp
+    tuple_helpers.cpp
+    tuple_output_bounds_check.cpp
+    tuple_partial_update.cpp
+    tuple_realization_to_buffer.cpp
+    tuple_select.cpp
+    tuple_undef.cpp
+    tuple_update_ops.cpp
+    tuple_val_select_undef.cpp
+    two_vector_args.cpp
+    typed_func.cpp
+    unbounded_input.cpp
+    unbounded_output.cpp
+    undefined_func_compile.cpp
+    undefined_loop_level.cpp
+    undefined_pipeline_compile.cpp
+    uninitialized_param.cpp
+    uninitialized_param_2.cpp
+    uninitialized_read.cpp
+    unique_func_image.cpp
+    unroll_dynamic_loop.cpp
+    unroll_huge_mux.cpp
+    unroll_loop_with_implied_constant_bounds.cpp
+    unrolled_reduction.cpp
+    unsafe_dedup_lets.cpp
+    unsafe_promises.cpp
+    unused_func.cpp
+    update_chunk.cpp
+    vector_bounds_inference.cpp
+    vector_extern.cpp
+    vector_print_bug.cpp
+    vector_store_alignment.cpp
+    vector_tile.cpp
+    vectorize_dynamic.cpp
+    vectorize_guard_with_if.cpp
+    vectorize_mixed_widths.cpp
+    vectorize_nested.cpp
+    vectorize_too_little.cpp
+    vectorize_too_much.cpp
+    vectorize_varying_allocation_size.cpp
+    vectorized_assert.cpp
+    vectorized_extern.cpp
+    vectorized_guard_with_if_tail.cpp
+    vectorized_initialization.cpp
+    vectorized_load_from_vectorized_allocation.cpp
+    vectorized_reduction_bug.cpp
+    wrong_type.cpp
+    # keep-sorted end
+)
+
+# Tests that use the GPU when the target has a GPU feature. See doc/Testing.md.
+tests(
+    GROUPS correctness gpu
+    SOURCES
+    # keep-sorted start case=no
+    argmax.cpp
+    async_device_copy.cpp
+    atomics_gpu_8_bit.cpp
+    atomics_gpu_mutex.cpp
+    bool_compute_root_vectorize.cpp
+    bool_predicate_cast.cpp
+    boundary_conditions.cpp
+    bounds.cpp
+    bounds_inference.cpp
+    cascaded_filters.cpp
+    chunk.cpp
+    convolution_multiple_kernels.cpp
+    custom_metal_context.cpp
+    custom_webgpu_context.cpp
+    debug_to_file.cpp
+    debug_to_file_reorder.cpp
+    device_buffer_copies_with_profile.cpp
+    device_buffer_copy.cpp
+    device_copy_at_inner_loop.cpp
+    device_crop.cpp
+    device_slice.cpp
+    dilate3x3.cpp
+    dynamic_allocation_in_gpu_kernel.cpp
+    extern_producer.cpp
+    extern_sort.cpp
+    extern_stage_on_device.cpp
+    five_d_gpu_buffer.cpp
+    float16_t.cpp
+    func_lifetime.cpp
+    func_lifetime_2.cpp
+    fuse.cpp
+    fuse_gpu_threads.cpp
     gpu_alloc_group_profiling.cpp
     gpu_allocation_cache.cpp
     gpu_arg_types.cpp
@@ -205,257 +429,39 @@ tests(
     gpu_sum_scan.cpp
     gpu_texture.cpp
     gpu_thread_barrier.cpp
-    gpu_thread_extent_under_outer_split.cpp
     gpu_transpose.cpp
     gpu_vectorize.cpp
     gpu_vectorized_shared_memory.cpp
-    growing_stack.cpp
-    half_native_interleave.cpp
-    handle.cpp
-    heap_cleanup.cpp
     hello_gpu.cpp
-    hexagon_scatter.cpp
-    histogram.cpp
-    histogram_equalize.cpp
-    hoist_invariants.cpp
-    hoist_loop_invariant_if_statements.cpp
-    hoist_storage.cpp
-    hoist_storage_extern.cpp
-    hoist_storage_root_without_compute_root.cpp
-    hoist_storage_without_compute_at.cpp
-    host_alignment.cpp
-    image_io.cpp
-    image_of_lists.cpp
-    implicit_args.cpp
-    implicit_args_tests.cpp
-    implicit_pure_def_with_rvar_args.cpp
-    impossible_constraints.cpp
     in_place.cpp
-    incomplete_target.cpp
-    indexing_access_undef.cpp
-    inline_reduction.cpp
-    inlined_generator.cpp
-    input_buffer_func_name_collision.cpp
-    input_func_name_unique.cpp
-    input_generator_buffer_func_name_collision.cpp
-    input_image_bounds_check.cpp
-    input_larger_than_two_gigs.cpp
-    input_param_func_name_collision.cpp
-    integer_powers.cpp
-    interleave.cpp
     interleave_rgb.cpp
     interleave_x.cpp
-    intrinsics.cpp
     invalid_gpu_loop_nests.cpp
     inverse.cpp
     isnan.cpp
-    issue_3926.cpp
-    iterate_over_circle.cpp
-    jit_host_environment.cpp
-    lambda.cpp
-    lazy_convolution.cpp
     leak_device_memory.cpp
-    left_shift_negative.cpp
-    lerp.cpp
-    let_in_rdom_bound.cpp
-    likely.cpp
-    load_library.cpp
     logical.cpp
-    loop_carry.cpp
     loop_invariant_extern_calls.cpp
-    loop_level_generator_param.cpp
-    lossless_cast.cpp
     lots_of_loop_invariants.cpp
-    low_bit_depth_noise.cpp
-    make_struct.cpp
-    many_dimensions.cpp
-    many_inlined_selects.cpp
-    many_small_extern_stages.cpp
-    many_updates.cpp
     math.cpp
     median3x3.cpp
-    memoize_cloned.cpp
-    memoize_different_compute_store.cpp
-    memoize_output_invalid.cpp
     metal_precompiled_shaders.cpp
     metal_threads_too_large.cpp
-    min_extent.cpp
-    mismatch_runtime_streaming_vscale.cpp
-    mismatch_runtime_vscale.cpp
-    missing_args.cpp
-    mod.cpp
-    multi_output_pipeline_with_bad_sizes.cpp
-    multi_splits_with_diff_tail_strategies.cpp
     multi_way_select.cpp
-    multipass_constraints.cpp
     multiple_outputs.cpp
-    mux.cpp
-    narrow_predicates.cpp
-    negative_split_factors.cpp
-    nested_tail_strategies.cpp
     newtons_method.cpp
-    non_nesting_extern_bounds_query.cpp
-    non_vector_aligned_embeded_buffer.cpp
-    null_host_field.cpp
-    obscure_image_references.cpp
-    out_constraint.cpp
-    out_of_memory.cpp
-    output_func_input_buffer_name_collision.cpp
-    output_larger_than_two_gigs.cpp
-    overflow_during_constant_folding.cpp
     parallel_gpu_nested.cpp
     param.cpp
-    parameter_constraints.cpp
-    partial_application.cpp
-    partial_realization.cpp
-    partition_clamped_extent_guard.cpp
-    partition_loops.cpp
-    partition_loops_bug.cpp
-    partition_max_filter.cpp
-    pipeline_set_jit_externs_func.cpp
-    popc_clz_ctz_bounds.cpp
-    predicated_store_load.cpp
-    predicated_store_load_single_lane.cpp
-    prefetch.cpp
-    print.cpp
-    process_some_tiles.cpp
-    profiler_json_output.cpp
-    pseudostack_shares_slots.cpp
-    python_extension_gen.cpp
-    realization_with_too_many_outputs.cpp
-    realize_condition_depends_on_tuple.cpp
-    realize_constantly_larger_than_two_gigs.cpp
-    realize_larger_than_two_gigs.cpp
-    realize_over_shifted_domain.cpp
-    recursive_box_filters.cpp
-    reduction_chain.cpp
     reduction_non_rectangular.cpp
-    reduction_schedule.cpp
-    register_shuffle.cpp
-    reorder_storage.cpp
-    require.cpp
-    require_fail.cpp
-    reschedule.cpp
-    respect_input_constraint_in_bounds_inference.cpp
-    reuse_stack_alloc.cpp
     round.cpp
-    saturating_casts.cpp
-    scatter.cpp
-    serialization.cpp
-    set_custom_trace.cpp
-    sever.cpp
-    shadowed_bound.cpp
-    shift_by_unsigned_negated.cpp
-    side_effects.cpp
-    simplified_away_embedded_image.cpp
-    skip_stages.cpp
-    skip_stages_cse_bug.cpp
-    skip_stages_external_array_functions.cpp
-    skip_stages_memoize.cpp
-    sliding_backwards.cpp
-    sliding_over_guard_with_if.cpp
-    sliding_reduction.cpp
-    sliding_window.cpp
-    sliding_window_cascade.cpp
-    sme_streaming.cpp
-    sme_streaming_without_target_feature.cpp
-    sort_exprs.cpp
-    specialize.cpp
-    specialize_fail.cpp
-    specialize_stride_lowering.cpp
     specialize_to_gpu.cpp
-    specialize_trim_condition.cpp
-    split_by_non_factor.cpp
-    split_factor_type.cpp
-    split_fuse_rvar.cpp
-    split_non_innermost_predicated.cpp
-    split_reuse_inner_name_bug.cpp
-    split_storage.cpp
-    split_storage_errors.cpp
-    split_store_compute.cpp
-    stack_allocations.cpp
-    stage_strided_loads.cpp
-    stencil_chain_in_update_definitions.cpp
-    stmt_to_html.cpp
-    storage_folding.cpp
-    store_at_without_compute_at.cpp
-    store_in.cpp
-    store_root_without_compute_root.cpp
-    streaming.cpp
-    streaming_in.cpp
-    streaming_specialize.cpp
-    strict_float.cpp
-    strict_float_bounds.cpp
     strict_fma.cpp
-    strided_load.cpp
-    struct_nested_field_load.cpp
-    struct_nested_field_store.cpp
-    struct_type.cpp
-    struct_type_dot_product.cpp
-    target_query.cpp
-    thread_id_outside_block_id.cpp
-    tiled_matmul.cpp
-    tracing.cpp
-    tracing_bounds.cpp
-    tracing_broadcast.cpp
-    tracing_errors.cpp
-    tracing_stack.cpp
-    transitive_bounds.cpp
-    transpose_idioms.cpp
-    transposed_vector_reduce.cpp
     trim_no_ops.cpp
-    tuple_arg_select_undef.cpp
-    tuple_helpers.cpp
-    tuple_output_bounds_check.cpp
-    tuple_partial_update.cpp
-    tuple_realization_to_buffer.cpp
     tuple_reduction.cpp
-    tuple_select.cpp
-    tuple_undef.cpp
-    tuple_update_ops.cpp
-    tuple_val_select_undef.cpp
-    two_vector_args.cpp
-    typed_func.cpp
-    unbounded_input.cpp
-    unbounded_output.cpp
     undef.cpp
-    undefined_func_compile.cpp
-    undefined_loop_level.cpp
-    undefined_pipeline_compile.cpp
-    uninitialized_param.cpp
-    uninitialized_param_2.cpp
-    uninitialized_read.cpp
-    unique_func_image.cpp
-    unroll_dynamic_loop.cpp
-    unroll_huge_mux.cpp
-    unroll_loop_with_implied_constant_bounds.cpp
-    unrolled_reduction.cpp
-    unsafe_dedup_lets.cpp
-    unsafe_promises.cpp
-    unused_func.cpp
-    update_chunk.cpp
-    vector_bounds_inference.cpp
-    vector_extern.cpp
-    vector_print_bug.cpp
     vector_shuffle.cpp
-    vector_store_alignment.cpp
-    vector_tile.cpp
-    vectorize_dynamic.cpp
-    vectorize_guard_with_if.cpp
-    vectorize_mixed_widths.cpp
-    vectorize_nested.cpp
-    vectorize_too_little.cpp
-    vectorize_too_much.cpp
-    vectorize_varying_allocation_size.cpp
-    vectorized_assert.cpp
-    vectorized_extern.cpp
     vectorized_gpu_allocation.cpp
-    vectorized_guard_with_if_tail.cpp
-    vectorized_initialization.cpp
-    vectorized_load_from_vectorized_allocation.cpp
-    vectorized_reduction_bug.cpp
     widening_reduction.cpp
-    wrong_type.cpp
     # keep-sorted end
 )
 
@@ -530,6 +536,7 @@ tests(
     halide_buffer.cpp
     host_inside_gpu_loop.cpp
     implicit_args_mismatch.cpp
+    incomplete_target.cpp
     infer_arguments.cpp
     init_def_should_be_all_vars.cpp
     inspect_loop_level.cpp
@@ -615,6 +622,7 @@ tests(
     generator_cache.cpp
     generator_internal.cpp
     gpu_async_copy_errors.cpp
+    gpu_thread_extent_under_outer_split.cpp
     pytorch.cpp
     runtime_prefixes.cpp
     sve_codegen_predicated.cpp
@@ -662,18 +670,14 @@ tests(
     atomic_tuples.cpp
     atomics.cpp
     compute_outermost.cpp
-    compute_with.cpp
-    convolution.cpp
     extern_consumer_tiled.cpp
     extern_stage.cpp
     func_clone.cpp
     func_wrapper.cpp
     image_wrapper.cpp
-    interpreter.cpp
     legal_race_condition.cpp
     lots_of_dimensions.cpp
     memoize.cpp
-    mul_div_mod.cpp
     multi_pass_reduction.cpp
     multiple_outputs_extern.cpp
     multiple_scatter.cpp
@@ -691,7 +695,6 @@ tests(
     parallel_scatter.cpp
     parallel_size_one.cpp
     random.cpp
-    reorder_rvars.cpp
     rfactor.cpp
     rfactor_aligned_split.cpp
     rfactor_aligned_split_2d.cpp
@@ -704,9 +707,23 @@ tests(
     transitive_in.cpp
     truncated_pyramid.cpp
     tuple_vector_reduce.cpp
-    vector_cast.cpp
     vector_math.cpp
     vector_reductions.cpp
+    # keep-sorted end
+)
+
+# Multithreaded tests that use the GPU when the target has a GPU feature.
+# See doc/Testing.md.
+tests(
+    GROUPS correctness multithreaded gpu
+    SOURCES
+    # keep-sorted start
+    compute_with.cpp
+    convolution.cpp
+    interpreter.cpp
+    mul_div_mod.cpp
+    reorder_rvars.cpp
+    vector_cast.cpp
     # keep-sorted end
 )
 

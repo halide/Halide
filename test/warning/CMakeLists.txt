@@ -1,14 +1,10 @@
-tests(
-    GROUPS warning
-    SOURCES
-    metal_assertion_in_kernel.cpp
-    require_const_false.cpp
-    sliding_vectors.cpp
-    unscheduled_update_def.cpp
-)
+tests(GROUPS warning SOURCES require_const_false.cpp sliding_vectors.cpp unscheduled_update_def.cpp)
 set(WARNING_TESTS ${TEST_NAMES})
 
 # See doc/Testing.md for the meaning of these groups.
+tests(GROUPS warning gpu SOURCES metal_assertion_in_kernel.cpp)
+list(APPEND WARNING_TESTS ${TEST_NAMES})
+
 tests(GROUPS warning target_independent llvm_independent SOURCES hidden_pure_definition.cpp)
 list(APPEND WARNING_TESTS ${TEST_NAMES})
 

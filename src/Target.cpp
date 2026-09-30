@@ -697,6 +697,9 @@ void set_sanitizer_bits(Target &t) {
 }  // End anonymous namespace
 
 Target get_target_from_environment() {
+    // tools/audit_test_labels.py relies on this tag (and the one below) to
+    // find tests whose results can depend on the target.
+    debug(4, "target-env") << "Reading target from environment: HL_TARGET\n";
     string target = Internal::get_env_variable("HL_TARGET");
     if (target.empty()) {
         return get_host_target();
@@ -706,6 +709,7 @@ Target get_target_from_environment() {
 }
 
 Target get_jit_target_from_environment() {
+    debug(4, "target-env") << "Reading target from environment: HL_JIT_TARGET\n";
     Target host = get_host_target();
     host.set_feature(Target::JIT);
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Audit the target_independent / llvm_independent CTest labels.
+"""Audit the target_independent / llvm_independent / gpu CTest labels.
 
 CI relies on these labels to avoid running the same test more than once:
 
@@ -8,18 +8,29 @@ CI relies on these labels to avoid running the same test more than once:
                       Halide target.
   llvm_independent    The test never invokes LLVM code generation, so it runs
                       against only one LLVM version. Implies target_independent.
+  gpu                 The test exercises the GPU when the target has a GPU
+                      feature, so it runs in the CI steps that test a GPU
+                      target.
 
-This script checks both labels empirically against an existing build, running
-each test once:
+This script checks them empirically against an existing build. Each test runs
+once, with HL_TARGET / HL_JIT_TARGET set to --target (default host) and
+HL_DEBUG_CODEGEN=0;tag:target-env,llvm-entry,gpu-entry. Keeping verbosity 0
+means debug(0) output, e.g. print_loop_nest(), happens exactly as in CI. Each
+tag marks one thing in the test's output:
 
-  * A test is target independent if it still passes with HL_TARGET and
-    HL_JIT_TARGET set to an unparsable string (any attempt to read the target
-    from the environment then fails with "Did not understand Halide target").
-  * A target-independent test is LLVM independent if, in that same run, it
-    never emits the "llvm-entry" debug tag, which marks Halide loading its
-    LLVM runtime bitcode. The tag is enabled alongside the default verbosity
-    (HL_DEBUG_CODEGEN=0;tag:llvm-entry) so that debug(0) output, e.g.
-    print_loop_nest(), still happens exactly as it does in CI.
+  target-env  Halide read the target from the environment
+              (get_target_from_environment / get_jit_target_from_environment).
+              A passing test that never does this is target independent.
+  llvm-entry  Halide loaded its LLVM runtime bitcode, which every LLVM code
+              generation path does. A target-independent test that never
+              does this is LLVM independent.
+  gpu-entry   Halide compiled a GPU kernel or fetched a device interface. When
+              --target has a GPU feature (e.g. host-metal), every test that
+              does this and reads the target must be labeled gpu. (A
+              target-independent test uses the GPU the same way everywhere, so
+              it needs no gpu label.) A gpu-labeled test that doesn't use the
+              GPU, e.g. a CUDA-only test that skips itself on Metal, or one
+              checking a GPU-only schedule error, is reported, not rejected.
 
 Only JIT-style test executables are audited (see AUDITED_LABELS): AOT tests
 (generator, tutorial, apps, ...) bake Halide_TARGET in at build time and so
@@ -32,6 +43,7 @@ branch on get_host_target().
 
 Usage:
     tools/audit_test_labels.py --build-dir build [-C RelWithDebInfo] [-j N]
+                               [--target host-metal]
 """
 
 import argparse
@@ -42,13 +54,14 @@ import re
 import subprocess
 import sys
 
-POISON = "audit-poisoned-target"
-TARGET_ERROR = "Did not understand Halide target"
-# Every LLVM code generation path loads runtime bitcode through
-# parse_bitcode_file() in src/LLVM_Runtime_Linker.cpp, which logs LLVM_MARKER
-# under this tag.
-LLVM_DEBUG_RULES = "0;tag:llvm-entry"
+DEBUG_RULES = "0;tag:target-env,llvm-entry,gpu-entry"
+# Logged under target-env by src/Target.cpp.
+TARGET_MARKER = "Reading target from environment: "
+# Logged under llvm-entry by src/LLVM_Runtime_Linker.cpp.
 LLVM_MARKER = "Loading runtime bitcode: "
+# Logged under gpu-entry by src/OffloadGPULoops.cpp and src/DeviceInterface.cpp.
+GPU_MARKERS = ("Compiling GPU kernel: ", "Using device interface: ")
+GPU_FEATURES = {"cuda", "opencl", "metal", "vulkan", "d3d12compute", "webgpu"}
 
 # Tests with any of these labels are JIT tests built from plain C++ sources, so
 # the environment is the only way their target can be chosen.
@@ -114,18 +127,21 @@ def passed(test, code, out):
     return "passed" if ok else "failed"
 
 
-def audit(test, timeout):
+def audit(test, timeout, target):
     env = {
-        "HL_TARGET": POISON,
-        "HL_JIT_TARGET": POISON,
-        "HL_DEBUG_CODEGEN": LLVM_DEBUG_RULES,
+        "HL_TARGET": target,
+        "HL_JIT_TARGET": target,
+        "HL_DEBUG_CODEGEN": DEBUG_RULES,
     }
     code, out = run(test, env, timeout)
-    used_llvm = LLVM_MARKER in out
     status = passed(test, code, out)
-    if status != "passed" or TARGET_ERROR in out or POISON in out:
-        return test["name"], False, False, status
-    return test["name"], True, not used_llvm, "passed"
+    ti = status == "passed" and TARGET_MARKER not in out
+    return test["name"], {
+        "status": status,
+        "ti": ti,
+        "li": ti and LLVM_MARKER not in out,
+        "gpu": any(m in out for m in GPU_MARKERS),
+    }
 
 
 def main():
@@ -136,12 +152,19 @@ def main():
     ap.add_argument("-R", "--regex", default=None, help="only audit matching tests")
     ap.add_argument("--timeout", type=int, default=1800)
     ap.add_argument(
+        "--target",
+        default="host",
+        help="HL_TARGET for the audit run; give one with a GPU feature the host"
+        " supports (e.g. host-metal) to also audit the gpu label",
+    )
+    ap.add_argument(
         "--strict",
         action="store_true",
         help="also fail when an unlabeled test could carry a label",
     )
     args = ap.parse_args()
 
+    check_gpu = bool(GPU_FEATURES & set(args.target.split("-")))
     tests = [t for t in ctest_json(args.build_dir, args.config)["tests"] if in_scope(t)]
     if args.regex:
         tests = [t for t in tests if re.search(args.regex, t["name"])]
@@ -150,20 +173,22 @@ def main():
     print(f"Auditing {len(tests)} tests with {args.jobs} jobs...", file=sys.stderr)
     results = {}
     with concurrent.futures.ThreadPoolExecutor(args.jobs) as ex:
-        futures = [ex.submit(audit, t, args.timeout) for t in tests]
+        futures = [ex.submit(audit, t, args.timeout, args.target) for t in tests]
         for i, f in enumerate(concurrent.futures.as_completed(futures), 1):
-            name, ti, li, status = f.result()
-            results[name] = (ti, li, status)
+            name, r = f.result()
+            results[name] = r
             print(
-                f"[{i}/{len(tests)}] {name}: {status}"
-                f"{' target_independent' if ti else ''}"
-                f"{' llvm_independent' if li else ''}",
+                f"[{i}/{len(tests)}] {name}: {r['status']}"
+                f"{' target_independent' if r['ti'] else ''}"
+                f"{' llvm_independent' if r['li'] else ''}"
+                f"{' gpu' if r['gpu'] else ''}",
                 file=sys.stderr,
             )
 
-    errors, suggestions = [], []
+    errors, suggestions, notes = [], [], []
     for name in sorted(results):
-        ti, li, status = results[name]
+        r = results[name]
+        ti, li, status = r["ti"], r["li"], r["status"]
         have = labels[name]
         if "target_independent" in have and not ti:
             errors.append(f"{name}: labeled target_independent but is not ({status})")
@@ -175,7 +200,20 @@ def main():
             suggestions.append(f"{name}: could be labeled target_independent")
         if li and "llvm_independent" not in have:
             suggestions.append(f"{name}: could be labeled llvm_independent")
+        if check_gpu:
+            if r["gpu"] and not ti and "gpu" not in have:
+                errors.append(f"{name}: uses the GPU but is not labeled gpu")
+            if ti and "gpu" in have:
+                errors.append(
+                    f"{name}: gpu label is redundant on a target-independent test"
+                )
+            if "gpu" in have and not r["gpu"]:
+                notes.append(f"{name}: labeled gpu but did not use the GPU")
+            if status != "passed":
+                notes.append(f"{name}: {status} on {args.target}")
 
+    for n in notes:
+        print("info:", n)
     for s in suggestions:
         print("note:", s)
     for e in errors:
