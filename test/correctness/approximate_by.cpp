@@ -100,7 +100,7 @@ int check_discovery() {
     EncodeResult e = two.encode({f});
     Func in("topo_in");
     in(x) = x;
-    Approximation composed = Compose{TwoStep{"_outer"}, TwoStep{"_inner"}};
+    Approximation composed = Compose{TwoStep{"_inner"}, TwoStep{"_outer"}};
     EncodeResult ce = composed.encode({in});
     auto index_of = [&](const char *n) {
         for (size_t i = 0; i < ce.intermediates.size(); i++) {
@@ -165,10 +165,10 @@ int main(int argc, char **argv) {
     ApproximationResult result = f.approximate_by(quant, {g});
 
     // Stage tracing preserves opaque identities through nested combinators,
-    // including repeated component types and Apply/TrustedInverse ownership.
+    // including repeated component types and Parallel/TrustedInverse ownership.
     Approximation first_identity = Identity{}, second_identity = Identity{};
     Approximation trusted_encoder = Identity{}, trusted_decoder = Identity{};
-    Approximation applied = Apply(0, second_identity);
+    Approximation applied = Parallel{std::vector<Approximation>{second_identity}};
     Approximation trusted = TrustedInverse(trusted_encoder, trusted_decoder);
     Approximation nested = Compose(first_identity, applied, trusted);
 
@@ -195,7 +195,7 @@ int main(int argc, char **argv) {
     if (!require_port(first_identity, "first repeated Identity") ||
         !require_port(second_identity, "second repeated Identity") ||
         !require_port(first_copy, "copy of first Identity") ||
-        !require_port(applied, "Apply") ||
+        !require_port(applied, "Parallel") ||
         !require_port(trusted, "TrustedInverse") ||
         !require_port(nested, "outer Compose")) {
         return 1;

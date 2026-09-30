@@ -73,7 +73,7 @@ int main() {
         CHECK(comp.label() == "Identity");
         CHECK(Approximation(BlockReshape{32}).label() == "BlockReshape");
         CHECK(Approximation(Compose{Identity{}, Identity{}}).label() == "Compose");
-        CHECK(Approximation(Apply{2, Identity{}}).label() == "Apply[2]");
+        CHECK(Approximation(Parallel{Identity{}, Identity{}}).label() == "Parallel");
         CHECK(Approximation(StorageCast<float, int8_t>{}).label() == "StorageCast<float, signed char>");
         CHECK(Approximation().label().empty());
 
@@ -103,18 +103,18 @@ int main() {
     Approximation inc = Pointwise{"inc", [](Expr e) { return e + 1; }, [](Expr e) { return e - 1; }};
     Approximation dbl(Pointwise{"dbl", [](Expr e) { return e * 2; }, [](Expr e) { return e / 2; }}, "Double");
     Approximation pair = Pair{inc, dbl};
-    Approximation scheme = Compose{Apply{0, pair}, neg};
+    Approximation scheme = Compose{neg, Parallel{std::vector<Approximation>{pair}}};
 
     ApproximationResult r = src.approximate_by(scheme, {consumer});
 
     const ApproximationTraceNode &et = r.encode_trace;
     CHECK(et.stage.same_as(scheme));
     CHECK(et.label == "Compose");
-    // Compose encodes back-to-front: neg first, then Apply[0].
+    // Compose encodes front-to-back: neg first, then the Parallel.
     CHECK(et.children.size() == 2);
     CHECK(et.children[0].stage.same_as(neg));
     CHECK(et.children[0].children.empty());
-    CHECK(et.children[1].label == "Apply[0]");
+    CHECK(et.children[1].label == "Parallel");
     CHECK(et.children[1].children.size() == 1);
     const ApproximationTraceNode &ep = et.children[1].children[0];
     CHECK(ep.stage.same_as(pair));
@@ -123,11 +123,11 @@ int main() {
     CHECK(ep.children[1].stage.same_as(dbl));
     CHECK(ep.children[1].label == "Double");
 
-    // Decode runs front-to-back, and Pair undoes its stages in reverse.
+    // Decode runs back-to-front, and Pair undoes its stages in reverse.
     const ApproximationTraceNode &dt = r.decode_trace;
     CHECK(dt.stage.same_as(scheme));
     CHECK(dt.children.size() == 2);
-    CHECK(dt.children[0].label == "Apply[0]");
+    CHECK(dt.children[0].label == "Parallel");
     CHECK(dt.children[1].stage.same_as(neg));
     const ApproximationTraceNode &dp = dt.children[0].children[0];
     CHECK(dp.stage.same_as(pair));
@@ -147,12 +147,12 @@ int main() {
     std::ostringstream trace;
     trace << et;
     const char *expected_trace =
-        "Compose -> input=dbl_encode\n"
+        "Compose -> 0=dbl_encode\n"
         "  intermediates: neg_encode, inc_encode\n"
-        "  Pointwise -> input=neg_encode\n"
-        "  Apply[0] -> input=dbl_encode\n"
+        "  Pointwise -> 0=neg_encode\n"
+        "  Parallel -> 0=dbl_encode\n"
         "    intermediates: inc_encode\n"
-        "    Pair -> input=dbl_encode\n"
+        "    Pair -> 0=dbl_encode\n"
         "      intermediates: inc_encode\n"
         "      Pointwise -> 0=inc_encode\n"
         "      Double -> 0=dbl_encode\n";
@@ -165,25 +165,25 @@ int main() {
     full << r;
     const char *expected_full =
         "encode:\n"
-        "  Compose -> input=dbl_encode\n"
+        "  Compose -> 0=dbl_encode\n"
         "    intermediates: neg_encode, inc_encode\n"
-        "    Pointwise -> input=neg_encode\n"
-        "    Apply[0] -> input=dbl_encode\n"
+        "    Pointwise -> 0=neg_encode\n"
+        "    Parallel -> 0=dbl_encode\n"
         "      intermediates: inc_encode\n"
-        "      Pair -> input=dbl_encode\n"
+        "      Pair -> 0=dbl_encode\n"
         "        intermediates: inc_encode\n"
         "        Pointwise -> 0=inc_encode\n"
         "        Double -> 0=dbl_encode\n"
         "decode:\n"
-        "  Compose -> input=neg_decode\n"
+        "  Compose -> 0=neg_decode\n"
         "    intermediates: dbl_decode, inc_decode\n"
-        "    Apply[0] -> input=inc_decode\n"
+        "    Parallel -> 0=inc_decode\n"
         "      intermediates: dbl_decode\n"
-        "      Pair -> input=inc_decode\n"
+        "      Pair -> 0=inc_decode\n"
         "        intermediates: dbl_decode\n"
         "        Double -> 0=dbl_decode\n"
         "        Pointwise -> 0=inc_decode\n"
-        "    Pointwise -> input=neg_decode\n";
+        "    Pointwise -> 0=neg_decode\n";
     if (normalize(full.str()) != expected_full) {
         printf("Unexpected result printout:\n%s", full.str().c_str());
         return 1;

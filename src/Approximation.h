@@ -4,12 +4,13 @@
 /** \file
  * Defines Approximation, a type-erased handle for lossy, quantified
  * Func-to-Func transformations (e.g. a quantize/dequantize round trip), and
- * Compose/Apply/etc., which build larger Approximations out of smaller ones. See
+ * Compose/Parallel/etc., which build larger Approximations out of smaller ones. See
  * Func::approximate_by(), which splices such a round trip into an existing
  * call graph, and doc/Approximation.md for the design rationale.
  */
 
 #include <functional>
+#include <initializer_list>
 #include <iosfwd>
 #include <memory>
 #include <optional>
@@ -55,9 +56,15 @@ struct ApproximationRange {
 
 /** A named slot in an Approximation's interface: one Func that flows into or
  * out of a stage. The name identifies the port (for lookups and for
- * name-based combinators like Apply); `type` and `dimensions`, when set, are
- * checked against the actual Func at run time. A port with a multi-valued
+ * name-based combinators like Parallel); `type` and `dimensions`, when set,
+ * are checked against the actual Func at run time. A port with a multi-valued
  * (Tuple) Func never has a `type`.
+ *
+ * A name identifies a *wire*, not a stage: the port names that reach a stage
+ * from upstream (or from the caller) are the names it sees, and a stage's
+ * declared input names are only defaults for when none flow in. The
+ * declaration is checked (types, dimensions) but never substituted. See
+ * Approximation::encode().
  *
  * `range`, when set, is a declared bound on the port's *values*. Its meaning
  * depends on the direction the port is used in:
@@ -155,17 +162,19 @@ struct ApproximationSignature {
  * \endcode
  *
  * Each direction may additionally take a *port-aware* form, which also
- * receives the ports (names and constraints) of the Funcs being consumed:
+ * receives the ports (names and constraints) of the Funcs that encode()
+ * consumed -- the original values. In decode() that is the context in which
+ * the stage's encode ran, not the ports of `encoded`:
  *
  * \code
  * std::vector<Func> encode(const std::vector<Func> &inputs,
  *                          const ApproximationPorts &input_ports) const;
  * std::vector<Func> decode(const std::vector<Func> &encoded,
- *                          const ApproximationPorts &encoded_ports) const;
+ *                          const ApproximationPorts &input_ports) const;
  * \endcode
  *
- * The port-aware form is preferred when present. Compose and Apply use it so
- * that they can look ports up by name.
+ * The port-aware form is preferred when present. Combinators use it so that
+ * they can look ports up by name and hand each child its own context.
  *
  * A unit may declare its interface with ONE of:
  *
@@ -184,21 +193,17 @@ struct ApproximationSignature {
  * outputs are named positionally, "0", "1", .... Declared ports are validated
  * against the actual Funcs on every call (see encode()).
  *
- * A unit whose decoded port names depend on its encoded ports (a combinator
- * that reorders or forwards them) may say how:
- *
- * \code
- * // The names (and constraints) of the Funcs decode() returns, given the
- * // ports it receives; empty if unknown. Without it, the declared signature's
- * // inputs resolved with no context are used (or the naming rule).
- * ApproximationPorts decoded_ports(const ApproximationPorts &encoded) const;
- * \endcode
+ * Decode never needs to declare anything more: for every stage, the ports of
+ * decode()'s outputs are named like the ports of its encode()'s inputs, and
+ * the ports of decode()'s inputs like the ports of encode()'s outputs.
  *
  * A unit may also list the Approximations it is built from, for describe():
  *
  * \code
  * std::vector<Approximation> children() const;
- * // optional: the input ports each child would receive, parallel to children()
+ * // optional: the input ports each child would receive when this unit's
+ * // encode receives `inputs`, parallel to children(); it is what lets
+ * // describe() and check_ranges() resolve the children's signatures
  * std::vector<ApproximationPorts> child_inputs(const ApproximationPorts &inputs) const;
  * \endcode
  *
@@ -224,7 +229,7 @@ struct ApproximationSignature {
  *
  * The handle's own encode()/decode() always take and return a *vector* of
  * Funcs, even though the common case (a leaf Approximation like a plain
- * quantizer) only ever uses one. This is what makes Compose and Apply below
+ * quantizer) only ever uses one. This is what makes Compose and Parallel below
  * possible: a composed Approximation's inner stage can produce multiple Funcs
  * (e.g. a quantized-values Func plus a separate scale Func), and the next
  * stage needs to be able to consume all of them, or select just one to act
@@ -249,7 +254,7 @@ struct ApproximationSignature {
  *
  * \code
  * Approximation qh = LittleEndianScalarPack<uint32_t>{};
- * Compose scheme{qh, BlockReshape{32}};
+ * Compose scheme{BlockReshape{32}, qh};
  * ApproximationResult r = f.approximate_by(scheme, {g});
  * Func bytes = r.decoded_by(qh);
  * \endcode
@@ -273,13 +278,11 @@ class Approximation {
         virtual std::vector<Func> encode(const std::vector<Func> &inputs,
                                          const ApproximationPorts &input_ports) const = 0;
         virtual std::vector<Func> decode(const std::vector<Func> &encoded,
-                                         const ApproximationPorts &encoded_ports) const = 0;
+                                         const ApproximationPorts &input_ports) const = 0;
         virtual std::string default_label() const = 0;
         virtual SignatureForm signature_form() const = 0;
         virtual ApproximationSignature declared_signature(const ApproximationPorts &inputs) const = 0;
         virtual bool encode_is_single() const = 0;
-        virtual bool declares_decoded_ports() const = 0;
-        virtual ApproximationPorts decoded_ports(const ApproximationPorts &encoded) const = 0;
         virtual std::vector<Approximation> children() const = 0;
         virtual std::vector<ApproximationPorts> child_inputs(const ApproximationPorts &inputs) const = 0;
         virtual Func error_bound(const std::vector<Func> &inputs, const std::vector<Func> &encoded) const = 0;
@@ -396,14 +399,6 @@ class Approximation {
                                            ApproximationSignature>>> : std::true_type {};
 
     template<typename T, typename = void>
-    struct has_decoded_ports : std::false_type {};
-    template<typename T>
-    struct has_decoded_ports<T, std::enable_if_t<std::is_same_v<
-                                    std::decay_t<decltype(std::declval<const T &>().decoded_ports(
-                                        std::declval<const ApproximationPorts &>()))>,
-                                    ApproximationPorts>>> : std::true_type {};
-
-    template<typename T, typename = void>
     struct has_children : std::false_type {};
     template<typename T>
     struct has_children<T, std::enable_if_t<std::is_same_v<
@@ -511,20 +506,21 @@ public:
      * made from inside an encode() (unusual) is recorded in that encode's
      * `stage_outputs`.
      *
-     * Ports: `input_ports` name the `inputs`. If non-empty, its size must
-     * equal `inputs.size()`. If empty, the unit's declared signature supplies
-     * the names (when its input count matches), else they are positional:
-     * "0", "1", .... Every input Func is then checked against its port's
-     * `type` and `dimensions` (when set) -- both the given ports and the
-     * unit's declared inputs -- and a mismatch is a user_error naming this
-     * stage, the direction, the port, and expected vs actual. If the unit
-     * declares a static signature, its input names replace the given ones.
-     * The output ports are the declared signature's outputs (which must
-     * match the output count, and are validated like the inputs) or, for an
-     * undeclared or unknown-signature unit, follow the naming rule described
-     * on Approximation. They are returned in EncodeResult::encoded_ports,
-     * with unset types and dimensions filled in from the actual Funcs, so
-     * that they can be handed to the next stage. */
+     * Ports: `input_ports` name the `inputs`, and a name that flows in like
+     * this is the one the stage uses, whatever its declared signature says.
+     * If `input_ports` is non-empty, its size must equal `inputs.size()`. If
+     * empty, the unit's declared signature supplies default names (when its
+     * input count matches), else they are positional: "0", "1", .... Every
+     * input Func is then checked against its port's `type` and `dimensions`
+     * (when set) -- both the given ports and the unit's declared inputs -- and
+     * a mismatch is a user_error naming this stage, the direction, the port,
+     * and expected vs actual. The output ports are the declared signature's
+     * outputs, resolved for these inputs (which must match the output count,
+     * and are validated like the inputs) or, for an undeclared or
+     * unknown-signature unit, follow the naming rule described on
+     * Approximation. They are returned in EncodeResult::encoded_ports, with
+     * unset types and dimensions filled in from the actual Funcs, so that
+     * they can be handed to the next stage. */
     EncodeResult encode(const std::vector<Func> &inputs,
                         const ApproximationPorts &input_ports = {}) const;
 
@@ -532,30 +528,33 @@ public:
      * encoded form. See DecodeResult for the constraint on `decoded`'s
      * size, which depends on how this Approximation is used.
      *
-     * Ports work as in encode(), with the roles reversed: `encoded_ports`
-     * name `encoded`; when empty they come from the declared signature's
-     * outputs (so a decode run on its own, e.g. after compute_offline severs
-     * the encode, still gets named inputs). The decoded Funcs are named by
-     * decoded_ports() of the encoded ports, or by the naming rule if that is
-     * unknown or the unit is undeclared. */
+     * `input_ports` are the ports encode() was given (or empty, if it was
+     * given none, as when a decode runs on its own after compute_offline
+     * severs the encode). They are the *context*: the encoded ports and the
+     * decoded ports are both derived from them statically, through the
+     * declared signature (as describe() does), so that a stand-alone decode
+     * agrees with the encode that produced its inputs. Concretely, the
+     * `encoded` Funcs are checked against, and named after, the outputs of
+     * signature(input_ports), and the decoded Funcs are named after
+     * `input_ports` (the defaults, if empty): decode's output port i is named
+     * like encode's input port i. For an undeclared unit whose signature is
+     * unknown, the encoded ports are named by the naming rule and the
+     * decoded ports follow `input_ports` if their count matches. */
     DecodeResult decode(const std::vector<Func> &encoded,
-                        const ApproximationPorts &encoded_ports = {}) const;
+                        const ApproximationPorts &input_ports = {}) const;
 
     /** The signature of this stage in the encode direction, resolved for
      * inputs named `inputs` (empty if unknown). Nothing is run.
      *
-     * - static signature: returned as is (its input names are authoritative);
-     * - contextual signature: computed from `inputs`;
+     * - static signature: returned as is, except that when `inputs` is
+     *   non-empty and has the declared size, the input ports take the names
+     *   of `inputs` (the declared names are defaults, never substitutes);
+     * - contextual signature: computed from `inputs`, with the same rule
+     *   for the input names;
      * - undeclared single-Func unit: one input (`inputs`, or "0" if none
      *   were given) and one output with the same name;
      * - undeclared multi-Func unit: unknown (see ApproximationSignature). */
     ApproximationSignature signature(const ApproximationPorts &inputs = {}) const;
-
-    /** The ports decode() would return for encoded ports `encoded` (empty if
-     * unknown). Nothing is run. A unit's own `decoded_ports()` is used if it
-     * has one; otherwise its declared signature's inputs, resolved without
-     * context. */
-    ApproximationPorts decoded_ports(const ApproximationPorts &encoded) const;
 
     /** A per-element upper bound on |decode(encode(x)) - x|, given the
      * `inputs` handed to encode() and the `encoded` Funcs it returned, valid
@@ -584,10 +583,11 @@ public:
     std::string describe(const ApproximationPorts &inputs = {}) const;
 
 private:
-    ApproximationPorts resolve_ports(const std::vector<Func> &funcs, const ApproximationPorts &given,
-                                     bool encode_direction) const;
-    ApproximationPorts output_ports(const std::vector<Func> &outputs, const ApproximationPorts &input_ports,
-                                    bool encode_direction) const;
+    ApproximationPorts resolve_inputs(const std::vector<Func> &inputs, const ApproximationPorts &given) const;
+    ApproximationPorts resolve_encoded(const std::vector<Func> &encoded, const ApproximationSignature &sig,
+                                       const ApproximationPorts &input_ports) const;
+    ApproximationPorts output_ports(const std::vector<Func> &outputs, const ApproximationSignature &sig,
+                                    const ApproximationPorts &input_ports, bool encode_direction) const;
     void describe_to(std::string &out, const ApproximationPorts &inputs, int depth) const;
     void range_issues_to(std::vector<std::string> &out, const ApproximationPorts &inputs,
                          const std::string &path) const;
@@ -650,7 +650,7 @@ struct EncodeResult {
  * replacement for whatever Func(s) were originally encoded, plus the
  * discovered scheduling-only intermediates. When an Approximation is used
  * directly with Func::approximate_by(), decoded must contain exactly one
- * Func; when it's used as one stage of a larger Compose/Apply chain,
+ * Func; when it's used as one stage of a larger Compose/Parallel chain,
  * decoded may contain however many Funcs the next stage down expects. */
 struct DecodeResult {
     std::vector<Func> decoded;
@@ -683,9 +683,9 @@ struct Approximation::Model final : Approximation::Concept {
     }
 
     std::vector<Func> decode(const std::vector<Func> &encoded,
-                             const ApproximationPorts &encoded_ports) const override {
+                             const ApproximationPorts &input_ports) const override {
         if constexpr (decode_form<T> == Form::Ported) {
-            return unit.decode(encoded, encoded_ports);
+            return unit.decode(encoded, input_ports);
         } else if constexpr (decode_form<T> == Form::Multi) {
             return unit.decode(encoded);
         } else {
@@ -724,18 +724,6 @@ struct Approximation::Model final : Approximation::Concept {
 
     bool encode_is_single() const override {
         return encode_form<T> == Form::Single;
-    }
-
-    bool declares_decoded_ports() const override {
-        return has_decoded_ports<T>::value;
-    }
-
-    ApproximationPorts decoded_ports(const ApproximationPorts &encoded) const override {
-        if constexpr (has_decoded_ports<T>::value) {
-            return unit.decoded_ports(encoded);
-        } else {
-            return {};
-        }
     }
 
     std::vector<Approximation> children() const override {
@@ -834,7 +822,7 @@ struct ApproximationResult {
      * stage boundaries (e.g. compute_root them alongside reductions).
      * `replacement` -- the decode root's output, already spliced into the
      * consumers -- is excluded. A stage that passes an input through
-     * (Identity, Apply) reports it as a port, so the original Func may appear
+     * (Identity, or Parallel around one) reports it as a port, so the original Func may appear
      * if such a stage sits at the very inside of the encode chain. */
     std::vector<Func> stage_ports() const;
 
@@ -872,14 +860,13 @@ std::ostream &operator<<(std::ostream &stream, const Approximation &approximatio
  * `decode:` headers. */
 std::ostream &operator<<(std::ostream &stream, const ApproximationResult &result);
 
-/** Sequentially composes any number of Approximations into a pipeline:
- * encode() runs `stages` back-to-front (the last stage first, on the
- * original inputs), feeding each stage's encoded output to the one before
- * it; decode() runs the mirror image, front-to-back. So `stages[0]` is the
- * "outermost" stage -- the one whose encode() output is this Compose's own
- * encoded result, and whose decode() input is this Compose's own encoded
- * argument -- and `stages.back()` is "innermost", closest to the original
- * values.
+/** Sequentially composes any number of Approximations into a pipeline. The
+ * stages are listed in *encode order*, innermost first: encode() runs them
+ * first to last, on the original inputs, feeding each stage's encoded output
+ * to the next; decode() runs the mirror image, last to first. So `stages[0]`
+ * is closest to the original values, and `stages.back()` is the one whose
+ * encode() output is this Compose's own encoded result, and whose decode()
+ * input is this Compose's own encoded argument.
  *
  * Each stage is held as an Approximation handle (plain units convert
  * implicitly), so pass a named handle for any stage you want to look up
@@ -887,12 +874,17 @@ std::ostream &operator<<(std::ostream &stream, const ApproximationResult &result
  *
  * \code
  * Compose scheme{
- *     StructPack{...},
- *     Apply{1, 1, 1, Fp16Pack{}},
+ *     BlockReshape{block_size},
  *     SymmetricAffineQuantize{block_size, qmax, rounding, anchor},
+ *     Parallel{{"codes", Fp8Pack{}}, {"scale", Fp16Pack{}}},
+ *     StructPack{...},
  * };
  * \endcode
- */
+ *
+ * Each stage sees the port names that the previous stage's encode produced,
+ * and (in decode) the ports are derived statically from the context in the
+ * same way, so a stage's decode output ports are named like its encode
+ * input ports. */
 struct Compose {
     explicit Compose(std::vector<Approximation> stages)
         : stages(std::move(stages)) {
@@ -909,18 +901,16 @@ struct Compose {
 
     /** Each stage receives the ports the previous stage produced. */
     std::vector<Func> encode(const std::vector<Func> &inputs, const ApproximationPorts &input_ports) const;
-    std::vector<Func> decode(const std::vector<Func> &encoded, const ApproximationPorts &encoded_ports) const;
 
-    /** Chains the stages' signatures from the innermost outward. Unknown if
-     * any stage's signature is unknown. */
+    /** Each stage receives the context that its encode had, found by
+     * threading the stages' signatures from `input_ports`. */
+    std::vector<Func> decode(const std::vector<Func> &encoded, const ApproximationPorts &input_ports) const;
+
+    /** Chains the stages' signatures from the first. Unknown if any stage's
+     * signature is unknown. */
     ApproximationSignature signature(const ApproximationPorts &inputs) const;
 
-    /** Threads the ports through each stage's decoded_ports(), outermost
-     * first. Empty if any stage's are unknown. */
-    ApproximationPorts decoded_ports(const ApproximationPorts &encoded) const;
-
-    /** The stages, *innermost first* (the order encode() runs them), each
-     * with the ports it would receive. */
+    /** The stages in encode order, each with the ports it would receive. */
     std::vector<Approximation> children() const;
     std::vector<ApproximationPorts> child_inputs(const ApproximationPorts &inputs) const;
 
@@ -933,70 +923,89 @@ struct Compose {
     std::vector<Approximation> stages;
 };
 
-/** Applies `inner` to just a sub-range of a Func vector, passing every other
- * element through unchanged -- e.g. applying a quantizer to just the "scale"
- * component of a scheme's encoded output while leaving the codes untouched.
+/** A product combinator: applies different Approximations to different parts
+ * of a vector of Funcs, side by side. It comes in two forms.
  *
- * The sub-range is chosen either by position, `[idx, idx + arity)`, or by
- * port name (`Apply("scale", inner)`). By name, the range starts at the
- * input port called `port` (it is an error if there is none, or more than
- * one), and its size is the number of inputs `inner` declares (one if it
- * declares nothing) in encode(); in decode() the range starts at the
- * position of the first of `inner`'s encoded output ports, and its size is
- * the number of those outputs (one if `inner` declares nothing). The prefix
- * before the range is unchanged in both directions. By position,
- * `encode_arity`/`decode_arity` (how many Funcs `inner` consumes at that
- * position for each direction) must be given explicitly, since C++ has no
- * way to infer them generically from `inner` itself.
+ * *Positional*: `Parallel{a, b, c}`. Child i is applied to a consecutive
+ * slice of the Funcs, whose width is the number of inputs in the child's
+ * signature in encode() (and of outputs in decode(), i.e. the number of
+ * encoded ports), or one if the child's signature is unknown. The slices
+ * must exactly cover the Funcs, or it is an error. Use Identity to pass one
+ * Func through.
  *
- * In both forms the port names propagate: the untouched ports keep theirs,
- * and the replaced range takes the names of `inner`'s output ports. */
-struct Apply {
-    Apply(int idx, int encode_arity, int decode_arity, Approximation inner)
-        : idx(idx), encode_arity(encode_arity), decode_arity(decode_arity),
-          inner(std::move(inner)) {
+ * *Named*: `Parallel{{"codes", a}, {"scale", b}}`. Each entry routes the port
+ * called `"codes"` to its child (an error if there is no such port, or more
+ * than one, or if two entries name the same port). Ports that are not
+ * mentioned pass through unchanged, in place. A child's outputs replace its
+ * port in place, so a child may expand one port into several in encode(), and
+ * in decode() collapses them back into one. Naming the ports requires the
+ * context to have names: a by-name Parallel has no known signature without
+ * input ports, which is the case for the first stage of a Compose only if
+ * given ports explicitly.
+ *
+ * The two forms cannot be mixed. In both, the Funcs the children produce,
+ * in order, are Parallel's outputs, and the children see (and produce) port
+ * names as they are, so names flow through untouched.
+ *
+ * Parallel is lossless if all of its children are. It declares no error bound,
+ * since it would have to know how the children's errors combine. */
+struct Parallel {
+    /** One by-name entry. */
+    struct Entry {
+        Entry(std::string port, Approximation child)
+            : port(std::move(port)), child(std::move(child)) {
+        }
+        std::string port;
+        Approximation child;
+    };
+
+    /** Positional. */
+    explicit Parallel(std::vector<Approximation> children)
+        : children_(std::move(children)) {
     }
 
-    Apply(int idx, Approximation inner)
-        : Apply(idx, 1, 1, std::move(inner)) {
+    template<typename A, typename B, typename... Rest,
+             typename = std::enable_if_t<std::conjunction_v<std::is_convertible<A, Approximation>,
+                                                            std::is_convertible<B, Approximation>,
+                                                            std::is_convertible<Rest, Approximation>...>>>
+    Parallel(A &&a, B &&b, Rest &&...rest)
+        : children_{Approximation(std::forward<A>(a)), Approximation(std::forward<B>(b)),
+                    Approximation(std::forward<Rest>(rest))...} {
     }
 
-    Apply(std::string port, Approximation inner)
-        : idx(-1), encode_arity(-1), decode_arity(-1), port(std::move(port)), inner(std::move(inner)) {
-    }
+    /** Named. */
+    Parallel(std::initializer_list<Entry> entries);
 
     std::vector<Func> encode(const std::vector<Func> &inputs, const ApproximationPorts &input_ports) const;
-    std::vector<Func> decode(const std::vector<Func> &encoded, const ApproximationPorts &encoded_ports) const;
+    std::vector<Func> decode(const std::vector<Func> &encoded, const ApproximationPorts &input_ports) const;
 
-    /** Unknown unless the range can be located in `inputs` and `inner`'s
-     * signature is known for it. */
+    /** Unknown if the children cannot be located in `inputs` or any of their
+     * signatures is unknown. Without `inputs`, a positional Parallel uses
+     * each child's own defaults. */
     ApproximationSignature signature(const ApproximationPorts &inputs) const;
 
-    /** By name, the ports `inner` would have been given (its inputs, as
-     * resolved for `port`); by position, `inner`'s decoded_ports() for the
-     * range. The other ports keep their names. */
-    ApproximationPorts decoded_ports(const ApproximationPorts &encoded) const;
-
-    /** Just `inner`, with the ports it would receive. */
+    /** The children, with the ports each would receive. */
     std::vector<Approximation> children() const;
     std::vector<ApproximationPorts> child_inputs(const ApproximationPorts &inputs) const;
 
-    /** "Apply[idx]" or "Apply[port]" */
-    std::string name() const;
-
-    /** Lossless if `inner` is (the other ports pass through untouched). */
+    /** Lossless if every child is. */
     bool lossless() const;
 
-    /** The position and arities for the by-position form; -1 by name. */
-    int idx, encode_arity, decode_arity;
-    /** The port name for the by-name form; empty by position. */
-    std::string port;
-    Approximation inner;
-
 private:
-    // The encode-side range [begin, begin + arity) of `inputs`, or nothing
-    // (with the reason in *problem, if given).
-    bool locate(const ApproximationPorts &inputs, size_t &begin, size_t &arity, std::string *problem) const;
+    // How the encode-side ports are divided among the children, in port
+    // order: `child` (an index into children_, or -1 for a port that passes
+    // through) takes [begin, begin + width) of the ports, with `context` as
+    // their ports (empty if unknown), and produces `outputs` encoded ports.
+    struct Segment {
+        int child;
+        size_t begin, width;
+        ApproximationPorts context;
+        size_t outputs;
+    };
+    bool plan(const ApproximationPorts &inputs, std::vector<Segment> &segments, std::string *problem) const;
+
+    std::vector<Approximation> children_;
+    std::vector<std::string> ports_;
 };
 
 /** Routes encode() to one Approximation and decode() to another, taking each
@@ -1026,7 +1035,7 @@ private:
  * TrustedInverse{
  *     ExternQuantize{"q4_k_quantize_via_ggml"},   // encode(): values -> bytes
  *     Compose{                                      // decode(): bytes -> values
- *         StructPack{...}, Apply{...}, ..., BlockReshape{block_size},
+ *         BlockReshape{block_size}, ..., Parallel{...}, StructPack{...},
  *     },
  * };
  * \endcode
@@ -1040,14 +1049,11 @@ struct TrustedInverse {
     }
 
     std::vector<Func> encode(const std::vector<Func> &inputs, const ApproximationPorts &input_ports) const;
-    std::vector<Func> decode(const std::vector<Func> &encoded, const ApproximationPorts &encoded_ports) const;
+    std::vector<Func> decode(const std::vector<Func> &encoded, const ApproximationPorts &input_ports) const;
 
     /** The encoder's signature, in both directions: the encoder defines the
      * encoded representation, and the decoder is trusted to consume it. */
     ApproximationSignature signature(const ApproximationPorts &inputs) const;
-
-    /** The decoder's. */
-    ApproximationPorts decoded_ports(const ApproximationPorts &encoded) const;
 
     /** The encoder, then the decoder (which is described without context,
      * since it runs in the other direction). */
@@ -1065,13 +1071,10 @@ struct Choose {
     }
 
     std::vector<Func> encode(const std::vector<Func> &inputs, const ApproximationPorts &input_ports) const;
-    std::vector<Func> decode(const std::vector<Func> &encoded, const ApproximationPorts &encoded_ports) const;
+    std::vector<Func> decode(const std::vector<Func> &encoded, const ApproximationPorts &input_ports) const;
 
     /** The chosen stage's signature. */
     ApproximationSignature signature(const ApproximationPorts &inputs) const;
-
-    /** The chosen stage's. */
-    ApproximationPorts decoded_ports(const ApproximationPorts &encoded) const;
 
     /** Just the chosen stage. */
     std::vector<Approximation> children() const;
@@ -1141,10 +1144,6 @@ struct Identity {
     /** Echoes `inputs`; unknown if there are none. */
     ApproximationSignature signature(const ApproximationPorts &inputs) const;
 
-    ApproximationPorts decoded_ports(const ApproximationPorts &encoded) const {
-        return encoded;
-    }
-
     bool lossless() const {
         return true;
     }
@@ -1152,9 +1151,8 @@ struct Identity {
 
 /** Reorders Funcs: encode() outputs `inputs[permutation[i]]` at position i,
  * and decode() inverts that. The output port names are permuted the same
- * way, and decode() restores the names the inputs had by inverting the
- * permutation of the encoded ports it receives. Without a context (no input
- * ports), the inputs are named positionally. */
+ * way. Without a context (no input ports), the inputs are named
+ * positionally. */
 struct Permute {
     explicit Permute(std::vector<int> permutation)
         : forward(std::move(permutation)) {
@@ -1168,9 +1166,6 @@ struct Permute {
     std::vector<Func> decode(const std::vector<Func> &encoded) const;
 
     ApproximationSignature signature(const ApproximationPorts &inputs) const;
-
-    /** The encoded ports, inverse-permuted; empty if their count is wrong. */
-    ApproximationPorts decoded_ports(const ApproximationPorts &encoded) const;
 
     bool lossless() const {
         return true;
