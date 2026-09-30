@@ -74,6 +74,26 @@ struct SplitParity {
     }
 };
 
+// One input, two float outputs, declared: values -> (lo, hi).
+struct LoHi {
+    std::vector<Func> encode(const std::vector<Func> &in) const {
+        Var x("x");
+        Func lo("lo_part"), hi("hi_part");
+        lo(x) = in[0](2 * x);
+        hi(x) = in[0](2 * x + 1);
+        return {lo, hi};
+    }
+    std::vector<Func> decode(const std::vector<Func> &in) const {
+        Var x("x");
+        Func out("lohi_merged");
+        out(x) = select(x % 2 == 0, in[0](x / 2), in[1](x / 2));
+        return {out};
+    }
+    ApproximationSignature signature() const {
+        return {{{"values", Float(32), 1}}, {{"lo", Float(32), 1}, {"hi", Float(32), 1}}};
+    }
+};
+
 // Records the ports it is handed, and passes everything through.
 struct Probe {
     std::shared_ptr<ApproximationPorts> seen = std::make_shared<ApproximationPorts>();
@@ -273,6 +293,55 @@ int main() {
         std::ostringstream trace;
         trace << r;
         CHECK(trace.str().find("0=even") != std::string::npos);
+    }
+
+    // Permute restores the pre-permutation names in decode, so a by-name Apply
+    // after it works in both directions, with and without an encode context.
+    {
+        Approximation lohi = LoHi{};
+        Approximation lo_half = Apply("lo", half);
+        Approximation permute = Permute{{1, 0}};
+        Approximation permuted = Compose{permute, lo_half, lohi};
+
+        EncodeResult e = permuted.encode({f});
+        CHECK(names(e.encoded_ports) == Names({"hi", "lo"}));
+        CHECK(*e.encoded_ports[1].type == UInt(16));
+
+        DecodeResult d = permuted.decode(e.encoded, e.encoded_ports);
+        CHECK(names(d.decoded_ports) == Names({"values"}));
+        CHECK(d.trace.children.size() == 3);
+
+        // Sever the ports, as compute_offline does.
+        DecodeResult sd = permuted.decode(e.encoded);
+        CHECK(names(sd.decoded_ports) == Names({"values"}));
+        CHECK(sd.decoded[0].types()[0] == Float(32));
+
+        // Each stage sees the names it had on the way in.
+        CHECK(sd.trace.children[0].port_names == Names({"lo", "hi"}));
+        CHECK(sd.trace.children[1].port_names == Names({"lo", "hi"}));
+        CHECK(sd.trace.children[0].input_names == Names({"hi", "lo"}));
+
+        // Permute alone, with and without context.
+        EncodeResult pe = permute.encode({f, consumer}, {{"a"}, {"b"}});
+        CHECK(names(pe.encoded_ports) == Names({"b", "a"}));
+        CHECK(names(permute.decode(pe.encoded, pe.encoded_ports).decoded_ports) == Names({"a", "b"}));
+        Permute rotate{{1, 2, 0}};
+        EncodeResult re = Approximation(rotate).encode({f, consumer, f}, {{"a"}, {"b"}, {"c"}});
+        CHECK(names(re.encoded_ports) == Names({"b", "c", "a"}));
+        CHECK(names(Approximation(rotate).decode(re.encoded, re.encoded_ports).decoded_ports) == Names({"a", "b", "c"}));
+
+        // Identity and a positional Apply keep names in decode too.
+        Approximation ident = Compose{Identity{}, Apply(1, half), lohi};
+        EncodeResult ie = ident.encode({f});
+        CHECK(names(ie.encoded_ports) == Names({"lo", "hi"}));
+        CHECK(names(ident.decode(ie.encoded, ie.encoded_ports).decoded_ports) == Names({"values"}));
+        Approximation by_name_first = Compose{Apply("lo", half), Permute{{1, 0}}, Permute{{1, 0}}, lohi};
+        EncodeResult be = by_name_first.encode({f});
+        CHECK(names(by_name_first.decode(be.encoded).decoded_ports) == Names({"values"}));
+        Approximation two_perms = Compose{Permute{{1, 0}}, Apply("hi", half), Permute{{1, 0}}, lohi};
+        EncodeResult tpe = two_perms.encode({f});
+        CHECK(names(tpe.encoded_ports) == Names({"lo", "hi"}));
+        CHECK(names(two_perms.decode(tpe.encoded, tpe.encoded_ports).decoded_ports) == Names({"values"}));
     }
 
     printf("Success!\n");
