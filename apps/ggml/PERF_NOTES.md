@@ -150,18 +150,18 @@ Two traps found along the way:
 
 ### q4_0/q8_0 core-composition cleanup
 
-The tuned schedule above is now fed by faithful, public core Approximation
-compositions rather than ggml's legacy `StructBlockLayout` and code-pack
-wrappers:
+The tuned schedule above is now fed by faithful Approximation compositions (core
+units plus the ggml units in `quant_components.h`) rather than ggml's legacy
+`StructBlockLayout` and code-pack wrappers:
 
-- q4_0 `{Float16 d; UInt8 qs[16]}` is
-  `StructLayout -> StorageCast -> PlanarFieldPack -> AdditiveOffset -> SymmetricBlockQuantize -> BlockReshape`.
-  `AdditiveOffset<int8_t, uint8_t>{8}` is the representation policy that maps
-  signed codes `[-8, 7]` to stored nibbles `[0, 15]`; planar packing remains an
-  exact, policy-free bit layout.
+- q4_0 `{Float16 d; UInt8 qs[16]}` is (in `Compose` encode order)
+  `BlockReshape -> SymmetricAffineQuantize -> Parallel{codes: nibble_offset(8) -> PlanarFieldPack, scale: fp16_storage()} -> StructLayout`.
+  `nibble_offset(8)` (an inline `Pointwise`) is the representation policy that
+  maps signed codes `[-8, 7]` to stored nibbles `[0, 15]`; planar packing
+  remains an exact, policy-free bit layout.
 - q8_0 `{Float16 d; Int8 qs[32]}` is
-  `StructLayout -> StorageCast -> SymmetricBlockQuantize -> BlockReshape`. Its
-  faithful signed array means the old UInt8 `BytePack` reinterpretation is
+  `BlockReshape -> SymmetricAffineQuantize -> Parallel{scale: fp16_storage()} -> StructLayout`.
+  Its faithful signed array means the old UInt8 `BytePack` reinterpretation is
   unnecessary.
 
 Both formats share one traced weight/activation decode graph between the main
@@ -364,11 +364,12 @@ performance-neutral (+0.30% Halide time). q5_1 remained within noise at 143.728
 sample as a fixed score.
 
 **Core composition now mirrors the representation.** q5_0 is
-`StructLayout -> StorageCast -> LittleEndianScalarPack -> BinaryAlphabetPack -> PlanarFieldPack -> AdditiveRadixSplit -> SymmetricBlockQuantize -> BlockReshape`.
-Opaque Approximation stage keys carry the reconstructed-code and qh-word
-identities into `VecDotSpec`; generated Func names no longer control q5_0's
-schedule. `BlockReshape` and symmetric block quantization now live in the public
-Approximation component library, with ggml compatibility aliases/wrappers.
+`BlockReshape -> SymmetricAffineQuantize -> Parallel{codes: AdditiveRadixSplit} -> Parallel{low: PlanarFieldPack, high: BinaryAlphabetPack -> LittleEndianScalarPack, scale: fp16_storage()} -> StructLayout`
+(in `Compose` encode order). Opaque Approximation stage keys carry the
+reconstructed-code and qh-word identities into `VecDotSpec`; generated Func
+names no longer control q5_0's schedule. `BlockReshape` lives in the core
+Approximation library; symmetric block quantization, `AdditiveRadixSplit` and
+`BinaryAlphabetPack` live in ggml's `quant_components.h`.
 
 Reusable performance experiments should become discoverable `kernel-bench`
 modes. In particular, promote the odd-tail n sweep (32, 96, 160, 224, 1056)
