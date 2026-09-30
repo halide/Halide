@@ -311,6 +311,10 @@ ComputeOfflineResult Pipeline::compute_offline(const vector<Func> &to_sever, con
     return compute_offline_impl(*this, to_sever, &bind_to);
 }
 
+ComputeOfflineResult Pipeline::compute_offline(const vector<Func> &to_sever, std::initializer_list<string> names) {
+    return compute_offline(to_sever, vector<string>(names));
+}
+
 ComputeOfflineResult Pipeline::compute_offline(const vector<Func> &to_sever, const vector<string> &names) {
     user_assert(names.size() == to_sever.size())
         << "Pipeline::compute_offline(): names has " << names.size()

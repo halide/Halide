@@ -257,6 +257,13 @@ public:
     ComputeOfflineResult compute_offline(const std::vector<Func> &to_sever,
                                          const std::vector<std::string> &names);
 
+    /** Disambiguates a braced list of string literals, e.g.
+     * compute_offline({a, b}, {"a_in", "b_in"}), which a
+     * std::vector<ImageParam> could otherwise also accept through its
+     * iterator-pair constructor. */
+    ComputeOfflineResult compute_offline(const std::vector<Func> &to_sever,
+                                         std::initializer_list<std::string> names);
+
     /** Generate a schedule for the pipeline using the specified autoscheduler. */
     AutoSchedulerResults apply_autoscheduler(const Target &target,
                                              const AutoschedulerParams &autoscheduler_params) const;
