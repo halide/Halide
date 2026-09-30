@@ -579,24 +579,24 @@ if ((NOT ${_USING_WASM}) AND (NOT Halide_TARGET MATCHES "vulkan"))
         gpu_multi_context_threaded
         HALIDE_LIBRARIES gpu_multi_context_threaded_add gpu_multi_context_threaded_mul
         LINK_TO_GPU
-        GROUPS multithreaded
+        GROUPS multithreaded gpu
     )
 endif ()
 
 # gpu_object_lifetime_aottest.cpp
 # gpu_object_lifetime_generator.cpp
 _add_halide_libraries(gpu_object_lifetime FEATURES debug)
-_add_halide_aot_tests(gpu_object_lifetime)
+_add_halide_aot_tests(gpu_object_lifetime GROUPS gpu)
 
 # gpu_only_aottest.cpp
 # gpu_only_generator.cpp
 _add_halide_libraries(gpu_only)
-_add_halide_aot_tests(gpu_only)
+_add_halide_aot_tests(gpu_only GROUPS gpu)
 
 # gpu_texture_aottest.cpp
 # gpu_texture_generator.cpp
 _add_halide_libraries(gpu_texture)
-_add_halide_aot_tests(gpu_texture)
+_add_halide_aot_tests(gpu_texture GROUPS gpu)
 
 # image_from_array_aottest.cpp
 # image_from_array_generator.cpp
@@ -683,7 +683,7 @@ _add_halide_aot_tests(metadata_tester HALIDE_LIBRARIES metadata_tester metadata_
 # metal_completion_handler_override_aottest.cpp
 # metal_completion_handler_override_generator.cpp
 _add_halide_libraries(metal_completion_handler_override FEATURES user_context)
-_add_halide_aot_tests(metal_completion_handler_override)
+_add_halide_aot_tests(metal_completion_handler_override GROUPS gpu)
 
 # msan_aottest.cpp
 # msan_generator.cpp

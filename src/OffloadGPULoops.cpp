@@ -9,6 +9,7 @@
 #include "CodeGen_PTX_Dev.h"
 #include "CodeGen_Vulkan_Dev.h"
 #include "CodeGen_WebGPU_Dev.h"
+#include "Debug.h"
 #include "ExprUsesVar.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -194,6 +195,9 @@ protected:
         user_assert(gpu_codegen != nullptr)
             << "Loop is scheduled on device " << loop->device_api
             << " which does not appear in target " << target.to_string() << "\n";
+        // tools/audit_test_labels.py relies on this tag to find tests that
+        // run GPU code.
+        debug(4, "gpu-entry") << "Compiling GPU kernel: " << kernel_name << "\n";
         gpu_codegen->set_kernel_max_registers(max_registers);
         gpu_codegen->add_kernel(loop, kernel_name, closure_args);
 
