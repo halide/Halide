@@ -1,11 +1,11 @@
-#ifndef HALIDE_APPROXIMATION_TESTING_H
-#define HALIDE_APPROXIMATION_TESTING_H
+#ifndef HALIDE_APPROXIMATION_TESTING_TOOL_H
+#define HALIDE_APPROXIMATION_TESTING_TOOL_H
 
 /** \file
  * Property-based testing and round-trip verification for Approximations.
- * Everything here is header-only and lives in Halide::ApproximationTesting
- * (kept out of namespace Halide proper because names like Distribution and
- * Property are too generic for the monolithic Halide.h).
+ * Header-only, like halide_image_io.h: include it alongside Halide.h in test
+ * code. Everything lives in Halide::ApproximationTesting, since names like
+ * Distribution and Property are too generic for namespace Halide.
  *
  * The pieces:
  *
@@ -45,10 +45,7 @@
 #include <utility>
 #include <vector>
 
-#include "Approximation.h"
-#include "Buffer.h"
-#include "Func.h"
-#include "Pipeline.h"
+#include "Halide.h"
 
 namespace Halide {
 namespace ApproximationTesting {
