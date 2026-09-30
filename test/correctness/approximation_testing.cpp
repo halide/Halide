@@ -228,12 +228,114 @@ int test_declared_bound_is_exact() {
     return 0;
 }
 
+// Copies a (possibly struct-typed) Func unchanged.
+struct Copy {
+    Func encode(const Func &f) const {
+        Func g("copy_encode");
+        g(_) = f(_);
+        return g;
+    }
+    Func decode(const Func &f) const {
+        Func g("copy_decode");
+        g(_) = f(_);
+        return g;
+    }
+};
+
+// A Tuple-valued encoded Func: (x, x + 1).
+struct TuplePair {
+    Func encode(const Func &f) const {
+        Func t("tuple_pair");
+        t(_) = Tuple(f(_), f(_) + cast<uint8_t>(1));
+        return t;
+    }
+    Func decode(const Func &f) const {
+        Func g("tuple_first");
+        g(_) = f(_)[0];
+        return g;
+    }
+    ApproximationSignature signature() const {
+        return {{{"value", UInt(8), 1}}, {{"pair", std::nullopt, 1, ApproximationRange(0, 255)}}};
+    }
+    bool lossless() const {
+        return true;
+    }
+};
+
+bool mentions_unreadable(const PropertyResult &r) {
+    return !r.passed && r.message.find("cannot be read back") != std::string::npos;
+}
+
+// Encoded Funcs that are struct-typed or Tuple-valued cannot be read back:
+// properties that need their values fail with a message; the others work.
+int test_unreadable_encoded() {
+    Type record = Type::Struct({{"low", UInt(8)}, {"high", Int(8)}});
+    Approximation split = AdditiveRadixSplit(16, 16);
+    Approximation layout = StructLayout(record, {"low", "high"});
+    Approximation copy = Copy{};
+    Approximation scheme = Compose{layout, split};
+
+    const std::vector<int> extents = {32};
+    const std::vector<InputSpec> codes = {InputSpec{Int(8), extents, Distribution::uniform_int(-16, 15)}};
+    CHECK(scheme.lossless());
+    PropertyResult lossless_result = check_property(scheme, lossless(), codes, 3, 5);
+    std::cout << lossless_result;
+    CHECK(lossless_result.passed);
+    CHECK(check_property(scheme, bounded_error(0), codes, 2, 5).passed);
+    CHECK(check_property(scheme, within_declared_bound(), codes, 2, 5).passed);
+    CHECK(check_property(scheme, zero_preserving(), codes, 1, 5).passed);
+    CHECK(check_property(scheme, sign_preserving(), codes, 2, 5).passed);
+
+    // The record port declares no range, so there is nothing to check.
+    CHECK(check_property(scheme, outputs_within_declared_ranges(), codes, 2, 5).passed);
+
+    PropertyResult idem = check_property(scheme, idempotent_requantize(), codes, 2, 5);
+    std::cout << idem;
+    CHECK(mentions_unreadable(idem));
+    CHECK(idem.message.find("'record'") != std::string::npos && idem.message.find("struct-typed") != std::string::npos);
+
+    // A stage whose input is struct-typed cannot be targeted, but others can.
+    Approximation with_copy = Compose{copy, layout, split};
+    CHECK(check_property(with_copy, lossless(), codes, 2, 5).passed);
+    PropertyResult at_copy = check_property(with_copy, lossless().at(copy), codes, 2, 5);
+    std::cout << at_copy;
+    CHECK(mentions_unreadable(at_copy));
+    CHECK(check_property(with_copy, lossless().at(split), codes, 2, 5).passed);
+    CHECK(check_property(with_copy, lossless().at(layout), codes, 2, 5).passed);
+
+    // The layout on its own, over two inputs of different types.
+    Approximation two = StructLayout(record, {"low", "high"});
+    std::vector<InputSpec> specs = {InputSpec{UInt(8), extents, Distribution::uniform_int(0, 255)},
+                                    InputSpec{Int(8), extents, Distribution::uniform_int(-128, 127)}};
+    CHECK(check_property(two, lossless(), specs, 2, 5).passed);
+    RoundTripReport report = verify_round_trip(two, {generate(specs[0].dist, UInt(8), extents, 1),
+                                                     generate(specs[1].dist, Int(8), extents, 2)});
+    CHECK(report.max_abs_error == 0);
+
+    // Tuple-valued.
+    Approximation tuple = TuplePair{};
+    CHECK(check_property(tuple, lossless(), extents, 2, 5).passed);
+    CHECK(mentions_unreadable(check_property(tuple, idempotent_requantize(), extents, 2, 5)));
+    PropertyResult ranges = check_property(tuple, outputs_within_declared_ranges(), extents, 2, 5);
+    CHECK(mentions_unreadable(ranges) && ranges.message.find("Tuple-valued") != std::string::npos);
+    return 0;
+}
+
+// AdditiveRadixSplit's declared output ranges hold for every valid code.
+int test_radix_split_ranges() {
+    Approximation split = AdditiveRadixSplit(16, 16);
+    CHECK(check_property(split, outputs_within_declared_ranges(), {InputSpec{Int(8), {256}, Distribution::uniform_int(-16, 15)}}, 4, 3).passed);
+    CHECK(check_property(split, lossless(), {InputSpec{Int(8), {256}, Distribution::uniform_int(-16, 15)}}, 4, 3).passed);
+    CHECK(check_property(split, idempotent_requantize(), {InputSpec{Int(8), {256}, Distribution::uniform_int(-16, 15)}}, 2, 3).passed);
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
     int (*tests[])() = {test_generators, test_round_trip_report, test_lossless, test_precondition_conditioning,
                         test_stage_targeting, test_idempotent_requantize, test_range_diagnostics,
-                        test_declared_bound_is_exact};
+                        test_declared_bound_is_exact, test_unreadable_encoded, test_radix_split_ranges};
     for (auto t : tests) {
         if (t()) {
             return 1;

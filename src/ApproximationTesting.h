@@ -730,6 +730,20 @@ struct RoundTripRun {
     Buffer<> bound;
     bool has_bound = false;
 
+    // Could the values of a Func from the encode side be read back? Tuple-valued,
+    // struct-typed and vector-typed Funcs cannot.
+    bool can_read(const Func &f) const {
+        return input_wrappers.count(f.name()) || captured.count(f.name());
+    }
+
+    // Why can_read() is false.
+    static std::string unreadable_reason(const Func &f) {
+        if (f.outputs() > 1) {
+            return "Tuple-valued";
+        }
+        return f.types()[0].is_struct() ? "struct-typed" : "not scalar";
+    }
+
     // The realized values of a Func from the encode side.
     Buffer<> value_of(const Func &f) const {
         auto w = input_wrappers.find(f.name());
@@ -850,8 +864,7 @@ inline RoundTripRun run_round_trip(const Approximation &a, const std::vector<Buf
     }
     // Encoded Funcs that cannot be read back (e.g. struct-typed) are left as undefined Buffers.
     for (const Func &f : run.enc.encoded) {
-        bool readable = run.input_wrappers.count(f.name()) || run.captured.count(f.name());
-        run.encoded.push_back(readable ? run.value_of(f) : Buffer<>());
+        run.encoded.push_back(run.can_read(f) ? run.value_of(f) : Buffer<>());
     }
     return run;
 }
@@ -1013,10 +1026,19 @@ struct PropertyContext {
     std::vector<std::string> input_names;
     Detail::RoundTripRun run;
 
-    /** The Buffers the encode side produced (one per encoded Func). */
+    /** The Buffers the encode side produced (one per encoded Func). An
+     * encoded Func that is Tuple-valued or struct-typed cannot be read back,
+     * and its Buffer is undefined; see encoded_readable(). */
     const std::vector<Buffer<>> &encoded() const {
         return run.encoded;
     }
+    /** Can encoded()[p] be used? */
+    bool encoded_readable(size_t p) const {
+        return p < run.encoded.size() && run.encoded[p].defined();
+    }
+    /** A failure describing encoded Func `p` as unreadable, for properties
+     * that need its values. */
+    PropertyOutcome encoded_unreadable(size_t p) const;
     /** The decoded Buffers (one per input). */
     const std::vector<Buffer<>> &decoded() const {
         return run.decoded;
@@ -1089,6 +1111,16 @@ inline PropertyOutcome fail(const std::string &message, const std::vector<int> &
     o.coord = coord;
     return o;
 }
+
+}  // namespace Detail
+
+inline PropertyOutcome PropertyContext::encoded_unreadable(size_t p) const {
+    std::string name = p < run.enc.encoded_ports.size() ? run.enc.encoded_ports[p].name : std::to_string(p);
+    return Detail::fail("the encoded port '" + name + "' is " + Detail::RoundTripRun::unreadable_reason(run.enc.encoded[p]) +
+                        " and cannot be read back, so this property does not apply to it");
+}
+
+namespace Detail {
 
 inline std::string describe_pair(double x, double y) {
     return number_string(x, 9) + " -> " + number_string(y, 9);
@@ -1190,10 +1222,19 @@ inline Property within_declared_bound() {
  * magnitude. */
 inline Property idempotent_requantize(double float_rel_tol = 1e-6) {
     return Property("idempotent_requantize", [float_rel_tol](const PropertyContext &c) {
+        for (size_t p = 0; p < c.encoded().size(); p++) {
+            if (!c.encoded_readable(p)) {
+                return c.encoded_unreadable(p);
+            }
+        }
         const Detail::RoundTripRun &again = c.requantized();
+        if (again.encoded.size() != c.encoded().size()) {
+            return Detail::fail("re-encoding produced " + std::to_string(again.encoded.size()) + " Funcs instead of " +
+                                std::to_string(c.encoded().size()));
+        }
         for (size_t p = 0; p < c.encoded().size(); p++) {
             const Buffer<> &e1 = c.encoded()[p], &e2 = again.encoded[p];
-            if (e1.dimensions() != e2.dimensions() || e1.type() != e2.type()) {
+            if (!e2.defined() || e1.dimensions() != e2.dimensions() || e1.type() != e2.type()) {
                 return Detail::fail("encoded Func " + std::to_string(p) + " changed shape or type on re-encoding");
             }
             PropertyOutcome o;
@@ -1253,6 +1294,9 @@ inline Property outputs_within_declared_ranges() {
             const ApproximationPort &port = c.encoded_ports()[p];
             if (!port.range) {
                 continue;
+            }
+            if (!c.encoded_readable(p)) {
+                return c.encoded_unreadable(p);
             }
             PropertyOutcome o;
             Detail::for_each_coord(c.encoded()[p], [&](const int *pos) {
@@ -1386,6 +1430,14 @@ inline PropertyResult check_property(const Approximation &a, const Property &pro
             user_assert(count == 1) << "check_property: the stage '" << prop.stage().label() << "' was invoked "
                                     << count << " times by the encode of '" << a.label() << "' (expected once)\n";
             for (const Func &f : node->inputs) {
+                if (!root.can_read(f)) {
+                    result.passed = false;
+                    result.failing_seed = trial_seed;
+                    result.message = "the input '" + f.name() + "' of stage '" + prop.stage().label() + "' is " +
+                                     Detail::RoundTripRun::unreadable_reason(f) +
+                                     " and cannot be read back, so this property cannot be checked at that stage";
+                    return result;
+                }
                 stage_inputs.push_back(root.value_of(f));
             }
             stage_names = node->input_names;
