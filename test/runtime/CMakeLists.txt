@@ -27,7 +27,10 @@ function(halide_define_runtime_internal_test NAME)
     add_executable(runtime_internal_${NAME} ${NAME}.cpp $<TARGET_OBJECTS:runtime_internal_common>)
     _set_target_options(runtime_internal_${NAME})
     target_link_libraries(runtime_internal_${NAME} PRIVATE Halide::Test)
-    add_halide_test(runtime_internal_${NAME} GROUPS runtime_internal)
+    add_halide_test(
+        runtime_internal_${NAME}
+        GROUPS runtime_internal target_independent llvm_independent
+    )
 endfunction()
 
 # NOTE: These tests directly include runtime_internal.h which isn't compatible with MSVC

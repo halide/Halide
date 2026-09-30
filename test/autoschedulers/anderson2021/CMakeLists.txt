@@ -97,7 +97,7 @@ set_tests_properties(
 # Takes the source file name (e.g. test_foo.cpp) as the first argument
 # so that it appears on its own line for the CMake file list checker.
 function(_add_anderson2021_internal_test SRC)
-    cmake_parse_arguments(ARGS "" "" "EXTRA_SRCS" ${ARGN})
+    cmake_parse_arguments(ARGS "" "" "EXTRA_SRCS;GROUPS" ${ARGN})
 
     cmake_path(GET SRC STEM NAME)
 
@@ -116,7 +116,7 @@ function(_add_anderson2021_internal_test SRC)
     target_link_libraries(anderson2021_${NAME} PRIVATE Halide::Plugin)
     add_dependencies(anderson2021_${NAME} Halide::Anderson2021)
 
-    add_halide_test(anderson2021_${NAME} GROUPS anderson2021 autoschedulers_cuda)
+    add_halide_test(anderson2021_${NAME} GROUPS anderson2021 autoschedulers_cuda ${ARGS_GROUPS})
     # Workaround for nvidia driver + ASAN incompatibility
     # https://forums.developer.nvidia.com/t/cuda-runtime-library-and-addresssanitizer-incompatibilty/63145
     set_tests_properties(
@@ -126,22 +126,34 @@ function(_add_anderson2021_internal_test SRC)
     )
 endfunction()
 
-_add_anderson2021_internal_test(test_function_dag.cpp EXTRA_SRCS FunctionDAG.cpp)
+_add_anderson2021_internal_test(
+    test_function_dag.cpp
+    EXTRA_SRCS FunctionDAG.cpp
+    GROUPS target_independent llvm_independent
+)
 _add_anderson2021_internal_test(
     test_bounds.cpp
     EXTRA_SRCS FunctionDAG.cpp LoopNest.cpp GPULoopInfo.cpp Tiling.cpp
+    GROUPS target_independent
 )
-_add_anderson2021_internal_test(test_parser.cpp)
+_add_anderson2021_internal_test(test_parser.cpp GROUPS target_independent llvm_independent)
 _add_anderson2021_internal_test(
     test_state.cpp
     EXTRA_SRCS FunctionDAG.cpp LoopNest.cpp GPULoopInfo.cpp State.cpp Tiling.cpp
+    GROUPS target_independent
 )
 _add_anderson2021_internal_test(
     test_storage_strides.cpp
     EXTRA_SRCS FunctionDAG.cpp LoopNest.cpp GPULoopInfo.cpp State.cpp Tiling.cpp
+    GROUPS target_independent
 )
 _add_anderson2021_internal_test(
     test_thread_info.cpp
     EXTRA_SRCS LoopNest.cpp FunctionDAG.cpp GPULoopInfo.cpp Tiling.cpp
+    GROUPS target_independent
 )
-_add_anderson2021_internal_test(test_tiling.cpp EXTRA_SRCS Tiling.cpp)
+_add_anderson2021_internal_test(
+    test_tiling.cpp
+    EXTRA_SRCS Tiling.cpp
+    GROUPS target_independent llvm_independent
+)

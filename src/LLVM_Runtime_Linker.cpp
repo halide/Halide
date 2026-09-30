@@ -1,4 +1,5 @@
 #include "LLVM_Runtime_Linker.h"
+#include "Debug.h"
 #include "Error.h"
 #include "LLVM_Headers.h"
 #include "Target.h"
@@ -11,6 +12,10 @@ using std::vector;
 namespace {
 
 std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVMContext *context, const char *id) {
+    // Every LLVM-based code generation path starts by loading runtime bitcode
+    // here. tools/audit_test_labels.py relies on this tag to find tests that
+    // never use LLVM.
+    debug(4, "llvm-entry") << "Loading runtime bitcode: " << id << "\n";
 
     llvm::MemoryBufferRef bitcode_buffer = llvm::MemoryBufferRef(buf, id);
 

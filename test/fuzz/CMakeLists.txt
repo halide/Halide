@@ -6,28 +6,38 @@ set(LIB_FUZZING_ENGINE "${LIB_FUZZING_ENGINE}"
     CACHE STRING "Extra link libraries arguments for fuzz tests."
 )
 
+# By default, the libfuzzer harness runs with a timeout of 1200 seconds.
+# Let's dial that back:
+# - Do 1000 fuzz runs for each test.
+# - no single input should take more than 2 minutes
+# - total time should take no more than 5 minutes
+set(FUZZ_ARGS -runs=1000 -timeout=120 -max_total_time=300)
+
+# These tests don't print "Success!" -- just succeed or fail based on the exit code
 tests(
     GROUPS fuzz
     SOURCES
-        bounds.cpp
-        cse.cpp
         in_clone.cpp
         lossless_cast.cpp
-        simplify.cpp
-        solve.cpp
         widening_lerp.cpp
-    # By default, the libfuzzer harness runs with a timeout of 1200 seconds.
-    # Let's dial that back:
-    # - Do 1000 fuzz runs for each test.
-    # - no single input should take more than 2 minutes
-    # - total time should take no more than 5 minutes
-    ARGS
-        -runs=1000
-        -timeout=120
-        -max_total_time=300
-    # These tests don't print "Success!" -- just succeed or fail based on the exit code
+    ARGS ${FUZZ_ARGS}
     USE_EXIT_CODE_ONLY
 )
+set(FUZZ_TESTS ${TEST_NAMES})
+
+# Front-end-only fuzzers: their results depend on neither the Halide target
+# nor the LLVM version. See doc/Testing.md.
+tests(
+    GROUPS fuzz target_independent llvm_independent
+    SOURCES
+        bounds.cpp
+        cse.cpp
+        simplify.cpp
+        solve.cpp
+    ARGS ${FUZZ_ARGS}
+    USE_EXIT_CODE_ONLY
+)
+list(APPEND FUZZ_TESTS ${TEST_NAMES})
 
 # Check whether the configured toolchain can compile a libfuzzer test harness.
 # If this fails, the user likely needs to set up their environment to use a
@@ -69,6 +79,6 @@ else ()
 endif ()
 
 
-foreach (fuzzer IN LISTS TEST_NAMES)
+foreach (fuzzer IN LISTS FUZZ_TESTS)
     target_link_libraries("${fuzzer}" PRIVATE Halide::fuzz)
 endforeach ()
