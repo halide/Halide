@@ -273,7 +273,7 @@ int main(int argc, char **argv) {
         const float dequantized = q * d;
 
         const float expected_g = dequantized * 2.0f + 1.0f;
-        if (std::fabs(g_out(i) - expected_g) > 1e-4f) {
+        if (std::fabs(g_out(i) - expected_g) > 1e-5f * std::max(1.0f, std::fabs(expected_g))) {
             printf("g(%d) = %f, expected %f -- approximate_by's substitution did not take effect\n",
                    i, g_out(i), expected_g);
             return 1;
@@ -282,7 +282,7 @@ int main(int argc, char **argv) {
         // h was never passed as a consumer to approximate_by(): it must
         // see the real f, not the quantized round trip.
         const float expected_h = fx * 3.0f;
-        if (std::fabs(h_out(i) - expected_h) > 1e-4f) {
+        if (std::fabs(h_out(i) - expected_h) > 1e-5f * std::max(1.0f, std::fabs(expected_h))) {
             printf("h(%d) = %f, expected %f -- approximate_by affected a Func not in `consumers`\n",
                    i, h_out(i), expected_h);
             return 1;
