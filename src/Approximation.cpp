@@ -235,9 +235,11 @@ struct CallScope {
 
     // Finish the call: nest the node under the enclosing call, if any.
     ApproximationTraceNode finish(const Approximation &stage, std::vector<Func> ports,
-                                  std::vector<std::string> port_names, std::vector<Func> intermediates) {
+                                  std::vector<std::string> port_names, std::vector<Func> intermediates,
+                                  std::vector<Func> inputs, std::vector<std::string> input_names) {
         ApproximationTraceNode node{stage, stage.label(), std::move(ports), std::move(port_names),
-                                    std::move(intermediates), std::move(children)};
+                                    std::move(intermediates), std::move(children), std::move(inputs),
+                                    std::move(input_names)};
         if (parent) {
             parent->push_back(node);
         }
@@ -286,6 +288,13 @@ std::vector<Func> find_intermediates(const std::vector<Func> &inputs, const std:
 
 namespace {
 
+std::string range_string(const ApproximationRange &range) {
+    std::ostringstream stream;
+    stream.precision(9);
+    stream << "[" << range.lo << ", " << range.hi << "]";
+    return stream.str();
+}
+
 std::string port_string(const ApproximationPort &port) {
     std::ostringstream stream;
     stream << port.name;
@@ -295,7 +304,34 @@ std::string port_string(const ApproximationPort &port) {
     if (port.dimensions) {
         stream << " x" << *port.dimensions;
     }
+    if (port.range) {
+        stream << " in " << range_string(*port.range);
+    }
     return stream.str();
+}
+
+// Compare the ranges `context` guarantees with the preconditions `required`
+// declares, port by port. Nothing is reported unless the two line up.
+std::vector<std::string> input_range_issues(const ApproximationPorts &required,
+                                            const ApproximationPorts &context) {
+    std::vector<std::string> issues;
+    if (required.size() != context.size()) {
+        return issues;
+    }
+    for (size_t i = 0; i < required.size(); i++) {
+        if (!required[i].range) {
+            continue;
+        }
+        const std::string prefix = "input '" + required[i].name + "': ";
+        if (!context[i].range) {
+            issues.push_back(prefix + "requires " + range_string(*required[i].range) +
+                             ", but the producer declares no range");
+        } else if (!required[i].range->contains(*context[i].range)) {
+            issues.push_back(prefix + range_string(*context[i].range) + " not within " +
+                             range_string(*required[i].range));
+        }
+    }
+    return issues;
 }
 
 std::string type_string(const Type &t) {
@@ -473,6 +509,11 @@ void Approximation::describe_to(std::string &out, const ApproximationPorts &inpu
         out += "(unknown signature)";
     }
     out += "\n";
+    if (sig.known) {
+        for (const std::string &issue : input_range_issues(sig.inputs, inputs)) {
+            out += std::string(depth * 2 + 2, ' ') + "! " + issue + "\n";
+        }
+    }
     std::vector<Approximation> children = state_->impl->children();
     std::vector<ApproximationPorts> contexts = state_->impl->child_inputs(inputs);
     for (size_t i = 0; i < children.size(); i++) {
@@ -480,6 +521,55 @@ void Approximation::describe_to(std::string &out, const ApproximationPorts &inpu
             children[i].describe_to(out, i < contexts.size() ? contexts[i] : ApproximationPorts{}, depth + 1);
         }
     }
+}
+
+void Approximation::range_issues_to(std::vector<std::string> &out, const ApproximationPorts &inputs,
+                                    const std::string &path) const {
+    const std::string here = path.empty() ? label() : path + " > " + label();
+    ApproximationSignature sig = signature(inputs);
+    if (sig.known) {
+        for (const std::string &issue : input_range_issues(sig.inputs, inputs)) {
+            out.push_back(here + ": " + issue);
+        }
+    }
+    std::vector<Approximation> children = state_->impl->children();
+    std::vector<ApproximationPorts> contexts = state_->impl->child_inputs(inputs);
+    for (size_t i = 0; i < children.size(); i++) {
+        if (children[i].defined()) {
+            children[i].range_issues_to(out, i < contexts.size() ? contexts[i] : ApproximationPorts{}, here);
+        }
+    }
+}
+
+std::vector<std::string> check_ranges(const Approximation &a, const ApproximationPorts &inputs) {
+    std::vector<std::string> out;
+    if (a.defined()) {
+        a.range_issues_to(out, inputs, "");
+    }
+    return out;
+}
+
+Func Approximation::error_bound(const std::vector<Func> &inputs, const std::vector<Func> &encoded) const {
+    user_assert(defined()) << "error_bound called on an undefined Approximation\n";
+    Func bound = state_->impl->error_bound(inputs, encoded);
+    if (bound.defined()) {
+        return bound;
+    }
+    if (!state_->impl->lossless() || inputs.empty() || !inputs[0].defined()) {
+        return Func();
+    }
+    std::vector<Var> args;
+    for (int i = 0; i < inputs[0].dimensions(); i++) {
+        args.emplace_back("zb" + std::to_string(i));
+    }
+    Func zero("approximation_zero_bound");
+    zero(args) = cast<double>(0);
+    return zero;
+}
+
+bool Approximation::lossless() const {
+    user_assert(defined()) << "lossless called on an undefined Approximation\n";
+    return state_->impl->lossless();
 }
 
 std::string Approximation::describe(const ApproximationPorts &inputs) const {
@@ -502,7 +592,7 @@ EncodeResult Approximation::encode(const std::vector<Func> &inputs, const Approx
     std::vector<Func> encoded = state_->impl->encode(inputs, resolved);
     ApproximationPorts encoded_ports = output_ports(encoded, resolved, true);
     std::vector<Func> intermediates = find_intermediates(inputs, encoded);
-    ApproximationTraceNode node = scope.finish(*this, encoded, names_of(encoded_ports), intermediates);
+    ApproximationTraceNode node = scope.finish(*this, encoded, names_of(encoded_ports), intermediates, inputs, names_of(resolved));
     std::vector<ApproximationStageOutputs> stage_outputs;
     flatten(node, stage_outputs);
     return {std::move(encoded), std::move(encoded_ports), std::move(intermediates), std::move(stage_outputs),
@@ -516,7 +606,7 @@ DecodeResult Approximation::decode(const std::vector<Func> &encoded, const Appro
     std::vector<Func> decoded = state_->impl->decode(encoded, resolved);
     ApproximationPorts decoded_ports = output_ports(decoded, resolved, false);
     std::vector<Func> intermediates = find_intermediates(encoded, decoded);
-    ApproximationTraceNode node = scope.finish(*this, decoded, names_of(decoded_ports), intermediates);
+    ApproximationTraceNode node = scope.finish(*this, decoded, names_of(decoded_ports), intermediates, encoded, names_of(resolved));
     std::vector<ApproximationStageOutputs> stage_outputs;
     flatten(node, stage_outputs);
     return {std::move(decoded), std::move(decoded_ports), std::move(intermediates), std::move(stage_outputs),
@@ -581,6 +671,23 @@ std::vector<ApproximationPorts> Compose::child_inputs(const ApproximationPorts &
         current = s.known ? std::move(s.outputs) : ApproximationPorts{};
     }
     return result;
+}
+
+bool Compose::lossless() const {
+    for (const Approximation &stage : stages) {
+        if (!stage.lossless()) {
+            return false;
+        }
+    }
+    return !stages.empty();
+}
+
+bool Apply::lossless() const {
+    return inner.lossless();
+}
+
+bool Choose::lossless() const {
+    return chosen.lossless();
 }
 
 bool Apply::locate(const ApproximationPorts &inputs, size_t &begin, size_t &arity, std::string *problem) const {
@@ -814,6 +921,23 @@ Func Pointwise::encode(const Func &input) const {
 
 Func Pointwise::decode(const Func &encoded) const {
     return apply_pointwise(encoded, decode_fn, decode_name, var_prefix, "decode");
+}
+
+Pointwise Pointwise::with_error_bound(ExprFn bound) const {
+    Pointwise copy = *this;
+    copy.bound_fn = std::move(bound);
+    return copy;
+}
+
+Func Pointwise::error_bound(const std::vector<Func> &inputs, const std::vector<Func> &) const {
+    if (!bound_fn) {
+        return Func();
+    }
+    user_assert(inputs.size() == 1 && inputs[0].outputs() == 1)
+        << "Pointwise::error_bound requires a single-valued input Func\n";
+    return apply_pointwise(
+        inputs[0], wrap_expr_fn([f = bound_fn](Expr x) { return f(x); }),
+        encode_name + "_bound", var_prefix, "error_bound");
 }
 
 std::vector<Func> Identity::encode(const std::vector<Func> &inputs) const {
