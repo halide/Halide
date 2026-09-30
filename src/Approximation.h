@@ -28,23 +28,66 @@ struct DecodeResult;
 struct ApproximationResult;
 struct ApproximationTraceNode;
 
+/** A closed interval [lo, hi] of values, with constant double endpoints. This
+ * is deliberately simpler than Halide::Interval (which holds Exprs and can be
+ * unbounded on either side): declared value ranges are compile-time constants
+ * used for documentation and testing, never for code generation. Integers up
+ * to 2^53 in magnitude are represented exactly. */
+struct ApproximationRange {
+    double lo = 0, hi = 0;
+
+    ApproximationRange() = default;
+    ApproximationRange(double lo, double hi)
+        : lo(lo), hi(hi) {
+    }
+
+    bool contains(double v) const {
+        return lo <= v && v <= hi;
+    }
+    /** Is every value of `other` in this range? */
+    bool contains(const ApproximationRange &other) const {
+        return lo <= other.lo && other.hi <= hi;
+    }
+    bool operator==(const ApproximationRange &other) const {
+        return lo == other.lo && hi == other.hi;
+    }
+};
+
 /** A named slot in an Approximation's interface: one Func that flows into or
  * out of a stage. The name identifies the port (for lookups and for
  * name-based combinators like Apply); `type` and `dimensions`, when set, are
  * checked against the actual Func at run time. A port with a multi-valued
- * (Tuple) Func never has a `type`. */
+ * (Tuple) Func never has a `type`.
+ *
+ * `range`, when set, is a declared bound on the port's *values*. Its meaning
+ * depends on the direction the port is used in:
+ *
+ * - on an *input* port of a stage's encode (or a stage's declared inputs):
+ *   a precondition -- the range the stage requires for its declared
+ *   properties (losslessness, error bounds) to hold;
+ * - on an *output* port of encode: a guarantee -- every encoded value lies
+ *   in the range (e.g. a symmetric int8 quantizer's codes are in [-127, 127]).
+ *
+ * Ranges are never checked on the normal encode/decode path, so they cost
+ * nothing in generated code. They are checked statically (see
+ * check_ranges() and Approximation::describe()) by comparing each producer's
+ * guaranteed output range with the consumer's required input range, and
+ * dynamically by the helpers in ApproximationTesting.h. */
 struct ApproximationPort {
     std::string name;
     std::optional<Type> type;
     std::optional<int> dimensions;
+    std::optional<ApproximationRange> range;
 
     ApproximationPort(std::string name, std::optional<Type> type = std::nullopt,
-                      std::optional<int> dimensions = std::nullopt)
-        : name(std::move(name)), type(type), dimensions(dimensions) {
+                      std::optional<int> dimensions = std::nullopt,
+                      std::optional<ApproximationRange> range = std::nullopt)
+        : name(std::move(name)), type(type), dimensions(dimensions), range(range) {
     }
     ApproximationPort(const char *name, std::optional<Type> type = std::nullopt,
-                      std::optional<int> dimensions = std::nullopt)
-        : name(name), type(type), dimensions(dimensions) {
+                      std::optional<int> dimensions = std::nullopt,
+                      std::optional<ApproximationRange> range = std::nullopt)
+        : name(name), type(type), dimensions(dimensions), range(range) {
     }
 };
 
@@ -149,6 +192,21 @@ struct ApproximationSignature {
  * std::vector<ApproximationPorts> child_inputs(const ApproximationPorts &inputs) const;
  * \endcode
  *
+ * A unit may declare how accurate its round trip is, with ONE of:
+ *
+ * \code
+ * // A per-element bound on |decode(encode(x)) - x|, as a Func with the same
+ * // arguments as inputs[0] (any numeric type). `encoded` are the Funcs that
+ * // encode() produced from `inputs`.
+ * Func error_bound(const std::vector<Func> &inputs, const std::vector<Func> &encoded) const;
+ * // The round trip is exact (the bound is zero).
+ * bool lossless() const;
+ * \endcode
+ *
+ * Both are claims that hold *when every input port's declared range (its
+ * precondition) is respected*; see Approximation::error_bound() and
+ * lossless(). They are never enforced at run time.
+ *
  * See also Pointwise for elementwise units. The handle stores a decayed copy
  * of the unit, so methods are always invoked on a const object. (Units
  * needing mutable state must hold it in `mutable` members or behind a
@@ -212,6 +270,8 @@ class Approximation {
         virtual bool encode_is_single() const = 0;
         virtual std::vector<Approximation> children() const = 0;
         virtual std::vector<ApproximationPorts> child_inputs(const ApproximationPorts &inputs) const = 0;
+        virtual Func error_bound(const std::vector<Func> &inputs, const std::vector<Func> &encoded) const = 0;
+        virtual bool lossless() const = 0;
     };
 
     // The shared identity of a stage: every copy of a handle points at one
@@ -337,6 +397,20 @@ class Approximation {
                                        std::declval<const ApproximationPorts &>()))>,
                                    std::vector<ApproximationPorts>>>> : std::true_type {};
 
+    template<typename T, typename = void>
+    struct has_error_bound : std::false_type {};
+    template<typename T>
+    struct has_error_bound<T, std::enable_if_t<std::is_same_v<
+                                  std::decay_t<decltype(std::declval<const T &>().error_bound(
+                                      std::declval<const std::vector<Func> &>(),
+                                      std::declval<const std::vector<Func> &>()))>,
+                                  Func>>> : std::true_type {};
+    template<typename T, typename = void>
+    struct has_lossless : std::false_type {};
+    template<typename T>
+    struct has_lossless<T, std::enable_if_t<std::is_convertible_v<
+                               decltype(std::declval<const T &>().lossless()), bool>>> : std::true_type {};
+
     template<typename T>
     static constexpr Form encode_form =
         is_ported_encode<T>::value ? Form::Ported :
@@ -458,12 +532,30 @@ public:
      * - undeclared multi-Func unit: unknown (see ApproximationSignature). */
     ApproximationSignature signature(const ApproximationPorts &inputs = {}) const;
 
+    /** A per-element upper bound on |decode(encode(x)) - x|, given the
+     * `inputs` handed to encode() and the `encoded` Funcs it returned, valid
+     * when the inputs respect the declared input ranges. The result has the
+     * same arguments as inputs[0] and a numeric type. It comes from the
+     * unit's `error_bound()` if it has one, else a zero Func if the unit is
+     * lossless(), else an undefined Func (no bound is declared). The bound
+     * is a claim, not enforced; see ApproximationTesting.h to check it. */
+    Func error_bound(const std::vector<Func> &inputs, const std::vector<Func> &encoded) const;
+
+    /** Does the unit declare its round trip exact (under its input
+     * preconditions)? A unit that only has an `error_bound()` is not
+     * lossless() even if that bound happens to be zero. */
+    bool lossless() const;
+
     /** Render this stage's structure without running anything: one line per
      * stage, `label (inputs) -> (outputs)`, where a port prints as
-     * `name: type xN` (`N` being its dimensionality; unset parts are left
-     * out), followed by the stage's children (see the `children()` unit
+     * `name: type xN in [lo, hi]` (`N` being its dimensionality; unset parts
+     * are left out; the range is a precondition on inputs and a guarantee on
+     * outputs), followed by the stage's children (see the `children()` unit
      * method), indented by two spaces. `inputs` is the context in which the
-     * signature is resolved. */
+     * signature is resolved. When a stage's context is known, each input
+     * whose declared range is not guaranteed by the context is flagged on the
+     * following line, e.g. `! input 'value': [0, 15] not within [0, 7]`
+     * (or `... not guaranteed` when the context declares no range). */
     std::string describe(const ApproximationPorts &inputs = {}) const;
 
 private:
@@ -472,6 +564,9 @@ private:
     ApproximationPorts output_ports(const std::vector<Func> &outputs, const ApproximationPorts &input_ports,
                                     bool encode_direction) const;
     void describe_to(std::string &out, const ApproximationPorts &inputs, int depth) const;
+    void range_issues_to(std::vector<std::string> &out, const ApproximationPorts &inputs,
+                         const std::string &path) const;
+    friend std::vector<std::string> check_ranges(const Approximation &, const ApproximationPorts &);
 
     std::shared_ptr<State> state_;
 };
@@ -490,6 +585,10 @@ struct ApproximationTraceNode {
     /** The Funcs discovered for this stage alone (see Approximation::encode). */
     std::vector<Func> intermediates;
     std::vector<ApproximationTraceNode> children;
+    /** The Funcs this call consumed (the stage's inputs) and their port
+     * names (parallel to it). */
+    std::vector<Func> inputs;
+    std::vector<std::string> input_names;
 };
 
 /** The ports produced by one stage during encode or decode, plus the
@@ -617,6 +716,22 @@ struct Approximation::Model final : Approximation::Concept {
             return std::vector<ApproximationPorts>(children().size());
         }
     }
+
+    Func error_bound(const std::vector<Func> &inputs, const std::vector<Func> &encoded) const override {
+        if constexpr (has_error_bound<T>::value) {
+            return unit.error_bound(inputs, encoded);
+        } else {
+            return Func();
+        }
+    }
+
+    bool lossless() const override {
+        if constexpr (has_lossless<T>::value) {
+            return unit.lossless();
+        } else {
+            return false;
+        }
+    }
 };
 
 template<typename T, typename>
@@ -690,6 +805,23 @@ struct ApproximationResult {
     bool is_stage_port(const Func &f) const;
 };
 
+/** Statically check declared value ranges through `a`, without running
+ * anything. For every stage whose input context is known (the root's is
+ * `inputs`, which is skipped when empty; a child's comes from
+ * `child_inputs()`), each input port with a declared range (a precondition)
+ * is compared with the range the context guarantees:
+ *
+ * - if both are declared and the guarantee is not within the precondition,
+ *   the diagnostic reads `path: input 'p': [0, 15] not within [0, 7]`;
+ * - if the guarantee is undeclared, `path: input 'p': requires [0, 7], but
+ *   the producer declares no range`.
+ *
+ * `path` is the chain of stage labels from the root. An empty result means
+ * every declared precondition is statically guaranteed. Ranges only flow
+ * through units that declare them, so unknown is common; unknown is reported,
+ * never assumed satisfied. */
+std::vector<std::string> check_ranges(const Approximation &a, const ApproximationPorts &inputs = {});
+
 /** Print a trace as an indented tree, one line per call: the label, then
  * `-> ` and the comma-separated ports as `port name=Func name`. A non-empty intermediates
  * list follows on its own line as `intermediates: a, b`, indented under its
@@ -751,6 +883,12 @@ struct Compose {
     std::vector<Approximation> children() const;
     std::vector<ApproximationPorts> child_inputs(const ApproximationPorts &inputs) const;
 
+    /** A composition of lossless stages is lossless (under their
+     * preconditions, see check_ranges()). No error bound is declared for
+     * lossy compositions: bounds do not compose without knowing how errors
+     * propagate. */
+    bool lossless() const;
+
     std::vector<Approximation> stages;
 };
 
@@ -799,6 +937,9 @@ struct Apply {
 
     /** "Apply[idx]" or "Apply[port]" */
     std::string name() const;
+
+    /** Lossless if `inner` is (the other ports pass through untouched). */
+    bool lossless() const;
 
     /** The position and arities for the by-position form; -1 by name. */
     int idx, encode_arity, decode_arity;
@@ -884,6 +1025,9 @@ struct Choose {
     std::vector<Approximation> children() const;
     std::vector<ApproximationPorts> child_inputs(const ApproximationPorts &inputs) const;
 
+    /** Lossless if the chosen stage is. */
+    bool lossless() const;
+
     Approximation chosen;
 };
 
@@ -924,9 +1068,17 @@ struct Pointwise {
     Func encode(const Func &input) const;
     Func decode(const Func &encoded) const;
 
+    /** A copy that also declares an error bound: `bound(x)` is an upper
+     * bound on |decode(encode(x)) - x| as a function of the *original* value
+     * x (single-valued Funcs only). Without this, error_bound() returns an
+     * undefined Func. */
+    Pointwise with_error_bound(ExprFn bound) const;
+    Func error_bound(const std::vector<Func> &inputs, const std::vector<Func> &encoded) const;
+
 private:
     std::string encode_name, decode_name, var_prefix;
     TupleFn encode_fn, decode_fn;
+    ExprFn bound_fn;
 };
 
 /** Passes Funcs (and their port names) through unchanged in both directions. */
@@ -936,6 +1088,10 @@ struct Identity {
 
     /** Echoes `inputs`; unknown if there are none. */
     ApproximationSignature signature(const ApproximationPorts &inputs) const;
+
+    bool lossless() const {
+        return true;
+    }
 };
 
 /** Reorders Funcs: encode() outputs `inputs[permutation[i]]` at position i,
@@ -955,6 +1111,10 @@ struct Permute {
     std::vector<Func> decode(const std::vector<Func> &encoded) const;
 
     ApproximationSignature signature(const ApproximationPorts &inputs) const;
+
+    bool lossless() const {
+        return true;
+    }
 
     std::vector<int> forward, backward;
 };
