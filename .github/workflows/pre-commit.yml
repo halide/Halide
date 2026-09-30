@@ -4,6 +4,16 @@ on:
   # We don't want 'review_requested' (that's redundant to the ones below for our purposes)
   pull_request:
     types: [ opened, synchronize, reopened ]
+  # Pull requests can restore caches saved on main but not each other's, so
+  # the hook cache is only saved by these runs, which just install the hooks.
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/pre-commit.yml"
+      - ".pre-commit-config.yaml"
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -24,10 +34,35 @@ jobs:
 
       - uses: actions/setup-python@v7
       - uses: astral-sh/setup-uv@v7
+        with:
+          save-cache: ${{ github.event_name != 'pull_request' }}
+
+      - name: Install pre-commit
+        run: python -m pip install pre-commit
+
+      - name: Restore pre-commit hook cache
+        id: hook-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ env.pythonLocation }}-${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: pre-commit-${{ runner.os }}-${{ env.pythonLocation }}-
+
+      - name: Install hooks
+        if: github.event_name != 'pull_request' && steps.hook-cache.outputs.cache-hit != 'true'
+        run: pre-commit install-hooks
+
+      - name: Save pre-commit hook cache
+        if: github.event_name != 'pull_request' && steps.hook-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/pre-commit
+          key: ${{ steps.hook-cache.outputs.cache-primary-key }}
 
       - name: Run pre-commit
         id: pre-commit
-        uses: pre-commit/action@v3.0.1
+        if: github.event_name == 'pull_request'
+        run: pre-commit run --show-diff-on-failure --color=always --all-files
 
       - name: Create auto-fix diff
         id: diff
