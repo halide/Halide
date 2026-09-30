@@ -228,13 +228,12 @@ int test_standard_quant_compositions() {
     Func q4_values("q4_values");
     q4_values(k) = cast<float>((k % 16) - 8);
     Approximation q4 = Compose(
-        StructLayout{q4_type, {"qs", "d"}},
-        Apply{1, StorageCast<float, float16_t>{}},
-        Apply{0, PlanarFieldPack{4, 16}},
-        Apply{0, AdditiveOffset<int8_t, uint8_t>{8}},
+        BlockReshape{32},
         SymmetricBlockQuantize{32, 8, BlockRoundingMode::TruncateHalfUpWithOffset,
                                BlockScaleAnchor::ExtremeSignedValue},
-        BlockReshape{32});
+        Parallel{{"codes", Compose{AdditiveOffset<int8_t, uint8_t>{8}, PlanarFieldPack{4, 16}}},
+                 {"scale", StorageCast<float, float16_t>{}}},
+        StructLayout{q4_type, {"qs", "d"}});
     EncodeResult q4_encoded = q4.encode({q4_values});
     for (Func intermediate : q4_encoded.intermediates) {
         intermediate.compute_root();
@@ -252,11 +251,11 @@ int test_standard_quant_compositions() {
     Expr local = k % 32;
     q8_values(k) = cast<float>(select(local == 0, -127, local - 16));
     Approximation q8 = Compose(
-        StructLayout{q8_type, {"qs", "d"}},
-        Apply{1, StorageCast<float, float16_t>{}},
+        BlockReshape{32},
         SymmetricBlockQuantize{32, 127, BlockRoundingMode::Nearest,
                                BlockScaleAnchor::AbsMax},
-        BlockReshape{32});
+        Parallel{Identity{}, StorageCast<float, float16_t>{}},
+        StructLayout{q8_type, {"qs", "d"}});
     EncodeResult q8_encoded = q8.encode({q8_values});
     for (Func intermediate : q8_encoded.intermediates) {
         intermediate.compute_root();
