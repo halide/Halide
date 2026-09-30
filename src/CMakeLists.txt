@@ -63,6 +63,7 @@ target_sources(
     ApplySplit.h
     Approximation.h
     ApproximationComponents.h
+    ApproximationTesting.h
     Argument.h
     AssociativeOpsTable.h
     Associativity.h
