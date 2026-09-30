@@ -7,6 +7,25 @@ name: Apps
 # everything, while changes confined to one app only run that app.
 
 on:
+  # Pull requests can restore caches saved on main but not each other's, so
+  # caches are only saved by these runs, which build just enough to fill them.
+  # See the "Save vcpkg binary cache" steps.
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/testing-apps.yml"
+      - "vcpkg.json"
+      - "vcpkg-configuration.json"
+      - "cmake/vcpkg-ports/**"
+      - "cmake/vcpkg-triplets/**"
+      - "apps/vcpkg.json"
+      - "apps/vcpkg-configuration.json"
+      - "apps/vcpkg/**"
+      - "pyproject.toml"
+      - "uv.lock"
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
   pull_request:
     types: [ opened, synchronize, reopened ]
     paths-ignore:
@@ -71,7 +90,11 @@ jobs:
         id: detect
         run: |
           android=false baremetal=false wasm=false ios=false suite=false core=false
-          while read -r f; do
+          # Outside pull requests, only the jobs with caches to save run.
+          if [[ "${{ github.event_name }}" != pull_request ]]; then
+            suite=true
+          fi
+          while [[ "${{ github.event_name }}" == pull_request ]] && read -r f; do
             case "$f" in
               # Mirrors the workflow's paths-ignore: never affects any app.
               doc/* | *.md | test/* | tutorial/* | .github/* | .claude/* | .devcontainer/* | \
@@ -102,7 +125,7 @@ jobs:
           fi
 
           linux=false macos=false
-          [[ "$android$baremetal$wasm" == *true* ]] && linux=true
+          [[ "$android$baremetal$wasm" == *true* || "${{ github.event_name }}" != pull_request ]] && linux=true
           [[ "$ios$suite" == *true* ]] && macos=true
 
           tee -a "$GITHUB_OUTPUT" <<EOF
@@ -131,6 +154,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@v7
         with:
+          save-cache: ${{ github.event_name != 'pull_request' }}
           cache-suffix: apps-linux-x86-64
 
       - name: Install system dependencies
@@ -145,7 +169,8 @@ jobs:
           echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" >> "$GITHUB_ENV"
 
       - name: Restore vcpkg binary cache
-        uses: actions/cache@v6
+        id: vcpkg-cache
+        uses: actions/cache/restore@v6
         with:
           path: ${{ github.workspace }}/.vcpkg-cache
           key: vcpkg-halide-ubuntu-24.04-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-ports/**', 'cmake/vcpkg-triplets/**') }}
@@ -163,14 +188,24 @@ jobs:
           -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install"
           -DWITH_TESTS=NO -DWITH_TUTORIALS=NO -DWITH_PYTHON_BINDINGS=NO
 
+      - name: Save vcpkg binary cache
+        if: github.event_name != 'pull_request' && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ github.workspace }}/.vcpkg-cache
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+
       - name: Build and install Halide
+        if: github.event_name == 'pull_request'
         run: cmake --build build --target install
 
       # Tar the install tree so symlinks and permissions survive the artifact.
       - name: Package install tree
+        if: github.event_name == 'pull_request'
         run: tar -C "${{ github.workspace }}" -czf halide-install.tar.gz install
 
       - uses: actions/upload-artifact@v7
+        if: github.event_name == 'pull_request'
         with:
           name: halide-install-linux-x86-64
           path: halide-install.tar.gz
@@ -192,6 +227,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@v7
         with:
+          save-cache: ${{ github.event_name != 'pull_request' }}
           cache-suffix: apps-${{ matrix.python }}
 
       # See the matching step in testing-macos.yml.
@@ -208,7 +244,8 @@ jobs:
           echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" >> "$GITHUB_ENV"
 
       - name: Restore vcpkg binary cache
-        uses: actions/cache@v6
+        id: vcpkg-cache
+        uses: actions/cache/restore@v6
         with:
           path: ${{ github.workspace }}/.vcpkg-cache
           key: vcpkg-halide-${{ matrix.runner }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-ports/**', 'cmake/vcpkg-triplets/**') }}
@@ -225,6 +262,13 @@ jobs:
           cmake --preset ci-macos-${{ matrix.arch }}
           -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install"
           -DWITH_TESTS=NO -DWITH_TUTORIALS=NO
+
+      - name: Save vcpkg binary cache
+        if: github.event_name != 'pull_request' && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ github.workspace }}/.vcpkg-cache
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
 
       - name: Build and install Halide
         run: cmake --build build --target install
@@ -419,6 +463,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@v7
         with:
+          save-cache: ${{ github.event_name != 'pull_request' }}
           cache-suffix: apps-${{ matrix.python }}
 
       # See the matching step in testing-macos.yml.
@@ -436,7 +481,8 @@ jobs:
           echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" >> "$GITHUB_ENV"
 
       - name: Restore vcpkg binary cache
-        uses: actions/cache@v6
+        id: vcpkg-cache
+        uses: actions/cache/restore@v6
         with:
           path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
           key: vcpkg-apps-${{ matrix.runner }}-${{ hashFiles('apps/vcpkg.json', 'apps/vcpkg-configuration.json', 'apps/vcpkg/**') }}
@@ -455,10 +501,19 @@ jobs:
           -DHalide_TARGET=host
           -DENABLE_APPS_HANNK=${{ matrix.arch == 'arm-64' && 'ON' || 'OFF' }}
 
+      - name: Save vcpkg binary cache
+        if: github.event_name != 'pull_request' && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+
       - name: Build apps (host)
+        if: github.event_name == 'pull_request'
         run: cmake --build apps-build
 
       - name: Test apps (host)
+        if: github.event_name == 'pull_request'
         run: >-
           ctest --test-dir apps-build --build-config RelWithDebInfo
           --output-on-failure -LE slow_tests --timeout 3600
@@ -466,7 +521,7 @@ jobs:
       # Real GPU testing on hosted Apple Silicon runners. arm-64 only --
       # GitHub's Intel macOS runners have a GPU too weak for this workload.
       - name: Configure apps (host-metal)
-        if: matrix.arch == 'arm-64'
+        if: github.event_name == 'pull_request' && (matrix.arch == 'arm-64')
         run: >-
           cmake -S apps -B apps-build
           -G Ninja
@@ -477,11 +532,11 @@ jobs:
           -DENABLE_APPS_HANNK=ON
 
       - name: Build apps (host-metal)
-        if: matrix.arch == 'arm-64'
+        if: github.event_name == 'pull_request' && (matrix.arch == 'arm-64')
         run: cmake --build apps-build
 
       - name: Test apps (host-metal)
-        if: matrix.arch == 'arm-64'
+        if: github.event_name == 'pull_request' && (matrix.arch == 'arm-64')
         run: >-
           ctest --test-dir apps-build --build-config RelWithDebInfo
           --output-on-failure -LE slow_tests --timeout 3600

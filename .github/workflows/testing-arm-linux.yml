@@ -1,6 +1,22 @@
 name: ARM Linux
 
 on:
+  # Pull requests can restore caches saved on main but not each other's, so
+  # caches are only saved by these runs, which stop once the caches are
+  # filled. See the "Save vcpkg binary cache" step.
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/testing-arm-linux.yml"
+      - "vcpkg.json"
+      - "vcpkg-configuration.json"
+      - "cmake/vcpkg-ports/**"
+      - "cmake/vcpkg-triplets/**"
+      - "pyproject.toml"
+      - "uv.lock"
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
   pull_request:
     types: [ opened, synchronize, reopened ]
     paths-ignore:
@@ -67,6 +83,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@v7
         with:
+          save-cache: ${{ github.event_name != 'pull_request' }}
           # Per-configuration key: jobs otherwise share one key and the first
           # to save wins, so source-built wheels (e.g. i686) are never reused.
           cache-suffix: ${{ matrix.python }}-${{ matrix.uv_group }}
@@ -79,7 +96,8 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/vcpkg-archives"
 
       - name: Restore vcpkg binary cache
-        uses: actions/cache@v6
+        id: vcpkg-cache
+        uses: actions/cache/restore@v6
         with:
           path: ${{ runner.temp }}/vcpkg-archives
           key: vcpkg-${{ github.job }}-${{ matrix.bits }}${{ matrix.arch }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-ports/**', 'cmake/vcpkg-triplets/**') }}
@@ -131,10 +149,19 @@ jobs:
       - name: Configure CMake
         run: cmake --preset ci-linux-arm-${{ matrix.bits }}
 
+      - name: Save vcpkg binary cache
+        if: github.event_name != 'pull_request' && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/vcpkg-archives
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+
       - name: Initial build
+        if: github.event_name == 'pull_request'
         run: cmake --build build
 
       - name: Detect host target
+        if: github.event_name == 'pull_request'
         run: |
           HOST_TARGET=$(./build/src/autoschedulers/common/get_host_target)
           echo "HAS_SVE2=$([[ "$HOST_TARGET" == *sve2* ]] && echo true || echo false)" >> "$GITHUB_ENV"
@@ -145,6 +172,7 @@ jobs:
       # runs first varies (host is skipped without SVE2), so every step marks
       # target-independent tests as done.
       - name: Configure test filters
+        if: github.event_name == 'pull_request'
         run: |
           exclude="performance"
           if [[ "${{ matrix.uv_group }}" != "ci-llvm-main" ]]; then
@@ -153,7 +181,7 @@ jobs:
           echo "CTEST_EXCLUDE=${exclude}" >> "$GITHUB_ENV"
 
       - name: Test (host)
-        if: matrix.bits == '32' || env.HAS_SVE2 == 'true'
+        if: github.event_name == 'pull_request' && (matrix.bits == '32' || env.HAS_SVE2 == 'true')
         run: |
           cmake -S . -B build -DHalide_TARGET=host
           cmake --build build
@@ -162,7 +190,7 @@ jobs:
           [[ "${CTEST_EXCLUDE}" == *target_independent* ]] || echo "CTEST_EXCLUDE=${CTEST_EXCLUDE}|target_independent" >> "$GITHUB_ENV"
 
       - name: Test (NEON)
-        if: matrix.bits == '64'
+        if: github.event_name == 'pull_request' && (matrix.bits == '64')
         run: |
           cmake -S . -B build -DHalide_TARGET=arm-64-linux-arm_dot_prod-arm_fp16
           cmake --build build
@@ -171,6 +199,7 @@ jobs:
           [[ "${CTEST_EXCLUDE}" == *target_independent* ]] || echo "CTEST_EXCLUDE=${CTEST_EXCLUDE}|target_independent" >> "$GITHUB_ENV"
 
       - name: Test (no extensions)
+        if: github.event_name == 'pull_request'
         run: |
           cmake -S . -B build -DHalide_TARGET=cmake
           cmake --build build
