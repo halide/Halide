@@ -736,7 +736,8 @@ struct SymmetricBlockQuantize {
         if (rounding_ == BlockRoundingMode::Nearest) {
             codes(kk, blk) = cast<int8_t>(round(scaled));
         } else if (rounding_ == BlockRoundingMode::TruncateHalfUpWithOffset) {
-            Expr raw = cast<int32_t>(cast<int8_t>(scaled + (float)qmax_ + 0.5f));
+            // One add of the folded constant, as in GGML's `x * id + 8.5f`.
+            Expr raw = cast<int32_t>(cast<int8_t>(scaled + ((float)qmax_ + 0.5f)));
             codes(kk, blk) = cast<int8_t>(min(raw, 2 * qmax_ - 1) - qmax_);
         } else if (rounding_ == BlockRoundingMode::SignOnly) {
             codes(kk, blk) = cast<int8_t>(select(block(kk, blk) >= 0.0f, 1, -1));

@@ -194,7 +194,7 @@ int main() {
     // Stage lookup works for simple-form units, including when composed.
     {
         Approximation h_neg = Negate{}, h_parity = SplitParity{}, h_add = AddOne{};
-        Compose scheme{h_parity, h_neg, h_add};
+        Compose scheme{h_add, h_neg, h_parity};
         Func f("src");
         Var x("x");
         f(x) = x;

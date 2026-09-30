@@ -2781,17 +2781,11 @@ Func Func::clone_in(const vector<Func> &fs) {
 }
 
 ApproximationResult Func::approximate_by(const Approximation &p, const vector<Func> &consumers) {
-    // Name the input port after the root's declared input, if it has one.
-    ApproximationSignature root = p.signature();
-    std::string input_name = "input";
-    if (root.known && root.inputs.size() == 1 && root.inputs[0].name != "0") {
-        input_name = root.inputs[0].name;
-    }
-    EncodeResult enc = p.encode({*this}, {ApproximationPort(input_name)});
+    EncodeResult enc = p.encode({*this});
     user_assert(!enc.encoded.empty())
         << "approximate_by: Approximation::encode(" << name() << ") returned no Funcs\n";
 
-    DecodeResult dec = p.decode(enc.encoded, enc.encoded_ports);
+    DecodeResult dec = p.decode(enc.encoded);
     user_assert(dec.decoded.size() == 1)
         << "approximate_by: Approximation::decode() must return exactly one Func (the "
         << "round-trip replacement), but returned " << dec.decoded.size() << "\n";

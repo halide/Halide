@@ -161,7 +161,7 @@ int test_stage_targeting() {
     Approximation offset = AdditiveOffset<int8_t, uint8_t>{8};
     Approximation quant = SymmetricBlockQuantize{16, 8, BlockRoundingMode::TruncateHalfUpWithOffset,
                                                  BlockScaleAnchor::ExtremeSignedValue};
-    Approximation scheme = Compose{Apply{0, Compose{pack, offset}}, quant, BlockReshape{16}};
+    Approximation scheme = Compose{BlockReshape{16}, quant, Parallel{{"codes", Compose{offset, pack}}}};
 
     CHECK(check_ranges(scheme).empty());
     std::cout << scheme.describe();
@@ -201,7 +201,7 @@ int test_range_diagnostics() {
     Approximation pack = PlanarFieldPack{4, 8};
     Approximation offset = AdditiveOffset<int8_t, uint8_t>{8};
     Approximation quant = SymmetricBlockQuantize{16, 8, BlockRoundingMode::Nearest, BlockScaleAnchor::AbsMax};
-    Approximation bad = Compose{Apply{0, Compose{pack, offset}}, quant, BlockReshape{16}};
+    Approximation bad = Compose{BlockReshape{16}, quant, Parallel{{"codes", Compose{offset, pack}}}};
     std::vector<std::string> issues = check_ranges(bad);
     for (const std::string &s : issues) {
         std::cout << "issue: " << s << "\n";
@@ -274,7 +274,7 @@ int test_unreadable_encoded() {
     Approximation split = AdditiveRadixSplit(16, 16);
     Approximation layout = StructLayout(record, {"low", "high"});
     Approximation copy = Copy{};
-    Approximation scheme = Compose{layout, split};
+    Approximation scheme = Compose{split, layout};
 
     const std::vector<int> extents = {32};
     const std::vector<InputSpec> codes = {InputSpec{Int(8), extents, Distribution::uniform_int(-16, 15)}};
@@ -296,7 +296,7 @@ int test_unreadable_encoded() {
     CHECK(idem.message.find("'record'") != std::string::npos && idem.message.find("struct-typed") != std::string::npos);
 
     // A stage whose input is struct-typed cannot be targeted, but others can.
-    Approximation with_copy = Compose{copy, layout, split};
+    Approximation with_copy = Compose{split, layout, copy};
     CHECK(check_property(with_copy, lossless(), codes, 2, 5).passed);
     PropertyResult at_copy = check_property(with_copy, lossless().at(copy), codes, 2, 5);
     std::cout << at_copy;
