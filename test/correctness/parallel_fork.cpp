@@ -21,7 +21,7 @@ namespace halide_externs {
 HalideExtern_1(int, five_ms, int);
 }
 
-enum Schedule {
+enum class Schedule {
     Serial,
     Parallel,
     AsyncRoot,
@@ -40,20 +40,20 @@ Func make(Schedule schedule) {
 
     both.compute_root().bound(z, 0, 2);
     switch (schedule) {
-    case Serial:
+    case Schedule::Serial:
         f.compute_root();
         g.compute_root();
         break;
-    case Parallel:
+    case Schedule::Parallel:
         both.parallel(z);
         f.compute_at(both, z);
         g.compute_at(both, z);
         break;
-    case AsyncRoot:
+    case Schedule::AsyncRoot:
         f.compute_root().async();
         g.compute_root().async();
         break;
-    case AsyncComputeAt:
+    case Schedule::AsyncComputeAt:
         both.parallel(z);
         f.compute_at(both, z).async();
         g.compute_at(both, z).async();
@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
     double time;
 
     call_count = 0;
-    both = make(Serial);
+    both = make(Schedule::Serial);
     im = both.realize({10, 10, 2});
     count = call_count;
     time = benchmark([&]() {
@@ -85,7 +85,7 @@ int main(int argc, char **argv) {
     fflush(stdout);
 
     call_count = 0;
-    both = make(Parallel);
+    both = make(Schedule::Parallel);
     im = both.realize({10, 10, 2});
     count = call_count;
     time = benchmark([&]() {
@@ -94,7 +94,7 @@ int main(int argc, char **argv) {
     printf("Parallel time %f for %d calls.\n", time, count);
     fflush(stdout);
 
-    both = make(AsyncRoot);
+    both = make(Schedule::AsyncRoot);
     call_count = 0;
     im = both.realize({10, 10, 2});
     count = call_count;
@@ -104,7 +104,7 @@ int main(int argc, char **argv) {
     printf("Async root time %f for %d calls.\n", time, count);
     fflush(stdout);
 
-    both = make(AsyncComputeAt);
+    both = make(Schedule::AsyncComputeAt);
     call_count = 0;
     im = both.realize({10, 10, 2});
     count = call_count;
