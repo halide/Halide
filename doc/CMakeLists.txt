@@ -121,6 +121,7 @@ set(_sphinx_static_files
     "${CMAKE_CURRENT_SOURCE_DIR}/conf.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/index.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/guides.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Approximation.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/BuildingHalideWithCMake.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/CodeStyleCMake.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/CustomRuntimes.md"
