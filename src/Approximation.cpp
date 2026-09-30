@@ -6,7 +6,6 @@
 
 #if defined(__GNUC__) || defined(__clang__)
 #include <cstdlib>
-#include <cxxabi.h>
 #endif
 
 #include "Error.h"
@@ -175,22 +174,43 @@ std::ostream &operator<<(std::ostream &stream, const ApproximationResult &result
     return stream;
 }
 
-std::string Approximation::type_label(const std::type_info &type) {
-    std::string name = type.name();
-#if defined(__GNUC__) || defined(__clang__)
-    int status = 0;
-    char *demangled = abi::__cxa_demangle(name.c_str(), nullptr, nullptr, &status);
-    if (status == 0 && demangled) {
-        name = demangled;
+std::string Approximation::type_label(const char *pretty_function) {
+    const std::string pretty = pretty_function;
+    std::string name;
+    size_t start = std::string::npos;
+    if (size_t pos = pretty.find("pretty_type_name<"); pos != std::string::npos) {
+        // MSVC: ...pretty_type_name<struct Foo>(void)
+        start = pos + std::string("pretty_type_name<").size();
+    } else if (pos = pretty.find("T = "); pos != std::string::npos) {
+        // clang: [T = Foo]; GCC: [with T = Foo; ...]
+        start = pos + 4;
     }
-    std::free(demangled);
-#else
+    if (start == std::string::npos) {
+        return "unit";
+    }
+    int depth = 0;
+    for (size_t i = start; i < pretty.size(); i++) {
+        char c = pretty[i];
+        if (c == '<' || c == '(' || c == '[') {
+            depth++;
+        } else if (c == '>' || c == ')' || c == ']') {
+            if (depth == 0) {
+                break;
+            }
+            depth--;
+        } else if (c == ';' && depth == 0) {
+            break;
+        }
+        name += c;
+    }
     replace_all(name, "struct ", "");
     replace_all(name, "class ", "");
-#endif
     replace_all(name, "(anonymous namespace)::", "");
+    replace_all(name, "{anonymous}::", "");
     replace_all(name, "`anonymous namespace'::", "");
+    replace_all(name, "`anonymous-namespace'::", "");
     replace_all(name, "std::__1::", "std::");
+    replace_all(name, "std::__cxx11::", "std::");
     replace_all(name, "Halide::", "");
     return name;
 }
@@ -259,7 +279,7 @@ void discover(const Internal::Function &f, const std::set<std::string> &inputs,
         discover(callee, inputs, outputs, visited, result);
     }
     if (!outputs.count(f.name())) {
-        result.push_back(Func(f));
+        result.emplace_back(f);
     }
 }
 
@@ -523,10 +543,11 @@ void Approximation::describe_to(std::string &out, const ApproximationPorts &inpu
     } else {
         out += "(unknown signature)";
     }
-    out += "\n";
+    out += '\n';
     if (sig.known) {
         for (const std::string &issue : input_range_issues(sig.inputs, inputs)) {
-            out += std::string(depth * 2 + 2, ' ') + "! " + issue + "\n";
+            out += std::string(depth * 2 + 2, ' ');
+            out += "! " + issue + "\n";
         }
     }
     std::vector<Approximation> children = state_->impl->children();
@@ -540,11 +561,18 @@ void Approximation::describe_to(std::string &out, const ApproximationPorts &inpu
 
 void Approximation::range_issues_to(std::vector<std::string> &out, const ApproximationPorts &inputs,
                                     const std::string &path) const {
-    const std::string here = path.empty() ? label() : path + " > " + label();
+    std::string here = path;
+    if (!here.empty()) {
+        here += " > ";
+    }
+    here += label();
     ApproximationSignature sig = signature(inputs);
     if (sig.known) {
         for (const std::string &issue : input_range_issues(sig.inputs, inputs)) {
-            out.push_back(here + ": " + issue);
+            std::string line = here;
+            line += ": ";
+            line += issue;
+            out.push_back(std::move(line));
         }
     }
     std::vector<Approximation> children = state_->impl->children();
@@ -574,6 +602,7 @@ Func Approximation::error_bound(const std::vector<Func> &inputs, const std::vect
         return Func();
     }
     std::vector<Var> args;
+    args.reserve(inputs[0].dimensions());
     for (int i = 0; i < inputs[0].dimensions(); i++) {
         args.emplace_back("zb" + std::to_string(i));
     }
@@ -1048,7 +1077,7 @@ Func Pointwise::error_bound(const std::vector<Func> &inputs, const std::vector<F
     user_assert(inputs.size() == 1 && inputs[0].outputs() == 1)
         << "Pointwise::error_bound requires a single-valued input Func\n";
     return apply_pointwise(
-        inputs[0], wrap_expr_fn([f = bound_fn](Expr x) { return f(x); }),
+        inputs[0], wrap_expr_fn([f = bound_fn](const Expr &x) { return f(x); }),
         encode_name + "_bound", var_prefix, "error_bound");
 }
 
@@ -1119,7 +1148,7 @@ std::vector<Expr> component_exprs(const std::vector<Var> &vars) {
 
 std::vector<Func> BlockReshape::encode(const std::vector<Func> &inputs) const {
     user_assert(inputs.size() == 1) << "BlockReshape::encode expects one input\n";
-    Func flat = inputs[0];
+    const Func &flat = inputs[0];
     std::vector<Var> dims = block_vars();
     Var blk("blk");
     Expr within = cast<int>(0);
@@ -1137,7 +1166,7 @@ std::vector<Func> BlockReshape::encode(const std::vector<Func> &inputs) const {
 
 std::vector<Func> BlockReshape::decode(const std::vector<Func> &encoded) const {
     user_assert(encoded.size() == 1) << "BlockReshape::decode expects one input\n";
-    Func packed = encoded[0];
+    const Func &packed = encoded[0];
     Var k("k"), kk("kk"), blk("blk");
     Expr within = block_indexed_ ? Expr(kk) : k % block_size();
     Expr block = block_indexed_ ? Expr(blk) : k / block_size();
@@ -1172,6 +1201,7 @@ int BlockReshape::block_size() const {
 
 std::vector<Var> BlockReshape::block_vars() const {
     std::vector<Var> vars;
+    vars.reserve(extents_.size());
     for (size_t i = 0; i < extents_.size(); ++i) {
         vars.emplace_back(extents_.size() == 1 ? "kk" : "d" + std::to_string(i));
     }
@@ -1210,7 +1240,7 @@ std::vector<Func> StructLayout::encode(const std::vector<Func> &inputs) const {
     std::vector<Expr> values;
     for (const StructField &field : info->fields) {
         size_t slot = logical_slot(field.name);
-        Func input = inputs[slot];
+        const Func &input = inputs[slot];
         user_assert(input.outputs() == 1 && input.types()[0] == field.type)
             << "StructLayout field '" << field.name << "' requires exact type " << field.type
             << " but slot " << slot << " has " << input.types()[0] << "\n";
@@ -1234,7 +1264,7 @@ std::vector<Func> StructLayout::decode(const std::vector<Func> &encoded) const {
     user_assert(encoded.size() == 1 && encoded[0].outputs() == 1 &&
                 encoded[0].types()[0] == record_type_)
         << "StructLayout::decode requires one Func of the exact record type\n";
-    Func packed = encoded[0];
+    const Func &packed = encoded[0];
     std::vector<Var> records = component_vars(record_dimensions_, "record");
     std::vector<Expr> record_args = component_exprs(records);
     Expr record = packed(record_args);
@@ -1289,7 +1319,7 @@ const StructField &StructLayout::physical_field(const std::string &name) const {
 std::vector<Func> PlanarFieldPack::encode(const std::vector<Func> &inputs) const {
     user_assert(inputs.size() == 1 && inputs[0].dimensions() == 2)
         << "PlanarFieldPack::encode currently requires (element, record)\n";
-    Func fields = inputs[0];
+    const Func &fields = inputs[0];
     Var position("position"), record("record");
     RDom plane(0, planes_, "plane");
     Expr element = plane * positions_ + position;
@@ -1305,7 +1335,7 @@ std::vector<Func> PlanarFieldPack::decode(const std::vector<Func> &encoded) cons
     user_assert(encoded.size() == 1 && encoded[0].types() == std::vector<Type>{UInt(8)} &&
                 encoded[0].dimensions() == 2)
         << "PlanarFieldPack::decode currently requires (position, record) bytes\n";
-    Func bytes = encoded[0];
+    const Func &bytes = encoded[0];
     Var element("element"), record("record");
     Expr plane = element / positions_;
     Expr position = element % positions_;
@@ -1331,7 +1361,7 @@ namespace Internal {
 std::vector<Func> little_endian_scalar_encode(Type word_type, const std::vector<Func> &inputs) {
     user_assert(inputs.size() == 1 && inputs[0].types() == std::vector<Type>{word_type})
         << "LittleEndianScalarPack::encode word type mismatch\n";
-    Func word = inputs[0];
+    const Func &word = inputs[0];
     std::vector<Var> records = component_vars(word.dimensions(), "record");
     std::vector<Expr> record_args(records.begin(), records.end());
     Var byte("byte");
@@ -1347,7 +1377,7 @@ std::vector<Func> little_endian_scalar_decode(Type word_type, const std::vector<
     user_assert(encoded.size() == 1 && encoded[0].types() == std::vector<Type>{UInt(8)} &&
                 encoded[0].dimensions() >= 2)
         << "LittleEndianScalarPack::decode requires byte arrays per record\n";
-    Func bytes = encoded[0];
+    const Func &bytes = encoded[0];
     std::vector<Var> records = component_vars(bytes.dimensions() - 1, "record");
     std::vector<Expr> record_args(records.begin(), records.end());
     std::vector<Expr> pieces;

@@ -72,7 +72,7 @@ void reference_quantize(const float *x, block_q4_0 *y, int nblocks) {
             }
         }
         const float d = max / -8;
-        const float id = d ? 1.0f / d : 0.0f;
+        const float id = d != 0.0f ? 1.0f / d : 0.0f;
         y[i].d = float16_t(d).to_bits();
         for (int j = 0; j < QK4_0 / 2; j++) {
             // Separate statements, so the compiler can't fuse them into an fma.
@@ -98,7 +98,7 @@ void reference_dequantize(const block_q4_0 *x, float *y, int nblocks) {
 // Deterministic test data. Most blocks are pseudo-random, but the first few
 // are tricky on purpose.
 std::vector<float> make_weights(int nblocks) {
-    std::vector<float> w(nblocks * QK4_0);
+    std::vector<float> w(static_cast<size_t>(nblocks) * QK4_0);
     uint32_t state = 12345;
     for (float &v : w) {
         state = state * 1664525u + 1013904223u;
@@ -106,7 +106,7 @@ std::vector<float> make_weights(int nblocks) {
     }
     for (int j = 0; j < QK4_0; j++) {
         w[0 * QK4_0 + j] = 0.0f;                              // all zeros: d == 0
-        w[1 * QK4_0 + j] = (j % 2 ? -1 : 1) * 0.25f * (j % 8);  // ties: +/-1.75 repeat
+        w[1 * QK4_0 + j] = (j % 2 != 0 ? -1 : 1) * 0.25f * (j % 8);  // ties: +/-1.75 repeat
         w[2 * QK4_0 + j] = -0.5f - 0.1f * j;                  // the extreme is negative
         w[3 * QK4_0 + j] = 100.0f;                            // constant block
         w[4 * QK4_0 + j] = 1e-20f * (j - 7);                  // tiny scale
@@ -131,9 +131,9 @@ void part1_a_tiny_approximation() {
     // Drop the low bit of an integer: lossy, with error at most 1.
     Approximation drop_lsb =
         Pointwise{"drop_lsb",
-                  [](Expr x) { return x >> 1; },
-                  [](Expr x) { return x << 1; }}
-            .with_error_bound([](Expr) { return Expr(1); });
+                  [](const Expr &x) { return x >> 1; },
+                  [](const Expr &x) { return x << 1; }}
+            .with_error_bound([](const Expr &) { return Expr(1); });
 
     Var x("x");
     Func f("f"), consumer("consumer");
@@ -176,8 +176,8 @@ void part1_a_tiny_approximation() {
 struct Q4_0Quantizer {
     // Encode makes both the codes and the scale, so it takes and returns
     // vectors of Funcs.
-    std::vector<Func> encode(const std::vector<Func> &in) const {
-        Func blocks = in[0];
+    static std::vector<Func> encode(const std::vector<Func> &in) {
+        const Func &blocks = in[0];
         Var j("j"), b("b");
 
         // The signed element of largest magnitude in each block. The first
@@ -199,8 +199,8 @@ struct Q4_0Quantizer {
         return {codes, scale};
     }
 
-    std::vector<Func> decode(const std::vector<Func> &encoded) const {
-        Func codes = encoded[0], scale = encoded[1];
+    static std::vector<Func> decode(const std::vector<Func> &encoded) {
+        const Func &codes = encoded[0], &scale = encoded[1];
         Var j("j"), b("b");
         Func values("values");
         values(j, b) = codes(j, b) * scale(b);
@@ -209,7 +209,7 @@ struct Q4_0Quantizer {
 
     // Optional: the types and dimensions of the ports, and a guarantee about
     // the codes. Later stages' preconditions are checked against it.
-    ApproximationSignature signature() const {
+    static ApproximationSignature signature() {
         return {{{"blocks", Float(32), 2}},
                 {{"codes", Int(8), 2, ApproximationRange(-8, 7)},
                  {"scale", Float(32), 1}}};
@@ -217,7 +217,7 @@ struct Q4_0Quantizer {
 
     // Optional: |decode(encode(x)) - x| is at most one step (the top code is
     // clamped: a value that scales to +8 becomes 7), plus slack for rounding.
-    Func error_bound(const std::vector<Func> &, const std::vector<Func> &encoded) const {
+    static Func error_bound(const std::vector<Func> & /*inputs*/, const std::vector<Func> &encoded) {
         Var j("j"), b("b");
         Func bound("bound");
         bound(j, b) = abs(cast<double>(encoded[1](b))) * Expr(1.0001);
@@ -231,8 +231,8 @@ struct Q4_0Quantizer {
 // precondition for being lossless, and the output range is a guarantee.
 Pointwise make_offset() {
     return Pointwise{"offset",
-                     [](Expr x) { return cast<uint8_t>(x + 8); },
-                     [](Expr x) { return cast<int8_t>(cast<int>(x) - 8); }}
+                     [](const Expr &x) { return cast<uint8_t>(x + 8); },
+                     [](const Expr &x) { return cast<int8_t>(cast<int>(x) - 8); }}
         .with_types(Int(8), UInt(8))
         .with_ranges(ApproximationRange(-8, 7), ApproximationRange(0, 15))
         .with_lossless();
@@ -241,8 +241,8 @@ Pointwise make_offset() {
 // Likewise, a cast: the fp32 scale is stored as fp16.
 Pointwise make_fp16() {
     return Pointwise{"fp16",
-                     [](Expr x) { return cast<float16_t>(x); },
-                     [](Expr x) { return cast<float>(x); }}
+                     [](const Expr &x) { return cast<float16_t>(x); },
+                     [](const Expr &x) { return cast<float>(x); }}
         .with_types(Float(32), Float(16));
 }
 
@@ -380,12 +380,16 @@ int main() {
     require(encoded.size_in_bytes() == nblocks * sizeof(block_q4_0), "encoded size");
     if (memcmp(encoded.data(), ref_blocks.data(), nblocks * sizeof(block_q4_0)) != 0) {
         for (int b = 0; b < nblocks; b++) {
-            const uint8_t *got = (const uint8_t *)encoded.data() + b * 18;
+            const uint8_t *got = (const uint8_t *)encoded.data() + static_cast<size_t>(b) * 18;
             if (memcmp(got, &ref_blocks[b], 18) != 0) {
                 printf("block %d differs:\n  got:      ", b);
-                for (int i = 0; i < 18; i++) printf("%02x ", got[i]);
+                for (int i = 0; i < 18; i++) {
+                    printf("%02x ", got[i]);
+                }
                 printf("\n  expected: ");
-                for (int i = 0; i < 18; i++) printf("%02x ", ((const uint8_t *)&ref_blocks[b])[i]);
+                for (int i = 0; i < 18; i++) {
+                    printf("%02x ", ((const uint8_t *)&ref_blocks[b])[i]);
+                }
                 printf("\n");
                 break;
             }
@@ -394,9 +398,15 @@ int main() {
         return 1;
     }
 
-    if (memcmp(dequantized.data(), ref_dequantized.data(), N * sizeof(float)) != 0) {
-        printf("Dequantized values do not match the reference\n");
-        return 1;
+    for (int i = 0; i < N; i++) {
+        // Compare bit patterns: the match must be exact.
+        uint32_t got_bits = 0, want_bits = 0;
+        memcpy(&got_bits, &dequantized.data()[i], sizeof(got_bits));
+        memcpy(&want_bits, &ref_dequantized[i], sizeof(want_bits));
+        if (got_bits != want_bits) {
+            printf("Dequantized values do not match the reference\n");
+            return 1;
+        }
     }
 
     float ref_dot = 0.0f;
