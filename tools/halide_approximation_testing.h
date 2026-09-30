@@ -219,7 +219,7 @@ inline void store_value(void *p, Type t, double v) {
             break;
         }
     } else {
-        user_error << "ApproximationTesting: unsupported element type " << t << "\n";
+        _halide_user_error << "ApproximationTesting: unsupported element type " << t << "\n";
     }
 }
 
@@ -257,7 +257,7 @@ inline double load_value(const void *p, Type t) {
             return (double)*(const uint64_t *)p;
         }
     }
-    user_error << "ApproximationTesting: unsupported element type " << t << "\n";
+    _halide_user_error << "ApproximationTesting: unsupported element type " << t << "\n";
     return 0;
 }
 
@@ -386,7 +386,7 @@ public:
     /** Every block of `block` elements is one constant value, drawn once per
      * block from `base`. */
     static Distribution blockwise_constant(int block, Distribution base) {
-        user_assert(block > 0) << "blockwise_constant: block must be positive\n";
+        _halide_user_assert(block > 0) << "blockwise_constant: block must be positive\n";
         Distribution d(Kind::Blockwise);
         d.block_ = block;
         d.parts_ = {std::move(base)};
@@ -396,7 +396,7 @@ public:
     /** Values from `base`, except that one randomly chosen element of every
      * block of `block` elements (with a random sign) is `magnitude`. */
     static Distribution outliers(Distribution base, int block, double magnitude) {
-        user_assert(block > 0) << "outliers: block must be positive\n";
+        _halide_user_assert(block > 0) << "outliers: block must be positive\n";
         Distribution d(Kind::Outliers);
         d.block_ = block;
         d.a_ = magnitude;
@@ -427,7 +427,7 @@ public:
      * segment on its own: its own block structure restarts at the segment's
      * start. */
     static Distribution mixture(std::vector<Distribution> parts, int block = 1) {
-        user_assert(!parts.empty() && block > 0) << "mixture: needs components and a positive block\n";
+        _halide_user_assert(!parts.empty() && block > 0) << "mixture: needs components and a positive block\n";
         Distribution d(Kind::Mixture);
         d.block_ = block;
         d.parts_ = std::move(parts);
@@ -546,7 +546,7 @@ public:
             break;
         }
         case Kind::SpecialFloats: {
-            user_assert(Detail::is_floating(type)) << "special_floats() requires a floating-point type\n";
+            _halide_user_assert(Detail::is_floating(type)) << "special_floats() requires a floating-point type\n";
             Detail::FloatInfo info = Detail::float_info(type);
             const double inf = std::numeric_limits<double>::infinity();
             const std::vector<double> values = {
@@ -748,7 +748,7 @@ struct RoundTripRun {
             return inputs[w->second];
         }
         auto c = captured.find(f.name());
-        user_assert(c != captured.end())
+        _halide_user_assert(c != captured.end())
             << "ApproximationTesting: the values of '" << f.name() << "' were not captured\n";
         return c->second;
     }
@@ -763,7 +763,7 @@ inline std::string next_name(const char *base) {
 // `capture_all`, which captures every stage's inputs and outputs.
 inline RoundTripRun run_round_trip(const Approximation &a, const std::vector<Buffer<>> &inputs,
                                    const std::vector<std::string> &input_names, bool capture_all) {
-    user_assert(a.defined() && !inputs.empty()) << "ApproximationTesting: an approximation and inputs are required\n";
+    _halide_user_assert(a.defined() && !inputs.empty()) << "ApproximationTesting: an approximation and inputs are required\n";
     RoundTripRun run;
     run.inputs = inputs;
 
@@ -781,8 +781,8 @@ inline RoundTripRun run_round_trip(const Approximation &a, const std::vector<Buf
     }
 
     run.enc = a.encode(in_funcs, ports);
-    run.dec = a.decode(run.enc.encoded, run.enc.encoded_ports);
-    user_assert(run.dec.decoded.size() == inputs.size())
+    run.dec = a.decode(run.enc.encoded, ports);
+    _halide_user_assert(run.dec.decoded.size() == inputs.size())
         << "ApproximationTesting: '" << a.label() << "' decoded " << run.dec.decoded.size()
         << " Funcs from " << inputs.size() << " inputs\n";
 
@@ -811,7 +811,7 @@ inline RoundTripRun run_round_trip(const Approximation &a, const std::vector<Buf
     std::vector<Buffer<>> out_buffers;
     for (size_t i = 0; i < inputs.size(); i++) {
         const Func &d = run.dec.decoded[i];
-        user_assert(d.outputs() == 1 && d.dimensions() == inputs[i].dimensions())
+        _halide_user_assert(d.outputs() == 1 && d.dimensions() == inputs[i].dimensions())
             << "ApproximationTesting: decoded Func '" << d.name() << "' does not match input " << i << "\n";
         std::vector<int> extents, mins;
         for (int k = 0; k < inputs[i].dimensions(); k++) {
@@ -823,7 +823,7 @@ inline RoundTripRun run_round_trip(const Approximation &a, const std::vector<Buf
     }
     Func bound = a.error_bound(in_funcs, run.enc.encoded);
     if (bound.defined()) {
-        user_assert(bound.dimensions() == inputs[0].dimensions() && bound.outputs() == 1)
+        _halide_user_assert(bound.dimensions() == inputs[0].dimensions() && bound.outputs() == 1)
             << "ApproximationTesting: the declared error bound must be a single-valued Func over the "
             << "first input's dimensions\n";
         std::vector<Var> vars;
@@ -1424,8 +1424,8 @@ inline PropertyResult check_property(const Approximation &a, const Property &pro
             Detail::RoundTripRun root = Detail::run_round_trip(a, inputs, {}, true);
             int count = 0;
             const ApproximationTraceNode *node = Detail::find_node(root.enc.trace, prop.stage(), count);
-            user_assert(count == 1) << "check_property: the stage '" << prop.stage().label() << "' was invoked "
-                                    << count << " times by the encode of '" << a.label() << "' (expected once)\n";
+            _halide_user_assert(count == 1) << "check_property: the stage '" << prop.stage().label() << "' was invoked "
+                                            << count << " times by the encode of '" << a.label() << "' (expected once)\n";
             for (const Func &f : node->inputs) {
                 if (!root.can_read(f)) {
                     result.passed = false;
@@ -1507,7 +1507,7 @@ inline PropertyResult check_property(const Approximation &a, const Property &pro
 inline PropertyResult check_property(const Approximation &a, const Property &prop, std::vector<int> extents,
                                      int trials = 8, uint64_t seed = 0, const PropertyOptions &options = {}) {
     ApproximationSignature sig = a.signature();
-    user_assert(sig.known && !sig.inputs.empty())
+    _halide_user_assert(sig.known && !sig.inputs.empty())
         << "check_property: '" << a.label() << "' has no declared input ports to generate from; pass InputSpecs\n";
     std::vector<InputSpec> specs;
     for (const ApproximationPort &port : sig.inputs) {

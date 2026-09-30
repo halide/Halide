@@ -17,6 +17,7 @@ tests(
     amx_matmul.cpp
     approximate_by.cpp
     approximation_components.cpp
+    approximation_parallel.cpp
     approximation_signatures.cpp
     approximation_testing.cpp
     approximation_trace.cpp

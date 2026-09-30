@@ -415,72 +415,72 @@ void validate_ports(const Approximation &stage, const char *direction, const cha
 
 }  // namespace
 
-ApproximationPorts Approximation::resolve_ports(const std::vector<Func> &funcs, const ApproximationPorts &given,
-                                                bool encode_direction) const {
-    const char *direction = encode_direction ? "encode" : "decode";
-    const size_t n = funcs.size();
+ApproximationPorts Approximation::resolve_inputs(const std::vector<Func> &inputs, const ApproximationPorts &given) const {
+    const size_t n = inputs.size();
     if (!given.empty()) {
         user_assert(given.size() == n)
-            << "Approximation '" << label() << "' " << direction << ": " << given.size()
+            << "Approximation '" << label() << "' encode: " << given.size()
             << " ports were given for " << n << " Funcs\n";
+        validate_ports(*this, "encode", "input", inputs, given);
     }
 
-    const SignatureForm form = state_->impl->signature_form();
-    ApproximationPorts declared;
-    bool have_declared = false;
-    if (form != SignatureForm::None) {
-        ApproximationSignature sig = signature(encode_direction ? given : ApproximationPorts{});
-        if (sig.known) {
-            declared = encode_direction ? sig.inputs : sig.outputs;
-            have_declared = declared.size() == n;
-        }
+    // The declared inputs are defaults for the names, and constrain the rest.
+    ApproximationSignature sig = signature(given);
+    const bool have_declared = sig.known && state_->impl->signature_form() != SignatureForm::None;
+    if (have_declared) {
+        user_assert(sig.inputs.size() == n)
+            << "Approximation '" << label() << "' encode: the declared signature has "
+            << sig.inputs.size() << " input ports (" << ports_string(sig.inputs) << ") but " << n
+            << " Funcs were given\n";
     }
 
-    ApproximationPorts ports;
-    if (given.empty()) {
-        ports = have_declared ? declared : positional_ports(n);
-    } else {
-        validate_ports(*this, direction, encode_direction ? "input" : "encoded", funcs, given);
-        ports = given;
-        if (have_declared) {
-            for (size_t i = 0; i < n; i++) {
-                if (form == SignatureForm::Static) {
-                    ports[i].name = declared[i].name;
-                }
-                ports[i].type = declared[i].type ? declared[i].type : ports[i].type;
-                ports[i].dimensions = declared[i].dimensions ? declared[i].dimensions : ports[i].dimensions;
-            }
+    ApproximationPorts ports = !given.empty() ? given : have_declared ? sig.inputs :
+                                                                        positional_ports(n);
+    if (have_declared && !given.empty()) {
+        for (size_t i = 0; i < n; i++) {
+            ports[i].type = sig.inputs[i].type ? sig.inputs[i].type : ports[i].type;
+            ports[i].dimensions = sig.inputs[i].dimensions ? sig.inputs[i].dimensions : ports[i].dimensions;
         }
     }
-    validate_ports(*this, direction, encode_direction ? "input" : "encoded", funcs, ports);
-    fill_from_funcs(ports, funcs);
+    validate_ports(*this, "encode", "input", inputs, ports);
+    fill_from_funcs(ports, inputs);
     return ports;
 }
 
-ApproximationPorts Approximation::output_ports(const std::vector<Func> &outputs, const ApproximationPorts &input_ports,
-                                               bool encode_direction) const {
+ApproximationPorts Approximation::resolve_encoded(const std::vector<Func> &encoded, const ApproximationSignature &sig,
+                                                  const ApproximationPorts &input_ports) const {
+    const size_t n = encoded.size();
+    ApproximationPorts ports;
+    if (sig.known) {
+        user_assert(sig.outputs.size() == n)
+            << "Approximation '" << label() << "' decode: the declared signature has "
+            << sig.outputs.size() << " output ports (" << ports_string(sig.outputs) << ") but " << n
+            << " encoded Funcs were given\n";
+        ports = sig.outputs;
+    } else {
+        ports = n == input_ports.size() ? names_only(input_ports) : positional_ports(n);
+    }
+    validate_ports(*this, "decode", "encoded", encoded, ports);
+    fill_from_funcs(ports, encoded);
+    return ports;
+}
+
+ApproximationPorts Approximation::output_ports(const std::vector<Func> &outputs, const ApproximationSignature &sig,
+                                               const ApproximationPorts &input_ports, bool encode_direction) const {
     const char *direction = encode_direction ? "encode" : "decode";
     ApproximationPorts ports;
-    bool resolved = false;
-    if (!encode_direction) {
-        ApproximationPorts decoded = decoded_ports(input_ports);
-        if (!decoded.empty() && decoded.size() == outputs.size()) {
-            ports = std::move(decoded);
-            resolved = true;
-        }
-    }
-    if (!resolved && state_->impl->signature_form() != SignatureForm::None) {
-        ApproximationSignature sig = signature(encode_direction ? input_ports : ApproximationPorts{});
-        if (sig.known) {
-            ports = encode_direction ? sig.outputs : sig.inputs;
-            user_assert(ports.size() == outputs.size())
-                << "Approximation '" << label() << "' " << direction << ": the declared signature has "
-                << ports.size() << " output ports (" << ports_string(ports) << ") but the unit returned "
-                << outputs.size() << " Funcs\n";
-            resolved = true;
-        }
-    }
-    if (!resolved) {
+    if (sig.known && state_->impl->signature_form() != SignatureForm::None) {
+        ports = encode_direction ? sig.outputs : sig.inputs;
+        user_assert(ports.size() == outputs.size())
+            << "Approximation '" << label() << "' " << direction << ": the declared signature has "
+            << ports.size() << (encode_direction ? " output" : " input") << " ports (" << ports_string(ports)
+            << ") but the unit returned " << outputs.size() << " Funcs\n";
+    } else if (encode_direction) {
+        ports = outputs.size() == input_ports.size() ? names_only(input_ports) : positional_ports(outputs.size());
+    } else if (sig.known) {
+        // Undeclared single-Func unit: its one output is named like its input.
+        ports = names_only(sig.inputs);
+    } else {
         ports = outputs.size() == input_ports.size() ? names_only(input_ports) : positional_ports(outputs.size());
     }
     validate_ports(*this, direction, "output", outputs, ports);
@@ -488,34 +488,30 @@ ApproximationPorts Approximation::output_ports(const std::vector<Func> &outputs,
     return ports;
 }
 
-ApproximationPorts Approximation::decoded_ports(const ApproximationPorts &encoded) const {
-    user_assert(defined()) << "decoded_ports called on an undefined Approximation\n";
-    if (state_->impl->declares_decoded_ports()) {
-        return state_->impl->decoded_ports(encoded);
-    }
-    if (state_->impl->signature_form() == SignatureForm::None) {
-        return {};
-    }
-    ApproximationSignature sig = signature();
-    return sig.known ? sig.inputs : ApproximationPorts{};
-}
-
 ApproximationSignature Approximation::signature(const ApproximationPorts &inputs) const {
     user_assert(defined()) << "signature called on an undefined Approximation\n";
+    ApproximationSignature result;
     switch (state_->impl->signature_form()) {
     case SignatureForm::Static:
-        return state_->impl->declared_signature({});
-    case SignatureForm::Contextual:
-        return state_->impl->declared_signature(inputs);
-    case SignatureForm::None:
+        result = state_->impl->declared_signature({});
         break;
+    case SignatureForm::Contextual:
+        result = state_->impl->declared_signature(inputs);
+        break;
+    case SignatureForm::None:
+        if (!state_->impl->encode_is_single() || inputs.size() > 1) {
+            return ApproximationSignature::unknown(inputs);
+        }
+        result.inputs = inputs.empty() ? positional_ports(1) : inputs;
+        result.outputs = {ApproximationPort(result.inputs[0].name)};
+        return result;
     }
-    if (!state_->impl->encode_is_single() || inputs.size() > 1) {
-        return ApproximationSignature::unknown(inputs);
+    // Names that flow in win over declared ones.
+    if (result.known && !inputs.empty() && result.inputs.size() == inputs.size()) {
+        for (size_t i = 0; i < inputs.size(); i++) {
+            result.inputs[i].name = inputs[i].name;
+        }
     }
-    ApproximationSignature result;
-    result.inputs = inputs.empty() ? positional_ports(1) : inputs;
-    result.outputs = {ApproximationPort(result.inputs[0].name)};
     return result;
 }
 
@@ -606,10 +602,10 @@ std::ostream &operator<<(std::ostream &stream, const Approximation &approximatio
 
 EncodeResult Approximation::encode(const std::vector<Func> &inputs, const ApproximationPorts &input_ports) const {
     user_assert(defined()) << "encode called on an undefined Approximation\n";
-    ApproximationPorts resolved = resolve_ports(inputs, input_ports, true);
+    ApproximationPorts resolved = resolve_inputs(inputs, input_ports);
     CallScope scope;
     std::vector<Func> encoded = state_->impl->encode(inputs, resolved);
-    ApproximationPorts encoded_ports = output_ports(encoded, resolved, true);
+    ApproximationPorts encoded_ports = output_ports(encoded, signature(resolved), resolved, true);
     std::vector<Func> intermediates = find_intermediates(inputs, encoded);
     ApproximationTraceNode node = scope.finish(*this, encoded, names_of(encoded_ports), intermediates, inputs, names_of(resolved));
     std::vector<ApproximationStageOutputs> stage_outputs;
@@ -618,12 +614,19 @@ EncodeResult Approximation::encode(const std::vector<Func> &inputs, const Approx
             std::move(node)};
 }
 
-DecodeResult Approximation::decode(const std::vector<Func> &encoded, const ApproximationPorts &encoded_ports) const {
+DecodeResult Approximation::decode(const std::vector<Func> &encoded, const ApproximationPorts &input_ports) const {
     user_assert(defined()) << "decode called on an undefined Approximation\n";
-    ApproximationPorts resolved = resolve_ports(encoded, encoded_ports, false);
+    // The context is static: the caller's, or else the defaults.
+    ApproximationPorts context = input_ports;
+    if (context.empty()) {
+        ApproximationSignature defaults = signature();
+        context = defaults.known ? defaults.inputs : ApproximationPorts{};
+    }
+    ApproximationSignature sig = signature(context);
+    ApproximationPorts resolved = resolve_encoded(encoded, sig, context);
     CallScope scope;
-    std::vector<Func> decoded = state_->impl->decode(encoded, resolved);
-    ApproximationPorts decoded_ports = output_ports(decoded, resolved, false);
+    std::vector<Func> decoded = state_->impl->decode(encoded, context);
+    ApproximationPorts decoded_ports = output_ports(decoded, sig, context, false);
     std::vector<Func> intermediates = find_intermediates(encoded, decoded);
     ApproximationTraceNode node = scope.finish(*this, decoded, names_of(decoded_ports), intermediates, encoded, names_of(resolved));
     std::vector<ApproximationStageOutputs> stage_outputs;
@@ -636,22 +639,20 @@ std::vector<Func> Compose::encode(const std::vector<Func> &inputs, const Approxi
     user_assert(!stages.empty()) << "Compose::encode: no stages\n";
     std::vector<Func> current = inputs;
     ApproximationPorts current_ports = input_ports;
-    for (int i = (int)stages.size() - 1; i >= 0; i--) {
-        EncodeResult r = stages[i].encode(current, current_ports);
+    for (const Approximation &stage : stages) {
+        EncodeResult r = stage.encode(current, current_ports);
         current = std::move(r.encoded);
         current_ports = std::move(r.encoded_ports);
     }
     return current;
 }
 
-std::vector<Func> Compose::decode(const std::vector<Func> &encoded, const ApproximationPorts &encoded_ports) const {
+std::vector<Func> Compose::decode(const std::vector<Func> &encoded, const ApproximationPorts &input_ports) const {
     user_assert(!stages.empty()) << "Compose::decode: no stages\n";
+    std::vector<ApproximationPorts> contexts = child_inputs(input_ports);
     std::vector<Func> current = encoded;
-    ApproximationPorts current_ports = encoded_ports;
-    for (size_t i = 0; i < stages.size(); i++) {
-        DecodeResult r = stages[i].decode(current, current_ports);
-        current = std::move(r.decoded);
-        current_ports = std::move(r.decoded_ports);
+    for (int i = (int)stages.size() - 1; i >= 0; i--) {
+        current = stages[i].decode(current, contexts[i]).decoded;
     }
     return current;
 }
@@ -661,12 +662,12 @@ ApproximationSignature Compose::signature(const ApproximationPorts &inputs) cons
         return ApproximationSignature::unknown(inputs);
     }
     ApproximationPorts current = inputs, first_inputs;
-    for (int i = (int)stages.size() - 1; i >= 0; i--) {
+    for (size_t i = 0; i < stages.size(); i++) {
         ApproximationSignature s = stages[i].signature(current);
         if (!s.known) {
             return ApproximationSignature::unknown(inputs);
         }
-        if (i == (int)stages.size() - 1) {
+        if (i == 0) {
             first_inputs = s.inputs;
         }
         current = std::move(s.outputs);
@@ -677,27 +678,16 @@ ApproximationSignature Compose::signature(const ApproximationPorts &inputs) cons
     return result;
 }
 
-ApproximationPorts Compose::decoded_ports(const ApproximationPorts &encoded) const {
-    ApproximationPorts current = encoded;
-    for (const Approximation &stage : stages) {
-        current = stage.decoded_ports(current);
-        if (current.empty()) {
-            break;
-        }
-    }
-    return current;
-}
-
 std::vector<Approximation> Compose::children() const {
-    return std::vector<Approximation>(stages.rbegin(), stages.rend());
+    return stages;
 }
 
 std::vector<ApproximationPorts> Compose::child_inputs(const ApproximationPorts &inputs) const {
     std::vector<ApproximationPorts> result;
     ApproximationPorts current = inputs;
-    for (int i = (int)stages.size() - 1; i >= 0; i--) {
+    for (const Approximation &stage : stages) {
         result.push_back(current);
-        ApproximationSignature s = stages[i].signature(current);
+        ApproximationSignature s = stage.signature(current);
         current = s.known ? std::move(s.outputs) : ApproximationPorts{};
     }
     return result;
@@ -712,44 +702,8 @@ bool Compose::lossless() const {
     return !stages.empty();
 }
 
-bool Apply::lossless() const {
-    return inner.lossless();
-}
-
 bool Choose::lossless() const {
     return chosen.lossless();
-}
-
-bool Apply::locate(const ApproximationPorts &inputs, size_t &begin, size_t &arity, std::string *problem) const {
-    auto fail = [&](const std::string &message) {
-        if (problem) {
-            *problem = message;
-        }
-        return false;
-    };
-    if (port.empty()) {
-        begin = idx;
-        arity = encode_arity;
-    } else {
-        size_t count = 0;
-        for (size_t i = 0; i < inputs.size(); i++) {
-            if (inputs[i].name == port) {
-                begin = i;
-                count++;
-            }
-        }
-        if (count != 1) {
-            return fail("there is " + std::string(count == 0 ? "no" : "more than one") + " input port named '" + port +
-                        "' (available: " + ports_string(names_only(inputs)) + ")");
-        }
-        ApproximationSignature s = inner.signature({inputs[begin]});
-        arity = s.known && !s.inputs.empty() ? s.inputs.size() : 1;
-    }
-    if (begin + arity > inputs.size()) {
-        return fail("the range [" + std::to_string(begin) + ", " + std::to_string(begin + arity) +
-                    ") exceeds the input count (" + std::to_string(inputs.size()) + ")");
-    }
-    return true;
 }
 
 namespace {
@@ -759,134 +713,191 @@ std::vector<T> slice(const std::vector<T> &v, size_t begin, size_t count) {
     return std::vector<T>(v.begin() + begin, v.begin() + begin + count);
 }
 
-template<typename T>
-std::vector<T> splice(const std::vector<T> &v, size_t begin, size_t count, const std::vector<T> &replacement) {
-    std::vector<T> result(v.begin(), v.begin() + begin);
-    result.insert(result.end(), replacement.begin(), replacement.end());
-    result.insert(result.end(), v.begin() + begin + count, v.end());
-    return result;
+// A port passed through a by-name Parallel is not a precondition of the
+// Parallel: keep the interface, drop the range.
+ApproximationPort without_range(ApproximationPort port) {
+    port.range.reset();
+    return port;
+}
+
+// The number of inputs `child` takes when it has no context (one if unknown).
+size_t input_width(const Approximation &child) {
+    ApproximationSignature s = child.signature();
+    return s.known && !s.inputs.empty() ? s.inputs.size() : 1;
+}
+
+// The number of encoded ports `child` produces from `context` (one if unknown).
+size_t output_width(const Approximation &child, const ApproximationPorts &context) {
+    ApproximationSignature s = child.signature(context);
+    return s.known && !s.outputs.empty() ? s.outputs.size() : 1;
 }
 
 }  // namespace
 
-std::vector<Func> Apply::encode(const std::vector<Func> &inputs, const ApproximationPorts &input_ports) const {
-    ApproximationPorts ports = input_ports.size() == inputs.size() ? input_ports : positional_ports(inputs.size());
-    size_t begin = 0, arity = 0;
-    std::string problem;
-    user_assert(locate(ports, begin, arity, &problem)) << "Apply::encode: " << problem << "\n";
-    return splice(inputs, begin, arity,
-                  inner.encode(slice(inputs, begin, arity), slice(ports, begin, arity)).encoded);
+Parallel::Parallel(std::initializer_list<Entry> entries) {
+    for (const Entry &e : entries) {
+        ports_.push_back(e.port);
+        children_.push_back(e.child);
+    }
 }
 
-std::vector<Func> Apply::decode(const std::vector<Func> &encoded, const ApproximationPorts &encoded_ports) const {
-    ApproximationPorts ports = encoded_ports.size() == encoded.size() ? encoded_ports : positional_ports(encoded.size());
-    size_t begin = 0, arity = 0;
-    if (port.empty()) {
-        begin = idx;
-        arity = decode_arity;
-    } else {
-        // The inner's encoded outputs sit where its inputs were.
-        ApproximationSignature s = inner.signature({ApproximationPort(port)});
-        ApproximationPorts outs = s.known && !s.outputs.empty() ? s.outputs : ApproximationPorts{ApproximationPort(port)};
-        size_t count = 0;
-        for (size_t i = 0; i < ports.size(); i++) {
-            if (ports[i].name == outs[0].name) {
-                begin = i;
+bool Parallel::plan(const ApproximationPorts &inputs, std::vector<Segment> &segments, std::string *problem) const {
+    auto fail = [&](const std::string &message) {
+        if (problem) {
+            *problem = message;
+        }
+        return false;
+    };
+    segments.clear();
+    if (ports_.empty()) {
+        size_t begin = 0;
+        for (size_t i = 0; i < children_.size(); i++) {
+            const size_t width = input_width(children_[i]);
+            segments.push_back({(int)i, begin, width, {}, 0});
+            begin += width;
+        }
+        if (!inputs.empty() && begin != inputs.size()) {
+            return fail("the children take " + std::to_string(begin) + " Funcs in total, but there are " +
+                        std::to_string(inputs.size()) + " (the ports are: " + ports_string(names_only(inputs)) + ")");
+        }
+        for (Segment &seg : segments) {
+            if (!inputs.empty()) {
+                seg.context = slice(inputs, seg.begin, seg.width);
+            }
+            seg.outputs = output_width(children_[seg.child], seg.context);
+        }
+        return true;
+    }
+
+    std::vector<int> owner(inputs.size(), -1);
+    for (size_t i = 0; i < ports_.size(); i++) {
+        size_t match = 0, count = 0;
+        for (size_t j = 0; j < inputs.size(); j++) {
+            if (inputs[j].name == ports_[i]) {
+                match = j;
                 count++;
             }
         }
-        user_assert(count == 1)
-            << "Apply::decode: there is " << (count == 0 ? "no" : "more than one") << " encoded port named '"
-            << outs[0].name << "' (available: " << ports_string(names_only(ports)) << ")\n";
-        arity = outs.size();
+        if (count != 1) {
+            return fail(std::string("there is ") + (count == 0 ? "no" : "more than one") + " input port named '" +
+                        ports_[i] + "' (the ports are: " + ports_string(names_only(inputs)) + ")");
+        }
+        if (owner[match] >= 0) {
+            return fail("the port '" + ports_[i] + "' is routed by more than one entry");
+        }
+        owner[match] = (int)i;
     }
-    user_assert(begin + arity <= encoded.size())
-        << "Apply::decode: the range [" << begin << ", " << begin + arity
-        << ") exceeds the input count (" << encoded.size() << ")\n";
-    return splice(encoded, begin, arity,
-                  inner.decode(slice(encoded, begin, arity), slice(ports, begin, arity)).decoded);
+    for (size_t j = 0; j < inputs.size(); j++) {
+        Segment seg{owner[j], j, 1, {inputs[j]}, 1};
+        if (owner[j] >= 0) {
+            seg.outputs = output_width(children_[owner[j]], seg.context);
+        }
+        segments.push_back(seg);
+    }
+    return true;
 }
 
-ApproximationSignature Apply::signature(const ApproximationPorts &inputs) const {
-    size_t begin = 0, arity = 0;
-    if (!locate(inputs, begin, arity, nullptr)) {
-        return ApproximationSignature::unknown(inputs);
+std::vector<Func> Parallel::encode(const std::vector<Func> &inputs, const ApproximationPorts &input_ports) const {
+    ApproximationPorts ports = input_ports.size() == inputs.size() ? input_ports : positional_ports(inputs.size());
+    std::vector<Segment> segments;
+    std::string problem;
+    user_assert(plan(ports, segments, &problem)) << "Parallel::encode: " << problem << "\n";
+    std::vector<Func> result;
+    for (const Segment &seg : segments) {
+        std::vector<Func> in = slice(inputs, seg.begin, seg.width);
+        if (seg.child < 0) {
+            result.insert(result.end(), in.begin(), in.end());
+        } else {
+            std::vector<Func> out = children_[seg.child].encode(in, seg.context).encoded;
+            result.insert(result.end(), out.begin(), out.end());
+        }
     }
-    ApproximationSignature s = inner.signature(slice(inputs, begin, arity));
-    if (!s.known || s.inputs.size() != arity) {
-        return ApproximationSignature::unknown(inputs);
-    }
-    ApproximationSignature result;
-    result.inputs = inputs;
-    for (size_t j = 0; j < arity; j++) {
-        ApproximationPort &p = result.inputs[begin + j];
-        p.type = s.inputs[j].type ? s.inputs[j].type : p.type;
-        p.dimensions = s.inputs[j].dimensions ? s.inputs[j].dimensions : p.dimensions;
-    }
-    result.outputs = splice(inputs, begin, arity, s.outputs);
     return result;
 }
 
-ApproximationPorts Apply::decoded_ports(const ApproximationPorts &encoded) const {
-    size_t begin = 0, arity = 0;
-    ApproximationPorts inner_ports;
-    if (port.empty()) {
-        begin = idx;
-        arity = decode_arity;
-        if (begin + arity > encoded.size()) {
-            return {};
+std::vector<Func> Parallel::decode(const std::vector<Func> &encoded, const ApproximationPorts &input_ports) const {
+    std::vector<Segment> segments;
+    std::string problem;
+    user_assert(plan(input_ports, segments, &problem)) << "Parallel::decode: " << problem << "\n";
+    size_t total = 0;
+    for (const Segment &seg : segments) {
+        total += seg.outputs;
+    }
+    user_assert(total == encoded.size())
+        << "Parallel::decode: the children produce " << total << " Funcs in total, but " << encoded.size()
+        << " were given\n";
+    std::vector<Func> result;
+    size_t begin = 0;
+    for (const Segment &seg : segments) {
+        std::vector<Func> in = slice(encoded, begin, seg.outputs);
+        begin += seg.outputs;
+        if (seg.child < 0) {
+            result.insert(result.end(), in.begin(), in.end());
+            continue;
         }
-        inner_ports = inner.decoded_ports(slice(encoded, begin, arity));
-    } else {
-        ApproximationSignature s = inner.signature({ApproximationPort(port)});
-        if (!s.known || s.inputs.empty() || s.outputs.empty()) {
-            return {};
+        std::vector<Func> out = children_[seg.child].decode(in, seg.context).decoded;
+        user_assert(ports_.empty() || out.size() == 1)
+            << "Parallel::decode: the child for port '" << ports_[seg.child] << "' decoded to " << out.size()
+            << " Funcs, but must decode to one\n";
+        result.insert(result.end(), out.begin(), out.end());
+    }
+    return result;
+}
+
+ApproximationSignature Parallel::signature(const ApproximationPorts &inputs) const {
+    std::vector<Segment> segments;
+    if (children_.empty() || (!ports_.empty() && inputs.empty()) || !plan(inputs, segments, nullptr)) {
+        return ApproximationSignature::unknown(inputs);
+    }
+    ApproximationSignature result;
+    for (const Segment &seg : segments) {
+        if (seg.child < 0) {
+            result.inputs.push_back(without_range(seg.context[0]));
+            result.outputs.push_back(seg.context[0]);
+            continue;
         }
-        inner_ports = s.inputs;
-        arity = s.outputs.size();
-        size_t count = 0;
-        for (size_t i = 0; i < encoded.size(); i++) {
-            if (encoded[i].name == s.outputs[0].name) {
-                begin = i;
-                count++;
+        ApproximationSignature s = children_[seg.child].signature(seg.context);
+        if (!s.known || s.inputs.size() != seg.width) {
+            return ApproximationSignature::unknown(inputs);
+        }
+        result.inputs.insert(result.inputs.end(), s.inputs.begin(), s.inputs.end());
+        result.outputs.insert(result.outputs.end(), s.outputs.begin(), s.outputs.end());
+    }
+    return result;
+}
+
+std::vector<Approximation> Parallel::children() const {
+    return children_;
+}
+
+std::vector<ApproximationPorts> Parallel::child_inputs(const ApproximationPorts &inputs) const {
+    std::vector<ApproximationPorts> result(children_.size());
+    std::vector<Segment> segments;
+    if (plan(inputs, segments, nullptr)) {
+        for (const Segment &seg : segments) {
+            if (seg.child >= 0) {
+                result[seg.child] = seg.context;
             }
         }
-        if (count != 1 || begin + arity > encoded.size()) {
-            return {};
+    }
+    return result;
+}
+
+bool Parallel::lossless() const {
+    for (const Approximation &child : children_) {
+        if (!child.lossless()) {
+            return false;
         }
     }
-    if (inner_ports.empty()) {
-        return {};
-    }
-    return splice(encoded, begin, arity, inner_ports);
-}
-
-std::vector<Approximation> Apply::children() const {
-    return {inner};
-}
-
-std::vector<ApproximationPorts> Apply::child_inputs(const ApproximationPorts &inputs) const {
-    size_t begin = 0, arity = 0;
-    if (!locate(inputs, begin, arity, nullptr)) {
-        return {{}};
-    }
-    return {slice(inputs, begin, arity)};
-}
-
-std::string Apply::name() const {
-    return "Apply[" + (port.empty() ? std::to_string(idx) : port) + "]";
+    return !children_.empty();
 }
 
 std::vector<Func> TrustedInverse::encode(const std::vector<Func> &inputs, const ApproximationPorts &input_ports) const {
     return encoder.encode(inputs, input_ports).encoded;
 }
 
-std::vector<Func> TrustedInverse::decode(const std::vector<Func> &encoded, const ApproximationPorts &encoded_ports) const {
-    return decoder.decode(encoded, encoded_ports).decoded;
-}
-
-ApproximationPorts TrustedInverse::decoded_ports(const ApproximationPorts &encoded) const {
-    return decoder.decoded_ports(encoded);
+std::vector<Func> TrustedInverse::decode(const std::vector<Func> &encoded, const ApproximationPorts &input_ports) const {
+    return decoder.decode(encoded, input_ports).decoded;
 }
 
 ApproximationSignature TrustedInverse::signature(const ApproximationPorts &inputs) const {
@@ -905,12 +916,8 @@ std::vector<Func> Choose::encode(const std::vector<Func> &inputs, const Approxim
     return chosen.encode(inputs, input_ports).encoded;
 }
 
-std::vector<Func> Choose::decode(const std::vector<Func> &encoded, const ApproximationPorts &encoded_ports) const {
-    return chosen.decode(encoded, encoded_ports).decoded;
-}
-
-ApproximationPorts Choose::decoded_ports(const ApproximationPorts &encoded) const {
-    return chosen.decoded_ports(encoded);
+std::vector<Func> Choose::decode(const std::vector<Func> &encoded, const ApproximationPorts &input_ports) const {
+    return chosen.decode(encoded, input_ports).decoded;
 }
 
 ApproximationSignature Choose::signature(const ApproximationPorts &inputs) const {
@@ -1025,17 +1032,6 @@ ApproximationSignature Identity::signature(const ApproximationPorts &inputs) con
         return ApproximationSignature::unknown();
     }
     return {inputs, inputs};
-}
-
-ApproximationPorts Permute::decoded_ports(const ApproximationPorts &encoded) const {
-    if (encoded.size() != forward.size()) {
-        return {};
-    }
-    ApproximationPorts result;
-    for (int source : backward) {
-        result.push_back(encoded[source]);
-    }
-    return result;
 }
 
 ApproximationSignature Permute::signature(const ApproximationPorts &inputs) const {

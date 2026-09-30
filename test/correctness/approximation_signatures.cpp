@@ -144,11 +144,11 @@ int main() {
     Func consumer("consumer");
     consumer(x) = f(x) + 0.0f;
 
-    // A named Apply in a Compose: half-precision scales, found by name.
+    // A named Parallel in a Compose: half-precision scales, found by name.
     Approximation producer = Producer{};
     Approximation half = HalfBits{};
-    Approximation apply = Apply("scale", half);
-    Approximation scheme = Compose{apply, producer};
+    Approximation apply = Parallel{{"scale", half}};
+    Approximation scheme = Compose{producer, apply};
     {
         ApproximationResult r = f.approximate_by(scheme, {consumer});
         Buffer<float> out = consumer.realize({64});
@@ -186,8 +186,9 @@ int main() {
         EncodeResult e = neg.encode({f}, {ApproximationPort("weights")});
         CHECK(names(e.encoded_ports) == Names({"weights"}));
         CHECK(e.trace.port_names == Names({"weights"}));
-        DecodeResult d = neg.decode(e.encoded, e.encoded_ports);
+        DecodeResult d = neg.decode(e.encoded, {ApproximationPort("weights")});
         CHECK(names(d.decoded_ports) == Names({"weights"}));
+        CHECK(d.trace.input_names == Names({"weights"}));
 
         Approximation chain = Compose{neg, half};
         EncodeResult ce = chain.encode({f}, {ApproximationPort("weights")});
@@ -196,11 +197,12 @@ int main() {
         // Without ports, a unit with no declaration names its input positionally.
         CHECK(names(neg.encode({f}).encoded_ports) == Names({"0"}));
 
-        // approximate_by names its input "input", unless the root declares one.
+        // approximate_by gives the root no names, so it uses its declared
+        // defaults, or else positional ones.
         Probe undeclared;
         Approximation p1 = undeclared;
         (void)f.approximate_by(p1, {});
-        CHECK(names(*undeclared.seen) == Names({"input"}));
+        CHECK(names(*undeclared.seen) == Names({"0"}));
         DeclaredProbe declared;
         Approximation p2 = declared;
         (void)f.approximate_by(p2, {});
@@ -224,7 +226,7 @@ int main() {
 
     // Resolved signatures.
     Approximation declared_half = DeclaredHalfBits{};
-    Approximation declared_scheme = Compose{Apply("scale", declared_half), producer};
+    Approximation declared_scheme = Compose{producer, Parallel{{"scale", declared_half}}};
     {
         ApproximationSignature s = declared_scheme.signature();
         CHECK(s.known);
@@ -234,8 +236,11 @@ int main() {
         CHECK(*s.outputs[0].type == Int(8));
         CHECK(*s.outputs[1].type == UInt(16));
 
-        // A static signature's names are authoritative; a contextual one follows its context.
-        CHECK(names(producer.signature({ApproximationPort("other")}).inputs) == Names({"values"}));
+        // Declared input names are only defaults: names that flow in win, for
+        // static and contextual signatures alike.
+        CHECK(names(producer.signature().inputs) == Names({"values"}));
+        CHECK(names(producer.signature({ApproximationPort("other")}).inputs) == Names({"other"}));
+        CHECK(*producer.signature({ApproximationPort("other")}).inputs[0].type == Float(32));
         ApproximationSignature cast = Approximation(StorageCast<float, uint16_t>{})
                                           .signature({ApproximationPort("w", std::nullopt, 3)});
         CHECK(names(cast.inputs) == Names({"w"}) && names(cast.outputs) == Names({"w"}));
@@ -254,8 +259,8 @@ int main() {
         const char *expected =
             "Compose (values: float32 x1) -> (codes: int8 x1, bits: uint16 x1)\n"
             "  Producer (values: float32 x1) -> (codes: int8 x1, scale: float32 x1)\n"
-            "  Apply[scale] (codes: int8 x1, scale: float32 x1) -> (codes: int8 x1, bits: uint16 x1)\n"
-            "    DeclaredHalfBits (value: float32 x1) -> (bits: uint16 x1)\n";
+            "  Parallel (codes: int8 x1, scale: float32 x1) -> (codes: int8 x1, bits: uint16 x1)\n"
+            "    DeclaredHalfBits (scale: float32 x1) -> (bits: uint16 x1)\n";
         std::string got = declared_scheme.describe();
         if (got != expected) {
             printf("Unexpected describe():\n%s", got.c_str());
@@ -268,8 +273,8 @@ int main() {
         std::string undeclared = Approximation(Compose{half, SplitParity{}}).describe();
         const char *expected_undeclared =
             "Compose (unknown signature)\n"
-            "  SplitParity (unknown signature)\n"
-            "  HalfBits (0) -> (0)\n";
+            "  HalfBits (0) -> (0)\n"
+            "  SplitParity (unknown signature)\n";
         if (undeclared != expected_undeclared) {
             printf("Unexpected describe():\n%s", undeclared.c_str());
             return 1;
@@ -295,53 +300,53 @@ int main() {
         CHECK(trace.str().find("0=even") != std::string::npos);
     }
 
-    // Permute restores the pre-permutation names in decode, so a by-name Apply
-    // after it works in both directions, with and without an encode context.
+    // Decode's output ports are named like encode's input ports, so a by-name
+    // Parallel after a Permute works in both directions, with and without an
+    // encode context.
     {
         Approximation lohi = LoHi{};
-        Approximation lo_half = Apply("lo", half);
+        Approximation lo_half = Parallel{{"lo", half}};
         Approximation permute = Permute{{1, 0}};
-        Approximation permuted = Compose{permute, lo_half, lohi};
+        Approximation permuted = Compose{lohi, lo_half, permute};
 
         EncodeResult e = permuted.encode({f});
         CHECK(names(e.encoded_ports) == Names({"hi", "lo"}));
         CHECK(*e.encoded_ports[1].type == UInt(16));
 
-        DecodeResult d = permuted.decode(e.encoded, e.encoded_ports);
+        DecodeResult d = permuted.decode(e.encoded);
         CHECK(names(d.decoded_ports) == Names({"values"}));
         CHECK(d.trace.children.size() == 3);
-
-        // Sever the ports, as compute_offline does.
-        DecodeResult sd = permuted.decode(e.encoded);
-        CHECK(names(sd.decoded_ports) == Names({"values"}));
-        CHECK(sd.decoded[0].types()[0] == Float(32));
+        CHECK(d.decoded[0].types()[0] == Float(32));
 
         // Each stage sees the names it had on the way in.
-        CHECK(sd.trace.children[0].port_names == Names({"lo", "hi"}));
-        CHECK(sd.trace.children[1].port_names == Names({"lo", "hi"}));
-        CHECK(sd.trace.children[0].input_names == Names({"hi", "lo"}));
+        CHECK(d.trace.children[0].input_names == Names({"hi", "lo"}));
+        CHECK(d.trace.children[0].port_names == Names({"lo", "hi"}));
+        CHECK(d.trace.children[1].input_names == Names({"lo", "hi"}));
+        CHECK(d.trace.children[1].port_names == Names({"lo", "hi"}));
+        CHECK(d.trace.children[2].input_names == Names({"lo", "hi"}));
 
         // Permute alone, with and without context.
         EncodeResult pe = permute.encode({f, consumer}, {{"a"}, {"b"}});
         CHECK(names(pe.encoded_ports) == Names({"b", "a"}));
-        CHECK(names(permute.decode(pe.encoded, pe.encoded_ports).decoded_ports) == Names({"a", "b"}));
+        CHECK(names(permute.decode(pe.encoded, {{"a"}, {"b"}}).decoded_ports) == Names({"a", "b"}));
+        CHECK(names(permute.decode(pe.encoded).decoded_ports) == Names({"0", "1"}));
         Permute rotate{{1, 2, 0}};
         EncodeResult re = Approximation(rotate).encode({f, consumer, f}, {{"a"}, {"b"}, {"c"}});
         CHECK(names(re.encoded_ports) == Names({"b", "c", "a"}));
-        CHECK(names(Approximation(rotate).decode(re.encoded, re.encoded_ports).decoded_ports) == Names({"a", "b", "c"}));
+        CHECK(names(Approximation(rotate).decode(re.encoded, {{"a"}, {"b"}, {"c"}}).decoded_ports) == Names({"a", "b", "c"}));
 
-        // Identity and a positional Apply keep names in decode too.
-        Approximation ident = Compose{Identity{}, Apply(1, half), lohi};
+        // Identity and a positional Parallel keep names in decode too.
+        Approximation ident = Compose{lohi, Parallel{Identity{}, half}, Identity{}};
         EncodeResult ie = ident.encode({f});
         CHECK(names(ie.encoded_ports) == Names({"lo", "hi"}));
-        CHECK(names(ident.decode(ie.encoded, ie.encoded_ports).decoded_ports) == Names({"values"}));
-        Approximation by_name_first = Compose{Apply("lo", half), Permute{{1, 0}}, Permute{{1, 0}}, lohi};
+        CHECK(names(ident.decode(ie.encoded).decoded_ports) == Names({"values"}));
+        Approximation by_name_first = Compose{lohi, permute, permute, Parallel{{"lo", half}}};
         EncodeResult be = by_name_first.encode({f});
         CHECK(names(by_name_first.decode(be.encoded).decoded_ports) == Names({"values"}));
-        Approximation two_perms = Compose{Permute{{1, 0}}, Apply("hi", half), Permute{{1, 0}}, lohi};
+        Approximation two_perms = Compose{lohi, permute, Parallel{{"hi", half}}, permute};
         EncodeResult tpe = two_perms.encode({f});
         CHECK(names(tpe.encoded_ports) == Names({"lo", "hi"}));
-        CHECK(names(two_perms.decode(tpe.encoded, tpe.encoded_ports).decoded_ports) == Names({"values"}));
+        CHECK(names(two_perms.decode(tpe.encoded).decoded_ports) == Names({"values"}));
     }
 
     printf("Success!\n");
