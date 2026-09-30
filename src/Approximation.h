@@ -72,7 +72,7 @@ struct ApproximationRange {
  * nothing in generated code. They are checked statically (see
  * check_ranges() and Approximation::describe()) by comparing each producer's
  * guaranteed output range with the consumer's required input range, and
- * dynamically by the helpers in ApproximationTesting.h. */
+ * dynamically by the helpers in tools/halide_approximation_testing.h. */
 struct ApproximationPort {
     std::string name;
     std::optional<Type> type;
@@ -563,7 +563,7 @@ public:
      * same arguments as inputs[0] and a numeric type. It comes from the
      * unit's `error_bound()` if it has one, else a zero Func if the unit is
      * lossless(), else an undefined Func (no bound is declared). The bound
-     * is a claim, not enforced; see ApproximationTesting.h to check it. */
+     * is a claim, not enforced; see tools/halide_approximation_testing.h to check it. */
     Func error_bound(const std::vector<Func> &inputs, const std::vector<Func> &encoded) const;
 
     /** Does the unit declare its round trip exact (under its input
