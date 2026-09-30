@@ -26,6 +26,30 @@ the directory name. Thus, one can use `ctest -L generator` to run only the
 `generator` tests. The `performance` tests configure CTest to not run them
 concurrently with other tests (including each other).
 
+Three additional labels let CI pick which tests each step needs to run:
+
+- `target_independent`: the test's result does not depend on `HL_TARGET` or
+  `HL_JIT_TARGET` (it may still depend on the host and LLVM version). CI runs
+  these once per job rather than once per target.
+- `llvm_independent`: a `target_independent` test that never invokes LLVM code
+  generation. CI runs these on one LLVM version only.
+- `gpu`: the test exercises the GPU when the target has a GPU feature. CI's GPU
+  steps run only these. A `target_independent` test never gets it.
+
+These are added as extra `GROUPS` on the test's declaration, e.g.
+`tests(GROUPS correctness target_independent llvm_independent SOURCES ...)`, so
+each directory's source lists are partitioned by label set. AOT tests (e.g.
+`generator`) must never be `target_independent` or `llvm_independent`, since
+their target is fixed at build time. Verify any change with
+`tools/audit_test_labels.py --build-dir build`. It runs each audited test once
+with `HL_DEBUG_CODEGEN=0;tag:target-env,llvm-entry,gpu-entry` and checks the
+tagged debug output: `target_independent` tests must never read the target from
+the environment (`target-env`), and `llvm_independent` tests must also never
+load LLVM runtime bitcode (`llvm-entry`). Pass `--target host-metal` (or another
+GPU target the host supports) to also check that every test that reads the
+target and compiles a GPU kernel or uses a device interface (`gpu-entry`) is
+labeled `gpu`.
+
 The vast majority of our tests are simple C++ executables that link to Halide,
 perform some checks, and print the special line `Success!` upon successful
 completion. There are three main exceptions to this:

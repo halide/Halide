@@ -1,11 +1,26 @@
 name: Linux
 
 on:
+  # Pull requests can restore caches saved on main but not each other's, so
+  # caches are only saved by these runs, which stop once the caches are
+  # filled. See the "Save vcpkg binary cache" step.
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/testing-linux.yml"
+      - "vcpkg.json"
+      - "vcpkg-configuration.json"
+      - "cmake/vcpkg-ports/**"
+      - "cmake/vcpkg-triplets/**"
+      - "pyproject.toml"
+      - "uv.lock"
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
   pull_request:
     types: [ opened, synchronize, reopened ]
     paths-ignore:
       - "doc/**"
-      - "README.md"
       - "CODE_OF_CONDUCT.md"
       - "LICENSE.txt"
       - ".gitignore"
@@ -19,6 +34,24 @@ on:
       - "Makefile.inc"
       - 'run-clang-tidy.sh'
       - '**.clang-tidy'
+      - "**.md"
+      - ".claude/**"
+      - ".devcontainer/**"
+      - ".pre-commit-config.yaml"
+      - ".clang-format"
+      - ".clang-format-ignore"
+      - "run-clang-format.sh"
+      - ".git-blame-ignore-revs"
+      - ".gdbinit"
+      - "tools/audit_test_labels.py"
+      - "tools/check_cmake_*.py"
+      # Apps are tested by testing-apps.yml; test/integration by testing-ecosystem.yml.
+      - "apps/**"
+      - "test/integration/**"
+      - "codecov.yml"
+      - "tools/run-coverage.sh"
+      # Python bindings are disabled in this workflow's CI presets.
+      - "python_bindings/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -49,6 +82,26 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: astral-sh/setup-uv@v7
+        with:
+          save-cache: ${{ github.event_name != 'pull_request' }}
+          # Per-configuration key: jobs otherwise share one key and the first
+          # to save wins, so source-built wheels (e.g. i686) are never reused.
+          cache-suffix: ${{ matrix.python }}-${{ matrix.uv_group }}
+
+      # vcpkg otherwise rebuilds every dependency (wabt, flatbuffers, ...) on
+      # each run. Its ABI hashes make stale archives harmless cache misses.
+      - name: Set up vcpkg binary cache directory
+        run: |
+          echo "VCPKG_DEFAULT_BINARY_CACHE=${RUNNER_TEMP}/vcpkg-archives" >> "$GITHUB_ENV"
+          mkdir -p "${RUNNER_TEMP}/vcpkg-archives"
+
+      - name: Restore vcpkg binary cache
+        id: vcpkg-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/vcpkg-archives
+          key: vcpkg-${{ github.job }}-${{ matrix.bits }}${{ matrix.arch }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-ports/**', 'cmake/vcpkg-triplets/**') }}
+          restore-keys: vcpkg-${{ github.job }}-${{ matrix.bits }}${{ matrix.arch }}-
 
       - name: Install system dependencies
         run: |
@@ -93,179 +146,49 @@ jobs:
       - name: Configure CMake
         run: cmake --preset ci-linux-x86-${{ matrix.bits }}
 
+      - name: Save vcpkg binary cache
+        if: github.event_name != 'pull_request' && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/vcpkg-archives
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+
       - name: Initial build
+        if: github.event_name == 'pull_request'
         run: cmake --build build
 
       - name: DEBUG - print cpu info and Halide host target
+        if: github.event_name == 'pull_request'
         run: |
           cat /proc/cpuinfo
           ./build/src/autoschedulers/common/get_host_target
 
+      # See doc/Testing.md for the meaning of the labels used to skip redundant
+      # tests.
+      - name: Configure test filters
+        if: github.event_name == 'pull_request'
+        run: |
+          exclude="performance"
+          if [[ "${{ matrix.uv_group }}" != "ci-llvm-main" ]]; then
+            exclude+="|fuzz|llvm_independent"
+          fi
+          echo "CTEST_EXCLUDE=${exclude}" >> "$GITHUB_ENV"
+
       - name: Test (host)
+        if: github.event_name == 'pull_request'
         run: |
           cmake -S . -B build -DHalide_TARGET=host
           cmake --build build
-          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -LE performance -j "$(nproc)"
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -LE "${CTEST_EXCLUDE}" -j "$(nproc)"
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -L performance --repeat until-pass:5
+          echo "CTEST_EXCLUDE=${CTEST_EXCLUDE}|target_independent" >> "$GITHUB_ENV"
 
       - name: Test (no extensions)
+        if: github.event_name == 'pull_request'
         run: |
           cmake -S . -B build -DHalide_TARGET=cmake
           cmake --build build
-          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -LE performance -j "$(nproc)"
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -LE "${CTEST_EXCLUDE}" -j "$(nproc)"
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -L performance --repeat until-pass:5
 
-  android-apps:
-    # Deliberately its own job on Ubuntu (not folded into `macos`/HelloiOS's
-    # job): unlike HelloiOS, cross-compiling for Android has no dependency on
-    # Xcode or any other macOS-only tooling, so it doesn't need to spend
-    # macOS CI minutes. GitHub's hosted ubuntu-24.04 image ships an Android
-    # SDK+NDK by default, same as its macOS image does for Xcode/HelloiOS.
-    # The app builds a real APK via its own Gradle/CMake `externalNativeBuild`
-    # project -- Halide's generators are built as a side effect of that same
-    # CMake configure (see app/src/main/cpp/CMakeLists.txt), so no separate
-    # generator pre-build step is needed here.
-    if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
-    name: HelloAndroid app
-    runs-on: ubuntu-24.04
-
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: astral-sh/setup-uv@v7
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libpng-dev libjpeg-dev
-
-      - name: Sync CI environment
-        run: |
-          uv sync --frozen --group ci-llvm-main --no-install-workspace
-          echo "${GITHUB_WORKSPACE}/.venv/bin" >> "$GITHUB_PATH"
-          echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" >> "$GITHUB_ENV"
-
-      - name: Configure LLVM
-        run: echo "Halide_LLVM_ROOT=$(halide-llvm --prefix)" >> "$GITHUB_ENV"
-
-      - name: Configure CMake
-        run: >-
-          cmake --preset ci-linux-x86-64
-          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install"
-
-      - name: Build and install Halide
-        run: cmake --build build --target install
-
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: "21"
-
-      - uses: gradle/actions/setup-gradle@v6
-
-      - name: Point Gradle at a CMake >= 3.28
-        # AGP's own bundled/SDK-managed CMake package defaults to an older
-        # version than Halide's CMake floor; point it at the system CMake
-        # (already >= 3.28, since building Halide itself above requires it)
-        # via the documented `cmake.dir` local.properties key instead.
-        run: |
-          cmake_dir="$(dirname "$(dirname "$(command -v cmake)")")"
-          echo "cmake.dir=${cmake_dir}" | tee apps/HelloAndroid/local.properties
-
-      - name: Build HelloAndroid
-        working-directory: apps/HelloAndroid
-        run: ./gradlew assembleDebug "-PHalide_ROOT=${{ github.workspace }}/install"
-
-      - name: Enable KVM group perms (required by the emulator)
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-
-      # A build-only check can't catch bugs like a missing runtime permission
-      # request or native buffer handling -- those only show up once the app
-      # actually runs and tries to open the camera. x86_64 (not arm64-v8a) so
-      # the emulator gets KVM hardware acceleration on these x86_64 runners.
-      - name: Run smoke tests on an emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 34
-          target: default
-          arch: x86_64
-          profile: pixel_6
-          emulator-options: >-
-            -no-window -gpu swiftshader_indirect -no-snapshot -noaudio
-            -no-boot-anim -camera-back emulated -camera-front emulated
-          disable-animations: true
-          # android-emulator-runner's `script` input splits on newlines and
-          # runs each line as its own independent `sh -c` command -- it does
-          # NOT honor `\` line-continuation across lines -- so each invocation
-          # below must stay on a single line.
-          script: |
-            apps/HelloAndroid/android_smoke_test.sh apps/HelloAndroid/app/build/outputs/apk/debug/app-debug.apk com.example.helloandroid .CameraActivity android.permission.CAMERA
-
-  baremetal-apps:
-    # Deliberately its own job: needs an arm-none-eabi cross toolchain and
-    # QEMU's Arm system emulator, neither of which any other job installs.
-    # Actually cross-compiles and runs all three documented build methods
-    # (see apps/HelloBaremetal/README.md) under QEMU with semihosting, rather
-    # than only checking that they build for host.
-    if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
-    name: HelloBaremetal apps
-    runs-on: ubuntu-24.04
-
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: astral-sh/setup-uv@v7
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libpng-dev libjpeg-dev gcc-arm-none-eabi qemu-system-arm
-
-      - name: Sync CI environment
-        run: |
-          uv sync --frozen --group ci-llvm-main --no-install-workspace
-          echo "${GITHUB_WORKSPACE}/.venv/bin" >> "$GITHUB_PATH"
-          echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" >> "$GITHUB_ENV"
-
-      - name: Configure LLVM
-        run: echo "Halide_LLVM_ROOT=$(halide-llvm --prefix)" >> "$GITHUB_ENV"
-
-      - name: Configure CMake
-        run: >-
-          cmake --preset ci-linux-x86-64
-          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install"
-
-      - name: Build and install Halide
-        run: cmake --build build --target install
-
-      - name: Build HelloBaremetal (host target)
-        working-directory: apps/HelloBaremetal
-        env:
-          CMAKE_PREFIX_PATH: ${{ github.workspace }}/install
-        run: |
-          for method in cmake-twice cmake-super_build cmake-external_project; do
-            cmake -S "$method" -B "$method/build"
-            cmake --build "$method/build"
-          done
-
-      # The actual point of this job: build.sh cross-compiles each method for
-      # the bare-metal Arm target, then ctest runs the result under QEMU with
-      # semihosting, actually exercising the cross-compiled binary rather than
-      # only checking that it builds for host.
-      - name: Build and run HelloBaremetal (bare-metal cross-compile under QEMU)
-        working-directory: apps/HelloBaremetal
-        env:
-          CMAKE_PREFIX_PATH: ${{ github.workspace }}/install
-        run: |
-          declare -A test_dir=(
-            [cmake-twice]=build-target
-            [cmake-super_build]=build/app
-            [cmake-external_project]=build
-          )
-          for method in cmake-twice cmake-super_build cmake-external_project; do
-            ( cd "$method" && ./build.sh )
-            ctest --test-dir "$method/${test_dir[$method]}" --output-on-failure
-          done
+  # HelloAndroid and HelloBaremetal run in testing-apps.yml.

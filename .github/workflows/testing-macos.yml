@@ -4,14 +4,18 @@ on:
   # Codecov needs a coverage run on main itself (not just PR branches) to
   # compute diffs correctly under our squash-and-merge strategy -- otherwise
   # it has no base-commit report to diff a PR's coverage against. Only the
-  # `coverage` job runs on push; `macos` stays pull_request-only.
+  # `coverage` job runs on push. The `macos` job runs on pull requests, and
+  # on the schedule / workflow_dispatch only to save its caches, which pull
+  # requests can restore from main but not from each other.
   push:
     branches: [ main ]
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
   pull_request:
     types: [ opened, synchronize, reopened ]
     paths-ignore:
       - "doc/**"
-      - "README.md"
       - "CODE_OF_CONDUCT.md"
       - "LICENSE.txt"
       - ".gitignore"
@@ -25,6 +29,20 @@ on:
       - "Makefile.inc"
       - 'run-clang-tidy.sh'
       - '**.clang-tidy'
+      - "**.md"
+      - ".claude/**"
+      - ".devcontainer/**"
+      - ".pre-commit-config.yaml"
+      - ".clang-format"
+      - ".clang-format-ignore"
+      - "run-clang-format.sh"
+      - ".git-blame-ignore-revs"
+      - ".gdbinit"
+      - "tools/audit_test_labels.py"
+      - "tools/check_cmake_*.py"
+      # Apps are tested by testing-apps.yml; test/integration by testing-ecosystem.yml.
+      - "apps/**"
+      - "test/integration/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -35,7 +53,7 @@ permissions:
 
 jobs:
   coverage:
-    if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
+    if: "(github.event_name == 'push' || github.event_name == 'pull_request') && !contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
     name: arm-64 / coverage
     runs-on: macos-26
 
@@ -56,7 +74,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   macos:
-    if: "github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
+    if: "github.event_name != 'push' && !contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
     name: ${{ matrix.arch }} / ${{ matrix.uv_group }}
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -81,8 +99,30 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: astral-sh/setup-uv@v7
+        with:
+          save-cache: ${{ github.event_name != 'pull_request' }}
+          # Per-configuration key: jobs otherwise share one key and the first
+          # to save wins, so source-built wheels (e.g. i686) are never reused.
+          cache-suffix: ${{ matrix.python }}-${{ matrix.uv_group }}
 
+      # vcpkg otherwise rebuilds every dependency (wabt, flatbuffers, ...) on
+      # each run. Its ABI hashes make stale archives harmless cache misses.
+      - name: Set up vcpkg binary cache directory
+        run: |
+          echo "VCPKG_DEFAULT_BINARY_CACHE=${RUNNER_TEMP}/vcpkg-archives" >> "$GITHUB_ENV"
+          mkdir -p "${RUNNER_TEMP}/vcpkg-archives"
+
+      - name: Restore vcpkg binary cache
+        id: vcpkg-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/vcpkg-archives
+          key: vcpkg-${{ github.job }}-${{ matrix.arch }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-ports/**', 'cmake/vcpkg-triplets/**') }}
+          restore-keys: vcpkg-${{ github.job }}-${{ matrix.arch }}-
+
+      # Only needed for the wasm steps below, which run on arm-64 only.
       - name: Install wasm toolchain
+        if: matrix.arch == 'arm-64'
         run: brew install emscripten
 
       # AppleClang on Intel unconditionally injects /usr/local/include and
@@ -108,140 +148,89 @@ jobs:
         run: echo "Halide_LLVM_ROOT=$(halide-llvm --prefix)" >> "$GITHUB_ENV"
 
       - name: Configure CMake
-        run: >-
-          cmake --preset ci-macos-${{ matrix.arch }}
-          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install"
+        run: cmake --preset ci-macos-${{ matrix.arch }}
+
+      - name: Save vcpkg binary cache
+        if: github.event_name != 'pull_request' && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/vcpkg-archives
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
 
       - name: Initial build
-        run: cmake --build build --target install
+        if: github.event_name == 'pull_request'
+        run: cmake --build build
 
       # --- host: internal, correctness, generator, error, warning,
       # tutorial, python, autoschedulers_cpu ---
+      #
+      # Tests labeled target_independent (see doc/Testing.md) only run here;
+      # every later step skips them.
 
       - name: Test (host)
+        if: github.event_name == 'pull_request'
         run: |
           cmake -S . -B build -DHalide_TARGET=host
-          cmake --build build --target install
+          cmake --build build
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
             -LE "performance|autoschedulers|fuzz" -j "$(sysctl -n hw.logicalcpu)" \
             -E tutorial_lesson_19
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
             -L "performance|autoschedulers" --repeat until-pass:5
 
-      - name: Configure apps (host)
-        run: >-
-          cmake -S apps -B apps-build
-          -G Ninja
-          -DCMAKE_BUILD_TYPE=RelWithDebInfo
-          -DCMAKE_PREFIX_PATH="${{ github.workspace }}/install"
-          -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
-          -DHalide_TARGET=host
-          -DENABLE_APPS_HANNK=${{ matrix.arch == 'arm-64' && 'ON' || 'OFF' }}
-
-      - name: Build apps (host)
-        run: cmake --build apps-build
-
-      - name: Test apps (host)
-        run: >-
-          ctest --test-dir apps-build --build-config RelWithDebInfo
-          --output-on-failure -LE slow_tests --timeout 3600
-
-      - name: Configure HelloiOS
-        if: matrix.arch == 'arm-64'
-        run: ./setup.sh
-        working-directory: apps/HelloiOS
-        env:
-          Halide_ROOT: ${{ github.workspace }}/install
-
-      - name: Build HelloiOS
-        if: matrix.arch == 'arm-64'
-        run: >-
-          xcodebuild -workspace HelloiOS.xcworkspace
-          -scheme HelloiOS
-          -configuration Debug
-          -destination 'generic/platform=iOS Simulator'
-          build
-        working-directory: apps/HelloiOS
-
       # --- x86-64-macos correctness. No no-SSE4.1 variant: no real Intel Mac
       # lacks SSE4.1, and that hypothetical baseline is already exercised by
       # Linux/Windows CI, where it's an actually reachable target. ---
 
       - name: Test (x86-64-macos, SSE4.1)
-        if: matrix.arch == 'x86-64'
+        if: github.event_name == 'pull_request' && (matrix.arch == 'x86-64')
         run: |
           cmake -S . -B build -DHalide_TARGET=x86-64-macos-sse41
           cmake --build build
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
-            -L correctness -j "$(sysctl -n hw.logicalcpu)"
+            -L correctness -LE target_independent -j "$(sysctl -n hw.logicalcpu)"
 
       # --- host-metal: real GPU testing on hosted Apple Silicon runners.
+      # Runs the tests labeled gpu (see doc/Testing.md).
       # arm-64 only -- GitHub's Intel macOS runners have a GPU too weak to
       # sustain this workload; once it hangs once, the driver cascades into
       # rejecting further submissions for the rest of the job, so reduced
       # concurrency and retries don't help. ---
 
       - name: Test (host-metal)
-        if: matrix.arch == 'arm-64'
+        if: github.event_name == 'pull_request' && (matrix.arch == 'arm-64')
         run: |
           cmake -S . -B build -DHalide_TARGET=host-metal
-          cmake --build build --target install
+          cmake --build build
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
-            -L "correctness|generator" -R "gpu|metal" -j "$(sysctl -n hw.logicalcpu)"
+            -L "^gpu$" -j "$(sysctl -n hw.logicalcpu)"
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
             -L "performance|autoschedulers_gpu" -R "gpu|metal" --repeat until-pass:5
 
-      - name: Configure apps (host-metal)
-        if: matrix.arch == 'arm-64'
-        run: >-
-          cmake -S apps -B apps-build
-          -G Ninja
-          -DCMAKE_BUILD_TYPE=RelWithDebInfo
-          -DCMAKE_PREFIX_PATH="${{ github.workspace }}/install"
-          -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
-          -DHalide_TARGET=host-metal
-          -DENABLE_APPS_HANNK=ON
-
-      - name: Build apps (host-metal)
-        if: matrix.arch == 'arm-64'
-        run: cmake --build apps-build
-
-      - name: Test apps (host-metal)
-        if: matrix.arch == 'arm-64'
-        run: >-
-          ctest --test-dir apps-build --build-config RelWithDebInfo
-          --output-on-failure -LE slow_tests --timeout 3600
-
-      # --- wasm (wabt JIT) ---
+      # --- wasm (wabt JIT). The wasm target is host-agnostic, so these only
+      # run on arm-64 (the faster runner); running them on x86-64 as well
+      # would test the exact same code again. ---
 
       - name: Test (wasm_simd128, wabt JIT)
+        if: github.event_name == 'pull_request' && (matrix.arch == 'arm-64')
         run: |
           cmake -S . -B build -DHalide_TARGET=wasm-32-wasmrt-wasm_simd128
           cmake --build build
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
-            -L "internal|correctness|generator|error|warning" -j "$(sysctl -n hw.logicalcpu)"
+            -L "internal|correctness|generator|error|warning" -LE target_independent -j "$(sysctl -n hw.logicalcpu)"
 
       - name: Test (wasm_mvponly, wabt JIT)
+        if: github.event_name == 'pull_request' && (matrix.arch == 'arm-64')
         run: |
           cmake -S . -B build -DHalide_TARGET=wasm-32-wasmrt-wasm_mvponly
           cmake --build build
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
-            -L "internal|correctness|generator|error|warning" -j "$(sysctl -n hw.logicalcpu)"
+            -L "internal|correctness|generator|error|warning" -LE target_independent -j "$(sysctl -n hw.logicalcpu)"
 
       - name: Build (wasm_simd128 + wasm_threads, generator only)
+        if: github.event_name == 'pull_request' && (matrix.arch == 'arm-64')
         run: |
           cmake -S . -B build -DHalide_TARGET=wasm-32-wasmrt-wasm_simd128-wasm_threads
           cmake --build build --target build_generator
 
-      # HelloWasm is a super-build (not add_subdirectory()'d from apps/), so
-      # it needs its own configure/build/test rather than riding along with
-      # the "Configure/Build/Test apps" steps above.
-      - name: Configure HelloWasm
-        run: cmake -S . -B build -DCMAKE_PREFIX_PATH="${{ github.workspace }}/install"
-        working-directory: apps/HelloWasm
-
-      - name: Build and test HelloWasm
-        run: |
-          cmake --build build
-          ctest --test-dir build --output-on-failure
-        working-directory: apps/HelloWasm
+      # The apps suite, HelloiOS and HelloWasm run in testing-apps.yml.
