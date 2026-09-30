@@ -6,7 +6,7 @@
  * Func-to-Func transformations (e.g. a quantize/dequantize round trip), and
  * Compose/Apply/etc., which build larger Approximations out of smaller ones. See
  * Func::approximate_by(), which splices such a round trip into an existing
- * call graph, and doc/ApproximationDesign.md for the design rationale.
+ * call graph, and doc/Approximation.md for the design rationale.
  */
 
 #include <functional>
