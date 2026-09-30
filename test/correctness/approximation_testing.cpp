@@ -78,10 +78,81 @@ int test_generators() {
     return 0;
 }
 
-Approximation make_quantizer(int block, BlockRoundingMode rounding = BlockRoundingMode::Nearest,
-                             BlockScaleAnchor anchor = BlockScaleAnchor::AbsMax, int qmax = 127) {
-    return SymmetricBlockQuantize{block, qmax, rounding, anchor};
+// A per-block absmax quantizer on (within, block) floats: codes in
+// [-qmax, qmax] and one float scale per block. Rounding to nearest keeps the
+// error within half a scale step (plus slack for float rounding).
+struct AbsMaxQuantizer {
+    int block, qmax;
+
+    std::vector<Func> encode(const std::vector<Func> &in) const {
+        Var kk("kk"), blk("blk");
+        RDom r(0, block);
+        Func amax("absmax_stat"), scale("absmax_scale"), codes("absmax_codes");
+        amax(blk) = 0.0f;
+        amax(blk) = max(amax(blk), abs(in[0](r, blk)));
+        scale(blk) = amax(blk) / (float)qmax;
+        codes(kk, blk) = cast<int8_t>(round(in[0](kk, blk) / select(scale(blk) == 0.0f, 1.0f, scale(blk))));
+        return {codes, scale};
+    }
+
+    std::vector<Func> decode(const std::vector<Func> &encoded) const {
+        Var kk("kk"), blk("blk");
+        Func out("absmax_decoded");
+        out(kk, blk) = cast<float>(encoded[0](kk, blk)) * encoded[1](blk);
+        return {out};
+    }
+
+    ApproximationSignature signature() const {
+        return {{{"block", Float(32), 2}},
+                {{"codes", Int(8), 2, ApproximationRange(-qmax, qmax)}, {"scale", Float(32), 1}}};
+    }
+
+    Func error_bound(const std::vector<Func> &, const std::vector<Func> &encoded) const {
+        Var kk("kk"), blk("blk");
+        Func bound("absmax_error_bound");
+        bound(kk, blk) = abs(cast<double>(encoded[1](blk))) * Expr(0.5 + qmax / (double)(1 << 21));
+        return bound;
+    }
+};
+
+Approximation make_quantizer(int block, int qmax = 127) {
+    return AbsMaxQuantizer{block, qmax};
 }
+
+// Signed q4 codes [-8, 7] to stored nibbles [0, 15]: exact within that range.
+Approximation make_offset() {
+    return Pointwise{"offset",
+                     [](Expr x) { return cast<uint8_t>(x + 8); },
+                     [](Expr x) { return cast<int8_t>(x - 8); }}
+        .with_types(Int(8), UInt(8))
+        .with_ranges(ApproximationRange(-8, 7), ApproximationRange(0, 15))
+        .with_lossless();
+}
+
+// An int8 to its low nibble (uint8) and high nibble (int8): x = high * 16 + low.
+struct SplitNibbles {
+    std::vector<Func> encode(const std::vector<Func> &in) const {
+        Var x("x");
+        Func low("split_low"), high("split_high");
+        low(x) = cast<uint8_t>(in[0](x) & 15);
+        high(x) = cast<int8_t>(in[0](x) >> 4);
+        return {low, high};
+    }
+    std::vector<Func> decode(const std::vector<Func> &in) const {
+        Var x("x");
+        Func out("split_joined");
+        out(x) = cast<int8_t>(in[1](x) * 16 + in[0](x));
+        return {out};
+    }
+    ApproximationSignature signature() const {
+        return {{{"codes", Int(8), 1}},
+                {{"low", UInt(8), 1, ApproximationRange(0, 15)},
+                 {"high", Int(8), 1, ApproximationRange(-8, 7)}}};
+    }
+    bool lossless() const {
+        return true;
+    }
+};
 
 int test_round_trip_report() {
     // (within, block) input: 4 blocks of 32.
@@ -130,7 +201,7 @@ int test_precondition_conditioning() {
 
     // With no generator given, inputs come from the declared port (type and
     // range): here the whole valid range of int8 codes.
-    Approximation offset = AdditiveOffset<int8_t, uint8_t>{8};
+    Approximation offset = make_offset();
     CHECK(check_property(offset, lossless(), {16, 4}, 4, 3).passed);
 
     // Outside it: by default the precondition failure is reported ...
@@ -158,9 +229,8 @@ int test_precondition_conditioning() {
 // The packing is exact only because the quantizer guarantees its codes.
 int test_stage_targeting() {
     Approximation pack = PlanarFieldPack{4, 8};
-    Approximation offset = AdditiveOffset<int8_t, uint8_t>{8};
-    Approximation quant = SymmetricBlockQuantize{16, 8, BlockRoundingMode::TruncateHalfUpWithOffset,
-                                                 BlockScaleAnchor::ExtremeSignedValue};
+    Approximation offset = make_offset();
+    Approximation quant = make_quantizer(16, 7);
     Approximation scheme = Compose{BlockReshape{16}, quant, Parallel{{"codes", Compose{offset, pack}}}};
 
     CHECK(check_ranges(scheme).empty());
@@ -197,10 +267,10 @@ int test_idempotent_requantize() {
 }
 
 int test_range_diagnostics() {
-    // Codes [-8, 8] shifted by 8 are [0, 16]: one too many for 4 bits.
+    // Codes [-8, 8] are one too many for the offset's precondition [-8, 7].
     Approximation pack = PlanarFieldPack{4, 8};
-    Approximation offset = AdditiveOffset<int8_t, uint8_t>{8};
-    Approximation quant = SymmetricBlockQuantize{16, 8, BlockRoundingMode::Nearest, BlockScaleAnchor::AbsMax};
+    Approximation offset = make_offset();
+    Approximation quant = make_quantizer(16, 8);
     Approximation bad = Compose{BlockReshape{16}, quant, Parallel{{"codes", Compose{offset, pack}}}};
     std::vector<std::string> issues = check_ranges(bad);
     for (const std::string &s : issues) {
@@ -214,16 +284,13 @@ int test_range_diagnostics() {
 }
 
 int test_declared_bound_is_exact() {
-    // Every rounding mode with a declared bound honours it on hostile input.
-    for (BlockRoundingMode m : {BlockRoundingMode::Nearest, BlockRoundingMode::NearestEvenClampedHigh,
-                                BlockRoundingMode::TruncateHalfUpWithOffset}) {
-        for (BlockScaleAnchor a : {BlockScaleAnchor::AbsMax, BlockScaleAnchor::ExtremeSignedValue}) {
-            Approximation q = make_quantizer(16, m, a, 8);
-            for (const Distribution &d : {Distribution::normal(0, 1), Distribution::uniform(-1, 1),
-                                          Distribution::outliers(Distribution::uniform(-1, 1), 16, 50)}) {
-                CHECK(check_property(q, within_declared_bound(), d, Float(32), {16, 4}, 6, 21).passed);
-                CHECK(check_property(q, outputs_within_declared_ranges(), d, Float(32), {16, 4}, 6, 21).passed);
-            }
+    // The declared bound holds on hostile input.
+    for (int qmax : {7, 127}) {
+        Approximation q = make_quantizer(16, qmax);
+        for (const Distribution &d : {Distribution::normal(0, 1), Distribution::uniform(-1, 1),
+                                      Distribution::outliers(Distribution::uniform(-1, 1), 16, 50)}) {
+            CHECK(check_property(q, within_declared_bound(), d, Float(32), {16, 4}, 6, 21).passed);
+            CHECK(check_property(q, outputs_within_declared_ranges(), d, Float(32), {16, 4}, 6, 21).passed);
         }
     }
     return 0;
@@ -271,7 +338,7 @@ bool mentions_unreadable(const PropertyResult &r) {
 // properties that need their values fail with a message; the others work.
 int test_unreadable_encoded() {
     Type record = Type::Struct({{"low", UInt(8)}, {"high", Int(8)}});
-    Approximation split = AdditiveRadixSplit(16, 16);
+    Approximation split = SplitNibbles{};
     Approximation layout = StructLayout(record, {"low", "high"});
     Approximation copy = Copy{};
     Approximation scheme = Compose{split, layout};
@@ -322,12 +389,12 @@ int test_unreadable_encoded() {
     return 0;
 }
 
-// AdditiveRadixSplit's declared output ranges hold for every valid code.
-int test_radix_split_ranges() {
-    Approximation split = AdditiveRadixSplit(16, 16);
-    CHECK(check_property(split, outputs_within_declared_ranges(), {InputSpec{Int(8), {256}, Distribution::uniform_int(-16, 15)}}, 4, 3).passed);
-    CHECK(check_property(split, lossless(), {InputSpec{Int(8), {256}, Distribution::uniform_int(-16, 15)}}, 4, 3).passed);
-    CHECK(check_property(split, idempotent_requantize(), {InputSpec{Int(8), {256}, Distribution::uniform_int(-16, 15)}}, 2, 3).passed);
+// SplitNibbles' declared output ranges hold for every code.
+int test_split_ranges() {
+    Approximation split = SplitNibbles{};
+    CHECK(check_property(split, outputs_within_declared_ranges(), {InputSpec{Int(8), {256}, Distribution::uniform_int(-128, 127)}}, 4, 3).passed);
+    CHECK(check_property(split, lossless(), {InputSpec{Int(8), {256}, Distribution::uniform_int(-128, 127)}}, 4, 3).passed);
+    CHECK(check_property(split, idempotent_requantize(), {InputSpec{Int(8), {256}, Distribution::uniform_int(-128, 127)}}, 2, 3).passed);
     return 0;
 }
 
@@ -336,7 +403,7 @@ int test_radix_split_ranges() {
 int main(int argc, char **argv) {
     int (*tests[])() = {test_generators, test_round_trip_report, test_lossless, test_precondition_conditioning,
                         test_stage_targeting, test_idempotent_requantize, test_range_diagnostics,
-                        test_declared_bound_is_exact, test_unreadable_encoded, test_radix_split_ranges};
+                        test_declared_bound_is_exact, test_unreadable_encoded, test_split_ranges};
     for (auto t : tests) {
         if (t()) {
             return 1;
