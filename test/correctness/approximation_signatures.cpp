@@ -241,11 +241,14 @@ int main() {
         CHECK(names(producer.signature().inputs) == Names({"values"}));
         CHECK(names(producer.signature({ApproximationPort("other")}).inputs) == Names({"other"}));
         CHECK(*producer.signature({ApproximationPort("other")}).inputs[0].type == Float(32));
-        ApproximationSignature cast = Approximation(StorageCast<float, uint16_t>{})
-                                          .signature({ApproximationPort("w", std::nullopt, 3)});
-        CHECK(names(cast.inputs) == Names({"w"}) && names(cast.outputs) == Names({"w"}));
-        CHECK(*cast.inputs[0].type == Float(32) && *cast.outputs[0].type == UInt(16));
-        CHECK(*cast.outputs[0].dimensions == 3);
+        ApproximationSignature converted = Approximation(Pointwise{"cast",
+                                                                   [](Expr x) { return cast<uint16_t>(x); },
+                                                                   [](Expr x) { return cast<float>(x); }}
+                                                             .with_types(Float(32), UInt(16)))
+                                               .signature({ApproximationPort("w", std::nullopt, 3)});
+        CHECK(names(converted.inputs) == Names({"w"}) && names(converted.outputs) == Names({"w"}));
+        CHECK(*converted.inputs[0].type == Float(32) && *converted.outputs[0].type == UInt(16));
+        CHECK(*converted.outputs[0].dimensions == 3);
 
         // Undeclared: a single-form unit is pass-through; a multi-form one is unknown.
         ApproximationSignature single = half.signature({ApproximationPort("v")});

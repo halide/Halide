@@ -336,8 +336,8 @@ inline std::string number_string(double v, int precision = 9) {
  * Elements are generated in memory order over the flattened buffer
  * (dimension 0 varies fastest), and a *block* is a run of that many
  * consecutive elements in this order -- so with dimension 0 the within-block
- * index, as in SymmetricBlockQuantize's (within, block) layout, blocks of
- * size `block` line up with dimension 0's extent.
+ * index (a (within, block) layout), blocks of size `block` line up with
+ * dimension 0's extent.
  *
  * All draws use Rng, and use only integer arithmetic and IEEE +, -, *, so a
  * given (distribution, type, extents, seed) yields the same bytes on every

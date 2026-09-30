@@ -74,7 +74,7 @@ int main() {
         CHECK(Approximation(BlockReshape{32}).label() == "BlockReshape");
         CHECK(Approximation(Compose{Identity{}, Identity{}}).label() == "Compose");
         CHECK(Approximation(Parallel{Identity{}, Identity{}}).label() == "Parallel");
-        CHECK(Approximation(StorageCast<float, int8_t>{}).label() == "StorageCast<float, signed char>");
+        CHECK(Approximation(LittleEndianScalarPack<uint32_t>{}).label() == "LittleEndianScalarPack<unsigned int>");
         CHECK(Approximation().label().empty());
 
         Approximation named = Named{};

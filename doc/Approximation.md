@@ -94,9 +94,10 @@ that handle to the combinators (see "Introspection").
 **Labels.** Each handle has a label for display: `labelled("x")` (or the
 two-argument constructor) sets it, else the unit's `std::string name() const` if
 it has one, else the unit's type name with `Halide::` qualifiers stripped
-(`Compose`, `StorageCast<float, signed char>`). The label lives in state shared
-by all copies of the handle, so `labelled()` affects every copy and returns a
-handle that is `same_as` the original, even though the method is `const`.
+(`Compose`, `LittleEndianScalarPack<unsigned int>`). The label lives in state
+shared by all copies of the handle, so `labelled()` affects every copy and
+returns a handle that is `same_as` the original, even though the method is
+`const`.
 
 ### Defining a unit
 
@@ -163,7 +164,10 @@ zero-valued Func if the unit is `lossless()`, else an undefined Func.
 
 Elementwise units need no struct: `Pointwise{name, encode_fn, decode_fn}` builds
 one from a pair of `Expr -> Expr` lambdas (or `std::vector<Expr>` ones for
-Tuple-valued Funcs; pass lambdas with concrete parameter types, not `auto`).
+Tuple-valued Funcs; pass lambdas with concrete parameter types, not `auto`). A
+cast or an offset is one inline `Pointwise`; the optional `with_types`,
+`with_ranges` and `with_lossless` declare (and let tests check) more than its
+arity.
 
 ```cpp
 // Drops the low bit of an integer: lossy, with error at most 1.
@@ -172,6 +176,15 @@ Approximation drop_lsb =
               [](Expr x) { return x >> 1; },
               [](Expr x) { return x << 1; }}
         .with_error_bound([](Expr) { return Expr(1); });
+
+// Signed 4-bit codes to stored nibbles: exact for codes in [-8, 7].
+Approximation offset =
+    Pointwise{"offset",
+              [](Expr x) { return cast<uint8_t>(x + 8); },
+              [](Expr x) { return cast<int8_t>(cast<int>(x) - 8); }}
+        .with_types(Int(8), UInt(8))
+        .with_ranges(ApproximationRange(-8, 7), ApproximationRange(0, 15))
+        .with_lossless();
 ```
 
 Anything less regular is a small struct. This int8 quantizer with one scale per
@@ -229,38 +242,33 @@ Approximation q = BlockQ8{};
 
 ### Core units
 
-`Approximation.h` provides the combinators; `ApproximationComponents.h` provides
-reusable leaf units. All are plain structs that convert to `Approximation`, and
-all declare signatures.
+`Approximation.h` provides the combinators and a few generic leaf units for
+layout and bit packing. All are plain structs that convert to `Approximation`,
+and all declare signatures. Domain-specific quantizers (block scales, rounding
+policies, code alphabets) are not part of the core: they live in client code,
+like `BlockQ8` above or the Q4_0 quantizer in lesson 25 (GGML's own quantizers
+are defined in the GGML app).
 
-| Unit                                                       | Description                                                                                                                                                                                                                                                                                                                  |
-| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Compose{stages...}`                                       | Sequential composition, in encode order: `encode` runs the stages first to last, `decode` runs them last to first. The last stage's encoded output is the Compose's own. Lossless iff all stages are; no error bound is declared for lossy compositions, because bounds do not compose without knowing how errors propagate. |
-| `Parallel{children...}` / `Parallel{{"port", child}, ...}` | Product: applies each child to its own share of the Funcs. See below.                                                                                                                                                                                                                                                        |
-| `TrustedInverse{encoder, decoder}`                         | Takes `encode` from one approximation and `decode` from another. The escape hatch out of `Compose`'s structural guarantee (see below).                                                                                                                                                                                       |
-| `Choose{cond, if_true, if_false}`                          | Keeps whichever handle `cond` selects at construction, so it can be found by that handle.                                                                                                                                                                                                                                    |
-| `Identity{}`, `Permute{permutation}`                       | Pass Funcs (and their port names) through unchanged / reordered. Both are lossless.                                                                                                                                                                                                                                          |
-| `Pointwise{...}`                                           | Elementwise `out(vs) = fn(in(vs))`; the output Funcs are named `name + "_encode"` and `name + "_decode"` (the four-argument constructors choose both names and the pure Var prefix).                                                                                                                                         |
-| `BlockReshape`                                             | Flat row to fixed-size records; lossless.                                                                                                                                                                                                                                                                                    |
-| `StructLayout`                                             | Logical Funcs to a struct-typed record Func, one field each; lossless.                                                                                                                                                                                                                                                       |
-| `StorageCast<Decoded, Storage>`                            | Explicit numeric conversion; lossless exactly when every `Decoded` value is representable in `Storage`.                                                                                                                                                                                                                      |
-| `AdditiveOffset<Decoded, Storage>`                         | Shifts an integral alphabet by a constant; lossless for inputs in its declared range.                                                                                                                                                                                                                                        |
-| `LittleEndianScalarPack<Word>`                             | A word per record to and from a leading byte dimension; lossless.                                                                                                                                                                                                                                                            |
-| `BinaryAlphabetPack<Value>`                                | A two-valued vector to and from an integer word.                                                                                                                                                                                                                                                                             |
-| `AdditiveRadixSplit`                                       | Splits a signed code into a low digit and a weighted high part.                                                                                                                                                                                                                                                              |
-| `PlanarFieldPack`                                          | Fixed-width fields packed into bytes; lossless for inputs in its declared range.                                                                                                                                                                                                                                             |
-| `SymmetricBlockQuantize`                                   | Per-block int8 quantization with configurable rounding and scale-anchor policies; declares a code range and (for the extreme-value scale anchors) an error bound.                                                                                                                                                            |
+| Unit                                                       | Description                                                                                                                                                                                                                                                                                                                                         |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Compose{stages...}`                                       | Sequential composition, in encode order: `encode` runs the stages first to last, `decode` runs them last to first. The last stage's encoded output is the Compose's own. Lossless iff all stages are; no error bound is declared for lossy compositions, because bounds do not compose without knowing how errors propagate.                        |
+| `Parallel{children...}` / `Parallel{{"port", child}, ...}` | Product: applies each child to its own share of the Funcs. See below.                                                                                                                                                                                                                                                                               |
+| `TrustedInverse{encoder, decoder}`                         | Takes `encode` from one approximation and `decode` from another. The escape hatch out of `Compose`'s structural guarantee (see below).                                                                                                                                                                                                              |
+| `Choose{cond, if_true, if_false}`                          | Keeps whichever handle `cond` selects at construction, so it can be found by that handle.                                                                                                                                                                                                                                                           |
+| `Identity{}`, `Permute{permutation}`                       | Pass Funcs (and their port names) through unchanged / reordered. Both are lossless.                                                                                                                                                                                                                                                                 |
+| `Pointwise{...}`                                           | Elementwise `out(vs) = fn(in(vs))`; the output Funcs are named `name + "_encode"` and `name + "_decode"` (the four-argument constructors choose both names and the pure Var prefix). `with_types`, `with_ranges`, `with_lossless` and `with_error_bound` declare the signature, precondition and guarantee ranges, losslessness and an error bound. |
+| `BlockReshape`                                             | Flat row to fixed-size records; lossless.                                                                                                                                                                                                                                                                                                           |
+| `StructLayout`                                             | Logical Funcs to a struct-typed record Func, one field each; lossless.                                                                                                                                                                                                                                                                              |
+| `LittleEndianScalarPack<Word>`                             | A word per record to and from a leading byte dimension; lossless.                                                                                                                                                                                                                                                                                   |
+| `PlanarFieldPack`                                          | Fixed-width fields packed into bytes; lossless for inputs in its declared range.                                                                                                                                                                                                                                                                    |
 
-A four-bit scheme, built from these, reads inside-out in the order `encode` runs
-it: reshape to blocks, quantize, then shift the codes to `[0, 15]` and pack
-them.
+A four-bit scheme, built from these and a quantizer of your own (`quant`, here
+one whose codes are declared to lie in `[-8, 7]`), reads in the order `encode`
+runs it: reshape to blocks, quantize, then shift the codes to `[0, 15]` (the
+`offset` above) and pack them.
 
 ```cpp
 Approximation pack = PlanarFieldPack{4, 8};
-Approximation offset = AdditiveOffset<int8_t, uint8_t>{8};
-Approximation quant = SymmetricBlockQuantize{
-    16, 8, BlockRoundingMode::TruncateHalfUpWithOffset,
-    BlockScaleAnchor::ExtremeSignedValue};
 Approximation scheme = Compose{
     BlockReshape{16}, quant,
     Parallel{{"codes", Compose{offset, pack}}}};
@@ -288,10 +296,10 @@ never called.
 - *Named*: `Parallel{{"codes", a}, {"scale", b}}`. Each entry routes the one
   port of that name to its child. Ports not mentioned pass through unchanged, in
   place. A child's outputs replace its port in place, so a child may expand a
-  port into several on encode (`AdditiveRadixSplit`); the mirror collapses them
-  on decode, where the child must yield exactly one Func. A name that is missing
-  or ambiguous, or routed twice, is an error. Without input ports (no context)
-  the signature is unknown.
+  port into several on encode; the mirror collapses them on decode, where the
+  child must yield exactly one Func. A name that is missing or ambiguous, or
+  routed twice, is an error. Without input ports (no context) the signature is
+  unknown.
 
 `Parallel` is lossless iff all children are and declares no error bound. Its
 children appear in `describe()` and `check_ranges()`, and are traced like any
@@ -461,15 +469,16 @@ renders a stage's structure without running anything: one
 `name: type xN in [lo, hi]` (unset parts are left out), followed by the stage's
 children (`Compose`: encode order; `Parallel`: its children; `TrustedInverse`:
 encoder then decoder; `Choose`: the chosen stage), indented by two spaces and
-given the ports they would receive. For the four-bit scheme above:
+given the ports they would receive. For the four-bit scheme above (with the
+quantizer from lesson 25):
 
 ```
 Compose (values x1) -> (bytes: uint8 x2, scale: float32 x1)
   BlockReshape (values x1) -> (blocks x2)
-  SymmetricBlockQuantize (blocks: float32 x2) -> (codes: int8 x2 in [-8, 7], scale: float32 x1)
-  Parallel (codes: int8 x2 in [-8, 127], scale: float32 x1) -> (bytes: uint8 x2, scale: float32 x1)
-    Compose (codes: int8 x2 in [-8, 127]) -> (bytes: uint8 x2)
-      AdditiveOffset<signed char, unsigned char> (codes: int8 x2 in [-8, 127]) -> (codes: uint8 x2 in [0, 15])
+  Q4_0Quantizer (blocks: float32 x2) -> (codes: int8 x2 in [-8, 7], scale: float32 x1)
+  Parallel (codes: int8 x2 in [-8, 7], scale: float32 x1) -> (bytes: uint8 x2, scale: float32 x1)
+    Compose (codes: int8 x2 in [-8, 7]) -> (bytes: uint8 x2)
+      offset (codes: int8 x2 in [-8, 7]) -> (codes: uint8 x2 in [0, 15])
       PlanarFieldPack (codes x2 in [0, 15]) -> (bytes: uint8 x2)
 ```
 
@@ -784,10 +793,8 @@ back; it does not change how a pipeline you build yourself is scheduled.
   Ranges only flow through units that declare them, so unknown is common;
   unknown is reported, never assumed satisfied.
 - `error_bound()` and `lossless()` (see "Defining a unit") declare accuracy.
-  `SymmetricBlockQuantize` declares a bound for the scale anchors set by the
-  block's extreme value (`half a step` for round-to-nearest, `a full step` for
-  `TruncateHalfUpWithOffset`), and none for `MeanAbs` scales or `SignOnly`
-  codes.
+  `BlockQ8` above declares half a step; a unit that declares none is treated as
+  having no bound.
 
 Ranges are never enforced by `encode`/`decode`, so they cost nothing in
 generated code.
