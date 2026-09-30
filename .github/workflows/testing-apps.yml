@@ -1,0 +1,517 @@
+name: Apps
+
+# Builds and tests the apps in apps/ against an *installed* Halide. Each
+# platform's Halide is built and installed once by a builder job and shared
+# with the app jobs as an artifact, so no app job rebuilds Halide. A `changes`
+# job decides which app jobs a PR actually needs: changes to Halide itself run
+# everything, while changes confined to one app only run that app.
+
+on:
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+    paths-ignore:
+      - "doc/**"
+      - "**.md"
+      - "CODE_OF_CONDUCT.md"
+      - "LICENSE.txt"
+      - ".gitignore"
+      - ".gitattributes"
+      - ".gitmodules"
+      - ".lldbinit"
+      - ".gdbinit"
+      - ".git-blame-ignore-revs"
+      - ".github/**"
+      - "!.github/workflows/testing-apps.yml"
+      - ".claude/**"
+      - ".devcontainer/**"
+      - ".pre-commit-config.yaml"
+      - ".clang-format"
+      - ".clang-format-ignore"
+      - "**.clang-tidy"
+      - "codecov.yml"
+      - "Makefile"
+      - "Makefile.inc"
+      - "run-clang-format.sh"
+      - "run-clang-tidy.sh"
+      - "test/**"
+      - "tutorial/**"
+      - "tools/audit_test_labels.py"
+      - "tools/check_cmake_*.py"
+      - "tools/run-coverage.sh"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
+    name: Detect affected apps
+    runs-on: ubuntu-slim
+    outputs:
+      android: ${{ steps.detect.outputs.android }}
+      baremetal: ${{ steps.detect.outputs.baremetal }}
+      wasm: ${{ steps.detect.outputs.wasm }}
+      ios: ${{ steps.detect.outputs.ios }}
+      suite: ${{ steps.detect.outputs.suite }}
+      linux: ${{ steps.detect.outputs.linux }}
+      macos: ${{ steps.detect.outputs.macos }}
+      macos_matrix: ${{ steps.detect.outputs.macos_matrix }}
+    steps:
+      # The default pull_request checkout is the PR's merge commit, whose first
+      # parent is the base branch, so HEAD^1..HEAD is exactly the PR's diff.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      - name: Classify changed files
+        id: detect
+        run: |
+          android=false baremetal=false wasm=false ios=false suite=false core=false
+          while read -r f; do
+            case "$f" in
+              # Mirrors the workflow's paths-ignore: never affects any app.
+              doc/* | *.md | test/* | tutorial/* | .github/* | .claude/* | .devcontainer/* | \
+              tools/audit_test_labels.py | tools/check_cmake_*.py | tools/run-coverage.sh | \
+              Makefile | Makefile.inc | .clang-format* | *.clang-tidy | run-clang-*.sh | \
+              .pre-commit-config.yaml | codecov.yml | LICENSE.txt | .git* | .lldbinit | .gdbinit)
+                [[ "$f" == .github/workflows/testing-apps.yml ]] && core=true ;;
+              apps/HelloAndroid/*) android=true ;;
+              apps/HelloBaremetal/*) baremetal=true ;;
+              apps/HelloWasm/*) wasm=true ;;
+              apps/HelloiOS/*) ios=true ;;
+              apps/*) suite=true ;;
+              *) core=true ;;
+            esac
+          done < <(git diff --name-only HEAD^1 HEAD)
+
+          if [[ "$core" == true ]]; then
+            android=true baremetal=true wasm=true ios=true suite=true
+          fi
+
+          # The apps suite runs on both macOS arches; HelloiOS only on arm-64.
+          if [[ "$suite" == true ]]; then
+            macos_matrix='[{"runner":"macos-26","arch":"arm-64","python":"cpython-3.10.20-macos-aarch64-none"},{"runner":"macos-26-intel","arch":"x86-64","python":"3.10"}]'
+          elif [[ "$ios" == true ]]; then
+            macos_matrix='[{"runner":"macos-26","arch":"arm-64","python":"cpython-3.10.20-macos-aarch64-none"}]'
+          else
+            macos_matrix='[]'
+          fi
+
+          linux=false macos=false
+          [[ "$android$baremetal$wasm" == *true* ]] && linux=true
+          [[ "$ios$suite" == *true* ]] && macos=true
+
+          tee -a "$GITHUB_OUTPUT" <<EOF
+          android=$android
+          baremetal=$baremetal
+          wasm=$wasm
+          ios=$ios
+          suite=$suite
+          linux=$linux
+          macos=$macos
+          macos_matrix=$macos_matrix
+          EOF
+
+  # ---------------------------------------------------------------------------
+  # Builders: build and install Halide once per platform.
+
+  build-linux:
+    needs: changes
+    if: needs.changes.outputs.linux == 'true'
+    name: Build Halide (linux-x86-64)
+    runs-on: ubuntu-24.04
+    env:
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          cache-suffix: apps-linux-x86-64
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpng-dev libjpeg-dev
+
+      - name: Sync CI environment
+        run: |
+          uv sync --frozen --group ci-llvm-main --no-install-workspace
+          echo "${GITHUB_WORKSPACE}/.venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" >> "$GITHUB_ENV"
+
+      - name: Restore vcpkg binary cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ github.workspace }}/.vcpkg-cache
+          key: vcpkg-halide-ubuntu-24.04-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-ports/**', 'cmake/vcpkg-triplets/**') }}
+          restore-keys: vcpkg-halide-ubuntu-24.04-
+
+      - name: Create vcpkg binary cache directory
+        run: mkdir -p "$VCPKG_DEFAULT_BINARY_CACHE"
+
+      - name: Configure LLVM
+        run: echo "Halide_LLVM_ROOT=$(halide-llvm --prefix)" >> "$GITHUB_ENV"
+
+      - name: Configure CMake
+        run: >-
+          cmake --preset ci-linux-x86-64
+          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install"
+          -DWITH_TESTS=NO -DWITH_TUTORIALS=NO -DWITH_PYTHON_BINDINGS=NO
+
+      - name: Build and install Halide
+        run: cmake --build build --target install
+
+      # Tar the install tree so symlinks and permissions survive the artifact.
+      - name: Package install tree
+        run: tar -C "${{ github.workspace }}" -czf halide-install.tar.gz install
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: halide-install-linux-x86-64
+          path: halide-install.tar.gz
+          retention-days: 1
+
+  build-macos:
+    needs: changes
+    if: needs.changes.outputs.macos == 'true'
+    name: Build Halide (macos-${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.changes.outputs.macos_matrix) }}
+    env:
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          cache-suffix: apps-${{ matrix.python }}
+
+      # See the matching step in testing-macos.yml.
+      - name: Remove Homebrew libjpeg-turbo
+        if: matrix.arch == 'x86-64'
+        run: |
+          brew uninstall --ignore-dependencies --force jpeg-turbo || true
+          brew uninstall --ignore-dependencies --force jpeg || true
+
+      - name: Sync CI environment
+        run: |
+          uv sync --frozen --python '${{ matrix.python }}' --group ci-llvm-main --no-install-workspace
+          echo "${GITHUB_WORKSPACE}/.venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" >> "$GITHUB_ENV"
+
+      - name: Restore vcpkg binary cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ github.workspace }}/.vcpkg-cache
+          key: vcpkg-halide-${{ matrix.runner }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-ports/**', 'cmake/vcpkg-triplets/**') }}
+          restore-keys: vcpkg-halide-${{ matrix.runner }}-
+
+      - name: Create vcpkg binary cache directory
+        run: mkdir -p "$VCPKG_DEFAULT_BINARY_CACHE"
+
+      - name: Configure LLVM paths
+        run: echo "Halide_LLVM_ROOT=$(halide-llvm --prefix)" >> "$GITHUB_ENV"
+
+      - name: Configure CMake
+        run: >-
+          cmake --preset ci-macos-${{ matrix.arch }}
+          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install"
+          -DWITH_TESTS=NO -DWITH_TUTORIALS=NO
+
+      - name: Build and install Halide
+        run: cmake --build build --target install
+
+      - name: Package install tree
+        run: tar -C "${{ github.workspace }}" -czf halide-install.tar.gz install
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: halide-install-macos-${{ matrix.arch }}
+          path: halide-install.tar.gz
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  # Linux app jobs
+
+  android:
+    # GitHub's hosted ubuntu-24.04 image ships an Android SDK+NDK by default.
+    # The app builds a real APK via its own Gradle/CMake `externalNativeBuild`
+    # project; Halide's generators are built as a side effect of that same
+    # CMake configure (see app/src/main/cpp/CMakeLists.txt) against the
+    # installed Halide from build-linux.
+    needs: [ changes, build-linux ]
+    if: needs.changes.outputs.android == 'true'
+    name: HelloAndroid app
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: halide-install-linux-x86-64
+
+      - name: Unpack Halide
+        run: tar -C "${{ github.workspace }}" -xzf halide-install.tar.gz
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Point Gradle at a CMake >= 3.28
+        # AGP's own bundled/SDK-managed CMake package defaults to an older
+        # version than Halide's CMake floor; point it at the system CMake
+        # via the documented `cmake.dir` local.properties key instead.
+        run: |
+          cmake_dir="$(dirname "$(dirname "$(command -v cmake)")")"
+          echo "cmake.dir=${cmake_dir}" | tee apps/HelloAndroid/local.properties
+
+      - name: Build HelloAndroid
+        working-directory: apps/HelloAndroid
+        run: ./gradlew assembleDebug "-PHalide_ROOT=${{ github.workspace }}/install"
+
+      - name: Enable KVM group perms (required by the emulator)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # A build-only check can't catch bugs like a missing runtime permission
+      # request or native buffer handling -- those only show up once the app
+      # actually runs and tries to open the camera. x86_64 (not arm64-v8a) so
+      # the emulator gets KVM hardware acceleration on these x86_64 runners.
+      - name: Run smoke tests on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: default
+          arch: x86_64
+          profile: pixel_6
+          emulator-options: >-
+            -no-window -gpu swiftshader_indirect -no-snapshot -noaudio
+            -no-boot-anim -camera-back emulated -camera-front emulated
+          disable-animations: true
+          # android-emulator-runner's `script` input splits on newlines and
+          # runs each line as its own independent `sh -c` command -- it does
+          # NOT honor `\` line-continuation across lines -- so each invocation
+          # below must stay on a single line.
+          script: |
+            apps/HelloAndroid/android_smoke_test.sh apps/HelloAndroid/app/build/outputs/apk/debug/app-debug.apk com.example.helloandroid .CameraActivity android.permission.CAMERA
+
+  baremetal:
+    # Needs an arm-none-eabi cross toolchain and QEMU's Arm system emulator.
+    # Actually cross-compiles and runs all three documented build methods
+    # (see apps/HelloBaremetal/README.md) under QEMU with semihosting, rather
+    # than only checking that they build for host.
+    needs: [ changes, build-linux ]
+    if: needs.changes.outputs.baremetal == 'true'
+    name: HelloBaremetal apps
+    runs-on: ubuntu-24.04
+    env:
+      CMAKE_PREFIX_PATH: ${{ github.workspace }}/install
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: halide-install-linux-x86-64
+
+      - name: Unpack Halide
+        run: tar -C "${{ github.workspace }}" -xzf halide-install.tar.gz
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpng-dev libjpeg-dev gcc-arm-none-eabi qemu-system-arm
+
+      - name: Build HelloBaremetal (host target)
+        working-directory: apps/HelloBaremetal
+        run: |
+          for method in cmake-twice cmake-super_build cmake-external_project; do
+            cmake -S "$method" -B "$method/build"
+            cmake --build "$method/build"
+          done
+
+      # build.sh cross-compiles each method for the bare-metal Arm target,
+      # then ctest runs the result under QEMU with semihosting.
+      - name: Build and run HelloBaremetal (bare-metal cross-compile under QEMU)
+        working-directory: apps/HelloBaremetal
+        run: |
+          declare -A test_dir=(
+            [cmake-twice]=build-target
+            [cmake-super_build]=build/app
+            [cmake-external_project]=build
+          )
+          for method in cmake-twice cmake-super_build cmake-external_project; do
+            ( cd "$method" && ./build.sh )
+            ctest --test-dir "$method/${test_dir[$method]}" --output-on-failure
+          done
+
+  wasm:
+    # The wasm target is host-agnostic, so HelloWasm only needs to run once,
+    # and a Linux runner is the cheapest place to do it.
+    needs: [ changes, build-linux ]
+    if: needs.changes.outputs.wasm == 'true'
+    name: HelloWasm app
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: halide-install-linux-x86-64
+
+      - name: Unpack Halide
+        run: tar -C "${{ github.workspace }}" -xzf halide-install.tar.gz
+
+      - name: Install Emscripten
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          "$RUNNER_TEMP/emsdk/emsdk" install latest
+          "$RUNNER_TEMP/emsdk/emsdk" activate latest
+          echo "EMSDK=$RUNNER_TEMP/emsdk" >> "$GITHUB_ENV"
+
+      # HelloWasm is a super-build (not add_subdirectory()'d from apps/), so it
+      # gets its own configure/build/test.
+      - name: Configure HelloWasm
+        working-directory: apps/HelloWasm
+        run: cmake -S . -B build -DCMAKE_PREFIX_PATH="${{ github.workspace }}/install"
+
+      - name: Build and test HelloWasm
+        working-directory: apps/HelloWasm
+        run: |
+          cmake --build build
+          ctest --test-dir build --output-on-failure
+
+  # ---------------------------------------------------------------------------
+  # macOS app jobs
+
+  suite:
+    needs: [ changes, build-macos ]
+    if: needs.changes.outputs.suite == 'true'
+    name: apps suite (macos-${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.changes.outputs.macos_matrix) }}
+    env:
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: halide-install-macos-${{ matrix.arch }}
+
+      - name: Unpack Halide
+        run: tar -C "${{ github.workspace }}" -xzf halide-install.tar.gz
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          cache-suffix: apps-${{ matrix.python }}
+
+      # See the matching step in testing-macos.yml.
+      - name: Remove Homebrew libjpeg-turbo
+        if: matrix.arch == 'x86-64'
+        run: |
+          brew uninstall --ignore-dependencies --force jpeg-turbo || true
+          brew uninstall --ignore-dependencies --force jpeg || true
+
+      # Some apps (e.g. onnx) need Python and LLVM tooling from the CI env.
+      - name: Sync CI environment
+        run: |
+          uv sync --frozen --python '${{ matrix.python }}' --group ci-llvm-main --no-install-workspace
+          echo "${GITHUB_WORKSPACE}/.venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=${GITHUB_WORKSPACE}/.venv" >> "$GITHUB_ENV"
+
+      - name: Restore vcpkg binary cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: vcpkg-apps-${{ matrix.runner }}-${{ hashFiles('apps/vcpkg.json', 'apps/vcpkg-configuration.json', 'apps/vcpkg/**') }}
+          restore-keys: vcpkg-apps-${{ matrix.runner }}-
+
+      - name: Create vcpkg binary cache directory
+        run: mkdir -p "$VCPKG_DEFAULT_BINARY_CACHE"
+
+      - name: Configure apps (host)
+        run: >-
+          cmake -S apps -B apps-build
+          -G Ninja
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DCMAKE_PREFIX_PATH="${{ github.workspace }}/install"
+          -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          -DHalide_TARGET=host
+          -DENABLE_APPS_HANNK=${{ matrix.arch == 'arm-64' && 'ON' || 'OFF' }}
+
+      - name: Build apps (host)
+        run: cmake --build apps-build
+
+      - name: Test apps (host)
+        run: >-
+          ctest --test-dir apps-build --build-config RelWithDebInfo
+          --output-on-failure -LE slow_tests --timeout 3600
+
+      # Real GPU testing on hosted Apple Silicon runners. arm-64 only --
+      # GitHub's Intel macOS runners have a GPU too weak for this workload.
+      - name: Configure apps (host-metal)
+        if: matrix.arch == 'arm-64'
+        run: >-
+          cmake -S apps -B apps-build
+          -G Ninja
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DCMAKE_PREFIX_PATH="${{ github.workspace }}/install"
+          -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          -DHalide_TARGET=host-metal
+          -DENABLE_APPS_HANNK=ON
+
+      - name: Build apps (host-metal)
+        if: matrix.arch == 'arm-64'
+        run: cmake --build apps-build
+
+      - name: Test apps (host-metal)
+        if: matrix.arch == 'arm-64'
+        run: >-
+          ctest --test-dir apps-build --build-config RelWithDebInfo
+          --output-on-failure -LE slow_tests --timeout 3600
+
+  ios:
+    needs: [ changes, build-macos ]
+    if: needs.changes.outputs.ios == 'true'
+    name: HelloiOS app
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: halide-install-macos-arm-64
+
+      - name: Unpack Halide
+        run: tar -C "${{ github.workspace }}" -xzf halide-install.tar.gz
+
+      - name: Configure HelloiOS
+        working-directory: apps/HelloiOS
+        run: ./setup.sh
+        env:
+          Halide_ROOT: ${{ github.workspace }}/install
+
+      - name: Build HelloiOS
+        working-directory: apps/HelloiOS
+        run: >-
+          xcodebuild -workspace HelloiOS.xcworkspace
+          -scheme HelloiOS
+          -configuration Debug
+          -destination 'generic/platform=iOS Simulator'
+          build

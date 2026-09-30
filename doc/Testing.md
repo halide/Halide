@@ -26,6 +26,23 @@ the directory name. Thus, one can use `ctest -L generator` to run only the
 `generator` tests. The `performance` tests configure CTest to not run them
 concurrently with other tests (including each other).
 
+Two additional labels let CI avoid running identical tests more than once:
+
+- `target_independent`: the test's result does not depend on `HL_TARGET` or
+  `HL_JIT_TARGET` (it may still depend on the host and LLVM version). CI runs
+  these once per job rather than once per target.
+- `llvm_independent`: a `target_independent` test that never invokes LLVM code
+  generation. CI runs these on one LLVM version only.
+
+These are added as extra `GROUPS` on the test's declaration, e.g.
+`tests(GROUPS correctness target_independent llvm_independent SOURCES ...)`, so
+each directory's source lists are partitioned by label set. AOT tests (e.g.
+`generator`) must never get them, since their target is fixed at build time.
+Verify any change with `tools/audit_test_labels.py --build-dir build`, which
+runs the audited tests with a poisoned target and checks that `llvm_independent`
+tests never log the `llvm-entry` debug tag
+(`HL_DEBUG_CODEGEN=0;tag:llvm-entry`).
+
 The vast majority of our tests are simple C++ executables that link to Halide,
 perform some checks, and print the special line `Success!` upon successful
 completion. There are three main exceptions to this:

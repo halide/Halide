@@ -5,7 +5,6 @@ on:
     types: [ opened, synchronize, reopened ]
     paths-ignore:
       - "doc/**"
-      - "README.md"
       - "CODE_OF_CONDUCT.md"
       - "LICENSE.txt"
       - ".gitignore"
@@ -19,6 +18,24 @@ on:
       - "Makefile.inc"
       - 'run-clang-tidy.sh'
       - '**.clang-tidy'
+      - "**.md"
+      - ".claude/**"
+      - ".devcontainer/**"
+      - ".pre-commit-config.yaml"
+      - ".clang-format"
+      - ".clang-format-ignore"
+      - "run-clang-format.sh"
+      - ".git-blame-ignore-revs"
+      - ".gdbinit"
+      - "tools/audit_test_labels.py"
+      - "tools/check_cmake_*.py"
+      # Apps are tested by testing-apps.yml; test/integration by testing-ecosystem.yml.
+      - "apps/**"
+      - "test/integration/**"
+      - "codecov.yml"
+      - "tools/run-coverage.sh"
+      # Python bindings are disabled in this workflow's CI presets.
+      - "python_bindings/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -49,6 +66,24 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: astral-sh/setup-uv@v7
+        with:
+          # Per-configuration key: jobs otherwise share one key and the first
+          # to save wins, so source-built wheels (e.g. i686) are never reused.
+          cache-suffix: ${{ matrix.python }}-${{ matrix.uv_group }}
+
+      # vcpkg otherwise rebuilds every dependency (wabt, flatbuffers, ...) on
+      # each run. Its ABI hashes make stale archives harmless cache misses.
+      - name: Set up vcpkg binary cache directory
+        run: |
+          echo "VCPKG_DEFAULT_BINARY_CACHE=${RUNNER_TEMP}/vcpkg-archives" >> "$GITHUB_ENV"
+          mkdir -p "${RUNNER_TEMP}/vcpkg-archives"
+
+      - name: Restore vcpkg binary cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/vcpkg-archives
+          key: vcpkg-${{ github.job }}-${{ matrix.bits }}${{ matrix.arch }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-ports/**', 'cmake/vcpkg-triplets/**') }}
+          restore-keys: vcpkg-${{ github.job }}-${{ matrix.bits }}${{ matrix.arch }}-
 
       - name: Install system dependencies
         run: |
@@ -105,25 +140,39 @@ jobs:
           echo "HAS_SVE2=$([[ "$HOST_TARGET" == *sve2* ]] && echo true || echo false)" >> "$GITHUB_ENV"
           echo "Detected host target: ${HOST_TARGET}"
 
+      # See doc/Testing.md for the meaning of the labels used to skip redundant
+      # tests. Which target step
+      # runs first varies (host is skipped without SVE2), so every step marks
+      # target-independent tests as done.
+      - name: Configure test filters
+        run: |
+          exclude="performance"
+          if [[ "${{ matrix.uv_group }}" != "ci-llvm-main" ]]; then
+            exclude+="|fuzz|llvm_independent"
+          fi
+          echo "CTEST_EXCLUDE=${exclude}" >> "$GITHUB_ENV"
+
       - name: Test (host)
         if: matrix.bits == '32' || env.HAS_SVE2 == 'true'
         run: |
           cmake -S . -B build -DHalide_TARGET=host
           cmake --build build
-          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -LE performance -j "$(nproc)"
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -LE "${CTEST_EXCLUDE}" -j "$(nproc)"
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -L performance --repeat until-pass:5
+          [[ "${CTEST_EXCLUDE}" == *target_independent* ]] || echo "CTEST_EXCLUDE=${CTEST_EXCLUDE}|target_independent" >> "$GITHUB_ENV"
 
       - name: Test (NEON)
         if: matrix.bits == '64'
         run: |
           cmake -S . -B build -DHalide_TARGET=arm-64-linux-arm_dot_prod-arm_fp16
           cmake --build build
-          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -LE performance -j "$(nproc)"
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -LE "${CTEST_EXCLUDE}" -j "$(nproc)"
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -L performance --repeat until-pass:5
+          [[ "${CTEST_EXCLUDE}" == *target_independent* ]] || echo "CTEST_EXCLUDE=${CTEST_EXCLUDE}|target_independent" >> "$GITHUB_ENV"
 
       - name: Test (no extensions)
         run: |
           cmake -S . -B build -DHalide_TARGET=cmake
           cmake --build build
-          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -LE performance -j "$(nproc)"
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -LE "${CTEST_EXCLUDE}" -j "$(nproc)"
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -L performance --repeat until-pass:5
