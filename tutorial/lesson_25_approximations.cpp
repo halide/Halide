@@ -159,32 +159,101 @@ void part1_a_tiny_approximation() {
 // steps, each of which is an Approximation of its own. Compose takes them
 // in the order encode runs them, and decode runs them backwards:
 //
-//   BlockReshape{32}                  flat floats -> (within, block)
-//   SymmetricBlockQuantize            (within, block) -> int8 codes, fp32 scale
-//   AdditiveOffset<int8_t, uint8_t>   codes [-8, 7] -> nibbles [0, 15]
-//   PlanarFieldPack{4, 16}            nibbles -> 16 bytes, with element j in
-//                                     the low half of byte j and element j+16
-//                                     in the high half
-//   StorageCast<float, float16_t>     fp32 scale -> fp16 scale
-//   StructLayout                      {qs, d} -> one 18-byte record
+//   BlockReshape{32}        flat floats -> (within, block)
+//   Q4_0Quantizer           (within, block) -> int8 codes [-8, 7], fp32 scale
+//   offset                  codes [-8, 7] -> nibbles [0, 15]
+//   PlanarFieldPack{4, 16}  nibbles -> 16 bytes, with element j in the low
+//                           half of byte j and element j+16 in the high half
+//   fp16                    fp32 scale -> fp16 scale
+//   StructLayout            {qs, d} -> one 18-byte record
 //
-// Q4_0's choices map onto SymmetricBlockQuantize's parameters like so:
-//   qmax = 8           the scale is  max / -8
-//   ExtremeSignedValue the scale is anchored on the signed element of largest
-//                      magnitude (not on |max|), so that element is exactly -8
-//   TruncateHalfUpWithOffset
-//                      code = min(15, (int8_t)(x/d + 8.5)) - 8
+// Everything but the quantizer is generic. The quantizer is where Q4_0's
+// arithmetic lives, and it is ordinary client code: a struct with an encode
+// and a decode method (and, optionally, declarations about itself), which
+// converts implicitly to an Approximation.
 // ----------------------------------------------------------------------------
+
+struct Q4_0Quantizer {
+    // Encode makes both the codes and the scale, so it takes and returns
+    // vectors of Funcs.
+    std::vector<Func> encode(const std::vector<Func> &in) const {
+        Func blocks = in[0];
+        Var j("j"), b("b");
+
+        // The signed element of largest magnitude in each block. The first
+        // one wins ties, so the comparison is strict.
+        RDom r(0, QK4_0);
+        Func extreme("extreme");
+        extreme(b) = Tuple(0.0f, 0.0f);
+        Expr v = blocks(r, b);
+        Expr bigger = abs(v) > extreme(b)[0];
+        extreme(b) = Tuple(select(bigger, abs(v), extreme(b)[0]),
+                           select(bigger, v, extreme(b)[1]));
+
+        Func scale("scale"), codes("codes");
+        scale(b) = extreme(b)[1] / -8.0f;
+        Expr inv_scale = select(scale(b) != 0.0f, 1.0f / scale(b), 0.0f);
+        // One add of 8.5f, as in GGML: (int8_t)(x * id + 8.5f).
+        Expr biased = cast<int8_t>(blocks(j, b) * inv_scale + 8.5f);
+        codes(j, b) = min(biased, cast<int8_t>(15)) - 8;
+        return {codes, scale};
+    }
+
+    std::vector<Func> decode(const std::vector<Func> &encoded) const {
+        Func codes = encoded[0], scale = encoded[1];
+        Var j("j"), b("b");
+        Func values("values");
+        values(j, b) = codes(j, b) * scale(b);
+        return {values};
+    }
+
+    // Optional: the types and dimensions of the ports, and a guarantee about
+    // the codes. Later stages' preconditions are checked against it.
+    ApproximationSignature signature() const {
+        return {{{"blocks", Float(32), 2}},
+                {{"codes", Int(8), 2, ApproximationRange(-8, 7)},
+                 {"scale", Float(32), 1}}};
+    }
+
+    // Optional: |decode(encode(x)) - x| is at most one step (the top code is
+    // clamped: a value that scales to +8 becomes 7), plus slack for rounding.
+    Func error_bound(const std::vector<Func> &, const std::vector<Func> &encoded) const {
+        Var j("j"), b("b");
+        Func bound("bound");
+        bound(j, b) = abs(cast<double>(encoded[1](b))) * Expr(1.0001);
+        return bound;
+    }
+};
+
+// Pointwise units are elementwise conversions, written inline. This one
+// shifts the signed codes into the unsigned nibbles that PlanarFieldPack packs.
+// The declarations are optional: the types are checked, the input range is a
+// precondition for being lossless, and the output range is a guarantee.
+Pointwise make_offset() {
+    return Pointwise{"offset",
+                     [](Expr x) { return cast<uint8_t>(x + 8); },
+                     [](Expr x) { return cast<int8_t>(cast<int>(x) - 8); }}
+        .with_types(Int(8), UInt(8))
+        .with_ranges(ApproximationRange(-8, 7), ApproximationRange(0, 15))
+        .with_lossless();
+}
+
+// Likewise, a cast: the fp32 scale is stored as fp16.
+Pointwise make_fp16() {
+    return Pointwise{"fp16",
+                     [](Expr x) { return cast<float16_t>(x); },
+                     [](Expr x) { return cast<float>(x); }}
+        .with_types(Float(32), Float(16));
+}
 
 // A scheme is found again later (to schedule it, or to read back one of its
 // intermediate values) through the handles of the stages it was built from, so
 // we keep the interesting ones around next to the finished scheme.
 struct Q4_0 {
+    Approximation quantize = Q4_0Quantizer{};
+    Approximation offset = Approximation(make_offset(), "offset");
     Approximation pack = PlanarFieldPack{4, QK4_0 / 2};
-    Approximation offset = AdditiveOffset<int8_t, uint8_t>{8};
-    Approximation quantize = SymmetricBlockQuantize{
-        QK4_0, 8, BlockRoundingMode::TruncateHalfUpWithOffset,
-        BlockScaleAnchor::ExtremeSignedValue};
+    Approximation fp16 = Approximation(make_fp16(), "fp16");
 
     // block_q4_0, as a Halide struct type. Its size is 18 bytes, and it has
     // the same layout as the C++ struct above.
@@ -200,7 +269,7 @@ struct Q4_0 {
         BlockReshape{QK4_0},
         quantize,
         Parallel{{"codes", Compose{offset, pack}},
-                 {"scale", StorageCast<float, float16_t>{}}},
+                 {"scale", fp16}},
         StructLayout{block_type(), {"qs", "d"}}};
 };
 
@@ -238,12 +307,12 @@ int main() {
     //
     // Compose (values x1) -> (record: struct{d: float16, qs: uint8[16]} x1)
     //   BlockReshape (values x1) -> (blocks x2)
-    //   SymmetricBlockQuantize (blocks: float32 x2) -> (codes: int8 x2 in [-8, 7], scale: float32 x1)
-    //   Parallel (codes: int8 x2 in [-8, 127], scale: float32 x1) -> (bytes: uint8 x2, scale: float16 x1)
-    //     Compose (codes: int8 x2 in [-8, 127]) -> (bytes: uint8 x2)
-    //       AdditiveOffset<signed char, unsigned char> (codes: int8 x2 in [-8, 127]) -> (codes: uint8 x2 in [0, 15])
+    //   Q4_0Quantizer (blocks: float32 x2) -> (codes: int8 x2 in [-8, 7], scale: float32 x1)
+    //   Parallel (codes: int8 x2 in [-8, 7], scale: float32 x1) -> (bytes: uint8 x2, scale: float16 x1)
+    //     Compose (codes: int8 x2 in [-8, 7]) -> (bytes: uint8 x2)
+    //       offset (codes: int8 x2 in [-8, 7]) -> (codes: uint8 x2 in [0, 15])
     //       PlanarFieldPack (codes x2 in [0, 15]) -> (bytes: uint8 x2)
-    //     StorageCast<float, float16_t> (scale: float32 x1) -> (scale: float16 x1)
+    //     fp16 (scale: float32 x1) -> (scale: float16 x1)
     //   StructLayout (bytes: uint8 x2, scale: float16 x1) -> (record: struct{d: float16, qs: uint8[16]} x1)
     std::cout << q4_0 << "\n";
     ApproximationResult approx = weights.approximate_by(q4_0, {dot});
@@ -252,12 +321,12 @@ int main() {
     // Funcs each one produced and their helper Funcs, e.g.:
     //
     // encode:
-    //   SymmetricBlockQuantize -> codes=symmetric_quantize_codes, scale=symmetric_quantize_scale
-    //     intermediates: symmetric_quantize_stat, symmetric_quantize_reciprocal
+    //   Q4_0Quantizer -> codes=codes, scale=scale
+    //     intermediates: extreme
     //   ...
 
     // Anything with an update definition (like the per-block search for the
-    // largest element) or that is the boundary between two stages is an
+    // largest element, `extreme`) or that is the boundary between two stages is an
     // ordinary Func. Here, we compute those at root. The rest are pure, and
     // get inlined into their consumers.
     for (Func f : approx.intermediates) {
