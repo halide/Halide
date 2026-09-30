@@ -450,6 +450,7 @@ SOURCE_FILES = \
   AlignLoads.cpp \
   AllocationBoundsInference.cpp \
   ApplySplit.cpp \
+  Approximation.cpp \
   Argument.cpp \
   AssociativeOpsTable.cpp \
   Associativity.cpp \
@@ -656,6 +657,7 @@ HEADER_FILES = \
   AlignLoads.h \
   AllocationBoundsInference.h \
   ApplySplit.h \
+  Approximation.h \
   Argument.h \
   AssociativeOpsTable.h \
   Associativity.h \
@@ -2459,6 +2461,7 @@ install: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR
 	cp $(ROOT_DIR)/tools/RunGenMain.cpp $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/halide_image.h $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/halide_image_io.h $(PREFIX)/share/halide/tools
+	cp $(ROOT_DIR)/tools/halide_approximation_testing.h $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/halide_malloc_trace.h $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/halide_thread_pool.h $(PREFIX)/share/halide/tools
