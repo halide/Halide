@@ -52,6 +52,32 @@ int main() {
         }
     }
 
+    // A prefetch of an ImageParam, which is an external parameter.
+    {
+        ImageParam input(Int(32), 2, "input");
+        Func f("f");
+        f(x, y) = input(x, y) * 2;
+        f.prefetch(input, y, y, 2);
+
+        std::vector<uint8_t> data;
+        std::map<std::string, Parameter> params;
+        serialize_pipeline(Pipeline(f), data, params);
+        Pipeline deserialized = deserialize_pipeline(data, params);
+
+        Buffer<int> in(4, 4);
+        in.fill(3);
+        input.set(in);
+        Buffer<int> result = deserialized.realize({4, 4});
+        for (int j = 0; j < 4; j++) {
+            for (int i = 0; i < 4; i++) {
+                if (result(i, j) != 6) {
+                    printf("Mismatch at (%d, %d): expected 6, got %d\n", i, j, result(i, j));
+                    return 1;
+                }
+            }
+        }
+    }
+
     // A corrupted buffer is still rejected: raising max_depth must not
     // disable the structural verification #9395 added.
     {
