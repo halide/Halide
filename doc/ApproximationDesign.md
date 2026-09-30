@@ -469,6 +469,59 @@ the static `Input<>`/`Output<>` member style used elsewhere in this repo doesn't
 need. Revisiting this ergonomics gap is out of scope until the rest of this
 design is validated.
 
+## Verification
+
+`ApproximationTesting.h` (namespace `Halide::ApproximationTesting`, part of
+`Halide.h`) checks what a scheme claims. It is a test-time helper: nothing is
+added to the generated pipelines.
+
+**Declared facts.** A port may carry a value range,
+`ApproximationPort::range = {lo, hi}` (constant bounds, exact up to 2^53; no
+ranges for 64-bit integers). On an encode *input* it is a precondition: the
+values the stage needs for its properties to hold (e.g. `PlanarFieldPack` with
+4-bit fields needs `[0, 15]`). On an encode *output* it is a guarantee (e.g.
+symmetric int8 codes lie in `[-127, 127]`). `describe()` prints ranges and flags
+a producer whose range is not within its consumer's precondition
+(`[0, 16] not within [0, 15]`), or whose range is unknown; `check_ranges()`
+returns the same diagnostics. A unit may also provide
+`error_bound(inputs, encoded)`, a per-element bound on
+`|decode(encode(x)) - x|`, or `bool lossless()`, meaning bound 0 when the input
+preconditions hold. `Approximation::error_bound()` turns `lossless()` into a
+zero bound. A `Compose` is lossless iff all its stages are, and otherwise
+declares no bound. Ranges are never enforced by encode/decode.
+
+**Generators.** A `Distribution` (`uniform`, `uniform_int`, `normal`,
+`constant`, and the adversarial `zeros`, `blockwise_constant`, `outliers`,
+`extremes`, `special_floats`, plus `mixture`) generates a `Buffer` from a
+`uint64_t` seed with a built-in xoshiro256\*\* PRNG, so data is identical on
+every platform. Blocks run along the flattened buffer, dim 0 fastest. `mixture`
+picks a component per block (`block = 1`: per element).
+
+**Round trips.** `verify_round_trip` returns a `RoundTripReport` (error
+statistics, worst coordinate, violations of the declared bound, seed and
+distribution). Relative error is `|y - x| / max(|x|, floor)`.
+
+**Properties.** `lossless`, `bounded_error`, `within_declared_bound`,
+`idempotent_requantize`, `zero_preserving`, `sign_preserving`, and
+`outputs_within_declared_ranges` are checked by `check_property` over seeded
+trials; trial `i` uses `derive_seed(seed, i)` with trial 0 using `seed`, so
+`trials = 1, seed = failing_seed` reproduces a failure. By default inputs are
+drawn from the root's declared ranges. The values entering the checked stage are
+compared with its input ranges; a violation fails the trial as "precondition not
+met" without running the property (turn this off with
+`PropertyOptions::check_preconditions = false` to see the property fail).
+
+**Conditioning on upstream guarantees.** `prop.at(stage)` runs the whole scheme
+on generated inputs, takes the values that actually arrive at `stage`'s encode
+inputs, and checks the property for that stage alone on them. This shows whether
+an upstream quantizer really establishes the precondition of a packing stage
+below it.
+
+**Mechanics.** Stage-boundary values are read back by tracing stores of those
+Funcs (JIT custom trace handler) rather than by realizing them, since their
+extents are inferred from the consumers. Each run is a full round trip;
+idempotence re-runs it on the decoded values in a separate pipeline.
+
 ## Summary of decisions and open items
 
 | Item                                                                                        | Status                                                                                                                           |
