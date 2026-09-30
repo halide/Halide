@@ -1,0 +1,27 @@
+EXPORTS
+	?compile_to_bitcode@Func@Halide@@QAEXABV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@ABV?$vector@VArgument@Halide@@V?$allocator@VArgument@Halide@@@std@@@4@0ABVTarget@2@@Z
+	?name@Func@Halide@@QBEABV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@XZ
+	??0Func@Halide@@QAE@ABV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@@Z
+	?const_true@Halide@@YA?AVExpr@1@H@Z
+	??$make_const@H@Internal@Halide@@YA?AVExpr@1@VType@1@H@Z
+	??0?$IntrusivePtr@VBaseExprNode@Internal@Halide@@@Internal@Halide@@QAE@XZ
+	??1?$IntrusivePtr@VBaseExprNode@Internal@Halide@@@Internal@Halide@@QAE@XZ
+	??_7?$_Func_impl_no_alloc@V<lambda_1>@?0??foo@Halide@@YAXXZ@XH@std@@6B@
+	??_G?$_Func_impl_no_alloc@P6AXH@ZXH@std@@UAEPAXI@Z
+	??_7Error@Halide@@6B@
+	??_R0?AVError@Halide@@@8
+	?global_table@Internal@Halide@@3PAHA	 DATA
+	?instances@?$Registry@VFoo@Halide@@@Internal@Halide@@2V?$vector@PAVFoo@Halide@@V?$allocator@PAVFoo@Halide@@@std@@@std@@A	 DATA
+	?free_helper@?A0x1234abcd@@YAXXZ
+	??$foo@V<lambda_1>@?0??bar@Halide@@YAXXZ@@std@@YAXXZ
+	?vec_size@Halide@@YAIABV?$vector@HV?$allocator@H@std@@@std@@@Z
+	?callback@Halide@@YAXP6AXABV?$vector@HV?$allocator@H@std@@@std@@@Z@Z
+	??$apply@P6AXH@Z@Halide@@YAXXZ
+	??$bar@$00@@Halide@@YAXXZ
+	??$baz@U?$array@H$01@@std@@@Halide@@YAXXZ
+	halide_malloc
+	halide_error
+	_halide_buffer_get_host
+	halide_pipeline_finalize	 DATA
+	main
+	?f@@YAXXZ
