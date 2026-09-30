@@ -29,24 +29,26 @@ remain on their affine/legacy paths.
 
 ## Target compositions
 
+`Compose` lists stages in encode order (innermost first).
+
 q4_0 faithful type: `{d: Float16, qs: UInt8[16]}`.
 
-1. `StructLayout`, logical `{qs, d}` to physical fields.
-2. `Apply` `StorageCast<Float32, Float16>` to `d`.
-3. `Apply` `PlanarFieldPack{4, 16}` to stored nibbles.
-4. `Apply` a reusable additive-offset component mapping signed codes to on-disk
-   `[0, 15]` values.
-5. `SymmetricBlockQuantize`, qmax 8, extreme-signed scale selection, and
+1. `BlockReshape{32}` with the requested row/block-indexed layout.
+2. `SymmetricAffineQuantize`, qmax 8, extreme-signed scale selection, and
    truncate-half-up-with-offset rounding.
-6. `BlockReshape{32}` with the requested row/block-indexed layout.
+3. `Parallel` on `codes`: an inline `Pointwise` additive offset
+   (`nibble_offset`) mapping signed codes to on-disk `[0, 15]` values, then
+   `PlanarFieldPack{4, 16}` for stored nibbles; and on `scale`: an inline
+   `Pointwise` storage cast (`fp16_storage`) from Float32 to Float16.
+4. `StructLayout`, logical `{qs, d}` to physical fields.
 
 q8_0 faithful type: `{d: Float16, qs: Int8[32]}`.
 
-1. `StructLayout`, logical `{qs, d}` to physical fields.
-2. `Apply` `StorageCast<Float32, Float16>` to `d`.
-3. `SymmetricBlockQuantize`, qmax 127, absolute-max scale selection, and nearest
-   rounding.
-4. `BlockReshape{32}` with the requested row/block-indexed layout.
+1. `BlockReshape{32}` with the requested row/block-indexed layout.
+2. `SymmetricAffineQuantize`, qmax 127, absolute-max scale selection, and
+   nearest rounding.
+3. `Parallel` on `scale`: `fp16_storage` (Float32 to Float16).
+4. `StructLayout`, logical `{qs, d}` to physical fields.
 
 The standalone q8_0 codecs and q8_0 weight path use the faithful core scheme.
 The shared activation ABI remains byte-addressed: a struct-typed experiment
@@ -95,7 +97,7 @@ All candidate correctness flags were true. Raw CSV files are in
 | #   | Change                                                                                                                              | Correctness                                               | GGML / Halide timings                                                                                 | Generated-code observations                                                                              | Decision                                         |
 | --- | ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
 | 0   | Completed q5_0 worktree baseline                                                                                                    | All filtered vec-dot checks passed                        | q4_0: 92.585 / 95.784 ns, 0.9666x; q8_0: 70.618 / 74.870 ns, 0.9432x                                  | Existing four-block SDOT paths are the generated-code reference                                          | Reference                                        |
-| 1   | Add core `AdditiveOffset` and compose faithful q4_0/q8_0 structs from public components                                             | Component composition and standalone q4_0/q8_0 tests pass | Ten-run probe: q4_0 94.177 / 96.975 ns, 0.9712x; q8_0 72.942 / 74.824 ns, 0.9748x                     | Core stages simplify to the existing signed-code SDOT inputs                                             | Keep                                             |
+| 1   | Add an inline `Pointwise` additive offset (`nibble_offset`) and compose faithful q4_0/q8_0 structs from public components           | Component composition and standalone q4_0/q8_0 tests pass | Ten-run probe: q4_0 94.177 / 96.975 ns, 0.9712x; q8_0 72.942 / 74.824 ns, 0.9748x                     | Core stages simplify to the existing signed-code SDOT inputs                                             | Keep                                             |
 | 2   | Use faithful struct q8_0 for the shared activation operand                                                                          | Correct, including q5_0                                   | Single sample moved absolute timings with core placement; paired ratios did not indicate a regression | Broadened input/load-shape changes across q4_0 and q5_0                                                  | Revert; keep the established byte activation ABI |
 | 3   | Share the traced weight and activation decode graphs between q4_0/q8_0 main and tail updates, eagerly inlining only the tail update | Standalone and odd-size tests pass                        | Ten-run probe: q4_0 96.039 / 99.147 ns, 0.9687x; q8_0 75.801 / 77.443 ns, 0.9788x                     | Removes duplicate tail Approximation graphs; main remains four-block SDOT and the remainder stays scalar | Keep                                             |
 | 4   | Full validation and ten final paired runs                                                                                           | `kernel-bench --all` clean; all paired flags true         | q4_0: 95.088 / 97.000 ns, 0.9803x; q8_0: 72.973 / 74.951 ns, 0.9736x                                  | Eight SDOTs/four blocks, paired 128-bit code loads, persistent accumulators, no accumulator spill        | Final                                            |
@@ -118,7 +120,7 @@ Negative deltas are improvements. Raw final CSV files are in
 ## Framework/compiler issues
 
 - No compiler change was needed. The simplifier folds q4_0's core
-  `AdditiveOffset` and `PlanarFieldPack` into the same mask/shift/vector-add
+  `nibble_offset` and `PlanarFieldPack` into the same mask/shift/vector-add
   operations consumed by SDOT, and q8_0's signed struct array lowers to direct
   128-bit loads.
 - A struct-typed q8_0 activation was correct but unnecessarily broadened load

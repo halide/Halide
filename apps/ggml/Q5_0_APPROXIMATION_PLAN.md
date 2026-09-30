@@ -24,13 +24,14 @@ and remain at least 0.90x GGML. q5_1 is explicitly unchanged transitional debt.
 
 - Add an opaque, copyable `ApproximationStageKey` to every Approximation
   instance.
-- Extend traced invocation through `Compose`, `Apply`, `TrustedInverse`, and
+- Extend traced invocation through `Compose`, `Parallel`, `TrustedInverse`, and
   `Func::approximate_by` so `ApproximationResult` resolves encoded and decoded
   outputs by `(StageKey, port)` while preserving flat `handles` and `encoded`.
 - Add public standard components in a dedicated header included by `Halide.h`:
-  `StructLayout`, `StorageCast`, `LittleEndianScalarPack`, `BinaryAlphabetPack`,
-  `AdditiveRadixSplit`, `PlanarFieldPack`, `BlockReshape`, and the symmetric
-  block quantizer/policies.
+  `StructLayout`, `LittleEndianScalarPack`, `PlanarFieldPack`, `BlockReshape`,
+  and an inline `Pointwise` storage cast. (`BinaryAlphabetPack`,
+  `AdditiveRadixSplit`, and the symmetric block quantizer/policies were later
+  moved into ggml's `quant_components.h`.)
 - Leave ggml compatibility aliases/wrappers so unrelated formats do not migrate.
 - Test nested combinators, repeated types with distinct keys, invalid lookups,
   encode/decode lookup, and component correctness, including one- and
@@ -40,18 +41,18 @@ and remain at least 0.90x GGML. q5_1 is explicitly unchanged transitional debt.
 
 Faithful packed type: `{d: Float16, qh: UInt8[4], qs: UInt8[16]}`.
 
-Outer to inner:
+In `Compose` encode order (innermost first):
 
-1. `StructLayout`, logical `{qs, qh, d}` to physical fields.
-2. `Apply` `StorageCast<Float32, Float16>` to `d`.
-3. `Apply` `LittleEndianScalarPack<UInt32>` to `qh`.
-4. `Apply` `BinaryAlphabetPack<int8_t>{32, UInt32, -16, 0}` to high
-   contributions.
-5. `Apply` `PlanarFieldPack{4, 16}` to low nibbles.
-6. `Apply` `AdditiveRadixSplit{16, 16}` to signed codes.
-7. Symmetric block quantization, qmax 16, extreme-signed scale selection,
+1. `BlockReshape{32, block_indexed}`.
+2. Symmetric block quantization, qmax 16, extreme-signed scale selection,
    truncate-half-up rounding.
-8. `BlockReshape{32, block_indexed}`.
+3. `Parallel` on `codes`: `AdditiveRadixSplit{16, 16}` splits signed codes into
+   `low` and `high`.
+4. `Parallel` on the resulting ports: `PlanarFieldPack{4, 16}` for `low`
+   nibbles; `BinaryAlphabetPack<int8_t>{32, UInt32, -16, 0}` then
+   `LittleEndianScalarPack<UInt32>` for `high` contributions; `fp16_storage`
+   (Float32 to Float16) for `scale`.
+5. `StructLayout`, logical `{qs, qh, d}` to physical fields.
 
 Capture stage keys for reconstructed signed codes (`AdditiveRadixSplit`) and the
 qh word (`LittleEndianScalarPack`), carry them through scheme metadata into
@@ -102,14 +103,14 @@ All candidate correctness flags were true. Raw CSV files are in
 
 ## Experiment log
 
-| #   | Change                                                                                                                | Correctness                                                                                        | GGML / Halide timings                                             | Generated-code observations                                                                                          | Decision  |
-| --- | --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | --------- |
-| 0   | Clean committed baseline                                                                                              | All filtered vec_dot checks passed                                                                 | q5_0: 122.172 / 130.259 ns, 0.9379x paired median                 | Existing q5_0 path is the generated-code reference                                                                   | Reference |
-| 1   | Add opaque stage keys and traces through Compose, Apply, TrustedInverse, and approximate_by                           | Nested/repeated/directional/invalid lookup tests pass                                              | Not performance-sensitive                                         | Flat encoded/handle compatibility retained                                                                           | Keep      |
-| 2   | Add public core components; move BlockReshape and symmetric quantization behind ggml compatibility alias/wrapper      | Focused component suite passes, including 1-D and 2-D StructLayout and inline StorageCast rounding | Not measured independently                                        | `strict_float` makes fp16 storage rounding survive eager inlining                                                    | Keep      |
-| 3   | Replace q5_0 legacy split-code composition with the eight reusable stages                                             | q5_0 quantize/dequantize/vec_dot pass                                                              | Focused q5_0 run: 117.7 / 126.2 ns in one sample                  | Faithful UInt8[4] qh lowers through concat_bits to a word load                                                       | Keep      |
-| 4   | Resolve codes/qh by stage key, stop sdot inlining by Func identity, and share/eager-inline the q5_0 tail decode graph | Odd n=32/96/160/224/1056 all pass                                                                  | Included in final medians                                         | Main loop has two blocks in flight, four SDOTs/pair, persistent vector accumulators; tail is scalar and fully inline | Keep      |
-| 5   | Full validation and ten final paired runs after the final StorageCast change                                          | `kernel-bench --all` clean; focused tests and odd sizes pass; all paired flags true                | q5_0: 122.147 / 130.645 ns, 0.9349x; baseline delta +0.30% Halide | One unaligned qh word load/block, contiguous LUT loads, no accumulator spill or one-iteration epilogue               | Final     |
+| #   | Change                                                                                                                                    | Correctness                                                                                              | GGML / Halide timings                                             | Generated-code observations                                                                                          | Decision  |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | --------- |
+| 0   | Clean committed baseline                                                                                                                  | All filtered vec_dot checks passed                                                                       | q5_0: 122.172 / 130.259 ns, 0.9379x paired median                 | Existing q5_0 path is the generated-code reference                                                                   | Reference |
+| 1   | Add opaque stage keys and traces through Compose, Parallel, TrustedInverse, and approximate_by                                            | Nested/repeated/directional/invalid lookup tests pass                                                    | Not performance-sensitive                                         | Flat encoded/handle compatibility retained                                                                           | Keep      |
+| 2   | Add public core components; move BlockReshape and symmetric quantization behind ggml compatibility alias/wrapper (since re-homed in ggml) | Focused component suite passes, including 1-D and 2-D StructLayout and inline fp16 storage-cast rounding | Not measured independently                                        | `strict_float` makes fp16 storage rounding survive eager inlining                                                    | Keep      |
+| 3   | Replace q5_0 legacy split-code composition with the eight reusable stages                                                                 | q5_0 quantize/dequantize/vec_dot pass                                                                    | Focused q5_0 run: 117.7 / 126.2 ns in one sample                  | Faithful UInt8[4] qh lowers through concat_bits to a word load                                                       | Keep      |
+| 4   | Resolve codes/qh by stage key, stop sdot inlining by Func identity, and share/eager-inline the q5_0 tail decode graph                     | Odd n=32/96/160/224/1056 all pass                                                                        | Included in final medians                                         | Main loop has two blocks in flight, four SDOTs/pair, persistent vector accumulators; tail is scalar and fully inline | Keep      |
+| 5   | Full validation and ten final paired runs after the final storage-cast change                                                             | `kernel-bench --all` clean; focused tests and odd sizes pass; all paired flags true                      | q5_0: 122.147 / 130.645 ns, 0.9349x; baseline delta +0.30% Halide | One unaligned qh word load/block, contiguous LUT loads, no accumulator spill or one-iteration epilogue               | Final     |
 
 ## Final paired results
 
@@ -136,10 +137,11 @@ Negative deltas are improvements. Raw final CSV files are in
 - Installing only the development component updates headers and GenGen but not
   the changed shared library; a full `cmake --install` was required before the
   standalone ggml generator could link the new stage lookup methods.
-- A plain fp32-to-fp16-to-fp32 cast chain can fuse away when fully inlined.
-  `StorageCast` uses `strict_float` on both conversions so storage rounding is
-  schedule-independent; its correctness test intentionally leaves the stage
-  inline. q5_0 also materializes the fp16 value in its packed struct field.
+- A plain fp32-to-fp16-to-fp32 cast chain can fuse away when fully inlined. The
+  fp16 storage cast (`fp16_storage`) uses `strict_float` on both conversions so
+  storage rounding is schedule-independent; its correctness test intentionally
+  leaves the stage inline. q5_0 also materializes the fp16 value in its packed
+  struct field.
 
 ## Final follow-up items
 
