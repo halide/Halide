@@ -68,6 +68,38 @@ struct Nibbles {
     }
 };
 
+// A cast to and from float16.
+Pointwise f16_storage() {
+    return Pointwise{"f16",
+                     [](Expr x) { return strict_float(cast<float16_t>(x)); },
+                     [](Expr x) { return strict_float(cast<float>(x)); }}
+        .with_types(Float(32), Float(16));
+}
+
+// (within, block) floats -> int8 codes and a float scale per block.
+struct AbsMaxQuantizer {
+    int block, qmax;
+    std::vector<Func> encode(const std::vector<Func> &in) const {
+        Var kk("kk"), blk("blk");
+        RDom r(0, block);
+        Func amax("absmax_stat"), scale("absmax_scale"), codes("absmax_codes");
+        amax(blk) = 0.0f;
+        amax(blk) = max(amax(blk), abs(in[0](r, blk)));
+        scale(blk) = amax(blk) / (float)qmax;
+        codes(kk, blk) = cast<int8_t>(round(in[0](kk, blk) / select(scale(blk) == 0.0f, 1.0f, scale(blk))));
+        return {codes, scale};
+    }
+    std::vector<Func> decode(const std::vector<Func> &encoded) const {
+        Var kk("kk"), blk("blk");
+        Func out("absmax_decoded");
+        out(kk, blk) = cast<float>(encoded[0](kk, blk)) * encoded[1](blk);
+        return {out};
+    }
+    ApproximationSignature signature() const {
+        return {{{"block", Float(32), 2}}, {{"codes", Int(8), 2}, {"scale", Float(32), 1}}};
+    }
+};
+
 Func source() {
     Var x("x");
     Func f("src");
@@ -94,7 +126,7 @@ int test_named() {
     Func f = source();
     Approximation scheme = Compose{Producer{},
                                    Parallel{{"codes", Nibbles{}},
-                                            {"scale", StorageCast<float, float16_t>{}}}};
+                                            {"scale", f16_storage()}}};
     EncodeResult e = scheme.encode({f});
     CHECK(names(e.encoded_ports) == Names({"lo", "hi", "scale"}));
     CHECK(e.encoded.size() == 3);
@@ -128,14 +160,14 @@ int test_named() {
 
 int test_positional() {
     Func f = source();
-    Approximation scheme = Compose{Producer{}, Parallel{Nibbles{}, StorageCast<float, float16_t>{}}};
+    Approximation scheme = Compose{Producer{}, Parallel{Nibbles{}, f16_storage()}};
     EncodeResult e = scheme.encode({f});
     CHECK(names(e.encoded_ports) == Names({"lo", "hi", "scale"}));
     CHECK(names(scheme.decode(e.encoded).decoded_ports) == Names({"values"}));
     CHECK(check_round_trip(scheme, e.encoded, e, f) == 0);
 
     // Identity passes one Func through; widths come from the signatures.
-    Approximation with_identity = Compose{Producer{}, Parallel{Identity{}, StorageCast<float, float16_t>{}}};
+    Approximation with_identity = Compose{Producer{}, Parallel{Identity{}, f16_storage()}};
     EncodeResult ie = with_identity.encode({f});
     CHECK(names(ie.encoded_ports) == Names({"codes", "scale"}));
     CHECK(check_round_trip(with_identity, ie.encoded, ie, f) == 0);
@@ -166,19 +198,21 @@ int test_errors() {
     return 0;
 }
 
-// Q4_0: BlockReshape, quantize, Parallel, StructLayout.
+// A Q4_0-shaped scheme: BlockReshape, quantize, Parallel, StructLayout.
 int test_mirror_and_uniqueness() {
     Type block = Type::Struct({{"d", Float(16)}, {"qs", UInt(8), 16}});
+    Pointwise offset{"offset",
+                     [](Expr x) { return cast<uint8_t>(x + 8); },
+                     [](Expr x) { return cast<int8_t>(x - 8); }};
     Approximation scheme = Compose{
         BlockReshape{32},
-        SymmetricBlockQuantize{32, 8, BlockRoundingMode::TruncateHalfUpWithOffset,
-                               BlockScaleAnchor::ExtremeSignedValue},
-        Parallel{{"codes", Compose{AdditiveOffset<int8_t, uint8_t>{8}, PlanarFieldPack{4, 16}}},
-                 {"scale", StorageCast<float, float16_t>{}}},
+        AbsMaxQuantizer{32, 7},
+        Parallel{{"codes", Compose{offset, PlanarFieldPack{4, 16}}},
+                 {"scale", f16_storage()}},
         StructLayout{block, {"qs", "d"}}};
     Var k("k");
     Func f("q4_src");
-    f(k) = cast<float>((k % 16) - 8);
+    f(k) = cast<float>((k % 15) - 7);
     EncodeResult e = scheme.encode({f});
     DecodeResult d = scheme.decode(e.encoded);
     CHECK(names(d.decoded_ports) == Names({"values"}));

@@ -1008,6 +1008,39 @@ Pointwise Pointwise::with_error_bound(ExprFn bound) const {
     return copy;
 }
 
+Pointwise Pointwise::with_types(Type input_type, Type output_type) const {
+    Pointwise copy = *this;
+    copy.input_type = input_type;
+    copy.output_type = output_type;
+    return copy;
+}
+
+Pointwise Pointwise::with_ranges(ApproximationRange input_range, ApproximationRange output_range) const {
+    Pointwise copy = *this;
+    copy.input_range = input_range;
+    copy.output_range = output_range;
+    return copy;
+}
+
+Pointwise Pointwise::with_lossless(bool is_lossless) const {
+    Pointwise copy = *this;
+    copy.lossless_ = is_lossless;
+    return copy;
+}
+
+ApproximationSignature Pointwise::signature(const ApproximationPorts &inputs) const {
+    if (inputs.size() > 1) {
+        return ApproximationSignature::unknown(inputs);
+    }
+    std::optional<int> dims;
+    std::string name = positional_ports(1)[0].name;
+    if (inputs.size() == 1) {
+        dims = inputs[0].dimensions;
+        name = inputs[0].name;
+    }
+    return {{{name, input_type, dims, input_range}}, {{name, output_type, dims, output_range}}};
+}
+
 Func Pointwise::error_bound(const std::vector<Func> &inputs, const std::vector<Func> &) const {
     if (!bound_fn) {
         return Func();
@@ -1066,5 +1099,280 @@ std::vector<Func> Permute::decode(const std::vector<Func> &encoded) const {
     }
     return result;
 }
+
+namespace {
+
+std::vector<Var> component_vars(int dimensions, const std::string &prefix) {
+    std::vector<Var> vars;
+    vars.reserve(dimensions);
+    for (int i = 0; i < dimensions; ++i) {
+        vars.emplace_back(prefix + std::to_string(i));
+    }
+    return vars;
+}
+
+std::vector<Expr> component_exprs(const std::vector<Var> &vars) {
+    return std::vector<Expr>(vars.begin(), vars.end());
+}
+
+}  // namespace
+
+std::vector<Func> BlockReshape::encode(const std::vector<Func> &inputs) const {
+    user_assert(inputs.size() == 1) << "BlockReshape::encode expects one input\n";
+    Func flat = inputs[0];
+    std::vector<Var> dims = block_vars();
+    Var blk("blk");
+    Expr within = cast<int>(0);
+    int stride = 1;
+    for (size_t i = 0; i < dims.size(); ++i) {
+        within += dims[i] * stride;
+        stride *= extents_[i];
+    }
+    std::vector<Var> args = dims;
+    args.push_back(blk);
+    Func packed("block_reshape_packed");
+    packed(args) = block_indexed_ ? flat(within, blk) : flat(blk * block_size() + within);
+    return {packed};
+}
+
+std::vector<Func> BlockReshape::decode(const std::vector<Func> &encoded) const {
+    user_assert(encoded.size() == 1) << "BlockReshape::decode expects one input\n";
+    Func packed = encoded[0];
+    Var k("k"), kk("kk"), blk("blk");
+    Expr within = block_indexed_ ? Expr(kk) : k % block_size();
+    Expr block = block_indexed_ ? Expr(blk) : k / block_size();
+    std::vector<Expr> args;
+    Expr rem = within;
+    for (int extent : extents_) {
+        args.push_back(rem % extent);
+        rem /= extent;
+    }
+    args.push_back(block);
+    Func out("block_reshape_unpacked");
+    if (block_indexed_) {
+        out(kk, blk) = packed(args);
+    } else {
+        out(k) = packed(args);
+    }
+    return {out};
+}
+
+ApproximationSignature BlockReshape::signature() const {
+    return {{{"values", std::nullopt, block_indexed_ ? 2 : 1}},
+            {{"blocks", std::nullopt, (int)extents_.size() + 1}}};
+}
+
+int BlockReshape::block_size() const {
+    int size = 1;
+    for (int extent : extents_) {
+        size *= extent;
+    }
+    return size;
+}
+
+std::vector<Var> BlockReshape::block_vars() const {
+    std::vector<Var> vars;
+    for (size_t i = 0; i < extents_.size(); ++i) {
+        vars.emplace_back(extents_.size() == 1 ? "kk" : "d" + std::to_string(i));
+    }
+    return vars;
+}
+
+StructLayout::StructLayout(Type record_type, std::vector<std::string> logical_fields,
+                           int record_dimensions)
+    : record_type_(record_type), logical_fields_(std::move(logical_fields)),
+      record_dimensions_(record_dimensions) {
+    user_assert(record_type_.is_struct()) << "StructLayout requires a struct Type\n";
+    user_assert(record_dimensions_ > 0) << "StructLayout record dimensionality must be positive\n";
+    const StructTypeInfo *info = record_type_.struct_type();
+    user_assert(logical_fields_.size() == info->fields.size())
+        << "StructLayout requires exactly one logical slot per physical field\n";
+    for (const std::string &name : logical_fields_) {
+        int matches = 0;
+        for (const StructField &field : info->fields) {
+            matches += field.name == name;
+        }
+        user_assert(matches == 1) << "StructLayout: no unique field named '" << name << "'\n";
+        int logical_matches = 0;
+        for (const std::string &logical_name : logical_fields_) {
+            logical_matches += logical_name == name;
+        }
+        user_assert(logical_matches == 1) << "StructLayout: duplicate logical field '" << name << "'\n";
+    }
+}
+
+std::vector<Func> StructLayout::encode(const std::vector<Func> &inputs) const {
+    user_assert(inputs.size() == logical_fields_.size())
+        << "StructLayout::encode input count does not match logical field count\n";
+    const StructTypeInfo *info = record_type_.struct_type();
+    std::vector<Var> records = component_vars(record_dimensions_, "record");
+    std::vector<Expr> record_args = component_exprs(records);
+    std::vector<Expr> values;
+    for (const StructField &field : info->fields) {
+        size_t slot = logical_slot(field.name);
+        Func input = inputs[slot];
+        user_assert(input.outputs() == 1 && input.types()[0] == field.type)
+            << "StructLayout field '" << field.name << "' requires exact type " << field.type
+            << " but slot " << slot << " has " << input.types()[0] << "\n";
+        int extent = field.array_extent.value_or(1);
+        user_assert(input.dimensions() == record_dimensions_ + (field.array_extent ? 1 : 0))
+            << "StructLayout field '" << field.name << "' has the wrong dimensionality\n";
+        for (int element = 0; element < extent; ++element) {
+            std::vector<Expr> args = record_args;
+            if (field.array_extent) {
+                args.insert(args.begin(), element);
+            }
+            values.push_back(input(args));
+        }
+    }
+    Func packed("struct_layout_packed");
+    packed(records) = pack_struct(record_type_, values);
+    return {packed};
+}
+
+std::vector<Func> StructLayout::decode(const std::vector<Func> &encoded) const {
+    user_assert(encoded.size() == 1 && encoded[0].outputs() == 1 &&
+                encoded[0].types()[0] == record_type_)
+        << "StructLayout::decode requires one Func of the exact record type\n";
+    Func packed = encoded[0];
+    std::vector<Var> records = component_vars(record_dimensions_, "record");
+    std::vector<Expr> record_args = component_exprs(records);
+    Expr record = packed(record_args);
+    std::vector<Func> outputs;
+    outputs.reserve(logical_fields_.size());
+    for (const std::string &name : logical_fields_) {
+        const StructField &physical = physical_field(name);
+        Func output("struct_layout_" + name);
+        if (physical.array_extent) {
+            Var element("element");
+            std::vector<Var> args = records;
+            args.insert(args.begin(), element);
+            output(args) = field(record, name)[element];
+        } else {
+            output(records) = field(record, name);
+        }
+        outputs.push_back(output);
+    }
+    return outputs;
+}
+
+ApproximationSignature StructLayout::signature() const {
+    ApproximationSignature sig;
+    for (const std::string &name : logical_fields_) {
+        const StructField &f = physical_field(name);
+        sig.inputs.emplace_back(name, f.type, record_dimensions_ + (f.array_extent ? 1 : 0));
+    }
+    sig.outputs = {{"record", record_type_, record_dimensions_}};
+    return sig;
+}
+
+size_t StructLayout::logical_slot(const std::string &name) const {
+    for (size_t i = 0; i < logical_fields_.size(); ++i) {
+        if (logical_fields_[i] == name) {
+            return i;
+        }
+    }
+    user_error << "StructLayout internal field mapping failure\n";
+    return 0;
+}
+
+const StructField &StructLayout::physical_field(const std::string &name) const {
+    for (const StructField &field : record_type_.struct_type()->fields) {
+        if (field.name == name) {
+            return field;
+        }
+    }
+    user_error << "StructLayout internal physical field failure\n";
+    return record_type_.struct_type()->fields[0];
+}
+
+std::vector<Func> PlanarFieldPack::encode(const std::vector<Func> &inputs) const {
+    user_assert(inputs.size() == 1 && inputs[0].dimensions() == 2)
+        << "PlanarFieldPack::encode currently requires (element, record)\n";
+    Func fields = inputs[0];
+    Var position("position"), record("record");
+    RDom plane(0, planes_, "plane");
+    Expr element = plane * positions_ + position;
+    Expr value = cast<uint8_t>(fields(element, record)) & ((1 << field_bits_) - 1);
+    Func bytes("planar_field_bytes");
+    bytes(position, record) = cast<uint8_t>(0);
+    bytes(position, record) = bytes(position, record) |
+                              cast<uint8_t>(value << (plane * field_bits_));
+    return {bytes};
+}
+
+std::vector<Func> PlanarFieldPack::decode(const std::vector<Func> &encoded) const {
+    user_assert(encoded.size() == 1 && encoded[0].types() == std::vector<Type>{UInt(8)} &&
+                encoded[0].dimensions() == 2)
+        << "PlanarFieldPack::decode currently requires (position, record) bytes\n";
+    Func bytes = encoded[0];
+    Var element("element"), record("record");
+    Expr plane = element / positions_;
+    Expr position = element % positions_;
+    Func fields("planar_field_values");
+    fields(element, record) = cast<uint8_t>((bytes(position, record) >> (plane * field_bits_)) &
+                                            ((1 << field_bits_) - 1));
+    return {fields};
+}
+
+ApproximationSignature PlanarFieldPack::signature() const {
+    return {{{"fields", std::nullopt, 2, ApproximationRange(0, (double)((1 << field_bits_) - 1))}},
+            {{"bytes", UInt(8), 2}}};
+}
+
+PlanarFieldPack::PlanarFieldPack(int field_bits, int positions)
+    : field_bits_(field_bits), positions_(positions), planes_(8 / field_bits) {
+    user_assert(field_bits_ > 0 && 8 % field_bits_ == 0 && positions_ > 0)
+        << "Invalid PlanarFieldPack shape\n";
+}
+
+namespace Internal {
+
+std::vector<Func> little_endian_scalar_encode(Type word_type, const std::vector<Func> &inputs) {
+    user_assert(inputs.size() == 1 && inputs[0].types() == std::vector<Type>{word_type})
+        << "LittleEndianScalarPack::encode word type mismatch\n";
+    Func word = inputs[0];
+    std::vector<Var> records = component_vars(word.dimensions(), "record");
+    std::vector<Expr> record_args(records.begin(), records.end());
+    Var byte("byte");
+    std::vector<Var> args = records;
+    args.insert(args.begin(), byte);
+    Func bytes("little_endian_scalar_bytes");
+    Expr bits = cast(word_type, word(record_args));
+    bytes(args) = cast<uint8_t>(bits >> (byte * 8));
+    return {bytes};
+}
+
+std::vector<Func> little_endian_scalar_decode(Type word_type, const std::vector<Func> &encoded) {
+    user_assert(encoded.size() == 1 && encoded[0].types() == std::vector<Type>{UInt(8)} &&
+                encoded[0].dimensions() >= 2)
+        << "LittleEndianScalarPack::decode requires byte arrays per record\n";
+    Func bytes = encoded[0];
+    std::vector<Var> records = component_vars(bytes.dimensions() - 1, "record");
+    std::vector<Expr> record_args(records.begin(), records.end());
+    std::vector<Expr> pieces;
+    for (int i = 0; i < word_type.bytes(); ++i) {
+        std::vector<Expr> args = record_args;
+        args.insert(args.begin(), i);
+        pieces.push_back(bytes(args));
+    }
+    Func word("little_endian_scalar_word");
+    word(records) = cast(word_type, concat_bits(pieces));
+    return {word};
+}
+
+ApproximationSignature little_endian_scalar_signature(Type word_type, const ApproximationPorts &inputs) {
+    if (inputs.size() > 1) {
+        return ApproximationSignature::unknown(inputs);
+    }
+    std::optional<int> dims;
+    if (inputs.size() == 1) {
+        dims = inputs[0].dimensions;
+    }
+    return {{{inputs.empty() ? "word" : inputs[0].name, word_type, dims}},
+            {{"bytes", UInt(8), dims ? std::optional<int>(*dims + 1) : std::nullopt}}};
+}
+
+}  // namespace Internal
 
 }  // namespace Halide

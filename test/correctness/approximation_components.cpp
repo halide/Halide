@@ -7,6 +7,41 @@ using namespace Halide;
 
 namespace {
 
+// A per-block absmax int8 quantizer on (within, block) floats: codes in
+// [-qmax, qmax] and one float scale per block.
+struct AbsMaxQuantizer {
+    int block, qmax;
+
+    std::vector<Func> encode(const std::vector<Func> &in) const {
+        Var kk("kk"), blk("blk");
+        RDom r(0, block);
+        Func amax("absmax_stat"), scale("absmax_scale"), codes("absmax_codes");
+        amax(blk) = 0.0f;
+        amax(blk) = max(amax(blk), abs(in[0](r, blk)));
+        scale(blk) = amax(blk) / (float)qmax;
+        codes(kk, blk) = cast<int8_t>(round(in[0](kk, blk) / select(scale(blk) == 0.0f, 1.0f, scale(blk))));
+        return {codes, scale};
+    }
+
+    std::vector<Func> decode(const std::vector<Func> &encoded) const {
+        Var kk("kk"), blk("blk");
+        Func out("absmax_decoded");
+        out(kk, blk) = cast<float>(encoded[0](kk, blk)) * encoded[1](blk);
+        return {out};
+    }
+
+    ApproximationSignature signature() const {
+        return {{{"block", Float(32), 2}}, {{"codes", Int(8), 2}, {"scale", Float(32), 1}}};
+    }
+};
+
+// Reduced-precision storage: a cast to and from float16.
+Pointwise f16_storage() {
+    return Pointwise{"f16",
+                     [](Expr x) { return strict_float(cast<float16_t>(x)); },
+                     [](Expr x) { return strict_float(cast<float>(x)); }};
+}
+
 int test_struct_layout_1d() {
     Type record_type = Type::Struct({{"d", Float(16)}, {"qh", UInt(8), 4}, {"qs", UInt(8), 16}});
     Var element("element"), record("record");
@@ -87,14 +122,14 @@ int test_scalar_components() {
     Var record("record");
     Func values("values");
     values(record) = cast<float>(record) / 3.0f;
-    Approximation storage = StorageCast<float, float16_t>{};
+    Approximation storage = f16_storage();
     EncodeResult stored = storage.encode({values});
     DecodeResult cast_roundtrip = storage.decode(stored.encoded);
     Buffer<float> out = cast_roundtrip.decoded[0].realize({8});
     for (int i = 0; i < 8; ++i) {
         float expected = (float)(float16_t)(i / 3.0f);
         if (out(i) != expected) {
-            printf("StorageCast mismatch at %d: %g vs %g\n", i, out(i), expected);
+            printf("f16 cast mismatch at %d: %g vs %g\n", i, out(i), expected);
             return 1;
         }
     }
@@ -121,7 +156,9 @@ int test_code_components() {
     Var element("element"), record("record");
     Func signed_nibbles("signed_nibbles");
     signed_nibbles(element, record) = cast<int8_t>((element % 16) - 8);
-    Approximation offset = AdditiveOffset<int8_t, uint8_t>(8);
+    Approximation offset = Pointwise{"offset",
+                                     [](Expr x) { return cast<uint8_t>(x + 8); },
+                                     [](Expr x) { return cast<int8_t>(x - 8); }};
     EncodeResult offset_codes = offset.encode({signed_nibbles});
     DecodeResult signed_roundtrip = offset.decode(offset_codes.encoded);
     Buffer<uint8_t> stored_nibbles = offset_codes.encoded[0].realize({16, 2});
@@ -134,43 +171,10 @@ int test_code_components() {
         }
     }
 
-    Func high("high");
-    high(element, record) = cast<int8_t>(select(((element + record) & 1) != 0, 0, -16));
-    Approximation binary = BinaryAlphabetPack<int8_t>(32, UInt(32), -16, 0);
-    EncodeResult word = binary.encode({high});
-    word.encoded[0].compute_root();
-    DecodeResult expanded = binary.decode(word.encoded);
-    Buffer<uint32_t> packed_word = word.encoded[0].realize({2});
-    Buffer<int8_t> out_high = expanded.decoded[0].realize({32, 2});
-    if (packed_word(0) != 0xaaaaaaaau || packed_word(1) != 0x55555555u) {
-        return 1;
-    }
-    for (int r = 0; r < 2; ++r) {
-        for (int i = 0; i < 32; ++i) {
-            int8_t expected = ((i + r) & 1) ? 0 : -16;
-            if (out_high(i, r) != expected) {
-                return 1;
-            }
-        }
-    }
-
-    Func codes("codes");
-    codes(element, record) = cast<int8_t>((element % 32) - 16);
-    Approximation split = AdditiveRadixSplit(16, 16);
-    EncodeResult parts = split.encode({codes});
-    DecodeResult combined = split.decode(parts.encoded);
-    Buffer<uint8_t> low = parts.encoded[0].realize({32, 1});
-    Buffer<int8_t> high_part = parts.encoded[1].realize({32, 1});
-    Buffer<int8_t> combined_codes = combined.decoded[0].realize({32, 1});
-    for (int i = 0; i < 32; ++i) {
-        if (low(i, 0) != (i & 15) || high_part(i, 0) != (i < 16 ? -16 : 0) ||
-            combined_codes(i, 0) != i - 16) {
-            return 1;
-        }
-    }
-
+    Func nibbles("nibbles");
+    nibbles(element, record) = cast<uint8_t>(element % 16);
     Approximation planar = PlanarFieldPack(4, 16);
-    EncodeResult planar_bytes = planar.encode({parts.encoded[0]});
+    EncodeResult planar_bytes = planar.encode({nibbles});
     planar_bytes.encoded[0].compute_root();
     DecodeResult planar_fields = planar.decode(planar_bytes.encoded);
     Buffer<uint8_t> bytes_out = planar_bytes.encoded[0].realize({16, 1});
@@ -197,42 +201,23 @@ int test_block_components() {
         }
     }
 
-    Var element("element"), record("record");
-    Func blocks("blocks");
-    blocks(element, record) = cast<float>(element - 16);
-    Approximation quantize = SymmetricBlockQuantize(32, 16, BlockRoundingMode::TruncateHalfUpWithOffset,
-                                                    BlockScaleAnchor::ExtremeSignedValue);
-    EncodeResult quantized = quantize.encode({blocks});
-    for (Func intermediate : quantized.intermediates) {
-        intermediate.compute_root();
-    }
-    DecodeResult dequantized = quantize.decode(quantized.encoded);
-    Buffer<int8_t> codes = quantized.encoded[0].realize({32, 1});
-    Buffer<float> scale = quantized.encoded[1].realize({1});
-    Buffer<float> values = dequantized.decoded[0].realize({32, 1});
-    if (scale(0) != 1.0f) {
-        return 1;
-    }
-    for (int i = 0; i < 32; ++i) {
-        if (codes(i, 0) != i - 16 || values(i, 0) != i - 16) {
-            return 1;
-        }
-    }
     return 0;
 }
 
 int test_standard_quant_compositions() {
     Var k("k");
 
+    Pointwise offset{"offset",
+                     [](Expr x) { return cast<uint8_t>(x + 8); },
+                     [](Expr x) { return cast<int8_t>(x - 8); }};
     Type q4_type = Type::Struct({{"d", Float(16)}, {"qs", UInt(8), 16}});
     Func q4_values("q4_values");
-    q4_values(k) = cast<float>((k % 16) - 8);
+    q4_values(k) = cast<float>((k % 15) - 7);
     Approximation q4 = Compose(
         BlockReshape{32},
-        SymmetricBlockQuantize{32, 8, BlockRoundingMode::TruncateHalfUpWithOffset,
-                               BlockScaleAnchor::ExtremeSignedValue},
-        Parallel{{"codes", Compose{AdditiveOffset<int8_t, uint8_t>{8}, PlanarFieldPack{4, 16}}},
-                 {"scale", StorageCast<float, float16_t>{}}},
+        AbsMaxQuantizer{32, 7},
+        Parallel{{"codes", Compose{offset, PlanarFieldPack{4, 16}}},
+                 {"scale", f16_storage()}},
         StructLayout{q4_type, {"qs", "d"}});
     EncodeResult q4_encoded = q4.encode({q4_values});
     for (Func intermediate : q4_encoded.intermediates) {
@@ -241,7 +226,7 @@ int test_standard_quant_compositions() {
     DecodeResult q4_decoded = q4.decode(q4_encoded.encoded);
     Buffer<float> q4_roundtrip = q4_decoded.decoded[0].realize({64});
     for (int i = 0; i < 64; ++i) {
-        if (q4_roundtrip(i) != (i % 16) - 8) {
+        if (q4_roundtrip(i) != (i % 15) - 7) {
             return 1;
         }
     }
@@ -252,9 +237,8 @@ int test_standard_quant_compositions() {
     q8_values(k) = cast<float>(select(local == 0, -127, local - 16));
     Approximation q8 = Compose(
         BlockReshape{32},
-        SymmetricBlockQuantize{32, 127, BlockRoundingMode::Nearest,
-                               BlockScaleAnchor::AbsMax},
-        Parallel{Identity{}, StorageCast<float, float16_t>{}},
+        AbsMaxQuantizer{32, 127},
+        Parallel{Identity{}, f16_storage()},
         StructLayout{q8_type, {"qs", "d"}});
     EncodeResult q8_encoded = q8.encode({q8_values});
     for (Func intermediate : q8_encoded.intermediates) {

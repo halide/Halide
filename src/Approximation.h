@@ -477,7 +477,7 @@ public:
      * the label set by labelled() (or the constructor), if any; otherwise the
      * unit's `std::string name() const` if it has one; otherwise the unit's
      * type name with "Halide::" qualifiers stripped (e.g. "Compose",
-     * "StorageCast<float, signed char>"). Empty for an undefined handle. */
+     * "LittleEndianScalarPack<unsigned int>"). Empty for an undefined handle. */
     std::string label() const;
 
     /** Produce the encoded form of `inputs`. EncodeResult::encoded's
@@ -1093,8 +1093,8 @@ struct Choose {
  * The functions take an Expr and return an Expr (the common case, for
  * single-valued Funcs), or take and return a `std::vector<Expr>` (one element
  * per Tuple output of the input Func, for Tuple-valued Funcs). Pass
- * lambdas with concrete parameter types, not `auto`. No type checking of the
- * input is done here; wrap Pointwise in a unit of your own for that.
+ * lambdas with concrete parameter types, not `auto`. The input is not type
+ * checked unless with_types() declares its type.
  *
  * The output Funcs are named `name + "_encode"` and `name + "_decode"`; the
  * second constructor lets the caller pick both names exactly (and the
@@ -1106,6 +1106,20 @@ struct Choose {
  *                            [](Expr x) { return x * 2; },
  *                            [](Expr x) { return x / 2; }};
  * \endcode
+ *
+ * A cast is a one-liner:
+ *
+ * \code
+ * Approximation to_f16 = Pointwise{"f16",
+ *                                 [](Expr x) { return cast<float16_t>(x); },
+ *                                 [](Expr x) { return cast<float>(x); }}
+ *                            .with_types(Float(32), Float(16));
+ * \endcode
+ *
+ * By default a Pointwise declares only its arity: one Func in, one out, with
+ * the name and dimensionality of the input port. The with_*() methods
+ * declare more of the signature (see Approximation::signature()), and
+ * claim losslessness.
  *
  * Besides converting to Approximation, Pointwise's encode(Func) and
  * decode(Func) may be called directly. */
@@ -1130,10 +1144,36 @@ struct Pointwise {
     Pointwise with_error_bound(ExprFn bound) const;
     Func error_bound(const std::vector<Func> &inputs, const std::vector<Func> &encoded) const;
 
+    /** A copy that declares the type of its input (what encode consumes) and
+     * of its output (what encode produces); both are checked against the
+     * actual Funcs. */
+    Pointwise with_types(Type input_type, Type output_type) const;
+
+    /** A copy that declares value ranges: `input_range` is the precondition
+     * on the input for the unit's declared properties to hold (e.g.
+     * losslessness), and `output_range` is a guarantee on the encoded
+     * values (see ApproximationPort::range). */
+    Pointwise with_ranges(ApproximationRange input_range, ApproximationRange output_range) const;
+
+    /** A copy that claims to be lossless (for inputs within the declared
+     * input range). */
+    Pointwise with_lossless(bool is_lossless = true) const;
+
+    /** The declared signature; see the with_*() methods. Undeclared parts are
+     * left unknown. */
+    ApproximationSignature signature(const ApproximationPorts &inputs) const;
+
+    bool lossless() const {
+        return lossless_;
+    }
+
 private:
     std::string encode_name, decode_name, var_prefix;
     TupleFn encode_fn, decode_fn;
     ExprFn bound_fn;
+    std::optional<Type> input_type, output_type;
+    std::optional<ApproximationRange> input_range, output_range;
+    bool lossless_ = false;
 };
 
 /** Passes Funcs (and their port names) through unchanged in both directions. */
@@ -1172,6 +1212,116 @@ struct Permute {
     }
 
     std::vector<int> forward, backward;
+};
+
+/** Losslessly reshape a flat row into fixed-size records. In block-indexed
+ * mode the flat side is `(within, record)` rather than a single flat index. */
+struct BlockReshape {
+    explicit BlockReshape(int block_size, bool block_indexed = false)
+        : extents_{block_size}, block_indexed_(block_indexed) {
+    }
+    explicit BlockReshape(std::vector<int> extents, bool block_indexed = false)
+        : extents_(std::move(extents)), block_indexed_(block_indexed) {
+    }
+
+    std::vector<Func> encode(const std::vector<Func> &inputs) const;
+    std::vector<Func> decode(const std::vector<Func> &encoded) const;
+
+    /** values (flat) <-> blocks (one extra leading dimension per extent). */
+    ApproximationSignature signature() const;
+
+    /** Pure re-indexing: exact for any values (given the flat extent is a
+     * multiple of the block size). */
+    bool lossless() const {
+        return true;
+    }
+
+private:
+    std::vector<int> extents_;
+    bool block_indexed_;
+
+    int block_size() const;
+    std::vector<Var> block_vars() const;
+};
+
+/** Map consecutive logical Func slots to named fields of an exact struct
+ * type. Scalar fields have `record_dimensions` dimensions; array fields have
+ * an additional leading element dimension. */
+struct StructLayout {
+    StructLayout(Type record_type, std::vector<std::string> logical_fields,
+                 int record_dimensions = 1);
+
+    std::vector<Func> encode(const std::vector<Func> &inputs) const;
+    std::vector<Func> decode(const std::vector<Func> &encoded) const;
+
+    /** One input per logical field, named after it, and one `record` output. */
+    ApproximationSignature signature() const;
+
+    /** Fields are stored bit-for-bit. */
+    bool lossless() const {
+        return true;
+    }
+
+private:
+    Type record_type_;
+    std::vector<std::string> logical_fields_;
+    int record_dimensions_;
+
+    size_t logical_slot(const std::string &name) const;
+    const StructField &physical_field(const std::string &name) const;
+};
+
+namespace Internal {
+std::vector<Func> little_endian_scalar_encode(Type word_type, const std::vector<Func> &inputs);
+std::vector<Func> little_endian_scalar_decode(Type word_type, const std::vector<Func> &encoded);
+ApproximationSignature little_endian_scalar_signature(Type word_type, const ApproximationPorts &inputs);
+}  // namespace Internal
+
+/** Convert a scalar integral word per record to/from a leading little-endian
+ * byte dimension. Decode deliberately uses concat_bits so struct lowering and
+ * ordinary byte buffers share the same wide-load optimization path. */
+template<typename Word>
+struct LittleEndianScalarPack {
+    std::vector<Func> encode(const std::vector<Func> &inputs) const {
+        return Internal::little_endian_scalar_encode(type_of<Word>(), inputs);
+    }
+
+    std::vector<Func> decode(const std::vector<Func> &encoded) const {
+        return Internal::little_endian_scalar_decode(type_of<Word>(), encoded);
+    }
+
+    /** A word per record <-> its bytes in a new leading dimension. */
+    ApproximationSignature signature(const ApproximationPorts &inputs) const {
+        return Internal::little_endian_scalar_signature(type_of<Word>(), inputs);
+    }
+
+    /** Every bit of the word is kept. */
+    bool lossless() const {
+        return true;
+    }
+};
+
+/** Exact fixed-width planar packing. For `(field_bits, positions)`, one byte
+ * contains `8/field_bits` planes, each plane spanning `positions` consecutive
+ * elements. This component applies no recentering and no lookup policy. */
+struct PlanarFieldPack {
+    PlanarFieldPack(int field_bits, int positions);
+
+    std::vector<Func> encode(const std::vector<Func> &inputs) const;
+    std::vector<Func> decode(const std::vector<Func> &encoded) const;
+
+    /** (element, record) fields <-> (position, record) bytes. The fields
+     * must fit in `field_bits`: encode masks each one to that width, so
+     * values outside [0, 2^field_bits - 1] are silently truncated. */
+    ApproximationSignature signature() const;
+
+    /** Exact for fields in the declared input range. */
+    bool lossless() const {
+        return true;
+    }
+
+private:
+    int field_bits_, positions_, planes_;
 };
 
 }  // namespace Halide
