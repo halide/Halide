@@ -1592,7 +1592,7 @@ public:
      * immediately, like Func::rfactor() and the targeted form of
      * Func::in(), but substitutes a different computation rather than an
      * identity wrapper -- see Approximation.h and
-     * doc/ApproximationDesign.md for the rationale. Because the
+     * doc/Approximation.md for the rationale. Because the
      * substitution is eager, it can only rewrite Funcs that are already
      * fully defined at the point of the call -- there is no counterpart to
      * the global Func::in() that also covers Funcs written later. */
