@@ -16,7 +16,6 @@
 #include <optional>
 #include <string>
 #include <type_traits>
-#include <typeinfo>
 #include <utility>
 #include <vector>
 
@@ -298,7 +297,18 @@ class Approximation {
 
     /** A readable name for a unit type: demangled, with "Halide::" and
      * anonymous-namespace qualifiers stripped. */
-    static std::string type_label(const std::type_info &type);
+    static std::string type_label(const char *pretty_function);
+
+    // Captures the compiler's pretty function name, which spells out T; this
+    // avoids depending on RTTI.
+    template<typename T>
+    static const char *pretty_type_name() {
+#if defined(_MSC_VER) && !defined(__clang__)
+        return __FUNCSIG__;
+#else
+        return __PRETTY_FUNCTION__;
+#endif
+    }
 
     template<typename T>
     struct Model;
@@ -665,7 +675,8 @@ template<typename T>
 struct Approximation::Model final : Approximation::Concept {
     T unit;
 
-    template<typename U>
+    template<typename U,
+             typename = std::enable_if_t<!std::is_same_v<std::decay_t<U>, Model>>>
     explicit Model(U &&u)
         : unit(std::forward<U>(u)) {
     }
@@ -698,11 +709,7 @@ struct Approximation::Model final : Approximation::Concept {
         if constexpr (has_name<T>::value) {
             return std::string(unit.name());
         } else {
-#if defined(__cpp_rtti) || defined(_CPPRTTI)
-            return type_label(typeid(T));
-#else
-            return "unit";
-#endif
+            return type_label(pretty_type_name<T>());
         }
     }
 
