@@ -99,6 +99,9 @@ int test_struct_layout_2d() {
 }
 
 int test_struct_layout_contract_errors() {
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
     Type record_type = Type::Struct({{"tag", UInt(16)}, {"pixels", UInt(8), 3}});
     Var element("element"), record("record");
     Func pixels("pixels"), wrong_tag("wrong_tag");

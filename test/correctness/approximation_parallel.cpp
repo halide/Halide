@@ -185,6 +185,9 @@ bool fails_with(F &&fn, const std::string &needle) {
 }
 
 int test_errors() {
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
     Func f = source(), g = source();
     Approximation missing = Parallel{{"nope", Identity{}}};
     CHECK(fails_with([&] { missing.encode({f, g}, {{"a"}, {"b"}}); }, "nope"));
