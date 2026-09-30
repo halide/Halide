@@ -698,7 +698,11 @@ struct Approximation::Model final : Approximation::Concept {
         if constexpr (has_name<T>::value) {
             return std::string(unit.name());
         } else {
+#if defined(__cpp_rtti) || defined(_CPPRTTI)
             return type_label(typeid(T));
+#else
+            return "unit";
+#endif
         }
     }
 
