@@ -67,7 +67,7 @@ public:
     EncodeResult encode(const std::vector<Func> &inputs,
                         const ApproximationPorts &input_ports = {}) const;
     DecodeResult decode(const std::vector<Func> &encoded,
-                        const ApproximationPorts &encoded_ports = {}) const;
+                        const ApproximationPorts &input_ports = {}) const;
 
     ApproximationSignature signature(const ApproximationPorts &inputs = {}) const;
     Func error_bound(const std::vector<Func> &inputs,
@@ -81,8 +81,8 @@ The handle's `encode()`/`decode()` always take and return *vectors* of Funcs,
 even though a plain quantizer only uses one. That is what makes the combinators
 possible: an inner stage can produce several Funcs (a codes Func and a separate
 scale Func), and the next stage needs to consume all of them, or pick one to act
-on. There is no base class; the type-erasure is what lets `Compose` and `Apply`
-hold a runtime-heterogeneous list of stages.
+on. There is no base class; the type-erasure is what lets `Compose` and
+`Parallel` hold a runtime-heterogeneous list of stages.
 
 **Identity.** A copy of a handle is the *same* stage (`same_as()` is true);
 converting a plain unit to an `Approximation` twice makes two *distinct* stages,
@@ -129,8 +129,9 @@ callers filter. A unit that calls other `Approximation` handles inside its own
 are traced automatically.
 
 The port-aware form additionally receives the ports (names and constraints) of
-the Funcs being consumed. It exists so that combinators can look ports up by
-name; leaf units rarely need it.
+the encode-side inputs: `encode(inputs, input_ports)` and
+`decode(encoded, input_ports)`. It exists so that combinators can route by port
+name and forward context to their children; leaf units rarely need it.
 
 A unit may additionally provide any of the following optional members.
 
@@ -142,7 +143,8 @@ A unit may additionally provide any of the following optional members.
 - `std::vector<Approximation> children() const`, and optionally
   `std::vector<ApproximationPorts> child_inputs(const ApproximationPorts &inputs) const`
   (the ports each child would receive, parallel to `children()`): the stages
-  this unit is built from, used by `describe()` and `check_ranges()`.
+  this unit is built from, used by `describe()` and `check_ranges()`. Only the
+  unit knows how it routes ports to children, so this cannot be derived.
 - `Func error_bound(const std::vector<Func> &inputs, const std::vector<Func> &encoded) const`:
   a per-element bound on `abs(decode(encode(x)) - x)`, as a Func over
   `inputs[0]`'s arguments.
@@ -231,23 +233,23 @@ Approximation q = BlockQ8{};
 reusable leaf units. All are plain structs that convert to `Approximation`, and
 all declare signatures.
 
-| Unit                                                                                           | Description                                                                                                                                                                                                                                                                                                                                                               |
-| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Compose{stages...}`                                                                           | Sequential composition. `encode` runs the stages back-to-front (the last stage first, on the original inputs); `decode` runs them front-to-back. `stages[0]` is *outermost*: its encoded output is the Compose's own. Lossless iff all stages are; no error bound is declared for lossy compositions, because bounds do not compose without knowing how errors propagate. |
-| `Apply{idx, encode_arity, decode_arity, inner}` / `Apply{idx, inner}` / `Apply{"port", inner}` | Applies `inner` to a sub-range of the Func vector and passes the rest through. See below.                                                                                                                                                                                                                                                                                 |
-| `TrustedInverse{encoder, decoder}`                                                             | Takes `encode` from one approximation and `decode` from another. The escape hatch out of `Compose`'s structural guarantee (see below).                                                                                                                                                                                                                                    |
-| `Choose{cond, if_true, if_false}`                                                              | Keeps whichever handle `cond` selects at construction, so it can be found by that handle.                                                                                                                                                                                                                                                                                 |
-| `Identity{}`, `Permute{permutation}`                                                           | Pass Funcs (and their port names) through unchanged / reordered. Both are lossless.                                                                                                                                                                                                                                                                                       |
-| `Pointwise{...}`                                                                               | Elementwise `out(vs) = fn(in(vs))`; the output Funcs are named `name + "_encode"` and `name + "_decode"` (the four-argument constructors choose both names and the pure Var prefix).                                                                                                                                                                                      |
-| `BlockReshape`                                                                                 | Flat row to fixed-size records; lossless.                                                                                                                                                                                                                                                                                                                                 |
-| `StructLayout`                                                                                 | Logical Funcs to a struct-typed record Func, one field each; lossless.                                                                                                                                                                                                                                                                                                    |
-| `StorageCast<Decoded, Storage>`                                                                | Explicit numeric conversion; lossless exactly when every `Decoded` value is representable in `Storage`.                                                                                                                                                                                                                                                                   |
-| `AdditiveOffset<Decoded, Storage>`                                                             | Shifts an integral alphabet by a constant; lossless for inputs in its declared range.                                                                                                                                                                                                                                                                                     |
-| `LittleEndianScalarPack<Word>`                                                                 | A word per record to and from a leading byte dimension; lossless.                                                                                                                                                                                                                                                                                                         |
-| `BinaryAlphabetPack<Value>`                                                                    | A two-valued vector to and from an integer word.                                                                                                                                                                                                                                                                                                                          |
-| `AdditiveRadixSplit`                                                                           | Splits a signed code into a low digit and a weighted high part.                                                                                                                                                                                                                                                                                                           |
-| `PlanarFieldPack`                                                                              | Fixed-width fields packed into bytes; lossless for inputs in its declared range.                                                                                                                                                                                                                                                                                          |
-| `SymmetricBlockQuantize`                                                                       | Per-block int8 quantization with configurable rounding and scale-anchor policies; declares a code range and (for the extreme-value scale anchors) an error bound.                                                                                                                                                                                                         |
+| Unit                                                       | Description                                                                                                                                                                                                                                                                                                                  |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Compose{stages...}`                                       | Sequential composition, in encode order: `encode` runs the stages first to last, `decode` runs them last to first. The last stage's encoded output is the Compose's own. Lossless iff all stages are; no error bound is declared for lossy compositions, because bounds do not compose without knowing how errors propagate. |
+| `Parallel{children...}` / `Parallel{{"port", child}, ...}` | Product: applies each child to its own share of the Funcs. See below.                                                                                                                                                                                                                                                        |
+| `TrustedInverse{encoder, decoder}`                         | Takes `encode` from one approximation and `decode` from another. The escape hatch out of `Compose`'s structural guarantee (see below).                                                                                                                                                                                       |
+| `Choose{cond, if_true, if_false}`                          | Keeps whichever handle `cond` selects at construction, so it can be found by that handle.                                                                                                                                                                                                                                    |
+| `Identity{}`, `Permute{permutation}`                       | Pass Funcs (and their port names) through unchanged / reordered. Both are lossless.                                                                                                                                                                                                                                          |
+| `Pointwise{...}`                                           | Elementwise `out(vs) = fn(in(vs))`; the output Funcs are named `name + "_encode"` and `name + "_decode"` (the four-argument constructors choose both names and the pure Var prefix).                                                                                                                                         |
+| `BlockReshape`                                             | Flat row to fixed-size records; lossless.                                                                                                                                                                                                                                                                                    |
+| `StructLayout`                                             | Logical Funcs to a struct-typed record Func, one field each; lossless.                                                                                                                                                                                                                                                       |
+| `StorageCast<Decoded, Storage>`                            | Explicit numeric conversion; lossless exactly when every `Decoded` value is representable in `Storage`.                                                                                                                                                                                                                      |
+| `AdditiveOffset<Decoded, Storage>`                         | Shifts an integral alphabet by a constant; lossless for inputs in its declared range.                                                                                                                                                                                                                                        |
+| `LittleEndianScalarPack<Word>`                             | A word per record to and from a leading byte dimension; lossless.                                                                                                                                                                                                                                                            |
+| `BinaryAlphabetPack<Value>`                                | A two-valued vector to and from an integer word.                                                                                                                                                                                                                                                                             |
+| `AdditiveRadixSplit`                                       | Splits a signed code into a low digit and a weighted high part.                                                                                                                                                                                                                                                              |
+| `PlanarFieldPack`                                          | Fixed-width fields packed into bytes; lossless for inputs in its declared range.                                                                                                                                                                                                                                             |
+| `SymmetricBlockQuantize`                                   | Per-block int8 quantization with configurable rounding and scale-anchor policies; declares a code range and (for the extreme-value scale anchors) an error bound.                                                                                                                                                            |
 
 A four-bit scheme, built from these, reads inside-out in the order `encode` runs
 it: reshape to blocks, quantize, then shift the codes to `[0, 15]` and pack
@@ -259,8 +261,9 @@ Approximation offset = AdditiveOffset<int8_t, uint8_t>{8};
 Approximation quant = SymmetricBlockQuantize{
     16, 8, BlockRoundingMode::TruncateHalfUpWithOffset,
     BlockScaleAnchor::ExtremeSignedValue};
-Approximation scheme = Compose{Apply{0, Compose{pack, offset}}, quant,
-                               BlockReshape{16}};
+Approximation scheme = Compose{
+    BlockReshape{16}, quant,
+    Parallel{{"codes", Compose{offset, pack}}}};
 ```
 
 **`Compose` and `TrustedInverse`.** Every `Approximation` is meant to be an
@@ -275,16 +278,24 @@ typically an extern call) that no composition of Funcs reproduces bit-for-bit,
 but whose reverse map is an ordinary `Compose`. The unused half of each side is
 never called.
 
-**`Apply`.** The sub-range is selected either by position, `[idx, idx + arity)`,
-or by port name. By position, `encode_arity`/`decode_arity` (how many Funcs
-`inner` consumes there in each direction) must be given, since C++ cannot infer
-them from `inner`; the two-argument form assumes one. By name,
-`Apply("scale", inner)` starts at the input port so named (an error if there is
-none, or several) and spans the number of inputs `inner` declares (one if it
-declares nothing); in `decode` it starts at the position of the first of
-`inner`'s encoded output ports, and spans the number of those outputs. The
-prefix before the range is unchanged. Untouched ports keep their names, and the
-replaced range takes the names of `inner`'s output ports.
+**`Parallel`.** A product combinator with two forms; they cannot be mixed.
+
+- *Positional*: `Parallel{a, b, ...}`. Child `i` gets a consecutive slice of the
+  Funcs. On encode its width is the number of inputs of its signature, on decode
+  the number of outputs (its encoded ports); one if the signature is unknown.
+  The slices must exactly cover the Funcs, or it is an error stating both
+  counts. `Identity{}` passes one Func through.
+- *Named*: `Parallel{{"codes", a}, {"scale", b}}`. Each entry routes the one
+  port of that name to its child. Ports not mentioned pass through unchanged, in
+  place. A child's outputs replace its port in place, so a child may expand a
+  port into several on encode (`AdditiveRadixSplit`); the mirror collapses them
+  on decode, where the child must yield exactly one Func. A name that is missing
+  or ambiguous, or routed twice, is an error. Without input ports (no context)
+  the signature is unknown.
+
+`Parallel` is lossless iff all children are and declares no error bound. Its
+children appear in `describe()` and `check_ranges()`, and are traced like any
+other combinator's.
 
 ### Ports and naming
 
@@ -305,14 +316,14 @@ time; a port with a Tuple-valued Func never has a `type`. `range` is a declared
 bound on the port's *values*, never checked on the normal encode/decode path
 (see "Verification").
 
-Port names are resolved as follows.
+A port name identifies one wire, in both directions. Declared names are
+*checked, not substituted*.
 
-- **Input ports** of `encode` (and, mirrored, of `decode`) come from, in order:
-  the ports the caller passed (if non-empty, their count must equal the number
-  of Funcs), else the unit's declared signature (if its input count matches),
-  else positional names `"0"`, `"1"`, ....
-- If the unit declares a *static* signature, its input names are authoritative
-  and replace the given names; a *contextual* signature follows its context.
+- **Names flow in.** The names of the input ports come from, in order: the ports
+  the caller (or the upstream stage) passed, else the unit's declared signature
+  inputs, else positional `"0"`, `"1"`, .... A declared input name is only a
+  default, used when no name flows in; it never renames a flowing wire. Types
+  and dimensions are still checked against the declared ones.
 - **Output ports** are the declared signature's outputs (their count must match
   the number of Funcs the unit returned) or, for an undeclared unit or one whose
   signature is unknown, follow the *naming rule*: if the output count equals the
@@ -320,23 +331,21 @@ Port names are resolved as follows.
   preserves its input's name); otherwise the outputs are named positionally.
 - The resolved output ports, with unset types and dimensions filled in from the
   actual Funcs, are returned as `EncodeResult::encoded_ports` /
-  `DecodeResult::decoded_ports`, ready to hand to the next stage. `Compose`,
-  `Apply` and the other combinators thread them along, so names flow through
-  composition.
-- `Func::approximate_by()` names its input port after the root's declared input
-  if it has exactly one, else `"input"`.
-- A `decode` run on its own (e.g. after `compute_offline` severs the encode)
-  takes its input names from the declared signature's *outputs*.
-- The output names of `decode` come from the unit's optional
-  `decoded_ports(encoded)`, which maps the encoded ports it receives to the
-  decoded ones, else from the declared signature's *inputs* resolved without an
-  encode-side context, else the naming rule. Combinators define `decoded_ports`:
-  `Identity` echoes the ports, `Permute` inverse-permutes them (restoring the
-  names before the permutation), by-name `Apply` names its range after the ports
-  `inner` was given on the encode side, by-position `Apply` asks `inner` for its
-  range, and `Compose` threads the ports through its stages, outermost first. So
-  a by-name `Apply` after a `Permute` finds its port in both directions, with or
-  without the encode's ports.
+  `DecodeResult::decoded_ports`, ready to hand to the next stage.
+- **Mirror invariant.** For every stage, decode output `i` has the name of
+  encode input `i`, and decode inputs have the names of the encode outputs. So a
+  by-name `Parallel` routes the same port names in both directions, even across
+  `StructLayout`, and decode ports never collide.
+- **Stand-alone decode.** `decode(encoded, input_ports)` takes the encode-side
+  context, computed statically: with none given, it is threaded from the root's
+  default input names via signatures, exactly as `describe()` does. So a decode
+  run on its own (e.g. after `compute_offline` severs the encode) names its
+  ports as an encode+decode would.
+- `Func::approximate_by()` passes no names: the root's declared input names (or
+  `"0"`) are the defaults.
+- **Limit.** If a stage in a `Compose` has an unknown signature (an undeclared
+  multi-Func unit), the contexts after it are unknown and fall back to defaults,
+  so mirror naming past it is best-effort.
 
 ### Signatures and validation
 
@@ -362,8 +371,8 @@ anything:
   `inputs` echoes the context and `outputs` is empty).
 
 Combinators derive their signatures from their children's, and are unknown
-whenever a child is: `Compose` chains its stages' signatures from the innermost
-outward, `Apply` splices `inner`'s ports into the range it locates,
+whenever a child is: `Compose` chains its stages' signatures in encode order,
+`Parallel` splices its children's ports into the slices they handle,
 `TrustedInverse` and `Choose` report the encoder's and the chosen stage's,
 `Identity` echoes its inputs (unknown if there are none), and `Permute` permutes
 them.
@@ -434,7 +443,7 @@ duplicated port name is an error whose message lists the ports the stage has.
 
 ```cpp
 Approximation qh = LittleEndianScalarPack<uint32_t>{};
-Compose scheme{qh, BlockReshape{32}};
+Compose scheme{BlockReshape{32}, qh};
 ApproximationResult r = f.approximate_by(scheme, {g});
 Func bytes = r.decoded_by(qh);
 ```
@@ -450,18 +459,18 @@ alongside reductions, e.g.
 renders a stage's structure without running anything: one
 `label (inputs) -> (outputs)` line per stage, where a port prints as
 `name: type xN in [lo, hi]` (unset parts are left out), followed by the stage's
-children (`Compose`: innermost first; `Apply`: the inner; `TrustedInverse`:
+children (`Compose`: encode order; `Parallel`: its children; `TrustedInverse`:
 encoder then decoder; `Choose`: the chosen stage), indented by two spaces and
 given the ports they would receive. For the four-bit scheme above:
 
 ```
 Compose (values x1) -> (bytes: uint8 x2, scale: float32 x1)
   BlockReshape (values x1) -> (blocks x2)
-  SymmetricBlockQuantize (block: float32 x2) -> (codes: int8 x2 in [-8, 7], scale: float32 x1)
-  Apply[0] (codes: int8 x2 in [-8, 7], scale: float32 x1) -> (bytes: uint8 x2, scale: float32 x1)
+  SymmetricBlockQuantize (blocks: float32 x2) -> (codes: int8 x2 in [-8, 7], scale: float32 x1)
+  Parallel (codes: int8 x2 in [-8, 127], scale: float32 x1) -> (bytes: uint8 x2, scale: float32 x1)
     Compose (codes: int8 x2 in [-8, 127]) -> (bytes: uint8 x2)
       AdditiveOffset<signed char, unsigned char> (codes: int8 x2 in [-8, 127]) -> (codes: uint8 x2 in [0, 15])
-      PlanarFieldPack (fields x2 in [0, 15]) -> (bytes: uint8 x2)
+      PlanarFieldPack (codes x2 in [0, 15]) -> (bytes: uint8 x2)
 ```
 
 An unknown signature prints as `(unknown signature)`. Where a stage's context is
@@ -888,9 +897,10 @@ Open items:
 
 - **API surface.** The unit interface has many optional hooks. Candidates for
   pruning if the surface proves too large: the port-aware `encode`/`decode`
-  forms (needed only by combinators that look ports up by name), contextual
-  `signature(inputs)` (needed only by shape-polymorphic units and combinators),
-  and `child_inputs()` (only refines `describe()`/`check_ranges()`).
+  forms (needed only by combinators that route by name or forward context),
+  contextual `signature(inputs)` (needed only by shape-polymorphic units and
+  combinators), and `child_inputs()` (only refines
+  `describe()`/`check_ranges()`).
 - **Path-based stage lookup.** Stages are found only by handle. Selecting a
   stage by its path in the trace tree (e.g. by label chain) is not implemented;
   it would remove the need to name handles in the common case, at the cost of
