@@ -6,7 +6,9 @@
  * fixed-width bit fields, and block quantization.
  */
 
+#include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <string>
 #include <type_traits>
@@ -41,6 +43,17 @@ inline std::optional<int> approximation_single_dimensions(const ApproximationPor
         return inputs[0].dimensions;
     }
     return std::nullopt;
+}
+
+// The full range of a (32 bits or narrower) integral type, or nothing for
+// wider types, whose bounds do not fit a double exactly.
+template<typename T>
+std::optional<ApproximationRange> approximation_integral_range() {
+    if constexpr (std::is_integral_v<T> && sizeof(T) <= 4) {
+        return ApproximationRange((double)std::numeric_limits<T>::lowest(), (double)std::numeric_limits<T>::max());
+    } else {
+        return std::nullopt;
+    }
 }
 
 }  // namespace Internal
@@ -99,6 +112,12 @@ struct BlockReshape {
     ApproximationSignature signature() const {
         return {{{"values", std::nullopt, block_indexed_ ? 2 : 1}},
                 {{"blocks", std::nullopt, (int)extents_.size() + 1}}};
+    }
+
+    /** Pure re-indexing: exact for any values (given the flat extent is a
+     * multiple of the block size). */
+    bool lossless() const {
+        return true;
     }
 
 private:
@@ -215,6 +234,11 @@ struct StructLayout {
         return sig;
     }
 
+    /** Fields are stored bit-for-bit. */
+    bool lossless() const {
+        return true;
+    }
+
 private:
     Type record_type_;
     std::vector<std::string> logical_fields_;
@@ -267,6 +291,33 @@ struct StorageCast {
         return {{{name, type_of<Decoded>(), dims}}, {{name, type_of<Storage>(), dims}}};
     }
 
+    /** True exactly when every Decoded value is exactly representable in
+     * Storage (a widening conversion between arithmetic types); narrowing or
+     * float-to-integer casts round or truncate, so they declare no bound. */
+    static constexpr bool is_lossless() {
+        if constexpr (std::is_arithmetic_v<Decoded> && std::is_arithmetic_v<Storage>) {
+            using D = std::numeric_limits<Decoded>;
+            using S = std::numeric_limits<Storage>;
+            if constexpr (std::is_floating_point_v<Decoded>) {
+                return std::is_floating_point_v<Storage> && S::digits >= D::digits &&
+                       S::max_exponent >= D::max_exponent && S::min_exponent <= D::min_exponent;
+            } else if constexpr (std::is_floating_point_v<Storage>) {
+                return S::digits >= D::digits;
+            } else if constexpr (std::is_signed_v<Decoded>) {
+                return std::is_signed_v<Storage> && sizeof(Storage) >= sizeof(Decoded);
+            } else {
+                return std::is_unsigned_v<Storage> ? sizeof(Storage) >= sizeof(Decoded) :
+                                                     sizeof(Storage) > sizeof(Decoded);
+            }
+        } else {
+            return false;
+        }
+    }
+
+    bool lossless() const {
+        return is_lossless();
+    }
+
 private:
     static Pointwise pointwise() {
         return Pointwise{"storage_cast_stored", "storage_cast_decoded",
@@ -301,14 +352,42 @@ struct AdditiveOffset {
         return {pointwise().decode(encoded[0])};
     }
 
-    /** Dimensions and name follow the input port. */
+    /** Dimensions and name follow the input port.
+     *
+     * The input range is the precondition for exactness: the Decoded values
+     * whose translation fits in Storage. The output range is the translation
+     * of the range the input port guarantees (clipped to the precondition),
+     * or of the whole precondition if it guarantees none. Ranges are only
+     * declared for types of 32 bits or fewer. */
     ApproximationSignature signature(const ApproximationPorts &inputs) const {
         if (inputs.size() > 1) {
             return ApproximationSignature::unknown(inputs);
         }
         std::string name = inputs.empty() ? "value" : inputs[0].name;
         std::optional<int> dims = Internal::approximation_single_dimensions(inputs);
-        return {{{name, type_of<Decoded>(), dims}}, {{name, type_of<Storage>(), dims}}};
+        std::optional<ApproximationRange> pre, post;
+        auto decoded = Internal::approximation_integral_range<Decoded>();
+        auto stored = Internal::approximation_integral_range<Storage>();
+        if (decoded && stored) {
+            const double offset = (double)offset_;
+            pre = ApproximationRange(std::max(decoded->lo, stored->lo - offset),
+                                     std::min(decoded->hi, stored->hi - offset));
+            ApproximationRange in = *pre;
+            if (!inputs.empty() && inputs[0].range) {
+                in = ApproximationRange(std::max(pre->lo, inputs[0].range->lo),
+                                        std::min(pre->hi, inputs[0].range->hi));
+                if (in.lo > in.hi) {
+                    in = *pre;
+                }
+            }
+            post = ApproximationRange(in.lo + offset, in.hi + offset);
+        }
+        return {{{name, type_of<Decoded>(), dims, pre}}, {{name, type_of<Storage>(), dims, post}}};
+    }
+
+    /** Exact whenever the input respects the declared range. */
+    bool lossless() const {
+        return true;
     }
 
 private:
@@ -369,6 +448,11 @@ struct LittleEndianScalarPack {
         std::optional<int> dims = Internal::approximation_single_dimensions(inputs);
         return {{{inputs.empty() ? "word" : inputs[0].name, type_of<Word>(), dims}},
                 {{"bytes", UInt(8), dims ? std::optional<int>(*dims + 1) : std::nullopt}}};
+    }
+
+    /** Every bit of the word is kept. */
+    bool lossless() const {
+        return true;
     }
 };
 
@@ -476,18 +560,59 @@ struct AdditiveRadixSplit {
         return {code};
     }
 
-    /** A code <-> its unsigned low digit and signed high contribution. */
+    /** A code <-> its unsigned low digit and signed high contribution.
+     *
+     * The input range is the precondition for exactness, found by trying every
+     * int8 code (decode returns an int8): the codes for which the low digit
+     * fits a byte and the high contribution fits an int8. The output ranges
+     * are the digits those codes produce. No ranges are declared if the valid
+     * codes are empty or not contiguous. */
     ApproximationSignature signature(const ApproximationPorts &inputs) const {
         if (inputs.size() > 1) {
             return ApproximationSignature::unknown(inputs);
         }
         std::optional<int> dims = Internal::approximation_single_dimensions(inputs);
-        return {{{inputs.empty() ? "code" : inputs[0].name, std::nullopt, dims}},
-                {{"low", UInt(8), dims}, {"high", Int(8), dims}}};
+        Analysis a = analyze();
+        return {{{inputs.empty() ? "code" : inputs[0].name, std::nullopt, dims, a.valid ? std::optional(a.code) : std::nullopt}},
+                {{"low", UInt(8), dims, a.valid ? std::optional(a.low) : std::nullopt},
+                 {"high", Int(8), dims, a.valid ? std::optional(a.high) : std::nullopt}}};
+    }
+
+    /** Exact for codes in the declared input range. */
+    bool lossless() const {
+        return analyze().valid;
     }
 
 private:
     int radix_, offset_;
+
+    struct Analysis {
+        bool valid = false;
+        ApproximationRange code, low, high;
+    };
+
+    Analysis analyze() const {
+        Analysis a;
+        int count = 0, first = 0, last = 0;
+        for (int v = -128; v <= 127; ++v) {
+            int low = ((v + offset_) % radix_ + radix_) % radix_;
+            int high = v - low;
+            if (low > 255 || high < -128 || high > 127) {
+                continue;
+            }
+            if (count++ == 0) {
+                first = v;
+                a.low = ApproximationRange(low, low);
+                a.high = ApproximationRange(high, high);
+            }
+            last = v;
+            a.low = ApproximationRange(std::min<double>(a.low.lo, low), std::max<double>(a.low.hi, low));
+            a.high = ApproximationRange(std::min<double>(a.high.lo, high), std::max<double>(a.high.hi, high));
+        }
+        a.valid = count > 0 && count == last - first + 1;
+        a.code = ApproximationRange(first, last);
+        return a;
+    }
 };
 
 /** Exact fixed-width planar packing. For `(field_bits, positions)`, one byte
@@ -529,9 +654,17 @@ struct PlanarFieldPack {
         return {fields};
     }
 
-    /** (element, record) fields <-> (position, record) bytes. */
+    /** (element, record) fields <-> (position, record) bytes. The fields
+     * must fit in `field_bits`: encode masks each one to that width, so
+     * values outside [0, 2^field_bits - 1] are silently truncated. */
     ApproximationSignature signature() const {
-        return {{{"fields", std::nullopt, 2}}, {{"bytes", UInt(8), 2}}};
+        return {{{"fields", std::nullopt, 2, ApproximationRange(0, (double)((1 << field_bits_) - 1))}},
+                {{"bytes", UInt(8), 2}}};
+    }
+
+    /** Exact for fields in the declared input range. */
+    bool lossless() const {
+        return true;
     }
 
 private:
@@ -621,10 +754,50 @@ struct SymmetricBlockQuantize {
         return {dequantized};
     }
 
-    /** (within, block) floats <-> int8 codes and one float scale per block. */
+    /** (within, block) floats <-> int8 codes and one float scale per block.
+     *
+     * The codes' range is a guarantee for finite inputs: [-qmax, qmax] for
+     * round-to-nearest, [-qmax, qmax - 1] for TruncateHalfUpWithOffset, and
+     * [-1, 1] for SignOnly. It is not declared for MeanAbs scales (except
+     * SignOnly), where a code may be as large as the block size. */
     ApproximationSignature signature() const {
+        std::optional<ApproximationRange> codes;
+        if (rounding_ == BlockRoundingMode::SignOnly) {
+            codes = ApproximationRange(-1, 1);
+        } else if (anchor_ != BlockScaleAnchor::MeanAbs) {
+            const int hi = rounding_ == BlockRoundingMode::TruncateHalfUpWithOffset ? qmax_ - 1 : qmax_;
+            codes = ApproximationRange(std::max(-qmax_, -128), std::min(hi, 127));
+        }
         return {{{"block", Float(32), 2}},
-                {{"codes", Int(8), 2}, {"scale", Float(32), 1}}};
+                {{"codes", Int(8), 2, codes}, {"scale", Float(32), 1}}};
+    }
+
+    /** For finite inputs, a bound on |decode(encode(x)) - x| in units of the
+     * block's |scale|, when the scale is set by the block's extreme value
+     * (AbsMax, ExtremeSignedValue, ExtremeSignedValueTwoStep) and the codes
+     * are not sign-only:
+     *
+     * - Nearest and NearestEvenClampedHigh round to the nearest code, so the
+     *   error is at most half a step: |scale| / 2;
+     * - TruncateHalfUpWithOffset also clamps the top code (a value that
+     *   scales to +qmax lands on qmax - 1), so the bound is a full step:
+     *   |scale|.
+     *
+     * Both include a relative slack of qmax * 2^-21 covering the float
+     * rounding of the reciprocal, the scaled value, and the dequantizing
+     * product. No bound is declared for MeanAbs scales or SignOnly. */
+    Func error_bound(const std::vector<Func> &inputs, const std::vector<Func> &encoded) const {
+        if (anchor_ == BlockScaleAnchor::MeanAbs || rounding_ == BlockRoundingMode::SignOnly) {
+            return Func();
+        }
+        user_assert(inputs.size() == 1 && encoded.size() == 2)
+            << "SymmetricBlockQuantize::error_bound expects one input and two encoded Funcs\n";
+        const double steps = rounding_ == BlockRoundingMode::TruncateHalfUpWithOffset ? 1.0 : 0.5;
+        const double factor = steps + qmax_ * (1.0 / (1 << 21));
+        Var kk("kk"), blk("blk");
+        Func bound("symmetric_quantize_error_bound");
+        bound(kk, blk) = abs(cast<double>(encoded[1](blk))) * Expr(factor);
+        return bound;
     }
 
 private:
