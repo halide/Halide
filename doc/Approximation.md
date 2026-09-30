@@ -325,11 +325,17 @@ Port names are resolved as follows.
 - `Func::approximate_by()` names its input port after the root's declared input
   if it has exactly one, else `"input"`.
 - A `decode` run on its own (e.g. after `compute_offline` severs the encode)
-  takes its input names from the declared signature's *outputs*. Its output
-  names come from the declared signature's *inputs* resolved without an
-  encode-side context, which for context-dependent units (`Apply`, `Identity`,
-  `Permute`, ...) is unknown, so the naming rule applies (and `Permute`, whose
-  signature is known even without a context, produces positional names).
+  takes its input names from the declared signature's *outputs*.
+- The output names of `decode` come from the unit's optional
+  `decoded_ports(encoded)`, which maps the encoded ports it receives to the
+  decoded ones, else from the declared signature's *inputs* resolved without an
+  encode-side context, else the naming rule. Combinators define `decoded_ports`:
+  `Identity` echoes the ports, `Permute` inverse-permutes them (restoring the
+  names before the permutation), by-name `Apply` names its range after the ports
+  `inner` was given on the encode side, by-position `Apply` asks `inner` for its
+  range, and `Compose` threads the ports through its stages, outermost first. So
+  a by-name `Apply` after a `Permute` finds its port in both directions, with or
+  without the encode's ports.
 
 ### Signatures and validation
 
@@ -848,8 +854,13 @@ check_property(scheme, lossless().at(pack), Distribution::normal(0, 1),
 **Mechanics.** Stage-boundary values are read back by tracing stores (a JIT
 custom trace handler) rather than by realizing the Funcs, since their extents
 are inferred from the consumers. Each trial is a full round trip; idempotence
-re-runs it on the decoded values in a separate pipeline. Encoded Funcs that are
-not single-valued scalars (e.g. struct-typed) cannot be read back.
+re-runs it on the decoded values in a separate pipeline. Funcs that are not
+single-valued scalars (Tuple-valued or struct-typed) cannot be read back: their
+`encoded()` Buffers are undefined, and a property that needs one (e.g.
+`idempotent_requantize`, or `outputs_within_declared_ranges` on a port with a
+range) fails with a message saying so, as does `prop.at(stage)` for a stage with
+such an input. Properties over the decoded values (`lossless()`,
+`bounded_error()`, ...) are unaffected.
 
 ## Summary of decisions and open items
 
@@ -882,18 +893,10 @@ Open items:
   stage by its path in the trace tree (e.g. by label chain) is not implemented;
   it would remove the need to name handles in the common case, at the cost of
   making lookups depend on labels.
-- **Context-free decode names.** A stand-alone `decode` names its outputs from
-  the signature resolved without an encode-side context. `Permute` reports
-  positional names there, so a by-name `Apply` placed after it in the decode
-  direction cannot find its port; `Apply` and `Identity` fall back to the naming
-  rule, which preserves names only when the port count is unchanged.
 - **Trace scope.** The trace collector is thread-local; handle calls made from
   another thread inside a unit are not attached to the enclosing call.
 - **Bounds composition.** `Compose` declares no `error_bound` for lossy stages,
   and ranges flow only through units that declare them.
-- **Testing limits.** Encoded Funcs that are Tuple-valued or struct-typed cannot
-  be read back by the testing helpers, so properties over encoded values
-  (`idempotent_requantize`) do not apply to such schemes.
 - **Provenance checking** across an offline/online split, as above.
 
 ## Prior art referenced

@@ -184,6 +184,16 @@ struct ApproximationSignature {
  * outputs are named positionally, "0", "1", .... Declared ports are validated
  * against the actual Funcs on every call (see encode()).
  *
+ * A unit whose decoded port names depend on its encoded ports (a combinator
+ * that reorders or forwards them) may say how:
+ *
+ * \code
+ * // The names (and constraints) of the Funcs decode() returns, given the
+ * // ports it receives; empty if unknown. Without it, the declared signature's
+ * // inputs resolved with no context are used (or the naming rule).
+ * ApproximationPorts decoded_ports(const ApproximationPorts &encoded) const;
+ * \endcode
+ *
  * A unit may also list the Approximations it is built from, for describe():
  *
  * \code
@@ -268,6 +278,8 @@ class Approximation {
         virtual SignatureForm signature_form() const = 0;
         virtual ApproximationSignature declared_signature(const ApproximationPorts &inputs) const = 0;
         virtual bool encode_is_single() const = 0;
+        virtual bool declares_decoded_ports() const = 0;
+        virtual ApproximationPorts decoded_ports(const ApproximationPorts &encoded) const = 0;
         virtual std::vector<Approximation> children() const = 0;
         virtual std::vector<ApproximationPorts> child_inputs(const ApproximationPorts &inputs) const = 0;
         virtual Func error_bound(const std::vector<Func> &inputs, const std::vector<Func> &encoded) const = 0;
@@ -382,6 +394,14 @@ class Approximation {
                                            std::decay_t<decltype(std::declval<const T &>().signature(
                                                std::declval<const ApproximationPorts &>()))>,
                                            ApproximationSignature>>> : std::true_type {};
+
+    template<typename T, typename = void>
+    struct has_decoded_ports : std::false_type {};
+    template<typename T>
+    struct has_decoded_ports<T, std::enable_if_t<std::is_same_v<
+                                    std::decay_t<decltype(std::declval<const T &>().decoded_ports(
+                                        std::declval<const ApproximationPorts &>()))>,
+                                    ApproximationPorts>>> : std::true_type {};
 
     template<typename T, typename = void>
     struct has_children : std::false_type {};
@@ -516,9 +536,8 @@ public:
      * name `encoded`; when empty they come from the declared signature's
      * outputs (so a decode run on its own, e.g. after compute_offline severs
      * the encode, still gets named inputs). The decoded Funcs are named by
-     * the declared signature's inputs -- resolved without an encode-side
-     * context -- or by the naming rule if the unit is undeclared or its
-     * signature is unknown without context (Apply, Identity, ...). */
+     * decoded_ports() of the encoded ports, or by the naming rule if that is
+     * unknown or the unit is undeclared. */
     DecodeResult decode(const std::vector<Func> &encoded,
                         const ApproximationPorts &encoded_ports = {}) const;
 
@@ -531,6 +550,12 @@ public:
      *   were given) and one output with the same name;
      * - undeclared multi-Func unit: unknown (see ApproximationSignature). */
     ApproximationSignature signature(const ApproximationPorts &inputs = {}) const;
+
+    /** The ports decode() would return for encoded ports `encoded` (empty if
+     * unknown). Nothing is run. A unit's own `decoded_ports()` is used if it
+     * has one; otherwise its declared signature's inputs, resolved without
+     * context. */
+    ApproximationPorts decoded_ports(const ApproximationPorts &encoded) const;
 
     /** A per-element upper bound on |decode(encode(x)) - x|, given the
      * `inputs` handed to encode() and the `encoded` Funcs it returned, valid
@@ -699,6 +724,18 @@ struct Approximation::Model final : Approximation::Concept {
 
     bool encode_is_single() const override {
         return encode_form<T> == Form::Single;
+    }
+
+    bool declares_decoded_ports() const override {
+        return has_decoded_ports<T>::value;
+    }
+
+    ApproximationPorts decoded_ports(const ApproximationPorts &encoded) const override {
+        if constexpr (has_decoded_ports<T>::value) {
+            return unit.decoded_ports(encoded);
+        } else {
+            return {};
+        }
     }
 
     std::vector<Approximation> children() const override {
@@ -878,6 +915,10 @@ struct Compose {
      * any stage's signature is unknown. */
     ApproximationSignature signature(const ApproximationPorts &inputs) const;
 
+    /** Threads the ports through each stage's decoded_ports(), outermost
+     * first. Empty if any stage's are unknown. */
+    ApproximationPorts decoded_ports(const ApproximationPorts &encoded) const;
+
     /** The stages, *innermost first* (the order encode() runs them), each
      * with the ports it would receive. */
     std::vector<Approximation> children() const;
@@ -930,6 +971,11 @@ struct Apply {
     /** Unknown unless the range can be located in `inputs` and `inner`'s
      * signature is known for it. */
     ApproximationSignature signature(const ApproximationPorts &inputs) const;
+
+    /** By name, the ports `inner` would have been given (its inputs, as
+     * resolved for `port`); by position, `inner`'s decoded_ports() for the
+     * range. The other ports keep their names. */
+    ApproximationPorts decoded_ports(const ApproximationPorts &encoded) const;
 
     /** Just `inner`, with the ports it would receive. */
     std::vector<Approximation> children() const;
@@ -1000,6 +1046,9 @@ struct TrustedInverse {
      * encoded representation, and the decoder is trusted to consume it. */
     ApproximationSignature signature(const ApproximationPorts &inputs) const;
 
+    /** The decoder's. */
+    ApproximationPorts decoded_ports(const ApproximationPorts &encoded) const;
+
     /** The encoder, then the decoder (which is described without context,
      * since it runs in the other direction). */
     std::vector<Approximation> children() const;
@@ -1020,6 +1069,9 @@ struct Choose {
 
     /** The chosen stage's signature. */
     ApproximationSignature signature(const ApproximationPorts &inputs) const;
+
+    /** The chosen stage's. */
+    ApproximationPorts decoded_ports(const ApproximationPorts &encoded) const;
 
     /** Just the chosen stage. */
     std::vector<Approximation> children() const;
@@ -1089,6 +1141,10 @@ struct Identity {
     /** Echoes `inputs`; unknown if there are none. */
     ApproximationSignature signature(const ApproximationPorts &inputs) const;
 
+    ApproximationPorts decoded_ports(const ApproximationPorts &encoded) const {
+        return encoded;
+    }
+
     bool lossless() const {
         return true;
     }
@@ -1096,8 +1152,9 @@ struct Identity {
 
 /** Reorders Funcs: encode() outputs `inputs[permutation[i]]` at position i,
  * and decode() inverts that. The output port names are permuted the same
- * way. Without a context (no input ports), the inputs are named positionally,
- * so a stand-alone decode() names its outputs "0", "1", ... too. */
+ * way, and decode() restores the names the inputs had by inverting the
+ * permutation of the encoded ports it receives. Without a context (no input
+ * ports), the inputs are named positionally. */
 struct Permute {
     explicit Permute(std::vector<int> permutation)
         : forward(std::move(permutation)) {
@@ -1111,6 +1168,9 @@ struct Permute {
     std::vector<Func> decode(const std::vector<Func> &encoded) const;
 
     ApproximationSignature signature(const ApproximationPorts &inputs) const;
+
+    /** The encoded ports, inverse-permuted; empty if their count is wrong. */
+    ApproximationPorts decoded_ports(const ApproximationPorts &encoded) const;
 
     bool lossless() const {
         return true;
