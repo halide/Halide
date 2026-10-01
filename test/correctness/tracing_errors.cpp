@@ -49,8 +49,11 @@ int main(int argc, char **argv) {
     Callable c = f.compile_to_callable({});
     Buffer<int> out(10);
 
-    // A trace file that can't be opened is reported as an error.
-    {
+    // A trace file that can't be opened is reported as an error. Skipped on
+    // 32-bit Windows, where the JIT runtime's getenv doesn't see variables set
+    // with _putenv_s.
+    const Target t = get_jit_target_from_environment();
+    if (!(t.os == Target::Windows && t.bits == 32)) {
         set_env("HL_TRACE_FILE", "/nonexistent_dir/trace.bin");
         JITUserContext ctx;
         ctx.handlers.custom_error = record_error;
