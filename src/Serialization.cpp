@@ -1123,6 +1123,16 @@ Offset<Serialize::FuncSchedule> Serializer::serialize_func_schedule(FlatBufferBu
     for (const auto &storage_dim : func_schedule.storage_dims()) {
         storage_dims_serialized.push_back(serialize_storage_dim(builder, storage_dim));
     }
+    std::vector<Offset<Serialize::StorageSplit>> storage_splits_serialized;
+    for (const auto &split : func_schedule.storage_splits()) {
+        const auto old_var_serialized = serialize_string(builder, split.old_var);
+        const auto outer_serialized = serialize_string(builder, split.outer);
+        const auto inner_serialized = serialize_string(builder, split.inner);
+        const auto factor_serialized = serialize_expr(builder, split.factor);
+        storage_splits_serialized.push_back(
+            Serialize::CreateStorageSplit(builder, old_var_serialized, outer_serialized, inner_serialized,
+                                          factor_serialized.first, factor_serialized.second));
+    }
     std::vector<Offset<Serialize::Bound>> bounds_serialized;
     for (const auto &entry : func_schedule.bounds()) {
         bounds_serialized.push_back(serialize_bound(builder, entry.second));
@@ -1157,7 +1167,8 @@ Offset<Serialize::FuncSchedule> Serializer::serialize_func_schedule(FlatBufferBu
                                          memory_type, memoized, async,
                                          ring_buffer.first, ring_buffer.second,
                                          memoize_eviction_key_serialized.first, memoize_eviction_key_serialized.second,
-                                         builder.CreateVector(type_change_checks_serialized));
+                                         builder.CreateVector(type_change_checks_serialized),
+                                         builder.CreateVector(storage_splits_serialized));
 }
 
 Offset<Serialize::Specialization> Serializer::serialize_specialization(FlatBufferBuilder &builder, const Specialization &specialization) {

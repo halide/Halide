@@ -480,6 +480,8 @@ tests(
     split_predicate.cpp
     split_reuse_inner_name_bug.cpp
     split_same_var_names.cpp
+    split_storage.cpp
+    split_storage_errors.cpp
     split_store_compute.cpp
     stable_realization_order.cpp
     stack_allocations.cpp

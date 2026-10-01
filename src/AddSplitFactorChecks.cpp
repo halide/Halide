@@ -10,37 +10,36 @@ namespace Internal {
 
 namespace {
 
+void check_split_factor(const Function &f, const std::string &old_var,
+                        const std::string &outer, const std::string &inner,
+                        const Expr &factor, std::vector<Stmt> *stmts) {
+    if (is_positive_const(factor)) {
+        return;
+    }
+    Expr positive = simplify(factor > 0);
+    if (is_const_one(positive)) {
+        return;
+    }
+    std::ostringstream factor_str;
+    factor_str << factor;
+    Expr error = Call::make(Int(32), "halide_error_split_factor_not_positive",
+                            {f.name(),
+                             split_string(old_var, ".").back(),
+                             split_string(outer, ".").back(),
+                             split_string(inner, ".").back(),
+                             factor_str.str(), factor},
+                            Call::Extern);
+    stmts->push_back(AssertStmt::make(positive, error));
+}
+
 void check_all_split_factors(const Function &f, const Definition &def, std::vector<Stmt> *stmts) {
     const StageSchedule &sched = def.schedule();
     for (const Split &split : sched.splits()) {
-        if (split.split_type != Split::SplitVar) {
-            continue;
+        if (split.split_type == Split::SplitVar) {
+            check_split_factor(f, split.old_var, split.outer, split.inner,
+                               split.factor, stmts);
         }
-        if (is_positive_const(split.factor)) {
-            // Common-case optimization
-            continue;
-        }
-        Expr positive = simplify(split.factor > 0);
-        if (is_const_one(positive)) {
-            // We statically proved it
-            continue;
-        }
-        // We need a runtime check that says: if the condition is
-        // entered, the split factor will be positive. We can still
-        // assume the pipeline preconditions, because they will be
-        // checked before this.
-        std::ostringstream factor_str;
-        factor_str << split.factor;
-        Expr error = Call::make(Int(32), "halide_error_split_factor_not_positive",
-                                {f.name(),
-                                 split_string(split.old_var, ".").back(),
-                                 split_string(split.outer, ".").back(),
-                                 split_string(split.inner, ".").back(),
-                                 factor_str.str(), split.factor},
-                                Call::Extern);
-        stmts->push_back(AssertStmt::make(positive, error));
     }
-
     for (const auto &s : def.specializations()) {
         check_all_split_factors(f, s.definition, stmts);
     }
@@ -54,6 +53,10 @@ Stmt add_split_factor_checks(const Stmt &s, const std::map<std::string, Function
 
     for (const auto &p : env) {
         const Function &f = p.second;
+        for (const StorageSplit &split : f.schedule().storage_splits()) {
+            check_split_factor(f, split.old_var, split.outer, split.inner,
+                               split.factor, &stmts);
+        }
         check_all_split_factors(f, f.definition(), &stmts);
         for (const auto &u : f.updates()) {
             check_all_split_factors(f, u, &stmts);

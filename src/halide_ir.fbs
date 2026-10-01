@@ -502,6 +502,13 @@ table StorageDim {
     fold_forward: bool;
 }
 
+table StorageSplit {
+    old_var: string;
+    outer: string;
+    inner: string;
+    factor: Expr;
+}
+
 table LoopLevel {
     func_name: string;
     stage_index: int32;
@@ -534,6 +541,7 @@ table FuncSchedule {
     ring_buffer: Expr;
     memoize_eviction_key: Expr;
     type_change_checks: [TypeChangeCheck];
+    storage_splits: [StorageSplit];
 }
 
 table Specialization {

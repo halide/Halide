@@ -1050,11 +1050,22 @@ FuncSchedule Deserializer::deserialize_func_schedule(const Serialize::FuncSchedu
                 deserialize_string(check->message()));
         }
     }
+    std::vector<StorageSplit> storage_splits;
+    if (func_schedule->storage_splits() != nullptr) {
+        storage_splits.reserve(func_schedule->storage_splits()->size());
+        for (const auto *split : *func_schedule->storage_splits()) {
+            storage_splits.push_back({deserialize_string(split->old_var()),
+                                      deserialize_string(split->outer()),
+                                      deserialize_string(split->inner()),
+                                      deserialize_expr(split->factor_type(), split->factor())});
+        }
+    }
     auto hl_func_schedule = FuncSchedule();
     hl_func_schedule.store_level() = store_level;
     hl_func_schedule.compute_level() = compute_level;
     hl_func_schedule.hoist_storage_level() = hoist_storage_level;
     hl_func_schedule.storage_dims() = storage_dims;
+    hl_func_schedule.storage_splits() = std::move(storage_splits);
     hl_func_schedule.bounds() = bounds;
     hl_func_schedule.estimates() = estimates;
     hl_func_schedule.wrappers() = wrappers;
