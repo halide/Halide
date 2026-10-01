@@ -323,6 +323,7 @@ tests(
     isnan.cpp
     issue_3926.cpp
     iterate_over_circle.cpp
+    jit_host_environment.cpp
     lambda.cpp
     lazy_convolution.cpp
     leak_device_memory.cpp
