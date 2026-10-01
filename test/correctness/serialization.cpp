@@ -52,8 +52,9 @@ int main() {
         }
     }
 
-    // A prefetch of an ImageParam, which is an external parameter.
-    {
+    // A prefetch of an ImageParam, which is an external parameter. Skipped on
+    // HVX targets, which can't compile host-side prefetches (#9496).
+    if (!get_jit_target_from_environment().has_feature(Target::HVX)) {
         ImageParam input(Int(32), 2, "input");
         Func f("f");
         f(x, y) = input(x, y) * 2;
