@@ -95,6 +95,16 @@ WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
         c.dst_stride_bytes[i] = 0;
     }
 
+    if (src->dimensions != dst->dimensions ||
+        src->type.bytes() != dst->type.bytes() ||
+        dst->dimensions > MAX_COPY_DIMS) {
+        // These conditions should also be checked for outside this fn.
+        // The check has to happen before the loops below, which index
+        // dst->dim[i] up to src->dimensions.
+        device_copy zero = {0};
+        return zero;
+    }
+
     // Offset the src and dst base pointer to the right point in their buffer.
     c.src_begin = 0;
     c.dst_begin = 0;
@@ -108,14 +118,6 @@ WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
     }
     c.src_begin *= c.chunk_size;
     c.dst_begin *= c.chunk_size;
-
-    if (src->dimensions != dst->dimensions ||
-        src->type.bytes() != dst->type.bytes() ||
-        dst->dimensions > MAX_COPY_DIMS) {
-        // These conditions should also be checked for outside this fn.
-        device_copy zero = {0};
-        return zero;
-    }
 
     if (c.chunk_size == 0) {
         // This buffer apparently represents no memory. Return a zero'd copy
