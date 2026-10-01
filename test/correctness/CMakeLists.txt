@@ -404,6 +404,7 @@ tests(
     print.cpp
     print_loop_nest.cpp
     process_some_tiles.cpp
+    profiler_json_output.cpp
     propagate_estimate.cpp
     pseudostack_shares_slots.cpp
     python_extension_gen.cpp
