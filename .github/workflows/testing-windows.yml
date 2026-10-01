@@ -33,14 +33,13 @@ defaults:
 
 jobs:
   windows:
-    if: "!contains(github.event.pull_request.labels.*.name, 'skip_buildbots')"
     name: windows-${{ matrix.bits }} / ${{ matrix.uv_group }}
     runs-on: windows-2022
     strategy:
       fail-fast: false
       matrix:
         bits: [ "32" ]  # Intentionally not 64, as we haven't configured self-hosted runners for it yet.
-        uv_group: [ "ci-llvm-main", "ci-llvm-22", "ci-llvm-21" ]
+        uv_group: [ "ci-llvm-main" ]
         include:
           - bits: 32
             # A 64-bit compiler targeting x86, rather than the 32-bit one, so
@@ -83,19 +82,8 @@ jobs:
       - name: Configure CMake
         run: cmake --preset ci-windows-x86-${{ matrix.bits }}
 
-      - name: Initial build
-        run: cmake --build build
-
-      - name: Test (host)
+      - name: Diagnostic
         run: |
           cmake -S . -B build -DHalide_TARGET=host
-          cmake --build build
-          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -LE performance -j "$(nproc)"
-          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -L performance --repeat until-pass:5
-
-      - name: Test (no extensions)
-        run: |
-          cmake -S . -B build -DHalide_TARGET=cmake
-          cmake --build build
-          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -LE performance -j "$(nproc)"
-          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -L performance --repeat until-pass:5
+          cmake --build build --config RelWithDebInfo --target correctness_tracing_errors
+          ctest --test-dir build --build-config RelWithDebInfo -V -R '^correctness_tracing_errors$'

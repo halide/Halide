@@ -52,6 +52,11 @@ int main(int argc, char **argv) {
     // A trace file that can't be opened is reported as an error.
     {
         set_env("HL_TRACE_FILE", "/nonexistent_dir/trace.bin");
+        {
+            Func g("g");
+            g(x) = x;
+            g.compile_jit();
+        }
         JITUserContext ctx;
         ctx.handlers.custom_error = record_error;
         int result = c(&ctx, out);

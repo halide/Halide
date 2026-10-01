@@ -508,6 +508,33 @@ void compile_module_impl(
     err = JIT->getMainJITDylib().define(orc::absoluteSymbols(std::move(newSymbols)));
     internal_assert(!err) << llvm::toString(std::move(err)) << "\n";
 
+#ifdef _WIN32
+    {
+        {
+            auto module_of = [](const void *addr) {
+                HMODULE h = nullptr;
+                char path[MAX_PATH] = {0};
+                if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                       (LPCSTR)addr, &h)) {
+                    GetModuleFileNameA(h, path, MAX_PATH);
+                }
+                return std::string(path);
+            };
+            auto jit_getenv = JIT->lookup("getenv");
+            if (jit_getenv) {
+                void *p = (void *)jit_getenv->getValue();
+                debug(0) << "DIAG: JIT getenv = " << p << " in " << module_of(p) << "\n";
+                const char *v = ((char *(*)(const char *))p)("HL_TRACE_FILE");
+                debug(0) << "DIAG: JIT getenv(\"HL_TRACE_FILE\") = " << (v ? v : "(null)") << "\n";
+            } else {
+                debug(0) << "DIAG: JIT getenv lookup failed: " << llvm::toString(jit_getenv.takeError()) << "\n";
+            }
+            debug(0) << "DIAG: libHalide getenv = " << (void *)&::getenv << " in " << module_of((void *)&::getenv) << "\n";
+            debug(0) << "DIAG: libHalide getenv(\"HL_TRACE_FILE\") = " << (::getenv("HL_TRACE_FILE") ? ::getenv("HL_TRACE_FILE") : "(null)") << "\n";
+        }
+    }
+#endif
+
     // Retrieve function pointers from the compiled module (which also
     // triggers compilation)
     debug(1) << "JIT compiling " << module_name
