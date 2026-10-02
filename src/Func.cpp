@@ -3,6 +3,7 @@
 #include <cstring>
 #include <iostream>
 #include <limits>
+#include <set>
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
@@ -13,6 +14,7 @@
 #endif
 
 #include "ApplySplit.h"
+#include "Approximation.h"
 #include "Argument.h"
 #include "Associativity.h"
 #include "Bounds.h"
@@ -2776,6 +2778,51 @@ Func Func::clone_in(const vector<Func> &fs) {
     }
     invalidate_cache();
     return get_wrapper(func, name() + "_clone", fs, true);
+}
+
+ApproximationResult Func::approximate_by(const Approximation &p, const vector<Func> &consumers) {
+    EncodeResult enc = p.encode({*this});
+    user_assert(!enc.encoded.empty())
+        << "approximate_by: Approximation::encode(" << name() << ") returned no Funcs\n";
+
+    DecodeResult dec = p.decode(enc.encoded);
+    user_assert(dec.decoded.size() == 1)
+        << "approximate_by: Approximation::decode() must return exactly one Func (the "
+        << "round-trip replacement), but returned " << dec.decoded.size() << "\n";
+
+    Func round_trip = dec.decoded[0];
+    user_assert(round_trip.dimensions() == dimensions())
+        << "approximate_by: decode(encode(" << name() << "))'s result (" << round_trip.name()
+        << ") has " << round_trip.dimensions() << " dimensions, but " << name() << " has "
+        << dimensions() << " -- Approximation implementations must reproduce the original "
+        << "Func's signature exactly\n";
+    user_assert(round_trip.types() == types())
+        << "approximate_by: decode(encode(" << name() << "))'s result (" << round_trip.name()
+        << ") has a different type than " << name() << " -- Approximation implementations "
+        << "must reproduce the original Func's signature exactly\n";
+
+    for (const Func &g : consumers) {
+        user_assert(g.name() != name())
+            << "approximate_by: " << name() << " cannot be its own consumer\n";
+        // Eager and destructive, like Func::rfactor() and the targeted
+        // form of Func::in().
+        g.function().substitute_calls(func, round_trip.function());
+    }
+
+    vector<Func> intermediates;
+    std::set<std::string> seen = {name(), round_trip.name()};
+    auto add = [&](const vector<Func> &fs) {
+        for (const Func &g : fs) {
+            if (seen.insert(g.name()).second) {
+                intermediates.push_back(g);
+            }
+        }
+    };
+    add(enc.encoded);
+    add(enc.intermediates);
+    add(dec.intermediates);
+    return {round_trip, enc.encoded, enc.encoded_ports, intermediates, enc.stage_outputs, dec.stage_outputs,
+            std::move(enc.trace), std::move(dec.trace)};
 }
 
 Func Func::copy_to_device(DeviceAPI d) {
