@@ -609,7 +609,7 @@ Funcs in the call graph. `sever` (below) is needed only for the strictly
 narrower case of actually severing the graph into two separately-compiled
 artifacts, the static-weight case.
 
-## `sever`: v1 scope
+## `sever`: scope
 
 `Pipeline::sever()` is deliberately independent of `Approximation`: it operates
 on Funcs.
@@ -648,12 +648,12 @@ that should become a compile-time boundary, the result is:
 
 True automatic splitting (one Generator definition, two artifacts emitted
 automatically, no extra static I/O declared by the author) was considered and
-rejected for v1: it would require a Generator to discover an extra Input/Output
+rejected: it would require a Generator to discover an extra Input/Output
 *during* `generate()`, based on the structure of a Func graph that does not yet
 exist when `configure()` declares I/O. That is a phase-ordering problem, not
 just an ergonomics one.
 
-**v1 restriction:** each severed Func must be single-valued (no Tuples).
+**Restriction:** each severed Func must be single-valued (no Tuples).
 
 ### Composability with `approximate_by`
 
@@ -674,14 +674,14 @@ math needs the value, since it is writing the consumer fresh anyway.
 `approximate_by` earns its keep when the consumer already exists as written code
 the author does not want to edit by hand.
 
-### Non-goal for v1: provenance checking
+### Non-goal: provenance checking
 
 Nothing here guarantees that the `Approximation` used to produce the offline
 artifact in one compile is *actually* the same one the online compile expects
 when decoding it. Correctness rests on both sides building the same scheme.
 Embedding a scheme fingerprint in the artifact and checking it at load time is
-deferred; v1 accepts this as a user obligation, as any hand-written
-quantize/dequantize split already does.
+deferred; this is a user obligation, as any hand-written quantize/dequantize
+split already does.
 
 ## Generator shape
 
@@ -892,9 +892,9 @@ such an input. Properties over the decoded values (`lossless()`,
 | `Approximation` makes no placement claims (offline vs fused)                                 | Decided                                                                         |
 | `encode`'s output arity/layout (packed vs planar)                                            | Left to each `Approximation`                                                    |
 | `approximate_by`: eager, destructive `substitute_calls`, not `Func::in`; a `Func` member     | Decided; same scoping as `rfactor`, explicit already-existing `consumers`       |
-| `sever`: seam exposure on `Pipeline`, adopted via `add_input(ImageParam)`/`add_output(Func)` | Decided for v1; single-valued Funcs only                                        |
-| `sever`: true automatic pipeline splitting                                                   | Rejected for v1 (phase-ordering conflict with `configure()`/`generate()`)       |
-| `sever`: cross-compile provenance checking                                                   | Deferred; v1 relies on both sides building the same scheme                      |
+| `sever`: seam exposure on `Pipeline`, adopted via `add_input(ImageParam)`/`add_output(Func)` | Decided; single-valued Funcs only                                               |
+| `sever`: true automatic pipeline splitting                                                   | Rejected (phase-ordering conflict with `configure()`/`generate()`)              |
+| `sever`: cross-compile provenance checking                                                   | Deferred; relies on both sides building the same scheme                         |
 | Fusing `encode`/`decode` into neighboring stages (activation requantization)                 | No new mechanism; ordinary `.compute_at()`/`.compute_inline()`                  |
 | Declared ranges, `error_bound()`, `lossless()`; property-based testing in `tools/`           | Decided; claims are checked in tests, never enforced or used in codegen         |
 | Generator I/O ergonomics (`add_input`/`add_output` pointer bookkeeping)                      | Accepted rough edge, deferred                                                   |
