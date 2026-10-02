@@ -228,7 +228,7 @@ public:
      * -- e.g. quantizing a set of static weights -- into ordinary input
      * data, supplied once from wherever `offline` was realized or compiled.
      *
-     * v1 restriction: each Func in `to_sever` must be single-valued (no
+     * Each Func in `to_sever` must be single-valued (no
      * Tuples). */
     SeverResult sever(const std::vector<Func> &to_sever);
 
