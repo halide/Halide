@@ -18,6 +18,7 @@
 #include "Var.h"
 
 #include <map>
+#include <type_traits>
 #include <utility>
 
 namespace Halide {
@@ -58,6 +59,7 @@ struct VarOrRVar {
 };
 
 class ImageParam;
+class FuncVec;
 
 namespace Internal {
 struct AssociativeOp;
@@ -80,7 +82,7 @@ class Stage {
     void set_dim_type(const VarOrRVar &var, Internal::ForType t);
     void set_dim_device_api(const VarOrRVar &var, DeviceAPI device_api);
     void split(const std::string &old, const std::string &outer, const std::string &inner,
-               const Expr &factor, bool exact, TailStrategy tail);
+               const Expr &factor, const Expr &align, bool exact, TailStrategy tail);
     void remove(const std::string &var);
 
     const std::vector<Internal::StorageDim> &storage_dims() const {
@@ -212,6 +214,49 @@ public:
     HALIDE_NO_USER_CODE_INLINE std::enable_if_t<Internal::all_are_convertible<Func, Args...>::value, Stage &>
     eager_inline(const Func &first, Args &&...args);
     // @}
+
+    /** Hoist loop-invariant factors out of an associative reduction by applying
+     * the distributive law of a semiring. Like rfactor(), this must be called on
+     * an update definition; it splits the update into an intermediate that
+     * accumulates one factor-free outer term over all of the update's RVars and
+     * a write-back that applies the hoisted factors once. The intermediate Funcs
+     * are returned in a FuncVec. For tuple-valued reductions, they are ordered
+     * by tuple output index, then by outer-term order.
+     *
+     * A factor is hoistable if it does not depend on any RVar being reduced. It
+     * may be nested at any depth of an associative/commutative chain. The valid
+     * hoistings are:
+     *
+     *   Outer op    Inner combine   Law
+     *   ---------   -------------   ---
+     *   + (sum)     *               sum_k(s * x_k) = s * sum_k(x_k)
+     *   min         +               min_k(c + x_k) = c + min_k(x_k)
+     *   max         +               max_k(c + x_k) = c + max_k(x_k)
+     *   || (bool)   &&              or_k(p && x_k) = p && or_k(x_k)
+     *   && (bool)   ||              and_k(p || x_k) = p || and_k(x_k)
+     *
+     * For example, hoist_invariants() rewrites a pipeline like this:
+     * \code
+     * f(x) = 0;
+     * f(x) += a(x) * g(x, r) + b(x) * h(x, r);
+     * \endcode
+     * into a pipeline like this:
+     * \code
+     * f_intm0(x) = 0;
+     * f_intm0(x) += g(x, r);
+     * f_intm1(x) = 0;
+     * f_intm1(x) += h(x, r);
+     *
+     * f(x) = 0;
+     * f(x) += a(x) * f_intm0(x) + b(x) * f_intm1(x);
+     * \endcode
+     *
+     * This reduces the number of factor applications from |R| to one per pure
+     * point. Terms without a hoistable factor are still split into separate
+     * intermediates. It is an error if there is neither a distributable invariant
+     * factor nor more than one outer term to split.
+     */
+    FuncVec hoist_invariants();
 
     /** Schedule the iteration over this stage to be fused with another
      * stage 's' from outermost loop to a given LoopLevel. 'this' stage will
@@ -365,6 +410,7 @@ public:
     // @{
 
     Stage &split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
+    Stage &aligned_split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, const Expr &align, TailStrategy tail = TailStrategy::Auto);
     Stage &fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRVar &fused);
     Stage &serial(const VarOrRVar &var);
     Stage &parallel(const VarOrRVar &var);
@@ -793,6 +839,8 @@ class Func {
     /** Get the imaging pipeline that outputs this Func alone,
      * creating it (and freezing the Func) if necessary. */
     Pipeline pipeline();
+
+    friend class ProfilerScope;
 
     // Helper function for recursive reordering support
     Func &reorder_storage(const std::vector<Var> &dims, size_t start);
@@ -1519,6 +1567,41 @@ public:
      * factor does not provably divide the extent. */
     Func &split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
 
+    /** A version of split() that additionally takes a runtime-valued
+     * 'align' Expr. This version anchors the inner-loop's iterations
+     * to absolute coordinates, instead of to Halide's inferred loop
+     * bounds.
+     *
+     * As such, in absolute coordinates, the inner-loop boundaries fall
+     * at ``align``, ``align + factor``, ``align + 2*factor``, and so on.
+     * The inner dimension still iterates over ``[0, factor-1]``, same as
+     * an unaligned split. The difference is how the original loop Var
+     * is reconstructed from the outer and inner loop Vars.
+     * This may increase the number of iterations over the outer
+     * loop by 1 compared to an unaligned split.
+     *
+     * This is useful when an algorithm selects between cases using an
+     * expression like ``(x - offset) % factor``, where 'offset' is a
+     * value only known at runtime (e.g. a Param). Passing that same
+     * 'offset' as 'align' makes ``(x - offset) % factor`` a
+     * compile-time constant on each unrolled iteration of the inner
+     * loop, so that a mux() indexed by it can be resolved statically
+     * instead of compiling to a runtime select:
+     \code
+     Var x, xo, xi;
+     Param<int> offset;
+     f(x) = mux((x - offset) % 4, {a(x), b(x), c(x), d(x)});
+     f.aligned_split(x, xo, xi, 4, offset, TailStrategy::GuardWithIf)
+      .unroll(xi);
+     \endcode
+     * Without 'align', the compiler can't tell at compile time which of
+     * the four mux() cases applies to a given unrolled value of 'xi',
+     * because that depends on the runtime value of 'offset'. With it,
+     * ``(x - offset) % 4`` simplifies to a distinct compile-time
+     * constant for each unrolled value of 'xi', and each mux() call
+     * collapses to its selected case. */
+    Func &aligned_split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, const Expr &align, TailStrategy tail = TailStrategy::Auto);
+
     /** Join two dimensions into a single fused dimension. The fused dimension
      * covers the product of the extents of the inner and outer dimensions
      * given. The loop type (e.g. parallel, vectorized) of the resulting fused
@@ -2199,6 +2282,35 @@ public:
     }
     // @}
 
+    /** Split a storage dimension into two sub-dimensions, analogous to
+     * how \ref Func::split splits a loop dimension. The storage axis
+     * "old" is replaced (in the storage nesting order) by "inner"
+     * (innermost) and "outer", where "inner" has extent "factor". The
+     * newly created axes are ordinary storage axes: they can be
+     * reordered relative to the other storage axes with
+     * reorder_storage, and bounded/aligned with bound_storage and
+     * align_storage.
+     *
+     * This lets you describe blocked/tiled storage layouts. For
+     * example, given foo(x, y), splitting x into (xo, xi) by 8 and then
+     * reordering to (xi, y, xo) lays foo out as a sequence of 8-wide
+     * column strips.
+     *
+     * Unlike a loop split there is no TailStrategy: the allocation is
+     * always rounded up so that the outer extent is
+     * ceil(old_extent / factor), over-allocating when the factor does
+     * not divide the extent.
+     *
+     * bound_storage, align_storage, and fold_storage settings must be
+     * applied to the split axes, not to "old" before it is split.
+     *
+     * split_storage is not supported for pipeline outputs, Funcs with
+     * an extern definition, Funcs consumed by an extern stage, or Funcs
+     * stored in MemoryType::GPUTexture. You may fold_storage the other
+     * (unsplit) axes of the same Func, but folding a split axis itself
+     * is not supported. */
+    Func &split_storage(const Var &old, const Var &outer, const Var &inner, const Expr &factor);
+
     /** Pad the storage extent of a particular dimension of
      * realizations of this function up to be a multiple of the
      * specified alignment. This guarantees that the strides for the
@@ -2727,6 +2839,23 @@ public:
      * in global vs shared vs local on the GPU. See the documentation
      * on MemoryType for more detail. */
     Func &store_in(MemoryType memory_type);
+
+    /** Tell the GPU shader compiler to fit the kernel this Func's loop over gpu
+     * blocks becomes under a given number of registers per thread. A smaller
+     * budget allows more blocks to be resident on one of the GPU's processors
+     * at once, but constrains the compiler's instruction scheduling, and may
+     * make it spill values to memory.
+     *
+     * Leaving this unset does not mean no limit. It means the GPU driver picks
+     * a value automatically, so asking for more registers than it would have
+     * chosen is also a meaningful thing to do. Zero asks for that automatic
+     * choice, which is what an unscheduled Func gets.
+     *
+     * Only CUDA offers this level of control, so the device API must be given
+     * explicitly and must be DeviceAPI::CUDA; passing anything else warns and
+     * has no effect. Even for CUDA it only takes effect when the PTX version in
+     * use has the .maxnreg directive. */
+    Func &gpu_max_registers(DeviceAPI device_api, int n);
 
     /** Use non-temporal (streaming) loads for every direct read this Func's
      * pure (initial) definition makes of another Func. Equivalent to calling

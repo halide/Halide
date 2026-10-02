@@ -345,7 +345,9 @@ TailStrategy Deserializer::deserialize_tail_strategy(Serialize::TailStrategy tai
     case Serialize::TailStrategy::GuardWithIf:
         return TailStrategy::GuardWithIf;
     case Serialize::TailStrategy::Predicate:
-        return TailStrategy::Predicate;
+        // Predicate is deprecated and identical to GuardWithIf; old
+        // serialized pipelines that used it deserialize to GuardWithIf.
+        return TailStrategy::GuardWithIf;
     case Serialize::TailStrategy::PredicateLoads:
         return TailStrategy::PredicateLoads;
     case Serialize::TailStrategy::PredicateStores:
@@ -432,6 +434,27 @@ Type Deserializer::deserialize_type(const Serialize::Type *type) {
     const int bits = type->bits();
     const int lanes = type->lanes();
     const TypeCode code_deserialized = type->code();
+
+    if (code_deserialized == TypeCode::Struct) {
+        user_assert(lanes == 1) << "A struct type cannot be a vector.\n";
+        const auto *fields_serialized = type->struct_fields();
+        user_assert(fields_serialized != nullptr && fields_serialized->size() > 0)
+            << "deserializing a struct type with no fields\n";
+        std::vector<StructField> fields;
+        fields.reserve(fields_serialized->size());
+        for (const auto *field_serialized : *fields_serialized) {
+            StructField field;
+            field.name = deserialize_string(field_serialized->name());
+            field.type = deserialize_type(field_serialized->type());
+            const int array_extent = field_serialized->array_extent();
+            if (array_extent >= 0) {
+                field.array_extent = array_extent;
+            }
+            fields.push_back(field);
+        }
+        return Type::Struct(fields);
+    }
+
     halide_type_code_t code = halide_type_uint;
     switch (code_deserialized) {
     case TypeCode::Int:
@@ -1025,8 +1048,12 @@ FuncSchedule Deserializer::deserialize_func_schedule(const Serialize::FuncSchedu
     const std::vector<StorageDim> storage_dims =
         deserialize_vector<Serialize::StorageDim, StorageDim>(func_schedule->storage_dims(),
                                                               &Deserializer::deserialize_storage_dim);
-    const std::vector<Bound> bounds = deserialize_vector<Serialize::Bound, Bound>(func_schedule->bounds(),
-                                                                                  &Deserializer::deserialize_bound);
+    const std::vector<Bound> bounds_vec = deserialize_vector<Serialize::Bound, Bound>(func_schedule->bounds(),
+                                                                                      &Deserializer::deserialize_bound);
+    std::map<std::string, Bound> bounds;
+    for (const auto &b : bounds_vec) {
+        merge_bound(bounds, b);
+    }
     const std::vector<Bound> estimates = deserialize_vector<Serialize::Bound, Bound>(func_schedule->estimates(),
                                                                                      &Deserializer::deserialize_bound);
     const std::map<std::string, FunctionPtr> wrappers = deserialize_wrapper_refs(func_schedule->wrappers());
@@ -1044,11 +1071,22 @@ FuncSchedule Deserializer::deserialize_func_schedule(const Serialize::FuncSchedu
                 deserialize_string(check->message()));
         }
     }
+    std::vector<StorageSplit> storage_splits;
+    if (func_schedule->storage_splits() != nullptr) {
+        storage_splits.reserve(func_schedule->storage_splits()->size());
+        for (const auto *split : *func_schedule->storage_splits()) {
+            storage_splits.push_back({deserialize_string(split->old_var()),
+                                      deserialize_string(split->outer()),
+                                      deserialize_string(split->inner()),
+                                      deserialize_expr(split->factor_type(), split->factor())});
+        }
+    }
     auto hl_func_schedule = FuncSchedule();
     hl_func_schedule.store_level() = store_level;
     hl_func_schedule.compute_level() = compute_level;
     hl_func_schedule.hoist_storage_level() = hoist_storage_level;
     hl_func_schedule.storage_dims() = storage_dims;
+    hl_func_schedule.storage_splits() = std::move(storage_splits);
     hl_func_schedule.bounds() = bounds;
     hl_func_schedule.estimates() = estimates;
     hl_func_schedule.wrappers() = wrappers;
@@ -1152,6 +1190,7 @@ Split Deserializer::deserialize_split(const Serialize::Split *split) {
     const auto exact = split->exact();
     const auto tail = deserialize_tail_strategy(split->tail());
     const auto split_type = deserialize_split_type(split->split_type());
+    const auto align = deserialize_expr(split->align_type(), split->align());
     auto hl_split = Split();
     hl_split.old_var = old_var;
     hl_split.outer = outer;
@@ -1160,6 +1199,7 @@ Split Deserializer::deserialize_split(const Serialize::Split *split) {
     hl_split.exact = exact;
     hl_split.tail = tail;
     hl_split.split_type = split_type;
+    hl_split.align = align;
     return hl_split;
 }
 
@@ -1446,6 +1486,18 @@ Pipeline Deserializer::deserialize(std::istream &in) {
 }
 
 Pipeline Deserializer::deserialize(const std::vector<uint8_t> &data) {
+    // The accessors below chase offsets straight out of the buffer with no
+    // structural check unless we ask for one, so a malformed .hlpipe can read
+    // out of bounds (Finish() writes no file identifier, so verify without
+    // one). Each IR node is one flatbuffer table, and deserialize_stmt/
+    // deserialize_expr recurse to a depth matching the buffer's nesting, so
+    // max_depth is raised well past the default of 64 -- enough for deeply
+    // nested Exprs, but still a real bound on that recursion.
+    flatbuffers::Verifier::Options verifier_options;
+    verifier_options.max_depth = 1000;
+    flatbuffers::Verifier verifier(data.data(), data.size(), verifier_options);
+    user_assert(verifier.VerifyBuffer<Serialize::Pipeline>())
+        << "malformed serialized pipeline: failed flatbuffer verification\n";
     const auto *pipeline_obj = Serialize::GetPipeline(data.data());
     if (pipeline_obj == nullptr) {
         user_warning << "deserialized pipeline is empty\n";
@@ -1573,6 +1625,12 @@ std::map<std::string, Parameter> Deserializer::deserialize_parameters(std::istre
 
 std::map<std::string, Parameter> Deserializer::deserialize_parameters(const std::vector<uint8_t> &data) {
     std::map<std::string, Parameter> external_parameters_by_name;
+    // See the matching verifier in deserialize() above for why max_depth is raised.
+    flatbuffers::Verifier::Options verifier_options;
+    verifier_options.max_depth = 1000;
+    flatbuffers::Verifier verifier(data.data(), data.size(), verifier_options);
+    user_assert(verifier.VerifyBuffer<Serialize::Pipeline>())
+        << "malformed serialized pipeline: failed flatbuffer verification\n";
     const auto *pipeline_obj = Serialize::GetPipeline(data.data());
     if (pipeline_obj == nullptr) {
         user_warning << "deserialized pipeline is empty\n";

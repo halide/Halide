@@ -40,7 +40,7 @@ public:
         const int vector_size = natural_vector_size<uint8_t>();
 
         output_.compute_root()
-            .vectorize(x, vector_size, TailStrategy::Predicate);
+            .vectorize(x, vector_size, TailStrategy::GuardWithIf);
 
         inv_sqrt.compute_at(output_, y);
 
@@ -118,7 +118,7 @@ public:
         // Schedule.
         const int vector_size = natural_vector_size<uint8_t>();
 
-        output_.vectorize(x, vector_size, TailStrategy::Predicate);
+        output_.vectorize(x, vector_size, TailStrategy::GuardWithIf);
 
         max_x.compute_at(output_, y)
             .update()

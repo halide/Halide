@@ -24,11 +24,13 @@ set(tests
     memoize.py
     multi_method_module_test.py
     multipass_constraints.py
+    profiler_scope.py
     pystub.py
     rdom.py
     realize_warnings.py
     runtime_prefixes.py
     serialization.py
+    struct_type.py
     target.py
     tuple_select.py
     type.py

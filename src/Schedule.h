@@ -51,14 +51,9 @@ enum class TailStrategy {
      * case to handle the if statement. */
     GuardWithIf,
 
-    /** Guard the loads and stores in the loop with an if statement
-     * that prevents evaluation beyond the original extent. Always
-     * legal. The if statement is treated like a boundary condition,
-     * and factored out into a loop epilogue if possible.
-     * Pros: no redundant re-evaluation; does not constrain input or
-     * output sizes. Cons: increases code size due to separate
-     * tail-case handling. */
-    Predicate,
+    /** Identical to GuardWithIf. Kept only for backwards
+     * compatibility; use GuardWithIf instead. */
+    Predicate [[deprecated("Use TailStrategy::GuardWithIf instead. TailStrategy::Predicate is identical to it and will be removed in a future release.")]] = GuardWithIf,
 
     /** Guard the loads in the loop with an if statement that
      * prevents evaluation beyond the original extent. Only legal
@@ -334,6 +329,8 @@ struct ReductionVariable;
 struct Split {
     std::string old_var, outer, inner;
     Expr factor;
+    Expr align;  // If defined, the inner var loops over [align,
+                 // align + factor - 1] instead of [0, factor - 1].
     bool exact;  // Is it required that the factor divides the extent
                  // of the old var. True for splits of RVars. Forces
                  // tail strategy to be GuardWithIf.
@@ -508,6 +505,15 @@ struct Bound {
     Expr modulus, remainder;
 };
 
+/** Merge \p b into \p bounds, keyed by \p b.var. Func::bound/bound_extent/
+ * align_bounds/align_extent each set one or more of a Var's four Bound
+ * fields (min, extent, modulus, remainder) and leave the rest undefined.
+ * A field that \p b doesn't set is left untouched on an existing entry for
+ * that Var; a field it does set overwrites whatever was there, so every
+ * consumer of FuncSchedule::bounds() sees at most one constraint per Var,
+ * with no ordering between calls left for them to get wrong. */
+void merge_bound(std::map<std::string, Bound> &bounds, const Bound &b);
+
 /** Properties of one axis of the storage of a Func */
 struct StorageDim {
     /** The var in the pure definition corresponding to this axis */
@@ -527,6 +533,20 @@ struct StorageDim {
      * false). */
     Expr fold_factor;
     bool fold_forward;
+};
+
+/** A split of one storage axis into two, created by
+ * Func::split_storage. Storage splits are the storage-layout analogue
+ * of loop splits (\ref Split): the pre-split axis old_var is carved
+ * into an outer and inner axis, where the inner axis has extent
+ * "factor". Unlike loop splits there is no TailStrategy - the
+ * allocation is always rounded up so that the outer extent is
+ * ceil(old_extent / factor). The resulting outer/inner axes appear in
+ * the storage_dims list (in place of old_var) and can be reordered,
+ * bounded and aligned like any other storage axis. */
+struct StorageSplit {
+    std::string old_var, outer, inner;
+    Expr factor;
 };
 
 /** This represents two stages with fused loop nests from outermost to
@@ -627,18 +647,35 @@ public:
     std::vector<StorageDim> &storage_dims();
     // @}
 
+    /** The list of storage-axis splits (see \ref StorageSplit and \ref
+     * Func::split_storage), in the order they were applied. Storage
+     * flattening replays these to derive the storage layout from the
+     * pure args. */
+    // @{
+    const std::vector<StorageSplit> &storage_splits() const;
+    std::vector<StorageSplit> &storage_splits();
+    // @}
+
     /** The memory type (heap/stack/shared/etc) used to back this Func. */
     // @{
     MemoryType memory_type() const;
     MemoryType &memory_type();
+
+    /** The most registers a thread of the kernel this Func's loop over gpu
+     * blocks becomes may use. Zero means let the backend decide. */
+    // @{
+    int gpu_max_registers() const;
+    int &gpu_max_registers();
+    // @}
     // @}
 
     /** You may explicitly bound some of the dimensions of a function,
      * or constrain them to lie on multiples of a given factor. See
-     * \ref Func::bound and \ref Func::align_bounds and \ref Func::align_extent. */
+     * \ref Func::bound and \ref Func::align_bounds and \ref Func::align_extent.
+     * At most one Bound is kept per Var, keyed by its name. */
     // @{
-    const std::vector<Bound> &bounds() const;
-    std::vector<Bound> &bounds();
+    const std::map<std::string, Bound> &bounds() const;
+    std::map<std::string, Bound> &bounds();
     // @}
 
     /** You may explicitly specify an estimate of some of the function

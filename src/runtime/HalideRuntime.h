@@ -499,6 +499,8 @@ typedef enum halide_type_code_t
     halide_type_float = 2,   ///< IEEE floating point numbers
     halide_type_handle = 3,  ///< opaque pointer type (void *)
     halide_type_bfloat = 4,  ///< floating point numbers in the bfloat format
+    halide_type_struct = 5,  ///< a packed, by-value aggregate; its total byte
+                             ///< size is carried in halide_type_t::info
 } halide_type_code_t;
 
 // Note that while __attribute__ can go before or after the declaration,
@@ -532,22 +534,24 @@ struct halide_type_t {
     HALIDE_ATTRIBUTE_ALIGN(1)
     uint8_t bits;
 
-    /** Reserved for future element-kind payloads. */
+    /** Element-kind payload. For a struct type (code == halide_type_struct)
+     * this holds the total packed byte size of the aggregate; the ordinary
+     * `bits` field is not meaningful for a struct. Zero for all other types. */
     HALIDE_ATTRIBUTE_ALIGN(2)
-    uint16_t reserved;
+    uint16_t info;
 
 #if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
     /** Construct a runtime representation of a Halide element type from:
      * code: The fundamental type from an enum.
      * bits: The bit size of one element. */
     HALIDE_ALWAYS_INLINE constexpr halide_type_t(halide_type_code_t code, uint8_t bits)
-        : code(code), bits(bits), reserved(0) {
+        : code(code), bits(bits), info(0) {
     }
 
     /** Default constructor is required e.g. to declare halide_trace_event
      * instances. */
     HALIDE_ALWAYS_INLINE constexpr halide_type_t()
-        : code((halide_type_code_t)0), bits(0), reserved(0) {
+        : code((halide_type_code_t)0), bits(0), info(0) {
     }
 
     /** Compare two types for equality. */
@@ -563,9 +567,11 @@ struct halide_type_t {
         return static_cast<uint32_t>(*this) < static_cast<uint32_t>(other);
     }
 
-    /** Size in bytes for a single element of this type. */
+    /** Size in bytes for a single element of this type. For a struct type the
+     * packed aggregate size is carried in `info` rather than derived from
+     * `bits`. */
     HALIDE_ALWAYS_INLINE constexpr int bytes() const {
-        return (bits + 7) / 8;
+        return code == halide_type_struct ? info : (bits + 7) / 8;
     }
 
     HALIDE_ALWAYS_INLINE constexpr operator uint32_t() const {
@@ -575,7 +581,7 @@ struct halide_type_t {
         // (At -O0 it will look awful.)
         return static_cast<uint8_t>(code) |
                static_cast<uint16_t>(bits) << 8 |
-               static_cast<uint32_t>(reserved) << 16;
+               static_cast<uint32_t>(info) << 16;
     }
 #endif
 };
@@ -740,7 +746,7 @@ struct halide_trace_packet_t {
         struct {
             /** The (scalar) element type code of the access (see halide_trace_event_t).
              * Unpacked from halide_type_t rather than storing it directly, since
-             * halide_type_t's `reserved` field carries no meaning here. */
+             * halide_type_t's `info` field carries no meaning here. */
             uint8_t type_code;
             /** The bit-width of the element type of the access. */
             uint8_t type_bits;
@@ -2018,6 +2024,21 @@ enum halide_profiler_func_kind {
 };
 
 /** Per-Func state tracked by the sampling profiler. */
+// These fields fall into groups that aggregate differently across the
+// pipeline's runs (see halide_profiler_pipeline_stats::runs). Read them
+// accordingly -- in particular the counters are *totals over all runs*, so
+// most consumers want to divide them by the run count:
+//   - Identity (name, parent, canonical_id, kind, buffer_func_id): fixed.
+//   - Peaks (memory_peak, stack_peak): the maximum over all runs. A peak,
+//     not a sum -- do not divide by runs.
+//   - Counters (everything from memory_total to the end of the struct, and
+//     time): summed over every run. Divide by the pipeline's `runs` to get a
+//     per-run value. `time` is the exception: it is summed only over runs
+//     that produced a sample, so divide it by `billed_runs` instead.
+//     active_threads_{numerator,denominator} are summed as a pair; their
+//     ratio is already an average, so do not divide it further.
+//   - memory_current is a live snapshot (roughly zero once a run finishes),
+//     not aggregated.
 struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
     /** The name of this Func. A global constant string. */
     const char *name;
@@ -2040,38 +2061,44 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
     int buffer_func_id;
 
     /** A bitmask flagging which of this Func's aggregated counters are
-     * conservative upper bounds rather than exact values. The bits index the
-     * counters passed to halide_profiler_update_counters, in that order:
-     * bit 0 = memory_total, 1 = num_allocs, 2 = parallel_loops,
-     * 3 = parallel_tasks, 4 = points_required_at_root, 5 = points_computed.
-     * (active_threads_numerator/denominator are sampled at runtime rather
-     * than summed over loops, so they are never approximated and have no
-     * bit.) A set bit only happens on GPU, where a guarded contribution
-     * can't be summed exactly and is bounded instead; the reporter marks
-     * such columns with a leading '<'. Must stay in sync with the counter
-     * enum in src/Profiling.cpp. */
+     * conservative upper bounds rather than exact values. Bit i corresponds
+     * to the i'th counter passed to halide_profiler_update_counters, in the
+     * order of the counter enum in src/Profiling.cpp (bit 0 = memory_total,
+     * 1 = num_allocs, ... covering all the summed counters below, from
+     * memory_total through productions_if_inwards). active_threads_numerator
+     * and _denominator are sampled at runtime rather than summed over loops,
+     * so they are never approximated and have no bit. A set bit only happens
+     * on GPU, where a guarded contribution can't be summed exactly and is
+     * bounded instead; the reporter marks such columns with a leading '<'. */
     uint32_t counters_approximated;
 
-    /** Total time taken evaluating this Func (in nanoseconds). */
+    /** Total time (nanoseconds) spent evaluating this Func, summed across
+     * all runs that produced a profiler sample. Divide by the pipeline's
+     * billed_runs (not runs) for a per-run time. */
     uint64_t HALIDE_ATTRIBUTE_ALIGN(8) time;
 
-    /** The current memory allocation of this Func. */
+    /** This Func's live heap allocation at the instant the report is taken;
+     * normally near zero once a run has finished. A snapshot, not aggregated. */
     uint64_t memory_current;
 
-    /** The peak memory allocation of this Func. */
+    /** The peak heap allocation of this Func: the maximum over all runs (a
+     * peak, not a sum -- do not divide by runs). */
     uint64_t memory_peak;
 
-    /** The peak stack allocation of this Func's threads. */
+    /** The peak stack allocation of this Func's threads, as a maximum over
+     * all runs (like memory_peak). */
     uint64_t stack_peak;
 
-    // Everything field after this point is a counter. They are aggregated by
-    // blindly adding.
+    // Every field after this point is a counter: summed across every run
+    // (and across a Func's instances). Divide by the pipeline's `runs` for a
+    // per-run value.
 
     /** The total memory allocation of this Func. */
     uint64_t memory_total;
 
-    /** The average number of thread pool worker threads active while computing
-     * this Func. */
+    /** The average number of thread pool worker threads active while
+     * computing this Func is numerator / denominator. Both are summed across
+     * runs, so the ratio is already an average -- do not divide it by runs. */
     uint64_t active_threads_numerator, active_threads_denominator;
 
     /** The total number of times heap storage for this Func was allocated. */
@@ -2127,22 +2154,32 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
 };
 
 /** Per-pipeline state tracked by the sampling profiler. These exist
- * in a linked list. */
+ * in a linked list. The fields aggregate across `runs` the same way as in
+ * halide_profiler_func_stats: `time` is summed over `billed_runs` (divide by
+ * that for per-run), `memory_peak` is a maximum (not a sum), the remaining
+ * counters are summed over `runs` (divide by `runs` for per-run), the
+ * active_threads pair is a ready-made average, and `memory_current` is a
+ * live snapshot. */
 struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_pipeline_stats {
-    /** Total time spent in this pipeline (in nanoseconds) */
+    /** Total time (nanoseconds) spent in this pipeline, summed across the
+     * runs that produced a sample. Divide by billed_runs for a per-run time. */
     uint64_t time;
 
-    /** The current memory allocation of funcs in this pipeline. */
+    /** Live heap allocation across this pipeline's funcs at report time; a
+     * snapshot, not aggregated. */
     uint64_t memory_current;
 
-    /** The peak memory allocation of funcs in this pipeline. */
+    /** The peak heap allocation of funcs in this pipeline: the maximum over
+     * all runs (a peak, not a sum). */
     uint64_t memory_peak;
 
-    /** The total memory allocation of funcs in this pipeline. */
+    /** The total memory allocated by funcs in this pipeline, summed across
+     * all runs. Divide by `runs` for a per-run value. */
     uint64_t memory_total;
 
-    /** The average number of thread pool worker threads doing useful
-     * work while computing this pipeline. */
+    /** The average number of thread pool worker threads doing useful work
+     * while computing this pipeline is numerator / denominator; the ratio is
+     * already an average (do not divide by runs). */
     uint64_t active_threads_numerator, active_threads_denominator;
 
     /** The native vector width for the target this pipeline ran on, in
@@ -2300,6 +2337,12 @@ extern void halide_profiler_shutdown(void);
 /** Print out timing statistics for everything run since the last
  * reset. Also happens at process exit. */
 extern void halide_profiler_report(void *user_context);
+
+/** Set the path of the JSON file that halide_profiler_report writes the raw
+ * statistics to, overriding the HL_PROFILER_JSON_OUTPUT environment
+ * variable. The path is copied. Pass nullptr to revert to the environment
+ * variable. */
+extern void halide_profiler_set_json_output(const char *path);
 
 /** These routines are called to temporarily disable and then re-enable
  * the profiler. */
@@ -2502,6 +2545,8 @@ inline std::ostream &operator<<(std::ostream &os, const halide_type_t &type) {
         return os << "(void*)";
     case halide_type_bfloat:
         return os << "bfloat" << (int)type.bits;
+    case halide_type_struct:
+        return os << "struct(" << (int)type.info << " bytes)";
     }
     return os;
 }

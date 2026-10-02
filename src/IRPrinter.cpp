@@ -46,8 +46,22 @@ ostream &operator<<(ostream &out, const Type &type) {
     case Type::BFloat:
         out << "bfloat";
         break;
+    case Type::StructKind:
+        out << "struct{";
+        if (const StructTypeInfo *info = type.struct_type()) {
+            const char *sep = "";
+            for (const auto &f : info->fields) {
+                out << sep << f.name << ": " << f.type;
+                if (f.array_extent) {
+                    out << "[" << *f.array_extent << "]";
+                }
+                sep = ", ";
+            }
+        }
+        out << "}";
+        break;
     }
-    if (!type.is_handle()) {
+    if (!type.is_handle() && !type.is_struct()) {
         out << type.bits();
     }
     if (type.lanes() > 1) {
@@ -68,8 +82,8 @@ ostream &operator<<(ostream &stream, const Expr &ir) {
 
 ostream &operator<<(ostream &stream, const Tuple &ir) {
     stream << "(";
-    for (size_t i = 0; i < ir.size(); i++) {
-        stream << ir[i] << ", ";  // keep the trailing comma
+    for (const Expr &e : ir) {
+        stream << e << ", ";  // keep the trailing comma
     }
     return stream << ")";
 }
@@ -186,9 +200,6 @@ std::ostream &operator<<(std::ostream &out, const TailStrategy &t) {
         break;
     case TailStrategy::GuardWithIf:
         out << "GuardWithIf";
-        break;
-    case TailStrategy::Predicate:
-        out << "Predicate";
         break;
     case TailStrategy::PredicateLoads:
         out << "PredicateLoads";
@@ -560,7 +571,14 @@ IRPrinter::IRPrinter(ostream &s)
 
     auto detect_color = [&](const std::ostream *terminal) {
         std::string opt = get_env_variable("HL_COLORS");
-        bool use_colors = !opt.empty() ? opt == "1" : supports_ansi(terminal);
+        bool use_colors;
+        if (!opt.empty()) {
+            use_colors = opt == "1";
+        } else {
+            // Respect NO_COLOR in addition to whether we're writing to a
+            // terminal, matching the profiler report's color gate.
+            use_colors = get_env_variable("NO_COLOR").empty() && supports_ansi(terminal);
+        }
 
         if (use_colors) {
             ansi = true;

@@ -162,6 +162,7 @@ class CheckCrossTalk : public IRVisitor {
     using IRVisitor::visit;
 
     bool in_threads = false;
+    bool in_kernel = false;
 
     void visit(const For *op) override {
         // An allocation inside a loop over threads or lanes already belongs to
@@ -172,17 +173,20 @@ class CheckCrossTalk : public IRVisitor {
         if (op->for_type == ForType::GPUThread || op->for_type == ForType::GPULane) {
             ScopedValue<bool> bind(in_threads, true);
             IRVisitor::visit(op);
+        } else if (is_gpu(op->for_type)) {
+            ScopedValue<bool> bind(in_kernel, true);
+            IRVisitor::visit(op);
         } else {
             IRVisitor::visit(op);
         }
     }
 
     void visit(const Realize *op) override {
-        // Only memory that is private to a thread, and only when the
-        // allocation is outside the loops over threads. An allocation with an
-        // automatic memory type that lands outside them goes to shared memory,
-        // which the threads of a block really do share.
-        if (!in_threads &&
+        // Only memory that is private to a thread. An allocation with an
+        // automatic memory type that lands outside the loops over threads
+        // goes to shared memory, which the threads of a block really do
+        // share.
+        if (in_kernel && !in_threads &&
             (op->memory_type == MemoryType::Register ||
              op->memory_type == MemoryType::Stack)) {
             check(op);

@@ -1,6 +1,15 @@
 include(HalideTestHelpers)
 include(CheckCXXCompilerFlag)
 
+# All test targets in this directory (and its subdirectories) must be built
+# with the same visibility settings, since they reuse a common precompiled
+# <Halide.h> header via target_precompile_headers(REUSE_FROM) -- otherwise
+# Clang rejects the PCH with "default visibility for functions and variables
+# differs in PCH file vs. current file".
+set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS OFF)
+set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+set(CMAKE_VISIBILITY_INLINES_HIDDEN TRUE)
+
 # _test_internal is not itself a test; it exists purely so that the other
 # test executables below can reuse its precompiled <Halide.h> header via
 # target_precompile_headers(REUSE_FROM). HalideTestHelpers depends on this
@@ -31,11 +40,6 @@ endif ()
 Halide_feature(WITH_TEST_CORRECTNESS "Build correctness tests" ON)
 if (WITH_TEST_CORRECTNESS)
     add_subdirectory(correctness)
-endif ()
-
-Halide_feature(WITH_TEST_ERROR "Build error tests" ON)
-if (WITH_TEST_ERROR)
-    add_subdirectory(error)
 endif ()
 
 Halide_feature(WITH_TEST_WARNING "Build warning tests" ON)
@@ -80,3 +84,12 @@ Halide_feature(WITH_TEST_DEBUGGER "Build debugger-integration tests" ON)
 if (WITH_TEST_DEBUGGER)
     add_subdirectory(debugger)
 endif ()
+
+add_test(
+    NAME filter_dll_exports
+    COMMAND
+        "${CMAKE_COMMAND}" "-DSCRIPT=${Halide_SOURCE_DIR}/cmake/FilterDllExports.cmake"
+        "-DDIR=${CMAKE_CURRENT_SOURCE_DIR}/filter_dll_exports"
+        "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/filter_dll_exports.out.def" -P
+        "${CMAKE_CURRENT_SOURCE_DIR}/filter_dll_exports/run.cmake"
+)

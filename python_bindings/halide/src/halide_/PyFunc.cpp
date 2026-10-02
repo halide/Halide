@@ -235,6 +235,7 @@ void define_func(py::module &m) {
             .def("hoist_storage_root", &Func::hoist_storage_root)
 
             .def("store_in", &Func::store_in, py::arg("memory_type"))
+            .def("gpu_max_registers", &Func::gpu_max_registers, py::arg("device_api"), py::arg("n"))
             .def("stream_loads", (Func & (Func::*)()) & Func::stream_loads)
             .def("stream_loads", (Func & (Func::*)(const std::vector<Func> &)) & Func::stream_loads, py::arg("funcs"))
             .def("stream_stores", &Func::stream_stores)
@@ -433,6 +434,8 @@ void define_func(py::module &m) {
             .def("align_extent", &Func::align_extent, py::arg("var"), py::arg("modulus"))
 
             .def("bound_extent", &Func::bound_extent, py::arg("var"), py::arg("extent"))
+
+            .def("split_storage", &Func::split_storage, py::arg("old"), py::arg("outer"), py::arg("inner"), py::arg("factor"))
 
             .def("align_storage", &Func::align_storage, py::arg("dim"), py::arg("alignment"))
 

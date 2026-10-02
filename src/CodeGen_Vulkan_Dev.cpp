@@ -147,6 +147,9 @@ protected:
         void store_at_vector_index(const Store *op, SpvId variable_id, Type value_type, Type storage_type, SpvStorageClass storage_class, SpvId value_id);
 
         SpvId apply_storage_buffer_offset(SpvId variable_id, SpvId index_id);
+        SpvId access_chain_for_scalar_index(SpvId variable_id, SpvId ptr_type_id, Type storage_type, SpvId index_id, SpvStorageClass storage_class);
+        bool load_from_narrow_storage(const Load *op, SpvId index_id, SpvId variable_id, Type value_type, Type storage_type, SpvStorageClass storage_class);
+        bool store_at_narrow_storage(const Store *op, SpvId index_id, SpvId variable_id, Type value_type, Type storage_type, SpvStorageClass storage_class, SpvId value_id);
 
         SpvFactory::Components split_vector(Type type, SpvId value_id);
         SpvId join_vector(Type type, const SpvFactory::Components &value_components);
@@ -1395,6 +1398,117 @@ SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::apply_storage_buffer_offset(SpvId varia
     return adjusted_index_id;
 }
 
+SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::access_chain_for_scalar_index(SpvId variable_id, SpvId ptr_type_id, Type storage_type, SpvId index_id, SpvStorageClass storage_class) {
+    // determine the base type id for the source value
+    SpvId base_type_id = builder.type_of(variable_id);
+    if (builder.is_pointer_type(base_type_id)) {
+        base_type_id = builder.lookup_base_type(base_type_id);
+    }
+
+    uint32_t zero = 0;
+    SpvId access_id = SpvInvalidId;
+    SpvId adjusted_index_id = apply_storage_buffer_offset(variable_id, index_id);
+    if (storage_class == SpvStorageClassUniform) {
+        if (builder.is_struct_type(base_type_id)) {
+            SpvId zero_id = builder.declare_constant(UInt(32), &zero);
+            SpvFactory::Indices access_indices = {zero_id, adjusted_index_id};
+            access_id = builder.declare_access_chain(ptr_type_id, variable_id, access_indices);
+        } else {
+            SpvFactory::Indices access_indices = {adjusted_index_id};
+            access_id = builder.declare_access_chain(ptr_type_id, variable_id, access_indices);
+        }
+    } else if ((storage_class == SpvStorageClassWorkgroup) || (storage_class == SpvStorageClassFunction)) {
+        if (builder.is_array_type(base_type_id)) {
+            SpvFactory::Indices access_indices = {adjusted_index_id};
+            access_id = builder.declare_access_chain(ptr_type_id, variable_id, access_indices);
+        } else {
+            access_id = variable_id;
+        }
+    } else {
+        internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::access_chain_for_scalar_index(): unhandled storage class encountered: " << storage_class << "\n";
+    }
+    internal_assert(access_id != SpvInvalidId);
+    return access_id;
+}
+
+bool CodeGen_Vulkan_Dev::SPIRV_Emitter::load_from_narrow_storage(const Load *op, SpvId index_id, SpvId variable_id, Type value_type, Type storage_type, SpvStorageClass storage_class) {
+    // Struct-backed allocations (e.g. arrays underlying Halide struct types) are
+    // stored as a byte-addressable array (storage_type is a single byte), so a
+    // multi-byte field must be reassembled from multiple consecutive storage
+    // elements rather than loaded/cast directly from a single element.
+    if (storage_type.bytes() >= value_type.bytes() || (value_type.bytes() % storage_type.bytes()) != 0) {
+        return false;
+    }
+
+    int lanes = value_type.bytes() / storage_type.bytes();
+    Type byte_type = storage_type.with_code(halide_type_uint);
+    Type wide_type = UInt(value_type.bits());
+    SpvId byte_type_id = builder.declare_type(byte_type);
+    SpvId wide_type_id = builder.declare_type(wide_type);
+    SpvId ptr_type_id = builder.declare_pointer_type(storage_type, storage_class);
+    SpvId storage_type_id = builder.declare_type(storage_type);
+
+    Type index_type = Int(32);
+    SpvId index_type_id = builder.declare_type(index_type);
+
+    SpvId accum_id = SpvInvalidId;
+    for (int i = 0; i < lanes; i++) {
+        SpvId byte_index_id = index_id;
+        if (i != 0) {
+            SpvId offset_id = builder.declare_constant(index_type, &i);
+            byte_index_id = builder.reserve_id(SpvResultId);
+            builder.append(SpvFactory::integer_add(index_type_id, byte_index_id, index_id, offset_id));
+        }
+
+        SpvId src_id = access_chain_for_scalar_index(variable_id, ptr_type_id, storage_type, byte_index_id, storage_class);
+
+        SpvId elem_id = builder.reserve_id(SpvResultId);
+        builder.append(SpvFactory::load(storage_type_id, elem_id, src_id));
+
+        // Reinterpret the loaded byte (which may be a signed int8) as an unsigned
+        // byte prior to zero-extending it, so sign-extension never corrupts the bits.
+        SpvId unsigned_elem_id = elem_id;
+        if (storage_type != byte_type) {
+            unsigned_elem_id = builder.reserve_id(SpvResultId);
+            builder.append(SpvFactory::bitcast(byte_type_id, unsigned_elem_id, elem_id));
+        }
+
+        SpvId extended_id = unsigned_elem_id;
+        if (byte_type.bits() != wide_type.bits()) {
+            extended_id = builder.reserve_id(SpvResultId);
+            builder.append(SpvFactory::convert(SpvOpUConvert, wide_type_id, extended_id, unsigned_elem_id));
+        }
+
+        SpvId shifted_id = extended_id;
+        if (i != 0) {
+            uint32_t shift_amount = (uint32_t)(i * storage_type.bits());
+            SpvId shift_id = builder.declare_constant(UInt(32), &shift_amount);
+            shifted_id = builder.reserve_id(SpvResultId);
+            builder.append(SpvFactory::binary_op(SpvOpShiftLeftLogical, wide_type_id, shifted_id, extended_id, shift_id));
+        }
+
+        if (accum_id == SpvInvalidId) {
+            accum_id = shifted_id;
+        } else {
+            SpvId combined_id = builder.reserve_id(SpvResultId);
+            builder.append(SpvFactory::binary_op(SpvOpBitwiseOr, wide_type_id, combined_id, accum_id, shifted_id));
+            accum_id = combined_id;
+        }
+    }
+
+    // wide_type and value_type are guaranteed to be the same size by
+    // construction, so reinterpret (never numerically convert) the combined
+    // bytes to the requested value type.
+    SpvId result_id = accum_id;
+    if (wide_type != value_type) {
+        SpvId target_type_id = builder.declare_type(value_type);
+        result_id = builder.reserve_id(SpvResultId);
+        builder.append(SpvFactory::bitcast(target_type_id, result_id, accum_id));
+    }
+    builder.update_id(result_id);
+    return true;
+}
+
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::load_from_scalar_index(const Load *op, SpvId index_id, SpvId variable_id, Type value_type, Type storage_type, SpvStorageClass storage_class) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::load_from_scalar_index(): "
              << "index_id=" << index_id << " "
@@ -1403,38 +1517,13 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::load_from_scalar_index(const Load *op, S
              << "storage_type=" << storage_type << " "
              << "storage_class=" << storage_class << "\n";
 
-    // determine the base type id for the source value
-    SpvId base_type_id = builder.type_of(variable_id);
-    if (builder.is_pointer_type(base_type_id)) {
-        base_type_id = builder.lookup_base_type(base_type_id);
+    if (load_from_narrow_storage(op, index_id, variable_id, value_type, storage_type, storage_class)) {
+        return;
     }
 
     SpvId storage_type_id = builder.declare_type(storage_type);
     SpvId ptr_type_id = builder.declare_pointer_type(storage_type, storage_class);
-
-    uint32_t zero = 0;
-    SpvId src_id = SpvInvalidId;
-    SpvId src_index_id = apply_storage_buffer_offset(variable_id, index_id);
-    if (storage_class == SpvStorageClassUniform) {
-        if (builder.is_struct_type(base_type_id)) {
-            SpvId zero_id = builder.declare_constant(UInt(32), &zero);
-            SpvFactory::Indices access_indices = {zero_id, src_index_id};
-            src_id = builder.declare_access_chain(ptr_type_id, variable_id, access_indices);
-        } else {
-            SpvFactory::Indices access_indices = {src_index_id};
-            src_id = builder.declare_access_chain(ptr_type_id, variable_id, access_indices);
-        }
-    } else if ((storage_class == SpvStorageClassWorkgroup) || (storage_class == SpvStorageClassFunction)) {
-        if (builder.is_array_type(base_type_id)) {
-            SpvFactory::Indices access_indices = {src_index_id};
-            src_id = builder.declare_access_chain(ptr_type_id, variable_id, access_indices);
-        } else {
-            src_id = variable_id;
-        }
-    } else {
-        internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Load): unhandled storage class encountered on op: " << storage_class << "\n";
-    }
-    internal_assert(src_id != SpvInvalidId);
+    SpvId src_id = access_chain_for_scalar_index(variable_id, ptr_type_id, storage_type, index_id, storage_class);
 
     SpvId value_id = builder.reserve_id(SpvResultId);
     builder.append(SpvFactory::load(storage_type_id, value_id, src_id));
@@ -1495,6 +1584,68 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::load_from_vector_index(const Load *op, S
     }
 }
 
+bool CodeGen_Vulkan_Dev::SPIRV_Emitter::store_at_narrow_storage(const Store *op, SpvId index_id, SpvId variable_id, Type value_type, Type storage_type, SpvStorageClass storage_class, SpvId value_id) {
+    // Mirror image of load_from_narrow_storage(): split a multi-byte value into
+    // individual byte-sized storage elements when the storage is byte-addressable
+    // (e.g. arrays underlying Halide struct types) but the value being stored
+    // spans multiple storage elements.
+    if (storage_type.bytes() >= value_type.bytes() || (value_type.bytes() % storage_type.bytes()) != 0) {
+        return false;
+    }
+
+    int lanes = value_type.bytes() / storage_type.bytes();
+    Type byte_type = storage_type.with_code(halide_type_uint);
+    Type wide_type = UInt(value_type.bits());
+    SpvId byte_type_id = builder.declare_type(byte_type);
+    SpvId wide_type_id = builder.declare_type(wide_type);
+    SpvId ptr_type_id = builder.declare_pointer_type(storage_type, storage_class);
+
+    // Bitcast (not numerically convert) the value into an equivalently-sized
+    // unsigned integer so it can be decomposed into raw bytes.
+    SpvId wide_value_id = value_id;
+    if (wide_type != value_type) {
+        wide_value_id = builder.reserve_id(SpvResultId);
+        builder.append(SpvFactory::bitcast(wide_type_id, wide_value_id, value_id));
+    }
+
+    Type index_type = Int(32);
+    SpvId index_type_id = builder.declare_type(index_type);
+
+    for (int i = 0; i < lanes; i++) {
+        SpvId shifted_id = wide_value_id;
+        if (i != 0) {
+            uint32_t shift_amount = (uint32_t)(i * storage_type.bits());
+            SpvId shift_id = builder.declare_constant(UInt(32), &shift_amount);
+            shifted_id = builder.reserve_id(SpvResultId);
+            builder.append(SpvFactory::binary_op(SpvOpShiftRightLogical, wide_type_id, shifted_id, wide_value_id, shift_id));
+        }
+
+        SpvId truncated_id = shifted_id;
+        if (byte_type.bits() != wide_type.bits()) {
+            truncated_id = builder.reserve_id(SpvResultId);
+            builder.append(SpvFactory::convert(SpvOpUConvert, byte_type_id, truncated_id, shifted_id));
+        }
+
+        SpvId storage_value_id = truncated_id;
+        if (storage_type != byte_type) {
+            storage_value_id = builder.reserve_id(SpvResultId);
+            builder.append(SpvFactory::bitcast(builder.declare_type(storage_type), storage_value_id, truncated_id));
+        }
+
+        SpvId byte_index_id = index_id;
+        if (i != 0) {
+            SpvId offset_id = builder.declare_constant(index_type, &i);
+            byte_index_id = builder.reserve_id(SpvResultId);
+            builder.append(SpvFactory::integer_add(index_type_id, byte_index_id, index_id, offset_id));
+        }
+
+        SpvId dst_id = access_chain_for_scalar_index(variable_id, ptr_type_id, storage_type, byte_index_id, storage_class);
+        builder.append(SpvFactory::store(dst_id, storage_value_id));
+    }
+
+    return true;
+}
+
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::store_at_scalar_index(const Store *op, SpvId index_id, SpvId variable_id, Type value_type, Type storage_type, SpvStorageClass storage_class, SpvId value_id) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::store_at_scalar_index(): "
              << "index_id=" << index_id << " "
@@ -1504,37 +1655,12 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::store_at_scalar_index(const Store *op, S
              << "storage_class=" << storage_class << " "
              << "value_id=" << value_id << "\n";
 
-    // determine the base type id for the source value
-    SpvId base_type_id = builder.type_of(variable_id);
-    if (builder.is_pointer_type(base_type_id)) {
-        base_type_id = builder.lookup_base_type(base_type_id);
+    if (store_at_narrow_storage(op, index_id, variable_id, value_type, storage_type, storage_class, value_id)) {
+        return;
     }
-
-    uint32_t zero = 0;
-    SpvId dst_id = SpvInvalidId;
-    SpvId dst_index_id = apply_storage_buffer_offset(variable_id, index_id);
 
     SpvId ptr_type_id = builder.declare_pointer_type(storage_type, storage_class);
-    if (storage_class == SpvStorageClassUniform) {
-        if (builder.is_struct_type(base_type_id)) {
-            SpvId zero_id = builder.declare_constant(UInt(32), &zero);
-            SpvFactory::Indices access_indices = {zero_id, dst_index_id};
-            dst_id = builder.declare_access_chain(ptr_type_id, variable_id, access_indices);
-        } else {
-            SpvFactory::Indices access_indices = {dst_index_id};
-            dst_id = builder.declare_access_chain(ptr_type_id, variable_id, access_indices);
-        }
-    } else if ((storage_class == SpvStorageClassWorkgroup) || (storage_class == SpvStorageClassFunction)) {
-        if (builder.is_array_type(base_type_id)) {
-            SpvFactory::Indices access_indices = {dst_index_id};
-            dst_id = builder.declare_access_chain(ptr_type_id, variable_id, access_indices);
-        } else {
-            dst_id = variable_id;
-        }
-    } else {
-        internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Store): unhandled storage class encountered on op: " << storage_class << "\n";
-    }
-    internal_assert(dst_id != SpvInvalidId);
+    SpvId dst_id = access_chain_for_scalar_index(variable_id, ptr_type_id, storage_type, index_id, storage_class);
 
     // if the value type doesn't match the base for the pointer type, cast it accordingly
     if (storage_type != value_type) {
@@ -1682,6 +1808,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const AssertStmt *stmt) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(AssertStmt): "
              << "condition=" << stmt->condition << " "
              << "message=" << stmt->message << "\n";
+    user_warning << "Ignoring assertion inside Vulkan kernel: " << stmt->condition << "\n";
 }
 
 namespace {
@@ -1871,7 +1998,13 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Provide *) {
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
 
-    SpvId storage_type_id = builder.declare_type(op->type);
+    // SPIR-V has no notion of a struct type here: a struct-backed allocation
+    // is stored as a raw array of bytes (individual fields are read/written
+    // one byte at a time by LowerStructTypes), so its element type is UInt(8)
+    // rather than the struct type itself.
+    Type element_type = op->type.is_struct() ? UInt(8) : op->type;
+
+    SpvId storage_type_id = builder.declare_type(element_type);
     SpvId array_type_id = SpvInvalidId;
     SpvId variable_id = SpvInvalidId;
     uint32_t array_size = 0;
@@ -1882,18 +2015,25 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
         // Allocation of shared memory must be declared at global scope
         storage_class = SpvStorageClassWorkgroup;  // shared across workgroup
         std::string variable_name = std::string("k") + std::to_string(kernel_index) + std::string("_") + op->name;
-        uint32_t type_size = op->type.bytes();
+        uint32_t type_size = element_type.bytes();
         uint32_t constant_id = 0;
 
         // static fixed size allocation
         if (op->extents.size() == 1 && is_const(op->extents[0])) {
             array_size = op->constant_allocation_size();
-            array_type_id = builder.declare_type(op->type, array_size);
+            // A struct is stored as a raw byte array (print_storage_type emits a byte
+            // element type), so size is an element count and must be scaled to bytes.
+            if (op->type.is_struct()) {
+                array_size *= op->type.bytes();
+            }
+            array_type_id = builder.declare_type(element_type, array_size);
             builder.add_symbol(variable_name + "_array_type", array_type_id, builder.current_module().id());
             debug(2) << "Vulkan: Allocate (fixed-size) " << op->name << " type=" << op->type << " array_size=" << array_size << " in shared memory on device in global scope\n";
 
         } else {
             // dynamic allocation with unknown size at compile time ...
+
+            // TODO: what to do for struct types here? It doesn't seem to depend on op->type.
 
             // declare the array size as a specialization constant (which will get overridden at runtime)
             Type array_size_type = UInt(32);
@@ -1934,9 +2074,15 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
             << "Allocation " << op->name << " has a dynamic size. "
             << "Only fixed-size local allocations are supported with Vulkan.";
 
+        // A struct is stored as a raw byte array (print_storage_type emits a byte
+        // element type), so size is an element count and must be scaled to bytes.
+        if (op->type.is_struct()) {
+            array_size *= op->type.bytes();
+        }
+
         debug(2) << "Vulkan: Allocate " << op->name << " type=" << op->type << " size=" << array_size << " on device in function scope\n";
 
-        array_type_id = builder.declare_type(op->type, array_size);
+        array_type_id = builder.declare_type(element_type, array_size);
         storage_class = SpvStorageClassFunction;  // function scope
         std::string variable_name = std::string("k") + std::to_string(kernel_index) + std::string("_") + op->name;
         SpvId ptr_type_id = builder.declare_pointer_type(array_type_id, storage_class);
@@ -1947,7 +2093,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
     access.storage_class = storage_class;
     access.storage_array_size = array_size;
     access.storage_type_id = storage_type_id;
-    access.storage_type = op->type;
+    access.storage_type = element_type;
     storage_access_map[variable_id] = access;
 
     debug(3) << "Vulkan: Pushing allocation called " << op->name << " onto the symbol table\n";

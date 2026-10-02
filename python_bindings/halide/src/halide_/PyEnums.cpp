@@ -18,6 +18,16 @@ void define_enums(py::module &m) {
         .value("Input", Internal::ArgInfoDirection::Input)
         .value("Output", Internal::ArgInfoDirection::Output);
 
+    py::enum_<halide_profiler_func_kind>(m, "ProfilerFuncKind")
+        .value("Func", halide_profiler_func_kind_func)
+        .value("Overhead", halide_profiler_func_kind_overhead)
+        .value("ThreadIdle", halide_profiler_func_kind_thread_idle)
+        .value("Malloc", halide_profiler_func_kind_malloc)
+        .value("Free", halide_profiler_func_kind_free)
+        .value("CopyToHost", halide_profiler_func_kind_copy_to_host)
+        .value("CopyToDevice", halide_profiler_func_kind_copy_to_device)
+        .value("Allocation", halide_profiler_func_kind_allocation);
+
     py::enum_<DeviceAPI>(m, "DeviceAPI")
         .value("None", DeviceAPI::None)
         .value("Host", DeviceAPI::Host)
@@ -72,10 +82,10 @@ void define_enums(py::module &m) {
         .value("Text", StmtOutputFormat::Text)
         .value("HTML", StmtOutputFormat::HTML);
 
-    py::enum_<TailStrategy>(m, "TailStrategy")
+    py::enum_<TailStrategy> tail_strategy(m, "TailStrategy");
+    tail_strategy
         .value("RoundUp", TailStrategy::RoundUp)
         .value("GuardWithIf", TailStrategy::GuardWithIf)
-        .value("Predicate", TailStrategy::Predicate)
         .value("PredicateLoads", TailStrategy::PredicateLoads)
         .value("PredicateStores", TailStrategy::PredicateStores)
         .value("ShiftInwards", TailStrategy::ShiftInwards)
@@ -83,16 +93,39 @@ void define_enums(py::module &m) {
         .value("RoundUpAndBlend", TailStrategy::RoundUpAndBlend)
         .value("Auto", TailStrategy::Auto);
 
-    py::enum_<Target::OS>(m, "TargetOS")
-        .value("OSUnknown", Target::OS::OSUnknown)
-        .value("Linux", Target::OS::Linux)
-        .value("Windows", Target::OS::Windows)
-        .value("OSX", Target::OS::OSX)
-        .value("Android", Target::OS::Android)
-        .value("IOS", Target::OS::IOS)
-        .value("QuRT", Target::OS::QuRT)
-        .value("NoOS", Target::OS::NoOS)
-        .value("wasmrt", Target::OS::WebAssemblyRuntime);
+    // Predicate is deprecated in C++ (identical to GuardWithIf), but the
+    // Python binding is kept for one release for backwards compatibility.
+#if defined(__clang__) || defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+    tail_strategy.value("Predicate", TailStrategy::Predicate);
+#if defined(__clang__) || defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
+
+    auto target_os =
+        py::enum_<Target::OS>(m, "TargetOS")
+            .value("OSUnknown", Target::OS::OSUnknown)
+            .value("Linux", Target::OS::Linux)
+            .value("Windows", Target::OS::Windows)
+            .value("MacOS", Target::OS::MacOS)
+            .value("Android", Target::OS::Android)
+            .value("IOS", Target::OS::IOS)
+            .value("QuRT", Target::OS::QuRT)
+            .value("NoOS", Target::OS::NoOS)
+            .value("wasmrt", Target::OS::WebAssemblyRuntime);
+
+    // OSX is deprecated in C++ (identical to MacOS), but the Python binding
+    // is kept for one release for backwards compatibility.
+#if defined(__clang__) || defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+    target_os.value("OSX", Target::OS::OSX);
+#if defined(__clang__) || defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 
     py::enum_<Target::Arch>(m, "TargetArch")
         .value("ArchUnknown", Target::Arch::ArchUnknown)
@@ -250,7 +283,8 @@ void define_enums(py::module &m) {
         .value("Int", Type::Int)
         .value("UInt", Type::UInt)
         .value("Float", Type::Float)
-        .value("Handle", Type::Handle);
+        .value("Handle", Type::Handle)
+        .value("Struct", Type::StructKind);
 
     py::enum_<OutputFileType>(m, "OutputFileType")
         .value("assembly", OutputFileType::assembly)

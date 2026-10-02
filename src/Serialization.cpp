@@ -314,8 +314,6 @@ Serialize::TailStrategy Serializer::serialize_tail_strategy(const TailStrategy &
         return Serialize::TailStrategy::RoundUp;
     case TailStrategy::GuardWithIf:
         return Serialize::TailStrategy::GuardWithIf;
-    case TailStrategy::Predicate:
-        return Serialize::TailStrategy::Predicate;
     case TailStrategy::PredicateLoads:
         return Serialize::TailStrategy::PredicateLoads;
     case TailStrategy::PredicateStores:
@@ -403,8 +401,23 @@ Offset<String> Serializer::serialize_string(FlatBufferBuilder &builder, const st
 Offset<Serialize::Type> Serializer::serialize_type(FlatBufferBuilder &builder, const Type &type) {
     const int bits = type.bits();
     const int lanes = type.lanes();
-    halide_type_code_t code = type.code();
-    const auto code_serialized = Serialize::TypeCode(code);
+
+    if (type.is_struct()) {
+        const StructTypeInfo *info = type.struct_type();
+        internal_assert(info != nullptr) << "Struct type is missing its field layout.\n";
+        std::vector<Offset<Serialize::StructField>> fields_serialized;
+        fields_serialized.reserve(info->fields.size());
+        for (const StructField &field : info->fields) {
+            const auto name_serialized = serialize_string(builder, field.name);
+            const auto field_type_serialized = serialize_type(builder, field.type);
+            fields_serialized.push_back(Serialize::CreateStructField(
+                builder, name_serialized, field_type_serialized, field.array_extent.value_or(-1)));
+        }
+        const auto fields_vector_serialized = builder.CreateVector(fields_serialized);
+        return Serialize::CreateType(builder, Serialize::TypeCode::Struct, bits, lanes, fields_vector_serialized);
+    }
+
+    const auto code_serialized = Serialize::TypeCode(type.code());
     return Serialize::CreateType(builder, code_serialized, bits, lanes);
 }
 
@@ -1125,9 +1138,19 @@ Offset<Serialize::FuncSchedule> Serializer::serialize_func_schedule(FlatBufferBu
     for (const auto &storage_dim : func_schedule.storage_dims()) {
         storage_dims_serialized.push_back(serialize_storage_dim(builder, storage_dim));
     }
+    std::vector<Offset<Serialize::StorageSplit>> storage_splits_serialized;
+    for (const auto &split : func_schedule.storage_splits()) {
+        const auto old_var_serialized = serialize_string(builder, split.old_var);
+        const auto outer_serialized = serialize_string(builder, split.outer);
+        const auto inner_serialized = serialize_string(builder, split.inner);
+        const auto factor_serialized = serialize_expr(builder, split.factor);
+        storage_splits_serialized.push_back(
+            Serialize::CreateStorageSplit(builder, old_var_serialized, outer_serialized, inner_serialized,
+                                          factor_serialized.first, factor_serialized.second));
+    }
     std::vector<Offset<Serialize::Bound>> bounds_serialized;
-    for (const auto &bound : func_schedule.bounds()) {
-        bounds_serialized.push_back(serialize_bound(builder, bound));
+    for (const auto &entry : func_schedule.bounds()) {
+        bounds_serialized.push_back(serialize_bound(builder, entry.second));
     }
     std::vector<Offset<Serialize::Bound>> estimates_serialized;
     for (const auto &estimate : func_schedule.estimates()) {
@@ -1159,7 +1182,8 @@ Offset<Serialize::FuncSchedule> Serializer::serialize_func_schedule(FlatBufferBu
                                          memory_type, memoized, async,
                                          ring_buffer.first, ring_buffer.second,
                                          memoize_eviction_key_serialized.first, memoize_eviction_key_serialized.second,
-                                         builder.CreateVector(type_change_checks_serialized));
+                                         builder.CreateVector(type_change_checks_serialized),
+                                         builder.CreateVector(storage_splits_serialized));
 }
 
 Offset<Serialize::Specialization> Serializer::serialize_specialization(FlatBufferBuilder &builder, const Specialization &specialization) {
@@ -1259,10 +1283,12 @@ Offset<Serialize::Split> Serializer::serialize_split(FlatBufferBuilder &builder,
     const auto exact = split.exact;
     const auto tail_serialized = serialize_tail_strategy(split.tail);
     const auto split_type_serialized = serialize_split_type(split.split_type);
+    const auto align_serialized = serialize_expr(builder, split.align);
     return Serialize::CreateSplit(builder, old_var_serialized,
                                   outer_serialized, inner_serialized,
                                   factor_serialized.first, factor_serialized.second,
-                                  exact, tail_serialized, split_type_serialized);
+                                  exact, tail_serialized, split_type_serialized,
+                                  align_serialized.first, align_serialized.second);
 }
 
 Offset<Serialize::Dim> Serializer::serialize_dim(FlatBufferBuilder &builder, const Dim &dim) {

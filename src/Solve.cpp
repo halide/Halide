@@ -241,6 +241,16 @@ protected:
         }
 
         if (!expr.defined()) {
+            // Adding zero is a no-op. This comes up when terms cancel, or when
+            // a negation arrives here written as (0 - f(x)).
+            if (is_const_zero(b)) {
+                expr = a;
+            } else if (is_const_zero(a)) {
+                expr = b;
+            }
+        }
+
+        if (!expr.defined()) {
             if (a.same_as(op->a) && b.same_as(op->b)) {
                 expr = op;
             } else {
@@ -970,6 +980,22 @@ class SolveForInterval : public IRVisitor {
         // Select can apply to bools
         internal_assert(op->type.is_bool());
         Expr equiv = (op->condition && op->true_value) || (!op->condition && op->false_value);
+        equiv.accept(this);
+    }
+
+    void visit(const Min *op) override {
+        // min of bools is a logical And. These arise from
+        // and_condition_over_domain and the simplifier. Treat it as such so
+        // that Not distributes correctly (otherwise !min(a, b) is mis-solved).
+        internal_assert(op->type.is_bool());
+        Expr equiv = op->a && op->b;
+        equiv.accept(this);
+    }
+
+    void visit(const Max *op) override {
+        // max of bools is a logical Or.
+        internal_assert(op->type.is_bool());
+        Expr equiv = op->a || op->b;
         equiv.accept(this);
     }
 

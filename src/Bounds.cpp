@@ -256,6 +256,8 @@ protected:
         if ((t.is_uint() || t.is_int()) && t.bits() <= 16) {
             interval = Interval(t.min(), t.max());
         } else {
+            // Handle and struct types (and wider integers/floats) have no
+            // meaningful bounded numeric range.
             interval = Interval::everything();
         }
     }
@@ -1857,6 +1859,13 @@ void merge_boxes(Box &a, const Box &b) {
                          (equal(a.used, !b.used) || equal(!a.used, b.used));
 
     for (size_t i = 0; i < a.size(); i++) {
+        if (b[i].is_empty()) {
+            continue;
+        }
+        if (a[i].is_empty()) {
+            a[i] = b[i];
+            continue;
+        }
         if (!a[i].min.same_as(b[i].min)) {
             if (a[i].has_lower_bound() && b[i].has_lower_bound()) {
                 if (a_maybe_unused && b_maybe_unused) {
