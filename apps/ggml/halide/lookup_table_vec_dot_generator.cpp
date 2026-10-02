@@ -4,7 +4,7 @@
 // PARAMS family=iq4_nl instantiation of this one generator, registered in
 // CMakeLists.txt. Weight and activation are both block-indexed codecs from
 // quant_components.h; VecDotGeneratorBase splices them via approximate_by/
-// compute_offline (see vec_dot_generator_base.h).
+// sever (see vec_dot_generator_base.h).
 
 #include "Halide.h"
 

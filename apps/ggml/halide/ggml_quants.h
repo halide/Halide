@@ -13,7 +13,7 @@
 // weight-type x and a row of activation-type y (y is x's GGML vec_dot_type).
 // Both operands flow through the Approximation framework: the generic
 // symmetric/lookup_table/k_quant vec_dot generators splice weight and
-// activation codecs from quant_components.h via approximate_by/compute_offline
+// activation codecs from quant_components.h via approximate_by/sever
 // (see vec_dot_generator_base.h).
 
 #include <cstddef>

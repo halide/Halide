@@ -56,7 +56,7 @@ constexpr int kBlockBytesQ8_Kx4 = 4 * 4 + kQK_K * 4 + kNumGroups * 4 * 2;  // 11
 
 // Shared "quantize_mat" pipeline: a 2-D activation x(col, row in [0,4)) flows
 // through the codec `scheme` (block-relayout + Q8 quantize + interleave) via
-// the same approximate_by/compute_offline idiom as codec_generator_base.h's
+// the same approximate_by/sever idiom as codec_generator_base.h's
 // Quantize direction -- the encode half is adopted as the output block buffer.
 struct QuantizeMatPipe {
     ImageParam x;
@@ -76,7 +76,7 @@ inline QuantizeMatPipe build_quantize_mat(Approximation scheme, int block_bytes)
     }
 
     ImageParam blocks_in(UInt(8), 2, "blocks_in");
-    ComputeOfflineResult q = Pipeline({identity}).compute_offline(r.encoded, {blocks_in});
+    SeverResult q = Pipeline({identity}).sever(r.encoded, {blocks_in});
 
     Func blocks_out("blocks");
     blocks_out(byte, ib) = q.offline.outputs()[0](byte, ib);

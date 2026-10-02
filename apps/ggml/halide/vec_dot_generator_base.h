@@ -3,7 +3,7 @@
 // Shared configure() scaffolding for every Approximation-based vec_dot
 // Generator (the extended SymmetricVecDotGenerator, KQuantVecDotGenerator,
 // LookupTableVecDotGenerator). All three build the same "naive fp32 dot
-// product -> approximate_by both operands -> compute_offline severs the
+// product -> approximate_by both operands -> sever severs the
 // (already-quantized, Input-supplied) encode halves -> schedule" pipeline;
 // they differ only in which block-indexed codecs their build_vec_dot() picks.
 // This factors that shared body out via CRTP (Derived::build_vec_dot()) -- the
@@ -11,7 +11,7 @@
 // CodecGeneratorBase.
 //
 // generate() never calls Approximation::encode()/decode() directly -- only
-// through Func::approximate_by()/Pipeline::compute_offline(), exactly like the
+// through Func::approximate_by()/Pipeline::sever(), exactly like the
 // codec generators. The vec_dot is the point at which the framework's splice +
 // sever path is exercised for a dot product (matching
 // test/performance/matvec_offline_split.cpp).
@@ -117,7 +117,7 @@ public:
         x_blocks.set_host_alignment(64);
         y_blocks.set_host_alignment(64);
 
-        // Naive fp32 placeholders -- never realized; compute_offline() severs
+        // Naive fp32 placeholders -- never realized; sever() severs
         // Acc from them entirely, and the real values come from the
         // already-quantized x_blocks/y_blocks. Block-indexed (kk, blk) to match
         // the codecs' block-indexed decode.
@@ -198,7 +198,7 @@ public:
                 }
             }
         }
-        Pipeline({Acc}).compute_offline(to_sever, bind_to);
+        Pipeline({Acc}).sever(to_sever, bind_to);
 
         // Q5_0/Q5_1 reconstruct each code from a nibble plus a per-element high
         // bit read from the qh field's byte->bits expansion table (see
@@ -411,10 +411,10 @@ public:
             // Sever the offset term to the stored fp16 field. change_type(Float16)
             // makes the severed accumulator's type match the data (the encoder
             // rounds `s` to fp16 too, so this reproduces ggml's own rounding);
-            // compute_offline then replaces every call to it with a read of
+            // sever then replaces every call to it with a read of
             // s_blocks and discards the recomputing reduction.
             Func s16 = parts[1].change_type(Float(16));
-            Pipeline({Acc}).compute_offline({s16}, {s_blocks});
+            Pipeline({Acc}).sever({s16}, {s_blocks});
 
             // Product term: flatten the activation's full decode chain and
             // re-hoist to pull d_act out, leaving the scale-free Int(32) dot.

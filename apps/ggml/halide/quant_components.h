@@ -6,7 +6,7 @@
 // extern-delegated formats, Halide::TrustedInverse) into a scheme (see the
 // make_*_scheme() factory functions below), which the
 // Generators then splice in via Func::approximate_by()/
-// Pipeline::compute_offline() -- never by calling Approximation::encode()/
+// Pipeline::sever() -- never by calling Approximation::encode()/
 // decode() directly.
 //
 //   1. BlockReshape -- lossless relayout: flat values <-> (kk, blk).
@@ -64,7 +64,7 @@
 
 // Only the aggregated Halide.h is installed for apps to consume (individual
 // per-class headers like Approximation.h are not) -- it already pulls in
-// Approximation/Compose/Parallel/Pipeline::compute_offline.
+// Approximation/Compose/Parallel/Pipeline::sever.
 #include "Halide.h"
 
 #include <algorithm>
@@ -1809,10 +1809,10 @@ private:
 // them). encode() produces a correctly-shaped `blocks(byte, blk)` uint8 Func
 // so that Func::approximate_by() -- which always builds encode() before
 // decode() -- can splice the round trip; the value is a placeholder (0),
-// because Pipeline::compute_offline() always severs this encode and binds the
+// because Pipeline::sever() always severs this encode and binds the
 // real already-quantized Input in its place, so it is never computed. This is
 // what lets a decode-only format still go through the standard
-// approximate_by/compute_offline path (exercising the framework) instead of a
+// approximate_by/sever path (exercising the framework) instead of a
 // bespoke direct-decode generator. decode() traps -- the paired decoder half
 // of the TrustedInverse owns dequantize.
 class SeveredEncode {
@@ -2742,7 +2742,7 @@ private:
 // MXFP4): un-interleave -> [codebook] -> one-level scale. The col dims ride the
 // dimension-general LinearDequant/Codebook via Halide::_. SeveredEncode (3-D)
 // stands in for the pre-quantized weight buffer, severed by the gemv/gemm
-// generator's compute_offline.
+// generator's sever.
 inline Halide::Approximation make_repack_weight_scheme(
     int n_cols, int blocklen, int block_bytes, RepackWeightCode code_kind, ScaleFormat scale_kind,
     Halide::Buffer<int8_t> table = {}, int block_size = 32) {
@@ -2766,7 +2766,7 @@ inline Halide::Approximation make_repack_weight_scheme(
 // than composed from LinearDequant + the scale-min packs, because the
 // interleave is intricate enough that a direct transcription is far less
 // error-prone; the SeveredEncode encoder half is severed by the matmul
-// generator's compute_offline). blocklen is the interleave width (4 or 8).
+// generator's sever). blocklen is the interleave width (4 or 8).
 enum class KQuantWeightFamily { Q4_K,
                                 Q5_K,
                                 Q6_K,
@@ -2904,7 +2904,7 @@ private:
 // with the SAME arithmetic pieces the plain K-quant decode uses (Fp16Pack for
 // the fp16 headers, then LinearDequant in logical element order),
 // paired with a severed 3-D encoder (the weight is pre-quantized; encode is
-// severed by compute_offline). No BlockReshape: the weight stays block-indexed
+// severed by sever). No BlockReshape: the weight stays block-indexed
 // (kk, blk) with the column dims (j, x) riding through.
 inline Halide::Approximation make_kquant_repack_weight_scheme(
     KQuantWeightFamily family, int blocklen, int block_bytes) {
@@ -3468,7 +3468,7 @@ inline SchemeAndBytes make_iq3_s_scheme(Layout layout = Layout::FlatRow) {
 
 // IQ2_XS/IQ2_XXS/IQ1_S/IQ1_M: importance-matrix-only formats with no forward
 // map -- SeveredEncode stands in for the (always-severed) encode half so the
-// dequantize/vec_dot still go through approximate_by/compute_offline. Block
+// dequantize/vec_dot still go through approximate_by/sever. Block
 // bytes: 74 / 66 / 50 / 56.
 inline SchemeAndBytes make_iq2_xs_scheme(Layout layout = Layout::FlatRow) {
     return make_severed_grid_scheme(74, IQ2XSGridDequantize(), {8, 4, 8}, layout);

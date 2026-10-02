@@ -1,7 +1,7 @@
 // Generic, family-driven repack gemv/gemm, the matmul counterpart of the
 // repack quantize_mat codecs. Like the vec_dot generators, the weight and
 // activation operands are decoded through the Approximation framework
-// (approximate_by + compute_offline), and the interleaved weight layout is a
+// (approximate_by + sever), and the interleaved weight layout is a
 // lossless relayout (UnInterleaveWeight) composed in front of the same lossy
 // quant -- the col dims ride the dimension-general LinearDequant/Codebook via
 // Halide::_. One generator backs every (family, n_cols, blocklen) gemv library
@@ -124,7 +124,7 @@ public:
         std::vector<Func> sever = wr.encoded;
         sever.insert(sever.end(), ar.encoded.begin(), ar.encoded.end());
         std::vector<ImageParam> bind = {weight_blocks, act_blocks};
-        Pipeline({s}).compute_offline(sever, bind);
+        Pipeline({s}).sever(sever, bind);
 
         for (Func h : wr.intermediates) {
             if (h.has_update_definition()) {
@@ -237,7 +237,7 @@ public:
         std::vector<Func> sever = wr.encoded;
         sever.insert(sever.end(), ar.encoded.begin(), ar.encoded.end());
         std::vector<ImageParam> bind = {weight_blocks, act_blocks};
-        Pipeline({s}).compute_offline(sever, bind);
+        Pipeline({s}).sever(sever, bind);
 
         for (Func h : wr.intermediates) {
             if (h.has_update_definition()) {

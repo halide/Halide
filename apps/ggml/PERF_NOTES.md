@@ -214,9 +214,9 @@ to 133.8 ns / 0.80x.
   question, so it belongs in the schedule.
 - `hoist_invariants()` returns **one single-valued Func per accumulator**, not a
   Tuple. The Tuple version worked and measured identically, but it blocked
-  `compute_offline` (which cannot sever one value of a Tuple) and forced
-  `change_type` to grow multi-output support. Fusing the terms' loop nests is
-  `compute_with`'s job.
+  `sever` (which cannot sever one value of a Tuple) and forced `change_type` to
+  grow multi-output support. Fusing the terms' loop nests is `compute_with`'s
+  job.
 
 ## The stored block sum -- DONE (q4_1 0.97x)
 
@@ -225,9 +225,9 @@ that `block_q8_1` stores at quantize time
 (`{ggml_half d; ggml_half s; int8_t qs[32]}`, 36 bytes). Our Q8_1 codec already
 computes that field (`AppendSums{block_size, SumMode::ScaledFloat}` in
 `make_symmetric_byte_sum_block_scheme`). We now sever the offset term's
-accumulator straight to it via `compute_offline`, which needs no new Halide
-directive: its contract already *is* this claim -- sever a Func's computation,
-replace calls with an ImageParam read, discard the recomputing reduction.
+accumulator straight to it via `sever`, which needs no new Halide directive: its
+contract already *is* this claim -- sever a Func's computation, replace calls
+with an ImageParam read, discard the recomputing reduction.
 
 **Result: variant A + sever measured 110.2 ns / 0.97x** (q5_1: 208 ns / 0.64x).
 This *matched* the lane-split+sever projection, so the second route below
@@ -247,9 +247,9 @@ The recipe, as implemented in `vec_dot_generator_base.h`'s `sever_sum` branch
 2. `parts[1].change_type(Float(16))` -- makes the severed Func's type match the
    data. Faithful: the encoder rounds `s` to fp16 too (the ~6e-06 rel err is
    exactly that rounding, same as ggml's).
-3. `Pipeline({Acc}).compute_offline({s16}, {s_blocks})` -- second
-   `compute_offline` on the pipeline (the first, at configure top, severs the
-   encode halves to x_blocks/y_blocks). `s_blocks` is the third Input.
+3. `Pipeline({Acc}).sever({s16}, {s_blocks})` -- second `sever` on the pipeline
+   (the first, at configure top, severs the encode halves to x_blocks/y_blocks).
+   `s_blocks` is the third Input.
 4. Product term: inline `Act`'s **full** chain into `parts[0]` (one Act
    eager_inline is not enough -- the chain has intermediate levels, and a single
    inline leaves the second hoist with no visible d_act factor and it errors),

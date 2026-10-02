@@ -18,10 +18,10 @@
 Apply the q5_0 cleanup methodology to q4_0 and q8_0. Their schemes should use
 faithful packed struct types and reusable public Halide Approximations; the
 generic vec-dot generator should retain only the base reduction,
-`approximate_by`, `compute_offline`, and scheduling. Preserve bit-exact
-quantization, dequantization/vec-dot correctness, and the tuned four-block SDOT
-shape. Keep median paired performance within 5% of this worktree baseline and at
-least 0.90x GGML.
+`approximate_by`, `sever`, and scheduling. Preserve bit-exact quantization,
+dequantization/vec-dot correctness, and the tuned four-block SDOT shape. Keep
+median paired performance within 5% of this worktree baseline and at least 0.90x
+GGML.
 
 Unrelated legacy formats remain compatibility debt. In particular, q1_0 keeps
 the legacy symmetric layout until it is migrated deliberately, and q4_1/q5_1

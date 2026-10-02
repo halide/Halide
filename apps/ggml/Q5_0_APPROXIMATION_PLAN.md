@@ -15,10 +15,10 @@
 ## Goal and constraints
 
 Refactor q5_0 so its generator contains only the base reduction,
-`approximate_by`, `compute_offline`, and scheduling. Compose all q5_0
-representation logic from reusable core Halide Approximations. Preserve
-correctness, keep median paired performance within 5% of the committed baseline,
-and remain at least 0.90x GGML. q5_1 is explicitly unchanged transitional debt.
+`approximate_by`, `sever`, and scheduling. Compose all q5_0 representation logic
+from reusable core Halide Approximations. Preserve correctness, keep median
+paired performance within 5% of the committed baseline, and remain at least
+0.90x GGML. q5_1 is explicitly unchanged transitional debt.
 
 ## Core Approximation APIs
 
