@@ -27,8 +27,8 @@ Two pieces of prior work motivate this:
 This document describes the C++ realization of that idea as a first-class Halide
 concept, `Approximation`, plus the surrounding API needed to wire one into a
 real pipeline: `Func::approximate_by()`, which splices an approximation's round
-trip into an existing call graph; `Pipeline::compute_offline()`, which
-optionally splits the result across a compile-time boundary; and
+trip into an existing call graph; `Pipeline::sever()`, which optionally splits
+the result across a compile-time boundary; and
 `tools/halide_approximation_testing.h`, which checks what an approximation
 claims.
 
@@ -347,8 +347,8 @@ A port name identifies one wire, in both directions. Declared names are
 - **Stand-alone decode.** `decode(encoded, input_ports)` takes the encode-side
   context, computed statically: with none given, it is threaded from the root's
   default input names via signatures, exactly as `describe()` does. So a decode
-  run on its own (e.g. after `compute_offline` severs the encode) names its
-  ports as an encode+decode would.
+  run on its own (e.g. after `sever` severs the encode) names its ports as an
+  encode+decode would.
 - `Func::approximate_by()` passes no names: the root's declared input names (or
   `"0"`) are the defaults.
 - **Limit.** If a stage in a `Compose` has an unknown signature (an undeclared
@@ -532,7 +532,7 @@ substitute a different computation, `decode(encode(f))`. The global form
 `f.in()` is not an option either, because it is deferred: it registers a wrapper
 that `wrap_func_calls` applies during `lower()`, after
 `configure()`/`generate()`/`schedule()` have run. Anything that reasons about
-what a consumer actually calls before then (in particular, `compute_offline`'s
+what a consumer actually calls before then (in particular, `sever`'s
 `configure()`-time split) would see stale, pre-substitution state.
 
 ### The mechanism: eager and destructive, like `rfactor`
@@ -605,23 +605,23 @@ inference time.
 `decode` into a consumer needs no new Halide feature. Ordinary `.compute_at()` /
 `.compute_inline()` on `ApproximationResult`'s `replacement`, `encoded`,
 `intermediates` and `stage_ports()` already achieves it, since they are regular
-Funcs in the call graph. `compute_offline` (below) is needed only for the
-strictly narrower case of actually severing the graph into two
-separately-compiled artifacts, the static-weight case.
+Funcs in the call graph. `sever` (below) is needed only for the strictly
+narrower case of actually severing the graph into two separately-compiled
+artifacts, the static-weight case.
 
-## `compute_offline`: v1 scope
+## `sever`: v1 scope
 
-`Pipeline::compute_offline()` is deliberately independent of `Approximation`: it
-operates on Funcs.
+`Pipeline::sever()` is deliberately independent of `Approximation`: it operates
+on Funcs.
 
 ```cpp
-ComputeOfflineResult compute_offline(const std::vector<Func> &to_sever);
-ComputeOfflineResult compute_offline(const std::vector<Func> &to_sever,
+SeverResult sever(const std::vector<Func> &to_sever);
+SeverResult sever(const std::vector<Func> &to_sever,
                                      const std::vector<ImageParam> &bind_to);
-ComputeOfflineResult compute_offline(const std::vector<Func> &to_sever,
+SeverResult sever(const std::vector<Func> &to_sever,
                                      const std::vector<std::string> &names);
 
-struct ComputeOfflineResult {
+struct SeverResult {
     Pipeline offline;                       // computes to_sever's true values
     std::vector<ImageParam> online_inputs;  // one per to_sever, same order
 };
@@ -660,13 +660,12 @@ just an ergonomics one.
 Both operations are eager and destructive, so they compose in program order. The
 graph state at every point *is* the true state; no later lowering pass can
 silently change what a Func calls out from under code that already ran. The
-`encoded` Funcs of an `ApproximationResult` are exactly what to hand to
-`compute_offline`: they are the Funcs the consumers' rewritten call graph
-depends on.
+`encoded` Funcs of an `ApproximationResult` are exactly what to hand to `sever`:
+they are the Funcs the consumers' rewritten call graph depends on.
 
 ```cpp
 ApproximationResult r = f.approximate_by(scheme, {consumer});
-ComputeOfflineResult split = Pipeline({consumer}).compute_offline(r.encoded);
+SeverResult split = Pipeline({consumer}).sever(r.encoded);
 ```
 
 A Generator authoring an op from scratch usually does not need `approximate_by`
@@ -689,7 +688,7 @@ quantize/dequantize split already does.
 Generators already support dynamic I/O declared before `generate()` runs:
 `configure()` exists so that `add_input<>()`/`add_output<>()` can be called
 based on `GeneratorParam` values decided earlier. Two additions let
-`configure()` adopt the halves of a `compute_offline` split as ports:
+`configure()` adopt the halves of a `sever` split as ports:
 
 ```cpp
 template<typename T = Buffer<>> GeneratorInput<T> *add_input(const ImageParam &existing);
@@ -733,8 +732,8 @@ public:
         for (const ApproximationPort &p : r.encoded_ports) {
             names.push_back(p.name + "_in");
         }
-        ComputeOfflineResult split =
-            Pipeline({y}).compute_offline(r.encoded, names);
+        SeverResult split =
+            Pipeline({y}).sever(r.encoded, names);
 
         if (direction == Direction::Quantize) {
             add_input(x);
@@ -882,23 +881,23 @@ such an input. Properties over the decoded values (`lossless()`,
 
 ## Summary of decisions and open items
 
-| Item                                                                                                   | Status                                                                          |
-| ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| `Approximation`: value-semantic, type-erased, duck-typed handle; operates on `Func`s only              | Decided                                                                         |
-| Copies of a handle are one stage; separate conversions are distinct stages                             | Decided; lookups (`encoded_by`/`decoded_by`) are by handle                      |
-| Units return only their outputs; intermediates are discovered by walking definitions                   | Decided; scheduling-only, kept separate from the signature-contract outputs     |
-| Three unit forms per direction (single, multi, port-aware)                                             | Decided; see API surface below                                                  |
-| Named ports, optional declared signatures (static or contextual), run-time validation                  | Decided                                                                         |
-| `decode(encode(f))` reproduces `f`'s arg list and type                                                 | Decided; checked only at `approximate_by`'s substitution point, not generically |
-| `Approximation` makes no placement claims (offline vs fused)                                           | Decided                                                                         |
-| `encode`'s output arity/layout (packed vs planar)                                                      | Left to each `Approximation`                                                    |
-| `approximate_by`: eager, destructive `substitute_calls`, not `Func::in`; a `Func` member               | Decided; same scoping as `rfactor`, explicit already-existing `consumers`       |
-| `compute_offline`: seam exposure on `Pipeline`, adopted via `add_input(ImageParam)`/`add_output(Func)` | Decided for v1; single-valued Funcs only                                        |
-| `compute_offline`: true automatic pipeline splitting                                                   | Rejected for v1 (phase-ordering conflict with `configure()`/`generate()`)       |
-| `compute_offline`: cross-compile provenance checking                                                   | Deferred; v1 relies on both sides building the same scheme                      |
-| Fusing `encode`/`decode` into neighboring stages (activation requantization)                           | No new mechanism; ordinary `.compute_at()`/`.compute_inline()`                  |
-| Declared ranges, `error_bound()`, `lossless()`; property-based testing in `tools/`                     | Decided; claims are checked in tests, never enforced or used in codegen         |
-| Generator I/O ergonomics (`add_input`/`add_output` pointer bookkeeping)                                | Accepted rough edge, deferred                                                   |
+| Item                                                                                         | Status                                                                          |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `Approximation`: value-semantic, type-erased, duck-typed handle; operates on `Func`s only    | Decided                                                                         |
+| Copies of a handle are one stage; separate conversions are distinct stages                   | Decided; lookups (`encoded_by`/`decoded_by`) are by handle                      |
+| Units return only their outputs; intermediates are discovered by walking definitions         | Decided; scheduling-only, kept separate from the signature-contract outputs     |
+| Three unit forms per direction (single, multi, port-aware)                                   | Decided; see API surface below                                                  |
+| Named ports, optional declared signatures (static or contextual), run-time validation        | Decided                                                                         |
+| `decode(encode(f))` reproduces `f`'s arg list and type                                       | Decided; checked only at `approximate_by`'s substitution point, not generically |
+| `Approximation` makes no placement claims (offline vs fused)                                 | Decided                                                                         |
+| `encode`'s output arity/layout (packed vs planar)                                            | Left to each `Approximation`                                                    |
+| `approximate_by`: eager, destructive `substitute_calls`, not `Func::in`; a `Func` member     | Decided; same scoping as `rfactor`, explicit already-existing `consumers`       |
+| `sever`: seam exposure on `Pipeline`, adopted via `add_input(ImageParam)`/`add_output(Func)` | Decided for v1; single-valued Funcs only                                        |
+| `sever`: true automatic pipeline splitting                                                   | Rejected for v1 (phase-ordering conflict with `configure()`/`generate()`)       |
+| `sever`: cross-compile provenance checking                                                   | Deferred; v1 relies on both sides building the same scheme                      |
+| Fusing `encode`/`decode` into neighboring stages (activation requantization)                 | No new mechanism; ordinary `.compute_at()`/`.compute_inline()`                  |
+| Declared ranges, `error_bound()`, `lossless()`; property-based testing in `tools/`           | Decided; claims are checked in tests, never enforced or used in codegen         |
+| Generator I/O ergonomics (`add_input`/`add_output` pointer bookkeeping)                      | Accepted rough edge, deferred                                                   |
 
 Open items:
 
@@ -934,4 +933,4 @@ Open items:
   `Function::substitute_calls`, the primitive `approximate_by` calls directly
   and eagerly instead of through the deferred wrapper map.
 - `src/Generator.h`: the `configure()`/`generate()`/`schedule()` lifecycle that
-  `compute_offline` and the Generator shape build on.
+  `sever` and the Generator shape build on.

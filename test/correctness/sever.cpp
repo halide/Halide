@@ -208,7 +208,7 @@ int named_bindings_test() {
 }
 
 // The same quantizer expressed as an Approximation, used to check that
-// compute_offline() composes with approximate_by()'s rewritten call graph.
+// sever() composes with approximate_by()'s rewritten call graph.
 struct ApproxSymmetricQuantize {
     explicit ApproxSymmetricQuantize(int k)
         : k_(k) {
@@ -273,7 +273,7 @@ int approximate_by_offline_test() {
         result.intermediates[i].compute_root();
     }
 
-    ComputeOfflineResult split = Pipeline({Result}).compute_offline(encoded);
+    SeverResult split = Pipeline({Result}).sever(encoded);
 
     Buffer<int8_t> q_buf(K);
     Buffer<float> scale_buf = Buffer<float>::make_scalar();

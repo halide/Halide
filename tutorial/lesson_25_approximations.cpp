@@ -7,7 +7,7 @@
 //   - spliced it into an existing pipeline (a dot product) with
 //     Func::approximate_by,
 //   - split the pipeline into an offline quantizer and an online consumer
-//     with Pipeline::compute_offline,
+//     with Pipeline::sever,
 //   - checked that the bytes we produce are bit-for-bit what GGML produces,
 //   - and tested the properties the scheme claims.
 
@@ -344,11 +344,11 @@ int main() {
     // Part 4: Offline and online.
     //
     // Quantizing is done once, when a model is converted. The dot product is
-    // done every time it's run. compute_offline severs the pipeline at the
+    // done every time it's run. sever severs the pipeline at the
     // encoded weights: `split.offline` computes them, and the pipeline we
     // gave it now reads them from an ImageParam instead.
     // ------------------------------------------------------------------------
-    ComputeOfflineResult split = Pipeline(dot).compute_offline(approx.encoded);
+    SeverResult split = Pipeline(dot).sever(approx.encoded);
 
     std::vector<float> weights_data = make_weights(nblocks);
     std::vector<float> acts_data(N);
