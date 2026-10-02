@@ -1370,8 +1370,8 @@ VulkanShaderBinding *vk_decode_shader_bindings(void *user_context, VulkanMemoryA
             error(user_context) << "Vulkan: Failed to decode shader bindings ... malformed module buffer!\n";
             return nullptr;
         }
-        for (uint32_t dim = 0; dim < 3; dim++) {
-            shader_bindings[n].dispatch_data.local_size_binding.constant_id[dim] = module_ptr[idx++];
+        for (uint32_t &constant_id : shader_bindings[n].dispatch_data.local_size_binding.constant_id) {
+            constant_id = module_ptr[idx++];
         }
 
 #ifdef DEBUG_RUNTIME
