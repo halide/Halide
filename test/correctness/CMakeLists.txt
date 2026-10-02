@@ -514,6 +514,7 @@ tests(
     tracing.cpp
     tracing_bounds.cpp
     tracing_broadcast.cpp
+    tracing_errors.cpp
     tracing_stack.cpp
     transitive_bounds.cpp
     transpose_idioms.cpp
