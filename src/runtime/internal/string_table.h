@@ -185,7 +185,19 @@ size_t StringTable::parse(void *user_context, const char *str, const char *delim
         }
         ptr = (next_delim != nullptr) ? (next_delim + delim_length) : nullptr;
     }
-    return entry_count;
+
+    // Empty tokens (e.g. from consecutive, leading, or trailing delimiters) are
+    // skipped above but were still counted by count_tokens, so fewer entries get
+    // stored than slots were reserved for. Release the trailing unused storage
+    // and shrink to the number actually assigned, so size()/data()/operator[]
+    // never expose an uninitialized pointer entry.
+    for (size_t n = index; n < contents.size(); ++n) {
+        StringStorage *storage_ptr = static_cast<StringStorage *>(contents[n]);
+        StringStorage::destroy(user_context, storage_ptr);
+    }
+    contents.resize(user_context, index);
+    pointers.resize(user_context, index);
+    return index;
 }
 
 bool StringTable::contains(const char *str) const {
