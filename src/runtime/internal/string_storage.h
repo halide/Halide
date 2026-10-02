@@ -34,8 +34,13 @@ struct StringUtils {
         size_t delim_length = strlen(delim);
         while (!StringUtils::is_empty(ptr)) {
             const char *next_delim = strstr(ptr, delim);
+            size_t token_length = (next_delim == nullptr) ? strlen(ptr) : (size_t)(next_delim - ptr);
+            // Skip empty tokens from consecutive, leading, or trailing delimiters
+            // so this matches the number of tokens parse() actually stores.
+            if (token_length > 0) {
+                ++count;
+            }
             ptr = (next_delim != nullptr) ? (next_delim + delim_length) : nullptr;
-            ++count;
         }
         return count;
     }
