@@ -71,6 +71,7 @@ target_sources(
     Bounds.h
     BoundsInference.h
     BoundSmallAllocations.h
+    BoundsTracker.h
     Buffer.h
     Callable.h
     CanonicalizeGPUVars.h
@@ -256,6 +257,7 @@ target_sources(
     Bounds.cpp
     BoundsInference.cpp
     BoundSmallAllocations.cpp
+    BoundsTracker.cpp
     Buffer.cpp
     Callable.cpp
     CanonicalizeGPUVars.cpp
