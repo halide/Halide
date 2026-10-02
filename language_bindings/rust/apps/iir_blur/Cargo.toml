@@ -1,0 +1,16 @@
+[package]
+name = "iir_blur"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[build-dependencies]
+halide_build = "0.1.0"
+[dependencies]
+halide_runtime = "0.1.0"
+image = "0.24.1"
+
+[patch.crates-io]
+halide_build = {path = "../../rust_build"}
+halide_runtime = {path = "../../rust_runtime"}
