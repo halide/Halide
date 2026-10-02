@@ -906,12 +906,14 @@ std::pair<Serialize::Expr, Offset<void>> Serializer::serialize_expr(FlatBufferBu
         }
         const auto param_name_serialized = serialize_string(builder, param_name);
         const auto type_serialized = serialize_type(builder, call_expr->type);
+        const auto predicate_serialized = serialize_expr(builder, call_expr->predicate);
         return std::make_pair(Serialize::Expr::Call,
                               Serialize::CreateCall(builder, name_serialized,
                                                     builder.CreateVector(args_types),
                                                     builder.CreateVector(args_serialized),
                                                     call_type, func_index, value_index,
-                                                    image_name_serialized, param_name_serialized, type_serialized)
+                                                    image_name_serialized, param_name_serialized, type_serialized,
+                                                    predicate_serialized.first, predicate_serialized.second)
                                   .Union());
     }
     case IRNodeType::Variable: {

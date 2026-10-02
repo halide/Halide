@@ -28,16 +28,6 @@ class OptimizeShuffles : public IRMutator {
 
     using IRMutator::visit;
 
-    Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::if_then_else) && op->args[0].type().is_vector()) {
-            const Broadcast *b = op->args[0].as<Broadcast>();
-            if (!b || b->value.type().is_vector()) {
-                return op;
-            }
-        }
-        return IRMutator::visit(op);
-    }
-
     template<typename LetOrLetStmt>
     auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
         // We only care about vector lets.

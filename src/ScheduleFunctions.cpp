@@ -169,7 +169,7 @@ class AddPredicates : public IRGraphMutator {
     Expr visit(const Call *op) override {
         Expr result = IRMutator::visit(op);
         if (type == ApplySplitResult::PredicateCalls && op->call_type == Call::Halide) {
-            result = Call::make(op->type, Call::if_then_else, {cond, result}, Call::PureIntrinsic);
+            result = result.as<Call>()->with_predicate_and(cond);
         }
         return result;
     }

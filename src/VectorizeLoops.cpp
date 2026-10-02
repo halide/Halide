@@ -542,7 +542,9 @@ protected:
 
         // Mutate the args
         auto [new_args, changed] = mutate_with_changes(op->args);
-        int max_lanes = 0;
+        Expr predicate = mutate(op->predicate);
+        changed = changed || !predicate.same_as(op->predicate);
+        int max_lanes = predicate.type().lanes();
         for (const auto &new_arg : new_args) {
             max_lanes = std::max(new_arg.type().lanes(), max_lanes);
         }
@@ -625,15 +627,13 @@ protected:
                     new_args[10] = new_args[10] * max_lanes;
                 }
             }
-            return Call::make(op->type, Call::trace, new_args, op->call_type);
-        } else if (op->is_intrinsic(Call::if_then_else) && op->args.size() == 2) {
-            Expr cond = widen(new_args[0], max_lanes);
-            Expr true_value = widen(new_args[1], max_lanes);
-
-            const Load *load = true_value.as<Load>();
-            if (load) {
-                return Load::make(op->type.with_lanes(max_lanes), load->name, load->index, load->image, load->param, cond, load->alignment, load->is_streaming);
+            // The single trace call covers the whole vector, so it happens
+            // if any lane is active.
+            if (predicate.type().is_vector()) {
+                predicate = VectorReduce::make(VectorReduce::Or, predicate, 1);
             }
+            return Call::make(op->type, Call::trace, new_args, op->call_type,
+                              FunctionPtr(), 0, Buffer<>(), Parameter(), predicate);
         }
 
         // Widen the args to have the same lanes as the max lanes found
@@ -654,8 +654,15 @@ protected:
             new_op_type = op->type;
         }
 
+        if (new_op_type.is_scalar() && predicate.type().is_vector()) {
+            predicate = VectorReduce::make(VectorReduce::Or, predicate, 1);
+        } else {
+            predicate = widen(predicate, new_op_type.lanes());
+        }
+
         return Call::make(new_op_type, op->name, new_args,
-                          op->call_type, op->func, op->value_index, op->image, op->param);
+                          op->call_type, op->func, op->value_index, op->image, op->param,
+                          predicate);
     }
 
     template<typename LetOrLetStmt>

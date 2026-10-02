@@ -1021,6 +1021,14 @@ void IRPrinter::visit(const Broadcast *op) {
 }
 
 void IRPrinter::visit(const Call *op) {
+    if (!is_const_one(op->predicate)) {
+        open();
+        print(op->with(op->args, const_true(op->type.lanes())));
+        stream << kw(" if ");
+        print(op->predicate);
+        close();
+        return;
+    }
 
     if (op->is_intrinsic(Call::bitwise_or)) {
         open();

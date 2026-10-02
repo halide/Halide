@@ -53,7 +53,7 @@ class WeakenFunctionPtrs : public IRMutator {
             ptr.follow_global_wrappers = false;
             expr = Call::make(c->type, c->name, c->args, c->call_type,
                               ptr, c->value_index,
-                              c->image, c->param);
+                              c->image, c->param, c->predicate);
             count++;
         }
         return expr;
@@ -1369,7 +1369,7 @@ Function &Function::substitute_calls(const map<FunctionPtr, FunctionPtr> &substi
                          << "\"" << subs->name << "\"\n";
                 expr = Call::make(c->type, subs->name, c->args, c->call_type,
                                   subs, c->value_index,
-                                  c->image, c->param);
+                                  c->image, c->param, c->predicate);
             }
             return expr;
         }};

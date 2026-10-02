@@ -127,6 +127,10 @@ protected:
         // Scalarize expressions
         void scalarize(const Expr &e);
 
+        // Emit a branch on a scalar condition that evaluates exactly one of
+        // the two values, and make the result the current id.
+        void emit_branch_value(const Expr &cond, const Expr &true_value, const Expr &false_value);
+
         // Workgroup size
         void reset_workgroup_size();
         void find_workgroup_size(const Stmt &s);
@@ -1035,8 +1039,50 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const ProducerConsumer *op) {
     op->body.accept(this);
 }
 
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::emit_branch_value(const Expr &cond, const Expr &true_value, const Expr &false_value) {
+    internal_assert(cond.type().is_scalar()) << cond << "\n";
+    SpvFactory::BlockVariables block_vars = emit_if_then_else(cond, true_value, false_value);
+    SpvId type_id = builder.declare_type(true_value.type());
+    SpvId result_id = builder.reserve_id(SpvResultId);
+    builder.append(SpvFactory::phi(type_id, result_id, block_vars));
+    builder.update_id(result_id);
+}
+
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Call): " << op->type << " " << op->name << " args=" << (uint32_t)op->args.size() << "\n";
+
+    if (!is_const_one(op->predicate)) {
+        // The call is only performed where the predicate is true. The args
+        // are evaluated regardless, so lift any with side-effects out of the
+        // branch.
+        std::vector<std::pair<std::string, Expr>> lets;
+        std::vector<Expr> args = op->args;
+        for (Expr &arg : args) {
+            if (!is_pure(arg)) {
+                std::string name = unique_name('t');
+                lets.emplace_back(name, arg);
+                arg = Variable::make(arg.type(), name);
+            }
+        }
+        if (!lets.empty()) {
+            Expr e = op->with(args);
+            for (const auto &[n, v] : reverse_view(lets)) {
+                e = Let::make(n, v, e);
+            }
+            e.accept(this);
+            return;
+        }
+        Expr cond = op->predicate;
+        if (const Broadcast *b = cond.as<Broadcast>()) {
+            cond = b->value;
+        }
+        if (cond.type().is_vector()) {
+            scalarize(op);
+        } else {
+            emit_branch_value(cond, op->with(op->args, const_true(op->type.lanes())), make_zero(op->type));
+        }
+        return;
+    }
 
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
         internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
@@ -1115,26 +1161,6 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::bitwise_not)) {
         internal_assert(op->args.size() == 1);
         visit_unary_op(SpvOpNot, op->type, op->args[0]);
-    } else if (op->is_intrinsic(Call::if_then_else)) {
-        Expr cond = op->args[0];
-        if (const Broadcast *b = cond.as<Broadcast>()) {
-            cond = b->value;
-        }
-        if (cond.type().is_vector()) {
-            scalarize(op);
-        } else {
-            // Generate Phi node if used as an expression.
-            internal_assert(op->args.size() == 2 || op->args.size() == 3);
-            Expr else_expr;
-            if (op->args.size() == 3) {
-                else_expr = op->args[2];
-            }
-            SpvFactory::BlockVariables block_vars = emit_if_then_else(op->args[0], op->args[1], else_expr);
-            SpvId type_id = builder.declare_type(op->type);
-            SpvId result_id = builder.reserve_id(SpvResultId);
-            builder.append(SpvFactory::phi(type_id, result_id, block_vars));
-            builder.update_id(result_id);
-        }
     } else if (op->is_intrinsic(Call::IntrinsicOp::div_round_to_zero)) {
         internal_assert(op->args.size() == 2);
         // See if we can rewrite it to something faster (e.g. a shift)
@@ -1591,7 +1617,14 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::store_at_vector_index(const Store *op, S
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Load *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Load): " << op->type << " " << op->name << "[" << op->index << "]\n";
-    user_assert(is_const_one(op->predicate)) << "Predicated loads not supported by SPIR-V codegen\n";
+    if (!is_const_one(op->predicate)) {
+        if (op->type.is_vector()) {
+            scalarize(op);
+        } else {
+            emit_branch_value(op->predicate, op->with(op->index, const_true(), op->alignment), make_zero(op->type));
+        }
+        return;
+    }
 
     // Construct the pointer to read from
     const SymbolIdStorageClassPair *id_and_storage_class = symbol_table.find(op->name);

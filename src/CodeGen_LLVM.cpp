@@ -2758,6 +2758,76 @@ void CodeGen_LLVM::scalarize(const Expr &e) {
     value = result;
 }
 
+Value *CodeGen_LLVM::codegen_branch(const Expr &cond, const Expr &true_value, const Expr &false_value) {
+    internal_assert(cond.type().is_scalar()) << cond << "\n";
+
+    BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
+    BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
+    BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
+    Value *c = codegen(cond);
+    if (c->getType() != i1_t) {
+        c = builder->CreateIsNotNull(c);
+    }
+    builder->CreateCondBr(c, true_bb, false_bb);
+    builder->SetInsertPoint(true_bb);
+    Value *t = codegen(true_value);
+    builder->CreateBr(after_bb);
+    BasicBlock *true_pred = builder->GetInsertBlock();
+
+    builder->SetInsertPoint(false_bb);
+    Value *f = codegen(false_value);
+    builder->CreateBr(after_bb);
+    BasicBlock *false_pred = builder->GetInsertBlock();
+
+    builder->SetInsertPoint(after_bb);
+    // Some extern calls (e.g. halide_print) return void in LLVM despite
+    // having a Halide type. Treat their result as zero.
+    llvm::Type *result_t = llvm_type_of(true_value.type());
+    if (t->getType()->isVoidTy()) {
+        t = Constant::getNullValue(result_t);
+    }
+    if (f->getType()->isVoidTy()) {
+        f = Constant::getNullValue(result_t);
+    }
+    PHINode *phi = builder->CreatePHI(t->getType(), 2);
+    phi->addIncoming(t, true_pred);
+    phi->addIncoming(f, false_pred);
+    return phi;
+}
+
+Value *CodeGen_LLVM::codegen_predicated_call(const Call *op) {
+    // The args are evaluated regardless of the predicate, so lift any with
+    // side-effects out of the branch.
+    vector<pair<string, Expr>> lets;
+    vector<Expr> args = op->args;
+    for (Expr &arg : args) {
+        if (!is_pure(arg)) {
+            string name = unique_name('t');
+            lets.emplace_back(name, arg);
+            arg = Variable::make(arg.type(), name);
+        }
+    }
+    if (!lets.empty()) {
+        Expr e = op->with(args);
+        for (const auto &[n, v] : reverse_view(lets)) {
+            e = Let::make(n, v, e);
+        }
+        return codegen(e);
+    }
+
+    Expr cond = op->predicate;
+    if (const Broadcast *b = cond.as<Broadcast>()) {
+        cond = b->value;
+    }
+    if (cond.type().is_vector()) {
+        // Branch per lane.
+        scalarize(op);
+        return value;
+    }
+    Expr unpredicated = op->with(op->args, const_true(op->type.lanes()));
+    return codegen_branch(cond, unpredicated, make_zero(op->type));
+}
+
 void CodeGen_LLVM::codegen_predicated_store(const Store *op) {
     const Ramp *ramp = op->index.as<Ramp>();
     if (ramp && is_const_one(ramp->stride) && !emit_atomic_stores) {  // Dense vector store
@@ -2973,7 +3043,10 @@ void CodeGen_LLVM::codegen_predicated_load(const Load *op) {
     const Ramp *ramp = op->index.as<Ramp>();
     const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
 
-    if (ramp && is_const_one(ramp->stride)) {  // Dense vector load
+    if (op->type.is_scalar()) {
+        Expr load_expr = op->with(op->index, const_true(), op->alignment);
+        value = codegen_branch(op->predicate, load_expr, make_zero(op->type));
+    } else if (ramp && is_const_one(ramp->stride)) {  // Dense vector load
         Value *vpred = codegen(op->predicate);
         value = codegen_dense_vector_load(op, vpred);
     } else if (use_llvm_vp_intrinsics && stride) {  // Case only handled by vector predication, otherwise must scalarize.
@@ -3000,14 +3073,21 @@ void CodeGen_LLVM::codegen_predicated_load(const Load *op) {
         Value *flipped = codegen_dense_vector_load(flipped_load.as<Load>(), vpred);
         value = reverse_vector(flipped);
     } else {  // It's not dense vector load, we need to scalarize it
-        Expr load_expr = op->with(op->index, const_true(op->type.lanes()), op->alignment);
-        debug(4) << "Scalarize predicated vector load\n\t" << load_expr << "\n";
-        Expr pred_load = Call::make(load_expr.type(),
-                                    Call::if_then_else,
-                                    {op->predicate, load_expr},
-                                    Internal::Call::PureIntrinsic);
-        value = codegen(pred_load);
+        value = codegen_scalarized_predicated_load(op);
     }
+}
+
+Value *CodeGen_LLVM::codegen_scalarized_predicated_load(const Load *op) {
+    Expr load_expr = op->with(op->index, const_true(op->type.lanes()), op->alignment);
+    debug(4) << "Scalarize predicated vector load\n\t" << load_expr << "\n";
+    Value *result = PoisonValue::get(llvm_type_of(op->type));
+    for (int i = 0; i < op->type.lanes(); i++) {
+        Value *v = codegen_branch(extract_lane(op->predicate, i),
+                                  extract_lane(load_expr, i),
+                                  make_zero(op->type.element_of()));
+        result = builder->CreateInsertElement(result, v, ConstantInt::get(i32_t, i));
+    }
+    return result;
 }
 
 void CodeGen_LLVM::codegen_atomic_rmw(const Store *op) {
@@ -3131,6 +3211,10 @@ void CodeGen_LLVM::codegen_atomic_rmw(const Store *op) {
 }
 
 void CodeGen_LLVM::visit(const Call *op) {
+    if (!is_const_one(op->predicate)) {
+        value = codegen_predicated_call(op);
+        return;
+    }
     internal_assert(op->is_extern() || op->is_intrinsic())
         << "Can only codegen extern calls and intrinsics\n";
 
@@ -3310,42 +3394,6 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 2);
         codegen(op->args[0]);
         value = codegen(op->args[1]);
-    } else if (op->is_intrinsic(Call::if_then_else)) {
-        Expr cond = op->args[0];
-        if (const Broadcast *b = cond.as<Broadcast>()) {
-            cond = b->value;
-        }
-        if (cond.type().is_vector()) {
-            scalarize(op);
-        } else {
-
-            internal_assert(op->args.size() == 2 || op->args.size() == 3);
-
-            BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
-            BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
-            BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
-            Value *c = codegen(cond);
-            if (c->getType() != i1_t) {
-                c = builder->CreateIsNotNull(c);
-            }
-            builder->CreateCondBr(c, true_bb, false_bb);
-            builder->SetInsertPoint(true_bb);
-            Value *true_value = codegen(op->args[1]);
-            builder->CreateBr(after_bb);
-            BasicBlock *true_pred = builder->GetInsertBlock();
-
-            builder->SetInsertPoint(false_bb);
-            Value *false_value = codegen(op->args.size() == 3 ? op->args[2] : make_zero(op->type));
-            builder->CreateBr(after_bb);
-            BasicBlock *false_pred = builder->GetInsertBlock();
-
-            builder->SetInsertPoint(after_bb);
-            PHINode *phi = builder->CreatePHI(true_value->getType(), 2);
-            phi->addIncoming(true_value, true_pred);
-            phi->addIncoming(false_value, false_pred);
-
-            value = phi;
-        }
     } else if (op->is_intrinsic(Call::round)) {
         value = call_overloaded_intrin(op->type, "roundeven", op->args);
         if (!value) {

@@ -18,7 +18,7 @@ namespace Internal {
  * this requirement. This is done by injecting intrinsics to convert bools to
  * architecture-specific masks, and using a select_mask intrinsic instead of a
  * Select node. This also converts any intrinsics that operate on vectorized
- * conditions to a *_mask equivalent (if_then_else, require). Because the masks
+ * conditions to a *_mask equivalent (e.g. require). Because the masks
  * are architecture specific, they may not be stored or loaded. On Stores, the
  * masks are converted to UInt(8) with a value of 0 or 1, which is our canonical
  * in-memory representation of a bool. */

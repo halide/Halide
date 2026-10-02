@@ -267,6 +267,23 @@ Expr Inliner::visit(const Call *op) {
         // Bind the args using Let nodes
         internal_assert(args.size() == func_args.size());
 
+        Expr predicate = mutate(op->predicate);
+        if (!is_const_one(predicate)) {
+            // The call is only performed if the predicate is true, so the
+            // same must hold for every side-effecting or memory-accessing
+            // call in the inlined body. Pure calls are safe to evaluate
+            // unconditionally. The result is zero when the predicate is
+            // false.
+            body = mutate_with(body, [&](auto *self, const Call *c) -> Expr {
+                Expr e = self->visit_base(c);
+                if (Call::can_be_predicated(c->call_type)) {
+                    e = e.template as<Call>()->with_predicate_and(predicate);
+                }
+                return e;
+            });
+            body = select(predicate, body, make_zero(body.type()));
+        }
+
         for (size_t i = 0; i < args.size(); i++) {
             body = Let::make(func.name() + "." + func_args[i], args[i], body);
         }
