@@ -434,6 +434,27 @@ Type Deserializer::deserialize_type(const Serialize::Type *type) {
     const int bits = type->bits();
     const int lanes = type->lanes();
     const TypeCode code_deserialized = type->code();
+
+    if (code_deserialized == TypeCode::Struct) {
+        user_assert(lanes == 1) << "A struct type cannot be a vector.\n";
+        const auto *fields_serialized = type->struct_fields();
+        user_assert(fields_serialized != nullptr && fields_serialized->size() > 0)
+            << "deserializing a struct type with no fields\n";
+        std::vector<StructField> fields;
+        fields.reserve(fields_serialized->size());
+        for (const auto *field_serialized : *fields_serialized) {
+            StructField field;
+            field.name = deserialize_string(field_serialized->name());
+            field.type = deserialize_type(field_serialized->type());
+            const int array_extent = field_serialized->array_extent();
+            if (array_extent >= 0) {
+                field.array_extent = array_extent;
+            }
+            fields.push_back(field);
+        }
+        return Type::Struct(fields);
+    }
+
     halide_type_code_t code = halide_type_uint;
     switch (code_deserialized) {
     case TypeCode::Int:
