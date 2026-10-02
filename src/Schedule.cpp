@@ -351,6 +351,9 @@ struct StageScheduleContents {
             if (s.factor.defined()) {
                 s.factor = mutator(s.factor);
             }
+            if (s.align.defined()) {
+                s.align = mutator(s.align);
+            }
         }
         for (PrefetchDirective &p : prefetches) {
             if (p.offset.defined()) {
@@ -756,6 +759,9 @@ void StageSchedule::accept(IRVisitor *visitor) const {
     for (const Split &s : splits()) {
         if (s.factor.defined()) {
             s.factor.accept(visitor);
+        }
+        if (s.align.defined()) {
+            s.align.accept(visitor);
         }
     }
     for (const PrefetchDirective &p : prefetches()) {

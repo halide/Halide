@@ -5,6 +5,14 @@ tests(
     SOURCES
     # keep-sorted start case=no
     align_bounds.cpp
+    aligned_split.cpp
+    aligned_split_2d.cpp
+    aligned_split_2d_3x3.cpp
+    aligned_split_blend_small_extent.cpp
+    aligned_split_mux_phase.cpp
+    aligned_split_nested.cpp
+    aligned_split_partition.cpp
+    aligned_split_reduction.cpp
     ambiguous_inline_reductions.cpp
     argmax.cpp
     arm_cpu_detect.cpp
@@ -267,6 +275,7 @@ tests(
     gpu_sum_scan.cpp
     gpu_texture.cpp
     gpu_thread_barrier.cpp
+    gpu_thread_extent_under_outer_split.cpp
     gpu_transpose.cpp
     gpu_vectorize.cpp
     gpu_vectorized_shared_memory.cpp
@@ -661,6 +670,10 @@ tests(
     random.cpp
     reorder_rvars.cpp
     rfactor.cpp
+    rfactor_aligned_split.cpp
+    rfactor_aligned_split_2d.cpp
+    rfactor_aligned_split_nested.cpp
+    rfactor_aligned_split_phases.cpp
     ring_buffer.cpp
     stream_compaction.cpp
     thread_safety.cpp
