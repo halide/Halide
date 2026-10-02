@@ -2341,6 +2341,12 @@ extern void halide_profiler_shutdown(void);
  * reset. Also happens at process exit. */
 extern void halide_profiler_report(void *user_context);
 
+/** Set the path of the JSON file that halide_profiler_report writes the raw
+ * statistics to, overriding the HL_PROFILER_JSON_OUTPUT environment
+ * variable. The path is copied. Pass nullptr to revert to the environment
+ * variable. */
+extern void halide_profiler_set_json_output(const char *path);
+
 /** These routines are called to temporarily disable and then re-enable
  * the profiler. */
 //@{

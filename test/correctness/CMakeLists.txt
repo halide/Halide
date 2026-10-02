@@ -323,6 +323,7 @@ tests(
     isnan.cpp
     issue_3926.cpp
     iterate_over_circle.cpp
+    jit_host_environment.cpp
     lambda.cpp
     lazy_convolution.cpp
     leak_device_memory.cpp
@@ -404,6 +405,7 @@ tests(
     print.cpp
     print_loop_nest.cpp
     process_some_tiles.cpp
+    profiler_json_output.cpp
     propagate_estimate.cpp
     pseudostack_shares_slots.cpp
     python_extension_gen.cpp
@@ -480,6 +482,8 @@ tests(
     split_predicate.cpp
     split_reuse_inner_name_bug.cpp
     split_same_var_names.cpp
+    split_storage.cpp
+    split_storage_errors.cpp
     split_store_compute.cpp
     stable_realization_order.cpp
     stack_allocations.cpp

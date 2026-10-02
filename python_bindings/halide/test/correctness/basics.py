@@ -637,6 +637,26 @@ def test_split_vars():
     assert isinstance(vars[4], hl.Var) and vars[4].name() == hl.Var.outermost().name()
 
 
+def test_split_storage():
+    x, y, xo, xi = hl.vars("x y xo xi")
+    f = hl.Func("f")
+    g = hl.Func("g")
+    f[x, y] = x + 100 * y
+    g[x, y] = f[x, y] + 1
+
+    f.compute_root().split_storage(x, xo, xi, 4).reorder_storage(xi, y, xo)
+
+    result = g.realize([10, 6])
+    for yy in range(6):
+        for xx in range(10):
+            assert result[xx, yy] == xx + 100 * yy + 1
+
+    h = hl.Func("h")
+    h[x] = x
+    with assert_throws(hl.HalideError, "same name"):
+        h.split_storage(x, x, x, 4)
+
+
 if __name__ == "__main__":
     test_compiletime_error()
     test_runtime_error()
@@ -662,3 +682,4 @@ if __name__ == "__main__":
     test_implicit_update_by_float()
     test_print_ir()
     test_split_vars()
+    test_split_storage()
