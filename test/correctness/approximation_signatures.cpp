@@ -213,7 +213,7 @@ int main() {
     {
         EncodeResult e = scheme.encode({f});
         CHECK(names(e.encoded_ports) == Names({"codes", "scale"}));
-        // Sever the ports, as compute_offline does.
+        // Sever the ports, as sever does.
         DecodeResult d = scheme.decode(e.encoded);
         CHECK(d.decoded.size() == 1);
         CHECK(names(d.decoded_ports) == Names({"values"}));
