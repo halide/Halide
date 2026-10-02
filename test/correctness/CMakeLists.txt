@@ -486,6 +486,7 @@ tests(
     split_storage.cpp
     split_storage_errors.cpp
     split_store_compute.cpp
+    split_tail_preconditions.cpp
     stable_realization_order.cpp
     stack_allocations.cpp
     stage_strided_loads.cpp
