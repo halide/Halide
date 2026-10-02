@@ -666,6 +666,7 @@ tests(
     vector_cast.cpp
     vector_math.cpp
     vector_reductions.cpp
+    vulkan_bool_minmax.cpp
     # keep-sorted end
 )
 
@@ -690,6 +691,10 @@ find_package(SPIRV-Headers 1.5.5 REQUIRED HINTS "${Halide_SOURCE_DIR}/dependenci
 target_include_directories(correctness_spirv_ir PRIVATE "${Halide_SOURCE_DIR}/src")
 target_link_libraries(correctness_spirv_ir PRIVATE SPIRV-Headers::SPIRV-Headers)
 target_compile_definitions(correctness_spirv_ir PRIVATE WITH_SPIRV)
+
+target_include_directories(correctness_vulkan_bool_minmax PRIVATE "${Halide_SOURCE_DIR}/src")
+target_link_libraries(correctness_vulkan_bool_minmax PRIVATE SPIRV-Headers::SPIRV-Headers)
+target_compile_definitions(correctness_vulkan_bool_minmax PRIVATE WITH_SPIRV)
 
 # Tests which use external funcs need to enable exports.
 set_target_properties(

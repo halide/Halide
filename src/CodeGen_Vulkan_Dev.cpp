@@ -807,6 +807,10 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Mod *op) {
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Max *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Max): " << op->type << " Max((" << op->a << "), (" << op->b << "))\n";
+    if (op->type.is_bool()) {
+        visit_binary_op(SpvOpLogicalOr, op->type, op->a, op->b);
+        return;
+    }
     SpvId op_code = SpvOpNop;
     if (op->type.is_float()) {
         op_code = GLSLstd450FMax;
@@ -842,6 +846,10 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Max *op) {
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Min *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Min): " << op->type << " Min((" << op->a << "), (" << op->b << "))\n";
+    if (op->type.is_bool()) {
+        visit_binary_op(SpvOpLogicalAnd, op->type, op->a, op->b);
+        return;
+    }
     SpvId op_code = SpvOpNop;
     if (op->type.is_float()) {
         op_code = GLSLstd450FMin;
