@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <cstdlib>
 #include <mutex>
 #include <set>
 #include <string>
@@ -446,6 +447,22 @@ void compile_module_impl(
     auto dtors = llvm::orc::getDestructors(*m);
     auto dtorRunner = std::make_unique<llvm::orc::CtorDtorRunner>(JIT->getMainJITDylib());
     dtorRunner->add(dtors);
+
+#ifdef _WIN32
+    // JIT code has no import table, so the process-wide search below can bind
+    // C runtime functions to any loaded CRT that exports them, e.g. the
+    // msvcrt.dll that advapi32.dll pulls in. Each CRT has its own state (the
+    // environment, FILE handles, the heap), so search the CRT that libHalide
+    // itself uses first.
+    const void *crt_function = (const void *)&::getenv;
+    HMODULE crt = nullptr;
+    if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (LPCSTR)crt_function, &crt)) {
+        JIT->getMainJITDylib().addGenerator(
+            std::make_unique<llvm::orc::DynamicLibrarySearchGenerator>(
+                llvm::sys::DynamicLibrary(crt), target_data_layout.getGlobalPrefix()));
+    }
+#endif
 
     // Resolve system symbols (like pthread, dl and others)
 #if defined(__GNUC__) && !defined(__clang__)
