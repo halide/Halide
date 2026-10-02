@@ -539,7 +539,7 @@ public:
      * size, which depends on how this Approximation is used.
      *
      * `input_ports` are the ports encode() was given (or empty, if it was
-     * given none, as when a decode runs on its own after compute_offline
+     * given none, as when a decode runs on its own after sever
      * severs the encode). They are the *context*: the encoded ports and the
      * decoded ports are both derived from them statically, through the
      * declared signature (as describe() does), so that a stand-alone decode
@@ -801,7 +801,7 @@ struct ApproximationResult {
      * quantizer's packed byte buffer). This is a subset of `intermediates` (kept
      * there too, so existing code that schedules everything in `intermediates`
      * doesn't need to change), broken out separately so callers can act on
-     * exactly this boundary -- e.g. Pipeline::compute_offline(result.encoded)
+     * exactly this boundary -- e.g. Pipeline::sever(result.encoded)
      * -- without calling Approximation::encode() themselves. */
     std::vector<Func> encoded;
     /** The ports of `encoded` (parallel to it). */
