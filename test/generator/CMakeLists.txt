@@ -479,16 +479,16 @@ _add_halide_libraries(configure)
 _add_halide_aot_tests(configure)
 add_halide_stub(configure.stub FROM configure.generator GENERATOR configure)
 
-# compute_offline_aottest.cpp
-# compute_offline_generator.cpp
-_add_halide_libraries(compute_offline)
+# sever_aottest.cpp
+# sever_generator.cpp
+_add_halide_libraries(sever)
 _add_halide_libraries(
-    compute_offline_dequantize
-    FROM compute_offline.generator
-    GENERATOR_NAME compute_offline
+    sever_dequantize
+    FROM sever.generator
+    GENERATOR_NAME sever
     PARAMS direction=dequantize
 )
-_add_halide_aot_tests(compute_offline HALIDE_LIBRARIES compute_offline compute_offline_dequantize)
+_add_halide_aot_tests(sever HALIDE_LIBRARIES sever sever_dequantize)
 
 # TODO: this could be made to work under wasm with some tweaking, it's just build-rule complexity
 if (NOT ${_USING_WASM})

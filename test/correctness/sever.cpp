@@ -6,7 +6,7 @@
 
 using namespace Halide;
 
-// Exercises Pipeline::compute_offline: rewriting calls to a Func into calls to
+// Exercises Pipeline::sever: rewriting calls to a Func into calls to
 // a fresh ImageParam, severing a pipeline's *computation* of that Func while
 // preserving the shape contract it stood in for.
 
@@ -53,10 +53,10 @@ void reference_symmetric_quantize(int k, const std::function<float(int)> &values
     }
 }
 
-// A minimal check that compute_offline() actually severs
+// A minimal check that sever() actually severs
 // the call graph, rather than being a no-op that happens to still produce the
 // right answer once. f(x) = x*2, g(x) = f(x) + 1: after
-// Pipeline({g}).compute_offline({f}), g must stop depending on f's own
+// Pipeline({g}).sever({f}), g must stop depending on f's own
 // computation -- setting a buffer on the returned ImageParam that disagrees
 // with f's true values must change g's output accordingly.
 int minimal_severance_test() {
@@ -65,7 +65,7 @@ int minimal_severance_test() {
     f(x) = x * 2;
     g(x) = f(x) + 1;
 
-    ComputeOfflineResult split = Pipeline({g}).compute_offline({f});
+    SeverResult split = Pipeline({g}).sever({f});
 
     Buffer<int> f_values = split.offline.realize({10});
     for (int x = 0; x < 10; x++) {
@@ -98,7 +98,7 @@ int minimal_severance_test() {
         int expected = f_fake(x) + 1;
         if (g_fake(x) != expected) {
             printf("minimal_severance_test: g(%d) = %d with fake f, expected %d "
-                   "(compute_offline() did not actually sever the call graph)\n",
+                   "(sever() did not actually sever the call graph)\n",
                    x, g_fake(x), expected);
             return 1;
         }
@@ -123,9 +123,9 @@ int quantized_offline_test() {
     Result(k) = quantize.decode()(k) * 2.0f;
 
     // q(k) and scale() are the Funcs Result's call graph depends on; amax() is
-    // reachable only through them, so compute_offline() severs it too.
-    ComputeOfflineResult split =
-        Pipeline({Result}).compute_offline({quantize.q, quantize.scale});
+    // reachable only through them, so sever() severs it too.
+    SeverResult split =
+        Pipeline({Result}).sever({quantize.q, quantize.scale});
 
     // q(k) and scale() have different dimensionality (1-D vs scalar), so they
     // can't share a single realize({sizes}) call -- realize into
@@ -167,8 +167,8 @@ int named_bindings_test() {
     Func Result("Result");
     Result(k) = quantize.decode()(k);
 
-    ComputeOfflineResult split =
-        Pipeline({Result}).compute_offline({quantize.q, quantize.scale}, {"q_in", "scale_in"});
+    SeverResult split =
+        Pipeline({Result}).sever({quantize.q, quantize.scale}, {"q_in", "scale_in"});
 
     if (split.online_inputs.size() != 2 ||
         split.online_inputs[0].name() != "q_in" ||

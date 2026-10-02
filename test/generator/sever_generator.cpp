@@ -6,11 +6,11 @@ enum class Direction { Quantize,
                        Dequantize };
 
 // Builds a blockwise symmetric int8 quantize/dequantize round trip entirely in
-// configure(), splits it with Pipeline::compute_offline(), and then adopts one
+// configure(), splits it with Pipeline::sever(), and then adopts one
 // half as this Generator's ports via add_input(const ImageParam &) and
 // add_output(const Func &). Both directions share the same configure() body;
 // generate() is an empty stub.
-class ComputeOffline : public Halide::Generator<ComputeOffline> {
+class Sever : public Halide::Generator<Sever> {
 public:
     GeneratorParam<Direction> direction{"direction",
                                         Direction::Quantize,
@@ -43,8 +43,8 @@ public:
 
         // Name the severed Funcs' stand-in ImageParams, so the dequantize
         // direction's input ports have meaningful names.
-        ComputeOfflineResult split =
-            Pipeline({y}).compute_offline({q, scale}, {"q_in", "scale_in"});
+        SeverResult split =
+            Pipeline({y}).sever({q, scale}, {"q_in", "scale_in"});
 
         // Adopt one half as this Generator's ports. Typed ports check the
         // adopted ImageParam/Func's type and dimensionality when the
@@ -71,4 +71,4 @@ public:
 
 }  // namespace
 
-HALIDE_REGISTER_GENERATOR(ComputeOffline, compute_offline)
+HALIDE_REGISTER_GENERATOR(Sever, sever)

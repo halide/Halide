@@ -6,8 +6,8 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include "compute_offline.h"
-#include "compute_offline_dequantize.h"
+#include "sever.h"
+#include "sever_dequantize.h"
 
 using Halide::Runtime::Buffer;
 
@@ -31,11 +31,11 @@ int main(int argc, char **argv) {
     }
 
     // Quantize: Input x adopted from a plain ImageParam; Outputs q and scale
-    // adopted from compute_offline()'s offline Pipeline.
+    // adopted from sever()'s offline Pipeline.
     Buffer<int8_t, 1> q(kSize);
     Buffer<float, 1> scale(kBlocks);
-    if (int result = compute_offline(x, q, scale); result != 0) {
-        fprintf(stderr, "compute_offline failed: %d\n", result);
+    if (int result = sever(x, q, scale); result != 0) {
+        fprintf(stderr, "sever failed: %d\n", result);
         return 1;
     }
 
@@ -62,11 +62,11 @@ int main(int argc, char **argv) {
         }
     }
 
-    // Dequantize: Inputs adopted from the ImageParams compute_offline() bound
+    // Dequantize: Inputs adopted from the ImageParams sever() bound
     // the severed Funcs to; Output y adopted from the rewritten online Func.
     Buffer<float, 1> y(kSize);
-    if (int result = compute_offline_dequantize(q, scale, y); result != 0) {
-        fprintf(stderr, "compute_offline_dequantize failed: %d\n", result);
+    if (int result = sever_dequantize(q, scale, y); result != 0) {
+        fprintf(stderr, "sever_dequantize failed: %d\n", result);
         return 1;
     }
 
@@ -87,8 +87,8 @@ int main(int argc, char **argv) {
     // Dequantizing arbitrary data must use it, not recompute from x.
     q.fill(3);
     scale.fill(0.5f);
-    if (int result = compute_offline_dequantize(q, scale, y); result != 0) {
-        fprintf(stderr, "compute_offline_dequantize failed: %d\n", result);
+    if (int result = sever_dequantize(q, scale, y); result != 0) {
+        fprintf(stderr, "sever_dequantize failed: %d\n", result);
         return 1;
     }
     for (int k = 0; k < kSize; k++) {

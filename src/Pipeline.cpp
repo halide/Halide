@@ -238,8 +238,8 @@ std::vector<Internal::Stmt> Pipeline::requirements() const {
 
 namespace {
 
-ComputeOfflineResult compute_offline_impl(const Pipeline &pipeline, const vector<Func> &to_sever,
-                                          const vector<ImageParam> *bind_to) {
+SeverResult sever_impl(const Pipeline &pipeline, const vector<Func> &to_sever,
+                       const vector<ImageParam> *bind_to) {
     vector<Function> output_funcs;
     for (const Func &f : pipeline.outputs()) {
         output_funcs.push_back(f.function());
@@ -262,7 +262,7 @@ ComputeOfflineResult compute_offline_impl(const Pipeline &pipeline, const vector
 
     if (bind_to) {
         user_assert(bind_to->size() == to_sever.size())
-            << "Pipeline::compute_offline(): bind_to has " << bind_to->size()
+            << "Pipeline::sever(): bind_to has " << bind_to->size()
             << " ImageParams, but to_sever has " << to_sever.size() << " Funcs\n";
     }
 
@@ -272,13 +272,13 @@ ComputeOfflineResult compute_offline_impl(const Pipeline &pipeline, const vector
     for (size_t i = 0; i < to_sever.size(); i++) {
         const Func &f = to_sever[i];
         user_assert(f.types().size() == 1)
-            << "Pipeline::compute_offline() requires single-valued Funcs, but "
+            << "Pipeline::sever() requires single-valued Funcs, but "
             << f.name() << " has " << f.types().size() << " values\n";
 
         ImageParam im = bind_to ? (*bind_to)[i] : ImageParam(f.types()[0], f.dimensions(), f.name() + "_im");
         if (bind_to) {
             user_assert(im.type() == f.types()[0] && im.dimensions() == f.dimensions())
-                << "Pipeline::compute_offline(): bind_to[" << i << "] (" << im.name()
+                << "Pipeline::sever(): bind_to[" << i << "] (" << im.name()
                 << ") has type/dimensionality mismatched with " << f.name() << "\n";
         }
 
@@ -303,32 +303,32 @@ ComputeOfflineResult compute_offline_impl(const Pipeline &pipeline, const vector
 
 }  // namespace
 
-ComputeOfflineResult Pipeline::compute_offline(const vector<Func> &to_sever) {
-    return compute_offline_impl(*this, to_sever, nullptr);
+SeverResult Pipeline::sever(const vector<Func> &to_sever) {
+    return sever_impl(*this, to_sever, nullptr);
 }
 
-ComputeOfflineResult Pipeline::compute_offline(const vector<Func> &to_sever, const vector<ImageParam> &bind_to) {
-    return compute_offline_impl(*this, to_sever, &bind_to);
+SeverResult Pipeline::sever(const vector<Func> &to_sever, const vector<ImageParam> &bind_to) {
+    return sever_impl(*this, to_sever, &bind_to);
 }
 
-ComputeOfflineResult Pipeline::compute_offline(const vector<Func> &to_sever, std::initializer_list<string> names) {
-    return compute_offline(to_sever, vector<string>(names));
+SeverResult Pipeline::sever(const vector<Func> &to_sever, std::initializer_list<string> names) {
+    return sever(to_sever, vector<string>(names));
 }
 
-ComputeOfflineResult Pipeline::compute_offline(const vector<Func> &to_sever, const vector<string> &names) {
+SeverResult Pipeline::sever(const vector<Func> &to_sever, const vector<string> &names) {
     user_assert(names.size() == to_sever.size())
-        << "Pipeline::compute_offline(): names has " << names.size()
+        << "Pipeline::sever(): names has " << names.size()
         << " entries, but to_sever has " << to_sever.size() << " Funcs\n";
     vector<ImageParam> bind_to;
     bind_to.reserve(to_sever.size());
     for (size_t i = 0; i < to_sever.size(); i++) {
         const Func &f = to_sever[i];
         user_assert(f.types().size() == 1)
-            << "Pipeline::compute_offline() requires single-valued Funcs, but "
+            << "Pipeline::sever() requires single-valued Funcs, but "
             << f.name() << " has " << f.types().size() << " values\n";
         bind_to.emplace_back(f.types()[0], f.dimensions(), names[i]);
     }
-    return compute_offline_impl(*this, to_sever, &bind_to);
+    return sever_impl(*this, to_sever, &bind_to);
 }
 
 /* static */

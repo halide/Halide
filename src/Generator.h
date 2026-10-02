@@ -3104,7 +3104,7 @@ class NamesInterface {
 protected:
     // Import a consistent list of Halide names that can be used in
     // Halide generators without qualification.
-    using ComputeOfflineResult = Halide::ComputeOfflineResult;
+    using SeverResult = Halide::SeverResult;
     using Expr = Halide::Expr;
     using EvictionKey = Halide::EvictionKey;
     using ExternFuncArgument = Halide::ExternFuncArgument;
@@ -3454,12 +3454,12 @@ public:
     }
 
     /** Declares an Input<Buffer<>> backed directly by `existing` -- e.g. an
-     * ImageParam that Pipeline::compute_offline() minted or was bound to --
+     * ImageParam that Pipeline::sever() minted or was bound to --
      * instead of a fresh one. This is useful when a Generator's whole
      * pipeline is assembled in configure(), leaving generate() an empty
      * stub. For example, a quantizer and its dequantizer can share one
      * configure() that builds the round trip and splits it with
-     * compute_offline(); each Generator then adopts whichever half applies
+     * sever(); each Generator then adopts whichever half applies
      * to it as its ports. `existing` must already be defined (have a
      * concrete type and dimensionality); its own name is used as the port's
      * name. May only be called from configure().
@@ -3483,7 +3483,7 @@ public:
     }
 
     /** Declares an Output<Buffer<>> whose value is `existing` directly --
-     * e.g. either half of a Pipeline::compute_offline() split -- instead of
+     * e.g. either half of a Pipeline::sever() split -- instead of
      * a fresh, undefined Func for generate() to assign via operator(). See
      * add_input(const ImageParam &) above for the motivating use.
      * `existing` must already be defined; its own name is used as the port's

@@ -30,7 +30,7 @@ class Func;
 class FuncVec;
 class ImageParam;
 struct PipelineContents;
-struct ComputeOfflineResult;
+struct SeverResult;
 
 /** Special the Autoscheduler to be used (if any), along with arbitrary
  * additional arguments specific to the given Autoscheduler.
@@ -230,9 +230,9 @@ public:
      *
      * v1 restriction: each Func in `to_sever` must be single-valued (no
      * Tuples). */
-    ComputeOfflineResult compute_offline(const std::vector<Func> &to_sever);
+    SeverResult sever(const std::vector<Func> &to_sever);
 
-    /** Like compute_offline(const std::vector<Func> &) above, but binds each
+    /** Like sever(const std::vector<Func> &) above, but binds each
      * severed Func to a caller-supplied ImageParam instead of minting a
      * fresh one -- e.g. a Generator's own Input<Buffer<>> (which converts to
      * ImageParam implicitly), so the online half's severed input is exactly
@@ -244,25 +244,25 @@ public:
      * returned for symmetry with the other overload -- callers that already
      * have `bind_to` don't need it, but code generic over both overloads
      * still gets a uniform result shape. */
-    ComputeOfflineResult compute_offline(const std::vector<Func> &to_sever,
-                                         const std::vector<ImageParam> &bind_to);
+    SeverResult sever(const std::vector<Func> &to_sever,
+                      const std::vector<ImageParam> &bind_to);
 
-    /** Like compute_offline(const std::vector<Func> &) above, but names the
+    /** Like sever(const std::vector<Func> &) above, but names the
      * fresh ImageParams it mints: `online_inputs[i]` is named `names[i]`
      * instead of `to_sever[i].name() + "_im"`, and still takes its type and
      * dimensionality from `to_sever[i]`. Useful when the online half's
      * inputs become ports of a compiled artifact, e.g. via a Generator's
      * add_input(const ImageParam &), since their names are then part of
      * its interface. `names` must have the same length as `to_sever`. */
-    ComputeOfflineResult compute_offline(const std::vector<Func> &to_sever,
-                                         const std::vector<std::string> &names);
+    SeverResult sever(const std::vector<Func> &to_sever,
+                      const std::vector<std::string> &names);
 
     /** Disambiguates a braced list of string literals, e.g.
-     * compute_offline({a, b}, {"a_in", "b_in"}), which a
+     * sever({a, b}, {"a_in", "b_in"}), which a
      * std::vector<ImageParam> could otherwise also accept through its
      * iterator-pair constructor. */
-    ComputeOfflineResult compute_offline(const std::vector<Func> &to_sever,
-                                         std::initializer_list<std::string> names);
+    SeverResult sever(const std::vector<Func> &to_sever,
+                      std::initializer_list<std::string> names);
 
     /** Generate a schedule for the pipeline using the specified autoscheduler. */
     AutoSchedulerResults apply_autoscheduler(const Target &target,
@@ -630,13 +630,13 @@ public:
     // @}
 };
 
-/** The result of Pipeline::compute_offline(): `offline` computes exactly
+/** The result of Pipeline::sever(): `offline` computes exactly
  * `to_sever`'s original values, unmodified -- realize it once (JIT) or
  * compile it as its own artifact (AOT), then feed the result to
- * `online_inputs` before realizing the pipeline compute_offline() was called
+ * `online_inputs` before realizing the pipeline sever() was called
  * on again. `online_inputs` has one ImageParam per element of `to_sever`, in
  * the same order, with matching type and dimensionality. */
-struct ComputeOfflineResult {
+struct SeverResult {
     Pipeline offline;
     std::vector<ImageParam> online_inputs;
 };

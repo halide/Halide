@@ -1773,9 +1773,9 @@ $(FILTERS_DIR)/autograd_grad.a: $(BIN_DIR)/autograd.generator $(BIN_MULLAPUDI201
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g autograd $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) -f autograd_grad target=$(TARGET)-no_runtime autoscheduler=Mullapudi2016 -d 1 -p $(BIN_MULLAPUDI2016)
 
-$(FILTERS_DIR)/compute_offline_dequantize.a: $(BIN_DIR)/compute_offline.generator
+$(FILTERS_DIR)/sever_dequantize.a: $(BIN_DIR)/sever.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g compute_offline $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) -f compute_offline_dequantize target=$(TARGET)-no_runtime direction=dequantize
+	$(CURDIR)/$< -g sever $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) -f sever_dequantize target=$(TARGET)-no_runtime direction=dequantize
 
 # Usually, it's considered best practice to have one Generator per
 # .cpp file, with the generator-name and filename matching;
@@ -1846,12 +1846,12 @@ $(BIN_DIR)/$(TARGET)/generator_aotcpp_autograd: $(ROOT_DIR)/test/generator/autog
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
-# compute_offline has additional deps to link in
-$(BIN_DIR)/$(TARGET)/generator_aot_compute_offline: $(ROOT_DIR)/test/generator/compute_offline_aottest.cpp $(FILTERS_DIR)/compute_offline.a $(FILTERS_DIR)/compute_offline_dequantize.a $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+# sever has additional deps to link in
+$(BIN_DIR)/$(TARGET)/generator_aot_sever: $(ROOT_DIR)/test/generator/sever_aottest.cpp $(FILTERS_DIR)/sever.a $(FILTERS_DIR)/sever_dequantize.a $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
-$(BIN_DIR)/$(TARGET)/generator_aotcpp_compute_offline: $(ROOT_DIR)/test/generator/compute_offline_aottest.cpp $(FILTERS_DIR)/compute_offline.halide_generated.cpp $(FILTERS_DIR)/compute_offline_dequantize.halide_generated.cpp $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+$(BIN_DIR)/$(TARGET)/generator_aotcpp_sever: $(ROOT_DIR)/test/generator/sever_aottest.cpp $(FILTERS_DIR)/sever.halide_generated.cpp $(FILTERS_DIR)/sever_dequantize.halide_generated.cpp $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
