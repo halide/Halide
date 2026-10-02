@@ -1,6 +1,6 @@
 {
   "name": "tensorflow-lite",
-  "version-string": "2.21.0-rc0-a344c313",
+  "version-string": "2.21.0",
   "description": "TensorFlow Lite runtime and C API",
   "homepage": "https://github.com/tensorflow/tensorflow",
   "license": "Apache-2.0",

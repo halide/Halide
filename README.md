@@ -255,8 +255,8 @@ After [acquiring LLVM](#acquiring-llvm), change directory to the Halide
 repository and run:
 
 ```shell
-$ cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release -DHalide_LLVM_ROOT=$LLVM_ROOT
-$ cmake --build build
+$ cmake --preset release -DHalide_LLVM_ROOT=$LLVM_ROOT
+$ cmake --build build/release
 ```
 
 Setting `-DHalide_LLVM_ROOT` is not required if you have a suitable system-wide
@@ -268,8 +268,8 @@ If you use [Homebrew](https://brew.sh/) on macOS, you can use the provided CMake
 preset:
 
 ```shell
-$ cmake --preset=macOS -S . -B build
-$ cmake --build build
+$ cmake --preset=macOS
+$ cmake --build build/macOS
 ```
 
 This automatically finds LLVM from Homebrew's install path.
@@ -325,31 +325,54 @@ that was run earlier.
 ```
 D:\Halide> cmake -G Ninja -S . -B build ^
                  --toolchain D:/vcpkg/scripts/buildsystems/vcpkg.cmake ^
-                 -DCMAKE_BUILD_TYPE=Release
+                 -DCMAKE_BUILD_TYPE=Release ^
+                 -DVCPKG_MANIFEST_FEATURES=developer
 ```
 
 Or use a CMake preset (e.g. for a Visual Studio build):
 
 ```
 D:\Halide> cmake --preset=win64  &:: or win32 for 32-bit
-D:\Halide> cmake --build build\win64
+D:\Halide> cmake --build build\win64 --config Release
 ```
 
-For a Ninja-based build with vcpkg:
+For a Ninja-based build with vcpkg (needs `VCPKG_ROOT` set in the environment):
 
 ```
-D:\Halide> cmake --preset=release-vcpkg -S . -B build
-D:\Halide> cmake --build build
+D:\Halide> cmake --preset=release-vcpkg
+D:\Halide> cmake --build build\release-vcpkg
 ```
 
 To run all the tests:
 
 ```
-D:\Halide> ctest --test-dir build --output-on-failure
+D:\Halide> ctest --test-dir build\release-vcpkg --output-on-failure
 ```
 
 Subsets of the tests can be selected with `-L` and include `correctness`,
-`generator`, `error`, and the other directory names under `tests/`.
+`generator`, and the other directory names under `tests/`.
+
+To build the apps, you must first install Halide to a local prefix and record
+that prefix in `CMAKE_PREFIX_PATH` (or set as `-DCMAKE_PREFIX_PATH` on the CMake
+command line):
+
+```
+D:\Halide> cmake --build build\release-vcpkg --target install
+```
+
+By default, this will install to `D:\Halide\install\release-vcpkg`. You can
+choose a different install prefix by manually calling `cmake --install` with
+`--prefix <path>`.
+
+Then move to the `apps` folder:
+
+```
+D:\Halide> cd apps
+D:\Halide\apps> cmake --preset=release-vcpkg
+D:\Halide\apps> cmake --build --preset=release-vcpkg
+```
+
+To build just one app, add `--target <name>` to the `cmake --build` command.
 
 <details>
 <summary>Building LLVM from source on Windows (advanced)</summary>
@@ -406,23 +429,13 @@ build its own LLVM.
 
 </details>
 
-#### If all else fails...
-
-Do what the buildbots do: https://buildbot.halide-lang.org/master/#/builders
-
-If the row that best matches your system is red, then maybe things aren't just
-broken for you. If it's green, then you can click through to the latest build
-and see the commands that the build bots run. Open a step ("Configure Halide" is
-useful) and look at the "stdio" logs in the viewer. These logs contain the full
-commands that were run, as well as the environment variables they were run with.
-
 ## Building Halide with make
 
 > [!WARNING] We do not provide support for the Makefile. Feel free to use it,
 > but if anything goes wrong, switch to the CMake build. Note also that the
 > Makefile cannot build the Python bindings or produce install packages.
 
-*TL;DR*: Have LLVM 17 (or greater) installed and run `make` in the root
+*TL;DR*: Have LLVM 22 (or greater) installed and run `make` in the root
 directory of the repository (where this README is).
 
 By default, `make` will use the `llvm-config` tool found in the `PATH`. If you
