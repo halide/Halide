@@ -1428,7 +1428,7 @@ private:
 //   slot 1: `scale(blk)` -- the block's scale, read straight out of the typed
 //           `d` field (Float(16) -> Float(32)); this is what subsumes Fp16Pack's
 //           manual `lo | (hi<<8)` reassembly + reinterpret.
-// v1 pilot: exactly one scalar scale field + one UInt(8) array codes field (the
+// Supports exactly one scalar scale field + one UInt(8) array codes field (the
 // block_q4_0/block_q8_0 shape). Affine (min) and split-code (q5_0) layouts stay
 // on make_block_layout for now.
 class StructBlockLayout {
