@@ -1145,7 +1145,11 @@ PrefetchDirective Deserializer::deserialize_prefetch_directive(const Serialize::
     const auto strategy = deserialize_prefetch_bound_strategy(prefetch_directive->strategy());
     const auto param_name = deserialize_string(prefetch_directive->param_name());
     Parameter param;
-    if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
+    if (auto it = user_params.find(param_name); it != user_params.end()) {
+        param = it->second;
+    } else if (auto it = external_params.find(param_name); it != external_params.end()) {
+        param = it->second;
+    } else if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
         param = it->second;
     } else if (!param_name.empty()) {
         user_error << "unknown parameter used in pipeline '" << param_name << "'\n";
