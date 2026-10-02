@@ -3,7 +3,7 @@
 // Shared configure()/generate() scaffolding for every *_quant_generators.cpp
 // file's Direction-templated Generator (SymmetricCodecGenerator,
 // LookupTableCodecGenerator, KQuantCodecGenerator): all three build the
-// exact same "real ImageParam -> approximate_by -> compute_offline -> adopt
+// exact same "real ImageParam -> approximate_by -> sever -> adopt
 // one half as a port" pipeline in configure(), differing only in how their
 // SchemeAndBytes gets built. This factors that shared body out via CRTP
 // (Derived::build_scheme()) -- the same static-polymorphism idiom
@@ -72,7 +72,7 @@ public:
             }
         }
 
-        // Bind compute_offline() to a properly-named ImageParam of the packed
+        // Bind sever() to a properly-named ImageParam of the packed
         // block's shape up front, instead of letting it mint one named after
         // whatever internal Func produced r.encoded[0]. Only Dequantize below
         // adopts it as a port (named "blocks_in" rather than reusing Quantize's
@@ -83,7 +83,7 @@ public:
         // Severs `identity` from `input`/encode() entirely: `q.offline`
         // recomputes r.encoded (quantize) from `input`, while `identity`
         // (post-severance) instead reads from `blocks_in` (dequantize).
-        ComputeOfflineResult q = Pipeline({identity}).compute_offline(r.encoded, {blocks_in});
+        SeverResult q = Pipeline({identity}).sever(r.encoded, {blocks_in});
 
         if constexpr (dir == Direction::Quantize) {
             input.dim(0).set_min(0);

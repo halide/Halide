@@ -3,7 +3,7 @@
 // family set). "q4_k_vec_dot" is a PARAMS family=q4_k instantiation of this
 // one generator. Weight is a block-indexed K-quant codec, activation is the
 // block-indexed Q8_K codec; VecDotGeneratorBase splices both via
-// approximate_by/compute_offline. K-quant decode is a two-level (sub-block)
+// approximate_by/sever. K-quant decode is a two-level (sub-block)
 // scale, so the per-block scale is not single-invariant -> Float schedule.
 
 #include "Halide.h"

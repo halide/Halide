@@ -15,11 +15,11 @@
 //
 // The whole pipeline -- for *either* direction -- is built once in
 // configure(), not generate(): a single Func::approximate_by() +
-// Pipeline::compute_offline() call on a genuinely real ImageParam (not a
+// Pipeline::sever() call on a genuinely real ImageParam (not a
 // placeholder) produces both an "offline" half (the encode/quantize side,
 // still depending on that real ImageParam) and an "online" half (the
 // decode/dequantize side, reading from whatever ImageParam
-// compute_offline() severed it to instead). Each direction just adopts
+// sever() severed it to instead). Each direction just adopts
 // whichever half applies to it as its own Input/Output, via
 // GeneratorBase::add_input(const ImageParam&)/add_output(const Func&) --
 // new overloads added to Generator.h/.cpp for exactly this use (see there),
@@ -29,7 +29,7 @@
 // left to do.
 //
 // generate() never calls Approximation::encode()/decode() directly -- only
-// through Func::approximate_by() and Pipeline::compute_offline(). This
+// through Func::approximate_by() and Pipeline::sever(). This
 // configure()/generate() body is identical across every *_quant_generators.cpp
 // file in this directory, so it lives in codec_generator_base.h's
 // CodecGeneratorBase<Derived, dir> instead of being repeated here -- this

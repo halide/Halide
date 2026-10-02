@@ -12,7 +12,7 @@
 // empty stub).
 //
 // generate() never calls Approximation::encode()/decode() directly -- only
-// through Func::approximate_by() and Pipeline::compute_offline(). This
+// through Func::approximate_by() and Pipeline::sever(). This
 // configure()/generate() body is identical across every *_quant_generators.cpp
 // file in this directory, so it lives in codec_generator_base.h's
 // CodecGeneratorBase<Derived, dir> instead of being repeated here -- this

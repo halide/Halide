@@ -4,7 +4,7 @@
 // instantiations of this one generator (registered in CMakeLists.txt), not
 // per-format C++ classes. Weight and activation are both block-indexed codecs
 // from quant_components.h; VecDotGeneratorBase splices them via approximate_by/
-// compute_offline (see vec_dot_generator_base.h) -- generate() never calls
+// sever (see vec_dot_generator_base.h) -- generate() never calls
 // Approximation::encode()/decode() directly.
 //
 // The weight is one of the symmetric-family kinds (symmetric / affine /
