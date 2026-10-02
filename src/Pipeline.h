@@ -28,7 +28,9 @@ struct Argument;
 class Callable;
 class Func;
 class FuncVec;
+class ImageParam;
 struct PipelineContents;
+struct SeverResult;
 
 /** Special the Autoscheduler to be used (if any), along with arbitrary
  * additional arguments specific to the given Autoscheduler.
@@ -212,6 +214,55 @@ public:
 
     /** Get the requirements of this pipeline. */
     std::vector<Internal::Stmt> requirements() const;
+
+    /** Rewrite every call to each Func in `to_sever`, anywhere in this
+     * Pipeline's transitive call graph, to instead call a fresh ImageParam
+     * of matching type and dimensionality -- severing this Pipeline's
+     * *computation* of `to_sever` (and anything only `to_sever` depended on)
+     * while preserving the shape contract those Funcs stood in for. This is
+     * eager and destructive, like rfactor(): by the time this call returns,
+     * none of this Pipeline's outputs depend on `to_sever` for their
+     * computation, only for the shape the returned ImageParams must satisfy.
+     *
+     * This turns work that would otherwise be recomputed on every realize()
+     * -- e.g. quantizing a set of static weights -- into ordinary input
+     * data, supplied once from wherever `offline` was realized or compiled.
+     *
+     * Each Func in `to_sever` must be single-valued (no
+     * Tuples). */
+    SeverResult sever(const std::vector<Func> &to_sever);
+
+    /** Like sever(const std::vector<Func> &) above, but binds each
+     * severed Func to a caller-supplied ImageParam instead of minting a
+     * fresh one -- e.g. a Generator's own Input<Buffer<>> (which converts to
+     * ImageParam implicitly), so the online half's severed input is exactly
+     * the port `configure()`/`add_input()` already declared, rather than an
+     * unrelated ImageParam nothing else in the compiled artifact knows
+     * about. `bind_to` must have the same length as `to_sever`, and each
+     * `bind_to[i]` must have the same type and dimensionality as
+     * `to_sever[i]`. `online_inputs` in the result is `bind_to` itself,
+     * returned for symmetry with the other overload -- callers that already
+     * have `bind_to` don't need it, but code generic over both overloads
+     * still gets a uniform result shape. */
+    SeverResult sever(const std::vector<Func> &to_sever,
+                      const std::vector<ImageParam> &bind_to);
+
+    /** Like sever(const std::vector<Func> &) above, but names the
+     * fresh ImageParams it mints: `online_inputs[i]` is named `names[i]`
+     * instead of `to_sever[i].name() + "_im"`, and still takes its type and
+     * dimensionality from `to_sever[i]`. Useful when the online half's
+     * inputs become ports of a compiled artifact, e.g. via a Generator's
+     * add_input(const ImageParam &), since their names are then part of
+     * its interface. `names` must have the same length as `to_sever`. */
+    SeverResult sever(const std::vector<Func> &to_sever,
+                      const std::vector<std::string> &names);
+
+    /** Disambiguates a braced list of string literals, e.g.
+     * sever({a, b}, {"a_in", "b_in"}), which a
+     * std::vector<ImageParam> could otherwise also accept through its
+     * iterator-pair constructor. */
+    SeverResult sever(const std::vector<Func> &to_sever,
+                      std::initializer_list<std::string> names);
 
     /** Generate a schedule for the pipeline using the specified autoscheduler. */
     AutoSchedulerResults apply_autoscheduler(const Target &target,
@@ -577,6 +628,17 @@ public:
     const halide_profiler_func_stats *func_stats(const std::string &name) const;
     const halide_profiler_func_stats *func_stats(const Func &f) const;
     // @}
+};
+
+/** The result of Pipeline::sever(): `offline` computes exactly
+ * `to_sever`'s original values, unmodified -- realize it once (JIT) or
+ * compile it as its own artifact (AOT), then feed the result to
+ * `online_inputs` before realizing the pipeline sever() was called
+ * on again. `online_inputs` has one ImageParam per element of `to_sever`, in
+ * the same order, with matching type and dimensionality. */
+struct SeverResult {
+    Pipeline offline;
+    std::vector<ImageParam> online_inputs;
 };
 
 struct ExternSignature {

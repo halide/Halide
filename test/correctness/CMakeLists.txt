@@ -457,6 +457,7 @@ tests(
     scatter.cpp
     serialization.cpp
     set_custom_trace.cpp
+    sever.cpp
     shadowed_bound.cpp
     shared_self_references.cpp
     shift_by_unsigned_negated.cpp
