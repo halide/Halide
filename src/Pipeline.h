@@ -10,8 +10,10 @@
 #include <initializer_list>
 #include <map>
 #include <memory>
+#include <variant>
 #include <vector>
 
+#include "Callable.h"
 #include "IROperator.h"
 #include "IntrusivePtr.h"
 #include "JITModule.h"
@@ -521,27 +523,33 @@ private:
     friend class ProfilerScope;
 };
 
-/** Accumulates the profiler's statistics for a JIT-compiled Pipeline
- * across multiple runs, and makes them available for inspection.
+/** Accumulates the profiler's statistics for a JIT-compiled Pipeline or
+ * Callable across multiple runs, and makes them available for inspection.
  *
- * Normally each call to realize on a Target with the Profile or
- * ProfileByTimer feature prints the profiler's report and then resets
- * its statistics. While a ProfilerScope for the Pipeline is alive,
- * realize does neither, so statistics accumulate over every run within
- * the scope and can be read via pipeline_stats and func_stats. The
- * report is printed and the statistics reset when the scope is
- * destroyed.
+ * Normally each call to realize, or to a Callable, on a Target with the
+ * Profile or ProfileByTimer feature prints the profiler's report and then
+ * resets its statistics. While a ProfilerScope for the Pipeline or
+ * Callable is alive, it does neither, so statistics accumulate over every
+ * run within the scope and can be read via pipeline_stats and
+ * func_stats. The report is printed and the statistics reset when the
+ * scope is destroyed.
  *
- * The scope holds a copy of the Pipeline, which keeps its JIT-compiled
- * runtime, and thus the memory backing the statistics, alive. The
- * profiler's statistics are global to the process, so the reset at the
- * end of a scope also discards the statistics of any other profiled
- * Pipelines that ran in the meantime. */
+ * The scope holds a copy of the Pipeline or Callable, which keeps its
+ * JIT-compiled runtime, and thus the memory backing the statistics,
+ * alive. The profiler's statistics are global to the process, so the
+ * reset at the end of a scope also discards the statistics of any other
+ * profiled Pipelines that ran in the meantime. */
 class ProfilerScope {
-    Pipeline pipeline;
+    std::variant<Pipeline, Callable> source;
+
+    int &scope_count() const;
+    Internal::JITCache &jit_cache() const;
+    const JITHandlers &jit_handlers() const;
+    std::string function_name() const;
 
 public:
     explicit ProfilerScope(Pipeline p);
+    explicit ProfilerScope(Callable c);
 
     /** Construct from the Pipeline that Func::realize uses for f. Copies
      * of a Func do not share that Pipeline, so pass the Func that will
@@ -557,7 +565,7 @@ public:
      * nullptr if the Pipeline has not run with profiling enabled within
      * this scope, or the Target does not support inspecting the profiler
      * state (e.g. WebAssembly). The pointer is valid until the scope is
-     * destroyed. Only call this between runs of the Pipeline. */
+     * destroyed. Only call this between runs. */
     const halide_profiler_pipeline_stats *pipeline_stats() const;
 
     /** The statistics accumulated for one Func of the Pipeline, found by

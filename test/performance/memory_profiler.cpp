@@ -91,6 +91,31 @@ int main(int argc, char **argv) {
         check(scope, g2, total, total, 1, total, 0);
     });
 
+    run_case("callable heap allocation test", [&]() {
+        const int size_x = 1000, size_y = 1000;
+        Func f("f_callable"), g("g_callable");
+        g(x, y) = x;
+        f(x, y) = g(x - 1, y) + g(x, y - 1);
+        g.compute_root();
+
+        Callable c = f.compile_to_callable({}, t);
+        ProfilerScope scope(c);
+        Buffer<int> out(size_x, size_y);
+        for (int i = 0; i < 2; i++) {
+            if (c(out) != 0) {
+                printf("Callable failed\n");
+                exit(1);
+            }
+        }
+        const halide_profiler_pipeline_stats *ps = scope.pipeline_stats();
+        if (!ps || ps->runs != 2) {
+            printf("Expected stats for 2 runs of the Callable\n");
+            exit(1);
+        }
+        int total = (size_x + 1) * (size_y + 1) * (int)sizeof(int);
+        check(scope, g, total, total, 2, total, 0);
+    });
+
     run_case("heap allocate condition is always false test", [&]() {
         Func f3("f_3"), g3("g_3");
         g3(x, y) = x * y;
