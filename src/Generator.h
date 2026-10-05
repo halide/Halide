@@ -2301,6 +2301,7 @@ public:
     HALIDE_FORWARD_METHOD(Func, align_bounds)
     HALIDE_FORWARD_METHOD(Func, align_extent)
     HALIDE_FORWARD_METHOD(Func, align_storage)
+    HALIDE_FORWARD_METHOD(Func, aligned_split)
     HALIDE_FORWARD_METHOD(Func, always_partition)
     HALIDE_FORWARD_METHOD(Func, always_partition_all)
     HALIDE_FORWARD_METHOD_CONST(Func, args)
