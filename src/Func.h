@@ -2890,6 +2890,14 @@ public:
      * halide_trace. */
     Func &trace_realizations();
 
+    /** At each iteration of each loop containing a production of this Func,
+     * emit a halide_trace_bounds_required event giving the region of it
+     * that must be computed there. Values computed outside of that region
+     * (e.g. due to TailStrategy::RoundUp in a consumer) do not affect the
+     * output and may depend on uninitialized memory. If the Func is inlined,
+     * this has no effect. */
+    Func &trace_bounds_required();
+
     /** Add a string of arbitrary text that will be passed thru to trace
      * inspection code if the Func is realized in trace mode. (Funcs that are
      * inlined won't have their tags emitted.) Ignored entirely if

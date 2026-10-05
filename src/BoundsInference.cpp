@@ -11,6 +11,7 @@
 #include "Qualify.h"
 #include "Scope.h"
 #include "Simplify.h"
+#include "Tracing.h"
 
 #include <algorithm>
 #include <iterator>
@@ -403,23 +404,16 @@ public:
             }
         }
 
-        // Wrap a statement in let stmts defining the box
-        Stmt define_bounds(Stmt s,
-                           const Function &producing_func,
-                           const string &producing_stage_index,
-                           int producing_stage_index_index,
-                           const string &loop_level,
-                           const vector<vector<Function>> &fused_groups,
-                           const vector<set<FusedPair>> &fused_pairs_in_groups,
-                           const set<string> &in_pipeline,
-                           const set<string> &inner_productions,
-                           const set<string> &has_extern_consumer,
-                           const Target &target) {
-
-            // Merge all the relevant boxes.
+        // Merge the boxes of this stage required by consumers relevant at the
+        // given loop level.
+        Box required_box(const Function &producing_func,
+                         const string &producing_stage_index,
+                         int producing_stage_index_index,
+                         const string &loop_level,
+                         const vector<vector<Function>> &fused_groups,
+                         const vector<set<FusedPair>> &fused_pairs_in_groups,
+                         const set<string> &inner_productions) const {
             Box b;
-
-            const vector<string> func_args = func.args();
 
             size_t last_dot = loop_level.rfind('.');
             string var = loop_level.substr(last_dot + 1);
@@ -437,7 +431,29 @@ public:
                 }
             }
 
-            internal_assert(b.empty() || b.size() == func_args.size());
+            internal_assert(b.empty() || b.size() == func.args().size());
+            return b;
+        }
+
+        // Wrap a statement in let stmts defining the box
+        Stmt define_bounds(Stmt s,
+                           const Function &producing_func,
+                           const string &producing_stage_index,
+                           int producing_stage_index_index,
+                           const string &loop_level,
+                           const vector<vector<Function>> &fused_groups,
+                           const vector<set<FusedPair>> &fused_pairs_in_groups,
+                           const set<string> &in_pipeline,
+                           const set<string> &inner_productions,
+                           const set<string> &has_extern_consumer,
+                           const Target &target) {
+
+            Box b = required_box(producing_func, producing_stage_index,
+                                 producing_stage_index_index, loop_level,
+                                 fused_groups, fused_pairs_in_groups,
+                                 inner_productions);
+
+            const vector<string> func_args = func.args();
 
             if (func.has_extern_definition() &&
                 !func.extern_definition_proxy_expr().defined()) {
@@ -1060,6 +1076,9 @@ public:
                 body = let->body;
                 wrappers.emplace_back(let->name, let->value);
                 bindings.emplace_back(let_vars_in_scope, let->name);
+                if (ends_with(let->name, ".trace_id")) {
+                    trace_ids_in_scope.push_back(let->name);
+                }
             } else if (const IfThenElse *if_then_else = body.as<IfThenElse>()) {
                 if (depends_on_bounds_inference(if_then_else->condition) ||
                     if_then_else->else_case.defined()) {
@@ -1192,6 +1211,14 @@ public:
                     for (int consumer : stages[i].consumers) {
                         bounds_needed[consumer] = true;
                     }
+                }
+            }
+
+            body = trace_bounds_required(body, op->name, bounds_needed, f,
+                                         stage_name, stage_index);
+
+            for (size_t i = 0; i < stages.size(); i++) {
+                if (bounds_needed[i]) {
                     body = stages[i].define_bounds(
                         body, f, stage_name, stage_index, op->name, fused_groups,
                         fused_pairs_in_groups, in_pipeline, inner_productions,
@@ -1289,6 +1316,9 @@ public:
                 body = IfThenElse::make(value, body);
             } else {
                 body = LetStmt::make(var, value, body);
+                if (ends_with(var, ".trace_id")) {
+                    trace_ids_in_scope.pop_back();
+                }
             }
         }
 
@@ -1296,9 +1326,67 @@ public:
     }
 
     Scope<> let_vars_in_scope;
+    // The trace ids of the enclosing traced events, innermost last.
+    vector<string> trace_ids_in_scope;
     Stmt visit(const LetStmt *op) override {
         ScopedBinding<> bind(let_vars_in_scope, op->name);
-        return IRMutator::visit(op);
+        bool is_trace_id = ends_with(op->name, ".trace_id");
+        if (is_trace_id) {
+            trace_ids_in_scope.push_back(op->name);
+        }
+        Stmt s = IRMutator::visit(op);
+        if (is_trace_id) {
+            trace_ids_in_scope.pop_back();
+        }
+        return s;
+    }
+
+    // Emit a halide_trace_bounds_required event for each traced Func produced
+    // inside this loop whose bounds are defined here.
+    Stmt trace_bounds_required(Stmt body, const string &loop_name,
+                               const vector<bool> &bounds_needed,
+                               const Function &producing_func,
+                               const string &producing_stage_name,
+                               int producing_stage_index) {
+        vector<Stmt> events;
+        auto make_events = [&](const Expr &parent_id) {
+            for (size_t i = 0; i < stages.size(); i++) {
+                const Stage &s = stages[i];
+                if (!bounds_needed[i] || s.stage != 0 ||
+                    !inner_productions.count(s.name) ||
+                    s.required_box(producing_func, producing_stage_name,
+                                   producing_stage_index, loop_name, fused_groups,
+                                   fused_pairs_in_groups, inner_productions)
+                        .empty()) {
+                    continue;
+                }
+                Stmt e = make_trace_bounds_required(s.func, parent_id, target);
+                if (e.defined()) {
+                    events.push_back(e);
+                }
+            }
+        };
+
+        if (loop_name == "<outermost>") {
+            return mutate_with(body, [&](auto *self, const Evaluate *op) -> Stmt {
+                const Call *c = op->value.as<Call>();
+                if (c && c->is_intrinsic(Call::trace_bounds_required_marker)) {
+                    make_events(c->args[0]);
+                    return events.empty() ? Evaluate::make(0) : Block::make(events);
+                }
+                return op;
+            });
+        }
+
+        if (trace_ids_in_scope.empty()) {
+            return body;
+        }
+        make_events(Variable::make(Int(32), trace_ids_in_scope.back()));
+        if (events.empty()) {
+            return body;
+        }
+        events.push_back(body);
+        return Block::make(events);
     }
 
     Stmt visit(const ProducerConsumer *p) override {
