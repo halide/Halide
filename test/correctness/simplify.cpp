@@ -2394,17 +2394,20 @@ void check_unreachable() {
     check(IfThenElse::make(x != 0, Evaluate::make(unreachable()), not_no_op(y)),
           not_no_op(y));
 
-    // A predicated unreachable() promises that its predicate is false.
-    auto unreachable_if = [](const Expr &pred) {
-        return Call::make(Int(32), Call::unreachable, {}, Call::Intrinsic,
-                          FunctionPtr(), 0, Buffer<>(), Parameter(), pred);
-    };
-    check(y + select(x != 0, unreachable_if(x != 0), unreachable_if(x == 0)),
-          unreachable());
-    check(select(x != 0, y, unreachable_if(x == 0)), y);
-    check(select(x != 0, unreachable_if(x != 0), y), y);
-    check(unreachable_if(const_true()), unreachable());
-    check(unreachable_if(const_false()), 0);
+    // Select evaluates both sides, regardless of its condition.
+    check(select(x != 0, y, unreachable()), unreachable());
+    check(select(x != 0, unreachable(), y), unreachable());
+
+    for (Expr predicate : {Expr(x != 0), const_false()}) {
+        bool rejected = false;
+        try {
+            Call::make(Int(32), Call::unreachable, {}, Call::Intrinsic,
+                       FunctionPtr(), 0, Buffer<>(), Parameter(), predicate);
+        } catch (const InternalError &) {
+            rejected = true;
+        }
+        internal_assert(rejected) << "Predicated unreachable should be rejected\n";
+    }
 
     check(Block::make(not_no_op(y), For::make("i", 0, 1, ForType::Serial, Partition::Auto, DeviceAPI::None, Evaluate::make(unreachable()))),
           Evaluate::make(unreachable()));

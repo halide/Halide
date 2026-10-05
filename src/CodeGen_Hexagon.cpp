@@ -280,10 +280,10 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
             return op->with(index, Broadcast::make(condition, op->type.lanes()), op->alignment);
         } else {
             // It's a predicated vector gather, or a reversed dense
-            // load. CodeGen_Hexagon::visit(const Load *) scalarizes it. We'd prefer to keep it in a loop, but that would
-            // require some sort of loop Expr. Another option would be
-            // introducing a set of runtime functions to do predicated
-            // loads.
+            // load. CodeGen_Hexagon::visit(const Load *) scalarizes it. We'd
+            // prefer to keep it in a loop, but that would require some sort of
+            // loop Expr. Another option would be introducing a set of runtime
+            // functions to do predicated loads.
             return op->with(index, predicate, op->alignment);
         }
     }

@@ -341,7 +341,7 @@ protected:
             internal_assert(it != analysis.func_id.end());
             size_t func = it->second;
             if (func_info.find(func) != func_info.end()) {
-                return op->with_predicate_and(loaded_var(func));
+                return op->with_additional_predicate(loaded_var(func));
             } else {
                 // Not in the func info map, so it must be unconditionally used.
                 return op;

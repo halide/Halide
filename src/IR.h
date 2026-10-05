@@ -989,11 +989,12 @@ struct Call : public ExprNode<Call> {
      * Returns this Call unchanged if nothing changed. */
     Expr with(const std::vector<Expr> &args, const Expr &predicate) const;
 
-    /** Make the same call as this one, but with 'cond' and-ed into its
-     * predicate. */
-    Expr with_predicate_and(const Expr &cond) const;
+    /** Make the same call as this one, but with the additional predicate
+     * 'cond' conjoined with its existing predicate. */
+    Expr with_additional_predicate(const Expr &cond) const;
 
-    /** Whether this kind of call may carry a non-trivial predicate. */
+    /** Whether this kind of call may carry a non-trivial predicate.
+     * The unreachable intrinsic may never be predicated. */
     static bool can_be_predicated(CallType call_type) {
         return call_type != PureExtern && call_type != PureIntrinsic;
     }

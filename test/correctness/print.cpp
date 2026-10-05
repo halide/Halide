@@ -127,6 +127,35 @@ int main(int argc, char **argv) {
 
     messages.clear();
 
+    {
+        using namespace Halide::Internal;
+        // Void extern calls must have a usable result even outside a branch,
+        // and both scalar and vector predicated calls must return zero.
+        for (int lanes : {1, 4}) {
+            for (bool predicated : {false, true}) {
+                Func f;
+                Expr predicate = predicated ? Expr(x % 2 == 0) : const_true();
+                Expr message = Call::make(type_of<const char *>(), Call::stringify,
+                                          {x, StringImm::make("\n")}, Call::PureIntrinsic);
+                f(x) = Call::make(Int(32), "halide_print", {message},
+                                  Call::Extern, FunctionPtr(), 0, Buffer<>(), Parameter(), predicate);
+                if (lanes > 1) {
+                    f.vectorize(x, lanes);
+                }
+                f.jit_handlers().custom_print = my_print;
+                Buffer<int> result = f.realize({8});
+                for (int i = 0; i < result.width(); i++) {
+                    assert(result(i) == 0);
+                }
+                assert(messages.size() == (predicated ? 4 : 8));
+                for (size_t i = 0; i < messages.size(); i++) {
+                    assert(messages[i] == std::to_string(i * (predicated ? 2 : 1)) + "\n");
+                }
+                messages.clear();
+            }
+        }
+    }
+
     // Check that Halide's stringification of floats and doubles
     // matches %f and %e respectively.
 

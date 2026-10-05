@@ -1623,8 +1623,8 @@ protected:
             // Where the predicate is false, the result is zero.
             op->predicate.accept(this);
             Interval pred = interval;
-            bool always = pred.has_lower_bound() && is_const_one(simplify(pred.min));
-            bool never = pred.has_upper_bound() && is_const_zero(simplify(pred.max));
+            bool always = pred.has_lower_bound() && can_prove(pred.min);
+            bool never = pred.has_upper_bound() && can_prove(!pred.max);
             Expr zero = make_zero(op->type.element_of());
             if (never) {
                 interval = Interval::single_point(zero);
@@ -2414,6 +2414,9 @@ protected:
                 // IfThenElse only takes Stmts.
                 Expr cond = op->predicate;
                 if (cond.type().is_vector()) {
+                    // This treats every lane as touched if any lane is touched,
+                    // which is a conservative approximation. This is generally
+                    // used before vectorization, so we don't expect vectors here.
                     cond = VectorReduce::make(VectorReduce::Or, cond, 1);
                 }
                 Stmt equivalent_if =

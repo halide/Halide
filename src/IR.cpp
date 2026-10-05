@@ -989,6 +989,10 @@ Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &arg
         << " lanes: " << predicate << "\n";
     internal_assert(can_be_predicated(call_type) || is_const_one(predicate))
         << "Pure call to " << name << " may not be predicated: " << predicate << "\n";
+    internal_assert(name != intrinsic_op_names[Call::unreachable] ||
+                    (call_type != Intrinsic && call_type != PureIntrinsic) ||
+                    is_const_one(predicate))
+        << "unreachable may not be predicated: " << predicate << "\n";
     if (name == intrinsic_op_names[Call::prefetch] && call_type == Call::Intrinsic) {
         internal_assert(args.size() % 2 == 0)
             << "Number of args to a prefetch call should be even: {base, offset, extent0, stride0, extent1, stride1, ...}\n";
@@ -1044,7 +1048,7 @@ Expr Call::with(const std::vector<Expr> &args, const Expr &predicate) const {
     return make(type, name, args, call_type, func, value_index, image, param, predicate);
 }
 
-Expr Call::with_predicate_and(const Expr &cond) const {
+Expr Call::with_additional_predicate(const Expr &cond) const {
     Expr c = cond;
     if (c.type().is_scalar() && type.is_vector()) {
         c = Broadcast::make(c, type.lanes());

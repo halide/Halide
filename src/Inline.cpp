@@ -277,7 +277,7 @@ Expr Inliner::visit(const Call *op) {
             body = mutate_with(body, [&](auto *self, const Call *c) -> Expr {
                 Expr e = self->visit_base(c);
                 if (Call::can_be_predicated(c->call_type)) {
-                    e = e.template as<Call>()->with_predicate_and(predicate);
+                    e = e.template as<Call>()->with_additional_predicate(predicate);
                 }
                 return e;
             });

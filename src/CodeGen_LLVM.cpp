@@ -2780,15 +2780,6 @@ Value *CodeGen_LLVM::codegen_branch(const Expr &cond, const Expr &true_value, co
     BasicBlock *false_pred = builder->GetInsertBlock();
 
     builder->SetInsertPoint(after_bb);
-    // Some extern calls (e.g. halide_print) return void in LLVM despite
-    // having a Halide type. Treat their result as zero.
-    llvm::Type *result_t = llvm_type_of(true_value.type());
-    if (t->getType()->isVoidTy()) {
-        t = Constant::getNullValue(result_t);
-    }
-    if (f->getType()->isVoidTy()) {
-        f = Constant::getNullValue(result_t);
-    }
     PHINode *phi = builder->CreatePHI(t->getType(), 2);
     phi->addIncoming(t, true_pred);
     phi->addIncoming(f, false_pred);
@@ -3078,16 +3069,16 @@ void CodeGen_LLVM::codegen_predicated_load(const Load *op) {
 }
 
 Value *CodeGen_LLVM::codegen_scalarized_predicated_load(const Load *op) {
-    Expr load_expr = op->with(op->index, const_true(op->type.lanes()), op->alignment);
-    debug(4) << "Scalarize predicated vector load\n\t" << load_expr << "\n";
-    Value *result = PoisonValue::get(llvm_type_of(op->type));
+    debug(4) << "Scalarize predicated vector load\n\t" << Expr(op) << "\n";
+    vector<Expr> scalar_loads(op->type.lanes());
     for (int i = 0; i < op->type.lanes(); i++) {
-        Value *v = codegen_branch(extract_lane(op->predicate, i),
-                                  extract_lane(load_expr, i),
-                                  make_zero(op->type.element_of()));
-        result = builder->CreateInsertElement(result, v, ConstantInt::get(i32_t, i));
+        scalar_loads[i] = Load::make(op->type.element_of(), op->name,
+                                     extract_lane(op->index, i), op->image, op->param,
+                                     extract_lane(op->predicate, i),
+                                     i == 0 ? op->alignment : ModulusRemainder(), op->is_streaming);
     }
-    return result;
+    Expr reassembled = Shuffle::make_concat(scalar_loads);
+    return codegen(common_subexpression_elimination(reassembled));
 }
 
 void CodeGen_LLVM::codegen_atomic_rmw(const Store *op) {
@@ -4174,7 +4165,9 @@ void CodeGen_LLVM::visit(const Call *op) {
             if (op->is_pure()) {
                 call->setDoesNotAccessMemory();
             }
-            value = call;
+            // Some externs (e.g. halide_print) return void in LLVM despite
+            // having a Halide type. Give them a zero-valued result everywhere.
+            value = call->getType()->isVoidTy() ? Constant::getNullValue(result_type) : (Value *)call;
         } else {
 
             // Check if a vector version of the function already
@@ -4208,7 +4201,9 @@ void CodeGen_LLVM::visit(const Call *op) {
                     }
                     if (!call->getType()->isVoidTy()) {
                         value = builder->CreateInsertElement(value, call, idx);
-                    }  // otherwise leave it as undef.
+                    } else {
+                        value = builder->CreateInsertElement(value, Constant::getNullValue(result_type->getScalarType()), idx);
+                    }
                 }
             }
         }

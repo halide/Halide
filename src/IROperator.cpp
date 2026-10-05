@@ -1670,7 +1670,7 @@ Expr print_when(Expr condition, const std::vector<Expr> &args) {
     internal_assert(rs && rs->args.size() == 2);
     const Call *print_call = rs->args[0].as<Call>();
     internal_assert(print_call);
-    return rs->with({print_call->with_predicate_and(condition), rs->args[1]});
+    return rs->with({print_call->with_additional_predicate(condition), rs->args[1]});
 }
 
 Expr require(Expr condition, const std::vector<Expr> &args) {
