@@ -316,6 +316,13 @@ installations, so vcpkg only builds the smaller dependencies (flatbuffers, wabt,
 pybind11, etc.). You must have LLVM and Python installed separately (see
 [Acquiring LLVM](#acquiring-llvm) above).
 
+If CMake does not find your LLVM installation automatically, pass its absolute
+path as `-DHalide_LLVM_ROOT`, for example:
+
+```
+D:\Halide> cmake --preset=release-vcpkg -DHalide_LLVM_ROOT=D:/llvm-install
+```
+
 #### Building Halide
 
 Create a separate build tree and call CMake with vcpkg's toolchain. This will
@@ -372,7 +379,24 @@ D:\Halide\apps> cmake --preset=release-vcpkg
 D:\Halide\apps> cmake --build --preset=release-vcpkg
 ```
 
-To build just one app, add `--target <name>` to the `cmake --build` command.
+These commands configure all apps and resolve the dependencies in
+`apps/vcpkg.json`; vcpkg may build both Debug and Release versions of those
+dependencies. To build a single app without configuring the full apps project,
+configure from that app's directory instead. For example, with `blur` and
+dependencies already installed in the selected vcpkg triplet:
+
+```
+D:\Halide\apps\blur> cmake -G Ninja -S . -B build ^
+                          --toolchain D:/vcpkg/scripts/buildsystems/vcpkg.cmake ^
+                          -DVCPKG_MANIFEST_MODE=OFF ^
+                          -DCMAKE_BUILD_TYPE=Release ^
+                          -DHalide_DIR=D:/Halide/install/release-vcpkg/lib/cmake/Halide
+D:\Halide\apps\blur> cmake --build build
+```
+
+`VCPKG_MANIFEST_MODE=OFF` makes vcpkg use dependencies already installed for the
+selected triplet instead of installing all dependencies from `apps/vcpkg.json`.
+Install any dependencies required by the chosen app first.
 
 <details>
 <summary>Building LLVM from source on Windows (advanced)</summary>
