@@ -1,0 +1,111 @@
+@import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
+
+:root {
+  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 400;
+
+  color: #0f0f0f;
+  background-color: #f6f6f6;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+
+  --zoom-level: 1;
+}
+
+@theme {
+  --color-ps-primary: oklch(0.4423 0 0);
+  --color-ps-secondary: oklch(0.2768 0 0);
+  --color-ps-titlebar: oklch(0.3791 0 0);
+  --color-ps-text-primary: oklch(0.8975 0 0);
+  --color-ps-text-secondary: oklch(0.7444 0 0);
+  --color-ps-border-primary: oklch(0.3407 0 0);
+  --color-ps-border-secondary: oklch(0.3979 0 0);
+  --color-ps-border-tertiary: oklch(0.4997 0 0);
+  --color-oxide-green: oklch(0.77 0.1919 163.7);
+  --color-oxide-yellow: oklch(0.837 0.14 75);
+  --color-oxide-blue: oklch(0.71 0.15 272);
+  --color-oxide-red: oklch(0.712 0.185 11.3);
+  --color-oxide-purple: oklch(0.74 0.175 305.4);
+
+  --text-tiny: 0.625rem;
+  --text-tiny--line-height: 1.5;
+
+  --animate-blink: blink 1s step-end infinite;
+
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
+  }
+}
+
+@layer base {
+  /* Color Picker */
+  ::-webkit-color-swatch-wrapper {
+    @apply p-0;
+  }
+
+  ::-webkit-color-swatch {
+    @apply rounded-sm border-0;
+  }
+
+  ::-moz-color-swatch {
+    @apply border-0;
+  }
+
+  ::-moz-focus-inner {
+    @apply border-0;
+  }
+
+  ::-moz-focus-inner {
+    @apply p-0;
+  }
+
+  /* Number Input */
+  /* Chrome, Safari, Edge, Opera */
+  input::-webkit-outer-spin-button,
+  input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  /* Firefox */
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+}
+
+@layer components {
+  @keyframes slideDown {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+    }
+  }
+
+  @keyframes slideUp {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+
+  .accordion-content[data-state="open"] {
+    animation: slideDown 300ms cubic-bezier(0.87, 0, 0.13, 1);
+  }
+
+  .accordion-content[data-state="closed"] {
+    animation: slideUp 300ms cubic-bezier(0.87, 0, 0.13, 1);
+  }
+}
