@@ -636,8 +636,9 @@ target_include_directories(correctness_arm_cpu_detect PRIVATE ${Halide_SOURCE_DI
 target_include_directories(correctness_powerpc_cpu_detect PRIVATE ${Halide_SOURCE_DIR}/src/runtime)
 target_include_directories(correctness_x86_cpu_detect PRIVATE ${Halide_SOURCE_DIR}/src/runtime)
 
-# Simd op check tests fix the target features internally, so they are
-# target-independent.
+# Simd op check tests fix the target features internally. The host determines
+# whether they can also run the generated code, but HL_TARGET and HL_JIT_TARGET
+# have no effect, so they are target-independent.
 tests(
     GROUPS correctness multithreaded target_independent
     SOURCES
