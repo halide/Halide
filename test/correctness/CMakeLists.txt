@@ -5,6 +5,14 @@ tests(
     SOURCES
     # keep-sorted start case=no
     align_bounds.cpp
+    aligned_split.cpp
+    aligned_split_2d.cpp
+    aligned_split_2d_3x3.cpp
+    aligned_split_blend_small_extent.cpp
+    aligned_split_mux_phase.cpp
+    aligned_split_nested.cpp
+    aligned_split_partition.cpp
+    aligned_split_reduction.cpp
     ambiguous_inline_reductions.cpp
     argmax.cpp
     arm_cpu_detect.cpp
@@ -263,9 +271,11 @@ tests(
     gpu_reuse_shared_memory.cpp
     gpu_specialize.cpp
     gpu_store_in_register_with_no_lanes_loop.cpp
+    gpu_struct_type.cpp
     gpu_sum_scan.cpp
     gpu_texture.cpp
     gpu_thread_barrier.cpp
+    gpu_thread_extent_under_outer_split.cpp
     gpu_transpose.cpp
     gpu_vectorize.cpp
     gpu_vectorized_shared_memory.cpp
@@ -323,6 +333,7 @@ tests(
     isnan.cpp
     issue_3926.cpp
     iterate_over_circle.cpp
+    jit_host_environment.cpp
     lambda.cpp
     lazy_convolution.cpp
     leak_device_memory.cpp
@@ -404,6 +415,7 @@ tests(
     print.cpp
     print_loop_nest.cpp
     process_some_tiles.cpp
+    profiler_json_output.cpp
     propagate_estimate.cpp
     pseudostack_shares_slots.cpp
     python_extension_gen.cpp
@@ -480,6 +492,8 @@ tests(
     split_predicate.cpp
     split_reuse_inner_name_bug.cpp
     split_same_var_names.cpp
+    split_storage.cpp
+    split_storage_errors.cpp
     split_store_compute.cpp
     stable_realization_order.cpp
     stack_allocations.cpp
@@ -499,6 +513,10 @@ tests(
     strict_float_bounds.cpp
     strict_fma.cpp
     strided_load.cpp
+    struct_nested_field_load.cpp
+    struct_nested_field_store.cpp
+    struct_type.cpp
+    struct_type_dot_product.cpp
     sve_codegen_predicated.cpp
     sve_codegen_reinterpret.cpp
     target.cpp
@@ -510,6 +528,7 @@ tests(
     tracing.cpp
     tracing_bounds.cpp
     tracing_broadcast.cpp
+    tracing_errors.cpp
     tracing_stack.cpp
     transitive_bounds.cpp
     transpose_idioms.cpp
@@ -652,6 +671,10 @@ tests(
     random.cpp
     reorder_rvars.cpp
     rfactor.cpp
+    rfactor_aligned_split.cpp
+    rfactor_aligned_split_2d.cpp
+    rfactor_aligned_split_nested.cpp
+    rfactor_aligned_split_phases.cpp
     ring_buffer.cpp
     stream_compaction.cpp
     thread_safety.cpp

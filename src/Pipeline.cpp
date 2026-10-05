@@ -907,28 +907,62 @@ void Pipeline::trace_pipeline() {
 }
 
 ProfilerScope::ProfilerScope(Pipeline p)
-    : pipeline(std::move(p)) {
-    user_assert(pipeline.defined()) << "Pipeline is undefined\n";
-    pipeline.contents->profiler_scopes++;
+    : source(std::move(p)) {
+    user_assert(std::get<Pipeline>(source).defined()) << "Pipeline is undefined\n";
+    scope_count()++;
 }
 
 ProfilerScope::ProfilerScope(Func &f)
     : ProfilerScope(f.pipeline()) {
 }
 
+ProfilerScope::ProfilerScope(Callable c)
+    : source(std::move(c)) {
+    user_assert(std::get<Callable>(source).defined()) << "Callable is undefined\n";
+    scope_count()++;
+}
+
 ProfilerScope::~ProfilerScope() {
-    if (--pipeline.contents->profiler_scopes > 0) {
+    if (--scope_count() > 0) {
         return;
     }
-    // Report and reset as a realize outside of any scope would have.
+    // Report and reset as a run outside of any scope would have.
     JITUserContext context{};
-    JITFuncCallContext jit_context(&context, pipeline.jit_handlers());
-    pipeline.contents->jit_cache.finish_profiling(&context);
+    JITFuncCallContext jit_context(&context, jit_handlers());
+    jit_cache().finish_profiling(&context);
     jit_context.finalize(0);
 }
 
+int &ProfilerScope::scope_count() const {
+    if (const Pipeline *p = std::get_if<Pipeline>(&source)) {
+        return p->contents->profiler_scopes;
+    }
+    return std::get<Callable>(source).profiler_scopes();
+}
+
+JITCache &ProfilerScope::jit_cache() const {
+    if (const Pipeline *p = std::get_if<Pipeline>(&source)) {
+        return p->contents->jit_cache;
+    }
+    return std::get<Callable>(source).jit_cache();
+}
+
+const JITHandlers &ProfilerScope::jit_handlers() const {
+    if (const Pipeline *p = std::get_if<Pipeline>(&source)) {
+        return p->contents->jit_handlers;
+    }
+    return std::get<Callable>(source).saved_jit_handlers();
+}
+
+std::string ProfilerScope::function_name() const {
+    if (const Pipeline *p = std::get_if<Pipeline>(&source)) {
+        return p->generate_function_name();
+    }
+    return std::get<Callable>(source).name();
+}
+
 const halide_profiler_pipeline_stats *ProfilerScope::pipeline_stats() const {
-    const JITCache &cache = pipeline.contents->jit_cache;
+    const JITCache &cache = jit_cache();
     if (!cache.jit_target.has_feature(Target::Profile) &&
         !cache.jit_target.has_feature(Target::ProfileByTimer)) {
         return nullptr;
@@ -951,7 +985,7 @@ const halide_profiler_pipeline_stats *ProfilerScope::pipeline_stats() const {
     // walk the list comparing by string instead. Recompiling the
     // pipeline produces a new entry with the same name; the newest is
     // at the head of the list.
-    const std::string name = pipeline.generate_function_name();
+    const std::string name = function_name();
     halide_profiler_state *state = get_state();
     const halide_profiler_pipeline_stats *result = nullptr;
     lock(state);

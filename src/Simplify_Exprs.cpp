@@ -214,8 +214,19 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
                     x + max(y * (arg_lanes - 1), 0) <= z) ||
             rewrite(h_and(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), 1),
                     x < y + min(z * (arg_lanes - 1), 0)) ||
-            rewrite(h_and(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), 1),
+            rewrite(h_and(broadcast(x, arg_lanes) <= ramp(y, z, arg_lanes), 1),
                     x <= y + min(z * (arg_lanes - 1), 0)) ||
+
+            // Same rules as above, but with a confounding w sub-Expr in the h_and.
+            // This lets us peel clauses one by one.
+            rewrite(h_and(w && (ramp(x, y, arg_lanes) < broadcast(z, arg_lanes)), 1),
+                    h_and(w, 1) && (x + max(y * (arg_lanes - 1), 0) < z)) ||
+            rewrite(h_and(w && (ramp(x, y, arg_lanes) <= broadcast(z, arg_lanes)), 1),
+                    h_and(w, 1) && (x + max(y * (arg_lanes - 1), 0) <= z)) ||
+            rewrite(h_and(w && (broadcast(x, arg_lanes) < ramp(y, z, arg_lanes)), 1),
+                    h_and(w, 1) && (x < y + min(z * (arg_lanes - 1), 0))) ||
+            rewrite(h_and(w && (broadcast(x, arg_lanes) <= ramp(y, z, arg_lanes)), 1),
+                    h_and(w, 1) && (x <= y + min(z * (arg_lanes - 1), 0))) ||
             false) {
             return mutate(rewrite.result, info);
         }
@@ -237,7 +248,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
                     x + min(y * (arg_lanes - 1), 0) <= z) ||
             rewrite(h_or(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), 1),
                     x < y + max(z * (arg_lanes - 1), 0)) ||
-            rewrite(h_or(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), 1),
+            rewrite(h_or(broadcast(x, arg_lanes) <= ramp(y, z, arg_lanes), 1),
                     x <= y + max(z * (arg_lanes - 1), 0)) ||
             false) {
             return mutate(rewrite.result, info);
