@@ -36,6 +36,12 @@ Three additional labels let CI pick which tests each step needs to run:
 - `gpu`: the test exercises the GPU when the target has a GPU feature. CI's GPU
   steps run only these. A `target_independent` test never gets it.
 
+For example, the non-SVE2 `simd_op_check` tests fix their compilation targets
+internally and use the host target to decide whether they can also run the
+generated code. They are still `target_independent`: changing `HL_TARGET` or
+`HL_JIT_TARGET` does not change their behavior. `simd_op_check_sve2` is an
+exception because it reads `HL_JIT_TARGET` to decide whether to run the code.
+
 These are added as extra `GROUPS` on the test's declaration, e.g.
 `tests(GROUPS correctness target_independent llvm_independent SOURCES ...)`, so
 each directory's source lists are partitioned by label set. AOT tests (e.g.
