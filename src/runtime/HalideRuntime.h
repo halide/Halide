@@ -702,6 +702,11 @@ struct halide_trace_event_t {
  * Note that all tag events (if any) will occur just after the begin_pipeline
  * event, but before any begin_realization events. All tags for a given Func
  * will be emitted in the order added.
+ *
+ * A trace function returns the id of the event, which must be
+ * non-negative. A negative return value is treated as an error code:
+ * the pipeline stops and returns it. The trace function should call
+ * halide_error first to describe the failure.
  */
 // @}
 extern int32_t halide_trace(void *user_context, const struct halide_trace_event_t *event);
@@ -837,11 +842,13 @@ static_assert(sizeof(halide_trace_packet_t) == 6 * sizeof(uint32_t), "size misma
 /** Set the file descriptor that Halide should write binary trace
  * events to. If called with 0 as the argument, Halide outputs trace
  * information to stdout in a human-readable format. If never called,
- * Halide checks the for existence of an environment variable called
- * HL_TRACE_FILE and opens that file. If HL_TRACE_FILE is not defined,
- * it outputs trace information to stdout in a human-readable
- * format. */
-extern void halide_set_trace_file(int fd);
+ * or called with -1, Halide checks the for existence of an environment
+ * variable called HL_TRACE_FILE and opens that file. If HL_TRACE_FILE
+ * is not defined, it outputs trace information to stdout in a
+ * human-readable format. Trace data buffered for the previous file is
+ * flushed to it first, and a file opened via HL_TRACE_FILE is
+ * closed. Must not be called while a traced pipeline is running. */
+extern void halide_set_trace_file(void *user_context, int fd);
 
 /** Halide calls this to retrieve the file descriptor to write binary
  * trace events to. The default implementation returns the value set
@@ -851,8 +858,9 @@ extern void halide_set_trace_file(int fd);
  * information to stdout. */
 extern int halide_get_trace_file(void *user_context);
 
-/** If tracing is writing to a file. This call closes that file
- * (flushing the trace). Returns zero on success. */
+/** Flush any buffered trace data, close the trace file if it was
+ * opened via HL_TRACE_FILE, and reset to the state before any call to
+ * halide_set_trace_file. Returns zero on success. */
 extern int halide_shutdown_trace(void);
 
 /** All Halide GPU or device backend implementations provide an
@@ -1437,6 +1445,7 @@ extern int halide_error_device_crop_failed(void *user_context);
 extern int halide_error_split_factor_not_positive(void *user_context, const char *func_name, const char *orig, const char *outer, const char *inner, const char *factor_str, int factor);
 extern int halide_error_vscale_invalid(void *user_context, const char *func_name, int runtime_vscale, int compiletime_vscale);
 extern int halide_error_streaming_vscale_invalid(void *user_context, const char *func_name, int runtime_vscale, int compiletime_vscale);
+extern int halide_error_trace_failed(void *user_context, const char *reason);
 // @}
 
 /** Optional features a compilation Target can have.
