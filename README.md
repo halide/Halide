@@ -390,7 +390,7 @@ D:\Halide\apps\blur> cmake -G Ninja -S . -B build ^
                           --toolchain D:/vcpkg/scripts/buildsystems/vcpkg.cmake ^
                           -DVCPKG_MANIFEST_MODE=OFF ^
                           -DCMAKE_BUILD_TYPE=Release ^
-                          -DHalide_DIR=D:/Halide/install/release-vcpkg/lib/cmake/Halide
+                          -DHalide_ROOT=D:/Halide/install/release-vcpkg
 D:\Halide\apps\blur> cmake --build build
 ```
 
