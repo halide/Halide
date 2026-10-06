@@ -11,24 +11,20 @@ public:
 
     void generate() {
 
-        std::vector<Func> stages;
+        FuncVec stages("stage_", (int)stencils + 1);
 
         Var x("x"), y("y");
 
-        Func f = Halide::BoundaryConditions::repeat_edge(input);
+        stages[0] = Halide::BoundaryConditions::repeat_edge(input);
 
-        stages.push_back(f);
-
-        for (int s = 0; s < (int)stencils; s++) {
-            Func f("stage_" + std::to_string(s));
+        for (int s = 1; s <= (int)stencils; s++) {
             Expr e = cast<uint16_t>(0);
             for (int i = -2; i <= 2; i++) {
                 for (int j = -2; j <= 2; j++) {
-                    e += ((i + 3) * (j + 3)) * stages.back()(x + i, y + j);
+                    e += ((i + 3) * (j + 3)) * stages[s - 1](x + i, y + j);
                 }
             }
-            f(x, y) = e;
-            stages.push_back(f);
+            stages[s](x, y) = e;
         }
 
         output(x, y) = stages.back()(x, y);

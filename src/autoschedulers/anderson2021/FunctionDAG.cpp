@@ -892,12 +892,12 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) 
                         estimates[b.var] = Span(*i_min, *i_min + *i_extent - 1, false);
                     }
                 }
-                for (const auto &b : consumer.schedule().bounds()) {
+                for (const auto &[var_name, b] : consumer.schedule().bounds()) {
                     auto i_min = as_const_int(b.min);
                     auto i_extent = as_const_int(b.extent);
                     if (i_min && i_extent) {
                         // It's a true bound, not just an estimate
-                        estimates[b.var] = Span(*i_min, *i_min + *i_extent - 1, true);
+                        estimates[var_name] = Span(*i_min, *i_min + *i_extent - 1, true);
                     }
                 }
                 // Set the bounds using the estimates

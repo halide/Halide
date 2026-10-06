@@ -49,6 +49,19 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    // "osx" is a deprecated alias for "macos": it should still parse, but
+    // should print back out as "macos".
+    t1 = Target("x86-64-osx");
+    ts = t1.to_string();
+    if (ts != "x86-64-macos") {
+        printf("osx alias to_string failure: %s\n", ts.c_str());
+        return 1;
+    }
+    if (t1.os != Target::MacOS || t1 != Target("x86-64-macos")) {
+        printf("osx alias parse failure: %s\n", ts.c_str());
+        return 1;
+    }
+
     // Full specification round-trip, crazy features
     t1 = Target(Target::Android, Target::ARM, 32,
                 {Target::JIT, Target::CUDA, Target::OpenCL,

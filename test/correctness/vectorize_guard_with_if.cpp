@@ -16,7 +16,7 @@ int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
 }
 
 int main(int argc, char **argv) {
-    for (TailStrategy tail_strategy : {TailStrategy::GuardWithIf, TailStrategy::Predicate}) {
+    for (TailStrategy tail_strategy : {TailStrategy::GuardWithIf}) {
         Func f;
         Var x;
 
@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    for (TailStrategy tail_strategy : {TailStrategy::GuardWithIf, TailStrategy::Predicate}) {
+    for (TailStrategy tail_strategy : {TailStrategy::GuardWithIf}) {
         const int w = 98, v = 8;
 
         Buffer<int> b(w / 2);

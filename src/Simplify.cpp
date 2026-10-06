@@ -445,7 +445,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
     // Take a closer look at all failed proof attempts to hunt for
     // simplifier weaknesses
     if (!is_const(e)) {
-        debug(1) << [&]() -> std::string {
+        debug(1, "counterexample") << [&]() -> std::string {
             struct RenameVariables : public IRMutator {
                 using IRMutator::visit;
 

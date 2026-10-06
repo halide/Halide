@@ -207,7 +207,7 @@ public:
 
 private:
     // Intermediate stencil stages to schedule
-    vector<Func> intermediates;
+    FuncVec intermediates;
 };
 
 class CameraPipe : public Halide::Generator<CameraPipe> {

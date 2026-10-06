@@ -1682,6 +1682,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const AssertStmt *stmt) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(AssertStmt): "
              << "condition=" << stmt->condition << " "
              << "message=" << stmt->message << "\n";
+    user_warning << "Ignoring assertion inside Vulkan kernel: " << stmt->condition << "\n";
 }
 
 namespace {

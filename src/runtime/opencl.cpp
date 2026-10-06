@@ -222,7 +222,7 @@ WEAK const char *halide_opencl_get_build_options(void *user_context) {
 // - A call to halide_acquire_cl_context is followed by a matching call to
 //   halide_release_cl_context. halide_acquire_cl_context should block while a
 //   previous call (if any) has not yet been released via halide_release_cl_context.
-WEAK int halide_acquire_cl_context(void *user_context, cl_context *ctx, cl_command_queue *q, bool create = true) {
+WEAK int halide_default_acquire_cl_context(void *user_context, cl_context *ctx, cl_command_queue *q, bool create = true) {
     // TODO: Should we use a more "assertive" assert? These asserts do
     // not block execution on failure.
     halide_abort_if_false(user_context, ctx != nullptr);
@@ -248,9 +248,46 @@ WEAK int halide_acquire_cl_context(void *user_context, cl_context *ctx, cl_comma
     return halide_error_code_success;
 }
 
-WEAK int halide_release_cl_context(void *user_context) {
+WEAK int halide_default_release_cl_context(void *user_context) {
     __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
     return halide_error_code_success;
+}
+
+}  // extern "C"
+
+namespace Halide {
+namespace Runtime {
+namespace Internal {
+namespace OpenCL {
+
+WEAK halide_acquire_cl_context_t acquire_context = (halide_acquire_cl_context_t)halide_default_acquire_cl_context;
+WEAK halide_release_cl_context_t release_context = (halide_release_cl_context_t)halide_default_release_cl_context;
+
+}  // namespace OpenCL
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
+
+extern "C" {
+
+WEAK int halide_acquire_cl_context(void *user_context, cl_context *ctx, cl_command_queue *q, bool create = true) {
+    return OpenCL::acquire_context(user_context, (void **)ctx, (void **)q, create);
+}
+
+WEAK halide_acquire_cl_context_t halide_set_acquire_cl_context(halide_acquire_cl_context_t handler) {
+    halide_acquire_cl_context_t result = OpenCL::acquire_context;
+    OpenCL::acquire_context = handler;
+    return result;
+}
+
+WEAK int halide_release_cl_context(void *user_context) {
+    return OpenCL::release_context(user_context);
+}
+
+WEAK halide_release_cl_context_t halide_set_release_cl_context(halide_release_cl_context_t handler) {
+    halide_release_cl_context_t result = OpenCL::release_context;
+    OpenCL::release_context = handler;
+    return result;
 }
 
 }  // extern "C"

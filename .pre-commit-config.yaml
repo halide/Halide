@@ -81,6 +81,11 @@ repos:
     hooks:
       - id: mdformat
         args: [ --number, --wrap=80 ]
+        # Claude Code skill manifests (.claude/skills/**/SKILL.md) open with a
+        # YAML frontmatter block. None of mdformat's configured plugins parse
+        # frontmatter, so it rewrites the `---` fences as a thematic break and
+        # mangles the metadata -- leave those files alone.
+        exclude: (^|/)SKILL\.md$
         additional_dependencies:
           # Upstream mdformat-gfm declined to work around GitHub's rendering
           # quirks. See: https://github.com/hukkin/mdformat-gfm/issues/58

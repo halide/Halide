@@ -18,6 +18,7 @@
 #include "Var.h"
 
 #include <map>
+#include <type_traits>
 #include <utility>
 
 namespace Halide {
@@ -58,6 +59,7 @@ struct VarOrRVar {
 };
 
 class ImageParam;
+class FuncVec;
 
 namespace Internal {
 struct AssociativeOp;
@@ -212,6 +214,49 @@ public:
     HALIDE_NO_USER_CODE_INLINE std::enable_if_t<Internal::all_are_convertible<Func, Args...>::value, Stage &>
     eager_inline(const Func &first, Args &&...args);
     // @}
+
+    /** Hoist loop-invariant factors out of an associative reduction by applying
+     * the distributive law of a semiring. Like rfactor(), this must be called on
+     * an update definition; it splits the update into an intermediate that
+     * accumulates one factor-free outer term over all of the update's RVars and
+     * a write-back that applies the hoisted factors once. The intermediate Funcs
+     * are returned in a FuncVec. For tuple-valued reductions, they are ordered
+     * by tuple output index, then by outer-term order.
+     *
+     * A factor is hoistable if it does not depend on any RVar being reduced. It
+     * may be nested at any depth of an associative/commutative chain. The valid
+     * hoistings are:
+     *
+     *   Outer op    Inner combine   Law
+     *   ---------   -------------   ---
+     *   + (sum)     *               sum_k(s * x_k) = s * sum_k(x_k)
+     *   min         +               min_k(c + x_k) = c + min_k(x_k)
+     *   max         +               max_k(c + x_k) = c + max_k(x_k)
+     *   || (bool)   &&              or_k(p && x_k) = p && or_k(x_k)
+     *   && (bool)   ||              and_k(p || x_k) = p || and_k(x_k)
+     *
+     * For example, hoist_invariants() rewrites a pipeline like this:
+     * \code
+     * f(x) = 0;
+     * f(x) += a(x) * g(x, r) + b(x) * h(x, r);
+     * \endcode
+     * into a pipeline like this:
+     * \code
+     * f_intm0(x) = 0;
+     * f_intm0(x) += g(x, r);
+     * f_intm1(x) = 0;
+     * f_intm1(x) += h(x, r);
+     *
+     * f(x) = 0;
+     * f(x) += a(x) * f_intm0(x) + b(x) * f_intm1(x);
+     * \endcode
+     *
+     * This reduces the number of factor applications from |R| to one per pure
+     * point. Terms without a hoistable factor are still split into separate
+     * intermediates. It is an error if there is neither a distributable invariant
+     * factor nor more than one outer term to split.
+     */
+    FuncVec hoist_invariants();
 
     /** Schedule the iteration over this stage to be fused with another
      * stage 's' from outermost loop to a given LoopLevel. 'this' stage will
@@ -793,6 +838,8 @@ class Func {
     /** Get the imaging pipeline that outputs this Func alone,
      * creating it (and freezing the Func) if necessary. */
     Pipeline pipeline();
+
+    friend class ProfilerScope;
 
     // Helper function for recursive reordering support
     Func &reorder_storage(const std::vector<Var> &dims, size_t start);
@@ -2728,6 +2775,23 @@ public:
      * on MemoryType for more detail. */
     Func &store_in(MemoryType memory_type);
 
+    /** Tell the GPU shader compiler to fit the kernel this Func's loop over gpu
+     * blocks becomes under a given number of registers per thread. A smaller
+     * budget allows more blocks to be resident on one of the GPU's processors
+     * at once, but constrains the compiler's instruction scheduling, and may
+     * make it spill values to memory.
+     *
+     * Leaving this unset does not mean no limit. It means the GPU driver picks
+     * a value automatically, so asking for more registers than it would have
+     * chosen is also a meaningful thing to do. Zero asks for that automatic
+     * choice, which is what an unscheduled Func gets.
+     *
+     * Only CUDA offers this level of control, so the device API must be given
+     * explicitly and must be DeviceAPI::CUDA; passing anything else warns and
+     * has no effect. Even for CUDA it only takes effect when the PTX version in
+     * use has the .maxnreg directive. */
+    Func &gpu_max_registers(DeviceAPI device_api, int n);
+
     /** Use non-temporal (streaming) loads for every direct read this Func's
      * pure (initial) definition makes of another Func. Equivalent to calling
      * stream_loads() on Stage 0; see \ref Stage::stream_loads. To stream the
@@ -2815,6 +2879,33 @@ public:
     const Internal::StageSchedule &get_schedule() const {
         return Stage(*this).get_schedule();
     }
+};
+
+/** A vector of Funcs with conveniences for constructing and consuming
+ * collections of Funcs. */
+class FuncVec : public std::vector<Func> {
+    using Base = std::vector<Func>;
+
+public:
+    using Base::Base;
+    using Base::operator=;
+
+    FuncVec() = default;
+    FuncVec(const Base &funcs)
+        : Base(funcs) {
+    }
+    FuncVec(Base &&funcs)
+        : Base(std::move(funcs)) {
+    }
+
+    /** Construct count undefined Funcs. A singleton is named base_name; otherwise
+     * the Funcs are named base_name + their index. suffix, if given, is appended
+     * after the name. */
+    FuncVec(const std::string &base_name, size_t count, const std::string &suffix = "");
+
+    /** Convert a singleton FuncVec to its sole Func. It is a user error if
+     * the FuncVec does not contain exactly one Func. */
+    operator Func() const;
 };
 
 template<typename... Args>

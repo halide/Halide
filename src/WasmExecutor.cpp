@@ -2344,7 +2344,7 @@ WasmModuleContents::WasmModuleContents(
     wabt::Errors errors;
     wabt::interp::ModuleDesc module_desc;
     wabt::Result r = wabt::interp::ReadBinaryInterp("<internal>",
-                                                    final_wasm.data(),
+                                                    reinterpret_cast<const uint8_t *>(final_wasm.data()),
                                                     final_wasm.size(),
                                                     options,
                                                     &errors,

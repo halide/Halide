@@ -1850,7 +1850,7 @@ Node convert_concat_node(
     }
 
     Halide::Var concat_axis = tgt_indices[axis];
-    std::vector<Halide::Func> concat_funcs;
+    Halide::FuncVec concat_funcs;
     concat_funcs.resize(inputs.size());
     concat_funcs[0](tgt_indices) = inputs[0].rep(tgt_indices);
     Halide::Expr concat_offset = 0;

@@ -104,7 +104,7 @@ struct IRNode {
      */
     virtual void accept(IRVisitor *v) const = 0;
     IRNode(IRNodeType t)
-        : node_type(t) {
+        : hash((uint32_t)t) {
     }
     virtual ~IRNode() = default;
 
@@ -115,17 +115,34 @@ struct IRNode {
      */
     mutable RefCount ref_count;
 
-    /** Each IR node subclass has a unique identifier. We can compare
-     * these values to do runtime type identification. We don't
-     * compile with rtti because that injects run-time type
-     * identification stuff everywhere (and often breaks when linking
-     * external libraries compiled without it), and we only want it
-     * for IR nodes. One might want to put this value in the vtable,
-     * but that adds another level of indirection, and for Exprs we
-     * have 32 free bits in between the ref count and the Type
-     * anyway, so this doesn't increase the memory footprint of an IR node.
-     */
-    IRNodeType node_type;
+    /** Each IR node subclass has a unique identifier. We can compare these
+     * values to do runtime type identification. We don't compile with rtti
+     * because that injects run-time type identification stuff everywhere (and
+     * often breaks when linking external libraries compiled without it), and we
+     * only want it for IR nodes. One might want to put this value in the
+     * vtable, but that adds another level of indirection, and for Exprs we have
+     * 32 free bits in between the ref count and the Type field anyway. We use
+     * the first 8 to store the node type, and the next 24 as a hash of the
+     * children of the node, to make syntactic comparisons faster. */
+    union {
+        IRNodeType node_type;
+        uint32_t hash;
+    };
+
+    /** Set hash from a combined hash of this node's arguments (see
+     * combine_hash below), keeping the node type intact. The low bits of a
+     * multiply-add hash are of poor quality, so we discard them (rather
+     * than shifting them up) in favor of the node type. Which end of the
+     * word the node type landed in when we wrote it via the node_type
+     * member of the union depends on the endianness of the machine. */
+    HALIDE_ALWAYS_INLINE
+    void set_hash(uint32_t args_hash) {
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+        hash = (args_hash >> 8) | ((uint32_t)node_type << 24);
+#else
+        hash = (args_hash & 0xffffff00u) | (uint32_t)node_type;
+#endif
+    }
 };
 
 template<>
@@ -162,6 +179,22 @@ struct BaseExprNode : public IRNode {
     virtual Expr mutate_expr(IRMutator *v) const = 0;
     Type type;
 };
+
+/** Combine one or more child hashes (or plain uint32_t fields) into a
+ * running hash, for use in the make() methods of Expr nodes below. Pass
+ * the result to IRNode::set_hash to fold in the node type and get the
+ * final hash - see the make() methods below for examples. */
+// @{
+HALIDE_ALWAYS_INLINE
+uint32_t combine_hash(uint32_t hash, uint32_t child_hash) {
+    return hash * 2654435761u + child_hash;
+}
+
+template<typename... Rest>
+HALIDE_ALWAYS_INLINE uint32_t combine_hash(uint32_t hash, uint32_t child_hash, Rest... rest) {
+    return combine_hash(combine_hash(hash, child_hash), rest...);
+}
+// @}
 
 /** We use the "curiously recurring template pattern" to avoid
    duplicated code in the IR Nodes. These classes live between the
@@ -341,6 +374,12 @@ struct Expr : public Internal::IRHandle {
     HALIDE_ALWAYS_INLINE
     Type type() const {
         return get()->type;
+    }
+
+    /** Get the cheap hash of this expression node. See IRNode::hash. */
+    HALIDE_ALWAYS_INLINE
+    uint32_t hash() const {
+        return get()->hash;
     }
 };
 

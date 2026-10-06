@@ -4,6 +4,7 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "IRVisitor.h"
+#include <functional>
 #include <numeric>
 #include <utility>
 
@@ -44,6 +45,7 @@ Expr Cast::make(Type t, Expr v) {
 
     Cast *node = new Cast;
     node->type = t;
+    node->set_hash(combine_hash(v.hash(), t.hash()));
     node->value = std::move(v);
     return node;
 }
@@ -60,6 +62,7 @@ Expr Reinterpret::make(Type t, Expr v) {
 
     Reinterpret *node = new Reinterpret;
     node->type = t;
+    node->set_hash(combine_hash(v.hash(), t.hash()));
     node->value = std::move(v);
     return node;
 }
@@ -71,6 +74,7 @@ Expr Add::make(Expr a, Expr b) {
 
     Add *node = new Add;
     node->type = a.type();
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -83,6 +87,7 @@ Expr Sub::make(Expr a, Expr b) {
 
     Sub *node = new Sub;
     node->type = a.type();
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -95,6 +100,7 @@ Expr Mul::make(Expr a, Expr b) {
 
     Mul *node = new Mul;
     node->type = a.type();
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -107,6 +113,7 @@ Expr Div::make(Expr a, Expr b) {
 
     Div *node = new Div;
     node->type = a.type();
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -119,6 +126,7 @@ Expr Mod::make(Expr a, Expr b) {
 
     Mod *node = new Mod;
     node->type = a.type();
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -131,6 +139,7 @@ Expr Min::make(Expr a, Expr b) {
 
     Min *node = new Min;
     node->type = a.type();
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -143,6 +152,7 @@ Expr Max::make(Expr a, Expr b) {
 
     Max *node = new Max;
     node->type = a.type();
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -155,6 +165,7 @@ Expr EQ::make(Expr a, Expr b) {
 
     EQ *node = new EQ;
     node->type = Bool(a.type().lanes());
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -167,6 +178,7 @@ Expr NE::make(Expr a, Expr b) {
 
     NE *node = new NE;
     node->type = Bool(a.type().lanes());
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -179,6 +191,7 @@ Expr LT::make(Expr a, Expr b) {
 
     LT *node = new LT;
     node->type = Bool(a.type().lanes());
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -191,6 +204,7 @@ Expr LE::make(Expr a, Expr b) {
 
     LE *node = new LE;
     node->type = Bool(a.type().lanes());
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -203,6 +217,7 @@ Expr GT::make(Expr a, Expr b) {
 
     GT *node = new GT;
     node->type = Bool(a.type().lanes());
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -215,6 +230,7 @@ Expr GE::make(Expr a, Expr b) {
 
     GE *node = new GE;
     node->type = Bool(a.type().lanes());
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -229,6 +245,7 @@ Expr And::make(Expr a, Expr b) {
 
     And *node = new And;
     node->type = Bool(a.type().lanes());
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -243,6 +260,7 @@ Expr Or::make(Expr a, Expr b) {
 
     Or *node = new Or;
     node->type = Bool(a.type().lanes());
+    node->set_hash(combine_hash(a.hash(), b.hash()));
     node->a = std::move(a);
     node->b = std::move(b);
     return node;
@@ -254,6 +272,7 @@ Expr Not::make(Expr a) {
 
     Not *node = new Not;
     node->type = Bool(a.type().lanes());
+    node->set_hash(combine_hash(a.hash(), 0));
     node->a = std::move(a);
     return node;
 }
@@ -269,6 +288,8 @@ Expr Select::make(Expr condition, Expr true_value, Expr false_value) {
 
     Select *node = new Select;
     node->type = true_value.type();
+    node->set_hash(combine_hash(condition.hash(),
+                                true_value.hash(), false_value.hash()));
     node->condition = std::move(condition);
     node->true_value = std::move(true_value);
     node->false_value = std::move(false_value);
@@ -285,6 +306,8 @@ Expr Load::make(Type type, const std::string &name, Expr index, Buffer<> image, 
     Load *node = new Load;
     node->type = type;
     node->name = name;
+    node->set_hash(combine_hash((uint32_t)std::hash<std::string>{}(name),
+                                index.hash(), predicate.hash()));
     node->predicate = std::move(predicate);
     node->index = std::move(index);
     node->image = std::move(image);
@@ -320,6 +343,8 @@ Expr Ramp::make(Expr base, Expr stride, int lanes) {
 
     Ramp *node = new Ramp;
     node->type = base.type().with_lanes(lanes * base.type().lanes());
+    node->set_hash(combine_hash((uint32_t)lanes,
+                                base.hash(), stride.hash()));
     node->base = std::move(base);
     node->stride = std::move(stride);
     node->lanes = lanes;
@@ -332,6 +357,7 @@ Expr Broadcast::make(Expr value, int lanes) {
 
     Broadcast *node = new Broadcast;
     node->type = value.type().with_lanes(lanes * value.type().lanes());
+    node->set_hash(combine_hash((uint32_t)lanes, value.hash()));
     node->value = std::move(value);
     node->lanes = lanes;
     return node;
@@ -344,6 +370,8 @@ Expr Let::make(const std::string &name, Expr value, Expr body) {
     Let *node = new Let;
     node->type = body.type();
     node->name = name;
+    node->set_hash(combine_hash((uint32_t)std::hash<std::string>{}(name),
+                                value.hash(), body.hash()));
     node->value = std::move(value);
     node->body = std::move(body);
     return node;
@@ -719,6 +747,20 @@ Stmt Block::make(const std::vector<Stmt> &stmts) {
     return result;
 }
 
+std::vector<Stmt> Block::to_vector(const Stmt &s) {
+    std::vector<Stmt> result;
+    // Blocks are right-leaning: 'first' is never itself a Block.
+    Stmt rest = s;
+    while (const Block *b = rest.as<Block>()) {
+        result.push_back(b->first);
+        rest = b->rest;
+    }
+    if (rest.defined()) {
+        result.push_back(std::move(rest));
+    }
+    return result;
+}
+
 Stmt Block::with(const Stmt &first, const Stmt &rest) const {
     if (first.same_as(this->first) && rest.same_as(this->rest)) {
         return this;
@@ -960,6 +1002,12 @@ Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &arg
     Call *node = new Call;
     node->type = type;
     node->name = name;
+    uint32_t h = combine_hash((uint32_t)std::hash<std::string>{}(name),
+                              (uint32_t)call_type, (uint32_t)value_index);
+    for (const auto &arg : args) {
+        h = combine_hash(h, arg.hash());
+    }
+    node->set_hash(h);
     node->args = args;
     node->call_type = call_type;
     node->func = std::move(func);
@@ -981,6 +1029,7 @@ Expr Variable::make(Type type, const std::string &name, Buffer<> image, Paramete
     Variable *node = new Variable;
     node->type = type;
     node->name = name;
+    node->set_hash((uint32_t)std::hash<std::string>{}(name));
     node->image = std::move(image);
     node->param = std::move(param);
     node->reduction_domain = std::move(reduction_domain);
@@ -1003,6 +1052,14 @@ Expr Shuffle::make(const std::vector<Expr> &vectors,
 
     Shuffle *node = new Shuffle;
     node->type = element_ty.with_lanes((int)indices.size());
+    uint32_t h = 0;
+    for (int i : indices) {
+        h = combine_hash(h, (uint32_t)i);
+    }
+    for (const auto &v : vectors) {
+        h = combine_hash(h, v.hash());
+    }
+    node->set_hash(h);
     node->vectors = vectors;
     node->indices = indices;
     return node;
@@ -1245,6 +1302,7 @@ Expr VectorReduce::make(VectorReduce::Operator op,
         << lanes << " " << vec.type().lanes() << "\n";
     VectorReduce *node = new VectorReduce;
     node->type = vec.type().with_lanes(lanes);
+    node->set_hash(combine_hash((uint32_t)op, vec.hash()));
     node->op = op;
     node->value = std::move(vec);
     return node;

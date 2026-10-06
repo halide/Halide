@@ -49,7 +49,7 @@ HalideModel convert_onnx_model(
     result.model = std::make_shared<Model>(
         convert_model(onnx_model, expected_dim_sizes, layout));
 
-    std::vector<Halide::Func> funcs;
+    Halide::FuncVec funcs;
     for (const auto &output : onnx_model.graph().output()) {
         const auto &tensor = result.model->outputs.at(output.name());
         funcs.push_back(tensor.rep);

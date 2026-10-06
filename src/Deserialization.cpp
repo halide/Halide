@@ -345,7 +345,9 @@ TailStrategy Deserializer::deserialize_tail_strategy(Serialize::TailStrategy tai
     case Serialize::TailStrategy::GuardWithIf:
         return TailStrategy::GuardWithIf;
     case Serialize::TailStrategy::Predicate:
-        return TailStrategy::Predicate;
+        // Predicate is deprecated and identical to GuardWithIf; old
+        // serialized pipelines that used it deserialize to GuardWithIf.
+        return TailStrategy::GuardWithIf;
     case Serialize::TailStrategy::PredicateLoads:
         return TailStrategy::PredicateLoads;
     case Serialize::TailStrategy::PredicateStores:
@@ -1025,8 +1027,12 @@ FuncSchedule Deserializer::deserialize_func_schedule(const Serialize::FuncSchedu
     const std::vector<StorageDim> storage_dims =
         deserialize_vector<Serialize::StorageDim, StorageDim>(func_schedule->storage_dims(),
                                                               &Deserializer::deserialize_storage_dim);
-    const std::vector<Bound> bounds = deserialize_vector<Serialize::Bound, Bound>(func_schedule->bounds(),
-                                                                                  &Deserializer::deserialize_bound);
+    const std::vector<Bound> bounds_vec = deserialize_vector<Serialize::Bound, Bound>(func_schedule->bounds(),
+                                                                                      &Deserializer::deserialize_bound);
+    std::map<std::string, Bound> bounds;
+    for (const auto &b : bounds_vec) {
+        merge_bound(bounds, b);
+    }
     const std::vector<Bound> estimates = deserialize_vector<Serialize::Bound, Bound>(func_schedule->estimates(),
                                                                                      &Deserializer::deserialize_bound);
     const std::map<std::string, FunctionPtr> wrappers = deserialize_wrapper_refs(func_schedule->wrappers());
@@ -1446,11 +1452,16 @@ Pipeline Deserializer::deserialize(std::istream &in) {
 }
 
 Pipeline Deserializer::deserialize(const std::vector<uint8_t> &data) {
-    // The accessors below chase offsets straight out of the buffer, so the
-    // buffer has to be structurally sound before we touch it. flatbuffers does
-    // not check that unless we ask; without this a malformed .hlpipe reads out
-    // of bounds (Finish() writes no file identifier, so verify without one).
-    flatbuffers::Verifier verifier(data.data(), data.size());
+    // The accessors below chase offsets straight out of the buffer with no
+    // structural check unless we ask for one, so a malformed .hlpipe can read
+    // out of bounds (Finish() writes no file identifier, so verify without
+    // one). Each IR node is one flatbuffer table, and deserialize_stmt/
+    // deserialize_expr recurse to a depth matching the buffer's nesting, so
+    // max_depth is raised well past the default of 64 -- enough for deeply
+    // nested Exprs, but still a real bound on that recursion.
+    flatbuffers::Verifier::Options verifier_options;
+    verifier_options.max_depth = 1000;
+    flatbuffers::Verifier verifier(data.data(), data.size(), verifier_options);
     user_assert(verifier.VerifyBuffer<Serialize::Pipeline>())
         << "malformed serialized pipeline: failed flatbuffer verification\n";
     const auto *pipeline_obj = Serialize::GetPipeline(data.data());
@@ -1580,7 +1591,10 @@ std::map<std::string, Parameter> Deserializer::deserialize_parameters(std::istre
 
 std::map<std::string, Parameter> Deserializer::deserialize_parameters(const std::vector<uint8_t> &data) {
     std::map<std::string, Parameter> external_parameters_by_name;
-    flatbuffers::Verifier verifier(data.data(), data.size());
+    // See the matching verifier in deserialize() above for why max_depth is raised.
+    flatbuffers::Verifier::Options verifier_options;
+    verifier_options.max_depth = 1000;
+    flatbuffers::Verifier verifier(data.data(), data.size(), verifier_options);
     user_assert(verifier.VerifyBuffer<Serialize::Pipeline>())
         << "malformed serialized pipeline: failed flatbuffer verification\n";
     const auto *pipeline_obj = Serialize::GetPipeline(data.data());

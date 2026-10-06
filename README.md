@@ -460,7 +460,12 @@ Higher numbers will print more detail. The output can be filtered by source
 location using the grammar `verbosity[,filename[:line_low[-line_high]]][@func]`,
 with rules separated by `;` and OR-ed together (filenames and function names are
 matched as suffixes). For example, `HL_DEBUG_CODEGEN=3,Simplify.cpp:100-180`
-prints verbosity-3 output only from lines 100–180 of `Simplify.cpp`. See
+prints verbosity-3 output only from lines 100–180 of `Simplify.cpp`. A handful
+of call sites are also given a stable tag (their second `debug()` argument, e.g.
+`debug(1, "counterexample")`), independent of file/line, selectable via a
+`tag:name` rule (e.g. `HL_DEBUG_CODEGEN=tag:counterexample`, or
+`HL_DEBUG_CODEGEN=tag:counterexample,non-monotonic` to select either); a tag
+rule fires whenever one of its names matches, regardless of verbosity. See
 [doc/Testing.md](doc/Testing.md) for more, including the LLDB/GDB debugger
 helpers. `HL_DEBUG_CODEGEN` output goes to stderr by default; set
 `HL_DEBUG_CODEGEN_LOG_FILE=<path>` to append it to a file instead (the file is

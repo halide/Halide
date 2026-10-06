@@ -159,7 +159,9 @@ struct PipelineContents {
 
     bool trace_pipeline = false;
 
-    bool defer_profile_flush = false;
+    /** The number of live ProfilerScopes for this pipeline. While
+     * nonzero, realize leaves the profiler's statistics in place. */
+    int profiler_scopes = 0;
 
     /** Optional prefixes used to rename halide_-prefixed runtime symbols.
      * Empty unless set via Pipeline::apply_runtime_prefixes(). */
@@ -229,8 +231,8 @@ Pipeline::Pipeline(const std::vector<Func> &outputs, const std::vector<Internal:
     }
 }
 
-vector<Func> Pipeline::outputs() const {
-    vector<Func> funcs;
+FuncVec Pipeline::outputs() const {
+    FuncVec funcs;
     for (const Function &f : contents->outputs) {
         funcs.emplace_back(f);
     }
@@ -847,9 +849,7 @@ Realization Pipeline::realize(JITUserContext *context,
     }
 
     // If we're profiling, report runtimes and reset profiler stats.
-    // Condition based on whether or not calling code has chosen to defer
-    // flushing profile information (e.g., to accumulate results across runs).
-    if (!contents->defer_profile_flush) {
+    if (contents->profiler_scopes == 0) {
         contents->jit_cache.finish_profiling(context);
     }
     jit_context.finalize(exit_status);
@@ -912,17 +912,6 @@ void Pipeline::add_requirement(const Expr &condition, const std::vector<Expr> &e
 void Pipeline::trace_pipeline() {
     user_assert(defined()) << "Pipeline is undefined\n";
     contents->trace_pipeline = true;
-}
-
-void Pipeline::set_defer_profile_flush(bool defer) {
-    user_assert(defined()) << "Pipeline is undefined\n";
-    contents->defer_profile_flush = defer;
-}
-
-void Pipeline::flush_profiler_state(JITUserContext *context) {
-    user_assert(defined()) << "Pipeline is undefined\n";
-    JITUserContext empty{};
-    contents->jit_cache.finish_profiling(context ? context : &empty);
 }
 
 namespace {
@@ -1027,9 +1016,8 @@ void halidoscope_append_func_stats(std::ostringstream &out,
 // counters into halide_profiler_pipeline_stats) before the call returns to
 // this C++ code, so by the time the loop finishes, the pipeline stats
 // reflect all of the runs merged together, with per-Func times correctly
-// averaged across billed_runs. (Pipeline::flush_profiler_state(), called via
-// DeferredProfileFlush's destructor once this scope ends, is what resets
-// them, so this needs to run before that.)
+// averaged across billed_runs. (The ProfilerScope's destructor, once this
+// scope ends, is what resets them, so this needs to run before that.)
 void halidoscope_write_profile_json(const Target &target, std::string &profile_json) {
     using GetStateFn = halide_profiler_state *(*)();
     auto get_state = (GetStateFn)JITSharedRuntime::find_symbol(target, "halide_profiler_get_state");
@@ -1156,17 +1144,6 @@ void Pipeline::halidoscope_impl(const std::function<void(Pipeline &, const Targe
     }
 
     // --- Profile run: Halide's sampling profiler, captured into JSON. ---
-    struct DeferredProfileFlush {
-        Pipeline &p;
-        explicit DeferredProfileFlush(Pipeline &pipeline) : p(pipeline) {
-            p.set_defer_profile_flush(true);
-        }
-        ~DeferredProfileFlush() {
-            p.set_defer_profile_flush(false);
-            p.flush_profiler_state();
-        }
-    };
-
     if (profile_runs > 0) {
         Pipeline profiled = deserialize_pipeline(data, external_params);
         Target profile_target = base_target.with_feature(Target::Profile);
@@ -1174,7 +1151,7 @@ void Pipeline::halidoscope_impl(const std::function<void(Pipeline &, const Targe
         std::string profile_json;
 
         {
-            DeferredProfileFlush guard(profiled);
+            ProfilerScope guard(profiled);
             for (int i = 0; i < profile_runs; i++) {
                 std::cout << "Halidoscope profiling run " << i + 1 << " of " << profile_runs << "\n";
                 do_realize(profiled, profile_target);
@@ -1227,6 +1204,88 @@ void Pipeline::halidoscope(RealizationArg output, const HalidoscopeOptions &opti
         p.realize(halidoscope_clone_output(output), t);
     },
                      options, target);
+}
+
+ProfilerScope::ProfilerScope(Pipeline p)
+    : pipeline(std::move(p)) {
+    user_assert(pipeline.defined()) << "Pipeline is undefined\n";
+    pipeline.contents->profiler_scopes++;
+}
+
+ProfilerScope::ProfilerScope(Func &f)
+    : ProfilerScope(f.pipeline()) {
+}
+
+ProfilerScope::~ProfilerScope() {
+    if (--pipeline.contents->profiler_scopes > 0) {
+        return;
+    }
+    // Report and reset as a realize outside of any scope would have.
+    JITUserContext context{};
+    JITFuncCallContext jit_context(&context, pipeline.jit_handlers());
+    pipeline.contents->jit_cache.finish_profiling(&context);
+    jit_context.finalize(0);
+}
+
+const halide_profiler_pipeline_stats *ProfilerScope::pipeline_stats() const {
+    const JITCache &cache = pipeline.contents->jit_cache;
+    if (!cache.jit_target.has_feature(Target::Profile) &&
+        !cache.jit_target.has_feature(Target::ProfileByTimer)) {
+        return nullptr;
+    }
+    // The profiler lives in the shared JIT runtime, which the wasm
+    // module does not link against, so the symbols may not exist.
+    using GetStateFn = halide_profiler_state *(*)();
+    using LockFn = void (*)(halide_profiler_state *);
+    auto find = [&](const char *symbol) {
+        return cache.jit_module.find_symbol_by_name(symbol).address;
+    };
+    auto get_state = (GetStateFn)find("halide_profiler_get_state");
+    auto lock = (LockFn)find("halide_profiler_lock");
+    auto unlock = (LockFn)find("halide_profiler_unlock");
+    if (!get_state || !lock || !unlock) {
+        return nullptr;
+    }
+
+    // halide_profiler_get_pipeline_state compares names by pointer, so
+    // walk the list comparing by string instead. Recompiling the
+    // pipeline produces a new entry with the same name; the newest is
+    // at the head of the list.
+    const std::string name = pipeline.generate_function_name();
+    halide_profiler_state *state = get_state();
+    const halide_profiler_pipeline_stats *result = nullptr;
+    lock(state);
+    for (const halide_profiler_pipeline_stats *p = state->pipelines; p;
+         p = (const halide_profiler_pipeline_stats *)p->next) {
+        if (name == p->name) {
+            result = p;
+            break;
+        }
+    }
+    unlock(state);
+    return result;
+}
+
+const halide_profiler_func_stats *ProfilerScope::func_stats(const std::string &name) const {
+    const halide_profiler_pipeline_stats *p = pipeline_stats();
+    if (!p) {
+        return nullptr;
+    }
+    for (int i = 0; i < p->num_funcs; i++) {
+        const halide_profiler_func_stats &f = p->funcs[i];
+        if (f.kind == halide_profiler_func_kind_func &&
+            f.canonical_id == i &&
+            name == f.name) {
+            return &f;
+        }
+    }
+    return nullptr;
+}
+
+const halide_profiler_func_stats *ProfilerScope::func_stats(const Func &f) const {
+    // The profiler reports a Func under its display name if it has one.
+    const std::string &display_name = f.function().profiler_display_name();
+    return func_stats(display_name.empty() ? f.name() : display_name);
 }
 
 // Make a vector of void *'s to pass to the jit call using the
@@ -1443,10 +1502,7 @@ void Pipeline::realize(JITUserContext *context,
     debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
 
     // If we're profiling, report runtimes and reset profiler stats.
-    // Condition based on whether or not calling code has chosen to defer
-    // flushing profile information (e.g., to accumulate results across
-    // many runs).
-    if (!contents->defer_profile_flush) {
+    if (contents->profiler_scopes == 0) {
         contents->jit_cache.finish_profiling(context);
     }
 
