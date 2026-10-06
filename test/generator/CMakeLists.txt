@@ -403,6 +403,21 @@ _add_halide_aot_tests(
 _add_halide_libraries(all_type_names)
 _add_halide_aot_tests(all_type_names)
 
+# approximation_codec_aottest.cpp
+# approximation_codec_generator.cpp
+_add_halide_libraries(approximation_codec)
+target_include_directories(approximation_codec.generator PRIVATE "${Halide_SOURCE_DIR}/tools")
+_add_halide_libraries(
+    approximation_codec_decode
+    FROM approximation_codec.generator
+    GENERATOR_NAME approximation_codec
+    PARAMS direction=decode
+)
+_add_halide_aot_tests(
+    approximation_codec
+    HALIDE_LIBRARIES approximation_codec approximation_codec_decode
+)
+
 # argvcall_aottest.cpp
 # argvcall_generator.cpp
 _add_halide_libraries(argvcall)
