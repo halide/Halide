@@ -521,6 +521,7 @@ tests(
     struct_nested_field_store.cpp
     struct_type.cpp
     struct_type_dot_product.cpp
+    struct_type_record_field_reads.cpp
     sve_codegen_predicated.cpp
     sve_codegen_reinterpret.cpp
     target.cpp
