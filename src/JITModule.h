@@ -305,6 +305,9 @@ struct JITModule {
     /** See JITSharedRuntime::reuse_device_allocations */
     void reuse_device_allocations(bool) const;
 
+    /** See JITSharedRuntime::set_trace_file */
+    void set_trace_file(int fd) const;
+
     /** See JITSharedRuntime::get_num_threads */
     int get_num_threads() const;
 
@@ -341,6 +344,12 @@ public:
      * HalideRuntime.h and call halide_reuse_device_allocations
      * instead. */
     static void reuse_device_allocations(bool);
+
+    /** Set the file descriptor that JIT-compiled pipelines write binary
+     * trace events to. Applies to the shared runtime now if it exists,
+     * and whenever it is created later. Pass -1 to restore the default
+     * behavior. See halide_set_trace_file in HalideRuntime.h. */
+    static void set_trace_file(int fd);
 
     static void release_all();
 
