@@ -113,6 +113,18 @@ bool ApproximationResult::is_stage_port(const Func &f) const {
     return false;
 }
 
+std::vector<Func> ApproximationResult::decode_funcs() const {
+    std::vector<Func> result;
+    std::vector<Func> candidates = decode_trace.intermediates;
+    candidates.push_back(replacement);
+    for (const Func &f : candidates) {
+        if (f.defined() && Internal::eager_inline_obstacle(f.function()).empty()) {
+            result.push_back(f);
+        }
+    }
+    return result;
+}
+
 namespace {
 
 void replace_all(std::string &s, const std::string &from, const std::string &to) {
