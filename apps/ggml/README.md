@@ -84,16 +84,17 @@ its GGML type name in `schemes/schemes.h`; f16 is the `fp16` scheme, f32 has
 none) and one row of `GGML_FORMATS` in `formats.cmake`
 (`type ops [acts [target-features]]`).
 
-`codec` builds the one codec generator (`kernels/codec.cpp`) for the type: the
-scheme's round trip on a row of floats, severed at the encoded blocks, as
-`<type>_quantize` (f32 `[K]` -> blocks `[K / block]`, a struct type with GGML's
-block layout) and `<type>_dequantize`. The `codec` op (`--op codec`, on by
-default) checks both bitwise against GGML's reference quantizer
-(`ggml_quantize_chunk`) and `to_float` on N(0, 1) rows whose first blocks are
-adversarial (signed zeros, ties, constants, tiny and huge values; inf/NaN are
-undefined in GGML's reference), and times them against those and `from_float`.
-Codec rows reuse the CSV columns: `atype` is the direction, `err_ratio` is 0
-(bit-exact) or inf, `gops` is Gvalues/s.
+`codec` builds the one codec generator (`kernels/codec.cpp`, via `make_codec`
+from `tools/halide_approximation_codec.h`) for the type: the scheme's round trip
+on a row of floats, severed at the encoded blocks, as `<type>_quantize` (f32
+`[K]` -> blocks `[K / block]`, a struct type with GGML's block layout) and
+`<type>_dequantize`. The `codec` op (`--op codec`, on by default) checks both
+bitwise against GGML's reference quantizer (`ggml_quantize_chunk`) and
+`to_float` on N(0, 1) rows whose first blocks are adversarial (signed zeros,
+ties, constants, tiny and huge values; inf/NaN are undefined in GGML's
+reference), and times them against those and `from_float`. Codec rows reuse the
+CSV columns: `atype` is the direction, `err_ratio` is 0 (bit-exact) or inf,
+`gops` is Gvalues/s.
 
 `vec_dot` builds the one mul_mat generator (`kernels/matmul.cpp`,
 `weight=<type> act=<act>`) for each act in `acts`, as `<type>_<act>_vec_dot`:
@@ -102,8 +103,8 @@ its scheme and severed at its encoded records, scheduled for N = M = 1 by
 `kernels/schedule.h` (both operands block-quantized: an int32 dot of the codes
 per block, sdot on Arm, then the scales; otherwise decode and FMA). Kernel ABI
 (`harness/halide_providers.cpp`): `w`/`a` are `[K / block, N or M]` records
-(struct types from the kernel's metadata), `out` is f32 `[N, M]`; `vec_dot` goes
-through a GGML-ABI adapter.
+(struct types from the kernel's metadata), `out` is f32 `[N, M]`, all with mins
+0; `vec_dot` goes through a GGML-ABI adapter.
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds

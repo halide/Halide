@@ -13,10 +13,8 @@ using namespace Halide;
 inline std::vector<Func> decoders(const std::vector<ApproximationResult> &rs) {
     std::vector<Func> fs;
     for (const ApproximationResult &res : rs) {
-        fs.push_back(res.replacement);
-        for (const Func &f : res.intermediates) {
-            if (f.function().can_be_inlined()) fs.push_back(f);
-        }
+        std::vector<Func> d = res.decode_funcs();
+        fs.insert(fs.end(), d.begin(), d.end());
     }
     return fs;
 }

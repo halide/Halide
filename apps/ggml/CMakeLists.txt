@@ -14,7 +14,11 @@ if (NOT ggml_FOUND)
 endif ()
 find_package(Halide REQUIRED)
 
-add_halide_generator(ggml.generators SOURCES kernels/codec.cpp kernels/matmul.cpp)
+add_halide_generator(
+    ggml.generators
+    SOURCES kernels/codec.cpp kernels/matmul.cpp
+    LINK_LIBRARIES Halide::Tools
+)
 target_include_directories(ggml.generators PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 add_halide_runtime(ggml_halide_runtime)
 
