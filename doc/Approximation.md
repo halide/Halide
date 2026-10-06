@@ -780,6 +780,35 @@ public:
 };
 ```
 
+`tools/halide_approximation_codec.h` (namespace `Halide::ApproximationCodec`,
+header-only, not part of `Halide.h`) packages this body.
+`make_codec(scheme, type, dimensions, options = {})` builds the round trip for a
+`dimensions`-dimensional ImageParam, schedules it (`compute_root()` for Funcs
+with update definitions and encode-side stage ports; the decode side stays
+inline), severs it, and returns a `Codec`: `values` and `encoded` (the encoder's
+ports), `encoded_inputs` and `decoded` (the decoder's), and the
+`ApproximationResult`. Port names are stable: `values`, `decoded`, and one per
+encoded port named after it, the same in both directions (`Options` overrides
+them). Bounds constraints and schedules are added through the `Codec`:
+
+```cpp
+void configure() {
+    ApproximationCodec::Codec codec =
+        ApproximationCodec::make_codec(scheme, Float(32), 1);
+    if (direction == Direction::Quantize) {
+        codec.values.dim(0).set_min(0);
+        codec.adopt_encoder(*this);  // values -> codes, scale
+    } else {
+        codec.adopt_decoder(*this);  // codes, scale -> decoded
+    }
+}
+```
+
+It is a helper over the public API rather than a library feature: a codec
+Generator's shape (one ImageParam in, a severed identity consumer, names, which
+side is scheduled how) is a convention, and Generators that need another shape
+use the pattern above directly.
+
 The encoded form's arity and layout are whatever the scheme chose, so the
 Generator's public signature is scheme-dependent. That follows from a layout
 choice each `Approximation` makes, and the framework does not paper over it:
@@ -926,6 +955,7 @@ such an input. Properties over the decoded values (`lossless()`,
 | Fusing `encode`/`decode` into neighboring stages (activation requantization)                 | No new mechanism; ordinary `.compute_at()`/`.compute_inline()`                  |
 | Declared ranges, `error_bound()`, `lossless()`; property-based testing in `tools/`           | Decided; claims are checked in tests, never enforced or used in codegen         |
 | Generator I/O ergonomics (`add_input`/`add_output` pointer bookkeeping)                      | Accepted rough edge, deferred                                                   |
+| Codec Generators (configure()/sever()/adopt boilerplate)                                     | Header-only helper in `tools/` (`make_codec`); no library API                   |
 
 Open items:
 
