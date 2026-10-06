@@ -56,10 +56,9 @@ struct Options {
      * after its port), the Func gets a suffixed name, and adopting it as a
      * Generator port is an error; pass other names here. */
     std::vector<std::string> encoded_names;
-    /** If true, compute_root() every Func with an update definition, and
-     * every encode-side stage port other than the encoded Funcs themselves
-     * (which the encoder's outputs compute). The decode side is otherwise
-     * left inline. If false, nothing is scheduled. */
+    /** If true, compute_root() every Func with an update definition (e.g. a
+     * per-block reduction) and leave the rest inline, as by default. If
+     * false, nothing is scheduled. */
     bool default_schedule = true;
 };
 
@@ -150,20 +149,9 @@ inline Codec make_codec(const Approximation &scheme, Type type, int dimensions,
     codec.result = Func(codec.values).approximate_by(scheme, {codec.decoded});
     const ApproximationResult &r = codec.result;
 
-    std::set<std::string> encoded_funcs;
-    for (const Func &f : r.encoded) {
-        encoded_funcs.insert(f.name());
-    }
     if (options.default_schedule) {
-        std::set<std::string> encode_ports;
-        for (const ApproximationStageOutputs &o : r.encoded_stage_outputs) {
-            for (const Func &p : o.ports) {
-                encode_ports.insert(p.name());
-            }
-        }
         for (Func f : r.intermediates) {
-            if (f.has_update_definition() ||
-                (encode_ports.count(f.name()) && !encoded_funcs.count(f.name()))) {
+            if (f.has_update_definition()) {
                 f.compute_root();
             }
         }
