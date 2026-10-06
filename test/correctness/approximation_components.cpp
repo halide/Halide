@@ -2,6 +2,9 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstring>
+#include <optional>
+#include <string>
 
 using namespace Halide;
 
@@ -32,6 +35,43 @@ struct AbsMaxQuantizer {
 
     ApproximationSignature signature() const {
         return {{{"block", Float(32), 2}}, {{"codes", Int(8), 2}, {"scale", Float(32), 1}}};
+    }
+};
+
+// As AbsMaxQuantizer, but rank-polymorphic: any dimensions after the block
+// index pass through (implicit Vars), and the signature declares no
+// dimensionalities.
+struct BatchedAbsMaxQuantizer {
+    int block, qmax;
+
+    std::vector<Func> encode(const std::vector<Func> &in) const {
+        Var kk("kk"), blk("blk");
+        RDom r(0, block);
+        Func amax("batched_absmax_stat"), scale("batched_absmax_scale"), codes("batched_absmax_codes");
+        // An inline reduction, since a pure definition of 0.0f would have no
+        // implicit Vars to infer.
+        amax(blk, _) = maximum(abs(in[0](r, blk, _)));
+        scale(blk, _) = amax(blk, _) / (float)qmax;
+        codes(kk, blk, _) = cast<int8_t>(round(in[0](kk, blk, _) / select(scale(blk, _) == 0.0f, 1.0f, scale(blk, _))));
+        return {codes, scale};
+    }
+
+    std::vector<Func> decode(const std::vector<Func> &encoded) const {
+        Var kk("kk"), blk("blk");
+        Func out("batched_absmax_decoded");
+        out(kk, blk, _) = cast<float>(encoded[0](kk, blk, _)) * encoded[1](blk, _);
+        return {out};
+    }
+
+    // Contextual, so the dimensionalities follow the input's.
+    ApproximationSignature signature(const ApproximationPorts &inputs) const {
+        std::optional<int> dims, scale_dims;
+        if (inputs.size() == 1 && inputs[0].dimensions) {
+            dims = inputs[0].dimensions;
+            scale_dims = *dims - 1;
+        }
+        return {{{"block", Float(32), dims}},
+                {{"codes", Int(8), dims, ApproximationRange(-qmax, qmax)}, {"scale", Float(32), scale_dims}}};
     }
 };
 
@@ -207,6 +247,228 @@ int test_block_components() {
     return 0;
 }
 
+// The layout units pass trailing (batch) dimensions through unchanged.
+int test_batch_dimensions() {
+    Var k("k"), n("n"), m("m");
+
+    // BlockReshape: (k, n, m) <-> (kk, blk, n, m), flat and block-indexed.
+    Func flat("batched_flat");
+    flat(k, n, m) = cast<float>(k + 1000 * n + 10000 * m);
+    Approximation reshape = BlockReshape(8);
+    EncodeResult blocks = reshape.encode({flat});
+    if (blocks.encoded[0].dimensions() != 4) {
+        printf("BlockReshape: %d encoded dimensions\n", blocks.encoded[0].dimensions());
+        return 1;
+    }
+    Buffer<float> blocked = blocks.encoded[0].realize({8, 3, 2, 2});
+    Buffer<float> unblocked = reshape.decode(blocks.encoded).decoded[0].realize({24, 2, 2});
+    for (int mm = 0; mm < 2; mm++) {
+        for (int nn = 0; nn < 2; nn++) {
+            for (int i = 0; i < 24; i++) {
+                float expected = i + 1000 * nn + 10000 * mm;
+                if (unblocked(i, nn, mm) != expected || blocked(i % 8, i / 8, nn, mm) != expected) {
+                    printf("BlockReshape batch mismatch at (%d, %d, %d)\n", i, nn, mm);
+                    return 1;
+                }
+            }
+        }
+    }
+    Func block_indexed("batched_block_indexed");
+    block_indexed(k, n, m) = cast<float>(k + 100 * n + 1000 * m);
+    Approximation indexed = BlockReshape({4, 2}, true);
+    EncodeResult sub_blocks = indexed.encode({block_indexed});
+    Buffer<float> sub = sub_blocks.encoded[0].realize({4, 2, 3, 2});
+    Buffer<float> unsub = indexed.decode(sub_blocks.encoded).decoded[0].realize({8, 3, 2});
+    for (int mm = 0; mm < 2; mm++) {
+        for (int b = 0; b < 3; b++) {
+            for (int i = 0; i < 8; i++) {
+                float expected = i + 100 * b + 1000 * mm;
+                if (unsub(i, b, mm) != expected || sub(i % 4, i / 4, b, mm) != expected) {
+                    printf("Block-indexed BlockReshape batch mismatch at (%d, %d, %d)\n", i, b, mm);
+                    return 1;
+                }
+            }
+        }
+    }
+
+    // PlanarFieldPack: (element, record, n) <-> (position, record, n).
+    Var element("element"), record("record");
+    Func nibbles("batched_nibbles");
+    nibbles(element, record, n) = cast<uint8_t>((element + record + 3 * n) % 16);
+    Approximation planar = PlanarFieldPack(4, 8);
+    EncodeResult packed = planar.encode({nibbles});
+    packed.encoded[0].compute_root();
+    Buffer<uint8_t> bytes = packed.encoded[0].realize({8, 2, 3});
+    Buffer<uint8_t> fields = planar.decode(packed.encoded).decoded[0].realize({16, 2, 3});
+    for (int nn = 0; nn < 3; nn++) {
+        for (int r = 0; r < 2; r++) {
+            for (int i = 0; i < 16; i++) {
+                if (fields(i, r, nn) != (i + r + 3 * nn) % 16) {
+                    printf("PlanarFieldPack batch mismatch at (%d, %d, %d)\n", i, r, nn);
+                    return 1;
+                }
+            }
+            for (int i = 0; i < 8; i++) {
+                int lo = (i + r + 3 * nn) % 16, hi = (i + 8 + r + 3 * nn) % 16;
+                if (bytes(i, r, nn) != (lo | (hi << 4))) {
+                    printf("PlanarFieldPack batch byte mismatch at (%d, %d, %d)\n", i, r, nn);
+                    return 1;
+                }
+            }
+        }
+    }
+
+    // StructLayout without a declared record dimensionality takes the inputs'.
+    Type record_type = Type::Struct({{"tag", UInt(16)}, {"pixels", UInt(8), 3}});
+    Func pixels("batched_pixels"), tag("batched_tag");
+    pixels(element, record, n) = cast<uint8_t>(element + 10 * record + 30 * n);
+    tag(record, n) = cast<uint16_t>(100 + record + 4 * n);
+    Approximation layout = StructLayout(record_type, {"pixels", "tag"});
+    EncodeResult records = layout.encode({pixels, tag});
+    if (records.encoded[0].dimensions() != 2 || records.encoded_ports[0].dimensions != 2) {
+        printf("StructLayout: %d record dimensions\n", records.encoded[0].dimensions());
+        return 1;
+    }
+    DecodeResult unpacked = layout.decode(records.encoded);
+    Buffer<uint8_t> out_pixels = unpacked.decoded[0].realize({3, 4, 2});
+    Buffer<uint16_t> out_tag = unpacked.decoded[1].realize({4, 2});
+    for (int nn = 0; nn < 2; nn++) {
+        for (int r = 0; r < 4; r++) {
+            if (out_tag(r, nn) != 100 + r + 4 * nn) {
+                return 1;
+            }
+            for (int i = 0; i < 3; i++) {
+                if (out_pixels(i, r, nn) != i + 10 * r + 30 * nn) {
+                    return 1;
+                }
+            }
+        }
+    }
+
+    if (Halide::exceptions_enabled()) {
+        // Too few dimensions, or slots that disagree, are errors.
+        Func scalar("batched_scalar");
+        scalar() = 1.0f;
+        try {
+            (void)reshape.encode({scalar});
+            printf("BlockReshape accepted a 0-D input\n");
+            return 1;
+        } catch (const CompileError &) {
+        }
+        Func flat_tag("batched_flat_tag");
+        flat_tag(record) = cast<uint16_t>(record);
+        try {
+            (void)layout.encode({pixels, flat_tag});
+            printf("StructLayout accepted slots of different record dimensionalities\n");
+            return 1;
+        } catch (const CompileError &) {
+        }
+        try {
+            (void)Approximation(StructLayout(record_type, {"pixels", "tag"}, 1)).encode({pixels, tag});
+            printf("StructLayout accepted 2-D records with record_dimensions = 1\n");
+            return 1;
+        } catch (const CompileError &) {
+        }
+    }
+    return 0;
+}
+
+// One scheme value approximates a row and a matrix of rows: each row of the
+// matrix encodes to the same bytes as the row on its own, and a consumer of
+// the matrix sees the same decoded values.
+int test_batched_scheme() {
+    Pointwise offset = Pointwise{"offset",
+                                 [](Expr x) { return cast<uint8_t>(x + 8); },
+                                 [](Expr x) { return cast<int8_t>(cast<int>(x) - 8); }}
+                           .with_types(Int(8), UInt(8))
+                           .with_ranges(ApproximationRange(-8, 7), ApproximationRange(0, 15));
+    Type q4_type = Type::Struct({{"d", Float(16)}, {"qs", UInt(8), 16}});
+    Approximation scheme = Compose(
+        BlockReshape{32},
+        BatchedAbsMaxQuantizer{32, 7},
+        Parallel{{"codes", Compose{offset, PlanarFieldPack{4, 16}}},
+                 {"scale", f16_storage()}},
+        StructLayout{q4_type, {"qs", "d"}});
+
+    const int K = 64, N = 3;
+    Var k("k"), n("n");
+    Expr value = sin(cast<float>(k * 7 + n * 13)) * (cast<float>(n) + 1.0f);
+
+    // A matrix, consumed by a matrix-vector product.
+    Func W("batched_W"), x("batched_x"), out("batched_out");
+    W(k, n) = value;
+    x(k) = cos(cast<float>(k));
+    RDom r(0, K, "r");
+    out(n) = 0.0f;
+    out(n) += W(r, n) * x(r);
+    ApproximationResult approx = W.approximate_by(scheme, {out});
+    for (Func f : approx.intermediates) {
+        if (f.has_update_definition() || approx.is_stage_port(f)) {
+            f.compute_root();
+        }
+    }
+    if (approx.encoded.size() != 1 || approx.encoded[0].dimensions() != 2 ||
+        approx.encoded_ports[0].dimensions != 2) {
+        printf("Batched scheme: unexpected encoded shape\n");
+        return 1;
+    }
+    Buffer<> records = approx.encoded[0].realize({K / 32, N});
+    Buffer<float> decoded = approx.replacement.realize({K, N});
+    Buffer<float> dot = out.realize({N});
+
+    for (int nn = 0; nn < N; nn++) {
+        // The same scheme value, on one row.
+        Func row("batched_row"), row_copy("batched_row_copy");
+        row(k) = substitute(n.name(), nn, value);
+        row_copy(k) = row(k);
+        ApproximationResult row_approx = row.approximate_by(scheme, {row_copy});
+        for (Func f : row_approx.intermediates) {
+            if (f.has_update_definition() || row_approx.is_stage_port(f)) {
+                f.compute_root();
+            }
+        }
+        Buffer<> row_records = row_approx.encoded[0].realize({K / 32});
+        Buffer<float> row_decoded = row_copy.realize({K});
+        const size_t row_bytes = (size_t)(K / 32) * q4_type.bytes();
+        if (memcmp((const uint8_t *)records.data() + nn * row_bytes, row_records.data(), row_bytes) != 0) {
+            printf("Batched scheme: row %d encodes differently\n", nn);
+            return 1;
+        }
+        float expected_dot = 0.0f;
+        for (int i = 0; i < K; i++) {
+            if (decoded(i, nn) != row_decoded(i)) {
+                printf("Batched scheme: decoded (%d, %d) = %g vs %g\n", i, nn, decoded(i, nn), row_decoded(i));
+                return 1;
+            }
+            expected_dot += row_decoded(i) * std::cos((float)i);
+        }
+        if (std::fabs(dot(nn) - expected_dot) > 1e-4f * (1.0f + std::fabs(expected_dot))) {
+            printf("Batched scheme: dot %d = %g vs %g\n", nn, dot(nn), expected_dot);
+            return 1;
+        }
+    }
+
+    // With a context, describe() and check_ranges() see the batch dimension.
+    std::string described = scheme.describe({{"values", Float(32), 2}});
+    for (const char *expected : {"BlockReshape (values: float32 x2) -> (blocks: float32 x3)",
+                                 "PlanarFieldPack (codes: uint8 x3 in [0, 15]) -> (bytes: uint8 x3)",
+                                 "StructLayout (bytes: uint8 x3, scale: float16 x2) -> (record: struct{d: float16, qs: uint8[16]} x2)"}) {
+        if (described.find(expected) == std::string::npos) {
+            printf("describe() is missing \"%s\":\n%s", expected, described.c_str());
+            return 1;
+        }
+    }
+    std::vector<std::string> issues = check_ranges(scheme, {{"values", Float(32), 2}});
+    if (!issues.empty()) {
+        printf("check_ranges: %zu issues\n", issues.size());
+        for (const std::string &issue : issues) {
+            printf("  %s\n", issue.c_str());
+        }
+        return 1;
+    }
+    return 0;
+}
+
 int test_standard_quant_compositions() {
     Var k("k");
 
@@ -271,6 +533,8 @@ int main(int argc, char **argv) {
                  {"scalar packs", test_scalar_components},
                  {"code packs", test_code_components},
                  {"block components", test_block_components},
+                 {"batch dimensions", test_batch_dimensions},
+                 {"batched scheme", test_batched_scheme},
                  {"standard quant compositions", test_standard_quant_compositions}};
     for (const Test &test : tests) {
         if (test.run()) {

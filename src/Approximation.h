@@ -1226,7 +1226,10 @@ struct Permute {
 };
 
 /** Losslessly reshape a flat row into fixed-size records. In block-indexed
- * mode the flat side is `(within, record)` rather than a single flat index. */
+ * mode the flat side is `(within, record)` rather than a single flat index.
+ * Any further (batch) dimensions pass through unchanged, after the record
+ * dimension: `(k, rest...)` <-> `(within..., record, rest...)`, so one
+ * BlockReshape applies to a single row and to a matrix of rows alike. */
 struct BlockReshape {
     explicit BlockReshape(int block_size, bool block_indexed = false)
         : extents_{block_size}, block_indexed_(block_indexed) {
@@ -1238,8 +1241,11 @@ struct BlockReshape {
     std::vector<Func> encode(const std::vector<Func> &inputs) const;
     std::vector<Func> decode(const std::vector<Func> &encoded) const;
 
-    /** values (flat) <-> blocks (one extra leading dimension per extent). */
-    ApproximationSignature signature() const;
+    /** values (flat) <-> blocks (one extra leading dimension per extent).
+     * The dimensionalities come from the context: without one (or without
+     * its dimensionality) they are left unknown. The element type and any
+     * declared range are passed through. */
+    ApproximationSignature signature(const ApproximationPorts &inputs) const;
 
     /** Pure re-indexing: exact for any values (given the flat extent is a
      * multiple of the block size). */
@@ -1256,17 +1262,22 @@ private:
 };
 
 /** Map consecutive logical Func slots to named fields of an exact struct
- * type. Scalar fields have `record_dimensions` dimensions; array fields have
- * an additional leading element dimension. */
+ * type. Scalar fields have the record's dimensions; array fields have an
+ * additional leading element dimension. The record's dimensionality is
+ * `record_dimensions` if given, and otherwise whatever the inputs have (all
+ * inputs must agree), so one StructLayout applies to a single row of
+ * records and to a matrix of them alike. */
 struct StructLayout {
     StructLayout(Type record_type, std::vector<std::string> logical_fields,
-                 int record_dimensions = 1);
+                 std::optional<int> record_dimensions = std::nullopt);
 
     std::vector<Func> encode(const std::vector<Func> &inputs) const;
     std::vector<Func> decode(const std::vector<Func> &encoded) const;
 
-    /** One input per logical field, named after it, and one `record` output. */
-    ApproximationSignature signature() const;
+    /** One input per logical field, named after it, and one `record` output.
+     * Without `record_dimensions`, the dimensionalities come from the
+     * context, and are unknown without one. */
+    ApproximationSignature signature(const ApproximationPorts &inputs) const;
 
     /** Fields are stored bit-for-bit. */
     bool lossless() const {
@@ -1276,7 +1287,7 @@ struct StructLayout {
 private:
     Type record_type_;
     std::vector<std::string> logical_fields_;
-    int record_dimensions_;
+    std::optional<int> record_dimensions_;
 
     size_t logical_slot(const std::string &name) const;
     const StructField &physical_field(const std::string &name) const;
@@ -1314,17 +1325,20 @@ struct LittleEndianScalarPack {
 
 /** Exact fixed-width planar packing. For `(field_bits, positions)`, one byte
  * contains `8/field_bits` planes, each plane spanning `positions` consecutive
- * elements. This component applies no recentering and no lookup policy. */
+ * elements. This component applies no recentering and no lookup policy. Any
+ * dimensions after the record dimension pass through unchanged. */
 struct PlanarFieldPack {
     PlanarFieldPack(int field_bits, int positions);
 
     std::vector<Func> encode(const std::vector<Func> &inputs) const;
     std::vector<Func> decode(const std::vector<Func> &encoded) const;
 
-    /** (element, record) fields <-> (position, record) bytes. The fields
-     * must fit in `field_bits`: encode masks each one to that width, so
-     * values outside [0, 2^field_bits - 1] are silently truncated. */
-    ApproximationSignature signature() const;
+    /** (element, record, rest...) fields <-> (position, record, rest...)
+     * bytes. The fields must fit in `field_bits`: encode masks each one to
+     * that width, so values outside [0, 2^field_bits - 1] are silently
+     * truncated. The dimensionality comes from the context, and is unknown
+     * without one. */
+    ApproximationSignature signature(const ApproximationPorts &inputs) const;
 
     /** Exact for fields in the declared input range. */
     bool lossless() const {

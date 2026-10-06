@@ -303,15 +303,17 @@ int main() {
     Approximation q4_0 = q.scheme;
 
     // Printing an Approximation shows its structure, with the type and range
-    // of every port, without running anything:
+    // of every port, without running anything. BlockReshape works on rows of
+    // any dimensionality, so its ports depend on the input (pass them to
+    // q4_0.describe() to see them):
     //
-    // Compose (values x1) -> (record: struct{d: float16, qs: uint8[16]} x1)
-    //   BlockReshape (values x1) -> (blocks x2)
+    // Compose (values) -> (record: struct{d: float16, qs: uint8[16]} x1)
+    //   BlockReshape (values) -> (blocks)
     //   Q4_0Quantizer (blocks: float32 x2) -> (codes: int8 x2 in [-8, 7], scale: float32 x1)
     //   Parallel (codes: int8 x2 in [-8, 7], scale: float32 x1) -> (bytes: uint8 x2, scale: float16 x1)
     //     Compose (codes: int8 x2 in [-8, 7]) -> (bytes: uint8 x2)
     //       offset (codes: int8 x2 in [-8, 7]) -> (codes: uint8 x2 in [0, 15])
-    //       PlanarFieldPack (codes x2 in [0, 15]) -> (bytes: uint8 x2)
+    //       PlanarFieldPack (codes: uint8 x2 in [0, 15]) -> (bytes: uint8 x2)
     //     fp16 (scale: float32 x1) -> (scale: float16 x1)
     //   StructLayout (bytes: uint8 x2, scale: float16 x1) -> (record: struct{d: float16, qs: uint8[16]} x1)
     std::cout << q4_0 << "\n";
