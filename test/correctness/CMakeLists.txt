@@ -334,6 +334,7 @@ tests(
     issue_3926.cpp
     iterate_over_circle.cpp
     jit_host_environment.cpp
+    jit_set_trace_file.cpp
     lambda.cpp
     lazy_convolution.cpp
     leak_device_memory.cpp
