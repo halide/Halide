@@ -14,7 +14,8 @@ if (NOT ggml_FOUND)
 endif ()
 find_package(Halide REQUIRED)
 
-add_halide_generator(ggml.generators SOURCES harness/example_generator.cpp)
+add_halide_generator(ggml.generators SOURCES harness/example_generator.cpp kernels/codec.cpp)
+target_include_directories(ggml.generators PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 add_halide_runtime(ggml_halide_runtime)
 
 include(formats.cmake)
@@ -22,6 +23,7 @@ include(formats.cmake)
 add_executable(
     ggml-quant-bench
     harness/bench.cpp
+    harness/codec.cpp
     harness/ggml_providers.cpp
     harness/halide_providers.cpp
     harness/main.cpp
