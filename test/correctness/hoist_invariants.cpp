@@ -3,6 +3,7 @@
 #include "test_sharding.h"
 
 #include <cmath>
+#include <functional>
 #include <map>
 
 namespace {
@@ -649,6 +650,59 @@ int hoist_invariants_distribute_test() {
     return 0;
 }
 
+// distribute() on its own only rewrites the increment: nested products of sums
+// are fully multiplied out, subtractions stay intact, and the result is
+// unchanged.
+int distribute_preserves_result_test() {
+    const int K = 16;
+    ImageParam A{Int(32), 1, "A"};
+    ImageParam B{Int(32), 1, "B"};
+    Var i{"i"};
+    RDom r(0, K, "r");
+
+    auto define = [&](Func &f) {
+        f(i) = 0;
+        f(i) += (A(r) + i) * ((B(r) + 3) * (A(r) - i));
+    };
+    Func ref{"ref"}, f{"f"};
+    define(ref);
+    define(f);
+    f.update().distribute();
+
+    // Multiplying out must leave no Mul with an Add operand, but must not split
+    // the subtraction.
+    std::function<void(const Expr &)> check = [&](const Expr &e) {
+        if (const Add *add = e.as<Add>()) {
+            check(add->a);
+            check(add->b);
+        } else if (const Mul *mul = e.as<Mul>()) {
+            internal_assert(!mul->a.as<Add>() && !mul->b.as<Add>())
+                << "distribute: product over a sum survived: " << e << "\n";
+            check(mul->a);
+            check(mul->b);
+        }
+    };
+    check(f.update_value());
+    internal_assert(f.update_value().as<Add>())
+        << "distribute: expected a sum of products, got " << f.update_value() << "\n";
+
+    Buffer<int32_t> a_buf(K), b_buf(K);
+    for (int k = 0; k < K; k++) {
+        a_buf(k) = k * 7 % 11 - 5;
+        b_buf(k) = k * 3 % 13 - 6;
+    }
+    A.set(a_buf);
+    B.set(b_buf);
+
+    Buffer<int32_t> expected = ref.realize({8});
+    Buffer<int32_t> actual = f.realize({8});
+    for (int x = 0; x < 8; x++) {
+        internal_assert(actual(x) == expected(x))
+            << "distribute: f(" << x << ") = " << actual(x) << ", expected " << expected(x) << "\n";
+    }
+    return 0;
+}
+
 // distribute() is a schedule decision, so it says so when there is nothing to
 // multiply out rather than quietly leaving the reduction alone.
 int distribute_nothing_to_do_rejected_test() {
@@ -698,6 +752,7 @@ int main(int argc, char **argv) {
         {"hoist_invariants test (invalid law rejected)", hoist_invariants_invalid_law_rejected_test},
         {"hoist_invariants test (nothing to hoist rejected)", hoist_invariants_nothing_to_hoist_rejected_test},
         {"distribute test (affine dot product)", hoist_invariants_distribute_test},
+        {"distribute test (preserves result)", distribute_preserves_result_test},
         {"distribute test (nothing to distribute rejected)", distribute_nothing_to_do_rejected_test},
     };
 
