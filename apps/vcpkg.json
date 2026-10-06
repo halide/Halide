@@ -10,6 +10,10 @@
       "platform": "(windows & x64 & !uwp & !xbox) | (linux & x64) | (linux & arm64)"
     },
     "eigen3",
+    {
+      "name": "ggml",
+      "platform": "osx & arm64"
+    },
     "libjpeg-turbo",
     "libpng",
     "onnx",
