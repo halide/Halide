@@ -1,8 +1,8 @@
-import type { FuncMeta } from "@/types/trace";
+import type { FuncMeta, LiveBox } from "@/types/trace";
 
 /**
  * Determine whether a Func's buffer is live in memory at a given point in the
- * åtrace.
+ * trace.
  *
  * @param func The Func metadata to check.
  * @param globalIndex The global packet index to check liveness at.
@@ -16,29 +16,17 @@ export function isFuncBufferLive(func: FuncMeta, globalIndex: number) {
 }
 
 /**
- * Determine whether a Func is being consumed at a given point in the trace.
+ * The boxes whose packet index range contains a given point in the trace.
  *
- * @param func The Func metadata to check.
+ * @param boxes The boxes to filter.
  * @param globalIndex The global packet index to check against.
- * @returns Whether `globalIndex` falls within one of the Func's consume ranges.
  */
-export function isFuncConsuming(func: FuncMeta, globalIndex: number) {
-  return func.consume_ranges.some(
-    (range) => range.start <= globalIndex && globalIndex <= range.end,
-  );
+export function activeBoxes(boxes: LiveBox[], globalIndex: number) {
+  return boxes.filter((b) => b.start <= globalIndex && globalIndex <= b.end);
 }
 
-/**
- * Determine whether a Func is being produced at a given point in the trace.
- *
- * @param func The Func metadata to check.
- * @param globalIndex The global packet index to check against.
- * @returns Whether `globalIndex` falls within one of the Func's produce ranges.
- */
-export function isFuncProducing(func: FuncMeta, globalIndex: number) {
-  return func.produce_ranges.some(
-    (range) => range.start <= globalIndex && globalIndex <= range.end,
-  );
+function anyActive(boxes: LiveBox[], globalIndex: number) {
+  return boxes.some((b) => b.start <= globalIndex && globalIndex <= b.end);
 }
 
 /**
@@ -49,8 +37,8 @@ export function isFuncProducing(func: FuncMeta, globalIndex: number) {
  * @param source The name of the producer Func.
  * @param target The name of the consumer Func.
  * @param globalIndex The global packet index to check against.
- * @returns Whether `source` is producing and `target` is consuming at
- * `globalIndex`.
+ * @returns Whether `source` is being consumed while `target` is being produced
+ * at `globalIndex`.
  */
 export function isEdgeLive(
   funcs: Record<string, FuncMeta>,
@@ -59,7 +47,7 @@ export function isEdgeLive(
   globalIndex: number,
 ) {
   return (
-    isFuncProducing(funcs[source], globalIndex) &&
-    isFuncConsuming(funcs[target], globalIndex)
+    anyActive(funcs[source].liveness.consumptions, globalIndex) &&
+    anyActive(funcs[target].liveness.productions, globalIndex)
   );
 }

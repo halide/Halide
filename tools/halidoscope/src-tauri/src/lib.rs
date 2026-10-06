@@ -66,6 +66,7 @@ pub fn run() {
             commands::open_trace,
             commands::render_grayscale,
             commands::render_rgb,
+            commands::probe_value,
             commands::render_store_frequency,
             commands::render_load_frequency,
             commands::render_redundant_stores,

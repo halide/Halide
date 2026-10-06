@@ -10,10 +10,10 @@ use tauri::ipc::Response;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::render::{
-    GrayscaleState, LoadFrequencyState, NormalizationMode, RedundantState, Renderer,
+    GrayscaleState, LoadFrequencyState, NormalizationMode, Probe, RedundantState, Renderer,
     ReuseDistanceState, RgbState, StoreFrequencyState, ThreadOpMode, ThreadState,
 };
-use crate::trace::Trace;
+use crate::trace::{FuncLiveness, Trace};
 
 /// A half-open packet-index interval `[start, end]` used for liveness and produce/consume ranges.
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -44,8 +44,7 @@ pub struct FuncMeta {
     pub max_redundant_store_count: u32,
     pub max_reuse_distance: u64,
     pub buffer_liveness: IndexRange,
-    pub produce_ranges: Vec<IndexRange>,
-    pub consume_ranges: Vec<IndexRange>,
+    pub liveness: FuncLiveness,
     pub thread_count: u32,
     pub thread_ids: Vec<String>,
 }
@@ -94,22 +93,9 @@ impl TraceMeta {
                     max_redundant_store_count: stats.max_redundant_store_count,
                     max_reuse_distance: stats.max_reuse_distance,
                     buffer_liveness: IndexRange::from_tuple(
-                        *trace.func_buffer_liveness_range(name).unwrap_or(&(0, 0)),
+                        trace.func_buffer_liveness_range(name).unwrap_or((0, 0)),
                     ),
-                    produce_ranges: trace
-                        .func_produce_ranges(name)
-                        .unwrap_or(&[])
-                        .iter()
-                        .copied()
-                        .map(IndexRange::from_tuple)
-                        .collect(),
-                    consume_ranges: trace
-                        .func_consume_ranges(name)
-                        .unwrap_or(&[])
-                        .iter()
-                        .copied()
-                        .map(IndexRange::from_tuple)
-                        .collect(),
+                    liveness: trace.func_liveness(name).cloned().unwrap_or_default(),
                     thread_count: trace
                         .func_thread_ids(name)
                         .map_or(1, |ids| ids.len() as u32),
@@ -233,13 +219,41 @@ pub async fn open_trace(
     Ok(meta)
 }
 
-/// Renders `func` as a grayscale image at `global_index` and returns raw RGBA8 bytes. Channel 0
-/// is normalized to [0, 255] and replicated across R/G/B.
+/// Returns `func`'s value renderer from `renderers` (creating it with `new` if needed), with its
+/// view set to `slice` and its state advanced to `global_index`.
+fn seek_value_renderer<'a, R: Renderer>(
+    trace: &Trace,
+    renderers: &'a mut HashMap<String, R>,
+    func: &str,
+    global_index: u32,
+    new: impl FnOnce(&Trace, &str) -> Option<R>,
+    set_view: impl FnOnce(&mut R),
+) -> Result<&'a mut R, String> {
+    if !renderers.contains_key(func) {
+        let rs =
+            new(trace, func).ok_or_else(|| format!("func '{func}' has no renderable geometry"))?;
+        renderers.insert(func.to_string(), rs);
+    }
+    let renderer = renderers.get_mut(func).expect("just inserted");
+    set_view(renderer);
+
+    let value_indices = trace.func_value_indices(func);
+    let k = value_indices.partition_point(|&p| p <= global_index as usize);
+    renderer.seek(trace, value_indices, k);
+    Ok(renderer)
+}
+
+/// Renders the 2D slice of `func` at `slice` (the coordinates of logical dims 2 and up) as a
+/// grayscale image at `global_index` and returns raw RGBA8 bytes. Values are mapped linearly from
+/// [`black_point`, `white_point`] to [0, 255].
 #[tauri::command]
 pub fn render_grayscale(
     func: String,
     global_index: u32,
     normalization_mode: NormalizationMode,
+    slice: Vec<i32>,
+    black_point: f64,
+    white_point: f64,
     include_tabular_data: bool,
     include_nan: bool,
     include_inf: bool,
@@ -252,17 +266,14 @@ pub fn render_grayscale(
         grayscale_renderers,
         ..
     } = loaded;
-
-    if !grayscale_renderers.contains_key(&func) {
-        let rs = GrayscaleState::new(trace, &func)
-            .ok_or_else(|| format!("func '{func}' has no renderable geometry"))?;
-        grayscale_renderers.insert(func.clone(), rs);
-    }
-    let renderer = grayscale_renderers.get_mut(&func).expect("just inserted");
-
-    let store_indices = trace.func_store_indices(&func).unwrap_or(&[]);
-    let k = store_indices.partition_point(|&p| p <= global_index as usize);
-    renderer.seek(trace, store_indices, k);
+    let renderer = seek_value_renderer(
+        trace,
+        grayscale_renderers,
+        &func,
+        global_index,
+        GrayscaleState::new,
+        |r| r.set_view(&slice, black_point, white_point),
+    )?;
 
     let pixels = renderer.to_rgba(normalization_mode);
 
@@ -292,13 +303,18 @@ pub fn render_grayscale(
     )))
 }
 
-/// Renders `func` as an RGB image at `global_index` and returns raw RGBA8 bytes. Planes 0/1/2
-/// map to R/G/B; missing planes default to 0.
+/// Renders `func` as an RGB image at `global_index` and returns raw RGBA8 bytes. Planes 0/1/2 of
+/// logical dim 2 map to R/G/B, and `slice` (the coordinates of logical dims 2 and up; its first
+/// entry is ignored) selects the slice of the remaining dims. Values are mapped linearly from
+/// [`black_point`, `white_point`] to [0, 255].
 #[tauri::command]
 pub fn render_rgb(
     func: String,
     global_index: u32,
     normalization_mode: NormalizationMode,
+    slice: Vec<i32>,
+    black_point: f64,
+    white_point: f64,
     include_tabular_data: bool,
     include_nan: bool,
     include_inf: bool,
@@ -311,17 +327,14 @@ pub fn render_rgb(
         rgb_renderers,
         ..
     } = loaded;
-
-    if !rgb_renderers.contains_key(&func) {
-        let rs = RgbState::new(trace, &func)
-            .ok_or_else(|| format!("func '{func}' has no renderable geometry"))?;
-        rgb_renderers.insert(func.clone(), rs);
-    }
-    let renderer = rgb_renderers.get_mut(&func).expect("just inserted");
-
-    let store_indices = trace.func_store_indices(&func).unwrap_or(&[]);
-    let k = store_indices.partition_point(|&p| p <= global_index as usize);
-    renderer.seek(trace, store_indices, k);
+    let renderer = seek_value_renderer(
+        trace,
+        rgb_renderers,
+        &func,
+        global_index,
+        RgbState::new,
+        |r| r.set_view(&slice, black_point, white_point),
+    )?;
 
     let pixels = renderer.to_rgba(normalization_mode);
 
@@ -349,6 +362,51 @@ pub fn render_rgb(
         inf_overlay,
         histogram,
     )))
+}
+
+/// Returns the coordinates and value(s) of `func` at pixel (`x`, `y`) of the 2D slice at `slice`
+/// (as for `render_grayscale`, or `render_rgb` if `color`) as of `global_index`, or `None` if the
+/// pixel is outside the Func.
+#[tauri::command]
+pub fn probe_value(
+    func: String,
+    global_index: u32,
+    slice: Vec<i32>,
+    color: bool,
+    x: usize,
+    y: usize,
+    state: State<AppState>,
+) -> Result<Option<Probe>, String> {
+    let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
+    let loaded = guard.as_mut().ok_or("no trace loaded")?;
+    let Loaded {
+        trace,
+        grayscale_renderers,
+        rgb_renderers,
+        ..
+    } = loaded;
+    // The black and white points don't affect values, so the renderer's current ones are kept.
+    if color {
+        let r = seek_value_renderer(
+            trace,
+            rgb_renderers,
+            &func,
+            global_index,
+            RgbState::new,
+            |r| r.set_slice(&slice),
+        )?;
+        Ok(r.probe(x, y))
+    } else {
+        let r = seek_value_renderer(
+            trace,
+            grayscale_renderers,
+            &func,
+            global_index,
+            GrayscaleState::new,
+            |r| r.set_slice(&slice),
+        )?;
+        Ok(r.probe(x, y))
+    }
 }
 
 /// Renders a heatmap of store counts for `func` up to `global_index` and returns raw RGBA8 bytes.
@@ -653,6 +711,36 @@ pub fn render_thread(
 }
 
 // ── Profiler ─────────────────────────────────────────────────────────────────────────────────────
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+struct ProfileCumulative {
+    time_ns: u64,
+    memory_peak: u64,
+    stack_peak: u64,
+    memory_total: u64,
+    active_threads_numerator: u64,
+    active_threads_denominator: u64,
+    num_allocs: u64,
+    parallel_loops: u64,
+    parallel_tasks: u64,
+    points_required_at_root: u64,
+    points_computed: u64,
+    scalar_loads: u64,
+    vector_loads: u64,
+    gathers: u64,
+    bytes_loaded: u64,
+    scalar_stores: u64,
+    vector_stores: u64,
+    scatters: u64,
+    bytes_stored: u64,
+    realizations: u64,
+    productions: u64,
+    points_required_at_realization: u64,
+    points_required_at_production: u64,
+    points_required_inwards: u64,
+    productions_if_inwards: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ProfileFunc {
     name: String,
@@ -660,14 +748,58 @@ struct ProfileFunc {
     canonical_id: u32,
     kind: u32,
     buffer_func_id: i32,
+    #[serde(default)]
+    counters_approximated: u32,
     time_ns: u64,
     memory_current: u64,
     memory_peak: u64,
     memory_total: u64,
     stack_peak: u64,
-    active_threads_numerator: u32,
-    active_threads_denominator: u32,
-    num_allocs: u32,
+    active_threads_numerator: u64,
+    active_threads_denominator: u64,
+    num_allocs: u64,
+    #[serde(default)]
+    parallel_loops: u64,
+    #[serde(default)]
+    parallel_tasks: u64,
+    #[serde(default)]
+    points_required_at_root: u64,
+    #[serde(default)]
+    points_computed: u64,
+    #[serde(default)]
+    scalar_loads: u64,
+    #[serde(default)]
+    vector_loads: u64,
+    #[serde(default)]
+    gathers: u64,
+    #[serde(default)]
+    bytes_loaded: u64,
+    #[serde(default)]
+    scalar_stores: u64,
+    #[serde(default)]
+    vector_stores: u64,
+    #[serde(default)]
+    scatters: u64,
+    #[serde(default)]
+    bytes_stored: u64,
+    #[serde(default)]
+    realizations: u64,
+    #[serde(default)]
+    productions: u64,
+    #[serde(default)]
+    points_required_at_realization: u64,
+    #[serde(default)]
+    points_required_at_production: u64,
+    #[serde(default)]
+    points_required_inwards: u64,
+    #[serde(default)]
+    productions_if_inwards: u64,
+    #[serde(default)]
+    recompute: f64,
+    #[serde(default)]
+    cumulative: Option<ProfileCumulative>,
+    #[serde(default)]
+    warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -676,13 +808,17 @@ struct ProfilePipeline {
     runs: u32,
     billed_runs: u32,
     samples: u32,
-    num_allocs: u32,
+    num_allocs: u64,
     time_ns: u64,
     memory_current: u64,
     memory_peak: u64,
     memory_total: u64,
-    active_threads_numerator: u32,
-    active_threads_denominator: u32,
+    active_threads_numerator: u64,
+    active_threads_denominator: u64,
+    #[serde(default)]
+    native_vector_bytes: u32,
+    #[serde(default)]
+    warnings: Vec<String>,
     funcs: Vec<ProfileFunc>,
 }
 

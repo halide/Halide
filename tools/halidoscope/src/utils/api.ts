@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
+import type { FuncView } from "@/state/funcView";
 import type { NormalizationMode } from "@/state/render";
 import type { ThreadOpMode } from "@/state/thread";
 import type { Profile } from "@/types/profile";
@@ -70,6 +71,12 @@ export interface RenderFuncParams {
     b: number;
     a: number;
   };
+}
+
+/** Parameters accepted by the value (Grayscale / RGB) `render_*` commands. */
+export interface ValueRenderFuncParams extends RenderFuncParams {
+  /** The black / white point and the 2D slice to render. */
+  view: FuncView;
 }
 
 /**
@@ -178,9 +185,9 @@ function splitRenderBuffer({
 }
 
 /**
- * Render a Func as a grayscale image at a given packet index.
+ * Render a 2D slice of a Func as a grayscale image at a given packet index.
  *
- * @param params The {@link RenderFuncParams} describing what to render.
+ * @param params The {@link ValueRenderFuncParams} describing what to render.
  * @returns The {@link RenderFuncResponse} split out from the backend's raw
  * buffer.
  */
@@ -193,11 +200,15 @@ export async function renderGrayscale({
   includeTabularData,
   includeNan,
   includeInf,
-}: RenderFuncParams): Promise<RenderFuncResponse> {
+  view,
+}: ValueRenderFuncParams): Promise<RenderFuncResponse> {
   const buffer = await invoke<ArrayBuffer>("render_grayscale", {
     func,
     globalIndex,
     normalizationMode,
+    slice: view.slice,
+    blackPoint: view.blackPoint,
+    whitePoint: view.whitePoint,
     includeTabularData,
     includeNan: includeNan.active,
     includeInf: includeInf.active,
@@ -213,11 +224,35 @@ export async function renderGrayscale({
   });
 }
 
+/** The coordinates and value(s) of a Func at one displayed pixel. */
+export interface ProbeResponse {
+  /** The coordinate along each logical dim; null for the channel dim in RGB mode. */
+  coords: (number | null)[];
+  /** The value of each channel as text, or null where never written. */
+  values: (string | null)[];
+}
+
 /**
- * Render a Func as an RGB image at a given packet index. Channels 0/1/2 map to
- * R/G/B.
+ * Look up a Func's value at a displayed pixel as of a given packet index.
  *
- * @param params The {@link RenderFuncParams} describing what to render.
+ * @returns The {@link ProbeResponse}, or null if the pixel is outside the Func.
+ */
+export async function probeValue(params: {
+  func: string;
+  globalIndex: number;
+  slice: number[];
+  color: boolean;
+  x: number;
+  y: number;
+}): Promise<ProbeResponse | null> {
+  return invoke<ProbeResponse | null>("probe_value", params);
+}
+
+/**
+ * Render a Func as an RGB image at a given packet index. Channels 0/1/2 of
+ * dim 2 map to R/G/B, and the view's slice selects dims 3 and up.
+ *
+ * @param params The {@link ValueRenderFuncParams} describing what to render.
  * @returns The {@link RenderFuncResponse} split out from the backend's raw
  * buffer.
  */
@@ -230,11 +265,15 @@ export async function renderRgb({
   includeTabularData,
   includeNan,
   includeInf,
-}: RenderFuncParams): Promise<RenderFuncResponse> {
+  view,
+}: ValueRenderFuncParams): Promise<RenderFuncResponse> {
   const buffer = await invoke<ArrayBuffer>("render_rgb", {
     func,
     globalIndex,
     normalizationMode,
+    slice: view.slice,
+    blackPoint: view.blackPoint,
+    whitePoint: view.whitePoint,
     includeTabularData,
     includeNan: includeNan.active,
     includeInf: includeInf.active,

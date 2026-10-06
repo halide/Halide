@@ -65,6 +65,79 @@ export interface ProfileFunc {
   active_threads_denominator: number;
   /** The total number of times heap storage for this Func was allocated. */
   num_allocs: number;
+  /** Parallel loops entered while computing this Func, summed over runs. */
+  parallel_loops: number;
+  /** Parallel tasks launched by this Func's parallel loops, summed over runs. */
+  parallel_tasks: number;
+  /** Points of this Func required by its consumers if it were compute_root. */
+  points_required_at_root: number;
+  /** Points of this Func actually computed, including redundant recompute. */
+  points_computed: number;
+  scalar_loads: number;
+  vector_loads: number;
+  gathers: number;
+  bytes_loaded: number;
+  scalar_stores: number;
+  vector_stores: number;
+  scatters: number;
+  bytes_stored: number;
+  realizations: number;
+  productions: number;
+  points_required_at_realization: number;
+  points_required_at_production: number;
+  points_required_inwards: number;
+  productions_if_inwards: number;
+  /**
+   * Bitmask over the counters (in the order of the `counter_*` enum in
+   * `profiler_common.cpp`) whose values are conservative upper bounds.
+   */
+  counters_approximated: number;
+  /**
+   * Points computed divided by the points required at root, as shown in the
+   * runtime report's recompute ratio column. `0` if not applicable.
+   */
+  recompute: number;
+  /**
+   * This Func's stats rolled up with all its compute_at descendants. Every
+   * field is a sum except `parallel_tasks`, which is the task count of the
+   * parallel loop this Func runs under.
+   */
+  cumulative?: ProfileCumulative;
+  /** Performance warnings that apply to this Func. */
+  warnings?: string[];
+}
+
+/** A Func's stats rolled up over its compute_at subtree. */
+export interface ProfileCumulative {
+  time_ns: number;
+  memory_peak: number;
+  stack_peak: number;
+  memory_total: number;
+  active_threads_numerator: number;
+  active_threads_denominator: number;
+  num_allocs: number;
+  /** Parallel loops entered while computing this Func, summed over runs. */
+  parallel_loops: number;
+  /** Parallel tasks launched by this Func's parallel loops, summed over runs. */
+  parallel_tasks: number;
+  /** Points of this Func required by its consumers if it were compute_root. */
+  points_required_at_root: number;
+  /** Points of this Func actually computed, including redundant recompute. */
+  points_computed: number;
+  scalar_loads: number;
+  vector_loads: number;
+  gathers: number;
+  bytes_loaded: number;
+  scalar_stores: number;
+  vector_stores: number;
+  scatters: number;
+  bytes_stored: number;
+  realizations: number;
+  productions: number;
+  points_required_at_realization: number;
+  points_required_at_production: number;
+  points_required_inwards: number;
+  productions_if_inwards: number;
 }
 
 /**
@@ -113,6 +186,10 @@ export interface ProfilePipeline {
    * useful work while computing this pipeline run.
    */
   active_threads_denominator: number;
+  /** The native vector width of the target, in bytes. */
+  native_vector_bytes: number;
+  /** Pipeline-wide performance warnings. */
+  warnings?: string[];
   /** Per-Func profiling stats for this pipeline run. */
   funcs: ProfileFunc[];
 }

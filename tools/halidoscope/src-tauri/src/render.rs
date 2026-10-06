@@ -1,10 +1,10 @@
 use std::vec;
 
 use ::colorous;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::colormap::{Colormap, METRIC_PALETTE};
-use crate::trace::{for_each_lane_pixel, FuncGeometry, Trace, TracePacket};
+use crate::trace::{for_each_lane_pixel, lane_in_slice, FuncGeometry, Trace, TracePacket};
 
 #[derive(Deserialize, Clone, Copy)]
 pub enum NormalizationMode {
@@ -51,46 +51,97 @@ fn inf_mask(values: &[f64], channels: usize) -> Vec<u8> {
     pack_mask(values, channels, |src| src.iter().any(|v| v.is_infinite()))
 }
 
-// ── Grayscale rendering ──────────────────────────────────────────────────────────────────────────
+// ── Value rendering (Grayscale / RGB) ────────────────────────────────────────────────────────────
 
-pub struct GrayscaleState {
+/// The raw values of one 2D slice of a Func, shared by the grayscale and RGB renderers. Logical
+/// dims 0 and 1 are the image axes. In color, dim 2 is the channel axis and the slice fixes dims 3
+/// and up; otherwise the slice fixes dims 2 and up. Values are mapped to display levels at render
+/// time, so moving the black / white point doesn't require a re-seek.
+struct ValueSlice {
     geom: FuncGeometry,
+    channel: Option<(i32, usize)>,
+    first_slice_dim: usize,
+    slice: Vec<i32>,
     min_v: f64,
     max_v: f64,
-    framebuffer: Vec<u8>,
+    black: f64,
+    white: f64,
     values: Vec<f64>,
+    written: Vec<bool>,
     applied_k: usize,
 }
 
-impl GrayscaleState {
-    pub fn new(trace: &Trace, func: &str) -> Option<Self> {
+impl ValueSlice {
+    fn new(trace: &Trace, func: &str, color: bool) -> Option<Self> {
         let geom = trace.func_geometry(func)?;
         let stats = trace.funcs.get(func)?;
         let min_v = stats.min_value.unwrap_or(0.0);
         let max_v = stats.max_value.unwrap_or(255.0);
-        let framebuffer = vec![0u8; geom.width * geom.height * geom.channels];
-        let values = vec![0f64; geom.width * geom.height * geom.channels];
+        let (channel, first_slice_dim) = if color {
+            (Some((geom.min_c, geom.channels)), 3)
+        } else {
+            (None, 2)
+        };
+        let slice = stats
+            .min_coords
+            .get(first_slice_dim..)
+            .unwrap_or(&[])
+            .to_vec();
+        let len = geom.width * geom.height * channel.map_or(1, |(_, c)| c);
 
         Some(Self {
             geom,
+            channel,
+            first_slice_dim,
+            slice,
             min_v,
             max_v,
-            framebuffer,
-            values,
+            black: min_v,
+            white: max_v,
+            values: vec![0.0; len],
+            written: vec![false; len],
             applied_k: 0,
         })
     }
 
-    fn apply_store(&mut self, pkt: &TracePacket) {
+    fn channels(&self) -> usize {
+        self.channel.map_or(1, |(_, c)| c)
+    }
+
+    fn reset(&mut self) {
+        self.values.iter_mut().for_each(|v| *v = 0.0);
+        self.written.iter_mut().for_each(|w| *w = false);
+        self.applied_k = 0;
+    }
+
+    /// `slice` holds the coordinates of logical dims 2 and up. In color, its first entry (the
+    /// channel axis) is ignored.
+    fn set_slice(&mut self, slice: &[i32]) {
+        let slice = slice.get(self.first_slice_dim - 2..).unwrap_or(&[]);
+        if slice != self.slice.as_slice() {
+            self.slice = slice.to_vec();
+            self.reset();
+        }
+    }
+
+    fn set_view(&mut self, slice: &[i32], black: f64, white: f64) {
+        self.set_slice(slice);
+        self.black = black;
+        self.white = white;
+    }
+
+    fn apply_packet(&mut self, pkt: &TracePacket) {
         let FuncGeometry {
             width,
             height,
-            channels,
             min_x,
             min_y,
-            min_c,
             ..
         } = self.geom;
+        let first_slice_dim = self.first_slice_dim;
+        let slice = &self.slice;
+        let values = &mut self.values;
+        let written = &mut self.written;
 
         for_each_lane_pixel(
             pkt,
@@ -98,45 +149,126 @@ impl GrayscaleState {
             min_y,
             width,
             height,
-            Some((min_c, channels)),
+            self.channel,
             |lane, _pixel_idx, val_idx| {
+                if !lane_in_slice(pkt, lane, first_slice_dim, slice) {
+                    return;
+                }
                 if let Some(v) = pkt.decoded_value(lane) {
-                    self.framebuffer[val_idx] = self.normalize(v);
-                    self.values[val_idx] = v;
-                };
+                    values[val_idx] = v;
+                    written[val_idx] = true;
+                }
             },
         );
     }
 
-    #[inline]
-    fn normalize(&self, v: f64) -> u8 {
-        (255.0 * (v - self.min_v) / (self.max_v - self.min_v)).clamp(0.0, 255.0) as u8
-    }
-
-    /// Bins the raw (pre-normalization) intensity displayed per pixel — the same luma blend
-    /// `to_rgba` uses for channels >= 3, or the raw channel-0 value otherwise — into 256
-    /// fixed-width buckets (one per displayable 8-bit gray level) spanning `[min_v, max_v]`.
-    pub fn to_histogram(&self) -> Vec<u32> {
-        const NUM_BINS: usize = 256;
-        let channels = self.geom.channels;
-        let range = self.max_v - self.min_v;
-
-        let mut bins = vec![0u32; NUM_BINS];
-        for src in self.values.chunks_exact(channels) {
-            let v = if channels >= 3 {
-                src[0] * 0.2125 + src[1] * 0.7154 + src[2] * 0.0721
-            } else {
-                src[0]
-            };
-
-            let bucket = if range > 0.0 {
-                (((v - self.min_v) / range) * NUM_BINS as f64) as usize
-            } else {
-                0
-            };
-            bins[bucket.min(NUM_BINS - 1)] += 1;
+    /// Applies the first `target_k` of `value_indices` (see `Trace::func_value_indices`).
+    fn seek(&mut self, trace: &Trace, value_indices: &[usize], target_k: usize) {
+        let target_k = target_k.min(value_indices.len());
+        if target_k < self.applied_k {
+            self.reset();
         }
 
+        for &global_idx in &value_indices[self.applied_k..target_k] {
+            self.apply_packet(&trace.packets[global_idx]);
+        }
+
+        self.applied_k = target_k;
+    }
+
+    /// The display level of the value at `val_idx`: 0 at the black point, 255 at the white point.
+    /// Never-written locations are black.
+    #[inline]
+    fn level(&self, val_idx: usize) -> u8 {
+        if !self.written[val_idx] {
+            return 0;
+        }
+        let v = self.values[val_idx];
+        (255.0 * (v - self.black) / (self.white - self.black)).clamp(0.0, 255.0) as u8
+    }
+
+    /// Bins `v` into one of `NUM_HISTOGRAM_BINS` fixed-width buckets spanning `[min_v, max_v]`.
+    #[inline]
+    fn histogram_bucket(&self, v: f64) -> usize {
+        let range = self.max_v - self.min_v;
+        let bucket = if range > 0.0 {
+            (((v - self.min_v) / range) * NUM_HISTOGRAM_BINS as f64) as usize
+        } else {
+            0
+        };
+        bucket.min(NUM_HISTOGRAM_BINS - 1)
+    }
+
+    /// The coordinates and per-channel values at pixel (`px`, `py`) of the slice. In color, the
+    /// channel dim's coordinate is `None`. Values are `None` where never written.
+    fn probe(&self, px: usize, py: usize) -> Option<Probe> {
+        let FuncGeometry {
+            width,
+            height,
+            min_x,
+            min_y,
+            ..
+        } = self.geom;
+        if px >= width || py >= height {
+            return None;
+        }
+        let mut coords = vec![Some(min_x + px as i32), Some(min_y + py as i32)];
+        if self.channel.is_some() {
+            coords.push(None);
+        }
+        coords.extend(self.slice.iter().map(|&c| Some(c)));
+        let channels = self.channels();
+        let base = (py * width + px) * channels;
+        let values = (base..base + channels)
+            .map(|i| self.written[i].then(|| self.values[i].to_string()))
+            .collect();
+        Some(Probe { coords, values })
+    }
+
+    fn to_nan_overlay(&self) -> Vec<u8> {
+        nan_mask(&self.values, self.channels())
+    }
+
+    fn to_inf_overlay(&self) -> Vec<u8> {
+        inf_mask(&self.values, self.channels())
+    }
+}
+
+const NUM_HISTOGRAM_BINS: usize = 256;
+
+/// The value(s) of a Func at one displayed pixel. See `ValueSlice::probe`.
+#[derive(Serialize)]
+pub struct Probe {
+    coords: Vec<Option<i32>>,
+    values: Vec<Option<String>>,
+}
+
+pub struct GrayscaleState(ValueSlice);
+
+impl GrayscaleState {
+    pub fn new(trace: &Trace, func: &str) -> Option<Self> {
+        ValueSlice::new(trace, func, false).map(Self)
+    }
+
+    pub fn set_view(&mut self, slice: &[i32], black: f64, white: f64) {
+        self.0.set_view(slice, black, white);
+    }
+
+    pub fn set_slice(&mut self, slice: &[i32]) {
+        self.0.set_slice(slice);
+    }
+
+    pub fn probe(&self, px: usize, py: usize) -> Option<Probe> {
+        self.0.probe(px, py)
+    }
+
+    /// Bins the raw (pre-normalization) values into 256 fixed-width buckets (one per displayable
+    /// 8-bit gray level) spanning the Func's `[min_v, max_v]`.
+    pub fn to_histogram(&self) -> Vec<u32> {
+        let mut bins = vec![0u32; NUM_HISTOGRAM_BINS];
+        for &v in &self.0.values {
+            bins[self.0.histogram_bucket(v)] += 1;
+        }
         bins
     }
 }
@@ -145,156 +277,72 @@ impl Renderer for GrayscaleState {
     type Value = f64;
 
     fn seek(&mut self, trace: &Trace, store_indices: &[usize], target_k: usize) {
-        let target_k = target_k.min(store_indices.len());
-        if target_k < self.applied_k {
-            self.framebuffer.iter_mut().for_each(|b| *b = 0);
-            self.values.iter_mut().for_each(|v| *v = 0.0);
-            self.applied_k = 0;
-        }
-
-        for &global_idx in &store_indices[self.applied_k..target_k] {
-            self.apply_store(&trace.packets[global_idx]);
-        }
-
-        self.applied_k = target_k;
+        self.0.seek(trace, store_indices, target_k);
     }
 
     fn to_rgba(&self, _normalization_mode: NormalizationMode) -> Vec<u8> {
-        let FuncGeometry {
-            width,
-            height,
-            channels,
-            ..
-        } = self.geom;
-        let mut out = vec![0u8; width * height * 4];
-        let fb = &self.framebuffer;
-        if channels >= 3 {
-            for (chunk, src) in out.chunks_exact_mut(4).zip(fb.chunks_exact(channels)) {
-                // Use grayscale weights from scikit-image:
-                // https://scikit-image.org/docs/stable/auto_examples/color_exposure/plot_rgb_to_gray.html
-                let gray = src[0] as f64 * 0.2125 + src[1] as f64 * 0.7154 + src[2] as f64 * 0.0721;
-                chunk[0] = gray as u8;
-                chunk[1] = gray as u8;
-                chunk[2] = gray as u8;
-                chunk[3] = 255;
-            }
-        } else {
-            for (chunk, src) in out.chunks_exact_mut(4).zip(fb.chunks_exact(channels)) {
-                chunk[0] = src[0];
-                chunk[1] = src[0];
-                chunk[2] = src[0];
-                chunk[3] = 255;
-            }
+        let mut out = vec![0u8; self.0.values.len() * 4];
+        for (i, chunk) in out.chunks_exact_mut(4).enumerate() {
+            let gray = self.0.level(i);
+            chunk[0] = gray;
+            chunk[1] = gray;
+            chunk[2] = gray;
+            chunk[3] = 255;
         }
-
         out
     }
 
     fn to_values(&self) -> Vec<f64> {
-        self.values.clone()
+        self.0.values.clone()
     }
 
     fn to_nan_overlay(&self) -> Vec<u8> {
-        nan_mask(&self.values, self.geom.channels)
+        self.0.to_nan_overlay()
     }
 
     fn to_inf_overlay(&self) -> Vec<u8> {
-        inf_mask(&self.values, self.geom.channels)
+        self.0.to_inf_overlay()
     }
 }
 
-// ── RGB rendering ────────────────────────────────────────────────────────────────────────────────
-
-pub struct RgbState {
-    geom: FuncGeometry,
-    min_v: f64,
-    max_v: f64,
-    framebuffer: Vec<u8>,
-    values: Vec<f64>,
-    applied_k: usize,
-}
+pub struct RgbState(ValueSlice);
 
 impl RgbState {
     pub fn new(trace: &Trace, func: &str) -> Option<Self> {
-        let geom = trace.func_geometry(func)?;
-        let stats = trace.funcs.get(func)?;
-        let min_v = stats.min_value.unwrap_or(0.0);
-        let max_v = stats.max_value.unwrap_or(255.0);
-        let framebuffer = vec![0u8; geom.width * geom.height * geom.channels];
-        let values = vec![0f64; geom.width * geom.height * geom.channels];
-
-        Some(Self {
-            geom,
-            min_v,
-            max_v,
-            framebuffer,
-            values,
-            applied_k: 0,
-        })
+        ValueSlice::new(trace, func, true).map(Self)
     }
 
-    fn apply_store(&mut self, pkt: &TracePacket) {
-        let FuncGeometry {
-            width,
-            height,
-            channels,
-            min_x,
-            min_y,
-            min_c,
-            ..
-        } = self.geom;
-
-        for_each_lane_pixel(
-            pkt,
-            min_x,
-            min_y,
-            width,
-            height,
-            Some((min_c, channels)),
-            |lane, _pixel_idx, val_idx| {
-                if let Some(v) = pkt.decoded_value(lane) {
-                    self.framebuffer[val_idx] = self.normalize(v);
-                    self.values[val_idx] = v;
-                };
-            },
-        );
+    pub fn set_view(&mut self, slice: &[i32], black: f64, white: f64) {
+        self.0.set_view(slice, black, white);
     }
 
-    #[inline]
-    fn normalize(&self, v: f64) -> u8 {
-        (255.0 * (v - self.min_v) / (self.max_v - self.min_v)).clamp(0.0, 255.0) as u8
+    pub fn set_slice(&mut self, slice: &[i32]) {
+        self.0.set_slice(slice);
+    }
+
+    pub fn probe(&self, px: usize, py: usize) -> Option<Probe> {
+        self.0.probe(px, py)
     }
 
     /// Bins the raw (pre-normalization) per-channel values into 256 fixed-width buckets spanning
-    /// `[min_v, max_v]`. When `channels >= 3`, returns three histograms back to back (R, then G,
-    /// then B, 256 `u32`s each — the caller recovers the channel count as `len / 256`). Otherwise
-    /// falls back to a single histogram over channel 0, matching `GrayscaleState::to_histogram`.
+    /// the Func's `[min_v, max_v]`. When `channels >= 3`, returns three histograms back to back (R,
+    /// then G, then B, 256 `u32`s each — the caller recovers the channel count as `len / 256`).
+    /// Otherwise falls back to a single histogram over channel 0.
     pub fn to_histogram(&self) -> Vec<u32> {
-        const NUM_BINS: usize = 256;
-        let channels = self.geom.channels;
-        let range = self.max_v - self.min_v;
-
-        let bucket_of = |v: f64| -> usize {
-            let bucket = if range > 0.0 {
-                (((v - self.min_v) / range) * NUM_BINS as f64) as usize
-            } else {
-                0
-            };
-            bucket.min(NUM_BINS - 1)
-        };
+        let channels = self.0.channels();
 
         if channels < 3 {
-            let mut bins = vec![0u32; NUM_BINS];
-            for src in self.values.chunks_exact(channels) {
-                bins[bucket_of(src[0])] += 1;
+            let mut bins = vec![0u32; NUM_HISTOGRAM_BINS];
+            for src in self.0.values.chunks_exact(channels) {
+                bins[self.0.histogram_bucket(src[0])] += 1;
             }
             return bins;
         }
 
-        let mut bins = vec![0u32; NUM_BINS * 3];
-        for src in self.values.chunks_exact(channels) {
+        let mut bins = vec![0u32; NUM_HISTOGRAM_BINS * 3];
+        for src in self.0.values.chunks_exact(channels) {
             for c in 0..3 {
-                bins[c * NUM_BINS + bucket_of(src[c])] += 1;
+                bins[c * NUM_HISTOGRAM_BINS + self.0.histogram_bucket(src[c])] += 1;
             }
         }
         bins
@@ -305,58 +353,39 @@ impl Renderer for RgbState {
     type Value = f64;
 
     fn seek(&mut self, trace: &Trace, store_indices: &[usize], target_k: usize) {
-        let target_k = target_k.min(store_indices.len());
-        if target_k < self.applied_k {
-            self.framebuffer.iter_mut().for_each(|b| *b = 0);
-            self.values.iter_mut().for_each(|v| *v = 0.0);
-            self.applied_k = 0;
-        }
-
-        for &global_idx in &store_indices[self.applied_k..target_k] {
-            self.apply_store(&trace.packets[global_idx]);
-        }
-
-        self.applied_k = target_k;
+        self.0.seek(trace, store_indices, target_k);
     }
 
     fn to_rgba(&self, _normalization_mode: NormalizationMode) -> Vec<u8> {
-        let FuncGeometry {
-            width,
-            height,
-            channels,
-            ..
-        } = self.geom;
-        let mut out = vec![0u8; width * height * 4];
-        let fb = &self.framebuffer;
-        if channels >= 3 {
-            for (chunk, src) in out.chunks_exact_mut(4).zip(fb.chunks_exact(channels)) {
-                chunk[0] = src[0];
-                chunk[1] = src[1];
-                chunk[2] = src[2];
-                chunk[3] = 255;
+        let channels = self.0.channels();
+        let mut out = vec![0u8; self.0.values.len() / channels * 4];
+        for (pixel_idx, chunk) in out.chunks_exact_mut(4).enumerate() {
+            let base = pixel_idx * channels;
+            if channels >= 3 {
+                chunk[0] = self.0.level(base);
+                chunk[1] = self.0.level(base + 1);
+                chunk[2] = self.0.level(base + 2);
+            } else {
+                let v = self.0.level(base);
+                chunk[0] = v;
+                chunk[1] = v;
+                chunk[2] = v;
             }
-        } else {
-            for (chunk, src) in out.chunks_exact_mut(4).zip(fb.chunks_exact(channels)) {
-                chunk[0] = src[0];
-                chunk[1] = src[0];
-                chunk[2] = src[0];
-                chunk[3] = 255;
-            }
+            chunk[3] = 255;
         }
-
         out
     }
 
     fn to_values(&self) -> Vec<f64> {
-        self.values.clone()
+        self.0.values.clone()
     }
 
     fn to_nan_overlay(&self) -> Vec<u8> {
-        nan_mask(&self.values, self.geom.channels)
+        self.0.to_nan_overlay()
     }
 
     fn to_inf_overlay(&self) -> Vec<u8> {
-        inf_mask(&self.values, self.geom.channels)
+        self.0.to_inf_overlay()
     }
 }
 

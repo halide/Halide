@@ -15,15 +15,16 @@ import { useAtomValue, useSetAtom } from "jotai";
 import * as React from "react";
 
 import HandleCircle from "@/components/trace/canvas/HandleCircle";
-import { useTraceContext } from "@/hooks/trace";
 import { funcAtom } from "@/state/func";
-import { livenessAtom } from "@/state/liveness";
+import { funcViewAtom, getFuncView, type FuncView } from "@/state/funcView";
+import { hoverAtom } from "@/state/hover";
+import { LIVENESS_COLORS, livenessAtom } from "@/state/liveness";
 import { infAtom, nanAtom } from "@/state/nan-inf";
 import { packetAtom } from "@/state/packet";
 import { renderAtom } from "@/state/render";
 import { tabularDataAtom } from "@/state/tabularData";
 import { threadAtom } from "@/state/thread";
-import type { FuncMeta } from "@/types/trace";
+import type { FuncMeta, LiveBox } from "@/types/trace";
 import {
   renderGrayscale,
   renderLoadFrequency,
@@ -35,7 +36,68 @@ import {
   type RenderFuncParams,
   type RenderFuncResponse,
 } from "@/utils/api";
-import { isEdgeLive, isFuncBufferLive } from "@/utils/liveness";
+import { activeBoxes } from "@/utils/liveness";
+
+interface LiveBoxRectProps {
+  box: LiveBox;
+  func: FuncMeta;
+  view: FuncView;
+  /** Whether dims 2 and up are sliced, so boxes not containing the slice are hidden. */
+  showSlice: boolean;
+  /** Whether dim 2 is displayed as color channels rather than sliced. */
+  rgb: boolean;
+  color: string;
+  strokeWidth: number;
+  /** How far outside the box the stroke's center lies, in stroke widths. */
+  outset: number;
+}
+
+/** Outlines the region of a Func covered by a realize, produce, or consume node. */
+function LiveBoxRect({
+  box,
+  func,
+  view,
+  showSlice,
+  rgb,
+  color,
+  strokeWidth,
+  outset,
+}: LiveBoxRectProps) {
+  const { bounds } = box;
+  const dims = bounds.length / 2;
+  if (showSlice) {
+    for (let d = rgb ? 3 : 2; d < dims; d++) {
+      const s = view.slice[d - 2];
+      if (
+        s !== undefined &&
+        (s < bounds[2 * d] || s >= bounds[2 * d] + bounds[2 * d + 1])
+      ) {
+        return null;
+      }
+    }
+  }
+  const z = view.zoom;
+  const [x, w] =
+    dims > 0
+      ? [(bounds[0] - func.min_coords[0]) * z, bounds[1] * z]
+      : [0, func.width * z];
+  const [y, h] =
+    dims > 1
+      ? [(bounds[2] - func.min_coords[1]) * z, bounds[3] * z]
+      : [0, func.height * z];
+  const o = outset * strokeWidth;
+  return (
+    <rect
+      x={x - o}
+      y={y - o}
+      width={w + 2 * o}
+      height={h + 2 * o}
+      fill="none"
+      stroke={color}
+      strokeWidth={strokeWidth}
+    />
+  );
+}
 
 function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
   const { name, width, height, buffer_liveness, max_store_count } = data;
@@ -43,49 +105,36 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
   const nanOverlayRef = React.useRef<HTMLCanvasElement>(null);
   const infOverlayRef = React.useRef<HTMLCanvasElement>(null);
 
-  const { funcs } = useTraceContext();
   const liveness = useAtomValue(livenessAtom);
   const packetIndex = useAtomValue(packetAtom);
   const render = useAtomValue(renderAtom);
   const activeFunc = useAtomValue(funcAtom);
   const setTabularData = useSetAtom(tabularDataAtom);
+  const setHover = useSetAtom(hoverAtom);
   const nan = useAtomValue(nanAtom);
   const inf = useAtomValue(infAtom);
   const thread = useAtomValue(threadAtom);
+  const views = useAtomValue(funcViewAtom);
+  const modifiedView = views[name];
+  const view = React.useMemo(
+    () => getFuncView(modifiedView, data),
+    [modifiedView, data],
+  );
 
   const nodes = useNodes();
   const edges = useEdges();
 
   const active = activeFunc === name;
-  const bufferLive = React.useMemo(
-    () =>
-      liveness.active &&
-      liveness.mode === "realizations" &&
-      isFuncBufferLive(data, packetIndex),
-    [liveness, data, packetIndex],
-  );
-  const producing = React.useMemo(
-    () =>
-      liveness.active &&
-      liveness.mode === "produce-consume" &&
-      edges.some(
-        (edge) =>
-          edge.source === name &&
-          isEdgeLive(funcs, edge.source, edge.target, packetIndex),
-      ),
-    [liveness, edges, funcs, name, packetIndex],
-  );
-  const consuming = React.useMemo(
-    () =>
-      liveness.active &&
-      liveness.mode === "produce-consume" &&
-      edges.some(
-        (edge) =>
-          edge.target === name &&
-          isEdgeLive(funcs, edge.source, edge.target, packetIndex),
-      ),
-    [liveness, edges, funcs, name, packetIndex],
-  );
+  const liveBoxes = React.useMemo(() => {
+    if (!liveness.active) {
+      return null;
+    }
+    return {
+      realization: activeBoxes(data.liveness.realizations, packetIndex),
+      production: activeBoxes(data.liveness.productions, packetIndex),
+      consumption: activeBoxes(data.liveness.consumptions, packetIndex),
+    };
+  }, [liveness, data, packetIndex]);
 
   const incomingEdgeCount = React.useMemo(
     () => getIncomers({ id: name }, nodes, edges).length,
@@ -97,6 +146,12 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
   );
 
   const { zoom } = useViewport();
+
+  const displayStyle: React.CSSProperties = {
+    width: width * view.zoom,
+    height: height * view.zoom,
+    imageRendering: "pixelated",
+  };
 
   // Track the playhead position as a ref to avoid re-rendering on every scrub.
   const latestIndexRef = React.useRef(packetIndex);
@@ -113,7 +168,7 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
   React.useEffect(() => {
     cachedPreLiveResultRef.current = null;
     cachedPostLiveResultRef.current = null;
-  }, [render, nan, inf, thread, active]);
+  }, [render, nan, inf, thread, active, view]);
 
   React.useEffect(() => {
     latestIndexRef.current = packetIndex;
@@ -163,10 +218,10 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
 
             switch (render.renderMode) {
               case "Grayscale":
-                result = await renderGrayscale(params);
+                result = await renderGrayscale({ ...params, view });
                 break;
               case "RGB":
-                result = await renderRgb(params);
+                result = await renderRgb({ ...params, view });
                 break;
               case "Store Frequency":
                 result = await renderStoreFrequency(params);
@@ -261,6 +316,7 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
     buffer_liveness.start,
     buffer_liveness.end,
     max_store_count,
+    view,
   ]);
 
   return (
@@ -270,7 +326,7 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
         position={Position.Top}
         align="start"
         offset={2}
-        style={{ maxWidth: `${width * zoom}px` }}
+        style={{ maxWidth: `${width * view.zoom * zoom}px` }}
         className="truncate"
       >
         <span
@@ -282,32 +338,34 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
           {name}
         </span>
       </NodeToolbar>
-      <div
-        className={clsx("relative ring-transparent", {
-          "ring-oxide-yellow/30!": bufferLive,
-          "ring-oxide-green/30!": producing,
-          "ring-oxide-purple/30!": consuming,
-          "ring-4": zoom < 1,
-          "ring-2": zoom >= 1,
-        })}
-      >
+      <div className="relative">
         <canvas
           ref={canvasRef}
           width={width}
           height={height}
-          className={clsx("ring-transparent", {
-            "ring-oxide-yellow!": bufferLive,
-            "ring-oxide-green!": producing,
-            "ring-oxide-purple!": consuming,
-            "ring-2": zoom < 1,
-            "ring-1": zoom >= 1,
-          })}
+          style={displayStyle}
+          onMouseMove={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const x = Math.floor(
+              ((e.clientX - rect.left) / rect.width) * width,
+            );
+            const y = Math.floor(
+              ((e.clientY - rect.top) / rect.height) * height,
+            );
+            setHover((prev) =>
+              prev?.func === name && prev.x === x && prev.y === y
+                ? prev
+                : { func: name, x, y },
+            );
+          }}
+          onMouseLeave={() => setHover(null)}
         />
         <canvas
           ref={nanOverlayRef}
           width={width}
           height={height}
-          className={clsx("absolute top-0 left-0", {
+          style={displayStyle}
+          className={clsx("pointer-events-none absolute top-0 left-0", {
             hidden: !nan.active,
             "animate-blink": nan.active && nan.animationMode === "Blink",
             "animate-pulse": nan.active && nan.animationMode === "Pulse",
@@ -317,12 +375,40 @@ function FuncNode({ data }: NodeProps<Node<FuncMeta, "funcNode">>) {
           ref={infOverlayRef}
           width={width}
           height={height}
-          className={clsx("absolute top-0 left-0", {
+          style={displayStyle}
+          className={clsx("pointer-events-none absolute top-0 left-0", {
             hidden: !inf.active,
             "animate-blink": inf.active && inf.animationMode === "Blink",
             "animate-pulse": inf.active && inf.animationMode === "Pulse",
           })}
         />
+        {liveBoxes ? (
+          <svg
+            className="pointer-events-none absolute top-0 left-0 overflow-visible"
+            width={width * view.zoom}
+            height={height * view.zoom}
+          >
+            {(["realization", "production", "consumption"] as const).map(
+              (kind) =>
+                liveBoxes[kind].map((box, k) => (
+                  <LiveBoxRect
+                    key={`${kind}-${k}`}
+                    box={box}
+                    func={data}
+                    view={view}
+                    showSlice={
+                      render.renderMode === "Grayscale" ||
+                      render.renderMode === "RGB"
+                    }
+                    rgb={render.renderMode === "RGB"}
+                    color={LIVENESS_COLORS[kind]}
+                    strokeWidth={2 / zoom}
+                    outset={kind === "realization" ? 1.5 : 0.5}
+                  />
+                )),
+            )}
+          </svg>
+        ) : null}
       </div>
       {incomingEdgeCount > 0 && edges.every((edge) => !edge.hidden) ? (
         <Handle

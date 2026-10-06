@@ -12,6 +12,7 @@ import TraceLoading from "@/components/trace/TraceLoading";
 import { ProfileContextProvider } from "@/hooks/profile";
 import { TraceContextProvider } from "@/hooks/trace";
 import { funcAtom } from "@/state/func";
+import { funcViewAtom } from "@/state/funcView";
 import type { Profile as Pfile } from "@/types/profile";
 import type { FuncMeta, StatsMeta } from "@/types/trace";
 import { openProfile, openTrace } from "@/utils/api";
@@ -70,6 +71,7 @@ function App() {
 
   // GUI state.
   const setActiveFunc = useSetAtom(funcAtom);
+  const setFuncViews = useSetAtom(funcViewAtom);
 
   const loadTrace = React.useCallback(
     async (path: string) => {
@@ -104,6 +106,7 @@ function App() {
         setPacketCount(total_packets);
         setStats(stats);
         setActiveFunc(funcs[0]?.name ?? "");
+        setFuncViews({});
       } finally {
         unlisten();
         setTraceLoading({
@@ -113,7 +116,7 @@ function App() {
         });
       }
     },
-    [setActiveFunc],
+    [setActiveFunc, setFuncViews],
   );
 
   React.useEffect(() => {
