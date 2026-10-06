@@ -2,10 +2,10 @@
 // the generated halide_kernels.inc, registering two providers:
 //   halide-<name>          bench build (GGML_BENCH_FEATURES), timed
 //   halide-<name>:checked  default (checked) build, correctness only
-// Kernel ABI (every generator): w: uint8 [row bytes, N] in ggml's layout of
-// the weight type; a: [K, M] float32/float16, or uint8 [row bytes, M] for a
-// quantized activation type; out: float32 [N, M]. vec_dot (N = M = 1) goes
-// through an adapter with GGML's vec_dot ABI.
+// Kernel ABI (kernels/matmul.cpp): w: [K / block, N] and a: [K / block, M]
+// records of their format (a GGML block struct, or float16/float32 for plain
+// values; the element types come from the kernel's metadata), out: float32
+// [N, M]. vec_dot (N = M = 1) goes through an adapter with GGML's vec_dot ABI.
 #include "harness.h"
 
 #include "HalideRuntime.h"
@@ -26,13 +26,12 @@ ggml_type type_named(const char *n) {
     abort();
 }
 
-halide_type_t elem_type(ggml_type t) {
-    return t == GGML_TYPE_F32 ? halide_type_t(halide_type_float, 32) : t == GGML_TYPE_F16 ? halide_type_t(halide_type_float, 16) :
-                                                                                            halide_type_t(halide_type_uint, 8);
+int64_t records(ggml_type t, int64_t K) {
+    return K / ggml_blck_size(t);
 }
 
-int64_t extent0(ggml_type t, int64_t K) {
-    return ggml_is_quantized(t) ? (int64_t)ggml_row_size(t, K) : K;
+halide_type_t arg_type(const halide_filter_metadata_t *md, int i) {
+    return md->arguments[i].type;
 }
 
 struct Buf {
@@ -40,6 +39,9 @@ struct Buf {
     halide_dimension_t d[2]{};
     Buf() = default;
     Buf(const void *host, halide_type_t t, int64_t e0, int64_t e1) {
+        reset(host, t, e0, e1);
+    }
+    void reset(const void *host, halide_type_t t, int64_t e0, int64_t e1) {
         b.host = (uint8_t *)host;
         b.type = t;
         b.dimensions = 2;
@@ -79,14 +81,24 @@ struct HalideKernel : Kernel {
     }
 };
 
-// GGML's vec_dot ABI over a Halide kernel; one instantiation per kernel.
-template<Fn F>
+// GGML's vec_dot ABI over a Halide kernel; one instantiation per kernel. The
+// buffers are built once (vec_dot runs single-threaded) and only their host
+// pointers and extents are patched per call: building three halide_buffer_t
+// per call costs ~3 ns, more than the n = 256 dot itself.
+template<Fn F, const halide_filter_metadata_t *(*M)()>
 struct VecDot {
-    static inline ggml_type wt, at;
+    static inline int wshift, ashift;  // log2 of the block sizes: no divide per call
+    static inline Buf w, a, o;
+    static void bind(ggml_type wt, ggml_type at) {
+        wshift = __builtin_ctzll(ggml_blck_size(wt)), ashift = __builtin_ctzll(ggml_blck_size(at));
+        w.reset(nullptr, arg_type(M(), 0), 0, 1);
+        a.reset(nullptr, arg_type(M(), 1), 0, 1);
+        o.reset(nullptr, halide_type_t(halide_type_float, 32), 1, 1);
+    }
     static void call(int n, float *s, size_t, const void *x, size_t, const void *y, size_t, int) {
-        Buf w(x, halide_type_t(halide_type_uint, 8), ggml_row_size(wt, n), 1);
-        Buf a(y, elem_type(at), extent0(at, n), 1);
-        Buf o(s, halide_type_t(halide_type_float, 32), 1, 1);
+        w.b.host = (uint8_t *)x, w.d[0].extent = w.d[1].stride = n >> wshift;
+        a.b.host = (uint8_t *)y, a.d[0].extent = a.d[1].stride = n >> ashift;
+        o.b.host = (uint8_t *)s;
         F(&w.b, &a.b, &o.b);
     }
 };
@@ -97,6 +109,8 @@ struct Row {
     const char *features;
     Fn checked, bench;
     ggml_vec_dot_t vd_checked, vd_bench;
+    void (*bind_checked)(ggml_type, ggml_type), (*bind_bench)(ggml_type, ggml_type);
+    const halide_filter_metadata_t *(*md)();
 };
 
 std::vector<Row> &rows() {
@@ -119,10 +133,12 @@ struct AddCodec {
 }  // namespace
 }  // namespace gq
 
-#define GQ_HALIDE(name, wt, at, ops, features)                                                    \
-    static gq::AddRow name##_row({#name, #wt, #at, [] { using namespace gq; return (int)(ops); }(), features,                            \
-                                  name##_checked, name##_bench, gq::VecDot<name##_checked>::call, \
-                                  gq::VecDot<name##_bench>::call});
+#define GQ_HALIDE(name, wt, at, ops, features)                                                                             \
+    static gq::AddRow name##_row({#name, #wt, #at, [] { using namespace gq; return (int)(ops); }(), features,                                                     \
+                                  name##_checked, name##_bench, gq::VecDot<name##_checked, name##_checked_metadata>::call, \
+                                  gq::VecDot<name##_bench, name##_bench_metadata>::call,                                   \
+                                  gq::VecDot<name##_checked, name##_checked_metadata>::bind,                               \
+                                  gq::VecDot<name##_bench, name##_bench_metadata>::bind, name##_checked_metadata});
 #define GQ_CODEC(t) \
     static gq::AddCodec t##_codec({#t, {t##_quantize_checked, t##_quantize_bench}, {t##_dequantize_checked, t##_dequantize_bench}, t##_quantize_checked_metadata});
 #include "halide_kernels.inc"
@@ -141,6 +157,7 @@ void register_halide_providers() {
         for (bool bench : {false, true}) {
             Fn f = bench ? row.bench : row.checked;
             ggml_vec_dot_t vd = bench ? row.vd_bench : row.vd_checked;
+            (bench ? row.bind_bench : row.bind_checked)(wt, at);
             std::string name = std::string("halide-") + row.name + (bench ? "" : ":checked");
             if (row.ops & GQ_vec_dot && !gpu) {
                 providers().push_back({name, GQ_vec_dot, bench, [=](const Inputs &in) -> std::unique_ptr<Kernel> {
@@ -161,9 +178,9 @@ void register_halide_providers() {
                                            k->path = gpu ? "halide:metal" : "halide";
                                            size_t wbytes = ggml_row_size(wt, s.K) * s.N;
                                            for (int c = 0; c < in.copies; c++) {
-                                               k->w.push_back(std::make_unique<Buf>(in.w->data() + c * wbytes, halide_type_t(halide_type_uint, 8), ggml_row_size(wt, s.K), s.N));
+                                               k->w.push_back(std::make_unique<Buf>(in.w->data() + c * wbytes, arg_type(row.md(), 0), records(wt, s.K), s.N));
                                            }
-                                           k->a = std::make_unique<Buf>(in.a->data(), elem_type(at), extent0(at, s.K), s.M);
+                                           k->a = std::make_unique<Buf>(in.a->data(), arg_type(row.md(), 1), records(at, s.K), s.M);
                                            k->host_out.resize(s.N * s.M);
                                            k->out = std::make_unique<Buf>(k->host_out.data(), halide_type_t(halide_type_float, 32), s.N, s.M);
                                            if (gpu) {
