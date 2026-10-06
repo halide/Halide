@@ -1,6 +1,7 @@
-// One codec generator for every scheme: builds the round trip of a row of
-// floats, severs it at the encoded blocks, and adopts the half that
-// `direction` asks for (quantize: x -> blocks, dequantize: blocks -> y).
+// One codec generator for every scheme: the scheme's round trip on a row of
+// floats, severed at the encoded blocks; `quantize` picks the half to adopt
+// (quantize: x -> blocks, dequantize: blocks -> y).
+#include "halide_approximation_codec.h"
 #include "schemes/schemes.h"
 
 namespace {
@@ -13,34 +14,24 @@ public:
     GeneratorParam<bool> quantize{"quantize", true};
 
     void configure() {
-        ImageParam x(Float(32), 1, "x");
-        Var k("k");
-        Func y("y");
-        y(k) = x(k);
-        ApproximationResult r = Func(x).approximate_by(ggml::format(type).scheme, {y});
-        for (Func f : r.intermediates) {
-            if (f.has_update_definition()) f.compute_root();
-        }
-        SeverResult split = Pipeline(y).sever(r.encoded, {"blocks"});
+        codec = ApproximationCodec::make_codec(ggml::format(type).scheme, Float(32), 1, {"x", "y", {"blocks"}});
         if (quantize) {
-            add_input(x);
-            add_output(split.offline.outputs()[0]);
+            codec.adopt_encoder(*this);
         } else {
-            add_input(split.online_inputs[0]);
-            values = add_output(y);
+            codec.adopt_decoder(*this);
         }
     }
 
     void generate() {
-        if (values) {  // whole blocks: element index = vector lane
-            values->dim(0).set_min(0);
-            Var k = values->args()[0], b("b");
-            Func(*values).split(k, b, k, ggml::QK, TailStrategy::RoundUp).vectorize(k);
+        if (!quantize) {  // whole blocks: element index = vector lane
+            codec.decoded.output_buffer().dim(0).set_min(0);
+            Var k = codec.decoded.args()[0], b("b");
+            codec.decoded.split(k, b, k, ggml::format(type).block, TailStrategy::RoundUp).vectorize(k);
         }
     }
 
 private:
-    GeneratorOutput<Buffer<>> *values = nullptr;
+    ApproximationCodec::Codec codec;
 };
 
 }  // namespace
