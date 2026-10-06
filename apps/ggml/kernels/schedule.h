@@ -28,9 +28,10 @@ inline void vec_dot_blocked(Func out, const RDom &r, int block, bool integer,
                             const std::vector<ApproximationResult> &rs, const Target &t, int interleave = 2) {
     Var n = out.args()[0], lane("lane"), u("u"), bacc("bacc");
     RVar ry("ry"), rx("rx"), rxc("rxc"), rxo("rxo"), rxi("rxi"), ryo("ryo"), ryi("ryi");
-    int dot = integer ? 4 : 1;
-    out.update().split(r, ry, rx, block).split(rx, rxc, rxo, t.natural_vector_size<int8_t>()).split(rxo, rxo, rxi, dot);
+    int dot = integer ? 4 : 1, vec = t.natural_vector_size<int8_t>();
+    out.update().split(r, ry, rx, block).split(rx, rxc, rxo, vec).split(rxo, rxo, rxi, dot);
     Func blk = out.update().rfactor({{rxo, lane}, {ry, u}});
+    blk.bound(lane, 0, vec / dot);  // the lane's range, so the block's scales hoist
     blk.update().eager_inline(decoders(rs));
     Func codes = blk.update().hoist_invariants()[0];
     if (integer) codes = codes.change_type(Int(32));
