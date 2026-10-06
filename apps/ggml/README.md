@@ -77,6 +77,21 @@ activations for quantized weights; Metal's mul_mv has no quantized x f16 kernels
 - macOS has no clock pinning: `ci_pct` is the noise report. Serialize timing
   runs machine-wide (`~/dev/Halide/.bench.lock`).
 
+## Formats and codecs
+
+A format is a scheme (`schemes/`, mapped from its GGML type name in
+`schemes/schemes.h`) plus one row of `GGML_FORMATS` in `formats.cmake`
+(`type ops [target-features]`). `ops` = `codec` builds the one codec generator
+(`kernels/codec.cpp`) for the type: the scheme's round trip on a row of floats,
+severed at the encoded blocks, as `<type>_quantize` (f32 `[K]` -> blocks
+`[K / block]`, a struct type with GGML's block layout) and `<type>_dequantize`.
+The `codec` op (`--op codec`, on by default) checks both bitwise against GGML's
+reference quantizer (`ggml_quantize_chunk`) and `to_float` on N(0, 1) rows whose
+first blocks are adversarial (signed zeros, ties, constants, tiny and huge
+values; inf/NaN are undefined in GGML's reference), and times them against those
+and `from_float`. Codec rows reuse the CSV columns: `atype` is the direction,
+`err_ratio` is 0 (bit-exact) or inf, `gops` is Gvalues/s.
+
 ## Adding a Halide kernel
 
 Add one row to `GGML_HALIDE_KERNELS` in `formats.cmake`:
