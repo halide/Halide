@@ -15,6 +15,7 @@ tests(
     aligned_split_reduction.cpp
     ambiguous_inline_reductions.cpp
     approximate_by.cpp
+    approximation_codec.cpp
     approximation_components.cpp
     approximation_decode_funcs.cpp
     approximation_parallel.cpp
