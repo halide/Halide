@@ -79,21 +79,31 @@ int main(int argc, char **argv) {
 
     // ANSI color codes in the printed report must not leak into the JSON
     // strings. A Func dominated by gathers gets a warning that prints its
-    // gather count with a dimmed SI suffix.
+    // gather count with a dimmed SI suffix. The warning needs profiling
+    // samples, so the work per run is increased until there are some.
     {
         set_env("HL_COLORS", "1");
         Func lut("profiler_json_output_lut"), h("profiler_json_output_h");
-        const int n = 1 << 24;
+        const int n = 1 << 20;
+        Param<int> k;
+        RDom r(0, k);
         lut(x) = x * 3;
-        h(x) = lut((x * 7) % n);
+        h(x) = 0;
+        h(x) += lut((x * 7 + r * 13) % n) + lut((x * 11 + r * 17) % n);
         lut.compute_root().vectorize(x, 8);
-        h.vectorize(x, 8);
+        h.update().vectorize(x, 8);
         h.jit_handlers().custom_print = capture_print;
         h.compile_jit(target);
 
-        Internal::ensure_no_file_exists(path);
         set_json_output(path.c_str());
-        h.realize({n}, target);
+        json.clear();
+        for (int work = 1; work <= 1024 && json.find("more vector gathers") == std::string::npos; work *= 2) {
+            Internal::ensure_no_file_exists(path);
+            report.clear();
+            k.set(work);
+            h.realize({n}, target);
+            json = read_file(path);
+        }
         set_json_output(nullptr);
         set_env("HL_COLORS", "");
 
@@ -101,7 +111,6 @@ int main(int argc, char **argv) {
             printf("Expected colors in the printed report:\n%s\n", report.c_str());
             return 1;
         }
-        json = read_file(path);
         if (json.find("more vector gathers") == std::string::npos) {
             printf("JSON output is missing the gather warning:\n%s\n", json.c_str());
             return 1;
