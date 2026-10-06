@@ -6,6 +6,17 @@ include(WipeStandardFlags)
 wipe_standard_flags("[/-]D *NDEBUG")
 wipe_standard_flags("[/-]O[^ ]+")
 
+if (Halide_BUILDING_IN_CI)
+    if (CMAKE_VERSION VERSION_LESS 3.29)
+        message(FATAL_ERROR "Halide_BUILDING_IN_CI requires CMake 3.29 for CMAKE_TEST_LAUNCHER.")
+    endif ()
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    set(CMAKE_TEST_LAUNCHER
+        "${Python3_EXECUTABLE}" "${Halide_SOURCE_DIR}/tools/audit_test_labels.py" --build-dir
+        "${Halide_BINARY_DIR}" "--config=$<CONFIG>" --ctest "${CMAKE_CTEST_COMMAND}" --
+    )
+endif ()
+
 ##
 # Define helper targets for defining tests
 ##
@@ -59,16 +70,20 @@ endif ()
 
 function(add_halide_test TARGET)
     set(options EXPECT_FAILURE USE_EXIT_CODE_ONLY)
-    set(oneValueArgs WORKING_DIRECTORY)
+    set(oneValueArgs NAME WORKING_DIRECTORY)
     set(multiValueArgs GROUPS COMMAND ARGS)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    if (NOT DEFINED args_NAME)
+        set(args_NAME "${TARGET}")
+    endif ()
 
     if (NOT args_COMMAND)
         set(args_COMMAND ${TARGET})
     endif ()
 
     add_test(
-        NAME ${TARGET}
+        NAME "${args_NAME}"
         COMMAND ${args_COMMAND} ${args_ARGS}
         WORKING_DIRECTORY "${args_WORKING_DIRECTORY}"
     )
@@ -87,7 +102,7 @@ function(add_halide_test TARGET)
     string(REGEX REPLACE "^cmake" "${Halide_CMAKE_TARGET}" _resolved_target "${Halide_TARGET}")
 
     set_tests_properties(
-        ${TARGET}
+        "${args_NAME}"
         PROPERTIES
         LABELS "${args_GROUPS}"
         ENVIRONMENT "HL_TARGET=${_resolved_target};HL_JIT_TARGET=${_resolved_target}"
@@ -95,11 +110,27 @@ function(add_halide_test TARGET)
         WILL_FAIL ${args_EXPECT_FAILURE}
     )
     if ("multithreaded" IN_LIST args_GROUPS)
-        set_tests_properties(${TARGET} PROPERTIES RUN_SERIAL TRUE)
+        set_tests_properties("${args_NAME}" PROPERTIES RUN_SERIAL TRUE)
     endif ()
 
     if (NOT args_USE_EXIT_CODE_ONLY)
-        set_tests_properties(${TARGET} PROPERTIES PASS_REGULAR_EXPRESSION "Success!")
+        set_tests_properties("${args_NAME}" PROPERTIES PASS_REGULAR_EXPRESSION "Success!")
+    endif ()
+
+    if (Halide_BUILDING_IN_CI)
+        if (args_EXPECT_FAILURE)
+            set_property(TEST "${args_NAME}"
+                APPEND
+                PROPERTY
+                PASS_REGULAR_EXPRESSION "Halide test launcher: successful exit"
+                "Halide test capability violation:"
+            )
+        else ()
+            set_property(TEST "${args_NAME}"
+                APPEND
+                PROPERTY FAIL_REGULAR_EXPRESSION "Halide test capability violation:"
+            )
+        endif ()
     endif ()
 
     if (WITH_SERIALIZATION AND WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)

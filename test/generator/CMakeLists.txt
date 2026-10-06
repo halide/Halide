@@ -893,7 +893,7 @@ add_halide_stub(stubtest.stub FROM stubtest.generator GENERATOR stubtest)
 if (NOT ${_USING_WASM})
     add_executable(generator_jit_stubtest stubtest_jittest.cpp stubtest_generator.cpp)
     target_link_libraries(generator_jit_stubtest PRIVATE Halide::Test stubtest.stub)
-    add_halide_test(generator_jit_stubtest GROUPS generator)
+    add_halide_test(generator_jit_stubtest GROUPS generator target_from_environment calls_llvm)
 endif ()
 
 _add_halide_libraries(
@@ -945,7 +945,7 @@ _add_halide_aot_tests(
 if (NOT ${_USING_WASM})
     add_executable(generator_jit_configure configure_jittest.cpp configure_generator.cpp)
     target_link_libraries(generator_jit_configure PRIVATE Halide::Test configure.stub)
-    add_halide_test(generator_jit_configure GROUPS generator)
+    add_halide_test(generator_jit_configure GROUPS generator target_from_environment calls_llvm)
 endif ()
 
 # example_jittest.cpp
@@ -953,7 +953,10 @@ if (NOT ${_USING_WASM})
     add_halide_stub(example.stub FROM example.generator GENERATOR example)
     add_executable(generator_jit_example example_jittest.cpp example_generator.cpp)
     target_link_libraries(generator_jit_example PRIVATE Halide::Test example.stub)
-    add_halide_test(generator_jit_example GROUPS generator)
+    add_halide_test(
+        generator_jit_example
+        GROUPS generator multithreaded target_from_environment calls_llvm
+    )
 endif ()
 
 if (NOT ${_USING_WASM})
@@ -964,7 +967,7 @@ if (NOT ${_USING_WASM})
     # metadata registration hook fires with the expected function pointers.
     add_executable(rungen_test rungen_test.cpp "${example_registration_cpp}")
     target_link_libraries(rungen_test PRIVATE example example.runtime Halide::ImageIO Halide::Tools)
-    add_halide_test(rungen_test GROUPS generator)
+    add_halide_test(rungen_test GROUPS generator target_from_environment calls_llvm)
 
     # registration_test.cpp
     #

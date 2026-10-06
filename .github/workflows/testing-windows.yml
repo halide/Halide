@@ -153,24 +153,27 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           exclude="performance"
+          include="."
           if [[ "${{ matrix.uv_group }}" != "ci-llvm-main" ]]; then
-            exclude+="|fuzz|llvm_independent"
+            exclude+="|fuzz"
+            include="calls_llvm|generator|tutorial|autoschedulers"
           fi
           echo "CTEST_EXCLUDE=${exclude}" >> "$GITHUB_ENV"
+          echo "CTEST_INCLUDE=${include}" >> "$GITHUB_ENV"
 
       - name: Test (host)
         if: github.event_name == 'pull_request'
         run: |
           cmake -S . -B build -DHalide_TARGET=host
           cmake --build build
-          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -LE "${CTEST_EXCLUDE}" -j "$(nproc)"
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -L "${CTEST_INCLUDE}" -LE "${CTEST_EXCLUDE}" -j "$(nproc)"
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -L performance --repeat until-pass:5
-          echo "CTEST_EXCLUDE=${CTEST_EXCLUDE}|target_independent" >> "$GITHUB_ENV"
+          echo "CTEST_TARGET_INCLUDE=target_from_environment|generator|tutorial|autoschedulers" >> "$GITHUB_ENV"
 
       - name: Test (no extensions)
         if: github.event_name == 'pull_request'
         run: |
           cmake -S . -B build -DHalide_TARGET=cmake
           cmake --build build
-          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -LE "${CTEST_EXCLUDE}" -j "$(nproc)"
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -L "${CTEST_INCLUDE}" -L "${CTEST_TARGET_INCLUDE}" -LE "${CTEST_EXCLUDE}" -j "$(nproc)"
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -L performance --repeat until-pass:5

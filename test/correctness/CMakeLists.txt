@@ -1,12 +1,14 @@
-tests(GROUPS correctness_multi_gpu gpu SOURCES gpu_multi_device.cpp)
+tests(
+    GROUPS correctness_multi_gpu gpu target_from_environment calls_llvm
+    SOURCES gpu_multi_device.cpp
+)
 
 tests(
-    GROUPS correctness
+    GROUPS correctness target_from_environment calls_llvm
     SOURCES
     # keep-sorted start case=no
     align_bounds.cpp
     aligned_split.cpp
-    aligned_split_2d.cpp
     aligned_split_2d_3x3.cpp
     aligned_split_blend_small_extent.cpp
     aligned_split_mux_phase.cpp
@@ -14,7 +16,6 @@ tests(
     aligned_split_partition.cpp
     aligned_split_reduction.cpp
     async_require_fail.cpp
-    atomics_self_reference.cpp
     autodiff.cpp
     bad_async_producer.cpp
     bad_async_producer_2.cpp
@@ -84,16 +85,8 @@ tests(
     constraints.cpp
     cse_name_collision.cpp
     cse_nan.cpp
-    cuda_8_bit_dot_product.cpp
     custom_allocator.cpp
-    custom_cuda_context.cpp
-    custom_d3d12compute_context.cpp
-    custom_jit_context.cpp
     custom_lowering_pass.cpp
-    custom_opencl_context.cpp
-    custom_vulkan_context.cpp
-    d3d12compute_sm6x.cpp
-    d3d12compute_strict_float.cpp
     dead_realization_in_specialization.cpp
     debug_to_file_multiple_outputs.cpp
     deep_inline_chain.cpp
@@ -106,7 +99,6 @@ tests(
     dupe_param_name.cpp
     dynamic_reduction_bounds.cpp
     eager_inline.cpp
-    early_out.cpp
     erf.cpp
     exception.cpp
     explicit_inline_reductions.cpp
@@ -129,13 +121,10 @@ tests(
     fuzz_float_stores.cpp
     fuzz_schedule.cpp
     gameoflife.cpp
-    gather.cpp
     growing_stack.cpp
     half_native_interleave.cpp
     handle.cpp
     heap_cleanup.cpp
-    hexagon_scatter.cpp
-    histogram.cpp
     histogram_equalize.cpp
     hoist_invariants.cpp
     hoist_loop_invariant_if_statements.cpp
@@ -162,7 +151,6 @@ tests(
     integer_powers.cpp
     interleave.cpp
     intrinsics.cpp
-    issue_3926.cpp
     iterate_over_circle.cpp
     jit_host_environment.cpp
     lambda.cpp
@@ -171,7 +159,6 @@ tests(
     lerp.cpp
     let_in_rdom_bound.cpp
     likely.cpp
-    load_library.cpp
     loop_carry.cpp
     loop_level_generator_param.cpp
     lossless_cast.cpp
@@ -194,7 +181,6 @@ tests(
     multipass_constraints.cpp
     mux.cpp
     narrow_predicates.cpp
-    negative_split_factors.cpp
     nested_tail_strategies.cpp
     non_nesting_extern_bounds_query.cpp
     non_vector_aligned_embeded_buffer.cpp
@@ -214,7 +200,6 @@ tests(
     partition_max_filter.cpp
     pipeline_set_jit_externs_func.cpp
     popc_clz_ctz_bounds.cpp
-    predicated_store_load.cpp
     predicated_store_load_single_lane.cpp
     prefetch.cpp
     print.cpp
@@ -230,7 +215,6 @@ tests(
     recursive_box_filters.cpp
     reduction_chain.cpp
     reduction_schedule.cpp
-    register_shuffle.cpp
     reorder_storage.cpp
     require.cpp
     require_fail.cpp
@@ -255,7 +239,6 @@ tests(
     sliding_reduction.cpp
     sliding_window.cpp
     sliding_window_cascade.cpp
-    sme_streaming.cpp
     sme_streaming_without_target_feature.cpp
     sort_exprs.cpp
     specialize.cpp
@@ -286,10 +269,8 @@ tests(
     strided_load.cpp
     struct_nested_field_load.cpp
     struct_nested_field_store.cpp
-    struct_type.cpp
     struct_type_dot_product.cpp
     target_query.cpp
-    thread_id_outside_block_id.cpp
     tiled_matmul.cpp
     tracing.cpp
     tracing_bounds.cpp
@@ -349,13 +330,12 @@ tests(
     # keep-sorted end
 )
 
-# Tests that use the GPU when the target has a GPU feature. See doc/Testing.md.
+# Tests allowed to use a GPU device. See doc/Testing.md.
 tests(
-    GROUPS correctness gpu
+    GROUPS correctness gpu target_from_environment calls_llvm
     SOURCES
     # keep-sorted start case=no
     argmax.cpp
-    async_device_copy.cpp
     atomics_gpu_8_bit.cpp
     atomics_gpu_mutex.cpp
     bool_compute_root_vectorize.cpp
@@ -366,8 +346,10 @@ tests(
     cascaded_filters.cpp
     chunk.cpp
     convolution_multiple_kernels.cpp
-    custom_metal_context.cpp
-    custom_webgpu_context.cpp
+    cuda_8_bit_dot_product.cpp
+    custom_jit_context.cpp
+    d3d12compute_sm6x.cpp
+    d3d12compute_strict_float.cpp
     debug_to_file.cpp
     debug_to_file_reorder.cpp
     device_buffer_copies_with_profile.cpp
@@ -423,7 +405,6 @@ tests(
     gpu_register_stored_by_one_thread.cpp
     gpu_register_stored_by_one_warp.cpp
     gpu_reuse_shared_memory.cpp
-    gpu_specialize.cpp
     gpu_store_in_register_with_no_lanes_loop.cpp
     gpu_struct_type.cpp
     gpu_sum_scan.cpp
@@ -433,15 +414,17 @@ tests(
     gpu_vectorize.cpp
     gpu_vectorized_shared_memory.cpp
     hello_gpu.cpp
+    histogram.cpp
     in_place.cpp
     interleave_rgb.cpp
     interleave_x.cpp
     invalid_gpu_loop_nests.cpp
     inverse.cpp
     isnan.cpp
+    issue_3926.cpp
     leak_device_memory.cpp
+    load_library.cpp
     logical.cpp
-    loop_invariant_extern_calls.cpp
     lots_of_loop_invariants.cpp
     math.cpp
     median3x3.cpp
@@ -450,12 +433,13 @@ tests(
     multi_way_select.cpp
     multiple_outputs.cpp
     newtons_method.cpp
-    parallel_gpu_nested.cpp
     param.cpp
     reduction_non_rectangular.cpp
+    register_shuffle.cpp
     round.cpp
     specialize_to_gpu.cpp
     strict_fma.cpp
+    thread_id_outside_block_id.cpp
     trim_no_ops.cpp
     tuple_reduction.cpp
     undef.cpp
@@ -468,7 +452,7 @@ tests(
 # Front-end-only tests: their results depend on neither the Halide target nor
 # the LLVM version. See doc/Testing.md.
 tests(
-    GROUPS correctness target_independent llvm_independent
+    GROUPS correctness
     SOURCES
     # keep-sorted start case=no
     ambiguous_inline_reductions.cpp
@@ -611,7 +595,7 @@ tests(
 # Tests whose results do not depend on the Halide target, but do depend on
 # LLVM. See doc/Testing.md.
 tests(
-    GROUPS correctness target_independent
+    GROUPS correctness calls_llvm
     SOURCES
     # keep-sorted start case=no
     compile_to_multitarget.cpp
@@ -621,13 +605,16 @@ tests(
     fallback_vscale_sve.cpp
     generator_cache.cpp
     generator_internal.cpp
-    gpu_async_copy_errors.cpp
-    gpu_thread_extent_under_outer_split.cpp
     pytorch.cpp
     runtime_prefixes.cpp
     sve_codegen_predicated.cpp
     sve_codegen_reinterpret.cpp
     # keep-sorted end
+)
+
+tests(
+    GROUPS correctness gpu calls_llvm
+    SOURCES gpu_async_copy_errors.cpp gpu_thread_extent_under_outer_split.cpp
 )
 
 # These test the host CPU detection logic that libHalide shares with the
@@ -640,7 +627,7 @@ target_include_directories(correctness_x86_cpu_detect PRIVATE ${Halide_SOURCE_DI
 # whether they can also run the generated code, but HL_TARGET and HL_JIT_TARGET
 # have no effect, so they are target-independent.
 tests(
-    GROUPS correctness multithreaded target_independent
+    GROUPS correctness multithreaded calls_llvm
     SOURCES
     # keep-sorted start
     simd_op_check_arm.cpp
@@ -656,25 +643,31 @@ tests(
 # to run on one target in CI. Every CI runner targets host, so we can just
 # check for that.
 if (NOT Halide_BUILDING_IN_CI OR Halide_TARGET STREQUAL "host")
-    tests(GROUPS correctness multithreaded SOURCES simd_op_check_sve2.cpp)
+    tests(
+        GROUPS correctness multithreaded target_from_environment calls_llvm
+        SOURCES simd_op_check_sve2.cpp
+    )
 endif ()
 
 tests(
-    GROUPS correctness multithreaded
+    GROUPS correctness multithreaded target_from_environment calls_llvm
     SOURCES
     # keep-sorted start
+    aligned_split_2d.cpp
     assertion_failure_in_parallel_for.cpp
     async.cpp
-    async_copy_chain.cpp
     async_deadlock.cpp
     async_order.cpp
     atomic_tuples.cpp
-    atomics.cpp
+    atomics_self_reference.cpp
     compute_outermost.cpp
+    early_out.cpp
     extern_consumer_tiled.cpp
     extern_stage.cpp
     func_clone.cpp
     func_wrapper.cpp
+    gather.cpp
+    hexagon_scatter.cpp
     image_wrapper.cpp
     legal_race_condition.cpp
     lots_of_dimensions.cpp
@@ -683,6 +676,7 @@ tests(
     multiple_outputs_extern.cpp
     multiple_scatter.cpp
     named_updates.cpp
+    negative_split_factors.cpp
     nested_parallel_stack.cpp
     nested_shiftinwards.cpp
     oddly_sized_output.cpp
@@ -695,6 +689,7 @@ tests(
     parallel_rvar.cpp
     parallel_scatter.cpp
     parallel_size_one.cpp
+    predicated_store_load.cpp
     random.cpp
     rfactor.cpp
     rfactor_aligned_split.cpp
@@ -702,7 +697,9 @@ tests(
     rfactor_aligned_split_nested.cpp
     rfactor_aligned_split_phases.cpp
     ring_buffer.cpp
+    sme_streaming.cpp
     stream_compaction.cpp
+    struct_type.cpp
     thread_safety.cpp
     tracing_thread_ids.cpp
     transitive_in.cpp
@@ -716,13 +713,25 @@ tests(
 # Multithreaded tests that use the GPU when the target has a GPU feature.
 # See doc/Testing.md.
 tests(
-    GROUPS correctness multithreaded gpu
+    GROUPS correctness multithreaded gpu target_from_environment calls_llvm
     SOURCES
     # keep-sorted start
+    async_copy_chain.cpp
+    async_device_copy.cpp
+    atomics.cpp
     compute_with.cpp
     convolution.cpp
+    custom_cuda_context.cpp
+    custom_d3d12compute_context.cpp
+    custom_metal_context.cpp
+    custom_opencl_context.cpp
+    custom_vulkan_context.cpp
+    custom_webgpu_context.cpp
+    gpu_specialize.cpp
     interpreter.cpp
+    loop_invariant_extern_calls.cpp
     mul_div_mod.cpp
+    parallel_gpu_nested.cpp
     reorder_rvars.cpp
     vector_cast.cpp
     # keep-sorted end
@@ -810,7 +819,7 @@ endif ()
 
 if (WITH_AUTOSCHEDULERS)
     tests(
-        GROUPS correctness
+        GROUPS correctness target_from_environment calls_llvm
         SOURCES auto_schedule_no_parallel.cpp auto_schedule_no_reorder.cpp
         ARGS $<TARGET_FILE:Halide::Mullapudi2016>
     )
