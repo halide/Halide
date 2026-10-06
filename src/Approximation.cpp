@@ -1,5 +1,6 @@
 #include "Approximation.h"
 
+#include <algorithm>
 #include <ostream>
 #include <set>
 #include <sstream>
@@ -1144,11 +1145,26 @@ std::vector<Expr> component_exprs(const std::vector<Var> &vars) {
     return std::vector<Expr>(vars.begin(), vars.end());
 }
 
+// The trailing dimensions a rank-polymorphic unit passes through unchanged.
+std::vector<Var> batch_vars(int dimensions) {
+    return component_vars(dimensions, "batch");
+}
+
+// A single context port's dimensionality, if it is known.
+std::optional<int> context_dimensions(const ApproximationPorts &inputs) {
+    return inputs.size() == 1 ? inputs[0].dimensions : std::nullopt;
+}
+
 }  // namespace
 
 std::vector<Func> BlockReshape::encode(const std::vector<Func> &inputs) const {
     user_assert(inputs.size() == 1) << "BlockReshape::encode expects one input\n";
     const Func &flat = inputs[0];
+    const int flat_dims = block_indexed_ ? 2 : 1;
+    user_assert(flat.dimensions() >= flat_dims)
+        << "BlockReshape::encode requires at least " << flat_dims << " dimensions, but "
+        << flat.name() << " has " << flat.dimensions() << "\n";
+    std::vector<Var> rest = batch_vars(flat.dimensions() - flat_dims);
     std::vector<Var> dims = block_vars();
     Var blk("blk");
     Expr within = cast<int>(0);
@@ -1159,14 +1175,27 @@ std::vector<Func> BlockReshape::encode(const std::vector<Func> &inputs) const {
     }
     std::vector<Var> args = dims;
     args.push_back(blk);
+    args.insert(args.end(), rest.begin(), rest.end());
+    std::vector<Expr> flat_args;
+    if (block_indexed_) {
+        flat_args = {within, blk};
+    } else {
+        flat_args = {blk * block_size() + within};
+    }
+    flat_args.insert(flat_args.end(), rest.begin(), rest.end());
     Func packed("block_reshape_packed");
-    packed(args) = block_indexed_ ? flat(within, blk) : flat(blk * block_size() + within);
+    packed(args) = flat(flat_args);
     return {packed};
 }
 
 std::vector<Func> BlockReshape::decode(const std::vector<Func> &encoded) const {
     user_assert(encoded.size() == 1) << "BlockReshape::decode expects one input\n";
     const Func &packed = encoded[0];
+    const int block_dims = (int)extents_.size() + 1;
+    user_assert(packed.dimensions() >= block_dims)
+        << "BlockReshape::decode requires at least " << block_dims << " dimensions, but "
+        << packed.name() << " has " << packed.dimensions() << "\n";
+    std::vector<Var> rest = batch_vars(packed.dimensions() - block_dims);
     Var k("k"), kk("kk"), blk("blk");
     Expr within = block_indexed_ ? Expr(kk) : k % block_size();
     Expr block = block_indexed_ ? Expr(blk) : k / block_size();
@@ -1177,18 +1206,37 @@ std::vector<Func> BlockReshape::decode(const std::vector<Func> &encoded) const {
         rem /= extent;
     }
     args.push_back(block);
-    Func out("block_reshape_unpacked");
+    args.insert(args.end(), rest.begin(), rest.end());
+    std::vector<Var> out_args;
     if (block_indexed_) {
-        out(kk, blk) = packed(args);
+        out_args = {kk, blk};
     } else {
-        out(k) = packed(args);
+        out_args = {k};
     }
+    out_args.insert(out_args.end(), rest.begin(), rest.end());
+    Func out("block_reshape_unpacked");
+    out(out_args) = packed(args);
     return {out};
 }
 
-ApproximationSignature BlockReshape::signature() const {
-    return {{{"values", std::nullopt, block_indexed_ ? 2 : 1}},
-            {{"blocks", std::nullopt, (int)extents_.size() + 1}}};
+ApproximationSignature BlockReshape::signature(const ApproximationPorts &inputs) const {
+    if (inputs.size() > 1) {
+        return ApproximationSignature::unknown(inputs);
+    }
+    const int flat_dims = block_indexed_ ? 2 : 1;
+    const int block_dims = (int)extents_.size() + 1;
+    ApproximationPort values("values"), blocks("blocks");
+    if (inputs.size() == 1) {
+        values.type = blocks.type = inputs[0].type;
+        blocks.range = inputs[0].range;
+    }
+    if (std::optional<int> dims = context_dimensions(inputs)) {
+        // Too few dimensions: declare the minimum, so validation reports it.
+        const int rest = std::max(*dims - flat_dims, 0);
+        values.dimensions = flat_dims + rest;
+        blocks.dimensions = block_dims + rest;
+    }
+    return {{values}, {blocks}};
 }
 
 int BlockReshape::block_size() const {
@@ -1209,11 +1257,12 @@ std::vector<Var> BlockReshape::block_vars() const {
 }
 
 StructLayout::StructLayout(Type record_type, std::vector<std::string> logical_fields,
-                           int record_dimensions)
+                           std::optional<int> record_dimensions)
     : record_type_(record_type), logical_fields_(std::move(logical_fields)),
       record_dimensions_(record_dimensions) {
     user_assert(record_type_.is_struct()) << "StructLayout requires a struct Type\n";
-    user_assert(record_dimensions_ > 0) << "StructLayout record dimensionality must be positive\n";
+    user_assert(!record_dimensions_ || *record_dimensions_ > 0)
+        << "StructLayout record dimensionality must be positive\n";
     const StructTypeInfo *info = record_type_.struct_type();
     user_assert(logical_fields_.size() == info->fields.size())
         << "StructLayout requires exactly one logical slot per physical field\n";
@@ -1235,7 +1284,11 @@ std::vector<Func> StructLayout::encode(const std::vector<Func> &inputs) const {
     user_assert(inputs.size() == logical_fields_.size())
         << "StructLayout::encode input count does not match logical field count\n";
     const StructTypeInfo *info = record_type_.struct_type();
-    std::vector<Var> records = component_vars(record_dimensions_, "record");
+    // Without a declared dimensionality, the first slot decides it.
+    const int record_dimensions =
+        record_dimensions_ ? *record_dimensions_ :
+                             inputs[0].dimensions() - (physical_field(logical_fields_[0]).array_extent ? 1 : 0);
+    std::vector<Var> records = component_vars(record_dimensions, "record");
     std::vector<Expr> record_args = component_exprs(records);
     std::vector<Expr> values;
     for (const StructField &field : info->fields) {
@@ -1245,7 +1298,7 @@ std::vector<Func> StructLayout::encode(const std::vector<Func> &inputs) const {
             << "StructLayout field '" << field.name << "' requires exact type " << field.type
             << " but slot " << slot << " has " << input.types()[0] << "\n";
         int extent = field.array_extent.value_or(1);
-        user_assert(input.dimensions() == record_dimensions_ + (field.array_extent ? 1 : 0))
+        user_assert(input.dimensions() == record_dimensions + (field.array_extent ? 1 : 0))
             << "StructLayout field '" << field.name << "' has the wrong dimensionality\n";
         for (int element = 0; element < extent; ++element) {
             std::vector<Expr> args = record_args;
@@ -1265,7 +1318,10 @@ std::vector<Func> StructLayout::decode(const std::vector<Func> &encoded) const {
                 encoded[0].types()[0] == record_type_)
         << "StructLayout::decode requires one Func of the exact record type\n";
     const Func &packed = encoded[0];
-    std::vector<Var> records = component_vars(record_dimensions_, "record");
+    user_assert(!record_dimensions_ || packed.dimensions() == *record_dimensions_)
+        << "StructLayout::decode requires " << *record_dimensions_ << " record dimensions, but "
+        << packed.name() << " has " << packed.dimensions() << "\n";
+    std::vector<Var> records = component_vars(packed.dimensions(), "record");
     std::vector<Expr> record_args = component_exprs(records);
     Expr record = packed(record_args);
     std::vector<Func> outputs;
@@ -1286,13 +1342,25 @@ std::vector<Func> StructLayout::decode(const std::vector<Func> &encoded) const {
     return outputs;
 }
 
-ApproximationSignature StructLayout::signature() const {
+ApproximationSignature StructLayout::signature(const ApproximationPorts &inputs) const {
+    std::optional<int> record_dimensions = record_dimensions_;
+    // Without a declared dimensionality, the first slot with a known one
+    // decides it, so validation reports any slot that disagrees.
+    for (size_t i = 0; !record_dimensions && i < inputs.size() && i < logical_fields_.size(); i++) {
+        if (inputs[i].dimensions) {
+            record_dimensions = *inputs[i].dimensions - (physical_field(logical_fields_[i]).array_extent ? 1 : 0);
+        }
+    }
     ApproximationSignature sig;
     for (const std::string &name : logical_fields_) {
         const StructField &f = physical_field(name);
-        sig.inputs.emplace_back(name, f.type, record_dimensions_ + (f.array_extent ? 1 : 0));
+        std::optional<int> dims;
+        if (record_dimensions) {
+            dims = *record_dimensions + (f.array_extent ? 1 : 0);
+        }
+        sig.inputs.emplace_back(name, f.type, dims);
     }
-    sig.outputs = {{"record", record_type_, record_dimensions_}};
+    sig.outputs = {{"record", record_type_, record_dimensions}};
     return sig;
 }
 
@@ -1317,37 +1385,52 @@ const StructField &StructLayout::physical_field(const std::string &name) const {
 }
 
 std::vector<Func> PlanarFieldPack::encode(const std::vector<Func> &inputs) const {
-    user_assert(inputs.size() == 1 && inputs[0].dimensions() == 2)
-        << "PlanarFieldPack::encode currently requires (element, record)\n";
+    user_assert(inputs.size() == 1 && inputs[0].dimensions() >= 2)
+        << "PlanarFieldPack::encode requires (element, record, ...)\n";
     const Func &fields = inputs[0];
     Var position("position"), record("record");
+    std::vector<Var> rest = batch_vars(fields.dimensions() - 2);
+    std::vector<Expr> args = {position, record};
+    args.insert(args.end(), rest.begin(), rest.end());
     RDom plane(0, planes_, "plane");
-    Expr element = plane * positions_ + position;
-    Expr value = cast<uint8_t>(fields(element, record)) & ((1 << field_bits_) - 1);
+    std::vector<Expr> field_args = args;
+    field_args[0] = plane * positions_ + position;
+    Expr value = cast<uint8_t>(fields(field_args)) & ((1 << field_bits_) - 1);
     Func bytes("planar_field_bytes");
-    bytes(position, record) = cast<uint8_t>(0);
-    bytes(position, record) = bytes(position, record) |
-                              cast<uint8_t>(value << (plane * field_bits_));
+    bytes(args) = cast<uint8_t>(0);
+    bytes(args) = bytes(args) | cast<uint8_t>(value << (plane * field_bits_));
     return {bytes};
 }
 
 std::vector<Func> PlanarFieldPack::decode(const std::vector<Func> &encoded) const {
     user_assert(encoded.size() == 1 && encoded[0].types() == std::vector<Type>{UInt(8)} &&
-                encoded[0].dimensions() == 2)
-        << "PlanarFieldPack::decode currently requires (position, record) bytes\n";
+                encoded[0].dimensions() >= 2)
+        << "PlanarFieldPack::decode requires (position, record, ...) bytes\n";
     const Func &bytes = encoded[0];
     Var element("element"), record("record");
+    std::vector<Var> rest = batch_vars(bytes.dimensions() - 2);
+    std::vector<Var> args = {element, record};
+    args.insert(args.end(), rest.begin(), rest.end());
+    std::vector<Expr> byte_args = component_exprs(args);
     Expr plane = element / positions_;
-    Expr position = element % positions_;
+    byte_args[0] = element % positions_;
     Func fields("planar_field_values");
-    fields(element, record) = cast<uint8_t>((bytes(position, record) >> (plane * field_bits_)) &
-                                            ((1 << field_bits_) - 1));
+    fields(args) = cast<uint8_t>((bytes(byte_args) >> (plane * field_bits_)) & ((1 << field_bits_) - 1));
     return {fields};
 }
 
-ApproximationSignature PlanarFieldPack::signature() const {
-    return {{{"fields", std::nullopt, 2, ApproximationRange(0, (double)((1 << field_bits_) - 1))}},
-            {{"bytes", UInt(8), 2}}};
+ApproximationSignature PlanarFieldPack::signature(const ApproximationPorts &inputs) const {
+    if (inputs.size() > 1) {
+        return ApproximationSignature::unknown(inputs);
+    }
+    std::optional<int> dims = context_dimensions(inputs);
+    if (dims) {
+        // Too few dimensions: declare the minimum, so validation reports it.
+        dims = std::max(*dims, 2);
+    }
+    std::optional<Type> type = inputs.size() == 1 ? inputs[0].type : std::nullopt;
+    return {{{"fields", type, dims, ApproximationRange(0, (double)((1 << field_bits_) - 1))}},
+            {{"bytes", UInt(8), dims}}};
 }
 
 PlanarFieldPack::PlanarFieldPack(int field_bits, int positions)
