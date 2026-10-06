@@ -58,6 +58,17 @@ struct TraceEventBuilder {
     }
 };
 
+vector<Expr> pure_box_coordinates(const Function &f) {
+    vector<Expr> coords;
+    for (const auto &arg : f.args()) {
+        Expr min = Variable::make(Int(32), f.name() + ".s0." + arg + ".min");
+        Expr max = Variable::make(Int(32), f.name() + ".s0." + arg + ".max");
+        coords.push_back(min);
+        coords.push_back((max + 1) - min);
+    }
+    return coords;
+}
+
 class InjectTracing : public IRMutator {
 public:
     const map<string, Function> &env;
@@ -357,13 +368,7 @@ protected:
         builder.func = op->name;
 
         // Use the size of the pure step
-        for (const auto &arg : f.args()) {
-            Expr min = Variable::make(Int(32), op->name + ".s0." + arg + ".min");
-            Expr max = Variable::make(Int(32), op->name + ".s0." + arg + ".max");
-            Expr extent = (max + 1) - min;
-            builder.coordinates.push_back(min);
-            builder.coordinates.push_back(extent);
-        }
+        builder.coordinates = pure_box_coordinates(f);
 
         builder.parent_id = Variable::make(Int(32), call_stack + ".trace_id");
         builder.event = (op->is_producer ? halide_trace_produce : halide_trace_consume);
@@ -380,6 +385,19 @@ protected:
     }
 };
 }  // namespace
+
+Stmt make_trace_bounds_required(const Function &f, const Expr &parent_id,
+                                const Target &t) {
+    if (!(f.is_tracing_bounds_required() || t.has_feature(Target::TraceBoundsRequired))) {
+        return Stmt();
+    }
+    TraceEventBuilder builder;
+    builder.func = f.name();
+    builder.coordinates = pure_box_coordinates(f);
+    builder.parent_id = parent_id;
+    builder.event = halide_trace_bounds_required;
+    return Evaluate::make(builder.build());
+}
 
 Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
                     const map<string, Function> &env, const vector<Function> &outputs,
@@ -414,7 +432,13 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
         return self->visit_base(op);
     });
 
-    if (!s.same_as(original) || trace_pipeline || t.has_feature(Target::TracePipeline)) {
+    bool trace_bounds_required = t.has_feature(Target::TraceBoundsRequired);
+    for (const auto &[name, f] : env) {
+        trace_bounds_required |= f.is_tracing_bounds_required();
+    }
+
+    if (!s.same_as(original) || trace_pipeline || trace_bounds_required ||
+        t.has_feature(Target::TracePipeline)) {
         // Add pipeline start and end events
         TraceEventBuilder builder;
         builder.func = pipeline_name;
@@ -428,6 +452,12 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
         Expr pipeline_end = builder.build();
 
         s = Block::make(s, Evaluate::make(pipeline_end));
+
+        if (trace_bounds_required) {
+            Expr marker = Call::make(Int(32), Call::trace_bounds_required_marker,
+                                     {builder.parent_id}, Call::Intrinsic);
+            s = Block::make(Evaluate::make(marker), s);
+        }
 
         // All trace_tag events go at the start, immediately after begin_pipeline.
         // For a given realization/input/output, we output them in the order

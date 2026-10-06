@@ -593,6 +593,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"trace_stores", Target::TraceStores},
     {"trace_realizations", Target::TraceRealizations},
     {"trace_pipeline", Target::TracePipeline},
+    {"trace_bounds_required", Target::TraceBoundsRequired},
     {"d3d12compute", Target::D3D12Compute},
     {"hlsl_sm60", Target::HLSL_SM60},
     {"hlsl_sm61", Target::HLSL_SM61},
@@ -779,7 +780,7 @@ bool merge_string(Target &t, const std::string &target) {
             t.set_feature(feature);
             features_specified = true;
         } else if (tok == "trace_all") {
-            t.set_features({Target::TraceLoads, Target::TraceStores, Target::TraceRealizations});
+            t.set_features({Target::TraceLoads, Target::TraceStores, Target::TraceRealizations, Target::TraceBoundsRequired});
             features_specified = true;
         } else if ((vector_bits = parse_vector_bits(tok)) >= 0) {
             t.vector_bits = vector_bits;
@@ -1105,8 +1106,9 @@ std::string Target::to_string() const {
     }
     // Use has_feature() multiple times (rather than features_any_of())
     // to avoid constructing a temporary vector for this rather-common call.
-    if (has_feature(Target::TraceLoads) && has_feature(Target::TraceStores) && has_feature(Target::TraceRealizations)) {
-        result = Internal::replace_all(std::move(result), "trace_loads-trace_realizations-trace_stores", "trace_all");
+    if (has_feature(Target::TraceLoads) && has_feature(Target::TraceStores) &&
+        has_feature(Target::TraceRealizations) && has_feature(Target::TraceBoundsRequired)) {
+        result = Internal::replace_all(std::move(result), "trace_bounds_required-trace_loads-trace_realizations-trace_stores", "trace_all");
     }
     if (vector_bits != 0) {
         result += "-vector_bits_" + std::to_string(vector_bits);
@@ -1230,10 +1232,12 @@ const std::vector<std::pair<Target::Feature, Target::Feature>> &implied_feature_
         {Target::ARMv82a, Target::ARMv81a},
         {Target::ARMv81a, Target::ARMv8a},
 
-        // Tracing loads or stores also produces the enclosing realization
-        // begin/end events, so that the traced loads and stores have context.
+        // Tracing loads, stores, or bounds required also produces the
+        // enclosing realization begin/end events, so that the traced events
+        // have context.
         {Target::TraceLoads, Target::TraceRealizations},
         {Target::TraceStores, Target::TraceRealizations},
+        {Target::TraceBoundsRequired, Target::TraceRealizations},
     };
     return pairs;
 }

@@ -529,6 +529,7 @@ tests(
     too_many_args.cpp
     tracing.cpp
     tracing_bounds.cpp
+    tracing_bounds_required.cpp
     tracing_broadcast.cpp
     tracing_errors.cpp
     tracing_matched_events.cpp

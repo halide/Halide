@@ -146,6 +146,7 @@ struct Target {
         TraceStores = halide_target_feature_trace_stores,
         TraceRealizations = halide_target_feature_trace_realizations,
         TracePipeline = halide_target_feature_trace_pipeline,
+        TraceBoundsRequired = halide_target_feature_trace_bounds_required,
         D3D12Compute = halide_target_feature_d3d12compute,
         StrictFloat = halide_target_feature_strict_float,
         TSAN = halide_target_feature_tsan,
