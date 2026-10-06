@@ -11,6 +11,24 @@ const KIND_MALLOC = 3;
 const KIND_FREE = 4;
 const KIND_ALLOCATION = 7;
 
+// Bit positions in `ProfileFunc.counters_approximated`, matching the
+// `counter_*` enum in `profiler_common.cpp`.
+const COUNTER_MEMORY_TOTAL = 0;
+const COUNTER_NUM_ALLOCS = 1;
+const COUNTER_PARALLEL_LOOPS = 2;
+const COUNTER_PARALLEL_TASKS = 3;
+const COUNTER_POINTS_COMPUTED = 5;
+
+function isApproximate(func: ProfileFunc, counter: number): boolean {
+  return ((func.counters_approximated ?? 0) & (1 << counter)) !== 0;
+}
+
+/** Marks a conservative upper bound with a leading '<', as the runtime
+ * report does. */
+function approx(text: string, isApprox: boolean): string {
+  return isApprox && text !== "" ? `<${text}` : text;
+}
+
 const SI_SUFFIXES = ["", "K", "M", "G", "T", "P", "E"];
 
 /** SI-suffixed byte/allocation counter (10000 -> 10K, 1e6 -> 1.0M, ...),
@@ -64,6 +82,15 @@ function formatTime(timeNs: number, billedRuns: number): string {
 function formatPercent(timeNs: number, pipelineTimeNs: number): string {
   const pct = pipelineTimeNs > 0 ? (timeNs / pipelineTimeNs) * 100 : 0;
   return `(${pct.toFixed(1)}%)`;
+}
+
+function formatRecompute(recompute: number | undefined): string {
+  if (!recompute || recompute <= 0) {
+    return "";
+  }
+  return recompute >= 10000
+    ? formatCounter(Math.round(recompute))
+    : recompute.toFixed(2);
 }
 
 function formatThreads(numerator: number, denominator: number): string {
@@ -123,7 +150,8 @@ interface CumulativeStats {
 }
 
 /** Rolls each Func's time and active-thread stats up into its ancestors, for
- * the cumulative "active threads" column. */
+ * the cumulative "active threads" column. Used for profiles that predate the
+ * per-Func `cumulative` field. */
 function computeCumulativeStats(
   funcs: ProfileFunc[],
   order: number[],
@@ -217,17 +245,24 @@ function HeaderCell({ label, className }: HeaderCellProps) {
  */
 function ProfileTable() {
   const { pipelines } = useProfileContext();
-  const { funcs, runs, billed_runs, time_ns, num_allocs } = pipelines[0];
+  const {
+    funcs,
+    runs,
+    billed_runs,
+    time_ns,
+    num_allocs,
+    warnings: pipelineWarnings = [],
+  } = pipelines[0];
 
   const { order, depth, isLastSibling } = React.useMemo(
     () => buildTree(funcs),
     [funcs],
   );
 
-  const cumulative = React.useMemo(
-    () => computeCumulativeStats(funcs, order),
-    [funcs, order],
-  );
+  const cumulative = React.useMemo(() => {
+    const computed = computeCumulativeStats(funcs, order);
+    return funcs.map((fs, i) => fs.cumulative ?? computed[i]);
+  }, [funcs, order]);
 
   const rows = React.useMemo(
     () =>
@@ -250,78 +285,155 @@ function ProfileTable() {
     [funcs, num_allocs, order],
   );
 
-  return (
-    <table className="text-ps-text-primary text-tiny m-4 w-full border-collapse font-mono">
-      <thead className="bg-ps-secondary sticky top-0">
-        <tr className="border-ps-border-tertiary border-b text-left">
-          <HeaderCell label="name" />
-          <HeaderCell label="time" className="text-right" />
-          <HeaderCell label="percent" className="text-right" />
-          <HeaderCell label="active threads" className="text-right" />
-          <HeaderCell label="heap allocs" className="text-right" />
-          <HeaderCell label="peak mem" className="text-right" />
-          <HeaderCell label="avg mem" className="text-right" />
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((i) => {
-          const fs = funcs[i];
-          const cs = cumulative[i];
-          const isAllocation = fs.kind === KIND_ALLOCATION;
-          const peakMem = fs.num_allocs > 0 ? fs.memory_peak : fs.stack_peak;
-          const avgMem =
-            fs.num_allocs > 0 ? Math.floor(fs.memory_total / fs.num_allocs) : 0;
+  // Number the per-Func warnings in table order. Instances of a Func share a
+  // canonical id and therefore the same warnings and numbers.
+  const { warningList, notes } = React.useMemo(() => {
+    const warningList: string[] = [];
+    const byCanonical = new Map<number, number[]>();
+    for (const i of rows) {
+      const fs = funcs[i];
+      if (!fs.warnings?.length || byCanonical.has(fs.canonical_id)) {
+        continue;
+      }
+      byCanonical.set(
+        fs.canonical_id,
+        fs.warnings.map((w) => warningList.push(w)),
+      );
+    }
+    const notes = funcs.map((fs) =>
+      (byCanonical.get(fs.canonical_id) ?? []).join(","),
+    );
+    return { warningList, notes };
+  }, [funcs, rows]);
 
-          return (
-            <tr key={i} className="hover:bg-ps-border-primary/40">
-              <td className="px-2 py-0.5">
-                <NameCell
-                  func={fs}
-                  funcs={funcs}
-                  idx={i}
-                  depth={depth[i]}
-                  isLastSibling={isLastSibling}
-                />
-              </td>
-              {isAllocation ? (
-                <td
-                  colSpan={2}
-                  className="text-ps-text-secondary px-2 py-0.5 text-center italic"
-                >
-                  (allocation)
+  return (
+    <div className="text-ps-text-primary text-tiny m-4 font-mono">
+      <table className="w-full border-collapse">
+        <thead className="bg-ps-secondary sticky top-0">
+          <tr className="border-ps-border-tertiary border-b text-left">
+            <HeaderCell label="name" />
+            <HeaderCell label="time" className="text-right" />
+            <HeaderCell label="percent" className="text-right" />
+            <HeaderCell label="active threads" className="text-right" />
+            <HeaderCell label="parallel loops" className="text-right" />
+            <HeaderCell label="parallel tasks" className="text-right" />
+            <HeaderCell label="heap allocs" className="text-right" />
+            <HeaderCell label="peak mem" className="text-right" />
+            <HeaderCell label="avg mem" className="text-right" />
+            <HeaderCell label="recompute ratio" className="text-right" />
+            <HeaderCell label="notes" />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((i) => {
+            const fs = funcs[i];
+            const cs = cumulative[i];
+            const isAllocation = fs.kind === KIND_ALLOCATION;
+            const peakMem = fs.num_allocs > 0 ? fs.memory_peak : fs.stack_peak;
+            const avgMem =
+              fs.num_allocs > 0
+                ? Math.floor(fs.memory_total / fs.num_allocs)
+                : 0;
+
+            return (
+              <tr key={i} className="hover:bg-ps-border-primary/40">
+                <td className="px-2 py-0.5">
+                  <NameCell
+                    func={fs}
+                    funcs={funcs}
+                    idx={i}
+                    depth={depth[i]}
+                    isLastSibling={isLastSibling}
+                  />
                 </td>
-              ) : (
-                <>
-                  <td className="px-2 py-0.5 text-right">
-                    {formatTime(fs.time_ns, billed_runs)}
+                {isAllocation ? (
+                  <td
+                    colSpan={2}
+                    className="text-ps-text-secondary px-2 py-0.5 text-center italic"
+                  >
+                    (allocation)
                   </td>
-                  <td className="px-2 py-0.5 text-right">
-                    {formatPercent(fs.time_ns, time_ns)}
-                  </td>
-                </>
-              )}
-              <td className="px-2 py-0.5 text-right">
-                {!isAllocation && cs.time_ns > 0
-                  ? formatThreads(
-                      cs.active_threads_numerator,
-                      cs.active_threads_denominator,
-                    )
-                  : ""}
-              </td>
-              <td className="px-2 py-0.5 text-right">
-                {formatNormalizedCounter(fs.num_allocs, runs)}
-              </td>
-              <td className="px-2 py-0.5 text-right">
-                {formatCounter(peakMem)}
-              </td>
-              <td className="px-2 py-0.5 text-right">
-                {formatCounter(avgMem)}
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+                ) : (
+                  <>
+                    <td className="px-2 py-0.5 text-right">
+                      {formatTime(fs.time_ns, billed_runs)}
+                    </td>
+                    <td className="px-2 py-0.5 text-right">
+                      {formatPercent(fs.time_ns, time_ns)}
+                    </td>
+                  </>
+                )}
+                <td className="px-2 py-0.5 text-right">
+                  {!isAllocation && cs.time_ns > 0
+                    ? formatThreads(
+                        cs.active_threads_numerator,
+                        cs.active_threads_denominator,
+                      )
+                    : ""}
+                </td>
+                <td className="px-2 py-0.5 text-right">
+                  {isAllocation
+                    ? ""
+                    : approx(
+                        formatNormalizedCounter(fs.parallel_loops, runs),
+                        isApproximate(fs, COUNTER_PARALLEL_LOOPS),
+                      )}
+                </td>
+                <td className="px-2 py-0.5 text-right">
+                  {isAllocation
+                    ? ""
+                    : approx(
+                        formatNormalizedCounter(fs.parallel_tasks, runs),
+                        isApproximate(fs, COUNTER_PARALLEL_TASKS),
+                      )}
+                </td>
+                <td className="px-2 py-0.5 text-right">
+                  {approx(
+                    formatNormalizedCounter(fs.num_allocs, runs),
+                    isApproximate(fs, COUNTER_NUM_ALLOCS),
+                  )}
+                </td>
+                <td className="px-2 py-0.5 text-right">
+                  {formatCounter(peakMem)}
+                </td>
+                <td className="px-2 py-0.5 text-right">
+                  {approx(
+                    formatCounter(avgMem),
+                    isApproximate(fs, COUNTER_MEMORY_TOTAL),
+                  )}
+                </td>
+                <td className="px-2 py-0.5 text-right">
+                  {isAllocation
+                    ? ""
+                    : approx(
+                        formatRecompute(fs.recompute),
+                        isApproximate(fs, COUNTER_POINTS_COMPUTED),
+                      )}
+                </td>
+                <td className="px-2 py-0.5">{isAllocation ? "" : notes[i]}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {(pipelineWarnings.length > 0 || warningList.length > 0) && (
+        <div className="mt-3 font-sans">
+          <div className="text-ps-text-primary/60 italic">
+            Performance warnings:
+          </div>
+          <ul className="ml-4 list-disc">
+            {pipelineWarnings.map((w, k) => (
+              <li key={k}>{w}</li>
+            ))}
+          </ul>
+          <ol className="ml-4 list-decimal">
+            {warningList.map((w, k) => (
+              <li key={k}>{w}</li>
+            ))}
+          </ol>
+        </div>
+      )}
+    </div>
   );
 }
 

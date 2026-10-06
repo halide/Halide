@@ -9,6 +9,28 @@ export interface LivenessRange {
 }
 
 /**
+ * One instance of a Func's realize, produce, or consume node.
+ */
+export interface LiveBox {
+  /** The packet index at which the node begins. */
+  start: number;
+  /** The packet index at which the node ends. */
+  end: number;
+  /** The region covered, as interleaved (min, extent) pairs per dimension. Consume nodes carry
+   * the region of the corresponding produce node. */
+  bounds: number[];
+}
+
+/**
+ * Every realize, produce, and consume node instance of a Func.
+ */
+export interface FuncLiveness {
+  realizations: LiveBox[];
+  productions: LiveBox[];
+  consumptions: LiveBox[];
+}
+
+/**
  * Represents top-level metadata for a Func.
  */
 export interface FuncMeta extends Record<string, unknown> {
@@ -52,10 +74,8 @@ export interface FuncMeta extends Record<string, unknown> {
   max_reuse_distance: number;
   /** The packet index range over which this Func's buffer is live in memory. */
   buffer_liveness: LivenessRange;
-  /** The packet index ranges during which this Func is being produced. */
-  produce_ranges: LivenessRange[];
-  /** The packet index ranges during which this Func is being consumed. */
-  consume_ranges: LivenessRange[];
+  /** The realize, produce, and consume node instances of this Func. */
+  liveness: FuncLiveness;
   /** The number of distinct threads that executed this Func. */
   thread_count: number;
   /** The IDs of the distinct threads that executed this Func. */

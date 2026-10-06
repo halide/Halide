@@ -2,6 +2,7 @@ import {
   applyEdgeChanges,
   ReactFlow,
   useNodesState,
+  useReactFlow,
   useViewport,
   type Node,
   type Edge,
@@ -13,9 +14,11 @@ import * as React from "react";
 import FuncEdge from "@/components/trace/canvas/FuncEdge";
 import FuncNode from "@/components/trace/canvas/FuncNode";
 import Overlay from "@/components/trace/canvas/Overlay";
+import ValueStatus from "@/components/trace/canvas/ValueStatus";
 import { funcAtom } from "@/state/func";
+import { funcViewAtom, getFuncView } from "@/state/funcView";
 import { edgesAtom } from "@/state/graph";
-import { livenessAtom } from "@/state/liveness";
+import { LIVENESS_LEGEND, livenessAtom } from "@/state/liveness";
 import type { FuncMeta } from "@/types/trace";
 import { buildEdges, buildNodes, getLayoutedElements } from "@/utils/graph";
 
@@ -33,18 +36,31 @@ interface Props {
 }
 
 function Canvas({ funcs, dagEdges }: Props) {
+  const views = useAtomValue(funcViewAtom);
+  // Only zoom affects layout, so key the layout on the zooms rather than the whole views.
+  const zoomKey = JSON.stringify(
+    Object.entries(funcs).map(
+      ([name, func]) => getFuncView(views[name], func).zoom,
+    ),
+  );
   const { nodes: initialNodes, edges: initialEdges } = React.useMemo(() => {
     return getLayoutedElements(
-      buildNodes(funcs, "funcNode"),
+      buildNodes(funcs, "funcNode", views),
       buildEdges(dagEdges, "funcEdge"),
     );
-  }, [funcs, dagEdges]);
-  const [nodes, _setNodes, onNodesChange] =
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [funcs, dagEdges, zoomKey]);
+  const [nodes, setNodes, onNodesChange] =
     useNodesState<Node<FuncMeta>>(initialNodes);
+
+  React.useEffect(() => {
+    setNodes(initialNodes);
+  }, [initialNodes, setNodes]);
   const [edges, setEdges] = useAtom(edgesAtom);
   const setFunc = useSetAtom(funcAtom);
   const liveness = useAtomValue(livenessAtom);
   const { zoom } = useViewport();
+  const { zoomTo } = useReactFlow();
 
   React.useEffect(() => {
     setEdges(initialEdges);
@@ -70,41 +86,38 @@ function Canvas({ funcs, dagEdges }: Props) {
         edgeTypes={EDGE_TYPES}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        minZoom={0.01}
+        minZoom={1e-4}
+        maxZoom={Infinity}
         fitView
-        fitViewOptions={{ padding: 0.1 }}
+        fitViewOptions={{ padding: 0.1, maxZoom: 2 }}
         proOptions={{ hideAttribution: true }}
         onNodeClick={(_, node) => setFunc(node.data.name)}
       />
       {liveness.active ? (
         <Overlay className="bottom-2 left-2">
-          {liveness.mode === "realizations" ? (
-            <div className="flex items-center gap-2">
-              <div className="ring-oxide-yellow/30 h-3 w-3 ring-2">
-                <div className="ring-oxide-yellow h-full w-full ring-1" />
+          <div className="flex flex-col gap-2">
+            {LIVENESS_LEGEND.map(({ color, label }) => (
+              <div key={label} className="flex items-center gap-2">
+                <div
+                  className="h-3 w-3 border-2"
+                  style={{ borderColor: color }}
+                />
+                <span>{label}</span>
               </div>
-              <span>Buffer Live in Memory</span>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <div className="ring-oxide-green/30 h-3 w-3 ring-2">
-                  <div className="ring-oxide-green h-3 w-3 ring-1" />
-                </div>
-                <span>Producer</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="ring-oxide-purple/30 h-3 w-3 ring-2">
-                  <div className="ring-oxide-purple h-3 w-3 ring-1" />
-                </div>
-                <span>Consumer</span>
-              </div>
-            </div>
-          )}
+            ))}
+          </div>
         </Overlay>
       ) : null}
+      <ValueStatus />
       <Overlay className="right-2 bottom-2">
-        Zoom: {Math.round(zoom * 100)}%
+        <button
+          type="button"
+          className="cursor-pointer"
+          title="Reset to 100%"
+          onClick={() => zoomTo(1)}
+        >
+          Zoom: {Math.round(zoom * 100)}%
+        </button>
       </Overlay>
     </div>
   );

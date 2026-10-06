@@ -249,8 +249,9 @@ fn snapshot(subcommand: SubcommandMatches) -> Option<()> {
     }
 
     let ext = Path::new(destination).extension().and_then(OsStr::to_str);
-    let store_indices = trace.func_store_indices(func)?;
-    let load_indices = trace.func_load_indices(func)?;
+    let store_indices = trace.func_store_indices(func).unwrap_or(&[]);
+    let load_indices = trace.func_load_indices(func).unwrap_or(&[]);
+    let value_indices = trace.func_value_indices(func);
     let k = packet_index.try_into().unwrap_or_else(|_| {
         eprintln!("Packet index {} is too large.", packet_index);
         std::process::exit(1);
@@ -266,7 +267,7 @@ fn snapshot(subcommand: SubcommandMatches) -> Option<()> {
                         std::process::exit(1);
                     };
 
-                    gs.seek(&trace, store_indices, k);
+                    gs.seek(&trace, value_indices, k);
                     serde_json::to_string_pretty(&gs.to_values()).unwrap_or_else(|e| {
                         eprintln!("Error serializing values to JSON: {}", e);
                         std::process::exit(1);
@@ -278,7 +279,7 @@ fn snapshot(subcommand: SubcommandMatches) -> Option<()> {
                         std::process::exit(1);
                     };
 
-                    rgbs.seek(&trace, store_indices, k);
+                    rgbs.seek(&trace, value_indices, k);
                     serde_json::to_string_pretty(&rgbs.to_values()).unwrap_or_else(|e| {
                         eprintln!("Error serializing values to JSON: {}", e);
                         std::process::exit(1);

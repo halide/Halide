@@ -35,11 +35,7 @@ function FuncEdge({
   const liveness = useAtomValue(livenessAtom);
   const packetIndex = useAtomValue(packetAtom);
   const isProduceConsumeMode = React.useMemo(() => {
-    return (
-      liveness.active &&
-      liveness.mode === "produce-consume" &&
-      isEdgeLive(funcs, source, target, packetIndex)
-    );
+    return liveness.active && isEdgeLive(funcs, source, target, packetIndex);
   }, [liveness, funcs, packetIndex, source, target]);
 
   return (
@@ -53,8 +49,8 @@ function FuncEdge({
           x2={targetX}
           y2={targetY}
         >
-          <stop offset="0%" stopColor="var(--color-oxide-green)" />
-          <stop offset="100%" stopColor="var(--color-oxide-purple)" />
+          <stop offset="0%" stopColor="var(--color-oxide-purple)" />
+          <stop offset="100%" stopColor="var(--color-oxide-green)" />
         </linearGradient>
       </defs>
       <BaseEdge

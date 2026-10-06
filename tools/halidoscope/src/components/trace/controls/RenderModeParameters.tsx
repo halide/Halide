@@ -2,6 +2,7 @@ import { useAtom } from "jotai";
 import * as React from "react";
 
 import Select from "@/components/shared/Select";
+import ValueControls from "@/components/trace/controls/ValueControls";
 import { useTraceContext } from "@/hooks/trace";
 import { funcAtom } from "@/state/func";
 import { type NormalizationMode, renderAtom } from "@/state/render";
@@ -19,7 +20,13 @@ function RenderModeParameters() {
     switch (render.renderMode) {
       case "Grayscale":
       case "RGB":
-        return null;
+        return funcs[activeFunc] ? (
+          <ValueControls
+            key={activeFunc}
+            func={funcs[activeFunc]}
+            firstSliderDim={render.renderMode === "RGB" ? 3 : 2}
+          />
+        ) : null;
       case "Store Frequency":
       case "Load Frequency":
       case "Redundant Stores":

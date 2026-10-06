@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use serde::Serialize;
 
 // ── Type system ──────────────────────────────────────────────────────────────────────────────────
 
@@ -63,6 +64,7 @@ pub enum EventCode {
     Tag,
     BeginParallelTask,
     EndParallelTask,
+    BoundsRequired,
     Unknown(i32),
 }
 
@@ -82,6 +84,7 @@ impl EventCode {
             10 => Self::Tag,
             11 => Self::BeginParallelTask,
             12 => Self::EndParallelTask,
+            13 => Self::BoundsRequired,
             other => Self::Unknown(other),
         }
     }
@@ -201,6 +204,39 @@ pub struct FuncGeometry {
     pub max_reuse_distance: u64,
 }
 
+/// One instance of a Func's realize, produce, or consume node: the packet index range it spans
+/// and the region it covers, as interleaved (min, extent) pairs per dimension.
+#[derive(Debug, Clone, Serialize)]
+pub struct LiveBox {
+    pub start: u32,
+    pub end: u32,
+    pub bounds: Vec<i32>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct FuncLiveness {
+    pub realizations: Vec<LiveBox>,
+    pub productions: Vec<LiveBox>,
+    pub consumptions: Vec<LiveBox>,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum LiveKind {
+    Realization,
+    Production,
+    Consumption,
+}
+
+impl FuncLiveness {
+    fn boxes_mut(&mut self, kind: LiveKind) -> &mut Vec<LiveBox> {
+        match kind {
+            LiveKind::Realization => &mut self.realizations,
+            LiveKind::Production => &mut self.productions,
+            LiveKind::Consumption => &mut self.consumptions,
+        }
+    }
+}
+
 // ── Complete trace ───────────────────────────────────────────────────────────────────────────────
 
 // Note: We use BTreeMaps for deterministic iteration order here. We could consider switching to
@@ -211,9 +247,7 @@ pub struct Trace {
     pub dag_edges: BTreeMap<String, BTreeSet<String>>,
     pub store_indices_by_func: BTreeMap<String, Vec<usize>>,
     pub load_indices_by_func: BTreeMap<String, Vec<usize>>,
-    pub buffer_liveness_range_by_func: BTreeMap<String, (u32, u32)>,
-    pub produce_ranges_by_func: BTreeMap<String, Vec<(u32, u32)>>,
-    pub consume_ranges_by_func: BTreeMap<String, Vec<(u32, u32)>>,
+    pub liveness_by_func: BTreeMap<String, FuncLiveness>,
     pub thread_ids_by_func: BTreeMap<String, BTreeSet<i32>>,
     pub global_max_store_count: u32,
     pub global_max_load_count: u32,
@@ -305,31 +339,66 @@ fn update_coord_range(pkt: &TracePacket, stats: &mut FuncStats) {
 }
 
 // Update the min/max value in FuncStats based on the value seen in a given packet.
-fn update_value_range(pkt: &TracePacket, stats: &mut FuncStats) {
+/// Widens `[min_value, max_value]` to include the finite values of the lanes of `pkt` for which
+/// `include_lane` is true.
+fn update_value_range(
+    pkt: &TracePacket,
+    min_value: &mut Option<f64>,
+    max_value: &mut Option<f64>,
+    include_lane: impl Fn(usize) -> bool,
+) {
     for i in 0..pkt.type_.lanes as usize {
+        if !include_lane(i) {
+            continue;
+        }
         if let Some(v) = pkt.decoded_value(i) {
-            match (stats.min_value, stats.max_value) {
+            match (*min_value, *max_value) {
                 (None, _) => {
                     // Ensure we do not initialize min/max with NaN or Inf.
                     if v.is_nan() || v.is_infinite() {
                         continue;
                     }
 
-                    stats.min_value = Some(v);
-                    stats.max_value = Some(v);
+                    *min_value = Some(v);
+                    *max_value = Some(v);
                 }
                 (Some(mn), Some(mx)) => {
                     if v < mn && v.is_finite() {
-                        stats.min_value = Some(v);
+                        *min_value = Some(v);
                     }
 
                     if v > mx && v.is_finite() {
-                        stats.max_value = Some(v);
+                        *max_value = Some(v);
                     }
                 }
                 _ => {}
             }
         }
+    }
+}
+
+/// Whether lane `lane` of `pkt` lies within `bounds`, which holds `[min, extent]` per dim with
+/// each entry lane-interleaved like `pkt.coordinates` (a produce inside a vectorized loop has one
+/// box per lane). A box with a different lane count than `pkt` matches if any of its lanes does.
+fn lane_in_bounds(pkt: &TracePacket, lane: usize, bounds: &[i32]) -> bool {
+    let n_lanes = pkt.type_.lanes.max(1) as usize;
+    let dims = pkt.coordinates.len() / n_lanes;
+    if dims == 0 || bounds.len() % (2 * dims) != 0 {
+        return true;
+    }
+    let box_lanes = bounds.len() / (2 * dims);
+    let in_box_lane = |bl: usize| {
+        (0..dims).all(|d| {
+            let c = pkt.coordinates[d * n_lanes + lane];
+            let min = bounds[2 * d * box_lanes + bl];
+            let extent = bounds[(2 * d + 1) * box_lanes + bl];
+            c >= min && c - min < extent
+        })
+    };
+    if box_lanes == 1 || box_lanes == n_lanes {
+        in_box_lane(if box_lanes == 1 { 0 } else { lane })
+    } else {
+        (0..box_lanes).any(in_box_lane)
     }
 }
 
@@ -398,7 +467,12 @@ fn parse_func_type_and_dim(
 
 impl Trace {
     pub fn load_from_file(path: &str, on_progress: impl FnMut(String, u8)) -> Result<Self, String> {
-        let data = std::fs::read(path).map_err(|e| e.to_string())?;
+        let mut data = std::fs::read(path).map_err(|e| e.to_string())?;
+        // Traces written by Pipeline::halidoscope are zstd-compressed; HL_TRACE_FILE traces are not.
+        const ZSTD_MAGIC: [u8; 4] = [0x28, 0xb5, 0x2f, 0xfd];
+        if data.starts_with(&ZSTD_MAGIC) {
+            data = zstd::decode_all(data.as_slice()).map_err(|e| e.to_string())?;
+        }
         Self::load_from_bytes(&data, on_progress)
     }
 
@@ -415,9 +489,13 @@ impl Trace {
         let mut dag_edges: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
         let mut store_indices_by_func: BTreeMap<String, Vec<usize>> = BTreeMap::new();
         let mut load_indices_by_func: BTreeMap<String, Vec<usize>> = BTreeMap::new();
-        let mut buffer_liveness_range_by_func: BTreeMap<String, (u32, u32)> = BTreeMap::new();
-        let mut produce_ranges_by_func: BTreeMap<String, Vec<(u32, u32)>> = BTreeMap::new();
-        let mut consume_ranges_by_func: BTreeMap<String, Vec<(u32, u32)>> = BTreeMap::new();
+        let mut liveness_by_func: BTreeMap<String, FuncLiveness> = BTreeMap::new();
+        // Begin-event id -> the LiveBox it opened, until its end event arrives.
+        let mut open_boxes: HashMap<i32, (LiveKind, String, usize)> = HashMap::new();
+        // The latest produce box of a Func, keyed by the produce's parent and by the Func's
+        // enclosing realization, for finding the produce node corresponding to a consume node.
+        let mut produce_box_by_parent: HashMap<(i32, String), Vec<i32>> = HashMap::new();
+        let mut produce_box_by_realization: HashMap<i32, Vec<i32>> = HashMap::new();
         let mut thread_ids_by_func: BTreeMap<String, BTreeSet<i32>> = BTreeMap::new();
 
         // Trace-level maximum values.
@@ -439,6 +517,18 @@ impl Trace {
 
         // Loads we deferred for DAG inference.
         let mut pending_loads: Vec<(String, i32)> = Vec::new();
+
+        // Produce event id -> the region it is required to compute (see `lane_in_bounds`).
+        let mut produce_bounds_by_id: HashMap<i32, Vec<i32>> = HashMap::new();
+        // Parent id -> func -> the most recent BoundsRequired region declared for that func
+        // within that parent.
+        let mut bounds_required_by_parent: HashMap<i32, HashMap<String, Vec<i32>>> = HashMap::new();
+        // The regions constraining the most recent store, keyed by (parent_id, func).
+        let mut last_store_bounds: Option<(i32, String, Vec<Vec<i32>>)> = None;
+
+        // Value ranges observed by loads, used only for Funcs with no stores.
+        let mut load_value_range_by_func: HashMap<String, (Option<f64>, Option<f64>)> =
+            HashMap::new();
 
         // Packet parsing loop.
         while pos + HEADER_BYTES <= total {
@@ -564,23 +654,24 @@ impl Trace {
                 EventCode::BeginRealization => {
                     let entry = funcs.entry(func_name.clone()).or_default();
                     entry.name = func_name.clone();
-
-                    // Start the liveness range for this Func at the current packet index.
-                    let idx = packets.len() as u32;
-
-                    buffer_liveness_range_by_func
-                        .entry(func_name.clone())
-                        .and_modify(|range| range.0 = range.0.min(idx))
-                        .or_insert((idx, idx));
+                    open_live_box(
+                        &mut liveness_by_func,
+                        &mut open_boxes,
+                        LiveKind::Realization,
+                        &func_name,
+                        id,
+                        packets.len() as u32,
+                        pkt.coordinates.clone(),
+                    );
                 }
-                EventCode::EndRealization => {
-                    // End the liveness range for this Func at the current packet index.
-                    let idx = packets.len() as u32;
-
-                    buffer_liveness_range_by_func
-                        .entry(func_name.clone())
-                        .and_modify(|range| range.1 = range.1.max(idx))
-                        .or_insert((idx, idx));
+                EventCode::EndRealization | EventCode::EndProduce | EventCode::EndConsume => {
+                    close_live_boxes(
+                        &mut liveness_by_func,
+                        &mut open_boxes,
+                        &id_to_info,
+                        parent_id,
+                        packets.len() as u32,
+                    );
                 }
                 EventCode::Load => {
                     // When we observe a load event, add its current index (equivalent to
@@ -600,7 +691,10 @@ impl Trace {
                     // Update the min/max coordinate and value ranges for this Func based on the
                     // current load packet.
                     update_coord_range(&pkt, stats);
-                    update_value_range(&pkt, stats);
+                    let (min_value, max_value) = load_value_range_by_func
+                        .entry(func_name.clone())
+                        .or_default();
+                    update_value_range(&pkt, min_value, max_value, |_| true);
                 }
                 EventCode::Store => {
                     // When we observe a store event, add its current index (equivalent to
@@ -618,46 +712,90 @@ impl Trace {
                         ..Default::default()
                     });
                     update_coord_range(&pkt, stats);
-                    update_value_range(&pkt, stats);
+
+                    // Values stored outside the enclosing produce's region, or outside any region
+                    // declared required by a BoundsRequired event along the parent chain, are
+                    // intentional overcompute (e.g. rounded-up splits) and may be garbage, so
+                    // they don't count towards the value range.
+                    let cached = last_store_bounds
+                        .as_ref()
+                        .is_some_and(|(p, f, _)| *p == parent_id && *f == func_name);
+                    if !cached {
+                        let mut bounds = Vec::new();
+                        let mut seen_produce = false;
+                        let mut ancestor = parent_id;
+                        loop {
+                            if let Some(b) = bounds_required_by_parent
+                                .get(&ancestor)
+                                .and_then(|m| m.get(&func_name))
+                            {
+                                bounds.push(b.clone());
+                            }
+                            let Some((ev, name, parent)) = id_to_info.get(&ancestor) else {
+                                break;
+                            };
+                            if !seen_produce && *ev == EventCode::Produce && *name == func_name {
+                                if let Some(b) = produce_bounds_by_id.get(&ancestor) {
+                                    bounds.push(b.clone());
+                                }
+                                seen_produce = true;
+                            }
+                            if *parent == ancestor {
+                                break;
+                            }
+                            ancestor = *parent;
+                        }
+                        last_store_bounds = Some((parent_id, func_name.clone(), bounds));
+                    }
+                    let bounds = last_store_bounds
+                        .as_ref()
+                        .map_or(&[][..], |(_, _, b)| b.as_slice());
+                    update_value_range(&pkt, &mut stats.min_value, &mut stats.max_value, |lane| {
+                        bounds.iter().all(|b| lane_in_bounds(&pkt, lane, b))
+                    });
+                }
+                EventCode::BoundsRequired => {
+                    bounds_required_by_parent
+                        .entry(parent_id)
+                        .or_default()
+                        .insert(func_name.clone(), pkt.coordinates.clone());
+                    last_store_bounds = None;
                 }
                 EventCode::Produce => {
-                    let idx = packets.len() as u32;
-
-                    // When we observe a Produce event for a Func A, this signals that A is
-                    // consuming some other Func B. Thus, we store this as A's consume range.
-                    consume_ranges_by_func
-                        .entry(func_name.clone())
-                        .or_default()
-                        .push((idx, idx));
-                }
-                EventCode::EndProduce => {
-                    let idx = packets.len() as u32;
-
-                    if let Some(ranges) = consume_ranges_by_func.get_mut(func_name.as_str()) {
-                        if let Some(last) = ranges.last_mut() {
-                            last.1 = idx;
-                        }
+                    produce_bounds_by_id.insert(id, pkt.coordinates.clone());
+                    produce_box_by_parent
+                        .insert((parent_id, func_name.clone()), pkt.coordinates.clone());
+                    if let Some(r) = enclosing_realization(&id_to_info, parent_id, &func_name) {
+                        produce_box_by_realization.insert(r, pkt.coordinates.clone());
                     }
+                    open_live_box(
+                        &mut liveness_by_func,
+                        &mut open_boxes,
+                        LiveKind::Production,
+                        &func_name,
+                        id,
+                        packets.len() as u32,
+                        pkt.coordinates.clone(),
+                    );
                 }
                 EventCode::Consume => {
-                    let idx = packets.len() as u32;
-
-                    // When we observe a Consume event for a Func A, this signals that A is
-                    // producing for (being consumed by) some other Func B. Thus, we store this as
-                    // A's produce range.
-                    produce_ranges_by_func
-                        .entry(func_name.clone())
-                        .or_default()
-                        .push((idx, idx));
-                }
-                EventCode::EndConsume => {
-                    let idx = packets.len() as u32;
-
-                    if let Some(ranges) = produce_ranges_by_func.get_mut(func_name.as_str()) {
-                        if let Some(last) = ranges.last_mut() {
-                            last.1 = idx;
-                        }
-                    }
+                    let bounds = produce_box_by_parent
+                        .get(&(parent_id, func_name.clone()))
+                        .or_else(|| {
+                            enclosing_realization(&id_to_info, parent_id, &func_name)
+                                .and_then(|r| produce_box_by_realization.get(&r))
+                        })
+                        .cloned()
+                        .unwrap_or_else(|| pkt.coordinates.clone());
+                    open_live_box(
+                        &mut liveness_by_func,
+                        &mut open_boxes,
+                        LiveKind::Consumption,
+                        &func_name,
+                        id,
+                        packets.len() as u32,
+                        bounds,
+                    );
                 }
                 EventCode::BeginParallelTask => {
                     thread_id_by_task_id.insert(id, thread_id);
@@ -672,6 +810,17 @@ impl Trace {
             if pct > last_reported_pct {
                 last_reported_pct = pct;
                 on_progress("Loading trace...".to_string(), pct);
+            }
+        }
+
+        // Loads of a produced Func can read its overcomputed garbage, so only Funcs with no
+        // stores (pipeline inputs) take their value range from loads.
+        for (func_name, (min_value, max_value)) in load_value_range_by_func {
+            if !store_indices_by_func.contains_key(&func_name) {
+                if let Some(stats) = funcs.get_mut(&func_name) {
+                    stats.min_value = min_value;
+                    stats.max_value = max_value;
+                }
             }
         }
 
@@ -977,6 +1126,14 @@ impl Trace {
             }
         }
 
+        // Close boxes whose end event never arrived at the end of the trace.
+        let last = packets.len().saturating_sub(1) as u32;
+        for (kind, func, i) in open_boxes.into_values() {
+            if let Some(l) = liveness_by_func.get_mut(&func) {
+                l.boxes_mut(kind)[i].end = last;
+            }
+        }
+
         on_progress("Analyzing trace...".to_string(), 100);
 
         Ok(Self {
@@ -985,9 +1142,7 @@ impl Trace {
             dag_edges,
             store_indices_by_func,
             load_indices_by_func,
-            buffer_liveness_range_by_func,
-            produce_ranges_by_func,
-            consume_ranges_by_func,
+            liveness_by_func,
             thread_ids_by_func,
             global_max_store_count,
             global_max_load_count,
@@ -1010,20 +1165,25 @@ impl Trace {
         self.load_indices_by_func.get(func_name).map(Vec::as_slice)
     }
 
-    pub fn func_buffer_liveness_range(&self, func_name: &str) -> Option<&(u32, u32)> {
-        self.buffer_liveness_range_by_func.get(func_name)
+    /// The packets that reveal `func_name`'s values: its stores, or its loads if it has no stores
+    /// (i.e. it is a pipeline input).
+    pub fn func_value_indices(&self, func_name: &str) -> &[usize] {
+        match self.func_store_indices(func_name) {
+            Some(stores) if !stores.is_empty() => stores,
+            _ => self.func_load_indices(func_name).unwrap_or(&[]),
+        }
     }
 
-    pub fn func_produce_ranges(&self, func_name: &str) -> Option<&[(u32, u32)]> {
-        self.produce_ranges_by_func
-            .get(func_name)
-            .map(Vec::as_slice)
+    pub fn func_liveness(&self, func_name: &str) -> Option<&FuncLiveness> {
+        self.liveness_by_func.get(func_name)
     }
 
-    pub fn func_consume_ranges(&self, func_name: &str) -> Option<&[(u32, u32)]> {
-        self.consume_ranges_by_func
-            .get(func_name)
-            .map(Vec::as_slice)
+    /// The packet index range spanned by all of `func_name`'s realizations.
+    pub fn func_buffer_liveness_range(&self, func_name: &str) -> Option<(u32, u32)> {
+        let r = &self.func_liveness(func_name)?.realizations;
+        let start = r.iter().map(|b| b.start).min()?;
+        let end = r.iter().map(|b| b.end).max()?;
+        Some((start, end))
     }
 
     pub fn func_thread_ids(&self, func_name: &str) -> Option<&BTreeSet<i32>> {
@@ -1056,6 +1216,81 @@ impl Trace {
             max_redundant_store_count: stats.max_redundant_store_count,
             max_reuse_distance: stats.max_reuse_distance,
         })
+    }
+}
+
+// ── Liveness helpers ──────────────────────────────────────────────────────────
+
+fn open_live_box(
+    liveness: &mut BTreeMap<String, FuncLiveness>,
+    open: &mut HashMap<i32, (LiveKind, String, usize)>,
+    kind: LiveKind,
+    func: &str,
+    id: i32,
+    start: u32,
+    bounds: Vec<i32>,
+) {
+    let boxes = liveness.entry(func.to_owned()).or_default().boxes_mut(kind);
+    boxes.push(LiveBox {
+        start,
+        end: start,
+        bounds,
+    });
+    open.insert(id, (kind, func.to_owned(), boxes.len() - 1));
+}
+
+/// Closes the box opened by `begin_id`, along with any still-open boxes nested inside it whose
+/// own end events are missing from the trace.
+fn close_live_boxes(
+    liveness: &mut BTreeMap<String, FuncLiveness>,
+    open: &mut HashMap<i32, (LiveKind, String, usize)>,
+    id_to_info: &HashMap<i32, (EventCode, String, i32)>,
+    begin_id: i32,
+    end: u32,
+) {
+    let Some(closed) = open.remove(&begin_id) else {
+        return;
+    };
+    let nested: Vec<i32> = open
+        .keys()
+        .copied()
+        .filter(|&id| {
+            let mut a = id;
+            while let Some((_, _, parent)) = id_to_info.get(&a) {
+                if *parent == begin_id {
+                    return true;
+                }
+                if *parent == a {
+                    break;
+                }
+                a = *parent;
+            }
+            false
+        })
+        .collect();
+    let nested = nested.into_iter().filter_map(|id| open.remove(&id));
+    for (kind, func, i) in std::iter::once(closed).chain(nested) {
+        if let Some(l) = liveness.get_mut(&func) {
+            l.boxes_mut(kind)[i].end = end;
+        }
+    }
+}
+
+/// The id of the innermost realization of `func` enclosing the event `id`.
+fn enclosing_realization(
+    id_to_info: &HashMap<i32, (EventCode, String, i32)>,
+    mut id: i32,
+    func: &str,
+) -> Option<i32> {
+    loop {
+        let (ev, name, parent) = id_to_info.get(&id)?;
+        if *ev == EventCode::BeginRealization && name == func {
+            return Some(id);
+        }
+        if *parent == id {
+            return None;
+        }
+        id = *parent;
     }
 }
 
@@ -1103,6 +1338,23 @@ pub(crate) fn pixel_xy(
         -min_y
     };
     (x, y)
+}
+
+/// Whether lane `lane` of `pkt` has coordinate `slice[i]` in logical dim `first_dim + i` for every
+/// `i`. Dims the packet doesn't have are treated as matching.
+#[inline]
+pub(crate) fn lane_in_slice(
+    pkt: &TracePacket,
+    lane: usize,
+    first_dim: usize,
+    slice: &[i32],
+) -> bool {
+    let n_lanes = pkt.type_.lanes.max(1) as usize;
+    let dims_per_lane = pkt.coordinates.len() / n_lanes;
+    slice.iter().enumerate().all(|(i, &c)| {
+        let d = first_dim + i;
+        d >= dims_per_lane || pkt.coordinates[d * n_lanes + lane] == c
+    })
 }
 
 /// Iterates over each lane of `pkt` that falls within the Func's `w x h` extents, invoking
