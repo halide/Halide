@@ -125,13 +125,15 @@ void define_pipeline(py::module &m) {
 
     py::class_<HalidoscopeOptions>(m, "HalidoscopeOptions")
         .def(py::init<>())
-        .def_readwrite("halidoscope_path", &HalidoscopeOptions::halidoscope_path)
-        .def_readwrite("halidoscope_output_dir", &HalidoscopeOptions::halidoscope_output_dir)
-        .def_readwrite("halidoscope_profile_runs", &HalidoscopeOptions::halidoscope_profile_runs)
+        .def_readwrite("path", &HalidoscopeOptions::path)
+        .def_readwrite("output_dir", &HalidoscopeOptions::output_dir)
+        .def_readwrite("profile_runs", &HalidoscopeOptions::profile_runs)
+        .def_readwrite("trace_file_size_limit", &HalidoscopeOptions::trace_file_size_limit)
         .def("__repr__", [](const HalidoscopeOptions &o) -> std::string {
-            return "<halide.HalidoscopeOptions halidoscope_path='" + o.halidoscope_path.value_or("halidoscope") +
-                   "' halidoscope_output_dir='" + o.halidoscope_output_dir.value_or("") +
-                   "' halidoscope_profile_runs=" + std::to_string(o.halidoscope_profile_runs.value_or(1)) + ">";
+            return "<halide.HalidoscopeOptions path='" + o.path.value_or("halidoscope") +
+                   "' output_dir='" + o.output_dir.value_or("") +
+                   "' profile_runs=" + (o.profile_runs ? std::to_string(*o.profile_runs) : "None") +
+                   " trace_file_size_limit=" + std::to_string(o.trace_file_size_limit) + ">";
         });
 
     auto pipeline_class =

@@ -20,7 +20,7 @@ ifeq ($(OS), Windows_NT)
     $(error Halide no longer supports the MinGW environment. Please use MSVC through CMake instead.)
 else
     # let's assume "normal" UNIX such as linux
-    COMMON_LD_FLAGS=$(LDFLAGS) -ldl -lpthread -lz
+    COMMON_LD_FLAGS=$(LDFLAGS) -ldl -lpthread -lz -lzstd
     FPIC=-fPIC
 ifeq ($(UNAME), Darwin)
     SHARED_EXT=dylib
@@ -519,6 +519,7 @@ SOURCE_FILES = \
   FuzzFloatStores.cpp \
   Generator.cpp \
   GeneratorCache.cpp \
+  Halidoscope.cpp \
   HexagonOffload.cpp \
   HexagonOptimize.cpp \
   ImageParam.cpp \
@@ -726,6 +727,7 @@ HEADER_FILES = \
   FuzzFloatStores.h \
   Generator.h \
   GeneratorCache.h \
+  Halidoscope.h \
   HexagonOffload.h \
   HexagonOptimize.h \
   ImageParam.h \

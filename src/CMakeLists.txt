@@ -131,6 +131,7 @@ target_sources(
     FuzzFloatStores.h
     Generator.h
     GeneratorCache.h
+    Halidoscope.h
     HexagonOffload.h
     HexagonOptimize.h
     ImageParam.h
@@ -315,6 +316,7 @@ target_sources(
     FuzzFloatStores.cpp
     Generator.cpp
     GeneratorCache.cpp
+    Halidoscope.cpp
     HexagonOffload.cpp
     HexagonOptimize.cpp
     ImageParam.cpp
@@ -539,6 +541,14 @@ if (WITH_COMPILER_PROFILING)
     target_compile_definitions(Halide PRIVATE WITH_COMPILER_PROFILING)
 endif ()
 
+
+##
+# zstd, used to compress Pipeline::halidoscope() traces.
+##
+
+find_package(zstd REQUIRED)
+_Halide_pkgdep(zstd)
+target_link_libraries(Halide PRIVATE zstd::libzstd)
 
 ##
 # Flatbuffers and Serialization dependencies.
