@@ -1,0 +1,9 @@
+{
+  "name": "halide-ggml-app",
+  "version": "22.0.0",
+  "license": "MIT",
+  "builtin-baseline": "66c0373dc7fca549e5803087b9487edfe3aca0a1",
+  "dependencies": [
+    "ggml"
+  ]
+}
