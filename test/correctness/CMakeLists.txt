@@ -594,6 +594,7 @@ tests(
     vectorized_initialization.cpp
     vectorized_load_from_vectorized_allocation.cpp
     vectorized_reduction_bug.cpp
+    warp_shuffle_hoisting.cpp
     widening_reduction.cpp
     wrap_custom_after_shared.cpp
     wrap_frozen.cpp
