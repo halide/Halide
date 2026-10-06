@@ -705,7 +705,12 @@ struct RFactorProjection {
     }
 };
 
-pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, const ReductionDomain &rdom, const vector<Split> &splits) {
+// If include_split_predicates is false, the predicates that splits of RVars
+// place on the projected RDom (e.g. to guard the tail of a GuardWithIf split)
+// are left out, so the projected RDom may cover points that are outside the
+// original RDom.
+pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, const ReductionDomain &rdom, const vector<Split> &splits,
+                                                    bool include_split_predicates = true) {
     // The bounds projections maps expressions that reference the old RDom
     // bounds to expressions that reference the new RDom bounds (from dims).
     // We call this a projection because we are computing the symbolic image
@@ -752,7 +757,9 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
             case ApplySplitResult::PredicateCalls:
             case ApplySplitResult::PredicateProvides:
             case ApplySplitResult::Predicate:
-                new_rdom.where(substitute(bounds_projection, result.value));
+                if (include_split_predicates) {
+                    new_rdom.where(substitute(bounds_projection, result.value));
+                }
                 break;
             case ApplySplitResult::Substitution:
             case ApplySplitResult::SubstitutionInCalls:
@@ -767,6 +774,33 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
         add_let(dim_projection, dims[i].var, RVar(new_rdom, i));
     }
     return {new_rdom, dim_projection};
+}
+
+// Is the identity of the associative op also a right identity of the op as
+// written, i.e. does op(x, identity) simplify to x for every element of the
+// Tuple? If so, combining an element of an rfactor intermediate that was never
+// updated (and so still holds the identity) into the result is a no-op. This
+// is not the case for e.g. the unary op f() = g(r), or an argmax that keeps
+// the index from y on ties.
+bool identity_is_right_identity(const AssociativeOp &prover_result) {
+    std::map<string, Expr> y_to_identity;
+    for (size_t i = 0; i < prover_result.size(); i++) {
+        if (!prover_result.ys[i].var.empty()) {
+            y_to_identity.emplace(prover_result.ys[i].var, prover_result.pattern.identities[i]);
+        }
+    }
+    for (size_t i = 0; i < prover_result.size(); i++) {
+        const string &x = prover_result.xs[i].var;
+        if (x.empty()) {
+            return false;
+        }
+        Expr combined = simplify(substitute(y_to_identity, prover_result.pattern.ops[i]));
+        const Variable *v = combined.as<Variable>();
+        if (!v || v->name != x) {
+            return false;
+        }
+    }
+    return true;
 }
 
 // A semiring distributive law used by hoist_invariants(): `inner` distributes
@@ -1133,8 +1167,19 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
             intermediate_rdom.set_predicate(simplify(pred));
         }
 
-        // Preserved
-        std::tie(preserved_rdom, preserved_map) = project_rdom(preserved_rdims, rdom, rvar_splits);
+        // Preserved. Each point of the preserved RDom combines one element of
+        // the intermediate into the result. If no point of the intermediate
+        // RDom updates that element, it still holds the identity, and if the
+        // identity is a right identity, combining it is a no-op. So we can
+        // leave out the predicates from splits (e.g. the guard on the tail of
+        // a GuardWithIf split of the RVar), which would otherwise make the
+        // preserved RDom depend on the extent of the original one. These
+        // predicates only exclude points outside the original RDom, of which
+        // there are fewer than the split factor in each dimension, so the
+        // extra work is small. We keep any user predicate, which might exclude
+        // much more.
+        const bool include_split_predicates = !identity_is_right_identity(prover_result);
+        std::tie(preserved_rdom, preserved_map) = project_rdom(preserved_rdims, rdom, rvar_splits, include_split_predicates);
         Scope<Interval> intm_rdom;
         for (size_t i = 0; i < intermediate_rdom.domain().size(); i++) {
             const auto &var = intermediate_rdims[i].var;
