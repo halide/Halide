@@ -839,6 +839,17 @@ struct ApproximationResult {
 
     /** Is `f` (matched by name) one of stage_ports()? */
     bool is_stage_port(const Func &f) const;
+
+    /** The decode side's Funcs that can be inlined now: `replacement` and
+     * every Func it reaches without passing through `encoded` (the decode
+     * trace root's intermediates), in dependency order (producers first,
+     * `replacement` last). A Func eager_inline() would reject -- one with an
+     * update or extern definition, or scheduled other than inline (e.g.
+     * compute_root() or compute_at()) as it stands when this is called -- is
+     * left out, so `consumer.eager_inline(result.decode_funcs())` folds the
+     * whole inlinable decode chain into the consumer, leaving calls to
+     * `encoded` and to the Funcs left out. Schedule those first. */
+    std::vector<Func> decode_funcs() const;
 };
 
 /** Statically check declared value ranges through `a`, without running

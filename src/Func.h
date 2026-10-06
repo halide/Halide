@@ -3045,6 +3045,11 @@ Stage::eager_inline(const Func &first, Args &&...args) {
 
 namespace Internal {
 
+/** Why eager_inline() would reject `f`, as the rest of the sentence
+ * "eager_inline() cannot inline <name>" (ending in a newline), or an empty
+ * string if it can be inlined. The schedule is checked as it stands now. */
+std::string eager_inline_obstacle(const Function &f);
+
 template<typename Last>
 inline void check_types(const Tuple &t, int idx) {
     using T = std::remove_pointer_t<std::remove_reference_t<Last>>;
