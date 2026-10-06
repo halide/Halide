@@ -199,6 +199,12 @@ void check_casts() {
     Expr even = Shuffle::make_slice(var_vector, 0, 2, 4);
     Expr odd = Shuffle::make_slice(var_vector, 1, 2, 4);
     check(Shuffle::make_interleave({even, odd}), Shuffle::make_slice(var_vector, 0, 1, 8));
+
+    // Two shuffles of one vector that undo each other cancel.
+    Expr v16 = Variable::make(Int(8, 16), "v16");
+    check(Shuffle::make_transpose(Shuffle::make_transpose(v16, 2), 8), v16);
+    check(Shuffle::make_transpose(Shuffle::make_transpose(v16, 2), 2),
+          Shuffle::make_transpose(Shuffle::make_transpose(v16, 2), 2));
 }
 
 void check_algebra() {

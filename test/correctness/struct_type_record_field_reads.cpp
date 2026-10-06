@@ -47,8 +47,10 @@ Buffer<> wrap_records(Type record, std::vector<uint8_t> &data, int num_records) 
 
 // Check the lowered code of a vectorized pipeline: every vector load from
 // `input` must be a dense load (a ramp of stride 1 or -1), there must be at
-// least `min_dense_loads` of them, and there must be no per-lane select.
-void check_dense_loads(const char *name, Func f, const ImageParam &input, int min_dense_loads) {
+// least `min_dense_loads` of them, and there must be no per-lane select (and
+// no shuffle at all, unless `allow_shuffles`).
+void check_dense_loads(const char *name, Func f, const ImageParam &input, int min_dense_loads,
+                       bool allow_shuffles = true) {
     Module module = f.compile_to_module({input}, name, get_jit_target_from_environment().with_feature(Target::NoAsserts));
     int dense_loads = 0;
     for (const LoweredFunc &lowered_func : module.functions()) {
@@ -66,6 +68,13 @@ void check_dense_loads(const char *name, Func f, const ImageParam &input, int mi
                         exit(1);
                     }
                     dense_loads++;
+                }
+                self->visit_base(op);
+            },
+            [&](auto *self, const Shuffle *op) {
+                if (!allow_shuffles) {
+                    std::cout << name << ": unexpected shuffle: " << Expr(op) << "\n";
+                    exit(1);
                 }
                 self->visit_base(op);
             },
@@ -179,7 +188,9 @@ void test_packed_array_field() {
         out.bound(j, 0, n);
         if (vectorize) {
             out.vectorize(j);
-            check_dense_loads("packed_array_field", out, in, 1);
+            // The bytes of each element are reinterpreted straight from
+            // one dense load.
+            check_dense_loads("packed_array_field", out, in, 1, false);
         }
         Buffer<int32_t> result = out.realize({n, num_records});
         check_equal<int32_t>("packed_array_field", result, [&](int x, int y) {
