@@ -235,6 +235,7 @@ struct FuncScheduleContents {
 
     LoopLevel store_level, compute_level, hoist_storage_level;
     std::vector<StorageDim> storage_dims;
+    std::vector<StorageSplit> storage_splits;
     std::map<std::string, Bound> bounds;
     std::vector<Bound> estimates;
     std::map<std::string, Internal::FunctionPtr> wrappers;
@@ -260,6 +261,11 @@ struct FuncScheduleContents {
 
     // Pass an IRMutator through to all Exprs referenced in the FuncScheduleContents
     void mutate(IRMutator &mutator) {
+        for (StorageSplit &split : storage_splits) {
+            if (split.factor.defined()) {
+                split.factor = mutator(split.factor);
+            }
+        }
         for (auto &entry : bounds) {
             Bound &b = entry.second;
             if (b.min.defined()) {
@@ -345,6 +351,9 @@ struct StageScheduleContents {
             if (s.factor.defined()) {
                 s.factor = mutator(s.factor);
             }
+            if (s.align.defined()) {
+                s.align = mutator(s.align);
+            }
         }
         for (PrefetchDirective &p : prefetches) {
             if (p.offset.defined()) {
@@ -377,6 +386,7 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->compute_level.set(contents->compute_level);
     copy.contents->hoist_storage_level.set(contents->hoist_storage_level);
     copy.contents->storage_dims = contents->storage_dims;
+    copy.contents->storage_splits = contents->storage_splits;
     copy.contents->bounds = contents->bounds;
     copy.contents->estimates = contents->estimates;
     copy.contents->memory_type = contents->memory_type;
@@ -464,6 +474,14 @@ const std::vector<StorageDim> &FuncSchedule::storage_dims() const {
     return contents->storage_dims;
 }
 
+std::vector<StorageSplit> &FuncSchedule::storage_splits() {
+    return contents->storage_splits;
+}
+
+const std::vector<StorageSplit> &FuncSchedule::storage_splits() const {
+    return contents->storage_splits;
+}
+
 std::map<std::string, Bound> &FuncSchedule::bounds() {
     return contents->bounds;
 }
@@ -546,6 +564,11 @@ const LoopLevel &FuncSchedule::hoist_storage_level() const {
 }
 
 void FuncSchedule::accept(IRVisitor *visitor) const {
+    for (const StorageSplit &split : storage_splits()) {
+        if (split.factor.defined()) {
+            split.factor.accept(visitor);
+        }
+    }
     for (const auto &entry : bounds()) {
         const Bound &b = entry.second;
         if (b.min.defined()) {
@@ -736,6 +759,9 @@ void StageSchedule::accept(IRVisitor *visitor) const {
     for (const Split &s : splits()) {
         if (s.factor.defined()) {
             s.factor.accept(visitor);
+        }
+        if (s.align.defined()) {
+            s.align.accept(visitor);
         }
     }
     for (const PrefetchDirective &p : prefetches()) {

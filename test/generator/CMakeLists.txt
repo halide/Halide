@@ -479,6 +479,17 @@ _add_halide_libraries(configure)
 _add_halide_aot_tests(configure)
 add_halide_stub(configure.stub FROM configure.generator GENERATOR configure)
 
+# sever_aottest.cpp
+# sever_generator.cpp
+_add_halide_libraries(sever)
+_add_halide_libraries(
+    sever_dequantize
+    FROM sever.generator
+    GENERATOR_NAME sever
+    PARAMS direction=dequantize
+)
+_add_halide_aot_tests(sever HALIDE_LIBRARIES sever sever_dequantize)
+
 # TODO: this could be made to work under wasm with some tweaking, it's just build-rule complexity
 if (NOT ${_USING_WASM})
     # cxx_mangling_externs.cpp

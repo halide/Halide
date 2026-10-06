@@ -15,6 +15,7 @@
 #include "FindCalls.h"
 #include "Func.h"
 #include "IRVisitor.h"
+#include "ImageParam.h"
 #include "InferArguments.h"
 #include "LLVM_Output.h"
 #include "Lower.h"
@@ -241,6 +242,101 @@ FuncVec Pipeline::outputs() const {
 
 std::vector<Internal::Stmt> Pipeline::requirements() const {
     return contents->requirements;
+}
+
+namespace {
+
+SeverResult sever_impl(const Pipeline &pipeline, const vector<Func> &to_sever,
+                       const vector<ImageParam> *bind_to) {
+    vector<Function> output_funcs;
+    for (const Func &f : pipeline.outputs()) {
+        output_funcs.push_back(f.function());
+    }
+    std::map<string, Function> env = build_environment(output_funcs);
+
+    // Everything transitively reachable from to_sever (to_sever itself, plus
+    // anything only *it* depends on, e.g. a per-block reduction Func, or
+    // another Func one of to_sever's own definitions reads) is
+    // part of the offline half and must keep computing its true values --
+    // none of it should have its calls redirected to an online stand-in,
+    // even if it's also present in `env` because it used to be reachable
+    // from *this's outputs before severing.
+    vector<Function> to_sever_funcs;
+    to_sever_funcs.reserve(to_sever.size());
+    for (const Func &f : to_sever) {
+        to_sever_funcs.push_back(f.function());
+    }
+    std::map<string, Function> offline_env = build_environment(to_sever_funcs);
+
+    if (bind_to) {
+        user_assert(bind_to->size() == to_sever.size())
+            << "Pipeline::sever(): bind_to has " << bind_to->size()
+            << " ImageParams, but to_sever has " << to_sever.size() << " Funcs\n";
+    }
+
+    std::map<FunctionPtr, FunctionPtr> substitutions;
+    vector<ImageParam> online_inputs;
+    online_inputs.reserve(to_sever.size());
+    for (size_t i = 0; i < to_sever.size(); i++) {
+        const Func &f = to_sever[i];
+        user_assert(f.types().size() == 1)
+            << "Pipeline::sever() requires single-valued Funcs, but "
+            << f.name() << " has " << f.types().size() << " values\n";
+
+        ImageParam im = bind_to ? (*bind_to)[i] : ImageParam(f.types()[0], f.dimensions(), f.name() + "_im");
+        if (bind_to) {
+            user_assert(im.type() == f.types()[0] && im.dimensions() == f.dimensions())
+                << "Pipeline::sever(): bind_to[" << i << "] (" << im.name()
+                << ") has type/dimensionality mismatched with " << f.name() << "\n";
+        }
+
+        Func stand_in(f.name() + "_offline_input");
+        vector<Var> args = f.args();
+        vector<Expr> args_as_exprs(args.begin(), args.end());
+        stand_in(args) = im(args_as_exprs);
+
+        substitutions[f.function().get_contents()] = stand_in.function().get_contents();
+        online_inputs.push_back(im);
+    }
+
+    for (auto &entry : env) {
+        if (offline_env.count(entry.first)) {
+            continue;
+        }
+        entry.second.substitute_calls(substitutions);
+    }
+
+    return {Pipeline(to_sever), std::move(online_inputs)};
+}
+
+}  // namespace
+
+SeverResult Pipeline::sever(const vector<Func> &to_sever) {
+    return sever_impl(*this, to_sever, nullptr);
+}
+
+SeverResult Pipeline::sever(const vector<Func> &to_sever, const vector<ImageParam> &bind_to) {
+    return sever_impl(*this, to_sever, &bind_to);
+}
+
+SeverResult Pipeline::sever(const vector<Func> &to_sever, std::initializer_list<string> names) {
+    return sever(to_sever, vector<string>(names));
+}
+
+SeverResult Pipeline::sever(const vector<Func> &to_sever, const vector<string> &names) {
+    user_assert(names.size() == to_sever.size())
+        << "Pipeline::sever(): names has " << names.size()
+        << " entries, but to_sever has " << to_sever.size() << " Funcs\n";
+    vector<ImageParam> bind_to;
+    bind_to.reserve(to_sever.size());
+    for (size_t i = 0; i < to_sever.size(); i++) {
+        const Func &f = to_sever[i];
+        user_assert(f.types().size() == 1)
+            << "Pipeline::sever() requires single-valued Funcs, but "
+            << f.name() << " has " << f.types().size() << " values\n";
+        bind_to.emplace_back(f.types()[0], f.dimensions(), names[i]);
+    }
+    return sever_impl(*this, to_sever, &bind_to);
 }
 
 /* static */
@@ -1207,28 +1303,62 @@ void Pipeline::halidoscope(RealizationArg output, const HalidoscopeOptions &opti
 }
 
 ProfilerScope::ProfilerScope(Pipeline p)
-    : pipeline(std::move(p)) {
-    user_assert(pipeline.defined()) << "Pipeline is undefined\n";
-    pipeline.contents->profiler_scopes++;
+    : source(std::move(p)) {
+    user_assert(std::get<Pipeline>(source).defined()) << "Pipeline is undefined\n";
+    scope_count()++;
 }
 
 ProfilerScope::ProfilerScope(Func &f)
     : ProfilerScope(f.pipeline()) {
 }
 
+ProfilerScope::ProfilerScope(Callable c)
+    : source(std::move(c)) {
+    user_assert(std::get<Callable>(source).defined()) << "Callable is undefined\n";
+    scope_count()++;
+}
+
 ProfilerScope::~ProfilerScope() {
-    if (--pipeline.contents->profiler_scopes > 0) {
+    if (--scope_count() > 0) {
         return;
     }
-    // Report and reset as a realize outside of any scope would have.
+    // Report and reset as a run outside of any scope would have.
     JITUserContext context{};
-    JITFuncCallContext jit_context(&context, pipeline.jit_handlers());
-    pipeline.contents->jit_cache.finish_profiling(&context);
+    JITFuncCallContext jit_context(&context, jit_handlers());
+    jit_cache().finish_profiling(&context);
     jit_context.finalize(0);
 }
 
+int &ProfilerScope::scope_count() const {
+    if (const Pipeline *p = std::get_if<Pipeline>(&source)) {
+        return p->contents->profiler_scopes;
+    }
+    return std::get<Callable>(source).profiler_scopes();
+}
+
+JITCache &ProfilerScope::jit_cache() const {
+    if (const Pipeline *p = std::get_if<Pipeline>(&source)) {
+        return p->contents->jit_cache;
+    }
+    return std::get<Callable>(source).jit_cache();
+}
+
+const JITHandlers &ProfilerScope::jit_handlers() const {
+    if (const Pipeline *p = std::get_if<Pipeline>(&source)) {
+        return p->contents->jit_handlers;
+    }
+    return std::get<Callable>(source).saved_jit_handlers();
+}
+
+std::string ProfilerScope::function_name() const {
+    if (const Pipeline *p = std::get_if<Pipeline>(&source)) {
+        return p->generate_function_name();
+    }
+    return std::get<Callable>(source).name();
+}
+
 const halide_profiler_pipeline_stats *ProfilerScope::pipeline_stats() const {
-    const JITCache &cache = pipeline.contents->jit_cache;
+    const JITCache &cache = jit_cache();
     if (!cache.jit_target.has_feature(Target::Profile) &&
         !cache.jit_target.has_feature(Target::ProfileByTimer)) {
         return nullptr;
@@ -1251,7 +1381,7 @@ const halide_profiler_pipeline_stats *ProfilerScope::pipeline_stats() const {
     // walk the list comparing by string instead. Recompiling the
     // pipeline produces a new entry with the same name; the newest is
     // at the head of the list.
-    const std::string name = pipeline.generate_function_name();
+    const std::string name = function_name();
     halide_profiler_state *state = get_state();
     const halide_profiler_pipeline_stats *result = nullptr;
     lock(state);

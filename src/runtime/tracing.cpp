@@ -100,7 +100,6 @@ class TraceBuffer {
         using namespace Halide::Runtime::Internal::Synchronization;
 
         lock.acquire_shared();
-        halide_abort_if_false(user_context, size <= buffer_size);
         uint32_t my_cursor = atomic_fetch_add_sequentially_consistent(&cursor, size);
         if (my_cursor + size > sizeof(buf)) {
             // Don't try to back it out: instead, just allow this request to fail
@@ -117,8 +116,9 @@ class TraceBuffer {
 
 public:
     // Wait for all writers to finish with their packets, stall any
-    // new writers, and flush the buffer to the fd.
-    ALWAYS_INLINE void flush(void *user_context, int fd) {
+    // new writers, and flush the buffer to the fd. Returns false if
+    // the write failed.
+    ALWAYS_INLINE bool flush(void *user_context, int fd) {
         lock.acquire_exclusive();
         bool success = true;
         if (cursor) {
@@ -128,19 +128,22 @@ public:
             overage = 0;
         }
         lock.release_exclusive();
-        halide_abort_if_false(user_context, success && "Could not write to trace file");
+        return success;
     }
 
     // Acquire and return a packet's worth of space in the trace
     // buffer, flushing the trace buffer to the given fd to make space
     // if necessary. The region acquired is protected from other
     // threads writing or reading to it, so it must be released before
-    // a flush can occur.
+    // a flush can occur. Returns nullptr if a flush failed. size must
+    // be at most buffer_size.
     ALWAYS_INLINE halide_trace_packet_t *acquire_packet(void *user_context, int fd, uint32_t size) {
         halide_trace_packet_t *packet = nullptr;
         while (!(packet = try_acquire_packet(user_context, size))) {
             // Couldn't acquire space to write a packet. Flush and try again.
-            flush(user_context, fd);
+            if (!flush(user_context, fd)) {
+                return nullptr;
+            }
         }
         return packet;
     }
@@ -166,8 +169,33 @@ public:
 WEAK TraceBuffer *halide_trace_buffer = nullptr;
 WEAK int halide_trace_file = -1;  // -1 indicates uninitialized
 WEAK ScopedSpinLock::AtomicFlag halide_trace_file_lock = 0;
-WEAK bool halide_trace_file_initialized = false;
 WEAK void *halide_trace_file_internally_opened = nullptr;
+
+// Flushes any buffered trace data to the current trace file, closes it if it
+// was opened via HL_TRACE_FILE, and switches to fd. Returns zero on success.
+// The caller must hold halide_trace_file_lock.
+WEAK int set_trace_file_already_locked(void *user_context, int fd) {
+    int result = 0;
+    if (halide_trace_buffer && halide_trace_file > 0 &&
+        !halide_trace_buffer->flush(user_context, halide_trace_file)) {
+        result = -1;
+    }
+    if (halide_trace_file_internally_opened) {
+        if (fclose(halide_trace_file_internally_opened) != 0) {
+            result = -1;
+        }
+        halide_trace_file_internally_opened = nullptr;
+    }
+    if (fd > 0 && !halide_trace_buffer) {
+        halide_trace_buffer = (TraceBuffer *)malloc(sizeof(TraceBuffer));
+        halide_trace_buffer->init();
+    } else if (fd <= 0 && halide_trace_buffer) {
+        free(halide_trace_buffer);
+        halide_trace_buffer = nullptr;
+    }
+    halide_trace_file = fd;
+    return result;
+}
 
 }  // namespace Internal
 }  // namespace Runtime
@@ -180,11 +208,16 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
 
     static int32_t ids = 1;
 
-    int32_t my_id = atomic_fetch_add_sequentially_consistent(&ids, 1);
+    // Negative return values are error codes, so ids wrap within the
+    // non-negative range.
+    int32_t my_id = atomic_fetch_add_sequentially_consistent(&ids, 1) & 0x7fffffff;
 
     // If we're dumping to a file, use a binary format
     int fd = halide_get_trace_file(user_context);
-    if (fd > 0) {
+    if (fd < 0) {
+        // Some error condition
+        return fd;
+    } else if (fd > 0) {
         // Compute the total packet size
         uint32_t value_bytes = (e->event == halide_trace_load || e->event == halide_trace_store) ?
                                    (uint32_t)(e->lanes * e->type.bytes()) :
@@ -195,12 +228,14 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
         uint32_t trace_tag_bytes = e->trace_tag ? (strlen(e->trace_tag) + 1) : 1;
         uint32_t total_size_without_padding = header_bytes + value_bytes + coords_bytes + name_bytes + trace_tag_bytes;
         uint32_t total_size = (total_size_without_padding + 3) & ~3;
+        if (total_size > buffer_size) {
+            return halide_error_trace_failed(user_context, "Trace packet larger than the trace buffer");
+        }
 
         // Claim some space to write to in the trace buffer
         halide_trace_packet_t *packet = halide_trace_buffer->acquire_packet(user_context, fd, total_size);
-
-        if (total_size > 4096) {
-            print(nullptr) << total_size << "\n";
+        if (!packet) {
+            return halide_error_trace_failed(user_context, "Could not write to trace file");
         }
 
         // Write a packet into it
@@ -231,11 +266,13 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
 
         // We should also flush the trace buffer if we hit an event
         // that might be the end of the trace.
-        if (e->event == halide_trace_end_pipeline) {
-            halide_trace_buffer->flush(user_context, fd);
+        if (e->event == halide_trace_end_pipeline &&
+            !halide_trace_buffer->flush(user_context, fd)) {
+            return halide_error_trace_failed(user_context, "Could not write to trace file");
         }
 
-    } else {
+    } else if (fd == 0) {
+        // Trace to stdout
         StringStreamPrinter<4096> ss(user_context);
 
         // Round up bits to 8, 16, 32, or 64
@@ -243,7 +280,9 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
         while (print_bits < e->type.bits) {
             print_bits <<= 1;
         }
-        halide_abort_if_false(user_context, print_bits <= 64 && "Tracing bad type");
+        if (print_bits > 64) {
+            return halide_error_trace_failed(user_context, "Tracing a type with more than 64 bits");
+        }
 
         // Otherwise, use halide_print and a plain-text format
         const char *event_types[] = {"Load",
@@ -314,7 +353,9 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
                         ss << ((uint64_t *)(e->value))[i];
                     }
                 } else if (e->type.code == 2) {
-                    halide_abort_if_false(user_context, print_bits >= 16 && "Tracing a bad type");
+                    if (print_bits < 16) {
+                        return halide_error_trace_failed(user_context, "Tracing does not handle floats with fewer than 16 bits");
+                    }
                     if (print_bits == 32) {
                         ss << ((float *)(e->value))[i];
                     } else if (print_bits == 16) {
@@ -369,27 +410,30 @@ WEAK trace_fn halide_set_custom_trace(trace_fn t) {
     return result;
 }
 
-WEAK void halide_set_trace_file(int fd) {
-    halide_trace_file = fd;
+WEAK void halide_set_trace_file(void *user_context, int fd) {
+    ScopedSpinLock lock(&halide_trace_file_lock);
+    (void)set_trace_file_already_locked(user_context, fd);
 }
 
 extern int errno;
 
 WEAK int halide_get_trace_file(void *user_context) {
     ScopedSpinLock lock(&halide_trace_file_lock);
-    if (halide_trace_file < 0) {
+    if (halide_trace_file < -1) {
+        // Error
+        return halide_error_trace_failed(user_context, "Bad trace file");
+    } else if (halide_trace_file == -1) {
+        // Uninitialized
         const char *trace_file_name = getenv("HL_TRACE_FILE");
         if (trace_file_name) {
             void *file = halide_fopen(trace_file_name, "ab");
-            halide_abort_if_false(user_context, file && "Failed to open trace file\n");
-            halide_set_trace_file(fileno(file));
-            halide_trace_file_internally_opened = file;
-            if (!halide_trace_buffer) {
-                halide_trace_buffer = (TraceBuffer *)malloc(sizeof(TraceBuffer));
-                halide_trace_buffer->init();
+            if (!file) {
+                return halide_error_trace_failed(user_context, "Failed to open trace file");
             }
+            (void)set_trace_file_already_locked(user_context, fileno(file));
+            halide_trace_file_internally_opened = file;
         } else {
-            halide_set_trace_file(0);
+            (void)set_trace_file_already_locked(user_context, 0);
         }
     }
     return halide_trace_file;
@@ -400,18 +444,9 @@ WEAK int32_t halide_trace(void *user_context, const halide_trace_event_t *e) {
 }
 
 WEAK int halide_shutdown_trace() {
-    if (halide_trace_file_internally_opened) {
-        int ret = fclose(halide_trace_file_internally_opened);
-        halide_trace_file = 0;
-        halide_trace_file_initialized = false;
-        halide_trace_file_internally_opened = nullptr;
-        if (halide_trace_buffer) {
-            free(halide_trace_buffer);
-        }
-        if (ret != 0) {
-            return halide_error_code_trace_failed;
-        }
-        // else fall thru
+    ScopedSpinLock lock(&halide_trace_file_lock);
+    if (set_trace_file_already_locked(nullptr, -1) != 0) {
+        return halide_error_code_trace_failed;
     }
     return halide_error_code_success;
 }

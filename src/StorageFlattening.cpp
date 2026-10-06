@@ -2,6 +2,7 @@
 
 #include "Bounds.h"
 #include "CSE.h"
+#include "ExternFuncArgument.h"
 #include "Function.h"
 #include "FuseGPUThreadLoops.h"
 #include "IRMutator.h"
@@ -10,7 +11,6 @@
 #include "Parameter.h"
 #include "Scope.h"
 #include "Simplify.h"
-#include "Substitute.h"
 
 #include <optional>
 #include <sstream>
@@ -26,6 +26,61 @@ using std::string;
 using std::vector;
 
 namespace {
+
+// One axis of a Func's storage layout -- one per dimension of the allocated
+// halide_buffer_t, innermost first. `value` is the axis's coordinate or its
+// extent, depending on the per-arg values the layout was built from (see
+// storage_layout). With no storage splits there is one axis per storage dim (a
+// permutation of the pure args, plus a ring-buffer axis if any); split_storage
+// expands a storage dim into two axes.
+struct StorageAxis {
+    Expr value;
+    Expr bound;       // explicit bound_storage, may be undefined
+    Expr alignment;   // explicit align_storage, may be undefined
+    int arg;          // the pure arg this axis derives from (or the ring dim)
+    std::string var;  // the storage-dim name (for error messages)
+};
+
+// The storage axes of f, innermost first. per_arg gives a value for each pure
+// arg (plus one more for a ring buffer) -- its coordinate or its extent -- and
+// storage splits are replayed via combine(parent, factor), which returns the
+// {outer, inner} values a split produces from its parent's value.
+template<typename Combine>
+std::vector<StorageAxis> storage_layout(const Function &f, bool ring_buffered,
+                                        const std::vector<Expr> &per_arg, Combine combine) {
+    const std::vector<StorageDim> &sdims = f.schedule().storage_dims();
+    const std::vector<StorageSplit> &splits = f.schedule().storage_splits();
+    const std::vector<std::string> &args = f.args();
+    const int num_args = (int)args.size();
+
+    struct Info {
+        Expr value;
+        int arg;
+    };
+    std::map<std::string, Info> info;
+    for (int j = 0; j < num_args; j++) {
+        info[args[j]] = Info{per_arg[j], j};
+    }
+    for (const StorageSplit &s : splits) {
+        Info p = info.at(s.old_var);
+        info.erase(s.old_var);
+        std::pair<Expr, Expr> outer_inner = combine(p.value, s.factor);
+        info[s.outer] = Info{outer_inner.first, p.arg};
+        info[s.inner] = Info{outer_inner.second, p.arg};
+    }
+
+    std::vector<StorageAxis> result;
+    result.reserve(sdims.size() + (ring_buffered ? 1 : 0));
+    for (const StorageDim &d : sdims) {
+        const Info &i = info.at(d.var);
+        result.push_back({i.value, d.bound, d.alignment, i.arg, d.var});
+    }
+    if (ring_buffered) {
+        // The ring buffer is an extra outermost axis, beyond the pure args.
+        result.push_back({per_arg[num_args], Expr(), Expr(), num_args, "__ring_buffer"});
+    }
+    return result;
+}
 
 class FlattenDimensions : public IRMutator {
 public:
@@ -75,57 +130,121 @@ public:
 
     Expr flatten_args(const string &name, vector<Expr> args,
                       const Buffer<> &buf, const Parameter &param) {
-        bool internal = realizations.contains(name);
-        Expr idx = target.has_large_buffers() ? make_zero(Int(64)) : 0;
-        vector<Expr> mins(args.size()), strides(args.size());
+        const bool internal = realizations.contains(name);
+        const bool wide = target.has_large_buffers();
+        const Expr zero = wide ? make_zero(Int(64)) : make_zero(Int(32));
 
-        for (size_t i = 0; i < args.size(); i++) {
-            strides[i] = make_shape_var(name, "stride", i, buf, param);
-            mins[i] = make_shape_var(name, "min", i, buf, param);
-            if (target.has_large_buffers()) {
-                strides[i] = cast<int64_t>(strides[i]);
-            }
-        }
-
-        Expr zero = target.has_large_buffers() ? make_zero(Int(64)) : 0;
-
-        // We peel off constant offsets so that multiple stencil
-        // taps can share the same base address.
-        Expr constant_term = zero;
-        for (size_t i = 0; i < args.size(); i++) {
-            const Add *add = args[i].as<Add>();
-            if (add && is_const(add->b)) {
-                constant_term += strides[i] * add->b;
-                args[i] = add->a;
-            }
-        }
-
-        if (internal) {
-            // f(x, y) -> f[(x-xmin)*xstride + (y-ymin)*ystride] This
-            // strategy makes sense when we expect x to cancel with
-            // something in xmin.  We use this for internal allocations.
+        if (!internal) {
+            // External buffer (input or output): the mins and strides come
+            // from the buffer/param, one per pure arg. Storage splits are
+            // internal-only, so this path is unchanged.
+            auto it = env.find(name);
+            user_assert(it == env.end() || !func_has_storage_splits(it->second.first))
+                << "split_storage is only supported for internal allocations, but "
+                << name << " is a pipeline output.\n";
+            vector<Expr> mins(args.size()), strides(args.size());
             for (size_t i = 0; i < args.size(); i++) {
-                idx += (args[i] - mins[i]) * strides[i];
+                strides[i] = make_shape_var(name, "stride", i, buf, param);
+                mins[i] = make_shape_var(name, "min", i, buf, param);
+                if (wide) {
+                    strides[i] = cast<int64_t>(strides[i]);
+                }
             }
-        } else {
+
+            // Peel off constant offsets so that multiple stencil taps can
+            // share the same base address.
+            Expr constant_term = zero;
+            for (size_t i = 0; i < args.size(); i++) {
+                const Add *add = args[i].as<Add>();
+                if (add && is_const(add->b)) {
+                    constant_term += strides[i] * add->b;
+                    args[i] = add->a;
+                }
+            }
+
             // f(x, y) -> f[x*stride + y*ystride - (xstride*xmin +
-            // ystride*ymin)]. The idea here is that the last term
-            // will be pulled outside the inner loop. We use this for
-            // external buffers, where the mins and strides are likely
-            // to be symbolic
-            Expr base = zero;
+            // ystride*ymin)]. The last term will be pulled outside the inner
+            // loop. The mins and strides are likely to be symbolic.
+            Expr idx = zero, base = zero;
             for (size_t i = 0; i < args.size(); i++) {
                 idx += args[i] * strides[i];
                 base += mins[i] * strides[i];
             }
             idx -= base;
+            if (!is_const_zero(constant_term)) {
+                idx += constant_term;
+            }
+            return idx;
         }
 
+        // Internal allocation: build the index from the storage layout. With
+        // no splits this is one axis per pure arg with arg-indexed strides, so
+        // it reduces to f[(x-xmin)*xstride + (y-ymin)*ystride ...] as before.
+        auto it = env.find(name);
+        internal_assert(it != env.end()) << "Internal allocation " << name << " not in environment.\n";
+        const Function &f = it->second.first;
+        const bool ring = f.schedule().ring_buffer().defined();
+        const bool splits = func_has_storage_splits(f);
+        const int num_dims = (int)args.size();
+        const int num_args = (int)f.args().size();
+        internal_assert(num_dims == num_args + (ring ? 1 : 0));
+
+        // Peel constant offsets off the args so that multiple stencil taps can
+        // share a base address. Only valid where the arg feeds a linear
+        // (non-split) axis, i.e. when there are no splits.
+        Expr constant_term = zero;
+        if (!splits) {
+            for (int a = 0; a < num_dims; a++) {
+                const Add *add = args[a].as<Add>();
+                if (add && is_const(add->b)) {
+                    Expr stride = make_shape_var(name, "stride", a, buf, param);
+                    if (wide) {
+                        stride = cast<int64_t>(stride);
+                    }
+                    constant_term += stride * add->b;
+                    args[a] = add->a;
+                }
+            }
+        }
+
+        // The relative coordinate of each pure arg (its coordinate minus its
+        // min). For split funcs the buffer mins are zero, so the mins are bound
+        // separately as name.arg_min.<a>.
+        vector<Expr> per_arg_coord(num_dims);
+        for (int a = 0; a < num_dims; a++) {
+            if (ring && a == num_args) {
+                per_arg_coord[a] = args[a];
+            } else {
+                Expr arg_min = splits ? Variable::make(Int(32), name + ".arg_min." + std::to_string(a)) : make_shape_var(name, "min", a, buf, param);
+                per_arg_coord[a] = args[a] - arg_min;
+            }
+        }
+
+        // A split of a coordinate c by s gives inner = c % s, outer = c / s.
+        vector<StorageAxis> layout = storage_layout(
+            f, ring, per_arg_coord,
+            [](const Expr &c, const Expr &s) { return std::pair<Expr, Expr>{c / s, c % s}; });
+
+        Expr idx = zero;
+        for (size_t p = 0; p < layout.size(); p++) {
+            // The buffer stays in arg order when there are no splits, so the
+            // stride lives in dimension `arg`; otherwise in storage position p.
+            Expr coord = layout[p].value;
+            Expr stride = make_shape_var(name, "stride", splits ? p : layout[p].arg, buf, param);
+            if (wide) {
+                coord = cast<int64_t>(coord);
+                stride = cast<int64_t>(stride);
+            }
+            idx += coord * stride;
+        }
         if (!is_const_zero(constant_term)) {
             idx += constant_term;
         }
-
         return idx;
+    }
+
+    static bool func_has_storage_splits(const Function &f) {
+        return !f.schedule().storage_splits().empty();
     }
 
     using IRMutator::visit;
@@ -149,115 +268,135 @@ public:
 
         realizations.pop(op->name);
 
-        // The allocation extents of the function taken into account of
-        // the align_storage directives. It is only used to determine the
-        // host allocation size and the strides in halide_buffer_t objects (which
-        // also affects the device allocation in some backends).
-        vector<Expr> allocation_extents(extents.size());
-        vector<int> storage_permutation;
-        vector<Stmt> bound_asserts;
-        bool is_ring_buffered = false;
-        {
-            auto iter = env.find(op->name);
-            internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
-            Function f = iter->second.first;
-            is_ring_buffered = f.schedule().ring_buffer().defined();
-            const vector<StorageDim> &storage_dims = f.schedule().storage_dims();
-            const vector<string> &args = f.args();
-            for (size_t i = 0; i < storage_dims.size(); i++) {
-                for (size_t j = 0; j < args.size(); j++) {
-                    if (args[j] == storage_dims[i].var) {
-                        storage_permutation.push_back((int)j);
-                        Expr bound = storage_dims[i].bound;
-                        if (bound.defined()) {
-                            if (can_prove(extents[j] > bound)) {
-                                user_error << "Explicit storage bound (" << bound << ") for variable " << args[j] << " of function " << op->name << " is smaller than required (" << extents[j] << ")\n";
-                            }
-                            Expr bound_too_small_error =
-                                Call::make(Int(32),
-                                           "halide_error_storage_bound_too_small",
-                                           {StringImm::make(op->name), StringImm::make(args[j]), bound, extents[j]},
-                                           Call::Extern);
-                            Stmt size_to_small_check = AssertStmt::make(extents[j] <= bound, bound_too_small_error);
-                            bound_asserts.push_back(size_to_small_check);
-                            extents[j] = bound;
-                        }
-                        Expr alignment = storage_dims[i].alignment;
-                        if (alignment.defined()) {
-                            allocation_extents[j] = ((extents[j] + alignment - 1) / alignment) * alignment;
-                        } else {
-                            allocation_extents[j] = extents[j];
-                        }
-                    }
-                }
-                internal_assert(storage_permutation.size() == i + 1);
-            }
-            if (is_ring_buffered) {
-                storage_permutation.push_back(storage_dims.size());
-                allocation_extents[storage_dims.size()] = extents[storage_dims.size()];
-            }
-        }
-
-        internal_assert(storage_permutation.size() == op->bounds.size());
-
-        Stmt stmt = body;
         internal_assert(op->types.size() == 1);
+        auto iter = env.find(op->name);
+        internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
+        const Function &f = iter->second.first;
+        const bool ring = f.schedule().ring_buffer().defined();
+        const bool splits = func_has_storage_splits(f);
 
-        // Make the names for the mins, extents, and strides
-        int dims = op->bounds.size();
-        vector<string> min_name(dims), extent_name(dims), stride_name(dims);
-        for (int i = 0; i < dims; i++) {
-            string d = std::to_string(i);
-            min_name[i] = op->name + ".min." + d;
-            stride_name[i] = op->name + ".stride." + d;
-            extent_name[i] = op->name + ".extent." + d;
-        }
-        vector<Expr> min_var(dims), extent_var(dims), stride_var(dims);
-        for (int i = 0; i < dims; i++) {
-            min_var[i] = Variable::make(Int(32), min_name[i]);
-            extent_var[i] = Variable::make(Int(32), extent_name[i]);
-            stride_var[i] = Variable::make(Int(32), stride_name[i]);
+        if (splits) {
+            user_assert(op->memory_type != MemoryType::GPUTexture)
+                << "split_storage is not supported for Func " << op->name
+                << " because it is stored in MemoryType::GPUTexture.\n";
+            internal_assert(!f.has_extern_definition())
+                << "split_storage on extern-defined Func " << op->name << "\n";
+            for (const auto &p : env) {
+                const Function &g = p.second.first;
+                if (!g.has_extern_definition()) {
+                    continue;
+                }
+                for (const ExternFuncArgument &arg : g.extern_arguments()) {
+                    user_assert(!arg.is_func() || Function(arg.func).name() != op->name)
+                        << "split_storage is not supported for Func " << op->name
+                        << " because it is consumed by the extern stage " << g.name() << ".\n";
+                }
+            }
         }
 
-        // Create a halide_buffer_t object for this allocation.
+        // A split of an extent e by s gives inner = s, outer = ceil(e / s).
+        const vector<StorageAxis> layout = storage_layout(
+            f, ring, extents,
+            [](const Expr &e, const Expr &s) { return std::pair<Expr, Expr>{(e + s - 1) / s, s}; });
+        const int n = (int)layout.size();
+        const int num_args = (int)f.args().size();
+
+        // The buffer dimension each axis lives in: its pure arg (so the buffer
+        // stays in arg order) when there are no splits, else its storage
+        // position. With no splits n == op->bounds.size() and this is a
+        // permutation of the pure args, just as before.
+        auto buffer_dim = [&](int p) { return splits ? p : layout[p].arg; };
+
+        // The stored extent (taking bound_storage into account) and the
+        // allocated extent (also taking align_storage into account) of each
+        // buffer dimension.
+        vector<Expr> stored_extent(n), alloc_extent(n);
+        vector<Stmt> bound_asserts;
+        for (int p = 0; p < n; p++) {
+            int d = buffer_dim(p);
+            Expr e = layout[p].value;
+            if (layout[p].bound.defined()) {
+                Expr bound = layout[p].bound;
+                if (can_prove(e > bound)) {
+                    user_error << "Explicit storage bound (" << bound << ") for variable "
+                               << layout[p].var << " of function " << op->name
+                               << " is smaller than required (" << e << ")\n";
+                }
+                Expr err =
+                    Call::make(Int(32), "halide_error_storage_bound_too_small",
+                               {StringImm::make(op->name), StringImm::make(layout[p].var), bound, e},
+                               Call::Extern);
+                bound_asserts.push_back(AssertStmt::make(e <= bound, err));
+                stored_extent[d] = bound;
+            } else {
+                stored_extent[d] = e;
+            }
+            if (layout[p].alignment.defined()) {
+                Expr a = layout[p].alignment;
+                alloc_extent[d] = ((stored_extent[d] + a - 1) / a) * a;
+            } else {
+                alloc_extent[d] = stored_extent[d];
+            }
+        }
+
+        // Names and vars for the buffer's mins, extents and strides.
+        vector<string> min_name(n), extent_name(n), stride_name(n);
+        vector<Expr> min_var(n), extent_var(n), stride_var(n);
+        for (int d = 0; d < n; d++) {
+            string ds = std::to_string(d);
+            min_name[d] = op->name + ".min." + ds;
+            extent_name[d] = op->name + ".extent." + ds;
+            stride_name[d] = op->name + ".stride." + ds;
+            min_var[d] = Variable::make(Int(32), min_name[d]);
+            extent_var[d] = Variable::make(Int(32), extent_name[d]);
+            stride_var[d] = Variable::make(Int(32), stride_name[d]);
+        }
+
+        // Create a halide_buffer_t object for this allocation. When there are
+        // splits the buffer is in storage order and addressed with relative
+        // coordinates, so its mins are zero; otherwise it is in arg order with
+        // the args' mins, exactly as before.
         BufferBuilder builder;
         builder.host = Variable::make(Handle(), op->name);
         builder.type = op->types[0];
-        builder.dimensions = dims;
-
-        for (int i = 0; i < dims; i++) {
-            builder.mins.push_back(min_var[i]);
-            builder.extents.push_back(extent_var[i]);
-            builder.strides.push_back(stride_var[i]);
+        builder.dimensions = n;
+        for (int d = 0; d < n; d++) {
+            builder.mins.push_back(min_var[d]);
+            builder.extents.push_back(extent_var[d]);
+            builder.strides.push_back(stride_var[d]);
         }
+
+        Stmt stmt = body;
         stmt = LetStmt::make(op->name + ".buffer", builder.build(), stmt);
-
-        // Make the allocation node
-        stmt = Allocate::make(op->name, op->types[0], op->memory_type, allocation_extents, condition, stmt);
-
-        // Wrap it into storage bound asserts.
+        stmt = Allocate::make(op->name, op->types[0], op->memory_type, alloc_extent, condition, stmt);
         if (!bound_asserts.empty()) {
             stmt = Block::make(Block::make(bound_asserts), stmt);
         }
 
-        // Compute the strides
-        for (int i = (int)op->bounds.size() - 1; i > 0; i--) {
-            int prev_j = storage_permutation[i - 1];
-            int j = storage_permutation[i];
-            Expr stride = stride_var[prev_j] * allocation_extents[prev_j];
-            stmt = LetStmt::make(stride_name[j], stride, stmt);
+        // Strides, innermost (layout position 0) first.
+        for (int p = n - 1; p > 0; p--) {
+            stmt = LetStmt::make(stride_name[buffer_dim(p)],
+                                 stride_var[buffer_dim(p - 1)] * alloc_extent[buffer_dim(p - 1)], stmt);
+        }
+        if (n > 0) {
+            stmt = LetStmt::make(stride_name[buffer_dim(0)], 1, stmt);
         }
 
-        // Innermost stride is one
-        if (dims > 0) {
-            int innermost = storage_permutation.empty() ? 0 : storage_permutation[0];
-            stmt = LetStmt::make(stride_name[innermost], 1, stmt);
+        // Mins and extents of each buffer dimension.
+        for (int p = n - 1; p >= 0; p--) {
+            int d = buffer_dim(p);
+            Expr min_val = splits ? Expr(0) : op->bounds[layout[p].arg].min;
+            stmt = LetStmt::make(min_name[d], min_val, stmt);
+            stmt = LetStmt::make(extent_name[d], stored_extent[d], stmt);
         }
 
-        // Assign the mins and extents stored
-        for (size_t i = op->bounds.size(); i > 0; i--) {
-            stmt = LetStmt::make(min_name[i - 1], op->bounds[i - 1].min, stmt);
-            stmt = LetStmt::make(extent_name[i - 1], extents[i - 1], stmt);
+        // Split funcs address the buffer with relative coordinates, so the
+        // per-arg mins used by flatten_args are bound separately.
+        if (splits) {
+            for (int j = num_args; j > 0; j--) {
+                stmt = LetStmt::make(op->name + ".arg_min." + std::to_string(j - 1),
+                                     op->bounds[j - 1].min, stmt);
+            }
         }
 
         return stmt;
@@ -415,50 +554,73 @@ public:
 
         Expr condition = mutate(op->condition);
 
-        vector<Expr> prefetch_min(op->bounds.size());
-        vector<Expr> prefetch_extent(op->bounds.size());
-        vector<Expr> prefetch_stride(op->bounds.size());
-        for (size_t i = 0; i < op->bounds.size(); i++) {
-            prefetch_min[i] = mutate(op->bounds[i].min);
-            prefetch_extent[i] = mutate(op->bounds[i].extent);
-            prefetch_stride[i] = Variable::make(Int(32), op->name + ".stride." + std::to_string(i), op->prefetch.param);
+        auto iter = env.find(op->name);
+        const Function *f = iter != env.end() ? &iter->second.first : nullptr;
+        const bool splits = f && func_has_storage_splits(*f);
+        user_assert(!splits || realizations.contains(op->name))
+            << "split_storage is only supported for internal allocations, but "
+            << op->name << " is a pipeline output.\n";
+
+        // The range [lo, hi] of each arg, relative to its min.
+        const int num_args = (int)op->bounds.size();
+        vector<Expr> lo(num_args), hi(num_args);
+        for (int a = 0; a < num_args; a++) {
+            Expr arg_min = splits ?
+                               Variable::make(Int(32), op->name + ".arg_min." + std::to_string(a)) :
+                               make_shape_var(op->name, "min", a, Buffer<>(), op->prefetch.param);
+            lo[a] = mutate(op->bounds[a].min) - arg_min;
+            hi[a] = lo[a] + mutate(op->bounds[a].extent) - 1;
         }
 
-        Expr base_offset = mutate(flatten_args(op->name, prefetch_min, Buffer<>(), op->prefetch.param));
-        Expr base_address = Variable::make(Handle(), op->name);
-        vector<Expr> args = {base_address, base_offset};
-
-        auto iter = env.find(op->name);
-        if (iter != env.end()) {
-            // Order the <min, extent> args based on the storage dims
-            // (i.e. innermost dimension should be first in args)
-            vector<int> storage_permutation;
-            {
-                Function f = iter->second.first;
-                const vector<StorageDim> &storage_dims = f.schedule().storage_dims();
-                const vector<string> &args = f.args();
-                for (size_t i = 0; i < storage_dims.size(); i++) {
-                    for (size_t j = 0; j < args.size(); j++) {
-                        if (args[j] == storage_dims[i].var) {
-                            storage_permutation.push_back((int)j);
-                        }
-                    }
-                    internal_assert(storage_permutation.size() == i + 1);
-                }
+        // The range of each buffer dimension, innermost first. A split of
+        // [lo, hi] by s covers outer blocks [lo / s, hi / s] and,
+        // conservatively, all of the inner axis [0, s - 1]. The slot of a
+        // ring buffer that will be read isn't known here, so the prefetch
+        // conservatively covers all of them.
+        vector<Expr> dim_lo, dim_hi;
+        vector<int> dim;
+        if (f) {
+            const Expr &ring_extent = f->schedule().ring_buffer();
+            const bool ring = ring_extent.defined();
+            if (ring) {
+                lo.emplace_back(0);
+                hi.push_back(ring_extent - 1);
             }
-            internal_assert(storage_permutation.size() == op->bounds.size());
-
-            for (size_t i = 0; i < op->bounds.size(); i++) {
-                internal_assert(storage_permutation[i] < (int)op->bounds.size());
-                args.push_back(prefetch_extent[storage_permutation[i]]);
-                args.push_back(prefetch_stride[storage_permutation[i]]);
+            vector<StorageAxis> lo_layout = storage_layout(
+                *f, ring, lo,
+                [](const Expr &c, const Expr &s) { return std::pair<Expr, Expr>{c / s, 0}; });
+            vector<StorageAxis> hi_layout = storage_layout(
+                *f, ring, hi,
+                [](const Expr &c, const Expr &s) { return std::pair<Expr, Expr>{c / s, s - 1}; });
+            for (size_t p = 0; p < lo_layout.size(); p++) {
+                dim_lo.push_back(lo_layout[p].value);
+                dim_hi.push_back(hi_layout[p].value);
+                dim.push_back(splits ? (int)p : lo_layout[p].arg);
             }
         } else {
-            for (size_t i = 0; i < op->bounds.size(); i++) {
-                args.push_back(prefetch_extent[i]);
-                args.push_back(prefetch_stride[i]);
+            dim_lo = lo;
+            dim_hi = hi;
+            for (int a = 0; a < num_args; a++) {
+                dim.push_back(a);
             }
         }
+
+        // Prefetch: {base, offset, extent0, stride0, extent1, stride1, ...},
+        // where offset is the box's corner.
+        const bool wide = target.has_large_buffers();
+        Expr base_offset = wide ? make_zero(Int(64)) : make_zero(Int(32));
+        vector<Expr> args = {Variable::make(Handle(), op->name), Expr()};
+        for (size_t p = 0; p < dim.size(); p++) {
+            Expr stride = make_shape_var(op->name, "stride", dim[p], Buffer<>(), op->prefetch.param);
+            if (wide) {
+                base_offset += cast<int64_t>(dim_lo[p]) * cast<int64_t>(stride);
+            } else {
+                base_offset += dim_lo[p] * stride;
+            }
+            args.push_back(dim_hi[p] - dim_lo[p] + 1);
+            args.push_back(stride);
+        }
+        args[1] = base_offset;
 
         // TODO: Consider generating a prefetch call for each tuple element.
         Stmt prefetch_call = Evaluate::make(Call::make(op->types[0], Call::prefetch, args, Call::Intrinsic));

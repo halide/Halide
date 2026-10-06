@@ -70,6 +70,31 @@ int main(int argc, char **argv) {
         ss3.destroy(user_context);
         HALIDE_CHECK(user_context, get_allocated_system_memory() == 0);
     }
+
+    // test StringUtils::copy_up_to bounds
+    {
+        // The destination is exactly max_chars bytes; a guard byte sits
+        // immediately after it. copy_up_to must never write past max_chars,
+        // even when the source is longer, and must terminate in bounds.
+        constexpr size_t max_chars = 8;
+        char storage[max_chars + 1];
+        const char guard = (char)0x7f;
+        storage[max_chars] = guard;
+
+        const char *long_src = "abcdefghijkl";  // longer than max_chars
+        size_t copied = StringUtils::copy_up_to(storage, long_src, max_chars);
+        HALIDE_CHECK(user_context, storage[max_chars] == guard);
+        HALIDE_CHECK(user_context, copied == max_chars - 1);
+        HALIDE_CHECK(user_context, storage[copied] == '\0');
+
+        // A source that fits is copied verbatim and terminated in bounds.
+        const char *short_src = "abc";
+        size_t copied_short = StringUtils::copy_up_to(storage, short_src, max_chars);
+        HALIDE_CHECK(user_context, copied_short == strlen(short_src));
+        HALIDE_CHECK(user_context, storage[copied_short] == '\0');
+        HALIDE_CHECK(user_context, storage[max_chars] == guard);
+    }
+
     print(user_context) << "Success!\n";
     return 0;
 }
