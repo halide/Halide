@@ -48,7 +48,7 @@ inline void vec_dot_blocked(Func out, const RDom &r, int block, bool integer,
 // The N = M = 1 schedule (GGML's vec_dot).
 inline void vec_dot(Func out, const RDom &r, const std::vector<int> &blocks, const std::vector<ApproximationResult> &rs,
                     const Target &t) {
-    out.bound(out.args()[0], 0, 1).bound(out.args()[1], 0, 1);
+    out.output_buffer().dim(0).set_bounds(0, 1).dim(1).set_bounds(0, 1);  // N = M = 1
     vec_dot_blocked(out, r, blocks[0], blocks[1] == blocks[0], rs, t);
 }
 
