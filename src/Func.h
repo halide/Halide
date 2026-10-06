@@ -205,8 +205,13 @@ public:
      *
      * Each inlined Func must be inlinable: a pure Func (no update or extern
      * definition) with no specializations, and with a schedule compatible with
-     * inlining (as for compute_inline()). The inlined Funcs are otherwise
-     * unchanged; only this stage's calls to them are replaced. */
+     * inlining (as for compute_inline()). That is, it must not be scheduled
+     * compute_root(), compute_at(), store_root(), store_at(),
+     * hoist_storage_root(), hoist_storage(), compute_with(), or memoize(), and
+     * none of its loops may be parallel (including GPU blocks or threads),
+     * vectorized, or unrolled. Passing any other Func is an error. The schedule
+     * is checked as it stands when eager_inline() is called. The inlined Funcs
+     * are otherwise unchanged; only this stage's calls to them are replaced. */
     // @{
     Stage &eager_inline(const std::vector<Func> &fs);
 
@@ -2841,10 +2846,9 @@ public:
      * rewriting the definition in place. This is useful to surface structure that
      * other schedule-time directives need to see.
      *
-     * Each inlined Func must be inlinable: a pure Func (no update or extern
-     * definition) with no specializations, and with a schedule compatible with
-     * inlining (as for compute_inline()). The inlined Funcs are otherwise
-     * unchanged; only this definition's calls to them are replaced. */
+     * Each inlined Func must be inlinable; see \ref Stage::eager_inline for
+     * what that requires of its definition and schedule. The inlined Funcs are
+     * otherwise unchanged; only this definition's calls to them are replaced. */
     // @{
     Func &eager_inline(const std::vector<Func> &fs);
 

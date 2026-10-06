@@ -3729,6 +3729,71 @@ Func &Func::compute_inline() {
     return compute_at(LoopLevel::inlined());
 }
 
+namespace {
+
+// A Func's LoopLevels stay unlocked until lowering, since a LoopLevel passed to
+// compute_at() and friends may still be set() afterwards, and an unlocked
+// LoopLevel cannot be queried with is_inlined(). eager_inline() acts now, so it
+// only needs the value the level holds now: compare its fields against
+// LoopLevel::inlined() directly rather than locking it.
+bool currently_inlined(const LoopLevel &level) {
+    const LoopLevel inlined = LoopLevel::inlined();
+    return level.func_name() == inlined.func_name() &&
+           level.var_name() == inlined.var_name();
+}
+
+const char *const eager_inline_schedule_hint =
+    ", but only a Func with a schedule compatible with inlining (as for "
+    "compute_inline()) can be inlined.\n";
+
+void check_eager_inline_level(const Function &f, const LoopLevel &level, const char *directives) {
+    if (currently_inlined(level)) {
+        return;
+    }
+    // An undefined LoopLevel is one the caller still intends to set().
+    const bool undefined = level.var_name() == LoopLevel().var_name();
+    user_error << "eager_inline() cannot inline " << f.name()
+               << ": it is scheduled " << directives
+               << (undefined ? " at a LoopLevel that has not been set yet" : "")
+               << eager_inline_schedule_hint;
+}
+
+// Reject a Func whose schedule could not be used if it were computed inline.
+// These are the conditions that lowering treats as errors for a Func that is
+// compute_inline() (see validate_schedule_inlined_function()). A schedule
+// directive that lowering merely warns about for an inlined Func (split(),
+// bound(), etc.) is allowed.
+void check_eager_inline_schedule(const Function &f) {
+    const FuncSchedule &func_s = f.schedule();
+    const StageSchedule &stage_s = f.definition().schedule();
+
+    check_eager_inline_level(f, func_s.compute_level(), "compute_root() or compute_at()");
+    check_eager_inline_level(f, func_s.store_level(), "store_root() or store_at()");
+    check_eager_inline_level(f, func_s.hoist_storage_level(), "hoist_storage_root() or hoist_storage()");
+    check_eager_inline_level(f, stage_s.fuse_level().level, "compute_with()");
+    user_assert(!func_s.memoized())
+        << "eager_inline() cannot inline " << f.name()
+        << ": it is scheduled memoize()" << eager_inline_schedule_hint;
+
+    for (const Dim &d : stage_s.dims()) {
+        const char *loop_type = nullptr;
+        if (d.for_type == ForType::Parallel) {
+            loop_type = "parallel";
+        } else if (d.is_unordered_parallel()) {
+            loop_type = "as a GPU block or thread loop";
+        } else if (d.for_type == ForType::Vectorized) {
+            loop_type = "vectorized";
+        } else if (d.for_type == ForType::Unrolled) {
+            loop_type = "unrolled";
+        }
+        user_assert(loop_type == nullptr)
+            << "eager_inline() cannot inline " << f.name()
+            << ": its loop over " << d.var << " is scheduled " << loop_type << eager_inline_schedule_hint;
+    }
+}
+
+}  // namespace
+
 Stage &Stage::eager_inline(const std::vector<Func> &fs) {
     vector<Function> funcs;
     map<string, Func> by_name;
@@ -3739,6 +3804,7 @@ Stage &Stage::eager_inline(const std::vector<Func> &fs) {
             << "eager_inline() cannot inline " << f.name()
             << ": it must be a pure Func with no update or extern definition and "
             << "no specializations.\n";
+        check_eager_inline_schedule(f.function());
         funcs.push_back(f.function());
         by_name.emplace(f.name(), f);
     }
