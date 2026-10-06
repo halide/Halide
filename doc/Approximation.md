@@ -258,9 +258,20 @@ are defined in the GGML app).
 | `Identity{}`, `Permute{permutation}`                       | Pass Funcs (and their port names) through unchanged / reordered. Both are lossless.                                                                                                                                                                                                                                                                 |
 | `Pointwise{...}`                                           | Elementwise `out(vs) = fn(in(vs))`; the output Funcs are named `name + "_encode"` and `name + "_decode"` (the four-argument constructors choose both names and the pure Var prefix). `with_types`, `with_ranges`, `with_lossless` and `with_error_bound` declare the signature, precondition and guarantee ranges, losslessness and an error bound. |
 | `BlockReshape`                                             | Flat row to fixed-size records; lossless.                                                                                                                                                                                                                                                                                                           |
-| `StructLayout`                                             | Logical Funcs to a struct-typed record Func, one field each; lossless.                                                                                                                                                                                                                                                                              |
+| `StructLayout`                                             | Logical Funcs to a struct-typed record Func, one field each; lossless. The record dimensionality is the inputs' unless given to the constructor.                                                                                                                                                                                                    |
 | `LittleEndianScalarPack<Word>`                             | A word per record to and from a leading byte dimension; lossless.                                                                                                                                                                                                                                                                                   |
 | `PlanarFieldPack`                                          | Fixed-width fields packed into bytes; lossless for inputs in its declared range.                                                                                                                                                                                                                                                                    |
+
+The layout units are rank-polymorphic: dimensions after the ones they act on
+(`BlockReshape`: the flat index; `PlanarFieldPack`: `(element, record)`;
+`StructLayout` and `LittleEndianScalarPack`: all of them, as records) pass
+through unchanged, so one scheme value approximates a row `w(k)` and a matrix
+`W(k, n)` alike. `BlockReshape` maps `(k, rest...)` to
+`(within, block, rest...)`. Their signatures take the dimensionalities from the
+context, so they are unknown when there is none (e.g. in `describe()` without
+inputs) and checked at run time otherwise. A quantizer of your own composes with
+them on a matrix if it is rank-polymorphic too, e.g. written with implicit Vars
+(`codes(j, b, _) = ...`).
 
 A four-bit scheme, built from these and a quantizer of your own (`quant`, here
 one whose codes are declared to lie in `[-8, 7]`), reads in the order `encode`
@@ -473,13 +484,13 @@ given the ports they would receive. For the four-bit scheme above (with the
 quantizer from lesson 25):
 
 ```
-Compose (values x1) -> (bytes: uint8 x2, scale: float32 x1)
-  BlockReshape (values x1) -> (blocks x2)
+Compose (values) -> (bytes: uint8 x2, scale: float32 x1)
+  BlockReshape (values) -> (blocks)
   Q4_0Quantizer (blocks: float32 x2) -> (codes: int8 x2 in [-8, 7], scale: float32 x1)
   Parallel (codes: int8 x2 in [-8, 7], scale: float32 x1) -> (bytes: uint8 x2, scale: float32 x1)
     Compose (codes: int8 x2 in [-8, 7]) -> (bytes: uint8 x2)
       offset (codes: int8 x2 in [-8, 7]) -> (codes: uint8 x2 in [0, 15])
-      PlanarFieldPack (codes x2 in [0, 15]) -> (bytes: uint8 x2)
+      PlanarFieldPack (codes: uint8 x2 in [0, 15]) -> (bytes: uint8 x2)
 ```
 
 An unknown signature prints as `(unknown signature)`. Where a stage's context is
