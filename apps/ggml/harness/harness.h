@@ -15,10 +15,14 @@
 #include <string>
 #include <vector>
 
+struct halide_buffer_t;
+struct halide_filter_metadata_t;
+
 namespace gq {
 
 enum Op { GQ_vec_dot = 1,
-          GQ_mul_mat = 2 };
+          GQ_mul_mat = 2,
+          GQ_codec = 4 };
 
 struct Shape {
     std::string model, layer;
@@ -91,6 +95,25 @@ struct Timing {
     int samples, reps;
 };
 std::vector<Timing> time_interleaved(const std::vector<Kernel *> &ks, int rounds, double min_sample_ms);
+
+// Codecs (codec.cpp): a format's Halide quantize (row of f32 -> blocks) and
+// dequantize (blocks -> f32), checked bitwise against GGML's reference
+// quantizer (ggml_quantize_chunk) and to_float, and timed against them.
+struct CodecRow {
+    std::string type;
+    int (*quantize[2])(halide_buffer_t *, halide_buffer_t *);  // [checked, bench]
+    int (*dequantize[2])(halide_buffer_t *, halide_buffer_t *);
+    const halide_filter_metadata_t *(*metadata)();  // of quantize: argument 1 is the block type
+};
+std::vector<CodecRow> &codec_rows();
+struct CodecResult {
+    std::string type, dir, provider, path;
+    int64_t K;
+    std::string detail;  // empty: bit-exact
+    bool timed;
+    Timing t;
+};
+std::vector<CodecResult> run_codecs(const std::vector<int64_t> &Ks, const std::vector<std::string> &filters, bool check, int rounds, double min_ms);
 
 // Logging: GGML log lines captured since the last call.
 std::vector<std::string> take_log();
