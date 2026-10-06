@@ -639,6 +639,170 @@ int hoist_invariants_block_lane_test(int n) {
     return 0;
 }
 
+// The same block-scaled reduction, with each block of 32 split into two chunks
+// of 16 and each chunk into lanes of 4, and rfactor preserving the block (u)
+// and the lane (lane), so each lane keeps a partial sum over both chunks. The
+// factor reads scale((u*32 + kc*16 + lane*4 + ki) / 32), which only reduces to
+// scale((u*8 + kc*4 + lane) / 8) given the RVar bounds; dropping kc needs
+// lane in [0, 4). lane is a pure Var of the intermediate, so the schedule
+// supplies that range with bound().
+Func block_two_chunk_reduction(const ImageParam &data_p, const ImageParam &scale_p,
+                               const Var &u, const Var &lane, Func &out) {
+    RDom r(0, data_p.dim(0).extent(), "r");
+    RVar ko{"ko"}, k{"k"}, kc{"kc"}, kv{"kv"}, kl{"kl"}, ki{"ki"};
+    out() = 0.0f;
+    out() += cast<float>(data_p(r)) * scale_p(r / 32);
+    out.update().split(r, ko, k, 32).split(k, kc, kv, 16).split(kv, kl, ki, 4);
+    return out.update().rfactor({{kl, lane}, {ko, u}});
+}
+
+int hoist_invariants_block_two_chunk_test(int n) {
+    constexpr int block = 32;
+    ImageParam data_p{Int(8), 1, "data_p"};
+    ImageParam scale_p{Float(32), 1, "scale_p"};
+    Var u{"u"}, lane{"lane"};
+    Func out{"out"};
+    Func blocks = block_two_chunk_reduction(data_p, scale_p, u, lane, out);
+    blocks.bound(lane, 0, 4);
+    Func blocks_intm = blocks.update().hoist_invariants();
+    blocks.compute_root().vectorize(lane);
+    blocks.update().vectorize(lane);
+    blocks_intm.compute_at(blocks, u).vectorize(lane);
+
+    internal_assert(!calls_func(blocks_intm.update_value(), Func(scale_p).name()))
+        << "hoist_invariants two chunks: the per-block factor was not hoisted out of "
+        << blocks_intm.name() << ": " << blocks_intm.update_value() << "\n";
+    internal_assert(calls_func(blocks.update_value(), Func(scale_p).name()))
+        << "hoist_invariants two chunks: the write-back of " << blocks.name()
+        << " does not apply the per-block factor: " << blocks.update_value() << "\n";
+
+    const int num_blocks = (n + block - 1) / block;
+    Buffer<int8_t> data(n);
+    Buffer<float> scale(num_blocks);
+    for (int i = 0; i < n; i++) {
+        data(i) = (int8_t)((i * 7) % 11 - 5);
+    }
+    for (int b = 0; b < num_blocks; b++) {
+        scale(b) = (float)(b + 1) * 0.5f;
+    }
+    data_p.set(data);
+    scale_p.set(scale);
+
+    Buffer<float> result = out.realize();
+
+    float ref = 0.0f;
+    for (int i = 0; i < n; i++) {
+        ref += (float)data(i) * scale(i / block);
+    }
+    internal_assert(result() == ref)
+        << "hoist_invariants two chunks (n = " << n << "): "
+        << result() << " vs ref " << ref << "\n";
+
+    return 0;
+}
+
+// The hoisted factor scale(u) equals the original only for lane in [0, 4).
+// A consumer reading the intermediate outside that range must get an error,
+// both while the bound stands (Halide checks explicit bounds) and if the bound
+// is widened after hoisting (the hoisted factor checks the range it assumed;
+// since bound() fixes the region computed, any realization then fails).
+int hoist_invariants_block_two_chunk_out_of_bounds_test() {
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
+
+    constexpr int n = 64, num_blocks = n / 32;
+    for (bool widen : {false, true}) {
+        ImageParam data_p{Int(8), 1, "data_p"};
+        ImageParam scale_p{Float(32), 1, "scale_p"};
+        Var u{"u"}, lane{"lane"};
+        Func out{"out"};
+        Func blocks = block_two_chunk_reduction(data_p, scale_p, u, lane, out);
+        blocks.bound(lane, 0, 4);
+        Func blocks_intm = blocks.update().hoist_invariants();
+        blocks_intm.compute_root();
+        if (widen) {
+            blocks.bound(lane, 0, 8);
+        }
+
+        Buffer<int8_t> data(n);
+        Buffer<float> scale(num_blocks);
+        data.fill(1);
+        scale.fill(1.0f);
+        data_p.set(data);
+        scale_p.set(scale);
+
+        const string expected = widen ? "hoist_invariants() hoisted a factor" : "do not cover required region";
+        // A consumer that reads all 8 lanes. (Realizing blocks itself over 8
+        // lanes would just compute the bounded ones.)
+        Func reader{"reader"};
+        reader(lane, u) = blocks(lane, u);
+        blocks.compute_root();
+
+        bool error = false;
+        try {
+            reader.realize({8, num_blocks});
+        } catch (const Halide::RuntimeError &e) {
+            error = true;
+            if (string(e.what()).find(expected) == string::npos) {
+                printf("Unexpected error reading lanes out of bounds (widen = %d):\n%s\n", widen, e.what());
+                return 1;
+            }
+        }
+        if (!error) {
+            printf("Reading lanes out of the bounds hoist_invariants() assumed should fail "
+                   "(widen = %d)!\n",
+                   widen);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// Without a bound on lane, or with one that doesn't imply lane < 4, the factor
+// isn't known to be invariant over kc. Only bound() with a min and an extent
+// counts; bound_extent() leaves the min free.
+int hoist_invariants_block_two_chunk_unbounded_test() {
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
+
+    for (int config = 0; config < 3; config++) {
+        ImageParam data_p{Int(8), 1, "data_p"};
+        ImageParam scale_p{Float(32), 1, "scale_p"};
+        Var u{"u"}, lane{"lane"};
+        Func out{"out"};
+        Func blocks = block_two_chunk_reduction(data_p, scale_p, u, lane, out);
+        if (config == 1) {
+            blocks.bound_extent(lane, 4);
+        } else if (config == 2) {
+            blocks.bound(lane, 0, 8);
+        }
+
+        bool error = false;
+        try {
+            blocks.update().hoist_invariants();
+        } catch (const Halide::CompileError &e) {
+            error = true;
+            const string expected =
+                "hoist_invariants() could not find multiple reduction terms or a "
+                "distributable loop-invariant factor in the update definition of " +
+                blocks.name() + ".";
+            if (string(e.what()).find(expected) == string::npos) {
+                printf("Unexpected error for an unbounded lane (config %d):\n%s\n", config, e.what());
+                return 1;
+            }
+        }
+        if (!error) {
+            printf("hoist_invariants should not hoist a factor that needs an unknown "
+                   "lane range (config %d)!\n",
+                   config);
+            return 1;
+        }
+    }
+    return 0;
+}
+
 // A per-block index may itself be data dependent, bounded only by a promise:
 // scale(unsafe_promise_clamped(group(r / 32), 0, G - 1)). The promise must
 // survive hoisting, as it is the only bound on the hoisted factor's access to
@@ -1123,6 +1287,10 @@ int main(int argc, char **argv) {
         {"hoist_invariants test (block index, constant tail)", [] { return hoist_invariants_block_index_test(true, 100); }},
         {"hoist_invariants test (block lane, divisible)", [] { return hoist_invariants_block_lane_test(128); }},
         {"hoist_invariants test (block lane, tail)", [] { return hoist_invariants_block_lane_test(100); }},
+        {"hoist_invariants test (two chunks, bound lane)", [] { return hoist_invariants_block_two_chunk_test(128); }},
+        {"hoist_invariants test (two chunks, bound lane, tail)", [] { return hoist_invariants_block_two_chunk_test(100); }},
+        {"hoist_invariants test (two chunks, lane not bounded)", hoist_invariants_block_two_chunk_unbounded_test},
+        {"hoist_invariants test (two chunks, lanes out of bounds)", hoist_invariants_block_two_chunk_out_of_bounds_test},
         {"hoist_invariants test (block index, promised)", hoist_invariants_block_index_promise_test},
         {"hoist_invariants test (block index, min/add and or/and)", hoist_invariants_block_index_other_laws_test},
         {"hoist_invariants test (block index, varying)", hoist_invariants_block_index_varying_test},

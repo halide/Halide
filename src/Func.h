@@ -234,8 +234,22 @@ public:
      * to decide this, so a factor that is invariant only within those bounds is
      * hoisted too. For example, after splitting r by 32 into ro and ri and
      * calling rfactor(ro, u), a per-block factor s(r / 32) reads
-     * s((u*32 + ri) / 32), which is s(u) for every ri in [0, 32). The valid
-     * hoistings are:
+     * s((u*32 + ri) / 32), which is s(u) for every ri in [0, 32). Explicit
+     * bounds on the Func's pure vars, set by bound() with a constant min and
+     * extent before calling hoist_invariants(), are used the same way, since
+     * bound() fixes the region the Func is computed over. This matters for a
+     * var that rfactor() made from an RVar, which otherwise has no known range:
+     * after splitting r by 32 into ro and ri, ri by 16 into rc and rl, and rl by
+     * 4 into rv and rw, calling rfactor({{rv, v}, {ro, u}}) makes the factor
+     * read s((u*32 + rc*16 + v*4 + rw) / 32), which is s(u) only given that v
+     * is in [0, 4); calling bound(v, 0, 4) on the intermediate supplies that.
+     * Bounds from bound_extent(), align_bounds(), or bound_storage() are not
+     * used. A factor hoisted only thanks to such a bound is guarded by a
+     * require() on the bounded vars, which simplifies away while the bound
+     * stands. Widening the bound after hoist_invariants() makes every
+     * realization of the Func fail that check at runtime (bound() fixes the
+     * region computed, whatever consumers need), so it is an error rather than
+     * a wrong result. The valid hoistings are:
      *
      *   Outer op    Inner combine   Law
      *   ---------   -------------   ---
