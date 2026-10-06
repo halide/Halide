@@ -1300,6 +1300,9 @@ std::vector<Func> StructLayout::encode(const std::vector<Func> &inputs) const {
     const int record_dimensions =
         record_dimensions_ ? *record_dimensions_ :
                              inputs[0].dimensions() - (physical_field(logical_fields_[0]).array_extent ? 1 : 0);
+    user_assert(record_dimensions > 0)
+        << "StructLayout record dimensionality must be positive, but slot 0 ("
+        << inputs[0].name() << ") implies " << record_dimensions << "\n";
     std::vector<Var> records = component_vars(record_dimensions, "record");
     std::vector<Expr> record_args = component_exprs(records);
     std::vector<Expr> values;
@@ -1333,6 +1336,9 @@ std::vector<Func> StructLayout::decode(const std::vector<Func> &encoded) const {
     user_assert(!record_dimensions_ || packed.dimensions() == *record_dimensions_)
         << "StructLayout::decode requires " << *record_dimensions_ << " record dimensions, but "
         << packed.name() << " has " << packed.dimensions() << "\n";
+    user_assert(packed.dimensions() > 0)
+        << "StructLayout record dimensionality must be positive, but "
+        << packed.name() << " has 0 dimensions\n";
     std::vector<Var> records = component_vars(packed.dimensions(), "record");
     std::vector<Expr> record_args = component_exprs(records);
     Expr record = packed(record_args);
@@ -1361,6 +1367,9 @@ ApproximationSignature StructLayout::signature(const ApproximationPorts &inputs)
     for (size_t i = 0; !record_dimensions && i < inputs.size() && i < logical_fields_.size(); i++) {
         if (inputs[i].dimensions) {
             record_dimensions = *inputs[i].dimensions - (physical_field(logical_fields_[i]).array_extent ? 1 : 0);
+            user_assert(*record_dimensions > 0)
+                << "StructLayout record dimensionality must be positive, but slot " << i
+                << " implies " << *record_dimensions << "\n";
         }
     }
     ApproximationSignature sig;
