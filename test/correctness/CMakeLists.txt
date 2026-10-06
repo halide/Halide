@@ -16,6 +16,7 @@ tests(
     ambiguous_inline_reductions.cpp
     amx_matmul.cpp
     approximate_by.cpp
+    approximation_codec.cpp
     approximation_components.cpp
     approximation_decode_funcs.cpp
     approximation_parallel.cpp
