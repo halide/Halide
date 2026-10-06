@@ -16,43 +16,49 @@ using std::string;
 using std::vector;
 
 // Sanity check that this is a reasonable function to inline
-void validate_schedule_inlined_function(Function f, const char *context) {
+string inlined_function_schedule_error(const Function &f) {
     const FuncSchedule &func_s = f.schedule();
     const StageSchedule &stage_s = f.definition().schedule();
 
     // Compare the value directly so schedule-time callers need not lock the level.
     if (func_s.store_level().var_name() != LoopLevel::inlined().var_name()) {
-        user_error << "Function " << f.name() << " is scheduled to be computed inline, "
-                   << "but is not scheduled to be stored inline. A storage schedule "
-                   << "is meaningless for functions computed inline.\n";
+        return "Function " + f.name() + " is scheduled to be computed inline, "
+               "but is not scheduled to be stored inline. A storage schedule "
+               "is meaningless for functions computed inline.\n";
     }
 
     // Inlining is allowed only if there is no specialization.
-    user_assert(f.definition().specializations().empty())
-        << "Function " << f.name() << " is scheduled inline, so it"
-        << " must not have any specializations. Specialize on the"
-        << " scheduled function instead.\n";
+    if (!f.definition().specializations().empty()) {
+        return "Function " + f.name() + " is scheduled inline, so it"
+               " must not have any specializations. Specialize on the"
+               " scheduled function instead.\n";
+    }
 
     if (func_s.memoized()) {
-        user_error << "Cannot memoize function "
-                   << f.name() << " because the function is scheduled inline.\n";
+        return "Cannot memoize function " + f.name() +
+               " because the function is scheduled inline.\n";
     }
 
     for (const auto &d : stage_s.dims()) {
         if (d.is_unordered_parallel()) {
-            user_error << "Cannot parallelize dimension "
-                       << d.var << " of function "
-                       << f.name() << " because the function is scheduled inline.\n";
+            return "Cannot parallelize dimension " + d.var + " of function " +
+                   f.name() + " because the function is scheduled inline.\n";
         } else if (d.for_type == ForType::Unrolled) {
-            user_error << "Cannot unroll dimension "
-                       << d.var << " of function "
-                       << f.name() << " because the function is scheduled inline.\n";
+            return "Cannot unroll dimension " + d.var + " of function " +
+                   f.name() + " because the function is scheduled inline.\n";
         } else if (is_vectorized(d.for_type)) {
-            user_error << "Cannot vectorize dimension "
-                       << d.var << " of function "
-                       << f.name() << " because the function is scheduled inline.\n";
+            return "Cannot vectorize dimension " + d.var + " of function " +
+                   f.name() + " because the function is scheduled inline.\n";
         }
     }
+    return {};
+}
+
+void validate_schedule_inlined_function(Function f, const char *context) {
+    const string error = inlined_function_schedule_error(f);
+    user_assert(error.empty()) << error;
+    const FuncSchedule &func_s = f.schedule();
+    const StageSchedule &stage_s = f.definition().schedule();
 
     for (const auto &split : stage_s.splits()) {
         switch (split.split_type) {

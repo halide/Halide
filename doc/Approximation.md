@@ -474,6 +474,21 @@ side first, each side in post-order), excluding `replacement`;
 alongside reductions, e.g.
 `if (f.has_update_definition() || r.is_stage_port(f)) f.compute_root();`.
 
+**Decode chain.** `ApproximationResult::decode_funcs()` returns the decode
+side's Funcs that `eager_inline()` would accept as their schedules stand now:
+`replacement` and every Func it reaches without passing through `encoded` (the
+decode trace root's intermediates), in dependency order (producers first,
+`replacement` last). Funcs with update or extern definitions, or scheduled other
+than inline (`compute_root()`, `compute_at()`, `vectorize()`, ...), are left
+out. So after scheduling the encoded side and any decode Funcs that should stay
+materialized, one call folds the rest of the decode chain into a consumer, which
+then calls `encoded` directly, e.g. ahead of `rfactor()`:
+
+```cpp
+for (Func e : r.encoded) e.compute_root();
+dot.update().eager_inline(r.decode_funcs());
+```
+
 **`describe()`.** `Approximation::describe(inputs = {})` (also `operator<<`)
 renders a stage's structure without running anything: one
 `label (inputs) -> (outputs)` line per stage, where a port prints as
@@ -514,7 +529,8 @@ struct ApproximationResult {
     std::vector<ApproximationStageOutputs> encoded_stage_outputs,
                                            decoded_stage_outputs;
     ApproximationTraceNode encode_trace, decode_trace;
-    // encoded_by(), decoded_by(), stage_ports(), is_stage_port(): see above
+    // encoded_by(), decoded_by(), stage_ports(), is_stage_port(),
+    // decode_funcs(): see above
 };
 ```
 
@@ -616,7 +632,8 @@ inference time.
 `decode` into a consumer needs no new Halide feature. Ordinary `.compute_at()` /
 `.compute_inline()` on `ApproximationResult`'s `replacement`, `encoded`,
 `intermediates` and `stage_ports()` already achieves it, since they are regular
-Funcs in the call graph. `sever` (below) is needed only for the strictly
+Funcs in the call graph (and `eager_inline(r.decode_funcs())` folds the decode
+chain in at schedule time). `sever` (below) is needed only for the strictly
 narrower case of actually severing the graph into two separately-compiled
 artifacts, the static-weight case.
 
