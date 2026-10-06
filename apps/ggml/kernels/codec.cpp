@@ -17,7 +17,7 @@ public:
         Var k("k");
         Func y("y");
         y(k) = x(k);
-        ApproximationResult r = Func(x).approximate_by(ggml::scheme(type), {y});
+        ApproximationResult r = Func(x).approximate_by(ggml::format(type).scheme, {y});
         for (Func f : r.intermediates) {
             if (f.has_update_definition()) f.compute_root();
         }

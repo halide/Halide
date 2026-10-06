@@ -79,34 +79,34 @@ activations for quantized weights; Metal's mul_mv has no quantized x f16 kernels
 
 ## Formats and codecs
 
-A format is a scheme (`schemes/`, mapped from its GGML type name in
-`schemes/schemes.h`) plus one row of `GGML_FORMATS` in `formats.cmake`
-(`type ops [target-features]`). `ops` = `codec` builds the one codec generator
-(`kernels/codec.cpp`) for the type: the scheme's round trip on a row of floats,
-severed at the encoded blocks, as `<type>_quantize` (f32 `[K]` -> blocks
-`[K / block]`, a struct type with GGML's block layout) and `<type>_dequantize`.
-The `codec` op (`--op codec`, on by default) checks both bitwise against GGML's
-reference quantizer (`ggml_quantize_chunk`) and `to_float` on N(0, 1) rows whose
-first blocks are adversarial (signed zeros, ties, constants, tiny and huge
-values; inf/NaN are undefined in GGML's reference), and times them against those
-and `from_float`. Codec rows reuse the CSV columns: `atype` is the direction,
-`err_ratio` is 0 (bit-exact) or inf, `gops` is Gvalues/s.
+A format is a scheme plus its values per encoded record (`schemes/`, mapped from
+its GGML type name in `schemes/schemes.h`; f16 is the `fp16` scheme, f32 has
+none) and one row of `GGML_FORMATS` in `formats.cmake`
+(`type ops [acts [target-features]]`).
 
-## Adding a Halide kernel
+`codec` builds the one codec generator (`kernels/codec.cpp`) for the type: the
+scheme's round trip on a row of floats, severed at the encoded blocks, as
+`<type>_quantize` (f32 `[K]` -> blocks `[K / block]`, a struct type with GGML's
+block layout) and `<type>_dequantize`. The `codec` op (`--op codec`, on by
+default) checks both bitwise against GGML's reference quantizer
+(`ggml_quantize_chunk`) and `to_float` on N(0, 1) rows whose first blocks are
+adversarial (signed zeros, ties, constants, tiny and huge values; inf/NaN are
+undefined in GGML's reference), and times them against those and `from_float`.
+Codec rows reuse the CSV columns: `atype` is the direction, `err_ratio` is 0
+(bit-exact) or inf, `gops` is Gvalues/s.
 
-Add one row to `GGML_HALIDE_KERNELS` in `formats.cmake`:
+`vec_dot` builds the one mul_mat generator (`kernels/matmul.cpp`,
+`weight=<type> act=<act>`) for each act in `acts`, as `<type>_<act>_vec_dot`:
+`out(n, m) = sum_k W(k, n) * X(k, m)` in f32 with each operand approximated by
+its scheme and severed at its encoded records, scheduled for N = M = 1 by
+`kernels/schedule.h` (both operands block-quantized: an int32 dot of the codes
+per block, sdot on Arm, then the scales; otherwise decode and FMA). Kernel ABI
+(`harness/halide_providers.cpp`): `w`/`a` are `[K / block, N or M]` records
+(struct types from the kernel's metadata), `out` is f32 `[N, M]`; `vec_dot` goes
+through a GGML-ABI adapter.
 
-```
-name  generator  weight  act  ops  target-features  [generator params...]
-```
-
-Each row builds two variants: `checked` (default target features; asserts and
+Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds
-`GGML_BENCH_FEATURES`, i.e. `no_asserts no_bounds_query`; what gets timed). The
-generator follows the kernel ABI in `harness/halide_providers.cpp` (`w`: uint8
-`[row bytes, N]` in GGML's layout; `a`: `[K, M]` float or uint8 rows; `out`:
-float32 `[N, M]`); `vec_dot` reuses it at N = M = 1 through a GGML-ABI adapter.
+`GGML_BENCH_FEATURES`, i.e. `no_asserts no_bounds_query`; what gets timed).
 Halide providers currently get the default `Precision` (f32 accumulation, no
 re-quantization); kernels that approximate must declare theirs.
-`harness/example_generator.cpp` (q8_0 x f32) is a plumbing example, not a tuned
-kernel.
