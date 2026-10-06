@@ -64,24 +64,48 @@ The first argument to `Pipeline::halidoscope` matches that of
 2. An `output` `RealizationArg` representing an already-allocated destination
    (e.g., a `Buffer`) for Halidoscope to write to.
 
+As with `Pipeline::realize`, either may be preceded by a `JITUserContext *`.
+
+#### Calling Halidoscope from a Generator
+
+Generators have a protected `halidoscope` member function that can be called
+from `generate()` once all outputs are defined. It takes the same arguments as
+the `Callable` returned by `compile_to_callable`: an optional
+`JITUserContext *`, then the inputs in order, then the output buffers. The
+inputs are bound to the Generator's input parameters and `get_pipeline()` is
+passed to `Pipeline::halidoscope`. A `HalidoscopeOptions` may be passed as the
+very first argument.
+
+```cpp
+void generate() {
+    // Define and schedule the outputs.
+
+    Buffer<float> input_buffer = Halide::Tools::load_and_convert_image("input.png");
+    Buffer<float> output_buffer(input_buffer.width(), input_buffer.height());
+    halidoscope(input_buffer, 0.5f, output_buffer);
+}
+```
+
 #### Configuring Halidoscope's behavior
 
 The `Pipeline::halidoscope` API also accepts an `options` argument of type
 `HalidoscopeOptions` that can control how Halidoscope behaves. This struct has
 the following shape:
 
-| Field                      | Type                         | Description                                                                                                                                                                                                                                                    |
-| -------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `halidoscope_path`         | `std::optional<std::string>` | The path to the Halidoscope binary on disk. By default, `Pipeline::halidoscope` will look for `halidoscope` on the user's `$PATH` and error if not found.                                                                                                      |
-| `halidoscope_output_dir`   | `std::optional<std::string>` | (Optional.) A path to a non-volatile directory for storing Halidoscope-generated trace binaries and profiler output. By default, Halidoscope will write recorded `.hltrace` and profile JSON files to a temporary directory that is destroyed on process exit. |
-| `halidoscope_profile_runs` | `std::optional<int>`         | The number of profiling runs for the Halide profiler to execute on the pipeline. Defaults to 1. Users can opt out of profiling altogether by specifying 0.                                                                                                     |
+| Field                   | Type                         | Description                                                                                                                                                                                                                                                              |
+| ----------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `path`                  | `std::optional<std::string>` | The path to the Halidoscope binary on disk. By default, `Pipeline::halidoscope` will look for `halidoscope` on the user's `$PATH` and error if not found.                                                                                                                |
+| `output_dir`            | `std::optional<std::string>` | (Optional.) A path to a non-volatile directory for storing Halidoscope-generated trace binaries and profiler output. By default, Halidoscope will write recorded `.hltrace` and profile JSON files to a temporary directory that is destroyed on process exit.           |
+| `profile_runs`          | `std::optional<int>`         | The number of profiling runs for the Halide profiler to execute on the pipeline. If unset, runs the pipeline repeatedly for at least one second (not counting the first run, which includes JIT compilation). Users can opt out of profiling altogether by specifying 0. |
+| `trace_file_size_limit` | `size_t`                     | A limit on the size of the compressed trace file, in megabytes (default 1000). If the trace exceeds it, `Pipeline::halidoscope` fails with an error rather than filling the disk.                                                                                        |
 
 ### Calling Halidoscope from the command line
 
 As an alternative to the `Pipeline::halidoscope` API, you can also invoke
 Halidoscope directly from the command line to launch the GUI. To work with a
 pre-recorded trace, simply specify the path to a Halide trace binary file via
-the `--trace` flag.
+the `--trace` flag. Traces may be raw (e.g. as written by `HL_TRACE_FILE`) or
+zstd-compressed (as written by `Pipeline::halidoscope`).
 
 ```bash
 halidoscope --trace <path/to/file.hltrace>

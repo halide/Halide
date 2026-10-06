@@ -1,9 +1,9 @@
-// Exercises Pipeline::halidoscope(). Each check runs the real trace and
+// Exercises Pipeline::halidoscope() and Generator::halidoscope(). Each check runs the real trace and
 // profile instrumentation, but avoids depending on the actual Halidoscope
 // GUI binary being built or installed anywhere in this environment by
-// pointing HalidoscopeOptions::halidoscope_path at this test binary itself,
+// pointing HalidoscopeOptions::path at this test binary itself,
 // re-exec'd with the same "--trace <path> [--profile <path>]" argv shape
-// halidoscope_impl() would pass to the real thing -- mirroring
+// Internal::pipeline_halidoscope() would pass to the real thing -- mirroring
 // test/correctness/run_process.cpp.
 //
 // halidoscope() serializes and deserializes the pipeline internally, so it's
@@ -64,11 +64,51 @@ bool exception_thrown(const std::function<void()> &fn) {
     return false;
 }
 
+// Calls halidoscope() from within generate(), in the way selected by `mode`.
+class HalidoscopeGen : public Generator<HalidoscopeGen> {
+public:
+    Input<Buffer<uint8_t, 2>> input{"input"};
+    Input<int32_t> offset{"offset"};
+    Output<Buffer<int32_t, 2>> output{"output"};
+
+    enum Mode { Plain,
+                WithContext,
+                WrongType,
+                WrongCount } mode = Plain;
+    HalidoscopeOptions options;
+    Buffer<uint8_t> in;
+    Buffer<int32_t> out;
+    JITUserContext user_context;
+
+    void generate() {
+        Var x("x"), y("y");
+        Func f("f");
+        f(x, y) = cast<int32_t>(input(x, y)) + offset;
+        output(x, y) = f(x, y) * 2;
+        f.compute_root();
+
+        switch (mode) {
+        case Plain:
+            halidoscope(options, in, 5, out);
+            break;
+        case WithContext:
+            halidoscope(options, &user_context, in, 7, out);
+            break;
+        case WrongType:
+            halidoscope(options, in, 5.0f, out);
+            break;
+        case WrongCount:
+            halidoscope(options, in, out);
+            break;
+        }
+    }
+};
+
 }  // namespace
 
 int main(int argc, char **argv) {
     // Stub-launcher mode: stand in for the real Halidoscope GUI binary.
-    // halidoscope_impl() invokes its launcher with exactly this argv shape,
+    // Internal::pipeline_halidoscope() invokes its launcher with exactly this argv shape,
     // so re-exec'ing this test binary lets the checks below exercise a real
     // launch without needing the actual GUI app.
     if (argc >= 3 && std::string(argv[1]) == "--trace") {
@@ -78,7 +118,7 @@ int main(int argc, char **argv) {
     const std::string self = fs::absolute(argv[0]).string();
 
     // Happy path: one traced realization and one profiled realization
-    // should be written to halidoscope_output_dir, and the "launch" (our
+    // should be written to output_dir, and the "launch" (our
     // stub) should succeed without halidoscope() throwing.
     {
         Func f("f"), g("g");
@@ -86,8 +126,8 @@ int main(int argc, char **argv) {
 
         std::string dir = Internal::dir_make_temp();
         HalidoscopeOptions options;
-        options.halidoscope_path = self;
-        options.halidoscope_output_dir = dir;
+        options.path = self;
+        options.output_dir = dir;
 
         p.halidoscope({16, 16}, options);
 
@@ -103,15 +143,15 @@ int main(int argc, char **argv) {
         check(slurp(trace_path).size() > 1024);
 
         std::vector<char> profile_json = slurp(profile_path);
-        check(contains(profile_json, "\"pipelines\":["));
-        check(!contains(profile_json, "\"funcs\":[]"));
+        check(contains(profile_json, "\"pipelines\": ["));
+        check(contains(profile_json, "\"name\": \"f\""));
 
         Internal::file_unlink(trace_path);
         Internal::file_unlink(profile_path);
         Internal::dir_rmdir(dir);
     }
 
-    // halidoscope_profile_runs == 0 should skip the profiling run entirely
+    // profile_runs == 0 should skip the profiling run entirely
     // (no profile.json), while still writing the trace as usual.
     {
         Func f("f"), g("g");
@@ -119,9 +159,9 @@ int main(int argc, char **argv) {
 
         std::string dir = Internal::dir_make_temp();
         HalidoscopeOptions options;
-        options.halidoscope_path = self;
-        options.halidoscope_output_dir = dir;
-        options.halidoscope_profile_runs = 0;
+        options.path = self;
+        options.output_dir = dir;
+        options.profile_runs = 0;
 
         p.halidoscope({16, 16}, options);
 
@@ -140,8 +180,8 @@ int main(int argc, char **argv) {
 
         std::string dir = Internal::dir_make_temp();
         HalidoscopeOptions options;
-        options.halidoscope_path = self;
-        options.halidoscope_output_dir = dir;
+        options.path = self;
+        options.output_dir = dir;
 
         Buffer<int> out(16, 16);
         p.halidoscope(out, options);
@@ -154,14 +194,60 @@ int main(int argc, char **argv) {
         Internal::dir_rmdir(dir);
     }
 
-    // An explicit halidoscope_path that doesn't exist should fail fast,
+    // Generator::halidoscope, called from generate(), takes the same
+    // arguments as the Callable from compile_to_callable, optionally
+    // preceded by a HalidoscopeOptions.
+    {
+        const GeneratorContext context(get_jit_target_from_environment());
+
+        std::string dir = Internal::dir_make_temp();
+        HalidoscopeOptions options;
+        options.path = self;
+        options.output_dir = dir;
+
+        Buffer<uint8_t> in(16, 16);
+        in.fill(3);
+        Buffer<int32_t> out(16, 16);
+
+        auto run = [&](HalidoscopeGen::Mode mode) {
+            auto gen = HalidoscopeGen::create(context);
+            gen->mode = mode;
+            gen->options = options;
+            gen->in = in;
+            gen->out = out;
+            static_cast<Internal::AbstractGenerator &>(*gen).build_pipeline();
+        };
+
+        run(HalidoscopeGen::Plain);
+
+        std::string trace_path = dir + "/trace.hltrace";
+        std::string profile_path = dir + "/profile.json";
+        check(Internal::file_exists(trace_path));
+        check(Internal::file_exists(profile_path));
+        check(slurp(trace_path).size() > 1024);
+        check(contains(slurp(profile_path), "\"name\": \"f$"));
+        check(out(0, 0) == (3 + 5) * 2);
+
+        out.fill(0);
+        run(HalidoscopeGen::WithContext);
+        check(out(0, 0) == (3 + 7) * 2);
+
+        Internal::file_unlink(trace_path);
+        Internal::file_unlink(profile_path);
+        Internal::dir_rmdir(dir);
+
+        check(exception_thrown([&]() { run(HalidoscopeGen::WrongType); }));
+        check(exception_thrown([&]() { run(HalidoscopeGen::WrongCount); }));
+    }
+
+    // An explicit path that doesn't exist should fail fast,
     // before any instrumentation or launch is attempted.
     {
         Func f("f"), g("g");
         Pipeline p = make_test_pipeline(f, g);
 
         HalidoscopeOptions options;
-        options.halidoscope_path = "/no/such/path/to/halidoscope";
+        options.path = "/no/such/path/to/halidoscope";
 
         check(exception_thrown([&]() { p.halidoscope({16, 16}, options); }));
     }
@@ -173,7 +259,7 @@ int main(int argc, char **argv) {
         Pipeline p = make_test_pipeline(f, g);
 
         HalidoscopeOptions options;
-        options.halidoscope_path = "not_halidoscope";
+        options.path = "not_halidoscope";
 
         check(exception_thrown([&]() { p.halidoscope({16, 16}, options); }));
     }

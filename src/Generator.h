@@ -3112,6 +3112,7 @@ protected:
     using Func = Halide::Func;
     using FuncVec = Halide::FuncVec;
     using GeneratorContext = Halide::GeneratorContext;
+    using HalidoscopeOptions = Halide::HalidoscopeOptions;
     using ImageParam = Halide::ImageParam;
     using LoopLevel = Halide::LoopLevel;
     using MemoryType = Halide::MemoryType;
@@ -3277,6 +3278,42 @@ protected:
             << "Cannot add " << param_type << " with name " << name
             << ". It is already taken by another input or output parameter.";
         param_info_ptr->names.insert(name);
+    }
+
+    /** Run get_pipeline() under Halidoscope (see Pipeline::halidoscope),
+     * using the Generator's Target. May be called from generate() once all Outputs are
+     * defined. The arguments are the same as those of the Callable
+     * returned by compile_to_callable(): an optional JITUserContext*, then
+     * the inputs in order, then the output buffers. A HalidoscopeOptions
+     * may be passed as the very first argument. */
+    template<typename First, typename... Rest>
+    void halidoscope(First &&first, Rest &&...rest) {
+        if constexpr (std::is_same_v<std::decay_t<First>, HalidoscopeOptions>) {
+            halidoscope_with_options(first, std::forward<Rest>(rest)...);
+        } else {
+            halidoscope_with_options(HalidoscopeOptions(), std::forward<First>(first), std::forward<Rest>(rest)...);
+        }
+    }
+
+private:
+    template<typename First, typename... Rest>
+    void halidoscope_with_options(const HalidoscopeOptions &options, First &&first, Rest &&...rest) {
+        if constexpr (std::is_same_v<std::decay_t<First>, JITUserContext *>) {
+            halidoscope_with_context(options, first, rest...);
+        } else {
+            halidoscope_with_context(options, nullptr, first, rest...);
+        }
+    }
+
+    template<typename... Args>
+    void halidoscope_with_context(const HalidoscopeOptions &options, JITUserContext *context, const Args &...args) {
+        std::vector<Argument> arguments = ordered_input_arguments();
+        auto prepare = [&](Pipeline &p, const Target &t) {
+            Callable c = p.compile_to_callable(arguments, t);
+            return Internal::HalidoscopeRunner{[c, &args...](JITUserContext *ctx) { (void)c(ctx, args...); },
+                                               std::make_unique<ProfilerScope>(c)};
+        };
+        Internal::pipeline_halidoscope(get_pipeline(), context, prepare, options, get_target());
     }
 
 public:
