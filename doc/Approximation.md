@@ -784,12 +784,12 @@ public:
 header-only, not part of `Halide.h`) packages this body.
 `make_codec(scheme, type, dimensions, options = {})` builds the round trip for a
 `dimensions`-dimensional ImageParam, schedules it (`compute_root()` for Funcs
-with update definitions and encode-side stage ports; the decode side stays
-inline), severs it, and returns a `Codec`: `values` and `encoded` (the encoder's
-ports), `encoded_inputs` and `decoded` (the decoder's), and the
-`ApproximationResult`. Port names are stable: `values`, `decoded`, and one per
-encoded port named after it, the same in both directions (`Options` overrides
-them). Bounds constraints and schedules are added through the `Codec`:
+with update definitions; the rest stays inline), severs it, and returns a
+`Codec`: `values` and `encoded` (the encoder's ports), `encoded_inputs` and
+`decoded` (the decoder's), and the `ApproximationResult`. Port names are stable:
+`values`, `decoded`, and one per encoded port named after it, the same in both
+directions (`Options` overrides them). Bounds constraints and schedules are
+added through the `Codec`:
 
 ```cpp
 void configure() {
