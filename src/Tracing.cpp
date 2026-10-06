@@ -373,8 +373,10 @@ protected:
         builder.event = (op->is_producer ? halide_trace_end_produce : halide_trace_end_consume);
         Expr end_op_call = builder.build();
 
-        return LetStmt::make(op->name + ".trace_id", begin_op_call,
-                             op->with(Block::make(op->body, Evaluate::make(end_op_call))));
+        // Both events go inside the node, so that they are skipped together
+        // if a later pass makes the body conditional.
+        return op->with(LetStmt::make(op->name + ".trace_id", begin_op_call,
+                                      Block::make(op->body, Evaluate::make(end_op_call))));
     }
 };
 }  // namespace
