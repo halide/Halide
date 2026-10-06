@@ -317,6 +317,35 @@ void check_algebra() {
     check((x * -2 - y) / 2, (0 - y) / 2 - x);
     check((y - x * 4) / 2, y / 2 - x * 2);
     check((x + 8) / 2, x / 2 + 4);
+
+    // Drop an offset in [0, c0) that can't carry into the next multiple of
+    // the denominator, when c0 divides it.
+    check((x * 4 + y % 4) / 32, x / 8);
+    check((y % 4 + x * 4) / 32, x / 8);
+    check((x * 4 + clamp(y, 0, 3)) / 32, x / 8);
+    check((x * 4 + y % 4) / -32, x / -8);
+    check((x * 4 + y % 4 + z * 32) / 32, x / 8 + z);
+    {
+        Scope<Interval> bounds;
+        bounds.push("y", Interval(0, 3));
+        check_in_bounds((x * 4 + y) / 32, x / 8, bounds);
+        check_in_bounds((y + x * 4) / 32, x / 8, bounds);
+        // The offset may be 4.
+        bounds.push("z", Interval(0, 4));
+        check_in_bounds((x * 4 + z) / 32, (x * 4 + z) / 32, bounds);
+    }
+    // The offset may be 4, or negative, or unbounded.
+    check((x * 4 + y % 5) / 32, (x * 4 + y % 5) / 32);
+    check((x * 4 + clamp(y, -1, 3)) / 32, (clamp(y, -1, 3) + x * 4) / 32);
+    check((x * 4 + y) / 32, (x * 4 + y) / 32);
+    // c0 doesn't divide the denominator.
+    check((x * 3 + y % 3) / 32, (x * 3 + y % 3) / 32);
+    check((x * 4 + y % 4) / 30, (x * 4 + y % 4) / 30);
+    // c0 is negative.
+    check((x * -4 + y % 4) / 32, (x * -4 + y % 4) / 32);
+    // Not valid for floats.
+    check((xf * 2.0f + clamp(yf, 0.0f, 1.0f)) / 4.0f, (clamp(yf, 0.0f, 1.0f) + xf * 2.0f) * 0.25f);
+
     check((x - y) * -2, (y - x) * 2);
     check((xf - yf) * -2.0f, (yf - xf) * 2.0f);
 
@@ -616,6 +645,16 @@ void check_vectors() {
     check(Expr(ramp(x * 4, 1, 3)) / 4, broadcast(x, 3));
     check(Expr(ramp(x * 8, 2, 4)) / 8, broadcast(x, 4));
     check(Expr(ramp(x * 8, 3, 3)) / 8, broadcast(x, 3));
+
+    {
+        Expr a = Variable::make(Int(32, 4), "a");
+        Expr b = Variable::make(Int(32, 4), "b");
+        check((a * 4 + b % 4) / 32, a / 8);
+        check((a * 4 + broadcast(y % 4, 4)) / 32, a / 8);
+        // Some lanes of the offset may be 4.
+        check((broadcast(x, 4) * 4 + b % ramp(4, 1, 4)) / 32,
+              (b % ramp(4, 1, 4) + broadcast(x * 4, 4)) / 32);
+    }
     check(Expr(ramp(0, 1, 8)) % 16, Expr(ramp(0, 1, 8)));
     check(Expr(ramp(8, 1, 8)) % 16, Expr(ramp(8, 1, 8)));
     check(Expr(ramp(9, 1, 8)) % 16, Expr(ramp(9, 1, 8)) % 16);
