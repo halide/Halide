@@ -103,8 +103,14 @@ its scheme and severed at its encoded records, scheduled for N = M = 1 by
 `kernels/schedule.h`: per weight block, a dot of the codes (int32, sdot on Arm,
 when the activation is quantized alike; f32 otherwise) times the hoisted scales.
 Kernel ABI (`harness/halide_providers.cpp`): `w`/`a` are `[K / block, N or M]`
-records (struct types from the kernel's metadata), `out` is f32 `[N, M]`, all
-with mins 0; `vec_dot` goes through a GGML-ABI adapter.
+records (struct types from the kernel's metadata), `out` is f32 `[N, M]`. The
+kernel declares the whole contract (checked in `checked`, assumed in `bench`):
+all mins 0, rows dense (`dim(1).stride == dim(0).extent`), `a`'s K tied to
+`w`'s, `w`/`a` rows match `out`'s N/M, and `vec_dot` pins `out` to 1 x 1. It
+promises no more than GGML does: K is a whole number of blocks (GGML asserts
+`n % QK == 0`), with no even block count (the 2-block interleave keeps its
+guard) and no host alignment (q4_0/q8_0 rows start on 2-byte boundaries).
+`vec_dot` goes through a GGML-ABI adapter.
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds
