@@ -15,7 +15,7 @@ set(FUZZ_ARGS -runs=1000 -timeout=120 -max_total_time=300)
 
 # These tests don't print "Success!" -- just succeed or fail based on the exit code
 tests(
-    GROUPS fuzz
+    GROUPS fuzz target_from_environment calls_llvm
     SOURCES
         in_clone.cpp
         lossless_cast.cpp
@@ -28,7 +28,7 @@ set(FUZZ_TESTS ${TEST_NAMES})
 # Front-end-only fuzzers: their results depend on neither the Halide target
 # nor the LLVM version. See doc/Testing.md.
 tests(
-    GROUPS fuzz target_independent llvm_independent
+    GROUPS fuzz
     SOURCES
         bounds.cpp
         cse.cpp

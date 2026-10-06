@@ -26,35 +26,31 @@ the directory name. Thus, one can use `ctest -L generator` to run only the
 `generator` tests. The `performance` tests configure CTest to not run them
 concurrently with other tests (including each other).
 
-Three additional labels let CI pick which tests each step needs to run:
+Four additional labels grant tests permission to use capabilities:
 
-- `target_independent`: the test's result does not depend on `HL_TARGET` or
-  `HL_JIT_TARGET` (it may still depend on the host and LLVM version). CI runs
-  these once per job rather than once per target.
-- `llvm_independent`: a `target_independent` test that never invokes LLVM code
-  generation. CI runs these on one LLVM version only.
-- `gpu`: the test exercises the GPU when the target has a GPU feature. CI's GPU
-  steps run only these. A `target_independent` test never gets it.
+- `gpu`: uses any GPU device, including when its target is chosen internally.
+- `multithreaded`: uses at least one additional CPU core. These tests run
+  serially with respect to other CTest tests.
+- `target_from_environment`: reads `HL_TARGET` or `HL_JIT_TARGET`.
+- `calls_llvm`: invokes LLVM code generation, whether or not the generated code
+  runs.
 
-For example, the non-SVE2 `simd_op_check` tests fix their compilation targets
-internally and use the host target to decide whether they can also run the
-generated code. They are still `target_independent`: changing `HL_TARGET` or
-`HL_JIT_TARGET` does not change their behavior. `simd_op_check_sve2` is an
-exception because it reads `HL_JIT_TARGET` to decide whether to run the code.
+A label grants permission; it does not require a test to use the capability on
+every host. For example, a CUDA test may skip on Metal without losing its `gpu`
+label. None of these labels implies another.
 
-These are added as extra `GROUPS` on the test's declaration, e.g.
-`tests(GROUPS correctness target_independent llvm_independent SOURCES ...)`, so
-each directory's source lists are partitioned by label set. AOT tests (e.g.
-`generator`) must never be `target_independent` or `llvm_independent`, since
-their target is fixed at build time. Verify any change with
-`tools/audit_test_labels.py --build-dir build`. It runs each audited test once
-with `HL_DEBUG_CODEGEN=0;tag:target-env,llvm-entry,gpu-entry` and checks the
-tagged debug output: `target_independent` tests must never read the target from
-the environment (`target-env`), and `llvm_independent` tests must also never
-load LLVM runtime bitcode (`llvm-entry`). Pass `--target host-metal` (or another
-GPU target the host supports) to also check that every test that reads the
-target and compiles a GPU kernel or uses a device interface (`gpu-entry`) is
-labeled `gpu`.
+CI audits these permissions, with some caveats:
+
+- GPU-kernel compilation or a GPU device-interface request requires `gpu`, even
+  if no device is ultimately used.
+- CPU `.parallel()` followed by any JIT execution requires `multithreaded`, even
+  if the execution is serial, only queries bounds, or fails before reaching
+  parallel work. Merely constructing or compiling a parallel schedule does not;
+  GPU scheduling does not count as CPU threading.
+- The audit does not cover direct environment reads, thread creation outside
+  `.parallel()`, execution of precompiled AOT code, or direct vendor GPU API
+  calls. Scripts and custom commands are not audited automatically. Tests using
+  these capabilities must still declare the appropriate labels.
 
 The vast majority of our tests are simple C++ executables that link to Halide,
 perform some checks, and print the special line `Success!` upon successful

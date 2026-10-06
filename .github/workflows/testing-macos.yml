@@ -164,7 +164,7 @@ jobs:
       # --- host: internal, correctness, generator, error, warning,
       # tutorial, python, autoschedulers_cpu ---
       #
-      # Tests labeled target_independent (see doc/Testing.md) only run here;
+      # JIT tests without target_from_environment (see doc/Testing.md) only run here;
       # every later step skips them.
 
       - name: Test (host)
@@ -188,7 +188,7 @@ jobs:
           cmake -S . -B build -DHalide_TARGET=x86-64-macos-sse41
           cmake --build build
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
-            -L correctness -LE target_independent -j "$(sysctl -n hw.logicalcpu)"
+            -L correctness -L target_from_environment -j "$(sysctl -n hw.logicalcpu)"
 
       # --- host-metal: real GPU testing on hosted Apple Silicon runners.
       # Runs the tests labeled gpu (see doc/Testing.md).
@@ -217,7 +217,7 @@ jobs:
           cmake -S . -B build -DHalide_TARGET=wasm-32-wasmrt-wasm_simd128
           cmake --build build
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
-            -L "internal|correctness|generator|error|warning" -LE target_independent -j "$(sysctl -n hw.logicalcpu)"
+            -L "internal|correctness|generator|error|warning" -L "target_from_environment|generator" -j "$(sysctl -n hw.logicalcpu)"
 
       - name: Test (wasm_mvponly, wabt JIT)
         if: github.event_name == 'pull_request' && (matrix.arch == 'arm-64')
@@ -225,7 +225,7 @@ jobs:
           cmake -S . -B build -DHalide_TARGET=wasm-32-wasmrt-wasm_mvponly
           cmake --build build
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure \
-            -L "internal|correctness|generator|error|warning" -LE target_independent -j "$(sysctl -n hw.logicalcpu)"
+            -L "internal|correctness|generator|error|warning" -L "target_from_environment|generator" -j "$(sysctl -n hw.logicalcpu)"
 
       - name: Build (wasm_simd128 + wasm_threads, generator only)
         if: github.event_name == 'pull_request' && (matrix.arch == 'arm-64')

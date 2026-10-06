@@ -62,9 +62,10 @@ Tests use CTest and live under `test/`, one CTest label per subdirectory
 `fuzz`, `integration`, `autoschedulers/$AS`). See `doc/Testing.md` for the full
 breakdown of conventions (e.g. `error` tests expect an uncaught non-Halide
 exception, `warning` tests look for a `Warning:` line, tests print `[SKIP]` when
-inapplicable to the current target). The extra labels `target_independent` and
-`llvm_independent` let CI skip duplicate runs; check them with
-`tools/audit_test_labels.py`.
+inapplicable to the current target). Capability labels `gpu`, `multithreaded`,
+`target_from_environment` and `calls_llvm` declare what a test may use. With
+`Halide_BUILDING_IN_CI=ON` (CMake 3.29+), `tools/audit_test_labels.py` runs as
+the CTest launcher and rejects observed uses without permission.
 
 ```shell
 $ ctest --test-dir build --output-on-failure          # everything

@@ -2024,6 +2024,7 @@ Stage &Stage::serial(const VarOrRVar &var) {
 }
 
 Stage &Stage::parallel(const VarOrRVar &var) {
+    debug(4, "parallel-schedule") << "Scheduling parallel loop: " << var.name() << "\n";
     set_dim_type(var, ForType::Parallel);
     return *this;
 }

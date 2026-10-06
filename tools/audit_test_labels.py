@@ -1,224 +1,173 @@
 #!/usr/bin/env python3
-"""Audit the target_independent / llvm_independent / gpu CTest labels.
+"""CTest launcher that rejects use of undeclared Halide test capabilities.
 
-CI relies on these labels to avoid running the same test more than once:
+Usage: audit_test_labels.py --build-dir BUILD [--config CONFIG] -- COMMAND [ARGS...]
 
-  target_independent  The result does not depend on HL_TARGET / HL_JIT_TARGET,
-                      so the test runs once per CI job instead of once per
-                      Halide target.
-  llvm_independent    The test never invokes LLVM code generation, so it runs
-                      against only one LLVM version. Implies target_independent.
-  gpu                 The test exercises the GPU when the target has a GPU
-                      feature, so it runs in the CI steps that test a GPU
-                      target.
-
-This script checks them empirically against an existing build. Each test runs
-once, with HL_TARGET / HL_JIT_TARGET set to --target (default host) and
-HL_DEBUG_CODEGEN=0;tag:target-env,llvm-entry,gpu-entry. Keeping verbosity 0
-means debug(0) output, e.g. print_loop_nest(), happens exactly as in CI. Each
-tag marks one thing in the test's output:
-
-  target-env  Halide read the target from the environment
-              (get_target_from_environment / get_jit_target_from_environment).
-              A passing test that never does this is target independent.
-  llvm-entry  Halide loaded its LLVM runtime bitcode, which every LLVM code
-              generation path does. A target-independent test that never
-              does this is LLVM independent.
-  gpu-entry   Halide compiled a GPU kernel or fetched a device interface. When
-              --target has a GPU feature (e.g. host-metal), every test that
-              does this and reads the target must be labeled gpu. (A
-              target-independent test uses the GPU the same way everywhere, so
-              it needs no gpu label.) A gpu-labeled test that doesn't use the
-              GPU, e.g. a CUDA-only test that skips itself on Metal, or one
-              checking a GPU-only schedule error, is reported, not rejected.
-
-Only JIT-style test executables are audited (see AUDITED_LABELS): AOT tests
-(generator, tutorial, apps, ...) bake Halide_TARGET in at build time and so
-must never be labeled target_independent, even though they don't read the
-environment at run time.
-
-Note: this is only proof for the host the audit runs on. A test that reads the
-target only on some hosts would slip through, so keep an eye on tests that
-branch on get_host_target().
-
-Usage:
-    tools/audit_test_labels.py --build-dir build [-C RelWithDebInfo] [-j N]
-                               [--target host-metal]
+CTest supplies the environment, working directory, timeout and result policy.
+The launcher reads the test's actual labels from CTest, without changing its
+target. Extra permissions are allowed: a test may skip a capability on a host
+that does not support it.
 """
 
 import argparse
-import concurrent.futures
 import json
 import os
-import re
+import signal
 import subprocess
 import sys
 
-DEBUG_RULES = "0;tag:target-env,llvm-entry,gpu-entry"
-# Logged under target-env by src/Target.cpp.
-TARGET_MARKER = "Reading target from environment: "
-# Logged under llvm-entry by src/LLVM_Runtime_Linker.cpp.
-LLVM_MARKER = "Loading runtime bitcode: "
-# Logged under gpu-entry by src/OffloadGPULoops.cpp and src/DeviceInterface.cpp.
-GPU_MARKERS = ("Compiling GPU kernel: ", "Using device interface: ")
-GPU_FEATURES = {"cuda", "opencl", "metal", "vulkan", "d3d12compute", "webgpu"}
-
-# Tests with any of these labels are JIT tests built from plain C++ sources, so
-# the environment is the only way their target can be chosen.
-AUDITED_LABELS = {"correctness", "fuzz", "warning", "runtime_internal"}
-# Autoscheduler unit tests that exercise the autoscheduler's internals directly.
-AUDITED_NAMES = re.compile(
-    r"^(test_perfect_hash_map"
-    r"|(adams2019|anderson2021)_test_(function_dag|parser|state|storage_strides"
-    r"|thread_info|tiling|bounds))$"
-)
+FAILURE_MARKER = "Halide test capability violation:"
+SUCCESS_MARKER = "Halide test launcher: successful exit"
+PARALLEL_MARKER = "Scheduling parallel loop: "
+JIT_MARKER = "Running JIT code"
+MARKERS = {
+    "target_from_environment": ("Reading target from environment: ",),
+    "calls_llvm": ("Loading runtime bitcode: ",),
+    "gpu": ("Using device interface: ", "Compiling GPU kernel: "),
+}
 
 
-def ctest_json(build_dir, config):
-    cmd = ["ctest", "--test-dir", build_dir, "--show-only=json-v1"]
+def test_metadata(build_dir, config, ctest, command):
+    cmd = [ctest, "--test-dir", build_dir, "--show-only=json-v1"]
     if config:
         cmd += ["-C", config]
-    return json.loads(subprocess.check_output(cmd))
-
-
-def props(test):
-    return {p["name"]: p["value"] for p in test.get("properties", [])}
-
-
-def in_scope(test):
-    p = props(test)
-    labels = set(p.get("LABELS", []))
-    return bool(labels & AUDITED_LABELS) or bool(AUDITED_NAMES.match(test["name"]))
-
-
-def run(test, extra_env, timeout):
-    p = props(test)
-    env = dict(os.environ)
-    for kv in p.get("ENVIRONMENT", []):
-        k, _, v = kv.partition("=")
-        env[k] = v
-    env.update(extra_env)
-    try:
-        r = subprocess.run(
-            test["command"],
-            cwd=p.get("WORKING_DIRECTORY") or None,
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            timeout=timeout,
+    tests = json.loads(subprocess.check_output(cmd))["tests"]
+    # CTest's command includes this launcher and, when applicable, an emulator.
+    matches = [t for t in tests if t.get("command", [])[-len(command) :] == command]
+    if not matches:
+        raise ValueError(f"No CTest test matches command {command!r}")
+    # Several tests may share a command. It must be permitted by all of them.
+    labels = [
+        set(
+            next(
+                (p["value"] for p in t.get("properties", []) if p["name"] == "LABELS"),
+                [],
+            )
         )
-    except subprocess.TimeoutExpired:
-        return None, ""
-    return r.returncode, r.stdout.decode(errors="replace")
-
-
-def passed(test, code, out):
-    """Replicate CTest's pass/fail/skip logic for the properties Halide uses."""
-    if code is None:
-        return "timeout"
-    p = props(test)
-    skip = p.get("SKIP_REGULAR_EXPRESSION", [])
-    if any(re.search(s, out) for s in skip):
-        return "skipped"
-    regexes = p.get("PASS_REGULAR_EXPRESSION", [])
-    ok = any(re.search(s, out) for s in regexes) if regexes else code == 0
-    if p.get("WILL_FAIL"):
-        ok = not ok
-    return "passed" if ok else "failed"
-
-
-def audit(test, timeout, target):
-    env = {
-        "HL_TARGET": target,
-        "HL_JIT_TARGET": target,
-        "HL_DEBUG_CODEGEN": DEBUG_RULES,
+        for t in matches
+    ]
+    expected_failures = {
+        next(
+            (p["value"] for p in t.get("properties", []) if p["name"] == "WILL_FAIL"),
+            False,
+        )
+        for t in matches
     }
-    code, out = run(test, env, timeout)
-    status = passed(test, code, out)
-    ti = status == "passed" and TARGET_MARKER not in out
-    return test["name"], {
-        "status": status,
-        "ti": ti,
-        "li": ti and LLVM_MARKER not in out,
-        "gpu": any(m in out for m in GPU_MARKERS),
+    if len(expected_failures) != 1:
+        raise ValueError("Tests sharing a command must agree on WILL_FAIL")
+    pass_expressions = {
+        bool(
+            [
+                regex
+                for p in t.get("properties", [])
+                if p["name"] == "PASS_REGULAR_EXPRESSION"
+                for regex in p["value"]
+                if regex not in (FAILURE_MARKER, SUCCESS_MARKER)
+            ]
+        )
+        for t in matches
     }
+    if len(pass_expressions) != 1:
+        raise ValueError("Tests sharing a command must agree on pass-expression policy")
+    return (
+        ", ".join(t["name"] for t in matches),
+        set.intersection(*labels),
+        expected_failures.pop(),
+        pass_expressions.pop(),
+    )
+
+
+def missing_capabilities(labels, output):
+    missing = [
+        label
+        for label, markers in MARKERS.items()
+        if label not in labels and any(marker in output for marker in markers)
+    ]
+    parallel = output.find(PARALLEL_MARKER)
+    if (
+        "multithreaded" not in labels
+        and parallel >= 0
+        and JIT_MARKER in output[parallel:]
+    ):
+        missing.append("multithreaded")
+    return missing
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--build-dir", default="build")
-    ap.add_argument("-C", "--config", default=None)
-    ap.add_argument("-j", "--jobs", type=int, default=os.cpu_count())
-    ap.add_argument("-R", "--regex", default=None, help="only audit matching tests")
-    ap.add_argument("--timeout", type=int, default=1800)
-    ap.add_argument(
-        "--target",
-        default="host",
-        help="HL_TARGET for the audit run; give one with a GPU feature the host"
-        " supports (e.g. host-metal) to also audit the gpu label",
-    )
-    ap.add_argument(
-        "--strict",
-        action="store_true",
-        help="also fail when an unlabeled test could carry a label",
-    )
+    ap.add_argument("--build-dir", required=True)
+    ap.add_argument("--config", default=None)
+    ap.add_argument("--ctest", default="ctest")
+    ap.add_argument("command", nargs=argparse.REMAINDER)
     args = ap.parse_args()
+    command = args.command
+    if command and command[0] == "--":
+        command = command[1:]
+    if not command:
+        ap.error("a test command is required after --")
 
-    check_gpu = bool(GPU_FEATURES & set(args.target.split("-")))
-    tests = [t for t in ctest_json(args.build_dir, args.config)["tests"] if in_scope(t)]
-    if args.regex:
-        tests = [t for t in tests if re.search(args.regex, t["name"])]
-    labels = {t["name"]: set(props(t).get("LABELS", [])) for t in tests}
+    try:
+        name, labels, will_fail, has_pass_expression = test_metadata(
+            args.build_dir, args.config, args.ctest, command
+        )
+    except (OSError, subprocess.CalledProcessError, ValueError) as e:
+        print(f"{FAILURE_MARKER} cannot read test metadata: {e}", file=sys.stderr)
+        return 1
 
-    print(f"Auditing {len(tests)} tests with {args.jobs} jobs...", file=sys.stderr)
-    results = {}
-    with concurrent.futures.ThreadPoolExecutor(args.jobs) as ex:
-        futures = [ex.submit(audit, t, args.timeout, args.target) for t in tests]
-        for i, f in enumerate(concurrent.futures.as_completed(futures), 1):
-            name, r = f.result()
-            results[name] = r
-            print(
-                f"[{i}/{len(tests)}] {name}: {r['status']}"
-                f"{' target_independent' if r['ti'] else ''}"
-                f"{' llvm_independent' if r['li'] else ''}"
-                f"{' gpu' if r['gpu'] else ''}",
-                file=sys.stderr,
-            )
+    env = dict(os.environ)
+    # Preserve requested debug output while enabling the audit's tagged events.
+    tags = [
+        tag
+        for label, tag in (
+            ("target_from_environment", "target-env"),
+            ("calls_llvm", "llvm-entry"),
+            ("multithreaded", "parallel-schedule"),
+            ("multithreaded", "jit-execution"),
+            ("gpu", "gpu-entry"),
+        )
+        if label not in labels
+    ]
+    if tags:
+        env["HL_DEBUG_CODEGEN"] = ";".join(
+            filter(None, (env.get("HL_DEBUG_CODEGEN"), "0;tag:" + ",".join(tags)))
+        )
+        env["HL_DEBUG_CODEGEN_LOG_FILE"] = "/dev/stderr"
+    try:
+        result = subprocess.run(
+            command, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+        )
+    except OSError as e:
+        print(f"{FAILURE_MARKER} cannot launch {name}: {e}", file=sys.stderr)
+        return 1
 
-    errors, suggestions, notes = [], [], []
-    for name in sorted(results):
-        r = results[name]
-        ti, li, status = r["ti"], r["li"], r["status"]
-        have = labels[name]
-        if "target_independent" in have and not ti:
-            errors.append(f"{name}: labeled target_independent but is not ({status})")
-        if "llvm_independent" in have and not li:
-            errors.append(f"{name}: labeled llvm_independent but is not")
-        if "llvm_independent" in have and "target_independent" not in have:
-            errors.append(f"{name}: llvm_independent requires target_independent")
-        if ti and "target_independent" not in have:
-            suggestions.append(f"{name}: could be labeled target_independent")
-        if li and "llvm_independent" not in have:
-            suggestions.append(f"{name}: could be labeled llvm_independent")
-        if check_gpu:
-            if r["gpu"] and not ti and "gpu" not in have:
-                errors.append(f"{name}: uses the GPU but is not labeled gpu")
-            if ti and "gpu" in have:
-                errors.append(
-                    f"{name}: gpu label is redundant on a target-independent test"
-                )
-            if "gpu" in have and not r["gpu"]:
-                notes.append(f"{name}: labeled gpu but did not use the GPU")
-            if status != "passed":
-                notes.append(f"{name}: {status} on {args.target}")
+    output = result.stdout.decode(errors="replace")
+    missing = missing_capabilities(labels, output)
+    if missing:
+        # CTest gives skip expressions precedence over failure expressions.
+        # Keep the diagnostics, but do not let Halide's skip token mask a violation.
+        output = output.replace("[SKIP", "[AUDIT-INVALID-SKIP")
+        if will_fail:
+            # Only the audit's pass expression may match, so CTest's WILL_FAIL
+            # inversion reports a failure rather than accepting the child error.
+            output = ""
+    sys.stdout.write(output)
+    sys.stdout.flush()
+    if missing:
+        print(f"{FAILURE_MARKER} {name} requires labels: {', '.join(missing)}")
+        return 1
 
-    for n in notes:
-        print("info:", n)
-    for s in suggestions:
-        print("note:", s)
-    for e in errors:
-        print("error:", e)
-    return 1 if errors or (args.strict and suggestions) else 0
+    if will_fail and not has_pass_expression and result.returncode == 0:
+        # Adding the audit pass expression must not make an unexpectedly
+        # successful exit look like an expected failure.
+        print(SUCCESS_MARKER)
+
+    if os.name == "posix" and result.returncode < 0:
+        # Preserve abnormal termination, which CTest must not invert for WILL_FAIL.
+        sig = -result.returncode
+        if sig not in (signal.SIGKILL, signal.SIGSTOP):
+            signal.signal(sig, signal.SIG_DFL)
+        os.kill(os.getpid(), sig)
+    return result.returncode
 
 
 if __name__ == "__main__":

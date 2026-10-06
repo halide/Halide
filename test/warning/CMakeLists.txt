@@ -1,17 +1,17 @@
-tests(GROUPS warning SOURCES require_const_false.cpp sliding_vectors.cpp unscheduled_update_def.cpp)
+tests(
+    GROUPS warning target_from_environment calls_llvm
+    SOURCES require_const_false.cpp sliding_vectors.cpp unscheduled_update_def.cpp
+)
 set(WARNING_TESTS ${TEST_NAMES})
 
 # See doc/Testing.md for the meaning of these groups.
-tests(GROUPS warning gpu SOURCES metal_assertion_in_kernel.cpp)
+tests(GROUPS warning gpu target_from_environment calls_llvm SOURCES metal_assertion_in_kernel.cpp)
 list(APPEND WARNING_TESTS ${TEST_NAMES})
 
-tests(GROUPS warning target_independent llvm_independent SOURCES hidden_pure_definition.cpp)
+tests(GROUPS warning SOURCES hidden_pure_definition.cpp)
 list(APPEND WARNING_TESTS ${TEST_NAMES})
 
-tests(
-    GROUPS warning target_independent
-    SOURCES emulated_float16.cpp unsupported_vectorization_sve.cpp
-)
+tests(GROUPS warning calls_llvm SOURCES emulated_float16.cpp unsupported_vectorization_sve.cpp)
 list(APPEND WARNING_TESTS ${TEST_NAMES})
 
 # Don't look for "Success!" in warning tests, look for "Warning:" instead.
