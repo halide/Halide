@@ -110,6 +110,12 @@ struct AddRow {
     }
 };
 
+struct AddCodec {
+    explicit AddCodec(CodecRow r) {
+        codec_rows().push_back(r);
+    }
+};
+
 }  // namespace
 }  // namespace gq
 
@@ -117,9 +123,16 @@ struct AddRow {
     static gq::AddRow name##_row({#name, #wt, #at, [] { using namespace gq; return (int)(ops); }(), features,                            \
                                   name##_checked, name##_bench, gq::VecDot<name##_checked>::call, \
                                   gq::VecDot<name##_bench>::call});
+#define GQ_CODEC(t) \
+    static gq::AddCodec t##_codec({#t, {t##_quantize_checked, t##_quantize_bench}, {t##_dequantize_checked, t##_dequantize_bench}, t##_quantize_checked_metadata});
 #include "halide_kernels.inc"
 
 namespace gq {
+
+std::vector<CodecRow> &codec_rows() {
+    static std::vector<CodecRow> r;
+    return r;
+}
 
 void register_halide_providers() {
     for (const Row &row : rows()) {

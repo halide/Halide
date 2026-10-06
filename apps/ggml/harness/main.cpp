@@ -32,7 +32,7 @@ using namespace gq;
 namespace {
 
 struct Options {
-    int ops = GQ_vec_dot | GQ_mul_mat;
+    int ops = GQ_vec_dot | GQ_mul_mat | GQ_codec;
     std::vector<std::string> types, acts{"dot", "f16", "f32"}, filters;
     std::string shapes = "smoke";
     int threads = 0, rounds = 15;
@@ -50,7 +50,7 @@ std::vector<std::string> split(const std::string &s) {
 
 const char *usage =
     "usage: ggml-quant-bench [options]\n"
-    "  --op vec_dot|mul_mat     (default: both)\n"
+    "  --op vec_dot|mul_mat|codec  (default: all)\n"
     "  --types q4_0,q8_0,...    weight types (default: all GGML can mul_mat)\n"
     "  --acts dot,f16,f32       activation types; dot = the weight's vec_dot_type\n"
     "  --shapes PRESET          smoke|gemv|full|<model>-gemv|<model>-full|KxNxM|<n> (default smoke)\n"
@@ -160,7 +160,8 @@ int main(int argc, char **argv) {
         if (a == "--op") {
             std::string v = next();
             o.ops = v == "vec_dot" ? GQ_vec_dot : v == "mul_mat" ? GQ_mul_mat :
-                                                                   GQ_vec_dot | GQ_mul_mat;
+                                              v == "codec"       ? GQ_codec :
+                                                                   GQ_vec_dot | GQ_mul_mat | GQ_codec;
         } else if (a == "--types") {
             o.types = split(next());
         } else if (a == "--acts") {
@@ -311,6 +312,27 @@ int main(int argc, char **argv) {
                     }
                 }
             }
+        }
+    }
+    if (o.ops & GQ_codec) {
+        std::vector<int64_t> Ks;
+        for (const Shape &s : shapes(o.shapes, GQ_vec_dot)) {
+            if (std::find(Ks.begin(), Ks.end(), s.K) == Ks.end()) Ks.push_back(s.K);
+        }
+        for (const CodecResult &r : run_codecs(Ks, o.types, o.check, o.rounds, o.min_ms)) {
+            if (!o.filters.empty() && std::none_of(o.filters.begin(), o.filters.end(), [&](const std::string &f) { return r.provider.find(f) != std::string::npos; })) continue;
+            bool ok = r.detail.empty();
+            cases++;
+            failures += !ok;
+            if (!ok) fprintf(stderr, "codec %s %s %s K=%lld: %s\n", r.type.c_str(), r.dir.c_str(), r.provider.c_str(), (long long)r.K, r.detail.c_str());
+            // Same columns as above; atype is the direction, gops is Gvalues/s.
+            std::vector<std::pair<std::string, std::string>> kv = {
+                {"op", "codec"}, {"wtype", r.type}, {"atype", r.dir}, {"model", ""}, {"layer", ""}, {"K", std::to_string(r.K)}, {"N", "1"}, {"M", "1"}, {"threads", "1"}, {"cold", "0"}, {"provider", r.provider}, {"path", r.path}, {"err_ratio", ok ? "0" : "inf"}, {"ok", ok ? "1" : "0"}};
+            if (r.timed) {
+                double bytes = 4.0 * r.K + ggml_row_size(type_named(r.type), r.K);
+                kv.insert(kv.end(), {{"ns", fmt(r.t.median, "%.1f")}, {"ns_lo", fmt(r.t.lo, "%.1f")}, {"ns_hi", fmt(r.t.hi, "%.1f")}, {"ci_pct", fmt(100 * (r.t.hi - r.t.lo) / r.t.median, "%.2f")}, {"samples", std::to_string(r.t.samples)}, {"reps", std::to_string(r.t.reps)}, {"gbps", fmt(bytes / r.t.median, "%.2f")}, {"gops", fmt(r.K / r.t.median, "%.2f")}});
+            }
+            out.row(kv);
         }
     }
     fprintf(stderr, "%d results, %d failures\n", cases, failures);
