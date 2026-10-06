@@ -126,6 +126,8 @@ protected:
 
         std::string shared_name;
 
+        const std::string simd_lane_id_name = "_simd_lane_id";
+
         void visit(const Min *) override;
         void visit(const Max *) override;
         void visit(const Div *) override;
@@ -299,9 +301,6 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Mod *op) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const For *loop) {
-    user_assert(loop->for_type != ForType::GPULane)
-        << "The Metal backend does not support the gpu_lanes() scheduling directive.";
-
     if (is_gpu(loop->for_type)) {
         internal_assert(is_const_zero(loop->min));
 
@@ -372,6 +371,16 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Call *op) {
         // In Metal, rint matches our rounding semantics
         Expr equiv = Call::make(op->type, "rint", op->args, Call::PureExtern);
         equiv.accept(this);
+    } else if (op->name == "halide_metal_simd_shuffle_relative") {
+        // Injected by LowerWarpShuffles: read the value from the
+        // SIMD-group lane at the given (possibly non-uniform) offset
+        // from this one.
+        internal_assert(op->args.size() == 2);
+        string value = print_expr(op->args[0]);
+        string offset = print_expr(op->args[1]);
+        ostringstream rhs;
+        rhs << "simd_shuffle(" << value << ", (ushort)(" << simd_lane_id_name << " + " << offset << "))";
+        print_assignment(op->type, rhs.str());
     } else {
         CodeGen_GPU_C::visit(op);
     }
@@ -761,9 +770,18 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
     }
 
     // Emit the function prototype
+    bool uses_simd_lane_id = false;
+    visit_with(s, [&](auto *self, const Call *op) {
+        uses_simd_lane_id |= (op->name == "halide_metal_simd_shuffle_relative");
+        self->visit_base(op);
+    });
+
     stream << "kernel void " << name << "(\n";
     stream << "uint3 tgroup_index [[ threadgroup_position_in_grid ]],\n"
            << "uint3 tid_in_tgroup [[ thread_position_in_threadgroup ]]";
+    if (uses_simd_lane_id) {
+        stream << ",\nushort " << simd_lane_id_name << " [[ thread_index_in_simdgroup ]]";
+    }
     size_t buffer_index = 0;
     if (any_scalar_args) {
         stream << ",\nconst device " << name << "_args *_scalar_args [[ buffer(0) ]]";
