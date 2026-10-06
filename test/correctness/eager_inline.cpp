@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include <set>
 #include <sstream>
 #include <string>
 
@@ -6,7 +7,9 @@ using namespace Halide;
 
 // eager_inline() performs the substitution immediately, so the caller's
 // definition no longer references the inlined Funcs (they are inlined by value).
-// Verify the numerics of a simple chained inline match a plain inlined pipeline.
+// Verify that one call flattens chains of any shape among the passed Funcs,
+// leaves calls to other Funcs (and their schedules) alone, composes with
+// rfactor() and hoist_invariants(), and preserves the pipeline's numerics.
 
 namespace {
 
@@ -139,6 +142,172 @@ int main(int argc, char **argv) {
             << "Func::eager_inline should inline prod into the init definition\n";
         internal_assert(mentions(g.function().update(0).values()[0], "prod"))
             << "Func::eager_inline should not touch update definitions\n";
+    }
+
+    // A single call flattens every pass-through level, including diamonds and
+    // Tuple-valued intermediates, no matter how deep the chain is.
+    {
+        Func base{"dm_base"}, left{"dm_left"}, right{"dm_right"}, pair{"dm_pair"},
+            join{"dm_join"}, sink{"dm_sink"};
+        base(x) = x + 1;
+        left(x) = base(x) * 2;
+        right(x) = base(x) + 3;
+        pair(x) = Tuple(left(x), right(x));  // diamond: both sides call base
+        join(x) = pair(x)[0] * pair(x)[1];   // calls both Tuple elements
+        sink(x) = join(x) - base(x);
+
+        sink.eager_inline(base, pair, right, join, left);
+
+        Expr sink_body = sink.function().definition().values()[0];
+        for (const char *name : {"dm_base", "dm_left", "dm_right", "dm_pair", "dm_join"}) {
+            internal_assert(!mentions(sink_body, name))
+                << "eager_inline left a residual call to " << name << " in a diamond\n"
+                << "Saw: " << sink_body << "\n";
+        }
+
+        Buffer<int> out = sink.realize({8});
+        for (int i = 0; i < 8; i++) {
+            int ref = ((i + 1) * 2) * ((i + 1) + 3) - (i + 1);
+            if (out(i) != ref) {
+                printf("eager_inline diamond mismatch at %d: %d vs %d\n", i, out(i), ref);
+                return 1;
+            }
+        }
+    }
+
+    // A Func that is not passed is a boundary: calls to it are left in place, and
+    // it keeps its own schedule. Here mid is computed at root, while the levels
+    // above it are flattened into sink and the level below it is not reachable.
+    {
+        Func low{"cb_low"}, mid{"cb_mid"}, high{"cb_high"}, top{"cb_top"}, sink{"cb_sink"};
+        low(x) = x + 1;
+        mid(x) = low(x) * 2;
+        high(x) = mid(x) + 3;
+        top(x) = high(x) * 5;
+        sink(x) = top(x) - 4;
+
+        mid.compute_root();
+        sink.eager_inline(top, high);
+
+        Expr sink_body = sink.function().definition().values()[0];
+        internal_assert(!mentions(sink_body, "cb_top") && !mentions(sink_body, "cb_high"))
+            << "eager_inline should have flattened top and high into sink\n"
+            << "Saw: " << sink_body << "\n";
+        internal_assert(mentions(sink_body, "cb_mid"))
+            << "eager_inline should have left the call to mid, which was not passed\n"
+            << "Saw: " << sink_body << "\n";
+
+        // mid is still realized according to its compute_root() schedule.
+        struct FindProducers : public Internal::IRMutator {
+            using IRMutator::visit;
+            std::set<std::string> names;
+            Internal::Stmt visit(const Internal::ProducerConsumer *op) override {
+                if (op->is_producer) {
+                    names.insert(op->name);
+                }
+                return IRMutator::visit(op);
+            }
+        } producers;
+        sink.add_custom_lowering_pass(&producers, nullptr);
+
+        Buffer<int> out = sink.realize({8});
+        for (int i = 0; i < 8; i++) {
+            int ref = (((i + 1) * 2) + 3) * 5 - 4;
+            if (out(i) != ref) {
+                printf("eager_inline boundary mismatch at %d: %d vs %d\n", i, out(i), ref);
+                return 1;
+            }
+        }
+        internal_assert(producers.names.count("cb_mid"))
+            << "mid should still be computed at root after eager_inline\n";
+        sink.clear_custom_lowering_passes();
+    }
+
+    // Schedule directives that are merely meaningless for an inlined Func, such
+    // as split(), are allowed on the inlined Funcs; so is scheduling them after
+    // eager_inline() has already replaced this stage's calls to them.
+    {
+        Func p{"sp_p"}, q{"sp_q"};
+        Var xo{"xo"}, xi{"xi"};
+        p(x) = x * 3;
+        q(x) = p(x) + 1;
+
+        p.split(x, xo, xi, 4);
+        q.eager_inline(p);
+        p.compute_root().vectorize(xi);
+
+        internal_assert(!mentions(q.function().definition().values()[0], "sp_p"))
+            << "eager_inline should have inlined a Func with a split\n";
+        Buffer<int> out = q.realize({8});
+        for (int i = 0; i < 8; i++) {
+            if (out(i) != i * 3 + 1) {
+                printf("eager_inline split mismatch at %d: %d vs %d\n", i, out(i), i * 3 + 1);
+                return 1;
+            }
+        }
+    }
+
+    // Inlining a multi-level chain into the intermediate produced by rfactor()
+    // exposes a loop-invariant factor to hoist_invariants(), even when that factor
+    // is itself a Func with its own (compute_root) schedule.
+    {
+        const int width = 6, extent = 16;
+        Buffer<int> in(width, extent);
+        for (int k = 0; k < extent; k++) {
+            for (int i = 0; i < width; i++) {
+                in(i, k) = (i * 7 + k * 3) % 11 - 5;
+            }
+        }
+        Buffer<int> vec(extent);
+        for (int k = 0; k < extent; k++) {
+            vec(k) = k % 5 - 2;
+        }
+
+        Var k{"k"}, u{"u"};
+        RDom r(0, extent, "r");
+        Func scale{"rf_scale"}, load{"rf_load"}, scaled{"rf_scaled"}, weight{"rf_weight"};
+        scale(x) = x + 2;
+        load(x, k) = in(x, k);
+        scaled(x, k) = scale(x) * load(x, k);
+        weight(x, k) = scaled(x, k);
+
+        Func acc{"rf_acc"};
+        acc(x) = 0;
+        acc(x) += weight(x, r) * vec(r);
+
+        RVar ro{"ro"}, ri{"ri"};
+        acc.update().split(r, ro, ri, 4);
+        Func intm = acc.update().rfactor(ro, u);
+
+        scale.compute_root();
+        intm.update().eager_inline(weight, scaled, load);
+
+        Expr update = intm.function().update(0).values()[0];
+        internal_assert(!mentions(update, "rf_weight") && !mentions(update, "rf_scaled") &&
+                        !mentions(update, "rf_load"))
+            << "eager_inline should have flattened the whole chain into the rfactor intermediate\n"
+            << "Saw: " << update << "\n";
+        internal_assert(mentions(update, "rf_scale"))
+            << "eager_inline should have left the call to scale in place\n"
+            << "Saw: " << update << "\n";
+
+        FuncVec hoisted = intm.update().hoist_invariants();
+        internal_assert(hoisted.size() == 1)
+            << "hoist_invariants should have produced one intermediate, got " << hoisted.size() << "\n";
+        internal_assert(!mentions(hoisted[0].function().update(0).values()[0], "rf_scale"))
+            << "hoist_invariants should have hoisted scale out of the reduction\n";
+
+        Buffer<int> out = acc.realize({width});
+        for (int i = 0; i < width; i++) {
+            int ref = 0;
+            for (int j = 0; j < extent; j++) {
+                ref += (i + 2) * in(i, j) * vec(j);
+            }
+            if (out(i) != ref) {
+                printf("eager_inline + rfactor + hoist_invariants mismatch at %d: %d vs %d\n", i, out(i), ref);
+                return 1;
+            }
+        }
     }
 
     printf("Success!\n");
