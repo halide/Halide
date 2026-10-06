@@ -229,7 +229,12 @@ public:
      * by tuple output index, then by outer-term order.
      *
      * A factor is hoistable if it does not depend on any RVar being reduced. It
-     * may be nested at any depth of an associative/commutative chain. The valid
+     * may be nested at any depth of an associative/commutative chain. Its
+     * integer and boolean subexpressions are simplified using the RVars' bounds
+     * to decide this, so a factor that is invariant only within those bounds is
+     * hoisted too. For example, after splitting r by 32 into ro and ri and
+     * calling rfactor(ro, u), a per-block factor s(r / 32) reads
+     * s((u*32 + ri) / 32), which is s(u) for every ri in [0, 32). The valid
      * hoistings are:
      *
      *   Outer op    Inner combine   Law
