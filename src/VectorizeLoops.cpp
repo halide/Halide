@@ -438,24 +438,12 @@ protected:
             // reinterpret, then transpose the result back to the convention
             // expected by the rest of vectorization.
             if (widening > 1 && op->value.type().lanes() > 1) {
-                vector<Expr> source_lanes;
-                source_lanes.reserve(op->value.type().lanes());
-                for (int i = 0; i < op->value.type().lanes(); i++) {
-                    source_lanes.push_back(Shuffle::make_slice(value, i * widening, 1, widening));
-                }
-                value = Shuffle::make_interleave(source_lanes);
+                value = Shuffle::make_transpose(value, widening);
             }
 
             Expr result = Reinterpret::make(t, value);
             if (widening > 1 && op->type.lanes() > 1) {
-                vector<int> indices;
-                indices.reserve(t.lanes());
-                for (int result_lane = 0; result_lane < op->type.lanes(); result_lane++) {
-                    for (int iteration = 0; iteration < widening; iteration++) {
-                        indices.push_back(iteration * op->type.lanes() + result_lane);
-                    }
-                }
-                result = Shuffle::make({result}, indices);
+                result = Shuffle::make_transpose(result, op->type.lanes());
             }
             return result;
         }
