@@ -4304,31 +4304,53 @@ const char *const eager_inline_schedule_hint =
     ", but only a Func with a schedule compatible with inlining (as for "
     "compute_inline()) can be inlined.\n";
 
-void check_eager_inline_level(const Function &f, const LoopLevel &level, const char *directives) {
+string eager_inline_level_obstacle(const LoopLevel &level, const char *directives) {
     if (currently_inlined(level)) {
-        return;
+        return {};
     }
     // An undefined LoopLevel is one the caller still intends to set().
     const bool undefined = level.var_name() == LoopLevel().var_name();
-    user_error << "eager_inline() cannot inline " << f.name()
-               << ": it is scheduled " << directives
-               << (undefined ? " at a LoopLevel that has not been set yet" : "")
-               << eager_inline_schedule_hint;
-}
-
-// Check eager-only placement constraints, then the shared inline schedule rules.
-// Directives that merely warn (split(), bound(), etc.) are allowed.
-void check_eager_inline_schedule(const Function &f) {
-    const FuncSchedule &func_s = f.schedule();
-    const StageSchedule &stage_s = f.definition().schedule();
-
-    check_eager_inline_level(f, func_s.compute_level(), "compute_root() or compute_at()");
-    check_eager_inline_level(f, func_s.hoist_storage_level(), "hoist_storage_root() or hoist_storage()");
-    check_eager_inline_level(f, stage_s.fuse_level().level, "compute_with()");
-    validate_schedule_inlined_function(f, "inlined by eager_inline()");
+    return string(": it is scheduled ") + directives +
+           (undefined ? " at a LoopLevel that has not been set yet" : "") +
+           eager_inline_schedule_hint;
 }
 
 }  // namespace
+
+namespace Internal {
+
+// The schedule checks reject a Func whose schedule could not be used if it
+// were computed inline. These are the conditions that lowering treats as
+// errors for a Func that is compute_inline() (see
+// validate_schedule_inlined_function()). A schedule directive that lowering
+// merely warns about for an inlined Func (split(), bound(), etc.) is allowed.
+string eager_inline_obstacle(const Function &f) {
+    if (!f.can_be_inlined()) {
+        return ": it must be a pure Func with no update or extern definition and "
+               "no specializations.\n";
+    }
+    const FuncSchedule &func_s = f.schedule();
+    const StageSchedule &stage_s = f.definition().schedule();
+
+    const std::pair<LoopLevel, const char *> levels[] = {
+        {func_s.compute_level(), "compute_root() or compute_at()"},
+        {func_s.hoist_storage_level(), "hoist_storage_root() or hoist_storage()"},
+        {stage_s.fuse_level().level, "compute_with()"},
+    };
+    for (const auto &[level, directives] : levels) {
+        string obstacle = eager_inline_level_obstacle(level, directives);
+        if (!obstacle.empty()) {
+            return obstacle;
+        }
+    }
+    const string error = inlined_function_schedule_error(f);
+    if (!error.empty()) {
+        return ": " + error;
+    }
+    return {};
+}
+
+}  // namespace Internal
 
 Stage &Stage::eager_inline(const std::vector<Func> &fs) {
     vector<Function> funcs;
@@ -4336,11 +4358,10 @@ Stage &Stage::eager_inline(const std::vector<Func> &fs) {
     for (const Func &f : fs) {
         user_assert(f.defined())
             << "eager_inline() was passed an undefined Func.\n";
-        user_assert(f.function().can_be_inlined())
-            << "eager_inline() cannot inline " << f.name()
-            << ": it must be a pure Func with no update or extern definition and "
-            << "no specializations.\n";
-        check_eager_inline_schedule(f.function());
+        const string obstacle = Internal::eager_inline_obstacle(f.function());
+        user_assert(obstacle.empty())
+            << "eager_inline() cannot inline " << f.name() << obstacle;
+        validate_schedule_inlined_function(f.function(), "inlined by eager_inline()");
         funcs.push_back(f.function());
         by_name.emplace(f.name(), f);
     }
