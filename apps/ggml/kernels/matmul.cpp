@@ -33,6 +33,9 @@ public:
             }
         }
         Pipeline(out).sever(cut, bound);
+        for (ImageParam p : {w, a}) {  // the ABI: records start at 0
+            p.dim(0).set_min(0).dim(1).set_min(0);
+        }
         add_input(w);
         add_input(a);
         result = add_output(out);
