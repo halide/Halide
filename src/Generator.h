@@ -3495,11 +3495,21 @@ public:
      * add_output<Buffer<float, 1>>(scale). */
     template<typename T = Buffer<>>
     GeneratorOutput<T> *add_output(const Func &existing) {
+        return add_output<T>(existing.name(), existing);
+    }
+
+    /** As above, but name the port `name` rather than after `existing`. Func
+     * names are made unique within a process, so a Func created in
+     * configure() is renamed (e.g. "y$1") when configure() runs again, as it
+     * does once per target in a multi-target build; naming the port
+     * explicitly keeps the interface stable. */
+    template<typename T = Buffer<>>
+    GeneratorOutput<T> *add_output(const std::string &name, const Func &existing) {
         static_assert(Internal::IsHalideBuffer<T>::value,
                       "add_output(const Func &) can only declare an Output<Buffer<T, D>>.");
         check_exact_phase(GeneratorBase::ConfigureCalled);
-        claim_name(existing.name(), "output");
-        auto *p = new GeneratorOutput<T>(existing.name());
+        claim_name(name, "output");
+        auto *p = new GeneratorOutput<T>(name);
         p->generator = this;
         param_info_ptr->owned_extras.push_back(std::unique_ptr<Internal::GIOBase>(p));
         param_info_ptr->filter_outputs.push_back(p);
