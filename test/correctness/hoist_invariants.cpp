@@ -581,6 +581,64 @@ int hoist_invariants_block_index_test(bool constant_extent, int n) {
     return 0;
 }
 
+// The same reduction split twice, into blocks of 32 and then lanes of 4, with
+// rfactor preserving both the block (u) and the lane within it (lane), so each
+// lane keeps its own partial sum. The factor reads
+// scale((u*32 + lane*4 + ki) / 32), which only simplifies to scale(lane/8 + u)
+// given 0 <= ki < 4; that is invariant over ki and must be hoisted. The lane is
+// a pure Var with no recorded range, so the factor keeps a lane/8 term, which
+// is zero for the lanes 0..7 that are computed.
+int hoist_invariants_block_lane_test(int n) {
+    constexpr int block = 32, lane_width = 4;
+    ImageParam data_p{Int(8), 1, "data_p"};
+    ImageParam scale_p{Float(32), 1, "scale_p"};
+
+    Var u{"u"}, lane{"lane"};
+    RDom r(0, data_p.dim(0).extent(), "r");
+    RVar ko{"ko"}, k{"k"}, kl{"kl"}, ki{"ki"};
+
+    Func out{"out"};
+    out() = 0.0f;
+    out() += cast<float>(data_p(r)) * scale_p(r / block);
+    out.update().split(r, ko, k, block).split(k, kl, ki, lane_width);
+    Func blocks = out.update().rfactor({{kl, lane}, {ko, u}});
+    Func blocks_intm = blocks.update().hoist_invariants();
+    blocks.compute_root().vectorize(lane);
+    blocks.update().vectorize(lane);
+    blocks_intm.compute_at(blocks, u).vectorize(lane);
+
+    internal_assert(!calls_func(blocks_intm.update_value(), Func(scale_p).name()))
+        << "hoist_invariants block lane: the per-block factor was not hoisted out of "
+        << blocks_intm.name() << ": " << blocks_intm.update_value() << "\n";
+    internal_assert(calls_func(blocks.update_value(), Func(scale_p).name()))
+        << "hoist_invariants block lane: the write-back of " << blocks.name()
+        << " does not apply the per-block factor: " << blocks.update_value() << "\n";
+
+    const int num_blocks = (n + block - 1) / block;
+    Buffer<int8_t> data(n);
+    Buffer<float> scale(num_blocks);
+    for (int i = 0; i < n; i++) {
+        data(i) = (int8_t)((i * 7) % 11 - 5);
+    }
+    for (int b = 0; b < num_blocks; b++) {
+        scale(b) = (float)(b + 1) * 0.5f;
+    }
+    data_p.set(data);
+    scale_p.set(scale);
+
+    Buffer<float> result = out.realize();
+
+    float ref = 0.0f;
+    for (int i = 0; i < n; i++) {
+        ref += (float)data(i) * scale(i / block);
+    }
+    internal_assert(result() == ref)
+        << "hoist_invariants block lane (n = " << n << "): "
+        << result() << " vs ref " << ref << "\n";
+
+    return 0;
+}
+
 // A per-block index may itself be data dependent, bounded only by a promise:
 // scale(unsafe_promise_clamped(group(r / 32), 0, G - 1)). The promise must
 // survive hoisting, as it is the only bound on the hoisted factor's access to
@@ -1063,6 +1121,8 @@ int main(int argc, char **argv) {
         {"hoist_invariants test (block index, divisible)", [] { return hoist_invariants_block_index_test(false, 128); }},
         {"hoist_invariants test (block index, tail)", [] { return hoist_invariants_block_index_test(false, 100); }},
         {"hoist_invariants test (block index, constant tail)", [] { return hoist_invariants_block_index_test(true, 100); }},
+        {"hoist_invariants test (block lane, divisible)", [] { return hoist_invariants_block_lane_test(128); }},
+        {"hoist_invariants test (block lane, tail)", [] { return hoist_invariants_block_lane_test(100); }},
         {"hoist_invariants test (block index, promised)", hoist_invariants_block_index_promise_test},
         {"hoist_invariants test (block index, min/add and or/and)", hoist_invariants_block_index_other_laws_test},
         {"hoist_invariants test (block index, varying)", hoist_invariants_block_index_varying_test},
