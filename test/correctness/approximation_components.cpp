@@ -369,6 +369,15 @@ int test_batch_dimensions() {
             return 1;
         } catch (const CompileError &) {
         }
+        Func one_pixel("batched_one_pixel"), one_tag("batched_one_tag");
+        one_pixel(element) = cast<uint8_t>(element);
+        one_tag() = cast<uint16_t>(0);
+        try {
+            (void)layout.encode({one_pixel, one_tag});
+            printf("StructLayout accepted 0-D records\n");
+            return 1;
+        } catch (const CompileError &) {
+        }
     }
     return 0;
 }

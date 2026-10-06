@@ -45,16 +45,12 @@ namespace ApproximationCodec {
 struct Options {
     /** The name of the values ImageParam (the encoder's input). */
     std::string values_name = "values";
-    /** The name of the decoded Func (the decoder's output). As for the
-     * encoded names, it is suffixed if another Func already has it. */
+    /** The name of the decoded Func (the decoder's output). */
     std::string decoded_name = "decoded";
     /** The names of the encoded ports: both the encoder's outputs and the
      * decoder's inputs. If empty, they are the scheme's encoded port names,
      * with characters other than letters, digits and '_' replaced by '_', and
-     * "encoded<i>" for an unnamed port. Func names are made unique, so if
-     * another Func already has a requested name (e.g. a unit named a Func
-     * after its port), the Func gets a suffixed name, and adopting it as a
-     * Generator port is an error; pass other names here. */
+     * "encoded<i>" for an unnamed port. */
     std::vector<std::string> encoded_names;
     /** If true, compute_root() every Func with an update definition (e.g. a
      * per-block reduction) and leave the rest inline, as by default. If
@@ -81,15 +77,21 @@ struct Codec {
      * side reads `encoded_inputs` instead. */
     ApproximationResult result;
 
+    /** The port names of `encoded` and `encoded_inputs` (parallel to them),
+     * and of `decoded`. The Funcs' own names may differ: Func names are made
+     * unique within a process, e.g. when configure() runs once per target. */
+    std::vector<std::string> encoded_names;
+    std::string decoded_name;
+
     /** Declare the encoder's ports on `generator` (any type with
      * GeneratorBase's add_input(const ImageParam &) and
-     * add_output(const Func &)). Only valid in configure(). */
+     * add_output(const std::string &, const Func &)). Only valid in
+     * configure(). */
     template<typename G>
     void adopt_encoder(G &generator) const {
         generator.add_input(values);
-        for (const Func &f : encoded) {
-            check_port_name(f.name());
-            generator.add_output(f);
+        for (size_t i = 0; i < encoded.size(); i++) {
+            generator.add_output(encoded_names[i], encoded[i]);
         }
     }
 
@@ -99,16 +101,7 @@ struct Codec {
         for (const ImageParam &p : encoded_inputs) {
             generator.add_input(p);
         }
-        check_port_name(decoded.name());
-        generator.add_output(decoded);
-    }
-
-private:
-    static void check_port_name(const std::string &name) {
-        _halide_user_assert(name.find('$') == std::string::npos)
-            << "ApproximationCodec: the Func for port \"" << name.substr(0, name.find('$'))
-            << "\" was renamed to \"" << name << "\", since another Func already had that "
-            << "name (e.g. one the scheme's units made); pass other names in Options\n";
+        generator.add_output(decoded_name, decoded);
     }
 };
 
@@ -177,7 +170,8 @@ inline Codec make_codec(const Approximation &scheme, Type type, int dimensions,
     }
 
     // Name the outputs before sever() mints ImageParams of the same names, so
-    // the Funcs keep their names exactly (Func names are made unique).
+    // the Funcs keep their names where possible (Func names are made unique;
+    // the ports are named explicitly regardless).
     for (size_t i = 0; i < r.encoded.size(); i++) {
         const Func &e = r.encoded[i];
         std::vector<Var> e_args = Detail::make_vars(e.dimensions(), "e");
@@ -187,6 +181,8 @@ inline Codec make_codec(const Approximation &scheme, Type type, int dimensions,
         codec.encoded.push_back(out);
     }
     codec.encoded_inputs = Pipeline({codec.decoded}).sever(r.encoded, names).online_inputs;
+    codec.encoded_names = names;
+    codec.decoded_name = options.decoded_name;
     return codec;
 }
 

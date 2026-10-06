@@ -68,8 +68,8 @@ struct FakeGenerator {
     void add_input(const ImageParam &p) {
         inputs.push_back(p.name());
     }
-    void add_output(const Func &f) {
-        outputs.push_back(f.name());
+    void add_output(const std::string &name, const Func &) {
+        outputs.push_back(name);
     }
 };
 
@@ -98,13 +98,25 @@ int test_ports() {
     CHECK((decoder.inputs == std::vector<std::string>{"codes", "scale"}));
     CHECK((decoder.outputs == std::vector<std::string>{"decoded"}));
 
+    // Func names are made unique, so a second codec's Funcs are renamed (as
+    // when a Generator's configure() runs once per target), but its ports
+    // keep their names.
+    ApproximationCodec::Codec again = ApproximationCodec::make_codec(make_scheme(), Float(32), 1);
+    CHECK(again.decoded.name() != "decoded" && again.encoded[0].name() != "codes");
+    FakeGenerator encoder2, decoder2;
+    again.adopt_encoder(encoder2);
+    again.adopt_decoder(decoder2);
+    CHECK(encoder2.inputs == encoder.inputs && encoder2.outputs == encoder.outputs);
+    CHECK(decoder2.inputs == decoder.inputs && decoder2.outputs == decoder.outputs);
+
     ApproximationCodec::Options options;
     options.values_name = "x";
     options.decoded_name = "y";
     options.encoded_names = {"q", "d"};
     ApproximationCodec::Codec renamed = ApproximationCodec::make_codec(make_scheme(), Float(32), 1, options);
     CHECK(renamed.values.name() == "x" && renamed.decoded.name() == "y");
-    CHECK(renamed.encoded[0].name() == "q" && renamed.encoded_inputs[1].name() == "d");
+    CHECK(renamed.encoded_names == (std::vector<std::string>{"q", "d"}) && renamed.decoded_name == "y");
+    CHECK(renamed.encoded_inputs[0].name() == "q" && renamed.encoded_inputs[1].name() == "d");
     return 0;
 }
 

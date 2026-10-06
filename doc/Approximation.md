@@ -715,18 +715,23 @@ split already does.
 
 Generators already support dynamic I/O declared before `generate()` runs:
 `configure()` exists so that `add_input<>()`/`add_output<>()` can be called
-based on `GeneratorParam` values decided earlier. Two additions let
+based on `GeneratorParam` values decided earlier. These additions let
 `configure()` adopt the halves of a `sever` split as ports:
 
 ```cpp
 template<typename T = Buffer<>> GeneratorInput<T> *add_input(const ImageParam &existing);
 template<typename T = Buffer<>> GeneratorOutput<T> *add_output(const Func &existing);
+template<typename T = Buffer<>> GeneratorOutput<T> *add_output(const std::string &name,
+                                                               const Func &existing);
 ```
 
-Each declares a port backed directly by the existing object and named after it;
-`T` may be given explicitly (`add_input<Buffer<int8_t, 1>>(q_in)`) to check the
-object's type and dimensionality and give the stub statically typed buffers.
-Both may only be called from `configure()`.
+Each declares a port backed directly by the existing object and named after it
+(or `name`); `T` may be given explicitly (`add_input<Buffer<int8_t, 1>>(q_in)`)
+to check the object's type and dimensionality and give the stub statically typed
+buffers. Both may only be called from `configure()`. `configure()` runs once per
+target in a multi-target build, and `Func` names are made unique within a
+process, so a `Func` created there is renamed (`y$1`) on the second run; name
+the output port explicitly when that matters. (`ImageParam` names are exact.)
 
 This lets one `configure()` build a whole round trip, split it, and adopt
 whichever half applies, leaving `generate()` an empty stub. The quantize and
@@ -765,14 +770,15 @@ public:
 
         if (direction == Direction::Quantize) {
             add_input(x);
-            for (Func e : split.offline.outputs()) {
-                add_output(e);
+            std::vector<Func> encoded = split.offline.outputs();
+            for (size_t i = 0; i < encoded.size(); i++) {
+                add_output(r.encoded_ports[i].name, encoded[i]);
             }
         } else {
             for (const ImageParam &in : split.online_inputs) {
                 add_input(in);
             }
-            add_output(y);
+            add_output("y", y);
         }
     }
 
