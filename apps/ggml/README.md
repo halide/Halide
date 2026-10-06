@@ -100,11 +100,11 @@ CSV columns: `atype` is the direction, `err_ratio` is 0 (bit-exact) or inf,
 `weight=<type> act=<act>`) for each act in `acts`, as `<type>_<act>_vec_dot`:
 `out(n, m) = sum_k W(k, n) * X(k, m)` in f32 with each operand approximated by
 its scheme and severed at its encoded records, scheduled for N = M = 1 by
-`kernels/schedule.h` (both operands block-quantized: an int32 dot of the codes
-per block, sdot on Arm, then the scales; otherwise decode and FMA). Kernel ABI
-(`harness/halide_providers.cpp`): `w`/`a` are `[K / block, N or M]` records
-(struct types from the kernel's metadata), `out` is f32 `[N, M]`, all with mins
-0; `vec_dot` goes through a GGML-ABI adapter.
+`kernels/schedule.h`: per weight block, a dot of the codes (int32, sdot on Arm,
+when the activation is quantized alike; f32 otherwise) times the hoisted scales.
+Kernel ABI (`harness/halide_providers.cpp`): `w`/`a` are `[K / block, N or M]`
+records (struct types from the kernel's metadata), `out` is f32 `[N, M]`, all
+with mins 0; `vec_dot` goes through a GGML-ABI adapter.
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds
