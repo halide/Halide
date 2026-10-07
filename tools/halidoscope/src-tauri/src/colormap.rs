@@ -43,6 +43,18 @@ fn parse_hex(hex: &str) -> Srgb<f32> {
     Srgb::new(r, g, b).into_format()
 }
 
+/// The colors of `n` threads: the Set3 palette when it has enough colors, and otherwise `n`
+/// evenly spaced hues.
+pub fn thread_colors(n: usize) -> Vec<colorous::Color> {
+    if n <= colorous::SET3.len() {
+        colorous::SET3[..n].to_vec()
+    } else {
+        (0..n)
+            .map(|i| colorous::SINEBOW.eval_rational(i, n))
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

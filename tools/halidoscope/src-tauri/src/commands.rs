@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use tauri::ipc::Response;
 use tauri::{AppHandle, Emitter, State};
 
+use crate::colormap::thread_colors;
 use crate::render::{
     GrayscaleState, LoadFrequencyState, NormalizationMode, Probe, RedundantState, Renderer,
     ReuseDistanceState, RgbState, StoreFrequencyState, ThreadOpMode, ThreadState,
@@ -56,6 +57,8 @@ pub struct StatsMeta {
     global_max_redundant_store_count: u32,
     global_max_reuse_distance: u64,
     global_thread_ids: Vec<String>,
+    /// The color of each of `global_thread_ids`, as "#rrggbb".
+    global_thread_colors: Vec<String>,
 }
 
 /// Top-level payload returned by `open_trace`.
@@ -126,6 +129,10 @@ impl TraceMeta {
                     .global_thread_ids
                     .iter()
                     .map(|id| id.to_string())
+                    .collect(),
+                global_thread_colors: thread_colors(trace.global_thread_ids.len())
+                    .iter()
+                    .map(|c| format!("#{c:x}"))
                     .collect(),
             },
         }

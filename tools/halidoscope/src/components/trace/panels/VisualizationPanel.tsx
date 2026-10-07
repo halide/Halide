@@ -290,7 +290,7 @@ function FuncStats() {
           domain: threadIds.map((tId) => `${tId}`),
           range: stats.global_thread_ids.reduce<string[]>((acc, el, i) => {
             if (threadIds.includes(el)) {
-              return acc.concat(d3.schemeSet3[i]);
+              return acc.concat(stats.global_thread_colors[i]);
             }
 
             return acc;
