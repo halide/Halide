@@ -243,6 +243,63 @@ int main(int argc, char **argv) {
         ok &= check("macOS arm32 non-Swift", ops, detection, {}, false);
     }
 
+    // macOS: the architecture version is detected separately from the
+    // runtime-checked features. FEAT_I8MM and FEAT_BF16 together mean an
+    // Armv8.6-A core; either alone, or a 32-bit process, isn't enough.
+    {
+        FakeSysctlOps ops;
+        ops.sysctls = {{"hw.optional.arm.FEAT_DotProd", 1},
+                       {"hw.optional.arm.FEAT_FP16", 1},
+                       {"hw.optional.arm.FEAT_I8MM", 1},
+                       {"hw.optional.arm.FEAT_BF16", 1}};
+        const ArmDetection detection = detect_arm_features(ops, ArmArch::Arm64);
+        ok &= check("macOS arm64 Armv8.6-A runtime features", ops, detection,
+                    {halide_target_feature_arm_dot_prod,
+                     halide_target_feature_arm_fp16},
+                    false);
+        detect_arm_architecture_version(ops, ArmArch::Arm64);
+        ok &= check("macOS arm64 Armv8.6-A", ops, detection,
+                    {halide_target_feature_arm_dot_prod,
+                     halide_target_feature_arm_fp16,
+                     halide_target_feature_armv86a},
+                    false);
+    }
+
+    for (const auto &sysctls : std::vector<std::vector<std::pair<std::string, int>>>{
+             {{"hw.optional.arm.FEAT_I8MM", 1}},
+             {{"hw.optional.arm.FEAT_BF16", 1}},
+             {{"hw.optional.arm.FEAT_I8MM", 1}, {"hw.optional.arm.FEAT_BF16", 0}},
+         }) {
+        FakeSysctlOps ops;
+        ops.sysctls = sysctls;
+        detect_arm_architecture_version(ops, ArmArch::Arm64);
+        ok &= check("macOS arm64 without both FEAT_I8MM and FEAT_BF16", ops, ArmDetection{false, false}, {}, false);
+    }
+
+    {
+        FakeSysctlOps ops;
+        ops.sysctls = {{"hw.optional.arm.FEAT_I8MM", 1},
+                       {"hw.optional.arm.FEAT_BF16", 1}};
+        detect_arm_architecture_version(ops, ArmArch::Arm32);
+        ok &= check("macOS arm32 architecture version", ops, ArmDetection{false, false}, {}, false);
+    }
+
+    // Other platforms don't report an architecture version.
+    {
+        FakeAuxvOps ops;
+        ops.hwcap = ~0ull;
+        ops.hwcap2 = ~0ull;
+        detect_arm_architecture_version(ops, ArmArch::Arm64);
+        ok &= check("Linux arm64 architecture version", ops, ArmDetection{false, false}, {}, false);
+    }
+
+    {
+        FakeWindowsOps ops;
+        ops.windows_features = {pf_arm_fmac, pf_arm_v82_dp};
+        detect_arm_architecture_version(ops, ArmArch::Arm64);
+        ok &= check("Windows arm64 architecture version", ops, ArmDetection{false, false}, {}, false);
+    }
+
     // Windows on ARM.
     {
         FakeWindowsOps ops;

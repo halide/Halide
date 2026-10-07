@@ -265,6 +265,10 @@ Target calculate_host_target() {
     detection = CpuDetect::detect_arm_features(ops, host_arm_arch);
 #endif
 
+    // The runtime doesn't check architecture versions, so this half of the
+    // detection is ours alone.
+    CpuDetect::detect_arm_architecture_version(ops, host_arm_arch);
+
 #if defined(__aarch64__)
     // SME2 is a hardware capability, but without HAS_ATTR_TARGET_SME the local
     // compiler can't emit the streaming-mode probe needed to determine the SME
