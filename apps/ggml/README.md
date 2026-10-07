@@ -96,24 +96,35 @@ reference), and times them against those and `from_float`. Codec rows reuse the
 CSV columns: `atype` is the direction, `err_ratio` is 0 (bit-exact) or inf,
 `gops` is Gvalues/s.
 
-`vec_dot` builds the one mul_mat generator (`kernels/matmul.cpp`,
-`weight=<type> act=<act>`) for each act in `acts`, as `<type>_<act>_vec_dot`:
-`out(n, m) = sum_k W(k, n) * X(k, m)` in f32 with each operand approximated by
-its scheme and severed at its encoded records, scheduled for N = M = 1 by
-`kernels/schedule.h`: per weight block, a dot of the codes (int32, sdot on Arm,
-when the activation is quantized alike; f32 otherwise) times the hoisted scales.
-Kernel ABI (`harness/halide_providers.cpp`): `w`/`a` are `[K / block, N or M]`
-records (struct types from the kernel's metadata), `out` is f32 `[N, M]`. The
-kernel declares the whole contract (checked in `checked`, assumed in `bench`):
-all mins 0, rows dense (`dim(1).stride == dim(0).extent`), `a`'s K tied to
-`w`'s, `w`/`a` rows match `out`'s N/M, and `vec_dot` pins `out` to 1 x 1. It
-promises no more than GGML does: K is a whole number of blocks (GGML asserts
-`n % QK == 0`), with no even block count (the 2-block interleave keeps its
-guard) and no host alignment (q4_0/q8_0 rows start on 2-byte boundaries).
-`vec_dot` goes through a GGML-ABI adapter.
+`vec_dot` and `mul_mat` build the one mul_mat generator (`kernels/matmul.cpp`,
+`weight=<type> act=<act> op=<op>`) for each act in `acts`, as
+`<type>_<act>_<op>`: `out(n, m) = sum_k W(k, n) * X(k, m)` in f32 with each
+operand approximated by its scheme and severed at its encoded records. An act
+`<storage>:<compute>` (e.g. `f32:q8_0`, library `<type>_f32_to_q8_0_<op>`) takes
+`<storage>` activations and approximates X by `<compute>`'s scheme inside the
+kernel, not severed (GGML's numerics for f32 activations; the harness declares
+the act re-quantization in the provider's `Precision`); plain `f32` is the
+decode-then-float-dot variant. `kernels/schedule.h` schedules it: per weight
+block, a dot of the codes (int32, sdot on Arm, when the activation is quantized
+alike; f32 otherwise) times the hoisted scales, as one generic `blocked`
+schedule of an nt x mt output tile. `vec_dot` is the 1 x 1 tile for N = M = 1.
+`mul_mat` (multi-threaded; the harness sets the thread count) is a 4 x 4 tile,
+64 rows per parallel task, specialized on N % 4 == M % 4 == 0 (gemm), and
+otherwise (gemv, any N/M) the 1 x 1 tile with 2 blocks per iteration, 32 rows
+per parallel task; an in-kernel activation encoder runs first, parallel over
+activation rows when M > 1. Kernel ABI (`harness/halide_providers.cpp`): `w`/`a`
+are `[K / block, N or M]` records (struct types from the kernel's metadata),
+`out` is f32 `[N, M]`. The kernel declares the whole contract (checked in
+`checked`, assumed in `bench`): all mins 0, rows dense
+(`dim(1).stride == dim(0).extent`), `a`'s K tied to `w`'s, `w`/`a` rows match
+`out`'s N/M, and `vec_dot` pins `out` to 1 x 1. It promises no more than GGML
+does: K is a whole number of blocks (GGML asserts `n % QK == 0`), with no even
+block count (the 2-block interleave keeps its guard) and no host alignment
+(q4_0/q8_0 rows start on 2-byte boundaries). `vec_dot` goes through a GGML-ABI
+adapter.
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds
 `GGML_BENCH_FEATURES`, i.e. `no_asserts no_bounds_query`; what gets timed).
-Halide providers currently get the default `Precision` (f32 accumulation, no
-re-quantization); kernels that approximate must declare theirs.
+Halide providers get the default `Precision` (f32 accumulation, no
+re-quantization) plus the act re-quantization of `<storage>:<compute>` acts.
