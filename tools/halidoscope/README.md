@@ -105,7 +105,8 @@ As an alternative to the `Pipeline::halidoscope` API, you can also invoke
 Halidoscope directly from the command line to launch the GUI. To work with a
 pre-recorded trace, simply specify the path to a Halide trace binary file via
 the `--trace` flag. Traces may be raw (e.g. as written by `HL_TRACE_FILE`) or
-zstd-compressed (as written by `Pipeline::halidoscope`).
+compressed (as written by `Pipeline::halidoscope`, using
+`tools/halide_trace_compression.h`).
 
 ```bash
 halidoscope --trace <path/to/file.hltrace>

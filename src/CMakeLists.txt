@@ -514,6 +514,11 @@ target_sources(
     FILES "${Halide_BINARY_DIR}/include/Halide.h"
 )
 
+# For HalideRuntime.h, included by tools/halide_trace_compression.h
+set_source_files_properties(
+    Halidoscope.cpp PROPERTIES INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/runtime"
+)
+
 ##
 # CodeGen backends
 ##
@@ -541,14 +546,6 @@ if (WITH_COMPILER_PROFILING)
     target_compile_definitions(Halide PRIVATE WITH_COMPILER_PROFILING)
 endif ()
 
-
-##
-# zstd, used to compress Pipeline::halidoscope() traces.
-##
-
-find_package(zstd REQUIRED)
-_Halide_pkgdep(zstd)
-target_link_libraries(Halide PRIVATE zstd::libzstd)
 
 ##
 # Flatbuffers and Serialization dependencies.

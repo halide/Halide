@@ -12,7 +12,7 @@
 #include "Serialization.h"
 #include "Util.h"
 
-#include <zstd.h>
+#include "../tools/halide_trace_compression.h"
 
 #ifdef _WIN32
 #include <fcntl.h>
@@ -27,51 +27,41 @@ using namespace Internal;
 
 namespace {
 
-// Streams bytes through zstd into a file.
-class ZstdFileWriter {
+// Compresses a stream of trace packets into a file.
+class TraceFileWriter {
     std::ofstream out;
-    ZSTD_CCtx *cctx = nullptr;
-    std::vector<char> out_buf;
+    Tools::TraceCompressor compressor;
+    std::vector<uint8_t> compressed;
     int64_t limit_bytes;
 
-    bool pump(ZSTD_inBuffer &in, ZSTD_EndDirective mode) {
-        bool done = false;
-        while (!done && limit_bytes >= 0) {
-            ZSTD_outBuffer o = {out_buf.data(), out_buf.size(), 0};
-            size_t remaining = ZSTD_compressStream2(cctx, &o, &in, mode);
-            user_assert(!ZSTD_isError(remaining))
-                << "halidoscope: zstd compression failed: " << ZSTD_getErrorName(remaining) << "\n";
-            out.write(out_buf.data(), o.pos);
-            limit_bytes -= o.pos;
-            done = (mode == ZSTD_e_end) ? remaining == 0 : in.pos == in.size;
-        }
+    bool emit() {
+        out.write((const char *)compressed.data(), compressed.size());
+        limit_bytes -= compressed.size();
+        compressed.clear();
         return limit_bytes >= 0;
     }
 
 public:
-    explicit ZstdFileWriter(const std::string &path, int64_t limit_bytes)
-        : out(path, std::ios::binary), cctx(ZSTD_createCCtx()), out_buf(ZSTD_CStreamOutSize()), limit_bytes(limit_bytes) {
+    explicit TraceFileWriter(const std::string &path, int64_t limit_bytes)
+        : out(path, std::ios::binary), limit_bytes(limit_bytes) {
         user_assert(out.good()) << "halidoscope: unable to open " << path << " for writing\n";
-        ZSTD_CCtx_setParameter(cctx, ZSTD_c_compressionLevel, ZSTD_CLEVEL_DEFAULT);
-        // Compress on background threads if this libzstd supports it.
-        ZSTD_CCtx_setParameter(cctx, ZSTD_c_nbWorkers, 4);
     }
-
-    ~ZstdFileWriter() {
-        ZSTD_freeCCtx(cctx);
-    }
-
-    ZstdFileWriter(const ZstdFileWriter &) = delete;
-    ZstdFileWriter &operator=(const ZstdFileWriter &) = delete;
 
     bool write(const void *data, size_t size) {
-        ZSTD_inBuffer in = {data, size, 0};
-        return pump(in, ZSTD_e_continue);
+        if (limit_bytes < 0) {
+            return false;
+        }
+        bool ok = compressor.write(data, size, compressed);
+        internal_assert(ok) << "halidoscope: invalid trace packet\n";
+        return emit();
     }
 
     void finish() {
-        ZSTD_inBuffer in = {nullptr, 0, 0};
-        pump(in, ZSTD_e_end);
+        if (limit_bytes >= 0) {
+            bool ok = compressor.finish(compressed);
+            internal_assert(ok) << "halidoscope: truncated trace packet\n";
+            emit();
+        }
         out.close();
     }
 };
@@ -90,16 +80,16 @@ void halidoscope_record_error(JITUserContext *, const char *msg) {
     halidoscope_trace_errors += msg;
 }
 
-// Compresses everything written to the returned file descriptor into path
-// on a background thread, until the descriptor is closed.
-class ZstdPipeWriter {
+// Compresses everything written to the returned file descriptor into path on
+// a background thread, until the descriptor is closed.
+class TracePipeWriter {
     int read_fd = -1, write_fd = -1;
-    ZstdFileWriter writer;
+    TraceFileWriter writer;
     std::thread thread;
     JITUserContext *user_context = nullptr;
 
 public:
-    explicit ZstdPipeWriter(const std::string &path, int64_t limit_bytes, JITUserContext *user_context)
+    explicit TracePipeWriter(const std::string &path, int64_t limit_bytes, JITUserContext *user_context)
         : writer(path, limit_bytes), user_context(user_context) {
         int fds[2];
 #ifdef _WIN32
@@ -130,14 +120,14 @@ public:
         });
     }
 
-    ZstdPipeWriter(const ZstdPipeWriter &) = delete;
-    ZstdPipeWriter &operator=(const ZstdPipeWriter &) = delete;
+    TracePipeWriter(const TracePipeWriter &) = delete;
+    TracePipeWriter &operator=(const TracePipeWriter &) = delete;
 
     int fd() const {
         return write_fd;
     }
 
-    ~ZstdPipeWriter() {
+    ~TracePipeWriter() {
         JITSharedRuntime::set_trace_file(-1);
 #ifdef _WIN32
         _close(write_fd);
@@ -227,7 +217,7 @@ void pipeline_halidoscope(const Pipeline &pipeline,
     }
 
     // --- Trace run: every Func's loads/stores/realizations, dumped to a
-    // zstd-compressed binary trace file. ---
+    // compressed binary trace file. ---
     {
         Pipeline traced = deserialize_pipeline(data, external_params);
         traced.trace_pipeline();
@@ -254,7 +244,7 @@ void pipeline_halidoscope(const Pipeline &pipeline,
         halidoscope_trace_errors.clear();
 
         {
-            ZstdPipeWriter trace_writer(trace_path, (int64_t)options.trace_file_size_limit * 1000000, context);
+            TracePipeWriter trace_writer(trace_path, (int64_t)options.trace_file_size_limit * 1000000, context);
             JITSharedRuntime::set_trace_file(trace_writer.fd());
             prepare_trace(traced, trace_target).run(context);
         }

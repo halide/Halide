@@ -192,7 +192,7 @@ impl ValueSlice {
         }
 
         for &global_idx in &value_indices[self.applied_k..target_k] {
-            self.apply_packet(&trace.packets[global_idx]);
+            self.apply_packet(&trace.packet(global_idx));
         }
 
         self.applied_k = target_k;
@@ -523,7 +523,7 @@ impl Renderer for StoreFrequencyState {
             self.applied_k = 0;
         }
         for &idx in &store_indices[self.applied_k..target_k] {
-            self.increment(&trace.packets[idx]);
+            self.increment(&trace.packet(idx));
         }
         self.applied_k = target_k;
     }
@@ -668,7 +668,7 @@ impl Renderer for LoadFrequencyState {
             self.applied_k = 0;
         }
         for &idx in &load_indices[self.applied_k..target_k] {
-            self.increment(&trace.packets[idx]);
+            self.increment(&trace.packet(idx));
         }
         self.applied_k = target_k;
     }
@@ -826,10 +826,10 @@ impl RedundantState {
                 && (li >= load_slice.len() || store_slice[si] < load_slice[li]);
 
             if next_is_store {
-                self.apply_store(&trace.packets[store_slice[si]]);
+                self.apply_store(&trace.packet(store_slice[si]));
                 si += 1;
             } else {
-                self.apply_load(&trace.packets[load_slice[li]]);
+                self.apply_load(&trace.packet(load_slice[li]));
                 li += 1;
             }
         }
@@ -1008,10 +1008,10 @@ impl ReuseDistanceState {
                 && (li >= load_slice.len() || store_slice[si] < load_slice[li]);
 
             if next_is_store {
-                self.apply_store(&trace.packets[store_slice[si]], store_slice[si]);
+                self.apply_store(&trace.packet(store_slice[si]), store_slice[si]);
                 si += 1;
             } else {
-                self.apply_load(&trace.packets[load_slice[li]], load_slice[li]);
+                self.apply_load(&trace.packet(load_slice[li]), load_slice[li]);
                 li += 1;
             }
         }
@@ -1248,11 +1248,11 @@ impl ThreadState {
 
             match (&op_mode, next_is_store) {
                 (ThreadOpMode::Store, true) => {
-                    self.apply(&trace.packets[store_slice[si]], op_mode);
+                    self.apply(&trace.packet(store_slice[si]), op_mode);
                     si += 1;
                 }
                 (ThreadOpMode::Load, false) => {
-                    self.apply(&trace.packets[load_slice[li]], op_mode);
+                    self.apply(&trace.packet(load_slice[li]), op_mode);
                     li += 1;
                 }
                 (_, true) => {
