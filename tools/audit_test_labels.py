@@ -20,6 +20,7 @@ FAILURE_MARKER = "Halide test capability violation:"
 SUCCESS_MARKER = "Halide test launcher: successful exit"
 PARALLEL_MARKER = "Scheduling parallel loop: "
 JIT_MARKER = "Running JIT code"
+GPU_TARGET_QUERY_MARKER = "Querying target GPU capability: "
 MARKERS = {
     "target_from_environment": ("Reading target from environment: ",),
     "calls_llvm": ("Loading runtime bitcode: ",),
@@ -77,12 +78,29 @@ def test_metadata(build_dir, config, ctest, command):
     )
 
 
+def uses_gpu(output):
+    previous = ""
+    for line in output.splitlines():
+        if any(marker in line for marker in MARKERS["gpu"]) and not (
+            previous.startswith(GPU_TARGET_QUERY_MARKER)
+            and line
+            == "Using device interface: " + previous[len(GPU_TARGET_QUERY_MARKER) :]
+        ):
+            return True
+        previous = line
+    return False
+
+
 def missing_capabilities(labels, output):
     missing = [
         label
         for label, markers in MARKERS.items()
-        if label not in labels and any(marker in output for marker in markers)
+        if label != "gpu"
+        and label not in labels
+        and any(marker in output for marker in markers)
     ]
+    if "gpu" not in labels and uses_gpu(output):
+        missing.append("gpu")
     parallel = output.find(PARALLEL_MARKER)
     if (
         "multithreaded" not in labels
@@ -94,6 +112,10 @@ def missing_capabilities(labels, output):
 
 
 def main():
+    # CTest consumes UTF-8 output even when Python defaults to a Windows code page.
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--build-dir", required=True)
     ap.add_argument("--config", default=None)

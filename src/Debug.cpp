@@ -3,6 +3,7 @@
 #include "Util.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cerrno>
 #include <climits>
 #include <functional>
@@ -21,6 +22,14 @@
 namespace Halide::Internal {
 
 namespace {
+
+enum class JITExecutionDebugState {
+    Unarmed,
+    Armed,
+    Reported,
+};
+
+std::atomic<JITExecutionDebugState> jit_execution_debug_state{JITExecutionDebugState::Unarmed};
 
 std::string read_until(const char *&str, const char *delims) {
     const char *start = str;
@@ -282,6 +291,21 @@ bool debug_is_active_impl(const int verbosity, const char *tag, const char *file
                           const char *function, const int line) {
     static const std::vector<DebugRule> rules = parse_rules(get_env_variable("HL_DEBUG_CODEGEN"));
     return rules_accept(rules, verbosity, tag, file, function, line);
+}
+
+void arm_jit_execution_debug() {
+    auto expected = JITExecutionDebugState::Unarmed;
+    jit_execution_debug_state.compare_exchange_strong(expected, JITExecutionDebugState::Armed,
+                                                      std::memory_order_release, std::memory_order_relaxed);
+}
+
+bool consume_jit_execution_debug() {
+    if (jit_execution_debug_state.load(std::memory_order_relaxed) != JITExecutionDebugState::Armed) {
+        return false;
+    }
+    auto expected = JITExecutionDebugState::Armed;
+    return jit_execution_debug_state.compare_exchange_strong(expected, JITExecutionDebugState::Reported,
+                                                             std::memory_order_acquire, std::memory_order_relaxed);
 }
 
 bool debug_spec_accepts(const std::string &spec, const int verbosity, const char *tag,

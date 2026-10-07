@@ -386,6 +386,7 @@ Target get_host_target() {
 namespace {
 
 Target::Feature calculate_host_cuda_capability(Target t) {
+    debug(4, "gpu-entry") << "Querying target GPU capability: cuda\n";
     const auto *interface = get_device_interface_for_device_api(DeviceAPI::CUDA, t);
     internal_assert(interface->compute_capability);
     int major, minor;
@@ -429,6 +430,7 @@ Target::Feature get_host_cuda_capability(Target t) {
 }
 
 Target::Feature calculate_host_vulkan_capability(Target t) {
+    debug(4, "gpu-entry") << "Querying target GPU capability: vulkan\n";
     const auto *interface = get_device_interface_for_device_api(DeviceAPI::Vulkan, t);
     internal_assert(interface->compute_capability);
     int major, minor;

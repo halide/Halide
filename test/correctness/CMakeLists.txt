@@ -534,7 +534,6 @@ tests(
     lerp_mismatch.cpp
     lerp_signed_weight.cpp
     memoize_redefine_eviction_key.cpp
-    metal_vector_too_large.cpp
     modulus_remainder.cpp
     multiramp.cpp
     no_default_device.cpp
@@ -611,6 +610,8 @@ tests(
     sve_codegen_reinterpret.cpp
     # keep-sorted end
 )
+
+tests(GROUPS correctness gpu SOURCES metal_vector_too_large.cpp)
 
 tests(
     GROUPS correctness gpu calls_llvm
