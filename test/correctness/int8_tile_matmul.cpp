@@ -69,10 +69,30 @@ enum class Schedule {
     Direct,
 };
 
+// How the B operand of the product is computed from the input B.
+enum class Operand {
+    // B itself.
+    Plain,
+    // Unpacked from 4-bit codes in the low bits of a uint8 B, as
+    // (B & 15) - 8. The instruction can be used with the unpacking computed
+    // lane-wise on its operand.
+    Nibbles,
+    // Looked up in a table indexed by the low bits of a uint8 B. The lookup
+    // is a gather, so the instruction may not be used.
+    Lookup,
+    // B plus the row index of the output, which mixes the tile's rows into
+    // the operand that should only depend on its columns. This isn't a
+    // matrix product of 8-bit values, so the instruction must not be used.
+    PlusRow,
+};
+
+int8_t lookup_table[16] = {-128, -77, -45, -21, -3, 0, 2, 7, 13, 25, 41, 60, 82, 99, 115, 127};
+
 // C(j, i) = sum_k A(k, i) * B(k, j), with A M x K and B N x K, both stored
 // with k innermost.
 template<typename TA, typename TB, typename TC>
-int test(const std::string &name, Schedule schedule, int M, int N, int K, const std::string &op) {
+int test(const std::string &name, Schedule schedule, int M, int N, int K, const std::string &op,
+         Operand operand = Operand::Plain) {
     Buffer<TA> a_buf = make_input<TA>(K, M);
     Buffer<TB> b_buf = make_input<TB>(K, N);
     ImageParam A(type_of<TA>(), 2, "A"), B(type_of<TB>(), 2, "B");
@@ -84,8 +104,42 @@ int test(const std::string &name, Schedule schedule, int M, int N, int K, const 
     RVar ko("ko"), ki("ki");
     Func C("C"), acc("acc");
 
+    Buffer<int8_t> lut(lookup_table, 16);
     auto product = [&](const Expr &row, const Expr &col) {
-        return cast<TC>(A(r, row)) * cast<TC>(B(r, col));
+        Expr b = B(r, col);
+        switch (operand) {
+        case Operand::Plain:
+            break;
+        case Operand::Nibbles:
+            b = cast<int8_t>(b & 15) - 8;
+            break;
+        case Operand::Lookup:
+            b = lut(cast<int>(b & 15));
+            break;
+        case Operand::PlusRow:
+            b += cast(b.type(), row);
+            break;
+        }
+        return cast<TC>(A(r, row)) * cast<TC>(b);
+    };
+    // The same, in C++.
+    auto product_ref = [&](int k, int row, int col) -> int64_t {
+        TB b = b_buf(k, col);
+        int64_t b_value = b;
+        switch (operand) {
+        case Operand::Plain:
+            break;
+        case Operand::Nibbles:
+            b_value = (int8_t)(b & 15) - 8;
+            break;
+        case Operand::Lookup:
+            b_value = lookup_table[b & 15];
+            break;
+        case Operand::PlusRow:
+            b_value = (TB)(b + (TB)row);
+            break;
+        }
+        return (int64_t)(TC)a_buf(k, row) * (int64_t)(TC)b_value;
     };
 
     switch (schedule) {
@@ -150,7 +204,7 @@ int test(const std::string &name, Schedule schedule, int M, int N, int K, const 
         for (int x = 0; x < N; x++) {
             int64_t correct = 0;
             for (int k = 0; k < K; k++) {
-                correct += (int64_t)a_buf(k, y) * (int64_t)b_buf(k, x);
+                correct += product_ref(k, y, x);
             }
             if (out(x, y) != (TC)correct) {
                 printf("%s: C(%d, %d) = %lld instead of %lld\n",
@@ -160,13 +214,21 @@ int test(const std::string &name, Schedule schedule, int M, int N, int K, const 
         }
     }
 
-    if (expect_instructions() && schedule != Schedule::Direct) {
+    if (expect_instructions() && schedule != Schedule::Direct && operand != Operand::Lookup) {
         std::string file = Internal::get_test_tmp_dir() + "int8_tile_matmul_" + name + ".s";
         C.compile_to_assembly(file, {A, B}, get_jit_target_from_environment());
         std::ifstream in(file);
         std::stringstream contents;
         contents << in.rdbuf();
         int count = count_instructions(contents.str(), op);
+        if (operand == Operand::PlusRow) {
+            if (count != 0) {
+                printf("%s: expected no %s in the generated assembly, found %d\n",
+                       name.c_str(), op.c_str(), count);
+                return 1;
+            }
+            return 0;
+        }
         // Each of the four unrolled tiles of a 4x4 block needs one.
         int expected = schedule == Schedule::Block4x4 ? 4 : 1;
         if (count < expected) {
@@ -180,15 +242,15 @@ int test(const std::string &name, Schedule schedule, int M, int N, int K, const 
 }
 
 template<typename TA, typename TB, typename TC>
-int test_all_schedules(const std::string &name, const std::string &op) {
+int test_all_schedules(const std::string &name, const std::string &op, Operand operand = Operand::Plain) {
     int failures = 0;
-    failures += test<TA, TB, TC>(name + "_tile", Schedule::Tile, 8, 6, 32, op);
-    failures += test<TA, TB, TC>(name + "_transposed_tile", Schedule::TransposedTile, 6, 8, 32, op);
+    failures += test<TA, TB, TC>(name + "_tile", Schedule::Tile, 8, 6, 32, op, operand);
+    failures += test<TA, TB, TC>(name + "_transposed_tile", Schedule::TransposedTile, 6, 8, 32, op, operand);
     // Odd sizes and a reduction that isn't a multiple of 8.
-    failures += test<TA, TB, TC>(name + "_tile_tails", Schedule::Tile, 7, 5, 37, op);
-    failures += test<TA, TB, TC>(name + "_transposed_tile_tails", Schedule::TransposedTile, 5, 7, 37, op);
-    failures += test<TA, TB, TC>(name + "_block4x4", Schedule::Block4x4, 8, 12, 64, op);
-    failures += test<TA, TB, TC>(name + "_direct", Schedule::Direct, 8, 6, 32, op);
+    failures += test<TA, TB, TC>(name + "_tile_tails", Schedule::Tile, 7, 5, 37, op, operand);
+    failures += test<TA, TB, TC>(name + "_transposed_tile_tails", Schedule::TransposedTile, 5, 7, 37, op, operand);
+    failures += test<TA, TB, TC>(name + "_block4x4", Schedule::Block4x4, 8, 12, 64, op, operand);
+    failures += test<TA, TB, TC>(name + "_direct", Schedule::Direct, 8, 6, 32, op, operand);
     return failures;
 }
 
@@ -201,6 +263,15 @@ int main(int argc, char **argv) {
     failures += test_all_schedules<uint8_t, uint8_t, uint32_t>("u8_u8_u32", "ummla");
     failures += test_all_schedules<uint8_t, int8_t, int32_t>("u8_s8", "usmmla");
     failures += test_all_schedules<int8_t, uint8_t, int32_t>("s8_u8", "usmmla");
+
+    // A B operand computed lane-wise from the input.
+    failures += test_all_schedules<int8_t, uint8_t, int32_t>("s8_nibbles", "smmla", Operand::Nibbles);
+    failures += test_all_schedules<uint8_t, uint8_t, int32_t>("u8_nibbles", "usmmla", Operand::Nibbles);
+    // B operands that can't (or may not) use the instruction must still be
+    // computed correctly.
+    failures += test<int8_t, uint8_t, int32_t>("s8_lookup_tile", Schedule::Tile, 8, 6, 32, "smmla", Operand::Lookup);
+    failures += test<int8_t, int8_t, int32_t>("s8_plus_row_tile", Schedule::Tile, 8, 6, 32, "smmla", Operand::PlusRow);
+    failures += test<int8_t, int8_t, int32_t>("s8_plus_row_transposed_tile", Schedule::TransposedTile, 6, 8, 32, "smmla", Operand::PlusRow);
 
     if (failures) {
         printf("%d tests failed\n", failures);

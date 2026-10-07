@@ -744,6 +744,8 @@ public:
                     // Here the unsigned operand is the one that depends on
                     // x % 2, so the tile is computed transposed.
                     check("usmmla", 4, sum(i32(in_i8(row)) * in_u8(col)));
+                    // One operand computed lane-wise from 4-bit values.
+                    check("smmla", 4, sum(i32(in_i8(row)) * (i8(in_u8(col) & 15) - 8)));
                 }
             }
             // VPOP     X       F, D    Pop from Stack
