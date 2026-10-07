@@ -17,6 +17,28 @@ namespace Halide {
 namespace Runtime {
 namespace Internal {
 
+// The process-wide keep-awake reference count; see
+// halide_thread_pool_keep_awake. It lives outside work_queue so that
+// halide_shutdown_thread_pool, which resets work_queue, doesn't drop
+// references that are still held.
+WEAK int keep_awake_count = 0;
+
+// While the keep-awake count is held, how many times an idle thread polls for
+// work (each poll calls halide_thread_yield) before going to sleep anyway. This
+// is a backstop against leaked references and against taking cores from other
+// thread pools for long periods. Waking a thread costs tens of microseconds, so
+// once a thread has been idle for a few milliseconds, spinning any longer saves
+// at most about 1% of the idle time. With a halide_thread_yield that costs
+// about a microsecond (a sched_yield-style syscall), this is a few
+// milliseconds.
+constexpr int keep_awake_max_spins = 1 << 12;
+
+ALWAYS_INLINE bool keep_awake_held() {
+    int count;
+    Synchronization::atomic_load_relaxed(&keep_awake_count, &count);
+    return count > 0;
+}
+
 // A condition variable, augmented with a bit of spinning on an atomic counter
 // before going to sleep for real. This helps reduce overhead at the end of a
 // parallel for loop when idle worker threads are waiting for other threads to
@@ -25,24 +47,44 @@ struct halide_cond_with_spinning {
     halide_cond cond;
     uintptr_t counter;
 
-    void wait(halide_mutex *mutex) {
+    // If kept_awake is non-null, then while the keep-awake count is held, this
+    // waiter keeps spinning (up to keep_awake_max_spins) instead of going to
+    // sleep. *kept_awake counts the waiters doing so, is protected by the
+    // mutex, and is capped at max_kept_awake.
+    void wait(halide_mutex *mutex, int *kept_awake = nullptr, int max_kept_awake = 0) {
         // First spin for a bit, checking the counter for another thread to bump
         // it.
         uintptr_t initial;
         Synchronization::atomic_load_relaxed(&counter, &initial);
+        const bool stay_awake =
+            kept_awake && *kept_awake < max_kept_awake && keep_awake_held();
+        if (stay_awake) {
+            (*kept_awake)++;
+        }
         halide_mutex_unlock(mutex);
-        for (int spin = 0; spin < 40; spin++) {
+        bool woken = false;
+        for (int spin = 0;
+             spin < 40 ||
+             (stay_awake && spin < keep_awake_max_spins && keep_awake_held());
+             spin++) {
             halide_thread_yield();
             uintptr_t current;
             Synchronization::atomic_load_relaxed(&counter, &current);
             if (current != initial) {
-                halide_mutex_lock(mutex);
-                return;
+                woken = true;
+                break;
             }
         }
 
-        // Give up on spinning and relock the mutex preparing to sleep for real.
+        // Relock the mutex, and if we're done spinning without being woken,
+        // prepare to sleep for real.
         halide_mutex_lock(mutex);
+        if (stay_awake) {
+            (*kept_awake)--;
+        }
+        if (woken) {
+            return;
+        }
 
         // Check one final time with the lock held. This guarantees we won't
         // miss an increment of the counter because it is only ever incremented
@@ -199,6 +241,11 @@ struct work_queue_t {
     // team bookkeeping is undisturbed).
     int workers_parked_on_semaphore;
 
+    // The number of idle A-team workers and of owners currently spinning
+    // because the keep-awake count is held. Subsets of workers_sleeping and
+    // owners_sleeping respectively.
+    int workers_kept_awake, owners_kept_awake;
+
     // Keep track of threads so they can be joined at shutdown
     halide_thread *threads[MAX_THREADS];
 
@@ -283,20 +330,31 @@ WEAK void worker_thread(void *);
 WEAK void worker_thread_stall(work *owned_job) {
     work_queue.owners_sleeping++;
     owned_job->owner_is_sleeping = true;
-    work_queue.wake_owners.wait(&work_queue.mutex);
+    // An owner waiting on its own job is on the critical path of the
+    // parallel loop it started, so it may stay awake while the keep-awake
+    // count is held.
+    work_queue.wake_owners.wait(&work_queue.mutex, &work_queue.owners_kept_awake, MAX_THREADS);
     owned_job->owner_is_sleeping = false;
     work_queue.owners_sleeping--;
 }
 
 WEAK void worker_thread_idle() {
     work_queue.workers_sleeping++;
-    if (work_queue.a_team_size > work_queue.target_a_team_size) {
+    // While the keep-awake count is held, up to the desired number of threads
+    // (less the calling thread) stay awake on the A team, even if the most
+    // recent parallel loop didn't need them, so that a bigger loop that comes
+    // next doesn't have to wake them.
+    const int max_kept_awake = work_queue.desired_threads_working - 1;
+    const bool stay_on_a_team =
+        work_queue.workers_kept_awake < max_kept_awake && keep_awake_held();
+    if (work_queue.a_team_size > work_queue.target_a_team_size && !stay_on_a_team) {
         // Transition to B team
         work_queue.a_team_size--;
         work_queue.wake_b_team.wait(&work_queue.mutex);
         work_queue.a_team_size++;
     } else {
-        work_queue.wake_a_team.wait(&work_queue.mutex);
+        work_queue.wake_a_team.wait(&work_queue.mutex, &work_queue.workers_kept_awake,
+                                    max_kept_awake);
     }
     work_queue.workers_sleeping--;
 }
@@ -825,10 +883,43 @@ WEAK int halide_get_num_threads() {
     return n;
 }
 
+WEAK int halide_thread_pool_keep_awake(bool keep_awake) {
+    if (keep_awake) {
+        int count = Synchronization::atomic_add_fetch_sequentially_consistent(&keep_awake_count, 1);
+        if (count == 1) {
+            // Wake idle workers on both teams, so that they spin from now on
+            // rather than after the next parallel loop wakes them.
+            halide_mutex_lock(&work_queue.mutex);
+            if (work_queue.initialized && !work_queue.shutdown && work_queue.workers_sleeping) {
+                work_queue.wake_a_team.broadcast();
+                work_queue.wake_b_team.broadcast();
+            }
+            halide_mutex_unlock(&work_queue.mutex);
+        }
+        return count;
+    }
+
+    // Threads spinning because of the count notice it dropping to zero on
+    // their next poll and go to sleep, so there's nothing to wake here.
+    int count;
+    Synchronization::atomic_load_relaxed(&keep_awake_count, &count);
+    int desired;
+    do {
+        if (count <= 0) {
+            halide_error(nullptr, "halide_thread_pool_keep_awake(false) called without a matching halide_thread_pool_keep_awake(true).\n");
+            return halide_error_code_generic_error;
+        }
+        desired = count - 1;
+    } while (!Synchronization::atomic_cas_weak_relacq_relaxed(&keep_awake_count, &count, &desired));
+    return desired;
+}
+
 WEAK void halide_shutdown_thread_pool() {
     if (work_queue.initialized) {
         // Wake everyone up and tell them the party's over and it's time
-        // to go home
+        // to go home. This includes threads spinning because the
+        // keep-awake count is held. The count itself is preserved, so the
+        // threads of a restarted pool stay awake too.
         halide_mutex_lock(&work_queue.mutex);
 
         work_queue.shutdown = true;

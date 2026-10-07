@@ -32,6 +32,7 @@ set(tests
     serialization.py
     struct_type.py
     target.py
+    thread_pool_keep_awake.py
     tuple_select.py
     type.py
     user_context_test.py
