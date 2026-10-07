@@ -3,7 +3,26 @@ use std::path::PathBuf;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tauri_build::build();
+    build_trace_compression()?;
     generate_trace_packet_bindings()
+}
+
+/// Compiles the trace decompressor shared with libHalide (tools/halide_trace_compression.h).
+fn build_trace_compression() -> Result<(), Box<dyn std::error::Error>> {
+    let root = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?).join("../../..");
+    let shim = "src/trace_compression.cpp";
+    let header = root.join("tools/halide_trace_compression.h");
+    println!("cargo:rerun-if-changed={shim}");
+    println!("cargo:rerun-if-changed={}", header.display());
+    cc::Build::new()
+        .cpp(true)
+        .std("c++17")
+        .opt_level(3)
+        .include(root.join("tools"))
+        .include(root.join("src/runtime"))
+        .file(shim)
+        .compile("halide_trace_compression");
+    Ok(())
 }
 
 /// Derives Rust type layouts for `halide_trace_packet_t` (and, transitively, the

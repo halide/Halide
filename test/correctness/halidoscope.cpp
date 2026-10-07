@@ -11,6 +11,7 @@
 // TEST_WITH_SERIALIZATION is defined by CMake in that case.
 
 #include "Halide.h"
+#include "halide_trace_compression.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -141,11 +142,22 @@ int main(int argc, char **argv) {
         check(Internal::file_exists(trace_path));
         check(Internal::file_exists(profile_path));
 
-        // Every load/store/realization event the tracing hook writes is at
-        // least the size of one halide_trace_packet_t; a realization of two
-        // Funcs over a 16x16 domain produces many such events, so a
-        // near-empty file would indicate tracing silently didn't run.
-        check(slurp(trace_path).size() > 1024);
+        // The trace should decompress to stores of both Funcs over the
+        // whole 16x16 domain.
+        std::vector<char> trace = slurp(trace_path);
+        int f_stores = 0, g_stores = 0;
+        std::vector<uint8_t> packets;
+        check(Tools::decompress_trace((const uint8_t *)trace.data(), trace.size(), packets));
+        for (size_t pos = 0; pos < packets.size();) {
+            const halide_trace_packet_t &packet = *(const halide_trace_packet_t *)(packets.data() + pos);
+            if (packet.event == halide_trace_store) {
+                f_stores += std::string(packet.func()) == "f" ? packet.lanes : 0;
+                g_stores += std::string(packet.func()) == "g" ? packet.lanes : 0;
+            }
+            pos += packet.size;
+        }
+        check(f_stores >= 16 * 16);
+        check(g_stores >= 16 * 16);
 
         std::vector<char> profile_json = slurp(profile_path);
         check(contains(profile_json, "\"pipelines\": ["));

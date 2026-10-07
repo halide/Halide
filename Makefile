@@ -20,7 +20,7 @@ ifeq ($(OS), Windows_NT)
     $(error Halide no longer supports the MinGW environment. Please use MSVC through CMake instead.)
 else
     # let's assume "normal" UNIX such as linux
-    COMMON_LD_FLAGS=$(LDFLAGS) -ldl -lpthread -lz -lzstd
+    COMMON_LD_FLAGS=$(LDFLAGS) -ldl -lpthread -lz
     FPIC=-fPIC
 ifeq ($(UNAME), Darwin)
     SHARED_EXT=dylib
@@ -1272,6 +1272,9 @@ $(BUILD_DIR)/c_template.%.o: $(BUILD_DIR)/c_template.%.cpp
 $(BUILD_DIR)/html_template.%.o: $(BUILD_DIR)/html_template.%.cpp
 	$(CXX) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
 
+# For HalideRuntime.h, included by tools/halide_trace_compression.h
+$(BUILD_DIR)/Halidoscope.o: CXX_FLAGS += -I$(SRC_DIR)/runtime
+
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXX_FLAGS) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
@@ -2505,6 +2508,7 @@ $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT): \
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_malloc_trace.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_thread_pool.h $(DISTRIB_DIR)/tools
+	cp $(ROOT_DIR)/tools/halide_trace_compression.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_trace_config.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README*.md $(DISTRIB_DIR)
 	cp $(BUILD_DIR)/halide_config.* $(DISTRIB_DIR)

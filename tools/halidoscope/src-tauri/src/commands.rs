@@ -115,7 +115,7 @@ impl TraceMeta {
 
         TraceMeta {
             funcs,
-            total_packets: trace.packets.len() as u32,
+            total_packets: trace.num_packets() as u32,
             dag_edges,
             stats: StatsMeta {
                 global_max_store_count: trace.global_max_store_count,

@@ -239,11 +239,11 @@ fn snapshot(subcommand: SubcommandMatches) -> Option<()> {
     let target_func = trace.funcs.get(func)?;
 
     // Exit early if the packet index is out of bounds.
-    if packet_index as usize >= trace.packets.len() {
+    if packet_index as usize >= trace.num_packets() {
         eprintln!(
             "Packet index {} is out of bounds. Valid range: 0..{}",
             packet_index,
-            trace.packets.len()
+            trace.num_packets()
         );
         std::process::exit(1);
     }
