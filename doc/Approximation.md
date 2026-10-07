@@ -257,7 +257,7 @@ are defined in the GGML app).
 | `Choose{cond, if_true, if_false}`                          | Keeps whichever handle `cond` selects at construction, so it can be found by that handle.                                                                                                                                                                                                                                                           |
 | `Identity{}`, `Permute{permutation}`                       | Pass Funcs (and their port names) through unchanged / reordered. Both are lossless.                                                                                                                                                                                                                                                                 |
 | `Pointwise{...}`                                           | Elementwise `out(vs) = fn(in(vs))`; the output Funcs are named `name + "_encode"` and `name + "_decode"` (the four-argument constructors choose both names and the pure Var prefix). `with_types`, `with_ranges`, `with_lossless` and `with_error_bound` declare the signature, precondition and guarantee ranges, losslessness and an error bound. |
-| `BlockReshape`                                             | Flat row to fixed-size records; lossless.                                                                                                                                                                                                                                                                                                           |
+| `BlockReshape`                                             | Flat row to fixed-size records, or (`BlockReshape::tiles({b0, b1, ...})`) several leading dimensions to dense tiles; lossless.                                                                                                                                                                                                                      |
 | `StructLayout`                                             | Logical Funcs to a struct-typed record Func, one field each; lossless. The record dimensionality is the inputs' unless given to the constructor.                                                                                                                                                                                                    |
 | `LittleEndianScalarPack<Word>`                             | A word per record to and from a leading byte dimension; lossless.                                                                                                                                                                                                                                                                                   |
 | `PlanarFieldPack`                                          | Fixed-width fields packed into bytes; lossless for inputs in its declared range.                                                                                                                                                                                                                                                                    |
@@ -267,11 +267,17 @@ The layout units are rank-polymorphic: dimensions after the ones they act on
 `StructLayout` and `LittleEndianScalarPack`: all of them, as records) pass
 through unchanged, so one scheme value approximates a row `w(k)` and a matrix
 `W(k, n)` alike. `BlockReshape` maps `(k, rest...)` to
-`(within, block, rest...)`. Their signatures take the dimensionalities from the
-context, so they are unknown when there is none (e.g. in `describe()` without
-inputs) and checked at run time otherwise. A quantizer of your own composes with
-them on a matrix if it is rank-polymorphic too, e.g. written with implicit Vars
-(`codes(j, b, _) = ...`).
+`(within, block, rest...)`. `BlockReshape::tiles({b0, b1, ...})` splits each of
+the leading dimensions by its own block, within-tile indices first:
+`(x0, x1, rest...)` to `(x0 % b0, x1 % b1, x0 / b0, x1 / b1, rest...)`, so e.g.
+`tiles({2, 2})` stores a matrix as dense 2x2 tiles that a schedule can fuse and
+vectorize (`tiles({b})` is `BlockReshape(b)`). As with the flat form, each tiled
+extent must be a multiple of its block; like other shape requirements, this is
+documented rather than declared in the signature. The layout units' signatures
+take the dimensionalities from the context, so they are unknown when there is
+none (e.g. in `describe()` without inputs) and checked at run time otherwise. A
+quantizer of your own composes with them on a matrix if it is rank-polymorphic
+too, e.g. written with implicit Vars (`codes(j, b, _) = ...`).
 
 A four-bit scheme, built from these and a quantizer of your own (`quant`, here
 one whose codes are declared to lie in `[-8, 7]`), reads in the order `encode`
