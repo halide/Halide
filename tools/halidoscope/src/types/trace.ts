@@ -96,6 +96,8 @@ export interface StatsMeta {
   global_max_reuse_distance: number;
   /** The IDs of every distinct thread observed across all Funcs. */
   global_thread_ids: string[];
+  /** The color of each of global_thread_ids, as "#rrggbb". */
+  global_thread_colors: string[];
 }
 
 /**

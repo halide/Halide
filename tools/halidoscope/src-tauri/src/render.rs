@@ -4,7 +4,7 @@ use std::vec;
 use ::colorous;
 use serde::{Deserialize, Serialize};
 
-use crate::colormap::{Colormap, METRIC_PALETTE};
+use crate::colormap::{thread_colors, Colormap, METRIC_PALETTE};
 use crate::trace::{for_each_lane_element, FuncGeometry, Trace, TracePacket};
 
 #[derive(Deserialize, Clone, Copy)]
@@ -1140,6 +1140,7 @@ pub struct ThreadState {
     thread_ids: Vec<i32>,
     thread_id_buffer: Vec<i32>,
     global_thread_ids: Vec<i32>,
+    thread_colors: Vec<colorous::Color>,
     store_counts: Vec<u32>,
     load_counts: Vec<u32>,
     applied_store_k: usize,
@@ -1158,6 +1159,7 @@ impl ThreadState {
         let n_threads = thread_ids.len();
 
         let global_thread_ids: Vec<i32> = trace.global_thread_ids.iter().copied().collect();
+        let thread_colors = thread_colors(global_thread_ids.len());
 
         // `-1` marks an element no store/load has touched yet.
         let thread_id_buffer = vec![-1; geom.num_elements()];
@@ -1169,6 +1171,7 @@ impl ThreadState {
             thread_ids,
             thread_id_buffer,
             global_thread_ids,
+            thread_colors,
             store_counts: vec![0u32; n_threads],
             load_counts: vec![0u32; n_threads],
             applied_store_k: 0,
@@ -1283,8 +1286,7 @@ impl ThreadState {
                 .global_thread_ids
                 .binary_search(&thread_id)
                 .ok()
-                .filter(|&rank| rank < colorous::SET3.len())
-                .map(|rank| colorous::SET3[rank]);
+                .map(|rank| self.thread_colors[rank]);
 
             if let Some(color) = color {
                 chunk[0] = color.r;

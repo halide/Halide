@@ -73,6 +73,7 @@ function App() {
     global_max_redundant_store_count: 0,
     global_max_reuse_distance: 0,
     global_thread_ids: [],
+    global_thread_colors: [],
   });
 
   // Profile state.
