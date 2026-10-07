@@ -516,7 +516,9 @@ target_sources(
 
 # For HalideRuntime.h, included by tools/halide_trace_compression.h
 set_source_files_properties(
-    Halidoscope.cpp PROPERTIES INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/runtime"
+    Halidoscope.cpp
+    PROPERTIES
+    INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/runtime"
 )
 
 ##
