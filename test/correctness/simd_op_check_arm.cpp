@@ -693,6 +693,23 @@ public:
                         }
                     }
                 }
+
+                // USDOT/SUDOT - Mixed-sign dot products. FEAT_I8MM is
+                // mandatory from Armv8.6-A.
+                if (!arm32 && target.has_feature(Target::ARMv86a)) {
+                    for (int f : {4, 8}) {
+                        RDom r(0, f);
+                        for (int v : {2, 4}) {
+                            check("usdot", v, sum(i32(in_u8(f * x + r)) * in_i8(f * x + r + 32)));
+                            check("usdot", v, sum(i32(in_i8(f * x + r)) * in_u8(f * x + r + 32)));
+                        }
+                    }
+                    // The same four coefficients in every lane. Whichever
+                    // operand is broadcast, the unsigned one goes first.
+                    RDom r(0, 4);
+                    check("usdot", 4, sum(i32(in_u8(4 * x + r)) * in_i8(r + 32)));
+                    check("usdot", 4, sum(i32(in_i8(4 * x + r)) * in_u8(r + 32)));
+                }
             }
             // VPOP     X       F, D    Pop from Stack
             // VPUSH    X       F, D    Push to Stack
@@ -1181,5 +1198,6 @@ int main(int argc, char **argv) {
             Target("arm-32-linux"),
             Target("arm-64-linux"),
             Target("arm-64-linux-armv84a-arm_dot_prod-arm_fp16"),
+            Target("arm-64-linux-armv86a-arm_dot_prod-arm_fp16"),
         });
 }
