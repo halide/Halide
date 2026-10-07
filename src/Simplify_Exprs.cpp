@@ -266,6 +266,22 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
     }
 }
 
+bool Simplify::known_in_range(const BaseExprNode *e, int64_t lo, int64_t hi) const {
+    if (e->node_type == IRNodeType::Broadcast) {
+        e = ((const Broadcast *)e)->value.get();
+    }
+    if (e->node_type == IRNodeType::IntImm) {
+        const int64_t v = ((const IntImm *)e)->value;
+        return lo <= v && v < hi;
+    } else if (e->node_type == IRNodeType::Variable) {
+        if (const ExprInfo *b = bounds_and_alignment_info.find(((const Variable *)e)->name)) {
+            return (b->bounds.min_defined && lo <= b->bounds.min &&
+                    b->bounds.max_defined && b->bounds.max < hi);
+        }
+    }
+    return false;
+}
+
 Expr Simplify::visit(const Variable *op, ExprInfo *info) {
     if (const ExprInfo *b = bounds_and_alignment_info.find(op->name)) {
         if (info) {

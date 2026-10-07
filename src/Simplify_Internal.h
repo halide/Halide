@@ -393,6 +393,13 @@ public:
     // Only tracked for integer let vars
     Scope<ExprInfo> bounds_and_alignment_info;
 
+    /** Whether e is known to lie in [lo, hi): an integer constant, or a
+     * variable whose constant bounds are in bounds_and_alignment_info, or a
+     * broadcast of either. Doesn't simplify or build any IR, so it is safe to
+     * call with the raw node a rewrite rule has bound to a wildcard (see
+     * IRMatcher::in_range). Returns false when nothing is known. */
+    bool known_in_range(const BaseExprNode *e, int64_t lo, int64_t hi) const;
+
     // Symbols used by rewrite rules
     IRMatcher::Wild<0> x;
     IRMatcher::Wild<1> y;
