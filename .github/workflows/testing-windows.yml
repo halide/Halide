@@ -15,8 +15,8 @@ on:
       - ".github/**"
       - "!.github/workflows/testing-windows.yml"
       - "packaging/**"
-      - "Makefile"
-      - "Makefile.inc"
+      - "**/Makefile"
+      - "apps/support/Makefile.inc"
       - 'run-clang-tidy.sh'
       - '**.clang-tidy'
 
