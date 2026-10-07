@@ -289,6 +289,27 @@ namespace Halide {
 
 class GeneratorContext;
 
+/** The arguments for one run of a Generator's pipeline under Halidoscope (see
+ * GeneratorBase::halidoscope): the same arguments as those of the Callable
+ * returned by compile_to_callable(), excluding the JITUserContext. */
+class HalidoscopeArgs {
+    std::function<void(const Callable &, JITUserContext *)> call;
+
+public:
+    template<typename... Args,
+             typename = std::enable_if_t<!(sizeof...(Args) == 1 &&
+                                           (std::is_same_v<std::decay_t<Args>, HalidoscopeArgs> && ...))>>
+    HalidoscopeArgs(Args &&...args)
+        : call([t = std::make_tuple(std::forward<Args>(args)...)](const Callable &c, JITUserContext *context) {
+              std::apply([&](const auto &...a) { (void)c(context, a...); }, t);
+          }) {
+    }
+
+    void operator()(const Callable &c, JITUserContext *context) const {
+        call(c, context);
+    }
+};
+
 namespace Internal {
 
 void generator_test();
@@ -3286,7 +3307,9 @@ protected:
      * returned by compile_to_callable(): an optional JITUserContext*, then
      * the inputs in order, then the output buffers. A HalidoscopeOptions
      * may be passed as the very first argument. */
-    template<typename First, typename... Rest>
+    template<typename First, typename... Rest,
+             typename = std::enable_if_t<!(std::is_same_v<std::decay_t<First>, HalidoscopeArgs> || ... ||
+                                           std::is_same_v<std::decay_t<Rest>, HalidoscopeArgs>)>>
     void halidoscope(First &&first, Rest &&...rest) {
         if constexpr (std::is_same_v<std::decay_t<First>, HalidoscopeOptions>) {
             halidoscope_with_options(first, std::forward<Rest>(rest)...);
@@ -3294,6 +3317,28 @@ protected:
             halidoscope_with_options(HalidoscopeOptions(), std::forward<First>(first), std::forward<Rest>(rest)...);
         }
     }
+
+    /** As above, but with separate arguments for the tracing run and the
+     * profiling runs, as braced lists. For example, to trace a smaller region
+     * than is profiled:
+     * halidoscope(options, {input, output.cropped(0, 0, 64)}, {input, output}) */
+    // @{
+    void halidoscope(const HalidoscopeOptions &options, JITUserContext *context,
+                     const HalidoscopeArgs &trace_args, const HalidoscopeArgs &profile_args) {
+        halidoscope_impl(options, context, trace_args, profile_args);
+    }
+    void halidoscope(const HalidoscopeOptions &options,
+                     const HalidoscopeArgs &trace_args, const HalidoscopeArgs &profile_args) {
+        halidoscope_impl(options, nullptr, trace_args, profile_args);
+    }
+    void halidoscope(JITUserContext *context,
+                     const HalidoscopeArgs &trace_args, const HalidoscopeArgs &profile_args) {
+        halidoscope_impl(HalidoscopeOptions(), context, trace_args, profile_args);
+    }
+    void halidoscope(const HalidoscopeArgs &trace_args, const HalidoscopeArgs &profile_args) {
+        halidoscope_impl(HalidoscopeOptions(), nullptr, trace_args, profile_args);
+    }
+    // @}
 
 private:
     template<typename First, typename... Rest>
@@ -3307,14 +3352,12 @@ private:
 
     template<typename... Args>
     void halidoscope_with_context(const HalidoscopeOptions &options, JITUserContext *context, const Args &...args) {
-        std::vector<Argument> arguments = ordered_input_arguments();
-        auto prepare = [&](Pipeline &p, const Target &t) {
-            Callable c = p.compile_to_callable(arguments, t);
-            return Internal::HalidoscopeRunner{[c, &args...](JITUserContext *ctx) { (void)c(ctx, args...); },
-                                               std::make_unique<ProfilerScope>(c)};
-        };
-        Internal::pipeline_halidoscope(get_pipeline(), context, prepare, options, get_target());
+        HalidoscopeArgs halidoscope_args(args...);
+        halidoscope_impl(options, context, halidoscope_args, halidoscope_args);
     }
+
+    void halidoscope_impl(const HalidoscopeOptions &options, JITUserContext *context,
+                          const HalidoscopeArgs &trace_args, const HalidoscopeArgs &profile_args);
 
 public:
     // Create Input<Func> with dynamic type & dimensions

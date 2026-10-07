@@ -1,5 +1,5 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
 use serde::Serialize;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 // ── Type system ──────────────────────────────────────────────────────────────────────────────────
 
@@ -189,19 +189,60 @@ pub struct FuncStats {
     pub max_reuse_distance: u64,
 }
 
-/// Full spatial layout of a Func: pixel dimensions plus the channel axis (logical dim 2).
-#[derive(Debug, Clone, Copy)]
+/// The layout of every element of a Func. Logical dims 0 and 1 are the image axes, and `mins` and
+/// `extents` describe dims 2 and up. Elements are stored row-major: x varies fastest, then y, then
+/// dim 2, and so on.
+#[derive(Debug, Clone)]
 pub struct FuncGeometry {
     pub width: usize,
     pub height: usize,
-    pub channels: usize,
     pub min_x: i32,
     pub min_y: i32,
-    pub min_c: i32,
-    pub max_store_count: u32,
-    pub max_load_count: u32,
-    pub max_redundant_store_count: u32,
-    pub max_reuse_distance: u64,
+    pub mins: Vec<i32>,
+    pub extents: Vec<usize>,
+}
+
+impl FuncGeometry {
+    /// The number of pixels in one 2D plane.
+    pub fn pixels(&self) -> usize {
+        self.width * self.height
+    }
+
+    /// The total number of elements.
+    pub fn num_elements(&self) -> usize {
+        self.pixels() * self.extents.iter().product::<usize>()
+    }
+
+    /// The extent of logical dim 2, or 1 if there is none.
+    pub fn channels(&self) -> usize {
+        self.extents.first().copied().unwrap_or(1)
+    }
+
+    /// The element index of lane `lane` of `pkt`, or `None` if it falls outside the Func. Dims
+    /// the packet doesn't have are taken to be at their min.
+    #[inline]
+    fn element_index(
+        &self,
+        pkt: &TracePacket,
+        lane: usize,
+        n_lanes: usize,
+        dims_per_lane: usize,
+    ) -> Option<usize> {
+        let coord = |d: usize, min: i32, extent: usize| -> Option<usize> {
+            let c = if d < dims_per_lane {
+                pkt.coordinates[d * n_lanes + lane] - min
+            } else {
+                0
+            };
+            (c >= 0 && (c as usize) < extent).then_some(c as usize)
+        };
+        let mut index = 0;
+        for (i, (&min, &extent)) in self.mins.iter().zip(&self.extents).enumerate().rev() {
+            index = index * extent + coord(i + 2, min, extent)?;
+        }
+        index = index * self.height + coord(1, self.min_y, self.height)?;
+        Some(index * self.width + coord(0, self.min_x, self.width)?)
+    }
 }
 
 /// One instance of a Func's realize, produce, or consume node: the packet index range it spans
@@ -400,6 +441,25 @@ fn lane_in_bounds(pkt: &TracePacket, lane: usize, bounds: &[i32]) -> bool {
     } else {
         (0..box_lanes).any(in_box_lane)
     }
+}
+
+/// Region events traced inside a vectorized loop have a min/extent pair per lane, stored
+/// struct-of-vectors like load/store coordinates, and the lanes' regions may not be contiguous.
+/// This returns the bounding box of the lanes' regions of a Func with `dims` dimensions.
+fn bounding_box(coords: &[i32], dims: usize) -> Vec<i32> {
+    if dims == 0 || coords.len() <= 2 * dims || coords.len() % (2 * dims) != 0 {
+        return coords.to_vec();
+    }
+    let lanes = coords.len() / (2 * dims);
+    (0..dims)
+        .flat_map(|d| {
+            let mins = &coords[2 * d * lanes..(2 * d + 1) * lanes];
+            let extents = &coords[(2 * d + 1) * lanes..(2 * d + 2) * lanes];
+            let min = *mins.iter().min().unwrap();
+            let max = mins.iter().zip(extents).map(|(m, e)| m + e).max().unwrap();
+            [min, max - min]
+        })
+        .collect()
 }
 
 // ── func_type_and_dim tag parsing ─────────────────────────────────────────────
@@ -763,10 +823,11 @@ impl Trace {
                 }
                 EventCode::Produce => {
                     produce_bounds_by_id.insert(id, pkt.coordinates.clone());
-                    produce_box_by_parent
-                        .insert((parent_id, func_name.clone()), pkt.coordinates.clone());
+                    let dims = funcs.get(&func_name).map_or(0, |f| f.min_coords.len());
+                    let bounds = bounding_box(&pkt.coordinates, dims);
+                    produce_box_by_parent.insert((parent_id, func_name.clone()), bounds.clone());
                     if let Some(r) = enclosing_realization(&id_to_info, parent_id, &func_name) {
-                        produce_box_by_realization.insert(r, pkt.coordinates.clone());
+                        produce_box_by_realization.insert(r, bounds.clone());
                     }
                     open_live_box(
                         &mut liveness_by_func,
@@ -775,7 +836,7 @@ impl Trace {
                         &func_name,
                         id,
                         packets.len() as u32,
-                        pkt.coordinates.clone(),
+                        bounds,
                     );
                 }
                 EventCode::Consume => {
@@ -786,7 +847,10 @@ impl Trace {
                                 .and_then(|r| produce_box_by_realization.get(&r))
                         })
                         .cloned()
-                        .unwrap_or_else(|| pkt.coordinates.clone());
+                        .unwrap_or_else(|| {
+                            let dims = funcs.get(&func_name).map_or(0, |f| f.min_coords.len());
+                            bounding_box(&pkt.coordinates, dims)
+                        });
                     open_live_box(
                         &mut liveness_by_func,
                         &mut open_boxes,
@@ -907,38 +971,29 @@ impl Trace {
         // (Redundant store count: a store is redundant when the incoming value bit-matches the
         // previously stored value at that location and there have been no intervening loads from
         // that location. Reuse distance: the packet-index gap between a store and the next load
-        // from the same (x, y, channel).)
+        // from the same location.)
         //
-        // We extract extents/channels first (shared borrow) then write back (mut borrow) to keep
+        // We extract the geometry first (shared borrow) then write back (mut borrow) to keep
         // the two borrows of `funcs` non-overlapping.
         let total_store_funcs = store_indices_by_func.len();
         let mut merge_last_reported_pct: u8 = 50;
         for (index, (func_name, store_indices)) in store_indices_by_func.iter().enumerate() {
-            let extents = funcs.get(func_name.as_str()).and_then(func_extents);
-            if let Some((w, h, min_x, min_y)) = extents {
-                let stats = funcs.get(func_name.as_str()).unwrap();
-                let (channels, min_c) = if stats.min_coords.len() >= 3 {
-                    (
-                        (stats.max_coords[2] - stats.min_coords[2]).max(1) as usize,
-                        stats.min_coords[2],
-                    )
-                } else {
-                    (1, 0)
-                };
-
+            let geom = funcs.get(func_name.as_str()).and_then(func_geometry);
+            if let Some(geom) = geom {
                 let load_indices = load_indices_by_func
                     .get(func_name.as_str())
                     .map(Vec::as_slice)
                     .unwrap_or(&[]);
 
-                let mut store_counts = vec![0u32; w * h];
-                let mut load_counts = vec![0u32; w * h];
+                let n = geom.num_elements();
+                let mut store_counts = vec![0u32; n];
+                let mut load_counts = vec![0u32; n];
                 // None = no store has landed here yet; Some(bits) = last stored value as u64 bits.
-                let mut last_values = vec![None::<u64>; w * h * channels];
-                let mut redundant_counts = vec![0u32; w * h];
-                // usize::MAX = no store has landed at this (x, y, channel) yet.
-                let mut last_store_at = vec![usize::MAX; w * h * channels];
-                let mut max_reuse_distances = vec![0u64; w * h];
+                let mut last_values = vec![None::<u64>; n];
+                let mut redundant_counts = vec![0u32; n];
+                // usize::MAX = no store has landed here yet.
+                let mut last_store_at = vec![usize::MAX; n];
+                let mut max_reuse_distances = vec![0u64; n];
                 let mut si = 0;
                 let mut li = 0;
 
@@ -951,74 +1006,34 @@ impl Trace {
                         si += 1;
 
                         let pkt = &packets[global_idx];
-                        for_each_lane_pixel(
-                            pkt,
-                            min_x,
-                            min_y,
-                            w,
-                            h,
-                            None,
-                            |_lane, pixel_idx, _val_idx| {
-                                store_counts[pixel_idx] += 1;
-                            },
-                        );
-                        for_each_lane_pixel(
-                            pkt,
-                            min_x,
-                            min_y,
-                            w,
-                            h,
-                            Some((min_c, channels)),
-                            |lane, pixel_idx, val_idx| {
-                                if let Some(v) = pkt.decoded_value(lane) {
-                                    let v_bits = v.to_bits();
-                                    if let Some(prev_bits) = last_values[val_idx] {
-                                        if prev_bits == v_bits {
-                                            redundant_counts[pixel_idx] += 1;
-                                        }
-                                    }
-                                    last_values[val_idx] = Some(v_bits);
+                        for_each_lane_element(pkt, &geom, |lane, i| {
+                            store_counts[i] += 1;
+                            if let Some(v) = pkt.decoded_value(lane) {
+                                let v_bits = v.to_bits();
+                                if last_values[i] == Some(v_bits) {
+                                    redundant_counts[i] += 1;
                                 }
-                                last_store_at[val_idx] = global_idx;
-                            },
-                        );
+                                last_values[i] = Some(v_bits);
+                            }
+                            last_store_at[i] = global_idx;
+                        });
                     } else {
                         let global_idx = load_indices[li];
                         li += 1;
 
                         let pkt = &packets[global_idx];
-                        for_each_lane_pixel(
-                            pkt,
-                            min_x,
-                            min_y,
-                            w,
-                            h,
-                            None,
-                            |_lane, pixel_idx, _val_idx| {
-                                load_counts[pixel_idx] += 1;
-                            },
-                        );
-                        for_each_lane_pixel(
-                            pkt,
-                            min_x,
-                            min_y,
-                            w,
-                            h,
-                            Some((min_c, channels)),
-                            |_lane, pixel_idx, val_idx| {
-                                // A load resets redundancy tracking for this location: an
-                                // intervening load means the next store, even if bit-identical,
-                                // is not redundant.
-                                last_values[val_idx] = None;
+                        for_each_lane_element(pkt, &geom, |_lane, i| {
+                            load_counts[i] += 1;
+                            // A load resets redundancy tracking for this location: an
+                            // intervening load means the next store, even if bit-identical,
+                            // is not redundant.
+                            last_values[i] = None;
 
-                                if last_store_at[val_idx] != usize::MAX {
-                                    let dist = (global_idx - last_store_at[val_idx]) as u64;
-                                    if dist > max_reuse_distances[pixel_idx] {
-                                        max_reuse_distances[pixel_idx] = dist;
-                                    }
-                                }
-                            },
-                        );
+                            if last_store_at[i] != usize::MAX {
+                                let dist = (global_idx - last_store_at[i]) as u64;
+                                max_reuse_distances[i] = max_reuse_distances[i].max(dist);
+                            }
+                        });
                     }
                 }
 
@@ -1050,7 +1065,7 @@ impl Trace {
 
         // Pipeline inputs: Funcs with loads but no stores. These aren't covered by the merged
         // loop above, so compute their load count and reuse distance in one pass here. The first
-        // load at each (x, y, channel) is free (analogous to a memcpy); subsequent loads measure
+        // load at each location is free (analogous to a memcpy); subsequent loads measure
         // distance from that first load.
         let total_load_funcs = load_indices_by_func.len();
         let mut load_funcs_last_reported_pct: u8 = 75;
@@ -1064,54 +1079,25 @@ impl Trace {
             if store_indices_by_func.contains_key(func_name.as_str()) {
                 continue; // handled by the merged loop above
             }
-            let extents = funcs.get(func_name.as_str()).and_then(func_extents);
-            if let Some((w, h, min_x, min_y)) = extents {
-                let stats = funcs.get(func_name.as_str()).unwrap();
-                let (channels, min_c) = if stats.min_coords.len() >= 3 {
-                    (
-                        (stats.max_coords[2] - stats.min_coords[2]).max(1) as usize,
-                        stats.min_coords[2],
-                    )
-                } else {
-                    (1, 0)
-                };
-
-                let mut load_counts = vec![0u32; w * h];
-                // usize::MAX = first load hasn't occurred at this (x, y, channel) yet.
-                let mut first_load_at = vec![usize::MAX; w * h * channels];
-                let mut max_reuse_distances = vec![0u64; w * h];
+            let geom = funcs.get(func_name.as_str()).and_then(func_geometry);
+            if let Some(geom) = geom {
+                let n = geom.num_elements();
+                let mut load_counts = vec![0u32; n];
+                // usize::MAX = first load hasn't occurred here yet.
+                let mut first_load_at = vec![usize::MAX; n];
+                let mut max_reuse_distances = vec![0u64; n];
 
                 for &global_idx in load_indices {
                     let pkt = &packets[global_idx];
-                    for_each_lane_pixel(
-                        pkt,
-                        min_x,
-                        min_y,
-                        w,
-                        h,
-                        None,
-                        |_lane, pixel_idx, _val_idx| {
-                            load_counts[pixel_idx] += 1;
-                        },
-                    );
-                    for_each_lane_pixel(
-                        pkt,
-                        min_x,
-                        min_y,
-                        w,
-                        h,
-                        Some((min_c, channels)),
-                        |_lane, pixel_idx, val_idx| {
-                            if first_load_at[val_idx] == usize::MAX {
-                                first_load_at[val_idx] = global_idx;
-                            } else {
-                                let dist = (global_idx - first_load_at[val_idx]) as u64;
-                                if dist > max_reuse_distances[pixel_idx] {
-                                    max_reuse_distances[pixel_idx] = dist;
-                                }
-                            }
-                        },
-                    );
+                    for_each_lane_element(pkt, &geom, |_lane, i| {
+                        load_counts[i] += 1;
+                        if first_load_at[i] == usize::MAX {
+                            first_load_at[i] = global_idx;
+                        } else {
+                            let dist = (global_idx - first_load_at[i]) as u64;
+                            max_reuse_distances[i] = max_reuse_distances[i].max(dist);
+                        }
+                    });
                 }
 
                 if let Some(stats) = funcs.get_mut(func_name.as_str()) {
@@ -1190,32 +1176,9 @@ impl Trace {
         self.thread_ids_by_func.get(func_name)
     }
 
-    /// Spatial layout for `func_name`, or `None` if it has no usable coordinate extent. Reuses
-    /// `func_extents` for pixel dims so the renderer and the metadata layer agree, and adds the
-    /// channel axis (logical dim 2).
+    /// The element layout of `func_name`, or `None` if it has no usable coordinate extent.
     pub fn func_geometry(&self, func_name: &str) -> Option<FuncGeometry> {
-        let stats = self.funcs.get(func_name)?;
-        let (width, height, min_x, min_y) = func_extents(stats)?;
-        let (channels, min_c) = if stats.min_coords.len() >= 3 {
-            (
-                (stats.max_coords[2] - stats.min_coords[2]).max(0) as usize,
-                stats.min_coords[2],
-            )
-        } else {
-            (1, 0)
-        };
-        Some(FuncGeometry {
-            width,
-            height,
-            channels: channels.max(1),
-            min_x,
-            min_y,
-            min_c,
-            max_store_count: stats.max_store_count,
-            max_load_count: stats.max_load_count,
-            max_redundant_store_count: stats.max_redundant_store_count,
-            max_reuse_distance: stats.max_reuse_distance,
-        })
+        func_geometry(self.funcs.get(func_name)?)
     }
 }
 
@@ -1298,7 +1261,7 @@ fn enclosing_realization(
 
 /// Returns `(width, height, min_x, min_y)` for a Func, or `None` if the stats
 /// have no coordinate information or produce a zero-area extent.
-pub fn func_extents(stats: &FuncStats) -> Option<(usize, usize, i32, i32)> {
+fn func_extents(stats: &FuncStats) -> Option<(usize, usize, i32, i32)> {
     if stats.min_coords.is_empty() || stats.max_coords.is_empty() {
         return None;
     }
@@ -1320,83 +1283,50 @@ pub fn func_extents(stats: &FuncStats) -> Option<(usize, usize, i32, i32)> {
     Some((width, height, min_x, min_y))
 }
 
-/// Returns the `(x, y)` canvas pixel for lane `l` of `pkt`, relative to the
-/// Func's origin. Caller must bounds-check before indexing the canvas.
-#[inline]
-pub(crate) fn pixel_xy(
-    pkt: &TracePacket,
-    lane: usize,
-    n_lanes: usize,
-    dims_per_lane: usize,
-    min_x: i32,
-    min_y: i32,
-) -> (i32, i32) {
-    let x = pkt.coordinates[lane] - min_x;
-    let y = if dims_per_lane >= 2 {
-        pkt.coordinates[n_lanes + lane] - min_y
-    } else {
-        -min_y
-    };
-    (x, y)
-}
-
-/// Whether lane `lane` of `pkt` has coordinate `slice[i]` in logical dim `first_dim + i` for every
-/// `i`. Dims the packet doesn't have are treated as matching.
-#[inline]
-pub(crate) fn lane_in_slice(
-    pkt: &TracePacket,
-    lane: usize,
-    first_dim: usize,
-    slice: &[i32],
-) -> bool {
-    let n_lanes = pkt.type_.lanes.max(1) as usize;
-    let dims_per_lane = pkt.coordinates.len() / n_lanes;
-    slice.iter().enumerate().all(|(i, &c)| {
-        let d = first_dim + i;
-        d >= dims_per_lane || pkt.coordinates[d * n_lanes + lane] == c
+/// The element layout of a Func with `stats`, or `None` if it has no usable coordinate extent.
+pub fn func_geometry(stats: &FuncStats) -> Option<FuncGeometry> {
+    let (width, height, min_x, min_y) = func_extents(stats)?;
+    let mins = stats.min_coords.get(2..).unwrap_or(&[]).to_vec();
+    let extents = mins
+        .iter()
+        .zip(stats.max_coords.get(2..).unwrap_or(&[]))
+        .map(|(&min, &max)| (max - min).max(1) as usize)
+        .collect();
+    Some(FuncGeometry {
+        width,
+        height,
+        min_x,
+        min_y,
+        mins,
+        extents,
     })
 }
 
-/// Iterates over each lane of `pkt` that falls within the Func's `w x h` extents, invoking
-/// `f(lane, pixel_idx, val_idx)`. `pixel_idx` is the flattened `y * w + x` location.
-///
-/// When `channel` is `Some((min_c, channels))`, lanes are additionally filtered to those whose
-/// channel coordinate falls within `0..channels`, and `val_idx` is the flattened
-/// `pixel_idx * channels + c` location; otherwise `val_idx` is just `pixel_idx`.
-pub fn for_each_lane_pixel(
+/// Invokes `f(lane, index)` for each lane of `pkt` that falls within `geom`, where `index` is the
+/// lane's element index (see `FuncGeometry`).
+pub fn for_each_lane_element(
     pkt: &TracePacket,
-    min_x: i32,
-    min_y: i32,
-    w: usize,
-    h: usize,
-    channel: Option<(i32, usize)>,
-    mut f: impl FnMut(usize, usize, usize),
+    geom: &FuncGeometry,
+    mut f: impl FnMut(usize, usize),
 ) {
     let n_lanes = pkt.type_.lanes.max(1) as usize;
     let dims_per_lane = pkt.coordinates.len() / n_lanes;
     for lane in 0..n_lanes {
-        let (x, y) = pixel_xy(pkt, lane, n_lanes, dims_per_lane, min_x, min_y);
-        if x < 0 || y < 0 || x as usize >= w || y as usize >= h {
-            continue;
+        if let Some(index) = geom.element_index(pkt, lane, n_lanes, dims_per_lane) {
+            f(lane, index);
         }
+    }
+}
 
-        let pixel_idx = y as usize * w + x as usize;
-        let val_idx = if let Some((min_c, channels)) = channel {
-            let c = if dims_per_lane >= 3 {
-                pkt.coordinates[2 * n_lanes + lane] - min_c
-            } else {
-                0
-            };
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-            if c < 0 || c as usize >= channels {
-                continue;
-            }
-
-            pixel_idx * channels + c as usize
-        } else {
-            pixel_idx
-        };
-
-        f(lane, pixel_idx, val_idx);
+    #[test]
+    fn bounding_box_of_lanes() {
+        // Two dims, four lanes: x mins 0, 2, 4, 6 with extent 1; y min 3 with extent 2.
+        let coords = [0, 2, 4, 6, 1, 1, 1, 1, 3, 3, 3, 3, 2, 2, 2, 2];
+        assert_eq!(bounding_box(&coords, 2), vec![0, 7, 3, 2]);
+        assert_eq!(bounding_box(&[5, 4, 1, 2], 2), vec![5, 4, 1, 2]);
     }
 }

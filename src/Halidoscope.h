@@ -51,12 +51,16 @@ struct HalidoscopeRunner {
     std::unique_ptr<ProfilerScope> profiler_scope;
 };
 
+using HalidoscopePrepareFn = std::function<HalidoscopeRunner(Pipeline &, const Target &)>;
+
 /** The implementation of Pipeline::halidoscope() and
- * GeneratorBase::halidoscope(). prepare compiles an instrumented copy of the
- * pipeline for a Target. */
+ * GeneratorBase::halidoscope(). prepare_trace and prepare_profile compile an
+ * instrumented copy of the pipeline for a Target, for the tracing run and the
+ * profiling runs respectively. */
 void pipeline_halidoscope(const Pipeline &pipeline,
                           JITUserContext *context,
-                          const std::function<HalidoscopeRunner(Pipeline &, const Target &)> &prepare,
+                          const HalidoscopePrepareFn &prepare_trace,
+                          const HalidoscopePrepareFn &prepare_profile,
                           const HalidoscopeOptions &options,
                           const Target &target);
 

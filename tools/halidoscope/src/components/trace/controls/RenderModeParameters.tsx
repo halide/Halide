@@ -1,8 +1,9 @@
-import { useAtom } from "jotai";
+import { useAtom, useAtomValue } from "jotai";
 import * as React from "react";
 
 import Select from "@/components/shared/Select";
 import ValueControls from "@/components/trace/controls/ValueControls";
+import { useFuncView } from "@/hooks/funcView";
 import { useTraceContext } from "@/hooks/trace";
 import { funcAtom } from "@/state/func";
 import { type NormalizationMode, renderAtom } from "@/state/render";
@@ -11,21 +12,19 @@ import { threadAtom, NO_THREAD_INFO_SENTINEL_ID } from "@/state/thread";
 
 function RenderModeParameters() {
   const { funcs } = useTraceContext();
-  const [activeFunc, setActiveFunc] = useAtom(funcAtom);
+  const activeFunc = useAtomValue(funcAtom);
   const [render, setRender] = useAtom(renderAtom);
+  const [{ renderMode }] = useFuncView(funcs[activeFunc]);
   const [tabularData, setTabularData] = useAtom(tabularDataAtom);
   const [thread, setThread] = useAtom(threadAtom);
 
   const renderSecondaryControls = React.useCallback(() => {
-    switch (render.renderMode) {
+    switch (renderMode) {
       case "Grayscale":
+      case "Plot":
       case "RGB":
         return funcs[activeFunc] ? (
-          <ValueControls
-            key={activeFunc}
-            func={funcs[activeFunc]}
-            firstSliderDim={render.renderMode === "RGB" ? 3 : 2}
-          />
+          <ValueControls key={activeFunc} func={funcs[activeFunc]} />
         ) : null;
       case "Store Frequency":
       case "Load Frequency":
@@ -100,6 +99,7 @@ function RenderModeParameters() {
         );
     }
   }, [
+    renderMode,
     render,
     setRender,
     tabularData,
@@ -110,21 +110,7 @@ function RenderModeParameters() {
     activeFunc,
   ]);
 
-  return (
-    <div className="flex flex-col gap-2">
-      <Select
-        id="func-select"
-        label="Selected Func"
-        value={activeFunc}
-        onValueChange={setActiveFunc}
-        items={Object.keys(funcs).map((func) => ({
-          value: func,
-          label: func,
-        }))}
-      />
-      {renderSecondaryControls()}
-    </div>
-  );
+  return renderSecondaryControls();
 }
 
 export default RenderModeParameters;

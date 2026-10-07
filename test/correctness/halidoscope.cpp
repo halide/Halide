@@ -2,7 +2,7 @@
 // profile instrumentation, but avoids depending on the actual Halidoscope
 // GUI binary being built or installed anywhere in this environment by
 // pointing HalidoscopeOptions::path at this test binary itself,
-// re-exec'd with the same "--trace <path> [--profile <path>]" argv shape
+// re-exec'd with the same "--trace <path> --stmt <path> [--profile <path>]" argv shape
 // Internal::pipeline_halidoscope() would pass to the real thing -- mirroring
 // test/correctness/run_process.cpp.
 //
@@ -73,11 +73,13 @@ public:
 
     enum Mode { Plain,
                 WithContext,
+                SeparateArgs,
                 WrongType,
                 WrongCount } mode = Plain;
     HalidoscopeOptions options;
     Buffer<uint8_t> in;
     Buffer<int32_t> out;
+    Buffer<int32_t> trace_out;
     JITUserContext user_context;
 
     void generate() {
@@ -93,6 +95,9 @@ public:
             break;
         case WithContext:
             halidoscope(options, &user_context, in, 7, out);
+            break;
+        case SeparateArgs:
+            halidoscope(options, {in, 11, trace_out}, {in, 13, out});
             break;
         case WrongType:
             halidoscope(options, in, 5.0f, out);
@@ -146,8 +151,12 @@ int main(int argc, char **argv) {
         check(contains(profile_json, "\"pipelines\": ["));
         check(contains(profile_json, "\"name\": \"f\""));
 
+        std::string stmt_path = dir + "/conceptual_stmt.html";
+        check(contains(slurp(stmt_path), "<html"));
+
         Internal::file_unlink(trace_path);
         Internal::file_unlink(profile_path);
+        Internal::file_unlink(dir + "/conceptual_stmt.html");
         Internal::dir_rmdir(dir);
     }
 
@@ -169,6 +178,7 @@ int main(int argc, char **argv) {
         check(!Internal::file_exists(dir + "/profile.json"));
 
         Internal::file_unlink(dir + "/trace.hltrace");
+        Internal::file_unlink(dir + "/conceptual_stmt.html");
         Internal::dir_rmdir(dir);
     }
 
@@ -191,6 +201,7 @@ int main(int argc, char **argv) {
 
         Internal::file_unlink(dir + "/trace.hltrace");
         Internal::file_unlink(dir + "/profile.json");
+        Internal::file_unlink(dir + "/conceptual_stmt.html");
         Internal::dir_rmdir(dir);
     }
 
@@ -208,6 +219,7 @@ int main(int argc, char **argv) {
         Buffer<uint8_t> in(16, 16);
         in.fill(3);
         Buffer<int32_t> out(16, 16);
+        Buffer<int32_t> trace_out(4, 4);
 
         auto run = [&](HalidoscopeGen::Mode mode) {
             auto gen = HalidoscopeGen::create(context);
@@ -215,6 +227,7 @@ int main(int argc, char **argv) {
             gen->options = options;
             gen->in = in;
             gen->out = out;
+            gen->trace_out = trace_out;
             static_cast<Internal::AbstractGenerator &>(*gen).build_pipeline();
         };
 
@@ -232,8 +245,15 @@ int main(int argc, char **argv) {
         run(HalidoscopeGen::WithContext);
         check(out(0, 0) == (3 + 7) * 2);
 
+        // Separate arguments for the tracing run and the profiling runs.
+        out.fill(0);
+        run(HalidoscopeGen::SeparateArgs);
+        check(trace_out(0, 0) == (3 + 11) * 2);
+        check(out(0, 0) == (3 + 13) * 2);
+
         Internal::file_unlink(trace_path);
         Internal::file_unlink(profile_path);
+        Internal::file_unlink(dir + "/conceptual_stmt.html");
         Internal::dir_rmdir(dir);
 
         check(exception_thrown([&]() { run(HalidoscopeGen::WrongType); }));

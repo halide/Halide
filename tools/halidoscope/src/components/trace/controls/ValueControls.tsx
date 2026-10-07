@@ -1,19 +1,12 @@
-import { useAtom } from "jotai";
 import { Label, Slider } from "radix-ui";
 import * as React from "react";
 
-import {
-  funcViewAtom,
-  getFuncView,
-  maxZoom,
-  type FuncView,
-} from "@/state/funcView";
+import { useFuncView } from "@/hooks/funcView";
+import { maxZoom } from "@/state/funcView";
 import type { FuncMeta } from "@/types/trace";
 
 interface Props {
   func: FuncMeta;
-  /** The first logical dim that gets a slice slider. */
-  firstSliderDim: number;
 }
 
 function LevelInput({
@@ -92,23 +85,45 @@ function LabeledSlider({
   );
 }
 
-function ValueControls({ func, firstSliderDim }: Props) {
-  const [views, setViews] = useAtom(funcViewAtom);
-  const view = getFuncView(views[func.name], func);
-
-  const update = React.useCallback(
-    (change: Partial<FuncView>) => {
-      setViews((prev) => ({
-        ...prev,
-        [func.name]: { ...getFuncView(prev[func.name], func), ...change },
-      }));
-    },
-    [func, setViews],
-  );
-
-  const sliderDims = func.min_coords
+/** The dims from `firstSliderDim` on with more than one coordinate, and their inclusive ranges. */
+export function sliceSliderDims(func: FuncMeta, firstSliderDim: number) {
+  return func.min_coords
     .map((min, d) => ({ d, min, max: func.max_coords[d] - 1 }))
     .filter(({ d, min, max }) => d >= firstSliderDim && max > min);
+}
+
+interface SliceSlidersProps {
+  func: FuncMeta;
+  /** The first logical dim that gets a slice slider. */
+  firstSliderDim: number;
+}
+
+/** A slider for each non-image dim of a Func with more than one coordinate, selecting the slice displayed. */
+export function SliceSliders({ func, firstSliderDim }: SliceSlidersProps) {
+  const [view, update] = useFuncView(func);
+
+  return (
+    <div className="flex flex-col gap-2">
+      {sliceSliderDims(func, firstSliderDim).map(({ d, min, max }) => (
+        <LabeledSlider
+          key={d}
+          label={`Dimension ${d}`}
+          min={min}
+          max={max}
+          value={view.slice[d - 2]}
+          onChange={(c) => {
+            const slice = [...view.slice];
+            slice[d - 2] = c;
+            update({ slice });
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ValueControls({ func }: Props) {
+  const [view, update] = useFuncView(func);
 
   return (
     <div className="flex flex-col gap-2">
@@ -133,20 +148,6 @@ function ValueControls({ func, firstSliderDim }: Props) {
         value={view.zoom}
         onChange={(zoom) => update({ zoom })}
       />
-      {sliderDims.map(({ d, min, max }) => (
-        <LabeledSlider
-          key={d}
-          label={`Dimension ${d}`}
-          min={min}
-          max={max}
-          value={view.slice[d - 2]}
-          onChange={(c) => {
-            const slice = [...view.slice];
-            slice[d - 2] = c;
-            update({ slice });
-          }}
-        />
-      ))}
     </div>
   );
 }

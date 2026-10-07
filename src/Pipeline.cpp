@@ -1015,7 +1015,7 @@ void Pipeline::halidoscope(JITUserContext *context, std::vector<int32_t> sizes, 
         return HalidoscopeRunner{[&p, t, &sizes](JITUserContext *c) { p.realize(c, sizes, t); },
                                  std::make_unique<ProfilerScope>(p)};
     };
-    pipeline_halidoscope(*this, context, prepare, options, target);
+    pipeline_halidoscope(*this, context, prepare, prepare, options, target);
 }
 
 void Pipeline::halidoscope(JITUserContext *context, RealizationArg output, const HalidoscopeOptions &options, const Target &target) {
@@ -1026,7 +1026,7 @@ void Pipeline::halidoscope(JITUserContext *context, RealizationArg output, const
         return HalidoscopeRunner{[&p, t, &r](JITUserContext *c) { p.realize(c, r, t); },
                                  std::make_unique<ProfilerScope>(p)};
     };
-    pipeline_halidoscope(*this, context, prepare, options, target);
+    pipeline_halidoscope(*this, context, prepare, prepare, options, target);
 }
 
 ProfilerScope::ProfilerScope(Pipeline p)

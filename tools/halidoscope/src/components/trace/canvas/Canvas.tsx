@@ -16,9 +16,11 @@ import FuncNode from "@/components/trace/canvas/FuncNode";
 import Overlay from "@/components/trace/canvas/Overlay";
 import ValueStatus from "@/components/trace/canvas/ValueStatus";
 import { funcAtom } from "@/state/func";
-import { funcViewAtom, getFuncView } from "@/state/funcView";
+import { displaySize, funcViewAtom, getFuncView } from "@/state/funcView";
 import { edgesAtom } from "@/state/graph";
 import { LIVENESS_LEGEND, livenessAtom } from "@/state/liveness";
+import { traceViewportAtom } from "@/state/navigation";
+import { useOpenFuncMenu } from "@/hooks/funcMenu";
 import type { FuncMeta } from "@/types/trace";
 import { buildEdges, buildNodes, getLayoutedElements } from "@/utils/graph";
 
@@ -37,10 +39,10 @@ interface Props {
 
 function Canvas({ funcs, dagEdges }: Props) {
   const views = useAtomValue(funcViewAtom);
-  // Only zoom affects layout, so key the layout on the zooms rather than the whole views.
-  const zoomKey = JSON.stringify(
-    Object.entries(funcs).map(
-      ([name, func]) => getFuncView(views[name], func).zoom,
+  // Only display sizes affect layout, so key the layout on them rather than the whole views.
+  const sizeKey = JSON.stringify(
+    Object.entries(funcs).map(([name, func]) =>
+      displaySize(func, getFuncView(views[name], func)),
     ),
   );
   const { nodes: initialNodes, edges: initialEdges } = React.useMemo(() => {
@@ -49,7 +51,7 @@ function Canvas({ funcs, dagEdges }: Props) {
       buildEdges(dagEdges, "funcEdge"),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [funcs, dagEdges, zoomKey]);
+  }, [funcs, dagEdges, sizeKey]);
   const [nodes, setNodes, onNodesChange] =
     useNodesState<Node<FuncMeta>>(initialNodes);
 
@@ -60,7 +62,15 @@ function Canvas({ funcs, dagEdges }: Props) {
   const setFunc = useSetAtom(funcAtom);
   const liveness = useAtomValue(livenessAtom);
   const { zoom } = useViewport();
-  const { zoomTo } = useReactFlow();
+  const { zoomTo, getViewport } = useReactFlow();
+  const openMenu = useOpenFuncMenu();
+
+  const [savedViewport, setSavedViewport] = useAtom(traceViewportAtom);
+  const [initialViewport] = React.useState(savedViewport);
+  React.useEffect(
+    () => () => setSavedViewport(getViewport()),
+    [getViewport, setSavedViewport],
+  );
 
   React.useEffect(() => {
     setEdges(initialEdges);
@@ -88,10 +98,13 @@ function Canvas({ funcs, dagEdges }: Props) {
         onEdgesChange={onEdgesChange}
         minZoom={1e-4}
         maxZoom={Infinity}
-        fitView
+        fitView={!initialViewport}
         fitViewOptions={{ padding: 0.1, maxZoom: 2 }}
+        defaultViewport={initialViewport ?? undefined}
         proOptions={{ hideAttribution: true }}
         onNodeClick={(_, node) => setFunc(node.data.name)}
+        onPaneClick={() => setFunc("")}
+        onNodeContextMenu={(event, node) => openMenu(event, node.data.name)}
       />
       {liveness.active ? (
         <Overlay className="bottom-2 left-2">

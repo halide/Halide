@@ -1,18 +1,20 @@
-import { useAtom } from "jotai";
-
 import Select from "@/components/shared/Select";
-import { renderAtom, RENDER_MODES, type RenderMode } from "@/state/render";
+import { useFuncView } from "@/hooks/funcView";
+import { renderModesFor, type RenderMode } from "@/state/render";
+import type { FuncMeta } from "@/types/trace";
 
-function RenderMode() {
-  const [render, setRender] = useAtom(renderAtom);
+interface Props {
+  func: FuncMeta;
+}
+
+function RenderMode({ func }: Props) {
+  const [view, update] = useFuncView(func);
 
   return (
     <Select
-      value={render.renderMode}
-      onValueChange={(value) =>
-        setRender({ ...render, renderMode: value as RenderMode })
-      }
-      items={RENDER_MODES.map((mode) => ({ value: mode, label: mode }))}
+      value={view.renderMode}
+      onValueChange={(value) => update({ renderMode: value as RenderMode })}
+      items={renderModesFor(func).map((mode) => ({ value: mode, label: mode }))}
     />
   );
 }

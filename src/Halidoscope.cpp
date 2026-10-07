@@ -160,7 +160,8 @@ namespace Internal {
 
 void pipeline_halidoscope(const Pipeline &pipeline,
                           JITUserContext *context,
-                          const std::function<HalidoscopeRunner(Pipeline &, const Target &)> &prepare,
+                          const HalidoscopePrepareFn &prepare_trace,
+                          const HalidoscopePrepareFn &prepare_profile,
                           const HalidoscopeOptions &options,
                           const Target &target_arg) {
     user_assert(pipeline.defined()) << "Pipeline is undefined\n";
@@ -198,17 +199,19 @@ void pipeline_halidoscope(const Pipeline &pipeline,
     std::string dir = options.output_dir ? *options.output_dir : dir_make_temp();
     std::string trace_path = dir + "/trace.hltrace";
     std::string profile_path = dir + "/profile.json";
+    std::string stmt_path = dir + "/conceptual_stmt.html";
 
     struct ScopedCleanup {
         bool armed;
-        std::string trace_path, profile_path, dir;
-        ScopedCleanup(bool armed, const std::string &tp, const std::string &pp, const std::string &d)
-            : armed(armed), trace_path(tp), profile_path(pp), dir(d) {
+        std::string trace_path, profile_path, stmt_path, dir;
+        ScopedCleanup(bool armed, const std::string &tp, const std::string &pp, const std::string &sp, const std::string &d)
+            : armed(armed), trace_path(tp), profile_path(pp), stmt_path(sp), dir(d) {
         }
         void run() {
             if (armed) {
                 ensure_no_file_exists(trace_path);
                 ensure_no_file_exists(profile_path);
+                ensure_no_file_exists(stmt_path);
                 dir_rmdir(dir);
                 armed = false;
             }
@@ -216,7 +219,12 @@ void pipeline_halidoscope(const Pipeline &pipeline,
         ~ScopedCleanup() {
             run();
         }
-    } scoped_cleanup(!options.output_dir, trace_path, profile_path, dir);
+    } scoped_cleanup(!options.output_dir, trace_path, profile_path, stmt_path, dir);
+
+    {
+        Pipeline p = deserialize_pipeline(data, external_params);
+        p.compile_to_conceptual_stmt(stmt_path, p.infer_arguments(), StmtOutputFormat::HTML, base_target);
+    }
 
     // --- Trace run: every Func's loads/stores/realizations, dumped to a
     // zstd-compressed binary trace file. ---
@@ -248,7 +256,7 @@ void pipeline_halidoscope(const Pipeline &pipeline,
         {
             ZstdPipeWriter trace_writer(trace_path, (int64_t)options.trace_file_size_limit * 1000000, context);
             JITSharedRuntime::set_trace_file(trace_writer.fd());
-            prepare(traced, trace_target).run(context);
+            prepare_trace(traced, trace_target).run(context);
         }
 
         // The pipe writer swaps in halidoscope_trace_fail when the limit is
@@ -274,7 +282,7 @@ void pipeline_halidoscope(const Pipeline &pipeline,
         Target profile_target = base_target.with_feature(Target::Profile);
 
         {
-            HalidoscopeRunner runner = prepare(profiled, profile_target);
+            HalidoscopeRunner runner = prepare_profile(profiled, profile_target);
             if (profile_runs) {
                 for (int i = 0; i < *profile_runs; i++) {
                     std::cout << "Halidoscope profiling run " << i + 1 << " of " << *profile_runs << "\n";
@@ -305,7 +313,7 @@ void pipeline_halidoscope(const Pipeline &pipeline,
     // --- Launch Halidoscope, blocking until the window is closed. ---
     std::string binary = halidoscope_path;
 
-    std::vector<std::string> halidoscope_args = {binary, "--trace", trace_path};
+    std::vector<std::string> halidoscope_args = {binary, "--trace", trace_path, "--stmt", stmt_path};
     if (profiling) {
         halidoscope_args.emplace_back("--profile");
         halidoscope_args.emplace_back(profile_path);

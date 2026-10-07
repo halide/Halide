@@ -75,7 +75,7 @@ impl TraceMeta {
             .map(|(name, stats)| {
                 let geom = trace.func_geometry(name);
                 let (width, height, channels) = match geom {
-                    Some(g) => (g.width as u32, g.height as u32, g.channels as u32),
+                    Some(g) => (g.width as u32, g.height as u32, g.channels() as u32),
                     None => (0, 0, 1),
                 };
 
@@ -159,12 +159,16 @@ fn pack_render_response(
     mut pixels: Vec<u8>,
     nan_overlay: Vec<u8>,
     inf_overlay: Vec<u8>,
+    written_mask: Vec<u8>,
     tabular_data: Vec<u32>,
 ) -> Vec<u8> {
-    pixels.reserve(nan_overlay.len() + inf_overlay.len() + tabular_data.len() * 4);
+    pixels.reserve(
+        nan_overlay.len() + inf_overlay.len() + written_mask.len() + tabular_data.len() * 4,
+    );
 
     pixels.extend_from_slice(&nan_overlay);
     pixels.extend_from_slice(&inf_overlay);
+    pixels.extend_from_slice(&written_mask);
 
     for v in tabular_data {
         pixels.extend_from_slice(&v.to_le_bytes());
@@ -257,6 +261,7 @@ pub fn render_grayscale(
     include_tabular_data: bool,
     include_nan: bool,
     include_inf: bool,
+    include_written: bool,
     state: State<AppState>,
 ) -> Result<Response, String> {
     let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
@@ -289,6 +294,12 @@ pub fn render_grayscale(
         Vec::new()
     };
 
+    let written_mask = if include_written {
+        renderer.to_written_mask()
+    } else {
+        Vec::new()
+    };
+
     let histogram = if include_tabular_data {
         renderer.to_histogram()
     } else {
@@ -299,6 +310,7 @@ pub fn render_grayscale(
         pixels,
         nan_overlay,
         inf_overlay,
+        written_mask,
         histogram,
     )))
 }
@@ -360,6 +372,7 @@ pub fn render_rgb(
         pixels,
         nan_overlay,
         inf_overlay,
+        Vec::new(),
         histogram,
     )))
 }
@@ -410,11 +423,14 @@ pub fn probe_value(
 }
 
 /// Renders a heatmap of store counts for `func` up to `global_index` and returns raw RGBA8 bytes.
+/// `slice` selects the 2D slice, as for `render_grayscale`. Likewise for the other metric
+/// renderers below.
 #[tauri::command]
 pub fn render_store_frequency(
     func: String,
     global_index: u32,
     normalization_mode: NormalizationMode,
+    slice: Vec<i32>,
     include_tabular_data: bool,
     include_nan: bool,
     include_inf: bool,
@@ -436,6 +452,7 @@ pub fn render_store_frequency(
     let renderer = store_frequency_renderers
         .get_mut(&func)
         .expect("just inserted");
+    renderer.set_slice(&slice);
 
     let store_indices = trace.func_store_indices(&func).unwrap_or(&[]);
     let k = store_indices.partition_point(|&p| p <= global_index as usize);
@@ -465,6 +482,7 @@ pub fn render_store_frequency(
         pixels,
         nan_overlay,
         inf_overlay,
+        Vec::new(),
         histogram,
     )))
 }
@@ -475,6 +493,7 @@ pub fn render_load_frequency(
     func: String,
     global_index: u32,
     normalization_mode: NormalizationMode,
+    slice: Vec<i32>,
     include_tabular_data: bool,
     include_nan: bool,
     include_inf: bool,
@@ -496,6 +515,7 @@ pub fn render_load_frequency(
     let renderer = load_frequency_renderers
         .get_mut(&func)
         .expect("just inserted");
+    renderer.set_slice(&slice);
 
     let load_indices = trace.func_load_indices(&func).unwrap_or(&[]);
     let k = load_indices.partition_point(|&p| p <= global_index as usize);
@@ -525,6 +545,7 @@ pub fn render_load_frequency(
         pixels,
         nan_overlay,
         inf_overlay,
+        Vec::new(),
         histogram,
     )))
 }
@@ -537,6 +558,7 @@ pub fn render_redundant_stores(
     func: String,
     global_index: u32,
     normalization_mode: NormalizationMode,
+    slice: Vec<i32>,
     include_tabular_data: bool,
     include_nan: bool,
     include_inf: bool,
@@ -556,6 +578,7 @@ pub fn render_redundant_stores(
         redundant_renderers.insert(func.clone(), rs);
     }
     let renderer = redundant_renderers.get_mut(&func).expect("just inserted");
+    renderer.set_slice(&slice);
 
     let store_indices = trace.func_store_indices(&func).unwrap_or(&[]);
     let load_indices = trace.func_load_indices(&func).unwrap_or(&[]);
@@ -587,18 +610,20 @@ pub fn render_redundant_stores(
         pixels,
         nan_overlay,
         inf_overlay,
+        Vec::new(),
         histogram,
     )))
 }
 
 /// Renders a heatmap of maximum store-to-load reuse distances for `func` up to `global_index`
 /// and returns raw RGBA8 bytes. Reuse distance is the number of packets elapsed between a store
-/// and the next load from the same (x, y, channel).
+/// and the next load from the same location.
 #[tauri::command]
 pub fn render_reuse_distance(
     func: String,
     global_index: u32,
     normalization_mode: NormalizationMode,
+    slice: Vec<i32>,
     include_tabular_data: bool,
     include_nan: bool,
     include_inf: bool,
@@ -620,6 +645,7 @@ pub fn render_reuse_distance(
     let renderer = reuse_distance_renderers
         .get_mut(&func)
         .expect("just inserted");
+    renderer.set_slice(&slice);
 
     let store_indices = trace.func_store_indices(&func).unwrap_or(&[]);
     let load_indices = trace.func_load_indices(&func).unwrap_or(&[]);
@@ -651,6 +677,7 @@ pub fn render_reuse_distance(
         pixels,
         nan_overlay,
         inf_overlay,
+        Vec::new(),
         histogram,
     )))
 }
@@ -659,6 +686,7 @@ pub fn render_reuse_distance(
 pub fn render_thread(
     func: String,
     global_index: u32,
+    slice: Vec<i32>,
     op_mode: ThreadOpMode,
     thread_id: String,
     include_nan: bool,
@@ -679,6 +707,7 @@ pub fn render_thread(
         thread_renderers.insert(func.clone(), rs);
     }
     let renderer = thread_renderers.get_mut(&func).expect("just inserted");
+    renderer.set_slice(&slice);
     let store_indices = trace.func_store_indices(&func).unwrap_or(&[]);
     let load_indices = trace.func_load_indices(&func).unwrap_or(&[]);
     let store_k = store_indices.partition_point(|&p| p <= global_index as usize);
@@ -706,6 +735,7 @@ pub fn render_thread(
         pixels,
         nan_overlay,
         inf_overlay,
+        Vec::new(),
         thread_counts,
     )))
 }
@@ -744,6 +774,7 @@ struct ProfileCumulative {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ProfileFunc {
     name: String,
+    ir_name: String,
     parent: i32,
     canonical_id: u32,
     kind: u32,
@@ -832,6 +863,11 @@ impl Profile {
         let data = std::fs::read(path).map_err(|e| e.to_string())?;
         serde_json::from_slice(&data).map_err(|e| e.to_string())
     }
+}
+
+#[tauri::command]
+pub fn open_stmt(path: &str) -> Result<String, String> {
+    std::fs::read_to_string(path).map_err(|e| format!("failed to read {path}: {e}"))
 }
 
 #[tauri::command]

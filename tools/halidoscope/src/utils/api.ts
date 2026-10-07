@@ -26,6 +26,11 @@ export interface RenderFuncResponse {
   /** The RGBA8 overlay marking coordinates where an Inf was observed. */
   infOverlayData: Uint8ClampedArray<ArrayBuffer> | null;
   /**
+   * The 1-bit-per-pixel mask (as packed by `pack_mask` in `render.rs`) of
+   * coordinates that have been written, or null if not requested.
+   */
+  writtenMask: Uint8Array | null;
+  /**
    * The per-coordinate tabular data backing histograms, or null if not
    * requested.
    */
@@ -44,6 +49,8 @@ export interface RenderFuncParams {
   width: number;
   /** The height of the Func's buffer. */
   height: number;
+  /** The coordinates of logical dims 2 and up, selecting the 2D slice to render. */
+  slice: number[];
   /**
    * Whether to compute and return per-coordinate tabular data alongside the
    * rendered pixels.
@@ -75,8 +82,10 @@ export interface RenderFuncParams {
 
 /** Parameters accepted by the value (Grayscale / RGB) `render_*` commands. */
 export interface ValueRenderFuncParams extends RenderFuncParams {
-  /** The black / white point and the 2D slice to render. */
+  /** The black / white point. */
   view: FuncView;
+  /** Whether to return the mask of written coordinates. */
+  includeWritten?: boolean;
 }
 
 /**
@@ -131,6 +140,7 @@ function expandMask(
  * @param height The height of the buffer.
  * @param includeNan The NaN overlay color, or `null` if not requested.
  * @param includeInf The Inf overlay color, or `null` if not requested.
+ * @param includeWritten Whether to expect the written mask in the buffer.
  * @param includeTabularData A flag indicating whether or not to expect tabular
  * data in the buffer payload.
  * @returns A {@link RenderFuncResponse}.
@@ -141,6 +151,7 @@ function splitRenderBuffer({
   height,
   includeNan,
   includeInf,
+  includeWritten = false,
   includeTabularData,
 }: {
   buffer: ArrayBuffer;
@@ -148,17 +159,18 @@ function splitRenderBuffer({
   height: number;
   includeNan: RenderFuncParams["includeNan"] | null;
   includeInf: RenderFuncParams["includeInf"] | null;
+  includeWritten?: boolean;
   includeTabularData: boolean;
 }): RenderFuncResponse {
   const pixelByteLength = width * height * 4;
   const maskByteLength = Math.ceil((width * height) / 8);
-  const overlayBytes =
-    (includeNan ? maskByteLength : 0) + (includeInf ? maskByteLength : 0);
-  const tabularByteLength = buffer.byteLength - pixelByteLength - overlayBytes;
 
   const nanMaskOffset = pixelByteLength;
   const infMaskOffset = nanMaskOffset + (includeNan ? maskByteLength : 0);
-  const tabularOffset = infMaskOffset + (includeInf ? maskByteLength : 0);
+  const writtenMaskOffset = infMaskOffset + (includeInf ? maskByteLength : 0);
+  const tabularOffset =
+    writtenMaskOffset + (includeWritten ? maskByteLength : 0);
+  const tabularByteLength = buffer.byteLength - tabularOffset;
 
   return {
     tensorData: new Uint8ClampedArray(buffer, 0, pixelByteLength),
@@ -178,8 +190,14 @@ function splitRenderBuffer({
           includeInf,
         )
       : null,
+    writtenMask: includeWritten
+      ? new Uint8Array(buffer, writtenMaskOffset, maskByteLength)
+      : null,
+    // The masks preceding the tabular data needn't end 4-byte aligned.
     tabularData: includeTabularData
-      ? new Uint32Array(buffer, tabularOffset, tabularByteLength / 4)
+      ? new Uint32Array(
+          buffer.slice(tabularOffset, tabularOffset + tabularByteLength),
+        )
       : null,
   };
 }
@@ -197,21 +215,24 @@ export async function renderGrayscale({
   normalizationMode,
   width,
   height,
+  slice,
   includeTabularData,
   includeNan,
   includeInf,
   view,
+  includeWritten = false,
 }: ValueRenderFuncParams): Promise<RenderFuncResponse> {
   const buffer = await invoke<ArrayBuffer>("render_grayscale", {
     func,
     globalIndex,
     normalizationMode,
-    slice: view.slice,
+    slice,
     blackPoint: view.blackPoint,
     whitePoint: view.whitePoint,
     includeTabularData,
     includeNan: includeNan.active,
     includeInf: includeInf.active,
+    includeWritten,
   });
 
   return splitRenderBuffer({
@@ -220,6 +241,7 @@ export async function renderGrayscale({
     height,
     includeNan: includeNan.active ? includeNan : null,
     includeInf: includeInf.active ? includeInf : null,
+    includeWritten,
     includeTabularData,
   });
 }
@@ -262,6 +284,7 @@ export async function renderRgb({
   normalizationMode,
   width,
   height,
+  slice,
   includeTabularData,
   includeNan,
   includeInf,
@@ -271,7 +294,7 @@ export async function renderRgb({
     func,
     globalIndex,
     normalizationMode,
-    slice: view.slice,
+    slice,
     blackPoint: view.blackPoint,
     whitePoint: view.whitePoint,
     includeTabularData,
@@ -302,6 +325,7 @@ export async function renderStoreFrequency({
   normalizationMode,
   width,
   height,
+  slice,
   includeTabularData,
   includeNan,
   includeInf,
@@ -310,6 +334,7 @@ export async function renderStoreFrequency({
     func,
     globalIndex,
     normalizationMode,
+    slice,
     includeTabularData,
     includeNan: includeNan.active,
     includeInf: includeInf.active,
@@ -338,6 +363,7 @@ export async function renderLoadFrequency({
   normalizationMode,
   width,
   height,
+  slice,
   includeTabularData,
   includeNan,
   includeInf,
@@ -346,6 +372,7 @@ export async function renderLoadFrequency({
     func,
     globalIndex,
     normalizationMode,
+    slice,
     includeTabularData,
     includeNan: includeNan.active,
     includeInf: includeInf.active,
@@ -380,6 +407,7 @@ export async function renderRedundantStores({
   normalizationMode,
   width,
   height,
+  slice,
   includeTabularData,
   includeNan,
   includeInf,
@@ -388,6 +416,7 @@ export async function renderRedundantStores({
     func,
     globalIndex,
     normalizationMode,
+    slice,
     includeTabularData,
     includeNan: includeNan.active,
     includeInf: includeInf.active,
@@ -410,7 +439,7 @@ export async function renderRedundantStores({
  * @remarks
  *
  * Reuse distance is the number of packets elapsed between a store and the next
- * load from the same (x, y, channel). In the case of input buffers, it is the
+ * load from the same location. In the case of input buffers, it is the
  * distance from the first load to the last load from that buffer.
  *
  * @param params The {@link RenderFuncParams} describing what to render.
@@ -423,6 +452,7 @@ export async function renderReuseDistance({
   normalizationMode,
   width,
   height,
+  slice,
   includeTabularData,
   includeNan,
   includeInf,
@@ -431,6 +461,7 @@ export async function renderReuseDistance({
     func,
     globalIndex,
     normalizationMode,
+    slice,
     includeTabularData,
     includeNan: includeNan.active,
     includeInf: includeInf.active,
@@ -472,6 +503,7 @@ export async function renderThread({
   threadId,
   width,
   height,
+  slice,
   includeTabularData,
   includeNan,
   includeInf,
@@ -480,6 +512,7 @@ export async function renderThread({
     func,
     globalIndex,
     normalizationMode,
+    slice,
     opMode: threadOpMode,
     threadId,
     includeNan: includeNan.active,
@@ -502,6 +535,10 @@ export async function renderThread({
  * @param path The path to the profiler output file to open.
  * @returns The parsed {@link Profile}.
  */
+export async function openStmt(path: string): Promise<string> {
+  return invoke<string>("open_stmt", { path });
+}
+
 export async function openProfile(path: string): Promise<Profile> {
   return invoke<Profile>("open_profile", { path });
 }

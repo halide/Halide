@@ -1,7 +1,7 @@
 import Dagre from "@dagrejs/dagre";
 import type { Node, Edge } from "@xyflow/react";
 
-import { getFuncView, type FuncView } from "@/state/funcView";
+import { displaySize, getFuncView, type FuncView } from "@/state/funcView";
 import type { FuncMeta } from "@/types/trace";
 
 /** Represents the types of permitted nodes for the @xyflow/react canvas. */
@@ -12,7 +12,7 @@ type NodeTypes = "funcNode";
  *
  * @param funcs The funcs payload from the backend.
  * @param type The node type to assign to each node.
- * @param views The user-modified per-Func views, which set each node's display zoom.
+ * @param views The user-modified per-Func views, which set each node's display size.
  * @returns An array of nodes formatted for use with @xyflow/react.
  */
 export function buildNodes(
@@ -21,7 +21,7 @@ export function buildNodes(
   views: Record<string, FuncView>,
 ): Node<FuncMeta>[] {
   return Object.entries(funcs).map(([name, stats]) => {
-    const { zoom } = getFuncView(views[name], stats);
+    const size = displaySize(stats, getFuncView(views[name], stats));
     return {
       id: name,
       type,
@@ -30,10 +30,7 @@ export function buildNodes(
         y: 0,
       },
       data: stats,
-      style: {
-        width: stats.width * zoom,
-        height: stats.height * zoom,
-      },
+      style: size,
     };
   });
 }

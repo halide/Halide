@@ -6,7 +6,6 @@ import { useTraceContext } from "@/hooks/trace";
 import { funcViewAtom, getFuncView } from "@/state/funcView";
 import { hoverAtom } from "@/state/hover";
 import { packetAtom } from "@/state/packet";
-import { renderAtom } from "@/state/render";
 import { probeValue, type ProbeResponse } from "@/utils/api";
 
 /** Shows the value of the Func under the mouse as of the current packet. */
@@ -14,7 +13,6 @@ function ValueStatus() {
   const { funcs } = useTraceContext();
   const hover = useAtomValue(hoverAtom);
   const packetIndex = useAtomValue(packetAtom);
-  const render = useAtomValue(renderAtom);
   const views = useAtomValue(funcViewAtom);
   const [probe, setProbe] = React.useState<{
     func: string;
@@ -22,8 +20,9 @@ function ValueStatus() {
   } | null>(null);
 
   const func = hover ? funcs[hover.func] : undefined;
-  const slice = func ? getFuncView(views[func.name], func).slice : undefined;
-  const color = render.renderMode === "RGB";
+  const view = func ? getFuncView(views[func.name], func) : undefined;
+  const slice = view?.slice;
+  const color = view?.renderMode === "RGB";
 
   React.useEffect(() => {
     if (!hover || !slice) {

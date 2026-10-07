@@ -47,6 +47,12 @@
           "short": "p",
           "takesValue": true,
           "description": "Path to Halide profile JSON file to load on startup."
+        },
+        {
+          "name": "stmt",
+          "short": "s",
+          "takesValue": true,
+          "description": "Path to Halide conceptual stmt HTML file to load on startup."
         }
       ],
       "subcommands": {

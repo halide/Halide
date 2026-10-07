@@ -1,6 +1,10 @@
 import { Separator } from "radix-ui";
+import * as React from "react";
 
 import { useProfileContext } from "@/hooks/profile";
+import { formatBytes, formatTime } from "@/utils/formatters";
+
+const perRun = (x: number, runs: number) => (runs > 0 ? x / runs : 0);
 
 function ProfileOverview() {
   const { pipelines } = useProfileContext();
@@ -11,72 +15,46 @@ function ProfileOverview() {
     billed_runs,
     samples,
     time_ns,
+    num_allocs,
     memory_peak,
     memory_total,
     active_threads_numerator,
     active_threads_denominator,
   } = pipelines[0];
 
+  const stats: [string, string][] = [
+    ["Pipeline", name],
+    ["Time / run", formatTime(perRun(time_ns, billed_runs))],
+    [
+      "Avg. threads",
+      active_threads_denominator > 0
+        ? (active_threads_numerator / active_threads_denominator).toFixed(2)
+        : "-",
+    ],
+    ["Peak heap", formatBytes(memory_peak)],
+    ["Heap allocated / run", formatBytes(perRun(memory_total, runs))],
+    ["Heap allocs / run", perRun(num_allocs, runs).toLocaleString()],
+    ["Runs", runs.toLocaleString()],
+    ["Billed runs", billed_runs.toLocaleString()],
+    ["Samples", samples.toLocaleString()],
+  ];
+
   return (
-    <div className="bg-ps-border-primary text-ps-text-primary border-l-ps-border-primary flex h-8 w-full shrink-0 items-center gap-2 px-8 py-2 text-xs">
-      <div className="flex gap-1">
-        <span className="text-ps-text-primary/60">Pipeline</span>
-        <span className="font-semibold">{name}</span>
-      </div>
-      <Separator.Root className="bg-ps-border-tertiary h-full w-px" />
-      <div className="flex gap-1">
-        <span className="text-ps-text-primary/60">Runs</span>
-        <span className="font-semibold">{runs}</span>
-      </div>
-      <Separator.Root className="bg-ps-border-tertiary h-full w-px" />
-      <div className="flex gap-1">
-        <span className="text-ps-text-primary/60">Billed Runs</span>
-        <span className="font-semibold">{billed_runs}</span>
-      </div>
-      <Separator.Root className="bg-ps-border-tertiary h-full w-px" />
-      <div className="flex gap-1">
-        <span className="text-ps-text-primary/60">Samples</span>
-        <span className="font-semibold">{samples}</span>
-      </div>
-      <Separator.Root className="bg-ps-border-tertiary h-full w-px" />
-      <div className="flex gap-1">
-        <span className="text-ps-text-primary/60">Avg. Time / Run</span>
-        <span className="font-semibold">
-          {time_ns / billed_runs}&thinsp;ns /{" "}
-          {((time_ns / billed_runs) * 1e-6).toFixed(3)}&thinsp;ms
-        </span>
-      </div>
-      <Separator.Root className="bg-ps-border-tertiary h-full w-px" />
-      <div className="flex gap-1">
-        <span className="text-ps-text-primary/60">Peak Memory</span>
-        <span className="font-semibold">
-          {memory_peak}&thinsp;
-          <span className="text-oxide-purple">B</span>
-          {" / "}
-          {(memory_peak * 1e-6).toFixed(3)}&thinsp;
-          <span className="text-oxide-yellow">MB</span>
-        </span>
-      </div>
-      <Separator.Root className="bg-ps-border-tertiary h-full w-px" />
-      <div className="flex gap-1">
-        <span className="text-ps-text-primary/60">Total Memory</span>
-        <span className="font-semibold">
-          <span className="font-semibold">
-            {memory_total / runs}&thinsp;
-            <span className="text-oxide-purple">B</span>
-            {" / "}
-            {((memory_total / runs) * 1e-6).toFixed(3)}&thinsp;
-            <span className="text-oxide-yellow">MB</span>
-          </span>
-        </span>
-      </div>
-      <Separator.Root className="bg-ps-border-tertiary h-full w-px" />
-      <div className="flex gap-1">
-        <span className="text-ps-text-primary/60">Avg. Threads</span>
-        <span className="font-semibold">
-          {(active_threads_numerator / active_threads_denominator).toFixed(3)}
-        </span>
-      </div>
+    <div className="bg-ps-border-primary text-ps-text-primary border-ps-border-tertiary flex w-full shrink-0 flex-wrap items-stretch gap-4 border-b px-6 py-2">
+      {stats.map(([label, value], i) => (
+        <React.Fragment key={label}>
+          {i > 0 ? (
+            <Separator.Root
+              orientation="vertical"
+              className="bg-ps-border-tertiary w-px"
+            />
+          ) : null}
+          <div className="flex flex-col">
+            <span className="text-ps-text-primary/60 text-xs">{label}</span>
+            <span className="text-base font-semibold">{value}</span>
+          </div>
+        </React.Fragment>
+      ))}
     </div>
   );
 }

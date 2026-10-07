@@ -1,8 +1,9 @@
 import * as d3 from "d3";
-import { useAtomValue } from "jotai";
+import { useAtom, useAtomValue } from "jotai";
 import { Separator } from "radix-ui";
 import * as React from "react";
 
+import Select from "@/components/shared/Select";
 import RenderMode from "@/components/trace/controls/RenderMode";
 import RenderModeParameters from "@/components/trace/controls/RenderModeParameters";
 import BarChart from "@/components/trace/charts/BarChart";
@@ -10,12 +11,14 @@ import Histogram from "@/components/trace/charts/Histogram";
 import PanelSection from "@/components/trace/panels/PanelSection";
 import { useTraceContext } from "@/hooks/trace";
 import { funcAtom } from "@/state/func";
-import { type RenderMode as RM, renderAtom } from "@/state/render";
+import { funcViewAtom, getFuncView } from "@/state/funcView";
+import { isValueMode, type RenderMode as RM, renderAtom } from "@/state/render";
 import { tabularDataAtom } from "@/state/tabularData";
 import { threadAtom, NO_THREAD_INFO_SENTINEL_ID } from "@/state/thread";
 
 const RENDER_MODE_TO_LABEL: Record<RM, string> = {
   Grayscale: "Value",
+  Plot: "Value",
   RGB: "Value",
   "Store Frequency": "Store Count",
   "Load Frequency": "Load Count",
@@ -67,10 +70,12 @@ interface BarChartData {
 
 type ChartData = HistogramData | BarChartData;
 
-function VisualizationPanel() {
+function FuncStats() {
   const { funcs, stats } = useTraceContext();
-  const render = useAtomValue(renderAtom);
+  const { normalizationMode } = useAtomValue(renderAtom);
   const activeFunc = useAtomValue(funcAtom);
+  const views = useAtomValue(funcViewAtom);
+  const { renderMode } = getFuncView(views[activeFunc], funcs[activeFunc]);
   const { tabularData, scale } = useAtomValue(tabularDataAtom);
   const thread = useAtomValue(threadAtom);
 
@@ -181,8 +186,9 @@ function VisualizationPanel() {
   );
 
   const chartData = React.useMemo((): ChartData => {
-    switch (render.renderMode) {
-      case "Grayscale": {
+    switch (renderMode) {
+      case "Grayscale":
+      case "Plot": {
         const min = funcs[activeFunc].min_value ?? 0;
         const max = funcs[activeFunc].max_value ?? 255;
 
@@ -220,7 +226,7 @@ function VisualizationPanel() {
       case "Store Frequency": {
         const min = scale === "log" ? 1 : 0;
         const max =
-          render.normalizationMode === "Per Func"
+          normalizationMode === "Per Func"
             ? funcs[activeFunc].max_store_count
             : stats.global_max_store_count;
 
@@ -233,7 +239,7 @@ function VisualizationPanel() {
       case "Load Frequency": {
         const min = scale === "log" ? 1 : 0;
         const max =
-          render.normalizationMode === "Per Func"
+          normalizationMode === "Per Func"
             ? funcs[activeFunc].max_load_count
             : stats.global_max_load_count;
 
@@ -246,7 +252,7 @@ function VisualizationPanel() {
       case "Redundant Stores": {
         const min = scale === "log" ? 1 : 0;
         const max =
-          render.normalizationMode === "Per Func"
+          normalizationMode === "Per Func"
             ? funcs[activeFunc].max_redundant_store_count
             : stats.global_max_redundant_store_count;
 
@@ -259,7 +265,7 @@ function VisualizationPanel() {
       case "Reuse Distance": {
         const min = scale === "log" ? 1 : 0;
         const max =
-          render.normalizationMode === "Per Func"
+          normalizationMode === "Per Func"
             ? funcs[activeFunc].max_reuse_distance
             : stats.global_max_reuse_distance;
 
@@ -293,7 +299,8 @@ function VisualizationPanel() {
       }
     }
   }, [
-    render,
+    renderMode,
+    normalizationMode,
     tabularData,
     funcs,
     stats,
@@ -311,21 +318,13 @@ function VisualizationPanel() {
           <Histogram
             data={chartData.data}
             domain={chartData.domain}
-            scale={
-              render.renderMode === "Grayscale" || render.renderMode === "RGB"
-                ? "linear"
-                : scale
-            }
+            scale={isValueMode(renderMode) ? "linear" : scale}
             labels={{
-              x: RENDER_MODE_TO_LABEL[render.renderMode],
+              x: RENDER_MODE_TO_LABEL[renderMode],
               y: "Coordinate Count",
             }}
             renderLegend={chartData.renderLegend}
-            interval={
-              render.renderMode !== "Grayscale" && render.renderMode !== "RGB"
-                ? 1
-                : undefined
-            }
+            interval={isValueMode(renderMode) ? undefined : 1}
           />
         );
       case "Bar Chart":
@@ -335,7 +334,7 @@ function VisualizationPanel() {
             domain={chartData.domain}
             range={chartData.range}
             labels={{
-              x: RENDER_MODE_TO_LABEL[render.renderMode],
+              x: RENDER_MODE_TO_LABEL[renderMode],
               y: `${thread.op} Count`,
             }}
             highlight={(x: string) =>
@@ -344,19 +343,46 @@ function VisualizationPanel() {
           />
         );
     }
-  }, [chartData, scale, render.renderMode, thread]);
+  }, [chartData, scale, renderMode, thread]);
+
+  return (
+    <PanelSection title="Stats">
+      <RenderModeParameters />
+      {renderChart()}
+    </PanelSection>
+  );
+}
+
+function VisualizationPanel() {
+  const { funcs } = useTraceContext();
+  const [activeFunc, setActiveFunc] = useAtom(funcAtom);
+  const func = funcs[activeFunc];
 
   return (
     <div className="flex flex-col gap-4 px-3 py-4">
       <PanelSection title="Render Mode">
-        <RenderMode />
+        <div className="flex flex-col gap-2">
+          <Select
+            id="func-select"
+            label="Selected Func"
+            value={func ? activeFunc : ""}
+            onValueChange={setActiveFunc}
+            placeholder="None"
+            items={Object.keys(funcs).map((func) => ({
+              value: func,
+              label: func,
+            }))}
+          />
+          {func ? <RenderMode func={func} /> : null}
+        </div>
       </PanelSection>
-      <Separator.Root className="bg-ps-border-tertiary h-px" />
-      <PanelSection title="Stats">
-        <RenderModeParameters />
-        {renderChart()}
-      </PanelSection>
-      <Separator.Root className="bg-ps-border-tertiary h-px" />
+      {func ? (
+        <>
+          <Separator.Root className="bg-ps-border-tertiary h-px" />
+          <FuncStats />
+          <Separator.Root className="bg-ps-border-tertiary h-px" />
+        </>
+      ) : null}
     </div>
   );
 }

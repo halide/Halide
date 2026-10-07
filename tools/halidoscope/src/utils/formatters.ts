@@ -1,24 +1,32 @@
 import * as d3 from "d3";
 
-export type ByteUnit = "B" | "KB" | "MB" | "GB";
-
-const numberStringRegex = /^([\d.]+)\s*(.*)$/;
-
 /**
- * Format a numeric value as a byte string (e.g., 10KB, 1.5MB).
+ * Format a byte count with the largest unit (B, KB, MB, GB) that keeps the
+ * value at least 1, to 3 significant figures.
  *
  * @param bytes The count of bytes.
  * @returns A formatted byte string.
  */
-export function formatBytes(bytes: number): {
-  value: number;
-  unit: ByteUnit;
-} {
-  const formatted = d3.format(".2s")(bytes).replace("k", "K").concat("B");
-  const result = formatted.match(numberStringRegex);
+export function formatBytes(bytes: number): string {
+  return formatWithUnits(bytes, 1024, ["B", "KB", "MB", "GB"]);
+}
 
-  return {
-    value: Number(result?.[1]),
-    unit: (result?.[2] as ByteUnit) ?? "B",
-  };
+/**
+ * Format a duration in nanoseconds with the largest unit (ns, µs, ms, s) that
+ * keeps the value at least 1, to 3 significant figures.
+ *
+ * @param ns The duration in nanoseconds.
+ * @returns A formatted duration string.
+ */
+export function formatTime(ns: number): string {
+  return formatWithUnits(ns, 1000, ["ns", "µs", "ms", "s"]);
+}
+
+function formatWithUnits(x: number, base: number, units: string[]): string {
+  let i = 0;
+  while (i < units.length - 1 && x >= base) {
+    x /= base;
+    i++;
+  }
+  return `${d3.format(".3~r")(x)}\u2009${units[i]}`;
 }

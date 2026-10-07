@@ -1,7 +1,7 @@
 import { clsx } from "clsx";
 
 interface Props {
-  label: string;
+  label: React.ReactNode;
   className?: string;
   contentClassName?: string;
 }
