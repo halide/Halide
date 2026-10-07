@@ -160,7 +160,7 @@ class TraceCodec {
         halide_trace_packet_t *p = (halide_trace_packet_t *)w;
         uint32_t size = residual<dec>(dec ? 0 : p->size, last_size, size_len);
         uint32_t n = size / 4;
-        if (n < header_words || n > max_trace_packet_size / 4 || n > max_words) {
+        if (size % 4 || n < header_words || n > max_trace_packet_size / 4 || n > max_words) {
             return false;
         }
         p->size = last_size = size;
@@ -401,7 +401,10 @@ inline bool trace_chunks(const uint8_t *data, size_t size, std::vector<TraceChun
         }
         memcpy(header, pos, sizeof(header));
         uint64_t chunk_bytes = sizeof(header) + (uint64_t)header[2] + header[3];
-        if (chunk_bytes > (uint64_t)(end - pos)) {
+        if (chunk_bytes > (uint64_t)(end - pos) ||
+            header[1] % 4 ||
+            header[1] < (uint64_t)header[0] * sizeof(halide_trace_packet_t) ||
+            header[1] > (uint64_t)header[0] * max_trace_packet_size) {
             return false;
         }
         chunks.push_back({pos, pos + chunk_bytes, out_offset, header[1]});

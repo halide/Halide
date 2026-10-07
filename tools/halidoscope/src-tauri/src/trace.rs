@@ -615,6 +615,21 @@ fn read_words(path: &str) -> Result<(Vec<u32>, usize), String> {
     Ok((words, len))
 }
 
+/// Allocates `n` zeroed words, or returns None if the allocation fails. The pages are zeroed
+/// lazily by the OS, so a large allocation costs nothing until it is written.
+fn zeroed_words(n: usize) -> Option<Vec<u32>> {
+    if n == 0 {
+        return Some(Vec::new());
+    }
+    let layout = std::alloc::Layout::array::<u32>(n).ok()?;
+    // SAFETY: the layout has nonzero size, and a zeroed allocation of `n` u32s with u32's
+    // layout is a valid Vec with length and capacity `n`.
+    unsafe {
+        let ptr = std::alloc::alloc_zeroed(layout) as *mut u32;
+        (!ptr.is_null()).then(|| Vec::from_raw_parts(ptr, n, n))
+    }
+}
+
 /// Marks a Func id as absent.
 const NO_FUNC: u32 = u32::MAX;
 
@@ -1093,7 +1108,8 @@ impl Trace {
         if size == usize::MAX {
             return Err("corrupt compressed trace".to_string());
         }
-        let mut data = vec![0u32; size / 4];
+        let mut data = zeroed_words(size / 4)
+            .ok_or_else(|| format!("not enough memory for a {size}-byte trace"))?;
         let out = data.as_mut_ptr() as usize;
 
         // The number of bytes decompressed so far, and whether decompression has finished.
