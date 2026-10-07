@@ -81,7 +81,8 @@ inline void vec_dot(Func out, const RDom &r, const std::vector<int> &blocks, con
     blocked(out, out.update(), {}, r, blocks[0], blocks[1] == blocks[0], rs, t);
 }
 
-// mul_mat: gemv (M = 1) is the vec_dot recipe per row; gemm tiles the outputs.
+// mul_mat: gemm tiles the outputs; gemv (M = 1) is the vec_dot recipe on row
+// pairs sharing each activation block (single rows for odd N).
 inline void mul_mat(Func out, const RDom &r, const std::vector<int> &blocks, const std::vector<ApproximationResult> &rs,
                     const std::vector<Func> &staged, const Target &t) {
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
@@ -89,8 +90,9 @@ inline void mul_mat(Func out, const RDom &r, const std::vector<int> &blocks, con
         e.compute_root().specialize(M > 1).parallel(e.args().back());  // per activation row
     }
     bool integer = blocks[1] == blocks[0];
-    Tiles gemm{4, 4, 1, 32, 32}, rows{1, 1, 2, 32};
+    Tiles gemm{4, 4, 1, 32, 32}, pairs{2, 1, 2, 32}, rows{1, 1, 2, 32};
     blocked(out, out.update().specialize(N % gemm.nt == 0 && M % gemm.mt == 0), gemm, r, blocks[0], integer, rs, t);
+    blocked(out, out.update().specialize(N % pairs.nt == 0), pairs, r, blocks[0], integer, rs, t);
     blocked(out, out.update(), rows, r, blocks[0], integer, rs, t);
 }
 
