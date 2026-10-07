@@ -196,6 +196,8 @@ class AuditTestLabels(unittest.TestCase):
                     "ctest",
                     "--test-dir",
                     tmp,
+                    "-C",
+                    "Debug",
                     "--output-on-failure",
                     "--output-junit",
                     str(root / "results.xml"),
@@ -210,6 +212,11 @@ class AuditTestLabels(unittest.TestCase):
                 t.attrib["name"]: t
                 for t in ET.parse(root / "results.xml").iter("testcase")
             }
+            for name, test in results.items():
+                self.assertTrue(
+                    test.attrib.get("status") != "notrun" or name == "skip_allowed",
+                    f"{name} did not run:\n{result.stdout}{result.stderr}",
+                )
             for name in (
                 "violation",
                 "skip_violation",
@@ -277,7 +284,14 @@ class AuditTestLabels(unittest.TestCase):
                 )
                 tests = json.loads(
                     subprocess.check_output(
-                        ["ctest", "--test-dir", tmp, "--show-only=json-v1"]
+                        [
+                            "ctest",
+                            "--test-dir",
+                            tmp,
+                            "-C",
+                            "Debug",
+                            "--show-only=json-v1",
+                        ]
                     )
                 )["tests"]
                 for test in tests:
