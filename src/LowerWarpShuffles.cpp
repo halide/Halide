@@ -803,6 +803,7 @@ class LowerWarpShuffles : public IRMutator {
             // Each vector element comes from a different lane, so do
             // one shuffle per element.
             vector<Expr> elems;
+            elems.reserve(type.lanes());
             for (int i = 0; i < type.lanes(); i++) {
                 elems.push_back(make_metal_shuffle(type.element_of(),
                                                    extract_lane(base_val, i),
