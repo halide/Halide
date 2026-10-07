@@ -108,20 +108,22 @@ decode-then-float-dot variant. `kernels/schedule.h` schedules it: per weight
 block, a dot of the codes (int32, sdot on Arm, when the activation is quantized
 alike; f32 otherwise) times the hoisted scales, as one generic `blocked`
 schedule of an nt x mt output tile. `vec_dot` is the 1 x 1 tile for N = M = 1.
-`mul_mat` (multi-threaded; the harness sets the thread count) is a 4 x 4 tile,
-32 x 32 outputs per parallel task, specialized on N % 4 == M % 4 == 0 (gemm),
-and otherwise (gemv, any N/M) the 1 x 1 tile with 2 blocks per iteration, 32
-rows per parallel task; an in-kernel activation encoder runs first, parallel
-over activation rows when M > 1. Kernel ABI (`harness/halide_providers.cpp`):
-`w`/`a` are `[K / block, N or M]` records (struct types from the kernel's
-metadata), `out` is f32 `[N, M]`. The kernel declares the whole contract
-(checked in `checked`, assumed in `bench`): all mins 0, rows dense
-(`dim(1).stride == dim(0).extent`), `a`'s K tied to `w`'s, `w`/`a` rows match
-`out`'s N/M, and `vec_dot` pins `out` to 1 x 1. It promises no more than GGML
-does: K is a whole number of blocks (GGML asserts `n % QK == 0`), with no even
-block count (the 2-block interleave keeps its guard) and no host alignment
-(q4_0/q8_0 rows start on 2-byte boundaries). `vec_dot` goes through a GGML-ABI
-adapter.
+`mul_mat` (multi-threaded; the harness sets the thread count) tiles gemm by 2 x
+8 outputs of i8mm `smmla` 2 x 2 x 8 tiles (`blocked_mmla`; when the target has
+`arm_i8mm` and the activation is quantized alike; N % 2 == M % 8 == 0), else by
+4 x 4 (N % 4 == M % 4 == 0), with 32 x 32 outputs per parallel task; otherwise
+(gemv, any N/M) it is a 2 x 1 tile (N even; two rows share each activation
+block) or the 1 x 1 tile, with 2 blocks per iteration and 32 rows per parallel
+task. An in-kernel activation encoder runs first, parallel over activation rows
+(for M > 1). Kernel ABI (`harness/halide_providers.cpp`): `w`/`a` are
+`[K / block, N or M]` records (struct types from the kernel's metadata), `out`
+is f32 `[N, M]`. The kernel declares the whole contract (checked in `checked`,
+assumed in `bench`): all mins 0, rows dense (`dim(1).stride == dim(0).extent`),
+`a`'s K tied to `w`'s, `w`/`a` rows match `out`'s N/M, and `vec_dot` pins `out`
+to 1 x 1. It promises no more than GGML does: K is a whole number of blocks
+(GGML asserts `n % QK == 0`), with no even block count (the 2-block interleave
+keeps its guard) and no host alignment (q4_0/q8_0 rows start on 2-byte
+boundaries). `vec_dot` goes through a GGML-ABI adapter.
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds
