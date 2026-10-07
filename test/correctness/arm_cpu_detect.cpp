@@ -79,8 +79,10 @@ constexpr uint64_t arm64_hwcap_asimdhp = 1ull << 10;
 constexpr uint64_t arm64_hwcap_asimddp = 1ull << 20;
 constexpr uint64_t arm64_hwcap_sve = 1ull << 22;
 constexpr uint64_t arm64_hwcap2_sve2 = 1ull << 1;
+constexpr uint64_t arm64_hwcap2_i8mm = 1ull << 13;
 constexpr uint64_t arm32_hwcap_asimdhp = 1ull << 23;
 constexpr uint64_t arm32_hwcap_asimddp = 1ull << 24;
+constexpr uint64_t arm32_hwcap_i8mm = 1ull << 27;
 
 // Windows feature codes.
 constexpr int pf_floating_point_emulated = 1;
@@ -88,6 +90,7 @@ constexpr int pf_arm_fmac = 27;
 constexpr int pf_arm_v82_dp = 43;
 constexpr int pf_arm_sve = 46;
 constexpr int pf_arm_sve2 = 47;
+constexpr int pf_arm_v82_i8mm = 66;
 
 std::vector<int> sorted_features(const std::vector<halide_target_feature_t> &features) {
     std::vector<int> result;
@@ -190,12 +193,43 @@ int main(int argc, char **argv) {
                     false);
     }
 
+    // FEAT_I8MM is in AT_HWCAP2 on aarch64, but in AT_HWCAP on arm32.
+    {
+        FakeAuxvOps ops;
+        ops.hwcap = arm64_hwcap_asimddp;
+        ops.hwcap2 = arm64_hwcap2_i8mm;
+        const ArmDetection detection = detect_arm_features(ops, ArmArch::Arm64);
+        ok &= check("Linux aarch64 with dotprod and i8mm", ops, detection,
+                    {halide_target_feature_arm_dot_prod,
+                     halide_target_feature_arm_i8mm},
+                    false);
+    }
+
+    {
+        FakeAuxvOps ops;
+        ops.hwcap = arm64_hwcap_asimddp | arm32_hwcap_i8mm;
+        const ArmDetection detection = detect_arm_features(ops, ArmArch::Arm64);
+        ok &= check("Linux aarch64 without i8mm", ops, detection,
+                    {halide_target_feature_arm_dot_prod},
+                    false);
+    }
+
+    {
+        FakeAuxvOps ops;
+        ops.hwcap = arm32_hwcap_asimddp | arm32_hwcap_i8mm;
+        const ArmDetection detection = detect_arm_features(ops, ArmArch::Arm32);
+        ok &= check("Linux arm32 with dotprod and i8mm", ops, detection,
+                    {halide_target_feature_arm_dot_prod,
+                     halide_target_feature_arm_i8mm},
+                    false);
+    }
+
     // The 64-bit bit positions must not be read on a 32-bit machine, or we'd
     // claim features the CPU doesn't have.
     {
         FakeAuxvOps ops;
         ops.hwcap = arm64_hwcap_asimddp | arm64_hwcap_asimdhp;
-        ops.hwcap2 = arm64_hwcap2_sve2;
+        ops.hwcap2 = arm64_hwcap2_sve2 | arm64_hwcap2_i8mm;
         const ArmDetection detection = detect_arm_features(ops, ArmArch::Arm32);
         ok &= check("Linux arm32 doesn't read aarch64 hwcap bits", ops, detection, {}, false);
     }
@@ -227,6 +261,24 @@ int main(int argc, char **argv) {
         ok &= check("macOS arm64 without dotprod or fp16", ops, detection, {}, false);
     }
 
+    // FEAT_I8MM is detected on its own, without needing to identify the
+    // architecture version.
+    {
+        FakeSysctlOps ops;
+        ops.sysctls = {{"hw.optional.arm.FEAT_I8MM", 1}};
+        const ArmDetection detection = detect_arm_features(ops, ArmArch::Arm64);
+        ok &= check("macOS arm64 with i8mm", ops, detection,
+                    {halide_target_feature_arm_i8mm}, false);
+    }
+
+    {
+        FakeSysctlOps ops;
+        ops.sysctls = {{"hw.optional.arm.FEAT_I8MM", 0},
+                       {"hw.optional.arm.FEAT_BF16", 1}};
+        const ArmDetection detection = detect_arm_features(ops, ArmArch::Arm64);
+        ok &= check("macOS arm64 without i8mm", ops, detection, {}, false);
+    }
+
     // macOS, 32-bit: a Swift core is identified by cputype/cpusubtype.
     {
         FakeSysctlOps ops;
@@ -255,12 +307,14 @@ int main(int argc, char **argv) {
         const ArmDetection detection = detect_arm_features(ops, ArmArch::Arm64);
         ok &= check("macOS arm64 Armv8.6-A runtime features", ops, detection,
                     {halide_target_feature_arm_dot_prod,
-                     halide_target_feature_arm_fp16},
+                     halide_target_feature_arm_fp16,
+                     halide_target_feature_arm_i8mm},
                     false);
         detect_arm_architecture_version(ops, ArmArch::Arm64);
         ok &= check("macOS arm64 Armv8.6-A", ops, detection,
                     {halide_target_feature_arm_dot_prod,
                      halide_target_feature_arm_fp16,
+                     halide_target_feature_arm_i8mm,
                      halide_target_feature_armv86a},
                     false);
     }
@@ -310,6 +364,16 @@ int main(int argc, char **argv) {
                      halide_target_feature_arm_dot_prod,
                      halide_target_feature_sve2},
                     true);
+    }
+
+    {
+        FakeWindowsOps ops;
+        ops.windows_features = {pf_arm_v82_dp, pf_arm_v82_i8mm};
+        const ArmDetection detection = detect_arm_features(ops, ArmArch::Arm64);
+        ok &= check("Windows arm64 with i8mm", ops, detection,
+                    {halide_target_feature_arm_dot_prod,
+                     halide_target_feature_arm_i8mm},
+                    false);
     }
 
     // Emulated floating point means the fp16 instructions aren't real, even
