@@ -1240,26 +1240,42 @@ struct Permute {
  * mode the flat side is `(within, record)` rather than a single flat index.
  * Any further (batch) dimensions pass through unchanged, after the record
  * dimension: `(k, rest...)` <-> `(within..., record, rest...)`, so one
- * BlockReshape applies to a single row and to a matrix of rows alike. */
+ * BlockReshape applies to a single row and to a matrix of rows alike.
+ *
+ * BlockReshape::tiles() instead splits several leading dimensions, one block
+ * extent each, into dense tiles: all within-tile indices first, then the tile
+ * indices, then the pass-through dimensions. */
 struct BlockReshape {
+    /** `(k, rest...)` <-> `(k % block_size, k / block_size, rest...)`. */
     explicit BlockReshape(int block_size, bool block_indexed = false)
         : extents_{block_size}, block_indexed_(block_indexed) {
     }
+    /** Records of `extents[0] x extents[1] x ...` consecutive elements of
+     * the one flat dimension, the first extent innermost:
+     * `(k, rest...)` <-> `(d0, d1, ..., k / product(extents), rest...)`. */
     explicit BlockReshape(std::vector<int> extents, bool block_indexed = false)
         : extents_(std::move(extents)), block_indexed_(block_indexed) {
     }
 
+    /** Tile the leading `blocks.size()` dimensions, each by its block extent:
+     * `(x0, x1, ..., rest...)` <->
+     * `(x0 % b0, x1 % b1, ..., x0 / b0, x1 / b1, ..., rest...)`.
+     * E.g. `tiles({2, 2})` lays a matrix out as dense 2x2 tiles. Each tiled
+     * dimension's extent must be a multiple of its block (as the flat extent
+     * must be for the other forms); `tiles({b})` is `BlockReshape(b)`. */
+    static BlockReshape tiles(std::vector<int> blocks);
+
     std::vector<Func> encode(const std::vector<Func> &inputs) const;
     std::vector<Func> decode(const std::vector<Func> &encoded) const;
 
-    /** values (flat) <-> blocks (one extra leading dimension per extent).
-     * The dimensionalities come from the context: without one (or without
-     * its dimensionality) they are left unknown. The element type and any
-     * declared range are passed through. */
+    /** values (flat) <-> blocks (one extra leading dimension per extent, or
+     * per tiled dimension). The dimensionalities come from the context:
+     * without one (or without its dimensionality) they are left unknown. The
+     * element type and any declared range are passed through. */
     ApproximationSignature signature(const ApproximationPorts &inputs) const;
 
-    /** Pure re-indexing: exact for any values (given the flat extent is a
-     * multiple of the block size). */
+    /** Pure re-indexing: exact for any values (given the flat or tiled
+     * extents are multiples of the block sizes). */
     bool lossless() const {
         return true;
     }
@@ -1267,6 +1283,8 @@ struct BlockReshape {
 private:
     std::vector<int> extents_;
     bool block_indexed_;
+    // The per-dimension blocks in tiles() mode; empty otherwise.
+    std::vector<int> tiles_;
 
     int block_size() const;
     std::vector<Var> block_vars() const;
