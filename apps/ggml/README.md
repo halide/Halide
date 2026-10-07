@@ -109,13 +109,13 @@ block, a dot of the codes (int32, sdot on Arm, when the activation is quantized
 alike; f32 otherwise) times the hoisted scales, as one generic `blocked`
 schedule of an nt x mt output tile. `vec_dot` is the 1 x 1 tile for N = M = 1.
 `mul_mat` (multi-threaded; the harness sets the thread count) is a 4 x 4 tile,
-64 rows per parallel task, specialized on N % 4 == M % 4 == 0 (gemm), and
-otherwise (gemv, any N/M) the 1 x 1 tile with 2 blocks per iteration, 32 rows
-per parallel task; an in-kernel activation encoder runs first, parallel over
-activation rows when M > 1. Kernel ABI (`harness/halide_providers.cpp`): `w`/`a`
-are `[K / block, N or M]` records (struct types from the kernel's metadata),
-`out` is f32 `[N, M]`. The kernel declares the whole contract (checked in
-`checked`, assumed in `bench`): all mins 0, rows dense
+32 x 32 outputs per parallel task, specialized on N % 4 == M % 4 == 0 (gemm),
+and otherwise (gemv, any N/M) the 1 x 1 tile with 2 blocks per iteration, 32
+rows per parallel task; an in-kernel activation encoder runs first, parallel
+over activation rows when M > 1. Kernel ABI (`harness/halide_providers.cpp`):
+`w`/`a` are `[K / block, N or M]` records (struct types from the kernel's
+metadata), `out` is f32 `[N, M]`. The kernel declares the whole contract
+(checked in `checked`, assumed in `bench`): all mins 0, rows dense
 (`dim(1).stride == dim(0).extent`), `a`'s K tied to `w`'s, `w`/`a` rows match
 `out`'s N/M, and `vec_dot` pins `out` to 1 x 1. It promises no more than GGML
 does: K is a whole number of blocks (GGML asserts `n % QK == 0`), with no even
