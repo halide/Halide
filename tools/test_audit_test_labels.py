@@ -3,6 +3,7 @@
 
 import importlib.util
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -228,9 +229,12 @@ class AuditTestLabels(unittest.TestCase):
                 self.assertIn(audit.FAILURE_MARKER, output)
                 if name != "expected_violation":
                     self.assertIn("target=unchanged", output)
-                    self.assertIn(
-                        "cwd=" + root.resolve().as_posix(), output.replace("\\", "/")
+                    cwd = next(
+                        line[len("cwd=") :]
+                        for line in output.splitlines()
+                        if line.startswith("cwd=")
                     )
+                    self.assertTrue(os.path.samefile(cwd, root), cwd)
             for name in (
                 "plain",
                 "allowed",
