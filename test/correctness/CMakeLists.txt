@@ -717,7 +717,6 @@ tests(
     transitive_in.cpp
     truncated_pyramid.cpp
     tuple_vector_reduce.cpp
-    vector_math.cpp
     vector_reductions.cpp
     vulkan_bool_minmax.cpp
     # keep-sorted end
@@ -747,6 +746,7 @@ tests(
     parallel_gpu_nested.cpp
     reorder_rvars.cpp
     vector_cast.cpp
+    vector_math.cpp
     # keep-sorted end
 )
 
