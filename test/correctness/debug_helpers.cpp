@@ -18,6 +18,7 @@ void set_env(const char *name, const char *val) {
 
 int main(int argc, char **argv) {
     set_env("HL_DEBUG_CODEGEN", "0;tag:parallel-schedule");
+    internal_assert(!consume_jit_execution_debug());
 
     // debug_stream_sink() looks up where a DebugStream's contents will
     // really end up
@@ -45,6 +46,7 @@ int main(int argc, char **argv) {
         gpu.gpu_blocks(xo, yo).gpu_threads(xi, yi);
         std::cerr.rdbuf(old_buffer);
         internal_assert(messages.str().find("Scheduling parallel loop: ") == std::string::npos);
+        internal_assert(!consume_jit_execution_debug());
 
         Func cpu("cpu");
         cpu(x, y) = x + y;
@@ -52,6 +54,10 @@ int main(int argc, char **argv) {
         cpu.parallel(y, 4);
         std::cerr.rdbuf(old_buffer);
         internal_assert(messages.str().find("Scheduling parallel loop: y") != std::string::npos);
+        internal_assert(consume_jit_execution_debug());
+        internal_assert(!consume_jit_execution_debug());
+        cpu.parallel(x);
+        internal_assert(!consume_jit_execution_debug());
     }
 
     // End-to-end: IRPrinter must actually emit ANSI color codes when writing

@@ -42,7 +42,8 @@ label. None of these labels implies another.
 CI audits these permissions, with some caveats:
 
 - GPU-kernel compilation or a GPU device-interface request requires `gpu`, even
-  if no device is ultimately used.
+  if no device is ultimately used. Automatic capability queries when parsing
+  CUDA or Vulkan targets are exempt.
 - CPU `.parallel()` followed by any JIT execution requires `multithreaded`, even
   if the execution is serial, only queries bounds, or fails before reaching
   parallel work. Merely constructing or compiling a parallel schedule does not;

@@ -39,6 +39,30 @@ class AuditTestLabels(unittest.TestCase):
                     audit.missing_capabilities({"multithreaded"}, output), []
                 )
 
+    def test_gpu_target_queries(self):
+        for api in ("cuda", "vulkan"):
+            query = audit.GPU_TARGET_QUERY_MARKER + api
+            use = "Using device interface: " + api
+            for newline in ("\n", "\r\n"):
+                with self.subTest(api=api, newline=newline):
+                    probe = query + newline + use + newline
+                    self.assertEqual(audit.missing_capabilities(set(), probe), [])
+                    for output in (
+                        use + newline + probe,
+                        probe + use,
+                        query + newline + "intervening output" + newline + use,
+                        query + newline + "Using device interface: metal",
+                        query + newline + "Compiling GPU kernel: kernel",
+                        probe + "Compiling GPU kernel: kernel",
+                    ):
+                        with self.subTest(output=output):
+                            self.assertEqual(
+                                audit.missing_capabilities(set(), output), ["gpu"]
+                            )
+                            self.assertEqual(
+                                audit.missing_capabilities({"gpu"}, output), []
+                            )
+
     def test_ctest(self):
         with tempfile.TemporaryDirectory(prefix="halide-label-audit-") as tmp:
             root = pathlib.Path(tmp)
@@ -60,6 +84,15 @@ class AuditTestLabels(unittest.TestCase):
                 f"        print({audit.JIT_MARKER!r})\n"
                 "elif sys.argv[1] == 'jit_only':\n"
                 f"    print({audit.JIT_MARKER!r})\n"
+                "if sys.argv[1].startswith('gpu_probe'):\n"
+                f"    print({(audit.GPU_TARGET_QUERY_MARKER + 'cuda')!r})\n"
+                "    print('Using device interface: cuda')\n"
+                "    if sys.argv[1] == 'gpu_probe_then_use':\n"
+                "        print('Using device interface: cuda')\n"
+                "if sys.argv[1].startswith('unicode'):\n"
+                "    sys.stdout.flush()\n"
+                "    sys.stdout.buffer.write(b'\\xe2\\x94\\x82\\n')\n"
+                "    sys.stdout.buffer.flush()\n"
                 "print('Success!')\n"
                 "if 'skip' in sys.argv[1]: print('[SKIP]')\n"
                 "sys.exit(1 if 'expected' in sys.argv[1] and 'success' not in sys.argv[1] else 0)\n"
@@ -96,6 +129,10 @@ class AuditTestLabels(unittest.TestCase):
             ]
             cases = {
                 "plain": (False, False, False),
+                "unicode": (True, False, False),
+                "unicode_violation": (False, False, False),
+                "gpu_probe": (True, False, False),
+                "gpu_probe_then_use": (True, False, False),
                 "allowed": (True, False, False),
                 "violation": (False, False, False),
                 "skip_violation": (False, False, True),
@@ -124,6 +161,11 @@ class AuditTestLabels(unittest.TestCase):
                 if allowed:
                     cmake += [
                         f"set_tests_properties({name} PROPERTIES LABELS target_from_environment)"
+                    ]
+                if name.startswith("unicode"):
+                    cmake += [
+                        f"set_property(TEST {name} APPEND PROPERTY ENVIRONMENT "
+                        '"PYTHONIOENCODING=cp1252")'
                     ]
                 if name == "schedule_then_jit_permitted":
                     cmake += [
@@ -168,7 +210,12 @@ class AuditTestLabels(unittest.TestCase):
                 t.attrib["name"]: t
                 for t in ET.parse(root / "results.xml").iter("testcase")
             }
-            for name in ("violation", "skip_violation", "expected_violation"):
+            for name in (
+                "violation",
+                "skip_violation",
+                "expected_violation",
+                "unicode_violation",
+            ):
                 self.assertIsNotNone(results[name].find("failure"), result.stdout)
                 output = results[name].findtext("system-out")
                 self.assertIn(audit.FAILURE_MARKER, output)
@@ -177,8 +224,24 @@ class AuditTestLabels(unittest.TestCase):
                     self.assertIn(
                         "cwd=" + root.resolve().as_posix(), output.replace("\\", "/")
                     )
-            for name in ("plain", "allowed", "expected_allowed", "tutorial_plain"):
+            for name in (
+                "plain",
+                "allowed",
+                "expected_allowed",
+                "tutorial_plain",
+                "unicode",
+                "gpu_probe",
+            ):
                 self.assertIsNone(results[name].find("failure"), result.stdout)
+            for name in ("unicode", "unicode_violation"):
+                self.assertIn("\u2502", results[name].findtext("system-out"))
+            self.assertIsNotNone(
+                results["gpu_probe_then_use"].find("failure"), result.stdout
+            )
+            self.assertIn(
+                "requires labels: gpu",
+                results["gpu_probe_then_use"].findtext("system-out"),
+            )
             for name in (
                 "schedule_only",
                 "jit_only",
