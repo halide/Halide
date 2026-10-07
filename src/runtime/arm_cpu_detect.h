@@ -311,6 +311,36 @@ ArmDetection detect_arm_features(Ops &ops, ArmArch arch) {
     return detect_arm_features(ops, arch, typename Ops::ArmDetectionSource{});
 }
 
+/** Detect the Armv8.x architecture version features (armv81a, etc).
+ *
+ * These are deliberately not part of for_each_detectable_arm_feature: the
+ * runtime doesn't check them, because most platforms have no way to report
+ * the architecture version. So only libHalide calls this, to make the host
+ * target as capable as we can tell it is. */
+template<typename Ops, typename Source>
+void detect_arm_architecture_version(Ops &, ArmArch, Source) {
+}
+
+/** Apple doesn't report the architecture version either, but its cores step
+ * up a version at a time, and each step can be told apart by the optional
+ * features reported. Target::set_implied_features already assumes Armv8.4-A
+ * of all Apple silicon, so the step to detect is Armv8.6-A (A15 and M2 and
+ * later), which is the first to have FEAT_I8MM and FEAT_BF16. Both are
+ * mandatory from Armv8.6-A. */
+template<typename Ops>
+void detect_arm_architecture_version(Ops &ops, ArmArch arch, SysctlSource) {
+    if (arch == ArmArch::Arm64 &&
+        detail::sysctl_is_set(ops, "hw.optional.arm.FEAT_I8MM") &&
+        detail::sysctl_is_set(ops, "hw.optional.arm.FEAT_BF16")) {
+        ops.set_feature(halide_target_feature_armv86a);
+    }
+}
+
+template<typename Ops>
+void detect_arm_architecture_version(Ops &ops, ArmArch arch) {
+    detect_arm_architecture_version(ops, arch, typename Ops::ArmDetectionSource{});
+}
+
 }  // namespace CpuDetect
 }  // namespace Internal
 }  // namespace Halide
