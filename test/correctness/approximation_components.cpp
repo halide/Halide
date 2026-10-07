@@ -530,6 +530,191 @@ int test_standard_quant_compositions() {
     return 0;
 }
 
+// Records whether a vector store of `lanes` lanes to `name` was lowered.
+class FindVectorStore : public Internal::IRMutator {
+    using IRMutator::visit;
+    Internal::Stmt visit(const Internal::Store *op) override {
+        if (op->name == name && op->value.type().lanes() == lanes) {
+            found = true;
+        }
+        return IRMutator::visit(op);
+    }
+
+public:
+    std::string name;
+    int lanes = 0;
+    bool found = false;
+};
+
+// BlockReshape::tiles splits several leading dimensions into dense tiles:
+// (x0, x1, rest...) <-> (x0 % b0, x1 % b1, x0 / b0, x1 / b1, rest...).
+int test_block_tiles() {
+    Var x("x"), y("y"), z("z"), n("n");
+
+    // 2-D tiles with a pass-through dimension: exact both ways.
+    {
+        Func f("tiles_2d");
+        f(x, y, n) = cast<float>(x + 100 * y + 10000 * n);
+        Approximation tiles = BlockReshape::tiles({2, 4});
+        EncodeResult e = tiles.encode({f});
+        if (e.encoded[0].dimensions() != 5 || e.encoded_ports[0].dimensions != 5 ||
+            e.encoded_ports[0].type != Float(32)) {
+            printf("tiles({2, 4}): %d encoded dimensions\n", e.encoded[0].dimensions());
+            return 1;
+        }
+        Buffer<float> enc = e.encoded[0].realize({2, 4, 3, 2, 2});
+        Buffer<float> dec = tiles.decode(e.encoded).decoded[0].realize({6, 8, 2});
+        for (int nn = 0; nn < 2; nn++) {
+            for (int yy = 0; yy < 8; yy++) {
+                for (int xx = 0; xx < 6; xx++) {
+                    float expected = xx + 100 * yy + 10000 * nn;
+                    if (dec(xx, yy, nn) != expected ||
+                        enc(xx % 2, yy % 4, xx / 2, yy / 4, nn) != expected) {
+                        printf("tiles({2, 4}) mismatch at (%d, %d, %d)\n", xx, yy, nn);
+                        return 1;
+                    }
+                }
+            }
+        }
+    }
+
+    // 3-D tiles.
+    {
+        Func f("tiles_3d");
+        f(x, y, z) = cast<int>(x + 100 * y + 10000 * z);
+        Approximation tiles = BlockReshape::tiles({2, 3, 2});
+        EncodeResult e = tiles.encode({f});
+        Buffer<int> enc = e.encoded[0].realize({2, 3, 2, 2, 2, 3});
+        Buffer<int> dec = tiles.decode(e.encoded).decoded[0].realize({4, 6, 6});
+        for (int zz = 0; zz < 6; zz++) {
+            for (int yy = 0; yy < 6; yy++) {
+                for (int xx = 0; xx < 4; xx++) {
+                    int expected = xx + 100 * yy + 10000 * zz;
+                    if (dec(xx, yy, zz) != expected ||
+                        enc(xx % 2, yy % 3, zz % 2, xx / 2, yy / 3, zz / 2) != expected) {
+                        printf("tiles({2, 3, 2}) mismatch at (%d, %d, %d)\n", xx, yy, zz);
+                        return 1;
+                    }
+                }
+            }
+        }
+    }
+
+    // One tiled dimension is the plain BlockReshape.
+    {
+        Func f("tiles_1d");
+        f(x, n) = cast<float>(x + 1000 * n);
+        Buffer<float> tiled = Approximation(BlockReshape::tiles({8})).encode({f}).encoded[0].realize({8, 3, 2});
+        Buffer<float> blocked = Approximation(BlockReshape(8)).encode({f}).encoded[0].realize({8, 3, 2});
+        if (memcmp(tiled.data(), blocked.data(), tiled.size_in_bytes()) != 0) {
+            printf("tiles({8}) differs from BlockReshape(8)\n");
+            return 1;
+        }
+    }
+
+    // Signature: +k dimensions, type and range passed through.
+    {
+        Approximation tiles = BlockReshape::tiles({2, 2});
+        ApproximationPort values("values", UInt(8), 3);
+        values.range = ApproximationRange{0, 15};
+        std::string described = tiles.describe({values});
+        const char *expected = "BlockReshape (values: uint8 x3) -> (blocks: uint8 x5 in [0, 15])";
+        if (described.find(expected) == std::string::npos) {
+            printf("tiles describe() is missing \"%s\":\n%s", expected, described.c_str());
+            return 1;
+        }
+    }
+
+    // Composes with Parallel, Permute and Pointwise: a tiled matrix and a
+    // blocked row, swapped, the matrix stored as float16.
+    {
+        Func a("tiles_a"), b("tiles_b");
+        a(x, y) = cast<float>(x + 16 * y);
+        b(x, n) = cast<float>(2 * x - n);
+        Pointwise f16{"tiles_f16",
+                      [](Expr v) { return cast<float16_t>(v); },
+                      [](Expr v) { return cast<float>(v); }};
+        Approximation scheme =
+            Compose{Parallel{Compose{BlockReshape::tiles({2, 2}), f16}, BlockReshape::tiles({4})},
+                    Permute{{1, 0}}};
+        EncodeResult e = scheme.encode({a, b});
+        if (e.encoded.size() != 2 || e.encoded[0].dimensions() != 3 || e.encoded[1].dimensions() != 4 ||
+            e.encoded[1].types()[0] != Float(16)) {
+            printf("Composed tiles: unexpected encoded ports\n");
+            return 1;
+        }
+        DecodeResult d = scheme.decode(e.encoded);
+        Buffer<float> a_out = d.decoded[0].realize({8, 6});
+        Buffer<float> b_out = d.decoded[1].realize({8, 2});
+        for (int yy = 0; yy < 6; yy++) {
+            for (int xx = 0; xx < 8; xx++) {
+                if (a_out(xx, yy) != xx + 16 * yy) {
+                    printf("Composed tiles: a(%d, %d) = %g\n", xx, yy, a_out(xx, yy));
+                    return 1;
+                }
+            }
+        }
+        for (int nn = 0; nn < 2; nn++) {
+            for (int xx = 0; xx < 8; xx++) {
+                if (b_out(xx, nn) != 2 * xx - nn) {
+                    printf("Composed tiles: b(%d, %d) = %g\n", xx, nn, b_out(xx, nn));
+                    return 1;
+                }
+            }
+        }
+    }
+
+    // The within-tile dimensions of the encoded Func are dense and leading, so
+    // a schedule can vectorize across a whole 2x2 tile.
+    {
+        Func m("tiles_m");
+        m(x, y) = x + 100 * y;
+        Func packed = Approximation(BlockReshape::tiles({2, 2})).encode({m}).encoded[0];
+        std::vector<Var> args = packed.args();
+        Var tile("tile");
+        packed.bound(args[0], 0, 2).bound(args[1], 0, 2).fuse(args[0], args[1], tile).vectorize(tile);
+        FindVectorStore finder;
+        finder.name = packed.name();
+        finder.lanes = 4;
+        Pipeline p(packed);
+        p.add_custom_lowering_pass(&finder, [] {});
+        Buffer<int> out = p.realize({2, 2, 4, 3});
+        if (!finder.found) {
+            printf("tiles({2, 2}): no 4-wide store to %s\n", packed.name().c_str());
+            return 1;
+        }
+        for (int yy = 0; yy < 6; yy++) {
+            for (int xx = 0; xx < 8; xx++) {
+                if (out(xx % 2, yy % 2, xx / 2, yy / 2) != xx + 100 * yy) {
+                    printf("Vectorized tiles mismatch at (%d, %d)\n", xx, yy);
+                    return 1;
+                }
+            }
+        }
+    }
+
+    if (Halide::exceptions_enabled()) {
+        Func row("tiles_row");
+        row(x) = x;
+        for (auto make : {+[] { return BlockReshape::tiles({}); },
+                          +[] { return BlockReshape::tiles({2, 0}); }}) {
+            try {
+                (void)make();
+                printf("BlockReshape::tiles accepted bad block extents\n");
+                return 1;
+            } catch (const CompileError &) {
+            }
+        }
+        try {
+            (void)Approximation(BlockReshape::tiles({2, 2})).encode({row});
+            printf("BlockReshape::tiles({2, 2}) accepted a 1-D input\n");
+            return 1;
+        } catch (const CompileError &) {
+        }
+    }
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -542,6 +727,7 @@ int main(int argc, char **argv) {
                  {"scalar packs", test_scalar_components},
                  {"code packs", test_code_components},
                  {"block components", test_block_components},
+                 {"block tiles", test_block_tiles},
                  {"batch dimensions", test_batch_dimensions},
                  {"batched scheme", test_batched_scheme},
                  {"standard quant compositions", test_standard_quant_compositions}};

@@ -1169,9 +1169,40 @@ std::optional<int> context_dimensions(const ApproximationPorts &inputs) {
 
 }  // namespace
 
+BlockReshape BlockReshape::tiles(std::vector<int> blocks) {
+    user_assert(!blocks.empty()) << "BlockReshape::tiles requires at least one block extent\n";
+    for (int b : blocks) {
+        user_assert(b > 0) << "BlockReshape::tiles block extents must be positive, but got " << b << "\n";
+    }
+    BlockReshape result(1);
+    result.tiles_ = std::move(blocks);
+    return result;
+}
+
 std::vector<Func> BlockReshape::encode(const std::vector<Func> &inputs) const {
     user_assert(inputs.size() == 1) << "BlockReshape::encode expects one input\n";
     const Func &flat = inputs[0];
+    if (!tiles_.empty()) {
+        const int k = (int)tiles_.size();
+        user_assert(flat.dimensions() >= k)
+            << "BlockReshape::tiles encode requires at least " << k << " dimensions, but "
+            << flat.name() << " has " << flat.dimensions() << "\n";
+        std::vector<Var> within = component_vars(k, "within");
+        std::vector<Var> tile = component_vars(k, "tile");
+        std::vector<Var> rest = batch_vars(flat.dimensions() - k);
+        std::vector<Var> args = within;
+        args.insert(args.end(), tile.begin(), tile.end());
+        args.insert(args.end(), rest.begin(), rest.end());
+        std::vector<Expr> flat_args;
+        flat_args.reserve(k + rest.size());
+        for (int i = 0; i < k; i++) {
+            flat_args.push_back(tile[i] * tiles_[i] + within[i]);
+        }
+        flat_args.insert(flat_args.end(), rest.begin(), rest.end());
+        Func packed("block_reshape_packed");
+        packed(args) = flat(flat_args);
+        return {packed};
+    }
     const int flat_dims = block_indexed_ ? 2 : 1;
     user_assert(flat.dimensions() >= flat_dims)
         << "BlockReshape::encode requires at least " << flat_dims << " dimensions, but "
@@ -1203,6 +1234,28 @@ std::vector<Func> BlockReshape::encode(const std::vector<Func> &inputs) const {
 std::vector<Func> BlockReshape::decode(const std::vector<Func> &encoded) const {
     user_assert(encoded.size() == 1) << "BlockReshape::decode expects one input\n";
     const Func &packed = encoded[0];
+    if (!tiles_.empty()) {
+        const int k = (int)tiles_.size();
+        user_assert(packed.dimensions() >= 2 * k)
+            << "BlockReshape::tiles decode requires at least " << 2 * k << " dimensions, but "
+            << packed.name() << " has " << packed.dimensions() << "\n";
+        std::vector<Var> xs = component_vars(k, "x");
+        std::vector<Var> rest = batch_vars(packed.dimensions() - 2 * k);
+        std::vector<Expr> args;
+        args.reserve(2 * k + rest.size());
+        for (int i = 0; i < k; i++) {
+            args.push_back(xs[i] % tiles_[i]);
+        }
+        for (int i = 0; i < k; i++) {
+            args.push_back(xs[i] / tiles_[i]);
+        }
+        args.insert(args.end(), rest.begin(), rest.end());
+        std::vector<Var> out_args = xs;
+        out_args.insert(out_args.end(), rest.begin(), rest.end());
+        Func out("block_reshape_unpacked");
+        out(out_args) = packed(args);
+        return {out};
+    }
     const int block_dims = (int)extents_.size() + 1;
     user_assert(packed.dimensions() >= block_dims)
         << "BlockReshape::decode requires at least " << block_dims << " dimensions, but "
@@ -1235,8 +1288,9 @@ ApproximationSignature BlockReshape::signature(const ApproximationPorts &inputs)
     if (inputs.size() > 1) {
         return ApproximationSignature::unknown(inputs);
     }
-    const int flat_dims = block_indexed_ ? 2 : 1;
-    const int block_dims = (int)extents_.size() + 1;
+    const int flat_dims = !tiles_.empty() ? (int)tiles_.size() : block_indexed_ ? 2 :
+                                                                                  1;
+    const int block_dims = !tiles_.empty() ? 2 * (int)tiles_.size() : (int)extents_.size() + 1;
     ApproximationPort values("values"), blocks("blocks");
     if (inputs.size() == 1) {
         values.type = blocks.type = inputs[0].type;
