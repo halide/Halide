@@ -319,6 +319,7 @@ tests(
     input_larger_than_two_gigs.cpp
     input_param_func_name_collision.cpp
     inspect_loop_level.cpp
+    int8_tile_matmul.cpp
     integer_powers.cpp
     interleave.cpp
     interleave_rgb.cpp

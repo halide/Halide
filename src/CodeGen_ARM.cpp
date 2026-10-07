@@ -171,6 +171,7 @@ protected:
     Value *codegen_shuffle_indices(int bits, const std::vector<int> &indices);
     Value *codegen_whilelt(int total_lanes, int start, int end);
     void codegen_vector_reduce(const VectorReduce *, const Expr &) override;
+    bool codegen_matmul_vector_reduce(const VectorReduce *, const Expr &);
     bool codegen_dot_product_vector_reduce(const VectorReduce *, const Expr &);
     bool codegen_pairwise_vector_reduce(const VectorReduce *, const Expr &);
     bool codegen_across_vector_reduce(const VectorReduce *, const Expr &);
@@ -804,6 +805,12 @@ const ArmIntrinsic intrinsic_defs[] = {
     // USDOT - Mixed-sign dot products (FEAT_I8MM). The unsigned operand comes first.
     {nullptr, "usdot.v2i32.v8i8", Int(32, 2), "dot_product", {Int(32, 2), UInt(8, 8), Int(8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
     {nullptr, "usdot.v4i32.v16i8", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), Int(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
+
+    // 2x2x8 8-bit matrix multiply-accumulate (FEAT_I8MM).
+    {nullptr, "smmla.v4i32.v16i8", Int(32, 4), "matmul_2x2x8", {Int(32, 4), Int(8, 16), Int(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
+    {nullptr, "ummla.v4i32.v16i8", Int(32, 4), "matmul_2x2x8", {Int(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
+    {nullptr, "ummla.v4i32.v16i8", UInt(32, 4), "matmul_2x2x8", {UInt(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
+    {nullptr, "usmmla.v4i32.v16i8", Int(32, 4), "matmul_2x2x8", {Int(32, 4), UInt(8, 16), Int(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
     // SVE versions.
     {nullptr, "sdot.nxv4i32", Int(32, 4), "dot_product", {Int(32, 4), Int(8, 16), Int(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate | ArmIntrinsic::SveRequired},
     {nullptr, "udot.nxv4i32", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate | ArmIntrinsic::SveRequired},
@@ -2653,6 +2660,9 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         return;
     }
 
+    if (codegen_matmul_vector_reduce(op, init)) {
+        return;
+    }
     if (codegen_dot_product_vector_reduce(op, init)) {
         return;
     }
@@ -2663,6 +2673,135 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         return;
     }
     CodeGen_CPU::codegen_vector_reduce(op, init);
+}
+
+// For each lane of a vector, find the expression and lane that it is a copy
+// of, looking through shuffles and broadcasts.
+void find_lane_sources(const Expr &e, vector<pair<Expr, int>> &sources) {
+    if (const Shuffle *s = e.as<Shuffle>()) {
+        vector<pair<Expr, int>> inputs;
+        for (const Expr &v : s->vectors) {
+            find_lane_sources(v, inputs);
+        }
+        for (int i : s->indices) {
+            sources.push_back(inputs[i]);
+        }
+    } else if (const Broadcast *b = e.as<Broadcast>()) {
+        vector<pair<Expr, int>> inputs;
+        find_lane_sources(b->value, inputs);
+        for (int i = 0; i < b->lanes; i++) {
+            sources.insert(sources.end(), inputs.begin(), inputs.end());
+        }
+    } else {
+        for (int i = 0; i < e.type().lanes(); i++) {
+            sources.emplace_back(e, i);
+        }
+    }
+}
+
+bool same_lane_source(const pair<Expr, int> &a, const pair<Expr, int> &b) {
+    return a.second == b.second && (a.first.same_as(b.first) || equal(a.first, b.first));
+}
+
+// Given the lane sources of a 32-lane vector with lanes indexed as
+// 16 * outer + 8 * inner + k, check that the value does not depend on the
+// inner index (stride == 8) or the outer index (stride == 16).
+bool lane_sources_independent_of(const vector<pair<Expr, int>> &sources, int stride) {
+    for (int i = 0; i < 32; i++) {
+        if ((i & stride) == 0 && !same_lane_source(sources[i], sources[i + stride])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool CodeGen_ARM::codegen_matmul_vector_reduce(const VectorReduce *op, const Expr &init) {
+    // smmla, ummla and usmmla compute a 2x2 tile of 32-bit dot products of
+    // 8-bit values:
+    //   acc[2 * i + j] += sum_{k < 8} a[8 * i + k] * b[8 * j + k]
+    // where a and b each hold two rows of eight values. Look for a 32 -> 4
+    // lane sum of products where lane 16 * i + 8 * j + k of one operand only
+    // depends on i and k, and the same lane of the other operand only depends
+    // on j and k. Everything else is left to the dot product patterns.
+    if (op->op != VectorReduce::Add ||
+        op->type.lanes() != 4 ||
+        op->value.type().lanes() != 32 ||
+        !target.has_feature(Target::ARMv86a) ||
+        target.bits != 64 ||
+        target_vscale() != 0) {
+        return false;
+    }
+
+    static const Expr patterns[] = {
+        i32(widening_mul(wild_i8x_, wild_i8x_)),
+        i32(widening_mul(wild_u8x_, wild_u8x_)),
+        u32(widening_mul(wild_u8x_, wild_u8x_)),
+        i32(widening_mul(wild_u8x_, wild_i8x_)),
+        i32(widening_mul(wild_i8x_, wild_u8x_)),
+    };
+
+    vector<Expr> matches;
+    for (const Expr &p : patterns) {
+        if (!expr_match(p, op->value, matches)) {
+            continue;
+        }
+
+        vector<pair<Expr, int>> sources[2];
+        find_lane_sources(matches[0], sources[0]);
+        find_lane_sources(matches[1], sources[1]);
+        Expr rows_i, rows_j;
+        if (lane_sources_independent_of(sources[0], 8) &&
+            lane_sources_independent_of(sources[1], 16)) {
+            rows_i = matches[0];
+            rows_j = matches[1];
+        } else if (lane_sources_independent_of(sources[1], 8) &&
+                   lane_sources_independent_of(sources[0], 16)) {
+            rows_i = matches[1];
+            rows_j = matches[0];
+        } else {
+            return false;
+        }
+
+        // Pack the two distinct rows of each operand into a 16-lane vector.
+        vector<int> i_lanes, j_lanes;
+        for (int k = 0; k < 8; k++) {
+            i_lanes.push_back(k);
+            j_lanes.push_back(k);
+        }
+        for (int k = 0; k < 8; k++) {
+            i_lanes.push_back(16 + k);
+            j_lanes.push_back(8 + k);
+        }
+        Expr a = Shuffle::make({rows_i}, i_lanes);
+        Expr b = Shuffle::make({rows_j}, j_lanes);
+
+        Expr acc = init.defined() ? init : make_zero(op->type);
+
+        // usmmla needs the unsigned operand first. Swapping the operands
+        // computes the transpose of the tile, so transpose the accumulator on
+        // the way in and the result on the way out.
+        const vector<int> transpose = {0, 2, 1, 3};
+        bool transposed = a.type().is_int() && b.type().is_uint();
+        if (transposed) {
+            std::swap(a, b);
+            acc = Shuffle::make({acc}, transpose);
+        }
+
+        Value *v = call_overloaded_intrin(op->type, "matmul_2x2x8", {acc, a, b});
+        if (!v) {
+            return false;
+        }
+        if (transposed) {
+            string n = unique_name('t');
+            sym_push(n, v);
+            v = codegen(Shuffle::make({Variable::make(op->type, n)}, transpose));
+            sym_pop(n);
+        }
+        value = v;
+        return true;
+    }
+
+    return false;
 }
 
 bool CodeGen_ARM::codegen_dot_product_vector_reduce(const VectorReduce *op, const Expr &init) {

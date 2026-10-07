@@ -26,6 +26,27 @@ public:
         }
     }
 
+    // Inline reductions over an RDom with this name get their vectorized
+    // output lanes split into a 2x2 tile. Lane x is then element
+    // (x / 2, x % 2) of the tile, and x / 2 and x % 2 simplify to the
+    // vectorized tile coordinates rather than becoming gathers.
+    static constexpr const char *tile_2x2_rdom = "tile_2x2_k";
+
+    using SimdOpCheckTest::apply_additional_schedule;
+    void apply_additional_schedule(Stage &stage) const override {
+        const auto &rvars = stage.get_schedule().rvars();
+        if (rvars.size() != 1 || !Internal::starts_with(rvars[0].var, tile_2x2_rdom)) {
+            return;
+        }
+        for (const Internal::Dim &d : stage.get_schedule().dims()) {
+            if (d.for_type == Internal::ForType::Vectorized && d.dim_type == Internal::DimType::PureVar) {
+                Var outer, inner;
+                stage.split(Var(d.var.substr(d.var.rfind('.') + 1)), outer, inner, 2);
+                return;
+            }
+        }
+    }
+
     void check_streaming_accesses() {
         if (target.bits != 64) {
             return;
@@ -709,6 +730,21 @@ public:
                     RDom r(0, 4);
                     check("usdot", 4, sum(i32(in_u8(4 * x + r)) * in_i8(r + 32)));
                     check("usdot", 4, sum(i32(in_i8(4 * x + r)) * in_u8(r + 32)));
+
+                    // SMMLA/UMMLA/USMMLA - 2x2 tile of 8-element dot
+                    // products. Output lane x is element (x / 2, x % 2) of
+                    // the tile: one operand depends only on x / 2, the other
+                    // only on x % 2.
+                    RDom k(0, 8, tile_2x2_rdom);
+                    Expr row = 16 * (x / 2) + k;
+                    Expr col = 8 * (x % 2) + k + 32;
+                    check("smmla", 4, sum(i32(in_i8(row)) * in_i8(col)));
+                    check("ummla", 4, sum(u32(in_u8(row)) * in_u8(col)));
+                    check("ummla", 4, sum(i32(in_u8(row)) * in_u8(col)));
+                    check("usmmla", 4, sum(i32(in_u8(row)) * in_i8(col)));
+                    // Here the unsigned operand is the one that depends on
+                    // x % 2, so the tile is computed transposed.
+                    check("usmmla", 4, sum(i32(in_i8(row)) * in_u8(col)));
                 }
             }
             // VPOP     X       F, D    Pop from Stack
