@@ -801,6 +801,9 @@ const ArmIntrinsic intrinsic_defs[] = {
     {nullptr, "sdot.v4i32.v16i8", Int(32, 4), "dot_product", {Int(32, 4), Int(8, 16), Int(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
     {nullptr, "udot.v4i32.v16i8", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
     {nullptr, "udot.v4i32.v16i8", UInt(32, 4), "dot_product", {UInt(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
+    // USDOT - Mixed-sign dot products (FEAT_I8MM). The unsigned operand comes first.
+    {nullptr, "usdot.v2i32.v8i8", Int(32, 2), "dot_product", {Int(32, 2), UInt(8, 8), Int(8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
+    {nullptr, "usdot.v4i32.v16i8", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), Int(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
     // SVE versions.
     {nullptr, "sdot.nxv4i32", Int(32, 4), "dot_product", {Int(32, 4), Int(8, 16), Int(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate | ArmIntrinsic::SveRequired},
     {nullptr, "udot.nxv4i32", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate | ArmIntrinsic::SveRequired},
@@ -2686,6 +2689,9 @@ bool CodeGen_ARM::codegen_dot_product_vector_reduce(const VectorReduce *op, cons
         {VectorReduce::Add, 4, i64(widening_mul(wild_i16x_, wild_i16x_)), "dot_product", Target::SVE2},
         {VectorReduce::Add, 4, i64(widening_mul(wild_u16x_, wild_u16x_)), "dot_product", Target::SVE2},
         {VectorReduce::Add, 4, u64(widening_mul(wild_u16x_, wild_u16x_)), "dot_product", Target::SVE2},
+        // Mixed-sign dot products. FEAT_I8MM is mandatory from Armv8.6-A.
+        {VectorReduce::Add, 4, i32(widening_mul(wild_u8x_, wild_i8x_)), "dot_product", Target::ARMv86a},
+        {VectorReduce::Add, 4, i32(widening_mul(wild_i8x_, wild_u8x_)), "dot_product", Target::ARMv86a},
         // A sum is the same as a dot product with a vector of ones, and this appears to
         // be a bit faster.
         {VectorReduce::Add, 4, i32(wild_i8x_), "dot_product", Target::ARMDotProd, {1}},
@@ -2726,7 +2732,14 @@ bool CodeGen_ARM::codegen_dot_product_vector_reduce(const VectorReduce *op, cons
                 i = make_zero(op->type);
             }
 
-            if (const Shuffle *s = matches[0].as<Shuffle>()) {
+            if (matches[0].type() != matches[1].type()) {
+                // The mixed-sign dot product (usdot) takes its unsigned
+                // operand first, so we can't move a broadcast as below. LLVM
+                // matches a broadcast unsigned operand to the indexed sudot.
+                if (matches[0].type().is_int()) {
+                    std::swap(matches[0], matches[1]);
+                }
+            } else if (const Shuffle *s = matches[0].as<Shuffle>()) {
                 if (s->is_broadcast()) {
                     // LLVM wants the broadcast as the second operand for the broadcasting
                     // variant of udot/sdot.

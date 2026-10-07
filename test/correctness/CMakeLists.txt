@@ -372,6 +372,7 @@ tests(
     mismatch_runtime_streaming_vscale.cpp
     mismatch_runtime_vscale.cpp
     missing_args.cpp
+    mixed_sign_dot_product.cpp
     mod.cpp
     modulus_remainder.cpp
     multi_output_pipeline_with_bad_sizes.cpp
