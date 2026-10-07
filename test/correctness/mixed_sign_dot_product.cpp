@@ -33,9 +33,10 @@ Buffer<T> make_input(int w, int h = 0) {
     return buf;
 }
 
-std::string compile_to_asm(Func f, const std::vector<Argument> &args, const std::string &name) {
+std::string compile_to_asm(Func f, const std::vector<Argument> &args, const std::string &name,
+                           const Target &target = get_jit_target_from_environment()) {
     std::string file = Internal::get_test_tmp_dir() + "mixed_sign_dot_product_" + name + ".s";
-    f.compile_to_assembly(file, args, get_jit_target_from_environment());
+    f.compile_to_assembly(file, args, target);
     std::ifstream in(file);
     std::stringstream contents;
     contents << in.rdbuf();
@@ -44,7 +45,8 @@ std::string compile_to_asm(Func f, const std::vector<Argument> &args, const std:
 
 bool expect_instructions() {
     Target t = get_jit_target_from_environment();
-    return t.arch == Target::ARM && t.bits == 64 && t.has_feature(Target::ARMv86a) &&
+    return t.arch == Target::ARM && t.bits == 64 &&
+           t.with_implied_features().has_feature(Target::ARMI8MM) &&
            !t.has_feature(Target::NoNEON) && !t.has_feature(Target::SVE2);
 }
 
@@ -144,9 +146,48 @@ int test_broadcast_form(const std::string &name) {
     return 0;
 }
 
+// The instructions need arm_i8mm, which Armv8.6-A implies. This only compiles,
+// so it runs on any host.
+int test_target_gating() {
+    ImageParam a(UInt(8), 1, "a"), b(Int(8), 1, "b");
+    Var x("x"), xo("xo"), xi("xi");
+    RDom r(0, K, "r");
+    RVar ro("ro"), ri("ri");
+    Func out("gating");
+    out(x) = 0;
+    out(x) += cast<int32_t>(a(K * x + r)) * cast<int32_t>(b(K * x + r));
+    out.update()
+        .split(r, ro, ri, 4)
+        .split(x, xo, xi, 4)
+        .reorder(ri, xi, ro, xo)
+        .atomic()
+        .vectorize(ri)
+        .vectorize(xi);
+
+    const std::vector<std::pair<std::string, bool>> cases = {
+        {"arm-64-linux-arm_dot_prod", false},
+        {"arm-64-linux-arm_dot_prod-arm_i8mm", true},
+        {"arm-64-linux-armv86a", true},
+    };
+    for (size_t i = 0; i < cases.size(); i++) {
+        const auto &[target, expected] = cases[i];
+        std::string assembly = compile_to_asm(out, {a, b}, "gating_" + std::to_string(i), Target(target));
+        bool found = assembly.find("usdot") != std::string::npos;
+        if (found != expected) {
+            printf("%s: expected usdot to be %s\n", target.c_str(), expected ? "used" : "unused");
+            return 1;
+        }
+    }
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
+    if (test_target_gating()) {
+        return 1;
+    }
+
     for (int lanes : {2, 4, 8}) {
         std::string suffix = "_x" + std::to_string(lanes);
         if (test_vector_form<uint8_t, int8_t>("u8_i8" + suffix, lanes) ||

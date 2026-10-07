@@ -33,7 +33,8 @@ Buffer<T> make_input(int w, int h) {
 
 bool expect_instructions() {
     Target t = get_jit_target_from_environment();
-    return t.arch == Target::ARM && t.bits == 64 && t.has_feature(Target::ARMv86a) &&
+    return t.arch == Target::ARM && t.bits == 64 &&
+           t.with_implied_features().has_feature(Target::ARMI8MM) &&
            !t.has_feature(Target::NoNEON) && !t.has_feature(Target::SVE2);
 }
 
