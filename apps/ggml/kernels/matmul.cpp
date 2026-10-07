@@ -2,6 +2,9 @@
 //   out(n, m) = sum_k W(k, n) * X(k, m)  in f32,
 // each operand approximated by its format's scheme, then severed at the
 // encoded records, which become the inputs w: [K / block, N], a: [.., M].
+// act = "<storage>[:<compute>]": X arrives as <storage> and, given a compute
+// format, is approximated by it inside the pipeline too (not severed), as
+// GGML quantizes f32 activations.
 #include "kernels/schedule.h"
 #include "schemes/schemes.h"
 
@@ -11,10 +14,12 @@ using namespace Halide;
 
 class MatMul : public Generator<MatMul> {
 public:
-    GeneratorParam<std::string> weight{"weight", "q4_0"}, act{"act", "q8_0"};
+    GeneratorParam<std::string> weight{"weight", "q4_0"}, act{"act", "q8_0"}, op{"op", "vec_dot"};
 
     void configure() {
-        ggml::Format fw = ggml::format(weight), fa = ggml::format(act);
+        std::string an = act, cn = an.substr(an.find(':') + 1);
+        an = an.substr(0, an.find(':'));
+        ggml::Format fw = ggml::format(weight), fa = ggml::format(an), fc = ggml::format(cn);
         ImageParam w = input(fw, "w"), a = input(fa, "a");
         Var k("k"), n("n"), m("m");
         Func W("W"), X("X"), out("out");
@@ -32,10 +37,15 @@ public:
                 bound.push_back(p);
             }
         }
+        if (cn != an) {
+            if (fa.scheme.defined()) throw std::invalid_argument("act: only plain storage can be re-approximated");
+            approx.push_back(X.approximate_by(fc.scheme, {out}));
+            staged.push_back(approx.back().encoded[0]);
+        }
         Pipeline(out).sever(cut, bound);
         // The ABI: w [K / w block, N], a [K / a block, M], out [N, M], all
         // dense from 0 (strides as GGML's contiguous rows; K % block == 0).
-        if (fw.block % fa.block) throw std::invalid_argument("activation blocks must divide weight blocks");
+        if (fw.block % fa.block || fw.block % fc.block) throw std::invalid_argument("activation blocks must divide weight blocks");
         OutputImageParam o = out.output_buffer();
         o.dim(0).set_min(0).dim(1).set_min(0).set_stride(o.dim(0).extent());
         w.dim(0).set_min(0).dim(1).set_bounds(0, o.dim(0).extent()).set_stride(w.dim(0).extent());
@@ -44,16 +54,17 @@ public:
         add_input(w);
         add_input(a);
         result = add_output(out);
-        blocks = {fw.block, fa.block};
+        blocks = {fw.block, fc.block};
     }
 
     void generate() {
-        ggml::vec_dot(*result, r, blocks, approx, get_target());
+        (op == "vec_dot" ? ggml::vec_dot : ggml::mul_mat)(*result, r, blocks, approx, staged, get_target());
     }
 
 private:
     RDom r;
     std::vector<ApproximationResult> approx;
+    std::vector<Func> staged;  // encoded inside the pipeline
     std::vector<int> blocks;
     GeneratorOutput<Buffer<>> *result = nullptr;
 
