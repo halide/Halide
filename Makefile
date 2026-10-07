@@ -1334,6 +1334,19 @@ GENERATOR_JIT_TESTS = $(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_ji
 
 # multitarget test doesn't make any sense for the CPP backend; just skip it.
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_multitarget,$(GENERATOR_AOTCPP_TESTS))
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_arm_i8mm_multitarget,$(GENERATOR_AOTCPP_TESTS))
+
+# arm_i8mm_multitarget simulates ARM CPUs with and without arm_i8mm, so it only
+# makes sense on 64-bit ARM hosts.
+ifeq ($(UNAME), Darwin)
+ARM_I8MM_MULTITARGET_BASE = arm-64-osx
+else
+ARM_I8MM_MULTITARGET_BASE = arm-64-linux
+endif
+ifeq (,$(filter arm64 aarch64,$(shell uname -m)))
+GENERATOR_AOT_TESTS := $(filter-out generator_aot_arm_i8mm_multitarget,$(GENERATOR_AOT_TESTS))
+GENERATOR_AOT_EXCLUDED_BINS = $(BIN_DIR)/$(TARGET)/generator_aot_arm_i8mm_multitarget
+endif
 
 # Note that many of the AOT-CPP tests are broken right now;
 # remove AOT-CPP tests that don't (yet) work for C++ backend
@@ -1376,6 +1389,7 @@ GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/define_extern_opencl
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/msan.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/sanitizercoverage.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/multitarget.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
+GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/arm_i8mm_multitarget.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/nested_externs.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 # profiler_instances declares a test_extern_stage callback in its
 # aottest, which rungen doesn't link.
@@ -1419,7 +1433,7 @@ build_tests: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=$(BIN_DIR)/c
 	$(WARNING_TESTS:$(ROOT_DIR)/test/warning/%.cpp=$(BIN_DIR)/warning_%) \
 	$(RUNTIME_TESTS:$(ROOT_DIR)/test/runtime/%.cpp=$(BIN_DIR)/runtime_%) \
 	$(FUZZ_TESTS:$(ROOT_DIR)/test/fuzz/%.cpp=$(BIN_DIR)/fuzz_%) \
-	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_aottest.cpp=$(BIN_DIR)/$(TARGET)/generator_aot_%) \
+	$(filter-out $(GENERATOR_AOT_EXCLUDED_BINS),$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_aottest.cpp=$(BIN_DIR)/$(TARGET)/generator_aot_%)) \
 	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_jittest.cpp=$(BIN_DIR)/generator_jit_%) \
 	$(MULLAPUDI2016_TESTS:$(ROOT_DIR)/test/autoschedulers/mullapudi2016/%.cpp=$(BIN_DIR)/mullapudi2016_%) \
 	$(LI2018_TESTS:$(ROOT_DIR)/test/autoschedulers/li2018/%.cpp=$(BIN_DIR)/li2018_%) \
@@ -1704,6 +1718,18 @@ $(FILTERS_DIR)/multitarget.a: $(BIN_DIR)/multitarget.generator
 		target=$(TARGET)-no_bounds_query-no_runtime-c_plus_plus_name_mangling,$(TARGET)-no_runtime-c_plus_plus_name_mangling  \
 		-e assembly,bitcode,c_source,c_header,stmt_html,static_library,stmt
 
+# The base targets here are deliberately not $(TARGET), which (as "host") could
+# already include arm_i8mm.
+$(FILTERS_DIR)/arm_i8mm_multitarget.a: $(BIN_DIR)/arm_i8mm_multitarget.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g arm_i8mm_multitarget -e static_library,c_header -o $(CURDIR)/$(FILTERS_DIR) \
+		target=$(ARM_I8MM_MULTITARGET_BASE)-arm_i8mm-no_runtime,$(ARM_I8MM_MULTITARGET_BASE)-no_runtime
+
+$(FILTERS_DIR)/armv86a_multitarget.a: $(BIN_DIR)/arm_i8mm_multitarget.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g arm_i8mm_multitarget -f armv86a_multitarget -e static_library,c_header -o $(CURDIR)/$(FILTERS_DIR) \
+		target=$(ARM_I8MM_MULTITARGET_BASE)-armv86a-no_runtime,$(ARM_I8MM_MULTITARGET_BASE)-no_runtime
+
 $(FILTERS_DIR)/msan.a: $(BIN_DIR)/msan.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g msan -f msan $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-msan
@@ -1959,6 +1985,17 @@ $(BIN_DIR)/generator_jit_%: $(ROOT_DIR)/test/generator/%_jittest.cpp $(TEST_DEPS
 $(BIN_DIR)/$(TARGET)/generator_aot_stubuser: $(ROOT_DIR)/test/generator/stubuser_aottest.cpp $(FILTERS_DIR)/stubuser.a $(FILTERS_DIR)/stubuser.h $(FILTERS_DIR)/stubuser_auto.a $(FILTERS_DIR)/stubuser_auto.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
+
+$(BIN_DIR)/$(TARGET)/generator_aot_arm_i8mm_multitarget: $(ROOT_DIR)/test/generator/arm_i8mm_multitarget_aottest.cpp $(FILTERS_DIR)/arm_i8mm_multitarget.a $(FILTERS_DIR)/armv86a_multitarget.a $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+	@mkdir -p $(@D)
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
+
+# generator_aot_arm_i8mm_multitarget is run with and without simulated arm_i8mm.
+generator_aot_arm_i8mm_multitarget: $(BIN_DIR)/$(TARGET)/generator_aot_arm_i8mm_multitarget
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR) ; HL_TEST_HAVE_ARM_I8MM=0 $(CURDIR)/$<
+	cd $(TMP_DIR) ; HL_TEST_HAVE_ARM_I8MM=1 $(CURDIR)/$<
+	@-echo
 
 # generator_aot_multitarget is run multiple times, with different env vars.
 generator_aot_multitarget: $(BIN_DIR)/$(TARGET)/generator_aot_multitarget

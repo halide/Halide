@@ -148,6 +148,12 @@ static_assert(CpuDetect::detail::hwcap2_sve2 == HWCAP2_SVE2);
 #if defined(HWCAP2_SME2) && !defined(__arm__)
 static_assert(CpuDetect::detail::hwcap2_sme2 == HWCAP2_SME2);
 #endif
+#if defined(HWCAP2_I8MM) && !defined(__arm__)
+static_assert(CpuDetect::detail::hwcap2_i8mm == HWCAP2_I8MM);
+#endif
+#if defined(HWCAP_I8MM) && defined(__arm__)
+static_assert(CpuDetect::detail::arm32_hwcap_i8mm == HWCAP_I8MM);
+#endif
 #endif  // __linux__
 
 #ifdef __linux__
@@ -630,6 +636,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"sme_svl2048", Target::SME_SVL2048},
     {"arm_dot_prod", Target::ARMDotProd},
     {"arm_fp16", Target::ARMFp16},
+    {"arm_i8mm", Target::ARMI8MM},
     {"llvm_large_code_model", Target::LLVMLargeCodeModel},
     {"rvv", Target::RVV},
     {"armv8a", Target::ARMv8a},
@@ -906,6 +913,7 @@ void Target::validate_features() const {
         do_check_bad(*this, {
                                 ARMDotProd,
                                 ARMFp16,
+                                ARMI8MM,
                                 ARMv7s,
                                 ARMv81a,
                                 NoNEON,
@@ -953,6 +961,7 @@ void Target::validate_features() const {
         do_check_bad(*this, {
                                 ARMDotProd,
                                 ARMFp16,
+                                ARMI8MM,
                                 ARMv7s,
                                 ARMv81a,
                                 AVX,
@@ -1227,6 +1236,8 @@ const std::vector<std::pair<Target::Feature, Target::Feature>> &implied_feature_
         {Target::ARMv89a, Target::ARMv88a},
         {Target::ARMv88a, Target::ARMv87a},
         {Target::ARMv87a, Target::ARMv86a},
+        // FEAT_I8MM is optional from Armv8.2-A, and mandatory from Armv8.6-A.
+        {Target::ARMv86a, Target::ARMI8MM},
         {Target::ARMv86a, Target::ARMv85a},
         {Target::ARMv85a, Target::ARMv84a},
         {Target::ARMv84a, Target::ARMv83a},

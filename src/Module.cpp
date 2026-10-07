@@ -954,9 +954,19 @@ void compile_multitarget(const std::string &fn_name,
             }
         }
 
+        // The runtime can't detect the ARM architecture version features, so
+        // it accepts them unconditionally. Armv8.6-A implies arm_i8mm, which
+        // the runtime can detect and lowering will use, so check for it too.
+        // (Other implied features aren't added: the runtime's detection
+        // doesn't always report them alongside the features implying them.)
+        Target guard_target = target;
+        if (target.arch == Target::ARM &&
+            target.with_implied_features().has_feature(Target::ARMI8MM)) {
+            guard_target.set_feature(Target::ARMI8MM);
+        }
         uint64_t cur_target_features[kFeaturesWordCount] = {0};
         for (int i = 0; i < Target::FeatureEnd; ++i) {
-            if (target.has_feature((Target::Feature)i)) {
+            if (guard_target.has_feature((Target::Feature)i)) {
                 cur_target_features[i >> 6] |= ((uint64_t)1) << (i & 63);
             }
         }
