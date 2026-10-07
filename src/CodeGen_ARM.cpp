@@ -2726,7 +2726,7 @@ bool CodeGen_ARM::codegen_matmul_vector_reduce(const VectorReduce *op, const Exp
     if (op->op != VectorReduce::Add ||
         op->type.lanes() != 4 ||
         op->value.type().lanes() != 32 ||
-        !target.has_feature(Target::ARMv86a) ||
+        !target.has_feature(Target::ARMI8MM) ||
         target.bits != 64 ||
         target_vscale() != 0) {
         return false;
@@ -2828,9 +2828,9 @@ bool CodeGen_ARM::codegen_dot_product_vector_reduce(const VectorReduce *op, cons
         {VectorReduce::Add, 4, i64(widening_mul(wild_i16x_, wild_i16x_)), "dot_product", Target::SVE2},
         {VectorReduce::Add, 4, i64(widening_mul(wild_u16x_, wild_u16x_)), "dot_product", Target::SVE2},
         {VectorReduce::Add, 4, u64(widening_mul(wild_u16x_, wild_u16x_)), "dot_product", Target::SVE2},
-        // Mixed-sign dot products. FEAT_I8MM is mandatory from Armv8.6-A.
-        {VectorReduce::Add, 4, i32(widening_mul(wild_u8x_, wild_i8x_)), "dot_product", Target::ARMv86a},
-        {VectorReduce::Add, 4, i32(widening_mul(wild_i8x_, wild_u8x_)), "dot_product", Target::ARMv86a},
+        // Mixed-sign dot products.
+        {VectorReduce::Add, 4, i32(widening_mul(wild_u8x_, wild_i8x_)), "dot_product", Target::ARMI8MM},
+        {VectorReduce::Add, 4, i32(widening_mul(wild_i8x_, wild_u8x_)), "dot_product", Target::ARMI8MM},
         // A sum is the same as a dot product with a vector of ones, and this appears to
         // be a bit faster.
         {VectorReduce::Add, 4, i32(wild_i8x_), "dot_product", Target::ARMDotProd, {1}},
@@ -3141,6 +3141,9 @@ string CodeGen_ARM::mattrs() const {
     }
     if (target.has_feature(Target::ARMDotProd)) {
         attrs.emplace_back("+dotprod");
+    }
+    if (target.has_feature(Target::ARMI8MM)) {
+        attrs.emplace_back("+i8mm");
     }
     if (target.bits == 32) {
         if (target.has_feature(Target::ARMv7s)) {

@@ -120,6 +120,7 @@ public:
         for (Target::Feature f : {
                  Target::ARMDotProd,
                  Target::ARMFp16,
+                 Target::ARMI8MM,
                  Target::ARMv7s,
                  Target::ARMv8a,
                  Target::ARMv81a,

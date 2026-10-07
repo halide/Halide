@@ -715,9 +715,8 @@ public:
                     }
                 }
 
-                // USDOT/SUDOT - Mixed-sign dot products. FEAT_I8MM is
-                // mandatory from Armv8.6-A.
-                if (!arm32 && target.has_feature(Target::ARMv86a)) {
+                // USDOT/SUDOT - Mixed-sign dot products.
+                if (!arm32 && target.has_feature(Target::ARMI8MM)) {
                     for (int f : {4, 8}) {
                         RDom r(0, f);
                         for (int v : {2, 4}) {
@@ -1234,6 +1233,6 @@ int main(int argc, char **argv) {
             Target("arm-32-linux"),
             Target("arm-64-linux"),
             Target("arm-64-linux-armv84a-arm_dot_prod-arm_fp16"),
-            Target("arm-64-linux-armv86a-arm_dot_prod-arm_fp16"),
+            Target("arm-64-linux-armv84a-arm_dot_prod-arm_fp16-arm_i8mm"),
         });
 }
