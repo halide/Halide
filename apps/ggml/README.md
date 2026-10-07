@@ -18,7 +18,7 @@ build/apps/ggml/ggml-quant-bench --types q4_0 --shapes llama3-8b-gemv >out.csv
 build/apps/ggml/ggml-quant-bench --help
 ```
 
-The vcpkg port (`apps/vcpkg/ports/ggml`) pins GGML v0.15.3 with `GGML_NATIVE`,
+The vcpkg port (`apps/vcpkg/ports/ggml`) pins GGML v0.26.0 with `GGML_NATIVE`,
 CPU repack, KleidiAI (arm64) and Metal (macOS) on, and `GGML_LLAMAFILE` off, so
 the plain CPU path is GGML's own `vec_dot` loop.
 
