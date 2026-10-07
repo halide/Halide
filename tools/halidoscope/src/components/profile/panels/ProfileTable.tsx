@@ -1,101 +1,30 @@
 import { clsx } from "clsx";
 import * as React from "react";
 
+import { useOpenFuncMenu } from "@/hooks/funcMenu";
 import { useProfileContext } from "@/hooks/profile";
 import type { ProfileFunc } from "@/types/profile";
-
-// Mirrors the `ProfileFunc.kind` tags documented in `@/types/profile`.
-const KIND_OVERHEAD = 1;
-const KIND_THREAD_IDLE = 2;
-const KIND_MALLOC = 3;
-const KIND_FREE = 4;
-const KIND_ALLOCATION = 7;
-
-// Bit positions in `ProfileFunc.counters_approximated`, matching the
-// `counter_*` enum in `profiler_common.cpp`.
-const COUNTER_MEMORY_TOTAL = 0;
-const COUNTER_NUM_ALLOCS = 1;
-const COUNTER_PARALLEL_LOOPS = 2;
-const COUNTER_PARALLEL_TASKS = 3;
-const COUNTER_POINTS_COMPUTED = 5;
-
-function isApproximate(func: ProfileFunc, counter: number): boolean {
-  return ((func.counters_approximated ?? 0) & (1 << counter)) !== 0;
-}
-
-/** Marks a conservative upper bound with a leading '<', as the runtime
- * report does. */
-function approx(text: string, isApprox: boolean): string {
-  return isApprox && text !== "" ? `<${text}` : text;
-}
-
-const SI_SUFFIXES = ["", "K", "M", "G", "T", "P", "E"];
-
-/** SI-suffixed byte/allocation counter (10000 -> 10K, 1e6 -> 1.0M, ...),
- * matching Halide's `halide_profiler_report`. Zero renders blank. */
-function formatCounter(x: number): string {
-  if (x <= 0) {
-    return "";
-  }
-
-  let value = x;
-  let scale = 0;
-  while (value >= 10000) {
-    scale++;
-    value = Math.floor((value + 499) / 1000);
-  }
-
-  return `${value}${SI_SUFFIXES[scale]}`;
-}
-
-/** A counter accumulated over `runs` runs. Renders the per-run value if
- * constant per run, otherwise the average. Zero renders blank. */
-function formatNormalizedCounter(x: number, runs: number): string {
-  if (x <= 0) {
-    return "";
-  }
-  if (runs <= 0) {
-    return formatCounter(x);
-  }
-  if (x % runs === 0) {
-    return formatCounter(x / runs);
-  }
-
-  const avg = x / runs;
-  return avg >= 10000 ? formatCounter(Math.round(avg)) : avg.toFixed(2);
-}
-
-/** Time billed to a Func, averaged over the runs the sampler reached. */
-function formatTime(timeNs: number, billedRuns: number): string {
-  const runs = billedRuns > 0 ? billedRuns : 1;
-  let value = timeNs / (runs * 1e6);
-  let unit = "ms";
-
-  if (value >= 1000) {
-    value /= 1000;
-    unit = "s";
-  }
-
-  return `${value.toFixed(2)} ${unit}`;
-}
-
-function formatPercent(timeNs: number, pipelineTimeNs: number): string {
-  const pct = pipelineTimeNs > 0 ? (timeNs / pipelineTimeNs) * 100 : 0;
-  return `(${pct.toFixed(1)}%)`;
-}
-
-function formatRecompute(recompute: number | undefined): string {
-  if (!recompute || recompute <= 0) {
-    return "";
-  }
-  return recompute >= 10000
-    ? formatCounter(Math.round(recompute))
-    : recompute.toFixed(2);
-}
-
-function formatThreads(numerator: number, denominator: number): string {
-  return denominator > 0 ? (numerator / denominator).toFixed(2) : "";
-}
+import {
+  approx,
+  COUNTER_MEMORY_TOTAL,
+  COUNTER_NUM_ALLOCS,
+  COUNTER_PARALLEL_LOOPS,
+  COUNTER_PARALLEL_TASKS,
+  COUNTER_POINTS_COMPUTED,
+  formatCounter,
+  formatNormalizedCounter,
+  formatPercent,
+  formatRecompute,
+  formatThreads,
+  formatTime,
+  isApproximate,
+  KIND_ALLOCATION,
+  KIND_FREE,
+  KIND_MALLOC,
+  KIND_OVERHEAD,
+  KIND_THREAD_IDLE,
+  profileEntryFunc,
+} from "@/utils/profile";
 
 interface TreeInfo {
   /** DFS pre-order over the compute_at tree; parent === -1 is a root. */
@@ -243,8 +172,16 @@ function HeaderCell({ label, className }: HeaderCellProps) {
  * to stdout (see `halide_profiler_report_unlocked` in `profiler_common.cpp`),
  * as an HTML table.
  */
-function ProfileTable() {
+interface Props {
+  /** The canonical id of the highlighted Func, or null. */
+  highlight: number | null;
+  onHighlight: (id: number | null) => void;
+}
+
+function ProfileTable({ highlight, onHighlight }: Props) {
   const { pipelines } = useProfileContext();
+  const rowRefs = React.useRef(new Map<number, HTMLTableRowElement>());
+  const openMenu = useOpenFuncMenu();
   const {
     funcs,
     runs,
@@ -287,27 +224,49 @@ function ProfileTable() {
 
   // Number the per-Func warnings in table order. Instances of a Func share a
   // canonical id and therefore the same warnings and numbers.
-  const { warningList, notes } = React.useMemo(() => {
-    const warningList: string[] = [];
-    const byCanonical = new Map<number, number[]>();
-    for (const i of rows) {
-      const fs = funcs[i];
-      if (!fs.warnings?.length || byCanonical.has(fs.canonical_id)) {
-        continue;
+  const { warningList, warningOwner, notes, byCanonical } =
+    React.useMemo(() => {
+      const warningList: string[] = [];
+      const warningOwner: number[] = [];
+      const byCanonical = new Map<number, number[]>();
+      for (const i of rows) {
+        const fs = funcs[i];
+        if (!fs.warnings?.length || byCanonical.has(fs.canonical_id)) {
+          continue;
+        }
+        byCanonical.set(
+          fs.canonical_id,
+          fs.warnings.map((w) => {
+            warningOwner.push(fs.canonical_id);
+            return warningList.push(w);
+          }),
+        );
       }
-      byCanonical.set(
-        fs.canonical_id,
-        fs.warnings.map((w) => warningList.push(w)),
+      const notes = funcs.map((fs) =>
+        (byCanonical.get(fs.canonical_id) ?? []).join(","),
       );
+      return { warningList, warningOwner, notes, byCanonical };
+    }, [funcs, rows]);
+
+  const highlightedWarnings =
+    highlight === null ? [] : (byCanonical.get(highlight) ?? []);
+
+  const highlightedFromTable = React.useRef(false);
+  const highlightFromTable = (id: number) => {
+    highlightedFromTable.current = true;
+    onHighlight(id);
+  };
+
+  React.useEffect(() => {
+    if (highlightedFromTable.current) {
+      highlightedFromTable.current = false;
+    } else if (highlight !== null) {
+      rowRefs.current.get(highlight)?.scrollIntoView({ block: "nearest" });
     }
-    const notes = funcs.map((fs) =>
-      (byCanonical.get(fs.canonical_id) ?? []).join(","),
-    );
-    return { warningList, notes };
-  }, [funcs, rows]);
+  }, [highlight]);
 
   return (
-    <div className="text-ps-text-primary text-tiny m-4 font-mono">
+    <div className="text-ps-text-primary m-4 font-mono text-sm">
       <table className="w-full border-collapse">
         <thead className="bg-ps-secondary sticky top-0">
           <tr className="border-ps-border-tertiary border-b text-left">
@@ -336,7 +295,27 @@ function ProfileTable() {
                 : 0;
 
             return (
-              <tr key={i} className="hover:bg-ps-border-primary/40">
+              <tr
+                key={i}
+                ref={(row) => {
+                  if (row) {
+                    rowRefs.current.set(fs.canonical_id, row);
+                  } else {
+                    rowRefs.current.delete(fs.canonical_id);
+                  }
+                }}
+                className={clsx(
+                  "cursor-pointer",
+                  highlight === fs.canonical_id && "bg-ps-border-primary",
+                )}
+                onClick={() => highlightFromTable(fs.canonical_id)}
+                onContextMenu={(event) => {
+                  const name = profileEntryFunc(fs, funcs);
+                  if (name !== null) {
+                    openMenu(event, name);
+                  }
+                }}
+              >
                 <td className="px-2 py-0.5">
                   <NameCell
                     func={fs}
@@ -428,7 +407,19 @@ function ProfileTable() {
           </ul>
           <ol className="ml-4 list-decimal">
             {warningList.map((w, k) => (
-              <li key={k}>{w}</li>
+              <li
+                key={k}
+                className={clsx(
+                  "cursor-pointer",
+                  highlightedWarnings.includes(k + 1) && "bg-ps-border-primary",
+                )}
+                onClick={() => highlightFromTable(warningOwner[k])}
+                onContextMenu={(event) =>
+                  openMenu(event, funcs[warningOwner[k]].ir_name)
+                }
+              >
+                {w}
+              </li>
             ))}
           </ol>
         </div>

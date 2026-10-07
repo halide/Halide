@@ -40,6 +40,9 @@ int main(int argc, char **argv) {
     f(x) = x * 2;
     g(x) = f(x) + 1;
     f.compute_root();
+    // A wrapper's display name differs from its IR name.
+    Func wrapper = f.in(g);
+    wrapper.compute_root();
     g.compile_jit(target);
 
     using SetJSONOutputFn = void (*)(const char *);
@@ -64,6 +67,13 @@ int main(int argc, char **argv) {
     for (const char *name : {"\"pipelines\"", f.name().c_str(), g.name().c_str()}) {
         if (json.find(name) == std::string::npos) {
             printf("JSON output is missing %s:\n%s\n", name, json.c_str());
+            return 1;
+        }
+    }
+    for (const std::string &field : {"\"name\": \"" + f.name() + ".in(" + g.name() + ")\"",
+                                     "\"ir_name\": \"" + wrapper.name() + "\""}) {
+        if (json.find(field) == std::string::npos) {
+            printf("JSON output is missing %s:\n%s\n", field.c_str(), json.c_str());
             return 1;
         }
     }

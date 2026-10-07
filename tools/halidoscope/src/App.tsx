@@ -1,11 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getMatches } from "@tauri-apps/plugin-cli";
-import { useSetAtom } from "jotai";
+import { useAtom, useSetAtom } from "jotai";
 import { Tabs } from "radix-ui";
 import * as React from "react";
 
 import Profile from "@/components/profile/Profile";
+import FuncMenu from "@/components/shared/FuncMenu";
+import Stmt from "@/components/stmt/Stmt";
 import Trace from "@/components/trace/Trace";
 import TraceUpload from "@/components/trace/TraceUpload";
 import TraceLoading from "@/components/trace/TraceLoading";
@@ -13,9 +15,16 @@ import { ProfileContextProvider } from "@/hooks/profile";
 import { TraceContextProvider } from "@/hooks/trace";
 import { funcAtom } from "@/state/func";
 import { funcViewAtom } from "@/state/funcView";
+import { tabAtom, traceViewportAtom, type Tab } from "@/state/navigation";
+import { packetAtom } from "@/state/packet";
+import {
+  playbackRateAtom,
+  playbackRateFor,
+  playingAtom,
+} from "@/state/playback";
 import type { Profile as Pfile } from "@/types/profile";
 import type { FuncMeta, StatsMeta } from "@/types/trace";
-import { openProfile, openTrace } from "@/utils/api";
+import { openProfile, openStmt, openTrace } from "@/utils/api";
 
 import "./App.css";
 
@@ -69,9 +78,17 @@ function App() {
   // Profile state.
   const [profile, setProfile] = React.useState<Pfile | null>(null);
 
+  // Conceptual stmt HTML.
+  const [stmt, setStmt] = React.useState<string | null>(null);
+
   // GUI state.
   const setActiveFunc = useSetAtom(funcAtom);
   const setFuncViews = useSetAtom(funcViewAtom);
+  const setTraceViewport = useSetAtom(traceViewportAtom);
+  const setPlaybackRate = useSetAtom(playbackRateAtom);
+  const setPlaying = useSetAtom(playingAtom);
+  const setPacketIndex = useSetAtom(packetAtom);
+  const [tab, setTab] = useAtom(tabAtom);
 
   const loadTrace = React.useCallback(
     async (path: string) => {
@@ -107,6 +124,10 @@ function App() {
         setStats(stats);
         setActiveFunc(funcs[0]?.name ?? "");
         setFuncViews({});
+        setTraceViewport(null);
+        setPlaybackRate(playbackRateFor(total_packets));
+        setPacketIndex(0);
+        setPlaying(true);
       } finally {
         unlisten();
         setTraceLoading({
@@ -116,7 +137,14 @@ function App() {
         });
       }
     },
-    [setActiveFunc, setFuncViews],
+    [
+      setActiveFunc,
+      setFuncViews,
+      setTraceViewport,
+      setPlaybackRate,
+      setPlaying,
+      setPacketIndex,
+    ],
   );
 
   React.useEffect(() => {
@@ -169,6 +197,25 @@ function App() {
     loadProfileFromCLI();
   }, []);
 
+  React.useEffect(() => {
+    async function loadStmtFromCLI() {
+      const matches = await getMatches();
+      const stmtPath = matches.args.stmt?.value;
+
+      if (typeof stmtPath !== "string" || !stmtPath) {
+        return;
+      }
+
+      try {
+        setStmt(await openStmt(await resolvePath(stmtPath)));
+      } catch (err) {
+        console.error("Error loading stmt from CLI: ", err);
+      }
+    }
+
+    loadStmtFromCLI();
+  }, []);
+
   const renderTrace = React.useCallback(() => {
     switch (traceLoading.state) {
       case TraceLoadingState.Loading:
@@ -186,45 +233,67 @@ function App() {
   }, [traceLoading, loadTrace]);
 
   return (
-    <Tabs.Root className="flex h-screen w-screen flex-col" defaultValue="trace">
-      <Tabs.List className="bg-ps-titlebar border-ps-border-primary flex border-y">
-        <Tabs.Trigger
-          value="trace"
-          className="data-[state=active]:bg-ps-primary data-[state=inactive]:bg-ps-titlebar data-[state=active]:text-ps-text-primary data-[state=inactive]:text-ps-text-secondary border-ps-border-primary border-r px-3 py-1 text-base font-semibold"
-        >
-          Trace
-        </Tabs.Trigger>
-        {profile !== null ? (
+    <ProfileContextProvider value={profile ?? { pipelines: [] }}>
+      <Tabs.Root
+        className="flex h-screen w-screen flex-col"
+        value={tab}
+        onValueChange={(value) => setTab(value as Tab)}
+      >
+        <Tabs.List className="bg-ps-titlebar border-ps-border-primary flex border-y">
           <Tabs.Trigger
-            value="profile"
+            value="trace"
             className="data-[state=active]:bg-ps-primary data-[state=inactive]:bg-ps-titlebar data-[state=active]:text-ps-text-primary data-[state=inactive]:text-ps-text-secondary border-ps-border-primary border-r px-3 py-1 text-base font-semibold"
           >
-            Profile
+            Trace
           </Tabs.Trigger>
-        ) : null}
-      </Tabs.List>
-      <Tabs.Content value="trace" className="flex-1 overflow-hidden">
-        <TraceContextProvider
-          value={{
-            funcs,
-            dagEdges,
-            packetCount,
-            stats,
-          }}
-        >
-          <main className="h-full w-full">{renderTrace()}</main>
-        </TraceContextProvider>
-      </Tabs.Content>
-      {profile !== null ? (
-        <Tabs.Content value="profile" className="flex-1 overflow-hidden">
-          <ProfileContextProvider value={profile}>
+          {profile !== null ? (
+            <Tabs.Trigger
+              value="profile"
+              className="data-[state=active]:bg-ps-primary data-[state=inactive]:bg-ps-titlebar data-[state=active]:text-ps-text-primary data-[state=inactive]:text-ps-text-secondary border-ps-border-primary border-r px-3 py-1 text-base font-semibold"
+            >
+              Profile
+            </Tabs.Trigger>
+          ) : null}
+          {stmt !== null ? (
+            <Tabs.Trigger
+              value="stmt"
+              className="data-[state=active]:bg-ps-primary data-[state=inactive]:bg-ps-titlebar data-[state=active]:text-ps-text-primary data-[state=inactive]:text-ps-text-secondary border-ps-border-primary border-r px-3 py-1 text-base font-semibold"
+            >
+              Stmt
+            </Tabs.Trigger>
+          ) : null}
+        </Tabs.List>
+        <Tabs.Content value="trace" className="flex-1 overflow-hidden">
+          <TraceContextProvider
+            value={{
+              funcs,
+              dagEdges,
+              packetCount,
+              stats,
+            }}
+          >
+            <main className="h-full w-full">{renderTrace()}</main>
+          </TraceContextProvider>
+        </Tabs.Content>
+        {profile !== null ? (
+          <Tabs.Content value="profile" className="flex-1 overflow-hidden">
             <main className="h-full w-full">
               <Profile />
             </main>
-          </ProfileContextProvider>
-        </Tabs.Content>
-      ) : null}
-    </Tabs.Root>
+          </Tabs.Content>
+        ) : null}
+        {stmt !== null ? (
+          <Tabs.Content
+            value="stmt"
+            forceMount
+            className="flex-1 overflow-hidden data-[state=inactive]:hidden"
+          >
+            <Stmt html={stmt} />
+          </Tabs.Content>
+        ) : null}
+        <FuncMenu traceFuncs={funcs} profile={profile} />
+      </Tabs.Root>
+    </ProfileContextProvider>
   );
 }
 

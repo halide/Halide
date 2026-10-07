@@ -1,10 +1,10 @@
 import * as d3 from "d3";
-import { useAtom, useSetAtom } from "jotai";
+import { useAtom } from "jotai";
 import { Slider } from "radix-ui";
 import * as React from "react";
 
 import { packetAtom } from "@/state/packet";
-import { playbackRateAtom } from "@/state/playback";
+import { playbackRateAtom, playingAtom } from "@/state/playback";
 
 const SCRUB_DEBOUNCE_MS = 50;
 
@@ -14,13 +14,13 @@ interface Props {
 
 function Timeline({ packetCount }: Props) {
   // Local slider position, for a smooth thumb independent of render cadence.
-  const [packetIndex, setPacketIndex] = React.useState<number>(0);
-  const [playing, setPlaying] = React.useState<boolean>(false);
+  const [globalIndex, setGlobalIndex] = useAtom(packetAtom);
+  const [packetIndex, setPacketIndex] = React.useState<number>(globalIndex);
+  const [playing, setPlaying] = useAtom(playingAtom);
   const [playbackRate] = useAtom(playbackRateAtom);
-  const setGlobalIndex = useSetAtom(packetAtom);
 
   // Mirror the latest index synchronously for the playback interval closure.
-  const indexRef = React.useRef<number>(0);
+  const indexRef = React.useRef<number>(globalIndex);
   const scrubTimerRef = React.useRef<number | null>(null);
 
   const commitIndex = React.useCallback((next: number) => {
@@ -55,7 +55,10 @@ function Timeline({ packetCount }: Props) {
     }
 
     setPlaying((p) => !p);
-  }, [playing, packetCount, commitIndex, setGlobalIndex]);
+  }, [playing, packetCount, commitIndex, setGlobalIndex, setPlaying]);
+
+  // Pause when the trace tab is hidden.
+  React.useEffect(() => () => setPlaying(false), [setPlaying]);
 
   // Playback loop: advance the playhead on a fixed interval and push each step
   // straight to the global index. Canvases coalesce if rendering lags.
@@ -86,7 +89,14 @@ function Timeline({ packetCount }: Props) {
         cancelAnimationFrame(animationFrameId);
       }
     };
-  }, [packetCount, playing, commitIndex, setGlobalIndex, playbackRate]);
+  }, [
+    packetCount,
+    playing,
+    commitIndex,
+    setGlobalIndex,
+    playbackRate,
+    setPlaying,
+  ]);
 
   const disabled = packetCount <= 0;
   const ticks = d3

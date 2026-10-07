@@ -2068,6 +2068,11 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
     /** The name of this Func. A global constant string. */
     const char *name;
 
+    /** The name of this Func in the IR. Differs from name when the Func has a
+     * profiler display name (e.g. inputs and wrappers). A global constant
+     * string. */
+    const char *ir_name;
+
     /** The id of the parent Func (the one which this is compute_at). -1 if the
      * Func is compute_root. */
     int parent;

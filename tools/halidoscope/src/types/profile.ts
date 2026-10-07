@@ -3,8 +3,10 @@
  * captured by Halide's sampling profiler.
  */
 export interface ProfileFunc {
-  /** The name of the Func. */
+  /** The name of the Func as shown in the profiler report. */
   name: string;
+  /** The name of the Func in the IR, as used by the trace and stmt. */
+  ir_name: string;
   /** The id of the parent Func this one is `compute_at`. `-1` if the Func is
    * `compute_root`.
    */

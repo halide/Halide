@@ -11,6 +11,7 @@ interface Props {
   value: string;
   onValueChange: (value: string) => void;
   items: Item[];
+  placeholder?: string;
 }
 
 function BaseSelect({
@@ -18,6 +19,7 @@ function BaseSelect({
   items,
   value,
   onValueChange,
+  placeholder,
 }: Exclude<Props, "label">) {
   return (
     <RadixSelect.Root value={value} onValueChange={onValueChange}>
@@ -26,7 +28,7 @@ function BaseSelect({
         className="bg-ps-border-primary text-ps-text-primary border-ps-border-tertiary inline-flex h-8 w-full items-center justify-center rounded border px-2 focus:outline-none"
       >
         <span className="truncate">
-          <RadixSelect.Value />
+          <RadixSelect.Value placeholder={placeholder} />
         </span>
         <RadixSelect.Icon className="ml-auto">
           <svg
@@ -68,13 +70,21 @@ function BaseSelect({
   );
 }
 
-function Select({ id, label, value, onValueChange, items }: Props) {
+function Select({
+  id,
+  label,
+  value,
+  onValueChange,
+  items,
+  placeholder,
+}: Props) {
   if (!id || !label) {
     return (
       <BaseSelect
         id={id}
         items={items}
         onValueChange={onValueChange}
+        placeholder={placeholder}
         value={value}
       />
     );
@@ -89,6 +99,7 @@ function Select({ id, label, value, onValueChange, items }: Props) {
         id={id}
         items={items}
         onValueChange={onValueChange}
+        placeholder={placeholder}
         value={value}
       />
     </div>

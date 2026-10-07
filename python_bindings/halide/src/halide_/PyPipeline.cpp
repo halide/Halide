@@ -24,6 +24,7 @@ py::object realization_to_object(const Realization &r) {
 // after the ProfilerScope exits and the profiler resets.
 struct ProfilerFuncStats {
     std::string name;
+    std::string ir_name;
     halide_profiler_func_stats stats;
 };
 
@@ -34,7 +35,7 @@ struct ProfilerPipelineStats {
 };
 
 ProfilerFuncStats snapshot(const halide_profiler_func_stats &f) {
-    return {f.name, f};
+    return {f.name, f.ir_name, f};
 }
 
 std::optional<ProfilerPipelineStats> snapshot(const halide_profiler_pipeline_stats *p) {
@@ -406,6 +407,7 @@ void define_pipeline(py::module &m) {
 
     auto func_stats_class = py::class_<ProfilerFuncStats>(m, "ProfilerFuncStats")
                                 .def_readonly("name", &ProfilerFuncStats::name)
+                                .def_readonly("ir_name", &ProfilerFuncStats::ir_name)
                                 .def("__repr__", [](const ProfilerFuncStats &s) -> std::string {
                                     return "<halide.ProfilerFuncStats " + s.name + ">";
                                 });

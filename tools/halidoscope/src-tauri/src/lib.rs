@@ -73,6 +73,7 @@ pub fn run() {
             commands::render_reuse_distance,
             commands::render_thread,
             commands::open_profile,
+            commands::open_stmt,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
