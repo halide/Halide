@@ -104,7 +104,7 @@ struct VecDot {
 };
 
 struct Row {
-    const char *name, *wt, *at;
+    const char *name, *wt, *at, *aq;  // aq: the act's compute type (at: re-quantized inside)
     int ops;
     const char *features;
     Fn checked, bench;
@@ -133,8 +133,8 @@ struct AddCodec {
 }  // namespace
 }  // namespace gq
 
-#define GQ_HALIDE(name, wt, at, ops, features)                                                                             \
-    static gq::AddRow name##_row({#name, #wt, #at, [] { using namespace gq; return (int)(ops); }(), features,                                                     \
+#define GQ_HALIDE(name, wt, at, aq, ops, features)                                                                         \
+    static gq::AddRow name##_row({#name, #wt, #at, #aq, [] { using namespace gq; return (int)(ops); }(), features,                                                \
                                   name##_checked, name##_bench, gq::VecDot<name##_checked, name##_checked_metadata>::call, \
                                   gq::VecDot<name##_bench, name##_bench_metadata>::call,                                   \
                                   gq::VecDot<name##_checked, name##_checked_metadata>::bind,                               \
@@ -152,7 +152,7 @@ std::vector<CodecRow> &codec_rows() {
 
 void register_halide_providers() {
     for (const Row &row : rows()) {
-        ggml_type wt = type_named(row.wt), at = type_named(row.at);
+        ggml_type wt = type_named(row.wt), at = type_named(row.at), aq = type_named(row.aq);
         bool gpu = strstr(row.features, "metal") != nullptr;
         for (bool bench : {false, true}) {
             Fn f = bench ? row.bench : row.checked;
@@ -164,6 +164,7 @@ void register_halide_providers() {
                                            if (in.wt != wt || in.at != at) return nullptr;
                                            auto k = vec_dot_kernel(vd, in);
                                            k->path = "halide";
+                                           if (aq != at) k->prec.act_quant = aq;
                                            return k;
                                        }});
             }
@@ -176,6 +177,7 @@ void register_halide_providers() {
                                            k->gpu = gpu;
                                            k->threads = in.threads;
                                            k->path = gpu ? "halide:metal" : "halide";
+                                           if (aq != at) k->prec.act_quant = aq;
                                            size_t wbytes = ggml_row_size(wt, s.K) * s.N;
                                            for (int c = 0; c < in.copies; c++) {
                                                k->w.push_back(std::make_unique<Buf>(in.w->data() + c * wbytes, arg_type(row.md(), 0), records(wt, s.K), s.N));
