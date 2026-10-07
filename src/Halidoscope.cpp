@@ -86,11 +86,10 @@ class TracePipeWriter {
     int read_fd = -1, write_fd = -1;
     TraceFileWriter writer;
     std::thread thread;
-    JITUserContext *user_context = nullptr;
 
 public:
     explicit TracePipeWriter(const std::string &path, int64_t limit_bytes, JITUserContext *user_context)
-        : writer(path, limit_bytes), user_context(user_context) {
+        : writer(path, limit_bytes) {
         int fds[2];
 #ifdef _WIN32
         int rc = _pipe(fds, 1 << 20, _O_BINARY);
