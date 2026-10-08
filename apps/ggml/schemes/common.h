@@ -1,10 +1,10 @@
 #pragma once
 
 // Units shared by GGML's block formats: blocks of QK values, an fp32 scale per
-// block stored as fp16, codes stored as integers, and GGML's packed (AoS)
-// block structs as the layout stage. Rank-polymorphic: extra dimensions (rows)
-// pass through as implicit vars.
-#include "Halide.h"
+// block stored as fp16, codes stored as integers; the layout stage comes from
+// layouts.h. Rank-polymorphic: extra dimensions (rows) pass through as
+// implicit vars.
+#include "layouts.h"
 
 namespace ggml {
 
@@ -52,16 +52,21 @@ inline Approximation offset(int bias) {
         .with_lossless();
 }
 
+// Signed codes in [-2^(bits-1), 2^(bits-1) - 1] <-> their two's-complement
+// `bits`-bit fields (GGML's repacked q4_0 nibbles: offset(8) XOR 8).
+inline Approximation twos(int bits) {
+    int h = 1 << (bits - 1), s = 8 - bits;
+    return Pointwise{"twos", [=](const Expr &x) { return cast<uint8_t>(x) & cast<uint8_t>(2 * h - 1); },
+                     [=](const Expr &x) { return cast<int8_t>(x << s) >> s; }}
+        .with_types(Int(8), UInt(8))
+        .with_ranges(ApproximationRange(-h, h - 1), ApproximationRange(0, 2 * h - 1))
+        .with_lossless();
+}
+
 inline Approximation fp16() {
     return Pointwise{"fp16", [](const Expr &x) { return cast<float16_t>(x); },
                      [](const Expr &x) { return cast<float>(x); }}
         .with_types(Float(32), Float(16));
-}
-
-// GGML's on-disk block: `fields` in declaration order, packed; `logical` maps
-// the incoming ports to them in order.
-inline Approximation aos(std::vector<StructField> fields, std::vector<std::string> logical) {
-    return StructLayout{Type::Struct(std::move(fields)), std::move(logical)};
 }
 
 }  // namespace ggml
