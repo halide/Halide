@@ -440,7 +440,7 @@ void lower_impl(const vector<Function> &output_funcs,
     s = bound_small_allocations(s);
     log("Lowering after bounding small allocations:", s);
 
-    if (t.has_feature(Target::CUDA)) {
+    if (t.has_feature(Target::CUDA) || t.has_feature(Target::Metal)) {
         debug(1) << "Injecting warp shuffles...\n";
         s = lower_warp_shuffles(s, t);
         log("Lowering after injecting warp shuffles:", s);
