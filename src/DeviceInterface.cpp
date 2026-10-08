@@ -1,4 +1,5 @@
 #include "DeviceInterface.h"
+#include "Debug.h"
 #include "IR.h"
 #include "IROperator.h"
 #include "JITModule.h"
@@ -131,6 +132,9 @@ const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d
     }
 
     if (lookup_runtime_routine("halide_" + name + "_device_interface", t, fn)) {
+        if (d != DeviceAPI::Hexagon && d != DeviceAPI::HexagonDma) {
+            debug(4, "gpu-entry") << "Using device interface: " << name << "\n";
+        }
         return (*fn)();
     } else {
         if (error_site) {

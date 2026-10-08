@@ -2024,6 +2024,11 @@ Stage &Stage::serial(const VarOrRVar &var) {
 }
 
 Stage &Stage::parallel(const VarOrRVar &var) {
+    debug(4, "parallel-schedule") << [&]() {
+        debug(0) << "Scheduling parallel loop: " << var.name() << "\n";
+        arm_jit_execution_debug();
+        return "";
+    }();
     set_dim_type(var, ForType::Parallel);
     return *this;
 }

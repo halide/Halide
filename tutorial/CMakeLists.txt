@@ -1,3 +1,5 @@
+include(HalideTestHelpers)
+
 function(add_tutorial source_file)
     set(options WITH_IMAGE_IO)
     set(oneValueArgs)
@@ -13,18 +15,12 @@ function(add_tutorial source_file)
     endif ()
     target_compile_options(${name} PRIVATE "$<$<CXX_COMPILER_ID:GNU>:-Wno-unused-but-set-variable>")
 
-    string(REGEX REPLACE "^cmake" "${Halide_CMAKE_TARGET}" _resolved_target "${Halide_TARGET}")
-
-    add_test(NAME tutorial_${name} COMMAND ${name})
-    set_tests_properties(
-        tutorial_${name}
-        PROPERTIES
-        ENVIRONMENT "HL_TARGET=${_resolved_target};HL_JIT_TARGET=${_resolved_target}"
-        LABELS "tutorial;${args_GROUPS}"
+    add_halide_test(
+        ${name}
+        NAME tutorial_${name}
+        USE_EXIT_CODE_ONLY
+        GROUPS tutorial target_from_environment calls_llvm ${args_GROUPS}
     )
-    if ("multithreaded" IN_LIST args_GROUPS)
-        set_tests_properties(tutorial_${name} PROPERTIES RUN_SERIAL TRUE)
-    endif ()
 
     if (args_WITH_IMAGE_IO)
         target_link_libraries(${name} PRIVATE Halide::ImageIO)
@@ -136,18 +132,17 @@ if ("NVPTX" IN_LIST Halide_LLVM_COMPONENTS)
             lesson_10_aot_compilation_run.cpp lesson_10_aot_compilation_run
         )
 
-        add_test(NAME tutorial_lesson_10_aot_compilation_run COMMAND lesson_10_aot_compilation_run)
-        set_tests_properties(
-            tutorial_lesson_10_aot_compilation_run
-            PROPERTIES
-            LABELS "tutorial;multithreaded"
-            RUN_SERIAL TRUE
+        add_halide_test(
+            lesson_10_aot_compilation_run
+            NAME tutorial_lesson_10_aot_compilation_run
+            USE_EXIT_CODE_ONLY
+            GROUPS tutorial multithreaded
         )
     endif ()
 endif ()
 
 add_tutorial(lesson_11_cross_compilation.cpp)
-add_tutorial(lesson_12_using_the_gpu.cpp WITH_IMAGE_IO GROUPS multithreaded)
+add_tutorial(lesson_12_using_the_gpu.cpp WITH_IMAGE_IO GROUPS multithreaded gpu)
 add_tutorial(lesson_13_tuples.cpp)
 add_tutorial(lesson_14_types.cpp)
 
@@ -287,14 +282,18 @@ else ()
     )
     _Halide_register_tutorial_website_target(lesson_16_rgb_run.cpp lesson_16_rgb_run)
 
-    add_test(NAME tutorial_lesson_16_rgb_run COMMAND lesson_16_rgb_run)
-    set_tests_properties(tutorial_lesson_16_rgb_run PROPERTIES LABELS tutorial)
+    add_halide_test(
+        lesson_16_rgb_run
+        NAME tutorial_lesson_16_rgb_run
+        USE_EXIT_CODE_ONLY
+        GROUPS tutorial
+    )
 endif ()
 
 # Lessons 17 - 20
 add_tutorial(lesson_17_predicated_rdom.cpp)
 add_tutorial(lesson_18_parallel_associative_reductions.cpp GROUPS multithreaded)
-add_tutorial(lesson_19_wrapper_funcs.cpp)
+add_tutorial(lesson_19_wrapper_funcs.cpp GROUPS gpu)
 add_tutorial(lesson_20_cloning_funcs.cpp)
 
 # Lesson 21
@@ -332,12 +331,11 @@ if (TARGET Halide::Mullapudi2016)
         lesson_21_auto_scheduler_run.cpp lesson_21_auto_scheduler_run
     )
 
-    add_test(NAME tutorial_lesson_21_auto_scheduler_run COMMAND lesson_21_auto_scheduler_run)
-    set_tests_properties(
-        tutorial_lesson_21_auto_scheduler_run
-        PROPERTIES
-        LABELS "tutorial;multithreaded"
-        RUN_SERIAL TRUE
+    add_halide_test(
+        lesson_21_auto_scheduler_run
+        NAME tutorial_lesson_21_auto_scheduler_run
+        USE_EXIT_CODE_ONLY
+        GROUPS tutorial multithreaded
     )
 endif ()
 

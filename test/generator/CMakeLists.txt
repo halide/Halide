@@ -590,24 +590,24 @@ if ((NOT ${_USING_WASM}) AND (NOT Halide_TARGET MATCHES "vulkan"))
         gpu_multi_context_threaded
         HALIDE_LIBRARIES gpu_multi_context_threaded_add gpu_multi_context_threaded_mul
         LINK_TO_GPU
-        GROUPS multithreaded
+        GROUPS multithreaded gpu
     )
 endif ()
 
 # gpu_object_lifetime_aottest.cpp
 # gpu_object_lifetime_generator.cpp
 _add_halide_libraries(gpu_object_lifetime FEATURES debug)
-_add_halide_aot_tests(gpu_object_lifetime)
+_add_halide_aot_tests(gpu_object_lifetime GROUPS gpu)
 
 # gpu_only_aottest.cpp
 # gpu_only_generator.cpp
 _add_halide_libraries(gpu_only)
-_add_halide_aot_tests(gpu_only)
+_add_halide_aot_tests(gpu_only GROUPS gpu)
 
 # gpu_texture_aottest.cpp
 # gpu_texture_generator.cpp
 _add_halide_libraries(gpu_texture)
-_add_halide_aot_tests(gpu_texture)
+_add_halide_aot_tests(gpu_texture GROUPS gpu)
 
 # image_from_array_aottest.cpp
 # image_from_array_generator.cpp
@@ -694,7 +694,7 @@ _add_halide_aot_tests(metadata_tester HALIDE_LIBRARIES metadata_tester metadata_
 # metal_completion_handler_override_aottest.cpp
 # metal_completion_handler_override_generator.cpp
 _add_halide_libraries(metal_completion_handler_override FEATURES user_context)
-_add_halide_aot_tests(metal_completion_handler_override)
+_add_halide_aot_tests(metal_completion_handler_override GROUPS gpu)
 
 # msan_aottest.cpp
 # msan_generator.cpp
@@ -893,7 +893,7 @@ add_halide_stub(stubtest.stub FROM stubtest.generator GENERATOR stubtest)
 if (NOT ${_USING_WASM})
     add_executable(generator_jit_stubtest stubtest_jittest.cpp stubtest_generator.cpp)
     target_link_libraries(generator_jit_stubtest PRIVATE Halide::Test stubtest.stub)
-    add_halide_test(generator_jit_stubtest GROUPS generator)
+    add_halide_test(generator_jit_stubtest GROUPS generator target_from_environment calls_llvm)
 endif ()
 
 _add_halide_libraries(
@@ -945,7 +945,7 @@ _add_halide_aot_tests(
 if (NOT ${_USING_WASM})
     add_executable(generator_jit_configure configure_jittest.cpp configure_generator.cpp)
     target_link_libraries(generator_jit_configure PRIVATE Halide::Test configure.stub)
-    add_halide_test(generator_jit_configure GROUPS generator)
+    add_halide_test(generator_jit_configure GROUPS generator target_from_environment calls_llvm)
 endif ()
 
 # example_jittest.cpp
@@ -953,7 +953,10 @@ if (NOT ${_USING_WASM})
     add_halide_stub(example.stub FROM example.generator GENERATOR example)
     add_executable(generator_jit_example example_jittest.cpp example_generator.cpp)
     target_link_libraries(generator_jit_example PRIVATE Halide::Test example.stub)
-    add_halide_test(generator_jit_example GROUPS generator)
+    add_halide_test(
+        generator_jit_example
+        GROUPS generator multithreaded target_from_environment calls_llvm
+    )
 endif ()
 
 if (NOT ${_USING_WASM})
@@ -964,7 +967,7 @@ if (NOT ${_USING_WASM})
     # metadata registration hook fires with the expected function pointers.
     add_executable(rungen_test rungen_test.cpp "${example_registration_cpp}")
     target_link_libraries(rungen_test PRIVATE example example.runtime Halide::ImageIO Halide::Tools)
-    add_halide_test(rungen_test GROUPS generator)
+    add_halide_test(rungen_test GROUPS generator target_from_environment calls_llvm)
 
     # registration_test.cpp
     #

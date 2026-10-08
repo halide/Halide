@@ -1539,6 +1539,9 @@ Target JITCache::get_compiled_jit_target() const {
 }
 
 int JITCache::call_jit_code(const void *const *args) {
+    if (consume_jit_execution_debug()) {
+        debug(4, "jit-execution") << "Running JIT code\n";
+    }
 #if defined(__has_feature)
 #if __has_feature(memory_sanitizer)
     user_warning << "MSAN does not support JIT compilers of any sort, and will report "

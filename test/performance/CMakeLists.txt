@@ -5,20 +5,16 @@ if (Halide_ANY_SANITIZERS_ENABLED)
 endif ()
 
 tests(
-    GROUPS performance
+    GROUPS performance target_from_environment calls_llvm
     SOURCES
     # keep-sorted start
-    async_gpu.cpp
     blend_tail_strategies.cpp
     block_transpose.cpp
-    boundary_conditions.cpp
     clamped_vector_load.cpp
     const_division.cpp
-    device_copy.cpp
     fast_inverse.cpp
     fast_pow.cpp
     fast_sine_cosine.cpp
-    gpu_half_throughput.cpp
     interleave.cpp
     irmatch_throughput.cpp
     jit_stress.cpp
@@ -31,12 +27,16 @@ tests(
     tiled_matmul.cpp
     tiled_matmul_arm_neon.cpp
     vectorize.cpp
-    wrap.cpp
     # keep-sorted end
 )
 
 tests(
-    GROUPS performance multithreaded
+    GROUPS performance gpu target_from_environment calls_llvm
+    SOURCES boundary_conditions.cpp device_copy.cpp gpu_half_throughput.cpp wrap.cpp
+)
+
+tests(
+    GROUPS performance multithreaded target_from_environment calls_llvm
     SOURCES
     fan_in.cpp
     inner_loop_parallel.cpp
@@ -49,9 +49,13 @@ tests(
     rfactor.cpp
     sort.cpp
     split_storage.cpp
-    split_storage_bank_conflict.cpp
     stack_vs_heap.cpp
     thread_safe_jit_callable.cpp
+)
+
+tests(
+    GROUPS performance gpu multithreaded target_from_environment calls_llvm
+    SOURCES async_gpu.cpp split_storage_bank_conflict.cpp
 )
 
 # This test needs rdynamic or equivalent

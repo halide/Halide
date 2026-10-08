@@ -74,7 +74,7 @@ add_halide_test(
     COMMAND
         adams2019_test_apps_autoscheduler $<TARGET_FILE:Halide_Adams2019>
         "${Halide_SOURCE_DIR}/src/autoschedulers/adams2019/baseline.weights"
-    GROUPS adams2019 autoschedulers_cpu multithreaded
+    GROUPS adams2019 autoschedulers_cpu multithreaded target_from_environment calls_llvm
 )
 set_tests_properties(
     adams2019_test_apps_autoscheduler
