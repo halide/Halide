@@ -42,26 +42,36 @@ would already satisfy them.
   loop started while the pool is idle (nothing queued, and at least
   `min(size, threads) - 1` idle A-team workers polling in
   `halide_cond_with_spinning::wait`) instead publishes itself in a single global
-  slot. The polling workers join it and claim iterations without locks, and so
-  does the owner, which returns once every iteration has finished; the first
-  error is returned. The loop is split into `min(size, threads)` contiguous
-  chunks, one per participant: the owner's, then one per worker, numbered as it
-  starts. Each chunk has its own cache line, with the worker's presence flag and
-  the chunk's iteration counter, which keeps contention low, and gives a worker
-  the same iterations (and data) in successive loops of the same size, like
-  GGML's static row split. A participant claims iterations from its own chunk,
-  then from the others' in turn, so a late or absent helper's iterations are run
-  by whoever is free and never hold up the loop. It adds the number it claimed
-  to a shared total once, as it leaves, and the owner waits for the total to
-  reach the loop's size. The next fast-path loop waits for helpers still in the
-  previous one to leave before reusing the slot. Loops of one iteration, or with
-  one thread, run inline on the caller. Everything else takes the usual path:
-  loops started while the slot is in use (nested in a fast-path iteration, or on
-  another thread), loops on a busy pool, and all of `halide_do_parallel_tasks`
-  (semaphores, async). Busy-waiting uses the CPU's pause instruction
-  (`yield`/`pause`), selected with `#if`. Upstream, the runtime is compiled
-  arch-independently, so this would need a per-arch runtime helper. The glue
-  adds `ggml_halide_thread_pool_fast_loops()`, which counts fast-path loops, for
+  slot, a cache line that the owner writes and the polling workers read. The
+  workers join it and claim iterations without locks, and so does the owner,
+  which returns once every iteration has finished; the first error is returned.
+  The loop is split into `min(size, threads)` contiguous chunks: the owner's,
+  and one per worker numbered below that (workers are numbered as they start).
+  Each chunk has its own cache line, with a claim counter and a done counter,
+  which keeps contention low, and gives a worker the same iterations (and data)
+  in successive loops of the same size, like GGML's static row split. A
+  participant claims iterations from its own chunk; if the loop hasn't finished
+  after a short wait, it claims from the others' chunks in turn, so a late or
+  absent helper's iterations are run by whoever is free and never hold up the
+  loop. The owner waits for every chunk's done counter, not for the helpers to
+  leave. Both counters are tagged with the loop (the low 32 bits of a sequence
+  number), so a new loop needs no reset: the first claim in a new loop resets a
+  chunk, and a helper still leaving the previous loop can't claim from it. The
+  slot's description is read like a seqlock, and the previous loop is closed
+  lazily by the next owner. While the count is held, a worker that took part in
+  a loop polls with the CPU's pause instruction rather than yielding for 2^15
+  polls (some tens of microseconds), so a loop started right after another (say,
+  one that encodes the input of the next) costs little more than its iterations,
+  like a barrier in GGML's graph compute. Only workers numbered below
+  `threads - 1` are kept awake, so they're the ones with chunks after the thread
+  count drops. Loops of one iteration, or with one thread, run inline on the
+  caller. Everything else takes the usual path: loops started while the slot is
+  in use (nested in a fast-path iteration, or on another thread), loops on a
+  busy pool, and all of `halide_do_parallel_tasks` (semaphores, async).
+  Busy-waiting uses the CPU's pause instruction (`yield`/`pause`), selected with
+  `#if`. Upstream, the runtime is compiled arch-independently, so this would
+  need a per-arch runtime helper. The glue adds
+  `ggml_halide_thread_pool_fast_loops()`, which counts fast-path loops, for
   tests and diagnostics.
 - **Lost owner wakeup** (an upstream bug, not specific to this copy; the fix is
   halide/Halide#9534): a thread that owns a job can run a serial task of another
@@ -82,5 +92,7 @@ and not with gaps between loops, thread-count changes, shutdown and restart,
 concurrent callers, and the fast path (uneven iterations, failing iterations,
 nested loops and semaphores inside its iterations, shutdown right after it, slow
 and late helpers, oversubscription by spinning threads, and `HL_NUM_THREADS`
-from 1 to 64), and the stolen serial task from #9534. It checks that the fast
-path was used, and results, but not timings.
+from 1 to 64; sequences of back-to-back loops, each reading what the previous
+one wrote, with extents from 1 up, thread-count changes in between, and failing,
+sleeping and nested iterations), and the stolen serial task from #9534. It
+checks that the fast path was used, and results, but not timings.

@@ -101,6 +101,10 @@ ALWAYS_INLINE void atomic_store_sequentially_consistent(T *addr, TV *val) {
     __atomic_store(addr, val, __ATOMIC_SEQ_CST);
 }
 
+ALWAYS_INLINE void atomic_thread_fence_acquire() {
+    __atomic_thread_fence(__ATOMIC_ACQUIRE);
+}
+
 ALWAYS_INLINE void atomic_thread_fence_sequentially_consistent() {
     __atomic_thread_fence(__ATOMIC_SEQ_CST);
 }
