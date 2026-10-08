@@ -330,10 +330,10 @@ int main(int argc, char **argv) {
             if (!ok) fprintf(stderr, "codec %s %s %s K=%lld: %s\n", r.type.c_str(), r.dir.c_str(), r.provider.c_str(), (long long)r.K, r.detail.c_str());
             // Same columns as above; atype is the direction, gops is Gvalues/s.
             std::vector<std::pair<std::string, std::string>> kv = {
-                {"op", "codec"}, {"wtype", r.type}, {"atype", r.dir}, {"model", ""}, {"layer", ""}, {"K", std::to_string(r.K)}, {"N", "1"}, {"M", "1"}, {"threads", "1"}, {"cold", "0"}, {"provider", r.provider}, {"path", r.path}, {"err_ratio", ok ? "0" : "inf"}, {"ok", ok ? "1" : "0"}};
+                {"op", "codec"}, {"wtype", r.type}, {"atype", r.dir}, {"model", ""}, {"layer", ""}, {"K", std::to_string(r.K)}, {"N", std::to_string(r.rows)}, {"M", "1"}, {"threads", "1"}, {"cold", "0"}, {"provider", r.provider}, {"path", r.path}, {"err_ratio", ok ? "0" : "inf"}, {"ok", ok ? "1" : "0"}};
             if (r.timed) {
-                double bytes = 4.0 * r.K + ggml_row_size(type_named(r.type), r.K);
-                kv.insert(kv.end(), {{"ns", fmt(r.t.median, "%.1f")}, {"ns_lo", fmt(r.t.lo, "%.1f")}, {"ns_hi", fmt(r.t.hi, "%.1f")}, {"ci_pct", fmt(100 * (r.t.hi - r.t.lo) / r.t.median, "%.2f")}, {"samples", std::to_string(r.t.samples)}, {"reps", std::to_string(r.t.reps)}, {"gbps", fmt(bytes / r.t.median, "%.2f")}, {"gops", fmt(r.K / r.t.median, "%.2f")}});
+                double bytes = r.rows * (4.0 * r.K + ggml_row_size(type_named(parse_format(r.type).type), r.K));
+                kv.insert(kv.end(), {{"ns", fmt(r.t.median, "%.1f")}, {"ns_lo", fmt(r.t.lo, "%.1f")}, {"ns_hi", fmt(r.t.hi, "%.1f")}, {"ci_pct", fmt(100 * (r.t.hi - r.t.lo) / r.t.median, "%.2f")}, {"samples", std::to_string(r.t.samples)}, {"reps", std::to_string(r.t.reps)}, {"gbps", fmt(bytes / r.t.median, "%.2f")}, {"gops", fmt(r.rows * r.K / r.t.median, "%.2f")}});
             }
             out.row(kv);
         }
