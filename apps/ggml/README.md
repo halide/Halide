@@ -130,7 +130,9 @@ activation block) or the 1 x 1 tile, with 2 blocks per iteration and 32 rows per
 parallel task. Tiles at the edges of N and M shift inwards (they overlap the
 previous tile, recomputing a few outputs), so any token count M >= 8 runs on
 full 4 x 8 tiles. An in-kernel activation encoder runs first, parallel over
-activation rows (for M > 1). Kernel ABI (`harness/halide_providers.cpp`):
+activation rows (for M > 1) and vectorized per encoded block (`encoder`: the
+block's reductions, e.g. its scale, across the block; per-value Funcs, e.g. the
+codes, across their values). Kernel ABI (`harness/halide_providers.cpp`):
 `w`/`a` are `[K / block, N or M]` records (struct types from the kernel's
 metadata), `out` is f32 `[N, M]`. The kernel declares the whole contract
 (checked in `checked`, assumed in `bench`): all mins 0, rows dense
