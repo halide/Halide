@@ -385,6 +385,32 @@ Simplify::ScopedFact::~ScopedFact() {
     }
 }
 
+namespace {
+const Call *as_likely_tag(const Expr &e) {
+    const Call *c = e.as<Call>();
+    if (c && (c->is_intrinsic(Call::likely) ||
+              c->is_intrinsic(Call::likely_if_innermost))) {
+        return c;
+    }
+    return nullptr;
+}
+}  // namespace
+
+Expr strip_likely_tag(const Expr &e) {
+    if (const Call *c = as_likely_tag(e)) {
+        return c->args[0];
+    }
+    if (const Add *add = e.as<Add>()) {
+        const Call *a = as_likely_tag(add->a);
+        const Call *b = as_likely_tag(add->b);
+        if (a || b) {
+            return Add::make(a ? a->args[0] : add->a,
+                             b ? b->args[0] : add->b);
+        }
+    }
+    return e;
+}
+
 Expr simplify(const Expr &e,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment,
