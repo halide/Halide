@@ -61,6 +61,7 @@ struct HalideKernel : Kernel {
     bool gpu;
     int threads;
     std::vector<std::unique_ptr<Buf>> w;
+    std::vector<std::vector<uint8_t>> relaid;  // weights in the format's layout
     std::unique_ptr<Buf> a, out;
     std::vector<float> host_out;
     ~HalideKernel() override {
@@ -144,13 +145,13 @@ struct AddCodec {
 }  // namespace gq
 
 #define GQ_HALIDE(name, wt, at, aq, ops, features)                                                                         \
-    static gq::AddRow name##_row({#name, #wt, #at, #aq, [] { using namespace gq; return (int)(ops); }(), features,                                                \
+    static gq::AddRow name##_row({#name, wt, #at, #aq, [] { using namespace gq; return (int)(ops); }(), features,                                                 \
                                   name##_checked, name##_bench, gq::VecDot<name##_checked, name##_checked_metadata>::call, \
                                   gq::VecDot<name##_bench, name##_bench_metadata>::call,                                   \
                                   gq::VecDot<name##_checked, name##_checked_metadata>::bind,                               \
                                   gq::VecDot<name##_bench, name##_bench_metadata>::bind, name##_checked_metadata});
-#define GQ_CODEC(t) \
-    static gq::AddCodec t##_codec({#t, {t##_quantize_checked, t##_quantize_bench}, {t##_dequantize_checked, t##_dequantize_bench}, t##_quantize_checked_metadata});
+#define GQ_CODEC(t, spec) \
+    static gq::AddCodec t##_codec({spec, {t##_quantize_checked, t##_quantize_bench}, {t##_dequantize_checked, t##_dequantize_bench}, t##_quantize_checked_metadata});
 #include "halide_kernels.inc"
 
 namespace gq {
@@ -162,7 +163,8 @@ std::vector<CodecRow> &codec_rows() {
 
 void register_halide_providers() {
     for (const Row &row : rows()) {
-        ggml_type wt = type_named(row.wt), at = type_named(row.at), aq = type_named(row.aq);
+        FormatSpec fs = parse_format(row.wt);
+        ggml_type wt = type_named(fs.type.c_str()), at = type_named(row.at), aq = type_named(row.aq);
         bool gpu = strstr(row.features, "metal") != nullptr;
         for (bool bench : {false, true}) {
             Fn f = bench ? row.bench : row.checked;
@@ -180,7 +182,7 @@ void register_halide_providers() {
             }
             if (row.ops & GQ_mul_mat) {
                 providers().push_back({name, GQ_mul_mat, bench, [=](const Inputs &in) -> std::unique_ptr<Kernel> {
-                                           if (in.wt != wt || in.at != at) return nullptr;
+                                           if (in.wt != wt || in.at != at || in.s.N % fs.rows) return nullptr;
                                            auto k = std::make_unique<HalideKernel>();
                                            const auto &s = in.s;
                                            k->f = f;
@@ -190,7 +192,13 @@ void register_halide_providers() {
                                            if (aq != at) k->prec.act_quant = aq;
                                            size_t wbytes = ggml_row_size(wt, s.K) * s.N;
                                            for (int c = 0; c < in.copies; c++) {
-                                               k->w.push_back(std::make_unique<Buf>(in.w->data() + c * wbytes, arg_type(row.md(), 0), records(wt, s.K), s.N));
+                                               const uint8_t *wc = in.w->data() + c * wbytes;
+                                               if (fs.rows > 1) {
+                                                   k->relaid.emplace_back(wbytes);
+                                                   if (!ggml_repack(fs, wt, wc, k->relaid.back().data(), s.N, s.K)) return nullptr;
+                                                   wc = k->relaid.back().data();
+                                               }
+                                               k->w.push_back(std::make_unique<Buf>(wc, arg_type(row.md(), 0), records(wt, s.K), s.N / fs.rows));
                                            }
                                            k->a = std::make_unique<Buf>(in.a->data(), arg_type(row.md(), 1), records(at, s.K), s.M);
                                            k->host_out.resize(s.N * s.M);

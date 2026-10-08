@@ -112,8 +112,22 @@ struct CodecResult {
     std::string detail;  // empty: bit-exact
     bool timed;
     Timing t;
+    int64_t rows = 1;  // of K values each
 };
 std::vector<CodecResult> run_codecs(const std::vector<int64_t> &Ks, const std::vector<std::string> &filters, bool check, int rounds, double min_ms);
+
+// A Halide format "<type>[.<codes>][.<rows>x<chunk>]" (schemes/schemes.h).
+struct FormatSpec {
+    std::string type, codes;
+    int rows = 1, chunk = 0;
+};
+FormatSpec parse_format(const std::string &spec);
+// GGML's repack (repack.cpp) of N rows of K values of type t, from its blocks
+// to f's layout; false if GGML has no such layout.
+bool ggml_repack(const FormatSpec &f, ggml_type t, const uint8_t *src, uint8_t *dst, int64_t N, int64_t K);
+// The bytes GGML's CPU_REPACK buffer holds for the same weights; returns its
+// layout's name (e.g. q4_0_4x8), empty if it does not repack them.
+std::string ggml_repack_live(ggml_type t, const uint8_t *src, std::vector<uint8_t> &dst, int64_t N, int64_t K);
 
 // Logging: GGML log lines captured since the last call.
 std::vector<std::string> take_log();

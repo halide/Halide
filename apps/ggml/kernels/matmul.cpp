@@ -1,7 +1,7 @@
 // One mul_mat algorithm for every (weight, act) format pair:
 //   out(n, m) = sum_k W(k, n) * X(k, m)  in f32,
 // each operand approximated by its format's scheme, then severed at the
-// encoded records, which become the inputs w: [K / block, N], a: [.., M].
+// encoded records, which become the inputs w: [K / block, N / rows], a: [.., M].
 // act = "<storage>[:<compute>]": X arrives as <storage> and, given a compute
 // format, is approximated by it inside the pipeline too (not severed), as
 // GGML quantizes f32 activations.
@@ -43,12 +43,13 @@ public:
             staged.push_back(approx.back().encoded[0]);
         }
         Pipeline(out).sever(cut, bound);
-        // The ABI: w [K / w block, N], a [K / a block, M], out [N, M], all
-        // dense from 0 (strides as GGML's contiguous rows; K % block == 0).
+        // The ABI: w [K / w block, N / w rows], a [K / a block, M], out [N, M],
+        // all dense from 0 (strides as GGML's contiguous rows; K % block == 0).
         if (fw.block % fa.block || fw.block % fc.block) throw std::invalid_argument("activation blocks must divide weight blocks");
+        if (fa.rows > 1) throw std::invalid_argument("act: one row per record");
         OutputImageParam o = out.output_buffer();
         o.dim(0).set_min(0).dim(1).set_min(0).set_stride(o.dim(0).extent());
-        w.dim(0).set_min(0).dim(1).set_bounds(0, o.dim(0).extent()).set_stride(w.dim(0).extent());
+        w.dim(0).set_min(0).dim(1).set_bounds(0, o.dim(0).extent() / fw.rows).set_stride(w.dim(0).extent());
         a.dim(0).set_bounds(0, w.dim(0).extent() * (fw.block / fa.block));
         a.dim(1).set_bounds(0, o.dim(1).extent()).set_stride(a.dim(0).extent());
         add_input(w);
