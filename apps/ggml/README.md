@@ -97,7 +97,8 @@ none) and one row of `GGML_FORMATS` in `formats.cmake`
 `codec` builds the one codec generator (`kernels/codec.cpp`, via `make_codec`
 from `tools/halide_approximation_codec.h`) for the type: the scheme's round trip
 on a row of floats, severed at the encoded blocks, as `<type>_quantize` (f32
-`[K]` -> blocks `[K / block]`, a struct type with GGML's block layout) and
+`[K]` -> blocks `[K / block]`, a struct type with GGML's block layout; per
+block, vectorized by mul_mat's activation `encoder` schedule) and
 `<type>_dequantize`. The `codec` op (`--op codec`, on by default) checks both
 bitwise against GGML's reference quantizer (`ggml_quantize_chunk`) and
 `to_float` on N(0, 1) rows whose first blocks are adversarial (signed zeros,
