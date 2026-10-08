@@ -54,6 +54,15 @@ would already satisfy them.
   need a per-arch runtime helper. The glue adds
   `ggml_halide_thread_pool_fast_loops()`, which counts fast-path loops, for
   tests and diagnostics.
+- **Lost owner wakeup** (an upstream bug, not specific to this copy): a thread
+  that owns a job can run a serial task of another parallel region. If the
+  task's semaphore runs dry, the thread puts it back and, once its own job is
+  done, returns without looking at it again. The task's owner may have gone to
+  sleep meanwhile, having seen the task in use, so nobody ran the rest of it.
+  Putting a serial task back now wakes its sleeping owner. The fast path made
+  this likely (about one run in 30 of `ggml_thread_pool` with
+  `HL_NUM_THREADS=5`), because its owner and helpers each run
+  `halide_do_parallel_tasks` at the same time in that test.
 
 `thread_pool_test.cpp` (ctest `ggml_thread_pool`) stress-tests the copy through
 the q4_0 x q8_0 mul_mat kernel and direct calls: nested loops,
