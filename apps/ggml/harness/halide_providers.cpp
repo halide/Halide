@@ -9,10 +9,14 @@
 #include "harness.h"
 
 #include "HalideRuntime.h"
+#include "thread_pool.h"
 
 #include <cstring>
 
 namespace gq {
+
+bool halide_keep_awake = true;
+
 namespace {
 
 using Fn = int (*)(halide_buffer_t *, halide_buffer_t *, halide_buffer_t *);
@@ -67,12 +71,18 @@ struct HalideKernel : Kernel {
     }
     void run(int reps) override {
         halide_set_num_threads(threads);
+        // Like GGML's threadpool, which spins during graph compute and is
+        // paused between samples, keep the pool's idle threads polling for
+        // work for the duration of the sample.
+        const bool keep_awake = halide_keep_awake && !gpu;
+        if (keep_awake) ggml_halide_thread_pool_keep_awake(true);
         for (int r = 0, c = 0; r < reps; r++, c = c + 1 == (int)w.size() ? 0 : c + 1) {
             if (int e = f(&w[c]->b, &a->b, &out->b)) {
                 fprintf(stderr, "halide error %d\n", e);
                 abort();
             }
         }
+        if (keep_awake) ggml_halide_thread_pool_keep_awake(false);
         if (gpu) halide_device_sync(nullptr, &out->b);
     }
     void read(float *o) override {

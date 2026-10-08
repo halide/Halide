@@ -68,9 +68,18 @@ activations for quantized weights; Metal's mul_mv has no quantized x f16 kernels
   disabled, so they run back to back like dependent layers) to amortize
   per-graph overhead; times are per node. `--cold` cycles weight copies
   totalling >= 512 MiB so weights stream from DRAM as in inference.
-- CPU threads: a persistent GGML threadpool (paused between samples), default =
-  performance cores; the process runs at `QOS_CLASS_USER_INTERACTIVE`. Halide
-  kernels run on the app's copy of Halide's thread pool (`runtime/README.md`).
+- CPU threads: default = performance cores; the process runs at
+  `QOS_CLASS_USER_INTERACTIVE`. Both sides keep idle threads spinning within a
+  sample and let them sleep between samples:
+  - GGML: a persistent threadpool (default `poll = 50`), resumed before and
+    paused after each sample. During a graph, its workers spin at barriers and
+    poll for the next graph before sleeping.
+  - Halide: the app's copy of Halide's thread pool (`runtime/README.md`), with
+    its keep-awake count held for each sample. Idle workers (up to threads - 1)
+    and waiting owners poll instead of sleeping, until 4096 polls pass without
+    work. Parallel loops on an idle pool take the lock-free fast path.
+    `--no-keep-awake` leaves the count unheld (ablation), but the fast path
+    still applies while workers spin briefly after a loop.
 - Per case, each provider's reps are calibrated so a sample takes >= 20 ms, then
   warmed up; then 15 rounds, each timing one sample of every provider in a fresh
   random order. Reported: median, a distribution-free 95% CI of the median
