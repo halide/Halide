@@ -2,6 +2,12 @@
 #
 #   type  ops  [acts  [target-features]]
 #
+# `type`: <ggml type>[.<codes>][.<rows>x<chunk>]. The optional codes pick the
+# integer encoding (i4: two's-complement nibbles; default: GGML's offset
+# binary), the layout interleaves `rows` rows' records in `chunk`-byte pieces
+# (as GGML's repack q4_0_4x8 etc.; default: one row per record, AoS); its
+# weights are checked against GGML's repack (harness/repack.cpp).
+#
 # `ops`: codec (quantize + dequantize of a row, checked bit-exact against
 # GGML), vec_dot and mul_mat (kernels/matmul.cpp with weight=type op=<op>, one
 # library per act in `acts`). An act is <storage>[:<compute>]: f32:q8_0 takes
@@ -12,7 +18,11 @@
 # (GGML_BENCH_FEATURES; what gets timed), both registered with the harness
 # (harness/halide_providers.cpp, harness/codec.cpp).
 set(GGML_FORMATS
-    "q4_0 codec,vec_dot,mul_mat q8_0,f16,f32,f32:q8_0" "q8_0 codec,vec_dot q8_0,f16,f32"
+    "q4_0 codec,vec_dot,mul_mat q8_0,f16,f32,f32:q8_0"
+    "q8_0 codec,vec_dot q8_0,f16,f32"
+    "q4_0.i4.4x4 codec"
+    "q4_0.i4.4x8 codec,mul_mat q8_0,f32:q8_0"
+    "q4_0.i4.8x8 codec"
 )
 set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
 
@@ -48,10 +58,11 @@ foreach (row IN LISTS GGML_FORMATS)
         set(features "-")
     endif ()
     string(REPLACE "," ";" ops "${ops}")
+    string(MAKE_C_IDENTIFIER "${type}" id)
     if ("codec" IN_LIST ops)
-        _ggml_library(${type}_quantize codec ${features} type=${type} quantize=true)
-        _ggml_library(${type}_dequantize codec ${features} type=${type} quantize=false)
-        string(APPEND registry "GQ_CODEC(${type})\n")
+        _ggml_library(${id}_quantize codec ${features} type=${type} quantize=true)
+        _ggml_library(${id}_dequantize codec ${features} type=${type} quantize=false)
+        string(APPEND registry "GQ_CODEC(${id}, \"${type}\")\n")
     endif ()
     string(REPLACE "," ";" acts "${acts}")
     foreach (op IN ITEMS vec_dot mul_mat)
@@ -62,10 +73,10 @@ foreach (row IN LISTS GGML_FORMATS)
             string(REPLACE ":" ";" at "${act}")
             list(GET at 0 storage)
             list(GET at -1 compute)
-            string(REPLACE ":" "_to_" name "${type}_${act}_${op}")
+            string(REPLACE ":" "_to_" name "${id}_${act}_${op}")
             _ggml_library(${name} matmul ${features} weight=${type} act=${act} op=${op})
             string(APPEND registry
-                "GQ_HALIDE(${name}, ${type}, ${storage}, ${compute}, GQ_${op}, \"${features}\")\n"
+                "GQ_HALIDE(${name}, \"${type}\", ${storage}, ${compute}, GQ_${op}, \"${features}\")\n"
             )
         endforeach ()
     endforeach ()

@@ -1,6 +1,7 @@
 // One codec generator for every scheme: the scheme's round trip on a row of
-// floats, severed at the encoded blocks; `quantize` picks the half to adopt
-// (quantize: x -> blocks, dequantize: blocks -> y).
+// floats (on rows, for layouts with several per record), severed at the
+// encoded blocks; `quantize` picks the half to adopt (quantize: x -> blocks,
+// dequantize: blocks -> y).
 #include "halide_approximation_codec.h"
 #include "kernels/schedule.h"
 #include "schemes/schemes.h"
@@ -15,7 +16,7 @@ public:
     GeneratorParam<bool> quantize{"quantize", true};
 
     void configure() {
-        codec = ApproximationCodec::make_codec(ggml::format(type).scheme, Float(32), 1, {"x", "y", {"blocks"}});
+        codec = ApproximationCodec::make_codec(ggml::format(type).scheme, Float(32), ggml::format(type).rows > 1 ? 2 : 1, {"x", "y", {"blocks"}});
         if (quantize) {
             codec.adopt_encoder(*this);
         } else {

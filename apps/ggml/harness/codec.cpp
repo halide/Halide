@@ -18,15 +18,16 @@ namespace {
 
 using Fn = int (*)(halide_buffer_t *, halide_buffer_t *);
 
-struct Buf1 {
+struct BufN {
     halide_buffer_t b{};
-    halide_dimension_t d{};
-    Buf1(void *host, halide_type_t t, int64_t extent) {
+    halide_dimension_t d[2]{};
+    BufN(void *host, halide_type_t t, std::vector<int64_t> extents) {
         b.host = (uint8_t *)host;
         b.type = t;
-        b.dimensions = 1;
-        b.dim = &d;
-        d = {0, (int32_t)extent, 1, 0};
+        b.dimensions = (int)extents.size();
+        b.dim = d;
+        for (int i = 0, stride = 1; i < b.dimensions; stride *= (int)extents[i++])
+            d[i] = {0, (int32_t)extents[i], stride, 0};
     }
 };
 
@@ -79,26 +80,44 @@ std::vector<CodecResult> run_codecs(const std::vector<int64_t> &Ks, const std::v
     std::mt19937 rng(7);
     std::normal_distribution<float> normal;
     for (const CodecRow &row : codec_rows()) {
-        if (!filters.empty() && std::find(filters.begin(), filters.end(), row.type) == filters.end()) continue;
+        // Layouts of several rows per record: 2 records' worth of rows, laid
+        // out by GGML's repack.
+        FormatSpec fs = parse_format(row.type);
+        if (!filters.empty() && std::find(filters.begin(), filters.end(), fs.type) == filters.end() && std::find(filters.begin(), filters.end(), row.type) == filters.end()) continue;
         ggml_type t = GGML_TYPE_COUNT;
         for (int i = 0; i < GGML_TYPE_COUNT; i++) {
             const char *n = ggml_get_type_traits((ggml_type)i)->type_name;
-            if (n && row.type == n) t = (ggml_type)i;
+            if (n && fs.type == n) t = (ggml_type)i;
         }
         halide_type_t block = row.metadata()->arguments[1].type;
+        int64_t R = fs.rows > 1 ? 2 * fs.rows : 1;
         for (int64_t K : Ks) {
             if (K % ggml_blck_size(t)) continue;
-            int64_t nb = K / ggml_blck_size(t);
-            size_t bytes = ggml_row_size(t, K);
-            std::vector<float> x(K), y(K), ref_y(K);
+            int64_t nb = K / ggml_blck_size(t), records = nb * R / fs.rows;
+            size_t bytes = ggml_row_size(t, K) * R;
+            std::vector<float> x(K * R), y(K * R), ref_y(K * R);
             for (float &v : x)
                 v = normal(rng);
             adversarial(x.data(), K);
             std::vector<uint8_t> q(bytes), ref(bytes);
-            ggml_quantize_chunk(t, x.data(), ref.data(), 0, 1, K, nullptr);
-            ggml_get_type_traits(t)->to_float(ref.data(), ref_y.data(), K);
-            Buf1 bx(x.data(), halide_type_t(halide_type_float, 32), K), by(y.data(), halide_type_t(halide_type_float, 32), K);
-            Buf1 bq(q.data(), block, nb), bref(ref.data(), block, nb);
+            ggml_quantize_chunk(t, x.data(), ref.data(), 0, R, K, nullptr);
+            ggml_get_type_traits(t)->to_float(ref.data(), ref_y.data(), K * R);
+            if (R > 1) {
+                std::vector<uint8_t> aos = ref, live;
+                if (!ggml_repack(fs, t, aos.data(), ref.data(), R, K)) {
+                    results.push_back({row.type, "repack", "ggml", "transcription", K, "no GGML repack to this layout", false, {}, R});
+                    continue;
+                }
+                std::string name = ggml_repack_live(t, aos.data(), live, R, K);
+                if (check && name == fs.type + "_" + std::to_string(fs.rows) + "x" + std::to_string(fs.chunk)) {
+                    // The transcription against GGML itself, where it picks this layout.
+                    results.push_back({row.type, "repack", "ggml-repack", name, K, first_diff(ref.data(), live.data(), bytes, bytes / records), false, {}, R});
+                }
+            }
+            std::vector<int64_t> xe{K}, qe{records};
+            if (R > 1) xe.push_back(R), qe = {nb, R / fs.rows};
+            BufN bx(x.data(), halide_type_t(halide_type_float, 32), xe), by(y.data(), halide_type_t(halide_type_float, 32), xe);
+            BufN bq(q.data(), block, qe), bref(ref.data(), block, qe);
             for (const char *dir : {"quantize", "dequantize"}) {
                 bool quant = dir[0] == 'q';
                 struct Entry {
@@ -115,18 +134,18 @@ std::vector<CodecResult> run_codecs(const std::vector<int64_t> &Ks, const std::v
                     std::fill(y.begin(), y.end(), NAN);
                     int err = quant ? f(&bx.b, &bq.b) : f(&bref.b, &by.b);
                     std::string detail = err   ? "halide error " + std::to_string(err) :
-                                         quant ? first_diff(q.data(), ref.data(), bytes, bytes / nb) :
-                                                 first_diff(y.data(), ref_y.data(), K * sizeof(float), ggml_blck_size(t) * sizeof(float));
+                                         quant ? first_diff(q.data(), ref.data(), bytes, bytes / records) :
+                                                 first_diff(y.data(), ref_y.data(), K * R * sizeof(float), ggml_blck_size(t) * sizeof(float));
                     es.push_back({name, lambda("halide", quant ? std::function<void()>([=, &bx, &bq] { f(&bx.b, &bq.b); }) : [=, &bref, &by] { f(&bref.b, &by.b); }), detail});
                 }
                 if (!check) {
                     if (quant) {
-                        es.push_back({"ggml", lambda("quantize_chunk", [&] { ggml_quantize_chunk(t, x.data(), q.data(), 0, 1, K, nullptr); }), ""});
+                        es.push_back({"ggml", lambda("quantize_chunk", [&] { ggml_quantize_chunk(t, x.data(), q.data(), 0, R, K, nullptr); }), ""});
                         if (auto from = ggml_get_type_traits_cpu(t)->from_float) {
-                            es.push_back({"ggml", lambda("from_float", [&, from] { from(x.data(), q.data(), K); }), ""});
+                            es.push_back({"ggml", lambda("from_float", [&, from] { from(x.data(), q.data(), K * R); }), ""});
                         }
                     } else {
-                        es.push_back({"ggml", lambda("to_float", [&] { ggml_get_type_traits(t)->to_float(ref.data(), y.data(), K); }), ""});
+                        es.push_back({"ggml", lambda("to_float", [&] { ggml_get_type_traits(t)->to_float(ref.data(), y.data(), K * R); }), ""});
                     }
                 }
                 std::vector<Timing> ts;
@@ -137,7 +156,7 @@ std::vector<CodecResult> run_codecs(const std::vector<int64_t> &Ks, const std::v
                     ts = time_interleaved(ks, rounds, min_ms);
                 }
                 for (size_t i = 0; i < es.size(); i++) {
-                    results.push_back({row.type, dir, es[i].provider, es[i].k->path, K, es[i].detail, !check, check ? Timing{} : ts[i]});
+                    results.push_back({row.type, dir, es[i].provider, es[i].k->path, K, es[i].detail, !check, check ? Timing{} : ts[i], R});
                 }
             }
         }

@@ -94,7 +94,19 @@ activations for quantized weights; Metal's mul_mv has no quantized x f16 kernels
 A format is a scheme plus its values per encoded record (`schemes/`, mapped from
 its GGML type name in `schemes/schemes.h`; f16 is the `fp16` scheme, f32 has
 none) and one row of `GGML_FORMATS` in `formats.cmake`
-(`type ops [acts [target-features]]`).
+(`type ops [acts [target-features]]`). A type may name two lossless stages
+composed after the quantizer, which knows neither:
+`<ggml type>[.<codes>][.<rows>x<chunk>]`. The codes pick the integer encoding
+(`i4`: two's-complement nibbles, `twos` in `schemes/common.h`; default: GGML's
+offset binary). The layout (`schemes/layouts.h`; default: one row per record,
+AoS) is `Interleave{rows, chunk}`: one record per `rows` rows at the same block,
+each field's elements interleaved across the rows in `chunk`-byte pieces, as
+GGML's repack (`q4_0.i4.4x8` is `q4_0_4x8`, whose XOR 0x88 is the
+two's-complement encoding). Its libraries are named by the type with `.` as `_`;
+its weights (`[K / block, N / rows]` records) are checked against GGML's repack:
+the harness's transcription of it (`harness/repack.cpp`, every layout), itself
+checked against the bytes of GGML's `CPU_REPACK` buffer for the layout GGML
+picks here.
 
 `codec` builds the one codec generator (`kernels/codec.cpp`, via `make_codec`
 from `tools/halide_approximation_codec.h`) for the type: the scheme's round trip
@@ -136,15 +148,15 @@ outputs), so any token count M >= 8 runs on full 4 x 8 tiles. An in-kernel
 activation encoder runs first, parallel over activation rows (for M > 1) and
 vectorized per encoded block (`encoder`: the block's reductions, e.g. its scale,
 across the block; per-value Funcs, e.g. the codes, across their values). Kernel
-ABI (`harness/halide_providers.cpp`): `w`/`a` are `[K / block, N or M]` records
-(struct types from the kernel's metadata), `out` is f32 `[N, M]`. The kernel
-declares the whole contract (checked in `checked`, assumed in `bench`): all mins
-0, rows dense (`dim(1).stride == dim(0).extent`), `a`'s K tied to `w`'s, `w`/`a`
-rows match `out`'s N/M, and `vec_dot` pins `out` to 1 x 1. It promises no more
-than GGML does: K is a whole number of blocks (GGML asserts `n % QK == 0`), with
-no even block count (the 2-block interleave keeps its guard) and no host
-alignment (q4_0/q8_0 rows start on 2-byte boundaries). `vec_dot` goes through a
-GGML-ABI adapter.
+ABI (`harness/halide_providers.cpp`): `w`/`a` are `[K / block, N / rows or M]`
+records (struct types from the kernel's metadata), `out` is f32 `[N, M]`. The
+kernel declares the whole contract (checked in `checked`, assumed in `bench`):
+all mins 0, rows dense (`dim(1).stride == dim(0).extent`), `a`'s K tied to
+`w`'s, `w`/`a` rows match `out`'s N/M, and `vec_dot` pins `out` to 1 x 1. It
+promises no more than GGML does: K is a whole number of blocks (GGML asserts
+`n % QK == 0`), with no even block count (the 2-block interleave keeps its
+guard) and no host alignment (q4_0/q8_0 rows start on 2-byte boundaries).
+`vec_dot` goes through a GGML-ABI adapter.
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds
