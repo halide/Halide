@@ -69,7 +69,8 @@ activations for quantized weights; Metal's mul_mv has no quantized x f16 kernels
   per-graph overhead; times are per node. `--cold` cycles weight copies
   totalling >= 512 MiB so weights stream from DRAM as in inference.
 - CPU threads: a persistent GGML threadpool (paused between samples), default =
-  performance cores; the process runs at `QOS_CLASS_USER_INTERACTIVE`.
+  performance cores; the process runs at `QOS_CLASS_USER_INTERACTIVE`. Halide
+  kernels run on the app's copy of Halide's thread pool (`runtime/README.md`).
 - Per case, each provider's reps are calibrated so a sample takes >= 20 ms, then
   warmed up; then 15 rounds, each timing one sample of every provider in a fresh
   random order. Reported: median, a distribution-free 95% CI of the median
