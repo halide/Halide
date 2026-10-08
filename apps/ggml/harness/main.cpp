@@ -59,6 +59,7 @@ const char *usage =
     "  --rounds R --min-ms T    timing rounds; min ms per sample (15, 20)\n"
     "  --check                  correctness only, exit 1 on any failure\n"
     "  --cold                   cycle >= 512 MiB of weight copies (cache-cold)\n"
+    "  --no-keep-awake          let Halide's idle threads sleep during samples\n"
     "  --json                   JSON lines instead of CSV\n"
     "  --verbose                echo GGML's log\n";
 
@@ -180,6 +181,8 @@ int main(int argc, char **argv) {
             o.check = true;
         } else if (a == "--cold") {
             o.cold = true;
+        } else if (a == "--no-keep-awake") {
+            halide_keep_awake = false;
         } else if (a == "--json") {
             o.json = true;
         } else if (a == "--verbose") {
