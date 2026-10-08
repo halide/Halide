@@ -492,6 +492,7 @@ tests(
     split_inner_wrong_tail_strategy.cpp
     split_non_innermost_predicated.cpp
     split_predicate.cpp
+    split_predicate_stores_compute_at.cpp
     split_reuse_inner_name_bug.cpp
     split_same_var_names.cpp
     split_storage.cpp
