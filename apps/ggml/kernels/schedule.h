@@ -159,7 +159,7 @@ inline void mul_mat(Func out, Func dot, const RDom &r, const std::vector<int> &b
         encoder(e, rs);
     }
     bool integer = blocks[1] == blocks[0];
-    Tiles mmla{4, 8, 1, 32, 32}, gemm{4, 4, 1, 32, 32}, pairs{2, 1, 2, 32}, rows{1, 1, 2, 32};
+    Tiles mmla{4, 8, 1, 32, 32}, gemm{4, 4, 1, 32, 32}, pairs{2, 1, 2, 16}, rows{1, 1, 2, 16};
     if (integer && t.has_feature(Target::ARMI8MM)) {
         blocked_mmla(out, dot, N >= mmla.nt && M >= mmla.mt, mmla, r, blocks[0], rs);
     }
