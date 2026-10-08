@@ -23,3 +23,22 @@ internals in a namespace of its own so they can't collide with the runtime's
 weak copies. `ggml_thread_pool` is an OBJECT library: from an archive, the copy
 would only be loaded for undefined symbols, and the runtime's weak definitions
 would already satisfy them.
+
+## Changes to the copy
+
+- **Keep-awake** (as proposed upstream in halide/Halide#9526, whose diff to
+  `thread_pool_common.h` it applies verbatim): a refcounted keep-awake count.
+  While it is held, up to `halide_get_num_threads() - 1` idle workers, and
+  threads waiting for their own parallel loops, poll for work instead of
+  sleeping; idle workers aren't demoted to the B team; an idle thread sleeps
+  anyway after 4096 polls without work; acquiring the first reference wakes both
+  teams. The glue renames the upstream `halide_thread_pool_keep_awake` to
+  `ggml_halide_thread_pool_keep_awake` (so it can't collide with the runtime's
+  if #9526 lands; its error message still says the upstream name), declared with
+  the RAII holder `ggml_halide::ThreadPoolKeepAwake` in `thread_pool.h`.
+
+`thread_pool_test.cpp` (ctest `ggml_thread_pool`) stress-tests the copy through
+the q4_0 x q8_0 mul_mat kernel and direct calls: nested loops,
+`halide_do_parallel_tasks` with semaphores, error propagation, keep-awake held
+and not with gaps between loops, thread-count changes, shutdown and restart, and
+concurrent callers. It checks results only, not timings.

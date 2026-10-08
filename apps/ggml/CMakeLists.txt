@@ -26,6 +26,7 @@ add_halide_runtime(ggml_halide_runtime)
 # definitions override the runtime's weak ones; an OBJECT library, so that they
 # are always linked.
 add_library(ggml_thread_pool OBJECT runtime/thread_pool.cpp)
+target_include_directories(ggml_thread_pool PUBLIC runtime)
 target_link_libraries(ggml_thread_pool PUBLIC Halide::Runtime)
 
 include(formats.cmake)
@@ -45,3 +46,10 @@ target_link_libraries(ggml-quant-bench PRIVATE ggml::ggml ggml_thread_pool ${GGM
 
 add_test(NAME ggml_check COMMAND ggml-quant-bench --check --shapes smoke)
 set_tests_properties(ggml_check PROPERTIES LABELS ggml)
+
+if (TARGET q4_0_q8_0_mul_mat_checked)
+    add_executable(ggml_thread_pool_test runtime/thread_pool_test.cpp)
+    target_link_libraries(ggml_thread_pool_test PRIVATE ggml_thread_pool q4_0_q8_0_mul_mat_checked)
+    add_test(NAME ggml_thread_pool COMMAND ggml_thread_pool_test)
+    set_tests_properties(ggml_thread_pool PROPERTIES LABELS ggml)
+endif ()
