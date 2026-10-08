@@ -125,13 +125,28 @@ vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
         } else if (tail == TailStrategy::ShiftInwards) {
             // Adjust the base downwards to not compute off the
             // end of the realization.
-
-            base = likely_if_innermost(base);
             if (split.align.defined()) {
+                // As below, only tag the part of the base that varies
+                // within the outer loop, which starts at outer_min here.
+                // Once the outer loop is unrolled, this lets the simplifier
+                // remove clamps that are no-ops.
+                base = likely_if_innermost((outer - outer_min) * split.factor) +
+                       outer_min * split.factor;
                 base = Max::make(base, old_min - split.align);
                 base = Min::make(base, old_max + (1 - split.factor) - split.align);
             } else {
-                base = Min::make(base, old_max + (1 - split.factor));
+                // Only tag the part of the base that varies within the
+                // outer loop (which starts at zero here). If the whole thing
+                // were wrapped, the tag would hide old_min from the
+                // simplifier, which then couldn't cancel it against the
+                // old_max on the other side of the min. The clamp would
+                // survive even when the extent is a known multiple of the
+                // factor, hiding the alignment of the base (e.g. from the %
+                // and / in split_storage indices of vectorized tiles).
+                // Keeping old_min on both sides (rather than factoring it
+                // out) keeps bounds inference tight when old_min varies.
+                base = Min::make(likely_if_innermost(outer * split.factor) + old_min,
+                                 old_max + (1 - split.factor));
             }
         } else if (tail == TailStrategy::ShiftInwardsAndBlend) {
             // Unclamped base, saved before the Min/Max below adjust it. Used
@@ -140,9 +155,12 @@ vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
             // neighboring tile and must be masked out rather than
             // recomputed (to avoid double-counting in a reduction).
             Expr old_base = base;
-            base = likely(base);
             Expr mask;
             if (split.align.defined()) {
+                // As for ShiftInwards, only tag the part that varies within
+                // the outer loop.
+                base = likely((outer - outer_min) * split.factor) +
+                       outer_min * split.factor;
                 // Because base is anchored to align instead of old_min, the
                 // boundary tile can now be shifted at either end (whereas
                 // without align only the max end is reachable, since base
@@ -168,8 +186,10 @@ vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
                               likely(const_true()));
             } else {
                 // Without align, base is structurally >= old_min (outer
-                // starts at 0), so only the max end can ever be shifted.
-                base = Min::make(base, old_max + (1 - split.factor));
+                // starts at 0), so only the max end can ever be shifted. As
+                // for ShiftInwards, only tag the part that varies with outer.
+                base = Min::make(likely(outer * split.factor) + old_min,
+                                 old_max + (1 - split.factor));
                 Expr unwanted_elems = (-old_extent) % split.factor;
                 mask = inner >= unwanted_elems;
                 mask = select(base == old_base, likely(const_true()), mask);
