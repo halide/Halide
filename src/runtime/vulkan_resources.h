@@ -1211,6 +1211,21 @@ VulkanShaderBinding *vk_decode_shader_bindings(void *user_context, VulkanMemoryA
     //
     uint32_t module_entries = module_size / sizeof(uint32_t);
     uint32_t idx = 1;  // skip past the header_word_count
+
+    // A malformed module (truncated, or with corrupted length fields) must not
+    // be read past the end of the decoded word stream. The halide_debug_assert
+    // calls below are compiled out in release builds, so the running index is
+    // validated against module_entries before every read here. A well-formed
+    // module always has its SPIR-V binary following the header, so idx stays
+    // well inside module_entries and these checks never trip on valid input.
+    const auto remaining = [&](uint32_t words) -> bool {
+        return (idx <= module_entries) && (words <= (module_entries - idx));
+    };
+
+    if (!remaining(1)) {
+        error(user_context) << "Vulkan: Failed to decode shader bindings ... malformed module buffer!\n";
+        return nullptr;
+    }
     uint32_t shader_count = module_ptr[idx++];
     if (shader_count < 1) {
         error(user_context) << "Vulkan: Failed to decode shader bindings ... no descriptors found!\n";
@@ -1232,19 +1247,27 @@ VulkanShaderBinding *vk_decode_shader_bindings(void *user_context, VulkanMemoryA
         halide_debug_assert(user_context, (idx + 8) < module_entries);  // should be at least 8 entries
 
         // [0] Length of entry point name (padded to nearest word size)
+        if (!remaining(1)) {
+            error(user_context) << "Vulkan: Failed to decode shader bindings ... malformed module buffer!\n";
+            return nullptr;
+        }
         uint32_t entry_point_name_length = module_ptr[idx++];  // length is number of uint32_t entries
 
         // [*] Entry point string data (padded with null chars)
+        if (!remaining(entry_point_name_length)) {
+            error(user_context) << "Vulkan: Failed to decode shader bindings ... malformed module buffer!\n";
+            return nullptr;
+        }
         const char *entry_point_name = (const char *)(module_ptr + idx);  // NOTE: module owns string data
         idx += entry_point_name_length;                                   // skip past string data
 
-        // [1] Number of uniform buffers for this descriptor set
+        // [1] Number of uniform buffers, [2] storage buffers, [3] specialization constants
+        if (!remaining(3)) {
+            error(user_context) << "Vulkan: Failed to decode shader bindings ... malformed module buffer!\n";
+            return nullptr;
+        }
         uint32_t uniform_buffer_count = module_ptr[idx++];
-
-        // [2] Number of storage buffers for this descriptor set
         uint32_t storage_buffer_count = module_ptr[idx++];
-
-        // [3] Number of specialization constants for this descriptor set
         uint32_t specialization_constants_count = module_ptr[idx++];
 
         // Decode all specialization constants
@@ -1265,22 +1288,36 @@ VulkanShaderBinding *vk_decode_shader_bindings(void *user_context, VulkanMemoryA
                 halide_debug_assert(user_context, (idx + 4) < module_entries);  // should be at least 4 entries
 
                 // [0] Length of constant name string (padded to nearest word size)
+                if (!remaining(1)) {
+                    error(user_context) << "Vulkan: Failed to decode shader bindings ... malformed module buffer!\n";
+                    return nullptr;
+                }
                 uint32_t constant_name_length = module_ptr[idx++];
 
                 // [*] Constant name string data (padded with null chars)
+                if (!remaining(constant_name_length)) {
+                    error(user_context) << "Vulkan: Failed to decode shader bindings ... malformed module buffer!\n";
+                    return nullptr;
+                }
                 const char *constant_name = (const char *)(module_ptr + idx);
                 specialization_constants[sc].constant_name = constant_name;  // NOTE: module owns string data
                 idx += constant_name_length;                                 // skip past string data
 
-                // [1] Constant id (as used in VkSpecializationMapEntry for binding)
+                // [1] Constant id, [2] Size of data type (in bytes)
+                if (!remaining(2)) {
+                    error(user_context) << "Vulkan: Failed to decode shader bindings ... malformed module buffer!\n";
+                    return nullptr;
+                }
                 specialization_constants[sc].constant_id = module_ptr[idx++];
-
-                // [2] Size of data type (in bytes)
                 specialization_constants[sc].type_size = module_ptr[idx++];
             }
         }
 
         // [4] Number of shared memory allocations for this descriptor set
+        if (!remaining(1)) {
+            error(user_context) << "Vulkan: Failed to decode shader bindings ... malformed module buffer!\n";
+            return nullptr;
+        }
         uint32_t shared_memory_allocations_count = module_ptr[idx++];  // [3]
 
         // Decode all shared memory allocations ...
@@ -1297,32 +1334,44 @@ VulkanShaderBinding *vk_decode_shader_bindings(void *user_context, VulkanMemoryA
             memset(shared_memory_allocations, 0, shared_memory_allocations_size);
 
             // For each shared memory allocation ...
-            for (uint32_t sm = 0; sm < shared_memory_allocations_count && (idx < module_entries); sm++) {
+            for (uint32_t sm = 0; sm < shared_memory_allocations_count; sm++) {
                 halide_debug_assert(user_context, (idx + 4) < module_entries);  // should be at least 4 entries
 
                 // [0] Length of variable name string (padded to nearest word size)
+                if (!remaining(1)) {
+                    error(user_context) << "Vulkan: Failed to decode shader bindings ... malformed module buffer!\n";
+                    return nullptr;
+                }
                 uint32_t variable_name_length = module_ptr[idx++];
 
                 // [*] Variable name string data (padded with null chars)
+                if (!remaining(variable_name_length)) {
+                    error(user_context) << "Vulkan: Failed to decode shader bindings ... malformed module buffer!\n";
+                    return nullptr;
+                }
                 const char *variable_name = (const char *)(module_ptr + idx);
                 shared_memory_allocations[sm].variable_name = variable_name;  // NOTE: module owns string data
                 idx += variable_name_length;                                  // skip past string data
 
-                // [1] Constant id to use for overriding array size
+                // [1] Constant id, [2] Size of data type (in bytes), [3] Size of array
+                if (!remaining(3)) {
+                    error(user_context) << "Vulkan: Failed to decode shader bindings ... malformed module buffer!\n";
+                    return nullptr;
+                }
                 shared_memory_allocations[sm].constant_id = module_ptr[idx++];
-
-                // [2] Size of data type (in bytes)
                 shared_memory_allocations[sm].type_size = module_ptr[idx++];
-
-                // [3] Size of array (ie element count)
                 shared_memory_allocations[sm].array_size = module_ptr[idx++];
             }
         }
 
         // [4] Dynamic workgroup dimensions bound to specialization constants
         halide_debug_assert(user_context, (idx + 3) < module_entries);  // should be at least 3 entries
-        for (uint32_t dim = 0; dim < 3 && (idx < module_entries); dim++) {
-            shader_bindings[n].dispatch_data.local_size_binding.constant_id[dim] = module_ptr[idx++];
+        if (!remaining(3)) {
+            error(user_context) << "Vulkan: Failed to decode shader bindings ... malformed module buffer!\n";
+            return nullptr;
+        }
+        for (uint32_t &constant_id : shader_bindings[n].dispatch_data.local_size_binding.constant_id) {
+            constant_id = module_ptr[idx++];
         }
 
 #ifdef DEBUG_RUNTIME
@@ -1486,15 +1535,33 @@ VulkanCompilationCacheEntry *vk_compile_kernel_module(void *user_context, Vulkan
         return nullptr;
     }
 
-    // Extract the size of each "SPIR-V Module" for each kernel
+    // Extract the size of each "SPIR-V Module" for each kernel. The header
+    // fields (binary size, name length) are length-prefixed and untrusted, so
+    // validate the running word offset against the module before each read; a
+    // corrupted length must not walk word_offset past the end of the buffer.
+    const uint32_t module_words = (uint32_t)((size_t)size / sizeof(uint32_t));
     size_t byte_offset = 0;
     for (uint32_t i = 0; (i < kernel_count) && (byte_offset < (size_t)size); ++i) {
-        // Extract binary size
+        // Extract binary size and the kernel name length
+        if ((word_offset + 2) > module_words) {
+            debug(user_context) << "Vulkan: Code module is truncated!\n";
+            vk_system_free(user_context, binary_sizes);
+            vk_host_free(user_context, cache_entry->compiled_modules, allocator->callbacks());
+            vk_host_free(user_context, cache_entry, allocator->callbacks());
+            return nullptr;
+        }
         binary_sizes[i] = module_header[word_offset++];
 
         // Skip past the kernel name
         uint32_t kernel_name_entry_size = module_header[word_offset++];
         const char *kernel_name = (const char *)(module_header + word_offset);
+        if (kernel_name_entry_size > (module_words - word_offset)) {
+            debug(user_context) << "Vulkan: Code module is truncated!\n";
+            vk_system_free(user_context, binary_sizes);
+            vk_host_free(user_context, cache_entry->compiled_modules, allocator->callbacks());
+            vk_host_free(user_context, cache_entry, allocator->callbacks());
+            return nullptr;
+        }
         word_offset += kernel_name_entry_size;
 
         // Compute byte offset for loop range check
@@ -1506,7 +1573,14 @@ VulkanCompilationCacheEntry *vk_compile_kernel_module(void *user_context, Vulkan
     halide_error_code_t error_code = halide_error_code_success;
     for (uint32_t i = 0; (i < kernel_count) && (byte_offset < (size_t)size); ++i) {
 
-        // Skip the header and determine the start address of the "SPIR-V Module"
+        // Skip the header and determine the start address of the "SPIR-V Module".
+        // Reject a declared binary size that would read past the module buffer
+        // before it is handed to the driver as (spirv_ptr, spirv_size).
+        if (binary_sizes[i] > ((size_t)size - byte_offset)) {
+            debug(user_context) << "Vulkan: Code module binary size is out of range!\n";
+            error_code = halide_error_code_generic_error;
+            break;
+        }
         const uint32_t *spirv_ptr = (const uint32_t *)(ptr + byte_offset);
         size_t spirv_size = binary_sizes[i];
 
@@ -1574,6 +1648,16 @@ VulkanCompiledShaderModule *vk_compile_shader_module(void *user_context, VulkanM
     uint32_t header_word_count = module_ptr[0];
     uint32_t shader_count = module_ptr[1];
     uint32_t header_size = header_word_count * sizeof(uint32_t);
+
+    // A corrupted header_word_count must not push the SPIR-V start pointer
+    // past the module, nor underflow the (unsigned) binary_size computation.
+    // The multiply is done in size_t here (header_size above truncates to 32
+    // bits). For a well-formed module the header always leaves room for the
+    // binary, so this never trips on valid input.
+    if (((size_t)header_word_count * sizeof(uint32_t)) > (size_t)size) {
+        error(user_context) << "Vulkan: Failed to compile shader modules ... malformed program source buffer!\n";
+        return nullptr;
+    }
 
     // skip past the preamble header to the start of the SPIR-V binary
     const uint32_t *binary_ptr = (module_ptr + header_word_count);
