@@ -18,6 +18,10 @@ extern "C" {
  * halide_shutdown_thread_pool, and is independent of halide_set_num_threads. */
 int ggml_halide_thread_pool_keep_awake(bool keep_awake);
 
+/** The number of parallel loops that have run on the pool's lock-free fast
+ * path (README.md) with more than one thread. For tests and diagnostics. */
+unsigned long long ggml_halide_thread_pool_fast_loops();
+
 }  // extern "C"
 
 namespace ggml_halide {

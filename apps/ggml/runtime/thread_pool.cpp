@@ -52,8 +52,23 @@ ALWAYS_INLINE T atomic_fetch_add_acquire_release(T *addr, T val) {
 }
 
 template<typename T, typename TV>
+ALWAYS_INLINE TV atomic_fetch_add_sequentially_consistent(T *addr, TV val) {
+    return __atomic_fetch_add(addr, val, __ATOMIC_SEQ_CST);
+}
+
+template<typename T, typename TV>
+ALWAYS_INLINE TV atomic_fetch_sub_sequentially_consistent(T *addr, TV val) {
+    return __atomic_fetch_sub(addr, val, __ATOMIC_SEQ_CST);
+}
+
+template<typename T, typename TV>
 ALWAYS_INLINE TV atomic_add_fetch_sequentially_consistent(T *addr, TV val) {
     return __atomic_add_fetch(addr, val, __ATOMIC_SEQ_CST);
+}
+
+template<typename T, typename TV>
+ALWAYS_INLINE bool atomic_cas_strong_sequentially_consistent(T *addr, TV *expected, TV *desired) {
+    return __atomic_compare_exchange(addr, expected, desired, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
 }
 
 template<typename T>
@@ -72,8 +87,22 @@ ALWAYS_INLINE void atomic_load_acquire(T *addr, T *val) {
 }
 
 template<typename T>
+ALWAYS_INLINE void atomic_store_relaxed(T *addr, T *val) {
+    __atomic_store(addr, val, __ATOMIC_RELAXED);
+}
+
+template<typename T>
 ALWAYS_INLINE void atomic_store_release(T *addr, T *val) {
     __atomic_store(addr, val, __ATOMIC_RELEASE);
+}
+
+template<typename T, typename TV>
+ALWAYS_INLINE void atomic_store_sequentially_consistent(T *addr, TV *val) {
+    __atomic_store(addr, val, __ATOMIC_SEQ_CST);
+}
+
+ALWAYS_INLINE void atomic_thread_fence_sequentially_consistent() {
+    __atomic_thread_fence(__ATOMIC_SEQ_CST);
 }
 
 }  // namespace Halide::Runtime::Internal::Synchronization
@@ -81,3 +110,10 @@ ALWAYS_INLINE void atomic_store_release(T *addr, T *val) {
 #include "thread_pool_common.h"
 
 }  // namespace ggml_halide_pool
+
+extern "C" unsigned long long ggml_halide_thread_pool_fast_loops() {
+    uintptr_t state;
+    __atomic_load(&ggml_halide_pool::Halide::Runtime::Internal::fast_par_for.state, &state, __ATOMIC_RELAXED);
+    // Each loop opens and closes the fast path.
+    return (state + 1) / 2;
+}
