@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Regression tests for the capability launcher, including CTest result policies."""
 
+import concurrent.futures
 import importlib.util
 import json
 import os
@@ -8,7 +9,9 @@ import pathlib
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
+from unittest import mock
 
 SCRIPT = pathlib.Path(__file__).with_name("audit_test_labels.py")
 spec = importlib.util.spec_from_file_location("audit_test_labels", SCRIPT)
@@ -17,6 +20,111 @@ spec.loader.exec_module(audit)
 
 
 class AuditTestLabels(unittest.TestCase):
+    def test_metadata_cache(self):
+        with tempfile.TemporaryDirectory(prefix="halide-label-audit-") as tmp:
+            root = pathlib.Path(tmp) / "test-label-audit"
+            metadata = {
+                "tests": [
+                    {
+                        "name": "child",
+                        "command": ["launcher", "emulator", "child"],
+                        "properties": [{"name": "LABELS", "value": ["calls_llvm"]}],
+                    }
+                ]
+            }
+            with mock.patch.object(
+                audit.subprocess, "check_output", return_value=json.dumps(metadata)
+            ) as query:
+                for config in (None, "Debug", "Release"):
+                    cache_dir = root / config if config else root
+                    cache_dir.mkdir(parents=True, exist_ok=True)
+                    (cache_dir / "generation.txt").write_text("first\n")
+                    for _ in range(2):
+                        self.assertEqual(
+                            audit.test_metadata(tmp, config, "ctest", ["child"]),
+                            ("child", {"calls_llvm"}, False, False),
+                        )
+                self.assertEqual(query.call_count, 3)
+                self.assertEqual(
+                    query.call_args_list[1].args[0],
+                    [
+                        "ctest",
+                        "--test-dir",
+                        tmp,
+                        "--show-only=json-v1",
+                        "-C",
+                        "Debug",
+                    ],
+                )
+
+                (root / "Debug" / "generation.txt").write_text("second\n")
+                metadata["tests"][0]["properties"] = [
+                    {"name": "LABELS", "value": ["gpu"]},
+                    {"name": "WILL_FAIL", "value": True},
+                ]
+                query.return_value = json.dumps(metadata)
+                self.assertEqual(
+                    audit.test_metadata(tmp, "Debug", "ctest", ["child"]),
+                    ("child", {"gpu"}, True, False),
+                )
+                self.assertEqual(query.call_count, 4)
+                self.assertEqual(
+                    audit.test_metadata(tmp, "Release", "ctest", ["child"]),
+                    ("child", {"calls_llvm"}, False, False),
+                )
+                self.assertEqual(query.call_count, 4)
+
+                metadata["tests"].append(
+                    {"name": "newly_built", "command": ["launcher", "newly_built"]}
+                )
+                query.return_value = json.dumps(metadata)
+                self.assertEqual(
+                    audit.test_metadata(tmp, "Debug", "ctest", ["newly_built"]),
+                    ("newly_built", set(), False, False),
+                )
+                self.assertEqual(query.call_count, 5)
+
+                (root / "Debug" / "metadata-second.json").write_text("invalid json")
+                with self.assertRaises(json.JSONDecodeError):
+                    audit.ctest_metadata(tmp, "Debug", "ctest")
+                (root / "Debug" / "generation.txt").write_text("third\n")
+                query.side_effect = subprocess.CalledProcessError(1, "ctest")
+                with self.assertRaises(subprocess.CalledProcessError):
+                    audit.ctest_metadata(tmp, "Debug", "ctest")
+                self.assertFalse((root / "Debug" / "metadata-third.json").exists())
+
+    def test_concurrent_metadata_cache(self):
+        with tempfile.TemporaryDirectory(prefix="halide-label-audit-") as tmp:
+            root = pathlib.Path(tmp) / "test-label-audit"
+            root.mkdir()
+            (root / "generation.txt").write_text("first\n")
+            barrier = threading.Barrier(8)
+            metadata = {"tests": [{"name": "child"}]}
+
+            def query(_):
+                barrier.wait(timeout=10)
+                return json.dumps(metadata)
+
+            with (
+                mock.patch.object(audit.subprocess, "check_output", side_effect=query),
+                concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool,
+            ):
+                results = list(
+                    pool.map(
+                        lambda _: audit.ctest_metadata(tmp, None, "ctest"), range(8)
+                    )
+                )
+            self.assertEqual(results, [metadata["tests"]] * 8)
+            self.assertEqual(
+                {p.name for p in root.iterdir()},
+                {"generation.txt", "metadata-first.json"},
+            )
+            with mock.patch.object(audit.subprocess, "check_output") as query:
+                self.assertEqual(
+                    audit.ctest_metadata(tmp, None, "ctest"), metadata["tests"]
+                )
+                query.assert_not_called()
+
     def test_capabilities(self):
         for label, markers in audit.MARKERS.items():
             for marker in markers:
@@ -65,6 +173,11 @@ class AuditTestLabels(unittest.TestCase):
                             )
 
     def test_ctest(self):
+        for generator in ("Ninja", "Ninja Multi-Config"):
+            with self.subTest(generator=generator):
+                self.check_ctest(generator)
+
+    def check_ctest(self, generator):
         with tempfile.TemporaryDirectory(prefix="halide-label-audit-") as tmp:
             root = pathlib.Path(tmp)
             tmp = root.as_posix()
@@ -190,8 +303,16 @@ class AuditTestLabels(unittest.TestCase):
                 'ENVIRONMENT "HL_JIT_TARGET=unchanged")\n'
             )
             subprocess.run(
-                ["cmake", "-S", tmp, "-B", tmp], check=True, capture_output=True
+                ["cmake", "-G", generator, "-S", tmp, "-B", tmp],
+                check=True,
+                capture_output=True,
             )
+            config = "Debug" if generator == "Ninja Multi-Config" else None
+            cache_dir = root / "test-label-audit"
+            if config:
+                cache_dir /= config
+            generation_file = cache_dir / "generation.txt"
+            generation = generation_file.read_text()
             result = subprocess.run(
                 [
                     "ctest",
@@ -311,6 +432,12 @@ class AuditTestLabels(unittest.TestCase):
                     )
                     self.assertEqual(
                         expressions.count(audit.FAILURE_MARKER), int(ci == "ON")
+                    )
+                if ci == "ON":
+                    self.assertNotEqual(generation_file.read_text(), generation)
+                    self.assertEqual(
+                        [t["name"] for t in audit.ctest_metadata(tmp, config, "ctest")],
+                        ["tutorial_plain"],
                     )
 
 

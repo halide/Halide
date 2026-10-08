@@ -10,11 +10,14 @@ that does not support it.
 """
 
 import argparse
+import contextlib
 import json
 import os
+import pathlib
 import signal
 import subprocess
 import sys
+import tempfile
 
 FAILURE_MARKER = "Halide test capability violation:"
 SUCCESS_MARKER = "Halide test launcher: successful exit"
@@ -28,13 +31,42 @@ MARKERS = {
 }
 
 
-def test_metadata(build_dir, config, ctest, command):
+def ctest_metadata(build_dir, config, ctest, refresh=False):
+    cache_dir = pathlib.Path(build_dir) / "test-label-audit"
+    if config:
+        cache_dir /= config
+    generation = (cache_dir / "generation.txt").read_text(encoding="utf-8").strip()
+    cache_file = cache_dir / f"metadata-{generation}.json"
+    if not refresh:
+        try:
+            with cache_file.open(encoding="utf-8") as f:
+                return json.load(f)["tests"]
+        except FileNotFoundError:
+            pass
+
     cmd = [ctest, "--test-dir", build_dir, "--show-only=json-v1"]
     if config:
         cmd += ["-C", config]
     tests = json.loads(subprocess.check_output(cmd))["tests"]
+    # Publish an immutable snapshot so concurrent readers and writers are safe
+    # even on Windows. Reconfiguration changes the generation token.
+    with tempfile.TemporaryDirectory(dir=cache_dir) as tmp:
+        snapshot = pathlib.Path(tmp) / "metadata.json"
+        with snapshot.open("w", encoding="utf-8") as f:
+            json.dump({"tests": tests}, f)
+        with contextlib.suppress(FileExistsError):
+            os.link(snapshot, cache_file)
+    return tests
+
+
+def test_metadata(build_dir, config, ctest, command):
+    tests = ctest_metadata(build_dir, config, ctest)
     # CTest's command includes this launcher and, when applicable, an emulator.
     matches = [t for t in tests if t.get("command", [])[-len(command) :] == command]
+    if not matches:
+        # CTest omits commands for executables that have not been built yet.
+        tests = ctest_metadata(build_dir, config, ctest, refresh=True)
+        matches = [t for t in tests if t.get("command", [])[-len(command) :] == command]
     if not matches:
         raise ValueError(f"No CTest test matches command {command!r}")
     # Several tests may share a command. It must be permitted by all of them.
@@ -132,7 +164,7 @@ def main():
         name, labels, will_fail, has_pass_expression = test_metadata(
             args.build_dir, args.config, args.ctest, command
         )
-    except (OSError, subprocess.CalledProcessError, ValueError) as e:
+    except (OSError, subprocess.CalledProcessError, ValueError, KeyError) as e:
         print(f"{FAILURE_MARKER} cannot read test metadata: {e}", file=sys.stderr)
         return 1
 

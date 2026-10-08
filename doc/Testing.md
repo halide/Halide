@@ -53,6 +53,13 @@ CI audits these permissions, with some caveats:
   calls. Scripts and custom commands are not audited automatically. Tests using
   these capabilities must still declare the appropriate labels.
 
+The audit launcher caches CTest's test metadata under `build/test-label-audit/`,
+separately for each build configuration. Every CMake configure invalidates the
+cache, including changes to labels or result policies. Parallel tests can
+populate it safely; subsequent tests reuse the snapshot instead of launching
+another CTest process. The cache does not store test results or disable any
+capability checks.
+
 The vast majority of our tests are simple C++ executables that link to Halide,
 perform some checks, and print the special line `Success!` upon successful
 completion. There are three main exceptions to this:
