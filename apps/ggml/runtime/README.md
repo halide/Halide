@@ -42,17 +42,24 @@ would already satisfy them.
   loop started while the pool is idle (nothing queued, and at least
   `min(size, threads) - 1` idle A-team workers polling in
   `halide_cond_with_spinning::wait`) instead publishes itself in a single global
-  slot. The polling workers join it and claim iterations from an atomic counter.
-  The owner runs iterations too, then closes the loop and waits for the helpers
-  to leave. Only `min(size, threads) - 1` helpers do work, and the first error
-  is returned. Loops of one iteration, or with one thread, run inline on the
-  caller. Everything else takes the usual path: loops started while the slot is
-  in use (nested in a fast-path iteration, or on another thread), loops on a
-  busy pool, and all of `halide_do_parallel_tasks` (semaphores, async).
-  Busy-waiting uses the CPU's pause instruction (`yield`/`pause`), selected with
-  `#if`. Upstream, the runtime is compiled arch-independently, so this would
-  need a per-arch runtime helper. The glue adds
-  `ggml_halide_thread_pool_fast_loops()`, which counts fast-path loops, for
+  slot. The polling workers join it and claim iterations without locks, and so
+  does the owner, which returns once every iteration has finished; the first
+  error is returned. To keep contention low, each participant (the owner, and
+  each worker, numbered as it starts) has its own cache line with a presence
+  flag and a reserved first iteration. It claims that iteration, then claims
+  from a shared counter that starts past the reserved ones, then takes over the
+  reserved iterations of participants that haven't shown up, so a late helper
+  never holds up the loop. It adds the number it claimed to a shared total once,
+  as it leaves, and the owner waits for the total to reach the loop's size. The
+  next fast-path loop waits for helpers still in the previous one to leave
+  before reusing the slot. Loops of one iteration, or with one thread, run
+  inline on the caller. Everything else takes the usual path: loops started
+  while the slot is in use (nested in a fast-path iteration, or on another
+  thread), loops on a busy pool, and all of `halide_do_parallel_tasks`
+  (semaphores, async). Busy-waiting uses the CPU's pause instruction
+  (`yield`/`pause`), selected with `#if`. Upstream, the runtime is compiled
+  arch-independently, so this would need a per-arch runtime helper. The glue
+  adds `ggml_halide_thread_pool_fast_loops()`, which counts fast-path loops, for
   tests and diagnostics.
 - **Lost owner wakeup** (an upstream bug, not specific to this copy): a thread
   that owns a job can run a serial task of another parallel region. If the
@@ -69,5 +76,7 @@ the q4_0 x q8_0 mul_mat kernel and direct calls: nested loops,
 `halide_do_parallel_tasks` with semaphores, error propagation, keep-awake held
 and not with gaps between loops, thread-count changes, shutdown and restart,
 concurrent callers, and the fast path (uneven iterations, failing iterations,
-nested loops and semaphores inside its iterations, shutdown right after it). It
-checks that the fast path was used, and results, but not timings.
+nested loops and semaphores inside its iterations, shutdown right after it, slow
+and late helpers, oversubscription by spinning threads, and `HL_NUM_THREADS`
+from 1 to 64). It checks that the fast path was used, and results, but not
+timings.
