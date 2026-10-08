@@ -26,20 +26,20 @@ public:
         W(k, n) = operand(fw, w, k, n);
         X(k, m) = operand(fa, a, k, m);
         r = RDom(0, w.dim(0).extent() * fw.block, "r");
-        out(n, m) = 0.0f;
-        out(n, m) += W(r, n) * X(r, m);
+        dot(n, m) += W(r, n) * X(r, m);  // from 0; out writes each output once
+        out(n, m) = dot(n, m);
         std::vector<Func> cut;
         std::vector<ImageParam> bound;
         for (auto [F, f, p] : {std::tuple{W, fw, w}, std::tuple{X, fa, a}}) {
             if (f.scheme.defined()) {
-                approx.push_back(F.approximate_by(f.scheme, {out}));
+                approx.push_back(F.approximate_by(f.scheme, {dot}));
                 cut.push_back(approx.back().encoded[0]);
                 bound.push_back(p);
             }
         }
         if (cn != an) {
             if (fa.scheme.defined()) throw std::invalid_argument("act: only plain storage can be re-approximated");
-            approx.push_back(X.approximate_by(fc.scheme, {out}));
+            approx.push_back(X.approximate_by(fc.scheme, {dot}));
             staged.push_back(approx.back().encoded[0]);
         }
         Pipeline(out).sever(cut, bound);
@@ -58,11 +58,12 @@ public:
     }
 
     void generate() {
-        (op == "vec_dot" ? ggml::vec_dot : ggml::mul_mat)(*result, r, blocks, approx, staged, get_target());
+        (op == "vec_dot" ? ggml::vec_dot : ggml::mul_mat)(*result, dot, r, blocks, approx, staged, get_target());
     }
 
 private:
     RDom r;
+    Func dot{"dot"};
     std::vector<ApproximationResult> approx;
     std::vector<Func> staged;  // encoded inside the pipeline
     std::vector<int> blocks;
