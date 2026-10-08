@@ -344,6 +344,7 @@ tests(
     lerp_mismatch.cpp
     lerp_signed_weight.cpp
     let_in_rdom_bound.cpp
+    licm.cpp
     likely.cpp
     load_library.cpp
     logical.cpp
