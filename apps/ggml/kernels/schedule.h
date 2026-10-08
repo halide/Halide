@@ -127,18 +127,21 @@ inline void vec_dot(Func out, Func dot, const RDom &r, const std::vector<int> &b
     blocked(out, dot, Expr(), {}, r, blocks[0], blocks[1] == blocks[0], rs, t);
 }
 
-// An encoder computed per record (each block of activations), vectorized:
-// its reductions (e.g. the block's scale) across the block, and the Funcs
-// with an element per value (e.g. the codes) across their elements.
+// An encoder computed per record (each block of values), vectorized: the
+// Funcs with an element per value (e.g. the codes, packed bytes) across their
+// elements, and its reductions (e.g. the block's scale) across the block.
 inline void encoder(Func e, const std::vector<ApproximationResult> &rs) {
     std::vector<Func> dec = decoders(rs);
     for (const ApproximationResult &res : rs) {
         for (Func f : res.encoded[0].name() == e.name() ? res.intermediates : std::vector<Func>{}) {
             if (f.name() == e.name() || std::any_of(dec.begin(), dec.end(), [&](const Func &d) { return d.name() == f.name(); })) continue;
-            if (f.has_update_definition()) {
-                f.compute_at(e, e.args()[0]).update().atomic().vectorize(f.rvars()[0]);
-            } else if (f.dimensions() > e.dimensions()) {
+            if (f.dimensions() > e.dimensions()) {
                 f.compute_at(e, e.args()[0]).vectorize(f.args()[0]);
+                for (int u = 0; u < f.num_update_definitions(); u++) {
+                    f.update(u).vectorize(f.args()[0]);
+                }
+            } else if (f.has_update_definition()) {
+                f.compute_at(e, e.args()[0]).update().atomic().vectorize(f.rvars()[0]);
             }
         }
     }
