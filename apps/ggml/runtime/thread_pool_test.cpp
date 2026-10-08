@@ -5,8 +5,8 @@
 // between loops, thread-count changes, shutdown and restart, and concurrent
 // callers, and the lock-free fast path for parallel loops, including with
 // helpers that are late or never come, with more threads than cores, and with
-// fewer threads than workers. It
-// checks results only, never timings.
+// fewer threads than workers, and the lost-wakeup regression test from
+// halide/Halide#9534. It checks results only, never timings.
 #include "HalideRuntime.h"
 #include "q4_0_q8_0_mul_mat_checked.h"
 #include "thread_pool.h"
@@ -643,6 +643,151 @@ void test_concurrent() {
     CHECK(keep_awake_count() == 0);
 }
 
+// The regression test from halide/Halide#9534. Thread A owns a group of two
+// serial tasks that hand off to each other through semaphores. The main
+// thread runs a parallel task whose other iteration is held up until the main
+// thread has stolen one of A's tasks, so that its own task finishes while it
+// runs that task. When the task's semaphore runs dry, the main thread puts it
+// back and returns. If a release lands just before that, it wakes A while the
+// task is still in use, A goes back to sleep, and nothing wakes it again.
+namespace stolen_serial {
+
+thread_local bool is_main_thread = false;
+std::atomic<bool> main_thread_in_group{false};
+std::atomic<bool> group_started{false};
+std::atomic<bool> group_done{false};
+std::atomic<int> holders_entered{0};
+std::atomic<int> progress{0};
+
+struct PingPong {
+    halide_semaphore_t data, space;
+    int value;
+};
+
+void note_task_running() {
+    progress++;
+    group_started = true;
+    if (is_main_thread) {
+        main_thread_in_group = true;
+    }
+}
+
+int producer(void *, int min, int extent, uint8_t *closure, void *) {
+    PingPong *p = (PingPong *)closure;
+    note_task_running();
+    for (int i = min; i < min + extent; i++) {
+        p->value = i;
+        halide_semaphore_release(&p->data, 1);
+    }
+    return 0;
+}
+
+int consumer(void *, int min, int extent, uint8_t *closure, void *) {
+    PingPong *p = (PingPong *)closure;
+    note_task_running();
+    for (int i = min; i < min + extent; i++) {
+        CHECK(p->value == i);
+        halide_semaphore_release(&p->space, 1);
+    }
+    return 0;
+}
+
+void run_group() {
+    PingPong p;
+    p.value = -1;
+    halide_semaphore_init(&p.data, 0);
+    halide_semaphore_init(&p.space, 1);
+    halide_semaphore_acquire_t acquire_data = {&p.data, 1};
+    halide_semaphore_acquire_t acquire_space = {&p.space, 1};
+
+    halide_parallel_task_t tasks[2] = {};
+    tasks[0].fn = consumer;
+    tasks[0].closure = (uint8_t *)&p;
+    tasks[0].name = "consumer";
+    tasks[0].semaphores = &acquire_data;
+    tasks[0].num_semaphores = 1;
+    tasks[0].extent = 1024;
+    tasks[0].serial = true;
+    tasks[1].fn = producer;
+    tasks[1].closure = (uint8_t *)&p;
+    tasks[1].name = "producer";
+    tasks[1].semaphores = &acquire_space;
+    tasks[1].num_semaphores = 1;
+    tasks[1].extent = 1024;
+    tasks[1].serial = true;
+    CHECK(halide_do_parallel_tasks(nullptr, 2, tasks, nullptr) == 0);
+}
+
+// Run one iteration at a time. The main thread's iteration waits briefly for
+// a worker to take the other one, which then keeps the loop alive until the main thread is running one
+// of the group's tasks (or gives up, if that doesn't happen soon).
+int holder(void *, int, int, uint8_t *, void *) {
+    using namespace std::chrono;
+    holders_entered++;
+    auto start = steady_clock::now();
+    if (is_main_thread) {
+        while (holders_entered < 2 && steady_clock::now() - start < milliseconds(1)) {
+            std::this_thread::yield();
+        }
+    } else {
+        while (!main_thread_in_group && !group_done &&
+               steady_clock::now() - start < milliseconds(5)) {
+            std::this_thread::yield();
+        }
+    }
+    return 0;
+}
+
+void test() {
+    using namespace std::chrono;
+    CHECK(keep_awake_count() == 0);
+    is_main_thread = true;
+    halide_set_num_threads(4);
+    int stolen = 0;
+    for (int trial = 0; trial < 2000; trial++) {
+        main_thread_in_group = false;
+        group_started = false;
+        group_done = false;
+        holders_entered = 0;
+
+        std::thread owner([]() {
+            run_group();
+            group_done = true;
+        });
+        while (!group_started && !group_done) {
+            std::this_thread::yield();
+        }
+        // A parallel task rather than halide_do_par_for, which would often
+        // take the fast path and never steal.
+        halide_parallel_task_t hold = {};
+        hold.fn = holder;
+        hold.name = "holder";
+        hold.extent = 2;
+        CHECK(halide_do_parallel_tasks(nullptr, 1, &hold, nullptr) == 0);
+        stolen += main_thread_in_group;
+
+        int last_progress = progress;
+        auto last_change = steady_clock::now();
+        while (!group_done) {
+            std::this_thread::sleep_for(microseconds(50));
+            if (progress != last_progress) {
+                last_progress = progress;
+                last_change = steady_clock::now();
+            } else if (steady_clock::now() - last_change > seconds(10)) {
+                fprintf(stderr, "Trial %d: the group's owner was never woken\n", trial);
+                std::_Exit(1);
+            }
+        }
+        owner.join();
+    }
+    // Otherwise the test didn't force anything.
+    CHECK(stolen > 0);
+    is_main_thread = false;
+    halide_set_num_threads(0);
+}
+
+}  // namespace stolen_serial
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -655,6 +800,7 @@ int main(int argc, char **argv) {
     test_fast_path();
     test_late_helpers();
     test_concurrent();
+    stolen_serial::test();
     CHECK(keep_awake_count() == 0);
     printf("Success!\n");
     return 0;
