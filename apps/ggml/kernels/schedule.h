@@ -127,6 +127,23 @@ inline void vec_dot(Func out, Func dot, const RDom &r, const std::vector<int> &b
     blocked(out, dot, Expr(), {}, r, blocks[0], blocks[1] == blocks[0], rs, t);
 }
 
+// An encoder computed per record (each block of activations), vectorized:
+// its reductions (e.g. the block's scale) across the block, and the Funcs
+// with an element per value (e.g. the codes) across their elements.
+inline void encoder(Func e, const std::vector<ApproximationResult> &rs) {
+    std::vector<Func> dec = decoders(rs);
+    for (const ApproximationResult &res : rs) {
+        for (Func f : res.encoded[0].name() == e.name() ? res.intermediates : std::vector<Func>{}) {
+            if (f.name() == e.name() || std::any_of(dec.begin(), dec.end(), [&](const Func &d) { return d.name() == f.name(); })) continue;
+            if (f.has_update_definition()) {
+                f.compute_at(e, e.args()[0]).update().atomic().vectorize(f.rvars()[0]);
+            } else if (f.dimensions() > e.dimensions()) {
+                f.compute_at(e, e.args()[0]).vectorize(f.args()[0]);
+            }
+        }
+    }
+}
+
 // mul_mat: gemm tiles the outputs (4 x 8 on smmla when the target has i8mm
 // and both operands are quantized alike; else 4 x 4 on sdot); gemv (M = 1) is
 // the vec_dot recipe on row pairs sharing each activation block (single rows
@@ -136,6 +153,7 @@ inline void mul_mat(Func out, Func dot, const RDom &r, const std::vector<int> &b
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
     for (Func e : staged) {
         e.compute_root().specialize(M > 1).parallel(e.args().back());  // per activation row
+        encoder(e, rs);
     }
     bool integer = blocks[1] == blocks[0];
     Tiles mmla{4, 8, 1, 32, 32}, gemm{4, 4, 1, 32, 32}, pairs{2, 1, 2, 32}, rows{1, 1, 2, 32};

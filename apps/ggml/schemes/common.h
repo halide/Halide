@@ -16,10 +16,11 @@ inline Expr inverse(const Expr &d) {
     return select(d != 0.0f, 1.0f / d, 0.0f);
 }
 
-// C's roundf: half away from zero.
+// C's roundf: half away from zero. Truncating v plus the largest float below
+// 1/2 (with v's sign) equals roundf(v) for every float (checked exhaustively).
 inline Expr round_away(const Expr &v) {
-    Expr t = trunc(v);
-    return select(abs(v - t) >= 0.5f, t + select(v < 0, -1.0f, 1.0f), t);
+    const float h = 0.49999997f;
+    return trunc(v + select(v < 0, -h, h));
 }
 
 // values = codes * scale, for codes(j, b, ...) and scale(b, ...).
