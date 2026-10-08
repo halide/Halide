@@ -2042,95 +2042,165 @@ private:
     }
 };
 
-// Bind each compound index in the body of an IfThenElse that its condition
-// also mentions to a let around it, and repeat the condition in terms of the
-// name inside the original one, e.g.
+// Bounds inference infers bounds on variables from if conditions. For
+// example, in the following, it knows f is only accessed at positive
+// coordinates:
 //
-//   if (min_x <= x*s + r) { f(x*s + r); g(r) }
+// if (0 < x) { f(x) }
 //
-// becomes
+// Sometimes we'd like to exploit bounds on subexpressions too:
 //
-//   let t = x*s + r in if (min_x <= x*s + r) { if (min_x <= t) { f(t); g(r) } }
+// if (0 < x + y) { f(x + y) }
 //
-// BoxesTouched bounds an index by an IfThenElse's condition one variable at a
-// time, so it can only use a condition that relates several variables if
-// they're named by one. The original condition stays outside so that it keeps
-// bounding each of those variables on its own, for the other indices they
-// appear in.
+// But we may also want bounds on the individual terms within those
+// subexpressions. In the following, at the use of f we'd like to know x + y is
+// positive, and at the use of g we'd like to know that x is greater than -y:
+//
+// if (0 < x + y) { f(x + y); g(x) }
+//
+// Rather than teaching BoxesTouched to track bounds on arbitrary Exprs, the
+// mutator below identifies promising Exprs and gives them names, producing:
+//
+// let t = x + y in if (0 < x + y) { if (0 < t) { f(t); g(x) } }
+//
+// The two ifs are redundant - the inner one is just a way to communicate to
+// BoxesTouched that it can also assume t is positive. The else case is
+// treated the same way using the negated condition. This IR is temporary and
+// only consumed by BoxesTouched, so the redundant if doesn't escape into the
+// rest of lowering.
 class NameGuardedIndices : public IRMutator {
     using IRMutator::visit;
+    using ExprSet = set<Expr, IRDeepCompare>;
 
     Stmt visit(const IfThenElse *op) override {
-        // Name the indices here before recursing, so that the conditions of
-        // nested IfThenElses that bound the same index refer to the same let.
-        Stmt then_case = op->then_case;
-        vector<Expr> indices;
-        auto add_index = [&](const Expr &e) {
-            if (e.type() != Int(32) || e.as<Variable>() || is_const(e)) {
-                return;
+        // Identify all integer subexpressions of the condition
+        ExprSet in_condition;
+        mutate_with(op->condition, [&](auto *self, const Expr &e) {
+            if (e.type() == Int(32) && !e.as<Variable>() && !is_const(e)) {
+                in_condition.insert(e);
             }
-            for (const Expr &i : indices) {
-                if (equal(i, e)) {
-                    return;
-                }
-            }
-            indices.push_back(e);
-        };
-        // An index and each compound part of it, outermost first, so that the
-        // largest one the condition mentions gets the name.
-        auto add_index_and_parts = [&](const Expr &arg) {
-            add_index(arg);
-            visit_with(
-                arg,
-                [&](auto *self, const Add *op) { add_index(op); self->visit_base(op); },
-                [&](auto *self, const Sub *op) { add_index(op); self->visit_base(op); },
-                [&](auto *self, const Mul *op) { add_index(op); self->visit_base(op); },
-                [&](auto *self, const Select *op) { add_index(op); self->visit_base(op); },
-                [&](auto *self, const Div *op) { add_index(op); self->visit_base(op); },
-                [&](auto *self, const Mod *op) { add_index(op); self->visit_base(op); },
-                [&](auto *self, const Min *op) { add_index(op); self->visit_base(op); },
-                [&](auto *self, const Max *op) { add_index(op); self->visit_base(op); });
-        };
-        visit_with(
-            then_case,
-            [&](auto *self, const Call *call) {
-                if (call->call_type == Call::Halide || call->call_type == Call::Image) {
-                    for (const Expr &arg : call->args) {
-                        add_index_and_parts(arg);
-                    }
-                }
-                self->visit_base(call);
-            },
-            [&](auto *self, const Provide *provide) {
-                for (const Expr &arg : provide->args) {
-                    add_index_and_parts(arg);
-                }
-                self->visit_base(provide);
-            });
+            return self->mutate_base(e);
+        });
 
+        // Peel any tag (e.g. likely) so that we can solve the condition, and
+        // rewrap each bound we derive from it in the same tag.
         Expr condition = op->condition;
-        vector<pair<string, Expr>> lets;
-        for (const Expr &i : indices) {
-            string name = unique_name('t');
-            Expr var = Variable::make(i.type(), name);
-            Expr new_condition = substitute(i, var, condition);
-            if (!new_condition.same_as(condition)) {
-                condition = new_condition;
-                then_case = substitute(i, var, then_case);
-                lets.emplace_back(name, i);
-            }
+        const Call *tag = Call::as_tag(condition);
+        if (tag) {
+            condition = tag->args[0];
         }
-        then_case = mutate(then_case);
-        Stmt else_case = mutate(op->else_case);
 
-        if (lets.empty()) {
-            if (then_case.same_as(op->then_case) && else_case.same_as(op->else_case)) {
-                return op;
+        // Named subexpressions, shared by both branches
+        map<Expr, Expr, IRDeepCompare> names;
+        vector<pair<string, Expr>> lets;
+
+        auto name_guarded_indices = [&](const Expr &cond, const Stmt &body) {
+            if (!body.defined()) {
+                return body;
             }
-            return IfThenElse::make(op->condition, then_case, else_case);
-        }
-        then_case = IfThenElse::make(condition, then_case);
-        Stmt stmt = IfThenElse::make(op->condition, then_case, else_case);
+
+            // Filter the condition's subexpressions down to the ones used in an
+            // indexing context inside the body
+            ExprSet in_index;
+            if (!in_condition.empty()) {
+                int index_depth = 0;
+                mutate_with(
+                    body,
+                    [&](auto *self, const Expr &e) {
+                        if (index_depth > 0 && in_condition.count(e)) {
+                            in_index.insert(e);
+                        }
+                        const Call *call = e.as<Call>();
+                        bool is_access = call && (call->call_type == Call::Halide || call->call_type == Call::Image);
+                        index_depth += is_access;
+                        self->mutate_base(e);
+                        index_depth -= is_access;
+                        return e;
+                    },
+                    [&](auto *self, const Stmt &s) {
+                        const Provide *provide = s.as<Provide>();
+                        if (!provide) {
+                            self->mutate_base(s);
+                            return s;
+                        }
+                        for (const Expr &v : provide->values) {
+                            self->mutate(v);
+                        }
+                        index_depth++;
+                        for (const Expr &a : provide->args) {
+                            self->mutate(a);
+                        }
+                        index_depth--;
+                        self->mutate(provide->predicate);
+                        return s;
+                    });
+            }
+
+            // For each identified subexpression, see if the condition can be
+            // solved to give a bound on it, and if so, give it a name and an
+            // extra IfThenElse stating that bound.
+            map<Expr, Expr, IRDeepCompare> replacements;
+            vector<Expr> lifted_conditions;
+            for (const Expr &e : in_index) {
+                auto it = names.find(e);
+                Expr var = (it != names.end()) ? it->second : Variable::make(e.type(), unique_name('t'));
+                const string &name = var.as<Variable>()->name;
+                SolverResult solved = solve_expression(simplify(substitute(e, var, cond)), name);
+                if (!solved.fully_solved) {
+                    continue;
+                }
+                Expr c = solved.result;
+                Expr lhs;
+                if (const LT *lt = c.as<LT>()) {
+                    lhs = lt->a;
+                } else if (const LE *le = c.as<LE>()) {
+                    lhs = le->a;
+                } else if (const GT *gt = c.as<GT>()) {
+                    lhs = gt->a;
+                } else if (const GE *ge = c.as<GE>()) {
+                    lhs = ge->a;
+                } else if (const EQ *eq = c.as<EQ>()) {
+                    lhs = eq->a;
+                }
+                if (!lhs.defined() || !equal(lhs, var)) {
+                    continue;
+                }
+                if (tag) {
+                    c = Call::make(tag->type, tag->name, {c}, tag->call_type);
+                }
+                if (it == names.end()) {
+                    names.emplace(e, var);
+                    lets.emplace_back(name, e);
+                }
+                replacements.emplace(e, var);
+                lifted_conditions.push_back(c);
+            }
+
+            // Replace all subexpression uses with the named variables
+            Stmt s = body;
+            if (!replacements.empty()) {
+                s = mutate_with(s, [&](auto *self, const Expr &e) {
+                    auto it = replacements.find(e);
+                    if (it != replacements.end()) {
+                        return it->second;
+                    }
+                    return self->mutate_base(e);
+                });
+            }
+            s = mutate(s);
+
+            // Make all the inner IfThenElses
+            for (const Expr &c : reverse_view(lifted_conditions)) {
+                s = IfThenElse::make(c, s);
+            }
+            return s;
+        };
+
+        Stmt then_case = name_guarded_indices(condition, op->then_case);
+        Stmt else_case = name_guarded_indices(!condition, op->else_case);
+
+        // Wrap all the new named lets
+        Stmt stmt = op->with(op->condition, then_case, else_case);
         for (const auto &let : reverse_view(lets)) {
             stmt = LetStmt::make(let.first, let.second, stmt);
         }
