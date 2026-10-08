@@ -25,8 +25,8 @@ on:
       - ".github/**"
       - "!.github/workflows/testing-macos.yml"
       - "packaging/**"
-      - "Makefile"
-      - "Makefile.inc"
+      - "**/Makefile"
+      - "apps/support/Makefile.inc"
       - 'run-clang-tidy.sh'
       - '**.clang-tidy'
       - "**.md"

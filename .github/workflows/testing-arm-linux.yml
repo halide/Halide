@@ -30,8 +30,8 @@ on:
       - ".github/**"
       - "!.github/workflows/testing-arm-linux.yml"
       - "packaging/**"
-      - "Makefile"
-      - "Makefile.inc"
+      - "**/Makefile"
+      - "apps/support/Makefile.inc"
       - 'run-clang-tidy.sh'
       - '**.clang-tidy'
       - "**.md"
