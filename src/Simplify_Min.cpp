@@ -26,29 +26,18 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
     }
 
     // Early out when the bounds tells us one side or the other is smaller
-    auto strip_likely = [](const Expr &e) {
-        if (const Call *call = e.as<Call>()) {
-            if (call->is_intrinsic(Call::likely) ||
-                call->is_intrinsic(Call::likely_if_innermost)) {
-                return call->args[0];
-            }
-        }
-        return e;
-    };
-
-    // Early out when the bounds tells us one side or the other is smaller
     if (a_info.bounds >= b_info.bounds) {
         if (info) {
             // We lost information when we unioned the alignment, so revert to the info for b.
             *info = b_info;
         }
-        return strip_likely(b);
+        return strip_likely_tag(b);
     }
     if (b_info.bounds >= a_info.bounds) {
         if (info) {
             *info = a_info;
         }
-        return strip_likely(a);
+        return strip_likely_tag(a);
     }
 
     // Order commutative operations by node type
