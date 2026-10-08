@@ -63,13 +63,15 @@ would already satisfy them.
   arch-independently, so this would need a per-arch runtime helper. The glue
   adds `ggml_halide_thread_pool_fast_loops()`, which counts fast-path loops, for
   tests and diagnostics.
-- **Lost owner wakeup** (an upstream bug, not specific to this copy): a thread
-  that owns a job can run a serial task of another parallel region. If the
-  task's semaphore runs dry, the thread puts it back and, once its own job is
-  done, returns without looking at it again. The task's owner may have gone to
-  sleep meanwhile, having seen the task in use, so nobody ran the rest of it.
-  Putting a serial task back now wakes its sleeping owner. The fast path made
-  this likely (about one run in 30 of `ggml_thread_pool` with
+- **Lost owner wakeup** (an upstream bug, not specific to this copy; the fix is
+  halide/Halide#9534): a thread that owns a job can run a serial task of another
+  parallel region. If the task's semaphore runs dry, the thread puts it back
+  and, once its own job is done, returns without looking at it again. The task's
+  owner may have gone to sleep meanwhile, having seen the task in use, so nobody
+  ran the rest of it. Putting a serial task back unfinished now wakes all
+  sleeping owners, as a semaphore release does; the owner may be asleep on a
+  sibling task, so checking the task's own owner isn't enough. The fast path
+  made this likely (about one run in 30 of `ggml_thread_pool` with
   `HL_NUM_THREADS=5`), because its owner and helpers each run
   `halide_do_parallel_tasks` at the same time in that test.
 
@@ -80,5 +82,5 @@ and not with gaps between loops, thread-count changes, shutdown and restart,
 concurrent callers, and the fast path (uneven iterations, failing iterations,
 nested loops and semaphores inside its iterations, shutdown right after it, slow
 and late helpers, oversubscription by spinning threads, and `HL_NUM_THREADS`
-from 1 to 64). It checks that the fast path was used, and results, but not
-timings.
+from 1 to 64), and the stolen serial task from #9534. It checks that the fast
+path was used, and results, but not timings.
