@@ -36,9 +36,29 @@ would already satisfy them.
   `ggml_halide_thread_pool_keep_awake` (so it can't collide with the runtime's
   if #9526 lands; its error message still says the upstream name), declared with
   the RAII holder `ggml_halide::ThreadPoolKeepAwake` in `thread_pool.h`.
+- **Lock-free `do_par_for` fast path** (`fast_par_for_t`): with keep-awake, the
+  remaining fork/join cost is `work_queue.mutex`, taken to queue a loop and
+  again to claim and finish each iteration and to wait. A top-level parallel
+  loop started while the pool is idle (nothing queued, and at least
+  `min(size, threads) - 1` idle A-team workers polling in
+  `halide_cond_with_spinning::wait`) instead publishes itself in a single global
+  slot. The polling workers join it and claim iterations from an atomic counter.
+  The owner runs iterations too, then closes the loop and waits for the helpers
+  to leave. Only `min(size, threads) - 1` helpers do work, and the first error
+  is returned. Loops of one iteration, or with one thread, run inline on the
+  caller. Everything else takes the usual path: loops started while the slot is
+  in use (nested in a fast-path iteration, or on another thread), loops on a
+  busy pool, and all of `halide_do_parallel_tasks` (semaphores, async).
+  Busy-waiting uses the CPU's pause instruction (`yield`/`pause`), selected with
+  `#if`. Upstream, the runtime is compiled arch-independently, so this would
+  need a per-arch runtime helper. The glue adds
+  `ggml_halide_thread_pool_fast_loops()`, which counts fast-path loops, for
+  tests and diagnostics.
 
 `thread_pool_test.cpp` (ctest `ggml_thread_pool`) stress-tests the copy through
 the q4_0 x q8_0 mul_mat kernel and direct calls: nested loops,
 `halide_do_parallel_tasks` with semaphores, error propagation, keep-awake held
-and not with gaps between loops, thread-count changes, shutdown and restart, and
-concurrent callers. It checks results only, not timings.
+and not with gaps between loops, thread-count changes, shutdown and restart,
+concurrent callers, and the fast path (uneven iterations, failing iterations,
+nested loops and semaphores inside its iterations, shutdown right after it). It
+checks that the fast path was used, and results, but not timings.

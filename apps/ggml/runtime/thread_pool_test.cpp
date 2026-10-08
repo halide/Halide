@@ -3,7 +3,8 @@
 // thread-pool entry points: nested parallel loops, do_parallel_tasks with
 // semaphores, error propagation, the keep-awake count held and not with gaps
 // between loops, thread-count changes, shutdown and restart, and concurrent
-// callers. It checks results only, never timings.
+// callers, and the lock-free fast path for parallel loops. It checks results
+// only, never timings.
 #include "HalideRuntime.h"
 #include "q4_0_q8_0_mul_mat_checked.h"
 #include "thread_pool.h"
@@ -387,6 +388,101 @@ void test_shutdown() {
     CHECK(keep_awake_count() == 0);
 }
 
+int producer_consumer_task(void *, int, uint8_t *) {
+    run_producer_consumer();
+    return 0;
+}
+
+struct UnevenClosure {
+    std::atomic<int> *hits;
+    int min;
+    int fail_mod;
+};
+
+// An iteration that takes a varying time, and fails (with a code naming the
+// iteration) if idx % fail_mod == 1.
+int uneven_task(void *, int idx, uint8_t *closure) {
+    UnevenClosure *c = (UnevenClosure *)closure;
+    c->hits[idx - c->min]++;
+    serial_gap((idx * 7) % 5);
+    if (c->fail_mod && (idx % c->fail_mod + c->fail_mod) % c->fail_mod == 1) {
+        return -1000 - idx;
+    }
+    return 0;
+}
+
+void test_fast_path() {
+    // Back-to-back top-level loops on an idle pool with the count held take
+    // the lock-free fast path. Check iteration coverage, error propagation,
+    // and nested loops (which take the usual path) inside its iterations.
+    halide_set_num_threads(0);
+    const int threads = halide_get_num_threads();
+    ThreadPoolKeepAwake keep_awake;
+    run_par_for(threads);
+    const unsigned long long fast_before = ggml_halide_thread_pool_fast_loops();
+    std::mt19937 rng(2);
+    for (int i = 0; i < 2000; i++) {
+        const int n = i % 10 == 0 ? 1 + (int)(rng() % 1000) : 1 + (int)(rng() % (2 * threads));
+        const int min = (int)(rng() % 7) - 3;
+        const int fail_mod = i % 7 == 0 ? 1 + (int)(rng() % 5) : 0;
+        std::vector<std::atomic<int>> hits(n);
+        UnevenClosure c{hits.data(), min, fail_mod};
+        const int ret = halide_do_par_for(nullptr, uneven_task, min, n, (uint8_t *)&c);
+        bool any_fails = false;
+        for (int j = 0; j < n; j++) {
+            const int idx = min + j;
+            any_fails |= fail_mod && (idx % fail_mod + fail_mod) % fail_mod == 1;
+            // No iteration runs twice.
+            CHECK(hits[j] <= 1);
+        }
+        if (any_fails) {
+            // The error is one of the failing iterations', which ran.
+            const int idx = -1000 - ret;
+            CHECK(idx >= min && idx < min + n);
+            CHECK((idx % fail_mod + fail_mod) % fail_mod == 1);
+            CHECK(hits[idx - min] == 1);
+        } else {
+            CHECK(ret == 0);
+            for (auto &h : hits) {
+                CHECK(h == 1);
+            }
+        }
+        if (i % 50 == 0) {
+            run_par_for(threads, 2 * threads);
+            run_pipeline(i / 50);
+            // do_parallel_tasks with semaphores inside fast-path iterations.
+            CHECK(halide_do_par_for(nullptr, producer_consumer_task, 0, threads, nullptr) == 0);
+        }
+        if (i % 100 == 0) {
+            serial_gap(200);
+        }
+    }
+    CHECK(ggml_halide_thread_pool_fast_loops() > fast_before || threads == 1);
+
+    // Shut down right after a fast-path loop, while its helpers are polling,
+    // and use the fast path again after restarting.
+    for (int i = 0; i < 5; i++) {
+        run_par_for(threads);
+        halide_shutdown_thread_pool();
+        for (int j = 0; j < 20; j++) {
+            run_par_for(threads, j % 5 == 0 ? 3 : 0);
+        }
+    }
+
+    // Concurrent top-level callers: at most one at a time uses the fast path.
+    std::vector<std::thread> users;
+    for (int t = 0; t < 3; t++) {
+        users.emplace_back([t, threads]() {
+            for (int i = 0; i < 200; i++) {
+                run_par_for(1 + (i + t) % (2 * threads), (i % 20 == 0) ? 3 : 0);
+            }
+        });
+    }
+    for (auto &u : users) {
+        u.join();
+    }
+}
+
 void test_concurrent() {
     // Several threads use the pool and hold or release references
     // concurrently, while other threads toggle the count and the number of
@@ -442,6 +538,7 @@ int main(int argc, char **argv) {
     test_small_then_big();
     test_set_num_threads();
     test_shutdown();
+    test_fast_path();
     test_concurrent();
     CHECK(keep_awake_count() == 0);
     printf("Success!\n");
