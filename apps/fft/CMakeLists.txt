@@ -69,6 +69,8 @@ add_executable(bench_fft main.cpp fft.cpp)
 target_link_libraries(bench_fft PRIVATE Halide::Halide Halide::Tools)
 target_link_options(bench_fft PRIVATE "${LDFLAGS}")
 
+add_custom_target(fft DEPENDS fft_aot_test bench_fft)
+
 # Test that the app actually works!
 add_test(NAME fft_aot_test COMMAND fft_aot_test)
 set_tests_properties(

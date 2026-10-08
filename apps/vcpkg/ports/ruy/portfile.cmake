@@ -3,8 +3,8 @@ vcpkg_check_linkage(ONLY_STATIC_LIBRARY)
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO google/ruy
-    REF 2af88863614a8298689cc52b1a47b3fcad7be835  # latest (2026-02-16) as of 2026-02-24
-    SHA512 e2cb19d7cc98c29b86a02971cb98941954eee05505ff1600e3eebbd0ec85afad01c22eed7d49d9948fde9f83413704f86b58f4a10c5dedcb0bbfaf854fa25242
+    REF 2264753777198e4393fb83c44c693462d57a2be1  # latest (2026-07-22) as of 2026-09-26
+    SHA512 f54a01147f2dfe972c17df320175ff8e9dbcebad981ab0efb40c388e8a3f90a97397a01d5bfb5c682f5011943293980ea6351af2a573bceca152511f78dfaecd
 )
 
 vcpkg_cmake_configure(
