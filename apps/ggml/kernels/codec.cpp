@@ -2,6 +2,7 @@
 // floats, severed at the encoded blocks; `quantize` picks the half to adopt
 // (quantize: x -> blocks, dequantize: blocks -> y).
 #include "halide_approximation_codec.h"
+#include "kernels/schedule.h"
 #include "schemes/schemes.h"
 
 namespace {
@@ -23,7 +24,11 @@ public:
     }
 
     void generate() {
-        if (!quantize) {  // whole blocks: element index = vector lane
+        if (quantize) {  // per block, vectorized as mul_mat's activation encoder
+            Func e = codec.result.encoded[0];
+            e.compute_at(codec.encoded[0], codec.encoded[0].args()[0]);
+            ggml::encoder(e, {codec.result});
+        } else {  // whole blocks: element index = vector lane
             codec.decoded.output_buffer().dim(0).set_min(0);
             Var k = codec.decoded.args()[0], b("b");
             codec.decoded.split(k, b, k, ggml::format(type).block, TailStrategy::RoundUp).vectorize(k);
