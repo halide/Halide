@@ -77,9 +77,11 @@ activations for quantized weights; Metal's mul_mv has no quantized x f16 kernels
   - Halide: the app's copy of Halide's thread pool (`runtime/README.md`), with
     its keep-awake count held for each sample. Idle workers (up to threads - 1)
     and waiting owners poll instead of sleeping, until 4096 polls pass without
-    work. Parallel loops on an idle pool take the lock-free fast path.
-    `--no-keep-awake` leaves the count unheld (ablation), but the fast path
-    still applies while workers spin briefly after a loop.
+    work. Parallel loops on an idle pool take the lock-free fast path, after
+    which the workers that took part poll without yielding for some tens of
+    microseconds, like GGML's workers at a barrier. `--no-keep-awake` leaves the
+    count unheld (ablation), but the fast path still applies while workers spin
+    briefly after a loop.
 - Per case, each provider's reps are calibrated so a sample takes >= 20 ms, then
   warmed up; then 15 rounds, each timing one sample of every provider in a fresh
   random order. Reported: median, a distribution-free 95% CI of the median

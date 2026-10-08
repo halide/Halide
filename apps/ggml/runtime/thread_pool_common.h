@@ -63,94 +63,161 @@ ALWAYS_INLINE void spin_pause() {
 // owner, and every worker that joins), so that each touches few cache lines
 // that others write, and each worker gets the same iterations of loops of the
 // same size, and so the same data, from one loop to the next. A participant
-// claims iterations from its own chunk, then from the others' chunks, so that
-// a late participant never holds up the loop. It counts the iterations it
-// claimed and adds them to a shared total once, as it leaves; the owner returns
-// when the total reaches the loop's size, rather than waiting for every helper
-// to leave.
+// claims iterations from its own chunk; then, if the loop hasn't finished
+// after a short wait, from the others' chunks, so that a late participant
+// never holds up the loop. Each chunk counts its iterations that have
+// finished, and the owner returns when every chunk is done, without waiting
+// for the helpers to leave.
+//
+// Like a barrier in a thread pool that runs a whole graph of operations, a
+// loop started right after another, while the workers are still polling
+// closely (see fast_par_for_hot_polls), costs little more than its
+// iterations: the owner writes one cache line to open it, which the helpers
+// read, and each participant writes its own chunk's lines, which the owner
+// reads. Each chunk's counters are tagged with the loop they belong to, so
+// the owner doesn't reset them, nor wait for helpers that are still leaving
+// the previous loop: the first claim from a chunk in a new loop resets it,
+// and a stale helper can't claim from a newer loop.
 struct fast_par_for_t {
-    // Polled by idle workers. state is odd while a loop is open for helpers
-    // to join and even otherwise; the owner increments it to open the loop
-    // and again to close it. busy is nonzero while a thread owns the fast
-    // path. pollers counts the idle workers that may join a loop. workers
-    // counts the workers started since the pool was last shut down, which
-    // numbers them.
+    // Polled by idle workers, and written by the owner (and by the first
+    // failing iteration). state is odd from when the owner opens a loop
+    // until the next owner sets up the next one; it increments it to even
+    // before rewriting the rest, which describes the loop, and again to open
+    // the loop. So a helper that reads the description and then sees that
+    // state hasn't changed has a consistent copy, as with a seqlock.
     alignas(128) uintptr_t state;
-    int busy;
-    int pollers;
-    int workers;
-
-    // Written only by the owner, before opening the loop, while no helper is
-    // in it.
-    alignas(128) halide_task_t fn;
+    halide_task_t fn;
     void *user_context;
     uint8_t *closure;
     int min, extent;
     int participants;
-
-    // The number of iterations that helpers have claimed and finished (or
-    // skipped, after one failed), and the first failure.
-    alignas(128) int finished;
     int exit_status;
 
-    // A cache line per participant: 0 is the owner's, and h + 1 is that of
-    // the worker numbered h (see worker_thread_already_locked). in_use is set
-    // while that worker is in a loop or checking whether it may join one.
-    // Participant p's chunk is the iterations from next up to end (relative
-    // to min); next is the next one to claim.
-    struct alignas(128) slot_t {
-        int in_use;
-        int next, end;
-    } slots[MAX_THREADS + 1];
+    // busy is nonzero while a thread owns the fast path. pollers counts the
+    // idle workers that may join a loop. workers counts the workers started
+    // since the pool was last shut down, which numbers them.
+    alignas(128) int busy;
+    int pollers;
+    int workers;
+
+    // A cache line per participant's chunk: 0 is the owner's, and h + 1 that
+    // of the worker numbered h (see worker_thread_already_locked). The upper
+    // 32 bits of claim are the low bits of the state of the loop that last
+    // claimed from the chunk, and the lower 32 bits the next iteration to
+    // claim (relative to min). Likewise, the lower 32 bits of done are the
+    // number of the chunk's iterations that have finished (or been skipped,
+    // after one failed). A chunk tagged with an earlier loop is untouched in
+    // this one.
+    struct alignas(128) chunk_t {
+        uint64_t claim;
+        uint64_t done;
+    } chunks[MAX_THREADS];
 };
 
 WEAK fast_par_for_t fast_par_for = {};
 
-// Run iteration i of the open fast-path loop, unless one has failed.
-ALWAYS_INLINE void fast_par_for_run(int i) {
+// While the keep-awake count is held, a worker that has just taken part in a
+// fast-path loop polls for the next one this many times without yielding
+// (pausing instead; on Apple silicon each poll takes about a nanosecond, so
+// this is some tens of microseconds), and then goes back to polling at the
+// usual rate. Yielding between polls costs a microsecond or so to notice a
+// loop, which is most of the cost of a short loop that comes right after
+// another (say, one that encodes the input of the next).
+constexpr int fast_par_for_hot_polls = 1 << 15;
+
+// How long (in polls) a participant that has run out of its own iterations
+// waits for the loop to finish before claiming those of other participants.
+constexpr int fast_par_for_steal_spins = 1 << 10;
+
+// A copy of the description of the open fast-path loop.
+struct fast_par_for_loop_t {
+    uint32_t tag;
+    halide_task_t fn;
+    void *user_context;
+    uint8_t *closure;
+    int min, extent;
+    int participants;
+};
+
+// Run iteration i of the loop, unless one has failed.
+ALWAYS_INLINE void fast_par_for_run(const fast_par_for_loop_t &loop, int i) {
     int status;
     Synchronization::atomic_load_relaxed(&fast_par_for.exit_status, &status);
     if (status != halide_error_code_success) {
         return;
     }
-    int result = halide_do_task(fast_par_for.user_context, fast_par_for.fn,
-                                fast_par_for.min + i, fast_par_for.closure);
+    int result = halide_do_task(loop.user_context, loop.fn, loop.min + i, loop.closure);
     if (result != halide_error_code_success) {
         int expected = halide_error_code_success;
         Synchronization::atomic_cas_strong_sequentially_consistent(&fast_par_for.exit_status, &expected, &result);
     }
 }
 
-// Claim and run iterations of the open fast-path loop as participant p until
-// none are left to claim: first from p's own chunk, then from the others', in
-// turn. Returns how many this thread claimed.
-WEAK int fast_par_for_work(int p) {
-    const int participants = fast_par_for.participants;
+// The bounds of chunk p of the loop.
+ALWAYS_INLINE int fast_par_for_chunk_begin(const fast_par_for_loop_t &loop, int p) {
+    return (int)((int64_t)loop.extent * p / loop.participants);
+}
+
+// Claim and run iterations of chunk p of the loop until none are left to
+// claim, then count them as done. Returns how many this thread claimed.
+WEAK int fast_par_for_work(const fast_par_for_loop_t &loop, int p) {
+    const int begin = fast_par_for_chunk_begin(loop, p);
+    const int end = fast_par_for_chunk_begin(loop, p + 1);
+    uint64_t *claim = &fast_par_for.chunks[p].claim;
     int claimed = 0;
-    for (int k = 0; k < participants; k++) {
-        fast_par_for_t::slot_t &chunk = fast_par_for.slots[(p + k) % participants];
+    uint64_t old;
+    Synchronization::atomic_load_relaxed(claim, &old);
+    while (true) {
+        const uint32_t tag = (uint32_t)(old >> 32);
+        int next;
+        if (tag == loop.tag) {
+            next = (int)(uint32_t)old;
+        } else if ((int32_t)(tag - loop.tag) < 0) {
+            next = begin;
+        } else {
+            // The loop has closed, and the chunk belongs to a later one.
+            break;
+        }
+        if (next >= end) {
+            break;
+        }
+        uint64_t desired = ((uint64_t)loop.tag << 32) | (uint32_t)(next + 1);
+        if (Synchronization::atomic_cas_weak_relacq_relaxed(claim, &old, &desired)) {
+            fast_par_for_run(loop, next);
+            claimed++;
+            Synchronization::atomic_load_relaxed(claim, &old);
+        }
+    }
+    if (claimed) {
+        uint64_t *done = &fast_par_for.chunks[p].done;
+        Synchronization::atomic_load_relaxed(done, &old);
         while (true) {
-            int i;
-            Synchronization::atomic_load_relaxed(&chunk.next, &i);
-            if (i < chunk.end) {
-                i = Synchronization::atomic_fetch_add_acquire_release(&chunk.next, 1);
-            }
-            if (i >= chunk.end) {
+            uint64_t count = (uint32_t)(old >> 32) == loop.tag ? (uint32_t)old : 0;
+            uint64_t desired = ((uint64_t)loop.tag << 32) | (count + claimed);
+            if (Synchronization::atomic_cas_weak_relacq_relaxed(done, &old, &desired)) {
                 break;
             }
-            fast_par_for_run(i);
-            claimed++;
         }
     }
     return claimed;
 }
 
+// Claim and run iterations from the chunks of the participants other than p.
+// Returns how many this thread claimed.
+WEAK int fast_par_for_steal(const fast_par_for_loop_t &loop, int p) {
+    int claimed = 0;
+    for (int k = 1; k < loop.participants; k++) {
+        claimed += fast_par_for_work(loop, (p + k) % loop.participants);
+    }
+    return claimed;
+}
+
 // Called by the idle worker numbered h while it polls for work. If a fast-path
-// loop other than *seen is open, join it and help. Returns whether this thread
-// claimed any of its iterations.
+// loop other than *seen is open, and it has a chunk for this thread, join it
+// and help. Returns whether it did.
 WEAK bool fast_par_for_help(uintptr_t *seen, int h) {
     uintptr_t state;
-    Synchronization::atomic_load_relaxed(&fast_par_for.state, &state);
+    Synchronization::atomic_load_acquire(&fast_par_for.state, &state);
     if (state == *seen) {
         return false;
     }
@@ -158,27 +225,34 @@ WEAK bool fast_par_for_help(uintptr_t *seen, int h) {
     if (!(state & 1)) {
         return false;
     }
-    // Mark this thread as in the loop before checking that it's still open.
-    // The loop closes before the next one is set up, and the owner of the
-    // next one waits for every worker's in_use to clear before doing so, so
-    // either it waits for this thread, or this thread sees that the loop is
-    // closed and doesn't touch it.
-    fast_par_for_t::slot_t &slot = fast_par_for.slots[h + 1];
-    int one = 1;
-    Synchronization::atomic_store_sequentially_consistent(&slot.in_use, &one);
-    Synchronization::atomic_thread_fence_sequentially_consistent();
+    fast_par_for_loop_t loop;
+    loop.tag = (uint32_t)state;
+    Synchronization::atomic_load_relaxed(&fast_par_for.fn, &loop.fn);
+    Synchronization::atomic_load_relaxed(&fast_par_for.user_context, &loop.user_context);
+    Synchronization::atomic_load_relaxed(&fast_par_for.closure, &loop.closure);
+    Synchronization::atomic_load_relaxed(&fast_par_for.min, &loop.min);
+    Synchronization::atomic_load_relaxed(&fast_par_for.extent, &loop.extent);
+    Synchronization::atomic_load_relaxed(&fast_par_for.participants, &loop.participants);
+    Synchronization::atomic_thread_fence_acquire();
     uintptr_t current;
-    Synchronization::atomic_load_acquire(&fast_par_for.state, &current);
-    int claimed = 0;
-    if (current == state) {
-        claimed = fast_par_for_work(h + 1);
-        if (claimed) {
-            Synchronization::atomic_fetch_add_acquire_release(&fast_par_for.finished, claimed);
-        }
+    Synchronization::atomic_load_relaxed(&fast_par_for.state, &current);
+    const int p = h + 1;
+    if (current != state || p >= loop.participants) {
+        return false;
     }
-    int zero = 0;
-    Synchronization::atomic_store_release(&slot.in_use, &zero);
-    return claimed > 0;
+    fast_par_for_work(loop, p);
+    // Wait for the owner to start another loop, and if it doesn't soon, help
+    // any late participants. (The loop may be over, and there may be nothing
+    // left to claim.)
+    for (int spin = 0; spin < fast_par_for_steal_spins; spin++) {
+        Synchronization::atomic_load_relaxed(&fast_par_for.state, &current);
+        if (current != state) {
+            return true;
+        }
+        spin_pause();
+    }
+    fast_par_for_steal(loop, p);
+    return true;
 }
 
 // A condition variable, augmented with a bit of spinning on an atomic counter
@@ -194,7 +268,10 @@ struct halide_cond_with_spinning {
     // sleep. *kept_awake counts the waiters doing so, is protected by the
     // mutex, and is capped at max_kept_awake. If helper is the number of a
     // worker, rather than -1, this waiter also joins fast-path loops (see
-    // fast_par_for_t) while it spins.
+    // fast_par_for_t) while it spins, and it's kept awake only if its number
+    // is below max_kept_awake, so that the workers kept awake are the ones
+    // with chunks of a loop as big as the pool (after the thread count
+    // drops, say).
     void wait(halide_mutex *mutex, int *kept_awake = nullptr, int max_kept_awake = 0,
               int helper = -1) {
         // First spin for a bit, checking the counter for another thread to bump
@@ -202,7 +279,7 @@ struct halide_cond_with_spinning {
         uintptr_t initial;
         Synchronization::atomic_load_relaxed(&counter, &initial);
         const bool stay_awake =
-            kept_awake && *kept_awake < max_kept_awake && keep_awake_held();
+            kept_awake && *kept_awake < max_kept_awake && helper < max_kept_awake && keep_awake_held();
         if (stay_awake) {
             (*kept_awake)++;
         }
@@ -213,15 +290,23 @@ struct halide_cond_with_spinning {
         if (may_help) {
             Synchronization::atomic_fetch_add_acquire_release(&fast_par_for.pollers, 1);
         }
+        int hot_polls = 0;
         for (int spin = 0;
              spin < 40 ||
-             (stay_awake && spin < keep_awake_max_spins && keep_awake_held());
-             spin++) {
+             (stay_awake && spin < keep_awake_max_spins && keep_awake_held());) {
             if (may_help && fast_par_for_help(&fast_seen, helper)) {
-                // Found work, so start counting polls without work again.
+                // Found work, so start counting polls without work again, and
+                // watch closely for the next loop.
                 spin = 0;
+                hot_polls = stay_awake ? fast_par_for_hot_polls : 0;
             }
-            halide_thread_yield();
+            if (hot_polls > 0 && keep_awake_held()) {
+                hot_polls--;
+                spin_pause();
+            } else {
+                halide_thread_yield();
+                spin++;
+            }
             uintptr_t current;
             Synchronization::atomic_load_relaxed(&counter, &current);
             if (current != initial) {
@@ -927,7 +1012,7 @@ WEAK bool fast_par_for_try(void *user_context, halide_task_t f, int min, int siz
         // overflow.
         return false;
     }
-    const int participants = size < threads ? size : threads;
+    int participants = size < threads ? size : threads;
     if (participants == 1) {
         // There's nothing to share, so just run the loop here.
         for (int i = 0; i < size; i++) {
@@ -955,16 +1040,59 @@ WEAK bool fast_par_for_try(void *user_context, halide_task_t f, int min, int siz
         return false;
     }
 
-    // Wait for any helpers still in the previous loop to leave it. They have
-    // nothing left to claim there, so they are usually long gone.
-    const int workers = Synchronization::atomic_fetch_add_sequentially_consistent(&fast_par_for.workers, 0);
-    for (int h = 0; h < workers; h++) {
+    // Describe the loop. The fence orders the increment to even (or the
+    // previous one, by this thread or the one that released busy) before
+    // this.
+    uintptr_t state = fast_par_for.state;
+    if (state & 1) {
+        state++;
+        Synchronization::atomic_store_relaxed(&fast_par_for.state, &state);
+    }
+    Synchronization::atomic_thread_fence_sequentially_consistent();
+    state++;
+    const fast_par_for_loop_t loop = {(uint32_t)state, f, user_context, closure, min, size, participants};
+    if ((loop.tag & ((1u << 28) - 1)) == 1) {
+        // Every 2^27 loops, retag every chunk as untouched (by the previous
+        // loop, and with nothing left), so that tags compare correctly
+        // despite wrapping.
+        uint64_t untouched = ((uint64_t)(loop.tag - 2) << 32) | 0x7fffffff;
+        for (int p = 0; p < MAX_THREADS; p++) {
+            Synchronization::atomic_store_relaxed(&fast_par_for.chunks[p].claim, &untouched);
+            Synchronization::atomic_store_relaxed(&fast_par_for.chunks[p].done, &untouched);
+        }
+    }
+    Synchronization::atomic_store_relaxed(&fast_par_for.fn, &f);
+    Synchronization::atomic_store_relaxed(&fast_par_for.user_context, &user_context);
+    Synchronization::atomic_store_relaxed(&fast_par_for.closure, &closure);
+    Synchronization::atomic_store_relaxed(&fast_par_for.min, &min);
+    Synchronization::atomic_store_relaxed(&fast_par_for.extent, &size);
+    Synchronization::atomic_store_relaxed(&fast_par_for.participants, &participants);
+    int zero = 0;
+    Synchronization::atomic_store_relaxed(&fast_par_for.exit_status, &zero);
+
+    // Open the loop, and work on it.
+    Synchronization::atomic_store_release(&fast_par_for.state, &state);
+    fast_par_for_work(loop, 0);
+
+    // Wait for every chunk to be done. If one isn't soon, its participant may
+    // be late, so claim what's left of the others' chunks, then wait again.
+    bool stolen = false;
+    for (int p = 0; p < participants; p++) {
+        const uint64_t done = ((uint64_t)loop.tag << 32) |
+                              (uint32_t)(fast_par_for_chunk_begin(loop, p + 1) - fast_par_for_chunk_begin(loop, p));
         for (int spin = 0;; spin++) {
-            int in_use;
-            Synchronization::atomic_load_acquire(&fast_par_for.slots[h + 1].in_use, &in_use);
-            if (!in_use) {
+            uint64_t current;
+            Synchronization::atomic_load_acquire(&fast_par_for.chunks[p].done, &current);
+            if (current == done) {
                 break;
             }
+            if (spin == fast_par_for_steal_spins && !stolen) {
+                fast_par_for_steal(loop, 0);
+                stolen = true;
+            }
+            // Spin tightly for a few microseconds, which is as long as a short
+            // iteration might take, then yield to anything else that wants
+            // this core.
             if (spin < 4096) {
                 spin_pause();
             } else {
@@ -973,46 +1101,6 @@ WEAK bool fast_par_for_try(void *user_context, halide_task_t f, int min, int siz
         }
     }
 
-    fast_par_for.fn = f;
-    fast_par_for.user_context = user_context;
-    fast_par_for.closure = closure;
-    fast_par_for.min = min;
-    fast_par_for.extent = size;
-    fast_par_for.participants = participants;
-    int zero = 0;
-    for (int p = 0; p < participants; p++) {
-        int next = (int)((int64_t)size * p / participants);
-        int end = (int)((int64_t)size * (p + 1) / participants);
-        Synchronization::atomic_store_relaxed(&fast_par_for.slots[p].next, &next);
-        fast_par_for.slots[p].end = end;
-    }
-    Synchronization::atomic_store_relaxed(&fast_par_for.finished, &zero);
-    Synchronization::atomic_store_relaxed(&fast_par_for.exit_status, &zero);
-
-    // Open the loop, and work on it.
-    uintptr_t state = fast_par_for.state + 1;
-    Synchronization::atomic_store_release(&fast_par_for.state, &state);
-    const int claimed = fast_par_for_work(0);
-
-    // Every iteration has been claimed, so wait for the helpers to finish
-    // theirs, then close the loop.
-    for (int spin = 0;; spin++) {
-        int finished;
-        Synchronization::atomic_load_acquire(&fast_par_for.finished, &finished);
-        if (finished + claimed == size) {
-            break;
-        }
-        // Spin tightly for a few microseconds, which is as long as a short
-        // iteration might take, then yield to anything else that wants this
-        // core.
-        if (spin < 4096) {
-            spin_pause();
-        } else {
-            halide_thread_yield();
-        }
-    }
-    state++;
-    Synchronization::atomic_store_sequentially_consistent(&fast_par_for.state, &state);
     Synchronization::atomic_load_relaxed(&fast_par_for.exit_status, exit_status);
     Synchronization::atomic_store_release(&fast_par_for.busy, &zero);
     return true;
