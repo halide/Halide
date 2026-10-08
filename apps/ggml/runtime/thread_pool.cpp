@@ -12,6 +12,7 @@
 // The pool's C++ internals (work_queue, worker_thread, ...) are wrapped in a
 // namespace of their own, so they can't collide with the runtime's weak copies
 // of the same names, which have their own layout.
+#include "thread_pool.h"
 #include "HalideRuntime.h"
 
 #include <cstdint>
@@ -35,6 +36,10 @@ void halide_thread_yield();
         }                                                                              \
     } while (0)
 
+// The copy's additions to the runtime API get app names, so that they can't
+// collide with the runtime's if they are ever added upstream.
+#define halide_thread_pool_keep_awake ggml_halide_thread_pool_keep_awake
+
 namespace ggml_halide_pool {
 
 constexpr int MAX_THREADS = 256;
@@ -44,6 +49,11 @@ namespace Halide::Runtime::Internal::Synchronization {
 template<typename T>
 ALWAYS_INLINE T atomic_fetch_add_acquire_release(T *addr, T val) {
     return __atomic_fetch_add(addr, val, __ATOMIC_ACQ_REL);
+}
+
+template<typename T, typename TV>
+ALWAYS_INLINE TV atomic_add_fetch_sequentially_consistent(T *addr, TV val) {
+    return __atomic_add_fetch(addr, val, __ATOMIC_SEQ_CST);
 }
 
 template<typename T>
