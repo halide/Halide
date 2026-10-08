@@ -733,6 +733,49 @@ int main(int argc, char **argv) {
         _halide_user_assert(vector_store_lanes == 32);
     }
 
+    {
+        // Check that update definitions' specializations are simplified like
+        // pure ones: f's update is specialized on the same conditions as out,
+        // so in out's second branch (n >= 4 known, the first condition false)
+        // f's first specialization is dead.
+        ImageParam im(Int(32), 2);
+        Param<int> n, m;
+        Func f, out;
+        Var x, y;
+        f(x, y) = 0;
+        f(x, y) += im(x, y);
+        out(x, y) = f(x, y);
+
+        Expr c1 = n >= 4 && m >= 8, c2 = n >= 4 && m >= 4;
+        out.compute_root().specialize(c1).vectorize(x, 8, TailStrategy::RoundUp);
+        out.specialize(c2).vectorize(x, 4, TailStrategy::RoundUp);
+        f.compute_at(out, y);
+        f.update().specialize(c1).vectorize(x, 8, TailStrategy::RoundUp);
+        f.update().specialize(c2).vectorize(x, 4, TailStrategy::RoundUp);
+
+        if_then_else_count = 0;
+        CountIfThenElse pass;
+        for (const auto &ff : out.compile_to_module(out.infer_arguments()).functions()) {
+            pass(ff.body);
+        }
+
+        Buffer<int> input(16, 16), output(16, 16);
+        input.fill(1);
+        im.set(input);
+        for (int v : {2, 4, 8}) {
+            n.set(v);
+            m.set(v);
+            out.realize(output);
+            output.for_each_value([](int o) { _halide_user_assert(o == 1); });
+        }
+
+        // Only out's two conditions: f's are decided in every branch of out.
+        if (if_then_else_count != 2) {
+            printf("Expected 2 IfThenElse stmts. Found %d.\n", if_then_else_count);
+            return 1;
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }

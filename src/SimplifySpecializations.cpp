@@ -214,6 +214,9 @@ void simplify_specializations(map<string, Function> &env) {
         for (size_t i = 0; i < func.updates().size(); i++) {
             simplify_stage_specializations(func.update(i), name);
         }
+        for (size_t i = 0; i < func.updates().size(); i++) {
+            propagate_specialization_in_definition(func.update((int)i), func.name());
+        }
     }
 }
 
