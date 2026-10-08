@@ -104,28 +104,32 @@ operand approximated by its scheme and severed at its encoded records. An act
 `<storage>` activations and approximates X by `<compute>`'s scheme inside the
 kernel, not severed (GGML's numerics for f32 activations; the harness declares
 the act re-quantization in the provider's `Precision`); plain `f32` is the
-decode-then-float-dot variant. `kernels/schedule.h` schedules it: per weight
-block, a dot of the codes (int32, sdot on Arm, when the activation is quantized
-alike; f32 otherwise) times the hoisted scales, as one generic `blocked`
-schedule of an nt x mt output tile. `vec_dot` is the 1 x 1 tile for N = M = 1.
-`mul_mat` (multi-threaded; the harness sets the thread count) tiles gemm by 4 x
-8 outputs of i8mm `smmla` 2 x 2 x 8 tiles (`blocked_mmla`; when the target has
-`arm_i8mm` and the activation is quantized alike; N % 4 == M % 8 == 0; the
-intermediates' storage is split by `split_storage` so each 2 x 2 sub-tile is
-dense and the tile's accumulators stay in registers), else by 4 x 4 (N % 4 == M
-% 4 == 0), with 32 x 32 outputs per parallel task; otherwise (gemv, any N/M) it
-is a 2 x 1 tile (N even; two rows share each activation block) or the 1 x 1
-tile, with 2 blocks per iteration and 32 rows per parallel task. An in-kernel
-activation encoder runs first, parallel over activation rows (for M > 1). Kernel
-ABI (`harness/halide_providers.cpp`): `w`/`a` are `[K / block, N or M]` records
-(struct types from the kernel's metadata), `out` is f32 `[N, M]`. The kernel
-declares the whole contract (checked in `checked`, assumed in `bench`): all mins
-0, rows dense (`dim(1).stride == dim(0).extent`), `a`'s K tied to `w`'s, `w`/`a`
-rows match `out`'s N/M, and `vec_dot` pins `out` to 1 x 1. It promises no more
-than GGML does: K is a whole number of blocks (GGML asserts `n % QK == 0`), with
-no even block count (the 2-block interleave keeps its guard) and no host
-alignment (q4_0/q8_0 rows start on 2-byte boundaries). `vec_dot` goes through a
-GGML-ABI adapter.
+decode-then-float-dot variant. `kernels/schedule.h` schedules it: the sum is a
+Func `dot` that each output tile computes and `out` copies (so `out` is written
+once, and edge tiles can shift inwards); per weight block, a dot of the codes
+(int32, sdot on Arm, when the activation is quantized alike; f32 otherwise)
+times the hoisted scales, as one generic `blocked` schedule of an nt x mt output
+tile. `vec_dot` is the 1 x 1 tile for N = M = 1. `mul_mat` (multi-threaded; the
+harness sets the thread count) tiles gemm by 4 x 8 outputs of i8mm `smmla` 2 x 2
+x 8 tiles (`blocked_mmla`; when the target has `arm_i8mm` and the activation is
+quantized alike; N >= 4, M >= 8; the intermediates' storage is split by
+`split_storage` so each 2 x 2 sub-tile is dense and the tile's accumulators stay
+in registers), else by 4 x 4 (N, M >= 4), with 32 x 32 outputs per parallel
+task; otherwise (gemv) it is a 2 x 1 tile (N >= 2; two rows share each
+activation block) or the 1 x 1 tile, with 2 blocks per iteration and 32 rows per
+parallel task. Tiles at the edges of N and M shift inwards (they overlap the
+previous tile, recomputing a few outputs), so any token count M >= 8 runs on
+full 4 x 8 tiles. An in-kernel activation encoder runs first, parallel over
+activation rows (for M > 1). Kernel ABI (`harness/halide_providers.cpp`):
+`w`/`a` are `[K / block, N or M]` records (struct types from the kernel's
+metadata), `out` is f32 `[N, M]`. The kernel declares the whole contract
+(checked in `checked`, assumed in `bench`): all mins 0, rows dense
+(`dim(1).stride == dim(0).extent`), `a`'s K tied to `w`'s, `w`/`a` rows match
+`out`'s N/M, and `vec_dot` pins `out` to 1 x 1. It promises no more than GGML
+does: K is a whole number of blocks (GGML asserts `n % QK == 0`), with no even
+block count (the 2-block interleave keeps its guard) and no host alignment
+(q4_0/q8_0 rows start on 2-byte boundaries). `vec_dot` goes through a GGML-ABI
+adapter.
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds
