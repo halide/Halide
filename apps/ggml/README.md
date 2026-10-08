@@ -127,22 +127,22 @@ quantized alike; N >= 4, M >= 8; the intermediates' storage is split by
 `split_storage` so each 2 x 2 sub-tile is dense and the tile's accumulators stay
 in registers), else by 4 x 4 (N, M >= 4), with 32 x 32 outputs per parallel
 task; otherwise (gemv) it is a 2 x 1 tile (N >= 2; two rows share each
-activation block) or the 1 x 1 tile, with 2 blocks per iteration and 32 rows per
-parallel task. Tiles at the edges of N and M shift inwards (they overlap the
-previous tile, recomputing a few outputs), so any token count M >= 8 runs on
-full 4 x 8 tiles. An in-kernel activation encoder runs first, parallel over
-activation rows (for M > 1) and vectorized per encoded block (`encoder`: the
-block's reductions, e.g. its scale, across the block; per-value Funcs, e.g. the
-codes, across their values). Kernel ABI (`harness/halide_providers.cpp`):
-`w`/`a` are `[K / block, N or M]` records (struct types from the kernel's
-metadata), `out` is f32 `[N, M]`. The kernel declares the whole contract
-(checked in `checked`, assumed in `bench`): all mins 0, rows dense
-(`dim(1).stride == dim(0).extent`), `a`'s K tied to `w`'s, `w`/`a` rows match
-`out`'s N/M, and `vec_dot` pins `out` to 1 x 1. It promises no more than GGML
-does: K is a whole number of blocks (GGML asserts `n % QK == 0`), with no even
-block count (the 2-block interleave keeps its guard) and no host alignment
-(q4_0/q8_0 rows start on 2-byte boundaries). `vec_dot` goes through a GGML-ABI
-adapter.
+activation block) or the 1 x 1 tile, with 2 blocks per iteration and 16 rows per
+parallel task (32 tasks at N = 512 balance 8-12 threads). Tiles at the edges of
+N and M shift inwards (they overlap the previous tile, recomputing a few
+outputs), so any token count M >= 8 runs on full 4 x 8 tiles. An in-kernel
+activation encoder runs first, parallel over activation rows (for M > 1) and
+vectorized per encoded block (`encoder`: the block's reductions, e.g. its scale,
+across the block; per-value Funcs, e.g. the codes, across their values). Kernel
+ABI (`harness/halide_providers.cpp`): `w`/`a` are `[K / block, N or M]` records
+(struct types from the kernel's metadata), `out` is f32 `[N, M]`. The kernel
+declares the whole contract (checked in `checked`, assumed in `bench`): all mins
+0, rows dense (`dim(1).stride == dim(0).extent`), `a`'s K tied to `w`'s, `w`/`a`
+rows match `out`'s N/M, and `vec_dot` pins `out` to 1 x 1. It promises no more
+than GGML does: K is a whole number of blocks (GGML asserts `n % QK == 0`), with
+no even block count (the 2-block interleave keeps its guard) and no host
+alignment (q4_0/q8_0 rows start on 2-byte boundaries). `vec_dot` goes through a
+GGML-ABI adapter.
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds
