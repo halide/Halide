@@ -120,5 +120,8 @@ std::vector<std::string> take_log();
 int probe_metal(int argc, char **argv);
 extern bool verbose;
 extern std::string self_exe;
+// Hold the Halide thread pool's keep-awake count while timing Halide kernels
+// (default true; --no-keep-awake).
+extern bool halide_keep_awake;
 
 }  // namespace gq
