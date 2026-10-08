@@ -76,11 +76,12 @@ inline void blocked(Func out, Stage s, Tiles ts, const RDom &r, int block, bool 
     tasks(s, ts, ni, mi, no, mo);
 }
 
-// The integer path on 2 x 2 x 8 matrix-multiply tiles (i8mm smmla): nt = 2
-// rows stored innermost, so each 2 x 2 output sub-tile is dense; mt columns.
+// The integer path on i8mm smmla (2 x 2 x 8 matrix-multiply tiles): nt x mt
+// tiles of 2 x 2 sub-tiles, each 4 dense lanes of the intermediates' storage
+// (split_storage), so the tile's accumulators stay in registers.
 inline void blocked_mmla(Func out, Stage s, Tiles ts, const RDom &r, int block,
                          const std::vector<ApproximationResult> &rs) {
-    Var n = out.args()[0], m = out.args()[1], no("no"), mo("mo"), ni("ni"), mi("mi"), mio("mio"), mii("mii"), u("u"), bacc("bacc");
+    Var n = out.args()[0], m = out.args()[1], no("no"), mo("mo"), ni("ni"), mi("mi"), nio("nio"), nii("nii"), mio("mio"), mii("mii"), u("u"), bacc("bacc");
     RVar ry("ry"), rx("rx"), rxc("rxc"), rxk("rxk"), ryo("ryo"), ryi("ryi");
     s.split(r, ry, rx, block).split(rx, rxc, rxk, 8);
     s.tile(n, m, no, mo, ni, mi, ts.nt, ts.mt, TailStrategy::RoundUp).reorder(ni, mi, mo, no);
@@ -89,16 +90,19 @@ inline void blocked_mmla(Func out, Stage s, Tiles ts, const RDom &r, int block,
     Func codes = blk.update().hoist_invariants()[0].change_type(Int(32));
     s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
     Func acc = s.rfactor(ryi, bacc);
-    s.vectorize(ni).unroll(mi);
-    for (Func f : {blk, codes}) {
-        f.bound_storage(u, ts.interleave);
+    s.vectorize(ni, 2).unroll(ni).unroll(mi);
+    for (Func f : {acc, blk, codes}) {
+        Var x = f.args()[2], sno, sni, smo, smi;  // x: bacc or u
+        f.split_storage(n, sno, sni, 2).split_storage(m, smo, smi, 2).reorder_storage(sni, smi, sno, smo, x);
+        f.split(n, nio, nii, 2).split(m, mio, mii, 2).reorder(nii, mii, nio, mio, x).vectorize(nii).vectorize(mii).unroll(nio).unroll(mio).unroll(x);
     }
-    acc.compute_at(out, mo).vectorize(n).vectorize(m, 2).unroll(m).unroll(bacc);
-    acc.update().split(mi, mio, mii, 2).reorder(ni, mii, mio, bacc, ryo).vectorize(ni).vectorize(mii).unroll(mio).unroll(bacc);
-    blk.compute_at(acc, ryo).vectorize(n).vectorize(m, 2).unroll(m).unroll(u);
-    blk.update().split(mi, mio, mii, 2).reorder(ni, mii, mio, u).vectorize(ni).vectorize(mii).unroll(mio).unroll(u);
-    codes.compute_at(acc, ryo).vectorize(n).vectorize(m, 2).unroll(m).unroll(u);
-    codes.update().split(mi, mio, mii, 2).reorder(rxk, ni, mii, rxc, mio, u).atomic().vectorize(rxk).vectorize(ni).vectorize(mii).unroll(rxc).unroll(mio).unroll(u);
+    for (Func f : {blk, codes}) {
+        f.compute_at(acc, ryo).bound_storage(u, ts.interleave);
+    }
+    acc.compute_at(out, mo);
+    acc.update().split(ni, nio, nii, 2).split(mi, mio, mii, 2).reorder(nii, mii, nio, mio, bacc, ryo).vectorize(nii).vectorize(mii).unroll(nio).unroll(mio).unroll(bacc);
+    blk.update().split(ni, nio, nii, 2).split(mi, mio, mii, 2).reorder(nii, mii, nio, mio, u).vectorize(nii).vectorize(mii).unroll(nio).unroll(mio).unroll(u);
+    codes.update().split(ni, nio, nii, 2).split(mi, mio, mii, 2).reorder(rxk, nii, mii, rxc, nio, mio, u).atomic().vectorize(rxk).vectorize(nii).vectorize(mii).unroll(rxc).unroll(nio).unroll(mio).unroll(u);
     tasks(s, ts, ni, mi, no, mo);
 }
 
@@ -113,7 +117,7 @@ inline void vec_dot(Func out, const RDom &r, const std::vector<int> &blocks, con
     blocked(out, out.update(), {}, r, blocks[0], blocks[1] == blocks[0], rs, t);
 }
 
-// mul_mat: gemm tiles the outputs (2 x 8 on smmla when the target has i8mm
+// mul_mat: gemm tiles the outputs (4 x 8 on smmla when the target has i8mm
 // and both operands are quantized alike; else 4 x 4 on sdot); gemv (M = 1) is
 // the vec_dot recipe on row pairs sharing each activation block (single rows
 // for odd N).
@@ -124,7 +128,7 @@ inline void mul_mat(Func out, const RDom &r, const std::vector<int> &blocks, con
         e.compute_root().specialize(M > 1).parallel(e.args().back());  // per activation row
     }
     bool integer = blocks[1] == blocks[0];
-    Tiles mmla{2, 8, 1, 32, 32}, gemm{4, 4, 1, 32, 32}, pairs{2, 1, 2, 32}, rows{1, 1, 2, 32};
+    Tiles mmla{4, 8, 1, 32, 32}, gemm{4, 4, 1, 32, 32}, pairs{2, 1, 2, 32}, rows{1, 1, 2, 32};
     if (integer && t.has_feature(Target::ARMI8MM)) {
         blocked_mmla(out, out.update().specialize(N % mmla.nt == 0 && M % mmla.mt == 0), mmla, r, blocks[0], rs);
     }
