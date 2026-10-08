@@ -44,18 +44,20 @@ would already satisfy them.
   `halide_cond_with_spinning::wait`) instead publishes itself in a single global
   slot. The polling workers join it and claim iterations without locks, and so
   does the owner, which returns once every iteration has finished; the first
-  error is returned. To keep contention low, each participant (the owner, and
-  each worker, numbered as it starts) has its own cache line with a presence
-  flag and a reserved first iteration. It claims that iteration, then claims
-  from a shared counter that starts past the reserved ones, then takes over the
-  reserved iterations of participants that haven't shown up, so a late helper
-  never holds up the loop. It adds the number it claimed to a shared total once,
-  as it leaves, and the owner waits for the total to reach the loop's size. The
-  next fast-path loop waits for helpers still in the previous one to leave
-  before reusing the slot. Loops of one iteration, or with one thread, run
-  inline on the caller. Everything else takes the usual path: loops started
-  while the slot is in use (nested in a fast-path iteration, or on another
-  thread), loops on a busy pool, and all of `halide_do_parallel_tasks`
+  error is returned. The loop is split into `min(size, threads)` contiguous
+  chunks, one per participant: the owner's, then one per worker, numbered as it
+  starts. Each chunk has its own cache line, with the worker's presence flag and
+  the chunk's iteration counter, which keeps contention low, and gives a worker
+  the same iterations (and data) in successive loops of the same size, like
+  GGML's static row split. A participant claims iterations from its own chunk,
+  then from the others' in turn, so a late or absent helper's iterations are run
+  by whoever is free and never hold up the loop. It adds the number it claimed
+  to a shared total once, as it leaves, and the owner waits for the total to
+  reach the loop's size. The next fast-path loop waits for helpers still in the
+  previous one to leave before reusing the slot. Loops of one iteration, or with
+  one thread, run inline on the caller. Everything else takes the usual path:
+  loops started while the slot is in use (nested in a fast-path iteration, or on
+  another thread), loops on a busy pool, and all of `halide_do_parallel_tasks`
   (semaphores, async). Busy-waiting uses the CPU's pause instruction
   (`yield`/`pause`), selected with `#if`. Upstream, the runtime is compiled
   arch-independently, so this would need a per-arch runtime helper. The glue

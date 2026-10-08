@@ -59,12 +59,15 @@ ALWAYS_INLINE void spin_pause() {
 // is busy) takes the usual path, as do halide_do_parallel_tasks and everything
 // with semaphores.
 //
-// Each participant (the owner, and every worker that joins) touches few cache
-// lines that others write. It first claims an iteration reserved for it, then
-// claims iterations from a shared counter, and then any reserved iterations
-// whose participants are late. It counts the iterations it claimed and adds
-// them to a shared total once, as it leaves; the owner returns when the total
-// reaches the loop's size, rather than waiting for every helper to leave.
+// The loop is split into a contiguous chunk of iterations per participant (the
+// owner, and every worker that joins), so that each touches few cache lines
+// that others write, and each worker gets the same iterations of loops of the
+// same size, and so the same data, from one loop to the next. A participant
+// claims iterations from its own chunk, then from the others' chunks, so that
+// a late participant never holds up the loop. It counts the iterations it
+// claimed and adds them to a shared total once, as it leaves; the owner returns
+// when the total reaches the loop's size, rather than waiting for every helper
+// to leave.
 struct fast_par_for_t {
     // Polled by idle workers. state is odd while a loop is open for helpers
     // to join and even otherwise; the owner increments it to open the loop
@@ -78,16 +81,12 @@ struct fast_par_for_t {
     int workers;
 
     // Written only by the owner, before opening the loop, while no helper is
-    // in it. Iterations 0 to participants - 1 (relative to min) are reserved
-    // for the participants.
+    // in it.
     alignas(128) halide_task_t fn;
     void *user_context;
     uint8_t *closure;
     int min, extent;
     int participants;
-
-    // The next unreserved iteration to claim.
-    alignas(128) int next;
 
     // The number of iterations that helpers have claimed and finished (or
     // skipped, after one failed), and the first failure.
@@ -97,10 +96,11 @@ struct fast_par_for_t {
     // A cache line per participant: 0 is the owner's, and h + 1 is that of
     // the worker numbered h (see worker_thread_already_locked). in_use is set
     // while that worker is in a loop or checking whether it may join one.
-    // claimed is set once the participant's reserved iteration is claimed.
+    // Participant p's chunk is the iterations from next up to end (relative
+    // to min); next is the next one to claim.
     struct alignas(128) slot_t {
         int in_use;
-        int claimed;
+        int next, end;
     } slots[MAX_THREADS + 1];
 };
 
@@ -122,35 +122,23 @@ ALWAYS_INLINE void fast_par_for_run(int i) {
 }
 
 // Claim and run iterations of the open fast-path loop as participant p until
-// none are left to claim. Returns how many this thread claimed.
+// none are left to claim: first from p's own chunk, then from the others', in
+// turn. Returns how many this thread claimed.
 WEAK int fast_par_for_work(int p) {
     const int participants = fast_par_for.participants;
-    const int extent = fast_par_for.extent;
     int claimed = 0;
-    if (p < participants &&
-        !Synchronization::atomic_exchange_acquire(&fast_par_for.slots[p].claimed, 1)) {
-        fast_par_for_run(p);
-        claimed++;
-    }
-    while (true) {
-        int i;
-        Synchronization::atomic_load_relaxed(&fast_par_for.next, &i);
-        if (i < extent) {
-            i = Synchronization::atomic_fetch_add_acquire_release(&fast_par_for.next, 1);
-        }
-        if (i >= extent) {
-            break;
-        }
-        fast_par_for_run(i);
-        claimed++;
-    }
-    // Take over the reserved iterations of participants that are late.
-    for (int k = 1; k < participants; k++) {
-        int q = (p + k) % participants;
-        int c;
-        Synchronization::atomic_load_relaxed(&fast_par_for.slots[q].claimed, &c);
-        if (!c && !Synchronization::atomic_exchange_acquire(&fast_par_for.slots[q].claimed, 1)) {
-            fast_par_for_run(q);
+    for (int k = 0; k < participants; k++) {
+        fast_par_for_t::slot_t &chunk = fast_par_for.slots[(p + k) % participants];
+        while (true) {
+            int i;
+            Synchronization::atomic_load_relaxed(&chunk.next, &i);
+            if (i < chunk.end) {
+                i = Synchronization::atomic_fetch_add_acquire_release(&chunk.next, 1);
+            }
+            if (i >= chunk.end) {
+                break;
+            }
+            fast_par_for_run(i);
             claimed++;
         }
     }
@@ -932,7 +920,7 @@ WEAK bool fast_par_for_try(void *user_context, halide_task_t f, int min, int siz
                            uint8_t *closure, int *exit_status) {
     int threads;
     Synchronization::atomic_load_relaxed(&work_queue.desired_threads_working, &threads);
-    if (threads <= 0 || size > 0x7fffffff - MAX_THREADS) {
+    if (threads <= 0 || size > 0x7fffffff - MAX_THREADS - 1) {
         // The pool hasn't been initialized, or the iteration counter could
         // overflow.
         return false;
@@ -991,10 +979,11 @@ WEAK bool fast_par_for_try(void *user_context, halide_task_t f, int min, int siz
     fast_par_for.participants = participants;
     int zero = 0;
     for (int p = 0; p < participants; p++) {
-        Synchronization::atomic_store_relaxed(&fast_par_for.slots[p].claimed, &zero);
+        int next = (int)((int64_t)size * p / participants);
+        int end = (int)((int64_t)size * (p + 1) / participants);
+        Synchronization::atomic_store_relaxed(&fast_par_for.slots[p].next, &next);
+        fast_par_for.slots[p].end = end;
     }
-    int next = participants;
-    Synchronization::atomic_store_relaxed(&fast_par_for.next, &next);
     Synchronization::atomic_store_relaxed(&fast_par_for.finished, &zero);
     Synchronization::atomic_store_relaxed(&fast_par_for.exit_status, &zero);
 

@@ -87,11 +87,6 @@ ALWAYS_INLINE void atomic_load_acquire(T *addr, T *val) {
 }
 
 template<typename T>
-ALWAYS_INLINE T atomic_exchange_acquire(T *addr, T val) {
-    return __atomic_exchange_n(addr, val, __ATOMIC_ACQUIRE);
-}
-
-template<typename T>
 ALWAYS_INLINE void atomic_store_relaxed(T *addr, T *val) {
     __atomic_store(addr, val, __ATOMIC_RELAXED);
 }
