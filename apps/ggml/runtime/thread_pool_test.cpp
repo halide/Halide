@@ -11,6 +11,7 @@
 #include "q4_0_q8_0_mul_mat_checked.h"
 #include "thread_pool.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -597,6 +598,139 @@ void test_late_helpers() {
     halide_set_num_threads(0);
 }
 
+constexpr int stage_magic = 0x57a6e;
+
+// One of a sequence of loops run back to back, each of which reads what the
+// previous one wrote.
+struct Stage {
+    int magic;
+    int round;
+    int min, n;
+    std::atomic<int> *hits;
+    // Every iteration checks that the previous loop wrote all of consumed in
+    // this round, then writes its own entry of produced.
+    const int *consumed;
+    int consumed_n;
+    int *produced;
+    int fail_at;
+    int sleep_at;
+    int nested_at;
+};
+
+int stage_task(void *, int idx, uint8_t *closure) {
+    Stage *s = (Stage *)closure;
+    CHECK(s->magic == stage_magic);
+    CHECK(idx >= s->min && idx < s->min + s->n);
+    s->hits[idx - s->min]++;
+    // Check every entry if that's cheap, and a few otherwise.
+    const int step = s->consumed_n * s->n > 20000 ? s->consumed_n / 8 + 1 : 1;
+    for (int k = (idx - s->min) % step; k < s->consumed_n; k += step) {
+        CHECK(s->consumed[k] == s->round);
+    }
+    if (s->consumed_n) {
+        CHECK(s->consumed[s->consumed_n - 1] == s->round);
+    }
+    if (idx == s->sleep_at) {
+        std::this_thread::sleep_for(std::chrono::microseconds(100));
+    }
+    if (idx == s->nested_at) {
+        run_par_for(3, 2);
+    }
+    if (s->produced) {
+        s->produced[idx - s->min] = s->round;
+    }
+    return idx == s->fail_at ? -7 : 0;
+}
+
+void test_back_to_back() {
+    // Sequences of loops with nothing in between, as when a loop encodes the
+    // input of the next, so that helpers go straight from one fast-path loop
+    // to the next: with extents from 1 to many times the thread count, with
+    // HL_NUM_THREADS from 1 to more threads than cores, with the keep-awake
+    // count held or not, with failing, sleeping or nested iterations, and
+    // with the thread count changed in between. Every loop must see
+    // everything the previous one wrote.
+    const char *old_env = getenv("HL_NUM_THREADS");
+    const std::string saved = old_env ? old_env : "";
+    const int cores = (int)std::thread::hardware_concurrency();
+    std::mt19937 rng(4);
+    std::vector<int> buffers[2];
+    for (auto &b : buffers) {
+        b.resize(4096);
+    }
+    for (const char *env : {"2", "5", "", "64"}) {
+        if (*env) {
+            setenv("HL_NUM_THREADS", env, 1);
+        } else {
+            unsetenv("HL_NUM_THREADS");
+        }
+        halide_shutdown_thread_pool();
+        halide_set_num_threads(0);
+        const int threads = halide_get_num_threads();
+        const int rounds = threads > cores ? 200 : 3000;
+        for (bool hold : {true, false}) {
+            if (hold) {
+                ggml_halide_thread_pool_keep_awake(true);
+            }
+            const unsigned long long fast_before = ggml_halide_thread_pool_fast_loops();
+            for (int round = 1; round <= rounds; round++) {
+                const int loops = 2 + (round % 5 == 0);
+                const int *consumed = nullptr;
+                int consumed_n = 0;
+                for (int l = 0; l < loops; l++) {
+                    const int choices[] = {1, 2, threads - 1, threads, threads + 1, 2 * threads + 3,
+                                           64, 1 + (int)(rng() % 4096)};
+                    const int n = std::max(1, choices[rng() % 8]);
+                    const int min = (int)(rng() % 9) - 4;
+                    std::vector<std::atomic<int>> hits(n);
+                    int *produced = buffers[l % 2].data();
+                    const bool fail = round % 37 == 0 && l == 0;
+                    Stage s{stage_magic, round, min, n, hits.data(), consumed, consumed_n,
+                            produced, fail ? min + (int)(rng() % n) : min - 1,
+                            round % 53 == 0 ? min + (int)(rng() % n) : min - 1,
+                            round % 41 == 0 ? min + (int)(rng() % n) : min - 1};
+                    const int ret = halide_do_par_for(nullptr, stage_task, min, n, (uint8_t *)&s);
+                    if (fail) {
+                        // Iterations after the failure may have been
+                        // skipped, so the next loop reads nothing.
+                        CHECK(ret == -7);
+                        for (auto &h : hits) {
+                            CHECK(h <= 1);
+                        }
+                        consumed = nullptr;
+                        consumed_n = 0;
+                    } else {
+                        CHECK(ret == 0);
+                        for (auto &h : hits) {
+                            CHECK(h == 1);
+                        }
+                        consumed = produced;
+                        consumed_n = n;
+                    }
+                }
+                if (round % 500 == 0) {
+                    halide_set_num_threads(1 + (int)(rng() % threads));
+                } else if (round % 500 == 250) {
+                    halide_set_num_threads(threads);
+                }
+            }
+            halide_set_num_threads(threads);
+            if (hold) {
+                CHECK(threads == 1 || threads > cores ||
+                      ggml_halide_thread_pool_fast_loops() > fast_before);
+                ggml_halide_thread_pool_keep_awake(false);
+            }
+        }
+    }
+    if (old_env) {
+        setenv("HL_NUM_THREADS", saved.c_str(), 1);
+    } else {
+        unsetenv("HL_NUM_THREADS");
+    }
+    halide_shutdown_thread_pool();
+    halide_set_num_threads(0);
+}
+
 void test_concurrent() {
     // Several threads use the pool and hold or release references
     // concurrently, while other threads toggle the count and the number of
@@ -799,6 +933,7 @@ int main(int argc, char **argv) {
     test_shutdown();
     test_fast_path();
     test_late_helpers();
+    test_back_to_back();
     test_concurrent();
     stolen_serial::test();
     CHECK(keep_awake_count() == 0);
