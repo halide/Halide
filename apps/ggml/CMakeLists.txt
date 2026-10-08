@@ -22,6 +22,12 @@ add_halide_generator(
 target_include_directories(ggml.generators PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 add_halide_runtime(ggml_halide_runtime)
 
+# The app's copy of Halide's thread pool (runtime/README.md). Its strong
+# definitions override the runtime's weak ones; an OBJECT library, so that they
+# are always linked.
+add_library(ggml_thread_pool OBJECT runtime/thread_pool.cpp)
+target_link_libraries(ggml_thread_pool PUBLIC Halide::Runtime)
+
 include(formats.cmake)
 
 add_executable(
@@ -35,7 +41,7 @@ add_executable(
     harness/shapes.cpp
 )
 target_include_directories(ggml-quant-bench PRIVATE harness "${CMAKE_CURRENT_BINARY_DIR}")
-target_link_libraries(ggml-quant-bench PRIVATE ggml::ggml ${GGML_HALIDE_LIBRARIES})
+target_link_libraries(ggml-quant-bench PRIVATE ggml::ggml ggml_thread_pool ${GGML_HALIDE_LIBRARIES})
 
 add_test(NAME ggml_check COMMAND ggml-quant-bench --check --shapes smoke)
 set_tests_properties(ggml_check PROPERTIES LABELS ggml)
