@@ -3,8 +3,9 @@
 // thread-pool entry points: nested parallel loops, do_parallel_tasks with
 // semaphores, error propagation, the keep-awake count held and not with gaps
 // between loops, thread-count changes, shutdown and restart, and concurrent
-// callers, and the lock-free fast path for parallel loops. It checks results
-// only, never timings.
+// callers, and the lock-free fast path for parallel loops, including with
+// helpers that are late or never come, and with more threads than cores. It
+// checks results only, never timings.
 #include "HalideRuntime.h"
 #include "q4_0_q8_0_mul_mat_checked.h"
 #include "thread_pool.h"
@@ -483,6 +484,99 @@ void test_fast_path() {
     }
 }
 
+struct LateClosure {
+    std::atomic<int> *hits;
+    int min;
+    int sleep_mod;
+    int fail_at;
+};
+
+// An iteration that, if idx % sleep_mod == 0, sleeps long enough for the OS to
+// run something else on its core, so that the thread running it is late to
+// claim anything more.
+int late_task(void *, int idx, uint8_t *closure) {
+    LateClosure *c = (LateClosure *)closure;
+    c->hits[idx - c->min]++;
+    if (c->sleep_mod && idx % c->sleep_mod == 0) {
+        std::this_thread::sleep_for(std::chrono::microseconds(200));
+    }
+    return idx == c->fail_at ? halide_error_code_generic_error : 0;
+}
+
+void test_late_helpers() {
+    // Loops whose helpers are late or never come: with HL_NUM_THREADS from 1
+    // to more threads than cores, with other threads hogging every core, with
+    // iterations that sleep, and with the keep-awake count held or not. Every
+    // iteration must run exactly once, and every loop must finish.
+    const char *old_env = getenv("HL_NUM_THREADS");
+    const std::string saved = old_env ? old_env : "";
+    const int cores = (int)std::thread::hardware_concurrency();
+    std::mt19937 rng(3);
+    for (const char *env : {"1", "2", "3", "7", "64"}) {
+        setenv("HL_NUM_THREADS", env, 1);
+        halide_shutdown_thread_pool();
+        halide_set_num_threads(0);
+        const int threads = halide_get_num_threads();
+        CHECK(threads == atoi(env));
+        for (int hogs : {0, cores}) {
+            std::atomic<bool> stop{false};
+            std::vector<std::thread> hog;
+            for (int t = 0; t < hogs; t++) {
+                hog.emplace_back([&]() {
+                    while (!stop) {
+                    }
+                });
+            }
+            for (bool hold : {true, false}) {
+                if (hold) {
+                    ggml_halide_thread_pool_keep_awake(true);
+                }
+                const unsigned long long fast_before = ggml_halide_thread_pool_fast_loops();
+                for (int i = 0; i < 200; i++) {
+                    const int n = 1 + (int)(rng() % (3 * threads));
+                    const int min = (int)(rng() % 5) - 2;
+                    std::vector<std::atomic<int>> hits(n);
+                    LateClosure c{hits.data(), min, i % 3 ? 2 + (int)(rng() % 9) : 0,
+                                  i % 11 == 0 ? min + (int)(rng() % n) : min - 1};
+                    const int ret = halide_do_par_for(nullptr, late_task, min, n, (uint8_t *)&c);
+                    if (c.fail_at >= min) {
+                        CHECK(ret == halide_error_code_generic_error);
+                        CHECK(hits[c.fail_at - min] == 1);
+                        for (auto &h : hits) {
+                            CHECK(h <= 1);
+                        }
+                    } else {
+                        CHECK(ret == 0);
+                        for (auto &h : hits) {
+                            CHECK(h == 1);
+                        }
+                    }
+                    if (i % 25 == 0) {
+                        run_par_for(threads, 3);
+                    }
+                    serial_gap(i % 4 == 0 ? 20 * (i % 3) : 0);
+                }
+                if (hold) {
+                    CHECK(hogs || threads == 1 || threads > cores ||
+                          ggml_halide_thread_pool_fast_loops() > fast_before);
+                    ggml_halide_thread_pool_keep_awake(false);
+                }
+            }
+            stop = true;
+            for (auto &h : hog) {
+                h.join();
+            }
+        }
+    }
+    if (old_env) {
+        setenv("HL_NUM_THREADS", saved.c_str(), 1);
+    } else {
+        unsetenv("HL_NUM_THREADS");
+    }
+    halide_shutdown_thread_pool();
+    halide_set_num_threads(0);
+}
+
 void test_concurrent() {
     // Several threads use the pool and hold or release references
     // concurrently, while other threads toggle the count and the number of
@@ -539,6 +633,7 @@ int main(int argc, char **argv) {
     test_set_num_threads();
     test_shutdown();
     test_fast_path();
+    test_late_helpers();
     test_concurrent();
     CHECK(keep_awake_count() == 0);
     printf("Success!\n");
