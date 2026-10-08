@@ -1419,11 +1419,20 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
                         // Grayscale
                         image_color = (int_value * 0x00010101) | 0xff000000;
                     } else {
-                        // Color
+                        // Color. The color_dim coordinate selects which byte of
+                        // the 32-bit pixel to write, so it must be in [0, 3]. The
+                        // value comes from the trace and is otherwise unbounded;
+                        // channel * 8 would then shift past the width of the pixel.
+                        // Treat an out-of-range channel as grayscale, like the
+                        // color_dim check above.
                         uint32_t channel = coords[fi.config.color_dim * p.lanes + lane];
-                        uint32_t mask = ~(255 << (channel * 8));
-                        image_color &= mask;
-                        image_color |= int_value << (channel * 8);
+                        if (channel >= 4) {
+                            image_color = (int_value * 0x00010101) | 0xff000000;
+                        } else {
+                            const uint32_t shift = channel * 8;
+                            image_color &= ~(uint32_t(255) << shift);
+                            image_color |= uint32_t(int_value) << shift;
+                        }
                     }
                     surface->draw_image_pixel(fi.config.zoom, x, y, image_color);
                 }
