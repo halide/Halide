@@ -1012,6 +1012,20 @@ _add_halide_aot_tests(shuffler)
 _add_halide_libraries(templated)
 _add_halide_aot_tests(templated)
 
+# thread_pool_lost_wakeup_aottest.cpp
+# thread_pool_lost_wakeup_generator.cpp
+_add_halide_libraries(
+    thread_pool_lost_wakeup
+    # Requires threading support, not yet available for wasm tests
+    ENABLE_IF NOT ${_USING_WASM}
+)
+_add_halide_aot_tests(
+    thread_pool_lost_wakeup
+    # Requires threading support, not yet available for wasm tests
+    ENABLE_IF NOT ${_USING_WASM}
+    GROUPS multithreaded
+)
+
 # tiled_blur_aottest.cpp
 # tiled_blur_generator.cpp
 _add_halide_libraries(tiled_blur)
