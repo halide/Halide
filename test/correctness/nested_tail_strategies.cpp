@@ -181,6 +181,13 @@ int main(int argc, char **argv) {
                     if ((rng() & 63) != 0) {
                         continue;
                     }
+                    // PredicateStores can't be combined with a blend in the
+                    // same definition unless the split provably has no tail.
+                    if (t1 == TailStrategy::PredicateStores &&
+                        (t2 == TailStrategy::RoundUpAndBlend ||
+                         t2 == TailStrategy::ShiftInwardsAndBlend)) {
+                        continue;
+                    }
 
                     Func in("in"), f("f"), g("g"), h("h");
                     Var x;
