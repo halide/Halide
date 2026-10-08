@@ -161,6 +161,9 @@ void simplify_specializations(map<string, Function> &env) {
         if (func.definition().defined()) {
             propagate_specialization_in_definition(func.definition(), func.name());
         }
+        for (size_t i = 0; i < func.updates().size(); i++) {
+            propagate_specialization_in_definition(func.update((int)i), func.name());
+        }
     }
 }
 
