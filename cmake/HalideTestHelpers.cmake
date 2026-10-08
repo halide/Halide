@@ -11,6 +11,15 @@ if (Halide_BUILDING_IN_CI)
         message(FATAL_ERROR "Halide_BUILDING_IN_CI requires CMake 3.29 for CMAKE_TEST_LAUNCHER.")
     endif ()
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    get_property(audit_metadata_initialized GLOBAL PROPERTY Halide_AUDIT_METADATA_INITIALIZED)
+    if (NOT audit_metadata_initialized)
+        string(RANDOM LENGTH 32 ALPHABET 0123456789abcdef audit_generation)
+        file(GENERATE
+            OUTPUT "${Halide_BINARY_DIR}/test-label-audit/$<CONFIG>/generation.txt"
+            CONTENT "${audit_generation}\n"
+        )
+        set_property(GLOBAL PROPERTY Halide_AUDIT_METADATA_INITIALIZED TRUE)
+    endif ()
     set(CMAKE_TEST_LAUNCHER
         "${Python3_EXECUTABLE}" "${Halide_SOURCE_DIR}/tools/audit_test_labels.py" --build-dir
         "${Halide_BINARY_DIR}" "--config=$<CONFIG>" --ctest "${CMAKE_CTEST_COMMAND}" --
