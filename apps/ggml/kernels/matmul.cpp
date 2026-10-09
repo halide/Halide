@@ -71,7 +71,7 @@ public:
         add_input(w);
         add_input(a);
         result = add_output(out);
-        blocks = {fw.block, fc.block, fc.rows};
+        blocks = {fw.block, fc.block, fc.rows, fw.rows, fw.chunk};
     }
 
     void generate() {
