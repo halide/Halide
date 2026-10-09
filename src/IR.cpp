@@ -947,6 +947,7 @@ constexpr const char *intrinsic_op_names[] = {
     "target_has_feature",
     "target_natural_vector_size",
     "target_os_is",
+    "trace_bounds_required_marker",
     "undef",
     "unreachable",
     "unsafe_promise_clamped",

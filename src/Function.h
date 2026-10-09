@@ -88,6 +88,7 @@ public:
                                      bool trace_loads,
                                      bool trace_stores,
                                      bool trace_realizations,
+                                     bool trace_bounds_required,
                                      const std::vector<std::string> &trace_tags,
                                      bool no_profiling,
                                      const std::string &profiler_display_name,
@@ -290,10 +291,12 @@ public:
     void trace_loads();
     void trace_stores();
     void trace_realizations();
+    void trace_bounds_required();
     void add_trace_tag(const std::string &trace_tag);
     bool is_tracing_loads() const;
     bool is_tracing_stores() const;
     bool is_tracing_realizations() const;
+    bool is_tracing_bounds_required() const;
     const std::vector<std::string> &get_trace_tags() const;
     // @}
 
