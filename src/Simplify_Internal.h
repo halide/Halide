@@ -393,6 +393,15 @@ public:
     // Only tracked for integer let vars
     Scope<ExprInfo> bounds_and_alignment_info;
 
+    /** Looks up the alignment of let vars in bounds_and_alignment_info, for
+     * analyses that take an AlignmentLookup. */
+    AlignmentLookup let_var_alignment() const {
+        return [this](const std::string &name) {
+            const ExprInfo *info = bounds_and_alignment_info.find(name);
+            return info ? info->alignment : ModulusRemainder{};
+        };
+    }
+
     /** Whether e is known to lie in [lo, hi): an integer constant, or a
      * variable whose constant bounds are in bounds_and_alignment_info, or a
      * broadcast of either. Doesn't simplify or build any IR, so it is safe to
