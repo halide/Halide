@@ -415,6 +415,14 @@ Stmt Simplify::visit(const Store *op) {
             permuted_predicate = Shuffle::make_transpose(predicate, A);
         }
         return mutate(op->with(permuted_value, mr.to_expr(), permuted_predicate, align));
+    } else if (mr.dimensions() >= 1 &&
+               is_const_one(mr.strides[0]) &&
+               !mr.matches_expr(index)) {
+        // The index is a multiramp that is already dense innermost, but it's
+        // spelled some other way (e.g. with vector div and mod). Write it as
+        // nested ramps, which later become separate dense stores (or as a
+        // single dense ramp, if it has one dim).
+        return op->with(value, mr.to_expr(), predicate, align);
     } else if (predicate.same_as(op->predicate) &&
                value.same_as(op->value) &&
                index.same_as(op->index) &&
