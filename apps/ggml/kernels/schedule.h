@@ -114,8 +114,9 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
 // `chunk` codes (as GGML's repacked gemv): per block, int32 sums vectorized
 // across the record's rows and each piece's 4-code quads (sdot), so a piece
 // of the record is one dense load and the act's piece is broadcast to its
-// rows; the quads are then merged, and the scales and accumulators are
-// vectorized across the rows.
+// rows (held in registers per block: with 4-code pieces, a by-element sdot);
+// the quads are then merged, and the scales and accumulators are vectorized
+// across the rows.
 inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, int block, int chunk,
                          const std::vector<ApproximationResult> &rs) {
     Stage s = tile_out(out, st, dot, cond, ts, true);
@@ -124,7 +125,19 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     RVar ry("ry"), rx("rx"), rp("rp"), rq("rq"), ri("ri"), ryo("ryo"), ryi("ryi_rows");
     s.split(r, ry, rx, block);
     Func blk = s.rfactor(ry, u);
-    blk.update().eager_inline(decoders(rs));
+    // The act's codes (integer decode Funcs of rs[1..]; rs[0] is the weight's)
+    // stay out of the inline: staged per block in registers, below.
+    std::vector<Func> dec, ac;
+    for (Func f : decoders(rs)) {
+        bool act = false;
+        for (size_t i = 1; i < rs.size(); i++) {
+            for (const Func &g : rs[i].decode_trace.intermediates) {
+                act |= g.name() == f.name() && f.type().is_int();
+            }
+        }
+        (act ? ac : dec).push_back(f);
+    }
+    blk.update().eager_inline(dec);
     Func codes = blk.update().hoist_invariants()[0].change_type(Int(32));
     s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
     Func acc = s.rfactor(ryi, bacc);
@@ -135,6 +148,14 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     cu.reorder(rq, n).atomic().vectorize(rq).vectorize(n).unroll(m).unroll(u);
     quads.reorder_storage(q, n, m).compute_at(acc, ryo).vectorize(q).vectorize(n).unroll(m).unroll(u).bound_storage(u, ts.interleave);
     quads.update().reorder(ri, q, n, rp, u, m).atomic().vectorize(ri).vectorize(q).vectorize(n).unroll(rp).unroll(u).unroll(m);
+    // A piece's act codes then are a lane of a register: by-element sdot
+    auto calls = Internal::find_direct_calls(quads.function());
+    for (Func a : ac) {
+        if (calls.count(a.name())) {
+            Func ai = a.in(quads);
+            ai.compute_at(quads, u).vectorize(ai.args()[0]);
+        }
+    }
     for (Func f : {blk, codes}) {
         f.compute_at(acc, ryo).bound_storage(u, ts.interleave).vectorize(n).unroll(m).unroll(u);
     }

@@ -98,9 +98,9 @@ public:
 
 private:
     RDom r;
-    std::vector<Func> dots{Func("dot")};  // one per act encoding
-    std::vector<ApproximationResult> approx;
-    std::vector<Func> staged;  // encoded inside the pipeline
+    std::vector<Func> dots{Func("dot")};      // one per act encoding
+    std::vector<ApproximationResult> approx;  // the weight's first
+    std::vector<Func> staged;                 // encoded inside the pipeline
     std::vector<int> blocks;
     GeneratorOutput<Buffer<>> *result = nullptr;
 
