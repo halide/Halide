@@ -3,6 +3,7 @@
 #include "test_sharding.h"
 
 #include <cmath>
+#include <functional>
 #include <map>
 
 namespace {
@@ -588,6 +589,146 @@ int hoist_invariants_nothing_to_hoist_rejected_test() {
     return 0;
 }
 
+// distribute() multiplies a product of sums out so that hoist_invariants() can
+// see terms that were not written as terms. This is the affine-quantized dot
+// product: sum_k (d*q_k + m) * (e*p_k), whose expansion
+// d*e*sum_k(q_k*p_k) + m*e*sum_k(p_k) has two integer-bodied accumulators where
+// the unexpanded form has one float one.
+int hoist_invariants_distribute_test() {
+    const int K = 32;
+    ImageParam Q{Int(8), 1, "Q"};
+    ImageParam P{Int(8), 1, "P"};
+    ImageParam D{Float(32), 1, "D"};
+    ImageParam M{Float(32), 1, "M"};
+    ImageParam E{Float(32), 1, "E"};
+
+    Var i{"i"};
+    RDom r(0, K, "r");
+
+    Func Acc{"Acc"};
+    Acc(i) = 0.0f;
+    Acc(i) += (cast<float>(Q(r)) * D(i) + M(i)) * (cast<float>(P(r)) * E(i));
+
+    std::vector<Func> Acc_intm = Acc.update().distribute().hoist_invariants();
+    internal_assert(Acc_intm.size() == 2)
+        << "distribute: expected the multiplied-out increment to yield two "
+        << "accumulators, got " << Acc_intm.size() << "\n";
+
+    // Both bodies are integer sums of int8 products, so both retype -- and each
+    // accumulator is its own Func, so each may take its own target type.
+    Func qp = Acc_intm[0].change_type(Int(32));
+    Func p_sum = Acc_intm[1].change_type(Int(16));
+    internal_assert(qp.types()[0] == Int(32) && p_sum.types()[0] == Int(16))
+        << "distribute: retyping the accumulators separately gave "
+        << qp.types()[0] << " and " << p_sum.types()[0] << "\n";
+    qp.compute_root();
+    p_sum.compute_root();
+
+    Buffer<int8_t> q_buf(K), p_buf(K);
+    Buffer<float> d_buf(1), m_buf(1), e_buf(1);
+    int64_t sum_qp = 0, sum_p = 0;
+    for (int k = 0; k < K; k++) {
+        q_buf(k) = (int8_t)(k % 15);
+        p_buf(k) = (int8_t)((k * 5) % 127 - 63);
+        sum_qp += (int64_t)q_buf(k) * p_buf(k);
+        sum_p += p_buf(k);
+    }
+    d_buf(0) = 0.25f;
+    m_buf(0) = -0.5f;
+    e_buf(0) = 2.0f;
+    Q.set(q_buf);
+    P.set(p_buf);
+    D.set(d_buf);
+    M.set(m_buf);
+    E.set(e_buf);
+
+    Buffer<float> result = Acc.realize({1});
+    const float expected = 0.25f * 2.0f * (float)sum_qp + -0.5f * 2.0f * (float)sum_p;
+    internal_assert(std::abs(result(0) - expected) < 1e-3f)
+        << "distribute: got " << result(0) << ", expected " << expected << "\n";
+
+    return 0;
+}
+
+// distribute() on its own only rewrites the increment: nested products of sums
+// are fully multiplied out, subtractions stay intact, and the result is
+// unchanged.
+int distribute_preserves_result_test() {
+    const int K = 16;
+    ImageParam A{Int(32), 1, "A"};
+    ImageParam B{Int(32), 1, "B"};
+    Var i{"i"};
+    RDom r(0, K, "r");
+
+    auto define = [&](Func &f) {
+        f(i) = 0;
+        f(i) += (A(r) + i) * ((B(r) + 3) * (A(r) - i));
+    };
+    Func ref{"ref"}, f{"f"};
+    define(ref);
+    define(f);
+    f.update().distribute();
+
+    // Multiplying out must leave no Mul with an Add operand, but must not split
+    // the subtraction.
+    std::function<void(const Expr &)> check = [&](const Expr &e) {
+        if (const Add *add = e.as<Add>()) {
+            check(add->a);
+            check(add->b);
+        } else if (const Mul *mul = e.as<Mul>()) {
+            internal_assert(!mul->a.as<Add>() && !mul->b.as<Add>())
+                << "distribute: product over a sum survived: " << e << "\n";
+            check(mul->a);
+            check(mul->b);
+        }
+    };
+    check(f.update_value());
+    internal_assert(f.update_value().as<Add>())
+        << "distribute: expected a sum of products, got " << f.update_value() << "\n";
+
+    Buffer<int32_t> a_buf(K), b_buf(K);
+    for (int k = 0; k < K; k++) {
+        a_buf(k) = k * 7 % 11 - 5;
+        b_buf(k) = k * 3 % 13 - 6;
+    }
+    A.set(a_buf);
+    B.set(b_buf);
+
+    Buffer<int32_t> expected = ref.realize({8});
+    Buffer<int32_t> actual = f.realize({8});
+    for (int x = 0; x < 8; x++) {
+        internal_assert(actual(x) == expected(x))
+            << "distribute: f(" << x << ") = " << actual(x) << ", expected " << expected(x) << "\n";
+    }
+    return 0;
+}
+
+// distribute() is a schedule decision, so it says so when there is nothing to
+// multiply out rather than quietly leaving the reduction alone.
+int distribute_nothing_to_do_rejected_test() {
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
+    ImageParam A{Float(32), 1, "A"};
+    Var i{"i"};
+    RDom r(0, 8, "r");
+
+    Func f{"f"};
+    f(i) = 0.0f;
+    f(i) += A(i) * cast<float>(r);
+
+    try {
+        f.update().distribute();
+    } catch (const Halide::CompileError &e) {
+        const std::string msg = e.what();
+        internal_assert(msg.find("no product over a sum") != std::string::npos)
+            << "distribute() rejected the update for the wrong reason: " << msg << "\n";
+        return 0;
+    }
+    internal_assert(false) << "distribute() accepted an update with nothing to multiply out\n";
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -610,6 +751,9 @@ int main(int argc, char **argv) {
         {"hoist_invariants test (after rfactor)", hoist_invariants_after_rfactor_test},
         {"hoist_invariants test (invalid law rejected)", hoist_invariants_invalid_law_rejected_test},
         {"hoist_invariants test (nothing to hoist rejected)", hoist_invariants_nothing_to_hoist_rejected_test},
+        {"distribute test (affine dot product)", hoist_invariants_distribute_test},
+        {"distribute test (preserves result)", distribute_preserves_result_test},
+        {"distribute test (nothing to distribute rejected)", distribute_nothing_to_do_rejected_test},
     };
 
     using Sharder = Halide::Internal::Test::Sharder;
