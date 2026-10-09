@@ -251,11 +251,10 @@ void test_many_small_loops() {
 }
 
 void test_small_then_big() {
-    // While the count is held, workers that a small loop doesn't need stay on
-    // the A team rather than being demoted to the B team, and acquiring the
-    // count wakes workers that a small loop already demoted. Mix small and big
-    // loops around acquiring and releasing the count; results must be correct
-    // throughout, and threads demoted before or after must still pick up work.
+    // While the count is held, workers that a small loop doesn't need are
+    // still demoted to the B team, where they spin rather than sleep. Mix small
+    // and big loops around acquiring and releasing the count; results must be
+    // correct throughout, and demoted threads must still pick up work.
     halide_set_num_threads(0);
     const int threads = halide_get_num_threads();
     for (int round = 0; round < 20; round++) {
@@ -276,7 +275,7 @@ void test_small_then_big() {
             }
             run_par_for(1);
         }
-        // After releasing, idle workers on the A team demote again as usual.
+        // After releasing, idle workers sleep again as usual.
         run_par_for(1);
         run_par_for(2 * threads);
     }

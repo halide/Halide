@@ -430,18 +430,14 @@ extern int halide_set_num_threads(int n);
  * Normally, a thread pool thread that runs out of work spins briefly and then
  * goes to sleep, so a parallel loop that starts after the pool has been idle
  * for more than a few microseconds pays to wake its threads up. While the
- * keep-awake count is positive, idle threads (up to halide_get_num_threads() -
- * 1 workers, plus any threads waiting for parallel loops they started to
- * finish) instead keep polling for work, calling halide_thread_yield() between
- * polls. This includes workers that the most recent parallel loop didn't need,
- * so a large parallel loop that follows a small one doesn't pay to wake them
- * either. This makes back-to-back small parallel loops, separated by serial
- * work, much cheaper. The cost is that those threads keep their cores busy
- * while the count is held, even with no work to do, so hold it only around
- * phases that run many short parallel loops (e.g. a benchmark, or a model's
- * inference loop) and release it afterwards. Workers blocked on a semaphore of
- * an async pipeline still go to sleep, as do workers beyond
- * halide_get_num_threads() - 1 (e.g. after it is reduced).
+ * keep-awake count is positive, idle threads (workers, and threads waiting for
+ * parallel loops they started to finish) instead keep polling for work,
+ * calling halide_thread_yield() between polls. This makes back-to-back small
+ * parallel loops, separated by serial work, much cheaper. The cost is that
+ * those threads keep their cores busy while the count is held, even with no
+ * work to do, so hold it only around phases that run many short parallel loops
+ * (e.g. a benchmark, or a model's inference loop) and release it afterwards.
+ * Workers blocked on a semaphore of an async pipeline still go to sleep.
  *
  * Holders compose: the pool stays awake until every reference is released.
  * When the count returns to zero, spinning threads go to sleep on their next
@@ -451,10 +447,10 @@ extern int halide_set_num_threads(int n);
  * milliseconds, depending on the cost of halide_thread_yield); the next
  * parallel loop wakes it as usual.
  *
- * Acquiring the first reference wakes sleeping idle workers, so that they
- * start polling right away. Releasing a reference that isn't held is an
- * error: it calls halide_error, leaves the count at zero, and returns
- * halide_error_code_generic_error.
+ * Threads that are already asleep when the first reference is acquired start
+ * polling once the next parallel loop wakes them. Releasing a reference that
+ * isn't held is an error: it calls halide_error, leaves the count at zero,
+ * and returns halide_error_code_generic_error.
  *
  * The count is independent of halide_set_num_threads, and survives
  * halide_shutdown_thread_pool (which still wakes and joins all threads). This
