@@ -501,6 +501,7 @@ tests(
     split_same_var_names.cpp
     split_storage.cpp
     split_storage_errors.cpp
+    split_storage_vector_index.cpp
     split_store_compute.cpp
     stable_realization_order.cpp
     stack_allocations.cpp

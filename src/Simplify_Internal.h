@@ -560,6 +560,13 @@ public:
     std::pair<std::vector<Expr>, bool> mutate_with_changes(const std::vector<Expr> &old_exprs);
 };
 
+/** Remove a likely or likely_if_innermost tag at the top of e, or directly
+ * under a top-level Add (as in the likely_if_innermost(outer * factor) +
+ * old_min bases generated for ShiftInwards splits). Used when a min or max
+ * that the tag was steering resolves to one of its operands, since the tag
+ * means nothing once the min or max is gone. */
+Expr strip_likely_tag(const Expr &e);
+
 }  // namespace Internal
 }  // namespace Halide
 

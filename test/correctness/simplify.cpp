@@ -1203,6 +1203,12 @@ void check_bounds() {
     check(min(7, likely(5)), 5);
     check(max(4, likely(5)), 5);
     check(max(7, likely(5)), 7);
+    // A likely directly under an add (e.g. the base of a ShiftInwards split,
+    // likely_if_innermost(outer * factor) + min) is stripped too
+    check(min(likely(x % 8) + 5, 20), x % 8 + 5);
+    check(max(likely_if_innermost(x % 8) + 5, 2), x % 8 + 5);
+    check(min(20, likely_if_innermost(x % 8) + (y % 4)), x % 8 + y % 4);
+    check(max((y % 4) + likely(x % 8), -3), x % 8 + y % 4);
 
     check(select(x < y, x + y, x), select(x < y, y, 0) + x);
     check(select(x < y, x, x + y), select(x < y, 0, y) + x);
