@@ -1,5 +1,6 @@
 #include "HalideRuntime.h"
 #include "printer.h"
+#include "runtime_atomics.h"
 
 extern "C" {
 
@@ -71,6 +72,7 @@ WEAK halide_semaphore_init_t custom_semaphore_init = halide_default_semaphore_in
 WEAK halide_semaphore_try_acquire_t custom_semaphore_try_acquire = halide_default_semaphore_try_acquire;
 WEAK halide_semaphore_release_t custom_semaphore_release = halide_default_semaphore_release;
 WEAK halide_mutex_array halide_fake_mutex_array;
+WEAK int keep_awake_count = 0;
 
 }  // namespace Internal
 }  // namespace Runtime
@@ -129,6 +131,26 @@ WEAK int halide_set_num_threads(int n) {
 WEAK int halide_get_num_threads() {
     // This thread pool never runs work on any thread but the caller.
     return 1;
+}
+
+WEAK int halide_thread_pool_keep_awake(bool keep_awake) {
+    // There are no threads to keep awake, but keep the count so that
+    // unbalanced calls are diagnosed as they are with a real thread pool.
+    using namespace Halide::Runtime::Internal;
+    if (keep_awake) {
+        return Synchronization::atomic_add_fetch_sequentially_consistent(&keep_awake_count, 1);
+    }
+    int count;
+    Synchronization::atomic_load_relaxed(&keep_awake_count, &count);
+    int desired;
+    do {
+        if (count <= 0) {
+            halide_error(nullptr, "halide_thread_pool_keep_awake(false) called without a matching halide_thread_pool_keep_awake(true).\n");
+            return halide_error_code_generic_error;
+        }
+        desired = count - 1;
+    } while (!Synchronization::atomic_cas_weak_relacq_relaxed(&keep_awake_count, &count, &desired));
+    return desired;
 }
 
 WEAK halide_do_task_t halide_set_custom_do_task(halide_do_task_t f) {

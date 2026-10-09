@@ -679,6 +679,7 @@ tests(
     rfactor_aligned_split_phases.cpp
     ring_buffer.cpp
     stream_compaction.cpp
+    thread_pool_keep_awake.cpp
     thread_safety.cpp
     tracing_thread_ids.cpp
     transitive_in.cpp
