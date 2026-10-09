@@ -4,7 +4,8 @@
 // name and its scheme, optionally with another code encoding ("u4": GGML's
 // offset-binary nibbles, the default; "i4": two's complement, as GGML's
 // repacked q4_0) and layout ("aos": GGML's block structs, the default;
-// "<rows>x<chunk>": Interleave), chosen independently. `block`: values per
+// "<rows>x<chunk>": Interleave; "soa": one array per field), chosen
+// independently. `block`: values per
 // record along a row; `rows`: rows per record (f32: no scheme, one value);
 // `chunk`: Interleave's bytes per row piece (0 for aos). A kernel may ask for
 // `scaled` codes: the same bytes, decoded to codes at 2^(8 - bits) times their
@@ -27,7 +28,7 @@ inline Format format(const std::string &spec, bool aos = false, bool scaled = fa
     }
     std::string type = t[0], codes, lay = "aos";
     for (size_t i = 1; i < t.size(); i++) {
-        (isdigit(t[i][0]) || t[i] == "aos" ? lay : codes) = t[i];
+        (isdigit(t[i][0]) || t[i] == "aos" || t[i] == "soa" ? lay : codes) = t[i];
     }
     if (aos) lay = "aos";
     int rows = 1, chunk = 0;

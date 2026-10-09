@@ -6,6 +6,7 @@
 // N = M = 1 case. Providers (GGML CPU/Metal/BLAS, Halide) are registered in
 // one table and compared against an f64 oracle and each other.
 
+#include "HalideRuntime.h"
 #include "ggml-cpu.h"
 #include "ggml.h"
 
@@ -14,9 +15,6 @@
 #include <memory>
 #include <string>
 #include <vector>
-
-struct halide_buffer_t;
-struct halide_filter_metadata_t;
 
 namespace gq {
 
@@ -99,12 +97,15 @@ std::vector<Timing> time_interleaved(const std::vector<Kernel *> &ks, int rounds
 // Codecs (codec.cpp): a format's Halide quantize (row of f32 -> blocks) and
 // dequantize (blocks -> f32), checked bitwise against GGML's reference
 // quantizer (ggml_quantize_chunk) and to_float, and timed against them.
+// Halide functions are called through their _argv entry points: quantize
+// (x, ports...), dequantize (ports..., y), with one buffer per encoded port.
+using Argv = int (*)(void **);
 struct CodecRow {
     std::string type;
-    int (*quantize[2])(halide_buffer_t *, halide_buffer_t *);  // [checked, bench]
-    int (*dequantize[2])(halide_buffer_t *, halide_buffer_t *);
-    const halide_filter_metadata_t *(*metadata)();           // of quantize: argument 1 is the block type
-    int (*scaled[2])(halide_buffer_t *, halide_buffer_t *);  // checked quantize, dequantize with scaled codes
+    Argv quantize[2];  // [checked, bench]
+    Argv dequantize[2];
+    const halide_filter_metadata_t *(*metadata)();  // of quantize: arguments 1... are the ports
+    Argv scaled[2];                                 // checked quantize, dequantize with scaled codes
 };
 std::vector<CodecRow> &codec_rows();
 struct CodecResult {
@@ -117,12 +118,32 @@ struct CodecResult {
 };
 std::vector<CodecResult> run_codecs(const std::vector<int64_t> &Ks, const std::vector<std::string> &filters, bool check, int rounds, double min_ms);
 
-// A Halide format "<type>[.<codes>][.<rows>x<chunk>]" (schemes/schemes.h).
+// A Halide format "<type>[.<codes>][.<rows>x<chunk>|.soa]" (schemes/schemes.h).
 struct FormatSpec {
     std::string type, codes;
     int rows = 1, chunk = 0;
+    bool soa = false;
 };
 FormatSpec parse_format(const std::string &spec);
+// N rows of K values of type t from GGML's blocks to f's layout: as is (AoS),
+// GGML's repack (rows > 1), or planar (soa, for blocks of an fp16 scale and
+// then codes: the codes of every block, then their scales, one array per
+// port); false if f has no such layout.
+bool relayout(const FormatSpec &f, ggml_type t, const uint8_t *src, uint8_t *dst, int64_t N, int64_t K);
+
+// A dense buffer over host memory.
+struct HBuf {
+    halide_buffer_t b{};
+    halide_dimension_t d[4]{};
+    HBuf(const void *host, halide_type_t t, const std::vector<int64_t> &extents);
+    HBuf(const HBuf &) = delete;
+};
+// A kernel's encoded ports, its arguments [first, first + n) in `md`, over
+// `bytes` in port order: each port's records are `records` (e.g. [blocks,
+// rows]); a port with one more dimension holds its elements first, as many
+// as fill `record_bytes` with the other ports' records.
+std::vector<std::unique_ptr<HBuf>> port_buffers(const halide_filter_metadata_t *md, int first, int n, const uint8_t *bytes,
+                                                const std::vector<int64_t> &records, int64_t record_bytes);
 // GGML's repack (repack.cpp) of N rows of K values of type t, from its blocks
 // to f's layout; false if GGML has no such layout.
 bool ggml_repack(const FormatSpec &f, ggml_type t, const uint8_t *src, uint8_t *dst, int64_t N, int64_t K);
