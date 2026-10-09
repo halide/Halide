@@ -5,14 +5,15 @@
 // offset-binary nibbles, the default; "i4": two's complement, as GGML's
 // repacked q4_0) and layout ("aos": GGML's block structs, the default;
 // "<rows>x<chunk>": Interleave), chosen independently. `block`: values per
-// record along a row; `rows`: rows per record (f32: no scheme, one value).
+// record along a row; `rows`: rows per record (f32: no scheme, one value);
+// `chunk`: Interleave's bytes per row piece (0 for aos).
 #include "legacy.h"
 
 namespace ggml {
 
 struct Format {
     Approximation scheme;
-    int block = 1, rows = 1;
+    int block = 1, rows = 1, chunk = 0;
 };
 
 // `aos`: the same format with one row per record.
@@ -27,9 +28,10 @@ inline Format format(const std::string &spec, bool aos = false) {
         (isdigit(t[i][0]) || t[i] == "aos" ? lay : codes) = t[i];
     }
     if (aos) lay = "aos";
-    int rows = lay == "aos" ? 1 : atoi(lay.c_str());
-    if (type == "q4_0" && (codes.empty() || codes == "u4" || codes == "i4")) return {q4_0(codes == "i4" ? twos(4) : offset(8), lay), QK, rows};
-    if (type == "q8_0" && codes.empty()) return {q8_0(lay), QK, rows};
+    int rows = 1, chunk = 0;
+    sscanf(lay.c_str(), "%dx%d", &rows, &chunk);
+    if (type == "q4_0" && (codes.empty() || codes == "u4" || codes == "i4")) return {q4_0(codes == "i4" ? twos(4) : offset(8), lay), QK, rows, chunk};
+    if (type == "q8_0" && codes.empty()) return {q8_0(lay), QK, rows, chunk};
     if (type == "f16" && t.size() == 1) return {fp16()};
     if (type == "f32" && t.size() == 1) return {};
     throw std::invalid_argument("unknown format " + spec);
