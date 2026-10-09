@@ -444,7 +444,7 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
                // Don't do expensive analysis in the common case of a load of a ramp of scalars.
                !(r_index && r_index->base.type().is_scalar()) &&
                // It's a multi-dimensional multiramp.
-               is_multiramp(index, Scope<Expr>::empty_scope(), &mr) &&
+               is_multiramp(index, Scope<Expr>::empty_scope(), &mr, let_var_alignment()) &&
                mr.dimensions() > 1 &&
                // The innermost stride isn't already one.
                !is_const_one(mr.strides[0]) &&
