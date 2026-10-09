@@ -168,7 +168,7 @@ private:
 
     // Assuming that a and b should have the same scalar type and they might have
     // been boolean vectors converted to integer vectors, cast the masks to be the
-    // same type. This is necessary in the case of a select or Call::if_then_else, e.g.:
+    // same type. This is necessary in the case of a select, e.g.:
     //
     //    Expr a = float_expr1() < float_expr2();  // promoted to int32xN
     //    Expr b = uint8_expr1() < uint8_expr2();  // promoted to int8xN
@@ -186,28 +186,9 @@ private:
     }
 
     Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::if_then_else)) {
-            internal_assert(op->args.size() == 2 || op->args.size() == 3);
-            if (op->args[0].type().is_vector()) {
-                Expr cond = mutate(op->args[0]);
-                Expr true_value = mutate(op->args[1]);
-                Expr false_value = mutate(op->args.size() == 3 ? op->args[2] : make_zero(op->type));
-                Type cond_ty = cond.type();
-
-                // If the condition is a vector, it should be a vector of ints.
-                internal_assert(cond_ty.code() == Type::Int);
-
-                // if_then_else_mask requires that all 3 operands have the same
-                // width.
-                unify_bool_vector_types(true_value, false_value);
-                internal_assert(true_value.type().bits() == false_value.type().bits());
-                if (true_value.type().bits() != cond_ty.bits()) {
-                    cond_ty = cond_ty.with_bits(true_value.type().bits());
-                    cond = Call::make(cond_ty, Call::cast_mask, {cond}, Call::PureIntrinsic);
-                }
-
-                return Call::make(true_value.type(), Call::if_then_else_mask, {cond, true_value, false_value}, Call::PureIntrinsic);
-            }
+        if (!is_const_one(op->predicate)) {
+            // Vector predicates become masks, as for Loads.
+            return op->with(mutate_with_changes(op->args).first, mutate(op->predicate));
         } else if (op->is_intrinsic(Call::require)) {
             internal_assert(op->args.size() == 3);
             if (op->args[0].type().is_vector()) {
@@ -222,7 +203,8 @@ private:
             }
         }
 
-        return IRMutator::visit(op);
+        // Leave a trivial predicate as a boolean.
+        return op->with(mutate_with_changes(op->args).first);
     }
 
     Expr visit(const Select *op) override {

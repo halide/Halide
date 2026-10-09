@@ -197,8 +197,7 @@ protected:
                 builder.value = {value_var};
                 Expr trace = builder.build();
                 if (!is_const_one(op->predicate)) {
-                    trace = Call::make(trace.type(), Call::if_then_else,
-                                       {op->predicate, trace}, Call::PureIntrinsic);
+                    trace = trace.as<Call>()->with_additional_predicate(op->predicate);
                 }
 
                 traces[i] = Let::make(value_var_name, values[i],

@@ -124,7 +124,7 @@ class FoldStorageOfFunction : public IRMutator {
                 Expr new_mins = Call::make(type_of<int *>(), Call::make_struct, mins, Call::Intrinsic);
                 vector<Expr> new_args = op->args;
                 new_args[3] = new_mins;
-                expr = Call::make(op->type, op->name, new_args, op->call_type);
+                expr = op->with(new_args);
 
                 // Inject the assertion
                 Expr no_wraparound = mins[dim] + extents[dim] <= factor;

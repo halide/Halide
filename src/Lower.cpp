@@ -636,7 +636,7 @@ void lower_impl(const vector<Function> &output_funcs,
             ptr.strengthen();
             expr = Call::make(c->type, c->name, c->args, c->call_type,
                               ptr, c->value_index,
-                              c->image, c->param);
+                              c->image, c->param, c->predicate);
         }
         return expr;
     });

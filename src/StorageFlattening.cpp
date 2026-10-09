@@ -520,14 +520,18 @@ public:
                     args.push_back(extent);
                 }
 
+                // Pure calls may not be predicated, so a predicated
+                // image_load is marked as impure.
+                Expr predicate = mutate(op->predicate);
                 return Call::make(op->type,
                                   Call::image_load,
                                   args,
-                                  Call::PureIntrinsic,
+                                  is_const_one(predicate) ? Call::PureIntrinsic : Call::Intrinsic,
                                   FunctionPtr(),
                                   0,
                                   op->image,
-                                  op->param);
+                                  op->param,
+                                  predicate);
             } else {
                 Expr idx = mutate(flatten_args(op->name, op->args, op->image, op->param));
                 bool is_streaming = false;
@@ -540,7 +544,7 @@ public:
                     }
                 }
                 return Load::make(op->type, op->name, idx, op->image, op->param,
-                                  const_true(op->type.lanes()), ModulusRemainder(), is_streaming);
+                                  mutate(op->predicate), ModulusRemainder(), is_streaming);
             }
 
         } else {

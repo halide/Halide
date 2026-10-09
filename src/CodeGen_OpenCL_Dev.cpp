@@ -307,6 +307,10 @@ std::string image_type_suffix(const Type &type) {
 }  // namespace
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
+    if (!is_const_one(op->predicate)) {
+        id = print_predicated_call(op);
+        return;
+    }
     if (op->is_intrinsic(Call::bool_to_mask)) {
         if (op->args[0].type().is_vector()) {
             // The argument is already a mask of the right width. Just
@@ -509,7 +513,11 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_array_access(const string &na
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
-    user_assert(is_const_one(op->predicate)) << "Predicated load is not supported inside OpenCL kernel.\n";
+    if (op->type.is_scalar() && !is_const_one(op->predicate)) {
+        id = print_scalar_predicated_load(op);
+        return;
+    }
+    user_assert(is_const_one(op->predicate)) << "Vector predicated load is not supported inside OpenCL kernel.\n";
 
     // If we're loading a contiguous ramp into a vector, use vload instead.
     Expr ramp_base = strided_ramp_base(op->index);

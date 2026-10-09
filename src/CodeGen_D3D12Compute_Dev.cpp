@@ -493,6 +493,10 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Shuffle *op) 
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
+    if (!is_const_one(op->predicate)) {
+        id = print_predicated_call(op);
+        return;
+    }
     if (op->is_intrinsic(Call::bool_to_mask)) {
         if (op->args[0].type().is_vector()) {
             // The argument is already a mask of the right width. Just
@@ -882,7 +886,11 @@ struct StoragePackUnpack {
 };
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
-    user_assert(is_const_one(op->predicate)) << "Predicated load is not supported inside D3D12Compute kernel.\n";
+    if (op->type.is_scalar() && !is_const_one(op->predicate)) {
+        id = print_scalar_predicated_load(op);
+        return;
+    }
+    user_assert(is_const_one(op->predicate)) << "Vector predicated load is not supported inside D3D12Compute kernel.\n";
 
     // SM 5.1 groupshared buffers are always 32-bit; sub-32-bit loads need a
     // bit-reinterpret cast. SM 6.2+ supports 16-bit natively — no cast needed.

@@ -891,12 +891,6 @@ class OptimizePatterns : public IRMutator {
     }
 
     Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::if_then_else) && op->args[0].type().is_vector()) {
-            const Broadcast *b = op->args[0].as<Broadcast>();
-            if (!b || b->value.type().is_vector()) {
-                return op;
-            }
-        }
         if (op->is_intrinsic(Call::widening_add)) {
             Expr mpyadds = find_mpyadds(Add::make(cast(op->type, op->args[0]), cast(op->type, op->args[1])));
             if (mpyadds.defined()) {
@@ -1147,16 +1141,6 @@ class VectorReducePatterns : public IRMutator {
             return true;
         }
         return false;
-    }
-
-    Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::if_then_else) && op->args[0].type().is_vector()) {
-            const Broadcast *b = op->args[0].as<Broadcast>();
-            if (!b || b->value.type().is_vector()) {
-                return op;
-            }
-        }
-        return IRMutator::visit(op);
     }
 
     Expr visit(const VectorReduce *op) override {
@@ -2020,16 +2004,6 @@ class ScatterGatherGenerator : public IRMutator {
     std::unordered_map<string, const Allocate *> allocations;
 
     using IRMutator::visit;
-
-    Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::if_then_else) && op->args[0].type().is_vector()) {
-            const Broadcast *b = op->args[0].as<Broadcast>();
-            if (!b || b->value.type().is_vector()) {
-                return op;
-            }
-        }
-        return IRMutator::visit(op);
-    }
 
     template<typename LetOrLetStmt>
     auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {

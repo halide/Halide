@@ -102,6 +102,7 @@ protected:
                                    DoNotAppendSpace) override;
         std::string print_reinterpret(Type type, const Expr &e) override;
         std::string print_assignment(Type t, const std::string &rhs) override;
+        void print_uninitialized_var_decl(Type t, const std::string &name) override;
         std::string print_const(Type t, const std::string &rhs);
         std::string print_assignment_or_const(Type t, const std::string &rhs,
                                               bool const_expr);
@@ -481,6 +482,10 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Broadcast *op) {
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Call *op) {
+    if (!is_const_one(op->predicate)) {
+        id = print_predicated_call(op);
+        return;
+    }
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
         internal_assert(op->args.size() == 1)
             << "gpu_thread_barrier() intrinsic must specify fence type.\n";
@@ -500,29 +505,6 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Call *op) {
         }
         stream << "\n";
         print_assignment(op->type, "0");
-    } else if (op->is_intrinsic(Call::if_then_else)) {
-        internal_assert(op->args.size() == 2 || op->args.size() == 3);
-
-        string result_id = unique_name('_');
-        stream << get_indent() << "var " << result_id
-               << " : " << print_type(op->args[1].type()) << ";\n";
-
-        // TODO: The rest of this is just copied from the C backend, so maybe
-        // just introduce an overloadable `print_var_decl` instead.
-        string cond_id = print_expr(op->args[0]);
-        stream << get_indent() << "if (" << cond_id << ")\n";
-        open_scope();
-        string true_case = print_expr(op->args[1]);
-        stream << get_indent() << result_id << " = " << true_case << ";\n";
-        close_scope("if " + cond_id);
-        if (op->args.size() == 3) {
-            stream << get_indent() << "else\n";
-            open_scope();
-            string false_case = print_expr(op->args[2]);
-            stream << get_indent() << result_id << " = " << false_case << ";\n";
-            close_scope("if " + cond_id + " else");
-        }
-        print_assignment(op->type, result_id);
     } else if (op->is_intrinsic(Call::round)) {
         Expr equiv = Call::make(op->type, "round", op->args, Call::PureExtern);
         equiv.accept(this);
@@ -683,8 +665,12 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const For *loop) {
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Load *op) {
+    if (op->type.is_scalar() && !is_const_one(op->predicate)) {
+        id = print_scalar_predicated_load(op);
+        return;
+    }
     user_assert(is_const_one(op->predicate))
-        << "Predicated loads are not supported for WebGPU.\n";
+        << "Vector predicated loads are not supported for WebGPU.\n";
 
     Type result_type = op->type.element_of();
 
@@ -932,6 +918,11 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Store *op) {
 string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_assignment(
     Type t, const std::string &rhs) {
     return print_assignment_or_const(t, rhs, false);
+}
+
+void CodeGen_WebGPU_Dev::CodeGen_WGSL::print_uninitialized_var_decl(
+    Type t, const std::string &name) {
+    stream << get_indent() << "var " << name << " : " << print_type(t) << ";\n";
 }
 
 string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_const(

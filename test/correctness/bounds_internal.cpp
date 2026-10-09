@@ -245,6 +245,11 @@ int main() {
     check(scope, print(x, y), 0, 10);
     check(scope, print_when(x > y, x, y), 0, 10);
 
+    Expr call = Call::make(Int(32), Call::return_second, {0, x + 1}, Call::Intrinsic);
+    check(scope, call.as<Call>()->with_additional_predicate(x < 20), 1, 11);
+    check(scope, call.as<Call>()->with_additional_predicate(x > 20), 0, 0);
+    check(scope, call.as<Call>()->with_additional_predicate(x < 5), 0, 11);
+
     check(scope, select(y == 5, 0, 3), select(y == 5, 0, 3), select(y == 5, 0, 3));
     check(scope, select(y == 5, x, -3 * x + 8), select(y == 5, 0, -22), select(y == 5, 10, 8));
     check(scope, select(y == x, x, -3 * x + 8), -22, select(y <= 10 && 0 <= y, 10, 8));

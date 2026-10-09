@@ -126,11 +126,18 @@ bool box_contains(const Box &a, const Box &b);
  * for figuring out what regions of things to evaluate. Respects control flow
  * (e.g. encodes if statement conditions), but assumes all encountered asserts
  * pass. If it encounters an assert(false) in one if branch, assumes the
- * opposite if branch runs unconditionally. */
+ * opposite if branch runs unconditionally.
+ *
+ * If selects_are_branches is true, a select(c, a, b) with a pure condition
+ * is treated as if it were a branch that only evaluates the side selected by
+ * c. This is not the semantics of select, but it is useful when only the
+ * value of the expression matters (e.g. bounds inference of the region
+ * required to compute a Func's values correctly). */
 // @{
 std::map<std::string, Box> boxes_required(const Expr &e,
                                           const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
-                                          const FuncValueBounds &func_bounds = empty_func_value_bounds());
+                                          const FuncValueBounds &func_bounds = empty_func_value_bounds(),
+                                          bool selects_are_branches = false);
 std::map<std::string, Box> boxes_required(Stmt s,
                                           const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
                                           const FuncValueBounds &func_bounds = empty_func_value_bounds());

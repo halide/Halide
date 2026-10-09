@@ -67,6 +67,7 @@ protected:
     void visit(const Call *) override;
     void visit(const Mul *) override;
     void visit(const Select *) override;
+    void visit(const Load *) override;
     void visit(const Allocate *) override;
     ///@}
 
@@ -274,19 +275,16 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
                 condition = simplify(condition);
             }
 
-            Expr load = op->with(index, const_true(op->type.lanes()), op->alignment);
-
-            return Call::make(op->type, Call::if_then_else,
-                              {condition, load}, Call::PureIntrinsic);
+            // CodeGen_Hexagon::visit(const Load *) implements a load with a
+            // broadcast predicate as a branch around an unpredicated load.
+            return op->with(index, Broadcast::make(condition, op->type.lanes()), op->alignment);
         } else {
-            // It's a predicated vector gather. Just scalarize. We'd
-            // prefer to keep it in a loop, but that would require
-            // some sort of loop Expr. Another option would be
-            // introducing a set of runtime functions to do predicated
-            // loads.
-            Expr load = op->with(index, const_true(op->type.lanes()), op->alignment);
-            return Call::make(op->type, Call::if_then_else,
-                              {predicate, load}, Call::PureIntrinsic);
+            // It's a predicated vector gather, or a reversed dense
+            // load. CodeGen_Hexagon::visit(const Load *) scalarizes it. We'd
+            // prefer to keep it in a loop, but that would require some sort of
+            // loop Expr. Another option would be introducing a set of runtime
+            // functions to do predicated loads.
+            return op->with(index, predicate, op->alignment);
         }
     }
 
@@ -1895,6 +1893,10 @@ void CodeGen_Hexagon::visit(const Mul *op) {
 }
 
 void CodeGen_Hexagon::visit(const Call *op) {
+    if (!is_const_one(op->predicate)) {
+        value = codegen_predicated_call(op);
+        return;
+    }
     internal_assert(op->is_extern() || op->is_intrinsic())
         << "Can only codegen extern calls and intrinsics\n";
 
@@ -2114,13 +2116,26 @@ void CodeGen_Hexagon::visit(const Min *op) {
     }
 }
 
+void CodeGen_Hexagon::visit(const Load *op) {
+    if (op->type.is_scalar() || is_const_one(op->predicate)) {
+        CodeGen_CPU::visit(op);
+    } else if (const Broadcast *b = op->predicate.as<Broadcast>()) {
+        // Branch around an unpredicated vector load (see the predicated
+        // load lowering above).
+        Expr load = op->with(op->index, const_true(op->type.lanes()), op->alignment);
+        value = codegen_branch(b->value, load, make_zero(op->type));
+    } else {
+        // HVX has no masked loads, so scalarize any other predicated vector
+        // load (see the predicated load lowering above).
+        value = codegen_scalarized_predicated_load(op);
+    }
+}
+
 void CodeGen_Hexagon::visit(const Select *op) {
     const Broadcast *b = op->condition.as<Broadcast>();
     if (op->type.is_vector() && b && b->type.is_scalar()) {
         // Implement scalar conditions on vector values with if-then-else.
-        value = codegen(Call::make(op->type, Call::if_then_else,
-                                   {b->value, op->true_value, op->false_value},
-                                   Call::PureIntrinsic));
+        value = codegen_branch(b->value, op->true_value, op->false_value);
     } else if (op->type.is_vector() && op->type.is_bool()) {
         // Lower selects on bools to bit math
         std::string cond_name = unique_name('c');

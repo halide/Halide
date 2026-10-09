@@ -120,18 +120,17 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
     auto *_8 = b0;
     halide_print(_ucon, _8);
     int32_t _9 = 0;
-    int32_t _10 = return_second(_9, 3);
-    _6 = _10;
+    _6 = _9;
    } // if _7
    else
    {
-    _6 = 3;
+    _6 = 0;
    } // if _7 else
-   int32_t _11 = _6;
-   float _12 = float_from_bits(1082130432 /* 4 */);
-   bool _13 = _alpha > _12;
-   int32_t _14 = (int32_t)(_13 ? _11 : 2);
-   ((int32_t *)_buf)[_5] = _14;
+   int32_t _10 = return_second(_6, 3);
+   float _11 = float_from_bits(1082130432 /* 4 */);
+   bool _12 = _alpha > _11;
+   int32_t _13 = (int32_t)(_12 ? _10 : 2);
+   ((int32_t *)_buf)[_5] = _13;
   } // alloc _tmp_stack
   _tmp_heap_free.free();
  } // alloc _tmp_heap

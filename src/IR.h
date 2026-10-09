@@ -780,9 +780,6 @@ struct Call : public ExprNode<Call> {
         hvx_scatter,
         hvx_scatter_acc,
         hvx_scatter_release,
-        if_then_else,
-        // Vectorized if-then-else that operates on mask types
-        if_then_else_mask,
         image_load,
         image_store,
         lerp,
@@ -842,7 +839,7 @@ struct Call : public ExprNode<Call> {
         saturating_sub,
         // Used to implement scatter and gather (see IROperator.h)
         scatter_gather,
-        // Vectorized select that operates on mask types (similar to if_then_else_mask)
+        // Vectorized select that operates on mask types
         select_mask,
         shift_left,
         shift_right,
@@ -972,17 +969,44 @@ struct Call : public ExprNode<Call> {
     // pointer to that
     Parameter param;
 
+    /** A boolean with the same number of lanes as the call's type. In lanes
+     * where it is false, the call is not performed (it has no side effects
+     * and touches no memory) and that lane of the result is zero. The args
+     * are evaluated regardless. Only calls that are not pure computations may
+     * be predicated: Halide, Image, Extern, ExternCPlusPlus, and (impure)
+     * Intrinsic calls. Never undefined; defaults to true. */
+    Expr predicate;
+
     static Expr make(Type type, IntrinsicOp op, const std::vector<Expr> &args, CallType call_type,
                      FunctionPtr func = FunctionPtr(), int value_index = 0,
-                     const Buffer<> &image = Buffer<>(), Parameter param = Parameter());
+                     const Buffer<> &image = Buffer<>(), Parameter param = Parameter(),
+                     Expr predicate = Expr());
 
+    /** Make a call node. An undefined predicate means the call is
+     * unconditional (predicate = const_true(type.lanes())). A scalar
+     * predicate on a vector call is broadcast. */
     static Expr make(Type type, const std::string &name, const std::vector<Expr> &args, CallType call_type,
                      FunctionPtr func = FunctionPtr(), int value_index = 0,
-                     Buffer<> image = Buffer<>(), Parameter param = Parameter());
+                     Buffer<> image = Buffer<>(), Parameter param = Parameter(),
+                     Expr predicate = Expr());
 
     /** Make the same call as this one, but with new args. Returns this Call
      * unchanged if the new args are the same as the existing ones. */
     Expr with(const std::vector<Expr> &args) const;
+
+    /** Make the same call as this one, but with new args and predicate.
+     * Returns this Call unchanged if nothing changed. */
+    Expr with(const std::vector<Expr> &args, const Expr &predicate) const;
+
+    /** Make the same call as this one, but with the additional predicate
+     * 'cond' conjoined with its existing predicate. */
+    Expr with_additional_predicate(const Expr &cond) const;
+
+    /** Whether this kind of call may carry a non-trivial predicate.
+     * The unreachable intrinsic may never be predicated. */
+    static bool can_be_predicated(CallType call_type) {
+        return call_type != PureExtern && call_type != PureIntrinsic;
+    }
 
     /** Convenience constructor for calls to other halide functions. Pass
      * follow_global_wrappers = true when constructing a consumer's call to
