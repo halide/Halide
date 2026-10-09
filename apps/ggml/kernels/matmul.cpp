@@ -21,7 +21,10 @@ public:
     void configure() {
         std::string an = act, cn = an.substr(an.find(':') + 1);
         an = an.substr(0, an.find(':'));
-        ggml::Format fw = ggml::format(weight), fa = ggml::format(an), fc = ggml::format(cn);
+        // mul_mat on weight records of several rows takes their codes at 2^k
+        // (an exact alternative, see Q4_0Quant): it shortens the gemv's decode
+        bool scaled = op == "mul_mat" && ggml::format(weight).rows > 1;
+        ggml::Format fw = ggml::format(weight, false, scaled), fa = ggml::format(an), fc = ggml::format(cn);
         std::vector<ImageParam> w = inputs(fw, "w"), a = inputs(fa, "a");
         Var k("k"), n("n"), m("m");
         Func W("W"), X("X"), Xr("Xr"), out("out");
@@ -86,7 +89,7 @@ public:
             add_input(p);
         }
         result = add_output(out);
-        blocks = {fw.block, fc.block, fc.rows, fw.rows, fw.chunk};
+        blocks = {fw.block, fc.block, fc.rows, fw.rows, fw.chunk, scaled};
     }
 
     void generate() {

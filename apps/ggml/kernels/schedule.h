@@ -19,12 +19,18 @@ inline std::vector<Func> decoders(const std::vector<ApproximationResult> &rs) {
     return fs;
 }
 
+// The runtime's thread count.
+inline Expr threads() {
+    return max(Internal::Call::make(Int(32), "halide_get_num_threads", {}, Internal::Call::PureExtern), 1);
+}
+
 // The tile shape of one mul_mat schedule: nt x mt outputs (N >= nt, M >= mt;
 // edge tiles shift inwards; in out's updates, M tails are guarded) share each decoded weight row and activation
 // column; `interleave` blocks per iteration into independent accumulators;
-// parallel tasks of `rows` x `cols` outputs (rows 0: serial; cols 0: all of M).
+// parallel tasks of `rows` x `cols` outputs (rows 0: serial; cols 0: all of M),
+// fewer rows if that leaves under `tasks` tasks per thread.
 struct Tiles {
-    int nt = 1, mt = 1, interleave = 2, rows = 0, cols = 0;
+    int nt = 1, mt = 1, interleave = 2, rows = 0, cols = 0, tasks = 0;
 };
 
 // Out's stage `st`: 0 is its pure definition, over all of M; i > 0 its i-th
@@ -56,7 +62,13 @@ inline Stage tile_out(Func out, int st, Func dot, Expr cond, Tiles ts, bool whol
         s.split(mo, mc, mo, ts.cols / ts.mt, TailStrategy::GuardWithIf);
     }
     if (ts.rows) {
-        s.split(no, nc, no, ts.rows / ts.nt, TailStrategy::GuardWithIf);
+        Expr per = ts.rows / ts.nt;
+        if (ts.tasks) {
+            Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
+            Expr cs = ts.cols ? (M + ts.cols - 1) / ts.cols : 1, ns = (ts.tasks * threads() + cs - 1) / cs;
+            per = clamp(((N + ts.nt - 1) / ts.nt + ns - 1) / ns, 1, per);
+        }
+        s.split(no, nc, no, per, TailStrategy::GuardWithIf);
         if (ts.cols) s.reorder(ni, mi, mo, no, mc, nc).fuse(mc, nc, t);
         s.parallel(ts.cols ? t : VarOrRVar(nc));
     }
@@ -135,7 +147,7 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
 // tiles of 2 x 2 sub-tiles, each 4 dense lanes of the intermediates' storage
 // (split_storage), so the tile's accumulators stay in registers.
 inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, int block,
-                         const std::vector<ApproximationResult> &rs) {
+                         const std::vector<ApproximationResult> &rs, bool scaled = false) {
     Stage s = tile_out(out, st, dot, cond, ts);
     Var n = dot.args()[0], m = dot.args()[1], nio("nio"), nii("nii"), mio("mio"), mii("mii"), u("u"), bacc("bacc");
     RVar ry("ry"), rx("rx"), rxc("rxc"), rxk("rxk"), ryo("ryo"), ryi("ryi");
@@ -156,8 +168,10 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
         f.split_storage(n, sno, sni, 2).split_storage(m, smo, smi, 2).reorder_storage(sni, smi, sno, smo, x);
         sub(f).reorder(nii, mii, nio, mio, x).vectorize(nii).vectorize(mii).unroll(nio).unroll(mio).unroll(x);
     }
-    for (Func f : {blk, codes}) {  // tall tiles: per 2 rows, so few sums live (the weight's decode is CSE'd)
-        f.compute_at(LoopLevel(acc, ts.mt > 8 ? VarOrRVar(mio) : VarOrRVar(ryo))).bound_storage(u, ts.interleave);
+    // tall tiles: per 2 rows, so few sums live (the weight's decode is CSE'd),
+    // unless the codes are scaled (2^k): per block, as there they spill
+    for (Func f : {blk, codes}) {
+        f.compute_at(LoopLevel(acc, ts.mt > 8 && !scaled ? VarOrRVar(mio) : VarOrRVar(ryo))).bound_storage(u, ts.interleave);
     }
     acc.compute_at(tile_at(out, st));
     sub(acc.update()).reorder(nii, mii, nio, mio, bacc, ryo).vectorize(nii).vectorize(mii).unroll(nio).unroll(mio).unroll(bacc);
@@ -198,12 +212,13 @@ inline void encoder(Func e, const std::vector<ApproximationResult> &rs) {
 
 // mul_mat: gemm tiles the outputs (4 x 8 on smmla when the target has i8mm
 // and both operands are quantized alike, 4 x 16 for whole records of at least
-// 16 rows; else 4 x 4 on sdot); gemv (M = 1) is
-// the vec_dot recipe on row pairs sharing each activation block (single rows
-// for N = 1). Edge tiles shift inwards: any N, M at least the tile's. With act
-// records of r = blocks[2] > 1 rows, out's first update is the rows in whole
-// records (dots[1]) on gemm tiles starting on a record, its second the
-// others (dots[0], < r rows) on gemv tiles.
+// 16 rows, 4 x 4 where those waste rows; else 4 x 4 on sdot), in tasks of 32
+// x 32 outputs, fewer rows if that leaves under 2 tasks per thread (small N);
+// gemv (M = 1) is the vec_dot recipe on row pairs sharing each activation
+// block (single rows for N = 1). Edge tiles shift inwards: any N, M at least
+// the tile's. With act records of r = blocks[2] > 1 rows, out's first update
+// is the rows in whole records (dots[1]) on gemm tiles starting on a record,
+// its second the others (dots[0], < r rows) on gemv tiles.
 inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const std::vector<int> &blocks, const std::vector<ApproximationResult> &rs,
                     const std::vector<Func> &staged, const Target &t) {
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
@@ -213,19 +228,24 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     }
     bool integer = blocks[1] == blocks[0], whole = blocks[2] > 1;
     Expr Mr = M / blocks[2] * blocks[2];
-    Tiles mmla{4, 16, 1, 32, 32}, mmla8{4, 8, 1, 32, 32}, gemm{4, 4, 1, 32, 32}, pairs{2, 1, 2, 16}, rows{1, 1, 2, 16};
+    Tiles mmla{4, 16, 1, 32, 32, 2}, mmla8{4, 8, 1, 32, 32, 2}, mmla4{4, 4, 1, 32, 32, 2}, gemm{4, 4, 1, 32, 32, 2}, pairs{2, 1, 2, 16}, rows{1, 1, 2, 16};
     bool mmla_ok = integer && t.has_feature(Target::ARMI8MM);
     // Whole records: the tiles' rows past Mr read clamped records, so one
     // row tile (dot's bound) covers every record, with mmla when there is.
     Func dr = dots.back();
     auto fits = [&](const Tiles &ts, Expr m) { return whole ? N % ts.nt == 0 && N >= ts.nt : N >= ts.nt && m >= ts.mt; };
+    // 4-row tiles where the taller ones would compute 4 or 12 rows past Mr,
+    // up to 64 rows (measured wins at Mr = 4, 12, 20, 36, 52; losses at 28, 100).
+    // A disjunction, so the later branches learn each term false (dr's bound).
     Expr tall = Mr >= mmla.mt, odd_n = !fits(gemm, Mr);
+    Expr quad = (Mr % mmla.mt == mmla4.mt && Mr < 4 * mmla.mt) || Mr == mmla8.mt + mmla4.mt;
     if (whole) {  // odd N first, as tall as mmla; the bound is then constant in each branch
-        blocked(out, 1, dr, odd_n, {1, mmla_ok ? mmla.mt : gemm.mt, 1, 32, 32}, r, blocks[0], integer, rs, t);
-        dr.bound_extent(dr.args()[1], mmla_ok ? select(odd_n || tall, mmla.mt, mmla8.mt) : Expr(gemm.mt));
+        blocked(out, 1, dr, odd_n, {1, mmla_ok ? mmla.mt : gemm.mt, 1, 32, 32, 2}, r, blocks[0], integer, rs, t);
+        dr.bound_extent(dr.args()[1], mmla_ok ? select(odd_n, mmla.mt, quad, mmla4.mt, tall, mmla.mt, mmla8.mt) : Expr(gemm.mt));
     }
     if (mmla_ok) {
-        if (whole) blocked_mmla(out, whole, dr, tall, mmla, r, blocks[0], rs);
+        if (whole) blocked_mmla(out, whole, dr, quad, mmla4, r, blocks[0], rs);
+        if (whole) blocked_mmla(out, whole, dr, tall, mmla, r, blocks[0], rs, blocks[5]);
         blocked_mmla(out, whole, dr, whole ? Expr() : fits(mmla8, M), mmla8, r, blocks[0], rs);
     }
     if (!whole || !mmla_ok) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, blocks[0], integer, rs, t);
