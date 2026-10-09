@@ -156,8 +156,8 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
         f.split_storage(n, sno, sni, 2).split_storage(m, smo, smi, 2).reorder_storage(sni, smi, sno, smo, x);
         sub(f).reorder(nii, mii, nio, mio, x).vectorize(nii).vectorize(mii).unroll(nio).unroll(mio).unroll(x);
     }
-    for (Func f : {blk, codes}) {
-        f.compute_at(acc, ryo).bound_storage(u, ts.interleave);
+    for (Func f : {blk, codes}) {  // tall tiles: per 2 rows, so few sums live (the weight's decode is CSE'd)
+        f.compute_at(LoopLevel(acc, ts.mt > 8 ? VarOrRVar(mio) : VarOrRVar(ryo))).bound_storage(u, ts.interleave);
     }
     acc.compute_at(tile_at(out, st));
     sub(acc.update()).reorder(nii, mii, nio, mio, bacc, ryo).vectorize(nii).vectorize(mii).unroll(nio).unroll(mio).unroll(bacc);
@@ -197,7 +197,8 @@ inline void encoder(Func e, const std::vector<ApproximationResult> &rs) {
 }
 
 // mul_mat: gemm tiles the outputs (4 x 8 on smmla when the target has i8mm
-// and both operands are quantized alike; else 4 x 4 on sdot); gemv (M = 1) is
+// and both operands are quantized alike, 4 x 16 for whole records of at least
+// 16 rows; else 4 x 4 on sdot); gemv (M = 1) is
 // the vec_dot recipe on row pairs sharing each activation block (single rows
 // for N = 1). Edge tiles shift inwards: any N, M at least the tile's. With act
 // records of r = blocks[2] > 1 rows, out's first update is the rows in whole
@@ -212,21 +213,22 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     }
     bool integer = blocks[1] == blocks[0], whole = blocks[2] > 1;
     Expr Mr = M / blocks[2] * blocks[2];
-    Tiles mmla{4, 8, 1, 32, 32}, gemm{4, 4, 1, 32, 32}, pairs{2, 1, 2, 16}, rows{1, 1, 2, 16};
+    Tiles mmla{4, 16, 1, 32, 32}, mmla8{4, 8, 1, 32, 32}, gemm{4, 4, 1, 32, 32}, pairs{2, 1, 2, 16}, rows{1, 1, 2, 16};
     bool mmla_ok = integer && t.has_feature(Target::ARMI8MM);
     // Whole records: the tiles' rows past Mr read clamped records, so one
     // row tile (dot's bound) covers every record, with mmla when there is.
     Func dr = dots.back();
-    int mb = mmla_ok ? mmla.mt : gemm.mt;
     auto fits = [&](const Tiles &ts, Expr m) { return whole ? N % ts.nt == 0 && N >= ts.nt : N >= ts.nt && m >= ts.mt; };
+    Expr tall = Mr >= mmla.mt, odd_n = !fits(gemm, Mr);
+    if (whole) {  // odd N first, as tall as mmla; the bound is then constant in each branch
+        blocked(out, 1, dr, odd_n, {1, mmla_ok ? mmla.mt : gemm.mt, 1, 32, 32}, r, blocks[0], integer, rs, t);
+        dr.bound_extent(dr.args()[1], mmla_ok ? select(odd_n || tall, mmla.mt, mmla8.mt) : Expr(gemm.mt));
+    }
     if (mmla_ok) {
-        blocked_mmla(out, whole, dr, fits(mmla, Mr), mmla, r, blocks[0], rs);
+        if (whole) blocked_mmla(out, whole, dr, tall, mmla, r, blocks[0], rs);
+        blocked_mmla(out, whole, dr, whole ? Expr() : fits(mmla8, M), mmla8, r, blocks[0], rs);
     }
-    if (!whole || !mmla_ok) blocked(out, whole, dr, fits(gemm, Mr), gemm, r, blocks[0], integer, rs, t);
-    if (whole) {
-        blocked(out, 1, dr, Expr(), {1, mb, 1, 32, 32}, r, blocks[0], integer, rs, t);
-        dr.bound_extent(dr.args()[1], mb);
-    }
+    if (!whole || !mmla_ok) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, blocks[0], integer, rs, t);
     if (integer && blocks[3] > 1) {  // N is a multiple of the records' rows
         blocked_rows(out, 2 * whole, dots[0], Expr(), {blocks[3], 1, 2, 16}, r, blocks[0], blocks[4], rs);
         return;
