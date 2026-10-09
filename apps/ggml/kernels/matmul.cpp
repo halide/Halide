@@ -48,8 +48,8 @@ public:
         if (fw.block % fa.block || fw.block % fc.block) throw std::invalid_argument("activation blocks must divide weight blocks");
         if (fa.rows > 1) throw std::invalid_argument("act: one row per record");
         OutputImageParam o = out.output_buffer();
-        o.dim(0).set_min(0).dim(1).set_min(0).set_stride(o.dim(0).extent());
-        w.dim(0).set_min(0).dim(1).set_bounds(0, o.dim(0).extent() / fw.rows).set_stride(w.dim(0).extent());
+        o.dim(0).set_bounds(0, w.dim(1).extent() * fw.rows).dim(1).set_min(0).set_stride(o.dim(0).extent());
+        w.dim(0).set_min(0).dim(1).set_min(0).set_stride(w.dim(0).extent());
         a.dim(0).set_bounds(0, w.dim(0).extent() * (fw.block / fa.block));
         a.dim(1).set_bounds(0, o.dim(1).extent()).set_stride(a.dim(0).extent());
         add_input(w);
