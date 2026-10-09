@@ -117,9 +117,14 @@ block, vectorized by mul_mat's activation `encoder` schedule) and
 bitwise against GGML's reference quantizer (`ggml_quantize_chunk`) and
 `to_float` on N(0, 1) rows whose first blocks are adversarial (signed zeros,
 ties, constants, tiny and huge values; inf/NaN are undefined in GGML's
-reference), and times them against those and `from_float`. Codec rows reuse the
-CSV columns: `atype` is the direction, `err_ratio` is 0 (bit-exact) or inf,
-`gops` is Gvalues/s.
+reference), and times them against those and `from_float`. It checks the same
+for each type's scaled codes (`<type>_quantize_scaled`, `_dequantize_scaled`:
+checked variant only; the scheme a kernel may pick with
+`format(spec, aos, scaled)`, see `Q4_0Quant`'s `code_shift`), and dequantize
+also on crafted blocks spanning every code byte with every finite fp16 scale
+pattern stepped by 31 (zeros, subnormals, both signs). Codec rows reuse the CSV
+columns: `atype` is the direction, `err_ratio` is 0 (bit-exact) or inf, `gops`
+is Gvalues/s.
 
 `vec_dot` and `mul_mat` build the one mul_mat generator (`kernels/matmul.cpp`,
 `weight=<type> act=<act> op=<op>`) for each act in `acts`, as

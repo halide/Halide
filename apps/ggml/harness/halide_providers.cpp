@@ -151,7 +151,7 @@ struct AddCodec {
                                   gq::VecDot<name##_checked, name##_checked_metadata>::bind,                               \
                                   gq::VecDot<name##_bench, name##_bench_metadata>::bind, name##_checked_metadata});
 #define GQ_CODEC(t, spec) \
-    static gq::AddCodec t##_codec({spec, {t##_quantize_checked, t##_quantize_bench}, {t##_dequantize_checked, t##_dequantize_bench}, t##_quantize_checked_metadata});
+    static gq::AddCodec t##_codec({spec, {t##_quantize_checked, t##_quantize_bench}, {t##_dequantize_checked, t##_dequantize_bench}, t##_quantize_checked_metadata, {t##_quantize_scaled_checked, t##_dequantize_scaled_checked}});
 #include "halide_kernels.inc"
 
 namespace gq {

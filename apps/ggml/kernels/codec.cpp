@@ -1,7 +1,8 @@
 // One codec generator for every scheme: the scheme's round trip on a row of
 // floats (on rows, for layouts with several per record), severed at the
 // encoded blocks; `quantize` picks the half to adopt (quantize: x -> blocks,
-// dequantize: blocks -> y).
+// dequantize: blocks -> y); `scaled`: its scaled codes (schemes.h), as kernels
+// may pick, for the test that they read and write the same bytes.
 #include "halide_approximation_codec.h"
 #include "kernels/schedule.h"
 #include "schemes/schemes.h"
@@ -13,10 +14,11 @@ using namespace Halide;
 class Codec : public Generator<Codec> {
 public:
     GeneratorParam<std::string> type{"type", "q4_0"};
-    GeneratorParam<bool> quantize{"quantize", true};
+    GeneratorParam<bool> quantize{"quantize", true}, scaled{"scaled", false};
 
     void configure() {
-        codec = ApproximationCodec::make_codec(ggml::format(type).scheme, Float(32), ggml::format(type).rows > 1 ? 2 : 1, {"x", "y", {"blocks"}});
+        ggml::Format f = ggml::format(type, false, scaled);
+        codec = ApproximationCodec::make_codec(f.scheme, Float(32), f.rows > 1 ? 2 : 1, {"x", "y", {"blocks"}});
         if (quantize) {
             codec.adopt_encoder(*this);
         } else {
