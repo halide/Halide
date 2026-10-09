@@ -167,10 +167,14 @@ run the gemv tiles; with a laid-out integer weight they run `blocked_rows`
 instead: one weight record per tile (rows-tall, as GGML's repacked gemv), its
 int32 sums vectorized across the record's rows and each piece's 4-code quads
 (sdot), so a piece is one dense load and the activation's piece is broadcast to
-the rows. An in-kernel activation encoder runs first, parallel over activation
-rows (for M > 1) and vectorized per encoded block (`encoder`: the block's
-reductions, e.g. its scale, across the block; per-value Funcs, e.g. the codes,
-across their values). Kernel ABI (`harness/halide_providers.cpp`): `w`/`a` are
+the rows; the activation's codes are staged per block in registers, so with
+4-code pieces (`q4_0.i4.4x4`, GGML's `q4_0_4x4`) the broadcast is a by-element
+sdot. The default layouts: `q4_0.i4.4x4` for gemv, `q4_0.i4.4x8` for gemm
+(smmla); each is built with mul_mat, so the other serves as a comparison. An
+in-kernel activation encoder runs first, parallel over activation rows when M >
+1, and vectorized per encoded block (`encoder`: the block's reductions, e.g. its
+scale, across the block; per-value Funcs, e.g. the codes, across their values).
+Kernel ABI (`harness/halide_providers.cpp`): `w`/`a` are
 `[K / block, N / rows or M]` records (struct types from the kernel's metadata),
 `out` is f32 `[N, M]`. The kernel declares the whole contract (checked in
 `checked`, assumed in `bench`): all mins 0, rows dense
