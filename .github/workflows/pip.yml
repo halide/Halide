@@ -43,7 +43,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@v7
       - uses: ilammy/msvc-dev-cmd@v1
-      - uses: lukka/get-cmake@v4.4.2
+      - uses: lukka/get-cmake@v4.4.4
         with:
           cmakeVersion: "~3.28.0"
 
@@ -139,7 +139,7 @@ jobs:
           fetch-tags: true
 
       - uses: ilammy/msvc-dev-cmd@v1
-      - uses: lukka/get-cmake@v4.4.2
+      - uses: lukka/get-cmake@v4.4.4
         with:
           cmakeVersion: "~3.28.0"
 
@@ -262,7 +262,7 @@ jobs:
           fetch-tags: true
 
       - uses: ilammy/msvc-dev-cmd@v1
-      - uses: lukka/get-cmake@v4.4.2
+      - uses: lukka/get-cmake@v4.4.4
         with:
           cmakeVersion: "~3.28.0"
 
