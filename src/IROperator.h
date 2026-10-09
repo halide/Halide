@@ -1644,6 +1644,11 @@ namespace Internal {
  *
  * Note that this produces an intrinsic that is marked as 'pure' and thus is
  * allowed to be hoisted, etc.; thus, extra care must be taken with its use.
+ *
+ * If min or max is wrapped in likely(), the value is expected to only rarely
+ * be clamped by that bound (e.g. only in the tail of a loop split that
+ * doesn't divide evenly), and bounds inference marks the unclamped bound as
+ * likely so that loop partitioning can exploit this.
  **/
 Expr promise_clamped(const Expr &value, const Expr &min, const Expr &max);
 }  // namespace Internal

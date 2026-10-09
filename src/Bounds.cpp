@@ -1386,10 +1386,41 @@ protected:
                 return;
             }
 
-            // Unlike an explicit clamp, we are also permitted to
-            // assume the upper bound is greater than the lower bound.
-            interval.min = Interval::make_max(i.min, lower.min);
-            interval.max = Interval::make_min(i.max, upper.max);
+            // A promised bound wrapped in likely() means the clamp is only
+            // expected to have an effect rarely (e.g. in the tail of a
+            // reduction domain that doesn't divide evenly). If the clamp
+            // isn't redundant, we mark the unclamped side as the likely one
+            // instead, so that loop partitioning can remove the clamp, and
+            // any loop trimming or guards it induces in producers, from the
+            // steady state. This mirrors what we do for likely conditions
+            // in if statements. We look for the tag on the bounds of the
+            // bound rather than on the bound itself, so that we can see
+            // through lets (e.g. introduced by CSE).
+            auto clamp = [&](const Expr &e, const Expr &limit, bool is_max) {
+                Expr l = limit;
+                bool rarely_clamped = false;
+                if (const Call *c = Call::as_intrinsic(limit, {Call::likely})) {
+                    l = c->args[0];
+                    rarely_clamped = op->is_intrinsic(Call::promise_clamped);
+                }
+                Expr unclamped = e;
+                if (rarely_clamped &&
+                    !is_const(e) &&
+                    // A bare symbol might be a bound defined elsewhere that
+                    // is already clamped. Tagging it would hide that clamp
+                    // from loop partitioning.
+                    !e.as<Variable>() &&
+                    !e.same_as(Interval::pos_inf()) &&
+                    !e.same_as(Interval::neg_inf()) &&
+                    !can_prove(is_max ? e >= l : e <= l)) {
+                    unclamped = likely(e);
+                }
+                // Unlike an explicit clamp, we are also permitted to
+                // assume the upper bound is greater than the lower bound.
+                return is_max ? Interval::make_max(unclamped, l) : Interval::make_min(unclamped, l);
+            };
+            interval.min = clamp(i.min, lower.min, true);
+            interval.max = clamp(i.max, upper.max, false);
         } else if (op->is_intrinsic(Call::shift_left) ||
                    op->is_intrinsic(Call::shift_right) ||
                    op->is_intrinsic(Call::bitwise_xor) ||
