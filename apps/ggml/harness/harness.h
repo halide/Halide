@@ -103,7 +103,8 @@ struct CodecRow {
     std::string type;
     int (*quantize[2])(halide_buffer_t *, halide_buffer_t *);  // [checked, bench]
     int (*dequantize[2])(halide_buffer_t *, halide_buffer_t *);
-    const halide_filter_metadata_t *(*metadata)();  // of quantize: argument 1 is the block type
+    const halide_filter_metadata_t *(*metadata)();           // of quantize: argument 1 is the block type
+    int (*scaled[2])(halide_buffer_t *, halide_buffer_t *);  // checked quantize, dequantize with scaled codes
 };
 std::vector<CodecRow> &codec_rows();
 struct CodecResult {

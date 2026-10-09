@@ -9,7 +9,8 @@
 # weights are checked against GGML's repack (harness/repack.cpp).
 #
 # `ops`: codec (quantize + dequantize of a row, checked bit-exact against
-# GGML), vec_dot and mul_mat (kernels/matmul.cpp with weight=type op=<op>, one
+# GGML, also with the scaled codes kernels may pick: checked variant only),
+# vec_dot and mul_mat (kernels/matmul.cpp with weight=type op=<op>, one
 # library per act in `acts`). An act is <storage>[:<compute>]: f32:q8_0 takes
 # f32 activations and quantizes them to q8_0 inside the kernel (as GGML's CPU
 # paths do); its library is <type>_f32_to_q8_0_<op>. Each generated library
@@ -29,13 +30,17 @@ set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
 set(GGML_HALIDE_LIBRARIES "")
 set(registry "")
 
+# Builds the checked and bench variants (`_ggml_variants`, if set: those).
 function(_ggml_library name gen features)
+    if (NOT _ggml_variants)
+        set(_ggml_variants checked bench)
+    endif ()
     set(features_checked "")
     if (NOT features STREQUAL "-")
         string(REPLACE "," ";" features_checked "${features}")
     endif ()
     set(features_bench ${features_checked} ${GGML_BENCH_FEATURES})
-    foreach (variant IN ITEMS checked bench)
+    foreach (variant IN LISTS _ggml_variants)
         add_halide_library(
             ${name}_${variant}
             FROM ggml.generators
@@ -62,6 +67,14 @@ foreach (row IN LISTS GGML_FORMATS)
     if ("codec" IN_LIST ops)
         _ggml_library(${id}_quantize codec ${features} type=${type} quantize=true)
         _ggml_library(${id}_dequantize codec ${features} type=${type} quantize=false)
+        set(_ggml_variants checked)
+        _ggml_library(
+            ${id}_quantize_scaled codec ${features} type=${type} quantize=true scaled=true
+        )
+        _ggml_library(
+            ${id}_dequantize_scaled codec ${features} type=${type} quantize=false scaled=true
+        )
+        unset(_ggml_variants)
         string(APPEND registry "GQ_CODEC(${id}, \"${type}\")\n")
     endif ()
     string(REPLACE "," ";" acts "${acts}")

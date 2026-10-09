@@ -44,22 +44,33 @@ inline ApproximationSignature codes_and_scale(int lo, int hi) {
 }
 
 // Signed codes in [-bias, bias - 1] <-> unsigned fields in [0, 2 * bias - 1].
-inline Approximation offset(int bias) {
-    return Pointwise{"offset", [=](const Expr &x) { return cast<uint8_t>(x + bias); },
-                     [=](const Expr &x) { return cast<int8_t>(cast<int>(x) - bias); }}
+// With `shift`, codes kept at 2^shift times their value (multiples of 2^shift).
+inline Approximation offset(int bias, int shift = 0) {
+    int k = 1 << shift;
+    return Pointwise{"offset", [=](const Expr &x) { return cast<uint8_t>((shift ? x >> shift : x) + bias); },
+                     [=](const Expr &x) { return shift ? cast<int8_t>((x << shift) - cast<uint8_t>(bias * k)) : cast<int8_t>(cast<int>(x) - bias); }}
         .with_types(Int(8), UInt(8))
-        .with_ranges(ApproximationRange(-bias, bias - 1), ApproximationRange(0, 2 * bias - 1))
+        .with_ranges(ApproximationRange(-bias * k, (bias - 1) * k), ApproximationRange(0, 2 * bias - 1))
         .with_lossless();
 }
 
 // Signed codes in [-2^(bits-1), 2^(bits-1) - 1] <-> their two's-complement
-// `bits`-bit fields (GGML's repacked q4_0 nibbles: offset(8) XOR 8).
-inline Approximation twos(int bits) {
-    int h = 1 << (bits - 1), s = 8 - bits;
-    return Pointwise{"twos", [=](const Expr &x) { return cast<uint8_t>(x) & cast<uint8_t>(2 * h - 1); },
-                     [=](const Expr &x) { return cast<int8_t>(x << s) >> s; }}
+// `bits`-bit fields (GGML's repacked q4_0 nibbles: offset(8) XOR 8). With
+// `shift`, codes kept at 2^shift times their value (multiples of 2^shift): at
+// shift 8 - bits, a field's decode is its shift to the top of an int8.
+inline Approximation twos(int bits, int shift = 0) {
+    int h = 1 << (bits - 1), s = 8 - bits, k = 1 << shift;
+    return Pointwise{"twos", [=](const Expr &x) { return cast<uint8_t>(shift ? x >> shift : x) & cast<uint8_t>(2 * h - 1); },
+                     [=](const Expr &x) { Expr t = cast<int8_t>(x << s); return s > shift ? t >> (s - shift) : t; }}
         .with_types(Int(8), UInt(8))
-        .with_ranges(ApproximationRange(-h, h - 1), ApproximationRange(0, 2 * h - 1))
+        .with_ranges(ApproximationRange(-h * k, (h - 1) * k), ApproximationRange(0, 2 * h - 1))
+        .with_lossless();
+}
+
+// x * k for a power of two k: exact for normal floats (and fp16's are).
+inline Approximation scale_by(float k) {
+    return Pointwise{"scale_by", [=](const Expr &x) { return x * k; }, [=](const Expr &x) { return x * (1.0f / k); }}
+        .with_types(Float(32), Float(32))
         .with_lossless();
 }
 
