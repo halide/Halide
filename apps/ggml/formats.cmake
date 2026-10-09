@@ -6,7 +6,9 @@
 # integer encoding (i4: two's-complement nibbles; default: GGML's offset
 # binary), the layout interleaves `rows` rows' records in `chunk`-byte pieces
 # (as GGML's repack q4_0_4x8 etc.; default: one row per record, AoS); its
-# weights are checked against GGML's repack (harness/repack.cpp).
+# weights are checked against GGML's repack (harness/repack.cpp). `soa`: one
+# planar array per field (a kernel input each), checked against GGML's bytes
+# laid out alike.
 #
 # `ops`: codec (quantize + dequantize of a row, checked bit-exact against
 # GGML, also with the scaled codes kernels may pick: checked variant only),
@@ -24,6 +26,7 @@ set(GGML_FORMATS
     "q4_0.i4.4x4 codec"
     "q4_0.i4.4x8 codec,mul_mat q8_0,f32:q8_0,f32:q8_0.4x8"
     "q4_0.i4.8x8 codec"
+    "q4_0.soa codec,mul_mat q8_0,f32:q8_0"
 )
 set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
 
@@ -90,7 +93,7 @@ foreach (row IN LISTS GGML_FORMATS)
             string(MAKE_C_IDENTIFIER "${name}" name)
             _ggml_library(${name} matmul ${features} weight=${type} act=${act} op=${op})
             string(APPEND registry
-                "GQ_HALIDE(${name}, \"${type}\", ${storage}, ${compute}, GQ_${op}, \"${features}\")\n"
+                "GQ_HALIDE_${op}(${name}, \"${type}\", ${storage}, ${compute}, \"${features}\")\n"
             )
         endforeach ()
     endforeach ()

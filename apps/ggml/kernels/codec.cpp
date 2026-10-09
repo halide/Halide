@@ -18,7 +18,8 @@ public:
 
     void configure() {
         ggml::Format f = ggml::format(type, false, scaled);
-        codec = ApproximationCodec::make_codec(f.scheme, Float(32), f.rows > 1 ? 2 : 1, {"x", "y", {"blocks"}});
+        int ports = f.scheme.signature({{"values", Float(32), 2}}).outputs.size();  // e.g. planar: codes, scale
+        codec = ApproximationCodec::make_codec(f.scheme, Float(32), f.rows > 1 ? 2 : 1, {"x", "y", ports > 1 ? std::vector<std::string>{} : std::vector<std::string>{"blocks"}});
         if (quantize) {
             codec.adopt_encoder(*this);
         } else {
@@ -27,7 +28,9 @@ public:
     }
 
     void generate() {
-        if (quantize) {  // per block, vectorized as mul_mat's activation encoder
+        if (quantize && codec.encoded.size() > 1) {
+            return;             // several outputs share the quantizer: make_codec's default schedule
+        } else if (quantize) {  // per block, vectorized as mul_mat's activation encoder
             Func e = codec.result.encoded[0];
             e.compute_at(codec.encoded[0], codec.encoded[0].args()[0]);
             ggml::encoder(e, {codec.result});

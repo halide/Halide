@@ -4,8 +4,10 @@
 // values). inf/NaN inputs are undefined behavior in GGML's reference and are
 // not tested. Also checked: the same with the scaled codes kernels may pick
 // (same bytes, same values), and dequantize on crafted blocks spanning every
-// code byte and finite fp16 scale. Timed against the same GGML functions (and from_float, GGML's
-// fast path for activations, where it differs from the reference).
+// code byte and finite fp16 scale. Layouts GGML lacks (SoA) are checked
+// against GGML's bytes laid out by the harness (relayout). Timed against the
+// same GGML functions (and from_float, GGML's fast path for activations,
+// where it differs from the reference).
 #include "harness.h"
 
 #include "HalideRuntime.h"
@@ -18,20 +20,16 @@
 namespace gq {
 namespace {
 
-using Fn = int (*)(halide_buffer_t *, halide_buffer_t *);
+using Ports = std::vector<std::unique_ptr<HBuf>>;
 
-struct BufN {
-    halide_buffer_t b{};
-    halide_dimension_t d[2]{};
-    BufN(void *host, halide_type_t t, std::vector<int64_t> extents) {
-        b.host = (uint8_t *)host;
-        b.type = t;
-        b.dimensions = (int)extents.size();
-        b.dim = d;
-        for (int i = 0, stride = 1; i < b.dimensions; stride *= (int)extents[i++])
-            d[i] = {0, (int32_t)extents[i], stride, 0};
-    }
-};
+// quantize(x, ports...) or dequantize(ports..., y).
+int call(Argv f, bool quant, const HBuf &values, const Ports &ports) {
+    std::vector<void *> args;
+    for (const auto &p : ports)
+        args.push_back(&p->b);
+    args.insert(quant ? args.begin() : args.end(), (void *)&values.b);
+    return f(args.data());
+}
 
 struct Lambda : Kernel {
     std::function<void()> f;
@@ -91,8 +89,9 @@ std::vector<CodecResult> run_codecs(const std::vector<int64_t> &Ks, const std::v
             const char *n = ggml_get_type_traits((ggml_type)i)->type_name;
             if (n && fs.type == n) t = (ggml_type)i;
         }
-        halide_type_t block = row.metadata()->arguments[1].type;
-        int64_t R = fs.rows > 1 ? 2 * fs.rows : 1;
+        const halide_filter_metadata_t *md = row.metadata();
+        int np = md->num_arguments - 1;
+        int64_t R = fs.rows > 1 ? 2 * fs.rows : 1, record_bytes = ggml_type_size(t) * fs.rows;
         for (int64_t K : Ks) {
             if (K % ggml_blck_size(t)) continue;
             int64_t nb = K / ggml_blck_size(t), records = nb * R / fs.rows;
@@ -104,13 +103,13 @@ std::vector<CodecResult> run_codecs(const std::vector<int64_t> &Ks, const std::v
             std::vector<uint8_t> q(bytes), ref(bytes);
             ggml_quantize_chunk(t, x.data(), ref.data(), 0, R, K, nullptr);
             ggml_get_type_traits(t)->to_float(ref.data(), ref_y.data(), K * R);
-            if (R > 1) {
+            if (fs.rows > 1 || fs.soa) {
                 std::vector<uint8_t> aos = ref, live;
-                if (!ggml_repack(fs, t, aos.data(), ref.data(), R, K)) {
+                if (!relayout(fs, t, aos.data(), ref.data(), R, K)) {
                     results.push_back({row.type, "repack", "ggml", "transcription", K, "no GGML repack to this layout", false, {}, R});
                     continue;
                 }
-                std::string name = ggml_repack_live(t, aos.data(), live, R, K);
+                std::string name = fs.rows > 1 ? ggml_repack_live(t, aos.data(), live, R, K) : "";
                 if (check && name == fs.type + "_" + std::to_string(fs.rows) + "x" + std::to_string(fs.chunk)) {
                     // The transcription against GGML itself, where it picks this layout.
                     results.push_back({row.type, "repack", "ggml-repack", name, K, first_diff(ref.data(), live.data(), bytes, bytes / records), false, {}, R});
@@ -118,8 +117,8 @@ std::vector<CodecResult> run_codecs(const std::vector<int64_t> &Ks, const std::v
             }
             std::vector<int64_t> xe{K}, qe{records};
             if (R > 1) xe.push_back(R), qe = {nb, R / fs.rows};
-            BufN bx(x.data(), halide_type_t(halide_type_float, 32), xe), by(y.data(), halide_type_t(halide_type_float, 32), xe);
-            BufN bq(q.data(), block, qe), bref(ref.data(), block, qe);
+            HBuf bx(x.data(), halide_type_t(halide_type_float, 32), xe), by(y.data(), halide_type_t(halide_type_float, 32), xe);
+            Ports bq = port_buffers(md, 1, np, q.data(), qe, record_bytes), bref = port_buffers(md, 1, np, ref.data(), qe, record_bytes);
             for (const char *dir : {"quantize", "dequantize"}) {
                 bool quant = dir[0] == 'q';
                 struct Entry {
@@ -130,17 +129,17 @@ std::vector<CodecResult> run_codecs(const std::vector<int64_t> &Ks, const std::v
                 std::vector<Entry> es;
                 for (int bench : {0, 1, 2}) {  // checked, bench, scaled (checked)
                     if (!check && bench != 1) continue;
-                    Fn f = bench == 2 ? row.scaled[!quant] : quant ? row.quantize[bench] :
-                                                                     row.dequantize[bench];
+                    Argv f = bench == 2 ? row.scaled[!quant] : quant ? row.quantize[bench] :
+                                                                       row.dequantize[bench];
                     std::string name = "halide-" + row.type + (bench == 1 ? "" : bench ? ":scaled" :
                                                                                          ":checked");
                     memset(q.data(), 0, bytes);
                     std::fill(y.begin(), y.end(), NAN);
-                    int err = quant ? f(&bx.b, &bq.b) : f(&bref.b, &by.b);
+                    int err = quant ? call(f, true, bx, bq) : call(f, false, by, bref);
                     std::string detail = err   ? "halide error " + std::to_string(err) :
                                          quant ? first_diff(q.data(), ref.data(), bytes, bytes / records) :
                                                  first_diff(y.data(), ref_y.data(), K * R * sizeof(float), ggml_blck_size(t) * sizeof(float));
-                    es.push_back({name, lambda("halide", quant ? std::function<void()>([=, &bx, &bq] { f(&bx.b, &bq.b); }) : [=, &bref, &by] { f(&bref.b, &by.b); }), detail});
+                    es.push_back({name, lambda("halide", quant ? std::function<void()>([=, &bx, &bq] { call(f, true, bx, bq); }) : [=, &bref, &by] { call(f, false, by, bref); }), detail});
                 }
                 if (!check) {
                     if (quant) {
@@ -179,15 +178,14 @@ std::vector<CodecResult> run_codecs(const std::vector<int64_t> &Ks, const std::v
             }
             std::vector<float> y(K * R), ref_y(K * R);
             ggml_get_type_traits(t)->to_float(aos.data(), ref_y.data(), K * R);
-            if (R == 1) q = aos;
-            else if (!ggml_repack(fs, t, aos.data(), q.data(), R, K))
-                continue;
+            if (!relayout(fs, t, aos.data(), q.data(), R, K)) continue;
             std::vector<int64_t> ye{K}, qe{nb};
             if (R > 1) ye.push_back(R), qe = {nb, R / fs.rows};
-            BufN bq(q.data(), block, qe), by(y.data(), halide_type_t(halide_type_float, 32), ye);
+            Ports bq = port_buffers(md, 1, np, q.data(), qe, record_bytes);
+            HBuf by(y.data(), halide_type_t(halide_type_float, 32), ye);
             for (auto [f, name] : {std::pair{row.dequantize[0], ":checked"}, {row.scaled[1], ":scaled"}}) {
                 std::fill(y.begin(), y.end(), NAN);
-                int err = f(&bq.b, &by.b);
+                int err = call(f, false, by, bq);
                 std::string detail = err ? "halide error " + std::to_string(err) : first_diff(y.data(), ref_y.data(), K * R * sizeof(float), ggml_blck_size(t) * sizeof(float));
                 results.push_back({row.type, "dequantize", "halide-" + row.type + name, "crafted", K, detail, false, {}, R});
             }
