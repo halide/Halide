@@ -449,6 +449,7 @@ tests(
     reused_args.cpp
     rfactor_after_var_and_rvar_fusion.cpp
     rfactor_fused_var_and_rvar.cpp
+    rfactor_guarded_merge.cpp
     rfactor_inner_dim_non_commutative.cpp
     round.cpp
     round_up_and_blend_race.cpp
