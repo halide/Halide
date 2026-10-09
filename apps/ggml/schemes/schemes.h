@@ -15,7 +15,8 @@ struct Format {
     int block = 1, rows = 1;
 };
 
-inline Format format(const std::string &spec) {
+// `aos`: the same format with one row per record.
+inline Format format(const std::string &spec, bool aos = false) {
     std::vector<std::string> t;
     for (size_t i = 0, j; i <= spec.size(); i = j + 1) {
         j = std::min(spec.find('.', i), spec.size());
@@ -25,6 +26,7 @@ inline Format format(const std::string &spec) {
     for (size_t i = 1; i < t.size(); i++) {
         (isdigit(t[i][0]) || t[i] == "aos" ? lay : codes) = t[i];
     }
+    if (aos) lay = "aos";
     int rows = lay == "aos" ? 1 : atoi(lay.c_str());
     if (type == "q4_0" && (codes.empty() || codes == "u4" || codes == "i4")) return {q4_0(codes == "i4" ? twos(4) : offset(8), lay), QK, rows};
     if (type == "q8_0" && codes.empty()) return {q8_0(lay), QK, rows};

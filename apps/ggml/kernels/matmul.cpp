@@ -22,25 +22,41 @@ public:
         ggml::Format fw = ggml::format(weight), fa = ggml::format(an), fc = ggml::format(cn);
         ImageParam w = input(fw, "w"), a = input(fa, "a");
         Var k("k"), n("n"), m("m");
-        Func W("W"), X("X"), out("out");
+        Func W("W"), X("X"), Xr("Xr"), out("out");
         W(k, n) = operand(fw, w, k, n);
         X(k, m) = operand(fa, a, k, m);
         r = RDom(0, w.dim(0).extent() * fw.block, "r");
-        dot(n, m) += W(r, n) * X(r, m);  // from 0; out writes each output once
-        out(n, m) = dot(n, m);
+        dots[0](n, m) += W(r, n) * X(r, m);  // from 0; out writes each output once
+        if (fc.rows > 1) {
+            // Act records of several rows (as GGML's x4 activations): the
+            // rows in whole records from them (dots[1]; rows past M repeat the
+            // last one), the others one row per record.
+            Expr M = a.dim(1).extent(), Mr = M / fc.rows * fc.rows;
+            Xr(k, m) = operand(fa, a, k, clamp(m, 0, M - 1));
+            dots.push_back(Func("dotr"));
+            dots[1](n, m) += W(r, n) * Xr(r, m);
+            RDom whole(0, Mr, "whole"), rest(Mr, M - Mr, "rest");
+            out(n, m) = undef<float>();
+            out(n, whole) = dots[1](n, whole);
+            out(n, rest) = dots[0](n, rest);
+        } else {
+            out(n, m) = dots[0](n, m);
+        }
         std::vector<Func> cut;
         std::vector<ImageParam> bound;
         for (auto [F, f, p] : {std::tuple{W, fw, w}, std::tuple{X, fa, a}}) {
             if (f.scheme.defined()) {
-                approx.push_back(F.approximate_by(f.scheme, {dot}));
+                approx.push_back(F.approximate_by(f.scheme, dots));
                 cut.push_back(approx.back().encoded[0]);
                 bound.push_back(p);
             }
         }
         if (cn != an) {
             if (fa.scheme.defined()) throw std::invalid_argument("act: only plain storage can be re-approximated");
-            approx.push_back(X.approximate_by(fc.scheme, {dot}));
-            staged.push_back(approx.back().encoded[0]);
+            for (size_t i = 0; i < dots.size(); i++) {
+                approx.push_back((i ? Xr : X).approximate_by(ggml::format(cn, !i).scheme, {dots[i]}));
+                staged.push_back(approx.back().encoded[0]);
+            }
         }
         Pipeline(out).sever(cut, bound);
         // The ABI: w [K / w block, N / w rows], a [K / a block, M], out [N, M],
@@ -55,16 +71,16 @@ public:
         add_input(w);
         add_input(a);
         result = add_output(out);
-        blocks = {fw.block, fc.block};
+        blocks = {fw.block, fc.block, fc.rows};
     }
 
     void generate() {
-        (op == "vec_dot" ? ggml::vec_dot : ggml::mul_mat)(*result, dot, r, blocks, approx, staged, get_target());
+        (op == "vec_dot" ? ggml::vec_dot : ggml::mul_mat)(*result, dots, r, blocks, approx, staged, get_target());
     }
 
 private:
     RDom r;
-    Func dot{"dot"};
+    std::vector<Func> dots{Func("dot")};  // one per act encoding
     std::vector<ApproximationResult> approx;
     std::vector<Func> staged;  // encoded inside the pipeline
     std::vector<int> blocks;
@@ -76,7 +92,7 @@ private:
         return ImageParam(t, 2, name);
     }
 
-    static Expr operand(const ggml::Format &f, const ImageParam &p, const Var &k, const Var &i) {
+    static Expr operand(const ggml::Format &f, const ImageParam &p, const Expr &k, const Expr &i) {
         return f.scheme.defined() ? ImageParam(Float(32), 2, p.name() + "_values")(k, i) : p(k, i);
     }
 };
