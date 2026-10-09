@@ -767,6 +767,36 @@ if (NOT _USING_WASM AND NOT Halide_CMAKE_TARGET MATCHES ";")
     )
 endif ()
 
+# arm_i8mm_multitarget_aottest.cpp
+# arm_i8mm_multitarget_generator.cpp
+# This replaces the runtime's CPU feature detection to simulate CPUs with and
+# without arm_i8mm, so it only makes sense on 64-bit ARM hosts.
+if (NOT _USING_WASM AND Halide_CMAKE_TARGET MATCHES "^arm-64-(linux|macos|osx)$")
+    _add_halide_libraries(arm_i8mm_multitarget OMIT_C_BACKEND TARGETS cmake-arm_i8mm cmake)
+    _add_halide_libraries(
+        armv86a_multitarget
+        FROM arm_i8mm_multitarget.generator
+        GENERATOR_NAME arm_i8mm_multitarget
+        USE_RUNTIME arm_i8mm_multitarget.runtime
+        OMIT_C_BACKEND
+        TARGETS cmake-armv86a cmake
+    )
+    foreach (have_i8mm IN ITEMS 0 1)
+        _add_halide_aot_tests(
+            arm_i8mm_multitarget_${have_i8mm}
+            SRCS arm_i8mm_multitarget_aottest.cpp
+            HALIDE_LIBRARIES arm_i8mm_multitarget armv86a_multitarget
+            INCLUDES "${Halide_SOURCE_DIR}/src/runtime"
+            OMIT_C_BACKEND
+        )
+        set_tests_properties(
+            generator_aot_arm_i8mm_multitarget_${have_i8mm}
+            PROPERTIES
+            ENVIRONMENT "HL_TEST_HAVE_ARM_I8MM=${have_i8mm}"
+        )
+    endforeach ()
+endif ()
+
 # nested_externs_aottest.cpp
 # nested_externs_generator.cpp
 add_halide_generator(nested_externs.generator SOURCES nested_externs_generator.cpp)

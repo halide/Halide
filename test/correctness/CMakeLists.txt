@@ -319,6 +319,7 @@ tests(
     input_larger_than_two_gigs.cpp
     input_param_func_name_collision.cpp
     inspect_loop_level.cpp
+    int8_tile_matmul.cpp
     integer_powers.cpp
     interleave.cpp
     interleave_rgb.cpp
@@ -373,6 +374,7 @@ tests(
     mismatch_runtime_streaming_vscale.cpp
     mismatch_runtime_vscale.cpp
     missing_args.cpp
+    mixed_sign_dot_product.cpp
     mod.cpp
     modulus_remainder.cpp
     multi_output_pipeline_with_bad_sizes.cpp

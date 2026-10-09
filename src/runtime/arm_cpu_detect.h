@@ -127,6 +127,7 @@ template<typename Fn>
 void for_each_detectable_arm_feature(Fn fn) {
     fn(halide_target_feature_arm_dot_prod);
     fn(halide_target_feature_arm_fp16);
+    fn(halide_target_feature_arm_i8mm);
     fn(halide_target_feature_armv7s);
     fn(halide_target_feature_sve);
     fn(halide_target_feature_sve2);
@@ -155,6 +156,14 @@ constexpr uint64_t hwcap_asimddp(ArmArch arch) {
     return arch == ArmArch::Arm64 ? (1ull << 20) : (1ull << 24);
 }
 
+// FEAT_I8MM is reported in AT_HWCAP2 on AArch64, but in AT_HWCAP on AArch32.
+constexpr uint64_t hwcap2_i8mm = 1ull << 13;       // AArch64 HWCAP2_I8MM
+constexpr uint64_t arm32_hwcap_i8mm = 1ull << 27;  // AArch32 HWCAP_I8MM
+
+constexpr bool has_i8mm(ArmArch arch, uint64_t hwcap, uint64_t hwcap2) {
+    return arch == ArmArch::Arm64 ? (hwcap2 & hwcap2_i8mm) != 0 : (hwcap & arm32_hwcap_i8mm) != 0;
+}
+
 // AArch64 only.
 constexpr uint64_t hwcap_sve = 1ull << 22;
 constexpr uint64_t hwcap2_sve2 = 1ull << 1;
@@ -168,6 +177,7 @@ constexpr int pf_arm_fmac_instructions_available = 27;
 constexpr int pf_arm_v82_dp_instructions_available = 43;
 constexpr int pf_arm_sve_instructions_available = 46;
 constexpr int pf_arm_sve2_instructions_available = 47;
+constexpr int pf_arm_v82_i8mm_instructions_available = 66;
 constexpr int pf_arm_sme2_instructions_available = 71;
 
 // sysctl names and values used on Apple platforms.
@@ -235,6 +245,10 @@ ArmDetection detect_arm_features(Ops &ops, ArmArch arch, AuxvSource) {
         ops.set_feature(halide_target_feature_arm_fp16);
     }
 
+    if (detail::has_i8mm(arch, hwcap, hwcap2)) {
+        ops.set_feature(halide_target_feature_arm_i8mm);
+    }
+
     ArmDetection detection{false, false};
     if (arch == ArmArch::Arm64) {
         const bool have_sve =
@@ -266,6 +280,10 @@ ArmDetection detect_arm_features(Ops &ops, ArmArch arch, SysctlSource) {
         ops.set_feature(halide_target_feature_arm_fp16);
     }
 
+    if (detail::sysctl_is_set(ops, "hw.optional.arm.FEAT_I8MM")) {
+        ops.set_feature(halide_target_feature_arm_i8mm);
+    }
+
     const bool have_sme2 = detail::set_sme2_if_present(
         ops, detail::sysctl_is_set(ops, "hw.optional.arm.FEAT_SME2"));
 
@@ -284,6 +302,10 @@ ArmDetection detect_arm_features(Ops &ops, ArmArch arch, WindowsSource) {
 
     if (ops.processor_feature_present(detail::pf_arm_v82_dp_instructions_available)) {
         ops.set_feature(halide_target_feature_arm_dot_prod);
+    }
+
+    if (ops.processor_feature_present(detail::pf_arm_v82_i8mm_instructions_available)) {
+        ops.set_feature(halide_target_feature_arm_i8mm);
     }
 
     ArmDetection detection{false, false};
@@ -309,6 +331,39 @@ ArmDetection detect_arm_features(Ops &, ArmArch, NullSource) {
 template<typename Ops>
 ArmDetection detect_arm_features(Ops &ops, ArmArch arch) {
     return detect_arm_features(ops, arch, typename Ops::ArmDetectionSource{});
+}
+
+/** Detect the Armv8.x architecture version features (armv81a, etc).
+ *
+ * These are deliberately not part of for_each_detectable_arm_feature: the
+ * runtime doesn't check them, because most platforms have no way to report
+ * the architecture version. So only libHalide calls this, to make the host
+ * target as capable as we can tell it is. Code generation should therefore
+ * gate instructions on the individual features above (which the runtime does
+ * check, so multi-target dispatch can fall back) rather than on a version. */
+template<typename Ops, typename Source>
+void detect_arm_architecture_version(Ops &, ArmArch, Source) {
+}
+
+/** Apple doesn't report the architecture version either, but its cores step
+ * up a version at a time, and each step can be told apart by the optional
+ * features reported. Target::set_implied_features already assumes Armv8.4-A
+ * of all Apple silicon, so the step to detect is Armv8.6-A (A15 and M2 and
+ * later), which is the first to have FEAT_I8MM and FEAT_BF16. Both are
+ * mandatory from Armv8.6-A. FEAT_I8MM itself is detected (as arm_i8mm) by
+ * detect_arm_features, independently of this. */
+template<typename Ops>
+void detect_arm_architecture_version(Ops &ops, ArmArch arch, SysctlSource) {
+    if (arch == ArmArch::Arm64 &&
+        detail::sysctl_is_set(ops, "hw.optional.arm.FEAT_I8MM") &&
+        detail::sysctl_is_set(ops, "hw.optional.arm.FEAT_BF16")) {
+        ops.set_feature(halide_target_feature_armv86a);
+    }
+}
+
+template<typename Ops>
+void detect_arm_architecture_version(Ops &ops, ArmArch arch) {
+    detect_arm_architecture_version(ops, arch, typename Ops::ArmDetectionSource{});
 }
 
 }  // namespace CpuDetect

@@ -1589,6 +1589,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_hlsl_sm67,              ///< Enable D3D12 Shader Model 6.7
     halide_target_feature_hlsl_sm68,              ///< Enable D3D12 Shader Model 6.8
     halide_target_feature_hlsl_sm69,              ///< Enable D3D12 Shader Model 6.9 (long vectors 5-1024 lanes, native 16-bit/wave/int64 required)
+    halide_target_feature_arm_i8mm,               ///< Enable the ARM int8 matrix multiply extension (FEAT_I8MM; i.e. usdot, sudot, smmla, ummla, and usmmla instructions). Mandatory from ARMv8.6-a.
     halide_target_feature_end                     ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
