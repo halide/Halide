@@ -78,9 +78,11 @@ struct Interleave {
 };
 
 // `fields` (memory order) packed as GGML's structs, fed by ports in the
-// `logical` order; "aos": one record per row, "<rows>x<chunk>": Interleave.
+// `logical` order; "aos": one record per row, "<rows>x<chunk>": Interleave;
+// "soa": not packed, each field its own planar array (port).
 inline Approximation layout(const std::string &spec, std::vector<StructField> fields, std::vector<std::string> logical) {
     if (spec == "aos") return StructLayout{Type::Struct(fields), logical};
+    if (spec == "soa") return Identity{};
     int rows = 0, chunk = 0;
     if (sscanf(spec.c_str(), "%dx%d", &rows, &chunk) != 2) throw std::invalid_argument("unknown layout " + spec);
     Interleave il{rows, chunk, std::move(fields), logical};

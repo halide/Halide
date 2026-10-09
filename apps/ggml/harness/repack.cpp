@@ -7,7 +7,8 @@
 //   CPU;
 // - ggml_repack_live: the bytes GGML itself repacks to, read back from its
 //   CPU_REPACK buffer (host memory; the buffer has no get_tensor), which
-//   cross-checks the transcription on the layout GGML picks here.
+//   cross-checks the transcription on the layout GGML picks here;
+// - relayout: those, AoS as is, or the planar (SoA) layout, which GGML lacks.
 #include "harness.h"
 
 #include "ggml-backend.h"
@@ -25,7 +26,9 @@ FormatSpec parse_format(const std::string &spec) {
     }
     f.type = t[0];
     for (size_t i = 1; i < t.size(); i++) {
-        if (sscanf(t[i].c_str(), "%dx%d", &f.rows, &f.chunk) != 2 && t[i] != "aos") f.codes = t[i];
+        if (t[i] == "soa") f.soa = true;
+        else if (sscanf(t[i].c_str(), "%dx%d", &f.rows, &f.chunk) != 2 && t[i] != "aos")
+            f.codes = t[i];
     }
     return f;
 }
@@ -124,6 +127,51 @@ bool ggml_repack(const FormatSpec &f, ggml_type t, const uint8_t *src, uint8_t *
         return false;
     }
     return true;
+}
+
+bool relayout(const FormatSpec &f, ggml_type t, const uint8_t *src, uint8_t *dst, int64_t N, int64_t K) {
+    if (f.rows > 1) return ggml_repack(f, t, src, dst, N, K);
+    size_t bs = ggml_type_size(t), n = N * (K / ggml_blck_size(t));
+    if (!f.soa) {
+        memcpy(dst, src, bs * n);
+    } else if (t == GGML_TYPE_Q4_0 || t == GGML_TYPE_Q8_0) {  // {fp16 d; codes}
+        for (size_t i = 0; i < n; i++) {
+            memcpy(dst + i * (bs - 2), src + i * bs + 2, bs - 2);
+            memcpy(dst + n * (bs - 2) + i * 2, src + i * bs, 2);
+        }
+    } else {
+        return false;
+    }
+    return true;
+}
+
+HBuf::HBuf(const void *host, halide_type_t t, const std::vector<int64_t> &extents) {
+    b.host = (uint8_t *)host;
+    b.type = t;
+    b.dimensions = (int)extents.size();
+    b.dim = d;
+    for (int i = 0, stride = 1; i < b.dimensions; stride *= (int)extents[i++])
+        d[i] = {0, (int32_t)extents[i], stride, 0};
+}
+
+std::vector<std::unique_ptr<HBuf>> port_buffers(const halide_filter_metadata_t *md, int first, int n, const uint8_t *bytes,
+                                                const std::vector<int64_t> &records, int64_t record_bytes) {
+    auto size = [](halide_type_t t) { return (int64_t)t.bytes(); };
+    int64_t rest = record_bytes, count = 1;
+    for (int64_t r : records)
+        count *= r;
+    for (int i = first; i < first + n; i++) {
+        if (md->arguments[i].dimensions == (int)records.size()) rest -= size(md->arguments[i].type);
+    }
+    std::vector<std::unique_ptr<HBuf>> bs;
+    for (int i = first; i < first + n; i++) {
+        halide_type_t t = md->arguments[i].type;
+        std::vector<int64_t> e = records;
+        if (md->arguments[i].dimensions > (int)records.size()) e.insert(e.begin(), rest / size(t));
+        bs.push_back(std::make_unique<HBuf>(bytes, t, e));
+        bytes += count * size(t) * (e.size() > records.size() ? e[0] : 1);
+    }
+    return bs;
 }
 
 std::string ggml_repack_live(ggml_type t, const uint8_t *src, std::vector<uint8_t> &dst, int64_t N, int64_t K) {
