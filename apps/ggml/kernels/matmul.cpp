@@ -49,6 +49,8 @@ public:
         }
         std::vector<Func> cut;
         std::vector<ImageParam> bound;
+        // approx[0] is the weight's (the schedules rely on it)
+        if (!fw.scheme.defined()) throw std::invalid_argument("weight: a quantized format");
         for (auto [F, f, p] : {std::tuple{W, fw, w}, std::tuple{X, fa, a}}) {
             if (f.scheme.defined()) {
                 approx.push_back(F.approximate_by(f.scheme, dots));
@@ -99,7 +101,7 @@ public:
 private:
     RDom r;
     std::vector<Func> dots{Func("dot")};      // one per act encoding
-    std::vector<ApproximationResult> approx;  // the weight's first
+    std::vector<ApproximationResult> approx;  // the weight's first (asserted)
     std::vector<Func> staged;                 // encoded inside the pipeline
     std::vector<int> blocks;
     GeneratorOutput<Buffer<>> *result = nullptr;
