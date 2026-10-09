@@ -96,17 +96,21 @@ its GGML type name in `schemes/schemes.h`; f16 is the `fp16` scheme, f32 has
 none) and one row of `GGML_FORMATS` in `formats.cmake`
 (`type ops [acts [target-features]]`). A type may name two lossless stages
 composed after the quantizer, which knows neither:
-`<ggml type>[.<codes>][.<rows>x<chunk>]`. The codes pick the integer encoding
-(`i4`: two's-complement nibbles, `twos` in `schemes/common.h`; default: GGML's
-offset binary). The layout (`schemes/layouts.h`; default: one row per record,
-AoS) is `Interleave{rows, chunk}`: one record per `rows` rows at the same block,
-each field's elements interleaved across the rows in `chunk`-byte pieces, as
-GGML's repack (`q4_0.i4.4x8` is `q4_0_4x8`, whose XOR 0x88 is the
+`<ggml type>[.<codes>][.<rows>x<chunk>|.soa]`. The codes pick the integer
+encoding (`i4`: two's-complement nibbles, `twos` in `schemes/common.h`; default:
+GGML's offset binary). The layout (`schemes/layouts.h`; default: one row per
+record, AoS) is `Interleave{rows, chunk}`: one record per `rows` rows at the
+same block, each field's elements interleaved across the rows in `chunk`-byte
+pieces, as GGML's repack (`q4_0.i4.4x8` is `q4_0_4x8`, whose XOR 0x88 is the
 two's-complement encoding). Its libraries are named by the type with `.` as `_`;
 its weights (`[K / block, N / rows]` records) are checked against GGML's repack:
 the harness's transcription of it (`harness/repack.cpp`, every layout), itself
 checked against the bytes of GGML's `CPU_REPACK` buffer for the layout GGML
-picks here.
+picks here. `soa` (`Identity`: the planar packer's ports kept apart) stores each
+field in its own array, e.g. `q4_0.soa`'s codes `[16, K / block, N]` and fp16
+scales `[K / block, N]`; each array is its own kernel argument (the libraries
+are called through their `_argv` entry points), checked against GGML's blocks
+split alike.
 
 `codec` builds the one codec generator (`kernels/codec.cpp`, via `make_codec`
 from `tools/halide_approximation_codec.h`) for the type: the scheme's round trip
