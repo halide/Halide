@@ -41,13 +41,13 @@ inline LoopLevel tile_at(Func out, int st) {
 
 // out's stage st under `cond` (all of it if undefined) on ts tiles, each
 // computing its region of dot; parallel tasks of ts.rows x ts.cols outputs.
-// Returns dot's update under `cond`.
-inline Stage tile_out(Func out, int st, Func dot, Expr cond, Tiles ts) {
+// `whole_n`: N is a multiple of ts.nt. Returns dot's update under `cond`.
+inline Stage tile_out(Func out, int st, Func dot, Expr cond, Tiles ts, bool whole_n = false) {
     VarOrRVar n = out.args()[0], m = row_var(out, st), mo = row_var(out, st, "mo"), mi = row_var(out, st, "mi"), mc = row_var(out, st, "mc"), t = row_var(out, st, "nc");
     Var no("no"), ni("ni"), nc("nc");
     Stage o = st ? out.update(st - 1) : Stage(out), s = cond.defined() ? o.specialize(cond) : o;
     // Updates: whole tiles in n (cond knows N % nt == 0); m an RVar.
-    s.split(n, no, ni, ts.nt, st ? TailStrategy::RoundUp : TailStrategy::ShiftInwards);
+    s.split(n, no, ni, ts.nt, st || whole_n ? TailStrategy::RoundUp : TailStrategy::ShiftInwards);
     s.split(m, mo, mi, ts.mt, st ? TailStrategy::GuardWithIf : TailStrategy::ShiftInwards);
     s.reorder(ni, mi, mo, no).unroll(mi);
     ts.nt > 1 ? s.vectorize(ni) : s.unroll(ni);
@@ -96,6 +96,39 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     blk.update().vectorize(lane).unroll(u).unroll(n).unroll(m);
     codes.compute_at(acc, ryo).vectorize(lane).unroll(u).unroll(n).unroll(m);
     codes.update().atomic().vectorize(rxi).vectorize(lane).unroll(rxc).unroll(u).unroll(n).unroll(m);
+}
+
+// The integer path for weight records of ts.nt rows interleaved in pieces of
+// `chunk` codes (as GGML's repacked gemv): per block, int32 sums vectorized
+// across the record's rows and each piece's 4-code quads (sdot), so a piece
+// of the record is one dense load and the act's piece is broadcast to its
+// rows; the quads are then merged, and the scales and accumulators are
+// vectorized across the rows.
+inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, int block, int chunk,
+                         const std::vector<ApproximationResult> &rs) {
+    Stage s = tile_out(out, st, dot, cond, ts, true);
+    Var n = dot.args()[0], m = dot.args()[1], q("q"), u("u"), bacc("bacc");
+    // ryi_rows: not ryi, as dot's specializations share bounds by RVar name (gap M)
+    RVar ry("ry"), rx("rx"), rp("rp"), rq("rq"), ri("ri"), ryo("ryo"), ryi("ryi_rows");
+    s.split(r, ry, rx, block);
+    Func blk = s.rfactor(ry, u);
+    blk.update().eager_inline(decoders(rs));
+    Func codes = blk.update().hoist_invariants()[0].change_type(Int(32));
+    s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
+    Func acc = s.rfactor(ryi, bacc);
+    s.reorder(n, ryi).vectorize(n).unroll(ryi).unroll(m);
+    Stage cu = codes.update();
+    cu.split(rx, rp, rx, chunk).split(rx, rq, ri, 4);
+    Func quads = cu.rfactor(rq, q);
+    cu.reorder(rq, n).atomic().vectorize(rq).vectorize(n).unroll(m).unroll(u);
+    quads.reorder_storage(q, n, m).compute_at(acc, ryo).vectorize(q).vectorize(n).unroll(m).unroll(u).bound_storage(u, ts.interleave);
+    quads.update().reorder(ri, q, n, rp, u, m).atomic().vectorize(ri).vectorize(q).vectorize(n).unroll(rp).unroll(u).unroll(m);
+    for (Func f : {blk, codes}) {
+        f.compute_at(acc, ryo).bound_storage(u, ts.interleave).vectorize(n).unroll(m).unroll(u);
+    }
+    blk.update().vectorize(n).unroll(m).unroll(u);
+    acc.compute_at(tile_at(out, st)).vectorize(n).unroll(bacc).unroll(m);
+    acc.update().reorder(n, bacc, m, ryo).vectorize(n).unroll(bacc).unroll(m);
 }
 
 // The integer path on i8mm smmla (2 x 2 x 8 matrix-multiply tiles): nt x mt
@@ -193,6 +226,10 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     if (whole) {
         blocked(out, 1, dr, Expr(), {1, mb, 1, 32, 32}, r, blocks[0], integer, rs, t);
         dr.bound_extent(dr.args()[1], mb);
+    }
+    if (integer && blocks[3] > 1) {  // N is a multiple of the records' rows
+        blocked_rows(out, 2 * whole, dots[0], Expr(), {blocks[3], 1, 2, 16}, r, blocks[0], blocks[4], rs);
+        return;
     }
     blocked(out, 2 * whole, dots[0], fits(pairs, 1), pairs, r, blocks[0], integer, rs, t);
     blocked(out, 2 * whole, dots[0], Expr(), rows, r, blocks[0], integer, rs, t);
