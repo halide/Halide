@@ -213,6 +213,13 @@ public:
         }
     };
 
+    // A reduction variable of one definition (the default or a
+    // specialization), under the condition that selects that definition.
+    struct CondRVar {
+        Expr cond;
+        ReductionVariable rvar;
+    };
+
     struct Stage {
         Function func;
         size_t stage;  // 0 is the pure definition, 1 is the first update
@@ -220,7 +227,10 @@ public:
         vector<int> consumers;
         map<pair<string, int>, Box> bounds;
         vector<CondValue> exprs;
-        set<ReductionVariable, ReductionVariable::Compare> rvars;
+        // Each reduction variable, by name, in every definition that has it.
+        // rfactor() names the RVars it preserves as the user named them, so
+        // specializations may have RVars of the same name but different bounds.
+        map<string, vector<CondRVar>> rvars;
         string stage_prefix;
         size_t fused_group_index;
         Inliner *inliner;
@@ -272,9 +282,9 @@ public:
         // Note that a function definition might have different LHS or reduction domain
         // (if it's an update def) or RHS per specialization. All specializations
         // of an init definition should have the same LHS.
-        // This also pushes all the reduction domains it encounters into the 'rvars'
-        // set for later use.
-        vector<vector<CondValue>> compute_exprs_helper(const Definition &def, bool is_update) {
+        // This also pushes the reduction variables of every definition it
+        // encounters, under the same conditions, into 'rvs'.
+        vector<vector<CondValue>> compute_exprs_helper(const Definition &def, bool is_update, vector<CondRVar> &rvs) {
             vector<vector<CondValue>> result(2);  // <args, values>
 
             if (!def.defined()) {
@@ -283,7 +293,7 @@ public:
 
             // Default case (no specialization)
             for (const ReductionVariable &rv : def.schedule().rvars()) {
-                rvars.insert(rv);
+                rvs.push_back({const_true(), rv});
             }
 
             vector<vector<Expr>> vecs(2);
@@ -314,9 +324,13 @@ public:
                         cval.cond = simplify(!s_cond && cval.cond);
                     }
                 }
+                for (CondRVar &crv : rvs) {
+                    crv.cond = simplify(!s_cond && crv.cond);
+                }
 
                 // Then case (i.e. specialization condition is true)
-                vector<vector<CondValue>> s_result = compute_exprs_helper(s_def, is_update);
+                vector<CondRVar> s_rvs;
+                vector<vector<CondValue>> s_result = compute_exprs_helper(s_def, is_update, s_rvs);
                 for (auto &vec : s_result) {
                     for (CondValue &cval : vec) {
                         cval.cond = simplify(s_cond && cval.cond);
@@ -324,6 +338,10 @@ public:
                 }
                 for (size_t i = 0; i < result.size(); i++) {
                     result[i].insert(result[i].end(), s_result[i].begin(), s_result[i].end());
+                }
+                for (CondRVar &crv : s_rvs) {
+                    crv.cond = simplify(s_cond && crv.cond);
+                    rvs.push_back(std::move(crv));
                 }
             }
 
@@ -364,11 +382,15 @@ public:
 
             bool is_update = (stage != 0);
             vector<vector<CondValue>> result;
+            vector<CondRVar> rvs;
             if (!is_update) {
-                result = compute_exprs_helper(func.definition(), is_update);
+                result = compute_exprs_helper(func.definition(), is_update, rvs);
             } else {
                 const Definition &def = func.update(stage - 1);
-                result = compute_exprs_helper(def, is_update);
+                result = compute_exprs_helper(def, is_update, rvs);
+            }
+            for (CondRVar &crv : rvs) {
+                rvars[crv.rvar.var].push_back(std::move(crv));
             }
             internal_assert(result.size() == 2);
             exprs = result[0];
@@ -608,10 +630,22 @@ public:
             }
 
             if (stage > 0) {
-                for (const ReductionVariable &rvar : rvars) {
-                    string arg = name + ".s" + std::to_string(stage) + "." + rvar.var;
-                    s = LetStmt::make(arg + ".min", rvar.min, s);
-                    s = LetStmt::make(arg + ".max", rvar.extent + rvar.min - 1, s);
+                for (const auto &[var, crvs] : rvars) {
+                    // The bounds of the definition that runs. The conditions
+                    // of the definitions that have the variable are disjoint.
+                    Expr rmin = crvs[0].rvar.min, rextent = crvs[0].rvar.extent;
+                    for (size_t i = 1; i < crvs.size(); i++) {
+                        const auto &[cond, rv] = crvs[i];
+                        if (!equal(rv.min, rmin)) {
+                            rmin = select(cond, rv.min, rmin);
+                        }
+                        if (!equal(rv.extent, rextent)) {
+                            rextent = select(cond, rv.extent, rextent);
+                        }
+                    }
+                    string arg = name + ".s" + std::to_string(stage) + "." + var;
+                    s = LetStmt::make(arg + ".min", rmin, s);
+                    s = LetStmt::make(arg + ".max", rextent + rmin - 1, s);
                 }
             }
 
@@ -773,10 +807,10 @@ public:
                                      Variable::make(Int(32), arg + ".max")));
             }
             if (stage > 0) {
-                for (const ReductionVariable &rv : rvars) {
-                    string arg = name + ".s" + std::to_string(stage) + "." + rv.var;
-                    result.push(rv.var, Interval(Variable::make(Int(32), arg + ".min"),
-                                                 Variable::make(Int(32), arg + ".max")));
+                for (const auto &[var, _] : rvars) {
+                    string arg = name + ".s" + std::to_string(stage) + "." + var;
+                    result.push(var, Interval(Variable::make(Int(32), arg + ".min"),
+                                              Variable::make(Int(32), arg + ".max")));
                 }
             }
 
@@ -1243,8 +1277,8 @@ public:
                         vars = s.func.args();
                     }
                     if (s.stage > 0) {
-                        for (const ReductionVariable &rv : s.rvars) {
-                            vars.push_back(rv.var);
+                        for (const auto &[var, _] : s.rvars) {
+                            vars.push_back(var);
                         }
                     }
                     for (const string &i : vars) {
