@@ -149,26 +149,28 @@ else by 4 x 4 (N, M >= 4), with 32 x 32 outputs per parallel task; otherwise
 at N = 512 balance 8-12 threads). Tiles at the edges of N and M shift inwards
 (they overlap the previous tile, recomputing a few outputs), so any token count
 M >= 8 runs on full 4 x 8 tiles. With a laid-out act, the whole records run the
-gemm tiles (smmla's for any M with i8mm; when N is a multiple of their width,
-else 1-wide tiles as tall) starting on a record, with M tails guarded: `dotr` is
-bound to one tile's rows, and its rows past the records read the last activation
-row (clamped; nothing reads past the input). The rest run the gemv tiles; with a
-laid-out integer weight they run `blocked_rows` instead: one weight record per
-tile (rows-tall, as GGML's repacked gemv), its int32 sums vectorized across the
-record's rows and each piece's 4-code quads (sdot), so a piece is one dense load
-and the activation's piece is broadcast to the rows. An in-kernel activation
-encoder runs first, parallel over activation rows (for M > 1) and vectorized per
-encoded block (`encoder`: the block's reductions, e.g. its scale, across the
-block; per-value Funcs, e.g. the codes, across their values). Kernel ABI
-(`harness/halide_providers.cpp`): `w`/`a` are `[K / block, N / rows or M]`
-records (struct types from the kernel's metadata), `out` is f32 `[N, M]`. The
-kernel declares the whole contract (checked in `checked`, assumed in `bench`):
-all mins 0, rows dense (`dim(1).stride == dim(0).extent`), `a`'s K tied to
-`w`'s, `w`/`a` rows match `out`'s N/M, and `vec_dot` pins `out` to 1 x 1. It
-promises no more than GGML does: K is a whole number of blocks (GGML asserts
-`n % QK == 0`), with no even block count (the 2-block interleave keeps its
-guard) and no host alignment (q4_0/q8_0 rows start on 2-byte boundaries).
-`vec_dot` goes through a GGML-ABI adapter.
+gemm tiles (smmla's for any M with i8mm, 4 x 16 when the records cover 16 rows,
+the weight's decode then shared by the tile's row pairs, else 4 x 8; when N is a
+multiple of their width, else 1-wide tiles as tall) starting on a record, with M
+tails guarded: `dotr` is bound to one tile's rows, and its rows past the records
+read the last activation row (clamped; nothing reads past the input). The rest
+run the gemv tiles; with a laid-out integer weight they run `blocked_rows`
+instead: one weight record per tile (rows-tall, as GGML's repacked gemv), its
+int32 sums vectorized across the record's rows and each piece's 4-code quads
+(sdot), so a piece is one dense load and the activation's piece is broadcast to
+the rows. An in-kernel activation encoder runs first, parallel over activation
+rows (for M > 1) and vectorized per encoded block (`encoder`: the block's
+reductions, e.g. its scale, across the block; per-value Funcs, e.g. the codes,
+across their values). Kernel ABI (`harness/halide_providers.cpp`): `w`/`a` are
+`[K / block, N / rows or M]` records (struct types from the kernel's metadata),
+`out` is f32 `[N, M]`. The kernel declares the whole contract (checked in
+`checked`, assumed in `bench`): all mins 0, rows dense
+(`dim(1).stride == dim(0).extent`), `a`'s K tied to `w`'s, `w`/`a` rows match
+`out`'s N/M, and `vec_dot` pins `out` to 1 x 1. It promises no more than GGML
+does: K is a whole number of blocks (GGML asserts `n % QK == 0`), with no even
+block count (the 2-block interleave keeps its guard) and no host alignment
+(q4_0/q8_0 rows start on 2-byte boundaries). `vec_dot` goes through a GGML-ABI
+adapter.
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds
