@@ -287,6 +287,29 @@ void check_recognize_nested_ramp() {
     }
 }
 
+void check_matches_expr() {
+    Expr x = Variable::make(Int(32), "x");
+    Expr y = Variable::make(Int(32), "y");
+    std::vector<MultiRamp> ms = {
+        MultiRamp(x, {1}, {8}),
+        MultiRamp(x, {1, 100}, {2, 3}),
+        MultiRamp(x, {1, 0, y}, {4, 2, 3}),
+        MultiRamp(x, {0, 1}, {2, 4}),
+    };
+    for (const MultiRamp &m : ms) {
+        CHECK(m.matches_expr(m.to_expr()), "matches its own to_expr");
+    }
+    const MultiRamp &m = ms[1];
+    Expr inner = Ramp::make(x, Expr(1), 2);
+    CHECK(!m.matches_expr(Ramp::make(inner, Broadcast::make(Expr(101), 2), 3)), "other stride");
+    CHECK(!m.matches_expr(Ramp::make(Ramp::make(y, Expr(1), 2), Broadcast::make(Expr(100), 2), 3)), "other base");
+    CHECK(!m.matches_expr(Ramp::make(Ramp::make(x, Expr(1), 3), Broadcast::make(Expr(100), 3), 2)), "other lanes");
+    Expr r = Ramp::make(Expr(0), Expr(1), 6);
+    Expr spelled = Broadcast::make(x, 6) + r % 2 + (r / 2) * 100;
+    CHECK(!m.matches_expr(spelled), "other spelling");
+    CHECK(!m.matches_expr(x), "scalar");
+}
+
 void check_recognize_add() {
     Expr a = Ramp::make(Expr(0), Expr(1), 6);
     Expr inner = Ramp::make(Expr(0), Expr(2), 2);
@@ -772,6 +795,7 @@ int main(int argc, char **argv) {
 
     check_recognize_1d_ramp();
     check_recognize_nested_ramp();
+    check_matches_expr();
     check_recognize_add();
     check_recognize_div_const();
     check_recognize_mod_const();

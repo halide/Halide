@@ -889,6 +889,31 @@ Expr MultiRamp::to_expr() const {
     return e;
 }
 
+bool MultiRamp::matches_expr(const Expr &e) const {
+    // Walk to_expr()'s nesting from the outermost dim inwards.
+    const Expr *cur = &e;
+    for (int i = dimensions() - 1; i >= 0; i--) {
+        if (is_const_zero(strides[i])) {
+            const Broadcast *b = cur->as<Broadcast>();
+            if (!b || b->lanes != lanes[i]) {
+                return false;
+            }
+            cur = &b->value;
+        } else {
+            const Ramp *r = cur->as<Ramp>();
+            if (!r || r->lanes != lanes[i]) {
+                return false;
+            }
+            const Broadcast *s = r->stride.as<Broadcast>();
+            if (!equal(s ? s->value : r->stride, strides[i])) {
+                return false;
+            }
+            cur = &r->base;
+        }
+    }
+    return equal(*cur, base);
+}
+
 void MultiRamp::reorder(const std::vector<int> &perm) {
     int d = dimensions();
     internal_assert((int)perm.size() == d) << "perm size mismatch\n";

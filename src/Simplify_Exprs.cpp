@@ -466,6 +466,14 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
             op->with(mr.to_expr(), permuted_predicate, align);
         int B = op->type.lanes() / A;
         return mutate(Shuffle::make_transpose(permuted_load, B), info);
+    } else if (mr.dimensions() >= 1 &&
+               is_const_one(mr.strides[0]) &&
+               !mr.matches_expr(index)) {
+        // The index is a multiramp that is already dense innermost, but it's
+        // spelled some other way (e.g. with vector div and mod). Write it as
+        // nested ramps, which later become a concat of dense loads (or as a
+        // single dense ramp, if it has one dim).
+        return op->with(mr.to_expr(), predicate, align);
     } else {
         return op->with(index, predicate, align);
     }
