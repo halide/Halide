@@ -883,13 +883,87 @@ struct HoistedTerm {
     size_t intermediate_index;       // Index into the FuncVec of intermediates (not a tuple index).
 };
 
+bool uses_float(const Expr &e) {
+    class UsesFloat : public IRGraphVisitor {
+    public:
+        using IRGraphVisitor::include;
+        bool result = false;
+        void include(const Expr &e) override {
+            result |= e.type().is_float();
+            if (!result) {
+                IRGraphVisitor::include(e);
+            }
+        }
+    } visitor;
+    visitor.include(e);
+    return visitor.result;
+}
+
+// An expression may be invariant over the reduction only modulo the bounds of
+// its RVars, e.g. after split(r, ro, ri, 32) and rfactor(ro, u), the index
+// r / 32 becomes (u*32 + ri) / 32, which equals u for every ri in [0, 32).
+// Returns `e` with each maximal float-free subexpression that depends on an
+// RVar simplified under the RVar bounds (and any known pure var bounds). Floating-point math is left
+// untouched, so this only rewrites index, integer, and boolean arithmetic.
+//
+// Internal promises whose clamped value still depends on an RVar (such as the
+// ones rfactor() wraps around a split RVar's index) hide that index from the
+// simplifier, so they are removed. Removing a promise does not change any
+// value, only bounds inference, and such a promise could not be kept in a
+// hoisted factor anyway. All other promises are kept: promises around
+// RVar-invariant values, as bounds inference may need them for the hoisted
+// factor, and a user's unsafe_promise_clamped on an RVar-dependent value, as it
+// may be the only bound on an index (such a leaf is then not hoisted).
+Expr simplify_with_reduction_bounds(const Expr &e,
+                                    const Scope<> &reduction_vars,
+                                    const Scope<Interval> &reduction_bounds) {
+    auto uses_rvars = [&](const Expr &x) {
+        return expr_uses_vars(x, reduction_vars);
+    };
+    auto remove_varying_promises = [&](const Expr &x) {
+        return mutate_with(x, [&](auto *self, const Call *op) -> Expr {
+            if (op->is_intrinsic(Call::promise_clamped) ||
+                op->is_intrinsic(Call::unsafe_promise_clamped)) {
+                Expr arg = self->mutate(op->args[0]);
+                if (op->is_intrinsic(Call::promise_clamped) &&
+                    uses_rvars(simplify(arg, reduction_bounds))) {
+                    return arg;
+                }
+                return Call::make(op->type, op->name, {arg, op->args[1], op->args[2]}, op->call_type);
+            }
+            return self->visit_base(op);
+        });
+    };
+    return mutate_with(e, [&](auto *self, const Expr &x) -> Expr {
+        if (!uses_rvars(x)) {
+            return x;
+        }
+        if (!uses_float(x)) {
+            return simplify(remove_varying_promises(x), reduction_bounds);
+        }
+        return self->mutate_base(x);
+    });
+}
+
+// The constant bounds used to decide invariance modulo bounds.
+struct InvarianceBounds {
+    // The RVars' bounds, where known.
+    Scope<Interval> rvars;
+    // The RVars' bounds plus the explicit bound()s on the Func's pure vars.
+    Scope<Interval> rvars_and_pure_vars;
+    // The explicit bound()s on the Func's pure vars.
+    vector<pair<string, Interval>> pure_vars;
+};
+
 // Given the non-self-reference increment from an update body and the
 // distributive law of the outer associative op, extract a loop-invariant factor
 // that distributes over the outer op. `reduction_vars` is the set of RVar names
-// the factor must not reference.
+// the factor must not reference, and `bounds` holds the constant bounds for
+// deciding invariance modulo those bounds.
 optional<HoistedFactor> extract_factor(const Expr &increment,
                                        const DistributiveLaw &law,
-                                       const Scope<> &reduction_vars) {
+                                       const Scope<> &reduction_vars,
+                                       const InvarianceBounds &bounds) {
     auto is_rvar_free = [&](const Expr &e) {
         return !expr_uses_vars(e, reduction_vars);
     };
@@ -907,7 +981,36 @@ optional<HoistedFactor> extract_factor(const Expr &increment,
     for (const Expr &leaf : leaves) {
         if (is_rvar_free(leaf)) {
             invariant_leaves.push_back(leaf);
+        } else if (Expr simplified = simplify_with_reduction_bounds(leaf, reduction_vars, bounds.rvars);
+                   is_rvar_free(simplified)) {
+            // Equal to `leaf` for every RVar value the reduction runs, so it is
+            // invariant and can be applied once at write-back.
+            invariant_leaves.push_back(simplified);
+        } else if (Expr within_bounds = bounds.pure_vars.empty() ?
+                                            Expr() :
+                                            simplify_with_reduction_bounds(leaf, reduction_vars, bounds.rvars_and_pure_vars);
+                   within_bounds.defined() && is_rvar_free(within_bounds)) {
+            // Equal to `leaf` only within the explicit bounds of the pure vars.
+            // Those bound the region the Func is computed over now, but could
+            // be changed by a later bound() call, so check them where the
+            // factor is applied. The check simplifies away while the bounds
+            // stand.
+            Expr in_bounds = const_true();
+            for (const auto &[var, interval] : bounds.pure_vars) {
+                if (expr_uses_var(leaf, var)) {
+                    Expr v = Variable::make(Int(32), var);
+                    in_bounds = in_bounds && interval.min <= v && v <= interval.max;
+                }
+            }
+            invariant_leaves.push_back(
+                require(simplify(in_bounds), within_bounds,
+                        "hoist_invariants() hoisted a factor that is invariant only "
+                        "within the explicit bounds the Func had at the time, and they no "
+                        "longer hold. Don't widen a Func's bound() after calling "
+                        "hoist_invariants() on it."));
         } else {
+            // Keep the original (with its promises) when simplification can't
+            // prove invariance.
             dependent_leaves.push_back(leaf);
         }
     }
@@ -934,7 +1037,8 @@ optional<HoistedFactor> extract_factor(const Expr &increment,
 vector<vector<HoistedTerm>> extract_hoisted_terms(const vector<Expr> &values,
                                                   const AssociativeOp &prover_result,
                                                   const string &func_name,
-                                                  const Scope<> &reduction_vars) {
+                                                  const Scope<> &reduction_vars,
+                                                  const InvarianceBounds &bounds) {
     vector<vector<HoistedTerm>> result(values.size());
 
     auto is_orig_self_ref = [&](const Expr &e, size_t value_index) {
@@ -958,7 +1062,7 @@ vector<vector<HoistedTerm>> extract_hoisted_terms(const vector<Expr> &values,
                              [&](const Expr &e) { return is_orig_self_ref(e, i); }) == outer_leaves.end()) {
                 for (const Expr &term : outer_leaves) {
                     if (!is_orig_self_ref(term, i)) {
-                        optional<HoistedFactor> factor = extract_factor(term, *law, reduction_vars);
+                        optional<HoistedFactor> factor = extract_factor(term, *law, reduction_vars, bounds);
                         result[i].push_back({factor, factor ? factor->inner_body : term, 0});
                     }
                 }
@@ -1417,13 +1521,44 @@ FuncVec Stage::hoist_invariants() {
 
     Scope<> reduction_vars;
     Scope<Interval> reduction_bounds;
+    // The simplifier only uses constant bounds, so simplify each RVar's bounds
+    // (e.g. 0 + 32 - 1 after a split) for deciding invariance. Provably empty
+    // domains are left out.
+    InvarianceBounds constant_bounds;
     for (const auto &[var, min, extent] : definition.schedule().rvars()) {
         reduction_vars.push(var);
         reduction_bounds.push(var, Interval{min, min + extent - 1});
+        Interval bounds{simplify(min), simplify(min + extent - 1)};
+        const auto lo = as_const_int(bounds.min), hi = as_const_int(bounds.max);
+        if (!(lo && hi && *hi < *lo)) {
+            constant_bounds.rvars.push(var, bounds);
+            constant_bounds.rvars_and_pure_vars.push(var, bounds);
+        }
+    }
+    // An explicit bound() with a constant min and extent on one of the Func's
+    // pure vars fixes the region every stage is computed over, and Halide
+    // asserts that consumers need no more than that region. So the values of
+    // this update outside it are never used, and the pure var may be assumed in
+    // range while deciding invariance. E.g. a lane preserved by rfactor() has no
+    // recorded range otherwise. Bounds inference sees the rewritten expression,
+    // so producers are sized for whatever it reads over the actual loops. These
+    // bounds are only used for leaves that the RVar bounds alone don't make
+    // invariant.
+    for (const auto &[var, bound] : function.schedule().bounds()) {
+        if (!bound.min.defined() || !bound.extent.defined() || reduction_vars.contains(var)) {
+            continue;
+        }
+        Interval bounds{simplify(bound.min), simplify(bound.min + bound.extent - 1)};
+        const auto lo = as_const_int(bounds.min), hi = as_const_int(bounds.max);
+        if (lo && hi && *lo <= *hi) {
+            constant_bounds.rvars_and_pure_vars.push(var, bounds);
+            constant_bounds.pure_vars.emplace_back(var, bounds);
+        }
     }
     vector<vector<HoistedTerm>> hoisted_terms =
         extract_hoisted_terms(definition.values(), prover_result,
-                              function.name(), reduction_vars);
+                              function.name(), reduction_vars,
+                              constant_bounds);
     const bool any_hoisted = std::any_of(hoisted_terms.begin(), hoisted_terms.end(),
                                          [](const auto &terms) {
                                              return std::any_of(terms.begin(), terms.end(),

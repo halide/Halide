@@ -2,8 +2,10 @@
 #include "check_call_graphs.h"
 #include "test_sharding.h"
 
+#include <algorithm>
 #include <cmath>
 #include <functional>
+#include <limits>
 #include <map>
 
 namespace {
@@ -513,6 +515,537 @@ int hoist_invariants_after_rfactor_test() {
     return 0;
 }
 
+bool calls_func(const Expr &e, const string &name) {
+    bool found = false;
+    visit_with(e, [&](auto *self, const Call *op) {
+        found |= op->call_type == Call::Halide && op->name == name;
+        self->visit_base(op);
+    });
+    return found;
+}
+
+// A blocked reduction with one factor per block, e.g. a block-scaled dot product
+//   out = sum_k(scale(k / 32) * data(k)).
+// After split(k, ko, ki, 32) + rfactor(ko, u), the intermediate's index is
+// u*32 + ki, so the factor reads scale((u*32 + ki) / 32). That is not
+// syntactically free of ki, but it equals scale(u) for every ki in [0, 32).
+// hoist_invariants() must decide invariance modulo the RVar bounds, both when
+// the split divides the extent and when it leaves a guarded tail.
+int hoist_invariants_block_index_test(bool constant_extent, int n) {
+    constexpr int block = 32;
+    ImageParam data_p{Int(8), 1, "data_p"};
+    ImageParam scale_p{Float(32), 1, "scale_p"};
+
+    Var u{"u"};
+    RDom r(0, constant_extent ? Expr(n) : data_p.dim(0).extent(), "r");
+    RVar ko{"ko"}, ki{"ki"};
+
+    Func out{"out"};
+    out() = 0.0f;
+    out() += cast<float>(data_p(r)) * scale_p(r / block);
+    out.update().split(r, ko, ki, block);
+    Func blocks = out.update().rfactor(ko, u);
+    Func blocks_intm = blocks.update().hoist_invariants();
+    blocks.compute_root();
+    blocks_intm.compute_root();
+
+    internal_assert(!calls_func(blocks_intm.update_value(), Func(scale_p).name()))
+        << "hoist_invariants block index: the per-block factor was not hoisted out of "
+        << blocks_intm.name() << ": " << blocks_intm.update_value() << "\n";
+    internal_assert(calls_func(blocks.update_value(), Func(scale_p).name()))
+        << "hoist_invariants block index: the write-back of " << blocks.name()
+        << " does not apply the per-block factor: " << blocks.update_value() << "\n";
+
+    const int num_blocks = (n + block - 1) / block;
+    Buffer<int8_t> data(n);
+    Buffer<float> scale(num_blocks);
+    for (int k = 0; k < n; k++) {
+        data(k) = (int8_t)((k * 7) % 11 - 5);
+    }
+    for (int b = 0; b < num_blocks; b++) {
+        scale(b) = (float)(b + 1) * 0.5f;
+    }
+    data_p.set(data);
+    scale_p.set(scale);
+
+    Buffer<float> result = out.realize();
+
+    float ref = 0.0f;
+    for (int k = 0; k < n; k++) {
+        ref += (float)data(k) * scale(k / block);
+    }
+    internal_assert(result() == ref)
+        << "hoist_invariants block index (n = " << n << "): "
+        << result() << " vs ref " << ref << "\n";
+
+    return 0;
+}
+
+// The same reduction split twice, into blocks of 32 and then lanes of 4, with
+// rfactor preserving both the block (u) and the lane within it (lane), so each
+// lane keeps its own partial sum. The factor reads
+// scale((u*32 + lane*4 + ki) / 32), which only simplifies to scale(lane/8 + u)
+// given 0 <= ki < 4; that is invariant over ki and must be hoisted. The lane is
+// a pure Var with no recorded range, so the factor keeps a lane/8 term, which
+// is zero for the lanes 0..7 that are computed.
+int hoist_invariants_block_lane_test(int n) {
+    constexpr int block = 32, lane_width = 4;
+    ImageParam data_p{Int(8), 1, "data_p"};
+    ImageParam scale_p{Float(32), 1, "scale_p"};
+
+    Var u{"u"}, lane{"lane"};
+    RDom r(0, data_p.dim(0).extent(), "r");
+    RVar ko{"ko"}, k{"k"}, kl{"kl"}, ki{"ki"};
+
+    Func out{"out"};
+    out() = 0.0f;
+    out() += cast<float>(data_p(r)) * scale_p(r / block);
+    out.update().split(r, ko, k, block).split(k, kl, ki, lane_width);
+    Func blocks = out.update().rfactor({{kl, lane}, {ko, u}});
+    Func blocks_intm = blocks.update().hoist_invariants();
+    blocks.compute_root().vectorize(lane);
+    blocks.update().vectorize(lane);
+    blocks_intm.compute_at(blocks, u).vectorize(lane);
+
+    internal_assert(!calls_func(blocks_intm.update_value(), Func(scale_p).name()))
+        << "hoist_invariants block lane: the per-block factor was not hoisted out of "
+        << blocks_intm.name() << ": " << blocks_intm.update_value() << "\n";
+    internal_assert(calls_func(blocks.update_value(), Func(scale_p).name()))
+        << "hoist_invariants block lane: the write-back of " << blocks.name()
+        << " does not apply the per-block factor: " << blocks.update_value() << "\n";
+
+    const int num_blocks = (n + block - 1) / block;
+    Buffer<int8_t> data(n);
+    Buffer<float> scale(num_blocks);
+    for (int i = 0; i < n; i++) {
+        data(i) = (int8_t)((i * 7) % 11 - 5);
+    }
+    for (int b = 0; b < num_blocks; b++) {
+        scale(b) = (float)(b + 1) * 0.5f;
+    }
+    data_p.set(data);
+    scale_p.set(scale);
+
+    Buffer<float> result = out.realize();
+
+    float ref = 0.0f;
+    for (int i = 0; i < n; i++) {
+        ref += (float)data(i) * scale(i / block);
+    }
+    internal_assert(result() == ref)
+        << "hoist_invariants block lane (n = " << n << "): "
+        << result() << " vs ref " << ref << "\n";
+
+    return 0;
+}
+
+// The same block-scaled reduction, with each block of 32 split into two chunks
+// of 16 and each chunk into lanes of 4, and rfactor preserving the block (u)
+// and the lane (lane), so each lane keeps a partial sum over both chunks. The
+// factor reads scale((u*32 + kc*16 + lane*4 + ki) / 32), which only reduces to
+// scale((u*8 + kc*4 + lane) / 8) given the RVar bounds; dropping kc needs
+// lane in [0, 4). lane is a pure Var of the intermediate, so the schedule
+// supplies that range with bound().
+Func block_two_chunk_reduction(const ImageParam &data_p, const ImageParam &scale_p,
+                               const Var &u, const Var &lane, Func &out) {
+    RDom r(0, data_p.dim(0).extent(), "r");
+    RVar ko{"ko"}, k{"k"}, kc{"kc"}, kv{"kv"}, kl{"kl"}, ki{"ki"};
+    out() = 0.0f;
+    out() += cast<float>(data_p(r)) * scale_p(r / 32);
+    out.update().split(r, ko, k, 32).split(k, kc, kv, 16).split(kv, kl, ki, 4);
+    return out.update().rfactor({{kl, lane}, {ko, u}});
+}
+
+int hoist_invariants_block_two_chunk_test(int n) {
+    constexpr int block = 32;
+    ImageParam data_p{Int(8), 1, "data_p"};
+    ImageParam scale_p{Float(32), 1, "scale_p"};
+    Var u{"u"}, lane{"lane"};
+    Func out{"out"};
+    Func blocks = block_two_chunk_reduction(data_p, scale_p, u, lane, out);
+    blocks.bound(lane, 0, 4);
+    Func blocks_intm = blocks.update().hoist_invariants();
+    blocks.compute_root().vectorize(lane);
+    blocks.update().vectorize(lane);
+    blocks_intm.compute_at(blocks, u).vectorize(lane);
+
+    internal_assert(!calls_func(blocks_intm.update_value(), Func(scale_p).name()))
+        << "hoist_invariants two chunks: the per-block factor was not hoisted out of "
+        << blocks_intm.name() << ": " << blocks_intm.update_value() << "\n";
+    internal_assert(calls_func(blocks.update_value(), Func(scale_p).name()))
+        << "hoist_invariants two chunks: the write-back of " << blocks.name()
+        << " does not apply the per-block factor: " << blocks.update_value() << "\n";
+
+    const int num_blocks = (n + block - 1) / block;
+    Buffer<int8_t> data(n);
+    Buffer<float> scale(num_blocks);
+    for (int i = 0; i < n; i++) {
+        data(i) = (int8_t)((i * 7) % 11 - 5);
+    }
+    for (int b = 0; b < num_blocks; b++) {
+        scale(b) = (float)(b + 1) * 0.5f;
+    }
+    data_p.set(data);
+    scale_p.set(scale);
+
+    Buffer<float> result = out.realize();
+
+    float ref = 0.0f;
+    for (int i = 0; i < n; i++) {
+        ref += (float)data(i) * scale(i / block);
+    }
+    internal_assert(result() == ref)
+        << "hoist_invariants two chunks (n = " << n << "): "
+        << result() << " vs ref " << ref << "\n";
+
+    return 0;
+}
+
+// The hoisted factor scale(u) equals the original only for lane in [0, 4).
+// A consumer reading the intermediate outside that range must get an error,
+// both while the bound stands (Halide checks explicit bounds) and if the bound
+// is widened after hoisting (the hoisted factor checks the range it assumed;
+// since bound() fixes the region computed, any realization then fails).
+int hoist_invariants_block_two_chunk_out_of_bounds_test() {
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
+
+    constexpr int n = 64, num_blocks = n / 32;
+    for (bool widen : {false, true}) {
+        ImageParam data_p{Int(8), 1, "data_p"};
+        ImageParam scale_p{Float(32), 1, "scale_p"};
+        Var u{"u"}, lane{"lane"};
+        Func out{"out"};
+        Func blocks = block_two_chunk_reduction(data_p, scale_p, u, lane, out);
+        blocks.bound(lane, 0, 4);
+        Func blocks_intm = blocks.update().hoist_invariants();
+        blocks_intm.compute_root();
+        if (widen) {
+            blocks.bound(lane, 0, 8);
+        }
+
+        Buffer<int8_t> data(n);
+        Buffer<float> scale(num_blocks);
+        data.fill(1);
+        scale.fill(1.0f);
+        data_p.set(data);
+        scale_p.set(scale);
+
+        const string expected = widen ? "hoist_invariants() hoisted a factor" : "do not cover required region";
+        // A consumer that reads all 8 lanes. (Realizing blocks itself over 8
+        // lanes would just compute the bounded ones.)
+        Func reader{"reader"};
+        reader(lane, u) = blocks(lane, u);
+        blocks.compute_root();
+
+        bool error = false;
+        try {
+            reader.realize({8, num_blocks});
+        } catch (const Halide::RuntimeError &e) {
+            error = true;
+            if (string(e.what()).find(expected) == string::npos) {
+                printf("Unexpected error reading lanes out of bounds (widen = %d):\n%s\n", widen, e.what());
+                return 1;
+            }
+        }
+        if (!error) {
+            printf("Reading lanes out of the bounds hoist_invariants() assumed should fail "
+                   "(widen = %d)!\n",
+                   widen);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// Without a bound on lane, or with one that doesn't imply lane < 4, the factor
+// isn't known to be invariant over kc. Only bound() with a min and an extent
+// counts; bound_extent() leaves the min free.
+int hoist_invariants_block_two_chunk_unbounded_test() {
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
+
+    for (int config = 0; config < 3; config++) {
+        ImageParam data_p{Int(8), 1, "data_p"};
+        ImageParam scale_p{Float(32), 1, "scale_p"};
+        Var u{"u"}, lane{"lane"};
+        Func out{"out"};
+        Func blocks = block_two_chunk_reduction(data_p, scale_p, u, lane, out);
+        if (config == 1) {
+            blocks.bound_extent(lane, 4);
+        } else if (config == 2) {
+            blocks.bound(lane, 0, 8);
+        }
+
+        bool error = false;
+        try {
+            blocks.update().hoist_invariants();
+        } catch (const Halide::CompileError &e) {
+            error = true;
+            const string expected =
+                "hoist_invariants() could not find multiple reduction terms or a "
+                "distributable loop-invariant factor in the update definition of " +
+                blocks.name() + ".";
+            if (string(e.what()).find(expected) == string::npos) {
+                printf("Unexpected error for an unbounded lane (config %d):\n%s\n", config, e.what());
+                return 1;
+            }
+        }
+        if (!error) {
+            printf("hoist_invariants should not hoist a factor that needs an unknown "
+                   "lane range (config %d)!\n",
+                   config);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// A per-block index may itself be data dependent, bounded only by a promise:
+// scale(unsafe_promise_clamped(group(r / 32), 0, G - 1)). The promise must
+// survive hoisting, as it is the only bound on the hoisted factor's access to
+// scale. A user's promise around an RVar-dependent value is never dropped, so
+// shift(unsafe_promise_clamped(base(r / 32) * 32 + r, 0, M - 1) / 32) stays in
+// the intermediate, although it is invariant within a block.
+int hoist_invariants_block_index_promise_test() {
+    constexpr int block = 32, num_blocks = 3, num_groups = 4, n = block * num_blocks;
+    constexpr int max_base = 2, num_shifts = max_base + num_blocks;
+    ImageParam data_p{Int(8), 1, "data_p"};
+    ImageParam group_p{Int(32), 1, "group_p"};
+    ImageParam scale_p{Float(32), 1, "scale_p"};
+    ImageParam base_p{Int(32), 1, "base_p"};
+    ImageParam shift_p{Float(32), 1, "shift_p"};
+
+    Var u{"u"};
+    RDom r(0, n, "r");
+    RVar ko{"ko"}, ki{"ki"};
+
+    Func out{"out"};
+    out() = 0.0f;
+    out() += cast<float>(data_p(r)) *
+             scale_p(unsafe_promise_clamped(group_p(r / block), 0, num_groups - 1)) *
+             shift_p(unsafe_promise_clamped(base_p(r / block) * block + r, 0, num_shifts * block - 1) / block);
+    out.update().split(r, ko, ki, block);
+    Func blocks = out.update().rfactor(ko, u);
+    Func blocks_intm = blocks.update().hoist_invariants();
+    blocks.compute_root();
+    blocks_intm.compute_root();
+
+    internal_assert(!calls_func(blocks_intm.update_value(), Func(scale_p).name()))
+        << "hoist_invariants promised block index: the factor was not hoisted: "
+        << blocks_intm.update_value() << "\n";
+    internal_assert(calls_func(blocks_intm.update_value(), Func(shift_p).name()))
+        << "hoist_invariants promised block index: a promise on an RVar-dependent "
+        << "index was dropped: " << blocks_intm.update_value() << "\n";
+
+    Buffer<int8_t> data(n);
+    Buffer<int> group(num_blocks), base(num_blocks);
+    Buffer<float> scale(num_groups), shift(num_shifts);
+    for (int k = 0; k < n; k++) {
+        data(k) = (int8_t)((k * 3) % 7 - 3);
+    }
+    group(0) = 2;
+    group(1) = 0;
+    group(2) = 3;
+    base(0) = 1;
+    base(1) = 0;
+    base(2) = max_base;
+    for (int g = 0; g < num_groups; g++) {
+        scale(g) = (float)(g + 1) * 0.5f;
+    }
+    for (int i = 0; i < num_shifts; i++) {
+        shift(i) = (float)(i + 3);
+    }
+    data_p.set(data);
+    group_p.set(group);
+    scale_p.set(scale);
+    base_p.set(base);
+    shift_p.set(shift);
+
+    Buffer<float> result = out.realize();
+
+    float ref = 0.0f;
+    for (int k = 0; k < n; k++) {
+        ref += (float)data(k) * scale(group(k / block)) * shift((base(k / block) * block + k) / block);
+    }
+    internal_assert(result() == ref)
+        << "hoist_invariants promised block index: "
+        << result() << " vs ref " << ref << "\n";
+
+    return 0;
+}
+
+// Per-block invariance applies to every distributive law, not just sum/product:
+// a per-block bias under min/+ and a per-block mask under ||/&&.
+int hoist_invariants_block_index_other_laws_test() {
+    constexpr int block = 32, n = 100, num_blocks = (n + block - 1) / block;
+    ImageParam data_p{Int(32), 1, "data_p"};
+    ImageParam bias_p{Int(32), 1, "bias_p"};
+    ImageParam mask_p{UInt(8), 1, "mask_p"};
+
+    Var u{"u"};
+    RDom r(0, data_p.dim(0).extent(), "r");
+    RVar ko{"ko"}, ki{"ki"};
+
+    Func lo{"lo"};
+    lo() = Int(32).max();
+    lo() = min(lo(), bias_p(r / block) + data_p(r));
+    lo.update().split(r, ko, ki, block);
+    Func lo_blocks = lo.update().rfactor(ko, u);
+    Func lo_intm = lo_blocks.update().hoist_invariants();
+    lo_blocks.compute_root();
+    lo_intm.compute_root();
+    internal_assert(!calls_func(lo_intm.update_value(), Func(bias_p).name()))
+        << "hoist_invariants min block index: the bias was not hoisted: "
+        << lo_intm.update_value() << "\n";
+
+    Func any{"any"};
+    any() = cast<bool>(false);
+    any() = any() || (mask_p(r / block) != 0 && data_p(r) > 0);
+    any.update().split(r, ko, ki, block);
+    Func any_blocks = any.update().rfactor(ko, u);
+    Func any_intm = any_blocks.update().hoist_invariants();
+    any_blocks.compute_root();
+    any_intm.compute_root();
+    internal_assert(!calls_func(any_intm.update_value(), Func(mask_p).name()))
+        << "hoist_invariants or block index: the mask was not hoisted: "
+        << any_intm.update_value() << "\n";
+
+    Buffer<int> data(n), bias(num_blocks);
+    Buffer<uint8_t> mask(num_blocks);
+    for (int k = 0; k < n; k++) {
+        data(k) = -((k * 7) % 13);
+    }
+    for (int b = 0; b < num_blocks; b++) {
+        bias(b) = 5 * b - 7;
+        mask(b) = b % 2;
+    }
+    data_p.set(data);
+    bias_p.set(bias);
+    mask_p.set(mask);
+
+    int lo_ref = std::numeric_limits<int>::max();
+    for (int k = 0; k < n; k++) {
+        lo_ref = std::min(lo_ref, bias(k / block) + data(k));
+    }
+    Buffer<int> lo_result = lo.realize();
+    internal_assert(lo_result() == lo_ref)
+        << "hoist_invariants min block index: " << lo_result() << " vs ref " << lo_ref << "\n";
+
+    // data(10) > 0 lies in a block with mask 0; data(40) > 0 in one with mask 1.
+    for (bool expected : {false, true}) {
+        data(10) = 1;
+        data(40) = expected ? 1 : 0;
+        Buffer<bool> any_result = any.realize();
+        internal_assert(any_result() == expected)
+            << "hoist_invariants or block index: " << any_result() << " vs ref " << expected << "\n";
+    }
+
+    return 0;
+}
+
+// Only factors that are invariant for every value of the RVar bounds may be
+// hoisted. With an RDom that starts at 8, the split index is 8 + u*32 + ki, so
+// coarse(r / 32) changes value within a block and must stay in the
+// intermediate, while the block-aligned aligned((r - 8) / 32) is hoisted.
+int hoist_invariants_block_index_varying_test() {
+    constexpr int block = 32, base = 8, n = 100;
+    ImageParam data_p{Int(8), 1, "data_p"};
+    ImageParam aligned_p{Float(32), 1, "aligned_p"};
+    ImageParam coarse_p{Float(32), 1, "coarse_p"};
+
+    Var u{"u"};
+    RDom r(base, n, "r");
+    RVar ko{"ko"}, ki{"ki"};
+
+    Func out{"out"};
+    out() = 0.0f;
+    out() += cast<float>(data_p(r)) * aligned_p((r - base) / block) * coarse_p(r / block);
+    out.update().split(r, ko, ki, block);
+    Func blocks = out.update().rfactor(ko, u);
+    Func blocks_intm = blocks.update().hoist_invariants();
+    blocks.compute_root();
+    blocks_intm.compute_root();
+
+    internal_assert(!calls_func(blocks_intm.update_value(), Func(aligned_p).name()))
+        << "hoist_invariants varying block index: the block-aligned factor was not hoisted: "
+        << blocks_intm.update_value() << "\n";
+    internal_assert(calls_func(blocks_intm.update_value(), Func(coarse_p).name()))
+        << "hoist_invariants varying block index: a factor that varies within a block was hoisted: "
+        << blocks_intm.update_value() << "\n";
+
+    Buffer<int8_t> data(n);
+    data.set_min(base);
+    Buffer<float> aligned((n + block - 1) / block), coarse((base + n + block - 1) / block);
+    for (int k = base; k < base + n; k++) {
+        data(k) = (int8_t)((k * 5) % 9 - 4);
+    }
+    for (int b = 0; b < aligned.width(); b++) {
+        aligned(b) = (float)(b + 2);
+    }
+    for (int b = 0; b < coarse.width(); b++) {
+        coarse(b) = (float)(3 * b + 1) * 0.25f;
+    }
+    data_p.set(data);
+    aligned_p.set(aligned);
+    coarse_p.set(coarse);
+
+    Buffer<float> result = out.realize();
+
+    float ref = 0.0f;
+    for (int k = base; k < base + n; k++) {
+        ref += (float)data(k) * aligned((k - base) / block) * coarse(k / block);
+    }
+    internal_assert(result() == ref)
+        << "hoist_invariants varying block index: "
+        << result() << " vs ref " << ref << "\n";
+
+    return 0;
+}
+
+// A factor indexed at a finer granularity than the split (r / 16 with blocks of
+// 32) genuinely varies within a block, so there is nothing to hoist.
+int hoist_invariants_block_index_finer_rejected_test() {
+    if (!Halide::exceptions_enabled()) {
+        return 0;
+    }
+
+    ImageParam data_p{Int(8), 1, "data_p"};
+    ImageParam scale_p{Float(32), 1, "scale_p"};
+
+    Var u{"u"};
+    RDom r(0, data_p.dim(0).extent(), "r");
+    RVar ko{"ko"}, ki{"ki"};
+
+    Func out{"out"};
+    out() = 0.0f;
+    out() += cast<float>(data_p(r)) * scale_p(r / 16);
+    out.update().split(r, ko, ki, 32);
+    Func blocks = out.update().rfactor(ko, u);
+
+    bool error = false;
+    try {
+        blocks.update().hoist_invariants();
+    } catch (const Halide::CompileError &e) {
+        error = true;
+        const string expected =
+            "hoist_invariants() could not find multiple reduction terms or a "
+            "distributable loop-invariant factor in the update definition of " +
+            blocks.name() + ".";
+        if (string(e.what()).find(expected) == string::npos) {
+            printf("Unexpected error for a factor that varies within a block:\n%s\n", e.what());
+            return 1;
+        }
+    }
+    if (!error) {
+        printf("hoist_invariants should not hoist a factor that varies within a block!\n");
+        return 1;
+    }
+    return 0;
+}
+
 // The min/max + add hoisting law is only valid for integer types where addition
 // has no defined wraparound behavior. For UInt(8), hoisting the invariant 250
 // would incorrectly turn min_k((250 + x_k) mod 256) into (250 + min_k(x_k)) mod
@@ -749,6 +1282,19 @@ int main(int argc, char **argv) {
         {"hoist_invariants test (strict_float preserved)", hoist_invariants_strict_float_test},
         {"hoist_invariants test (predicated RDom)", hoist_invariants_predicated_rdom_test},
         {"hoist_invariants test (after rfactor)", hoist_invariants_after_rfactor_test},
+        {"hoist_invariants test (block index, divisible)", [] { return hoist_invariants_block_index_test(false, 128); }},
+        {"hoist_invariants test (block index, tail)", [] { return hoist_invariants_block_index_test(false, 100); }},
+        {"hoist_invariants test (block index, constant tail)", [] { return hoist_invariants_block_index_test(true, 100); }},
+        {"hoist_invariants test (block lane, divisible)", [] { return hoist_invariants_block_lane_test(128); }},
+        {"hoist_invariants test (block lane, tail)", [] { return hoist_invariants_block_lane_test(100); }},
+        {"hoist_invariants test (two chunks, bound lane)", [] { return hoist_invariants_block_two_chunk_test(128); }},
+        {"hoist_invariants test (two chunks, bound lane, tail)", [] { return hoist_invariants_block_two_chunk_test(100); }},
+        {"hoist_invariants test (two chunks, lane not bounded)", hoist_invariants_block_two_chunk_unbounded_test},
+        {"hoist_invariants test (two chunks, lanes out of bounds)", hoist_invariants_block_two_chunk_out_of_bounds_test},
+        {"hoist_invariants test (block index, promised)", hoist_invariants_block_index_promise_test},
+        {"hoist_invariants test (block index, min/add and or/and)", hoist_invariants_block_index_other_laws_test},
+        {"hoist_invariants test (block index, varying)", hoist_invariants_block_index_varying_test},
+        {"hoist_invariants test (block index, finer factor rejected)", hoist_invariants_block_index_finer_rejected_test},
         {"hoist_invariants test (invalid law rejected)", hoist_invariants_invalid_law_rejected_test},
         {"hoist_invariants test (nothing to hoist rejected)", hoist_invariants_nothing_to_hoist_rejected_test},
         {"distribute test (affine dot product)", hoist_invariants_distribute_test},
