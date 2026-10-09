@@ -164,7 +164,7 @@ std::vector<CodecRow> &codec_rows() {
 void register_halide_providers() {
     for (const Row &row : rows()) {
         FormatSpec fs = parse_format(row.wt);
-        ggml_type wt = type_named(fs.type.c_str()), at = type_named(row.at), aq = type_named(row.aq);
+        ggml_type wt = type_named(fs.type.c_str()), at = type_named(row.at), aq = type_named(parse_format(row.aq).type.c_str());
         bool gpu = strstr(row.features, "metal") != nullptr;
         for (bool bench : {false, true}) {
             Fn f = bench ? row.bench : row.checked;

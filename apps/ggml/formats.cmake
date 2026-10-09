@@ -21,7 +21,7 @@ set(GGML_FORMATS
     "q4_0 codec,vec_dot,mul_mat q8_0,f16,f32,f32:q8_0"
     "q8_0 codec,vec_dot q8_0,f16,f32"
     "q4_0.i4.4x4 codec"
-    "q4_0.i4.4x8 codec,mul_mat q8_0,f32:q8_0"
+    "q4_0.i4.4x8 codec,mul_mat q8_0,f32:q8_0,f32:q8_0.4x8"
     "q4_0.i4.8x8 codec"
 )
 set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
@@ -74,6 +74,7 @@ foreach (row IN LISTS GGML_FORMATS)
             list(GET at 0 storage)
             list(GET at -1 compute)
             string(REPLACE ":" "_to_" name "${id}_${act}_${op}")
+            string(MAKE_C_IDENTIFIER "${name}" name)
             _ggml_library(${name} matmul ${features} weight=${type} act=${act} op=${op})
             string(APPEND registry
                 "GQ_HALIDE(${name}, \"${type}\", ${storage}, ${compute}, GQ_${op}, \"${features}\")\n"
