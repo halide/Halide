@@ -213,11 +213,121 @@ void check_div_rejects_non_multiramp() {
 }
 
 void check_div_rejects_unaligned_base() {
-    // ramp(2,2,6)/4 = [0,1,1,2,2,3] would be a multiramp, but our algorithm
-    // requires the base to be a known multiple of the denominator, and 2 is
-    // not a multiple of 4.
+    // ramp(2,2,6)/4 = [0,1,1,2,2,3] would be a multiramp, but a base at
+    // position 2 of its bucket leaves a budget of 1, and even the split
+    // (p = 2) needs 2.
     MultiRamp A{2, {2}, {6}};
     CHECK(!A.div(4), "should reject div when base isn't aligned");
+}
+
+int64_t floor_div(int64_t a, int64_t b) {
+    return (a - (((a % b) + b) % b)) / b;
+}
+
+// Check that div and mod by k of a const MultiRamp are accepted (or not) as
+// expected, and when accepted, that they match per-lane Euclidean division.
+void check_div_mod_by(const MultiRamp &m, int k, bool expect_ok, int line) {
+    auto values = expand(m);
+    for (bool is_div : {true, false}) {
+        MultiRamp r = m;
+        bool ok = is_div ? r.div(k) : r.mod(k);
+        if (ok != expect_ok) {
+            printf("FAIL at %d: %s by %d %s\n", line, is_div ? "div" : "mod", k,
+                   ok ? "unexpectedly accepted" : "unexpectedly rejected");
+            failures++;
+            continue;
+        }
+        if (ok) {
+            std::vector<int> want;
+            for (int v : values) {
+                int64_t q = floor_div(v, k);
+                want.push_back((int)(is_div ? q : v - q * k));
+            }
+            check_seq(expand(r), want, is_div ? "div values" : "mod values", line);
+        }
+    }
+}
+
+#define CHECK_DIV_MOD(m, k, ok) check_div_mod_by((m), (k), (ok), __LINE__)
+
+void check_div_mod_unaligned_base() {
+    // Base at position r0 of its bucket leaves a budget of k-1-r0.
+    // ramp(1,1,2)/4: positions 1, 2. Budget 2, spends 1.
+    CHECK_DIV_MOD((MultiRamp{1, {1}, {2}}), 4, true);
+    // ramp(2,1,2)/4: positions 2, 3. Budget 1, spends exactly 1.
+    CHECK_DIV_MOD((MultiRamp{2, {1}, {2}}), 4, true);
+    // ramp(3,1,2)/4: positions 3, 4. Budget 0, crosses into the next bucket.
+    CHECK_DIV_MOD((MultiRamp{3, {1}, {2}}), 4, false);
+    // ramp(6,1,4)/4 = [1,1,2,2]: a split (p = 4) doesn't fit the budget of 1.
+    CHECK_DIV_MOD((MultiRamp{6, {1}, {4}}), 4, false);
+    // A split that exactly exhausts the budget: ramp(1,2,6)/4 = [0,0,1,1,2,2]
+    // has r0 = 1, so budget 2, and the inner half (p = 2) spends 2.
+    CHECK_DIV_MOD((MultiRamp{1, {2}, {6}}), 4, true);
+    // Two flex dims jointly exhausting the budget: base 2, strides [1, 2],
+    // lanes [2, 2], k = 6. Values 2, 3, 4, 5; budget 3 = 1 + 2.
+    CHECK_DIV_MOD((MultiRamp{2, {1, 2}, {2, 2}}), 6, true);
+    // ... and one more than the budget: values 3, 4, 5, 6.
+    CHECK_DIV_MOD((MultiRamp{3, {1, 2}, {2, 2}}), 6, false);
+    // A pure-carry outer dim spends nothing: base 5, strides [1, 8], lanes
+    // [3, 4], k = 8. Values 5..7, 13..15, ... Budget 2, inner spends 2.
+    CHECK_DIV_MOD((MultiRamp{5, {1, 8}, {3, 4}}), 8, true);
+    // A negative base.
+    CHECK_DIV_MOD((MultiRamp{-6, {1, 4}, {2, 3}}), 4, true);
+}
+
+void check_div_mod_negative_strides() {
+    // Strides are reduced to their Euclidean residue, so s = -3 behaves as
+    // one step down a bucket and 1 along it: ramp(0,-3,2) = [0,-3], /4 =
+    // [0,-1], %4 = [0,1].
+    CHECK_DIV_MOD((MultiRamp{0, {-3}, {2}}), 4, true);
+    // The same with r0 = 2, which exactly exhausts the budget of 1.
+    CHECK_DIV_MOD((MultiRamp{2, {-3}, {2}}), 4, true);
+    // ... and with r0 = 3, which overflows it.
+    CHECK_DIV_MOD((MultiRamp{3, {-3}, {2}}), 4, false);
+    // Pure-carry negative strides.
+    CHECK_DIV_MOD((MultiRamp{2, {1, -8}, {2, 3}}), 8, true);
+    // A descending dense run, ramp(3,-1,4) = [3,2,1,0], is constant under /4,
+    // but its residue 3 per step looks like a climb, so it's (conservatively)
+    // rejected.
+    CHECK_DIV_MOD((MultiRamp{3, {-1}, {4}}), 4, false);
+}
+
+void check_div_mod_symbolic_base_alignment() {
+    // A symbolic base whose residue only an alignment callback knows.
+    Var v("v");
+    AlignmentLookup v_is_8k_plus_4 = [](const std::string &name) {
+        return name == "v" ? ModulusRemainder{8, 4} : ModulusRemainder{};
+    };
+    MultiRamp A{v + 2, {1, 32}, {2, 3}};
+    {
+        MultiRamp r = A;
+        CHECK(!r.div(4), "unknown base residue rejects div");
+        CHECK(!r.mod(4), "unknown base residue rejects mod");
+    }
+    {
+        // (8k + 6) / 4 over lanes [2, 3]: positions 2, 3 fit the budget of 1.
+        MultiRamp r = A;
+        CHECK(r.div(4, v_is_8k_plus_4), "aligned base div");
+        CHECK(r.lanes.size() == 2 && r.lanes[0] == 2 && r.lanes[1] == 3, "aligned base div lanes");
+        if (r.strides.size() == 2) {
+            CHECK(is_const_zero(simplify(r.strides[0])), "aligned base div inner stride");
+            CHECK(is_const(simplify(r.strides[1]), 8), "aligned base div outer stride");
+        }
+        CHECK(equal(simplify(r.base), simplify((v + 2) / 4)), "aligned base div base");
+    }
+    {
+        MultiRamp r = A;
+        CHECK(r.mod(4, v_is_8k_plus_4), "aligned base mod");
+        CHECK_SEQ_LIT(expand(r), "aligned base mod values", 2, 3, 2, 3, 2, 3);
+    }
+    {
+        // Through is_multiramp: (ramp(v + 6, 1, 2) % 4) is ramp(2, 1, 2).
+        Expr e = Mod::make(Ramp::make(v + 6, 1, 2), Broadcast::make(4, 2));
+        MultiRamp m;
+        CHECK(!is_multiramp(e, Scope<Expr>::empty_scope(), &m), "is_multiramp needs the alignment");
+        CHECK(is_multiramp(e, Scope<Expr>::empty_scope(), &m, v_is_8k_plus_4), "is_multiramp with alignment");
+        CHECK_SEQ_LIT(expand(m), "is_multiramp with alignment values", 2, 3);
+    }
 }
 
 void check_div_rejects_symbolic_denominator() {
@@ -787,6 +897,9 @@ int main(int argc, char **argv) {
     check_div_rejects_non_multiramp();
     check_div_rejects_unaligned_base();
     check_div_rejects_symbolic_denominator();
+    check_div_mod_unaligned_base();
+    check_div_mod_negative_strides();
+    check_div_mod_symbolic_base_alignment();
 
     check_mod_basic();
     check_mod_with_split();
