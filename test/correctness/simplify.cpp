@@ -317,6 +317,37 @@ void check_algebra() {
     check((x * -2 - y) / 2, (0 - y) / 2 - x);
     check((y - x * 4) / 2, y / 2 - x * 2);
     check((x + 8) / 2, x / 2 + 4);
+
+    // Drop an offset in [0, c0) that can't carry into the next multiple of
+    // the denominator, when c0 divides it. The offset's range must already be
+    // known: it has to be a variable with constant bounds (or a constant).
+    {
+        Scope<Interval> bounds;
+        bounds.push("y", Interval(0, 3));
+        check_in_bounds((x * 4 + y) / 32, x / 8, bounds);
+        check_in_bounds((y + x * 4) / 32, x / 8, bounds);
+        check_in_bounds((x * 4 + y) / -32, x / -8, bounds);
+        check_in_bounds((x * 4 + y + z * 32) / 32, x / 8 + z, bounds);
+        // The offset may be 4, or negative.
+        bounds.push("z", Interval(0, 4));
+        check_in_bounds((x * 4 + z) / 32, (x * 4 + z) / 32, bounds);
+        bounds.push("w", Interval(-1, 3));
+        check_in_bounds((x * 4 + w) / 32, (x * 4 + w) / 32, bounds);
+        // c0 doesn't divide the denominator.
+        check_in_bounds((x * 4 + y) / 30, (x * 4 + y) / 30, bounds);
+        check_in_bounds((x * 3 + y) / 32, (x * 3 + y) / 32, bounds);
+        // c0 is negative.
+        check_in_bounds((x * -4 + y) / 32, (x * -4 + y) / 32, bounds);
+    }
+    // The offset is unbounded.
+    check((x * 4 + y) / 32, (x * 4 + y) / 32);
+    // The bounds of a compound offset aren't looked for, even when they would
+    // suffice: the rule doesn't simplify the offset to find out.
+    check((x * 4 + y % 4) / 32, (x * 4 + y % 4) / 32);
+    check((x * 4 + clamp(y, 0, 3)) / 32, (clamp(y, 0, 3) + x * 4) / 32);
+    // Not valid for floats.
+    check((xf * 2.0f + clamp(yf, 0.0f, 1.0f)) / 4.0f, (clamp(yf, 0.0f, 1.0f) + xf * 2.0f) * 0.25f);
+
     check((x - y) * -2, (y - x) * 2);
     check((xf - yf) * -2.0f, (yf - xf) * 2.0f);
 
@@ -616,6 +647,16 @@ void check_vectors() {
     check(Expr(ramp(x * 4, 1, 3)) / 4, broadcast(x, 3));
     check(Expr(ramp(x * 8, 2, 4)) / 8, broadcast(x, 4));
     check(Expr(ramp(x * 8, 3, 3)) / 8, broadcast(x, 3));
+
+    {
+        Expr a = Variable::make(Int(32, 4), "a");
+        Expr b = Variable::make(Int(32, 4), "b");
+        Scope<Interval> bounds;
+        bounds.push("y", Interval(0, 3));
+        check_in_bounds((a * 4 + broadcast(y, 4)) / 32, a / 8, bounds);
+        // A vector offset other than a broadcast isn't looked into.
+        check((a * 4 + b % 4) / 32, (a * 4 + b % 4) / 32);
+    }
     check(Expr(ramp(0, 1, 8)) % 16, Expr(ramp(0, 1, 8)));
     check(Expr(ramp(8, 1, 8)) % 16, Expr(ramp(8, 1, 8)));
     check(Expr(ramp(9, 1, 8)) % 16, Expr(ramp(9, 1, 8)) % 16);
@@ -1973,6 +2014,17 @@ void check_boolean() {
 
     // A for loop where the min equals the max is just the body
     check(IfThenElse::make(x == 0, loop), IfThenElse::make(x == 0, body));
+
+    // An offset's bounds may come from a loop (whose max is inclusive) or a
+    // learned fact.
+    check(For::make("y", 0, 3, ForType::Serial, Partition::Auto, DeviceAPI::None, not_no_op((x * 4 + y) / 32)),
+          For::make("y", 0, 3, ForType::Serial, Partition::Auto, DeviceAPI::None, not_no_op(x / 8)));
+    check(For::make("y", 0, 4, ForType::Serial, Partition::Auto, DeviceAPI::None, not_no_op((x * 4 + y) / 32)),
+          For::make("y", 0, 4, ForType::Serial, Partition::Auto, DeviceAPI::None, not_no_op((x * 4 + y) / 32)));
+    check(IfThenElse::make(0 <= y && y < 4, not_no_op((x * 4 + y) / 32)),
+          IfThenElse::make(0 <= y && y < 4, not_no_op(x / 8)));
+    check(IfThenElse::make(y < 4, not_no_op((x * 4 + y) / 32)),
+          IfThenElse::make(y < 4, not_no_op((x * 4 + y) / 32)));
 
     // Check we can learn from conditions on variables
     check(IfThenElse::make(x < 5, not_no_op(min(x, 17))),
