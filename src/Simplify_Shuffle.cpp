@@ -115,6 +115,23 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
         }
     }
 
+    // A shuffle of a single vector that is itself a shuffle of a single
+    // vector, where the two compose to the identity (e.g. two transposes
+    // that undo each other), is just that vector.
+    if (new_vectors.size() == 1) {
+        if (const Shuffle *inner = new_vectors[0].as<Shuffle>();
+            inner && inner->vectors.size() == 1 &&
+            inner->vectors[0].type().lanes() == op->type.lanes()) {
+            bool identity = true;
+            for (size_t i = 0; i < op->indices.size() && identity; i++) {
+                identity = inner->indices[op->indices[i]] == (int)i;
+            }
+            if (identity) {
+                return inner->vectors[0];
+            }
+        }
+    }
+
     // Simplify a slice of a broadcast, where the slice lies within a single
     // copy of the value being broadcast, into a slice of that value.
     if (op->is_slice() && new_vectors.size() == 1) {
