@@ -2,7 +2,9 @@
 // reference quantizer and to_float, bitwise, on N(0, 1) rows whose first
 // blocks are adversarial (signed zeros, ties, constants, tiny and huge
 // values). inf/NaN inputs are undefined behavior in GGML's reference and are
-// not tested. Timed against the same GGML functions (and from_float, GGML's
+// not tested. Also checked: the same with the scaled codes kernels may pick
+// (same bytes, same values), and dequantize on crafted blocks spanning every
+// code byte and finite fp16 scale. Timed against the same GGML functions (and from_float, GGML's
 // fast path for activations, where it differs from the reference).
 #include "harness.h"
 
@@ -126,10 +128,12 @@ std::vector<CodecResult> run_codecs(const std::vector<int64_t> &Ks, const std::v
                     std::string detail;
                 };
                 std::vector<Entry> es;
-                for (int bench : {0, 1}) {
-                    if (!check && !bench) continue;
-                    Fn f = quant ? row.quantize[bench] : row.dequantize[bench];
-                    std::string name = "halide-" + row.type + (bench ? "" : ":checked");
+                for (int bench : {0, 1, 2}) {  // checked, bench, scaled (checked)
+                    if (!check && bench != 1) continue;
+                    Fn f = bench == 2 ? row.scaled[!quant] : quant ? row.quantize[bench] :
+                                                                     row.dequantize[bench];
+                    std::string name = "halide-" + row.type + (bench == 1 ? "" : bench ? ":scaled" :
+                                                                                         ":checked");
                     memset(q.data(), 0, bytes);
                     std::fill(y.begin(), y.end(), NAN);
                     int err = quant ? f(&bx.b, &bq.b) : f(&bref.b, &by.b);
@@ -158,6 +162,34 @@ std::vector<CodecResult> run_codecs(const std::vector<int64_t> &Ks, const std::v
                 for (size_t i = 0; i < es.size(); i++) {
                     results.push_back({row.type, dir, es[i].provider, es[i].k->path, K, es[i].detail, !check, check ? Timing{} : ts[i], R});
                 }
+            }
+        }
+        if (check) {
+            // Crafted blocks, as GGML's (an fp16 scale, then the code bytes):
+            // block i's scale is a finite fp16 (zeros, subnormals, both signs,
+            // up to 65504); its code bytes count up, so every 16 blocks span
+            // every byte value.
+            int64_t K = 4096 * ggml_blck_size(t), nb = K / ggml_blck_size(t), bs = ggml_type_size(t);
+            std::vector<uint8_t> aos(bs * nb * R), q(aos.size());
+            for (int64_t i = 0; i < nb * R; i++) {
+                uint16_t h = (uint16_t)((i * 31) % 0x7c00 | (i & 1) << 15);
+                memcpy(&aos[i * bs], &h, 2);
+                for (int64_t j = 2; j < bs; j++)
+                    aos[i * bs + j] = (uint8_t)((i * (bs - 2) + j - 2) & 255);
+            }
+            std::vector<float> y(K * R), ref_y(K * R);
+            ggml_get_type_traits(t)->to_float(aos.data(), ref_y.data(), K * R);
+            if (R == 1) q = aos;
+            else if (!ggml_repack(fs, t, aos.data(), q.data(), R, K))
+                continue;
+            std::vector<int64_t> ye{K}, qe{nb};
+            if (R > 1) ye.push_back(R), qe = {nb, R / fs.rows};
+            BufN bq(q.data(), block, qe), by(y.data(), halide_type_t(halide_type_float, 32), ye);
+            for (auto [f, name] : {std::pair{row.dequantize[0], ":checked"}, {row.scaled[1], ":scaled"}}) {
+                std::fill(y.begin(), y.end(), NAN);
+                int err = f(&bq.b, &by.b);
+                std::string detail = err ? "halide error " + std::to_string(err) : first_diff(y.data(), ref_y.data(), K * R * sizeof(float), ggml_blck_size(t) * sizeof(float));
+                results.push_back({row.type, "dequantize", "halide-" + row.type + name, "crafted", K, detail, false, {}, R});
             }
         }
     }
