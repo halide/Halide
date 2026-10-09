@@ -393,6 +393,15 @@ public:
     // Only tracked for integer let vars
     Scope<ExprInfo> bounds_and_alignment_info;
 
+    /** Looks up the alignment of let vars in bounds_and_alignment_info, for
+     * analyses that take an AlignmentLookup. */
+    AlignmentLookup let_var_alignment() const {
+        return [this](const std::string &name) {
+            const ExprInfo *info = bounds_and_alignment_info.find(name);
+            return info ? info->alignment : ModulusRemainder{};
+        };
+    }
+
     // Symbols used by rewrite rules
     IRMatcher::Wild<0> x;
     IRMatcher::Wild<1> y;
