@@ -24,6 +24,7 @@ py::object realization_to_object(const Realization &r) {
 // after the ProfilerScope exits and the profiler resets.
 struct ProfilerFuncStats {
     std::string name;
+    std::string ir_name;
     halide_profiler_func_stats stats;
 };
 
@@ -34,7 +35,7 @@ struct ProfilerPipelineStats {
 };
 
 ProfilerFuncStats snapshot(const halide_profiler_func_stats &f) {
-    return {f.name, f};
+    return {f.name, f.ir_name, f};
 }
 
 std::optional<ProfilerPipelineStats> snapshot(const halide_profiler_pipeline_stats *p) {
@@ -121,6 +122,19 @@ void define_pipeline(py::module &m) {
         .def_readwrite("extra", &AutoschedulerParams::extra)
         .def("__repr__", [](const AutoSchedulerResults &o) -> std::string {
             return "<halide.AutoschedulerParams>";
+        });
+
+    py::class_<HalidoscopeOptions>(m, "HalidoscopeOptions")
+        .def(py::init<>())
+        .def_readwrite("path", &HalidoscopeOptions::path)
+        .def_readwrite("output_dir", &HalidoscopeOptions::output_dir)
+        .def_readwrite("profile_runs", &HalidoscopeOptions::profile_runs)
+        .def_readwrite("trace_file_size_limit", &HalidoscopeOptions::trace_file_size_limit)
+        .def("__repr__", [](const HalidoscopeOptions &o) -> std::string {
+            return "<halide.HalidoscopeOptions path='" + o.path.value_or("halidoscope") +
+                   "' output_dir='" + o.output_dir.value_or("") +
+                   "' profile_runs=" + (o.profile_runs ? std::to_string(*o.profile_runs) : "None") +
+                   " trace_file_size_limit=" + std::to_string(o.trace_file_size_limit) + ">";
         });
 
     auto pipeline_class =
@@ -283,6 +297,35 @@ void define_pipeline(py::module &m) {
                  },
                  py::arg("dst"), py::arg("target") = Target())
 
+            // Development/debugging aid: see Pipeline::halidoscope() in Pipeline.h.
+            // Blocks until the Halidoscope window is closed, so the GIL must be
+            // released for the duration of the call, same as realize() above.
+            .def("halidoscope",  //
+                 [](Pipeline &p, Buffer<> buffer, const HalidoscopeOptions &options, const Target &target) -> void {
+                     py::gil_scoped_release release;
+                     p.halidoscope(Realization(std::move(buffer)), options, target);  //
+                 },
+                 py::arg("dst"), py::arg("options") = HalidoscopeOptions(), py::arg("target") = Target())
+
+            // See the comment on the corresponding realize() overload above: this
+            // overload must be declared before the list-of-sizes one, so that an
+            // empty list [] is resolved as list-of-sizes (a 0-dimensional Buffer)
+            // rather than as an ambiguous empty list-of-buffers.
+            .def("halidoscope",  //
+                 [](Pipeline &p, std::vector<int32_t> sizes, const HalidoscopeOptions &options, const Target &target) -> void {
+                     py::gil_scoped_release release;
+                     p.halidoscope(std::move(sizes), options, target);  //
+                 },
+                 py::arg("sizes") = std::vector<int32_t>{}, py::arg("options") = HalidoscopeOptions(), py::arg("target") = Target())
+
+            // This will actually allow a list-of-buffers as well as a tuple-of-buffers, but that's OK.
+            .def("halidoscope",  //
+                 [](Pipeline &p, std::vector<Buffer<>> buffers, const HalidoscopeOptions &options, const Target &target) -> void {
+                     py::gil_scoped_release release;
+                     p.halidoscope(Realization(std::move(buffers)), options, target);  //
+                 },
+                 py::arg("dst"), py::arg("options") = HalidoscopeOptions(), py::arg("target") = Target())
+
             .def("infer_input_bounds",  //
                  [](Pipeline &p, const py::object &dst, const Target &target) -> void {
                      const Target t = to_jit_target(target);
@@ -364,6 +407,7 @@ void define_pipeline(py::module &m) {
 
     auto func_stats_class = py::class_<ProfilerFuncStats>(m, "ProfilerFuncStats")
                                 .def_readonly("name", &ProfilerFuncStats::name)
+                                .def_readonly("ir_name", &ProfilerFuncStats::ir_name)
                                 .def("__repr__", [](const ProfilerFuncStats &s) -> std::string {
                                     return "<halide.ProfilerFuncStats " + s.name + ">";
                                 });

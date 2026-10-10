@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "Callable.h"
+#include "Halidoscope.h"
 #include "IROperator.h"
 #include "IntrusivePtr.h"
 #include "JITModule.h"
@@ -567,6 +568,30 @@ public:
 
     /** Generate begin_pipeline and end_pipeline tracing calls for this pipeline. */
     void trace_pipeline();
+
+    /** Development/debugging aid: run this pipeline once with full tracing
+     * enabled and then some number of times with the profiler enabled (see
+     * HalidoscopeOptions::profile_runs), write the resulting trace and
+     * profile to a temporary directory, and open them in the Halidoscope GUI
+     * (tools/halidoscope). The `halidoscope` executable is looked up on $PATH
+     * by default; set HalidoscopeOptions::path to override that.
+     *
+     * These runs are purely for instrumentation. The output buffers, if any,
+     * are overwritten, but are not a meaningful realization for the
+     * caller. This method blocks until the Halidoscope window is closed, at
+     * which point the temporary directory is deleted.
+     *
+     * Not reentrant/thread-safe; do not call this concurrently with itself
+     * or with another Halide JIT realization in the same process.
+     *
+     * As with realize, the variants taking a JITUserContext pass it to
+     * runtime functions, and a nullptr context is legal. */
+    // @{
+    void halidoscope(std::vector<int32_t> sizes, const HalidoscopeOptions &options = HalidoscopeOptions(), const Target &target = Target());
+    void halidoscope(RealizationArg output, const HalidoscopeOptions &options = HalidoscopeOptions(), const Target &target = Target());
+    void halidoscope(JITUserContext *context, std::vector<int32_t> sizes, const HalidoscopeOptions &options = HalidoscopeOptions(), const Target &target = Target());
+    void halidoscope(JITUserContext *context, RealizationArg output, const HalidoscopeOptions &options = HalidoscopeOptions(), const Target &target = Target());
+    // @}
 
 private:
     std::string generate_function_name() const;

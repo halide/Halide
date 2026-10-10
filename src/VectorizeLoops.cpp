@@ -609,7 +609,8 @@ protected:
             if (*event == halide_trace_begin_realization ||
                 *event == halide_trace_end_realization ||
                 *event == halide_trace_begin_parallel_task ||
-                *event == halide_trace_end_parallel_task) {
+                *event == halide_trace_end_parallel_task ||
+                *event == halide_trace_bounds_required) {
                 // Call::trace vectorizes uniquely for begin/end scope events with min/extent pairs.
                 // We need to maintain the proper dimensionality count and instead aggregate the
                 // widened values into a single pair.

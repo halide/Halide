@@ -602,7 +602,8 @@ enum halide_trace_event_code_t { halide_trace_load = 0,
                                  halide_trace_end_pipeline = 9,
                                  halide_trace_tag = 10,
                                  halide_trace_begin_parallel_task = 11,
-                                 halide_trace_end_parallel_task = 12 };
+                                 halide_trace_end_parallel_task = 12,
+                                 halide_trace_bounds_required = 13 };
 
 struct halide_trace_event_t {
     /** The name of the Func or Pipeline that this event refers to */
@@ -676,9 +677,13 @@ struct halide_trace_event_t {
  * +--tag (if any)
  * +--tag (if any)
  * ...
+ * +--bounds_required (if any)
+ * ...
  * +--(begin_realization|produce|consume)
+ * |  +-- bounds_required (if any)
  * |  +-- ... recursively more realizations/produces/consumes ...
  * |      +-- begin_parallel_task
+ * |      |   +-- bounds_required (if any)
  * |      |   +-- load
  * |      |   +-- store
  * |      |   +-- ... recursively more realization/produce/consume events ...
@@ -702,6 +707,16 @@ struct halide_trace_event_t {
  * Note that all tag events (if any) will occur just after the begin_pipeline
  * event, but before any begin_realization events. All tags for a given Func
  * will be emitted in the order added.
+ *
+ * A bounds_required event gives, as min/extent pairs, the region of a Func
+ * that must be computed within an iteration of a loop that contains a
+ * production of that Func. It is emitted at the start of that iteration, before
+ * the realization of the Func, and its parent is the innermost enclosing event
+ * (or begin_pipeline, after any tags, for the outermost loop level). Stores
+ * to the Func within that iteration that fall outside the region (e.g. due to
+ * TailStrategy::RoundUp in a consumer) do not affect the output, and may be
+ * computed from uninitialized memory. Values stored in earlier iterations may
+ * still be loaded (e.g. due to sliding window).
  *
  * A trace function returns the id of the event, which must be
  * non-negative. A negative return value is treated as an error code:
@@ -1523,6 +1538,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_trace_stores,           ///< Trace all stores done by the pipeline. Equivalent to calling Func::trace_stores on every non-inlined Func.
     halide_target_feature_trace_realizations,     ///< Trace all realizations done by the pipeline. Equivalent to calling Func::trace_realizations on every non-inlined Func.
     halide_target_feature_trace_pipeline,         ///< Trace the pipeline.
+    halide_target_feature_trace_bounds_required,  ///< Trace the bounds required of each Func at each loop level containing a production of it. Equivalent to calling Func::trace_bounds_required on every non-inlined Func.
     halide_target_feature_hvx_v65,                ///< Enable Hexagon v65 architecture.
     halide_target_feature_hvx_v66,                ///< Enable Hexagon v66 architecture.
     halide_target_feature_hvx_v68,                ///< Enable Hexagon v68 architecture.
@@ -2051,6 +2067,11 @@ enum halide_profiler_func_kind {
 struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
     /** The name of this Func. A global constant string. */
     const char *name;
+
+    /** The name of this Func in the IR. Differs from name when the Func has a
+     * profiler display name (e.g. inputs and wrappers). A global constant
+     * string. */
+    const char *ir_name;
 
     /** The id of the parent Func (the one which this is compute_at). -1 if the
      * Func is compute_root. */

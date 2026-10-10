@@ -131,6 +131,7 @@ target_sources(
     FuzzFloatStores.h
     Generator.h
     GeneratorCache.h
+    Halidoscope.h
     HexagonOffload.h
     HexagonOptimize.h
     ImageParam.h
@@ -315,6 +316,7 @@ target_sources(
     FuzzFloatStores.cpp
     Generator.cpp
     GeneratorCache.cpp
+    Halidoscope.cpp
     HexagonOffload.cpp
     HexagonOptimize.cpp
     ImageParam.cpp
@@ -510,6 +512,13 @@ target_sources(
     FILE_SET HEADERS
     BASE_DIRS "${Halide_BINARY_DIR}/include"
     FILES "${Halide_BINARY_DIR}/include/Halide.h"
+)
+
+# For HalideRuntime.h, included by tools/halide_trace_compression.h
+set_source_files_properties(
+    Halidoscope.cpp
+    PROPERTIES
+    INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/runtime"
 )
 
 ##

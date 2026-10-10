@@ -282,6 +282,7 @@ tests(
     growing_stack.cpp
     half_native_interleave.cpp
     halide_buffer.cpp
+    halidoscope.cpp
     handle.cpp
     heap_cleanup.cpp
     hello_gpu.cpp
@@ -529,8 +530,10 @@ tests(
     too_many_args.cpp
     tracing.cpp
     tracing_bounds.cpp
+    tracing_bounds_required.cpp
     tracing_broadcast.cpp
     tracing_errors.cpp
+    tracing_matched_events.cpp
     tracing_stack.cpp
     transitive_bounds.cpp
     transpose_idioms.cpp
@@ -767,6 +770,7 @@ set_target_properties(
 if (WITH_SERIALIZATION)
     target_compile_definitions(correctness_streaming PRIVATE TEST_WITH_SERIALIZATION)
     target_compile_definitions(correctness_generator_cache PRIVATE TEST_WITH_SERIALIZATION)
+    target_compile_definitions(correctness_halidoscope PRIVATE TEST_WITH_SERIALIZATION)
     target_compile_definitions(correctness_serialization PRIVATE TEST_WITH_SERIALIZATION)
 endif ()
 

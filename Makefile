@@ -519,6 +519,7 @@ SOURCE_FILES = \
   FuzzFloatStores.cpp \
   Generator.cpp \
   GeneratorCache.cpp \
+  Halidoscope.cpp \
   HexagonOffload.cpp \
   HexagonOptimize.cpp \
   ImageParam.cpp \
@@ -726,6 +727,7 @@ HEADER_FILES = \
   FuzzFloatStores.h \
   Generator.h \
   GeneratorCache.h \
+  Halidoscope.h \
   HexagonOffload.h \
   HexagonOptimize.h \
   ImageParam.h \
@@ -1269,6 +1271,9 @@ $(BUILD_DIR)/c_template.%.o: $(BUILD_DIR)/c_template.%.cpp
 
 $(BUILD_DIR)/html_template.%.o: $(BUILD_DIR)/html_template.%.cpp
 	$(CXX) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
+
+# For HalideRuntime.h, included by tools/halide_trace_compression.h
+$(BUILD_DIR)/Halidoscope.o: CXX_FLAGS += -I$(SRC_DIR)/runtime
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(@D)
@@ -2503,6 +2508,7 @@ $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT): \
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_malloc_trace.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_thread_pool.h $(DISTRIB_DIR)/tools
+	cp $(ROOT_DIR)/tools/halide_trace_compression.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_trace_config.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README*.md $(DISTRIB_DIR)
 	cp $(BUILD_DIR)/halide_config.* $(DISTRIB_DIR)

@@ -238,7 +238,9 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
             return halide_error_trace_failed(user_context, "Could not write to trace file");
         }
 
-        // Write a packet into it
+        // Write a packet into it. Zero the last word first so that the
+        // padding is deterministic, which helps compression.
+        ((uint32_t *)packet)[total_size / 4 - 1] = 0;
         packet->size = total_size;
         packet->event = e->event;
         packet->parent_id = e->parent_id;
@@ -297,7 +299,8 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
                                      "End pipeline",
                                      "Tag",
                                      "Begin parallel task",
-                                     "End parallel task"};
+                                     "End parallel task",
+                                     "Bounds required"};
 
         // Only print out the value on stores and loads.
         bool print_value = (e->event < 2);
