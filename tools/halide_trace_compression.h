@@ -168,7 +168,7 @@ class TraceCodec {
             ctxs.resize(n + 1);
         }
         if (!ctxs[n]) {
-            ctxs[n].reset(new Ctx{std::vector<uint8_t>(n), std::vector<Model>(n)});
+            ctxs[n] = std::make_unique<Ctx>(Ctx{std::vector<uint8_t>(n), std::vector<Model>(n)});
         }
         Ctx &c = *ctxs[n];
 
@@ -450,7 +450,7 @@ bool decompress_trace(const uint8_t *data, size_t size, uint8_t *out, P progress
         while (true) {
             size_t i;
             {
-                std::lock_guard<std::mutex> lock(mutex);
+                std::scoped_lock lock(mutex);
                 if (failed || next >= chunks.size()) {
                     return;
                 }
@@ -459,7 +459,7 @@ bool decompress_trace(const uint8_t *data, size_t size, uint8_t *out, P progress
             const Internal::TraceChunk &c = chunks[i];
             bool ok = std::make_unique<TraceCodec>()->decode_chunk(c.begin, c.end, out + c.out_offset);
             {
-                std::lock_guard<std::mutex> lock(mutex);
+                std::scoped_lock lock(mutex);
                 state[i] = ok ? Done : Failed;
                 failed |= !ok;
             }
@@ -467,6 +467,7 @@ bool decompress_trace(const uint8_t *data, size_t size, uint8_t *out, P progress
         }
     };
     std::vector<std::thread> threads;
+    threads.reserve(num_threads);
     for (size_t t = 0; t < num_threads; t++) {
         threads.emplace_back(worker);
     }
