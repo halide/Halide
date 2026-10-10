@@ -53,6 +53,7 @@ add_app(cuda_mat_mul)
 add_app(depthwise_separable_conv)
 add_app(fft)
 add_app(gaussian_blur)
+add_app(ggml)
 add_app(hannk)
 add_app(harris)
 # add_app(HelloAndroid)  # don't build HelloAndroid here because it is driven by gradle
