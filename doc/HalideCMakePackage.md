@@ -414,6 +414,7 @@ add_halide_library(<target> FROM <generator-target>
                    [USE_RUNTIME hl-target]
                    [PARAMS param1 [param2 ...]]
                    [DEPENDS [dep1 dep2 ...]]
+                   [ENVIRONMENT VAR1=value1 [VAR2=value2 ...]]
                    [TARGETS target1 [target2 ...]]
                    [FEATURES feature1 [feature2 ...]]
                    [FEATURES[<triple>] feature1 [feature2 ...]]
@@ -490,6 +491,11 @@ build. To declare dependencies on these files, use the `DEPENDS` argument. Paths
 listed here will be passed verbatim to `add_custom_command`, and so will be
 relative to the source directory. Use absolute paths when referring to files
 outside the source directory.
+
+`ENVIRONMENT` sets environment variables (each `VAR=value`) for the generator
+invocations of this library only, via `cmake -E env`. For example,
+`ENVIRONMENT HL_LLVM_ARGS=-misched-regpressure=false` passes a flag to LLVM for
+just this library's code generation. It does not affect the runtime target.
 
 To use an autoscheduler, set the `AUTOSCHEDULER` argument to a target named like
 `Namespace::Scheduler`, for example `Halide::Adams2019`. This will set the
