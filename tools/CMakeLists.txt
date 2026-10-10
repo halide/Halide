@@ -91,6 +91,8 @@ target_sources(
     INTERFACE
     FILE_SET HEADERS
     FILES
+    halide_approximation_codec.h
+    halide_approximation_testing.h
     halide_benchmark.h
     halide_image.h
     halide_image_info.h

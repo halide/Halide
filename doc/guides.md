@@ -7,6 +7,7 @@
 BuildingHalideWithCMake
 HalideCMakePackage
 CodeStyleCMake
+Approximation
 CustomRuntimes
 FuzzTesting
 GeneratorCache
