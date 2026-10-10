@@ -173,21 +173,21 @@ sdot. Its gemm tiles (16, 8 or 4 activation rows) use the same by-element sdot,
 as KleidiAI's dotprod gemm: per block the weight record is decoded once and the
 sums are computed per activation record, its codes staged in memory order (a
 16-byte load holds a piece of each of its 4 rows) and its 4 scales one vector.
-The default layouts: `q4_0.i4.4x4` for gemv, `q4_0.i4.4x8` (smmla) for gemm; on
-M3 the two gemms are at parity, and each layout is built with mul_mat as a
-comparison. An in-kernel activation encoder runs first, parallel over activation
-rows when M > 1, and vectorized per encoded block (`encoder`: the block's
-reductions, e.g. its scale, across the block; per-value Funcs, e.g. the codes,
-across their values). Kernel ABI (`harness/halide_providers.cpp`): `w`/`a` are
-`[K / block, N / rows or M]` records (struct types from the kernel's metadata),
-`out` is f32 `[N, M]`. The kernel declares the whole contract (checked in
-`checked`, assumed in `bench`): all mins 0, rows dense
-(`dim(1).stride == dim(0).extent`), `a`'s K tied to `w`'s, `w`/`a` rows match
-`out`'s N/M, and `vec_dot` pins `out` to 1 x 1. It promises no more than GGML
-does: K is a whole number of blocks (GGML asserts `n % QK == 0`), with no even
-block count (the 2-block interleave keeps its guard) and no host alignment
-(q4_0/q8_0 rows start on 2-byte boundaries). `vec_dot` goes through a GGML-ABI
-adapter.
+The default layout is `q4_0.i4.4x4`, for gemv and gemm alike (a weight is
+repacked once, as KleidiAI's is); `q4_0.i4.4x8` (smmla gemm, at parity on M3)
+and AoS are built with mul_mat as comparisons. An in-kernel activation encoder
+runs first, parallel over activation rows when M > 1, and vectorized per encoded
+block (`encoder`: the block's reductions, e.g. its scale, across the block;
+per-value Funcs, e.g. the codes, across their values). Kernel ABI
+(`harness/halide_providers.cpp`): `w`/`a` are `[K / block, N / rows or M]`
+records (struct types from the kernel's metadata), `out` is f32 `[N, M]`. The
+kernel declares the whole contract (checked in `checked`, assumed in `bench`):
+all mins 0, rows dense (`dim(1).stride == dim(0).extent`), `a`'s K tied to
+`w`'s, `w`/`a` rows match `out`'s N/M, and `vec_dot` pins `out` to 1 x 1. It
+promises no more than GGML does: K is a whole number of blocks (GGML asserts
+`n % QK == 0`), with no even block count (the 2-block interleave keeps its
+guard) and no host alignment (q4_0/q8_0 rows start on 2-byte boundaries).
+`vec_dot` goes through a GGML-ABI adapter.
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds
