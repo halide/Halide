@@ -673,6 +673,8 @@ int test_block_tiles() {
         std::vector<Var> args = packed.args();
         Var tile("tile");
         packed.bound(args[0], 0, 2).bound(args[1], 0, 2).fuse(args[0], args[1], tile).vectorize(tile);
+        // A tile is one dense 4-wide store only if the output's tile rows are adjacent.
+        packed.output_buffer().dim(1).set_stride(2);
         FindVectorStore finder;
         finder.name = packed.name();
         finder.lanes = 4;
