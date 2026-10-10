@@ -719,7 +719,7 @@ function(add_halide_library TARGET)
         FILE_BASE_NAME FROM GENERATOR FUNCTION_NAME NAMESPACE OUTPUT_DIR USE_RUNTIME AUTOSCHEDULER
         HEADER ${extra_output_names} NO_THREADS NO_DL_LIBS
     )
-    set(multiValueArgs DEPENDS TARGETS PARAMS PLUGINS ${features_args})
+    set(multiValueArgs DEPENDS ENVIRONMENT TARGETS PARAMS PLUGINS ${features_args})
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if (NOT "${ARG_UNPARSED_ARGUMENTS}" STREQUAL "")
@@ -881,6 +881,17 @@ function(add_halide_library TARGET)
         OUT_COMMAND generator_cmd
         OUT_DEPENDS generator_cmd_deps
     )
+
+    foreach (assignment IN LISTS ARG_ENVIRONMENT)
+        if (NOT assignment MATCHES "^[A-Za-z_][A-Za-z0-9_]*=")
+            message(
+                FATAL_ERROR "ENVIRONMENT entries must have the form VAR=value, got: ${assignment}"
+            )
+        endif ()
+    endforeach ()
+    if (ARG_ENVIRONMENT)
+        list(PREPEND generator_cmd ${CMAKE_COMMAND} -E env ${ARG_ENVIRONMENT} --)
+    endif ()
 
     set(generator_args
         COMMAND ${generator_cmd}  #
