@@ -546,6 +546,52 @@ public:
     bool found = false;
 };
 
+class FindAllocation : public Internal::IRMutator {
+    using IRMutator::visit;
+    Internal::Stmt visit(const Internal::Allocate *op) override {
+        if (op->name == name) {
+            size = op->constant_allocation_size();
+        }
+        return IRMutator::visit(op);
+    }
+
+public:
+    std::string name;
+    int32_t size = -1;
+};
+
+// A block-indexed decode reads within-block indices as given, so a stage at a
+// loop over 4-element pieces of a 32-element block holds only the piece.
+int test_block_indexed_pieces() {
+    Var j("j"), b("b");
+    Func values("piece_values");
+    values(j, b) = j + 32 * b;
+    Approximation indexed = BlockReshape(32, true);
+    Func packed = indexed.encode({values}).encoded[0];
+    Func decoded = indexed.decode({packed}).decoded[0];
+    Func sum("piece_sum");
+    RDom r(0, 32, 0, 4);
+    sum() = 0;
+    sum() += decoded(r.x, r.y);
+    RVar rp("rp"), ri("ri");
+    sum.update().split(r.x, rp, ri, 4);
+    packed.compute_at(sum, rp);
+    FindAllocation finder;
+    finder.name = packed.name();
+    Pipeline p(sum);
+    p.add_custom_lowering_pass(&finder, [] {});
+    Buffer<int> out = p.realize();
+    if (finder.size != 4) {
+        printf("Block-indexed piece of %s: allocated %d elements, expected 4\n", packed.name().c_str(), finder.size);
+        return 1;
+    }
+    if (out() != 127 * 128 / 2) {
+        printf("Block-indexed pieces: sum %d, expected %d\n", out(), 127 * 128 / 2);
+        return 1;
+    }
+    return 0;
+}
+
 // BlockReshape::tiles splits several leading dimensions into dense tiles:
 // (x0, x1, rest...) <-> (x0 % b0, x1 % b1, x0 / b0, x1 / b1, rest...).
 int test_block_tiles() {
@@ -729,6 +775,7 @@ int main(int argc, char **argv) {
                  {"scalar packs", test_scalar_components},
                  {"code packs", test_code_components},
                  {"block components", test_block_components},
+                 {"block-indexed pieces", test_block_indexed_pieces},
                  {"block tiles", test_block_tiles},
                  {"batch dimensions", test_batch_dimensions},
                  {"batched scheme", test_batched_scheme},

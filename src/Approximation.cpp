@@ -1265,11 +1265,15 @@ std::vector<Func> BlockReshape::decode(const std::vector<Func> &encoded) const {
     Expr within = block_indexed_ ? Expr(kk) : k % block_size();
     Expr block = block_indexed_ ? Expr(blk) : k / block_size();
     std::vector<Expr> args;
+    // `within` is in [0, block_size()), so what's left of it for the last
+    // extent is already in range. Leaving off its % keeps bounds inference
+    // exact on pieces of a record (as at a loop over a split of `within`).
     Expr rem = within;
-    for (int extent : extents_) {
-        args.push_back(rem % extent);
-        rem /= extent;
+    for (size_t i = 0; i + 1 < extents_.size(); ++i) {
+        args.push_back(rem % extents_[i]);
+        rem /= extents_[i];
     }
+    args.push_back(rem);
     args.push_back(block);
     args.insert(args.end(), rest.begin(), rest.end());
     std::vector<Var> out_args;
