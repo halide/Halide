@@ -1013,6 +1013,12 @@ void run_with_cache(const std::string &key,
 }
 
 #ifdef WITH_SERIALIZATION
+// HL_LLVM_ARGS is passed straight to LLVM's option parser, so it can change
+// codegen without changing anything else in the key.
+void add_llvm_args_key_field(CacheKeyBuilder &b) {
+    b.add(get_env_variable("HL_LLVM_ARGS"));
+}
+
 // Mix the invocation-wide (target-independent) inputs that affect codegen
 // into a fresh key builder: the compiler identity plus names, build mode,
 // requested output types, and the canonical generator-param settings.
@@ -1025,6 +1031,7 @@ bool add_common_key_fields(CacheKeyBuilder &b, const char *kind, const ExecuteGe
     }
     b.add(kind);
     b.add(compiler_id);
+    add_llvm_args_key_field(b);
     b.add(args.function_name);
     b.add(args.file_base_name);
     b.add(args.build_mode == ExecuteGeneratorArgs::Gradient ? "gradient" : "default");
@@ -1178,6 +1185,7 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
                 CacheKeyBuilder b;
                 b.add("runtime");
                 b.add(compiler_id);
+                add_llvm_args_key_field(b);
                 b.add(gcd_target.to_string());
                 for (OutputFileType t : args.output_types) {
                     b.add(std::to_string((int)t));
