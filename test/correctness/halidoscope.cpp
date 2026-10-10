@@ -121,6 +121,11 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        std::cout << "[SKIP] WebAssembly JIT does not support the profiler or tracing to a file.\n";
+        return 0;
+    }
+
     const std::string self = fs::absolute(argv[0]).string();
 
     // Happy path: one traced realization and one profiled realization
