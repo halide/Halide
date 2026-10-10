@@ -160,7 +160,11 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     Func quads = cu.rfactor(rq, q);
     cu.reorder(rq, n).atomic().vectorize(rq).vectorize(n).unroll(m).unroll(u);
     quads.reorder_storage(q, n, m).compute_at(at).vectorize(q).vectorize(n).unroll(m).unroll(u).bound_storage(u, ts.interleave);
-    quads.update().reorder(ri, q, n, rp, grouped ? m : u, grouped ? u : m).atomic().vectorize(ri).vectorize(q).vectorize(n).unroll(rp).unroll(u).unroll(m);
+    // gemm tiles: per act record, piece-major, each piece of its codes
+    // staged just before use (the record's sums the only ones live)
+    Stage qu = quads.update();
+    grouped ? qu.split(m, mo, mi, group).reorder(ri, q, n, mi, rp, mo, u).unroll(mi).unroll(mo) : qu.reorder(ri, q, n, rp, u, m).unroll(m);
+    qu.atomic().vectorize(ri).vectorize(q).vectorize(n).unroll(rp).unroll(u);
     // A piece's act codes then are a lane of a register: by-element sdot
     auto calls = Internal::find_direct_calls(quads.function());
     for (Func a : ac) {
@@ -173,7 +177,7 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
                 ai.split(k, ko, ki, 4).reorder(ki, am, ko).fuse(ki, am, kv).unroll(ko);
                 k = kv;
             }
-            ai.compute_at(quads, u).vectorize(k);
+            ai.compute_at(grouped ? LoopLevel(quads, rp) : LoopLevel(quads, u)).vectorize(k);
         }
     }
     for (Func f : {blk, codes}) {
