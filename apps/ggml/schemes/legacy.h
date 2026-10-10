@@ -43,10 +43,11 @@ struct Q4_0Quant {
 
 // `codes`: the nibble encoding (GGML's block_q4_0: offset(8); its repacked
 // layouts: twos(4)) of the codes, kept at 2^shift times their value (the same
-// bytes; see Q4_0Quant). Then the fields' values to their storage.
-inline Approximation q4_0(const Approximation &codes, const std::string &lay, int shift = 0) {
+// bytes; see Q4_0Quant). Then the fields' values to their storage. `indexed`:
+// the values' side is (index in block, block, ...) rather than flat.
+inline Approximation q4_0(const Approximation &codes, const std::string &lay, int shift = 0, bool indexed = false) {
     Approximation codec = shift ? Parallel{{"codes", codes}, {"scale", scale_by(1 << shift)}} : Parallel{{"codes", codes}};
-    return Compose{BlockReshape{QK}, Q4_0Quant{shift}, codec,
+    return Compose{BlockReshape{QK, indexed}, Q4_0Quant{shift}, codec,
                    Parallel{{"codes", PlanarFieldPack{4, QK / 2}}, {"scale", fp16()}},
                    layout(lay, {{"d", Float(16)}, {"qs", UInt(8), QK / 2}}, {"qs", "d"})};
 }
@@ -72,8 +73,8 @@ struct Q8_0Quant {
     }
 };
 
-inline Approximation q8_0(const std::string &lay) {
-    return Compose{BlockReshape{QK}, Q8_0Quant{}, Parallel{{"scale", fp16()}},
+inline Approximation q8_0(const std::string &lay, bool indexed = false) {
+    return Compose{BlockReshape{QK, indexed}, Q8_0Quant{}, Parallel{{"scale", fp16()}},
                    layout(lay, {{"d", Float(16)}, {"qs", Int(8), QK}}, {"qs", "d"})};
 }
 
