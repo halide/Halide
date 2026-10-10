@@ -116,9 +116,12 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
 // of the record is one dense load and the act's piece is broadcast to its
 // rows (held in registers per block: with 4-code pieces, a by-element sdot);
 // the quads are then merged, and the scales and accumulators are vectorized
-// across the rows.
+// across the rows. On gemm tiles of more than `group` (the act's rows per
+// record) rows, as KleidiAI's dotprod gemm: the sums per act record, its
+// codes staged in memory order (a 4-code piece of each row per lane), and its
+// scales as one vector.
 inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, int block, int chunk,
-                         const std::vector<ApproximationResult> &rs) {
+                         const std::vector<ApproximationResult> &rs, int group = 0) {
     Stage s = tile_out(out, st, dot, cond, ts, true);
     Var n = dot.args()[0], m = dot.args()[1], q("q"), u("u"), bacc("bacc");
     // ryi_rows: not ryi, as dot's specializations share bounds by RVar name (gap M)
@@ -126,42 +129,69 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     s.split(r, ry, rx, block);
     Func blk = s.rfactor(ry, u);
     // The act's codes (integer decode Funcs of rs[1..]; rs[0] is the weight's)
-    // stay out of the inline: staged per block in registers, below.
-    std::vector<Func> dec, ac;
+    // stay out of the inline: staged per block in registers, below; on gemm
+    // tiles, so do its scales (float, per block and row).
+    bool grouped = group && ts.mt > group;
+    std::vector<Func> dec, ac, as;
     for (Func f : decoders(rs)) {
         bool act = false;
         for (size_t i = 1; i < rs.size(); i++) {
             for (const Func &g : rs[i].decode_trace.intermediates) {
-                act |= g.name() == f.name() && f.type().is_int();
+                act |= g.name() == f.name();
             }
         }
-        (act ? ac : dec).push_back(f);
+        if (act && f.type().is_int()) {
+            ac.push_back(f);
+        } else if (act && grouped && f.type().is_float() && f.dimensions() == 2) {
+            as.push_back(f);
+        } else {
+            dec.push_back(f);
+        }
     }
     blk.update().eager_inline(dec);
     Func codes = blk.update().hoist_invariants()[0].change_type(Int(32));
     s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
     Func acc = s.rfactor(ryi, bacc);
+    Var mo("mog"), mi("mig");
+    LoopLevel at(acc, grouped ? VarOrRVar(mo) : VarOrRVar(ryo));
     s.reorder(n, ryi).vectorize(n).unroll(ryi).unroll(m);
     Stage cu = codes.update();
     cu.split(rx, rp, rx, chunk).split(rx, rq, ri, 4);
     Func quads = cu.rfactor(rq, q);
     cu.reorder(rq, n).atomic().vectorize(rq).vectorize(n).unroll(m).unroll(u);
-    quads.reorder_storage(q, n, m).compute_at(acc, ryo).vectorize(q).vectorize(n).unroll(m).unroll(u).bound_storage(u, ts.interleave);
-    quads.update().reorder(ri, q, n, rp, u, m).atomic().vectorize(ri).vectorize(q).vectorize(n).unroll(rp).unroll(u).unroll(m);
+    quads.reorder_storage(q, n, m).compute_at(at).vectorize(q).vectorize(n).unroll(m).unroll(u).bound_storage(u, ts.interleave);
+    quads.update().reorder(ri, q, n, rp, grouped ? m : u, grouped ? u : m).atomic().vectorize(ri).vectorize(q).vectorize(n).unroll(rp).unroll(u).unroll(m);
     // A piece's act codes then are a lane of a register: by-element sdot
     auto calls = Internal::find_direct_calls(quads.function());
     for (Func a : ac) {
         if (calls.count(a.name())) {
             Func ai = a.in(quads);
-            ai.compute_at(quads, u).vectorize(ai.args()[0]);
+            Var k = ai.args()[0];
+            if (grouped && ai.dimensions() == 3) {  // (code, block, row)
+                Var b = ai.args()[1], am = ai.args()[2], ko("ko"), ki("ki"), kv("kv"), sko, ski;
+                ai.split_storage(k, sko, ski, 4).reorder_storage(ski, am, sko, b);
+                ai.split(k, ko, ki, 4).reorder(ki, am, ko).fuse(ki, am, kv).unroll(ko);
+                k = kv;
+            }
+            ai.compute_at(quads, u).vectorize(k);
         }
     }
     for (Func f : {blk, codes}) {
-        f.compute_at(acc, ryo).bound_storage(u, ts.interleave).vectorize(n).unroll(m).unroll(u);
+        f.compute_at(at).bound_storage(u, ts.interleave).vectorize(n).unroll(m).unroll(u);
     }
     blk.update().vectorize(n).unroll(m).unroll(u);
+    // the record's scales: one load, each row's a lane (fmla by element)
+    auto bcalls = Internal::find_direct_calls(blk.function());
+    for (Func a : as) {
+        if (bcalls.count(a.name())) {
+            Func ai = a.in(blk);
+            ai.compute_at(at).vectorize(ai.args()[1]);
+        }
+    }
     acc.compute_at(tile_at(out, st)).vectorize(n).unroll(bacc).unroll(m);
-    acc.update().reorder(n, bacc, m, ryo).vectorize(n).unroll(bacc).unroll(m);
+    Stage au = acc.update();
+    grouped ? au.split(m, mo, mi, group).reorder(n, bacc, mi, mo, ryo).unroll(mi).unroll(mo) : au.reorder(n, bacc, m, ryo).unroll(m);
+    au.vectorize(n).unroll(bacc);
 }
 
 // The integer path on i8mm smmla (2 x 2 x 8 matrix-multiply tiles): nt x mt
@@ -233,7 +263,8 @@ inline void encoder(Func e, const std::vector<ApproximationResult> &rs) {
 
 // mul_mat: gemm tiles the outputs (4 x 8 on smmla when the target has i8mm
 // and both operands are quantized alike, 4 x 16 for whole records of at least
-// 16 rows, 4 x 4 where those waste rows; else 4 x 4 on sdot), in tasks of 32
+// 16 rows, 4 x 4 where those waste rows; on weight records in 4-code pieces,
+// those tiles on by-element sdot; else 4 x 4 on sdot), in tasks of 32
 // x 32 outputs, fewer rows if that leaves under 2 tasks per thread (small N);
 // gemv (M = 1) is the vec_dot recipe on row pairs sharing each activation
 // block (single rows for N = 1). Edge tiles shift inwards: any N, M at least
@@ -251,6 +282,9 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     Expr Mr = M / blocks[2] * blocks[2];
     Tiles mmla{4, 16, 1, 32, 32, 2}, mmla8{4, 8, 1, 32, 32, 2}, mmla4{4, 4, 1, 32, 32, 2}, gemm{4, 4, 1, 32, 32, 2}, pairs{2, 1, 2, 16}, rows{1, 1, 2, 16};
     bool mmla_ok = integer && t.has_feature(Target::ARMI8MM);
+    // Weight records in 4-code pieces: by-element sdot on the same tiles (on M3,
+    // KleidiAI's dotprod gemm beats both i8mm ones)
+    bool lanes = whole && integer && blocks[3] > 1 && blocks[4] == 4, tiled = mmla_ok || lanes;
     // Whole records: the tiles' rows past Mr read clamped records, so one
     // row tile (dot's bound) covers every record, with mmla when there is.
     Func dr = dots.back();
@@ -261,15 +295,19 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     Expr tall = Mr >= mmla.mt, odd_n = !fits(gemm, Mr);
     Expr quad = (Mr % mmla.mt == mmla4.mt && Mr < 4 * mmla.mt) || Mr == mmla8.mt + mmla4.mt;
     if (whole) {  // odd N first, as tall as mmla; the bound is then constant in each branch
-        blocked(out, 1, dr, odd_n, {1, mmla_ok ? mmla.mt : gemm.mt, 1, 32, 32, 2}, r, blocks[0], integer, rs, t);
-        dr.bound_extent(dr.args()[1], mmla_ok ? select(odd_n, mmla.mt, quad, mmla4.mt, tall, mmla.mt, mmla8.mt) : Expr(gemm.mt));
+        blocked(out, 1, dr, odd_n, {1, tiled ? mmla.mt : gemm.mt, 1, 32, 32, 2}, r, blocks[0], integer, rs, t);
+        dr.bound_extent(dr.args()[1], tiled ? select(odd_n, mmla.mt, quad, mmla4.mt, tall, mmla.mt, mmla8.mt) : Expr(gemm.mt));
     }
-    if (mmla_ok) {
+    if (lanes) {
+        for (auto [c, ts] : std::vector<std::pair<Expr, Tiles>>{{quad, mmla4}, {tall, mmla}, {Expr(), mmla8}}) {
+            blocked_rows(out, whole, dr, c, ts, r, blocks[0], blocks[4], rs, blocks[2]);
+        }
+    } else if (mmla_ok) {
         if (whole) blocked_mmla(out, whole, dr, quad, mmla4, r, blocks[0], rs);
         if (whole) blocked_mmla(out, whole, dr, tall, mmla, r, blocks[0], rs, blocks[5]);
         blocked_mmla(out, whole, dr, whole ? Expr() : fits(mmla8, M), mmla8, r, blocks[0], rs);
     }
-    if (!whole || !mmla_ok) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, blocks[0], integer, rs, t);
+    if (!whole || !tiled) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, blocks[0], integer, rs, t);
     if (integer && blocks[3] > 1) {  // N is a multiple of the records' rows
         blocked_rows(out, 2 * whole, dots[0], Expr(), {blocks[3], 1, 2, 16}, r, blocks[0], blocks[4], rs);
         return;
