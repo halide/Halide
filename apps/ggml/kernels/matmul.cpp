@@ -24,22 +24,27 @@ public:
         // mul_mat on weight records of several rows takes their codes at 2^k
         // (an exact alternative, see Q4_0Quant): it shortens the gemv's decode
         bool scaled = op == "mul_mat" && ggml::format(weight).rows > 1;
-        ggml::Format fw = ggml::format(weight, false, scaled), fa = ggml::format(an), fc = ggml::format(cn);
+        ggml::Format fw = ggml::format(weight, false, scaled, true), fa = ggml::format(an, false, false, true), fc = ggml::format(cn);
         std::vector<ImageParam> w = inputs(fw, "w"), a = inputs(fa, "a");
         Var k("k"), n("n"), m("m");
-        Func W("W"), X("X"), Xr("Xr"), out("out");
-        W(k, n) = operand(fw, w, k, n);
-        X(k, m) = operand(fa, a, k, m);
-        r = RDom(0, record(w[0]).extent() * fw.block, "r");
-        dots[0](n, m) += W(r, n) * X(r, m);  // from 0; out writes each output once
+        Func Wf("Wf"), Xf("Xf"), Xrf("Xrf"), W("W"), X("X"), Xr("Xr"), out("out");
+        block = fw.block;
+        Wf(k, n) = operand(fw, w, k, n);
+        Xf(k, m) = operand(fa, a, k, m);
+        view(W, Wf);
+        view(X, Xf);
+        // r.x: a value within a block, r.y: the block
+        r = RDom(0, block, 0, record(w[0]).extent(), "r");
+        dots[0](n, m) += W(r.x, r.y, n) * X(r.x, r.y, m);  // from 0; out writes each output once
         if (fc.rows > 1) {
             // Act records of several rows (as GGML's x4 activations): the
             // rows in whole records from them (dots[1]; rows past M repeat the
             // last one), the others one row per record.
             Expr M = row(a[0]).extent(), Mr = M / fc.rows * fc.rows;
-            Xr(k, m) = operand(fa, a, k, clamp(m, 0, M - 1));
+            Xrf(k, m) = operand(fa, a, k, clamp(m, 0, M - 1));
+            view(Xr, Xrf);
             dots.push_back(Func("dotr"));
-            dots[1](n, m) += W(r, n) * Xr(r, m);
+            dots[1](n, m) += W(r.x, r.y, n) * Xr(r.x, r.y, m);
             RDom whole(0, Mr, "whole"), rest(Mr, M - Mr, "rest");
             out(n, m) = undef<float>();
             out(n, whole) = dots[1](n, whole);
@@ -51,9 +56,9 @@ public:
         std::vector<ImageParam> bound;
         // approx[0] is the weight's (the schedules rely on it)
         if (!fw.scheme.defined()) throw std::invalid_argument("weight: a quantized format");
-        for (auto [F, f, p] : {std::tuple{W, fw, w}, std::tuple{X, fa, a}}) {
+        for (auto [F, Ff, f, p] : {std::tuple{W, Wf, fw, w}, std::tuple{X, Xf, fa, a}}) {
             if (f.scheme.defined()) {
-                approx.push_back(F.approximate_by(f.scheme, dots));
+                approx.push_back(approximate(F, Ff, f, dots));
                 cut.insert(cut.end(), approx.back().encoded.begin(), approx.back().encoded.end());
                 bound.insert(bound.end(), p.begin(), p.end());
             }
@@ -61,7 +66,7 @@ public:
         if (cn != an) {
             if (fa.scheme.defined()) throw std::invalid_argument("act: only plain storage can be re-approximated");
             for (size_t i = 0; i < dots.size(); i++) {
-                approx.push_back((i ? Xr : X).approximate_by(ggml::format(cn, !i).scheme, {dots[i]}));
+                approx.push_back(approximate(i ? Xr : X, i ? Xrf : Xf, ggml::format(cn, !i, false, true), {dots[i]}));
                 staged.push_back(approx.back().encoded[0]);
             }
         }
@@ -69,7 +74,9 @@ public:
         // The ABI: w [K / w block, N / w rows], a [K / a block, M], out [N, M],
         // all dense from 0 (strides as GGML's contiguous rows; K % block == 0),
         // a field's elements first.
-        if (fw.block % fa.block || fw.block % fc.block) throw std::invalid_argument("activation blocks must divide weight blocks");
+        for (int b : {fa.block, fc.block}) {
+            if (b != 1 && b != fw.block) throw std::invalid_argument("activation blocks: the weight's, or none");
+        }
         if (fa.rows > 1) throw std::invalid_argument("act: one row per record");
         OutputImageParam o = out.output_buffer();
         o.dim(0).set_bounds(0, row(w[0]).extent() * fw.rows).dim(1).set_min(0).set_stride(o.dim(0).extent());
@@ -100,6 +107,7 @@ public:
 
 private:
     RDom r;
+    int block = 1;
     std::vector<Func> dots{Func("dot")};      // one per act encoding
     std::vector<ApproximationResult> approx;  // the weight's first (asserted)
     std::vector<Func> staged;                 // encoded inside the pipeline
@@ -110,11 +118,11 @@ private:
     // `name`, or name_<port> for several.
     static std::vector<ImageParam> inputs(const ggml::Format &f, const std::string &name) {
         if (!f.scheme.defined()) return {ImageParam(Float(32), 2, name)};
-        ApproximationPorts out = f.scheme.signature({{"values", Float(32), 2}}).outputs;
+        int dims = f.block > 1 ? 3 : 2;  // blocks: indexed (j, b, row)
+        ApproximationPorts out = f.scheme.signature({{"values", Float(32), dims}}).outputs;
         if (out.size() > 1) {  // their shapes: encode a placeholder
-            Var k, n;
             Func v;
-            v(k, n) = 0.0f;
+            v(std::vector<Var>(dims)) = 0.0f;
             out = f.scheme.encode({v}).encoded_ports;
         }
         std::vector<ImageParam> ps;
@@ -140,6 +148,17 @@ private:
 
     static Expr operand(const ggml::Format &f, const std::vector<ImageParam> &p, const Expr &k, const Expr &i) {
         return f.scheme.defined() ? ImageParam(Float(32), 2, p[0].name() + "_values")(k, i) : p[0](k, i);
+    }
+    // F(j, b, i): the flat operand's value j of block b (of the weight's), as
+    // the reduction reads it, so no index into a block is a % or / of r.
+    void view(Func F, Func flat) const {
+        Var j("j"), b("b"), i("i");
+        F(j, b, i) = flat(b * block + j, i);
+    }
+    // A format in the weight's blocks approximates the view (block-indexed);
+    // one without blocks, the flat rows.
+    ApproximationResult approximate(Func F, Func flat, const ggml::Format &f, const std::vector<Func> &consumers) const {
+        return f.block == block ? F.approximate_by(f.scheme, consumers) : flat.approximate_by(f.scheme, {F});
     }
 };
 
