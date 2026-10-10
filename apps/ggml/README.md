@@ -169,12 +169,16 @@ int32 sums vectorized across the record's rows and each piece's 4-code quads
 (sdot), so a piece is one dense load and the activation's piece is broadcast to
 the rows; the activation's codes are staged per block in registers, so with
 4-code pieces (`q4_0.i4.4x4`, GGML's `q4_0_4x4`) the broadcast is a by-element
-sdot. The default layouts: `q4_0.i4.4x4` for gemv, `q4_0.i4.4x8` for gemm
-(smmla); each is built with mul_mat, so the other serves as a comparison. An
-in-kernel activation encoder runs first, parallel over activation rows when M >
-1, and vectorized per encoded block (`encoder`: the block's reductions, e.g. its
-scale, across the block; per-value Funcs, e.g. the codes, across their values).
-Kernel ABI (`harness/halide_providers.cpp`): `w`/`a` are
+sdot. Its gemm tiles (16, 8 or 4 activation rows) use the same by-element sdot,
+as KleidiAI's dotprod gemm: per block the weight record is decoded once and the
+sums are computed per activation record, its codes staged in memory order (a
+16-byte load holds a piece of each of its 4 rows) and its 4 scales one vector.
+The default layouts: `q4_0.i4.4x4` for gemv, `q4_0.i4.4x8` (smmla) for gemm; on
+M3 the two gemms are at parity, and each layout is built with mul_mat as a
+comparison. An in-kernel activation encoder runs first, parallel over activation
+rows when M > 1, and vectorized per encoded block (`encoder`: the block's
+reductions, e.g. its scale, across the block; per-value Funcs, e.g. the codes,
+across their values). Kernel ABI (`harness/halide_providers.cpp`): `w`/`a` are
 `[K / block, N / rows or M]` records (struct types from the kernel's metadata),
 `out` is f32 `[N, M]`. The kernel declares the whole contract (checked in
 `checked`, assumed in `bench`): all mins 0, rows dense
