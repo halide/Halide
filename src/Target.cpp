@@ -10,11 +10,6 @@
 #include "Util.h"
 #include "WasmExecutor.h"
 
-#include "runtime/arm_cpu_detect.h"
-#include "runtime/auxv_ops.h"
-#include "runtime/powerpc_cpu_detect.h"
-#include "runtime/x86_cpu_detect.h"
-
 #if defined(__powerpc__) && (defined(__FreeBSD__) || defined(__linux__))
 #if defined(__FreeBSD__)
 #include <machine/cpu.h>
@@ -47,6 +42,14 @@
 #include <asm/hwcap.h>
 #include <sys/auxv.h>
 #endif
+
+// These must come after <sys/auxv.h>: auxv_ops.h redeclares getauxval without
+// glibc's noexcept, which is only accepted as a redeclaration, not as the first
+// declaration (https://github.com/halide/Halide/issues/9480).
+#include "runtime/arm_cpu_detect.h"
+#include "runtime/auxv_ops.h"
+#include "runtime/powerpc_cpu_detect.h"
+#include "runtime/x86_cpu_detect.h"
 
 /* Detect SME target attribute support */
 #if defined(__aarch64__) && !defined(__arm__) &&                       \
