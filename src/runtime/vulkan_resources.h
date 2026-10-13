@@ -285,7 +285,7 @@ bool vk_needs_scalar_uniform_buffer(void *user_context,
                                     void *args[],
                                     int8_t arg_is_buffer[]) {
     // if any args exist, we need at least 1x uniform buffer
-    if (static_cast<uint32_t>(arg_types[0]) != 0) {
+    if (arg_types[0] != halide_type_t{}) {
         return true;
     }
     return false;
@@ -300,7 +300,7 @@ uint32_t vk_count_bindings_for_descriptor_set(void *user_context,
     uint32_t bindings_count = vk_needs_scalar_uniform_buffer(user_context, arg_types, args, arg_is_buffer);
 
     int i = 0;
-    while (static_cast<uint32_t>(arg_types[i]) != 0) {
+    while (arg_types[i] != halide_type_t{}) {
         if (arg_is_buffer[i]) {
             bindings_count++;
         }
@@ -587,7 +587,7 @@ int vk_update_descriptor_set(void *user_context,
     }
 
     // Add all the other device buffers as STORAGE BUFFERs
-    for (size_t i = 0; static_cast<uint32_t>(arg_types[i]) != 0; i++) {
+    for (size_t i = 0; arg_types[i] != halide_type_t{}; i++) {
         if (arg_is_buffer[i]) {
 
             // get the allocated region for the buffer
@@ -651,9 +651,10 @@ size_t vk_estimate_scalar_uniform_buffer_size(void *user_context,
     uint32_t buffer_count = 0;
 
     // Add up all arg sizes for scalar params
-    for (size_t i = 0; static_cast<uint32_t>(arg_types[i]) != 0; i++) {
+    for (size_t i = 0; arg_types[i] != halide_type_t{}; i++) {
         if (!arg_is_buffer[i]) {
-            // Uniform bool arguments occupy uint32_t slots.
+            // Uniform bool arguments occupy uint32_t slots. Using uint8_t would require
+            // the optional SPV_KHR_8bit_storage extension and VulkanInt8 target feature.
             size_t arg_size = arg_types[i].bits == 1 ? sizeof(uint32_t) : arg_types[i].bytes();
             scalar_arg_sizes = aligned_offset(scalar_arg_sizes, arg_size);
             scalar_arg_sizes += arg_size;
@@ -747,7 +748,7 @@ int vk_update_scalar_uniform_buffer(void *user_context,
     // Copy all scalar params to the (host-visible/coherent) scalar uniform buffer
     size_t arg_offset = 0;
     size_t buffer_count = 0;
-    for (size_t i = 0; static_cast<uint32_t>(arg_types[i]) != 0; i++) {
+    for (size_t i = 0; arg_types[i] != halide_type_t{}; i++) {
         if (!arg_is_buffer[i]) {
             size_t arg_size = arg_types[i].bits == 1 ? sizeof(uint32_t) : arg_types[i].bytes();
             arg_offset = aligned_offset(arg_offset, arg_size);
@@ -771,7 +772,7 @@ int vk_update_scalar_uniform_buffer(void *user_context,
         arg_offset = aligned_offset(arg_offset, sizeof(int32_t));
 
         // Copy all storage buffer offsets (to support arbitrary crops)
-        for (size_t i = 0; static_cast<uint32_t>(arg_types[i]) != 0; i++) {
+        for (size_t i = 0; arg_types[i] != halide_type_t{}; i++) {
             if (arg_is_buffer[i]) {
 
                 // get the allocated region for the buffer

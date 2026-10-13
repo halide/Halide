@@ -2773,7 +2773,9 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
                                                             const std::string &entry_point_name,
                                                             const std::vector<DeviceArgument> &args) {
 
-    // Uniform bool arguments use UInt(32) because OpTypeBool has no physical storage representation.
+    // OpTypeBool has no physical storage representation. Use UInt(32), which is
+    // available in core Vulkan; UInt(8) Uniform storage would require the optional
+    // SPV_KHR_8bit_storage extension and VulkanInt8 target feature.
     const auto uniform_storage_type = [](Type type) {
         return type.is_bool() ? UInt(32) : type;
     };
