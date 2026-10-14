@@ -1,6 +1,6 @@
 {
   "name": "ruy",
-  "version-string": "2026.02.16",
+  "version-string": "2026.07.22",
   "description": "Matrix multiplication library used by TensorFlow Lite",
   "homepage": "https://github.com/google/ruy",
   "license": "Apache-2.0",

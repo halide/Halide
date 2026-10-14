@@ -15,7 +15,13 @@ find_package(Halide REQUIRED)
 add_halide_generator(max_filter.generator SOURCES max_filter_generator.cpp)
 
 # Filters
-add_halide_library(max_filter FROM max_filter.generator)
+add_halide_library(
+    max_filter_pipeline
+    FROM max_filter.generator
+    GENERATOR max_filter
+    FUNCTION_NAME max_filter
+    FILE_BASE_NAME max_filter
+)
 add_halide_library(
     max_filter_auto_schedule
     FROM max_filter.generator
@@ -25,13 +31,18 @@ add_halide_library(
 )
 
 # Main executable
-add_executable(max_filter_filter filter.cpp)
-target_link_libraries(max_filter_filter PRIVATE Halide::ImageIO max_filter max_filter_auto_schedule)
+set_target_properties(max_filter_pipeline PROPERTIES OUTPUT_NAME max_filter)
+set_target_properties(max_filter_pipeline.runtime PROPERTIES OUTPUT_NAME max_filter.runtime)
+add_executable(max_filter filter.cpp)
+target_link_libraries(
+    max_filter
+    PRIVATE Halide::ImageIO max_filter_pipeline max_filter_auto_schedule
+)
 
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgba.png)
 if (EXISTS ${IMAGE})
-    add_test(NAME max_filter_filter COMMAND max_filter_filter ${IMAGE} out.png)
+    add_test(NAME max_filter_filter COMMAND max_filter ${IMAGE} out.png)
     set_tests_properties(
         max_filter_filter
         PROPERTIES
