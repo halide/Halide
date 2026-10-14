@@ -1522,11 +1522,42 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
     }
 
     if (tail == TailStrategy::Auto) {
+        // Vars that RoundUp must not split: splitting a Var stemming from the
+        // outer Var of a PredicateStores split, or of a ShiftInwardsAndBlend
+        // split in an update, with RoundUp would run that split's tiles past
+        // its extent, which lowering may forbid (see splits_requiring_no_tail
+        // in ScheduleFunctions.cpp).
+        std::set<string> overhang_unsafe;
+        for (const Split &s : definition.schedule().splits()) {
+            switch (s.split_type) {
+            case Split::SplitVar:
+                if (overhang_unsafe.count(s.old_var)) {
+                    overhang_unsafe.insert(s.inner);
+                    overhang_unsafe.insert(s.outer);
+                } else if (s.tail == TailStrategy::PredicateStores ||
+                           (s.tail == TailStrategy::ShiftInwardsAndBlend && !definition.is_init())) {
+                    overhang_unsafe.insert(s.outer);
+                }
+                break;
+            case Split::RenameVar:
+                if (overhang_unsafe.count(s.old_var)) {
+                    overhang_unsafe.insert(s.outer);
+                }
+                break;
+            case Split::FuseVars:
+                if (overhang_unsafe.count(s.outer)) {
+                    overhang_unsafe.insert(s.old_var);
+                }
+                break;
+            }
+        }
+        const bool overhang_ok = !overhang_unsafe.count(old_name);
+
         // Select a tail strategy
         if (exact) {
             tail = TailStrategy::GuardWithIf;
         } else if (!definition.is_init()) {
-            tail = round_up_ok ? TailStrategy::RoundUp : TailStrategy::GuardWithIf;
+            tail = round_up_ok && overhang_ok ? TailStrategy::RoundUp : TailStrategy::GuardWithIf;
         } else {
             // We should employ ShiftInwards when we can to prevent
             // overcompute and adding constraints to the bounds of
@@ -1574,7 +1605,8 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
                 }
             }
             auto it = descends_from_shiftinwards_outer.find(old_name);
-            if (it != descends_from_shiftinwards_outer.end() &&
+            if (overhang_ok &&
+                it != descends_from_shiftinwards_outer.end() &&
                 can_prove(it->second >= factor)) {
                 tail = TailStrategy::RoundUp;
             } else {
