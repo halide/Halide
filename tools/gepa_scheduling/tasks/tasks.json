@@ -1,0 +1,269 @@
+{
+  "schema_version": 1,
+  "tasks": [
+    {
+      "id": "cpu-sliding-code",
+      "split": "train",
+      "kind": "code",
+      "fixture": "fixtures/cpu_sliding",
+      "tags": [
+        "cpu",
+        "compute-at",
+        "store-at",
+        "vectorize",
+        "parallel"
+      ],
+      "prompt": "Edit gepa_task/main.cpp. Replace the root-computed blur schedule with a correct fast CPU schedule. Use one parallel region at the output, vectorize the stride-1 axis with the target's natural float vector width, and place blur_y and blur_x so their storage survives across inner output rows while their computation occurs per inner row. Preserve algorithm results.",
+      "commands": [
+        {
+          "argv": [
+            "cmake",
+            "-S",
+            ".",
+            "-B",
+            "out",
+            "-DHalide_DIR={halide_dir}"
+          ]
+        },
+        {
+          "argv": [
+            "cmake",
+            "--build",
+            "out"
+          ]
+        },
+        {
+          "argv": [
+            "./out/task"
+          ],
+          "required_patterns": [
+            "Success!",
+            "parallel",
+            "vectorized",
+            "store blur_(x|y)"
+          ],
+          "forbidden_patterns": [
+            "incorrect result"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cpu-loop-shape",
+      "split": "train",
+      "kind": "diagnosis",
+      "answer_file": "answer.json",
+      "tags": [
+        "cpu",
+        "vectorize",
+        "parallel"
+      ],
+      "prompt": "A float output has x as its stride-1 dimension and dimensions 4096x2160. Its loop nest is serial y outside serial x. Choose values for JSON fields schedule.parallel_axis (x or y), schedule.vector_axis (x or y), and schedule.vector_width (fixed_8, fixed_16, or natural_vector_size_float). Include any rationale in a separate rationale string.",
+      "expected_json": {
+        "schedule.parallel_axis": "y",
+        "schedule.vector_axis": "x",
+        "schedule.vector_width": "natural_vector_size_float"
+      }
+    },
+    {
+      "id": "gpu-mapping",
+      "split": "train",
+      "kind": "diagnosis",
+      "answer_file": "answer.json",
+      "tags": [
+        "gpu",
+        "gpu-blocks",
+        "gpu-threads"
+      ],
+      "prompt": "A 2D GPU output is tiled into xo, yo, xi, yi. Choose JSON fields mapping.xo, mapping.yo, mapping.xi, and mapping.yi from gpu_block, gpu_thread, serial, and vectorized. Use conventional spatial GPU tiling with outer tiles assigned to blocks and inner tile coordinates assigned to threads.",
+      "expected_json": {
+        "mapping.xo": "gpu_block",
+        "mapping.yo": "gpu_block",
+        "mapping.xi": "gpu_thread",
+        "mapping.yi": "gpu_thread"
+      }
+    },
+    {
+      "id": "serial-recurrence",
+      "split": "train",
+      "kind": "diagnosis",
+      "answer_file": "answer.json",
+      "tags": [
+        "recurrence",
+        "parallel",
+        "vectorize"
+      ],
+      "prompt": "A scan update is f(x) = f(x - 1) + input(x) over increasing x. Choose JSON fields legality.parallel_x and legality.vectorize_x as booleans, and reason from loop_carried_dependency or independent_iterations.",
+      "expected_json": {
+        "legality.parallel_x": false,
+        "legality.vectorize_x": false,
+        "legality.reason": "loop_carried_dependency"
+      }
+    },
+    {
+      "id": "stmt-strided-store",
+      "split": "train",
+      "kind": "diagnosis",
+      "answer_file": "answer.json",
+      "tags": [
+        "stmt",
+        "vectorize",
+        "storage"
+      ],
+      "prompt": "The hot vector store in a .stmt file writes output[x*height + y] while x is the SIMD lane and y is constant. Choose JSON fields diagnosis.access (unit_stride or strided), diagnosis.primary_fix (vectorize_y, reorder_storage_x_innermost, or increase_unroll), and diagnosis.verify_with (stmt_ramp or wall_clock_only). The logical x dimension should remain SIMD.",
+      "expected_json": {
+        "diagnosis.access": "strided",
+        "diagnosis.primary_fix": "reorder_storage_x_innermost",
+        "diagnosis.verify_with": "stmt_ramp"
+      }
+    },
+    {
+      "id": "tail-strategy",
+      "split": "train",
+      "kind": "diagnosis",
+      "answer_file": "answer.json",
+      "tags": [
+        "split",
+        "tail",
+        "boundary"
+      ],
+      "prompt": "A pure Func reads an unbounded input without a boundary condition, and x has a runtime extent not known to be a multiple of the SIMD factor. Choose JSON fields tail.round_up_safe (boolean) and tail.preferred from RoundUp, ShiftInwards, GuardWithIf. Prefer the normal pure-stage strategy that avoids out-of-bounds overshoot.",
+      "expected_json": {
+        "tail.round_up_safe": false,
+        "tail.preferred": "ShiftInwards"
+      }
+    },
+    {
+      "id": "cpu-tile-code",
+      "split": "validation",
+      "kind": "code",
+      "fixture": "fixtures/cpu_tile",
+      "tags": [
+        "cpu",
+        "split",
+        "parallel",
+        "vectorize",
+        "inline"
+      ],
+      "prompt": "Edit gepa_task/main.cpp to add a target-aware CPU schedule. Split y into fixed-size strips, parallelize the outer strip, vectorize stride-1 x using the natural int vector width, and avoid a root-sized allocation for the cheap pointwise gain Func. Preserve correctness for the non-multiple extents in the test.",
+      "commands": [
+        {
+          "argv": [
+            "cmake",
+            "-S",
+            ".",
+            "-B",
+            "out",
+            "-DHalide_DIR={halide_dir}"
+          ]
+        },
+        {
+          "argv": [
+            "cmake",
+            "--build",
+            "out"
+          ]
+        },
+        {
+          "argv": [
+            "./out/task"
+          ],
+          "required_patterns": [
+            "Success!",
+            "parallel",
+            "vectorized"
+          ],
+          "forbidden_patterns": [
+            "incorrect result",
+            "store gain"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "histogram-update",
+      "split": "validation",
+      "kind": "diagnosis",
+      "answer_file": "answer.json",
+      "tags": [
+        "histogram",
+        "update",
+        "vectorize"
+      ],
+      "prompt": "A histogram update performs hist(input(r.x)) += 1, so different iterations may target the same bin. Choose JSON fields update.vectorize_r (boolean), update.parallelize_r_without_rfactor (boolean), and update.hazard from scatter_collision, unit_stride, or redundant_recompute.",
+      "expected_json": {
+        "update.vectorize_r": false,
+        "update.parallelize_r_without_rfactor": false,
+        "update.hazard": "scatter_collision"
+      }
+    },
+    {
+      "id": "profile-root-buffers",
+      "split": "validation",
+      "kind": "diagnosis",
+      "answer_file": "answer.json",
+      "tags": [
+        "profile",
+        "compute-root",
+        "memory"
+      ],
+      "prompt": "A profile shows three parallel regions separated by barriers, two root-computed intermediates totaling 24 MB, recompute=1.00, and one final output. Choose JSON fields diagnosis.primary from insufficient_threads, root_pipeline_shape, or excessive_recompute; diagnosis.next_change from pull_producers_into_output, add_more_parallel_regions, or compute_everything_root; and diagnosis.expected_parallel_regions as an integer.",
+      "expected_json": {
+        "diagnosis.primary": "root_pipeline_shape",
+        "diagnosis.next_change": "pull_producers_into_output",
+        "diagnosis.expected_parallel_regions": 1
+      }
+    },
+    {
+      "id": "gpu-shared-staging",
+      "split": "test",
+      "kind": "diagnosis",
+      "answer_file": "answer.json",
+      "tags": [
+        "gpu",
+        "shared-memory",
+        "compute-at"
+      ],
+      "prompt": "A tiled GPU consumer reuses a producer footprint within each block. Choose JSON fields producer.compute_scope from root, consumer_block, or consumer_thread; producer.inner_mapping from gpu_threads, gpu_blocks, or serial_only; and producer.memory_goal from shared_per_block, global_full_image, or private_per_lane.",
+      "expected_json": {
+        "producer.compute_scope": "consumer_block",
+        "producer.inner_mapping": "gpu_threads",
+        "producer.memory_goal": "shared_per_block"
+      }
+    },
+    {
+      "id": "vector-axis-storage",
+      "split": "test",
+      "kind": "diagnosis",
+      "answer_file": "answer.json",
+      "tags": [
+        "vectorize",
+        "storage",
+        "stride"
+      ],
+      "prompt": "A Func is declared f(x, y), uses the default storage order, and is consumed row-major. Choose JSON fields vector.axis from x or y, vector.access from unit_stride or gather, and storage.change_needed as a boolean.",
+      "expected_json": {
+        "vector.axis": "x",
+        "vector.access": "unit_stride",
+        "storage.change_needed": false
+      }
+    },
+    {
+      "id": "pyramid-placement",
+      "split": "test",
+      "kind": "diagnosis",
+      "answer_file": "answer.json",
+      "tags": [
+        "pyramid",
+        "compute-at",
+        "recompute"
+      ],
+      "prompt": "A multi-level pyramid stage feeds many output tiles. Computing the whole pyramid independently inside every tiny vector loop causes a very high recompute multiplier. Choose JSON fields diagnosis.problem from recompute_explosion, lack_of_simd, or gpu_race; placement.direction from move_outward or move_inward; and placement.first_baseline from compute_root or compute_inline.",
+      "expected_json": {
+        "diagnosis.problem": "recompute_explosion",
+        "placement.direction": "move_outward",
+        "placement.first_baseline": "compute_root"
+      }
+    }
+  ]
+}
