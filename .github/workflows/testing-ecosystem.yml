@@ -8,6 +8,9 @@ on:
       - '**.cpp'
       - '**/CMakeLists.txt'
       - '**.cmake'
+      # The package is built with WITH_TESTS=NO; only the integration tests matter.
+      - '!test/**'
+      - '!apps/**'
       - 'test/integration/**'
       - '.github/workflows/testing-ecosystem.yml'
 

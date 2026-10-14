@@ -26,6 +26,40 @@ the directory name. Thus, one can use `ctest -L generator` to run only the
 `generator` tests. The `performance` tests configure CTest to not run them
 concurrently with other tests (including each other).
 
+Four additional labels grant tests permission to use capabilities:
+
+- `gpu`: uses any GPU device, including when its target is chosen internally.
+- `multithreaded`: uses at least one additional CPU core. These tests run
+  serially with respect to other CTest tests.
+- `target_from_environment`: reads `HL_TARGET` or `HL_JIT_TARGET`.
+- `calls_llvm`: invokes LLVM code generation, whether or not the generated code
+  runs.
+
+A label grants permission; it does not require a test to use the capability on
+every host. For example, a CUDA test may skip on Metal without losing its `gpu`
+label. None of these labels implies another.
+
+CI audits these permissions, with some caveats:
+
+- GPU-kernel compilation or a GPU device-interface request requires `gpu`, even
+  if no device is ultimately used. Automatic capability queries when parsing
+  CUDA or Vulkan targets are exempt.
+- CPU `.parallel()` followed by any JIT execution requires `multithreaded`, even
+  if the execution is serial, only queries bounds, or fails before reaching
+  parallel work. Merely constructing or compiling a parallel schedule does not;
+  GPU scheduling does not count as CPU threading.
+- The audit does not cover direct environment reads, thread creation outside
+  `.parallel()`, execution of precompiled AOT code, or direct vendor GPU API
+  calls. Scripts and custom commands are not audited automatically. Tests using
+  these capabilities must still declare the appropriate labels.
+
+The audit launcher caches CTest's test metadata under `build/test-label-audit/`,
+separately for each build configuration. Every CMake configure invalidates the
+cache, including changes to labels or result policies. Parallel tests can
+populate it safely; subsequent tests reuse the snapshot instead of launching
+another CTest process. The cache does not store test results or disable any
+capability checks.
+
 The vast majority of our tests are simple C++ executables that link to Halide,
 perform some checks, and print the special line `Success!` upon successful
 completion. There are three main exceptions to this:
