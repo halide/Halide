@@ -61,6 +61,13 @@ struct CodeGen_GPU_Dev {
         return false;
     }
 
+    /** Return the physical scalar type passed to the kernel_run routine.
+     * Backends may widen types that are not legal in their parameter storage.
+     */
+    virtual Type kernel_run_scalar_arg_type(Type type) const {
+        return type;
+    }
+
     /** Checks if expr is block uniform, i.e. does not depend on a thread
      * var. */
     static bool is_block_uniform(const Expr &expr);

@@ -653,9 +653,8 @@ size_t vk_estimate_scalar_uniform_buffer_size(void *user_context,
     // Add up all arg sizes for scalar params
     for (size_t i = 0; arg_types[i] != halide_type_t{}; i++) {
         if (!arg_is_buffer[i]) {
-            // Uniform bool arguments occupy uint32_t slots. Using uint8_t would require
-            // the optional SPV_KHR_8bit_storage extension and VulkanInt8 target feature.
-            size_t arg_size = arg_types[i].bits == 1 ? sizeof(uint32_t) : arg_types[i].bytes();
+            halide_debug_assert(user_context, arg_types[i].bits != 1);
+            size_t arg_size = arg_types[i].bytes();
             scalar_arg_sizes = aligned_offset(scalar_arg_sizes, arg_size);
             scalar_arg_sizes += arg_size;
         } else {
@@ -750,15 +749,11 @@ int vk_update_scalar_uniform_buffer(void *user_context,
     size_t buffer_count = 0;
     for (size_t i = 0; arg_types[i] != halide_type_t{}; i++) {
         if (!arg_is_buffer[i]) {
-            size_t arg_size = arg_types[i].bits == 1 ? sizeof(uint32_t) : arg_types[i].bytes();
+            halide_debug_assert(user_context, arg_types[i].bits != 1);
+            size_t arg_size = arg_types[i].bytes();
             arg_offset = aligned_offset(arg_offset, arg_size);
             halide_debug_assert(user_context, (arg_offset + arg_size) <= region->allocation.size);
-            if (arg_types[i].bits == 1) {
-                uint32_t value = *static_cast<const uint8_t *>(args[i]) != 0 ? 1 : 0;
-                memcpy(host_ptr + arg_offset, &value, sizeof(value));
-            } else {
-                memcpy(host_ptr + arg_offset, args[i], arg_size);
-            }
+            memcpy(host_ptr + arg_offset, args[i], arg_size);
             arg_offset += arg_size;
         } else {
             buffer_count++;

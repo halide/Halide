@@ -29,6 +29,15 @@ namespace {  // anonymous
 
 // --
 
+Type vulkan_scalar_parameter_type(Type type) {
+    // OpTypeBool has no physical storage representation. Use UInt(32), which is
+    // available in core Vulkan; UInt(8) Uniform storage would require the optional
+    // SPV_KHR_8bit_storage extension and VulkanInt8 target feature.
+    return type.is_bool() ? UInt(32) : type;
+}
+
+// --
+
 class CodeGen_Vulkan_Dev : public CodeGen_GPU_Dev {
 public:
     CodeGen_Vulkan_Dev(Target target);
@@ -59,6 +68,10 @@ public:
 
     bool kernel_run_takes_types() const override {
         return true;
+    }
+
+    Type kernel_run_scalar_arg_type(Type type) const override {
+        return vulkan_scalar_parameter_type(type);
     }
 
 protected:
@@ -2773,13 +2786,6 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
                                                             const std::string &entry_point_name,
                                                             const std::vector<DeviceArgument> &args) {
 
-    // OpTypeBool has no physical storage representation. Use UInt(32), which is
-    // available in core Vulkan; UInt(8) Uniform storage would require the optional
-    // SPV_KHR_8bit_storage extension and VulkanInt8 target feature.
-    const auto uniform_storage_type = [](Type type) {
-        return type.is_bool() ? UInt(32) : type;
-    };
-
     // Keep track of the descriptor set needed to bind this kernel's inputs / outputs
     DescriptorSet descriptor_set;
     descriptor_set.entry_point_name = entry_point_name;
@@ -2812,7 +2818,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
                 builder.require_capability(SpvCapabilityUniformAndStorageBuffer16BitAccess);
             }
 
-            Type storage_type = uniform_storage_type(arg.type);
+            Type storage_type = vulkan_scalar_parameter_type(arg.type);
             SpvId arg_type_id = builder.declare_type(storage_type);
             param_struct_members.push_back(arg_type_id);
             scalar_arg_count++;
@@ -2842,7 +2848,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
         // First, add decorations for each scalar arg
         for (const auto &arg : args) {
             if (!arg.is_buffer) {
-                Type storage_type = uniform_storage_type(arg.type);
+                Type storage_type = vulkan_scalar_parameter_type(arg.type);
                 param_member_offset = align_offset(param_member_offset, storage_type.bytes());
                 SpvBuilder::Literals param_offset_literals = {param_member_offset};
                 builder.add_struct_annotation(param_struct_type_id, param_member_index, SpvDecorationOffset, param_offset_literals);
@@ -2882,7 +2888,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
         uint32_t scalar_index = 0;
         for (const auto &arg : args) {
             if (!arg.is_buffer) {
-                Type storage_type = uniform_storage_type(arg.type);
+                Type storage_type = vulkan_scalar_parameter_type(arg.type);
                 SpvId storage_type_id = builder.declare_type(storage_type);
                 SpvId access_index_id = builder.declare_constant(UInt(32), &scalar_index);
                 SpvId pointer_type_id = builder.declare_pointer_type(storage_type_id, SpvStorageClassUniform);
