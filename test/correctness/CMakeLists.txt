@@ -157,6 +157,7 @@ tests(
     deinterleave4.cpp
     deinterleave_lets.cpp
     deinterleave_vector.cpp
+    dense_multiramp_index.cpp
     device_buffer_copies_with_profile.cpp
     device_buffer_copy.cpp
     device_copy_at_inner_loop.cpp
