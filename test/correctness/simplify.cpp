@@ -2611,6 +2611,14 @@ void check_facts() {
         check_with_assumptions(max(a, b), a, {a >= b + cast(t, 5)});
     }
 
+    // Nor does a wrapping x + c sit c above x without any facts at all: for
+    // int8 x = 93, x + 49 wraps to -114.
+    for (Type t : {UInt(8), Int(8), Int(16), UInt(32)}) {
+        Expr a = Variable::make(t, "wrap_a");
+        check(max(a + cast(t, 49), a), max(a + cast(t, 49), a));
+        check(min(a + cast(t, 49), a), min(a + cast(t, 49), a));
+    }
+
     // A min is at most either of its operands and a max is at least either of
     // them, which needs no facts at all. That only bounds the difference on one
     // side, but knowing the two are unequal removes the endpoint, and the two

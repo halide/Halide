@@ -800,11 +800,13 @@ ConstantInterval Simplify::known_linear_difference(const BaseExprNode *a, int64_
 
     // Canonicalize the query the way facts are canonicalized when learned.
     // ca/cb seed the coefficients: they already apply to the unpeeled a/b (a
-    // matched WildConst, say), so peeling can't discover them itself.
+    // matched WildConst, say), so peeling can't discover them itself. Peeling
+    // treats x + c as c more than x, which a wrapping type doesn't promise.
     int64_t coeff_a = ca, coeff_b = cb, offset = 0, denom = 1;
     ConstantInterval err(0, 0);
-    if ((a->node_type >= IRNodeType::Add && a->node_type <= IRNodeType::Div) ||
-        (b->node_type >= IRNodeType::Add && b->node_type <= IRNodeType::Div)) {
+    if (no_overflow_int(a->type) &&
+        ((a->node_type >= IRNodeType::Add && a->node_type <= IRNodeType::Div) ||
+         (b->node_type >= IRNodeType::Add && b->node_type <= IRNodeType::Div))) {
         peel_affine_terms(a, b, coeff_a, coeff_b, offset, denom, err);
     }
 
