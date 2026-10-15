@@ -1727,12 +1727,13 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         };
         const bool any_pipeline_warning =
             too_few_samples || too_many_anon_funcs || expensive_free;
+        // print_wrapped doesn't understand non-printing characters, and the
+        // JSON warnings below must not contain them either.
+        bool old_support_colors = support_colors;
+        support_colors = false;
         if (num_warnings || any_pipeline_warning) {
             halide_print(user_context, " Performance warnings:\n");
             int max_cols = (int)strlen(func_row);
-            // print_wrapped doesn't understand non-printing characters.
-            bool old = support_colors;
-            support_colors = false;
 
             for (int k = 0; k < 3; k++) {
                 if (!pipeline_warning_fired(k)) {
@@ -1752,7 +1753,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 sstr << "\n";
                 print_wrapped(user_context, 5, max_cols, sstr.str());
             }
-            support_colors = old;
         }
 
         // Render this pipeline's warnings as JSON array strings for the JSON
@@ -1817,6 +1817,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             }
             pipeline_func_warnings[pipeline_pos] = fw;
         }
+        support_colors = old_support_colors;
 
         sstr.clear();
         emit_dim(horiz_rule);
