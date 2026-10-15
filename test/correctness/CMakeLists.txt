@@ -16,6 +16,7 @@ tests(
     ambiguous_inline_reductions.cpp
     argmax.cpp
     arm_cpu_detect.cpp
+    arm_dot_product_by_element.cpp
     associativity.cpp
     async_device_copy.cpp
     async_require_fail.cpp
