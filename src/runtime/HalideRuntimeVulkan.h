@@ -55,16 +55,13 @@ extern const struct halide_device_interface_t *halide_vulkan_device_interface();
 extern int halide_vulkan_initialize_kernels(void *user_context, void **state_ptr,
                                             const char *src, int size);
 
-// arg_types is zero-terminated; args and arg_is_buffer contain matching entries.
-// Generated launch code and runtime must use the same halide_vulkan_run ABI;
-// typed metadata is incompatible with the legacy size_t arg_sizes[] form.
 extern int halide_vulkan_run(void *user_context,
                              void *state_ptr,
                              const char *entry_name,
                              int blocksX, int blocksY, int blocksZ,
                              int threadsX, int threadsY, int threadsZ,
                              int shared_mem_bytes,
-                             struct halide_type_t arg_types[],
+                             size_t arg_sizes[],
                              void *args[],
                              int8_t arg_is_buffer[]);
 

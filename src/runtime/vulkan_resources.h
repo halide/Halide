@@ -281,26 +281,26 @@ int vk_submit_command_buffer(void *user_context, VkQueue queue, VkCommandBuffer 
 // --
 
 bool vk_needs_scalar_uniform_buffer(void *user_context,
-                                    halide_type_t arg_types[],
+                                    size_t arg_sizes[],
                                     void *args[],
                                     int8_t arg_is_buffer[]) {
     // if any args exist, we need at least 1x uniform buffer
-    if (arg_types[0] != halide_type_t{}) {
+    if (arg_sizes[0] > 0) {
         return true;
     }
     return false;
 }
 
 uint32_t vk_count_bindings_for_descriptor_set(void *user_context,
-                                              halide_type_t arg_types[],
+                                              size_t arg_sizes[],
                                               void *args[],
                                               int8_t arg_is_buffer[]) {
 
     // first binding is for passing scalar parameters in a buffer (if necessary)
-    uint32_t bindings_count = vk_needs_scalar_uniform_buffer(user_context, arg_types, args, arg_is_buffer);
+    uint32_t bindings_count = vk_needs_scalar_uniform_buffer(user_context, arg_sizes, args, arg_is_buffer);
 
     int i = 0;
-    while (arg_types[i] != halide_type_t{}) {
+    while (arg_sizes[i] > 0) {
         if (arg_is_buffer[i]) {
             bindings_count++;
         }
@@ -526,7 +526,7 @@ int vk_update_descriptor_set(void *user_context,
                              VkBuffer *scalar_args_buffer,
                              size_t uniform_buffer_count,
                              size_t storage_buffer_count,
-                             halide_type_t arg_types[],
+                             size_t arg_sizes[],
                              void *args[],
                              int8_t arg_is_buffer[],
                              VkDescriptorSet descriptor_set) {
@@ -587,7 +587,7 @@ int vk_update_descriptor_set(void *user_context,
     }
 
     // Add all the other device buffers as STORAGE BUFFERs
-    for (size_t i = 0; arg_types[i] != halide_type_t{}; i++) {
+    for (size_t i = 0; arg_sizes[i] > 0; i++) {
         if (arg_is_buffer[i]) {
 
             // get the allocated region for the buffer
@@ -644,17 +644,16 @@ int vk_update_descriptor_set(void *user_context,
 // --
 
 size_t vk_estimate_scalar_uniform_buffer_size(void *user_context,
-                                              halide_type_t arg_types[],
+                                              size_t arg_sizes[],
                                               void *args[],
                                               int8_t arg_is_buffer[]) {
     size_t scalar_arg_sizes = 0;
     uint32_t buffer_count = 0;
 
     // Add up all arg sizes for scalar params
-    for (size_t i = 0; arg_types[i] != halide_type_t{}; i++) {
+    for (size_t i = 0; arg_sizes[i] > 0; i++) {
         if (!arg_is_buffer[i]) {
-            halide_debug_assert(user_context, arg_types[i].bits != 1);
-            size_t arg_size = arg_types[i].bytes();
+            size_t arg_size = arg_sizes[i];
             scalar_arg_sizes = aligned_offset(scalar_arg_sizes, arg_size);
             scalar_arg_sizes += arg_size;
         } else {
@@ -717,7 +716,7 @@ MemoryRegion *vk_create_scalar_uniform_buffer(void *user_context,
 int vk_update_scalar_uniform_buffer(void *user_context,
                                     VulkanMemoryAllocator *allocator,
                                     MemoryRegion *region,
-                                    halide_type_t arg_types[],
+                                    size_t arg_sizes[],
                                     void *args[],
                                     int8_t arg_is_buffer[]) {
 
@@ -747,10 +746,9 @@ int vk_update_scalar_uniform_buffer(void *user_context,
     // Copy all scalar params to the (host-visible/coherent) scalar uniform buffer
     size_t arg_offset = 0;
     size_t buffer_count = 0;
-    for (size_t i = 0; arg_types[i] != halide_type_t{}; i++) {
+    for (size_t i = 0; arg_sizes[i] > 0; i++) {
         if (!arg_is_buffer[i]) {
-            halide_debug_assert(user_context, arg_types[i].bits != 1);
-            size_t arg_size = arg_types[i].bytes();
+            size_t arg_size = arg_sizes[i];
             arg_offset = aligned_offset(arg_offset, arg_size);
             halide_debug_assert(user_context, (arg_offset + arg_size) <= region->allocation.size);
             memcpy(host_ptr + arg_offset, args[i], arg_size);
@@ -767,7 +765,7 @@ int vk_update_scalar_uniform_buffer(void *user_context,
         arg_offset = aligned_offset(arg_offset, sizeof(int32_t));
 
         // Copy all storage buffer offsets (to support arbitrary crops)
-        for (size_t i = 0; arg_types[i] != halide_type_t{}; i++) {
+        for (size_t i = 0; arg_sizes[i] > 0; i++) {
             if (arg_is_buffer[i]) {
 
                 // get the allocated region for the buffer

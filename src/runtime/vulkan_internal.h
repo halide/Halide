@@ -120,12 +120,12 @@ int vk_submit_command_buffer(void *user_context, VkQueue queue, VkCommandBuffer 
 
 // -- Scalar Uniform Buffer
 bool vk_needs_scalar_uniform_buffer(void *user_context,
-                                    halide_type_t arg_types[],
+                                    size_t arg_sizes[],
                                     void *args[],
                                     int8_t arg_is_buffer[]);
 
 size_t vk_estimate_scalar_uniform_buffer_size(void *user_context,
-                                              halide_type_t arg_types[],
+                                              size_t arg_sizes[],
                                               void *args[],
                                               int8_t arg_is_buffer[]);
 
@@ -136,7 +136,7 @@ MemoryRegion *vk_create_scalar_uniform_buffer(void *user_context,
 int vk_update_scalar_uniform_buffer(void *user_context,
                                     VulkanMemoryAllocator *allocator,
                                     MemoryRegion *region,
-                                    halide_type_t arg_types[],
+                                    size_t arg_sizes[],
                                     void *args[],
                                     int8_t arg_is_buffer[]);
 
@@ -155,7 +155,7 @@ int vk_destroy_descriptor_pool(void *user_context,
 
 // -- Descriptor Set Layout
 uint32_t vk_count_bindings_for_descriptor_set(void *user_context,
-                                              halide_type_t arg_types[],
+                                              size_t arg_sizes[],
                                               void *args[],
                                               int8_t arg_is_buffer[]);
 
@@ -181,7 +181,7 @@ int vk_update_descriptor_set(void *user_context,
                              VkBuffer *scalar_args_buffer,
                              size_t uniform_buffer_count,
                              size_t storage_buffer_count,
-                             halide_type_t arg_types[],
+                             size_t arg_sizes[],
                              void *args[],
                              int8_t arg_is_buffer[],
                              VkDescriptorSet descriptor_set);

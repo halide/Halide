@@ -1142,7 +1142,7 @@ WEAK int halide_vulkan_run(void *user_context,
                            int blocksX, int blocksY, int blocksZ,
                            int threadsX, int threadsY, int threadsZ,
                            int shared_mem_bytes,
-                           halide_type_t arg_types[],
+                           size_t arg_sizes[],
                            void *args[],
                            int8_t arg_is_buffer[]) {
 #ifdef DEBUG_RUNTIME
@@ -1302,7 +1302,7 @@ WEAK int halide_vulkan_run(void *user_context,
 
     // 3a. Create a buffer for the scalar parameters
     if ((entry_point_binding->args_region == nullptr) && entry_point_binding->uniform_buffer_count) {
-        size_t scalar_buffer_size = vk_estimate_scalar_uniform_buffer_size(user_context, arg_types, args, arg_is_buffer);
+        size_t scalar_buffer_size = vk_estimate_scalar_uniform_buffer_size(user_context, arg_sizes, args, arg_is_buffer);
         if (scalar_buffer_size > 0) {
             entry_point_binding->args_region = vk_create_scalar_uniform_buffer(user_context, ctx.allocator, scalar_buffer_size);
             if (entry_point_binding->args_region == nullptr) {
@@ -1315,7 +1315,7 @@ WEAK int halide_vulkan_run(void *user_context,
     // 3b. Update uniform buffer with scalar parameters
     VkBuffer *args_buffer = nullptr;
     if ((entry_point_binding->args_region != nullptr) && entry_point_binding->uniform_buffer_count) {
-        error_code = vk_update_scalar_uniform_buffer(user_context, ctx.allocator, entry_point_binding->args_region, arg_types, args, arg_is_buffer);
+        error_code = vk_update_scalar_uniform_buffer(user_context, ctx.allocator, entry_point_binding->args_region, arg_sizes, args, arg_is_buffer);
         if (error_code != halide_error_code_success) {
             error(user_context) << "Vulkan: Failed to update scalar uniform buffer!\n";
             return error_code;
@@ -1329,7 +1329,9 @@ WEAK int halide_vulkan_run(void *user_context,
     }
 
     // 3c. Update buffer bindings for descriptor set
-    error_code = vk_update_descriptor_set(user_context, ctx.allocator, args_buffer, entry_point_binding->uniform_buffer_count, entry_point_binding->storage_buffer_count, arg_types, args, arg_is_buffer, entry_point_binding->descriptor_set);
+    error_code = vk_update_descriptor_set(user_context, ctx.allocator, args_buffer, entry_point_binding->uniform_buffer_count,
+                                          entry_point_binding->storage_buffer_count, arg_sizes, args, arg_is_buffer,
+                                          entry_point_binding->descriptor_set);
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to update descriptor set!\n";
         return error_code;

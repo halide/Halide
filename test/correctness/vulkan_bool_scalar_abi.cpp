@@ -1,6 +1,6 @@
 // Verify the host/runtime ABI for logical Bool scalar arguments to Vulkan kernels.
 // Vulkan Uniform storage cannot represent OpTypeBool, so the compiler must pass
-// four-byte UInt32 storage and matching metadata. This test inspects lowered IR
+// four-byte UInt32 storage and a matching runtime argument size. This test inspects lowered IR
 // without launching the Vulkan runtime or requiring a Vulkan device.
 // Forcing the Vulkan target instead of inheriting HL_TARGET is intentional: this
 // follows the compiler-only test pattern of exercising a specific backend in any
@@ -28,11 +28,11 @@ public:
         if (op->args.size() != 12) {
             return;
         }
-        const Call *arg_types = op->args[9].as<Call>();
+        const Call *arg_sizes = op->args[9].as<Call>();
         const Call *args = op->args[10].as<Call>();
         const Call *arg_is_buffer = op->args[11].as<Call>();
-        if (!arg_types || !args || !arg_is_buffer ||
-            arg_types->args.size() != args->args.size() ||
+        if (!arg_sizes || !args || !arg_is_buffer ||
+            arg_sizes->args.size() != args->args.size() ||
             args->args.size() != arg_is_buffer->args.size()) {
             return;
         }
@@ -42,10 +42,8 @@ public:
             const auto is_buffer = as_const_uint(arg_is_buffer->args[i]);
             if (storage && storage->args.size() == 1 && is_buffer && *is_buffer == 0) {
                 found = true;
-                const auto type = as_const_uint(arg_types->args[i]);
-                const uint32_t expected_type = static_cast<uint8_t>(halide_type_uint) | (uint32_t{32} << 8);
-                valid = storage->args[0].type() == UInt(32) &&
-                        type && *type == expected_type;
+                const auto size = as_const_int(arg_sizes->args[i]);
+                valid = storage->args[0].type() == UInt(32) && size && *size == 4;
             }
         }
     }
@@ -72,7 +70,7 @@ int main(int argc, char **argv) {
     }
 
     if (!check.found || !check.valid) {
-        printf("Vulkan Bool scalar was not passed as UInt32\n");
+        printf("Vulkan Bool scalar was not passed as a four-byte UInt32\n");
         return 1;
     }
 

@@ -66,10 +66,6 @@ public:
         return "vulkan";
     }
 
-    bool kernel_run_takes_types() const override {
-        return true;
-    }
-
     Type kernel_run_scalar_arg_type(Type type) const override {
         return vulkan_scalar_parameter_type(type);
     }
