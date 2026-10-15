@@ -17,6 +17,28 @@ namespace Halide {
 namespace Runtime {
 namespace Internal {
 
+// The process-wide keep-awake reference count; see
+// halide_thread_pool_keep_awake. It lives outside work_queue so that
+// halide_shutdown_thread_pool, which resets work_queue, doesn't drop
+// references that are still held.
+WEAK int keep_awake_count = 0;
+
+// While the keep-awake count is held, how many times an idle thread polls for
+// work (each poll calls halide_thread_yield) before going to sleep anyway. This
+// is a backstop against leaked references and against taking cores from other
+// thread pools for long periods. Waking a thread costs tens of microseconds, so
+// once a thread has been idle for a few milliseconds, spinning any longer saves
+// at most about 1% of the idle time. With a halide_thread_yield that costs
+// about a microsecond (a sched_yield-style syscall), this is a few
+// milliseconds.
+constexpr int keep_awake_max_spins = 1 << 12;
+
+ALWAYS_INLINE bool keep_awake_held() {
+    int count;
+    Synchronization::atomic_load_relaxed(&keep_awake_count, &count);
+    return count > 0;
+}
+
 // A condition variable, augmented with a bit of spinning on an atomic counter
 // before going to sleep for real. This helps reduce overhead at the end of a
 // parallel for loop when idle worker threads are waiting for other threads to
@@ -27,11 +49,14 @@ struct halide_cond_with_spinning {
 
     void wait(halide_mutex *mutex) {
         // First spin for a bit, checking the counter for another thread to bump
-        // it.
+        // it. While the keep-awake count is held, keep spinning (up to
+        // keep_awake_max_spins) instead of going to sleep.
         uintptr_t initial;
         Synchronization::atomic_load_relaxed(&counter, &initial);
         halide_mutex_unlock(mutex);
-        for (int spin = 0; spin < 40; spin++) {
+        for (int spin = 0;
+             spin < 40 || (spin < keep_awake_max_spins && keep_awake_held());
+             spin++) {
             halide_thread_yield();
             uintptr_t current;
             Synchronization::atomic_load_relaxed(&counter, &current);
@@ -825,10 +850,34 @@ WEAK int halide_get_num_threads() {
     return n;
 }
 
+WEAK int halide_thread_pool_keep_awake(bool keep_awake) {
+    if (keep_awake) {
+        // Idle threads that are already asleep start spinning once the next
+        // parallel loop wakes them.
+        return Synchronization::atomic_add_fetch_sequentially_consistent(&keep_awake_count, 1);
+    }
+
+    // Threads spinning because of the count notice it dropping to zero on
+    // their next poll and go to sleep, so there's nothing to wake here.
+    int count;
+    Synchronization::atomic_load_relaxed(&keep_awake_count, &count);
+    int desired;
+    do {
+        if (count <= 0) {
+            halide_error(nullptr, "halide_thread_pool_keep_awake(false) called without a matching halide_thread_pool_keep_awake(true).\n");
+            return halide_error_code_generic_error;
+        }
+        desired = count - 1;
+    } while (!Synchronization::atomic_cas_weak_relacq_relaxed(&keep_awake_count, &count, &desired));
+    return desired;
+}
+
 WEAK void halide_shutdown_thread_pool() {
     if (work_queue.initialized) {
         // Wake everyone up and tell them the party's over and it's time
-        // to go home
+        // to go home. This includes threads spinning because the
+        // keep-awake count is held. The count itself is preserved, so the
+        // threads of a restarted pool stay awake too.
         halide_mutex_lock(&work_queue.mutex);
 
         work_queue.shutdown = true;

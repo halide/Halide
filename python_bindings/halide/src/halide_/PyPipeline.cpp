@@ -79,6 +79,16 @@ struct PyProfilerScope {
     }
 };
 
+// Owns a ThreadPoolKeepAwake that a with-statement can release early, via
+// exit(), rather than waiting on garbage collection.
+struct PyThreadPoolKeepAwake {
+    std::unique_ptr<ThreadPoolKeepAwake> keep_awake = std::make_unique<ThreadPoolKeepAwake>();
+
+    void exit() {
+        keep_awake.reset();
+    }
+};
+
 }  // namespace
 
 void define_pipeline(py::module &m) {
@@ -438,6 +448,16 @@ void define_pipeline(py::module &m) {
         .def("func_stats", [](const PyProfilerScope &s, const Func &f) { return snapshot(s.get().func_stats(f)); }, py::arg("func"))
         .def("func_stats", [](const PyProfilerScope &s, const std::string &name) { return snapshot(s.get().func_stats(name)); }, py::arg("name"))
         .def("__repr__", [](const PyProfilerScope &s) -> std::string { return "<halide.ProfilerScope>"; });
+
+    py::class_<PyThreadPoolKeepAwake>(m, "ThreadPoolKeepAwake")
+        .def(py::init<>())
+        .def("__enter__", [](PyThreadPoolKeepAwake &k) -> PyThreadPoolKeepAwake & { return k; })
+        .def("__exit__", [](PyThreadPoolKeepAwake &k, const py::object &exc_type, const py::object &exc_value, const py::object &exc_traceback) -> bool {
+            k.exit();
+            return false;
+        })
+        .def("exit", &PyThreadPoolKeepAwake::exit)
+        .def("__repr__", [](const PyThreadPoolKeepAwake &k) -> std::string { return "<halide.ThreadPoolKeepAwake>"; });
 }
 
 }  // namespace PythonBindings
