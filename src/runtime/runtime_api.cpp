@@ -174,6 +174,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_profiler_memory_free,
     (void *)&halide_profiler_report,
     (void *)&halide_profiler_reset,
+    (void *)&halide_profiler_set_json_output,
     (void *)&halide_profiler_stack_peak_update,
     (void *)&halide_qurt_hvx_lock,
     (void *)&halide_qurt_hvx_unlock,

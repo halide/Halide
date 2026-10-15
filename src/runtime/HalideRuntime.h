@@ -499,6 +499,8 @@ typedef enum halide_type_code_t
     halide_type_float = 2,   ///< IEEE floating point numbers
     halide_type_handle = 3,  ///< opaque pointer type (void *)
     halide_type_bfloat = 4,  ///< floating point numbers in the bfloat format
+    halide_type_struct = 5,  ///< a packed, by-value aggregate; its total byte
+                             ///< size is carried in halide_type_t::info
 } halide_type_code_t;
 
 // Note that while __attribute__ can go before or after the declaration,
@@ -532,22 +534,24 @@ struct halide_type_t {
     HALIDE_ATTRIBUTE_ALIGN(1)
     uint8_t bits;
 
-    /** Reserved for future element-kind payloads. */
+    /** Element-kind payload. For a struct type (code == halide_type_struct)
+     * this holds the total packed byte size of the aggregate; the ordinary
+     * `bits` field is not meaningful for a struct. Zero for all other types. */
     HALIDE_ATTRIBUTE_ALIGN(2)
-    uint16_t reserved;
+    uint16_t info;
 
 #if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
     /** Construct a runtime representation of a Halide element type from:
      * code: The fundamental type from an enum.
      * bits: The bit size of one element. */
     HALIDE_ALWAYS_INLINE constexpr halide_type_t(halide_type_code_t code, uint8_t bits)
-        : code(code), bits(bits), reserved(0) {
+        : code(code), bits(bits), info(0) {
     }
 
     /** Default constructor is required e.g. to declare halide_trace_event
      * instances. */
     HALIDE_ALWAYS_INLINE constexpr halide_type_t()
-        : code((halide_type_code_t)0), bits(0), reserved(0) {
+        : code((halide_type_code_t)0), bits(0), info(0) {
     }
 
     /** Compare two types for equality. */
@@ -563,9 +567,11 @@ struct halide_type_t {
         return static_cast<uint32_t>(*this) < static_cast<uint32_t>(other);
     }
 
-    /** Size in bytes for a single element of this type. */
+    /** Size in bytes for a single element of this type. For a struct type the
+     * packed aggregate size is carried in `info` rather than derived from
+     * `bits`. */
     HALIDE_ALWAYS_INLINE constexpr int bytes() const {
-        return (bits + 7) / 8;
+        return code == halide_type_struct ? info : (bits + 7) / 8;
     }
 
     HALIDE_ALWAYS_INLINE constexpr operator uint32_t() const {
@@ -575,7 +581,7 @@ struct halide_type_t {
         // (At -O0 it will look awful.)
         return static_cast<uint8_t>(code) |
                static_cast<uint16_t>(bits) << 8 |
-               static_cast<uint32_t>(reserved) << 16;
+               static_cast<uint32_t>(info) << 16;
     }
 #endif
 };
@@ -696,6 +702,11 @@ struct halide_trace_event_t {
  * Note that all tag events (if any) will occur just after the begin_pipeline
  * event, but before any begin_realization events. All tags for a given Func
  * will be emitted in the order added.
+ *
+ * A trace function returns the id of the event, which must be
+ * non-negative. A negative return value is treated as an error code:
+ * the pipeline stops and returns it. The trace function should call
+ * halide_error first to describe the failure.
  */
 // @}
 extern int32_t halide_trace(void *user_context, const struct halide_trace_event_t *event);
@@ -740,7 +751,7 @@ struct halide_trace_packet_t {
         struct {
             /** The (scalar) element type code of the access (see halide_trace_event_t).
              * Unpacked from halide_type_t rather than storing it directly, since
-             * halide_type_t's `reserved` field carries no meaning here. */
+             * halide_type_t's `info` field carries no meaning here. */
             uint8_t type_code;
             /** The bit-width of the element type of the access. */
             uint8_t type_bits;
@@ -831,11 +842,13 @@ static_assert(sizeof(halide_trace_packet_t) == 6 * sizeof(uint32_t), "size misma
 /** Set the file descriptor that Halide should write binary trace
  * events to. If called with 0 as the argument, Halide outputs trace
  * information to stdout in a human-readable format. If never called,
- * Halide checks the for existence of an environment variable called
- * HL_TRACE_FILE and opens that file. If HL_TRACE_FILE is not defined,
- * it outputs trace information to stdout in a human-readable
- * format. */
-extern void halide_set_trace_file(int fd);
+ * or called with -1, Halide checks the for existence of an environment
+ * variable called HL_TRACE_FILE and opens that file. If HL_TRACE_FILE
+ * is not defined, it outputs trace information to stdout in a
+ * human-readable format. Trace data buffered for the previous file is
+ * flushed to it first, and a file opened via HL_TRACE_FILE is
+ * closed. Must not be called while a traced pipeline is running. */
+extern void halide_set_trace_file(void *user_context, int fd);
 
 /** Halide calls this to retrieve the file descriptor to write binary
  * trace events to. The default implementation returns the value set
@@ -845,8 +858,9 @@ extern void halide_set_trace_file(int fd);
  * information to stdout. */
 extern int halide_get_trace_file(void *user_context);
 
-/** If tracing is writing to a file. This call closes that file
- * (flushing the trace). Returns zero on success. */
+/** Flush any buffered trace data, close the trace file if it was
+ * opened via HL_TRACE_FILE, and reset to the state before any call to
+ * halide_set_trace_file. Returns zero on success. */
 extern int halide_shutdown_trace(void);
 
 /** All Halide GPU or device backend implementations provide an
@@ -1431,6 +1445,7 @@ extern int halide_error_device_crop_failed(void *user_context);
 extern int halide_error_split_factor_not_positive(void *user_context, const char *func_name, const char *orig, const char *outer, const char *inner, const char *factor_str, int factor);
 extern int halide_error_vscale_invalid(void *user_context, const char *func_name, int runtime_vscale, int compiletime_vscale);
 extern int halide_error_streaming_vscale_invalid(void *user_context, const char *func_name, int runtime_vscale, int compiletime_vscale);
+extern int halide_error_trace_failed(void *user_context, const char *reason);
 // @}
 
 /** Optional features a compilation Target can have.
@@ -2332,6 +2347,12 @@ extern void halide_profiler_shutdown(void);
  * reset. Also happens at process exit. */
 extern void halide_profiler_report(void *user_context);
 
+/** Set the path of the JSON file that halide_profiler_report writes the raw
+ * statistics to, overriding the HL_PROFILER_JSON_OUTPUT environment
+ * variable. The path is copied. Pass nullptr to revert to the environment
+ * variable. */
+extern void halide_profiler_set_json_output(const char *path);
+
 /** These routines are called to temporarily disable and then re-enable
  * the profiler. */
 //@{
@@ -2533,6 +2554,8 @@ inline std::ostream &operator<<(std::ostream &os, const halide_type_t &type) {
         return os << "(void*)";
     case halide_type_bfloat:
         return os << "bfloat" << (int)type.bits;
+    case halide_type_struct:
+        return os << "struct(" << (int)type.info << " bytes)";
     }
     return os;
 }

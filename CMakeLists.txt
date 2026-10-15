@@ -95,7 +95,8 @@ if (CMAKE_SYSTEM_NAME MATCHES "Windows")
     endif ()
 endif ()
 
-# Export all symbols on Windows to match GCC/Clang behavior on Linux/macOS
+# Export all symbols on Windows to match GCC/Clang behavior on Linux/macOS.
+# (With MSVC, src/CMakeLists.txt filters Halide.dll's list to stay under the linker's limit.)
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
 # Require standard C++17

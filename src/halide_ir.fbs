@@ -477,6 +477,13 @@ enum TypeCode: byte {
     Float,
     Handle,
     BFloat,
+    Struct,
+}
+
+table StructField {
+    name: string;
+    type: Type;
+    array_extent: int32 = -1;  // -1 means the field is scalar, not an array
 }
 
 // TODO: no halide_handle_cplusplus_type yet
@@ -484,6 +491,9 @@ table Type {
     code: TypeCode;
     bits: uint8;
     lanes: int32;
+    // Only present when code == Struct: the struct's field layout (see
+    // Type::Struct/StructTypeInfo). Absent for every other type code.
+    struct_fields: [StructField];
 }
 
 table Bound {
@@ -500,6 +510,13 @@ table StorageDim {
     bound: Expr;
     fold_factor: Expr;
     fold_forward: bool;
+}
+
+table StorageSplit {
+    old_var: string;
+    outer: string;
+    inner: string;
+    factor: Expr;
 }
 
 table LoopLevel {
@@ -534,6 +551,7 @@ table FuncSchedule {
     ring_buffer: Expr;
     memoize_eviction_key: Expr;
     type_change_checks: [TypeChangeCheck];
+    storage_splits: [StorageSplit];
 }
 
 table Specialization {
@@ -568,6 +586,7 @@ table Split {
     exact: bool;
     tail: TailStrategy;
     split_type: SplitType;
+    align: Expr;
 }
 
 enum DimType: ubyte {

@@ -28,6 +28,11 @@ function(add_runtime_test_kernel MOD)
 
     add_library(${MOD}_module MODULE aot_module_stub.c)
     target_link_libraries(${MOD}_module PRIVATE "$<LINK_LIBRARY:WHOLE_ARCHIVE,${MOD}_aot>")
+    # MSVC's incremental linker intermittently fails with LNK1236 ("corrupt or
+    # invalid COFF sections") when relinking a /WHOLEARCHIVE module after the
+    # AOT object changes (e.g. after switching Halide_TARGET). Full links are
+    # fine, so disable incremental linking for these modules.
+    target_link_options(${MOD}_module PRIVATE "$<$<C_COMPILER_ID:MSVC>:/INCREMENTAL:NO>")
     set_target_properties(${MOD}_module PROPERTIES PREFIX "" OUTPUT_NAME ${MOD})
 endfunction()
 

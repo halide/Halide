@@ -536,9 +536,16 @@ WEAK void worker_thread_already_locked(work *owned_job) {
 
         log_message("Done working on job " << job->task.name);
 
+        // A serial job is put back unfinished when its semaphores run dry.
+        // A release that lands while we still hold it wakes the owners, but
+        // they can't add themselves to the job then, so they go back to
+        // sleep. (The job's owner may be sleeping on a sibling job, so
+        // job->owner_is_sleeping isn't enough to tell.) If our own job is
+        // done, we won't look at this one again, so wake the owners now.
         if (wake_owners ||
-            (job->active_workers == 0 && (job->task.extent == 0 || job->exit_status != halide_error_code_success) && job->owner_is_sleeping)) {
-            // The job is done or some owned job failed via sibling linkage. Wake up the owner.
+            (job->active_workers == 0 && (job->task.extent == 0 || job->exit_status != halide_error_code_success) && job->owner_is_sleeping) ||
+            (job->task.serial && job->task.extent > 0 && work_queue.owners_sleeping)) {
+            // The job is done, was put back, or some owned job failed via sibling linkage. Wake up the owner.
             work_queue.wake_owners.broadcast();
         }
     }

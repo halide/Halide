@@ -82,7 +82,7 @@ class Stage {
     void set_dim_type(const VarOrRVar &var, Internal::ForType t);
     void set_dim_device_api(const VarOrRVar &var, DeviceAPI device_api);
     void split(const std::string &old, const std::string &outer, const std::string &inner,
-               const Expr &factor, bool exact, TailStrategy tail);
+               const Expr &factor, const Expr &align, bool exact, TailStrategy tail);
     void remove(const std::string &var);
 
     const std::vector<Internal::StorageDim> &storage_dims() const {
@@ -410,6 +410,7 @@ public:
     // @{
 
     Stage &split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
+    Stage &aligned_split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, const Expr &align, TailStrategy tail = TailStrategy::Auto);
     Stage &fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRVar &fused);
     Stage &serial(const VarOrRVar &var);
     Stage &parallel(const VarOrRVar &var);
@@ -1566,6 +1567,41 @@ public:
      * factor does not provably divide the extent. */
     Func &split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
 
+    /** A version of split() that additionally takes a runtime-valued
+     * 'align' Expr. This version anchors the inner-loop's iterations
+     * to absolute coordinates, instead of to Halide's inferred loop
+     * bounds.
+     *
+     * As such, in absolute coordinates, the inner-loop boundaries fall
+     * at ``align``, ``align + factor``, ``align + 2*factor``, and so on.
+     * The inner dimension still iterates over ``[0, factor-1]``, same as
+     * an unaligned split. The difference is how the original loop Var
+     * is reconstructed from the outer and inner loop Vars.
+     * This may increase the number of iterations over the outer
+     * loop by 1 compared to an unaligned split.
+     *
+     * This is useful when an algorithm selects between cases using an
+     * expression like ``(x - offset) % factor``, where 'offset' is a
+     * value only known at runtime (e.g. a Param). Passing that same
+     * 'offset' as 'align' makes ``(x - offset) % factor`` a
+     * compile-time constant on each unrolled iteration of the inner
+     * loop, so that a mux() indexed by it can be resolved statically
+     * instead of compiling to a runtime select:
+     \code
+     Var x, xo, xi;
+     Param<int> offset;
+     f(x) = mux((x - offset) % 4, {a(x), b(x), c(x), d(x)});
+     f.aligned_split(x, xo, xi, 4, offset, TailStrategy::GuardWithIf)
+      .unroll(xi);
+     \endcode
+     * Without 'align', the compiler can't tell at compile time which of
+     * the four mux() cases applies to a given unrolled value of 'xi',
+     * because that depends on the runtime value of 'offset'. With it,
+     * ``(x - offset) % 4`` simplifies to a distinct compile-time
+     * constant for each unrolled value of 'xi', and each mux() call
+     * collapses to its selected case. */
+    Func &aligned_split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, const Expr &align, TailStrategy tail = TailStrategy::Auto);
+
     /** Join two dimensions into a single fused dimension. The fused dimension
      * covers the product of the extents of the inner and outer dimensions
      * given. The loop type (e.g. parallel, vectorized) of the resulting fused
@@ -2245,6 +2281,35 @@ public:
         return reorder_storage(collected_args);
     }
     // @}
+
+    /** Split a storage dimension into two sub-dimensions, analogous to
+     * how \ref Func::split splits a loop dimension. The storage axis
+     * "old" is replaced (in the storage nesting order) by "inner"
+     * (innermost) and "outer", where "inner" has extent "factor". The
+     * newly created axes are ordinary storage axes: they can be
+     * reordered relative to the other storage axes with
+     * reorder_storage, and bounded/aligned with bound_storage and
+     * align_storage.
+     *
+     * This lets you describe blocked/tiled storage layouts. For
+     * example, given foo(x, y), splitting x into (xo, xi) by 8 and then
+     * reordering to (xi, y, xo) lays foo out as a sequence of 8-wide
+     * column strips.
+     *
+     * Unlike a loop split there is no TailStrategy: the allocation is
+     * always rounded up so that the outer extent is
+     * ceil(old_extent / factor), over-allocating when the factor does
+     * not divide the extent.
+     *
+     * bound_storage, align_storage, and fold_storage settings must be
+     * applied to the split axes, not to "old" before it is split.
+     *
+     * split_storage is not supported for pipeline outputs, Funcs with
+     * an extern definition, Funcs consumed by an extern stage, or Funcs
+     * stored in MemoryType::GPUTexture. You may fold_storage the other
+     * (unsplit) axes of the same Func, but folding a split axis itself
+     * is not supported. */
+    Func &split_storage(const Var &old, const Var &outer, const Var &inner, const Expr &factor);
 
     /** Pad the storage extent of a particular dimension of
      * realizations of this function up to be a multiple of the

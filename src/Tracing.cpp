@@ -51,7 +51,10 @@ struct TraceEventBuilder {
                              (int)event,
                              parent_id, tid, idx, (int)coordinates.size(),
                              trace_tag_expr};
-        return Call::make(Int(32), Call::trace, args, Call::Extern);
+        Expr id = Call::make(Int(32), Call::trace, args, Call::Extern);
+        // The runtime already called halide_error_trace_failed, we just need to
+        // plumb through the return code, which is passed as a negative trace id.
+        return Call::make(Int(32), Call::require, {id >= 0, id, id}, Call::Intrinsic);
     }
 };
 

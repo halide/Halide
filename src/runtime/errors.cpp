@@ -316,4 +316,10 @@ WEAK int halide_error_streaming_vscale_invalid(void *user_context, const char *f
     return halide_error_code_streaming_vscale_invalid;
 }
 
+WEAK int halide_error_trace_failed(void *user_context, const char *reason) {
+    error(user_context)
+        << "An attempt to write a trace event to a file failed due to: " << reason;
+    return halide_error_code_trace_failed;
+}
+
 }  // extern "C"

@@ -39,6 +39,7 @@ void define_expr(py::module &m) {
             // for implicitly_convertible
             .def(py::init([](const FuncRef &f) -> Expr { return f; }))
             .def(py::init([](const FuncTupleElementRef &f) -> Expr { return f; }))
+            .def(py::init([](const FieldRef &f) -> Expr { return f; }))
             .def(py::init([](const Param<> &p) -> Expr { return p; }))
             .def(py::init([](const RDom &r) -> Expr { return r; }))
             .def(py::init([](const RVar &r) -> Expr { return r; }))
@@ -77,6 +78,7 @@ void define_expr(py::module &m) {
     // There must be an Expr() ctor available for each of these
     py::implicitly_convertible<FuncRef, Expr>();
     py::implicitly_convertible<FuncTupleElementRef, Expr>();
+    py::implicitly_convertible<FieldRef, Expr>();
     py::implicitly_convertible<Param<>, Expr>();
     py::implicitly_convertible<RDom, Expr>();
     py::implicitly_convertible<RVar, Expr>();
