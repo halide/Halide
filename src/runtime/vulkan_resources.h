@@ -284,6 +284,7 @@ bool vk_needs_scalar_uniform_buffer(void *user_context,
                                     size_t arg_sizes[],
                                     void *args[],
                                     int8_t arg_is_buffer[]) {
+
     // if any args exist, we need at least 1x uniform buffer
     if (arg_sizes[0] > 0) {
         return true;

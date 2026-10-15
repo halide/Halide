@@ -1329,9 +1329,7 @@ WEAK int halide_vulkan_run(void *user_context,
     }
 
     // 3c. Update buffer bindings for descriptor set
-    error_code = vk_update_descriptor_set(user_context, ctx.allocator, args_buffer, entry_point_binding->uniform_buffer_count,
-                                          entry_point_binding->storage_buffer_count, arg_sizes, args, arg_is_buffer,
-                                          entry_point_binding->descriptor_set);
+    error_code = vk_update_descriptor_set(user_context, ctx.allocator, args_buffer, entry_point_binding->uniform_buffer_count, entry_point_binding->storage_buffer_count, arg_sizes, args, arg_is_buffer, entry_point_binding->descriptor_set);
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to update descriptor set!\n";
         return error_code;
