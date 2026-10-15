@@ -905,6 +905,10 @@ struct Call : public ExprNode<Call> {
         target_has_feature,
         target_natural_vector_size,
         target_os_is,
+        // Takes the trace id of the pipeline. Marks where bounds inference
+        // should emit the halide_trace_bounds_required events for the
+        // pipeline's outermost loop level.
+        trace_bounds_required_marker,
         // An undef is a magic value where storing it has no observable effect.
         undef,
         // Mark a code path as unreachable so that it can be dead-code eliminated.

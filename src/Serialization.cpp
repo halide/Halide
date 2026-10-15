@@ -1041,6 +1041,7 @@ Offset<Serialize::Func> Serializer::serialize_function(FlatBufferBuilder &builde
     const bool trace_loads = function.is_tracing_loads();
     const bool trace_stores = function.is_tracing_stores();
     const bool trace_realizations = function.is_tracing_realizations();
+    const bool trace_bounds_required = function.is_tracing_bounds_required();
     std::vector<Offset<String>> trace_tags_serialized;
     trace_tags_serialized.reserve(function.get_trace_tags().size());
     for (const auto &tag : function.get_trace_tags()) {
@@ -1081,6 +1082,7 @@ Offset<Serialize::Func> Serializer::serialize_function(FlatBufferBuilder &builde
                                       trace_loads,
                                       trace_stores,
                                       trace_realizations,
+                                      trace_bounds_required,
                                       builder.CreateVector(trace_tags_serialized),
                                       no_profiling,
                                       profiler_display_name_serialized,

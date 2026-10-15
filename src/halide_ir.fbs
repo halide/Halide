@@ -743,6 +743,7 @@ table Func {
     trace_loads: bool = false;
     trace_stores: bool = false;
     trace_realizations: bool = false;
+    trace_bounds_required: bool = false;
     trace_tags: [string];
     no_profiling: bool = false;
     profiler_display_name: string;

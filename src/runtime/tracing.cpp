@@ -297,7 +297,8 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
                                      "End pipeline",
                                      "Tag",
                                      "Begin parallel task",
-                                     "End parallel task"};
+                                     "End parallel task",
+                                     "Bounds required"};
 
         // Only print out the value on stores and loads.
         bool print_value = (e->event < 2);
