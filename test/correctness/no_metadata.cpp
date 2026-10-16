@@ -68,11 +68,15 @@ int main(int argc, char **argv) {
         ok &= check(c, read_file(c), "\"secret_offset\"", !no_metadata);
     }
 
+#if HALIDE_WITH_EXCEPTIONS
     // A registration needs the _argv() and _metadata() entry points.
-    ok &= expect_user_error("no_metadata_registration", "requires the _argv() and _metadata() entry points", [&]() {
-        Module m = f.compile_to_module(args, "secret_pipeline", base.with_feature(Target::NoMetadata));
-        m.compile({{OutputFileType::registration, dir + "no_metadata.registration.cpp"}});
-    });
+    if (Halide::exceptions_enabled()) {
+        ok &= expect_user_error("no_metadata_registration", "requires the _argv() and _metadata() entry points", [&]() {
+            Module m = f.compile_to_module(args, "secret_pipeline", base.with_feature(Target::NoMetadata));
+            m.compile({{OutputFileType::registration, dir + "no_metadata.registration.cpp"}});
+        });
+    }
+#endif
 
     if (!ok) {
         return 1;
