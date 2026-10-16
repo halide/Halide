@@ -16,11 +16,12 @@ using std::string;
 using std::vector;
 
 // Sanity check that this is a reasonable function to inline
-void validate_schedule_inlined_function(Function f) {
+void validate_schedule_inlined_function(Function f, bool emit_warnings) {
     const FuncSchedule &func_s = f.schedule();
     const StageSchedule &stage_s = f.definition().schedule();
 
-    if (!func_s.store_level().is_inlined()) {
+    // Compare the value directly so schedule-time callers need not lock the level.
+    if (func_s.store_level().var_name() != LoopLevel::inlined().var_name()) {
         user_error << "Function " << f.name() << " is scheduled to be computed inline, "
                    << "but is not scheduled to be stored inline. A storage schedule "
                    << "is meaningless for functions computed inline.\n";
@@ -51,6 +52,10 @@ void validate_schedule_inlined_function(Function f) {
                        << d.var << " of function "
                        << f.name() << " because the function is scheduled inline.\n";
         }
+    }
+
+    if (!emit_warnings) {
+        return;
     }
 
     for (const auto &split : stage_s.splits()) {

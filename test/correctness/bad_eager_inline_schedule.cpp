@@ -34,23 +34,27 @@ int main(int argc, char **argv) {
            [](Func &p, Func &) { p.compute_root(); });
     expect("compute_at", ": it is scheduled compute_root() or compute_at()",
            [&](Func &p, Func &c) { p.compute_at(c, x); });
-    expect("store_root", ": it is scheduled store_root() or store_at()",
+    expect("store_root", "but is not scheduled to be stored inline",
            [](Func &p, Func &) { p.store_root(); });
+    expect("store_at", "but is not scheduled to be stored inline",
+           [&](Func &p, Func &c) { p.store_at(c, x); });
     expect("hoist_storage_root", ": it is scheduled hoist_storage_root() or hoist_storage()",
            [](Func &p, Func &) { p.hoist_storage_root(); });
     expect("compute_with", ": it is scheduled compute_with()",
            [&](Func &p, Func &c) { p.compute_with(c, x); });
     expect("deferred_compute_at", ": it is scheduled compute_root() or compute_at() at a LoopLevel that has not been set yet",
            [](Func &p, Func &) { p.compute_at(LoopLevel()); });
-    expect("memoize", ": it is scheduled memoize()",
+    expect("deferred_store_at", "but is not scheduled to be stored inline",
+           [](Func &p, Func &) { p.store_at(LoopLevel()); });
+    expect("memoize", "Cannot memoize function producer",
            [](Func &p, Func &) { p.memoize(); });
-    expect("parallel", ": its loop over x.xo is scheduled parallel",
+    expect("parallel", "Cannot parallelize dimension x.xo",
            [&](Func &p, Func &) { p.split(x, xo, xi, 4).parallel(xo); });
-    expect("vectorize", ": its loop over x is scheduled vectorized",
+    expect("vectorize", "Cannot vectorize dimension x",
            [&](Func &p, Func &) { p.vectorize(x); });
-    expect("unroll", ": its loop over x.xi is scheduled unrolled",
+    expect("unroll", "Cannot unroll dimension x.xi",
            [&](Func &p, Func &) { p.split(x, xo, xi, 4).unroll(xi); });
-    expect("gpu_blocks", ": its loop over x is scheduled as a GPU block or thread loop",
+    expect("gpu_blocks", "Cannot parallelize dimension x",
            [&](Func &p, Func &) { p.gpu_blocks(x); });
 
     if (failures != 0) {
