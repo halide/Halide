@@ -3721,38 +3721,16 @@ void check_eager_inline_level(const Function &f, const LoopLevel &level, const c
                << eager_inline_schedule_hint;
 }
 
-// Reject a Func whose schedule could not be used if it were computed inline.
-// These are the conditions that lowering treats as errors for a Func that is
-// compute_inline() (see validate_schedule_inlined_function()). A schedule
-// directive that lowering merely warns about for an inlined Func (split(),
-// bound(), etc.) is allowed.
+// Check eager-only placement constraints, then the shared inline schedule rules.
+// Directives that merely warn during lowering (split(), bound(), etc.) are allowed.
 void check_eager_inline_schedule(const Function &f) {
     const FuncSchedule &func_s = f.schedule();
     const StageSchedule &stage_s = f.definition().schedule();
 
     check_eager_inline_level(f, func_s.compute_level(), "compute_root() or compute_at()");
-    check_eager_inline_level(f, func_s.store_level(), "store_root() or store_at()");
     check_eager_inline_level(f, func_s.hoist_storage_level(), "hoist_storage_root() or hoist_storage()");
     check_eager_inline_level(f, stage_s.fuse_level().level, "compute_with()");
-    user_assert(!func_s.memoized())
-        << "eager_inline() cannot inline " << f.name()
-        << ": it is scheduled memoize()" << eager_inline_schedule_hint;
-
-    for (const Dim &d : stage_s.dims()) {
-        const char *loop_type = nullptr;
-        if (d.for_type == ForType::Parallel) {
-            loop_type = "parallel";
-        } else if (d.is_unordered_parallel()) {
-            loop_type = "as a GPU block or thread loop";
-        } else if (d.for_type == ForType::Vectorized) {
-            loop_type = "vectorized";
-        } else if (d.for_type == ForType::Unrolled) {
-            loop_type = "unrolled";
-        }
-        user_assert(loop_type == nullptr)
-            << "eager_inline() cannot inline " << f.name()
-            << ": its loop over " << d.var << " is scheduled " << loop_type << eager_inline_schedule_hint;
-    }
+    validate_schedule_inlined_function(f, /*emit_warnings=*/false);
 }
 
 }  // namespace
