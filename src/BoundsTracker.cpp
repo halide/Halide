@@ -249,7 +249,7 @@ BoundsTracker::VarSet BoundsTracker::vars_of(const Expr &e) {
     CollectVarHashes collect(&result.hashes);
     e.accept(&collect);
     for (uint32_t h : result.hashes) {
-        result.bloom |= (uint64_t)1 << (h & 63);
+        result.bloom |= VarSet::bloom_bit(h);
     }
     result.sort_unique();
     return result;
@@ -308,7 +308,9 @@ std::vector<Expr> BoundsTracker::relevant_facts(const Expr &e) const {
     // a third condition relevant, so keep sweeping until nothing new is
     // picked up. After the first sweep only the variables picked up by the
     // one before can make a condition relevant, so later sweeps skip
-    // anything that shares none of those.
+    // anything sharing no Bloom bit with the conditions that sweep took.
+    // All bits of a newly taken condition count, including ones `used`
+    // already had: a new variable may share its bit with an old one.
     std::vector<bool> taken_fact(facts.size(), false);
     std::vector<bool> taken(cands.size(), false);
     uint64_t fresh = (uint64_t)-1;
@@ -330,7 +332,7 @@ std::vector<Expr> BoundsTracker::relevant_facts(const Expr &e) const {
             }
             taken_fact[i] = true;
             result.push_back(fact.condition);
-            next_fresh |= fact.vars.bloom & ~used.bloom;
+            next_fresh |= fact.vars.bloom;
             used.merge(fact.vars);
             changed = true;
         }
@@ -344,7 +346,7 @@ std::vector<Expr> BoundsTracker::relevant_facts(const Expr &e) const {
             }
             taken[i] = true;
             result.push_back(candidate_expr(cands[i]));
-            next_fresh |= vars.bloom & ~used.bloom;
+            next_fresh |= vars.bloom;
             used.merge(vars);
             changed = true;
         }

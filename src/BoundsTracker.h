@@ -192,9 +192,17 @@ private:
         std::vector<uint32_t> hashes;
         uint64_t bloom = 0;
 
+        /** The Bloom filter bit for a hash. One byte of every IR node's hash
+         * is its node type, the same for every Variable, so the bit is taken
+         * from the top of a multiplicative mix of all 32 bits rather than
+         * from any fixed bits of the hash itself. */
+        static uint64_t bloom_bit(uint32_t h) {
+            return (uint64_t)1 << ((h * 2654435761u) >> 26);
+        }
+
         void add(uint32_t h) {
             hashes.push_back(h);
-            bloom |= (uint64_t)1 << (h & 63);
+            bloom |= bloom_bit(h);
         }
 
         void sort_unique() {
