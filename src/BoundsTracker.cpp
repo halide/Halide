@@ -353,11 +353,7 @@ std::vector<Expr> BoundsTracker::relevant_facts(const Expr &e) const {
     return result;
 }
 
-std::optional<int64_t> BoundsTracker::find_constant_bound(const Expr &e, Direction d) const {
-    return bound_in_direction(find_constant_bounds(e), d);
-}
-
-ConstantInterval BoundsTracker::find_constant_bounds(const Expr &e) const {
+ConstantInterval BoundsTracker::find_constant_bounds_in_scope(const Expr &e) const {
     return to_constant_interval(Halide::Internal::find_constant_bounds(e, interval_scope()));
 }
 
@@ -444,8 +440,8 @@ ConstantInterval BoundsTracker::tighten_using_loop_monotonicity(const Expr &e, C
     return interval;
 }
 
-ConstantInterval BoundsTracker::find_constant_bounds_aggressive(const Expr &e) const {
-    ConstantInterval interval = find_constant_bounds(e);
+ConstantInterval BoundsTracker::find_constant_bounds(const Expr &e) const {
+    ConstantInterval interval = find_constant_bounds_in_scope(e);
     if (interval.is_bounded()) {
         return interval;
     }
@@ -457,8 +453,8 @@ ConstantInterval BoundsTracker::find_constant_bounds_aggressive(const Expr &e) c
     return tighten_using_loop_monotonicity(wrapped, interval);
 }
 
-std::optional<int64_t> BoundsTracker::find_constant_bound_aggressive(const Expr &e, Direction d) const {
-    return bound_in_direction(find_constant_bounds_aggressive(e), d);
+std::optional<int64_t> BoundsTracker::find_constant_bound(const Expr &e, Direction d) const {
+    return bound_in_direction(find_constant_bounds(e), d);
 }
 
 }  // namespace Internal

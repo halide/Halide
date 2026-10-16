@@ -282,7 +282,7 @@ protected:
             e = common_subexpression_elimination(e);
             e = solve_expression(e, loop_var).result;
             e = PartiallyCancelDifferences()(e);
-            // Cheaper than find_constant_bound_aggressive()'s
+            // Cheaper than BoundsTracker::find_constant_bounds()'s
             // wrap-every-pending-let-and-resimplify path (this pass is
             // already quadratic in loop nesting depth and runs across the
             // whole tree several times, so that would be too expensive

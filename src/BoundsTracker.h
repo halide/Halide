@@ -24,14 +24,14 @@ namespace Internal {
 /** Accumulates the bounds-relevant context available at some point inside a
  * Stmt tree -- enclosing pure LetStmt/Let bindings and For loop ranges -- as
  * a mutator or visitor descends, and uses it to find constant bounds for
- * expressions at that point far more reliably than a bare
- * find_constant_bound() call.
+ * expressions at that point far more reliably than a bare call to
+ * find_constant_bound() in Bounds.h.
  *
  * In addition to the usual scope-based lookup (cheap, but only sees a bound
  * if every intermediate variable it passes through was itself pushed with an
- * already-constant bound), find_constant_bound_aggressive() falls back to
- * literally wrapping an expression in the enclosing pure lets it refers to
- * and re-simplifying. This is the trick bound_constant_extent_loops uses to
+ * already-constant bound), find_constant_bounds() falls back to literally
+ * wrapping an expression in the enclosing pure lets it refers to and
+ * re-simplifying. This is the trick bound_constant_extent_loops uses to
  * find constant loop extents, generalized so other passes that infer
  * constant bounds (e.g. BoundSmallAllocations) can use it too.
  *
@@ -66,7 +66,7 @@ public:
     /** Push the bounds of a for loop variable: the envelope [lower bound of
      * min, upper bound of max], each resolved against everything pushed so
      * far. Additionally records the range symbolically, so that
-     * find_constant_bounds_aggressive() can substitute the endpoints into an
+     * find_constant_bounds() can substitute the endpoints into an
      * expression that turns out to be monotonic in the loop variable. That
      * recovers bounds the constants-only scope can't represent, because a
      * loop's min or max may itself mention a symbol the expression also
@@ -77,14 +77,15 @@ public:
      * Useful when a caller has proven a tighter bound for a variable already
      * in scope (e.g. because a dominating conditional narrows it) and wants
      * to temporarily refine it. Does not participate in
-     * find_constant_bound_aggressive()'s let-substitution. */
+     * find_constant_bounds()'s let-substitution. */
     Binding push_interval(const std::string &name, const Interval &interval);
 
-    /** Push a let binding. Feeds both the fast-path scope (via a constant
-     * bounds estimate of the value) and find_constant_bound_aggressive()'s
-     * slow path (via the syntactic binding, but only if the value turns out
-     * to be pure -- substituting an impure expression into multiple places
-     * would change its meaning). Both of those are derived lazily. */
+    /** Push a let binding. Feeds both the scope of constant bounds (via a
+     * constant bounds estimate of the value) and find_constant_bounds()'s
+     * let-substitution (via the syntactic binding, but only if the value
+     * turns out to be pure -- substituting an impure expression into
+     * multiple places would change its meaning). Both of those are derived
+     * lazily. */
     Binding push_let(const std::string &name, const Expr &value);
 
     /** An RAII guard produced by push_fact. Pops the fact when destroyed. */
@@ -106,35 +107,30 @@ public:
     /** Push a condition known to be true at this point (e.g. because we're
      * in the then-case of an IfThenElse that tests it, or it's the
      * condition of a dominating assert). Used as a simplifier assumption by
-     * the slow path in find_constant_bound_aggressive(). Doesn't affect the
-     * fast-path scope. */
+     * simplify_with_context() and find_constant_bounds(). Doesn't affect the
+     * scope of constant bounds. */
     FactGuard push_fact(const Expr &condition);
 
-    /** Fast path only: find a constant bound using the current scope. See
-     * find_constant_bound() in Bounds.h. Integer types only; a bound that
-     * does not fit in an int64_t is reported as missing. */
-    std::optional<int64_t> find_constant_bound(const Expr &e, Direction d) const;
-    ConstantInterval find_constant_bounds(const Expr &e) const;
-
-    /** Fast path first; on failure, wrap e in the pending pure lets it refers
-     * to (producing a self-contained copy with no free references to
-     * enclosing lets) and simplify before retrying against the resulting
+    /** Find constant bounds of e at this point. First tries the scope of
+     * constant bounds alone; on failure, wraps e in the pending pure lets it
+     * refers to (producing a self-contained copy with no free references to
+     * enclosing lets) and simplifies before retrying against the resulting
      * expression and the scope. Any endpoint still missing after that is
      * attempted once more by substituting the range of an enclosing loop e is
-     * monotonic in. More expensive than find_constant_bound(), but succeeds
-     * far more often, because the simplifier can cancel terms across let
-     * boundaries that interval arithmetic through opaque variable lookups
-     * cannot.
+     * monotonic in. This succeeds far more often than the scope alone,
+     * because the simplifier can cancel terms across let boundaries that
+     * interval arithmetic through opaque variable lookups cannot.
      *
-     * The single-Direction form is a wrapper around the ConstantInterval
-     * form; it returns nullopt if no bound in that direction was found. */
-    ConstantInterval find_constant_bounds_aggressive(const Expr &e) const;
-    std::optional<int64_t> find_constant_bound_aggressive(const Expr &e, Direction d) const;
+     * Integer types only; a bound that does not fit in an int64_t is
+     * reported as missing. The single-Direction form is a wrapper around the
+     * ConstantInterval form; it returns nullopt if no bound in that direction
+     * was found. */
+    ConstantInterval find_constant_bounds(const Expr &e) const;
+    std::optional<int64_t> find_constant_bound(const Expr &e, Direction d) const;
 
     /** Wrap e in the pending pure lets it refers to and simplify under the
-     * current scope and dominating facts. Unlike
-     * find_constant_bound_aggressive(), the result
-     * need not be a constant -- this is just a plain simplify() call that
+     * current scope and dominating facts. Unlike find_constant_bounds(), the
+     * result need not be a constant -- this is just a plain simplify() call that
      * can see context (enclosing let values, dominating conditions) that a
      * caller holding only a bare Expr has no way to pass in. Useful for
      * expressions built by context-free helpers (e.g. box_touched) whose
@@ -142,18 +138,17 @@ public:
      * point the helper was called from. */
     Expr simplify_with_context(const Expr &e) const;
 
-    /** The current fast-path scope of constant bounds, for passes that need
-     * to feed it directly into simplify() or a similar helper that accepts a
+    /** The current scope of constant bounds, for passes that need to feed it
+     * directly into simplify() or a similar helper that accepts a
      * Scope<Interval> of assumptions, rather than going through
-     * find_constant_bound(). Note that Simplify's own internal bounds
+     * find_constant_bounds(). Note that Simplify's own internal bounds
      * representation is constant-only anyway (it converts via as_const_int
      * at ingestion), so this scope -- itself always constant-or-unbounded --
      * loses nothing for that use case. It is not, however, suitable for
      * general symbolic interval arithmetic (e.g. bounds_of_expr_in_scope)
      * where a non-constant symbolic bound would otherwise be useful.
      *
-     * Asking for the scope forces every pending binding to be evaluated, so
-     * prefer find_constant_bound() where it suffices. */
+     * Asking for the scope forces every pending binding to be evaluated. */
     const Scope<Interval> &interval_scope() const;
 
     /** The dominating conditions that could possibly say something about e --
@@ -161,12 +156,17 @@ public:
      * for passes that want to feed them directly into simplify() as
      * assumptions alongside interval_scope(), without paying for the more
      * expensive wrap-in-every-pending-let-and-resimplify path that
-     * find_constant_bound_aggressive()/simplify_with_context() use. Facts
+     * find_constant_bounds()/simplify_with_context() use. Facts
      * sharing no variable (even transitively, via another fact) with e are
      * dropped: they can't help, and the simplifier pays to ingest each one. */
     std::vector<Expr> relevant_facts(const Expr &e) const;
 
 private:
+    /** Constant bounds of e from the scope of constant bounds alone: the
+     * cheap first step of find_constant_bounds(). See find_constant_bounds()
+     * in Bounds.h. */
+    ConstantInterval find_constant_bounds_in_scope(const Expr &e) const;
+
     /** Tighten an interval by exploiting monotonicity in an enclosing loop
      * variable: if e is monotonic in it, e's extremes over the loop are
      * reached at the ends of the loop's range, so substituting the symbolic

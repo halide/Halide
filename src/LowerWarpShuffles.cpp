@@ -421,7 +421,7 @@ class LowerWarpShuffles : public IRMutator {
                 Expr extent = op->extent();
                 Expr new_size = (alloc->extents[0] + extent - 1) / extent;
                 new_size = simplify(new_size, tracker.interval_scope());
-                auto sz = tracker.find_constant_bound_aggressive(new_size, Direction::Upper);
+                auto sz = tracker.find_constant_bound(new_size, Direction::Upper);
                 user_assert(sz) << "Warp-level allocation with non-constant size: "
                                 << alloc->extents[0] << ". Use Func::bound_extent.";
                 DetermineAllocStride stride(alloc->name, op->name, warp_size);

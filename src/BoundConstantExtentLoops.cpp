@@ -60,7 +60,7 @@ protected:
                 // every dominating condition.
                 debug(4) << "Trying to find a constant bound for loop " << op->name << "\n"
                          << "Extent: " << extent << "\n";
-                ConstantInterval bounds = tracker.find_constant_bounds_aggressive(extent);
+                ConstantInterval bounds = tracker.find_constant_bounds(extent);
                 debug(4) << "Bounds found: " << bounds << "\n";
                 if (bounds.is_single_point()) {
                     // The bound is exact: no guard needed.

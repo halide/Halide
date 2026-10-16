@@ -80,7 +80,7 @@ class BoundSmallAllocations : public IRMutator {
             bool changed = false;
             bool found_non_constant_extent = false;
             for (Range &r : region) {
-                std::optional<int64_t> bound = tracker.find_constant_bound_aggressive(r.extent, Direction::Upper);
+                std::optional<int64_t> bound = tracker.find_constant_bound(r.extent, Direction::Upper);
                 // We can allow non-constant extents for now, as long as all
                 // remaining dimensions are 1 (so the stride is unused, which
                 // will be non-constant).
@@ -110,7 +110,7 @@ class BoundSmallAllocations : public IRMutator {
         for (const Expr &e : op->extents) {
             total_extent *= e;
         }
-        std::optional<int64_t> const_size = tracker.find_constant_bound_aggressive(total_extent, Direction::Upper);
+        std::optional<int64_t> const_size = tracker.find_constant_bound(total_extent, Direction::Upper);
 
         if (!const_size && must_be_constant(op->memory_type)) {
             user_assert(op->memory_type != MemoryType::Register)
