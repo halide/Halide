@@ -30,6 +30,13 @@ Variables named `c0`, `c1`, ... are constant wildcards, and anything else is a
 general wildcard, as in the simplifier itself. A rule may carry a third argument
 giving a predicate under which it applies.
 
+The predicate `in_range(value, lo, hi)` is interpreted as
+`lo <= value && value < hi`. The optional matcher context argument, as in
+`in_range(y, 0, c0, this)`, is accepted and ignored. This models the guarantee
+of a successful bounds query, not the implementation of the simplifier's bounds
+lookup. Use it as a positive condition: a failed bounds query does not imply
+that the value lies outside the range.
+
 For each rule it checks that:
 
 - The rule is true, by asking z3 to find a counterexample.
