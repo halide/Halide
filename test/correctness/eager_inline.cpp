@@ -3,6 +3,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <vector>
 
 using namespace Halide;
 
@@ -15,10 +16,10 @@ using namespace Halide;
 namespace {
 
 struct WarningCounter final : CompileTimeErrorReporter {
-    int warnings = 0;
+    std::vector<std::string> warnings;
 
     void warning(const char *msg) override {
-        ++warnings;
+        warnings.emplace_back(msg);
     }
 
     [[noreturn]] void error(const char *msg) override {
@@ -253,8 +254,25 @@ int main(int argc, char **argv) {
         set_custom_compile_time_error_reporter(&reporter);
         q.eager_inline(p);
         set_custom_compile_time_error_reporter(nullptr);
-        internal_assert(reporter.warnings == 0)
-            << "eager_inline should not warn about meaningless schedule directives\n";
+        internal_assert(reporter.warnings.size() == 4)
+            << "eager_inline should warn about split, bound, stream_loads, and stream_stores\n";
+        for (const std::string &warning : reporter.warnings) {
+            internal_assert(warning.find("has no effect when its calls are inlined by eager_inline()") != std::string::npos)
+                << "Unexpected eager_inline warning: " << warning << "\n";
+        }
+
+        Func lowered{"sp_lowered"};
+        lowered(x) = p(x) + 1;
+        reporter.warnings.clear();
+        set_custom_compile_time_error_reporter(&reporter);
+        lowered.compile_to_module({});
+        set_custom_compile_time_error_reporter(nullptr);
+        internal_assert(reporter.warnings.size() >= 4)
+            << "Lowering should warn about the same schedule directives\n";
+        for (const std::string &warning : reporter.warnings) {
+            internal_assert(warning.find("has no effect when its calls are inlined during lowering") != std::string::npos)
+                << "Unexpected lowering warning: " << warning << "\n";
+        }
 
         // Eager validation must not lock LoopLevels shared with the caller.
         compute.set(LoopLevel::root());

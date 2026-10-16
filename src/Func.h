@@ -210,8 +210,10 @@ public:
      * hoist_storage_root(), hoist_storage(), compute_with(), or memoize(), and
      * none of its loops may be parallel (including GPU blocks or threads),
      * vectorized, or unrolled. Passing any other Func is an error. The schedule
-     * is checked as it stands when eager_inline() is called. The inlined Funcs
-     * are otherwise unchanged; only this stage's calls to them are replaced. */
+     * is checked as it stands when eager_inline() is called. Directives that do
+     * not affect inlined calls (e.g. split() or bound()) produce warnings but
+     * are allowed. The inlined Funcs are otherwise unchanged; only this stage's
+     * calls to them are replaced. */
     // @{
     Stage &eager_inline(const std::vector<Func> &fs);
 

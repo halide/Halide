@@ -97,9 +97,10 @@ void inline_function(Definition &def, const Function &f);
 Stmt inline_functions(const Stmt &s, const std::vector<Function> &fs);
 
 /** Check if the schedule of an inlined function is legal, throwing an error
- * if it is not. LoopLevels need not be locked. Set emit_warnings to false to
- * check only errors, without warning about meaningless schedule directives. */
-void validate_schedule_inlined_function(Function f, bool emit_warnings = true);
+ * if it is not, and warning about directives that do not affect inlined calls.
+ * LoopLevels need not be locked. The context describes how calls are inlined
+ * in warning messages. */
+void validate_schedule_inlined_function(Function f, const char *context = "inlined during lowering");
 
 }  // namespace Internal
 }  // namespace Halide
