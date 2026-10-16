@@ -207,18 +207,23 @@ protected:
         vector<Expr> args, arg_types_or_sizes, arg_is_buffer;
         for (const DeviceArgument &i : closure_args) {
             Expr val;
+            Type runtime_arg_type = i.type;
             if (i.is_buffer) {
                 val = Variable::make(Handle(), i.name + ".buffer");
             } else {
                 val = Variable::make(i.type, i.name);
+                runtime_arg_type = gpu_codegen->kernel_run_scalar_arg_type(i.type);
+                if (runtime_arg_type != i.type) {
+                    val = cast(runtime_arg_type, val);
+                }
                 val = Call::make(type_of<void *>(), Call::make_struct, {val}, Call::Intrinsic);
             }
             args.emplace_back(val);
 
             if (runtime_run_takes_types) {
-                arg_types_or_sizes.emplace_back(i.type.to_abi());
+                arg_types_or_sizes.emplace_back(runtime_arg_type.to_abi());
             } else {
-                arg_types_or_sizes.emplace_back(cast(target_size_t_type, i.is_buffer ? 8 : i.type.bytes()));
+                arg_types_or_sizes.emplace_back(cast(target_size_t_type, i.is_buffer ? 8 : runtime_arg_type.bytes()));
             }
 
             arg_is_buffer.emplace_back(make_const(UInt(8), (int)i.is_buffer));
