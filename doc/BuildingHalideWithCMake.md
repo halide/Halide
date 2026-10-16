@@ -347,6 +347,11 @@ $ cmake --preset=debug    # Debug mode, any single-config generator / compiler
 $ cmake --preset=release  # Release mode, any single-config generator / compiler
 ```
 
+The `macOS-coverage` and `macOS-fuzz` presets use Homebrew Clang 21. Their
+toolchain selects the SDK with `xcrun --show-sdk-path`; override
+`CMAKE_OSX_SYSROOT` to use a different SDK. Clang discovers the standard headers
+from the selected SDK and its own installation.
+
 #### Vcpkg presets
 
 The following presets use vcpkg to manage non-LLVM dependencies. LLVM and Python
