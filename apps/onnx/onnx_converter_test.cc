@@ -153,6 +153,41 @@ static void test_constant() {
     }
 }
 
+static void test_constant_short_data() {
+    onnx::NodeProto constant_node;
+    constant_node.set_name("constant_node");
+    constant_node.set_op_type("Constant");
+    constant_node.add_output("y");
+    onnx::AttributeProto *attr = constant_node.add_attribute();
+    attr->set_name("value");
+
+    onnx::TensorProto &value = *attr->mutable_t();
+    value.set_data_type(onnx::TensorProto_DataType_FLOAT);
+    value.add_dims(4096);
+
+    // The tensor declares more elements than its data holds, whether the
+    // data is stored in raw_data or in the typed field.
+    const float one = 1.0f;
+    value.set_raw_data(&one, sizeof(one));
+    bool rejected = false;
+    try {
+        convert_node(constant_node, {});
+    } catch (const std::invalid_argument &) {
+        rejected = true;
+    }
+    EXPECT_EQ(true, rejected);
+
+    value.clear_raw_data();
+    value.add_float_data(one);
+    rejected = false;
+    try {
+        convert_node(constant_node, {});
+    } catch (const std::invalid_argument &) {
+        rejected = true;
+    }
+    EXPECT_EQ(true, rejected);
+}
+
 static void test_gemm() {
     onnx::NodeProto add_node;
     add_node.set_name("gemm_node");
@@ -504,6 +539,7 @@ int main() {
     test_cast();
     test_add();
     test_constant();
+    test_constant_short_data();
     test_gemm();
     test_conv();
     test_sum();
