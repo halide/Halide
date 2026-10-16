@@ -533,6 +533,7 @@ tests(
     tracing_bounds_required.cpp
     tracing_broadcast.cpp
     tracing_errors.cpp
+    tracing_matched_events.cpp
     tracing_stack.cpp
     transitive_bounds.cpp
     transpose_idioms.cpp
