@@ -43,6 +43,11 @@ namespace Internal {
  * bindings they descend through. Once computed, the derived information is
  * memoized for as long as the binding is alive, so repeated queries under
  * the same bindings don't redo the work.
+ *
+ * Names must be unique, as simplify() requires: the let substitution wraps an
+ * expression in every enclosing let it names, so a let pushed under another
+ * let of the same name would be repeated. push_interval() is the exception,
+ * as it refines a name that is already bound.
  */
 class BoundsTracker {
 public:

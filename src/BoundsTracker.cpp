@@ -180,10 +180,8 @@ Interval BoundsTracker::bounds_of(const Entry &entry) const {
         // A pure let gets inlined by wrap_in_used_lets before anything asks
         // for a bound, and bounding the expression that results is both
         // cheaper and sharper than bounding the value here and looking it up
-        // through an opaque variable. It still has to occupy a slot in the
-        // scope, though: a let shadowing an outer variable that does have a
-        // bound must hide it, not let lookups fall through to it. An impure
-        // let is never inlined, so it needs a real bound.
+        // through an opaque variable. An impure let is never inlined, so it
+        // needs a real bound.
         if (entry_is_pure(entry)) {
             return Interval::everything();
         }
@@ -203,17 +201,16 @@ Interval BoundsTracker::bounds_of(const Entry &entry) const {
 
 void BoundsTracker::realize_all() const {
     // Outermost first: each entry's bounds may depend on the ones enclosing
-    // it, and pushing in this order also keeps the scope's shadowing of
-    // repeated names matching the tree.
+    // it.
     for (; realized < entries.size(); realized++) {
         Entry &entry = entries[realized];
         entry.bounds = bounds_of(entry);
         // A binding that bounds nothing reads the same as no binding at all:
         // a lookup that misses falls back to the bounds of the type, which
         // is what an unbounded interval would have narrowed it to anyway. So
-        // it is only worth a slot when there is an enclosing binding of the
-        // same name for it to hide. Most names are unique by this point, so
-        // this keeps the scope down to the bindings that say something.
+        // it only takes a slot when it replaces an enclosing binding of the
+        // same name, as push_interval() does. This keeps the scope down to
+        // the bindings that say something.
         entry.in_scope = !entry.bounds.is_everything() || scope.contains(entry.name);
         if (entry.in_scope) {
             scope.push(entry.name, entry.bounds);
@@ -232,9 +229,8 @@ Expr BoundsTracker::wrap_in_used_lets(const Expr &e) const {
     e.accept(&collect);
     Expr result = e;
     // Innermost first, so that a let picked up along the way can still pull in
-    // the outer lets its value refers to. Conservatively treats every name the
-    // body mentions as a possible reference to an enclosing let, even where an
-    // inner let shadows it.
+    // the outer lets its value refers to. Relies on let names being unique
+    // (see the class comment).
     for (const Entry &entry : reverse_view(entries)) {
         if (entry.kind == Kind::Let && used.count(entry.name) && entry_is_pure(entry)) {
             entry.lo.accept(&collect);
@@ -444,6 +440,13 @@ ConstantInterval BoundsTracker::tighten_using_loop_monotonicity(const Expr &e, C
 
 ConstantInterval BoundsTracker::find_constant_bounds(const Expr &e) const {
     ConstantInterval interval = find_constant_bounds_in_scope(e);
+    // This returns the first result bounded at both ends, not the tightest:
+    // once the scope alone bounds e, the let substitution, the dominating
+    // facts and the loop monotonicity step are not consulted, even where they
+    // would narrow the result (e.g. to the single point an extent query
+    // wants). Whether to keep trying is still open;
+    // test_tightness_known_limitation in test/correctness/bounds_tracker.cpp
+    // checks for the current behavior.
     if (interval.is_bounded()) {
         return interval;
     }

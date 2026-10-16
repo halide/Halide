@@ -78,6 +78,7 @@ tests(
     bounds_of_split.cpp
     bounds_query.cpp
     bounds_query_respects_specialize_fail.cpp
+    bounds_tracker.cpp
     broken_promise.cpp
     buffer_larger_than_two_gigs.cpp
     buffer_t.cpp
