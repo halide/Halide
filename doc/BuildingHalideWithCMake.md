@@ -348,7 +348,7 @@ $ cmake --preset=release  # Release mode, any single-config generator / compiler
 ```
 
 The `macOS-coverage` and `macOS-fuzz` presets use Homebrew Clang 21. Their
-toolchain selects the SDK with `xcrun --show-sdk-path`; override
+toolchain defaults to the `macosx` SDK, resolved by CMake; override
 `CMAKE_OSX_SYSROOT` to use a different SDK. Clang discovers the standard headers
 from the selected SDK and its own installation.
 
