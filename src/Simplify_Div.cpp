@@ -88,7 +88,7 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
           // Fold repeated division
           (rewrite((x / c0) / c2, x / fold(c0 * c2), c0 > 0 && c2 > 0 && !overflows(c0 * c2)) ||
            rewrite((x / c0 + c1) / c2, (x + fold(c1 * c0)) / fold(c0 * c2), c0 > 0 && c2 > 0 && !overflows(c0 * c2) && !overflows(c0 * c1)) ||
-           rewrite((x * c0) / c1, x / fold(c1 / c0), c1 % c0 == 0 && c0 > 0 && c1 / c0 != 0) ||
+           rewrite((x * c0) / c1, x / fold(c1 / c0), c1 % c0 == 0 && c0 > 0) ||
            // Pull out terms that are a multiple of the denominator
            rewrite((x * c0) / c1, x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
            rewrite(min((x * c0), c1) / c2, min(x * fold(c0 / c2), fold(c1 / c2)), c0 % c2 == 0 && c2 > 0) ||
@@ -100,14 +100,6 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
            rewrite((y + x * c0) / c1, y / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
            rewrite((y - x * c0) / c1, y / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
 
-           // Drop an offset that can't carry into the next multiple of the
-           // denominator: x*c0 % c1 is a multiple of c0 no greater than
-           // |c1| - c0, so adding y in [0, c0) doesn't change the quotient.
-           // E.g. (x*4 + y) / 32 == x / 8 for y in [0, 4). Integer-only.
-           // in_range only looks up the bounds already known for y, without
-           // simplifying anything, so it recognizes y only as a constant or a
-           // variable with constant bounds (from loops, lets, learned facts,
-           // or the caller's bounds), or a broadcast of one.
            (!op->type.is_float() &&
             (rewrite((x * c0 + y) / c1, x / fold(c1 / c0), c0 > 0 && c1 % c0 == 0 && in_range(y, 0, c0, this)) ||
              rewrite((y + x * c0) / c1, x / fold(c1 / c0), c0 > 0 && c1 % c0 == 0 && in_range(y, 0, c0, this)))) ||
