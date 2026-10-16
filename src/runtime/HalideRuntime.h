@@ -423,6 +423,45 @@ extern int halide_get_num_threads();
 extern int halide_set_num_threads(int n);
 // @}
 
+/** Acquire (keep_awake = true) or release (keep_awake = false) a reference on
+ * the default thread pool's process-wide keep-awake count, and return the new
+ * count.
+ *
+ * Normally, a thread pool thread that runs out of work spins briefly and then
+ * goes to sleep, so a parallel loop that starts after the pool has been idle
+ * for more than a few microseconds pays to wake its threads up. While the
+ * keep-awake count is positive, idle threads (workers, and threads waiting for
+ * parallel loops they started to finish) instead keep polling for work,
+ * calling halide_thread_yield() between polls. This makes back-to-back small
+ * parallel loops, separated by serial work, much cheaper. The cost is that
+ * those threads keep their cores busy while the count is held, even with no
+ * work to do, so hold it only around phases that run many short parallel loops
+ * (e.g. a benchmark, or a model's inference loop) and release it afterwards.
+ * Workers blocked on a semaphore of an async pipeline still go to sleep.
+ *
+ * Holders compose: the pool stays awake until every reference is released.
+ * When the count returns to zero, spinning threads go to sleep on their next
+ * poll. As a backstop against leaked references, and against competing for
+ * cores with other thread pools for long periods, an idle thread goes to sleep
+ * anyway after polling a few thousand times without finding work (a few
+ * milliseconds, depending on the cost of halide_thread_yield); the next
+ * parallel loop wakes it as usual.
+ *
+ * Threads that are already asleep when the first reference is acquired start
+ * polling once the next parallel loop wakes them. Releasing a reference that
+ * isn't held is an error: it calls halide_error, leaves the count at zero,
+ * and returns halide_error_code_generic_error.
+ *
+ * The count is independent of halide_set_num_threads, and survives
+ * halide_shutdown_thread_pool (which still wakes and joins all threads). This
+ * function may be called from any thread. Custom thread pools (see
+ * halide_set_custom_do_par_for) are not affected, and on platforms without
+ * threads this only maintains the count. C++ code can use the RAII wrapper
+ * Halide::Runtime::ThreadPoolKeepAwake. In JIT code, use
+ * Halide::ThreadPoolKeepAwake instead (hl.ThreadPoolKeepAwake in Python).
+ */
+extern int halide_thread_pool_keep_awake(bool keep_awake);
+
 /** Halide calls these functions to allocate and free memory. To
  * replace in AOT code, use the halide_set_custom_malloc and
  * halide_set_custom_free, or (on platforms that support weak
@@ -602,7 +641,8 @@ enum halide_trace_event_code_t { halide_trace_load = 0,
                                  halide_trace_end_pipeline = 9,
                                  halide_trace_tag = 10,
                                  halide_trace_begin_parallel_task = 11,
-                                 halide_trace_end_parallel_task = 12 };
+                                 halide_trace_end_parallel_task = 12,
+                                 halide_trace_bounds_required = 13 };
 
 struct halide_trace_event_t {
     /** The name of the Func or Pipeline that this event refers to */
@@ -676,9 +716,13 @@ struct halide_trace_event_t {
  * +--tag (if any)
  * +--tag (if any)
  * ...
+ * +--bounds_required (if any)
+ * ...
  * +--(begin_realization|produce|consume)
+ * |  +-- bounds_required (if any)
  * |  +-- ... recursively more realizations/produces/consumes ...
  * |      +-- begin_parallel_task
+ * |      |   +-- bounds_required (if any)
  * |      |   +-- load
  * |      |   +-- store
  * |      |   +-- ... recursively more realization/produce/consume events ...
@@ -702,6 +746,21 @@ struct halide_trace_event_t {
  * Note that all tag events (if any) will occur just after the begin_pipeline
  * event, but before any begin_realization events. All tags for a given Func
  * will be emitted in the order added.
+ *
+ * A bounds_required event gives, as min/extent pairs, the region of a Func
+ * that must be computed within an iteration of a loop that contains a
+ * production of that Func. It is emitted at the start of that iteration, before
+ * the realization of the Func, and its parent is the innermost enclosing event
+ * (or begin_pipeline, after any tags, for the outermost loop level). Stores
+ * to the Func within that iteration that fall outside the region (e.g. due to
+ * TailStrategy::RoundUp in a consumer) do not affect the output, and may be
+ * computed from uninitialized memory. Values stored in earlier iterations may
+ * still be loaded (e.g. due to sliding window).
+ *
+ * A trace function returns the id of the event, which must be
+ * non-negative. A negative return value is treated as an error code:
+ * the pipeline stops and returns it. The trace function should call
+ * halide_error first to describe the failure.
  */
 // @}
 extern int32_t halide_trace(void *user_context, const struct halide_trace_event_t *event);
@@ -837,11 +896,13 @@ static_assert(sizeof(halide_trace_packet_t) == 6 * sizeof(uint32_t), "size misma
 /** Set the file descriptor that Halide should write binary trace
  * events to. If called with 0 as the argument, Halide outputs trace
  * information to stdout in a human-readable format. If never called,
- * Halide checks the for existence of an environment variable called
- * HL_TRACE_FILE and opens that file. If HL_TRACE_FILE is not defined,
- * it outputs trace information to stdout in a human-readable
- * format. */
-extern void halide_set_trace_file(int fd);
+ * or called with -1, Halide checks the for existence of an environment
+ * variable called HL_TRACE_FILE and opens that file. If HL_TRACE_FILE
+ * is not defined, it outputs trace information to stdout in a
+ * human-readable format. Trace data buffered for the previous file is
+ * flushed to it first, and a file opened via HL_TRACE_FILE is
+ * closed. Must not be called while a traced pipeline is running. */
+extern void halide_set_trace_file(void *user_context, int fd);
 
 /** Halide calls this to retrieve the file descriptor to write binary
  * trace events to. The default implementation returns the value set
@@ -851,8 +912,9 @@ extern void halide_set_trace_file(int fd);
  * information to stdout. */
 extern int halide_get_trace_file(void *user_context);
 
-/** If tracing is writing to a file. This call closes that file
- * (flushing the trace). Returns zero on success. */
+/** Flush any buffered trace data, close the trace file if it was
+ * opened via HL_TRACE_FILE, and reset to the state before any call to
+ * halide_set_trace_file. Returns zero on success. */
 extern int halide_shutdown_trace(void);
 
 /** All Halide GPU or device backend implementations provide an
@@ -1437,6 +1499,7 @@ extern int halide_error_device_crop_failed(void *user_context);
 extern int halide_error_split_factor_not_positive(void *user_context, const char *func_name, const char *orig, const char *outer, const char *inner, const char *factor_str, int factor);
 extern int halide_error_vscale_invalid(void *user_context, const char *func_name, int runtime_vscale, int compiletime_vscale);
 extern int halide_error_streaming_vscale_invalid(void *user_context, const char *func_name, int runtime_vscale, int compiletime_vscale);
+extern int halide_error_trace_failed(void *user_context, const char *reason);
 // @}
 
 /** Optional features a compilation Target can have.
@@ -1514,6 +1577,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_trace_stores,           ///< Trace all stores done by the pipeline. Equivalent to calling Func::trace_stores on every non-inlined Func.
     halide_target_feature_trace_realizations,     ///< Trace all realizations done by the pipeline. Equivalent to calling Func::trace_realizations on every non-inlined Func.
     halide_target_feature_trace_pipeline,         ///< Trace the pipeline.
+    halide_target_feature_trace_bounds_required,  ///< Trace the bounds required of each Func at each loop level containing a production of it. Equivalent to calling Func::trace_bounds_required on every non-inlined Func.
     halide_target_feature_hvx_v65,                ///< Enable Hexagon v65 architecture.
     halide_target_feature_hvx_v66,                ///< Enable Hexagon v66 architecture.
     halide_target_feature_hvx_v68,                ///< Enable Hexagon v68 architecture.
@@ -2513,6 +2577,38 @@ HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<int64_t>() {
 }
 
 #ifndef COMPILING_HALIDE_RUNTIME
+
+namespace Halide {
+namespace Runtime {
+
+/** Hold a reference on the default thread pool's keep-awake count (see
+ * halide_thread_pool_keep_awake) for the lifetime of this object. Instances
+ * may be nested, and may live on different threads. For example:
+ \code
+ {
+     Halide::Runtime::ThreadPoolKeepAwake keep_awake;
+     for (int i = 0; i < 1000; i++) {
+         my_small_parallel_pipeline(...);
+     }
+ }
+ \endcode
+ * For JIT-compiled code, use Halide::ThreadPoolKeepAwake instead. */
+class ThreadPoolKeepAwake {
+public:
+    ThreadPoolKeepAwake() {
+        (void)halide_thread_pool_keep_awake(true);
+    }
+    ~ThreadPoolKeepAwake() {
+        (void)halide_thread_pool_keep_awake(false);
+    }
+    ThreadPoolKeepAwake(const ThreadPoolKeepAwake &) = delete;
+    ThreadPoolKeepAwake &operator=(const ThreadPoolKeepAwake &) = delete;
+    ThreadPoolKeepAwake(ThreadPoolKeepAwake &&) = delete;
+    ThreadPoolKeepAwake &operator=(ThreadPoolKeepAwake &&) = delete;
+};
+
+}  // namespace Runtime
+}  // namespace Halide
 
 // These structures are used by `function_info_header` files
 // (generated by passing `-e function_info_header` to a Generator).

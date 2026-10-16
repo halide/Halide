@@ -526,6 +526,7 @@ void Deserializer::deserialize_function(const Serialize::Func *function, Functio
     const bool trace_loads = function->trace_loads();
     const bool trace_stores = function->trace_stores();
     const bool trace_realizations = function->trace_realizations();
+    const bool trace_bounds_required = function->trace_bounds_required();
     const std::vector<std::string> trace_tags =
         deserialize_vector<flatbuffers::String, std::string>(function->trace_tags(),
                                                              &Deserializer::deserialize_string);
@@ -548,7 +549,8 @@ void Deserializer::deserialize_function(const Serialize::Func *function, Functio
                                             required_dim, args, func_schedule, init_def, updates,
                                             debug_file, output_buffers, extern_arguments, extern_function_name,
                                             name_mangling, extern_function_device_api, extern_proxy_expr,
-                                            trace_loads, trace_stores, trace_realizations, trace_tags,
+                                            trace_loads, trace_stores, trace_realizations,
+                                            trace_bounds_required, trace_tags,
                                             no_profiling, profiler_display_name, frozen, global_wrapper);
 }
 
@@ -1166,7 +1168,11 @@ PrefetchDirective Deserializer::deserialize_prefetch_directive(const Serialize::
     const auto strategy = deserialize_prefetch_bound_strategy(prefetch_directive->strategy());
     const auto param_name = deserialize_string(prefetch_directive->param_name());
     Parameter param;
-    if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
+    if (auto it = user_params.find(param_name); it != user_params.end()) {
+        param = it->second;
+    } else if (auto it = external_params.find(param_name); it != external_params.end()) {
+        param = it->second;
+    } else if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
         param = it->second;
     } else if (!param_name.empty()) {
         user_error << "unknown parameter used in pipeline '" << param_name << "'\n";

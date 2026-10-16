@@ -1451,6 +1451,7 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
         case halide_trace_end_consume:
         case halide_trace_begin_parallel_task:
         case halide_trace_end_parallel_task:
+        case halide_trace_bounds_required:
         // Note that you can get nested pipeline begin/end events when you trace
         // something that has extern stages that are also Halide-being-traced;
         // these should just be ignored.

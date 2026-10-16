@@ -209,7 +209,7 @@ int main(int argc, char **argv) {
 
     t1 = Target("x86-64-linux-trace_all");
     ts = t1.to_string();
-    if (!t1.features_all_of({Target::TraceLoads, Target::TraceStores, Target::TraceRealizations})) {
+    if (!t1.features_all_of({Target::TraceLoads, Target::TraceStores, Target::TraceRealizations, Target::TraceBoundsRequired})) {
         printf("trace_all failure: %s\n", ts.c_str());
         return 1;
     }

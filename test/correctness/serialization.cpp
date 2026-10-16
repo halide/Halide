@@ -52,6 +52,33 @@ int main() {
         }
     }
 
+    // A prefetch of an ImageParam, which is an external parameter. Skipped on
+    // HVX targets, which can't compile host-side prefetches (#9496).
+    if (!get_jit_target_from_environment().has_feature(Target::HVX)) {
+        ImageParam input(Int(32), 2, "input");
+        Func f("f");
+        f(x, y) = input(x, y) * 2;
+        f.prefetch(input, y, y, 2);
+
+        std::vector<uint8_t> data;
+        std::map<std::string, Parameter> params;
+        serialize_pipeline(Pipeline(f), data, params);
+        Pipeline deserialized = deserialize_pipeline(data, params);
+
+        Buffer<int> in(4, 4);
+        in.fill(3);
+        input.set(in);
+        Buffer<int> result = deserialized.realize({4, 4});
+        for (int j = 0; j < 4; j++) {
+            for (int i = 0; i < 4; i++) {
+                if (result(i, j) != 6) {
+                    printf("Mismatch at (%d, %d): expected 6, got %d\n", i, j, result(i, j));
+                    return 1;
+                }
+            }
+        }
+    }
+
     // storage_splits survive a round trip.
     {
         Func f("f"), g("g");

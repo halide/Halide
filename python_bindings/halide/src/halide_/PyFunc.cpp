@@ -355,6 +355,7 @@ void define_func(py::module &m) {
             .def("trace_loads", &Func::trace_loads)
             .def("trace_stores", &Func::trace_stores)
             .def("trace_realizations", &Func::trace_realizations)
+            .def("trace_bounds_required", &Func::trace_bounds_required)
             .def("print_loop_nest", &Func::print_loop_nest)
             .def("add_trace_tag", &Func::add_trace_tag, py::arg("trace_tag"))
 

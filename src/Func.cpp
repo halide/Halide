@@ -4266,6 +4266,12 @@ Func &Func::trace_realizations() {
     return *this;
 }
 
+Func &Func::trace_bounds_required() {
+    invalidate_cache();
+    func.trace_bounds_required();
+    return *this;
+}
+
 Func &Func::add_trace_tag(const std::string &trace_tag) {
     invalidate_cache();
     func.add_trace_tag(trace_tag);

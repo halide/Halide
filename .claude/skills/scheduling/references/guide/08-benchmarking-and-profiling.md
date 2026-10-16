@@ -28,6 +28,15 @@ problem — too few parallel tasks, a parallel loop that isn't outermost, or a
 memory-bandwidth ceiling — and the profiler's `average threads used` usually
 points the same way.
 
+Pipelines that run many short parallel loops back to back can spend a large
+share of their time waking up the thread pool, because idle workers go to sleep
+after spinning for only a few microseconds. Holding a
+`Halide::Runtime::ThreadPoolKeepAwake` (AOT), `Halide::ThreadPoolKeepAwake`
+(JIT), or `with hl.ThreadPoolKeepAwake():` (Python) around the timed region
+keeps idle workers polling for work instead, which is what a latency-sensitive
+application would do, at the cost of keeping those cores busy. See
+`halide_thread_pool_keep_awake` in `HalideRuntime.h`.
+
 ## The profiler is the main tool
 
 Profiling is turned on by adding `Target::Profile` to the target (for example,

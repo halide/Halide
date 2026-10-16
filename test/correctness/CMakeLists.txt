@@ -16,6 +16,7 @@ tests(
     ambiguous_inline_reductions.cpp
     argmax.cpp
     arm_cpu_detect.cpp
+    arm_dot_product_by_element.cpp
     associativity.cpp
     async_device_copy.cpp
     async_require_fail.cpp
@@ -334,6 +335,7 @@ tests(
     issue_3926.cpp
     iterate_over_circle.cpp
     jit_host_environment.cpp
+    jit_set_trace_file.cpp
     lambda.cpp
     lazy_convolution.cpp
     leak_device_memory.cpp
@@ -457,6 +459,7 @@ tests(
     scatter.cpp
     serialization.cpp
     set_custom_trace.cpp
+    sever.cpp
     shadowed_bound.cpp
     shared_self_references.cpp
     shift_by_unsigned_negated.cpp
@@ -528,7 +531,9 @@ tests(
     too_many_args.cpp
     tracing.cpp
     tracing_bounds.cpp
+    tracing_bounds_required.cpp
     tracing_broadcast.cpp
+    tracing_errors.cpp
     tracing_stack.cpp
     transitive_bounds.cpp
     transpose_idioms.cpp
@@ -677,6 +682,7 @@ tests(
     rfactor_aligned_split_phases.cpp
     ring_buffer.cpp
     stream_compaction.cpp
+    thread_pool_keep_awake.cpp
     thread_safety.cpp
     tracing_thread_ids.cpp
     transitive_in.cpp

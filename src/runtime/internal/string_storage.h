@@ -70,7 +70,12 @@ struct StringUtils {
     }
 
     static size_t copy_up_to(char *dst, const char *src, size_t max_chars) {
-        size_t length = count_length(src, max_chars);
+        if (max_chars == 0) {
+            return 0;
+        }
+        // Reserve one byte for the null terminator so the write below stays
+        // within a destination buffer of max_chars bytes.
+        size_t length = count_length(src, max_chars - 1);
         memcpy(dst, src, length);
         dst[length] = '\0';
         return length;

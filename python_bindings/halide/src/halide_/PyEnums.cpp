@@ -217,6 +217,7 @@ void define_enums(py::module &m) {
         .value("TraceStores", Target::Feature::TraceStores)
         .value("TraceRealizations", Target::Feature::TraceRealizations)
         .value("TracePipeline", Target::Feature::TracePipeline)
+        .value("TraceBoundsRequired", Target::Feature::TraceBoundsRequired)
         .value("D3D12Compute", Target::Feature::D3D12Compute)
         .value("StrictFloat", Target::Feature::StrictFloat)
         .value("TSAN", Target::Feature::TSAN)
