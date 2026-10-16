@@ -69,10 +69,8 @@ bool test_loop_monotonicity() {
     return ok;
 }
 
-// A dominating condition tells the simplifier which way a select goes. The
-// false side is unbounded here, so the scope alone can't bound the select.
-// (When the scope alone can, the fact is not consulted: see
-// test_tightness_known_limitation.)
+// A dominating condition tells the simplifier which way a select goes, whether
+// or not the scope alone can bound the select.
 bool test_fact() {
     BoundsTracker tracker;
     auto x = tracker.push_for("x", 0, 100);
@@ -86,26 +84,34 @@ bool test_fact() {
     }
     ok &= check(!tracker.find_constant_bounds(e).is_bounded(),
                 "the fact is gone once its guard is destroyed");
+
+    // Here the scope alone bounds the select to [3, 1000].
+    Expr bounded = select(var("x") < 5, 3, 1000);
+    {
+        auto fact = tracker.push_fact(var("x") < 5);
+        ok &= check(is_exactly(tracker.find_constant_bounds(bounded), 3),
+                    "the fact also tightens a select the scope already bounds");
+    }
     return ok;
 }
 
-// Known limitation, checked so that fixing it shows up here:
-// find_constant_bounds() returns the first result bounded at both ends, and
-// only falls back to let substitution, facts and loop monotonicity when the
-// scope alone leaves an end unbounded. This is test_loop_monotonicity with m
-// bounded by an enclosing loop: the scope now bounds y to [0, 107], so y - m
-// comes out as [-100, 107] and the monotonicity step that would give [0, 7]
-// never runs. Knowing more about m gives a looser answer. If this check
-// fails, find_constant_bounds() has learned to tighten a bounded result: make
-// it expect [0, 7], and update the note at BoundsTracker::find_constant_bounds().
-bool test_tightness_known_limitation() {
+// A result the scope bounds can still be loose, so the later steps run anyway.
+// This is test_loop_monotonicity with m bounded by an enclosing loop: the
+// scope now bounds y to [0, 107], so it bounds y - m to [-100, 107], and only
+// the monotonicity step tightens that to [0, 7].
+bool test_tighten_bounded_result() {
     BoundsTracker tracker;
     Expr m = var("m");
     auto outer = tracker.push_for("m", 0, 100);
     auto y = tracker.push_for("y", m, m + 7);
-    return check(is_range(tracker.find_constant_bounds(var("y") - m), -100, 107),
-                 "a bounded result is now tightened further: the known limitation "
-                 "is fixed, so update this test to expect [0, 7]");
+    Expr e = var("y") - m;
+
+    Interval through_scope = find_constant_bounds(e, tracker.interval_scope());
+    bool ok = check(through_scope.is_bounded() && !is_const(through_scope.min, 0),
+                    "the scope alone gives a bounded but loose result");
+    ok &= check(is_range(tracker.find_constant_bounds(e), 0, 7),
+                "the monotonicity step tightens a bounded result");
+    return ok;
 }
 
 // A caller that has proven a tighter range for a variable can push it, and the
@@ -159,7 +165,7 @@ int main(int argc, char **argv) {
     ok &= test_let_substitution();
     ok &= test_loop_monotonicity();
     ok &= test_fact();
-    ok &= test_tightness_known_limitation();
+    ok &= test_tighten_bounded_result();
     ok &= test_interval();
     ok &= test_relevant_facts();
     if (!ok) {

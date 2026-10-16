@@ -402,7 +402,7 @@ ConstantInterval BoundsTracker::tighten_using_loop_monotonicity(const Expr &e, C
     // Innermost first: the tightest correlation is usually with the nearest
     // enclosing loop.
     for (const Entry &entry : reverse_view(entries)) {
-        if (interval.is_bounded()) {
+        if (interval.is_single_point()) {
             break;
         }
         if (entry.kind != Kind::Loop ||
@@ -422,17 +422,21 @@ ConstantInterval BoundsTracker::tighten_using_loop_monotonicity(const Expr &e, C
         } else {
             continue;
         }
-        if (!interval.min_defined) {
+        {
             Expr lo = simplify(substitute(entry.name, at_lower, e));
             ConstantInterval b = to_constant_interval(Halide::Internal::find_constant_bounds(lo, scope));
-            interval.min_defined = b.min_defined;
-            interval.min = b.min;
+            if (b.min_defined && (!interval.min_defined || b.min > interval.min)) {
+                interval.min_defined = true;
+                interval.min = b.min;
+            }
         }
-        if (!interval.max_defined) {
+        {
             Expr hi = simplify(substitute(entry.name, at_upper, e));
             ConstantInterval b = to_constant_interval(Halide::Internal::find_constant_bounds(hi, scope));
-            interval.max_defined = b.max_defined;
-            interval.max = b.max;
+            if (b.max_defined && (!interval.max_defined || b.max < interval.max)) {
+                interval.max_defined = true;
+                interval.max = b.max;
+            }
         }
     }
     return interval;
@@ -440,19 +444,17 @@ ConstantInterval BoundsTracker::tighten_using_loop_monotonicity(const Expr &e, C
 
 ConstantInterval BoundsTracker::find_constant_bounds(const Expr &e) const {
     ConstantInterval interval = find_constant_bounds_in_scope(e);
-    // This returns the first result bounded at both ends, not the tightest:
-    // once the scope alone bounds e, the let substitution, the dominating
-    // facts and the loop monotonicity step are not consulted, even where they
-    // would narrow the result (e.g. to the single point an extent query
-    // wants). Whether to keep trying is still open;
-    // test_tightness_known_limitation in test/correctness/bounds_tracker.cpp
-    // checks for the current behavior.
-    if (interval.is_bounded()) {
+    // A bounded result can still be loose, so keep going until it is exact
+    // and intersect what each step finds. The later steps cost little in
+    // practice: most queries are either exact from the scope alone or not
+    // bounded by it at all.
+    if (interval.is_single_point()) {
         return interval;
     }
     Expr wrapped = simplify_with_context(e);
-    interval = to_constant_interval(Halide::Internal::find_constant_bounds(wrapped, scope));
-    if (interval.is_bounded()) {
+    interval = ConstantInterval::make_intersection(
+        interval, to_constant_interval(Halide::Internal::find_constant_bounds(wrapped, scope)));
+    if (interval.is_single_point()) {
         return interval;
     }
     return tighten_using_loop_monotonicity(wrapped, interval);

@@ -116,15 +116,17 @@ public:
      * scope of constant bounds. */
     FactGuard push_fact(const Expr &condition);
 
-    /** Find constant bounds of e at this point. First tries the scope of
-     * constant bounds alone; on failure, wraps e in the pending pure lets it
-     * refers to (producing a self-contained copy with no free references to
-     * enclosing lets) and simplifies before retrying against the resulting
-     * expression and the scope. Any endpoint still missing after that is
-     * attempted once more by substituting the range of an enclosing loop e is
-     * monotonic in. This succeeds far more often than the scope alone,
-     * because the simplifier can cancel terms across let boundaries that
-     * interval arithmetic through opaque variable lookups cannot.
+    /** Find constant bounds of e at this point. First bounds e using the
+     * scope of constant bounds alone. Unless that is already exact, it then
+     * wraps e in the pending pure lets it refers to (producing a
+     * self-contained copy with no free references to enclosing lets),
+     * simplifies it under the dominating facts and bounds the result, and
+     * finally substitutes the range of each enclosing loop e is monotonic in.
+     * The result is the intersection of what these steps find. The later
+     * steps succeed where the scope alone cannot, because the simplifier can
+     * cancel terms across let boundaries, and substitution can keep a symbol
+     * correlated, that interval arithmetic through opaque variable lookups
+     * cannot.
      *
      * Integer types only; a bound that does not fit in an int64_t is
      * reported as missing. The single-Direction form is a wrapper around the
@@ -172,8 +174,8 @@ private:
      * in Bounds.h. */
     ConstantInterval find_constant_bounds_in_scope(const Expr &e) const;
 
-    /** Tighten an interval by exploiting monotonicity in an enclosing loop
-     * variable: if e is monotonic in it, e's extremes over the loop are
+    /** Tighten an interval by exploiting monotonicity in the enclosing loop
+     * variables: if e is monotonic in one, e's extremes over the loop are
      * reached at the ends of the loop's range, so substituting the symbolic
      * endpoints and constant-bounding the results can succeed where
      * per-node interval arithmetic can't, because substitution keeps a
