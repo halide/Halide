@@ -16,7 +16,7 @@ using std::string;
 using std::vector;
 
 // Sanity check that this is a reasonable function to inline
-void validate_schedule_inlined_function(Function f, bool emit_warnings) {
+void validate_schedule_inlined_function(Function f, const char *context) {
     const FuncSchedule &func_s = f.schedule();
     const StageSchedule &stage_s = f.definition().schedule();
 
@@ -54,31 +54,28 @@ void validate_schedule_inlined_function(Function f, bool emit_warnings) {
         }
     }
 
-    if (!emit_warnings) {
-        return;
-    }
-
     for (const auto &split : stage_s.splits()) {
         switch (split.split_type) {
         case Split::RenameVar:
-            user_warning << "It is meaningless to rename variable "
+            user_warning << "Renaming variable "
                          << split.old_var << " of function "
                          << f.name() << " to " << split.outer
-                         << " because " << f.name() << " is scheduled inline.\n";
+                         << " has no effect when its calls are " << context << ".\n";
             break;
         case Split::FuseVars:
-            user_warning << "It is meaningless to fuse variables "
+            user_warning << "Fusing variables "
                          << split.inner << " and " << split.outer
-                         << " because " << f.name() << " is scheduled inline.\n";
+                         << " of function " << f.name()
+                         << " has no effect when its calls are " << context << ".\n";
             break;
         case Split::SplitVar:
-            user_warning << "It is meaningless to split variable "
+            user_warning << "Splitting variable "
                          << split.old_var << " of function "
                          << f.name() << " into "
                          << split.outer << " * "
                          << split.factor << " + "
-                         << split.inner << " because "
-                         << f.name() << " is scheduled inline.\n";
+                         << split.inner
+                         << " has no effect when its calls are " << context << ".\n";
 
             break;
         }
@@ -87,30 +84,28 @@ void validate_schedule_inlined_function(Function f, bool emit_warnings) {
     for (const auto &entry : func_s.bounds()) {
         const Bound &b = entry.second;
         if (b.min.defined()) {
-            user_warning << "It is meaningless to bound dimension "
+            user_warning << "Bounding dimension "
                          << b.var << " of function "
                          << f.name() << " to be within ["
                          << b.min << ", "
-                         << b.extent << "] because the function is scheduled inline.\n";
+                         << b.extent << "] has no effect when its calls are " << context << ".\n";
         } else if (b.modulus.defined()) {
-            user_warning << "It is meaningless to align the bounds of dimension "
+            user_warning << "Aligning the bounds of dimension "
                          << b.var << " of function "
                          << f.name() << " to have modulus/remainder ["
                          << b.modulus << ", "
-                         << b.remainder << "] because the function is scheduled inline.\n";
+                         << b.remainder << "] has no effect when its calls are " << context << ".\n";
         }
     }
 
     if (stage_s.stream_stores()) {
-        user_warning << "It is meaningless to stream the stores of function "
-                     << f.name() << " because it is scheduled inline: there is "
-                                    "no separate Store left to mark non-temporal.\n";
+        user_warning << "stream_stores() for function "
+                     << f.name() << " has no effect when its calls are " << context << ".\n";
     }
 
     if (const auto &names = stage_s.stream_loads_names(); !names || !names->empty()) {
-        user_warning << "It is meaningless to stream the loads made by function "
-                     << f.name() << " because it is scheduled inline: there is "
-                                    "no separate Load left to mark non-temporal.\n";
+        user_warning << "stream_loads() for function "
+                     << f.name() << " has no effect when its calls are " << context << ".\n";
     }
 }
 
