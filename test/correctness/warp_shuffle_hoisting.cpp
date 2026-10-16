@@ -135,7 +135,8 @@ bool check_output(const Buffer<int> &out, const std::function<int(int, int)> &co
 
 int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
-    bool can_run = t.get_cuda_capability_lower_bound() >= 50;
+    bool can_run = t.has_feature(Target::Metal) ||
+                   t.get_cuda_capability_lower_bound() >= 50;
 
     const int width = 48, height = 4;
 
@@ -206,7 +207,7 @@ int main(int argc, char **argv) {
     }
 
     if (!can_run) {
-        printf("Not running on a GPU: CUDA with capability 5.0 or greater required.\n");
+        printf("Not running on a GPU: Metal, or CUDA with capability 5.0 or greater, required.\n");
     }
 
     printf("Success!\n");
