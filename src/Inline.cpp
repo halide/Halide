@@ -23,15 +23,15 @@ string inlined_function_schedule_error(const Function &f) {
     // Compare the value directly so schedule-time callers need not lock the level.
     if (func_s.store_level().var_name() != LoopLevel::inlined().var_name()) {
         return "Function " + f.name() + " is scheduled to be computed inline, "
-               "but is not scheduled to be stored inline. A storage schedule "
-               "is meaningless for functions computed inline.\n";
+                                        "but is not scheduled to be stored inline. A storage schedule "
+                                        "is meaningless for functions computed inline.\n";
     }
 
     // Inlining is allowed only if there is no specialization.
     if (!f.definition().specializations().empty()) {
         return "Function " + f.name() + " is scheduled inline, so it"
-               " must not have any specializations. Specialize on the"
-               " scheduled function instead.\n";
+                                        " must not have any specializations. Specialize on the"
+                                        " scheduled function instead.\n";
     }
 
     if (func_s.memoized()) {
