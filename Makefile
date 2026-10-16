@@ -577,6 +577,7 @@ SOURCE_FILES = \
   RemoveDeadAllocations.cpp \
   RemoveExternLoops.cpp \
   RemoveUndef.cpp \
+  ReversePeel.cpp \
   Schedule.cpp \
   ScheduleFunctions.cpp \
   SelectGPUAPI.cpp \
@@ -787,6 +788,7 @@ HEADER_FILES = \
   RemoveDeadAllocations.h \
   RemoveExternLoops.h \
   RemoveUndef.h \
+  ReversePeel.h \
   runtime/HalideBuffer.h \
   runtime/HalideRuntime.h \
   Schedule.h \
