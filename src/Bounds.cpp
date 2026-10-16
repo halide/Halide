@@ -1386,38 +1386,27 @@ protected:
                 return;
             }
 
-            // A promised bound wrapped in likely() means the clamp is only
-            // expected to have an effect rarely (e.g. in the tail of a
-            // reduction domain that doesn't divide evenly). If the clamp
-            // isn't redundant, we mark the unclamped side as the likely one
-            // instead, so that loop partitioning can remove the clamp, and
-            // any loop trimming or guards it induces in producers, from the
-            // steady state. This mirrors what we do for likely conditions
-            // in if statements. We look for the tag on the bounds of the
-            // bound rather than on the bound itself, so that we can see
-            // through lets (e.g. introduced by CSE).
+            // Preserve the value's likely tag on bounds where the promise
+            // introduces a clamp, so loop partitioning can remove the clamp
+            // from the steady state.
+            const bool likely_value =
+                op->is_intrinsic(Call::promise_clamped) &&
+                Call::as_intrinsic(op->args[0], {Call::likely});
             auto clamp = [&](const Expr &e, const Expr &limit, bool is_max) {
-                Expr l = limit;
-                bool rarely_clamped = false;
-                if (const Call *c = Call::as_intrinsic(limit, {Call::likely})) {
-                    l = c->args[0];
-                    rarely_clamped = op->is_intrinsic(Call::promise_clamped);
-                }
                 Expr unclamped = e;
-                if (rarely_clamped &&
+                if (likely_value &&
                     !is_const(e) &&
-                    // A bare symbol might be a bound defined elsewhere that
-                    // is already clamped. Tagging it would hide that clamp
-                    // from loop partitioning.
+                    // A bare symbol might already be clamped elsewhere.
+                    // Tagging it would hide that clamp from partitioning.
                     !e.as<Variable>() &&
                     !e.same_as(Interval::pos_inf()) &&
                     !e.same_as(Interval::neg_inf()) &&
-                    !can_prove(is_max ? e >= l : e <= l)) {
+                    !can_prove(is_max ? e >= limit : e <= limit)) {
                     unclamped = likely(e);
                 }
                 // Unlike an explicit clamp, we are also permitted to
                 // assume the upper bound is greater than the lower bound.
-                return is_max ? Interval::make_max(unclamped, l) : Interval::make_min(unclamped, l);
+                return is_max ? Interval::make_max(unclamped, limit) : Interval::make_min(unclamped, limit);
             };
             interval.min = clamp(i.min, lower.min, true);
             interval.max = clamp(i.max, upper.max, false);
