@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include <cstdlib>
 #include <set>
 #include <sstream>
 #include <string>
@@ -12,6 +13,19 @@ using namespace Halide;
 // rfactor() and hoist_invariants(), and preserves the pipeline's numerics.
 
 namespace {
+
+struct WarningCounter final : CompileTimeErrorReporter {
+    int warnings = 0;
+
+    void warning(const char *msg) override {
+        ++warnings;
+    }
+
+    [[noreturn]] void error(const char *msg) override {
+        fprintf(stderr, "Unexpected error: %s\n", msg);
+        exit(1);
+    }
+};
 
 // Does the printed form of `e` contain a direct call to Func `name`?
 bool mentions(const Expr &e, const std::string &name) {
@@ -232,8 +246,19 @@ int main(int argc, char **argv) {
         p(x) = x * 3;
         q(x) = p(x) + 1;
 
-        p.split(x, xo, xi, 4);
+        LoopLevel compute = LoopLevel::inlined(), store = LoopLevel::inlined();
+        p.compute_at(compute).store_at(store).split(x, xo, xi, 4).bound(x, 0, 8);
+        p.stream_loads().stream_stores();
+        WarningCounter reporter;
+        set_custom_compile_time_error_reporter(&reporter);
         q.eager_inline(p);
+        set_custom_compile_time_error_reporter(nullptr);
+        internal_assert(reporter.warnings == 0)
+            << "eager_inline should not warn about meaningless schedule directives\n";
+
+        // Eager validation must not lock LoopLevels shared with the caller.
+        compute.set(LoopLevel::root());
+        store.set(LoopLevel::root());
         p.compute_root().vectorize(xi);
 
         internal_assert(!mentions(q.function().definition().values()[0], "sp_p"))
