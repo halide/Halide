@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <filesystem>
 #include <sstream>
 #include <utility>
 
@@ -890,8 +891,16 @@ vector<char> CodeGen_Metal_Dev::compile_to_src() {
         // so instead of embedding the shader as a string, we will embed it as a metallib
         // Write the source to a temporary file. The compiler and linker outputs
         // go in the same private directory, since their names are derived from
-        // the source file's name.
-        string tmpdir = dir_make_temp();
+        // the source file's name. The directory and anything in it are removed
+        // on scope exit, including when the compiler or linker fails.
+        struct TemporaryDir {
+            string path = dir_make_temp();
+            ~TemporaryDir() {
+                std::error_code ec;
+                std::filesystem::remove_all(path, ec);
+            }
+        } tmpdir_guard;
+        const string &tmpdir = tmpdir_guard.path;
         string tmpfile = tmpdir + "/kernel.metal";
         write_entire_file(tmpfile, buffer);
 
@@ -914,11 +923,6 @@ vector<char> CodeGen_Metal_Dev::compile_to_src() {
         // Read the metallib into a buffer.
         buffer = read_entire_file(metallib);
         debug(2) << "Metallib size: " << buffer.size() << "\n";
-
-        file_unlink(tmpfile);
-        file_unlink(metalir);
-        file_unlink(metallib);
-        dir_rmdir(tmpdir);
     } else {
         buffer.push_back(0);
     }
