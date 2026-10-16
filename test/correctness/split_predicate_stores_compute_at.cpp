@@ -15,35 +15,25 @@ bool check(bool ok, const char *msg) {
 }
 
 // Counts IfThenElse nodes reached while inside the named Func's produce node.
-class CountIfsInProduce : public IRVisitor {
-    using IRVisitor::visit;
-
-    std::string name;
-    int depth = 0;
-
-    void visit(const ProducerConsumer *op) override {
-        if (op->is_producer && op->name == name) {
-            depth++;
-            IRVisitor::visit(op);
-            depth--;
-        } else {
-            IRVisitor::visit(op);
-        }
-    }
-
-    void visit(const IfThenElse *op) override {
-        if (depth > 0) {
-            count++;
-        }
-        IRVisitor::visit(op);
-    }
-
-public:
-    explicit CountIfsInProduce(std::string n)
-        : name(std::move(n)) {
-    }
+int count_ifs_in_produce(const Stmt &s, const std::string &name) {
     int count = 0;
-};
+    int depth = 0;
+    visit_with(
+        s,
+        [&](auto *self, const ProducerConsumer *op) {
+            bool inside = op->is_producer && op->name == name;
+            depth += inside;
+            self->visit_base(op);
+            depth -= inside;
+        },
+        [&](auto *self, const IfThenElse *op) {
+            if (depth > 0) {
+                count++;
+            }
+            self->visit_base(op);
+        });
+    return count;
+}
 
 }  // namespace
 
@@ -70,9 +60,9 @@ int main(int argc, char **argv) {
 
     Module m = f.compile_to_module({});
 
-    CountIfsInProduce checker("g");
+    int ifs = 0;
     for (const LoweredFunc &lf : m.functions()) {
-        lf.body.accept(&checker);
+        ifs += count_ifs_in_produce(lf.body, "g");
     }
 
     // The tile's extent is exactly the split factor: the enclosing tile
@@ -81,7 +71,7 @@ int main(int argc, char **argv) {
     // is exact. BoundConstantExtentLoops must find that as an exact
     // constant, not just an upper bound, so the unrolled body needs no
     // guard at all.
-    if (!check(checker.count == 0,
+    if (!check(ifs == 0,
                "expected no guard inside the unrolled tile"))
         return 1;
 
