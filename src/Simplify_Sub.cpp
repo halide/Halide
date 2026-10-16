@@ -13,6 +13,15 @@ Expr Simplify::visit(const Sub *op, ExprInfo *info) {
         // cancellation rule that exploits that should always
         // remutate to recalculate the bounds.
         info->bounds = a_info.bounds - b_info.bounds;
+        // Except for the correlation the facts know about: x - 5 * y is
+        // positive wherever 5 * y < x was learned, however little the bounds
+        // of x and of 5 * y say on their own.
+        if (has_facts() && no_overflow_int(op->type)) {
+            ConstantInterval d = known_difference(a.get(), b.get());
+            if (d.min_defined || d.max_defined) {
+                info->bounds = ConstantInterval::make_intersection(info->bounds, d);
+            }
+        }
         info->alignment = a_info.alignment - b_info.alignment;
         info->cast_to(op->type);
         info->trim_bounds_using_alignment();
