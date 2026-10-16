@@ -472,6 +472,13 @@ Expr Simplify::visit(const Sub *op, ExprInfo *info) {
            rewrite((min(x * c0 + y, z) + w) / c1 - x * c2, (min(y, z - x * c0) + w) / c1, c0 == c1 * c2) ||
            rewrite((min(z, x * c0 + y) + w) / c1 - x * c2, (min(z - x * c0, y) + w) / c1, c0 == c1 * c2) ||
 
+           // The same with constant offsets, rounding a min-clamped region
+           // up to a multiple of c0. With c0 > 0, both the + c2 and the / c0
+           // distribute over the min, and x*c0 + c1 + c2 divides exactly into
+           // x and (c1 + c2) / c0, for any c1 and c2.
+           rewrite((min(x * c0 + c1, y) + c2) / c0 - x, min((y + c2) / c0 - x, fold((c1 + c2) / c0)), c0 > 0) ||
+           rewrite((min(y, x * c0 + c1) + c2) / c0 - x, min((y + c2) / c0 - x, fold((c1 + c2) / c0)), c0 > 0) ||
+
            false)))) {
         return mutate(rewrite.result, info);
     }
