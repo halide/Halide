@@ -1164,16 +1164,22 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
         }
 
         // Preserved. Each point of the preserved RDom combines one element of
-        // the intermediate into the result. If no point of the intermediate
-        // RDom updates that element, it still holds the identity, and if the
-        // identity is a right identity, combining it is a no-op. So we can
-        // leave out the predicates from splits (e.g. the guard on the tail of
-        // a GuardWithIf split of the RVar), which would otherwise make the
-        // preserved RDom depend on the extent of the original one. These
-        // predicates only exclude points outside the original RDom, of which
-        // there are fewer than the split factor in each dimension, so the
-        // extra work is small. We keep any user predicate, which might exclude
-        // much more.
+        // the intermediate into the result. For example, consider summing over
+        // r in [0, N), splitting r into ro * 4 + ri with GuardWithIf, and
+        // preserving ri. The intermediate has four partial sums, one per ri,
+        // each initialized to zero and updated only where ro * 4 + ri < N.
+        // If N is 3, the partial sum for ri = 3 is never updated and stays zero.
+        // The final merge can still add all four partial sums: adding that
+        // zero is a no-op. Omitting the split's guard from the merge lets its
+        // RDom be [0, 4), independent of N.
+        //
+        // More generally, we can omit split predicates when the intermediate's
+        // initial value is a right identity: merging an element that was never
+        // updated does not change the result. The intermediate still needs the
+        // predicates to avoid evaluating the original update outside its RDom.
+        // The extra merge work is limited to the split tail (fewer than the
+        // split factor in each dimension). We keep user predicates, which
+        // might exclude much more.
         const bool include_split_predicates = !identity_is_right_identity(prover_result);
         std::tie(preserved_rdom, preserved_map) = project_rdom(preserved_rdims, rdom, rvar_splits, include_split_predicates);
         Scope<Interval> intm_rdom;
