@@ -448,6 +448,7 @@ tests(
     rfactor_after_var_and_rvar_fusion.cpp
     rfactor_fused_var_and_rvar.cpp
     rfactor_inner_dim_non_commutative.cpp
+    rfactor_specialize_rvar_bounds.cpp
     round.cpp
     round_up_and_blend_race.cpp
     run_process.cpp
