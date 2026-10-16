@@ -888,8 +888,11 @@ vector<char> CodeGen_Metal_Dev::compile_to_src() {
     if (!metal_compiler.empty() && !metal_linker.empty()) {
         // The user has specified the Metal compiler and linker to use via set_metal_compiler_and_linker(),
         // so instead of embedding the shader as a string, we will embed it as a metallib
-        // Write the source to a temporary file.
-        auto tmpfile = file_make_temp("metal", ".metal");
+        // Write the source to a temporary file. The compiler and linker outputs
+        // go in the same private directory, since their names are derived from
+        // the source file's name.
+        string tmpdir = dir_make_temp();
+        string tmpfile = tmpdir + "/kernel.metal";
         write_entire_file(tmpfile, buffer);
 
         // Compile the Metal source to a metallib.
@@ -911,6 +914,11 @@ vector<char> CodeGen_Metal_Dev::compile_to_src() {
         // Read the metallib into a buffer.
         buffer = read_entire_file(metallib);
         debug(2) << "Metallib size: " << buffer.size() << "\n";
+
+        file_unlink(tmpfile);
+        file_unlink(metalir);
+        file_unlink(metallib);
+        dir_rmdir(tmpdir);
     } else {
         buffer.push_back(0);
     }
