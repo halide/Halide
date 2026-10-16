@@ -8,11 +8,13 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
 
 #include "Bounds.h"
+#include "ConstantInterval.h"
 #include "Expr.h"
 #include "Scope.h"
 
@@ -109,9 +111,10 @@ public:
     FactGuard push_fact(const Expr &condition);
 
     /** Fast path only: find a constant bound using the current scope. See
-     * find_constant_bound() in Bounds.h. */
-    Expr find_constant_bound(const Expr &e, Direction d) const;
-    Interval find_constant_bounds(const Expr &e) const;
+     * find_constant_bound() in Bounds.h. Integer types only; a bound that
+     * does not fit in an int64_t is reported as missing. */
+    std::optional<int64_t> find_constant_bound(const Expr &e, Direction d) const;
+    ConstantInterval find_constant_bounds(const Expr &e) const;
 
     /** Fast path first; on failure, wrap e in the pending pure lets it refers
      * to (producing a self-contained copy with no free references to
@@ -123,10 +126,10 @@ public:
      * boundaries that interval arithmetic through opaque variable lookups
      * cannot.
      *
-     * The single-Direction form is a wrapper around the Interval form; it
-     * returns an undefined Expr if no bound in that direction was found. */
-    Interval find_constant_bounds_aggressive(const Expr &e) const;
-    Expr find_constant_bound_aggressive(const Expr &e, Direction d) const;
+     * The single-Direction form is a wrapper around the ConstantInterval
+     * form; it returns nullopt if no bound in that direction was found. */
+    ConstantInterval find_constant_bounds_aggressive(const Expr &e) const;
+    std::optional<int64_t> find_constant_bound_aggressive(const Expr &e, Direction d) const;
 
     /** Wrap e in the pending pure lets it refers to and simplify under the
      * current scope and dominating facts. Unlike
@@ -170,7 +173,7 @@ private:
      * endpoints and constant-bounding the results can succeed where
      * per-node interval arithmetic can't, because substitution keeps a
      * symbol shared by e and the loop's range correlated. */
-    Interval tighten_using_loop_monotonicity(const Expr &e, Interval interval) const;
+    ConstantInterval tighten_using_loop_monotonicity(const Expr &e, ConstantInterval interval) const;
 
     /** Wrap e in the enclosing pure lets it refers to, innermost first,
      * skipping those it can't reach. */

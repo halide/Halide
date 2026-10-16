@@ -57,6 +57,39 @@ public:
     }
 };
 
+std::optional<int64_t> as_int64(const Expr &e) {
+    if (auto i = as_const_int(e)) {
+        return i;
+    }
+    if (auto u = as_const_uint(e); u && *u <= (uint64_t)INT64_MAX) {
+        return (int64_t)*u;
+    }
+    return std::nullopt;
+}
+
+/** The constant endpoints of an Interval, as returned by
+ * find_constant_bounds() in Bounds.h. */
+ConstantInterval to_constant_interval(const Interval &interval) {
+    ConstantInterval result;
+    if (auto lo = interval.has_lower_bound() ? as_int64(interval.min) : std::nullopt) {
+        result.min_defined = true;
+        result.min = *lo;
+    }
+    if (auto hi = interval.has_upper_bound() ? as_int64(interval.max) : std::nullopt) {
+        result.max_defined = true;
+        result.max = *hi;
+    }
+    return result;
+}
+
+std::optional<int64_t> bound_in_direction(const ConstantInterval &interval, Direction d) {
+    if (d == Direction::Lower) {
+        return interval.min_defined ? std::optional<int64_t>(interval.min) : std::nullopt;
+    } else {
+        return interval.max_defined ? std::optional<int64_t>(interval.max) : std::nullopt;
+    }
+}
+
 }  // namespace
 
 BoundsTracker::Binding::Binding(BoundsTracker *tracker)
@@ -320,12 +353,12 @@ std::vector<Expr> BoundsTracker::relevant_facts(const Expr &e) const {
     return result;
 }
 
-Expr BoundsTracker::find_constant_bound(const Expr &e, Direction d) const {
-    return Halide::Internal::find_constant_bound(e, d, interval_scope());
+std::optional<int64_t> BoundsTracker::find_constant_bound(const Expr &e, Direction d) const {
+    return bound_in_direction(find_constant_bounds(e), d);
 }
 
-Interval BoundsTracker::find_constant_bounds(const Expr &e) const {
-    return Halide::Internal::find_constant_bounds(e, interval_scope());
+ConstantInterval BoundsTracker::find_constant_bounds(const Expr &e) const {
+    return to_constant_interval(Halide::Internal::find_constant_bounds(e, interval_scope()));
 }
 
 Expr BoundsTracker::simplify_with_context(const Expr &e) const {
@@ -368,14 +401,14 @@ Expr BoundsTracker::simplify_with_context(const Expr &e) const {
     return wrapped;
 }
 
-Interval BoundsTracker::tighten_using_loop_monotonicity(const Expr &e, Interval interval) const {
+ConstantInterval BoundsTracker::tighten_using_loop_monotonicity(const Expr &e, ConstantInterval interval) const {
     if (e.type() != Int(32)) {
         return interval;
     }
     // Innermost first: the tightest correlation is usually with the nearest
     // enclosing loop.
     for (const Entry &entry : reverse_view(entries)) {
-        if (interval.has_lower_bound() && interval.has_upper_bound()) {
+        if (interval.is_bounded()) {
             break;
         }
         if (entry.kind != Kind::Loop ||
@@ -395,38 +428,37 @@ Interval BoundsTracker::tighten_using_loop_monotonicity(const Expr &e, Interval 
         } else {
             continue;
         }
-        if (!interval.has_lower_bound()) {
+        if (!interval.min_defined) {
             Expr lo = simplify(substitute(entry.name, at_lower, e));
-            interval.min = Halide::Internal::find_constant_bounds(lo, scope).min;
+            ConstantInterval b = to_constant_interval(Halide::Internal::find_constant_bounds(lo, scope));
+            interval.min_defined = b.min_defined;
+            interval.min = b.min;
         }
-        if (!interval.has_upper_bound()) {
+        if (!interval.max_defined) {
             Expr hi = simplify(substitute(entry.name, at_upper, e));
-            interval.max = Halide::Internal::find_constant_bounds(hi, scope).max;
+            ConstantInterval b = to_constant_interval(Halide::Internal::find_constant_bounds(hi, scope));
+            interval.max_defined = b.max_defined;
+            interval.max = b.max;
         }
     }
     return interval;
 }
 
-Interval BoundsTracker::find_constant_bounds_aggressive(const Expr &e) const {
-    Interval interval = find_constant_bounds(e);
-    if (interval.has_lower_bound() && interval.has_upper_bound()) {
+ConstantInterval BoundsTracker::find_constant_bounds_aggressive(const Expr &e) const {
+    ConstantInterval interval = find_constant_bounds(e);
+    if (interval.is_bounded()) {
         return interval;
     }
     Expr wrapped = simplify_with_context(e);
-    interval = Halide::Internal::find_constant_bounds(wrapped, scope);
-    if (interval.has_lower_bound() && interval.has_upper_bound()) {
+    interval = to_constant_interval(Halide::Internal::find_constant_bounds(wrapped, scope));
+    if (interval.is_bounded()) {
         return interval;
     }
     return tighten_using_loop_monotonicity(wrapped, interval);
 }
 
-Expr BoundsTracker::find_constant_bound_aggressive(const Expr &e, Direction d) const {
-    Interval interval = find_constant_bounds_aggressive(e);
-    if (d == Direction::Lower) {
-        return interval.has_lower_bound() ? interval.min : Expr();
-    } else {
-        return interval.has_upper_bound() ? interval.max : Expr();
-    }
+std::optional<int64_t> BoundsTracker::find_constant_bound_aggressive(const Expr &e, Direction d) const {
+    return bound_in_direction(find_constant_bounds_aggressive(e), d);
 }
 
 }  // namespace Internal
