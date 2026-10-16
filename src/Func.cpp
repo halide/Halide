@@ -3722,7 +3722,7 @@ void check_eager_inline_level(const Function &f, const LoopLevel &level, const c
 }
 
 // Check eager-only placement constraints, then the shared inline schedule rules.
-// Directives that merely warn during lowering (split(), bound(), etc.) are allowed.
+// Directives that merely warn (split(), bound(), etc.) are allowed.
 void check_eager_inline_schedule(const Function &f) {
     const FuncSchedule &func_s = f.schedule();
     const StageSchedule &stage_s = f.definition().schedule();
@@ -3730,7 +3730,7 @@ void check_eager_inline_schedule(const Function &f) {
     check_eager_inline_level(f, func_s.compute_level(), "compute_root() or compute_at()");
     check_eager_inline_level(f, func_s.hoist_storage_level(), "hoist_storage_root() or hoist_storage()");
     check_eager_inline_level(f, stage_s.fuse_level().level, "compute_with()");
-    validate_schedule_inlined_function(f, /*emit_warnings=*/false);
+    validate_schedule_inlined_function(f, "inlined by eager_inline()");
 }
 
 }  // namespace
