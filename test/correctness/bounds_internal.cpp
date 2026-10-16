@@ -209,6 +209,44 @@ void boxes_touched_test() {
     }
 }
 
+void check_box(const map<string, Box> &r, const string &name, const Expr &correct_min, const Expr &correct_max) {
+    internal_assert(r.count(name) && r.at(name).size() == 1);
+    const Interval &b = r.at(name)[0];
+    Interval sb = simplify(b);
+    if (!equal(sb.min, correct_min) || !equal(sb.max, correct_max)) {
+        internal_error << "Bounds of " << name << ": [" << sb.min << ", " << sb.max << "]\n"
+                       << "Should have been: [" << correct_min << ", " << correct_max << "]\n";
+    }
+}
+
+// An if condition bounds the indices in both of its branches, including
+// compound indices.
+void boxes_touched_guarded_test() {
+    Type t = Int(32);
+    Expr x = Variable::make(t, "x");
+    Expr y = Variable::make(t, "y");
+    Expr p = Variable::make(t, "p");
+    Expr q = Variable::make(t, "q");
+
+    Scope<Interval> scope;
+    scope.push("x", Interval(Expr(0), Expr(99)));
+    scope.push("y", Interval(Expr(0), Expr(99)));
+
+    Stmt stmt = IfThenElse::make(x + y < 50,
+                                 Provide::make("f", {0}, {x + y}, const_true()),
+                                 Provide::make("g", {0}, {x + y}, const_true()));
+    map<string, Box> r = boxes_provided(stmt, scope);
+    check_box(r, "f", 0, 49);
+    check_box(r, "g", 50, 198);
+
+    stmt = IfThenElse::make(p + q >= 0,
+                            Provide::make("f", {0}, {p + q}, const_true()),
+                            Provide::make("g", {0}, {p + q}, const_true()));
+    r = boxes_provided(stmt, scope);
+    check_box(r, "f", max(p + q, 0), p + q);
+    check_box(r, "g", p + q, min(p + q, -1));
+}
+
 }  // namespace
 
 int main() {
@@ -495,6 +533,7 @@ int main() {
     internal_assert(equal(simplify(r2[0].max), 19));
 
     boxes_touched_test();
+    boxes_touched_guarded_test();
 
     // Check a deeply-nested bitwise expr to ensure it doesn't take n^2 time
     // (this clause took ~30s on a typical laptop before the fix, ~10ms after)
