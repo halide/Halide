@@ -189,7 +189,8 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     for (Func a : as) {
         if (bcalls.count(a.name())) {
             Func ai = a.in(blk);
-            ai.compute_at(at).vectorize(ai.args()[1]);
+            // rows innermost: the block's extent is a guarded min(), not 1
+            ai.reorder_storage(ai.args()[1], ai.args()[0]).compute_at(at).vectorize(ai.args()[1]);
         }
     }
     acc.compute_at(tile_at(out, st)).vectorize(n).unroll(bacc).unroll(m);
