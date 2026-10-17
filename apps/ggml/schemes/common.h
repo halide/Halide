@@ -43,6 +43,14 @@ inline ApproximationSignature codes_and_scale(int lo, int hi) {
     return {{{"blocks", Float(32)}}, {{"codes", Int(8), std::nullopt, ApproximationRange(lo, hi)}, {"scale", Float(32)}}};
 }
 
+// Codes in [0, 2^bits - 1] <-> the same unsigned fields (GGML's q4_1 nibbles).
+inline Approximation unsigned_codes(int bits) {
+    return Pointwise{"unsigned", [](const Expr &x) { return cast<uint8_t>(x); }, [](const Expr &x) { return cast<int8_t>(x); }}
+        .with_types(Int(8), UInt(8))
+        .with_ranges(ApproximationRange(0, (1 << bits) - 1), ApproximationRange(0, (1 << bits) - 1))
+        .with_lossless();
+}
+
 // Signed codes in [-bias, bias - 1] <-> unsigned fields in [0, 2 * bias - 1].
 // With `shift`, codes kept at 2^shift times their value (multiples of 2^shift).
 inline Approximation offset(int bias, int shift = 0) {
