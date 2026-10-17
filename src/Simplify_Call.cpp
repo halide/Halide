@@ -594,6 +594,13 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
             if (info) {
                 *info = arg_info;
             }
+            // A likely tag on the value only says the clamp rarely has an
+            // effect (see the bounds of promise_clamped in Bounds.cpp), so it
+            // goes with the clamp. Left behind, it would block simplification
+            // of the arithmetic around it (e.g. dense vector indices).
+            if (const Call *l = Call::as_intrinsic(arg, {Call::likely})) {
+                return l->args[0];
+            }
             return arg;
         } else if (b_arg && b_lower && b_upper) {
             // Move broadcasts outwards
