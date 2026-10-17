@@ -927,6 +927,12 @@ Expr simplify_with_reduction_bounds(const Expr &e,
                 Expr arg = self->mutate(op->args[0]);
                 if (op->is_intrinsic(Call::promise_clamped) &&
                     uses_rvars(simplify(arg, reduction_bounds))) {
+                    // The likely tag rfactor() puts on the clamped value
+                    // goes with the clamp (see the simplifier's handling of
+                    // promise_clamped).
+                    if (const Call *l = Call::as_intrinsic(arg, {Call::likely})) {
+                        return l->args[0];
+                    }
                     return arg;
                 }
                 return Call::make(op->type, op->name, {arg, op->args[1], op->args[2]}, op->call_type);
