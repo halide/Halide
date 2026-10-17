@@ -1670,6 +1670,19 @@ void GeneratorBase::add_requirement(const Expr &condition, const std::vector<Exp
     requirements.push_back({condition, error_args});
 }
 
+void GeneratorBase::halidoscope_impl(const HalidoscopeOptions &options, JITUserContext *context,
+                                     const HalidoscopeArgs &trace_args, const HalidoscopeArgs &profile_args) {
+    std::vector<Argument> arguments = ordered_input_arguments();
+    auto prepare = [&](const HalidoscopeArgs &args) {
+        return [&arguments, &args](Pipeline &p, const Target &t) {
+            Callable c = p.compile_to_callable(arguments, t);
+            return HalidoscopeRunner{[c, &args](JITUserContext *ctx) { args(c, ctx); },
+                                     std::make_unique<ProfilerScope>(c)};
+        };
+    };
+    pipeline_halidoscope(get_pipeline(), context, prepare(trace_args), prepare(profile_args), options, get_target());
+}
+
 Pipeline GeneratorBase::get_pipeline() {
     check_min_phase(GenerateCalled);
     if (!pipeline.defined()) {

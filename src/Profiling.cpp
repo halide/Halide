@@ -71,6 +71,7 @@ struct Names {
     std::string profiler_shared_sampling_token;
     std::string hvx_profiler_instance;
     std::string profiler_func_names;
+    std::string profiler_func_ir_names;
     std::string profiler_func_parents;
     std::string profiler_func_canonical_ids;
     std::string profiler_func_stack_peak_buf;
@@ -90,6 +91,7 @@ struct Names {
           profiler_shared_sampling_token(unique_name("profiler_shared_sampling_token")),
           hvx_profiler_instance(unique_name("hvx_profiler_instance")),
           profiler_func_names(unique_name("profiler_func_names")),
+          profiler_func_ir_names(unique_name("profiler_func_ir_names")),
           profiler_func_parents(unique_name("profiler_func_parents")),
           profiler_func_canonical_ids(unique_name("profiler_func_canonical_ids")),
           profiler_func_stack_peak_buf(unique_name("profiler_func_stack_peak_buf")),
@@ -1572,6 +1574,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     Expr instance = Variable::make(Handle(), names.profiler_instance);
 
     Expr func_names_buf = Variable::make(Handle(), names.profiler_func_names);
+    Expr func_ir_names_buf = Variable::make(Handle(), names.profiler_func_ir_names);
     Expr func_parents_buf = Variable::make(Handle(), names.profiler_func_parents);
     Expr func_canonical_ids_buf = Variable::make(Handle(), names.profiler_func_canonical_ids);
     Expr func_kinds_buf = Variable::make(Handle(), names.profiler_func_kinds);
@@ -1582,6 +1585,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
                                      {pipeline_name,
                                       num_funcs,
                                       func_names_buf,
+                                      func_ir_names_buf,
                                       func_parents_buf,
                                       func_canonical_ids_buf,
                                       func_kinds_buf,
@@ -1634,6 +1638,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     }
 
     std::vector<Expr> func_names(num_funcs);
+    std::vector<Expr> func_ir_names(num_funcs);
     std::vector<Expr> func_parents(num_funcs);
     std::vector<Expr> func_canonical_ids(num_funcs);
     std::vector<Expr> func_kinds(num_funcs);
@@ -1642,6 +1647,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     for (int i = 0; i < num_funcs; i++) {
         const auto &info = names.entry_info[i];
         func_names[i] = info.name;
+        func_ir_names[i] = info.ir_name;
         func_parents[i] = info.parent_id;
         func_canonical_ids[i] = info.canonical_id;
         func_kinds[i] = make_const(Int(32), (int)info.kind);
@@ -1650,6 +1656,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     }
 
     s = LetStmt::make(names.profiler_func_names, Call::make(Handle(), Call::make_struct, func_names, Call::Intrinsic), s);
+    s = LetStmt::make(names.profiler_func_ir_names, Call::make(Handle(), Call::make_struct, func_ir_names, Call::Intrinsic), s);
     s = LetStmt::make(names.profiler_func_parents, Call::make(Handle(), Call::make_struct, func_parents, Call::Intrinsic), s);
     s = LetStmt::make(names.profiler_func_canonical_ids, Call::make(Handle(), Call::make_struct, func_canonical_ids, Call::Intrinsic), s);
     s = LetStmt::make(names.profiler_func_kinds, Call::make(Handle(), Call::make_struct, func_kinds, Call::Intrinsic), s);
