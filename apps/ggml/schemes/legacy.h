@@ -112,8 +112,9 @@ inline Approximation q8_0(const std::string &lay, bool indexed = false) {
 }
 
 // block_q8_1 (GGML's activations for q4_1, q5_1): q8_0's codes and scale, plus
-// the block's sum s = d * sum(codes) (d unrounded), which decode ignores: a
-// kernel may use it for the sum of the block's values (Format::sum).
+// the block's sum s = d * sum(codes) (d unrounded), which decode ignores.
+// Kernels don't read s yet: that needs a checked derived port (s declared as
+// approximating the block's sum of values, with a bound).
 struct Q8_1Quant {
     std::vector<Func> encode(const std::vector<Func> &in) const {
         std::vector<Func> e = Q8_0Quant{}.encode(in);
@@ -136,9 +137,8 @@ struct Q8_1Quant {
     }
 };
 
-// `sum`: the stage decoding the stored sums.
-inline Approximation q8_1(const std::string &lay, const Approximation &sum, bool indexed = false) {
-    return Compose{BlockReshape{QK, indexed}, Q8_1Quant{}, Parallel{{"scale", fp16()}, {"sum", sum}},
+inline Approximation q8_1(const std::string &lay, bool indexed = false) {
+    return Compose{BlockReshape{QK, indexed}, Q8_1Quant{}, Parallel{{"scale", fp16()}, {"sum", fp16()}},
                    layout(lay, {{"d", Float(16)}, {"s", Float(16)}, {"qs", Int(8), QK}}, {"qs", "d", "s"})};
 }
 

@@ -56,28 +56,21 @@ public:
         std::vector<ImageParam> bound;
         // approx[0] is the weight's (the schedules rely on it)
         if (!fw.scheme.defined()) throw std::invalid_argument("weight: a quantized format");
-        // the act's stored block sums, if its format has them (severed too:
-        // out reaches them only through the schedule)
-        std::vector<Func> outs{out};
-        sums.resize(dots.size());
         for (auto [F, Ff, f, p] : {std::tuple{W, Wf, fw, w}, std::tuple{X, Xf, fa, a}}) {
             if (f.scheme.defined()) {
                 approx.push_back(approximate(F, Ff, f, dots));
                 cut.insert(cut.end(), approx.back().encoded.begin(), approx.back().encoded.end());
                 bound.insert(bound.end(), p.begin(), p.end());
-                if (f.sum.defined()) outs.push_back(sums[0] = approx.back().decoded_by(f.sum));
             }
         }
         if (cn != an) {
             if (fa.scheme.defined()) throw std::invalid_argument("act: only plain storage can be re-approximated");
             for (size_t i = 0; i < dots.size(); i++) {
-                ggml::Format fs = ggml::format(cn, !i, false, true);
-                approx.push_back(approximate(i ? Xr : X, i ? Xrf : Xf, fs, {dots[i]}));
+                approx.push_back(approximate(i ? Xr : X, i ? Xrf : Xf, ggml::format(cn, !i, false, true), {dots[i]}));
                 staged.push_back(approx.back().encoded[0]);
-                if (fs.sum.defined()) sums[i] = approx.back().decoded_by(fs.sum);
             }
         }
-        Pipeline(outs).sever(cut, bound);
+        Pipeline(out).sever(cut, bound);
         // The ABI: w [K / w block, N / w rows], a [K / a block, M], out [N, M],
         // all dense from 0 (strides as GGML's contiguous rows; K % block == 0),
         // a field's elements first.
@@ -109,7 +102,7 @@ public:
     }
 
     void generate() {
-        (op == "vec_dot" ? ggml::vec_dot : ggml::mul_mat)(*result, dots, r, blocks, approx, staged, sums, get_target());
+        (op == "vec_dot" ? ggml::vec_dot : ggml::mul_mat)(*result, dots, r, blocks, approx, staged, get_target());
     }
 
 private:
@@ -118,7 +111,6 @@ private:
     std::vector<Func> dots{Func("dot")};      // one per act encoding
     std::vector<ApproximationResult> approx;  // the weight's first (asserted)
     std::vector<Func> staged;                 // encoded inside the pipeline
-    std::vector<Func> sums;                   // per dot, its act's stored block sums (or undefined)
     std::vector<int> blocks;
     GeneratorOutput<Buffer<>> *result = nullptr;
 
