@@ -31,7 +31,8 @@ set(GGML_FORMATS
     "q4_0.i4.4x8 codec,mul_mat q8_0,f32:q8_0,f32:q8_0.4x8"
     "q4_0.i4.8x8 codec"
     "q4_0.soa codec,mul_mat q8_0,f32:q8_0"
-    "q4_0 mul_mat f32 metal"
+    "q4_0 mul_mat f32,f16,q8_0 metal"
+    "q4_0.soa mul_mat f32,f16,q8_0 metal"
 )
 set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
 
