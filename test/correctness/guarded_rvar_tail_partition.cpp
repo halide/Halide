@@ -1,5 +1,6 @@
 #include "Halide.h"
 #include <cstdio>
+#include <sstream>
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -197,12 +198,64 @@ int check_storage_folding() {
     return 0;
 }
 
+// rfactor() tags a clamped RVar as likely to be in bounds, i.e.
+// promise_clamped(likely(r), min, max). The tag only describes the clamp, so
+// it goes with it when the simplifier proves the clamp redundant. Left in the
+// intermediate's index arithmetic, it would keep the vectorized RVar's lanes
+// from combining with the others (e.g. into a dense load).
+int check_likely_dropped_with_clamp() {
+    Var r("r");
+    Scope<Interval> bounds;
+    bounds.push(r.name(), Interval(0, 63));
+    Expr e = simplify(promise_clamped(likely(r), 0, 63) / 4, bounds);
+    if (!equal(e, r / 4)) {
+        std::ostringstream str;
+        str << e;
+        printf("The likely tag of a redundant clamp was not dropped: %s\n", str.str().c_str());
+        return 1;
+    }
+
+    ImageParam a(Int(32), 1, "a");
+    Func f("f");
+    Var x("x"), u("u");
+    RVar ro("ro"), ri("ri");
+    RDom rd(0, 64, "r");
+    f(x) = 0;
+    f(x) += a(rd + (x % 4) * 4 + (x / 4) * 64);
+    f.update().split(rd, ro, ri, 4);
+    Func intm = f.update().rfactor(ro, u);
+    f.vectorize(x, 4);
+    f.update().vectorize(x, 4);
+    intm.compute_at(f, x).vectorize(x);
+    intm.update().reorder(ri, x, u).atomic().vectorize(ri).vectorize(x);
+    f.output_buffer().dim(0).set_min(0);
+
+    Buffer<int> in(64 * 5);
+    for (int i = 0; i < in.width(); i++) {
+        in(i) = (i * 7) % 13 - 6;
+    }
+    a.set(in);
+    Buffer<int> out = f.realize({16});
+    for (int i = 0; i < 16; i++) {
+        int correct = 0;
+        for (int k = 0; k < 64; k++) {
+            correct += in(k + (i % 4) * 4 + (i / 4) * 64);
+        }
+        if (out(i) != correct) {
+            printf("out(%d) = %d instead of %d\n", i, out(i), correct);
+            return 1;
+        }
+    }
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
     if (check("rfactor", rfactor_pipeline) ||
         check("rfactor with split pure var", rfactor_split_pure_var_pipeline) ||
-        check_storage_folding()) {
+        check_storage_folding() ||
+        check_likely_dropped_with_clamp()) {
         return 1;
     }
     printf("Success!\n");
