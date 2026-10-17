@@ -78,6 +78,7 @@ tests(
     bounds_of_split.cpp
     bounds_query.cpp
     bounds_query_respects_specialize_fail.cpp
+    bounds_tracker.cpp
     broken_promise.cpp
     buffer_larger_than_two_gigs.cpp
     buffer_t.cpp
@@ -493,6 +494,7 @@ tests(
     split_inner_wrong_tail_strategy.cpp
     split_non_innermost_predicated.cpp
     split_predicate.cpp
+    split_predicate_stores_compute_at.cpp
     split_reuse_inner_name_bug.cpp
     split_same_var_names.cpp
     split_storage.cpp
