@@ -296,17 +296,40 @@ inline void encoder(Func e, const std::vector<ApproximationResult> &rs) {
 // half a block (one of its two 8-byte halves: 16 values) of every 16th block,
 // accumulating the rows in registers (the codes' sum per block, then times
 // its scale); the lanes' sums then reduce across the simdgroup (an atomic
-// update over the gpu lanes: simd shuffles) and lane 0 writes.
+// update over the gpu lanes: simd shuffles) and lane 0 writes. For M > 1,
+// each simdgroup takes rows x cols of out (up to 8 columns, fewer rows for
+// more), a lane per value of every block (coalesced loads), its products in
+// registers (each decoded weight used cols times, each act value rows times),
+// reduced the same way (the gemv lanes' act loads, 16 values of blocks 16
+// apart, are strided: far slower for that many columns). Each kernel has both
+// trees, behind uniform flags (dot's specialization, done on the host).
 inline void metal_rows(Func out, Func dot, const RDom &r, const std::vector<ApproximationResult> &rs, int nr = 4, int sg = 2) {
-    Var n = out.args()[0], m = out.args()[1], no("no"), ns("ns"), ni("ni"), uh("uh"), ub("ub"), u("u"), l("l");
+    Var n = out.args()[0], m = out.args()[1], no("no"), ns("ns"), ni("ni"), mo("mo"), mi("mi"), uh("uh"), ub("ub"), u("u"), l("l");
     RVar rx = r.x, ry = r.y, rxn("rxn"), rxh("rxh"), rxi("rxi"), ryo("ryo"), ryi("ryi"), rl("rl");
-    Expr N = out.output_buffer().dim(0).extent();
-    // N < nr * sg: a row per threadgroup
-    for (auto [o, rows, groups] : {std::tuple{Stage(out).specialize(N >= nr * sg), nr, sg}, std::tuple{Stage(out), 1, 1}}) {
+    Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
+    auto tile = [&](Stage o, int rows, int groups, int cols) {
         o.split(n, no, ni, rows * groups, TailStrategy::ShiftInwards).split(ni, ns, ni, rows);
-        o.reorder(ni, ns, no, m).unroll(ni).gpu_blocks(no, m).gpu_threads(ns);
+        if (cols > 1) {
+            o.split(m, mo, mi, cols, TailStrategy::ShiftInwards).reorder(ni, mi, ns, no, mo).unroll(mi).gpu_blocks(no, mo);
+        } else {
+            o.reorder(ni, ns, no, m).gpu_blocks(no, m);
+        }
+        o.unroll(ni).gpu_threads(ns);
+    };
+    Stage big = Stage(out).specialize(N >= nr * sg);
+    for (int cols = 8; cols > 1; cols--) {
+        tile(big.specialize(M >= cols), cols > 4 ? 2 : 4, sg, cols);
     }
-    dot.compute_at(out, ni);  // per row: warp allocations of one value
+    tile(big, nr, sg, 1);
+    tile(Stage(out), 1, 1, 1);  // N < nr * sg: a row per threadgroup
+    dot.compute_at(out, ni);    // per row: warp allocations of one value
+    Var lx("lx");
+    RVar ryk("ryk"), ryu("ryu");
+    Stage sm = dot.update().specialize(M >= 2);
+    Func lanes = sm.rfactor(rx, lx);
+    sm.atomic().gpu_lanes(rx);
+    lanes.compute_at(out, ns).gpu_lanes(lx).unroll(n).unroll(m);
+    lanes.update().split(ry, ryk, ryu, 4, TailStrategy::GuardWithIf).reorder(n, m, ryu, ryk, lx).gpu_lanes(lx).unroll(n).unroll(m).unroll(ryu);
     Stage s = dot.update();
     // value j = rxn * 16 + rxh * 8 + rxi: the low (rxn 0) and high nibbles of byte rxh * 8 + rxi
     s.split(rx, rxn, rx, 16).split(rx, rxh, rxi, 8);
@@ -319,8 +342,9 @@ inline void metal_rows(Func out, Func dot, const RDom &r, const std::vector<Appr
     acc.reorder_storage(uh, ub, n, m).compute_at(out, ns);
     acc.fuse(uh, ub, l).reorder(n, m, l).gpu_lanes(l).unroll(n);
     acc.update().fuse(uh, ub, l).reorder(n, m, ryo, l).gpu_lanes(l).unroll(n);
+    // store_at: works around halide/Halide#9571; bound_storage: also in the K tail: registers
     for (Func f : {blk, codes}) {
-        f.compute_at(acc, ryo).store_at(acc, l).bound_storage(u, 1).unroll(f.args()[0]);  // also in the K tail: registers
+        f.compute_at(acc, ryo).store_at(acc, l).bound_storage(u, 1).unroll(f.args()[0]);
     }
     blk.update().unroll(blk.args()[0]);
     codes.update().reorder(codes.args()[0], rxi, rxn).unroll(codes.args()[0]).unroll(rxi).unroll(rxn);
