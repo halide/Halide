@@ -35,6 +35,7 @@ inline Format format(const std::string &spec, bool aos = false, bool scaled = fa
     int rows = 1, chunk = 0;
     sscanf(lay.c_str(), "%dx%d", &rows, &chunk);
     if (type == "q4_0" && (codes.empty() || codes == "u4" || codes == "i4")) return {q4_0(codes == "i4" ? twos(4, scaled * 4) : offset(8, scaled * 4), lay, scaled * 4, indexed), QK, rows, chunk};
+    if (type == "q4_1" && codes.empty()) return {q4_1(lay, indexed), QK, rows, chunk};
     if (type == "q8_0" && codes.empty()) return {q8_0(lay, indexed), QK, rows, chunk};
     if (type == "f16" && t.size() == 1) return {fp16()};
     if (type == "f32" && t.size() == 1) return {};

@@ -52,6 +52,39 @@ inline Approximation q4_0(const Approximation &codes, const std::string &lay, in
                    layout(lay, {{"d", Float(16)}, {"qs", UInt(8), QK / 2}}, {"qs", "d"})};
 }
 
+// block_q4_1: affine, values = codes * scale + min; d = (max - min) / 15,
+// min = the block's (both first strict extremes, as GGML's scan); nibble =
+// min(15, (int8)((x - min) / d + 0.5)).
+struct Q4_1Quant {
+    std::vector<Func> encode(const std::vector<Func> &in) const {
+        Func x = in[0], d("scale"), m("min"), q("codes");
+        Var j, b;
+        RDom r(0, QK);
+        m(b, _) = argmin(x(r, b, _))[1];
+        d(b, _) = (argmax(x(r, b, _))[1] - m(b, _)) / 15.0f;
+        q(j, b, _) = min(cast<int8_t>((x(j, b, _) - m(b, _)) * inverse(d(b, _)) + 0.5f), cast<int8_t>(15));
+        return {q, d, m};
+    }
+    std::vector<Func> decode(const std::vector<Func> &e) const {
+        Func v("values");
+        Var j, b;
+        v(j, b, _) = cast<float>(e[0](j, b, _)) * e[1](b, _) + e[2](b, _);
+        return {v};
+    }
+    static ApproximationSignature signature() {
+        return {{{"blocks", Float(32)}}, {{"codes", Int(8), std::nullopt, ApproximationRange(0, 15)}, {"scale", Float(32)}, {"min", Float(32)}}};
+    }
+    Func error_bound(const std::vector<Func> &, const std::vector<Func> &e) const {
+        return step_bound(e, 0.5);
+    }
+};
+
+inline Approximation q4_1(const std::string &lay, bool indexed = false) {
+    return Compose{BlockReshape{QK, indexed}, Q4_1Quant{}, Parallel{{"codes", unsigned_codes(4)}},
+                   Parallel{{"codes", PlanarFieldPack{4, QK / 2}}, {"scale", fp16()}, {"min", fp16()}},
+                   layout(lay, {{"d", Float(16)}, {"m", Float(16)}, {"qs", UInt(8), QK / 2}}, {"qs", "d", "m"})};
+}
+
 // block_q8_0: d = max |x| / 127; code = roundf(x / d).
 struct Q8_0Quant {
     std::vector<Func> encode(const std::vector<Func> &in) const {
