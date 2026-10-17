@@ -370,14 +370,10 @@ class FindSimplifications : public IRVisitor {
     }
 
     void visit(const Call *op) override {
-        if (op->is_intrinsic(Call::if_then_else)) {
-            if (op->args.size() == 3) {
-                visit_select(op->args[0], op, op->args[1], op->args[2]);
-            } else {
-                visit_select(op->args[0], op, op->args[1], make_zero(op->type));
-            }
-        } else {
-            IRVisitor::visit(op);
+        IRVisitor::visit(op);
+        if (has_uncaptured_likely(op->predicate)) {
+            const int lanes = op->predicate.type().lanes();
+            new_simplification(op->predicate, op->predicate, const_true(lanes), remove_likelies(op->predicate));
         }
     }
 

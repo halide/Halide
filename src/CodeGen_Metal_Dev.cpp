@@ -341,6 +341,10 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Broadcast *op) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Call *op) {
+    if (!is_const_one(op->predicate)) {
+        id = print_predicated_call(op);
+        return;
+    }
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
         internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
 
@@ -403,7 +407,11 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::get_memory_space(const string &buf) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
-    user_assert(is_const_one(op->predicate)) << "Predicated load is not supported inside Metal kernel.\n";
+    if (op->type.is_scalar() && !is_const_one(op->predicate)) {
+        id = print_scalar_predicated_load(op);
+        return;
+    }
+    user_assert(is_const_one(op->predicate)) << "Vector predicated load is not supported inside Metal kernel.\n";
     user_assert(op->type.lanes() <= 4) << "Vectorization by widths greater than 4 is not supported by Metal -- type is " << op->type << ".\n";
 
     // If we're loading a contiguous ramp, load from a vector type pointer.

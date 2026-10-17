@@ -391,6 +391,7 @@ struct Comparer {
                 cmp(&Call::call_type);
                 cmp(&Call::value_index);
                 cmp(&Call::args);
+                cmp(&Call::predicate);
                 break;
             case IRNodeType::Let:
                 cmp(&Let::name);

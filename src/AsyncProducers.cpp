@@ -351,7 +351,7 @@ protected:
             vector<Expr> args = call->args;
             args[0] = new_var;
             Stmt new_stmt =
-                Evaluate::make(Call::make(call->type, call->name, args, call->call_type));
+                Evaluate::make(call->with(args));
             return Block::make(op, new_stmt);
         } else {
             return op;

@@ -2473,6 +2473,10 @@ void CodeGen_ARM::visit(const Ramp *op) {
 }
 
 void CodeGen_ARM::visit(const Call *op) {
+    if (!is_const_one(op->predicate)) {
+        value = codegen_predicated_call(op);
+        return;
+    }
     if (op->is_intrinsic(Call::sorted_avg)) {
         value = codegen(halving_add(op->args[0], op->args[1]));
         return;

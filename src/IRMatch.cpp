@@ -246,6 +246,10 @@ public:
                 expr = e->args[i];
                 op->args[i].accept(this);
             }
+            if (result) {
+                expr = e->predicate;
+                op->predicate.accept(this);
+            }
         } else {
             result = false;
         }
@@ -355,7 +359,7 @@ class WithLanes : public IRMutator {
         if (op->is_intrinsic() && (op->type.lanes() != lanes)) {
             auto new_args = mutate_with_changes(op->args).first;
             return Call::make(with_lanes(op->type), op->name, new_args, op->call_type,
-                              op->func, op->value_index, op->image, op->param);
+                              op->func, op->value_index, op->image, op->param, mutate(op->predicate));
         } else {
             return IRMutator::visit(op);
         }

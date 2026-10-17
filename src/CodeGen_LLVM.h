@@ -282,6 +282,18 @@ protected:
     /** Codegen a vector Expr by codegenning each lane and combining. */
     void scalarize(const Expr &);
 
+    /** Emit a branch on a scalar condition that evaluates exactly one of
+     * true_value and false_value, and return the result. */
+    llvm::Value *codegen_branch(const Expr &cond, const Expr &true_value, const Expr &false_value);
+
+    /** Codegen a Call with a non-trivial predicate: the call is only
+     * performed where the predicate is true, and the result is zero
+     * elsewhere. */
+    llvm::Value *codegen_predicated_call(const Call *op);
+
+    /** Codegen a predicated vector Load as a branch per lane. */
+    llvm::Value *codegen_scalarized_predicated_load(const Load *op);
+
     /** Some destructors should always be called. Others should only
      * be called if the pipeline is exiting with an error code. */
     enum DestructorType { Always,

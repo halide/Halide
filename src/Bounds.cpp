@@ -1180,9 +1180,6 @@ protected:
                 return abs(op->args[0] - op->args[1]);
             } else if (op->is_intrinsic(Call::return_second)) {
                 return op->args[1];
-            } else if (op->is_intrinsic(Call::if_then_else)) {
-                // Probably more conservative than necessary
-                return op->args[1];
             } else if (op->is_intrinsic(Call::rounding_shift_right)) {
                 // TODO: uses bitwise ops we may not handle well
                 return lower_rounding_shift_right(op->args[0], op->args[1]);
@@ -1231,10 +1228,7 @@ protected:
                 }
             }
         } else if (op->args.size() == 3) {
-            if (op->is_intrinsic(Call::if_then_else)) {
-                // Probably more conservative than necessary
-                return Select::make(op->args[0], op->args[1], op->args[2]);
-            } else if (can_widen_all(op->args)) {
+            if (can_widen_all(op->args)) {
                 if (op->is_intrinsic(Call::rounding_mul_shift_right)) {
                     return saturating_narrow(rounding_shift_right(widening_mul(op->args[0], op->args[1]), op->args[2]));
                 } else if (op->is_intrinsic(Call::mul_shift_right)) {
@@ -1626,6 +1620,27 @@ protected:
     void visit(const Call *op) override {
         TRACK_BOUNDS_INTERVAL;
         TRACK_BOUNDS_INFO("name:", op->name);
+
+        if (!is_const_one(op->predicate)) {
+            // Where the predicate is false, the result is zero.
+            op->predicate.accept(this);
+            Interval pred = interval;
+            bool always = pred.has_lower_bound() && can_prove(pred.min);
+            bool never = pred.has_upper_bound() && can_prove(!pred.max);
+            Expr zero = make_zero(op->type.element_of());
+            if (never) {
+                interval = Interval::single_point(zero);
+                return;
+            }
+            Expr unpredicated = op->with(op->args, const_true(op->type.lanes()));
+            unpredicated.accept(this);
+            if (pred.is_single_point() && interval.is_single_point()) {
+                interval = Interval::single_point(op);
+            } else if (!always) {
+                interval.include(zero);
+            }
+            return;
+        }
 
         if (op->is_intrinsic()) {
             Expr lowered = lower_intrinsic(op);
@@ -2137,8 +2152,10 @@ private:
 class BoxesTouched : public IRGraphVisitor {
 
 public:
-    BoxesTouched(bool calls, bool provides, string fn, const Scope<Interval> *s, const FuncValueBounds &fb)
-        : func(std::move(fn)), consider_calls(calls), consider_provides(provides), func_bounds(fb) {
+    BoxesTouched(bool calls, bool provides, string fn, const Scope<Interval> *s, const FuncValueBounds &fb,
+                 bool selects_are_branches = false)
+        : func(std::move(fn)), consider_calls(calls), consider_provides(provides),
+          selects_are_branches(selects_are_branches), func_bounds(fb) {
         scope.set_containing_scope(s);
     }
 
@@ -2298,6 +2315,7 @@ protected:
 
     string func;
     bool consider_calls, consider_provides;
+    bool selects_are_branches;
     Scope<Interval> scope;
     const FuncValueBounds &func_bounds;
     // Scope containing the current value definition of let stmts.
@@ -2354,6 +2372,23 @@ protected:
         return false;
     }
 
+    void visit(const Select *op) override {
+        TRACK_BOXES_TOUCHED;
+        if (selects_are_branches &&
+            op->condition.type().is_scalar() &&
+            is_pure(op->condition)) {
+            op->condition.accept(this);
+            // We wrap the values in dummy Evaluates since IfThenElse only
+            // takes Stmts.
+            Stmt equivalent_if = IfThenElse::make(op->condition,
+                                                  Evaluate::make(op->true_value),
+                                                  Evaluate::make(op->false_value));
+            equivalent_if.accept(this);
+        } else {
+            IRGraphVisitor::visit(op);
+        }
+    }
+
     void visit(const Call *op) override {
         TRACK_BOXES_TOUCHED;
         TRACK_BOXES_TOUCHED_INFO("name:", op->name);
@@ -2370,26 +2405,27 @@ protected:
         }
 
         if (consider_calls) {
-            if (op->is_intrinsic(Call::if_then_else)) {
-                // We wrap 'then_case' and 'else_case' inside 'dummy' call since IfThenElse
-                // only takes Stmts as arguments.
-                Stmt then_case = Evaluate::make(op->args[1]);
-                Stmt equivalent_if;
-                if (op->args.size() == 3) {
-                    Stmt else_case = Evaluate::make(op->args[2]);
-                    equivalent_if = IfThenElse::make(op->args[0], then_case, else_case);
-                } else {
-                    internal_assert(op->args.size() == 2);
-                    equivalent_if = IfThenElse::make(op->args[0], then_case);
-                }
-                equivalent_if.accept(this);
-                return;
-            }
-
             IRGraphVisitor::visit(op);
 
-            if (op->call_type == Call::Halide ||
-                op->call_type == Call::Image) {
+            if ((op->call_type == Call::Halide ||
+                 op->call_type == Call::Image) &&
+                !is_const_one(op->predicate)) {
+                // The args are evaluated unconditionally (and were visited
+                // above), but the call itself only touches memory where the
+                // predicate is true. We wrap it in a dummy Evaluate because
+                // IfThenElse only takes Stmts.
+                Expr cond = op->predicate;
+                if (cond.type().is_vector()) {
+                    // This treats every lane as touched if any lane is touched,
+                    // which is a conservative approximation. This is generally
+                    // used before vectorization, so we don't expect vectors here.
+                    cond = VectorReduce::make(VectorReduce::Or, cond, 1);
+                }
+                Stmt equivalent_if =
+                    IfThenElse::make(cond, Evaluate::make(op->with(op->args, const_true(op->type.lanes()))));
+                equivalent_if.accept(this);
+            } else if (op->call_type == Call::Halide ||
+                       op->call_type == Call::Image) {
                 for (const Expr &e : op->args) {
                     e.accept(this);
                 }
@@ -3028,7 +3064,8 @@ protected:
 };
 
 map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool consider_provides,
-                               const string &fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+                               const string &fn, const Scope<Interval> &scope, const FuncValueBounds &fb,
+                               bool selects_are_branches = false) {
     if (!fn.empty() && s.defined()) {
         // Filter things down to the relevant sub-Stmts, so we don't spend a
         // long time reasoning about lets and ifs that don't surround an
@@ -3132,8 +3169,8 @@ map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool 
     }
 
     // Do calls and provides separately, for better simplification.
-    BoxesTouched calls(consider_calls, false, fn, &scope, fb);
-    BoxesTouched provides(false, consider_provides, fn, &scope, fb);
+    BoxesTouched calls(consider_calls, false, fn, &scope, fb, selects_are_branches);
+    BoxesTouched provides(false, consider_provides, fn, &scope, fb, selects_are_branches);
 
     if (consider_calls) {
         if (e.defined()) {
@@ -3217,8 +3254,9 @@ Box box_touched(const Expr &e, Stmt s, bool consider_calls, bool consider_provid
 }
 }  // namespace
 
-map<string, Box> boxes_required(const Expr &e, const Scope<Interval> &scope, const FuncValueBounds &fb) {
-    return boxes_touched(e, Stmt(), true, false, "", scope, fb);
+map<string, Box> boxes_required(const Expr &e, const Scope<Interval> &scope, const FuncValueBounds &fb,
+                                bool selects_are_branches) {
+    return boxes_touched(e, Stmt(), true, false, "", scope, fb, selects_are_branches);
 }
 
 Box box_required(const Expr &e, const string &fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {

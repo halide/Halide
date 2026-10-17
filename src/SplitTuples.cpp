@@ -117,12 +117,14 @@ class SplitTuples : public IRMutator {
                 changed_name = true;
             }
             auto [args, changed_args] = mutate_with_changes(op->args);
+            Expr predicate = mutate(op->predicate);
             // It's safe to hook up the pointer to the function
             // unconditionally. This expr never gets held by a
             // Function, so there can't be a cycle. We do this even
             // for scalar provides.
-            if (changed_name || changed_args) {
-                return Call::make(op->type, name, args, op->call_type, f.get_contents());
+            if (changed_name || changed_args || !predicate.same_as(op->predicate)) {
+                return Call::make(op->type, name, args, op->call_type, f.get_contents(),
+                                  0, Buffer<>(), Parameter(), predicate);
             } else {
                 return op;
             }
