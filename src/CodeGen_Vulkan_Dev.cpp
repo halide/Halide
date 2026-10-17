@@ -29,6 +29,15 @@ namespace {  // anonymous
 
 // --
 
+Type vulkan_scalar_parameter_type(Type type) {
+    // OpTypeBool has no physical storage representation. Use UInt(32), which is
+    // available in core Vulkan; UInt(8) Uniform storage would require the optional
+    // SPV_KHR_8bit_storage extension and VulkanInt8 target feature.
+    return type.is_bool() ? UInt(32) : type;
+}
+
+// --
+
 class CodeGen_Vulkan_Dev : public CodeGen_GPU_Dev {
 public:
     CodeGen_Vulkan_Dev(Target target);
@@ -55,6 +64,10 @@ public:
 
     std::string api_unique_name() override {
         return "vulkan";
+    }
+
+    Type kernel_run_scalar_arg_type(Type type) const override {
+        return vulkan_scalar_parameter_type(type);
     }
 
 protected:
@@ -2801,7 +2814,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
                 builder.require_capability(SpvCapabilityUniformAndStorageBuffer16BitAccess);
             }
 
-            SpvId arg_type_id = builder.declare_type(arg.type);
+            Type storage_type = vulkan_scalar_parameter_type(arg.type);
+            SpvId arg_type_id = builder.declare_type(storage_type);
             param_struct_members.push_back(arg_type_id);
             scalar_arg_count++;
         } else {
@@ -2830,9 +2844,11 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
         // First, add decorations for each scalar arg
         for (const auto &arg : args) {
             if (!arg.is_buffer) {
+                Type storage_type = vulkan_scalar_parameter_type(arg.type);
+                param_member_offset = align_offset(param_member_offset, storage_type.bytes());
                 SpvBuilder::Literals param_offset_literals = {param_member_offset};
                 builder.add_struct_annotation(param_struct_type_id, param_member_index, SpvDecorationOffset, param_offset_literals);
-                param_member_offset += arg.type.bytes();
+                param_member_offset += storage_type.bytes();
                 param_member_index++;
             }
         }
@@ -2868,16 +2884,24 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
         uint32_t scalar_index = 0;
         for (const auto &arg : args) {
             if (!arg.is_buffer) {
-
-                SpvId arg_type_id = builder.declare_type(arg.type);
+                Type storage_type = vulkan_scalar_parameter_type(arg.type);
+                SpvId storage_type_id = builder.declare_type(storage_type);
                 SpvId access_index_id = builder.declare_constant(UInt(32), &scalar_index);
-                SpvId pointer_type_id = builder.declare_pointer_type(arg_type_id, SpvStorageClassUniform);
+                SpvId pointer_type_id = builder.declare_pointer_type(storage_type_id, SpvStorageClassUniform);
                 SpvFactory::Indices access_indices = {access_index_id};
                 SpvId access_chain_id = builder.declare_access_chain(pointer_type_id, param_pack_var_id, access_indices);
                 scalar_index++;
 
                 SpvId param_id = builder.reserve_id(SpvResultId);
-                builder.append(SpvFactory::load(arg_type_id, param_id, access_chain_id));
+                builder.append(SpvFactory::load(storage_type_id, param_id, access_chain_id));
+                if (arg.type.is_bool()) {
+                    uint32_t zero = 0;
+                    SpvId zero_id = builder.declare_constant(storage_type, &zero);
+                    SpvId bool_type_id = builder.declare_type(Bool());
+                    SpvId bool_param_id = builder.reserve_id(SpvResultId);
+                    builder.append(SpvFactory::integer_not_equal(bool_type_id, bool_param_id, param_id, zero_id));
+                    param_id = bool_param_id;
+                }
                 symbol_table.push(arg.name, {param_id, SpvStorageClassUniform});
             }
         }
