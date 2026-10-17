@@ -451,6 +451,15 @@ struct WildConst {
         return make_const_expr(val, type);
     }
 
+    // The matched value itself, no IR built. Integer constants only.
+    HALIDE_ALWAYS_INLINE
+    int64_t bound_const_int(MatcherState &state) const noexcept {
+        halide_scalar_value_t val;
+        Type type;
+        state.get_bound_const(i, val, type);
+        return val.u.i64;
+    }
+
     constexpr static bool foldable = true;
 
     [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, Type &ty, MatcherState &state) const noexcept {
@@ -487,6 +496,13 @@ struct Wild {
 
     HALIDE_ALWAYS_INLINE
     Expr make(MatcherState &state, Type type_hint) const {
+        return state.get_binding(i);
+    }
+
+    // The bound node itself. Unlike make() this doesn't even touch a reference
+    // count, which lets predicates inspect what matched for free.
+    HALIDE_ALWAYS_INLINE
+    const BaseExprNode *bound_node(MatcherState &state) const noexcept {
         return state.get_binding(i);
     }
 
@@ -547,6 +563,12 @@ struct IntLiteral {
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE bool match(const IntLiteral &b, MatcherState &state) const noexcept {
         return v == b.v;
+    }
+
+    // The literal value itself, no IR built.
+    HALIDE_ALWAYS_INLINE
+    int64_t bound_const_int(MatcherState &state) const noexcept {
+        return v;
     }
 
     HALIDE_ALWAYS_INLINE
@@ -2573,6 +2595,26 @@ std::ostream &operator<<(std::ostream &s, const CanProve<A, Prover> &op) {
     return s;
 }
 
+// Detects patterns that can hand back the node they matched without building
+// anything. The predicates below are restricted to these, which is what makes
+// them allocation-free: it is a compile error to ask about a derived expression
+// like min_diff(x, y + 1). Put the offset on the other side of the comparison
+// instead: min_diff(x, y) >= 1.
+template<typename A, typename = void>
+struct has_bound_node : std::false_type {};
+
+template<typename A>
+struct has_bound_node<A, std::void_t<decltype(std::declval<const A &>().bound_node(std::declval<MatcherState &>()))>>
+    : std::true_type {};
+
+// As has_bound_node, for terms whose constant reads out as a plain int64_t.
+template<typename A, typename = void>
+struct has_bound_const_int : std::false_type {};
+
+template<typename A>
+struct has_bound_const_int<A, std::void_t<decltype(std::declval<const A &>().bound_const_int(std::declval<MatcherState &>()))>>
+    : std::true_type {};
+
 template<typename A>
 struct IsFloat {
     struct pattern_tag {};
@@ -2605,6 +2647,60 @@ HALIDE_ALWAYS_INLINE auto is_float(A &&a) noexcept -> IsFloat<decltype(pattern_a
 template<typename A>
 std::ostream &operator<<(std::ostream &s, const IsFloat<A> &op) {
     s << "is_float(" << op.a << ")";
+    return s;
+}
+
+// Whether a matched expression is known to lie in the half-open range
+// [lo, hi), using only bounds the prover already has; nothing is simplified.
+// Used as in_range(y, 0, c0, this). The range is half-open so that a rule can
+// pass a matched constant as the end directly: lo and hi must be WildConsts or
+// integer literals (has_bound_const_int), so a folded bound such as
+// fold(c0 - 1) isn't accepted. Allocation-free: a is read as a raw bound node,
+// lo and hi as raw ints. Only an integer constant or a
+// variable with known constant bounds (or a broadcast of either) qualifies.
+// Anything else fails the predicate, so the rule simply doesn't fire.
+template<typename A, typename Lo, typename Hi, typename Prover>
+struct InRange {
+    struct pattern_tag {};
+    A a;
+    Lo lo;
+    Hi hi;
+    Prover *prover;
+
+    static_assert(has_bound_node<A>::value,
+                  "The first operand of in_range must be a wildcard, so that "
+                  "testing the predicate doesn't have to construct any IR.");
+    static_assert(has_bound_const_int<Lo>::value && has_bound_const_int<Hi>::value,
+                  "The range operands of in_range must be WildConsts or "
+                  "integer literals.");
+
+    constexpr static uint32_t binds = bindings<A>::mask | bindings<Lo>::mask | bindings<Hi>::mask;
+
+    // This rule is a boolean-valued predicate. Bools have type UIntImm.
+    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
+    constexpr static bool canonical = true;
+
+    constexpr static bool foldable = true;
+
+    [[nodiscard]] HALIDE_ALWAYS_INLINE bool make_folded_const(halide_scalar_value_t &val, Type &ty, MatcherState &state) const noexcept {
+        const BaseExprNode *node = a.bound_node(state);
+        val.u.u64 = prover->known_in_range(node, lo.bound_const_int(state), hi.bound_const_int(state));
+        ty = Bool(node->type.lanes());
+        return false;
+    }
+};
+
+template<typename A, typename Lo, typename Hi, typename Prover>
+HALIDE_ALWAYS_INLINE auto in_range(A &&a, Lo &&lo, Hi &&hi, Prover *p) noexcept
+    -> InRange<decltype(pattern_arg(a)), decltype(pattern_arg(lo)), decltype(pattern_arg(hi)), Prover> {
+    assert_is_lvalue_if_expr<A>();
+    return {pattern_arg(a), pattern_arg(lo), pattern_arg(hi), p};
+}
+
+template<typename A, typename Lo, typename Hi, typename Prover>
+std::ostream &operator<<(std::ostream &s, const InRange<A, Lo, Hi, Prover> &op) {
+    s << "in_range(" << op.a << ", " << op.lo << ", " << op.hi << ")";
     return s;
 }
 
