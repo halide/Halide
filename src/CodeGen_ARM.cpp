@@ -171,6 +171,7 @@ protected:
     Value *codegen_shuffle_indices(int bits, const std::vector<int> &indices);
     Value *codegen_whilelt(int total_lanes, int start, int end);
     void codegen_vector_reduce(const VectorReduce *, const Expr &) override;
+    bool codegen_matmul_vector_reduce(const VectorReduce *, const Expr &);
     bool codegen_dot_product_vector_reduce(const VectorReduce *, const Expr &);
     bool codegen_pairwise_vector_reduce(const VectorReduce *, const Expr &);
     bool codegen_across_vector_reduce(const VectorReduce *, const Expr &);
@@ -801,6 +802,15 @@ const ArmIntrinsic intrinsic_defs[] = {
     {nullptr, "sdot.v4i32.v16i8", Int(32, 4), "dot_product", {Int(32, 4), Int(8, 16), Int(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
     {nullptr, "udot.v4i32.v16i8", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
     {nullptr, "udot.v4i32.v16i8", UInt(32, 4), "dot_product", {UInt(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
+    // USDOT - Mixed-sign dot products (FEAT_I8MM). The unsigned operand comes first.
+    {nullptr, "usdot.v2i32.v8i8", Int(32, 2), "dot_product", {Int(32, 2), UInt(8, 8), Int(8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
+    {nullptr, "usdot.v4i32.v16i8", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), Int(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
+
+    // 2x2x8 8-bit matrix multiply-accumulate (FEAT_I8MM).
+    {nullptr, "smmla.v4i32.v16i8", Int(32, 4), "matmul_2x2x8", {Int(32, 4), Int(8, 16), Int(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
+    {nullptr, "ummla.v4i32.v16i8", Int(32, 4), "matmul_2x2x8", {Int(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
+    {nullptr, "ummla.v4i32.v16i8", UInt(32, 4), "matmul_2x2x8", {UInt(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
+    {nullptr, "usmmla.v4i32.v16i8", Int(32, 4), "matmul_2x2x8", {Int(32, 4), UInt(8, 16), Int(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
     // SVE versions.
     {nullptr, "sdot.nxv4i32", Int(32, 4), "dot_product", {Int(32, 4), Int(8, 16), Int(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate | ArmIntrinsic::SveRequired},
     {nullptr, "udot.nxv4i32", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate | ArmIntrinsic::SveRequired},
@@ -2650,6 +2660,9 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         return;
     }
 
+    if (codegen_matmul_vector_reduce(op, init)) {
+        return;
+    }
     if (codegen_dot_product_vector_reduce(op, init)) {
         return;
     }
@@ -2660,6 +2673,271 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         return;
     }
     CodeGen_CPU::codegen_vector_reduce(op, init);
+}
+
+// For each lane of a vector, find the expression and lane that it is a copy
+// of, looking through shuffles and broadcasts.
+void find_lane_sources(const Expr &e, vector<pair<Expr, int>> &sources) {
+    if (const Shuffle *s = e.as<Shuffle>()) {
+        vector<pair<Expr, int>> inputs;
+        for (const Expr &v : s->vectors) {
+            find_lane_sources(v, inputs);
+        }
+        for (int i : s->indices) {
+            sources.push_back(inputs[i]);
+        }
+    } else if (const Broadcast *b = e.as<Broadcast>()) {
+        vector<pair<Expr, int>> inputs;
+        find_lane_sources(b->value, inputs);
+        for (int i = 0; i < b->lanes; i++) {
+            sources.insert(sources.end(), inputs.begin(), inputs.end());
+        }
+    } else {
+        for (int i = 0; i < e.type().lanes(); i++) {
+            sources.emplace_back(e, i);
+        }
+    }
+}
+
+// Whether each lane of the result of a call depends only on the same lane of
+// its arguments.
+bool is_lane_wise(const Call *op) {
+    static const Call::IntrinsicOp lane_wise_intrinsics[] = {
+        Call::abs,
+        Call::absd,
+        Call::bitwise_and,
+        Call::bitwise_not,
+        Call::bitwise_or,
+        Call::bitwise_xor,
+        Call::count_leading_zeros,
+        Call::count_trailing_zeros,
+        Call::div_round_to_zero,
+        Call::halving_add,
+        Call::halving_sub,
+        Call::mod_round_to_zero,
+        Call::mul_shift_right,
+        Call::popcount,
+        Call::rounding_halving_add,
+        Call::rounding_mul_shift_right,
+        Call::rounding_shift_left,
+        Call::rounding_shift_right,
+        Call::saturating_add,
+        Call::saturating_cast,
+        Call::saturating_sub,
+        Call::shift_left,
+        Call::shift_right,
+        Call::widen_right_add,
+        Call::widen_right_mul,
+        Call::widen_right_sub,
+        Call::widening_add,
+        Call::widening_mul,
+        Call::widening_shift_left,
+        Call::widening_shift_right,
+        Call::widening_sub,
+    };
+    for (const Expr &arg : op->args) {
+        if (!arg.type().is_scalar() && arg.type().lanes() != op->type.lanes()) {
+            return false;
+        }
+    }
+    for (Call::IntrinsicOp i : lane_wise_intrinsics) {
+        if (op->is_intrinsic(i)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Returns an expression equal to Shuffle::make({e}, indices), with the shuffle
+// pushed down through lane-wise operations (casts, arithmetic, selects and
+// lane-wise intrinsics) and merged with the shuffles and broadcasts below
+// them. Shuffles of the same lanes of the same values give equal results, so
+// this can be used to check which lanes of e are copies of each other, even
+// when lane-wise operations are applied after the copying. It also computes
+// any lane-wise operations once per selected lane, rather than once per lane
+// of e.
+Expr shuffle_lanes(const Expr &e, const vector<int> &indices) {
+    const int lanes = (int)indices.size();
+    auto recurse = [&](const Expr &x) {
+        return x.type().is_scalar() ? x : shuffle_lanes(x, indices);
+    };
+    if (e.type().is_scalar()) {
+        return lanes == 1 ? e : Broadcast::make(e, lanes);
+    } else if (e.as<Shuffle>() || e.as<Broadcast>()) {
+        // Gather the distinct values that the selected lanes are copies of.
+        vector<pair<Expr, int>> sources;
+        find_lane_sources(e, sources);
+        vector<Expr> leaves;
+        vector<int> leaf_start, leaf_indices;
+        int total_lanes = 0;
+        for (int i : indices) {
+            const auto &[leaf, lane] = sources[i];
+            size_t l = 0;
+            while (l < leaves.size() && !leaves[l].same_as(leaf) && !equal(leaves[l], leaf)) {
+                l++;
+            }
+            if (l == leaves.size()) {
+                leaves.push_back(leaf);
+                leaf_start.push_back(total_lanes);
+                total_lanes += leaf.type().lanes();
+            }
+            leaf_indices.push_back(leaf_start[l] + lane);
+        }
+        if (leaves.size() == 1) {
+            return shuffle_lanes(leaves[0], leaf_indices);
+        }
+        return Shuffle::make(leaves, leaf_indices);
+    } else if (const Cast *op = e.as<Cast>()) {
+        return Cast::make(op->type.with_lanes(lanes), recurse(op->value));
+    } else if (const Reinterpret *op = e.as<Reinterpret>();
+               op && op->value.type().lanes() == op->type.lanes()) {
+        return Reinterpret::make(op->type.with_lanes(lanes), recurse(op->value));
+    } else if (const Not *op = e.as<Not>()) {
+        return Not::make(recurse(op->a));
+    } else if (const Select *op = e.as<Select>()) {
+        return Select::make(recurse(op->condition), recurse(op->true_value), recurse(op->false_value));
+    } else if (const Call *op = e.as<Call>(); op && is_lane_wise(op)) {
+        vector<Expr> args;
+        args.reserve(op->args.size());
+        for (const Expr &arg : op->args) {
+            args.push_back(recurse(arg));
+        }
+        return Call::make(op->type.with_lanes(lanes), op->name, args, op->call_type,
+                          op->func, op->value_index, op->image, op->param);
+    }
+
+    auto binary = [&](auto *op) -> Expr {
+        using T = std::remove_const_t<std::remove_pointer_t<decltype(op)>>;
+        return T::make(recurse(op->a), recurse(op->b));
+    };
+    switch (e.node_type()) {
+    case IRNodeType::Add:
+        return binary(e.as<Add>());
+    case IRNodeType::Sub:
+        return binary(e.as<Sub>());
+    case IRNodeType::Mul:
+        return binary(e.as<Mul>());
+    case IRNodeType::Div:
+        return binary(e.as<Div>());
+    case IRNodeType::Mod:
+        return binary(e.as<Mod>());
+    case IRNodeType::Min:
+        return binary(e.as<Min>());
+    case IRNodeType::Max:
+        return binary(e.as<Max>());
+    case IRNodeType::EQ:
+        return binary(e.as<EQ>());
+    case IRNodeType::NE:
+        return binary(e.as<NE>());
+    case IRNodeType::LT:
+        return binary(e.as<LT>());
+    case IRNodeType::LE:
+        return binary(e.as<LE>());
+    case IRNodeType::GT:
+        return binary(e.as<GT>());
+    case IRNodeType::GE:
+        return binary(e.as<GE>());
+    case IRNodeType::And:
+        return binary(e.as<And>());
+    case IRNodeType::Or:
+        return binary(e.as<Or>());
+    default:
+        break;
+    }
+
+    // Anything else is opaque.
+    bool identity = lanes == e.type().lanes();
+    for (int i = 0; identity && i < lanes; i++) {
+        identity = indices[i] == i;
+    }
+    return identity ? e : Shuffle::make({e}, indices);
+}
+
+// Given a 32-lane vector with lanes indexed as 16 * outer + 8 * inner + k,
+// if it does not depend on the inner index (stride == 8) or the outer index
+// (stride == 16), return the 16 lanes where that index is zero. Otherwise,
+// return an undefined Expr.
+Expr tile_rows(const Expr &e, int stride) {
+    vector<int> lo, hi;
+    for (int i = 0; i < 32; i++) {
+        if ((i & stride) == 0) {
+            lo.push_back(i);
+            hi.push_back(i + stride);
+        }
+    }
+    Expr rows = shuffle_lanes(e, lo);
+    return equal(rows, shuffle_lanes(e, hi)) ? rows : Expr();
+}
+
+bool CodeGen_ARM::codegen_matmul_vector_reduce(const VectorReduce *op, const Expr &init) {
+    // smmla, ummla and usmmla compute a 2x2 tile of 32-bit dot products of
+    // 8-bit values:
+    //   acc[2 * i + j] += sum_{k < 8} a[8 * i + k] * b[8 * j + k]
+    // where a and b each hold two rows of eight values. Look for a 32 -> 4
+    // lane sum of products where lane 16 * i + 8 * j + k of one operand only
+    // depends on i and k, and the same lane of the other operand only depends
+    // on j and k. Everything else is left to the dot product patterns.
+    if (op->op != VectorReduce::Add ||
+        op->type.lanes() != 4 ||
+        op->value.type().lanes() != 32 ||
+        !target.has_feature(Target::ARMI8MM) ||
+        target.bits != 64 ||
+        target_vscale() != 0) {
+        return false;
+    }
+
+    static const Expr patterns[] = {
+        i32(widening_mul(wild_i8x_, wild_i8x_)),
+        i32(widening_mul(wild_u8x_, wild_u8x_)),
+        u32(widening_mul(wild_u8x_, wild_u8x_)),
+        i32(widening_mul(wild_u8x_, wild_i8x_)),
+        i32(widening_mul(wild_i8x_, wild_u8x_)),
+    };
+
+    vector<Expr> matches;
+    for (const Expr &p : patterns) {
+        if (!expr_match(p, op->value, matches)) {
+            continue;
+        }
+
+        // One operand's rows are the tile's rows, and the other's are its
+        // columns. Each is a pair of rows of eight values in a 16-lane vector.
+        Expr a = tile_rows(matches[0], 8), b = tile_rows(matches[1], 16);
+        if (!a.defined() || !b.defined()) {
+            a = tile_rows(matches[1], 8);
+            b = tile_rows(matches[0], 16);
+        }
+        if (!a.defined() || !b.defined()) {
+            return false;
+        }
+
+        Expr acc = init.defined() ? init : make_zero(op->type);
+
+        // usmmla needs the unsigned operand first. Swapping the operands
+        // computes the transpose of the tile, so transpose the accumulator on
+        // the way in and the result on the way out.
+        const vector<int> transpose = {0, 2, 1, 3};
+        bool transposed = a.type().is_int() && b.type().is_uint();
+        if (transposed) {
+            std::swap(a, b);
+            acc = Shuffle::make({acc}, transpose);
+        }
+
+        Value *v = call_overloaded_intrin(op->type, "matmul_2x2x8", {acc, a, b});
+        if (!v) {
+            return false;
+        }
+        if (transposed) {
+            string n = unique_name('t');
+            sym_push(n, v);
+            v = codegen(Shuffle::make({Variable::make(op->type, n)}, transpose));
+            sym_pop(n);
+        }
+        value = v;
+        return true;
+    }
+
+    return false;
 }
 
 bool CodeGen_ARM::codegen_dot_product_vector_reduce(const VectorReduce *op, const Expr &init) {
@@ -2686,6 +2964,9 @@ bool CodeGen_ARM::codegen_dot_product_vector_reduce(const VectorReduce *op, cons
         {VectorReduce::Add, 4, i64(widening_mul(wild_i16x_, wild_i16x_)), "dot_product", Target::SVE2},
         {VectorReduce::Add, 4, i64(widening_mul(wild_u16x_, wild_u16x_)), "dot_product", Target::SVE2},
         {VectorReduce::Add, 4, u64(widening_mul(wild_u16x_, wild_u16x_)), "dot_product", Target::SVE2},
+        // Mixed-sign dot products.
+        {VectorReduce::Add, 4, i32(widening_mul(wild_u8x_, wild_i8x_)), "dot_product", Target::ARMI8MM},
+        {VectorReduce::Add, 4, i32(widening_mul(wild_i8x_, wild_u8x_)), "dot_product", Target::ARMI8MM},
         // A sum is the same as a dot product with a vector of ones, and this appears to
         // be a bit faster.
         {VectorReduce::Add, 4, i32(wild_i8x_), "dot_product", Target::ARMDotProd, {1}},
@@ -2726,7 +3007,14 @@ bool CodeGen_ARM::codegen_dot_product_vector_reduce(const VectorReduce *op, cons
                 i = make_zero(op->type);
             }
 
-            if (const Shuffle *s = matches[0].as<Shuffle>()) {
+            if (matches[0].type() != matches[1].type()) {
+                // The mixed-sign dot product (usdot) takes its unsigned
+                // operand first, so we can't move a broadcast as below. LLVM
+                // matches a broadcast unsigned operand to the indexed sudot.
+                if (matches[0].type().is_int()) {
+                    std::swap(matches[0], matches[1]);
+                }
+            } else if (const Shuffle *s = matches[0].as<Shuffle>()) {
                 if (s->is_broadcast()) {
                     // LLVM wants the broadcast as the second operand for the broadcasting
                     // variant of udot/sdot.
@@ -2989,6 +3277,9 @@ string CodeGen_ARM::mattrs() const {
     }
     if (target.has_feature(Target::ARMDotProd)) {
         attrs.emplace_back("+dotprod");
+    }
+    if (target.has_feature(Target::ARMI8MM)) {
+        attrs.emplace_back("+i8mm");
     }
     if (target.bits == 32) {
         if (target.has_feature(Target::ARMv7s)) {
