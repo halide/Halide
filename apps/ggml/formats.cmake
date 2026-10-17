@@ -15,7 +15,8 @@
 # laid out alike.
 #
 # `ops`: codec (quantize + dequantize of a row, checked bit-exact against
-# GGML, also with the scaled codes kernels may pick: checked variant only),
+# GGML, also with the scaled codes kernels may pick: checked variant only;
+# activation-only types such as q8_1 have just this),
 # vec_dot and mul_mat (kernels/matmul.cpp with weight=type op=<op>, one
 # library per act in `acts`). An act is <storage>[:<compute>]: f32:q8_0 takes
 # f32 activations and quantizes them to q8_0 inside the kernel (as GGML's CPU
@@ -27,7 +28,8 @@
 set(GGML_FORMATS
     "q4_0 codec,vec_dot,mul_mat q8_0,f16,f32,f32:q8_0"
     "q8_0 codec,vec_dot q8_0,f16,f32"
-    "q4_1 codec"
+    "q8_0 mul_mat q8_0,f32:q8_0"
+    "q4_1 codec,vec_dot,mul_mat q8_1,f16,f32,f32:q8_1"
     "q8_1 codec"
     "q4_0.i4.4x4 codec,mul_mat q8_0,f32:q8_0,f32:q8_0.4x4"
     "q4_0.i4.4x8 codec,mul_mat q8_0,f32:q8_0,f32:q8_0.4x8"

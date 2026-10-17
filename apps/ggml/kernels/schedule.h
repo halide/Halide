@@ -101,6 +101,116 @@ inline Stage tile_out(Func out, int st, Func dot, Expr cond, Tiles ts, const RDo
     return cond.defined() ? dot.update().specialize(cond) : dot.update();
 }
 
+// The terms of e as a sum.
+inline void terms(const Expr &e, std::vector<Expr> &ts) {
+    if (const auto *a = e.as<Internal::Add>()) {
+        terms(a->a, ts);
+        terms(a->b, ts);
+    } else {
+        ts.push_back(e);
+    }
+}
+
+// Does e (through its Muls and Adds, as distribute() sees it) multiply a sum?
+inline bool product_over_sum(const Expr &e) {
+    if (const auto *a = e.as<Internal::Add>()) return product_over_sum(a->a) || product_over_sum(a->b);
+    const auto *m = e.as<Internal::Mul>();
+    return m && (m->a.as<Internal::Add>() || m->b.as<Internal::Add>() || product_over_sum(m->a) || product_over_sum(m->b));
+}
+
+inline bool calls_any(const Expr &e, const std::vector<Func> &fs) {
+    bool found = false;
+    Internal::visit_with(e, [&](auto *self, const Internal::Call *c) {
+        for (const Func &f : fs) {
+            found |= c->name == f.name();
+        }
+        self->visit_base(c);
+    });
+    return found;
+}
+
+// Does every term of e call one of fs (no product over a sum to expand)?
+inline bool all_terms_call(Expr e, const std::vector<Func> &fs) {
+    e = Internal::substitute_in_all_lets(e);
+    std::vector<Expr> ts;
+    terms(e, ts);
+    return !product_over_sum(e) && std::all_of(ts.begin(), ts.end(), [&](const Expr &t) { return calls_any(t, fs); });
+}
+
+// Splits f's reduction into the part with the calls to fs and the rest: f
+// becomes their sum, each a reduction of its own (so the invariants of each
+// then hoist). Returns {f, undefined} if every term calls fs. It is the
+// hoist_invariants({fs}) proposed in the review of distribute()
+// (halide/Halide#9508), here distribute() then hoist_invariants() (the only
+// use of distribute(): swap it for that).
+inline std::pair<Func, Func> split_on(Func f, const std::vector<Func> &fs) {
+    Expr v = Internal::substitute_in_all_lets(f.update_value());
+    const auto *a = v.as<Internal::Add>();
+    const auto *self = a ? a->a.as<Internal::Call>() : nullptr;
+    if (!self || self->name != f.name()) throw std::invalid_argument("split_on: not a sum reduction: " + f.name());
+    if (all_terms_call(a->b, fs)) return {f, Func()};
+    if (product_over_sum(a->b)) f.update().distribute();
+    Func with, rest;
+    for (Func h : f.update().hoist_invariants()) {
+        Func &part = calls_any(h.update_value(), fs) ? with : rest;
+        if (part.defined()) throw std::invalid_argument("split_on: several terms of each part: " + f.name());
+        part = h;
+    }
+    return {with, rest};
+}
+
+// A reduction's value read from a field its operand's format stores (q8_1's
+// block sums): encode reads the field (computed offline, in the field's
+// precision), decode takes it as read.
+struct Stored {
+    Func field;
+    std::vector<Func> encode(const std::vector<Func> &) const {
+        return {field};
+    }
+    std::vector<Func> decode(const std::vector<Func> &e) const {
+        return e;
+    }
+};
+
+// The weight's decode with terms free of its codes (q4_1's codes * d + min):
+// dot (on out's stage st) splits into the part with the codes, returned for
+// the recipes (whose codes' dot then is integer as for q4_0), and the rest,
+// per block the code-free factor (the min) times the block's sum of act
+// values: `sum` (the act's stored sums, q8_1's s) where defined, else summed.
+// Otherwise returns dot.
+inline Func affine(Func out, int st, Func dot, const RDom &r, Func sum, const std::vector<ApproximationResult> &rs) {
+    std::vector<Func> floats, codes;
+    for (Func f : rs[0].decode_funcs()) {
+        (f.type().is_float() ? floats : codes).push_back(f);
+    }
+    Func w = rs[0].replacement, probe;
+    probe(w.args()) = w(w.args());
+    Stage(probe).eager_inline(floats);
+    if (all_terms_call(probe.value(), codes)) return dot;
+    dot.update().eager_inline(floats);
+    auto [with, rest] = split_on(dot, codes);
+    // per block, the tile's outputs at once (n vectorized, m unrolled: the
+    // tiles are constant)
+    LoopLevel at = tile_at(out, st);
+    Var n = dot.args()[0], m = dot.args()[1], u("u");
+    Func per = rest.update().rfactor(r.y, u), s = per.update().hoist_invariants()[0];
+    Expr sv = s.update_value();
+    if (sum.defined() && sv.as<Internal::Add>()->b.as<Internal::Call>()) {
+        Func field("stored_sum");
+        field(n, m, u) = sum(u, m);
+        s.approximate_by(Stored{field}, {per});
+    } else {
+        s.update().eager_inline(decoders(rs));
+        s.compute_at(rest, r.y).unroll(n).unroll(m).update().atomic().vectorize(r.x).unroll(n).unroll(m);
+    }
+    for (Func f : {dot, rest, per}) {
+        f.compute_at(f.name() == per.name() ? LoopLevel(rest, r.y) : at).vectorize(n).unroll(m);
+        f.update().vectorize(n).unroll(m);
+    }
+    rest.update().reorder(n, m, r.y);
+    return with;
+}
+
 // The weight quantized in blocks: per block (r.y) and output a dot of the
 // codes (when the activation is quantized alike, an int32 sdot: 4 products per
 // lane; otherwise f32) times the hoisted scales, accumulated per lane in f32
@@ -261,14 +371,15 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
 }
 
 // The N = M = 1 schedule (GGML's vec_dot). Activations encoded inside the
-// pipeline (`staged`) are encoded once, up front.
+// pipeline (`staged`) are encoded once, up front. sums[i]: the stored block
+// sums of dots[i]'s act, if its format has them.
 inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, const std::vector<int> &blocks, const std::vector<ApproximationResult> &rs,
-                    const std::vector<Func> &staged, const Target &t) {
+                    const std::vector<Func> &staged, const std::vector<Func> &sums, const Target &t) {
     for (Func e : staged) {
         e.compute_root();
     }
     out.output_buffer().dim(0).set_bounds(0, 1).dim(1).set_bounds(0, 1);  // N = M = 1
-    blocked(out, 0, dots[0], Expr(), {}, r, blocks[1] == blocks[0], rs, t);
+    blocked(out, 0, affine(out, 0, dots[0], r, sums[0], rs), Expr(), {}, r, blocks[1] == blocks[0], rs, t);
 }
 
 // An encoder computed per record (each block of values), vectorized: the
@@ -356,19 +467,24 @@ inline void metal_rows(Func out, Func dot, const RDom &r, const std::vector<Appr
 // those tiles on by-element sdot; else 4 x 4 on sdot), in tasks of up to 32
 // x 32 outputs, fewer rows where that balances the threads (small N);
 // gemv (M = 1) is the vec_dot recipe on row pairs sharing each activation
-// block (single rows for N = 1). Edge tiles shift inwards: any N, M at least
-// the tile's. With act records of r = blocks[2] > 1 rows, out's first update
+// block (single rows for N = 1). Affine weights split first, as in vec_dot.
+// Edge tiles shift inwards: any N, M at least the tile's. With act records of r = blocks[2] > 1 rows, out's first update
 // is the rows in whole records (dots[1]) on gemm tiles starting on a record,
 // its second the others (dots[0], < r rows) on gemv tiles.
-inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const std::vector<int> &blocks, const std::vector<ApproximationResult> &rs,
-                    const std::vector<Func> &staged, const Target &t) {
+inline void mul_mat(Func out, const std::vector<Func> &reductions, const RDom &r, const std::vector<int> &blocks, const std::vector<ApproximationResult> &rs,
+                    const std::vector<Func> &staged, const std::vector<Func> &sums, const Target &t) {
+    bool integer = blocks[1] == blocks[0], whole = blocks[2] > 1;
+    std::vector<Func> dots = reductions;
     if (t.has_feature(Target::Metal)) {
         if (!staged.empty() || blocks[2] > 1 || blocks[3] > 1) throw std::invalid_argument("metal: act formats stored as computed, weights one row per record");
+        if (affine(out, 0, dots[0], r, sums[0], rs).name() != dots[0].name()) throw std::invalid_argument("metal: weights decoded as codes times scales");
         metal_rows(out, dots[0], r, rs);
         return;
     }
+    for (size_t i = 0; i < dots.size(); i++) {
+        dots[i] = affine(out, i ? 1 : 2 * whole, dots[i], r, sums[i], rs);
+    }
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
-    bool integer = blocks[1] == blocks[0], whole = blocks[2] > 1;
     Expr Mr = M / blocks[2] * blocks[2];
     for (size_t i = 0; i < staged.size(); i++) {
         // staged[i] encodes dots[i]'s act. Records in tasks of up to 16 chunks
