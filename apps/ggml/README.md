@@ -189,6 +189,19 @@ promises no more than GGML does: K is a whole number of blocks (GGML asserts
 guard) and no host alignment (q4_0/q8_0 rows start on 2-byte boundaries).
 `vec_dot` goes through a GGML-ABI adapter.
 
+Affine formats (`q4_1`: codes * d + min) use the same algorithm and recipes.
+Before the recipes, `affine` (`schedule.h`) inlines the weight's float decode
+into `dot` and splits it on the weight's codes (`split_on`, the one use of
+`Stage::distribute()`, standing in for the proposed
+`hoist_invariants({funcs})`). The codes' part runs the recipes above, as q4_0
+does (int32 sdot times hoisted d_w * d_a). The rest, per block, is the min times
+the block's act sum, in its own reduction computed at the output tile. An act
+format can store that sum: q8_1 stores `s = fp16(d * sum(qs))` (`Format::sum`, a
+decode of the scheme's `sum` port, severed with `out`), and then the rest reads
+it (`approximate_by(Stored{field})`), as GGML's `vec_dot_q4_1_q8_1` does. For
+other acts it sums the act's values. Formats without such terms (q4_0, q8_0) are
+not split. q8_1 is activation-only (a codec row; q4_1's acts).
+
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds
 `GGML_BENCH_FEATURES`, i.e. `no_asserts no_bounds_query`; what gets timed).
