@@ -1,0 +1,5 @@
+node_modules
+/src-tauri/*
+!/src-tauri/tauri.conf.json
+.vscode
+*.yaml
