@@ -81,6 +81,9 @@ struct Reference {
     std::vector<double> out;      // [m * ns.size() + n]
 };
 Reference reference(const Inputs &in, const std::vector<float> &a_f32);
+// GGML's decoding of K values of type t: its to_float, or for the types it has
+// none for (activation-only q8_1, q8_K) their block layouts.
+void to_float(ggml_type t, const uint8_t *p, float *out, int64_t K);
 // max over sampled outputs of |got - ref| / tolerance; <= 1 passes.
 double error_ratio(const Inputs &in, const Reference &ref, const Precision &p, const float *got);
 
