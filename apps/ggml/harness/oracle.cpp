@@ -34,10 +34,8 @@ std::vector<float> decode(ggml_type t, const uint8_t *p, const std::vector<int64
     for (size_t i = 0; i < rows.size(); i++) {
         if (t == GGML_TYPE_F32) {
             std::memcpy(&out[i * K], p + rows[i] * rs, K * sizeof(float));
-        } else if (t == GGML_TYPE_Q8_1 || t == GGML_TYPE_Q8_K) {
-            decode_q8(t, p + rows[i] * rs, &out[i * K], K);
         } else {
-            ggml_get_type_traits(t)->to_float(p + rows[i] * rs, &out[i * K], K);
+            to_float(t, p + rows[i] * rs, &out[i * K], K);
         }
     }
     return out;
@@ -77,6 +75,14 @@ std::vector<double> requant_err(const float *x, int64_t K, ggml_type t, int64_t 
 }
 
 }  // namespace
+
+void to_float(ggml_type t, const uint8_t *p, float *out, int64_t K) {
+    if (t == GGML_TYPE_Q8_1 || t == GGML_TYPE_Q8_K) {
+        decode_q8(t, p, out, K);
+    } else {
+        ggml_get_type_traits(t)->to_float(p, out, K);
+    }
+}
 
 Reference reference(const Inputs &in, const std::vector<float> &a_f32) {
     int64_t K = in.s.K;

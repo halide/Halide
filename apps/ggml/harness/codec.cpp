@@ -1,5 +1,5 @@
 // The codec op: every format's Halide quantize/dequantize against GGML's
-// reference quantizer and to_float, bitwise, on N(0, 1) rows whose first
+// reference quantizer and to_float (for q8_1, which has none: d * qs), bitwise, on N(0, 1) rows whose first
 // blocks are adversarial (signed zeros, ties, constants, tiny and huge
 // values). inf/NaN inputs are undefined behavior in GGML's reference and are
 // not tested. Also checked: the same with the scaled codes kernels may pick
@@ -73,6 +73,20 @@ std::string first_diff(const void *a, const void *b, size_t n, size_t block_byte
     return "";
 }
 
+// ggml_quantize_chunk lacks GGML's activation-only types (q8_1).
+bool chunked(ggml_type t) {
+    return t != GGML_TYPE_Q8_1;
+}
+
+// GGML's reference quantizer of R rows of K values.
+void quantize_ref(ggml_type t, const float *x, uint8_t *dst, int64_t R, int64_t K) {
+    if (chunked(t)) {
+        ggml_quantize_chunk(t, x, dst, 0, R, K, nullptr);
+    } else {
+        ggml_get_type_traits(t)->from_float_ref(x, dst, R * K);
+    }
+}
+
 }  // namespace
 
 std::vector<CodecResult> run_codecs(const std::vector<int64_t> &Ks, const std::vector<std::string> &filters, bool check, int rounds, double min_ms) {
@@ -101,8 +115,8 @@ std::vector<CodecResult> run_codecs(const std::vector<int64_t> &Ks, const std::v
                 v = normal(rng);
             adversarial(x.data(), K);
             std::vector<uint8_t> q(bytes), ref(bytes);
-            ggml_quantize_chunk(t, x.data(), ref.data(), 0, R, K, nullptr);
-            ggml_get_type_traits(t)->to_float(ref.data(), ref_y.data(), K * R);
+            quantize_ref(t, x.data(), ref.data(), R, K);
+            to_float(t, ref.data(), ref_y.data(), K * R);
             if (fs.rows > 1 || fs.soa) {
                 std::vector<uint8_t> aos = ref, live;
                 if (!relayout(fs, t, aos.data(), ref.data(), R, K)) {
@@ -143,11 +157,11 @@ std::vector<CodecResult> run_codecs(const std::vector<int64_t> &Ks, const std::v
                 }
                 if (!check) {
                     if (quant) {
-                        es.push_back({"ggml", lambda("quantize_chunk", [&] { ggml_quantize_chunk(t, x.data(), q.data(), 0, R, K, nullptr); }), ""});
+                        es.push_back({"ggml", lambda(chunked(t) ? "quantize_chunk" : "from_float_ref", [&] { quantize_ref(t, x.data(), q.data(), R, K); }), ""});
                         if (auto from = ggml_get_type_traits_cpu(t)->from_float) {
                             es.push_back({"ggml", lambda("from_float", [&, from] { from(x.data(), q.data(), K * R); }), ""});
                         }
-                    } else {
+                    } else if (ggml_get_type_traits(t)->to_float) {
                         es.push_back({"ggml", lambda("to_float", [&] { ggml_get_type_traits(t)->to_float(ref.data(), y.data(), K * R); }), ""});
                     }
                 }
@@ -177,7 +191,7 @@ std::vector<CodecResult> run_codecs(const std::vector<int64_t> &Ks, const std::v
                     aos[i * bs + j] = (uint8_t)((i * (bs - 2) + j - 2) & 255);
             }
             std::vector<float> y(K * R), ref_y(K * R);
-            ggml_get_type_traits(t)->to_float(aos.data(), ref_y.data(), K * R);
+            to_float(t, aos.data(), ref_y.data(), K * R);
             if (!relayout(fs, t, aos.data(), q.data(), R, K)) continue;
             std::vector<int64_t> ye{K}, qe{nb};
             if (R > 1) ye.push_back(R), qe = {nb, R / fs.rows};

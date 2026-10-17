@@ -204,12 +204,13 @@ int main(int argc, char **argv) {
         }
     } else {
         for (const auto &n : o.types) {
+            // activation-only types (q8_1): their codecs only
             ggml_type t = type_named(n);
-            if (t == GGML_TYPE_COUNT || !weight_type_ok(t)) {
+            if (t == GGML_TYPE_COUNT || (!weight_type_ok(t) && o.ops != GQ_codec)) {
                 fprintf(stderr, "unsupported weight type %s\n", n.c_str());
                 return 2;
             }
-            wtypes.push_back(t);
+            if (weight_type_ok(t)) wtypes.push_back(t);
         }
     }
 
