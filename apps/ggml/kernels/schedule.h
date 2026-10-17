@@ -159,26 +159,9 @@ inline std::pair<Func, Func> split_on(Func f, const std::vector<Func> &fs) {
     return {with, rest};
 }
 
-// A reduction's value read from a field its operand's format stores (q8_1's
-// block sums): encode reads the field (computed offline, in the field's
-// precision), decode takes it as read.
-struct Stored {
-    Func field;
-    std::vector<Func> encode(const std::vector<Func> &) const {
-        return {field};
-    }
-    std::vector<Func> decode(const std::vector<Func> &e) const {
-        return e;
-    }
-};
-
-// The weight's decode with terms free of its codes (q4_1's codes * d + min):
-// dot (on out's stage st) splits into the part with the codes, returned for
-// the recipes (whose codes' dot then is integer as for q4_0), and the rest,
-// per block the code-free factor (the min) times the block's sum of act
-// values: `sum` (the act's stored sums, q8_1's s) where defined, else summed.
-// Otherwise returns dot.
-inline Func affine(Func out, int st, Func dot, const RDom &r, Func sum, const std::vector<ApproximationResult> &rs) {
+// Does the weight's decode have terms free of its codes (q4_1's codes * d +
+// min)?
+inline bool affine(const std::vector<ApproximationResult> &rs) {
     std::vector<Func> floats, codes;
     for (Func f : rs[0].decode_funcs()) {
         (f.type().is_float() ? floats : codes).push_back(f);
@@ -186,29 +169,36 @@ inline Func affine(Func out, int st, Func dot, const RDom &r, Func sum, const st
     Func w = rs[0].replacement, probe;
     probe(w.args()) = w(w.args());
     Stage(probe).eager_inline(floats);
-    if (all_terms_call(probe.value(), codes)) return dot;
-    dot.update().eager_inline(floats);
-    auto [with, rest] = split_on(dot, codes);
-    // per block, the tile's outputs at once (n vectorized, m unrolled: the
-    // tiles are constant)
-    LoopLevel at = tile_at(out, st);
-    Var n = dot.args()[0], m = dot.args()[1], u("u");
-    Func per = rest.update().rfactor(r.y, u), s = per.update().hoist_invariants()[0];
-    Expr sv = s.update_value();
-    if (sum.defined() && sv.as<Internal::Add>()->b.as<Internal::Call>()) {
-        Func field("stored_sum");
-        field(n, m, u) = sum(u, m);
-        s.approximate_by(Stored{field}, {per});
+    return !all_terms_call(probe.value(), codes);
+}
+
+// blk's per-block dot (r.y rfactored to a pure var) with the decoders inlined
+// and the scales hoisted: returns the dot of the codes (int32 if `integer`).
+// Affine weights first split on the weight's codes, the rest returned in
+// `rest` (else undefined): the code-free factor (the min) times the block's
+// act sum, of its codes (int32) if `integer`, else of its values.
+inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool integer, Func &rest) {
+    Func codes;
+    rest = Func();
+    if (!affine(rs)) {
+        blk.update().eager_inline(decoders(rs));
+        codes = blk.update().hoist_invariants()[0];
     } else {
-        s.update().eager_inline(decoders(rs));
-        s.compute_at(rest, r.y).unroll(n).unroll(m).update().atomic().vectorize(r.x).unroll(n).unroll(m);
+        std::vector<Func> floats, ints, wcodes;
+        for (size_t i = 0; i < rs.size(); i++) {
+            for (Func f : rs[i].decode_funcs()) {
+                (f.type().is_float() ? floats : ints).push_back(f);
+                if (!i && !f.type().is_float()) wcodes.push_back(f);
+            }
+        }
+        blk.update().eager_inline(floats);
+        std::tie(codes, rest) = split_on(blk, wcodes);
+        for (Func f : {codes, rest}) {
+            f.update().eager_inline(ints);
+        }
+        if (integer) rest = rest.change_type(Int(32));
     }
-    for (Func f : {dot, rest, per}) {
-        f.compute_at(f.name() == per.name() ? LoopLevel(rest, r.y) : at).vectorize(n).unroll(m);
-        f.update().vectorize(n).unroll(m);
-    }
-    rest.update().reorder(n, m, r.y);
-    return with;
+    return integer ? codes.change_type(Int(32)) : codes;
 }
 
 // The weight quantized in blocks: per block (r.y) and output a dot of the
@@ -224,18 +214,18 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     s.split(r.x, rxc, rxo, vec).split(rxo, rxo, rxi, per);
     Func blk = s.rfactor({{rxo, lane}, {ry, u}});
     blk.bound(lane, 0, vec / per);  // the lane's range, so the block's scales hoist
-    blk.update().eager_inline(decoders(rs));
-    Func codes = blk.update().hoist_invariants()[0];
-    if (integer) codes = codes.change_type(Int(32));
+    Func rest, codes = block_dot(blk, rs, integer, rest);
     s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
     Func acc = s.rfactor({{rxo, lane}, {ryi, bacc}});
     Func lanes = s.rfactor(rxo, lane);
     s.atomic().vectorize(rxo).unroll(n).unroll(m);
-    for (Func f : {lanes, acc, blk, codes}) {
+    std::vector<Func> fs{lanes, acc, blk, codes};
+    if (rest.defined()) fs.push_back(rest);
+    for (Func f : fs) {
         f.reorder_storage(lane, n, m);  // rfactor put the lanes last
     }
-    for (Func f : {blk, codes}) {
-        f.bound_storage(u, ts.interleave);  // also in the K tail: on the stack
+    for (size_t i = 2; i < fs.size(); i++) {
+        fs[i].bound_storage(u, ts.interleave);  // also in the K tail: on the stack
     }
     lanes.compute_at(tile_at(out, st)).vectorize(lane).unroll(n).unroll(m).update().vectorize(lane).unroll(ryi).unroll(n).unroll(m);
     acc.compute_at(tile_at(out, st)).vectorize(lane).unroll(bacc).unroll(n).unroll(m);
@@ -244,6 +234,15 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     blk.update().vectorize(lane).unroll(u).unroll(n).unroll(m);
     codes.compute_at(acc, ryo).vectorize(lane).unroll(u).unroll(n).unroll(m);
     codes.update().atomic().vectorize(rxi).vectorize(lane).unroll(rxc).unroll(u).unroll(n).unroll(m);
+    if (rest.defined()) {
+        // the act's block sum, once per act column: the rows' copies are a
+        // broadcast (n vectorized)
+        rest.compute_at(acc, ryo).vectorize(lane).unroll(u).unroll(m);
+        Stage ru = rest.update().atomic().vectorize(rxi).vectorize(lane).unroll(rxc).unroll(u).unroll(m);
+        for (Stage f : {Stage(rest), ru}) {
+            ts.nt > 1 ? f.vectorize(n) : f.unroll(n);
+        }
+    }
 }
 
 // The integer path for weight records of ts.nt rows interleaved in pieces of
@@ -258,6 +257,7 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
 // scales as one vector.
 inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, int chunk,
                          const std::vector<ApproximationResult> &rs, int group = 0) {
+    if (affine(rs)) throw std::invalid_argument("blocked_rows: weights decoded as codes times scales");
     Stage s = tile_out(out, st, dot, cond, ts, r, true);
     Var n = dot.args()[0], m = dot.args()[1], q("q"), u("u"), bacc("bacc");
     // ryi_rows: not ryi, as dot's specializations share bounds by RVar name (gap M)
@@ -344,8 +344,7 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     RVar ry = r.y, rxc("rxc"), rxk("rxk"), ryo("ryo"), ryi("ryi");
     s.split(r.x, rxc, rxk, 8);
     Func blk = s.rfactor(ry, u);
-    blk.update().eager_inline(decoders(rs));
-    Func codes = blk.update().hoist_invariants()[0].change_type(Int(32));
+    Func rest, codes = block_dot(blk, rs, true, rest);
     s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
     Func acc = s.rfactor(ryi, bacc);
     // 2 x 2 sub-tiles, guarded: this code is also in other tiles' branches
@@ -368,18 +367,21 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     sub(acc.update()).reorder(nii, mii, nio, mio, bacc, ryo).vectorize(nii).vectorize(mii).unroll(nio).unroll(mio).unroll(bacc);
     sub(blk.update()).reorder(nii, mii, nio, mio, u).vectorize(nii).vectorize(mii).unroll(nio).unroll(mio).unroll(u);
     sub(codes.update()).reorder(rxk, nii, mii, rxc, nio, mio, u).atomic().vectorize(rxk).vectorize(nii).vectorize(mii).unroll(rxc).unroll(nio).unroll(mio).unroll(u);
+    if (rest.defined()) {  // the act's block sum, once per act column (n vectorized)
+        rest.compute_at(LoopLevel(acc, ryo)).bound_storage(u, ts.interleave).vectorize(n).unroll(m).unroll(u);
+        rest.update().reorder(rxk, rxc, n, m, u).atomic().vectorize(rxk).vectorize(rxc).vectorize(n).unroll(m).unroll(u);
+    }
 }
 
 // The N = M = 1 schedule (GGML's vec_dot). Activations encoded inside the
-// pipeline (`staged`) are encoded once, up front. sums[i]: the stored block
-// sums of dots[i]'s act, if its format has them.
+// pipeline (`staged`) are encoded once, up front.
 inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, const std::vector<int> &blocks, const std::vector<ApproximationResult> &rs,
-                    const std::vector<Func> &staged, const std::vector<Func> &sums, const Target &t) {
+                    const std::vector<Func> &staged, const Target &t) {
     for (Func e : staged) {
         e.compute_root();
     }
     out.output_buffer().dim(0).set_bounds(0, 1).dim(1).set_bounds(0, 1);  // N = M = 1
-    blocked(out, 0, affine(out, 0, dots[0], r, sums[0], rs), Expr(), {}, r, blocks[1] == blocks[0], rs, t);
+    blocked(out, 0, dots[0], Expr(), {}, r, blocks[1] == blocks[0], rs, t);
 }
 
 // An encoder computed per record (each block of values), vectorized: the
@@ -467,24 +469,20 @@ inline void metal_rows(Func out, Func dot, const RDom &r, const std::vector<Appr
 // those tiles on by-element sdot; else 4 x 4 on sdot), in tasks of up to 32
 // x 32 outputs, fewer rows where that balances the threads (small N);
 // gemv (M = 1) is the vec_dot recipe on row pairs sharing each activation
-// block (single rows for N = 1). Affine weights split first, as in vec_dot.
-// Edge tiles shift inwards: any N, M at least the tile's. With act records of r = blocks[2] > 1 rows, out's first update
+// block (single rows for N = 1). Edge tiles shift inwards: any N, M at least
+// the tile's. With act records of r = blocks[2] > 1 rows, out's first update
 // is the rows in whole records (dots[1]) on gemm tiles starting on a record,
 // its second the others (dots[0], < r rows) on gemv tiles.
-inline void mul_mat(Func out, const std::vector<Func> &reductions, const RDom &r, const std::vector<int> &blocks, const std::vector<ApproximationResult> &rs,
-                    const std::vector<Func> &staged, const std::vector<Func> &sums, const Target &t) {
-    bool integer = blocks[1] == blocks[0], whole = blocks[2] > 1;
-    std::vector<Func> dots = reductions;
+inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const std::vector<int> &blocks, const std::vector<ApproximationResult> &rs,
+                    const std::vector<Func> &staged, const Target &t) {
     if (t.has_feature(Target::Metal)) {
         if (!staged.empty() || blocks[2] > 1 || blocks[3] > 1) throw std::invalid_argument("metal: act formats stored as computed, weights one row per record");
-        if (affine(out, 0, dots[0], r, sums[0], rs).name() != dots[0].name()) throw std::invalid_argument("metal: weights decoded as codes times scales");
+        if (affine(rs)) throw std::invalid_argument("metal: weights decoded as codes times scales");
         metal_rows(out, dots[0], r, rs);
         return;
     }
-    for (size_t i = 0; i < dots.size(); i++) {
-        dots[i] = affine(out, i ? 1 : 2 * whole, dots[i], r, sums[i], rs);
-    }
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
+    bool integer = blocks[1] == blocks[0], whole = blocks[2] > 1;
     Expr Mr = M / blocks[2] * blocks[2];
     for (size_t i = 0; i < staged.size(); i++) {
         // staged[i] encodes dots[i]'s act. Records in tasks of up to 16 chunks

@@ -17,9 +17,6 @@ namespace ggml {
 struct Format {
     Approximation scheme;
     int block = 1, rows = 1, chunk = 0;
-    // The stage whose decode is the stored sum of each block's values, if the
-    // format stores one (q8_1's s).
-    Approximation sum;
 };
 
 // `aos`: the same format with one row per record. `indexed`: its blocks'
@@ -40,10 +37,7 @@ inline Format format(const std::string &spec, bool aos = false, bool scaled = fa
     if (type == "q4_0" && (codes.empty() || codes == "u4" || codes == "i4")) return {q4_0(codes == "i4" ? twos(4, scaled * 4) : offset(8, scaled * 4), lay, scaled * 4, indexed), QK, rows, chunk};
     if (type == "q4_1" && codes.empty()) return {q4_1(lay, indexed), QK, rows, chunk};
     if (type == "q8_0" && codes.empty()) return {q8_0(lay, indexed), QK, rows, chunk};
-    if (type == "q8_1" && codes.empty()) {
-        Approximation sum = fp16();
-        return {q8_1(lay, sum, indexed), QK, rows, chunk, sum};
-    }
+    if (type == "q8_1" && codes.empty()) return {q8_1(lay, indexed), QK, rows, chunk};
     if (type == "f16" && t.size() == 1) return {fp16()};
     if (type == "f32" && t.size() == 1) return {};
     throw std::invalid_argument("unknown format " + spec);
