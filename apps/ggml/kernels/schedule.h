@@ -6,6 +6,8 @@
 // ApproximationResults.
 #include "Halide.h"
 
+#include <functional>
+
 namespace ggml {
 
 using namespace Halide;
@@ -25,13 +27,29 @@ inline Expr threads() {
     return max(Internal::Call::make(Int(32), "halide_get_num_threads", {}, Internal::Call::PureExtern), 1);
 }
 
+// Of the candidate splits ps (each `tasks` tasks of `size` work, plus
+// `overhead`: a task's dispatch, ~0.25-1 us on M3), the one whose busiest thread
+// does the least, ceil(tasks / threads) * (size + overhead); on ties, the earliest.
+inline Expr balanced(const std::vector<int> &ps, float overhead, const std::function<std::pair<Expr, Expr>(int)> &split) {
+    Expr T = threads(), best, least;
+    for (int p : ps) {
+        auto [tasks, size] = split(p);
+        Expr load = cast<float>((tasks + T - 1) / T) * (cast<float>(size) + overhead);
+        best = best.defined() ? select(load < least, p, best) : Expr(p);
+        least = least.defined() ? min(load, least) : load;
+    }
+    return best;
+}
+
 // The tile shape of one mul_mat schedule: nt x mt outputs (N >= nt, M >= mt;
 // edge tiles shift inwards; in out's updates, M tails are guarded) share each decoded weight row and activation
 // column; `interleave` blocks per iteration into independent accumulators;
 // parallel tasks of `rows` x `cols` outputs (rows 0: serial; cols 0: all of M),
-// fewer rows if that leaves under `tasks` tasks per thread.
+// with `tasks`: fewer rows where that balances the threads; with `busy`:
+// parallel only where it holds (else a serial loop, cheap when it has no work).
 struct Tiles {
     int nt = 1, mt = 1, interleave = 2, rows = 0, cols = 0, tasks = 0;
+    Expr busy;
 };
 
 // Out's stage `st`: 0 is its pure definition, over all of M; i > 0 its i-th
@@ -49,7 +67,7 @@ inline LoopLevel tile_at(Func out, int st) {
 // out's stage st under `cond` (all of it if undefined) on ts tiles, each
 // computing its region of dot; parallel tasks of ts.rows x ts.cols outputs.
 // `whole_n`: N is a multiple of ts.nt. Returns dot's update under `cond`.
-inline Stage tile_out(Func out, int st, Func dot, Expr cond, Tiles ts, bool whole_n = false) {
+inline Stage tile_out(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, bool whole_n = false) {
     VarOrRVar n = out.args()[0], m = row_var(out, st), mo = row_var(out, st, "mo"), mi = row_var(out, st, "mi"), mc = row_var(out, st, "mc"), t = row_var(out, st, "nc");
     Var no("no"), ni("ni"), nc("nc");
     Stage o = st ? out.update(st - 1) : Stage(out), s = cond.defined() ? o.specialize(cond) : o;
@@ -65,13 +83,20 @@ inline Stage tile_out(Func out, int st, Func dot, Expr cond, Tiles ts, bool whol
     if (ts.rows) {
         Expr per = ts.rows / ts.nt;
         if (ts.tasks) {
+            // tasks of `p` tiles in n, up to rows / nt (on ties, the largest);
+            // work in multiply-adds
             Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
-            Expr cs = ts.cols ? (M + ts.cols - 1) / ts.cols : 1, ns = (ts.tasks * threads() + cs - 1) / cs;
-            per = clamp(((N + ts.nt - 1) / ts.nt + ns - 1) / ns, 1, per);
+            Expr cs = ts.cols ? (M + ts.cols - 1) / ts.cols : 1, tn = (N + ts.nt - 1) / ts.nt;
+            Expr tile = cast<float>(ts.nt * (ts.cols ? min(M, ts.cols) : M)) * cast<float>(r.x.extent() * r.y.extent());
+            std::vector<int> ps;
+            for (int p = ts.rows / ts.nt; p >= 1; p--) {
+                ps.push_back(p);
+            }
+            per = balanced(ps, 1 << 14, [&](int p) { return std::pair{cs * ((tn + p - 1) / p), p * tile}; });
         }
         s.split(no, nc, no, per, TailStrategy::GuardWithIf);
         if (ts.cols) s.reorder(ni, mi, mo, no, mc, nc).fuse(mc, nc, t);
-        s.parallel(ts.cols ? t : VarOrRVar(nc));
+        (ts.busy.defined() ? s.specialize(ts.busy) : s).parallel(ts.cols ? t : VarOrRVar(nc));
     }
     return cond.defined() ? dot.update().specialize(cond) : dot.update();
 }
@@ -82,7 +107,7 @@ inline Stage tile_out(Func out, int st, Func dot, Expr cond, Tiles ts, bool whol
 // (GGML's order), on ts tiles of out under `cond`.
 inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, bool integer,
                     const std::vector<ApproximationResult> &rs, const Target &t) {
-    Stage s = tile_out(out, st, dot, cond, ts);
+    Stage s = tile_out(out, st, dot, cond, ts, r);
     Var n = dot.args()[0], m = dot.args()[1], lane("lane"), u("u"), bacc("bacc");
     RVar ry = r.y, rxc("rxc"), rxo("rxo"), rxi("rxi"), ryo("ryo"), ryi("ryi");
     int per = integer ? 4 : 1, vec = t.natural_vector_size<int8_t>();
@@ -123,7 +148,7 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
 // scales as one vector.
 inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, int chunk,
                          const std::vector<ApproximationResult> &rs, int group = 0) {
-    Stage s = tile_out(out, st, dot, cond, ts, true);
+    Stage s = tile_out(out, st, dot, cond, ts, r, true);
     Var n = dot.args()[0], m = dot.args()[1], q("q"), u("u"), bacc("bacc");
     // ryi_rows: not ryi, as dot's specializations share bounds by RVar name (gap M)
     RVar ry = r.y, rx = r.x, rp("rp"), rq("rq"), ri("ri"), ryo("ryo"), ryi("ryi_rows");
@@ -204,7 +229,7 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
 // (split_storage), so the tile's accumulators stay in registers.
 inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r,
                          const std::vector<ApproximationResult> &rs, bool scaled = false) {
-    Stage s = tile_out(out, st, dot, cond, ts);
+    Stage s = tile_out(out, st, dot, cond, ts, r);
     Var n = dot.args()[0], m = dot.args()[1], nio("nio"), nii("nii"), mio("mio"), mii("mii"), u("u"), bacc("bacc");
     RVar ry = r.y, rxc("rxc"), rxk("rxk"), ryo("ryo"), ryi("ryi");
     s.split(r.x, rxc, rxk, 8);
@@ -269,8 +294,8 @@ inline void encoder(Func e, const std::vector<ApproximationResult> &rs) {
 // mul_mat: gemm tiles the outputs (4 x 8 on smmla when the target has i8mm
 // and both operands are quantized alike, 4 x 16 for whole records of at least
 // 16 rows, 4 x 4 where those waste rows; on weight records in 4-code pieces,
-// those tiles on by-element sdot; else 4 x 4 on sdot), in tasks of 32
-// x 32 outputs, fewer rows if that leaves under 2 tasks per thread (small N);
+// those tiles on by-element sdot; else 4 x 4 on sdot), in tasks of up to 32
+// x 32 outputs, fewer rows where that balances the threads (small N);
 // gemv (M = 1) is the vec_dot recipe on row pairs sharing each activation
 // block (single rows for N = 1). Edge tiles shift inwards: any N, M at least
 // the tile's. With act records of r = blocks[2] > 1 rows, out's first update
@@ -279,12 +304,30 @@ inline void encoder(Func e, const std::vector<ApproximationResult> &rs) {
 inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const std::vector<int> &blocks, const std::vector<ApproximationResult> &rs,
                     const std::vector<Func> &staged, const Target &t) {
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
-    for (Func e : staged) {
-        e.compute_root().specialize(M > 1).parallel(e.args().back());  // per activation record
-        encoder(e, rs);
-    }
     bool integer = blocks[1] == blocks[0], whole = blocks[2] > 1;
     Expr Mr = M / blocks[2] * blocks[2];
+    for (size_t i = 0; i < staged.size(); i++) {
+        // staged[i] encodes dots[i]'s act. Records in tasks of up to 16 chunks
+        // of their blocks (work in values), so even a few records (small M)
+        // spread over the threads. The rows past Mr (staged[0] for whole
+        // records), up to 3 and often none, one per task (the fused loop would
+        // encode a row even for none).
+        Func e = staged[i];
+        Var b = e.args()[0], rec = e.args().back(), bo("bo"), t("t");
+        Stage s = e.compute_root().specialize(M > 1);
+        if (whole && !i) {
+            s.parallel(rec);
+        } else {
+            Expr B = r.y.extent(), recs = whole ? Mr / blocks[2] : M;
+            std::vector<int> cs;
+            for (int c = 1; c <= 16; c++) {
+                cs.push_back(c);
+            }
+            Expr chunks = balanced(cs, 4096, [&](int c) { return std::pair{recs * c, (B + c - 1) / c * blocks[1] * blocks[2]}; });
+            s.split(b, bo, b, (B + chunks - 1) / chunks, TailStrategy::GuardWithIf).fuse(rec, bo, t).parallel(t);
+        }
+        encoder(e, rs);
+    }
     Tiles mmla{4, 16, 1, 32, 32, 2}, mmla8{4, 8, 1, 32, 32, 2}, mmla4{4, 4, 1, 32, 32, 2}, gemm{4, 4, 1, 32, 32, 2}, pairs{2, 1, 2, 16}, rows{1, 1, 2, 16};
     bool mmla_ok = integer && t.has_feature(Target::ARMI8MM);
     // Weight records in 4-code pieces: by-element sdot on the same tiles (on M3,
@@ -313,10 +356,13 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         blocked_mmla(out, whole, dr, whole ? Expr() : fits(mmla8, M), mmla8, r, rs);
     }
     if (!whole || !tiled) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, integer, rs, t);
+    // The rows past Mr (fewer than a record's): no tasks when there are none.
+    Expr rest = whole ? M % blocks[2] != 0 : Expr();
     if (integer && blocks[3] > 1) {  // N is a multiple of the records' rows
-        blocked_rows(out, 2 * whole, dots[0], Expr(), {blocks[3], 1, 2, 16}, r, blocks[4], rs);
+        blocked_rows(out, 2 * whole, dots[0], Expr(), {blocks[3], 1, 2, 16, 0, 0, rest}, r, blocks[4], rs);
         return;
     }
+    pairs.busy = rows.busy = rest;
     blocked(out, 2 * whole, dots[0], fits(pairs, 1), pairs, r, integer, rs, t);
     blocked(out, 2 * whole, dots[0], Expr(), rows, r, integer, rs, t);
 }
