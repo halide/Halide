@@ -682,7 +682,8 @@ gengen
       llvm_assembly, object, python_extension, pytorch_wrapper, registration,
       schedule, static_library, stmt, stmt_html, conceptual_stmt,
       conceptual_stmt_html, hlpipe, device_code].
-     If omitted, default value is [c_header, static_library, registration].
+     If omitted, default value is [c_header, static_library, registration],
+     or [c_header, static_library] if the target has no_metadata.
 
  -p  A comma-separated list of shared libraries that will be loaded before the
      generator is run. Useful for custom auto-schedulers. The generator must
@@ -801,14 +802,16 @@ gengen
         return targets;
     };
 
-    const auto build_output_types = [&]() {
+    const auto build_output_types = [&](const std::vector<Target> &targets) {
         std::set<OutputFileType> output_types;
 
         std::string emit_flags_string = flags_info["-e"];
 
-        // If omitted or empty, assume .a and .h and registration.cpp
+        // If omitted or empty, assume .a and .h and registration.cpp. A target
+        // with no_metadata can't be registered, so then leave out the registration.
         if (emit_flags_string.empty()) {
-            emit_flags_string = "c_header,registration,static_library";
+            const bool no_metadata = !targets.empty() && targets.front().has_feature(Target::NoMetadata);
+            emit_flags_string = no_metadata ? "c_header,static_library" : "c_header,registration,static_library";
         }
 
         // If HL_EXTRA_OUTPUTS is defined, assume it's extra outputs we want to generate
@@ -870,7 +873,7 @@ gengen
     args.suffixes = build_target_strings(&args.generator_params);
     args.targets = build_targets(args.suffixes);
     args.output_dir = flags_info["-o"];
-    args.output_types = build_output_types();
+    args.output_types = build_output_types(args.targets);
     args.generator_name = flags_info["-g"];
     args.function_name = flags_info["-f"];
     args.file_base_name = flags_info["-n"];

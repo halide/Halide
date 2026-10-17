@@ -668,7 +668,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     // The initial args are the same.
     same_compile = same_compile && std::equal(lowering_args.begin(), lowering_args.end(), old_module.functions().front().args.begin());
     // Linkage is the same.
-    same_compile = same_compile && old_module.functions().front().linkage == linkage_type;
+    same_compile = same_compile && old_module.functions().front().linkage == linkage_for_target(linkage_type, target);
     // The outputs of a Pipeline cannot change, so no need to test them.
 
     if (same_compile) {
