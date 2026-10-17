@@ -1491,6 +1491,10 @@ $(BIN_DIR)/correctness_spirv_ir: $(ROOT_DIR)/test/correctness/spirv_ir.cpp $(TES
 	@mkdir -p $(@D)
 	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) -I$(SRC_DIR) $(SPIRV_CXX_FLAGS) $(TEST_LD_FLAGS) -o $@
 
+$(BIN_DIR)/correctness_vulkan_bool_minmax: $(ROOT_DIR)/test/correctness/vulkan_bool_minmax.cpp $(TEST_DEPS)
+	@mkdir -p $(@D)
+	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) -I$(SRC_DIR) $(SPIRV_CXX_FLAGS) $(TEST_LD_FLAGS) -o $@
+
 # OpenCL runtime correctness test requires runtime.a to be linked.
 $(BIN_DIR)/$(TARGET)/correctness_opencl_runtime: $(ROOT_DIR)/test/correctness/opencl_runtime.cpp $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
 	@mkdir -p $(@D)
