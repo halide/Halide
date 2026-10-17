@@ -26,6 +26,7 @@ void define_stage(py::module &m) {
             .def("hoist_invariants", [](Stage &stage) {
                 return std::vector<Func>(stage.hoist_invariants());
             })
+            .def("distribute", &Stage::distribute)
 
             .def("eager_inline", (Stage & (Stage::*)(const std::vector<Func> &)) & Stage::eager_inline, py::arg("fs"))
             .def("eager_inline", [](Stage &stage, const py::args &args) -> Stage & {
