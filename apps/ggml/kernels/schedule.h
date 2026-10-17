@@ -291,6 +291,41 @@ inline void encoder(Func e, const std::vector<ApproximationResult> &rs) {
     }
 }
 
+// Metal (Apple GPUs), as GGML's kernel_mul_mv_q4_0_f32: threadgroups of `sg`
+// simdgroups (gpu_threads), each `nr` rows of one column of out. A lane takes
+// half a block (one of its two 8-byte halves: 16 values) of every 16th block,
+// accumulating the rows in registers (the codes' sum per block, then times
+// its scale); the lanes' sums then reduce across the simdgroup (an atomic
+// update over the gpu lanes: simd shuffles) and lane 0 writes.
+inline void metal_rows(Func out, Func dot, const RDom &r, const std::vector<ApproximationResult> &rs, int nr = 4, int sg = 2) {
+    Var n = out.args()[0], m = out.args()[1], no("no"), ns("ns"), ni("ni"), uh("uh"), ub("ub"), u("u"), l("l");
+    RVar rx = r.x, ry = r.y, rxn("rxn"), rxh("rxh"), rxi("rxi"), ryo("ryo"), ryi("ryi"), rl("rl");
+    Expr N = out.output_buffer().dim(0).extent();
+    // N < nr * sg: a row per threadgroup
+    for (auto [o, rows, groups] : {std::tuple{Stage(out).specialize(N >= nr * sg), nr, sg}, std::tuple{Stage(out), 1, 1}}) {
+        o.split(n, no, ni, rows * groups, TailStrategy::ShiftInwards).split(ni, ns, ni, rows);
+        o.reorder(ni, ns, no, m).unroll(ni).gpu_blocks(no, m).gpu_threads(ns);
+    }
+    dot.compute_at(out, ni);  // per row: warp allocations of one value
+    Stage s = dot.update();
+    // value j = rxn * 16 + rxh * 8 + rxi: the low (rxn 0) and high nibbles of byte rxh * 8 + rxi
+    s.split(rx, rxn, rx, 16).split(rx, rxh, rxi, 8);
+    Func blk = s.rfactor({{rxh, uh}, {ry, u}});
+    blk.update().eager_inline(decoders(rs));
+    Func codes = blk.update().hoist_invariants()[0];
+    s.split(ry, ryo, ryi, 16, TailStrategy::GuardWithIf);
+    Func acc = s.rfactor({{rxh, uh}, {ryi, ub}});
+    s.fuse(rxh, ryi, rl).atomic().gpu_lanes(rl);
+    acc.reorder_storage(uh, ub, n, m).compute_at(out, ns);
+    acc.fuse(uh, ub, l).reorder(n, m, l).gpu_lanes(l).unroll(n);
+    acc.update().fuse(uh, ub, l).reorder(n, m, ryo, l).gpu_lanes(l).unroll(n);
+    for (Func f : {blk, codes}) {
+        f.compute_at(acc, ryo).store_at(acc, l).bound_storage(u, 1).unroll(f.args()[0]);  // also in the K tail: registers
+    }
+    blk.update().unroll(blk.args()[0]);
+    codes.update().reorder(codes.args()[0], rxi, rxn).unroll(codes.args()[0]).unroll(rxi).unroll(rxn);
+}
+
 // mul_mat: gemm tiles the outputs (4 x 8 on smmla when the target has i8mm
 // and both operands are quantized alike, 4 x 16 for whole records of at least
 // 16 rows, 4 x 4 where those waste rows; on weight records in 4-code pieces,
@@ -303,6 +338,11 @@ inline void encoder(Func e, const std::vector<ApproximationResult> &rs) {
 // its second the others (dots[0], < r rows) on gemv tiles.
 inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const std::vector<int> &blocks, const std::vector<ApproximationResult> &rs,
                     const std::vector<Func> &staged, const Target &t) {
+    if (t.has_feature(Target::Metal)) {
+        if (!staged.empty() || blocks[2] > 1 || blocks[3] > 1) throw std::invalid_argument("metal: act formats stored as computed, weights one row per record");
+        metal_rows(out, dots[0], r, rs);
+        return;
+    }
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
     bool integer = blocks[1] == blocks[0], whole = blocks[2] > 1;
     Expr Mr = M / blocks[2] * blocks[2];

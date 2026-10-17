@@ -2,6 +2,10 @@
 #
 #   type  ops  [acts  [target-features]]
 #
+# `target-features` (comma-separated, e.g. metal) are added to the libraries'
+# target; the vec_dot and mul_mat libraries' names end in them
+# (q4_0_f32_mul_mat_metal), so a format can have both a CPU and a GPU row.
+#
 # `type`: <ggml type>[.<codes>][.<rows>x<chunk>]. The optional codes pick the
 # integer encoding (i4: two's-complement nibbles; default: GGML's offset
 # binary), the layout interleaves `rows` rows' records in `chunk`-byte pieces
@@ -27,6 +31,7 @@ set(GGML_FORMATS
     "q4_0.i4.4x8 codec,mul_mat q8_0,f32:q8_0,f32:q8_0.4x8"
     "q4_0.i4.8x8 codec"
     "q4_0.soa codec,mul_mat q8_0,f32:q8_0"
+    "q4_0 mul_mat f32 metal"
 )
 set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
 
@@ -90,6 +95,10 @@ foreach (row IN LISTS GGML_FORMATS)
             list(GET at 0 storage)
             list(GET at -1 compute)
             string(REPLACE ":" "_to_" name "${id}_${act}_${op}")
+            if (NOT features STREQUAL "-")
+                string(REPLACE "," "_" suffix "${features}")
+                string(APPEND name "_${suffix}")
+            endif ()
             string(MAKE_C_IDENTIFIER "${name}" name)
             _ggml_library(${name} matmul ${features} weight=${type} act=${act} op=${op})
             string(APPEND registry
