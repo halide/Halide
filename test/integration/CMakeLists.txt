@@ -169,6 +169,25 @@ add_test(
         --test-command ${CMAKE_CTEST_COMMAND} --output-on-failure
 )
 
+# ENVIRONMENT must reach the generator process: an unknown LLVM option passed
+# through HL_LLVM_ARGS makes the generator fail.
+add_test(
+    NAME aot_generator_environment
+    COMMAND
+        ${CMAKE_CTEST_COMMAND}
+        --build-and-test "${CMAKE_CURRENT_LIST_DIR}/aot" "${CMAKE_CURRENT_BINARY_DIR}/aot-environment"
+        --build-generator Ninja
+        --build-options -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER} -DCMAKE_BUILD_TYPE=Release
+        "-Daot_ENVIRONMENT=HL_LLVM_ARGS=--unknown-option-from-halide-integration-test"
+        --test-command ${CMAKE_CTEST_COMMAND} --output-on-failure
+)
+set_tests_properties(
+    aot_generator_environment
+    PROPERTIES
+    PASS_REGULAR_EXPRESSION
+        "Unknown command line argument '--unknown-option-from-halide-integration-test'"
+)
+
 ##
 # Generator compile cache (HL_CACHE_DIR) tests
 #
