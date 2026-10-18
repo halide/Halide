@@ -209,10 +209,12 @@ inline bool invariant_factor(Func f) {
 // act sum, of its codes (int32) if `integer`, else of its values. A factor
 // common to both (the act's scale) hoists first: blk is then it times `mid`
 // (else undefined), the sum split, so one product per block reaches blk.
-inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool integer, Func &rest, Func &mid) {
+// `aff`: blk has the affine weight's code-free terms (affine(rs), unless
+// derived_sums() took them out).
+inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool integer, Func &rest, Func &mid, bool aff) {
     Func codes;
     rest = mid = Func();
-    if (!affine(rs)) {
+    if (!aff) {
         blk.update().eager_inline(decoders(rs));
         codes = blk.update().hoist_invariants()[0];
     } else {
@@ -234,20 +236,64 @@ inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool
     return integer ? codes.change_type(Int(32)) : codes;
 }
 
+// An affine weight's code-free terms, read from the act's derived port where
+// one is their act part: dot's increment splits on the weight's codes
+// (split_on) into `with`, returned, and the rest, the weight's min times the
+// act; per block (r.y rfactored to u), the min hoists out of the act's block
+// sum, which is then replaced by a read of the first derived port whose
+// definition it matches (Func::approximate_by(DerivedPort, ...): e.g.
+// q8_1's s). Returns `with` and, in `sums`, the rest (summing `blk`, the
+// min times the port per block); both undefined (dot untouched) if the
+// weight is not affine or the act has no derived port, and the block sum
+// is computed if none matches.
+inline Func derived_sums(Func dot, const RDom &r, const std::vector<ApproximationResult> &rs, Func &sums, Func &blk, Func &sum) {
+    sums = blk = sum = Func();
+    if (rs.size() < 2 || rs[1].derived_ports().empty() || !affine(rs)) return Func();
+    std::vector<Func> floats, codes;
+    for (Func f : rs[0].decode_funcs()) {
+        (f.type().is_float() ? floats : codes).push_back(f);
+    }
+    dot.update().eager_inline(floats);
+    Func with;
+    std::tie(with, sums) = split_on(dot, codes);
+    if (!sums.defined()) throw std::invalid_argument("derived_sums: no code-free terms in " + dot.name());
+    blk = sums.update().rfactor(r.y, Var("u"));
+    sum = blk.update().hoist_invariants()[0];
+    for (const DerivedPort &p : rs[1].derived_ports()) {
+        if (match_derived_port(sum, p)) {
+            sum.approximate_by(p, {blk});
+            sum = Func();
+            break;
+        }
+    }
+    return with;
+}
+
 // The weight quantized in blocks: per block (r.y) and output a dot of the
 // codes (when the activation is quantized alike, an int32 sdot: 4 products per
 // lane; otherwise f32) times the hoisted scales, accumulated per lane in f32
-// (GGML's order), on ts tiles of out under `cond`.
+// (GGML's order), on ts tiles of out under `cond`. `derived`: an affine
+// weight's code-free terms read the act's derived port (derived_sums()), a
+// product per block accumulated alongside (not under cond).
 inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, bool integer,
-                    const std::vector<ApproximationResult> &rs, const Target &t) {
+                    const std::vector<ApproximationResult> &rs, const Target &t, bool derived = false) {
     Stage s = tile_out(out, st, dot, cond, ts, r);
     Var n = dot.args()[0], m = dot.args()[1], lane("lane"), u("u"), bacc("bacc");
     RVar ry = r.y, rxc("rxc"), rxo("rxo"), rxi("rxi"), ryo("ryo"), ryi("ryi");
+    bool aff = affine(rs);
+    Func sums, sblk, ssum;
+    if (derived && !cond.defined()) {
+        if (Func with = derived_sums(dot, r, rs, sums, sblk, ssum); with.defined()) {
+            with.compute_at(tile_at(out, st));
+            s = with.update();
+            aff = false;
+        }
+    }
     int per = integer ? 4 : 1, vec = t.natural_vector_size<int8_t>();
     s.split(r.x, rxc, rxo, vec).split(rxo, rxo, rxi, per);
     Func blk = s.rfactor({{rxo, lane}, {ry, u}});
     blk.bound(lane, 0, vec / per);  // the lane's range, so the block's scales hoist
-    Func rest, mid, codes = block_dot(blk, rs, integer, rest, mid);
+    Func rest, mid, codes = block_dot(blk, rs, integer, rest, mid, aff);
     s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
     Func acc = s.rfactor({{rxo, lane}, {ryi, bacc}});
     Func lanes = s.rfactor(rxo, lane);
@@ -279,6 +325,19 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
         Stage ru = rest.update().atomic().vectorize(rxi).vectorize(lane).unroll(rxc).unroll(u).unroll(m);
         for (Stage f : {Stage(rest), ru}) {
             ts.nt > 1 ? f.vectorize(n) : f.unroll(n);
+        }
+    }
+    if (sums.defined()) {
+        // the code-free terms: per block, the min times the act's port, in the
+        // loop over the blocks
+        sums.compute_at(tile_at(out, st));
+        sums.update().split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf).reorder(ryi, n, m, ryo).unroll(ryi).unroll(n).unroll(m);
+        sums.update().compute_with(acc.update(), ryo);
+        sblk.compute_at(acc, ryo).bound_storage(u, ts.interleave).unroll(u).unroll(n).unroll(m);
+        sblk.update().unroll(u).unroll(n).unroll(m);
+        if (ssum.defined()) {  // no port matched: the act's block sums
+            ssum.compute_at(acc, ryo).unroll(u).unroll(n).unroll(m);
+            ssum.update().atomic().vectorize(r.x, vec);
         }
     }
 }
@@ -382,7 +441,7 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     RVar ry = r.y, rxc("rxc"), rxk("rxk"), ryo("ryo"), ryi("ryi");
     s.split(r.x, rxc, rxk, 8);
     Func blk = s.rfactor(ry, u);
-    Func rest, mid, codes = block_dot(blk, rs, true, rest, mid);
+    Func rest, mid, codes = block_dot(blk, rs, true, rest, mid, affine(rs));
     s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
     Func acc = s.rfactor(ryi, bacc);
     // 2 x 2 sub-tiles, guarded: this code is also in other tiles' branches
@@ -422,7 +481,7 @@ inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, cons
         e.compute_root();
     }
     out.output_buffer().dim(0).set_bounds(0, 1).dim(1).set_bounds(0, 1);  // N = M = 1
-    blocked(out, 0, dots[0], Expr(), {}, r, blocks[1] == blocks[0], rs, t);
+    blocked(out, 0, dots[0], Expr(), {}, r, blocks[1] == blocks[0], rs, t, true);
 }
 
 // An encoder computed per record (each block of values), vectorized: the
