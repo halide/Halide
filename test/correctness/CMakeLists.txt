@@ -386,6 +386,7 @@ tests(
     nested_tail_strategies.cpp
     newtons_method.cpp
     no_default_device.cpp
+    no_metadata.cpp
     non_nesting_extern_bounds_query.cpp
     non_vector_aligned_embeded_buffer.cpp
     nonexistent_update_stage.cpp
