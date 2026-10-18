@@ -373,6 +373,10 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Call *op) {
         // In Metal, rint matches our rounding semantics
         Expr equiv = Call::make(op->type, "rint", op->args, Call::PureExtern);
         equiv.accept(this);
+    } else if (op->is_intrinsic(Call::round_half_away)) {
+        // In Metal, round rounds ties away from zero
+        Expr equiv = Call::make(op->type, "round", op->args, Call::PureExtern);
+        equiv.accept(this);
     } else {
         CodeGen_GPU_C::visit(op);
     }

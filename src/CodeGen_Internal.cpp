@@ -554,6 +554,20 @@ Expr lower_round_to_nearest_ties_to_even(const Expr &x) {
     return common_subexpression_elimination(a - correction);
 }
 
+Expr lower_round_half_away_from_zero(const Expr &x) {
+    // Adding the largest float below one half, with x's sign, then truncating
+    // rounds ties away from zero. Adding one half instead would round, e.g.,
+    // that largest float itself up to one.
+    Type bits_type = x.type().with_code(halide_type_uint);
+    Expr sign_bit = reinterpret(bits_type, x) & (cast(bits_type, 1) << (x.type().bits() - 1));
+    Expr just_under_one_half = reinterpret(x.type(), (reinterpret(bits_type, cast(x.type(), 0.5f)) - 1) | sign_bit);
+    Expr r = trunc(x + just_under_one_half);
+    if (r.type() != x.type()) {
+        r = cast(x.type(), r);
+    }
+    return common_subexpression_elimination(r);
+}
+
 namespace {
 std::optional<int64_t> get_md_int(llvm::Metadata *value) {
     if (!value) {

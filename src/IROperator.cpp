@@ -2566,6 +2566,16 @@ Expr round(Expr x) {
     return Call::make(t, Call::round, {std::move(x)}, Call::PureIntrinsic);
 }
 
+Expr round_half_away(Expr x) {
+    user_assert(x.defined()) << "round_half_away of undefined Expr\n";
+    Type t = x.type();
+    if (!t.is_float()) {
+        x = cast<float>(x);
+        t = x.type();
+    }
+    return Call::make(t, Call::round_half_away, {std::move(x)}, Call::PureIntrinsic);
+}
+
 Expr trunc(Expr x) {
     user_assert(x.defined()) << "trunc of undefined Expr\n";
     Type t = x.type();
