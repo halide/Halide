@@ -714,9 +714,9 @@ compares them exactly; nothing is evaluated.
 Limits: no index shifting, splitting, or merging of reduction domains (a sum
 over `[0, 32)` does not match two sums over `[0, 16)`); nested sums must be
 nested in the same order; index arithmetic is compared after plain
-simplification, so a term must index the blocked decode-side Funcs, not a flat
-Func through `/` and `%`; anything that is not a polynomial over port calls and
-sums is opaque.
+simplification (with `likely` and `promise_clamped` tags removed), so a term
+must index the blocked decode-side Funcs, not a flat Func through `/` and `%`;
+anything that is not a polynomial over port calls and sums is opaque.
 
 **Floating-point note.** Halide compiles with fast-math flags that let LLVM
 remove an in-register `float -> float16 -> float` round trip. A unit that rounds

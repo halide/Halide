@@ -2155,7 +2155,9 @@ public:
         n->kind = NNode::Atom;
         n->name = name;
         for (Expr &a : args) {
-            a = Internal::simplify(a);
+            // likely() and promise_clamped() are value-preserving tags that
+            // schedules and layouts put on indices.
+            a = Internal::simplify(Internal::remove_promises(Internal::remove_likelies(a)));
             std::set<std::string> f = placeholders_in(a);
             n->free.insert(f.begin(), f.end());
         }

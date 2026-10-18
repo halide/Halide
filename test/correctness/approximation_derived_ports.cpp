@@ -275,6 +275,12 @@ int test_substitution() {
     recast(b) = cast<float>(s.port.from[1](b)) *
                 sum(cast<float>(cast<int8_t>(cast<int32_t>(s.port.from[0](r, b)) + 0)));
     CHECK(match_derived_port(recast, s.port).matched);
+
+    // likely() and promise_clamped() tags on indices are not operations.
+    Func tagged("tagged_sum");
+    tagged(b) = cast<float>(s.port.from[1](b)) *
+                sum(cast<float>(s.port.from[0](unsafe_promise_clamped(likely(r), 0, QB - 1), b)));
+    CHECK(match_derived_port(tagged, s.port).matched);
     return 0;
 }
 
