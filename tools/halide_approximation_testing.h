@@ -759,6 +759,89 @@ inline std::string next_name(const char *base) {
     return std::string(base) + "_" + std::to_string(counter++);
 }
 
+// The Funcs every Derive stage in the trace reads.
+inline void collect_derived_from(const ApproximationTraceNode &node, std::vector<Func> &out) {
+    for (const ApproximationTraceNode &child : node.children) {
+        collect_derived_from(child, out);
+    }
+    if (const Derive *d = node.stage.defined() ? node.stage.as_derive() : nullptr) {
+        for (size_t i = 0; i < node.inputs.size() && i < node.input_names.size(); i++) {
+            if (std::find(d->from().begin(), d->from().end(), node.input_names[i]) != d->from().end()) {
+                out.push_back(node.inputs[i]);
+            }
+        }
+    }
+}
+
+// Does `f` read `target` (or is it `target`)?
+inline bool reaches(const Func &f, const std::string &target) {
+    std::set<std::string> visited;
+    std::vector<Internal::Function> stack = {f.function()};
+    while (!stack.empty()) {
+        Internal::Function g = stack.back();
+        stack.pop_back();
+        if (g.name() == target) {
+            return true;
+        }
+        if (visited.insert(g.name()).second) {
+            for (const auto &[name, callee] : Internal::find_direct_calls(g)) {
+                stack.push_back(callee);
+            }
+        }
+    }
+    return false;
+}
+
+// The region of an encoded port `f` computed from a derived port: the
+// captured region of a port its definition reads with as many dimensions
+// as `f` (e.g. a per-block scale, for a per-block sum).
+inline bool derived_port_region(const ApproximationTraceNode &node, const Func &f,
+                                const std::map<std::string, Capture> &captures, const RoundTripRun &run,
+                                std::vector<int> &mins, std::vector<int> &extents) {
+    for (const ApproximationTraceNode &child : node.children) {
+        if (derived_port_region(child, f, captures, run, mins, extents)) {
+            return true;
+        }
+    }
+    const Derive *d = node.stage.defined() ? node.stage.as_derive() : nullptr;
+    if (!d) {
+        return false;
+    }
+    bool derives_f = false;
+    for (size_t i = 0; i < node.ports.size() && i < node.port_names.size(); i++) {
+        derives_f |= node.port_names[i] == d->port() && reaches(f, node.ports[i].name());
+    }
+    if (!derives_f) {
+        return false;
+    }
+    for (const std::string &from : d->from()) {
+        for (size_t i = 0; i < node.inputs.size() && i < node.input_names.size(); i++) {
+            const Func &in = node.inputs[i];
+            if (node.input_names[i] != from || in.dimensions() != f.dimensions()) {
+                continue;
+            }
+            Buffer<> region;
+            auto w = run.input_wrappers.find(in.name());
+            auto c = captures.find(in.name());
+            if (w != run.input_wrappers.end()) {
+                region = run.inputs[w->second];
+            } else if (c != captures.end() && !c->second.data.empty()) {
+                region = to_buffer(c->second);
+            } else {
+                continue;
+            }
+            mins.clear();
+            extents.clear();
+            for (int k = 0; k < region.dimensions(); k++) {
+                mins.push_back(region.dim(k).min());
+                extents.push_back(region.dim(k).extent());
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
 // Run a's round trip on `inputs`. Only the encoded Funcs are captured unless
 // `capture_all`, which captures every stage's inputs and outputs.
 inline RoundTripRun run_round_trip(const Approximation &a, const std::vector<Buffer<>> &inputs,
@@ -791,6 +874,8 @@ inline RoundTripRun run_round_trip(const Approximation &a, const std::vector<Buf
     if (capture_all) {
         collect_trace_funcs(run.enc.trace, wanted);
     }
+    // The ports derived ports are computed from give their regions (see below).
+    collect_derived_from(run.enc.trace, wanted);
     std::map<std::string, Capture> captures;
     for (const Func &f : wanted) {
         if (f.defined() && f.outputs() == 1 && f.types()[0].is_scalar() && !f.types()[0].is_struct() &&
@@ -849,6 +934,21 @@ inline RoundTripRun run_round_trip(const Approximation &a, const std::vector<Buf
     ctx.captures = &captures;
     ctx.handlers.custom_trace = &capture_trace;
     Pipeline(outputs).realize(&ctx, Realization(out_buffers));
+
+    // Decode ignores derived ports (see Derive), so the round trip above does
+    // not compute them: realize each such encoded port on its own.
+    for (const Func &f : run.enc.encoded) {
+        auto c = captures.find(f.name());
+        if (c == captures.end() || !c->second.data.empty()) {
+            continue;
+        }
+        std::vector<int> mins, extents;
+        if (derived_port_region(run.enc.trace, f, captures, run, mins, extents)) {
+            Buffer<> out(f.types()[0], extents);
+            out.set_min(mins);
+            Pipeline(f).realize(&ctx, Realization(std::vector<Buffer<>>{out}));
+        }
+    }
 
     for (const auto &[name, c] : captures) {
         run.captured[name] = to_buffer(c);
@@ -1312,6 +1412,215 @@ inline Property outputs_within_declared_ranges() {
             }
         }
         return PropertyOutcome();
+    });
+}
+
+/** Every derived port (see Derive) holds its declared relation on encode(x):
+ * the stored port equals its definition, psi of the decoded ports it reads,
+ * exactly if no lossy stage follows Derive, else within the declared bound
+ * of the one that does. Fails if there is no derived port, if a port
+ * declares no bound (DerivedPort::bound_problem), or if the port's encoded
+ * values cannot be read back. */
+inline Property derived_ports_hold() {
+    return Property("derived_ports_hold", [](const PropertyContext &c) {
+        Detail::RoundTripRun run = Detail::run_round_trip(c.approximation, c.inputs, c.input_names, true);
+        std::vector<DerivedPort> ports = derived_ports(run.enc.trace, run.dec.trace);
+        if (ports.empty()) {
+            return Detail::fail("'" + c.approximation.label() + "' has no derived ports");
+        }
+        for (const DerivedPort &p : ports) {
+            const std::string what = "derived port '" + p.name + "' of " + p.stage.label();
+            if (!p.bound_problem.empty()) {
+                return Detail::fail(what + ": " + p.bound_problem);
+            }
+            int count = 0;
+            const ApproximationTraceNode *node = Detail::find_node(run.enc.trace, p.stage, count);
+            if (count != 1) {
+                return Detail::fail(what + ": the stage is encoded " + std::to_string(count) + " times");
+            }
+            Func derived;
+            for (size_t i = 0; i < node->port_names.size(); i++) {
+                if (node->port_names[i] == p.name) {
+                    derived = node->ports[i];
+                }
+            }
+            if (!derived.defined() || !run.can_read(derived)) {
+                return Detail::fail(what + ": its encoded values cannot be read back");
+            }
+            // Realize the stored port, its definition and the bound where
+            // encode computed the port.
+            Buffer<> region = run.value_of(derived);
+            std::vector<Var> vars;
+            std::vector<Expr> args;
+            std::vector<int> mins, extents;
+            for (int d = 0; d < region.dimensions(); d++) {
+                vars.emplace_back("dv" + std::to_string(d));
+                args.emplace_back(vars.back());
+                mins.push_back(region.dim(d).min());
+                extents.push_back(region.dim(d).extent());
+            }
+            Func stored(Detail::next_name("derived_stored")), defined(Detail::next_name("derived_definition")),
+                bound(Detail::next_name("derived_bound"));
+            stored(vars) = cast<double>(p.stored(args));
+            defined(vars) = cast<double>(p.definition(args));
+            bound(vars) = p.exact ? Expr(0.0) : cast<double>(p.error_bound(args));
+            std::vector<Buffer<>> out;
+            for (int k = 0; k < 3; k++) {
+                out.emplace_back(Float(64), extents);
+                out.back().set_min(mins);
+            }
+            std::map<std::string, Detail::Capture> none;
+            Detail::CaptureContext ctx;
+            ctx.captures = &none;
+            ctx.handlers.custom_trace = &Detail::capture_trace;
+            Pipeline({stored, defined, bound}).realize(&ctx, Realization(out));
+            PropertyOutcome o;
+            Detail::for_each_coord(out[0], [&](const int *pos) {
+                double s = Detail::get(out[0], pos), d = Detail::get(out[1], pos), b = Detail::get(out[2], pos);
+                bool holds = p.exact ? (s == d) : (std::fabs(s - d) <= b);
+                if (o.passed && !holds) {
+                    std::vector<int> coord(pos, pos + out[0].dimensions());
+                    o = Detail::fail(what + " at " + Detail::coord_string(coord) + ": stored " +
+                                         Detail::number_string(s) + ", definition " + Detail::number_string(d) +
+                                         (p.exact ? std::string(" (declared exact)") :
+                                                    ", difference " + Detail::number_string(std::fabs(s - d)) +
+                                                        " exceeds the declared bound " + Detail::number_string(b)),
+                                     coord);
+                }
+            });
+            if (!o.passed) {
+                return o;
+            }
+        }
+        return PropertyOutcome();
+    });
+}
+
+namespace Detail {
+
+inline void trace_func_names(const ApproximationTraceNode &node, std::set<std::string> &out) {
+    for (const ApproximationTraceNode &child : node.children) {
+        trace_func_names(child, out);
+    }
+    for (const auto *funcs : {&node.inputs, &node.ports}) {
+        for (const Func &f : *funcs) {
+            if (f.defined()) {
+                out.insert(f.name());
+            }
+        }
+    }
+}
+
+// The Funcs and images (Buffers, ImageParams) one Function's definitions
+// read directly.
+class ClosureScan : public Internal::IRGraphVisitor {
+    using IRGraphVisitor::visit;
+    void visit(const Internal::Call *op) override {
+        IRGraphVisitor::visit(op);
+        if (op->call_type == Internal::Call::Halide && op->func.defined()) {
+            funcs.emplace_back(op->func);
+        } else if (op->call_type == Internal::Call::Image) {
+            images.insert(op->name);
+        }
+    }
+    void visit(const Internal::Variable *op) override {
+        if (op->param.defined() && op->param.is_buffer()) {
+            images.insert(op->param.name());
+        } else if (op->image.defined()) {
+            images.insert(op->image.name());
+        }
+    }
+
+public:
+    std::vector<Internal::Function> funcs;
+    std::set<std::string> images;
+};
+
+inline void closure_problems(const ApproximationTraceNode &node, const std::string &path, const char *direction,
+                             const std::set<std::string> &known, std::set<std::string> &seen,
+                             std::vector<std::string> &problems) {
+    const std::string here = (path.empty() ? "" : path + "/") + node.label;
+    std::set<std::string> inputs, internal;
+    for (const Func &f : node.inputs) {
+        if (f.defined()) {
+            inputs.insert(f.name());
+        }
+    }
+    trace_func_names(node, internal);
+    auto report = [&](const std::string &problem) {
+        std::string message = here + " (" + direction + "): " + problem;
+        if (seen.insert(message).second) {
+            problems.push_back(message);
+        }
+    };
+    for (size_t i = 0; i < node.ports.size(); i++) {
+        const Func &out = node.ports[i];
+        if (!out.defined() || inputs.count(out.name())) {
+            continue;
+        }
+        const std::string port = "output '" + (i < node.port_names.size() ? node.port_names[i] : std::to_string(i)) + "'";
+        bool reaches_input = false;
+        std::set<std::string> visited;
+        std::vector<Internal::Function> stack = {out.function()};
+        while (!stack.empty()) {
+            Internal::Function f = stack.back();
+            stack.pop_back();
+            if (inputs.count(f.name())) {
+                reaches_input = true;
+                continue;
+            }
+            if (!visited.insert(f.name()).second) {
+                continue;
+            }
+            if (known.count(f.name()) && !internal.count(f.name())) {
+                report(port + " reads " + f.name() + ", a Func of the round trip that is not among the stage's inputs");
+                continue;
+            }
+            ClosureScan scan;
+            f.accept(&scan);
+            for (const std::string &image : scan.images) {
+                report(port + " reads the image " + image + " (in " + f.name() + "), which is not among the stage's inputs");
+            }
+            stack.insert(stack.end(), scan.funcs.begin(), scan.funcs.end());
+        }
+        if (!reaches_input && !node.inputs.empty()) {
+            report(port + " depends on none of the stage's inputs");
+        }
+    }
+    for (const ApproximationTraceNode &child : node.children) {
+        closure_problems(child, here, direction, known, seen, problems);
+    }
+}
+
+}  // namespace Detail
+
+/** Each stage is a function of its inputs alone, in both directions: every
+ * output port of every encode and decode call, followed through the Funcs
+ * that compute it, reaches its own inputs, and reaches no other Func of the
+ * round trip (e.g. a decode that reads the original values, or another
+ * stage's ports) and no Buffer or ImageParam except through them. Scalar
+ * Params, and Funcs the stage defines (including constant tables), are
+ * allowed. A structural check of what a C++ closure cannot express -- that
+ * a unit's encode and decode depend only on their arguments -- it is not
+ * enforced on construction, so that a unit may take a shortcut while it is
+ * developed; this property finds it. The message lists each offending
+ * stage, by its path of labels from the root. */
+inline Property closed() {
+    return Property("closed", [](const PropertyContext &c) {
+        std::set<std::string> known, seen;
+        Detail::trace_func_names(c.run.enc.trace, known);
+        Detail::trace_func_names(c.run.dec.trace, known);
+        std::vector<std::string> problems;
+        Detail::closure_problems(c.run.enc.trace, "", "encode", known, seen, problems);
+        Detail::closure_problems(c.run.dec.trace, "", "decode", known, seen, problems);
+        if (problems.empty()) {
+            return PropertyOutcome();
+        }
+        std::string message = "not closed: ";
+        for (size_t i = 0; i < problems.size(); i++) {
+            message += (i ? "; " : "") + problems[i];
+        }
+        return Detail::fail(message);
     });
 }
 
