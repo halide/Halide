@@ -102,15 +102,15 @@ GGML's offset binary). The layout (`schemes/layouts.h`; default: one row per
 record, AoS) is `Interleave{rows, chunk}`: one record per `rows` rows at the
 same block, each field's elements interleaved across the rows in `chunk`-byte
 pieces, as GGML's repack (`q4_0.i4.4x8` is `q4_0_4x8`, whose XOR 0x88 is the
-two's-complement encoding). Its libraries are named by the type with `.` as `_`;
-its weights (`[K / block, N / rows]` records) are checked against GGML's repack:
-the harness's transcription of it (`harness/repack.cpp`, every layout), itself
-checked against the bytes of GGML's `CPU_REPACK` buffer for the layout GGML
-picks here. `soa` (`Identity`: the planar packer's ports kept apart) stores each
-field in its own array, e.g. `q4_0.soa`'s codes `[16, K / block, N]` and fp16
-scales `[K / block, N]`; each array is its own kernel argument (the libraries
-are called through their `_argv` entry points), checked against GGML's blocks
-split alike.
+two's-complement encoding; `q8_0.4x8` is `q8_0_4x8`, no XOR). Its libraries are
+named by the type with `.` as `_`; its weights (`[K / block, N / rows]` records)
+are checked against GGML's repack: the harness's transcription of it
+(`harness/repack.cpp`, every layout), itself checked against the bytes of GGML's
+`CPU_REPACK` buffer for the layout GGML picks here. `soa` (`Identity`: the
+planar packer's ports kept apart) stores each field in its own array, e.g.
+`q4_0.soa`'s codes `[16, K / block, N]` and fp16 scales `[K / block, N]`; each
+array is its own kernel argument (the libraries are called through their `_argv`
+entry points), checked against GGML's blocks split alike.
 
 `codec` builds the one codec generator (`kernels/codec.cpp`, via `make_codec`
 from `tools/halide_approximation_codec.h`) for the type: the scheme's round trip
@@ -159,7 +159,7 @@ at N = 512 balance 8-12 threads). Tiles at the edges of N and M shift inwards
 (they overlap the previous tile, recomputing a few outputs), so any token count
 M >= 8 runs on full 4 x 8 tiles. With a laid-out act, the whole records run the
 gemm tiles (smmla's for any M with i8mm, 4 x 16 when the records cover 16 rows,
-the weight's decode then shared by the tile's row pairs, else 4 x 8; when N is a
+else 4 x 8; per block, all of the tile's sums, then its scales; when N is a
 multiple of their width, else 1-wide tiles as tall) starting on a record, with M
 tails guarded: `dotr` is bound to one tile's rows, and its rows past the records
 read the last activation row (clamped; nothing reads past the input). The rest
@@ -175,19 +175,22 @@ sums are computed per activation record, its codes staged in memory order (a
 16-byte load holds a piece of each of its 4 rows) and its 4 scales one vector.
 The default layout is `q4_0.i4.4x4`, for gemv and gemm alike (a weight is
 repacked once, as KleidiAI's is); `q4_0.i4.4x8` (smmla gemm, at parity on M3)
-and AoS are built with mul_mat as comparisons. An in-kernel activation encoder
-runs first, parallel over activation rows when M > 1, and vectorized per encoded
-block (`encoder`: the block's reductions, e.g. its scale, across the block;
-per-value Funcs, e.g. the codes, across their values). Kernel ABI
-(`harness/halide_providers.cpp`): `w`/`a` are `[K / block, N / rows or M]`
-records (struct types from the kernel's metadata), `out` is f32 `[N, M]`. The
-kernel declares the whole contract (checked in `checked`, assumed in `bench`):
-all mins 0, rows dense (`dim(1).stride == dim(0).extent`), `a`'s K tied to
-`w`'s, `w`/`a` rows match `out`'s N/M, and `vec_dot` pins `out` to 1 x 1. It
-promises no more than GGML does: K is a whole number of blocks (GGML asserts
-`n % QK == 0`), with no even block count (the 2-block interleave keeps its
-guard) and no host alignment (q4_0/q8_0 rows start on 2-byte boundaries).
-`vec_dot` goes through a GGML-ABI adapter.
+and AoS are built with mul_mat as comparisons. q8_0 has the same layouts
+(`q8_0.4x4`, `q8_0.4x8`, `q8_0.soa`) on the same recipes, its codes read as
+stored (gemv: 8-byte pieces are a broadcast half-register, plain sdot). An
+in-kernel activation encoder runs first, parallel over activation rows when M >
+1, and vectorized per encoded block (`encoder`: the block's reductions, e.g. its
+scale, across the block; per-value Funcs, e.g. the codes, across their values).
+Kernel ABI (`harness/halide_providers.cpp`): `w`/`a` are
+`[K / block, N / rows or M]` records (struct types from the kernel's metadata),
+`out` is f32 `[N, M]`. The kernel declares the whole contract (checked in
+`checked`, assumed in `bench`): all mins 0, rows dense
+(`dim(1).stride == dim(0).extent`), `a`'s K tied to `w`'s, `w`/`a` rows match
+`out`'s N/M, and `vec_dot` pins `out` to 1 x 1. It promises no more than GGML
+does: K is a whole number of blocks (GGML asserts `n % QK == 0`), with no even
+block count (the 2-block interleave keeps its guard) and no host alignment
+(q4_0/q8_0 rows start on 2-byte boundaries). `vec_dot` goes through a GGML-ABI
+adapter.
 
 Affine formats (`q4_1`: codes * d + min) use the same algorithm and recipes. In
 each recipe, `block_dot` (`schedule.h`) inlines the float decode into the

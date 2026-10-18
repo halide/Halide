@@ -1,7 +1,8 @@
 // GGML's repacked weight layouts, as oracles for the Halide formats with an
 // Interleave layout (schemes/layouts.h):
 // - ggml_repack: a test-only transcription of make_block_q4_0x4,
-//   make_block_q4_0x8 and repack_q4_0_to_q4_0_{4,8}_bl from GGML v0.26's
+//   make_block_q4_0x8, make_block_q8_0x4, repack_q4_0_to_q4_0_{4,8}_bl and
+//   repack_q8_0_to_q8_0_4_bl from GGML v0.26's
 //   src/ggml-cpu/repack.cpp (MIT License, Copyright (c) 2023-2024 The ggml
 //   authors), for every layout, including those GGML does not pick on this
 //   CPU;
@@ -45,6 +46,31 @@ struct block_q4_0xN {
     uint16_t d[N];
     uint8_t qs[QK4_0 / 2 * N];
 };
+
+constexpr int QK8_0 = 32;
+struct block_q8_0 {
+    uint16_t d;
+    int8_t qs[QK8_0];
+};
+struct block_q8_0x4 {
+    uint16_t d[4];
+    int8_t qs[QK8_0 * 4];
+};
+
+block_q8_0x4 make_block_q8_0x4(block_q8_0 *in, unsigned int blck_size_interleave) {
+    block_q8_0x4 out;
+    for (int i = 0; i < 4; i++) {
+        out.d[i] = in[i].d;
+    }
+    const int end = QK8_0 * 4 / blck_size_interleave;
+    for (int i = 0; i < end; ++i) {
+        int src_id = i % 4;
+        int src_offset = (i / 4) * blck_size_interleave;
+        int dst_offset = i * blck_size_interleave;
+        memcpy(&out.qs[dst_offset], &in[src_id].qs[src_offset], blck_size_interleave);
+    }
+    return out;
+}
 
 block_q4_0xN<4> make_block_q4_0x4(block_q4_0 *in, int blck_size_interleave) {
     block_q4_0xN<4> out;
@@ -97,11 +123,11 @@ block_q4_0xN<8> make_block_q4_0x8(block_q4_0 *in, unsigned int blck_size_interle
     return out;
 }
 
-// repack_q4_0_to_q4_0_{4,8}_bl
-template<int R, typename F>
-void repack_rows(const block_q4_0 *src, uint8_t *out, int64_t nrow, int64_t nblocks, F make) {
-    auto *dst = (block_q4_0xN<R> *)out;
-    block_q4_0 dst_tmp[R];
+// repack_q4_0_to_q4_0_{4,8}_bl, repack_q8_0_to_q8_0_4_bl
+template<int R, typename B, typename F>
+void repack_rows(const B *src, uint8_t *out, int64_t nrow, int64_t nblocks, F make) {
+    auto *dst = (decltype(make(nullptr)) *)out;
+    B dst_tmp[R];
     for (int64_t b = 0; b < nrow; b += R) {
         for (int64_t x = 0; x < nblocks; x++) {
             for (int i = 0; i < R; i++) {
@@ -116,9 +142,13 @@ void repack_rows(const block_q4_0 *src, uint8_t *out, int64_t nrow, int64_t nblo
 }  // namespace
 
 bool ggml_repack(const FormatSpec &f, ggml_type t, const uint8_t *src, uint8_t *dst, int64_t N, int64_t K) {
+    int c = f.chunk;
+    if (t == GGML_TYPE_Q8_0 && f.codes.empty() && f.rows == 4 && (c == 4 || c == 8) && N % 4 == 0 && K % QK8_0 == 0) {
+        repack_rows<4>((const block_q8_0 *)src, dst, N, K / QK8_0, [c](block_q8_0 *in) { return make_block_q8_0x4(in, c); });
+        return true;
+    }
     if (t != GGML_TYPE_Q4_0 || f.codes != "i4" || N % f.rows || K % QK4_0) return false;
     auto *s = (const block_q4_0 *)src;
-    int c = f.chunk;
     if (f.rows == 4 && (c == 4 || c == 8)) {
         repack_rows<4>(s, dst, N, K / QK4_0, [c](block_q4_0 *in) { return make_block_q4_0x4(in, c); });
     } else if (f.rows == 8 && c == 8) {
