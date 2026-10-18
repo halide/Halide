@@ -18,6 +18,7 @@ tests(
     approximation_codec.cpp
     approximation_components.cpp
     approximation_decode_funcs.cpp
+    approximation_derived_ports.cpp
     approximation_parallel.cpp
     approximation_signatures.cpp
     approximation_testing.cpp
