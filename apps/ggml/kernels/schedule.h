@@ -342,10 +342,18 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
             ts.nt > 1 ? f.vectorize(n) : f.unroll(n);
         }
     }
-    if (sums.defined()) {
-        // the code-free terms: per block, the min times the act's port, in the
-        // loop over the blocks, one accumulator per interleaved block (as acc:
-        // one fused-multiply-add each on the loop-carried chains)
+    if (sums.defined() && ts.nt > 2) {
+        // gemm tiles: the rows' mins vectorized (n), times each act column's
+        // port, a chain per column, alongside acc
+        sums.compute_at(tile_at(out, st)).vectorize(n).unroll(m);
+        sums.update().split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf).reorder(n, m, ryi, ryo).vectorize(n).unroll(m).unroll(ryi);
+        sums.update().compute_with(acc.update(), ryo);
+        sblk.compute_at(acc, ryo).bound_storage(u, ts.interleave).vectorize(n).unroll(u).unroll(m);
+        sblk.update().vectorize(n).unroll(u).unroll(m);
+    } else if (sums.defined()) {
+        // gemv tiles: per block, the min times the act's port, in the loop
+        // over the blocks, one accumulator per interleaved block (as acc: one
+        // fused-multiply-add each on the loop-carried chains)
         sums.compute_at(tile_at(out, st));
         sums.update().split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
         Var v("v");
@@ -356,10 +364,10 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
         spart.update().compute_with(acc.update(), ryo);
         sblk.compute_at(acc, ryo).bound_storage(u, ts.interleave).unroll(u).unroll(n).unroll(m);
         sblk.update().unroll(u).unroll(n).unroll(m);
-        if (ssum.defined()) {  // no port matched: the act's block sums
-            ssum.compute_at(acc, ryo).unroll(u).unroll(n).unroll(m);
-            ssum.update().atomic().vectorize(r.x, vec);
-        }
+    }
+    if (ssum.defined()) {  // no port matched: the act's block sums
+        ssum.compute_at(acc, ryo).unroll(u).unroll(n).unroll(m);
+        ssum.update().atomic().vectorize(r.x, vec);
     }
 }
 
@@ -677,7 +685,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         if (whole) blocked_mmla(out, whole, dr, tall, mmla, r, rs);
         blocked_mmla(out, whole, dr, whole ? Expr() : fits(mmla8, M), mmla8, r, rs, !whole);
     }
-    if (!whole || !tiled) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, integer, rs, t);
+    if (!whole || !tiled) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, integer, rs, t, !whole);
     // The rows past Mr (fewer than a record's): no tasks when there are none.
     Expr rest = whole ? M % blocks[2] != 0 : Expr();
     if (integer && blocks[3] > 1) {  // N is a multiple of the records' rows
