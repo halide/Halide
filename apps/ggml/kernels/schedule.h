@@ -456,13 +456,22 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
 // tiles of 2 x 2 sub-tiles, each 4 dense lanes of the intermediates' storage
 // (split_storage), so the tile's accumulators stay in registers.
 inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r,
-                         const std::vector<ApproximationResult> &rs) {
+                         const std::vector<ApproximationResult> &rs, bool derived = false) {
     Stage s = tile_out(out, st, dot, cond, ts, r);
     Var n = dot.args()[0], m = dot.args()[1], nio("nio"), nii("nii"), mio("mio"), mii("mii"), u("u"), bacc("bacc");
     RVar ry = r.y, rxc("rxc"), rxk("rxk"), ryo("ryo"), ryi("ryi");
+    bool aff = affine(rs);
+    Func sums, sblk, ssum;
+    if (derived) {
+        if (Func with = derived_sums(dot, s, cond, r, rs, sums, sblk, ssum); with.defined()) {
+            with.compute_at(tile_at(out, st));
+            s = with.update();
+            aff = false;
+        }
+    }
     s.split(r.x, rxc, rxk, 8);
     Func blk = s.rfactor(ry, u);
-    Func rest, mid, codes = block_dot(blk, rs, true, rest, mid, affine(rs));
+    Func rest, mid, codes = block_dot(blk, rs, true, rest, mid, aff);
     s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
     Func acc = s.rfactor(ryi, bacc);
     // 2 x 2 sub-tiles, guarded: this code is also in other tiles' branches
@@ -491,6 +500,19 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     if (rest.defined()) {  // the act's block sum, once per act column (n vectorized)
         rest.compute_at(LoopLevel(acc, ryo)).bound_storage(u, ts.interleave).vectorize(n).unroll(m).unroll(u);
         rest.update().reorder(rxk, rxc, n, m, u).atomic().vectorize(rxk).vectorize(rxc).vectorize(n).unroll(m).unroll(u);
+    }
+    if (sums.defined()) {
+        // the code-free terms: per block, the rows' mins (n vectorized) times
+        // each act column's port, alongside acc (one chain per column)
+        sums.compute_at(tile_at(out, st)).vectorize(n).unroll(m);
+        sums.update().split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf).reorder(n, m, ryi, ryo).vectorize(n).unroll(m).unroll(ryi);
+        sums.update().compute_with(acc.update(), ryo);
+        sblk.compute_at(acc, ryo).bound_storage(u, ts.interleave).vectorize(n).unroll(u).unroll(m);
+        sblk.update().vectorize(n).unroll(u).unroll(m);
+        if (ssum.defined()) {  // no port matched: the act's block sums
+            ssum.compute_at(acc, ryo).unroll(u).unroll(n).unroll(m);
+            ssum.update().atomic().vectorize(r.x, 16);
+        }
     }
 }
 
@@ -653,7 +675,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     } else if (mmla_ok) {
         if (whole) blocked_mmla(out, whole, dr, quad, mmla4, r, rs);
         if (whole) blocked_mmla(out, whole, dr, tall, mmla, r, rs);
-        blocked_mmla(out, whole, dr, whole ? Expr() : fits(mmla8, M), mmla8, r, rs);
+        blocked_mmla(out, whole, dr, whole ? Expr() : fits(mmla8, M), mmla8, r, rs, !whole);
     }
     if (!whole || !tiled) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, integer, rs, t);
     // The rows past Mr (fewer than a record's): no tasks when there are none.
