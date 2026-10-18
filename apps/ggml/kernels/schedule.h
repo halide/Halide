@@ -546,7 +546,8 @@ inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, cons
 // simdgroups (gpu_threads), each `nr` rows of one column of out. A lane takes
 // half a block (one of its two 8-byte halves: 16 values) of every 16th block,
 // accumulating the rows in registers (the codes' sum per block, then times
-// its scale); the lanes' sums then reduce across the simdgroup (an atomic
+// its scale; an affine weight's min times the act's sum alongside, as
+// block_dot); the lanes' sums then reduce across the simdgroup (an atomic
 // update over the gpu lanes: simd shuffles) and lane 0 writes. For M > 1,
 // each simdgroup takes rows x cols of out (up to 8 columns, fewer rows for
 // more), a lane per value of every block (coalesced loads), its products in
@@ -584,9 +585,8 @@ inline void metal_rows(Func out, Func dot, const RDom &r, const std::vector<Appr
     Stage s = dot.update();
     // value j = rxn * 16 + rxh * 8 + rxi: the low (rxn 0) and high nibbles of byte rxh * 8 + rxi
     s.split(rx, rxn, rx, 16).split(rx, rxh, rxi, 8);
-    Func blk = s.rfactor({{rxh, uh}, {ry, u}});
-    blk.update().eager_inline(decoders(rs));
-    Func codes = blk.update().hoist_invariants()[0];
+    Func blk = s.rfactor({{rxh, uh}, {ry, u}}), rest, mid;
+    Func codes = block_dot(blk, rs, false, rest, mid, affine(rs));
     s.split(ry, ryo, ryi, 16, TailStrategy::GuardWithIf);
     Func acc = s.rfactor({{rxh, uh}, {ryi, ub}});
     s.fuse(rxh, ryi, rl).atomic().gpu_lanes(rl);
@@ -594,11 +594,13 @@ inline void metal_rows(Func out, Func dot, const RDom &r, const std::vector<Appr
     acc.fuse(uh, ub, l).reorder(n, m, l).gpu_lanes(l).unroll(n);
     acc.update().fuse(uh, ub, l).reorder(n, m, ryo, l).gpu_lanes(l).unroll(n);
     // store_at: works around halide/Halide#9571; bound_storage: also in the K tail: registers
-    for (Func f : {blk, codes}) {
-        f.compute_at(acc, ryo).store_at(acc, l).bound_storage(u, 1).unroll(f.args()[0]);
+    for (Func f : {blk, mid, codes, rest}) {
+        if (f.defined()) f.compute_at(acc, ryo).store_at(acc, l).bound_storage(u, 1).unroll(f.args()[0]);
     }
     blk.update().unroll(blk.args()[0]);
-    codes.update().reorder(codes.args()[0], rxi, rxn).unroll(codes.args()[0]).unroll(rxi).unroll(rxn);
+    for (Func f : {codes, rest}) {
+        if (f.defined()) f.update().reorder(f.args()[0], rxi, rxn).unroll(f.args()[0]).unroll(rxi).unroll(rxn);
+    }
 }
 
 // mul_mat: gemm tiles the outputs (4 x 8 on smmla when the target has i8mm
@@ -615,7 +617,6 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
                     const std::vector<Func> &staged, const Target &t) {
     if (t.has_feature(Target::Metal)) {
         if (!staged.empty() || blocks[2] > 1 || blocks[3] > 1) throw std::invalid_argument("metal: act formats stored as computed, weights one row per record");
-        if (affine(rs)) throw std::invalid_argument("metal: weights decoded as codes times scales");
         metal_rows(out, dots[0], r, rs);
         return;
     }
