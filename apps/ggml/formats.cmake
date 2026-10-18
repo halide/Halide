@@ -9,10 +9,10 @@
 # `type`: <ggml type>[.<codes>][.<rows>x<chunk>]. The optional codes pick the
 # integer encoding (i4: two's-complement nibbles; default: GGML's offset
 # binary), the layout interleaves `rows` rows' records in `chunk`-byte pieces
-# (as GGML's repack q4_0_4x8 etc.; default: one row per record, AoS); its
-# weights are checked against GGML's repack (harness/repack.cpp). `soa`: one
-# planar array per field (a kernel input each), checked against GGML's bytes
-# laid out alike.
+# (as GGML's repack q4_0_4x8, q8_0_4x4 etc.; default: one row per record,
+# AoS); its weights are checked against GGML's repack (harness/repack.cpp).
+# `soa`: one planar array per field (a kernel input each), checked against
+# GGML's bytes laid out alike.
 #
 # `ops`: codec (quantize + dequantize of a row, checked bit-exact against
 # GGML, also with the scaled codes kernels may pick: checked variant only;
@@ -35,6 +35,9 @@ set(GGML_FORMATS
     "q4_0.i4.4x8 codec,mul_mat q8_0,f32:q8_0,f32:q8_0.4x8"
     "q4_0.i4.8x8 codec"
     "q4_0.soa codec,mul_mat q8_0,f32:q8_0"
+    "q8_0.4x4 codec,mul_mat q8_0,f32:q8_0,f32:q8_0.4x4"
+    "q8_0.4x8 codec,mul_mat q8_0,f32:q8_0,f32:q8_0.4x8"
+    "q8_0.soa codec,mul_mat q8_0,f32:q8_0"
     "q4_0 mul_mat f32,f16,q8_0 metal"
     "q4_0.soa mul_mat f32,f16,q8_0 metal"
 )
