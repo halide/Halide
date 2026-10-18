@@ -329,10 +329,16 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     }
     if (sums.defined()) {
         // the code-free terms: per block, the min times the act's port, in the
-        // loop over the blocks
+        // loop over the blocks, one accumulator per interleaved block (as acc:
+        // one fused-multiply-add each on the loop-carried chains)
         sums.compute_at(tile_at(out, st));
-        sums.update().split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf).reorder(ryi, n, m, ryo).unroll(ryi).unroll(n).unroll(m);
-        sums.update().compute_with(acc.update(), ryo);
+        sums.update().split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
+        Var v("v");
+        Func spart = sums.update().rfactor(ryi, v);
+        sums.update().unroll(ryi).unroll(n).unroll(m);
+        spart.compute_at(tile_at(out, st)).unroll(v).unroll(n).unroll(m);
+        spart.update().reorder(v, n, m, ryo).unroll(v).unroll(n).unroll(m);
+        spart.update().compute_with(acc.update(), ryo);
         sblk.compute_at(acc, ryo).bound_storage(u, ts.interleave).unroll(u).unroll(n).unroll(m);
         sblk.update().unroll(u).unroll(n).unroll(m);
         if (ssum.defined()) {  // no port matched: the act's block sums
@@ -473,17 +479,6 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     }
 }
 
-// The N = M = 1 schedule (GGML's vec_dot). Activations encoded inside the
-// pipeline (`staged`) are encoded once, up front.
-inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, const std::vector<int> &blocks, const std::vector<ApproximationResult> &rs,
-                    const std::vector<Func> &staged, const Target &t) {
-    for (Func e : staged) {
-        e.compute_root();
-    }
-    out.output_buffer().dim(0).set_bounds(0, 1).dim(1).set_bounds(0, 1);  // N = M = 1
-    blocked(out, 0, dots[0], Expr(), {}, r, blocks[1] == blocks[0], rs, t, true);
-}
-
 // An encoder computed per record (each block of values), vectorized: the
 // Funcs with an element per value (e.g. the codes, packed bytes) across their
 // elements, and its reductions (e.g. the block's scale) across the block.
@@ -502,6 +497,18 @@ inline void encoder(Func e, const std::vector<ApproximationResult> &rs) {
             }
         }
     }
+}
+
+// The N = M = 1 schedule (GGML's vec_dot). Activations encoded inside the
+// pipeline (`staged`) are encoded once, up front.
+inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, const std::vector<int> &blocks, const std::vector<ApproximationResult> &rs,
+                    const std::vector<Func> &staged, const Target &t) {
+    for (Func e : staged) {
+        e.compute_root();
+        encoder(e, rs);
+    }
+    out.output_buffer().dim(0).set_bounds(0, 1).dim(1).set_bounds(0, 1);  // N = M = 1
+    blocked(out, 0, dots[0], Expr(), {}, r, blocks[1] == blocks[0], rs, t, true);
 }
 
 // Metal (Apple GPUs), as GGML's kernel_mul_mv_q4_0_f32: threadgroups of `sg`
