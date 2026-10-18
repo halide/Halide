@@ -261,6 +261,7 @@ are defined in the GGML app).
 | `StructLayout`                                             | Logical Funcs to a struct-typed record Func, one field each; lossless. The record dimensionality is the inputs' unless given to the constructor.                                                                                                                                                                                                    |
 | `LittleEndianScalarPack<Word>`                             | A word per record to and from a leading byte dimension; lossless.                                                                                                                                                                                                                                                                                   |
 | `PlanarFieldPack`                                          | Fixed-width fields packed into bytes; lossless for inputs in its declared range.                                                                                                                                                                                                                                                                    |
+| `Derive{port, from, psi}`                                  | Appends a derived port `psi(from...)` on encode and drops it on decode; lossless. See "Derived ports".                                                                                                                                                                                                                                              |
 
 The layout units are rank-polymorphic: dimensions after the ones they act on
 (`BlockReshape`: the flat index; `PlanarFieldPack`: `(element, record)`;
@@ -610,6 +611,120 @@ costs nothing. It only forecloses transparently intercepting calls inside a
 large, opaque, externally-authored algorithm whose call sites cannot be
 enumerated, which is out of scope.
 
+## Derived ports
+
+A scheme may store a value that a consumer would otherwise compute from the
+other ports. The motivating case is a block-scaled int8 format that also stores
+each block's sum `S = d * sum(q)`: a dot product with an affinely decoded
+operand (`w = d_w * q_w + m_w`) needs `m_w * S` per block, and reading `S` saves
+recomputing it. Such a port is a declared *invariant* of the encoding, and it is
+the first one a transformation consumes: the substitution below replaces a
+computed term with a read of the port. It is checked structurally where it is
+used, and optionally at run time.
+
+**`Derive{port, from, psi}`** is a lossless stage. Its `encode` passes its
+inputs through and appends `port`, defined as `psi(from...)`, where `from` names
+ports among its inputs. Its `decode` drops the port, so the round trip, and its
+idempotent, are unchanged. Stages after it in encode order may encode the port
+like any other (round it to a narrower type, pack it). `psi` is a
+`std::function<Func(const std::vector<Func> &)>` and must be a function of its
+arguments alone: the framework instantiates it on the encode-side Funcs to
+compute the port, and again on the decode-side Funcs that `Derive`'s decode
+receives for `from` to state what the stored port approximates. `closed()`
+(below) checks this.
+
+```cpp
+Func block_sum(const std::vector<Func> &from) {  // from = {codes, scale}
+    Var b("b");
+    RDom r(0, 32);
+    Func total, sum;
+    total(b) = 0.0f;
+    total(b) += cast<float>(from[0](r, b));
+    sum(b) = cast<float>(from[1](b)) * total(b);
+    return sum;
+}
+
+Approximation scheme = Compose{
+    BlockReshape{32}, quant,
+    Parallel{{"scale", f16}},
+    Derive{"sum", {"codes", "scale"}, block_sum},
+    Parallel{{"sum", f16}}};
+```
+
+Placing `Derive` after the scale's rounding and rounding the sum in its own
+stage makes the stored sum a function of the *stored* scale: it is within half
+an fp16 ulp of the sum of the decoded block. Deriving it from the unrounded
+scale instead (`Derive` before the scale's `f16`) gives a sum that disagrees
+with the decoded block, by an fp16 ulp in a large fraction of blocks, and the
+scheme is no longer idempotent (`encode(decode(e)) != e`).
+
+**Introspection.** `ApproximationResult::derived_ports()` (and
+`derived_port(name)`, or `derived_ports(encode_trace, decode_trace)`) returns a
+`DerivedPort` per `Derive` stage in the round trip: its name, the decode-side
+`from` Funcs and `stored` Func that `Derive`'s decode received, `definition`
+(`psi` instantiated on `from`, with the arguments of `stored`), and the declared
+relation between them. The relation is exact if no lossy stage follows `Derive`
+on the port. If exactly one lossy stage follows it, on the port alone, its
+`error_bound` (evaluated on the definition) bounds `|stored - definition|`.
+Otherwise `bound_problem` says why no bound is declared (two lossy stages, or a
+lossy stage on a `from` port after `Derive`): bounds are declared per `Derive`
+chain, not composed.
+
+**Substitution.** `term.approximate_by(port, consumers[, check])` is the
+`approximate_by` variant for derived ports. `term` is a Func computing the
+derived value, typically one a schedule has outlined (e.g. by `rfactor` or by
+splitting a sum); it must read the decode-side Funcs (`port.from`), so call it
+before inlining the decode. The variant matches `term` against `port.definition`
+(below), and on success replaces every call to `term` in `consumers` with a read
+of `port.stored` at the matched arguments, like the eager `substitute_calls` of
+`approximate_by`. A mismatch, or a port with no declared bound, is an error that
+prints both normal forms. The returned `DerivedSubstitution` holds the
+`replacement` Func, the `port_args`, and the lossy `error_bound` of
+`|replacement - term|` (or `exact`).
+
+With `DerivedPortCheck::Runtime` the replacement also evaluates the definition
+where it reads the port and `require()`s `|stored - definition| <= bound` (or
+equality, if exact), so a stored buffer that does not hold its invariant (e.g.
+produced by another encoder) is an error at run time, at the cost of computing
+the definition. This is a per-call option, not a `Target` feature.
+
+**Real-valued matching.** `match_derived_port(term, port)` (used by the
+substitution, and available directly) normalizes both sides into polynomials and
+compares them exactly; nothing is evaluated.
+
+- Calls to `port.from` and `port.stored` are atoms, by name, with their index
+  arguments simplified. Other pure Funcs are expanded. A Func that is a sum
+  reduction (zero initial value, one update `f(v) = f(v) + body`, no RDom
+  predicate) becomes a sum over its RVars, which are renamed to binders so that
+  sums over equal bounds match regardless of names.
+- `+`, `-`, `*` (and division by a constant) on floats and on 32/64-bit signed
+  integers are real arithmetic: products are distributed, like terms collected
+  with rational coefficients, and factors invariant in a summation variable are
+  pulled out of the sum, so `d * sum(q)` and `sum(d * q)` match.
+- Widening float casts are the identity. Integer-to-integer and integer-to-float
+  casts are the identity when the operand's range (from its type and the extents
+  of the sums) is exactly representable in the result. Every other cast is a
+  rounding and, like every other operation, an opaque node that only matches an
+  identical node: rounding is never the identity. `strict_float` wrappers are
+  looked through.
+- The arguments come from unifying each call to a port in the definition with
+  one in the term, e.g. `codes(r, b)` in `psi` against `codes(r, b + 1)` in the
+  term gives `port_args = {b + 1}`.
+
+Limits: no index shifting, splitting, or merging of reduction domains (a sum
+over `[0, 32)` does not match two sums over `[0, 16)`); nested sums must be
+nested in the same order; index arithmetic is compared after plain
+simplification, so a term must index the blocked decode-side Funcs, not a flat
+Func through `/` and `%`; anything that is not a polynomial over port calls and
+sums is opaque.
+
+**Floating-point note.** Halide compiles with fast-math flags that let LLVM
+remove an in-register `float -> float16 -> float` round trip. A unit that rounds
+to fp16 and whose rounded value is consumed in the same pipeline (here, by
+`psi`) should round with `strict_float(cast<float16_t>(x))`; otherwise a fused
+`psi` can see the unrounded value, and the stored port no longer matches its
+declared definition.
+
 ## Scope: placement is not semantics
 
 An `Approximation`'s `encode`/`decode` never make any claim about *where* or
@@ -905,6 +1020,19 @@ re-encoding). The library:
 | `idempotent_requantize(rel_tol = 1e-6)`  | `encode(decode(e)) == e` for `e = encode(x)` (floating-point encodings within `rel_tol`). |
 | `zero_preserving()`, `sign_preserving()` | Zero decodes to zero; the round trip never flips a sign.                                  |
 | `outputs_within_declared_ranges()`       | Every encoded value lies in its port's declared output range.                             |
+| `derived_ports_hold()`                   | Every derived port holds its declared relation on `encode(x)` (exactly, or within bound). |
+| `closed()`                               | Every stage's encode and decode are functions of their inputs alone (structural).         |
+
+`closed()` runs nothing beyond the round trip: for every encode and decode call
+in the trace it follows each output through the Funcs that compute it, and fails
+if it reaches a Func of the round trip that is not among that call's inputs
+(e.g. a decode that reads the original values, captured by its unit), a Buffer
+or ImageParam, or none of the call's inputs. Scalar Params and Funcs the stage
+defines itself are allowed. The message names the stage by its path of labels
+and the offending Func or image. Nothing at construction enforces this, since a
+C++ closure cannot express that a unit's `encode` and `decode` depend only on
+their arguments; the property lets a unit take a shortcut while it is developed
+and catches it in tests.
 
 `check_property(a, prop, ...)` runs `prop` over `trials` seeded trials (default
 8), each on freshly generated inputs, and stops at the first failure. Inputs
@@ -946,7 +1074,10 @@ single-valued scalars (Tuple-valued or struct-typed) cannot be read back: their
 `idempotent_requantize`, or `outputs_within_declared_ranges` on a port with a
 range) fails with a message saying so, as does `prop.at(stage)` for a stage with
 such an input. Properties over the decoded values (`lossless()`,
-`bounded_error()`, ...) are unaffected.
+`bounded_error()`, ...) are unaffected. A derived port that no later stage reads
+is dead in the round trip, so it is realized separately, over the region of a
+`from` port with the same dimensionality, so that properties about it are not
+vacuous.
 
 ## Summary of decisions and open items
 
@@ -968,6 +1099,11 @@ such an input. Properties over the decoded values (`lossless()`,
 | Declared ranges, `error_bound()`, `lossless()`; property-based testing in `tools/`           | Decided; claims are checked in tests, never enforced or used in codegen         |
 | Generator I/O ergonomics (`add_input`/`add_output` pointer bookkeeping)                      | Accepted rough edge, deferred                                                   |
 | Codec Generators (configure()/sever()/adopt boilerplate)                                     | Header-only helper in `tools/` (`make_codec`); no library API                   |
+| Derived ports: a lossless `Derive` stage appends `psi(from)`; decode drops it                | Decided; idempotent unchanged                                                   |
+| Substituting a derived port: an `approximate_by` variant, after a real-valued exact match    | Decided; lossy, bounded by the stages after `Derive`; rounding never identity   |
+| Derived-port tolerance                                                                       | Declared per `Derive` chain (one lossy stage after it); no bounds composition   |
+| Run-time check of a derived port                                                             | Optional, per call (`DerivedPortCheck::Runtime`, a `require()`); not a `Target` |
+| Unchecked stored-value substitution                                                          | Rejected (a backdoor); `closed()` detects units that capture foreign Funcs      |
 
 Open items:
 
@@ -984,7 +1120,11 @@ Open items:
 - **Trace scope.** The trace collector is thread-local; handle calls made from
   another thread inside a unit are not attached to the enclosing call.
 - **Bounds composition.** `Compose` declares no `error_bound` for lossy stages,
-  and ranges flow only through units that declare them.
+  and ranges flow only through units that declare them. Derived ports sidestep
+  this by allowing one lossy stage after `Derive`.
+- **Matcher scope.** The derived-port normalizer handles polynomials over port
+  calls and sums with identical reduction structure; splitting or shifting
+  reduction domains is not supported.
 - **Provenance checking** across an offline/online split, as above.
 
 ## Prior art referenced
