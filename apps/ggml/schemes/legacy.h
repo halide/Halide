@@ -92,7 +92,7 @@ struct Q8_0Quant {
         Var j, b;
         RDom r(0, QK);
         d(b, _) = maximum(abs(x(r, b, _))) / 127.0f;
-        q(j, b, _) = cast<int8_t>(round_away(x(j, b, _) * inverse(d(b, _))));
+        q(j, b, _) = cast<int8_t>(round_half_away(x(j, b, _) * inverse(d(b, _))));
         return {q, d};
     }
     std::vector<Func> decode(const std::vector<Func> &e) const {
