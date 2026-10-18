@@ -42,6 +42,7 @@ set(GGML_FORMATS
     "q4_0.soa mul_mat f32,f16,q8_0 metal"
     "q8_0 mul_mat f32,f16,q8_0 metal"
     "q8_0.soa mul_mat f32,f16,q8_0 metal"
+    "q4_1 mul_mat f32,f16,q8_1 metal"
 )
 set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
 
