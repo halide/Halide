@@ -12,14 +12,41 @@ namespace ggml {
 
 using namespace Halide;
 
-// The decode Funcs eager_inline can fold into a consumer.
-inline std::vector<Func> decoders(const std::vector<ApproximationResult> &rs) {
+// The decode Funcs eager_inline can fold into a consumer, of rs[first, last):
+// all, or only the scales (float) or the codes (integer).
+enum class Of { All,
+                Floats,
+                Ints };
+inline std::vector<Func> decoders(const std::vector<ApproximationResult> &rs, Of of = Of::All, size_t first = 0, size_t last = SIZE_MAX) {
     std::vector<Func> fs;
-    for (const ApproximationResult &res : rs) {
-        std::vector<Func> d = res.decode_funcs();
-        fs.insert(fs.end(), d.begin(), d.end());
+    for (size_t i = first; i < std::min(last, rs.size()); i++) {
+        for (Func f : rs[i].decode_funcs()) {
+            if (of == Of::All || (of == Of::Floats) == f.type().is_float()) fs.push_back(f);
+        }
     }
     return fs;
+}
+
+// Every stage of f in registers: `vec` vectorized, `unrolled` unrolled, each
+// where the stage has it.
+inline Func regs(Func f, const std::vector<VarOrRVar> &vec, const std::vector<VarOrRVar> &unrolled) {
+    for (int i = 0; i <= f.num_update_definitions(); i++) {
+        Stage s = i ? f.update(i - 1) : Stage(f);
+        auto has = [&](const VarOrRVar &v) {
+            const auto &ds = s.get_schedule().dims();
+            // as Func.cpp's var_name_match: a split's dims are "parent.name"
+            return std::any_of(ds.begin(), ds.end(), [&](const Internal::Dim &d) {
+                return d.var == v.name() || Internal::ends_with(d.var, "." + v.name());
+            });
+        };
+        for (const VarOrRVar &v : vec) {
+            if (has(v)) s.vectorize(v);
+        }
+        for (const VarOrRVar &v : unrolled) {
+            if (has(v)) s.unroll(v);
+        }
+    }
+    return f;
 }
 
 // The runtime's thread count.
@@ -178,13 +205,9 @@ inline Expr update_value(Func f, const Expr &cond) {
 // min)? Its codes: its integer decode Funcs, or integer ports read as is
 // (e.g. planar int8 codes).
 inline bool affine(const std::vector<ApproximationResult> &rs) {
-    std::vector<Func> floats;
-    for (Func f : rs[0].decode_funcs()) {
-        if (f.type().is_float()) floats.push_back(f);
-    }
     Func w = rs[0].replacement, probe;
     probe(w.args()) = w(w.args());
-    Stage(probe).eager_inline(floats);
+    Stage(probe).eager_inline(decoders(rs, Of::Floats, 0, 1));
     Expr e = Internal::substitute_in_all_lets(probe.value());
     std::vector<Expr> ts;
     terms(e, ts);
@@ -233,18 +256,11 @@ inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool
         blk.update().eager_inline(decoders(rs));
         codes = blk.update().hoist_invariants()[0];
     } else {
-        std::vector<Func> floats, ints, wcodes;
-        for (size_t i = 0; i < rs.size(); i++) {
-            for (Func f : rs[i].decode_funcs()) {
-                (f.type().is_float() ? floats : ints).push_back(f);
-                if (!i && !f.type().is_float()) wcodes.push_back(f);
-            }
-        }
-        blk.update().eager_inline(floats);
+        blk.update().eager_inline(decoders(rs, Of::Floats));
         if (invariant_factor(blk)) mid = blk.update().hoist_invariants()[0];
-        std::tie(codes, rest) = split_on(mid.defined() ? mid : blk, wcodes);
+        std::tie(codes, rest) = split_on(mid.defined() ? mid : blk, decoders(rs, Of::Ints, 0, 1));
         for (Func f : {codes, rest}) {
-            f.update().eager_inline(ints);
+            f.update().eager_inline(decoders(rs, Of::Ints));
         }
         if (integer) rest = rest.change_type(Int(32));
     }
@@ -252,36 +268,66 @@ inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool
 }
 
 // An affine weight's code-free terms, read from the act's derived port where
-// one is their act part: dot's increment splits on the weight's codes
-// (split_on) into `with`, returned, and the rest, the weight's min times the
-// act; per block (r.y rfactored to u), the min hoists out of the act's block
-// sum, which is then replaced by a read of the first derived port whose
-// definition it matches (Func::approximate_by(DerivedPort, ...): e.g.
-// q8_1's s). Returns `with` and, in `sums`, the rest (summing `blk`, the
-// min times the port per block); both undefined (dot untouched) if the
-// weight is not affine or the act has no derived port, and the block sum
-// is computed if none matches.
-inline Func derived_sums(Func dot, Stage ds, const Expr &cond, const RDom &r, const std::vector<ApproximationResult> &rs, Func &sums, Func &blk, Func &sum) {
-    sums = blk = sum = Func();
-    if (rs.size() < 2 || rs[1].derived_ports().empty() || !affine(rs)) return Func();
-    std::vector<Func> floats, codes;
-    for (Func f : rs[0].decode_funcs()) {
-        (f.type().is_float() ? floats : codes).push_back(f);
-    }
-    ds.eager_inline(floats);
+// one is their act part: dot's increment (s, out's stage st tile under
+// `cond`) splits on the weight's codes (split_on) into `with`, computed per
+// tile, s then its update, and the rest, d.sums, the weight's min times the
+// act; per block (r.y rfactored to u, d.blk), the min hoists out of the act's
+// block sum, which is then replaced by a read of the first derived port whose
+// definition it matches (Func::approximate_by(DerivedPort, ...): e.g. q8_1's
+// s; d.sum, if none matches). Returns false (dot untouched) if the weight is
+// not affine or the act has no derived port.
+struct Sums {
+    Func sums, blk, sum;
+};
+inline bool derived_sums(Func out, int st, Func dot, Stage &s, const Expr &cond, const RDom &r, const std::vector<ApproximationResult> &rs, Sums &d) {
+    d = Sums();
+    if (rs.size() < 2 || rs[1].derived_ports().empty() || !affine(rs)) return false;
+    s.eager_inline(decoders(rs, Of::Floats, 0, 1));
     Func with;
-    std::tie(with, sums) = split_on(ds, update_value(dot, cond), dot.name(), codes);
-    if (!with.defined() || !sums.defined()) throw std::invalid_argument("derived_sums: no code-free terms in " + dot.name());
-    blk = sums.update().rfactor(r.y, Var("u"));
-    sum = blk.update().hoist_invariants()[0];
+    std::tie(with, d.sums) = split_on(s, update_value(dot, cond), dot.name(), decoders(rs, Of::Ints, 0, 1));
+    if (!with.defined() || !d.sums.defined()) throw std::invalid_argument("derived_sums: no code-free terms in " + dot.name());
+    d.blk = d.sums.update().rfactor(r.y, Var("u"));
+    d.sum = d.blk.update().hoist_invariants()[0];
     for (const DerivedPort &p : rs[1].derived_ports()) {
-        if (match_derived_port(sum, p)) {
-            sum.approximate_by(p, {blk});
-            sum = Func();
+        if (match_derived_port(d.sum, p)) {
+            d.sum.approximate_by(p, {d.blk});
+            d.sum = Func();
             break;
         }
     }
-    return with;
+    with.compute_at(tile_at(out, st));
+    s = with.update();
+    return true;
+}
+
+// d's sums alongside acc's update (at ryo), its blocks per ryo. On gemm
+// tiles, the rows' mins vectorized (n), times each act column's port, a chain
+// per column; on gemv tiles, per block, the min times the act's port, one
+// accumulator per interleaved block (as acc: one fused-multiply-add each on
+// the loop-carried chains).
+inline void schedule_sums(Sums d, Func out, int st, Func acc, Var n, Var m, const Tiles &ts, const RDom &r, bool gemm, int vec) {
+    if (!d.sums.defined()) return;
+    Var u("u"), v("v");
+    RVar ry = r.y, ryo("ryo"), ryi("ryi");
+    LoopLevel tile = tile_at(out, st), blocks(acc, ryo);
+    d.sums.compute_at(tile);
+    d.sums.update().split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
+    if (gemm) {
+        d.sums.vectorize(n).unroll(m);
+        d.sums.update().reorder(n, m, ryi, ryo).vectorize(n).unroll(m).unroll(ryi).compute_with(acc.update(), ryo);
+        regs(d.blk, {n}, {u, m});
+    } else {
+        Func spart = d.sums.update().rfactor(ryi, v);
+        d.sums.update().unroll(ryi).unroll(n).unroll(m);
+        regs(spart.compute_at(tile), {}, {v, n, m});
+        spart.update().reorder(v, n, m, ryo).compute_with(acc.update(), ryo);
+        regs(d.blk, {}, {u, n, m});
+    }
+    d.blk.compute_at(blocks).bound_storage(u, ts.interleave);
+    if (d.sum.defined()) {  // no port matched: the act's block sums
+        d.sum.compute_at(blocks).unroll(u).unroll(n).unroll(m);
+        d.sum.update().atomic().vectorize(r.x, vec);
+    }
 }
 
 // The weight quantized in blocks: per block (r.y) and output a dot of the
@@ -296,14 +342,8 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     Var n = dot.args()[0], m = dot.args()[1], lane("lane"), u("u"), bacc("bacc");
     RVar ry = r.y, rxc("rxc"), rxo("rxo"), rxi("rxi"), ryo("ryo"), ryi("ryi");
     bool aff = affine(rs);
-    Func sums, sblk, ssum;
-    if (derived) {
-        if (Func with = derived_sums(dot, s, cond, r, rs, sums, sblk, ssum); with.defined()) {
-            with.compute_at(tile_at(out, st));
-            s = with.update();
-            aff = false;
-        }
-    }
+    Sums d;
+    if (derived && derived_sums(out, st, dot, s, cond, r, rs, d)) aff = false;
     int per = integer ? 4 : 1, vec = t.natural_vector_size<int8_t>();
     s.split(r.x, rxc, rxo, vec).split(rxo, rxo, rxi, per);
     Func blk = s.rfactor({{rxo, lane}, {ry, u}});
@@ -313,62 +353,25 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     Func acc = s.rfactor({{rxo, lane}, {ryi, bacc}});
     Func lanes = s.rfactor(rxo, lane);
     s.atomic().vectorize(rxo).unroll(n).unroll(m);
-    std::vector<Func> fs{lanes, acc, blk, codes};
-    for (Func f : {rest, mid}) {
-        if (f.defined()) fs.push_back(f);
+    acc.update().reorder(lane, bacc, n, m, ryo);
+    // rfactor put the lanes last in storage; per block group (ryo), the
+    // blocks' storage also in the K tail: on the stack
+    for (Func f : {lanes, acc}) {
+        regs(f.compute_at(tile_at(out, st)).reorder_storage(lane, n, m), {lane}, {ryi, bacc, n, m});
     }
-    for (Func f : fs) {
-        f.reorder_storage(lane, n, m);  // rfactor put the lanes last
+    for (Func f : {blk, mid, codes}) {
+        if (f.defined()) regs(f.compute_at(acc, ryo).reorder_storage(lane, n, m).bound_storage(u, ts.interleave), {lane}, {u, n, m});
     }
-    for (size_t i = 2; i < fs.size(); i++) {
-        fs[i].bound_storage(u, ts.interleave);  // also in the K tail: on the stack
-    }
-    lanes.compute_at(tile_at(out, st)).vectorize(lane).unroll(n).unroll(m).update().vectorize(lane).unroll(ryi).unroll(n).unroll(m);
-    acc.compute_at(tile_at(out, st)).vectorize(lane).unroll(bacc).unroll(n).unroll(m);
-    acc.update().reorder(lane, bacc, n, m, ryo).vectorize(lane).unroll(bacc).unroll(n).unroll(m);
-    for (Func f : {blk, mid}) {
-        if (!f.defined()) continue;
-        f.compute_at(acc, ryo).vectorize(lane).unroll(u).unroll(n).unroll(m);
-        f.update().vectorize(lane).unroll(u).unroll(n).unroll(m);
-    }
-    codes.compute_at(acc, ryo).vectorize(lane).unroll(u).unroll(n).unroll(m);
-    codes.update().atomic().vectorize(rxi).vectorize(lane).unroll(rxc).unroll(u).unroll(n).unroll(m);
     if (rest.defined()) {
         // the act's block sum, once per act column: the rows' copies are a
         // broadcast (n vectorized)
-        rest.compute_at(acc, ryo).vectorize(lane).unroll(u).unroll(m);
-        Stage ru = rest.update().atomic().vectorize(rxi).vectorize(lane).unroll(rxc).unroll(u).unroll(m);
-        for (Stage f : {Stage(rest), ru}) {
-            ts.nt > 1 ? f.vectorize(n) : f.unroll(n);
-        }
+        regs(rest.compute_at(acc, ryo).reorder_storage(lane, n, m).bound_storage(u, ts.interleave), {lane}, {u, m});
+        ts.nt > 1 ? regs(rest, {n}, {}) : regs(rest, {}, {n});
     }
-    if (sums.defined() && ts.nt > 2) {
-        // gemm tiles: the rows' mins vectorized (n), times each act column's
-        // port, a chain per column, alongside acc
-        sums.compute_at(tile_at(out, st)).vectorize(n).unroll(m);
-        sums.update().split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf).reorder(n, m, ryi, ryo).vectorize(n).unroll(m).unroll(ryi);
-        sums.update().compute_with(acc.update(), ryo);
-        sblk.compute_at(acc, ryo).bound_storage(u, ts.interleave).vectorize(n).unroll(u).unroll(m);
-        sblk.update().vectorize(n).unroll(u).unroll(m);
-    } else if (sums.defined()) {
-        // gemv tiles: per block, the min times the act's port, in the loop
-        // over the blocks, one accumulator per interleaved block (as acc: one
-        // fused-multiply-add each on the loop-carried chains)
-        sums.compute_at(tile_at(out, st));
-        sums.update().split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
-        Var v("v");
-        Func spart = sums.update().rfactor(ryi, v);
-        sums.update().unroll(ryi).unroll(n).unroll(m);
-        spart.compute_at(tile_at(out, st)).unroll(v).unroll(n).unroll(m);
-        spart.update().reorder(v, n, m, ryo).unroll(v).unroll(n).unroll(m);
-        spart.update().compute_with(acc.update(), ryo);
-        sblk.compute_at(acc, ryo).bound_storage(u, ts.interleave).unroll(u).unroll(n).unroll(m);
-        sblk.update().unroll(u).unroll(n).unroll(m);
+    for (Func f : {codes, rest}) {
+        if (f.defined()) f.update().atomic().vectorize(rxi).unroll(rxc);
     }
-    if (ssum.defined()) {  // no port matched: the act's block sums
-        ssum.compute_at(acc, ryo).unroll(u).unroll(n).unroll(m);
-        ssum.update().atomic().vectorize(r.x, vec);
-    }
+    schedule_sums(d, out, st, acc, n, m, ts, r, ts.nt > 2, vec);
 }
 
 // The integer path for weight records of ts.nt rows interleaved in pieces of
@@ -419,13 +422,13 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     Stage cu = codes.update();
     cu.split(rx, rp, rx, chunk).split(rx, rq, ri, 4);
     Func quads = cu.rfactor(rq, q);
-    cu.reorder(rq, n).atomic().vectorize(rq).vectorize(n).unroll(m).unroll(u);
-    quads.reorder_storage(q, n, m).compute_at(at).vectorize(q).vectorize(n).unroll(m).unroll(u).bound_storage(u, ts.interleave);
+    cu.reorder(rq, n).atomic().vectorize(rq);
     // gemm tiles: per act record, piece-major, each piece of its codes
     // staged just before use (the record's sums the only ones live)
     Stage qu = quads.update();
-    grouped ? qu.split(m, mo, mi, group).reorder(ri, q, n, mi, rp, mo, u).unroll(mi).unroll(mo) : qu.reorder(ri, q, n, rp, u, m).unroll(m);
-    qu.atomic().vectorize(ri).vectorize(q).vectorize(n).unroll(rp).unroll(u);
+    grouped ? qu.split(m, mo, mi, group).reorder(ri, q, n, mi, rp, mo, u) : qu.reorder(ri, q, n, rp, u, m);
+    qu.atomic().vectorize(ri);
+    regs(quads.reorder_storage(q, n, m).compute_at(at).bound_storage(u, ts.interleave), {q, n}, {m, mi, mo, rp, u});
     // A piece's act codes then are a lane of a register: by-element sdot
     auto calls = Internal::find_direct_calls(quads.function());
     for (Func a : ac) {
@@ -442,9 +445,8 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
         }
     }
     for (Func f : {blk, codes}) {
-        f.compute_at(at).bound_storage(u, ts.interleave).vectorize(n).unroll(m).unroll(u);
+        regs(f.compute_at(at).bound_storage(u, ts.interleave), {n}, {m, u});
     }
-    blk.update().vectorize(n).unroll(m).unroll(u);
     // the record's scales: one load, each row's a lane (fmla by element)
     auto bcalls = Internal::find_direct_calls(blk.function());
     for (Func a : as) {
@@ -454,10 +456,9 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
             ai.reorder_storage(ai.args()[1], ai.args()[0]).compute_at(at).vectorize(ai.args()[1]);
         }
     }
-    acc.compute_at(tile_at(out, st)).vectorize(n).unroll(bacc).unroll(m);
     Stage au = acc.update();
-    grouped ? au.split(m, mo, mi, group).reorder(n, bacc, mi, mo, ryo).unroll(mi).unroll(mo) : au.reorder(n, bacc, m, ryo).unroll(m);
-    au.vectorize(n).unroll(bacc);
+    grouped ? au.split(m, mo, mi, group).reorder(n, bacc, mi, mo, ryo) : au.reorder(n, bacc, m, ryo);
+    regs(acc.compute_at(tile_at(out, st)), {n}, {bacc, m, mi, mo});
 }
 
 // The integer path on i8mm smmla (2 x 2 x 8 matrix-multiply tiles): nt x mt
@@ -469,59 +470,44 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     Var n = dot.args()[0], m = dot.args()[1], nio("nio"), nii("nii"), mio("mio"), mii("mii"), u("u"), bacc("bacc");
     RVar ry = r.y, rxc("rxc"), rxk("rxk"), ryo("ryo"), ryi("ryi");
     bool aff = affine(rs);
-    Func sums, sblk, ssum;
-    if (derived) {
-        if (Func with = derived_sums(dot, s, cond, r, rs, sums, sblk, ssum); with.defined()) {
-            with.compute_at(tile_at(out, st));
-            s = with.update();
-            aff = false;
-        }
-    }
+    Sums d;
+    if (derived && derived_sums(out, st, dot, s, cond, r, rs, d)) aff = false;
     s.split(r.x, rxc, rxk, 8);
     Func blk = s.rfactor(ry, u);
     Func rest, mid, codes = block_dot(blk, rs, true, rest, mid, aff);
     s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
     Func acc = s.rfactor(ryi, bacc);
-    // 2 x 2 sub-tiles, guarded: this code is also in other tiles' branches
-    // (never run there), whose bounds must not grow past their tiles
-    auto sub = [&](Stage st) {
-        return st.split(n, nio, nii, 2, TailStrategy::GuardWithIf).split(m, mio, mii, 2, TailStrategy::GuardWithIf);
+    // 2 x 2 sub-tiles (loops `order`, innermost first), guarded: this code is
+    // also in other tiles' branches (never run there), whose bounds must not
+    // grow past their tiles
+    auto sub = [&](Stage st, const std::vector<VarOrRVar> &order, const std::vector<VarOrRVar> &unrolled) {
+        st.split(n, nio, nii, 2, TailStrategy::GuardWithIf).split(m, mio, mii, 2, TailStrategy::GuardWithIf);
+        st.reorder(order).vectorize(nii).vectorize(mii).unroll(nio).unroll(mio);
+        for (const VarOrRVar &v : unrolled) {
+            st.unroll(v);
+        }
+        return st;
     };
     s.vectorize(n, 2, TailStrategy::GuardWithIf).unroll(n).unroll(m);
-    std::vector<Func> fs{acc, blk, codes};
-    if (mid.defined()) fs.push_back(mid);
-    for (Func f : fs) {
+    for (Func f : {acc, blk, codes, mid}) {
+        if (!f.defined()) continue;
         Var x = f.args()[2], sno, sni, smo, smi;  // x: bacc or u
         f.split_storage(n, sno, sni, 2).split_storage(m, smo, smi, 2).reorder_storage(sni, smi, sno, smo, x);
-        sub(f).reorder(nii, mii, nio, mio, x).vectorize(nii).vectorize(mii).unroll(nio).unroll(mio).unroll(x);
-    }
-    // per block (per 2 rows, tall tiles keep the weight's codes live and spill)
-    for (size_t i = 1; i < fs.size(); i++) {
-        fs[i].compute_at(acc, ryo).bound_storage(u, ts.interleave);
+        sub(f, {nii, mii, nio, mio, x}, {x});
+        // per block (per 2 rows, tall tiles keep the weight's codes live and spill)
+        if (x.name() == u.name()) f.compute_at(acc, ryo).bound_storage(u, ts.interleave);
     }
     acc.compute_at(tile_at(out, st));
-    sub(acc.update()).reorder(nii, mii, nio, mio, bacc, ryo).vectorize(nii).vectorize(mii).unroll(nio).unroll(mio).unroll(bacc);
+    sub(acc.update(), {nii, mii, nio, mio, bacc, ryo}, {bacc});
     for (Func f : {blk, mid}) {
-        if (f.defined()) sub(f.update()).reorder(nii, mii, nio, mio, u).vectorize(nii).vectorize(mii).unroll(nio).unroll(mio).unroll(u);
+        if (f.defined()) sub(f.update(), {nii, mii, nio, mio, u}, {u});
     }
-    sub(codes.update()).reorder(rxk, nii, mii, rxc, nio, mio, u).atomic().vectorize(rxk).vectorize(nii).vectorize(mii).unroll(rxc).unroll(nio).unroll(mio).unroll(u);
+    sub(codes.update(), {rxk, nii, mii, rxc, nio, mio, u}, {rxc, u}).atomic().vectorize(rxk);
     if (rest.defined()) {  // the act's block sum, once per act column (n vectorized)
-        rest.compute_at(LoopLevel(acc, ryo)).bound_storage(u, ts.interleave).vectorize(n).unroll(m).unroll(u);
-        rest.update().reorder(rxk, rxc, n, m, u).atomic().vectorize(rxk).vectorize(rxc).vectorize(n).unroll(m).unroll(u);
+        regs(rest.compute_at(acc, ryo).bound_storage(u, ts.interleave), {n}, {m, u});
+        rest.update().reorder(rxk, rxc, n, m, u).atomic().vectorize(rxk).vectorize(rxc);
     }
-    if (sums.defined()) {
-        // the code-free terms: per block, the rows' mins (n vectorized) times
-        // each act column's port, alongside acc (one chain per column)
-        sums.compute_at(tile_at(out, st)).vectorize(n).unroll(m);
-        sums.update().split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf).reorder(n, m, ryi, ryo).vectorize(n).unroll(m).unroll(ryi);
-        sums.update().compute_with(acc.update(), ryo);
-        sblk.compute_at(acc, ryo).bound_storage(u, ts.interleave).vectorize(n).unroll(u).unroll(m);
-        sblk.update().vectorize(n).unroll(u).unroll(m);
-        if (ssum.defined()) {  // no port matched: the act's block sums
-            ssum.compute_at(acc, ryo).unroll(u).unroll(n).unroll(m);
-            ssum.update().atomic().vectorize(r.x, 16);
-        }
-    }
+    schedule_sums(d, out, st, acc, n, m, ts, r, true, 16);
 }
 
 // An encoder computed per record (each block of values), vectorized: the
