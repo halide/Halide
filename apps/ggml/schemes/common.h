@@ -6,6 +6,8 @@
 // implicit vars.
 #include "layouts.h"
 
+#include <cmath>
+
 namespace ggml {
 
 using namespace Halide;
@@ -82,10 +84,16 @@ inline Approximation scale_by(float k) {
         .with_lossless();
 }
 
+// Round to fp16 (to nearest even): within half an fp16 ulp, relative to x
+// (2^-25 below fp16's normal range); finite inputs below 65520 only. The
+// rounding is strict_float: with fast math, LLVM may otherwise fold away an
+// in-register round trip f32(f16(x)), so a consumer in the same pipeline (a
+// Derive reading the rounded scale) would see x unrounded.
 inline Approximation fp16() {
-    return Pointwise{"fp16", [](const Expr &x) { return cast<float16_t>(x); },
+    return Pointwise{"fp16", [](const Expr &x) { return strict_float(cast<float16_t>(x)); },
                      [](const Expr &x) { return cast<float>(x); }}
-        .with_types(Float(32), Float(16));
+        .with_types(Float(32), Float(16))
+        .with_error_bound([](const Expr &x) { return max(abs(cast<double>(x)) * Expr(std::ldexp(1.0, -11)), Expr(std::ldexp(1.0, -25))); });
 }
 
 }  // namespace ggml

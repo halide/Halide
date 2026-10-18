@@ -1,5 +1,7 @@
 // The codec op: every format's Halide quantize/dequantize against GGML's
-// reference quantizer and to_float (for q8_1, which has none: d * qs), bitwise, on N(0, 1) rows whose first
+// reference quantizer and to_float (for q8_1, which has none: d * qs), bitwise
+// (q8_1's s against f16(f16(d) * sum(qs)) of GGML's d and qs: see
+// consistent_q8_1_sums), on N(0, 1) rows whose first
 // blocks are adversarial (signed zeros, ties, constants, tiny and huge
 // values). inf/NaN inputs are undefined behavior in GGML's reference and are
 // not tested. Also checked: the same with the scaled codes kernels may pick
@@ -78,6 +80,29 @@ bool chunked(ggml_type t) {
     return t != GGML_TYPE_Q8_1;
 }
 
+// GGML's q8_1 stores s = f16(d * sum(qs)) from the unrounded scale d, which in
+// about a quarter of blocks is 1 ulp off the sum of the decoded block. Our
+// scheme derives s from the decoded scale: s = f16(f16(d) * sum(qs)). Rewrite
+// GGML's blocks (d and qs are checked bitwise as they are) to that, returning
+// how many blocks differed.
+int64_t consistent_q8_1_sums(uint8_t *blocks, int64_t nb) {
+    const size_t bytes = ggml_type_size(GGML_TYPE_Q8_1);
+    int64_t differs = 0;
+    for (int64_t b = 0; b < nb; b++) {
+        uint8_t *p = blocks + b * bytes;
+        ggml_fp16_t d, s;
+        memcpy(&d, p, sizeof(d));
+        memcpy(&s, p + sizeof(d), sizeof(s));
+        int32_t sum = 0;
+        for (int j = 0; j < ggml_blck_size(GGML_TYPE_Q8_1); j++)
+            sum += (int8_t)p[2 * sizeof(d) + j];
+        ggml_fp16_t ours = ggml_fp32_to_fp16(ggml_fp16_to_fp32(d) * (float)sum);
+        differs += ours != s;
+        memcpy(p + sizeof(d), &ours, sizeof(ours));
+    }
+    return differs;
+}
+
 // GGML's reference quantizer of R rows of K values.
 void quantize_ref(ggml_type t, const float *x, uint8_t *dst, int64_t R, int64_t K) {
     if (chunked(t)) {
@@ -116,6 +141,11 @@ std::vector<CodecResult> run_codecs(const std::vector<int64_t> &Ks, const std::v
             adversarial(x.data(), K);
             std::vector<uint8_t> q(bytes), ref(bytes);
             quantize_ref(t, x.data(), ref.data(), R, K);
+            if (t == GGML_TYPE_Q8_1 && check) {
+                int64_t n = nb * R, differs = consistent_q8_1_sums(ref.data(), n);
+                fprintf(stderr, "q8_1 K=%lld: GGML's s differs from f16(f16(d) * sum(qs)) in %lld of %lld blocks (%.1f%%)\n",
+                        (long long)K, (long long)differs, (long long)n, 100.0 * differs / n);
+            }
             to_float(t, ref.data(), ref_y.data(), K * R);
             if (fs.rows > 1 || fs.soa) {
                 std::vector<uint8_t> aos = ref, live;

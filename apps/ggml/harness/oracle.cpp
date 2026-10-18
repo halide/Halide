@@ -147,8 +147,12 @@ double error_ratio(const Inputs &in, const Reference &ref, const Precision &p, c
                     sum_wmax_a += wmax * aa;
                 }
             }
-            // q8_1 carries s = f16(d * sum(qs)) (d unrounded), which dots with
-            // the weight's block min: 2 f16 roundings of a term <= wmax sum |a|.
+            // The oracle decodes q8_1 as d * qs and never reads s. Kernels
+            // may read s for the sum of the decoded block, which dots with
+            // the weight's block min. GGML's s = f16(d * sum(qs)) (d
+            // unrounded; the harness's activations are GGML's) is within 2
+            // f16 roundings of it, ours (f16(f16(d) * sum(qs))) within 1:
+            // either way <= gamma(2, 11) of a term <= wmax sum |a|.
             if (in.at == GGML_TYPE_Q8_1 || p.act_quant == GGML_TYPE_Q8_1) E += gamma(2, 11) * sum_wmax_a;
             double tol = E + g * S;
             size_t i = m * ref.ns.size() + n;

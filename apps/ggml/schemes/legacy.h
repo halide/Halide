@@ -111,35 +111,38 @@ inline Approximation q8_0(const std::string &lay, bool indexed = false) {
                    layout(lay, {{"d", Float(16)}, {"qs", Int(8), QK}}, {"qs", "d"})};
 }
 
+// The block's sum of its values, scale * sum(codes), from codes(j, b, ...)
+// and scale(b, ...): block_q8_1's s, as a derived port.
+inline Func block_sum(const std::vector<Func> &from) {
+    Func s("block_sum");
+    Var b;
+    RDom r(0, QK);
+    s(b, _) = cast<float>(from[1](b, _)) * cast<float>(sum(cast<int>(from[0](r, b, _))));
+    return s;
+}
+
 // block_q8_1 (GGML's activations for q4_1, q5_1): q8_0's codes and scale, plus
-// the block's sum s = d * sum(codes) (d unrounded), which decode ignores.
-// Kernels don't read s yet: that needs a checked derived port (s declared as
-// approximating the block's sum of values, with a bound).
-struct Q8_1Quant {
-    std::vector<Func> encode(const std::vector<Func> &in) const {
-        std::vector<Func> e = Q8_0Quant{}.encode(in);
-        Func s("sum");
-        Var b;
-        RDom r(0, QK);
-        s(b, _) = e[1](b, _) * cast<float>(sum(cast<int>(e[0](r, b, _))));
-        return {e[0], e[1], s};
+// s, the block's sum, derived from the codes and the scale once rounded to
+// fp16 (so it is the sum of the decoded block), then rounded to fp16 itself:
+// within half an fp16 ulp of the sum of the decoded values, which kernels may
+// read instead (Func::approximate_by(DerivedPort, ...)). Decode ignores it.
+// GGML derives s from the unrounded scale (fp16(d * sum(qs))), an fp16 ulp
+// off this in about a quarter of the blocks, and then not the sum of the
+// decoded block (nor idempotent): the scheme is GGML's but for that.
+// q8_1_stages() are the stages before the layout; with ggml_sum, s is derived
+// GGML's way (for the property test, which shows what that breaks).
+inline std::vector<Approximation> q8_1_stages(bool indexed = false, bool ggml_sum = false) {
+    Derive sum{"sum", {"codes", "scale"}, block_sum};
+    if (ggml_sum) {
+        return {BlockReshape{QK, indexed}, Q8_0Quant{}, sum, Parallel{{"scale", fp16()}, {"sum", fp16()}}};
     }
-    std::vector<Func> decode(const std::vector<Func> &e) const {
-        return {dequant(e)};
-    }
-    static ApproximationSignature signature() {
-        ApproximationSignature s = codes_and_scale(-127, 127);
-        s.outputs.emplace_back("sum", Float(32));
-        return s;
-    }
-    Func error_bound(const std::vector<Func> &, const std::vector<Func> &e) const {
-        return step_bound(e, 0.5);
-    }
-};
+    return {BlockReshape{QK, indexed}, Q8_0Quant{}, Parallel{{"scale", fp16()}}, sum, Parallel{{"sum", fp16()}}};
+}
 
 inline Approximation q8_1(const std::string &lay, bool indexed = false) {
-    return Compose{BlockReshape{QK, indexed}, Q8_1Quant{}, Parallel{{"scale", fp16()}, {"sum", fp16()}},
-                   layout(lay, {{"d", Float(16)}, {"s", Float(16)}, {"qs", Int(8), QK}}, {"qs", "d", "s"})};
+    std::vector<Approximation> stages = q8_1_stages(indexed);
+    stages.push_back(layout(lay, {{"d", Float(16)}, {"s", Float(16)}, {"qs", Int(8), QK}}, {"qs", "d", "s"}));
+    return Compose{stages};
 }
 
 }  // namespace ggml
