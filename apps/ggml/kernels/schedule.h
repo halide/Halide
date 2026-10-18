@@ -160,16 +160,27 @@ inline std::pair<Func, Func> split_on(Func f, const std::vector<Func> &fs) {
 }
 
 // Does the weight's decode have terms free of its codes (q4_1's codes * d +
-// min)?
+// min)? Its codes: its integer decode Funcs, or integer ports read as is
+// (e.g. planar int8 codes).
 inline bool affine(const std::vector<ApproximationResult> &rs) {
-    std::vector<Func> floats, codes;
+    std::vector<Func> floats;
     for (Func f : rs[0].decode_funcs()) {
-        (f.type().is_float() ? floats : codes).push_back(f);
+        if (f.type().is_float()) floats.push_back(f);
     }
     Func w = rs[0].replacement, probe;
     probe(w.args()) = w(w.args());
     Stage(probe).eager_inline(floats);
-    return !all_terms_call(probe.value(), codes);
+    Expr e = Internal::substitute_in_all_lets(probe.value());
+    std::vector<Expr> ts;
+    terms(e, ts);
+    return product_over_sum(e) || !std::all_of(ts.begin(), ts.end(), [](const Expr &t) {
+               bool code = false;
+               Internal::visit_with(t, [&](auto *self, const Internal::Call *c) {
+                   code |= (c->call_type == Internal::Call::Halide || c->call_type == Internal::Call::Image) && c->type.is_int_or_uint();
+                   self->visit_base(c);
+               });
+               return code;
+           });
 }
 
 // Does f's increment (a product) have a factor free of its RVars?
@@ -365,7 +376,7 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
 // tiles of 2 x 2 sub-tiles, each 4 dense lanes of the intermediates' storage
 // (split_storage), so the tile's accumulators stay in registers.
 inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r,
-                         const std::vector<ApproximationResult> &rs, bool scaled = false) {
+                         const std::vector<ApproximationResult> &rs) {
     Stage s = tile_out(out, st, dot, cond, ts, r);
     Var n = dot.args()[0], m = dot.args()[1], nio("nio"), nii("nii"), mio("mio"), mii("mii"), u("u"), bacc("bacc");
     RVar ry = r.y, rxc("rxc"), rxk("rxk"), ryo("ryo"), ryi("ryi");
@@ -387,10 +398,9 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
         f.split_storage(n, sno, sni, 2).split_storage(m, smo, smi, 2).reorder_storage(sni, smi, sno, smo, x);
         sub(f).reorder(nii, mii, nio, mio, x).vectorize(nii).vectorize(mii).unroll(nio).unroll(mio).unroll(x);
     }
-    // tall tiles: per 2 rows, so few sums live (the weight's decode is CSE'd),
-    // unless the codes are scaled (2^k): per block, as there they spill
+    // per block (per 2 rows, tall tiles keep the weight's codes live and spill)
     for (size_t i = 1; i < fs.size(); i++) {
-        fs[i].compute_at(LoopLevel(acc, ts.mt > 8 && !scaled ? VarOrRVar(mio) : VarOrRVar(ryo))).bound_storage(u, ts.interleave);
+        fs[i].compute_at(acc, ryo).bound_storage(u, ts.interleave);
     }
     acc.compute_at(tile_at(out, st));
     sub(acc.update()).reorder(nii, mii, nio, mio, bacc, ryo).vectorize(nii).vectorize(mii).unroll(nio).unroll(mio).unroll(bacc);
@@ -561,7 +571,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         }
     } else if (mmla_ok) {
         if (whole) blocked_mmla(out, whole, dr, quad, mmla4, r, rs);
-        if (whole) blocked_mmla(out, whole, dr, tall, mmla, r, rs, blocks[5]);
+        if (whole) blocked_mmla(out, whole, dr, tall, mmla, r, rs);
         blocked_mmla(out, whole, dr, whole ? Expr() : fits(mmla8, M), mmla8, r, rs);
     }
     if (!whole || !tiled) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, integer, rs, t);
