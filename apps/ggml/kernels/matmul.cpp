@@ -98,7 +98,7 @@ public:
             add_input(p);
         }
         result = add_output(out);
-        blocks = {fw.block, fc.block, fc.rows, fw.rows, fw.chunk, scaled};
+        blocks = {fw.block, fc.block, fc.rows, fw.rows, fw.chunk};
     }
 
     void generate() {
