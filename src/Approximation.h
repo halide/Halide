@@ -27,6 +27,7 @@ struct EncodeResult;
 struct DecodeResult;
 struct ApproximationResult;
 struct ApproximationTraceNode;
+struct Derive;
 
 /** A closed interval [lo, hi] of values, with constant double endpoints. This
  * is deliberately simpler than Halide::Interval (which holds Exprs and can be
@@ -286,6 +287,7 @@ class Approximation {
         virtual std::vector<ApproximationPorts> child_inputs(const ApproximationPorts &inputs) const = 0;
         virtual Func error_bound(const std::vector<Func> &inputs, const std::vector<Func> &encoded) const = 0;
         virtual bool lossless() const = 0;
+        virtual const Derive *derive() const = 0;
     };
 
     // The shared identity of a stage: every copy of a handle points at one
@@ -580,6 +582,11 @@ public:
      * lossless() even if that bound happens to be zero. */
     bool lossless() const;
 
+    /** The Derive unit this handle wraps, or null if it wraps another unit.
+     * This is how derived ports are found by handle in a trace (see
+     * derived_ports()). */
+    const Derive *as_derive() const;
+
     /** Render this stage's structure without running anything: one line per
      * stage, `label (inputs) -> (outputs)`, where a port prints as
      * `name: type xN in [lo, hi]` (`N` being its dimensionality; unset parts
@@ -768,6 +775,14 @@ struct Approximation::Model final : Approximation::Concept {
             return false;
         }
     }
+
+    const Derive *derive() const override {
+        if constexpr (std::is_same_v<T, Derive>) {
+            return &unit;
+        } else {
+            return nullptr;
+        }
+    }
 };
 
 template<typename T, typename>
@@ -781,6 +796,49 @@ Approximation::Approximation(T &&unit, std::string label)
     state_->impl = std::make_unique<const Model<std::decay_t<T>>>(std::forward<T>(unit));
     state_->label = std::move(label);
 }
+
+/** A port appended by a Derive stage, seen from the decode side, where a
+ * consumer can read it. Its declared relation is
+ *
+ *     stored ~= definition = psi(from)
+ *
+ * where `from` are the Funcs the Derive stage's decode received for its
+ * `from` ports (e.g. the decoded codes and scale) and `stored` is what it
+ * received for the derived port (the stored value, after the decode of every
+ * stage that followed Derive in encode order). The relation is exact if no
+ * lossy stage follows Derive on the port, and otherwise bounded by the one
+ * lossy stage that does (bounds are not composed): see error_bound and
+ * bound_problem. Obtain these with ApproximationResult::derived_ports() or
+ * derived_ports(); substitute one for an equal term with
+ * Func::approximate_by(const DerivedPort &, ...). */
+struct DerivedPort {
+    /** The Derive stage. */
+    Approximation stage;
+    /** The derived port's name, and the names of the ports psi reads. */
+    std::string name;
+    std::vector<std::string> from_names;
+    /** The decode-side Funcs psi reads (parallel to from_names). */
+    std::vector<Func> from;
+    /** The decode-side stored value of the port. */
+    Func stored;
+    /** psi instantiated on `from`; it has the same arguments as `stored`. */
+    Func definition;
+    /** A per-element bound on |stored - definition| over the arguments of
+     * `stored`, or undefined if `exact` (or if bound_problem is set). */
+    Func error_bound;
+    /** Is the stored value psi(from) exactly (no lossy stage follows)? */
+    bool exact = false;
+    /** Why no bound can be declared (e.g. two lossy stages follow Derive, or
+     * a lossy stage follows Derive on a `from` port); empty if there is one. */
+    std::string bound_problem;
+    /** The lossy stages that follow Derive on the port, in encode order. */
+    std::vector<Approximation> lossy_stages;
+};
+
+/** Every derived port in a pair of traces (the encode and decode traces of
+ * one round trip), in decode-trace post-order. */
+std::vector<DerivedPort> derived_ports(const ApproximationTraceNode &encode_trace,
+                                       const ApproximationTraceNode &decode_trace);
 
 /** The result of Func::approximate_by(): the primary replacement Func
  * (already spliced into every Func in `consumers`), plus every
@@ -850,6 +908,11 @@ struct ApproximationResult {
      * whole inlinable decode chain into the consumer, leaving calls to
      * `encoded` and to the Funcs left out. Schedule those first. */
     std::vector<Func> decode_funcs() const;
+
+    /** The derived ports of this round trip (see DerivedPort), and the one
+     * named `name` (an error if there is none, or more than one). */
+    std::vector<DerivedPort> derived_ports() const;
+    DerivedPort derived_port(const std::string &name) const;
 };
 
 /** Statically check declared value ranges through `a`, without running
@@ -1209,6 +1272,119 @@ struct Identity {
     bool lossless() const {
         return true;
     }
+};
+
+/** A lossless stage that appends a *derived port*: a value defined from other
+ * ports, `psi(from...)`, that a consumer may read instead of recomputing it
+ * (e.g. the sum of a block's decoded values, next to its codes and scale).
+ * encode() passes its inputs through and appends psi applied to the ports
+ * named `from` (in that order); decode() drops the derived port, so the
+ * round trip, and its idempotent, are unchanged. Stages after Derive (in
+ * encode order) may encode the port, e.g. round it to a narrower type; the
+ * relation then holds within their declared bound (see DerivedPort).
+ *
+ * `psi` must be a function of its arguments alone: it is instantiated on the
+ * encode side (to compute the port) and again on the decode side (to state
+ * what the stored port approximates), and matched against consumers' terms
+ * by Func::approximate_by(const DerivedPort &, ...). See the `closed()`
+ * property in tools/halide_approximation_testing.h to check that. */
+struct Derive {
+    using Definition = std::function<Func(const std::vector<Func> &)>;
+
+    Derive(std::string port, std::vector<std::string> from, Definition psi);
+
+    std::vector<Func> encode(const std::vector<Func> &inputs, const ApproximationPorts &input_ports) const;
+    std::vector<Func> decode(const std::vector<Func> &encoded, const ApproximationPorts &input_ports) const;
+
+    /** The inputs, then the derived port (type and dimensions left to the
+     * Func psi produces). Unknown if there are no inputs or a `from` port is
+     * missing. */
+    ApproximationSignature signature(const ApproximationPorts &inputs) const;
+
+    bool lossless() const {
+        return true;
+    }
+
+    /** "Derive(port)". */
+    std::string name() const;
+
+    const std::string &port() const {
+        return port_;
+    }
+    const std::vector<std::string> &from() const {
+        return from_;
+    }
+
+    /** psi applied to `from` (Funcs for the `from` ports, in that order). */
+    Func define(const std::vector<Func> &from) const;
+
+private:
+    std::string port_;
+    std::vector<std::string> from_;
+    Definition psi_;
+};
+
+/** The result of match_derived_port(). */
+struct DerivedPortMatch {
+    bool matched = false;
+    /** On success, the arguments of the port (and of its definition) at which
+     * the term equals the definition, as Exprs in the term's pure Vars. */
+    std::vector<Expr> port_args;
+    /** The normal forms that were compared (or the last attempt's). */
+    std::string term_form, definition_form;
+    /** Why the match failed; empty on success. */
+    std::string reason;
+
+    explicit operator bool() const {
+        return matched;
+    }
+};
+
+/** Does `term` equal `port.definition` at some arguments, under real-valued
+ * semantics? Both sides are normalized structurally, not evaluated:
+ *
+ * - calls to `port.from` and `port.stored` are atoms (by name, with their
+ *   index arguments simplified);
+ * - other pure Funcs are expanded, and Funcs that are sum reductions (a zero
+ *   initial value and one update `f(vars) = f(vars) + body`, without an RDom
+ *   predicate) become sums over their RVars, which are renamed so that sums
+ *   over equal bounds match;
+ * - + - * (and division by a constant) on floats and on 32/64-bit signed
+ *   integers are real arithmetic: products are distributed, like terms are
+ *   collected with rational coefficients, and within a sum, factors
+ *   invariant in the summation variable are pulled out;
+ * - widening float casts are the identity; integer-to-integer and
+ *   integer-to-float casts are the identity when the operand's range (from
+ *   its type and the sums' extents) is exactly representable; every other
+ *   cast (a rounding) and every other operation is an opaque node, which
+ *   only matches an identical node.
+ *
+ * The arguments come from unifying the definition's calls to the ports
+ * with the term's. Limits: no index shifting, splitting or merging of
+ * reduction domains, nested sums must be nested in the same order, and the
+ * term must reach the ports through calls (match before inlining their
+ * consumers). */
+DerivedPortMatch match_derived_port(const Func &term, const DerivedPort &port);
+
+/** How Func::approximate_by(const DerivedPort &, ...) trusts the stored
+ * port: `Static` relies on the structural match and the declared relation;
+ * `Runtime` additionally checks the relation where the port is read, with
+ * require(): |stored - definition| <= error_bound (or ==, if exact), at the
+ * cost of computing the definition. */
+enum class DerivedPortCheck { Static,
+                              Runtime };
+
+/** The result of Func::approximate_by(const DerivedPort &, ...). */
+struct DerivedSubstitution {
+    /** Spliced into the consumers in place of the term: the stored port at
+     * `port_args`. */
+    Func replacement;
+    DerivedPort port;
+    std::vector<Expr> port_args;
+    /** A bound on |replacement - term| (real-valued) over the term's
+     * arguments, or undefined if `exact`. */
+    Func error_bound;
+    bool exact = false;
 };
 
 /** Reorders Funcs: encode() outputs `inputs[permutation[i]]` at position i,

@@ -1,9 +1,14 @@
 #include "Approximation.h"
 
 #include <algorithm>
+#include <cmath>
+#include <iterator>
+#include <map>
+#include <numeric>
 #include <ostream>
 #include <set>
 #include <sstream>
+#include <tuple>
 
 #if defined(__GNUC__) || defined(__clang__)
 #include <cstdlib>
@@ -12,6 +17,13 @@
 #include "Error.h"
 #include "FindCalls.h"
 #include "Function.h"
+#include "IROperator.h"
+#include "IRPrinter.h"
+#include "IRVisitor.h"
+#include "Simplify.h"
+#include "StrictifyFloat.h"
+#include "Substitute.h"
+#include "Util.h"
 
 namespace Halide {
 
@@ -1516,6 +1528,1123 @@ PlanarFieldPack::PlanarFieldPack(int field_bits, int positions)
     : field_bits_(field_bits), positions_(positions), planes_(8 / field_bits) {
     user_assert(field_bits_ > 0 && 8 % field_bits_ == 0 && positions_ > 0)
         << "Invalid PlanarFieldPack shape\n";
+}
+
+const Derive *Approximation::as_derive() const {
+    return defined() ? state_->impl->derive() : nullptr;
+}
+
+namespace {
+
+int index_of(const std::vector<std::string> &names, const std::string &name) {
+    for (size_t i = 0; i < names.size(); i++) {
+        if (names[i] == name) {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+std::string joined(const std::vector<std::string> &names) {
+    std::string out;
+    for (const std::string &n : names) {
+        out += (out.empty() ? "" : ", ") + n;
+    }
+    return out;
+}
+
+}  // namespace
+
+Derive::Derive(std::string port, std::vector<std::string> from, Definition psi)
+    : port_(std::move(port)), from_(std::move(from)), psi_(std::move(psi)) {
+    user_assert(!port_.empty() && psi_) << "Derive requires a port name and a definition\n";
+    user_assert(!from_.empty()) << "Derive(" << port_ << ") must read at least one port\n";
+    for (size_t i = 0; i < from_.size(); i++) {
+        user_assert(from_[i] != port_ && index_of(std::vector<std::string>(from_.begin(), from_.begin() + i), from_[i]) < 0)
+            << "Derive(" << port_ << "): the ports it reads must be distinct and differ from the port it derives\n";
+    }
+}
+
+std::string Derive::name() const {
+    return "Derive(" + port_ + ")";
+}
+
+Func Derive::define(const std::vector<Func> &from) const {
+    user_assert(from.size() == from_.size())
+        << name() << ": the definition reads " << from_.size() << " ports, but was given " << from.size() << "\n";
+    Func f = psi_(from);
+    user_assert(f.defined()) << name() << ": the definition returned an undefined Func\n";
+    return f;
+}
+
+std::vector<Func> Derive::encode(const std::vector<Func> &inputs, const ApproximationPorts &input_ports) const {
+    std::vector<std::string> names = names_of(input_ports);
+    user_assert(index_of(names, port_) < 0)
+        << name() << ": there is already a port named '" << port_ << "' (ports: " << joined(names) << ")\n";
+    std::vector<Func> from;
+    for (const std::string &n : from_) {
+        int i = index_of(names, n);
+        user_assert(i >= 0) << name() << ": no input port '" << n << "' (ports: " << joined(names) << ")\n";
+        from.push_back(inputs[i]);
+    }
+    std::vector<Func> out = inputs;
+    out.push_back(define(from));
+    return out;
+}
+
+std::vector<Func> Derive::decode(const std::vector<Func> &encoded, const ApproximationPorts &input_ports) const {
+    user_assert(!encoded.empty() && (input_ports.empty() || encoded.size() == input_ports.size() + 1))
+        << name() << "::decode expects its inputs' ports followed by the derived port\n";
+    return std::vector<Func>(encoded.begin(), encoded.end() - 1);
+}
+
+ApproximationSignature Derive::signature(const ApproximationPorts &inputs) const {
+    std::vector<std::string> names = names_of(inputs);
+    for (const std::string &n : from_) {
+        if (index_of(names, n) < 0) {
+            return ApproximationSignature::unknown(inputs);
+        }
+    }
+    ApproximationSignature s{inputs, inputs};
+    s.outputs.emplace_back(port_);
+    return s;
+}
+
+namespace {
+
+void flatten_nodes(const ApproximationTraceNode &node, std::vector<const ApproximationTraceNode *> &out) {
+    for (const ApproximationTraceNode &c : node.children) {
+        flatten_nodes(c, out);
+    }
+    out.push_back(&node);
+}
+
+std::set<std::string> func_names(const std::vector<Func> &fs) {
+    std::set<std::string> names;
+    for (const Func &f : fs) {
+        if (f.defined()) {
+            names.insert(f.name());
+        }
+    }
+    return names;
+}
+
+// Read the derived port's relation off the stages that follow Derive in
+// encode order: lossless stages pass; at most one lossy stage may follow, on
+// the port alone, and it must declare a bound. Sets exact, error_bound,
+// lossy_stages, or bound_problem.
+void declare_bound(DerivedPort &p, const Derive &d, const std::vector<const ApproximationTraceNode *> &enc_nodes,
+                   const std::vector<const ApproximationTraceNode *> &dec_nodes) {
+    size_t at = enc_nodes.size(), count = 0;
+    for (size_t i = 0; i < enc_nodes.size(); i++) {
+        if (enc_nodes[i]->stage.same_as(p.stage)) {
+            at = i;
+            count++;
+        }
+    }
+    if (count != 1) {
+        p.bound_problem = count ? "the stage is encoded more than once" : "the stage is not in the encode trace";
+        return;
+    }
+    const ApproximationTraceNode &node = *enc_nodes[at];
+    int port_index = index_of(node.port_names, d.port());
+    internal_assert(port_index >= 0);
+    std::string derived_func = node.ports[port_index].name();
+    std::set<std::string> derived = {derived_func}, from;
+    for (const std::string &n : d.from()) {
+        int i = index_of(node.port_names, n);
+        internal_assert(i >= 0);
+        from.insert(node.ports[i].name());
+    }
+    std::vector<const ApproximationTraceNode *> lossy;
+    for (size_t i = at + 1; i < enc_nodes.size(); i++) {
+        const ApproximationTraceNode &n = *enc_nodes[i];
+        if (!n.children.empty()) {
+            continue;
+        }
+        std::set<std::string> inputs = func_names(n.inputs);
+        for (size_t k = 0; k < n.ports.size(); k++) {
+            const Func &out = n.ports[k];
+            if (inputs.count(out.name())) {
+                continue;  // passed through: it keeps its own taint
+            }
+            // The stage's inputs this output is computed from.
+            std::set<std::string> reached, visited;
+            std::vector<Internal::Function> stack = {out.function()};
+            while (!stack.empty()) {
+                Internal::Function f = stack.back();
+                stack.pop_back();
+                if (inputs.count(f.name())) {
+                    reached.insert(f.name());
+                } else if (visited.insert(f.name()).second) {
+                    for (const auto &[name, callee] : Internal::find_direct_calls(f)) {
+                        stack.push_back(callee);
+                    }
+                }
+            }
+            bool reads_derived = false, reads_from = false;
+            for (const std::string &r : reached) {
+                reads_derived |= derived.count(r) > 0;
+                reads_from |= from.count(r) > 0;
+            }
+            if (!n.stage.lossless() && (reads_derived || reads_from)) {
+                if (reads_from) {
+                    p.bound_problem = "the lossy stage " + n.label + " follows " + d.name() +
+                                      " on a port its definition reads (" + joined(d.from()) +
+                                      "), so the stored port is not within a declared bound of the definition " +
+                                      "of the decoded ports (bounds do not compose)";
+                    return;
+                }
+                bool alone = reached.size() == 1 && derived.count(*reached.begin());
+                if (!alone || (lossy.empty() && *reached.begin() != derived_func)) {
+                    p.bound_problem = "the lossy stage " + n.label + " follows " + d.name() +
+                                      ", but not on the derived port alone, as psi produced it";
+                    return;
+                }
+                if (lossy.empty() || lossy.back() != &n) {
+                    lossy.push_back(&n);
+                }
+            }
+            if (reads_derived) {
+                derived.insert(out.name());
+            }
+            if (reads_from) {
+                from.insert(out.name());
+            }
+        }
+    }
+    for (const ApproximationTraceNode *n : lossy) {
+        p.lossy_stages.push_back(n->stage);
+    }
+    if (lossy.empty()) {
+        p.exact = true;
+        return;
+    }
+    if (lossy.size() > 1) {
+        std::vector<std::string> labels;
+        for (const ApproximationTraceNode *n : lossy) {
+            labels.push_back(n->label);
+        }
+        p.bound_problem = "more than one lossy stage follows " + d.name() + " (" + joined(labels) +
+                          "): bounds do not compose";
+        return;
+    }
+    const ApproximationTraceNode &s = *lossy[0];
+    std::vector<Func> encoded;
+    size_t dec_count = 0;
+    for (const ApproximationTraceNode *n : dec_nodes) {
+        if (n->stage.same_as(s.stage)) {
+            encoded = n->inputs;
+            dec_count++;
+        }
+    }
+    if (dec_count != 1) {
+        encoded.clear();
+    }
+    p.error_bound = s.stage.error_bound({p.definition}, encoded);
+    if (!p.error_bound.defined()) {
+        p.bound_problem = "the lossy stage " + s.label + " that follows " + d.name() + " declares no error bound";
+    }
+}
+
+}  // namespace
+
+std::vector<DerivedPort> derived_ports(const ApproximationTraceNode &encode_trace,
+                                       const ApproximationTraceNode &decode_trace) {
+    std::vector<const ApproximationTraceNode *> enc_nodes, dec_nodes;
+    flatten_nodes(encode_trace, enc_nodes);
+    flatten_nodes(decode_trace, dec_nodes);
+    std::vector<DerivedPort> result;
+    for (const ApproximationTraceNode *node : dec_nodes) {
+        const Derive *d = node->stage.defined() ? node->stage.as_derive() : nullptr;
+        if (!d) {
+            continue;
+        }
+        DerivedPort p;
+        p.stage = node->stage;
+        p.name = d->port();
+        p.from_names = d->from();
+        int stored = index_of(node->input_names, d->port());
+        if (stored < 0 && !node->inputs.empty()) {
+            stored = (int)node->inputs.size() - 1;
+        }
+        user_assert(stored >= 0) << d->name() << ": its decode received no derived port\n";
+        p.stored = node->inputs[stored];
+        for (const std::string &n : d->from()) {
+            int i = index_of(node->input_names, n);
+            user_assert(i >= 0) << d->name() << ": its decode received no port '" << n
+                                << "' (ports: " << joined(node->input_names) << ")\n";
+            p.from.push_back(node->inputs[i]);
+        }
+        p.definition = d->define(p.from);
+        user_assert(p.definition.dimensions() == p.stored.dimensions())
+            << d->name() << ": the definition has " << p.definition.dimensions() << " dimensions, but the port has "
+            << p.stored.dimensions() << "\n";
+        declare_bound(p, *d, enc_nodes, dec_nodes);
+        result.push_back(std::move(p));
+    }
+    return result;
+}
+
+std::vector<DerivedPort> ApproximationResult::derived_ports() const {
+    return Halide::derived_ports(encode_trace, decode_trace);
+}
+
+DerivedPort ApproximationResult::derived_port(const std::string &name) const {
+    std::vector<DerivedPort> all = derived_ports(), found;
+    std::vector<std::string> names;
+    for (const DerivedPort &p : all) {
+        names.push_back(p.name);
+        if (p.name == name) {
+            found.push_back(p);
+        }
+    }
+    user_assert(found.size() == 1)
+        << "derived_port: " << (found.empty() ? "no" : "more than one") << " derived port named '" << name
+        << "' (derived ports: " << joined(names) << ")\n";
+    return found[0];
+}
+
+// The real-valued normalizer behind match_derived_port().
+namespace {
+
+using Internal::Call;
+using Internal::Variable;
+
+// An exact rational, num/den with den > 0, in lowest terms.
+struct Rational {
+    int64_t num = 0, den = 1;
+};
+
+struct NNode;
+using NNodePtr = std::shared_ptr<const NNode>;
+
+struct Mono {
+    Rational coeff;
+    std::vector<NNodePtr> factors;
+};
+
+struct Poly {
+    std::vector<Mono> monos;
+};
+
+struct Interval {
+    double lo = -INFINITY, hi = INFINITY;
+};
+
+// A factor: an atom (a call to a port or other unexpanded Func, an image, a
+// variable), an opaque operation over normalized children, or a sum of one
+// monomial over a summation variable.
+struct NNode {
+    enum Kind { Atom,
+                Opaque,
+                Sum } kind;
+    std::string name;            // Atom: the callee or variable; Opaque: the operation
+    std::vector<Expr> args;      // Atom: index arguments
+    std::vector<Poly> children;  // Opaque
+    std::string var;             // Sum: the summation variable (a placeholder)
+    Expr min, extent;            // Sum
+    Mono body;                   // Sum
+    std::set<std::string> free;  // placeholders that occur free
+    Interval range;
+    bool port = false;  // Atom: a call to a port
+};
+
+const char *const placeholder_prefix = "$dp";
+
+class FindPlaceholders : public Internal::IRGraphVisitor {
+    using IRGraphVisitor::visit;
+    void visit(const Variable *op) override {
+        if (Internal::starts_with(op->name, placeholder_prefix)) {
+            found.insert(op->name);
+        }
+    }
+
+public:
+    std::set<std::string> found;
+};
+
+std::set<std::string> placeholders_in(const Expr &e) {
+    FindPlaceholders f;
+    if (e.defined()) {
+        e.accept(&f);
+    }
+    return f.found;
+}
+
+std::string type_name(const Type &t) {
+    std::ostringstream s;
+    s << t;
+    return s.str();
+}
+
+Interval type_range(const Type &t) {
+    if (t.is_int()) {
+        return {-std::ldexp(1.0, t.bits() - 1), std::ldexp(1.0, t.bits() - 1) - 1};
+    }
+    if (t.is_uint()) {
+        return {0, std::ldexp(1.0, t.bits()) - 1};
+    }
+    if (t.is_bool()) {
+        return {0, 1};
+    }
+    return {};
+}
+
+Interval interval_mul(Interval a, Interval b) {
+    double c[4] = {a.lo * b.lo, a.lo * b.hi, a.hi * b.lo, a.hi * b.hi};
+    Interval r{INFINITY, -INFINITY};
+    for (double x : c) {
+        if (std::isnan(x)) {
+            x = 0;  // 0 * inf
+        }
+        r.lo = std::min(r.lo, x);
+        r.hi = std::max(r.hi, x);
+    }
+    return r;
+}
+
+class Normalizer {
+public:
+    std::set<std::string> stops;
+    std::string failure;
+    int budget = 200000;
+    int counter = 0;
+
+    Poly constant(Rational r) {
+        Poly p;
+        if (r.num != 0) {
+            p.monos.push_back({r, {}});
+        }
+        return p;
+    }
+
+    Poly factor(NNodePtr n) {
+        Poly p;
+        p.monos.push_back({{1, 1}, {std::move(n)}});
+        return p;
+    }
+
+    Rational rat(int64_t n, int64_t d) {
+        if (d < 0) {
+            n = -n;
+            d = -d;
+        }
+        int64_t g = std::gcd(n < 0 ? -n : n, d);
+        if (g > 1) {
+            n /= g;
+            d /= g;
+        }
+        return {n, d};
+    }
+
+    bool fits(__int128 v) {
+        return v >= INT64_MIN / 4 && v <= INT64_MAX / 4;
+    }
+
+    Rational reduce(__int128 n, __int128 d) {
+        if (d < 0) {
+            n = -n;
+            d = -d;
+        }
+        __int128 a = n < 0 ? -n : n, b = d;
+        while (b) {
+            __int128 t = a % b;
+            a = b;
+            b = t;
+        }
+        if (a > 1) {
+            n /= a;
+            d /= a;
+        }
+        if (!fits(n) || !fits(d)) {
+            fail("a coefficient overflowed");
+            return {0, 1};
+        }
+        return {(int64_t)n, (int64_t)d};
+    }
+
+    Rational mul(Rational a, Rational b) {
+        return reduce((__int128)a.num * b.num, (__int128)a.den * b.den);
+    }
+
+    Rational add(Rational a, Rational b) {
+        return reduce((__int128)a.num * b.den + (__int128)b.num * a.den, (__int128)a.den * b.den);
+    }
+
+    void fail(const std::string &why) {
+        if (failure.empty()) {
+            failure = why;
+        }
+    }
+
+    // Keys. env maps placeholders to canonical binder names.
+    std::string expr_key(const Expr &e, const std::map<std::string, Expr> &env) {
+        std::ostringstream s;
+        s << Internal::simplify(Internal::substitute(env, e));
+        return s.str();
+    }
+
+    std::string rat_key(Rational r) {
+        return r.den == 1 ? std::to_string(r.num) : std::to_string(r.num) + "/" + std::to_string(r.den);
+    }
+
+    std::string node_key(const NNode &n, const std::map<std::string, Expr> &env, int depth) {
+        switch (n.kind) {
+        case NNode::Atom: {
+            if (n.args.empty()) {
+                return n.name;
+            }
+            std::string s = n.name + "(";
+            for (size_t i = 0; i < n.args.size(); i++) {
+                s += (i ? ", " : "") + expr_key(n.args[i], env);
+            }
+            return s + ")";
+        }
+        case NNode::Opaque: {
+            std::string s = n.name + "(";
+            for (size_t i = 0; i < n.children.size(); i++) {
+                s += (i ? ", " : "") + poly_key(n.children[i], env, depth);
+            }
+            return s + ")";
+        }
+        case NNode::Sum: {
+            std::string binder = "#" + std::to_string(depth);
+            std::map<std::string, Expr> inner = env;
+            inner[n.var] = Variable::make(Int(32), binder);
+            return "sum[" + binder + " in " + expr_key(n.min, env) + " .. +" + expr_key(n.extent, env) + "](" +
+                   factors_key(n.body.factors, inner, depth + 1) + ")";
+        }
+        }
+        return "";
+    }
+
+    std::string factors_key(const std::vector<NNodePtr> &factors, const std::map<std::string, Expr> &env, int depth) {
+        std::vector<std::string> keys;
+        for (const NNodePtr &f : factors) {
+            const std::string k = node_key(*f, env, depth);
+            keys.push_back(f->kind == NNode::Atom ? k : "(" + k + ")");
+        }
+        std::sort(keys.begin(), keys.end());
+        std::string s;
+        for (const std::string &k : keys) {
+            s += (s.empty() ? "" : " * ") + k;
+        }
+        return s;
+    }
+
+    std::string mono_key(const Mono &m, const std::map<std::string, Expr> &env, int depth) {
+        if (m.factors.empty()) {
+            return rat_key(m.coeff);
+        }
+        std::string f = factors_key(m.factors, env, depth);
+        if (m.coeff.num == 1 && m.coeff.den == 1) {
+            return f;
+        }
+        return rat_key(m.coeff) + " * " + f;
+    }
+
+    std::vector<std::string> mono_keys(const Poly &p, const std::map<std::string, Expr> &env, int depth) {
+        std::vector<std::string> keys;
+        for (const Mono &m : p.monos) {
+            keys.push_back(mono_key(m, env, depth));
+        }
+        std::sort(keys.begin(), keys.end());
+        return keys;
+    }
+
+    std::string poly_key(const Poly &p, const std::map<std::string, Expr> &env = {}, int depth = 0) {
+        std::vector<std::string> keys = mono_keys(p, env, depth);
+        if (keys.empty()) {
+            return "0";
+        }
+        std::string s;
+        for (const std::string &k : keys) {
+            s += (s.empty() ? "" : " + ") + k;
+        }
+        return s;
+    }
+
+    // Arithmetic.
+    Poly plus(const Poly &a, const Poly &b) {
+        Poly r;
+        std::map<std::string, size_t> where;
+        auto add_mono = [&](const Mono &m) {
+            std::string k = factors_key(m.factors, {}, 0);
+            auto it = where.find(k);
+            if (it == where.end()) {
+                where[k] = r.monos.size();
+                r.monos.push_back(m);
+            } else {
+                r.monos[it->second].coeff = add(r.monos[it->second].coeff, m.coeff);
+            }
+        };
+        for (const Mono &m : a.monos) {
+            add_mono(m);
+        }
+        for (const Mono &m : b.monos) {
+            add_mono(m);
+        }
+        Poly out;
+        for (Mono &m : r.monos) {
+            if (m.coeff.num != 0) {
+                out.monos.push_back(std::move(m));
+            }
+        }
+        return out;
+    }
+
+    Poly scale(const Poly &a, Rational c) {
+        Poly r;
+        if (c.num == 0) {
+            return r;
+        }
+        for (const Mono &m : a.monos) {
+            r.monos.push_back({mul(m.coeff, c), m.factors});
+        }
+        return r;
+    }
+
+    Poly times(const Poly &a, const Poly &b) {
+        Poly r;
+        if ((double)a.monos.size() * (double)b.monos.size() > budget) {
+            fail("the expansion exceeds the size budget");
+            return r;
+        }
+        for (const Mono &x : a.monos) {
+            for (const Mono &y : b.monos) {
+                Mono m{mul(x.coeff, y.coeff), x.factors};
+                m.factors.insert(m.factors.end(), y.factors.begin(), y.factors.end());
+                r = plus(r, Poly{{m}});
+            }
+        }
+        budget -= (int)r.monos.size();
+        if (budget < 0) {
+            fail("the expansion exceeds the size budget");
+        }
+        return r;
+    }
+
+    bool as_constant(const Poly &p, Rational &c) {
+        if (p.monos.empty()) {
+            c = {0, 1};
+            return true;
+        }
+        if (p.monos.size() == 1 && p.monos[0].factors.empty()) {
+            c = p.monos[0].coeff;
+            return true;
+        }
+        return false;
+    }
+
+    Interval range_of(const Poly &p) {
+        Interval r{0, 0};
+        for (const Mono &m : p.monos) {
+            Interval t{(double)m.coeff.num / (double)m.coeff.den, (double)m.coeff.num / (double)m.coeff.den};
+            for (const NNodePtr &f : m.factors) {
+                t = interval_mul(t, f->range);
+            }
+            r.lo += t.lo;
+            r.hi += t.hi;
+        }
+        return r;
+    }
+
+    NNodePtr atom(const std::string &name, std::vector<Expr> args, Interval range) {
+        auto n = std::make_shared<NNode>();
+        n->kind = NNode::Atom;
+        n->name = name;
+        for (Expr &a : args) {
+            a = Internal::simplify(a);
+            std::set<std::string> f = placeholders_in(a);
+            n->free.insert(f.begin(), f.end());
+        }
+        n->args = std::move(args);
+        n->range = range;
+        return n;
+    }
+
+    Poly opaque(const std::string &name, const Type &t, std::vector<Poly> children) {
+        auto n = std::make_shared<NNode>();
+        n->kind = NNode::Opaque;
+        n->name = name;
+        for (const Poly &c : children) {
+            for (const Mono &m : c.monos) {
+                for (const NNodePtr &f : m.factors) {
+                    n->free.insert(f->free.begin(), f->free.end());
+                }
+            }
+        }
+        n->children = std::move(children);
+        n->range = type_range(t);
+        return factor(n);
+    }
+
+    // Sum `body` over var in [min, min + extent), one monomial at a time,
+    // pulling out the factors that do not depend on var.
+    Poly sum(const Poly &body, const std::string &var, const Expr &min, const Expr &extent) {
+        Poly result;
+        std::set<std::string> bounds_free = placeholders_in(min);
+        std::set<std::string> extent_free = placeholders_in(extent);
+        bounds_free.insert(extent_free.begin(), extent_free.end());
+        std::optional<int64_t> n_iter = Internal::as_const_int(Internal::simplify(extent));
+        for (const Mono &m : body.monos) {
+            Mono inv{m.coeff, {}}, dep{{1, 1}, {}};
+            for (const NNodePtr &f : m.factors) {
+                (f->free.count(var) ? dep : inv).factors.push_back(f);
+            }
+            Poly term{{inv}};
+            if (dep.factors.empty()) {
+                term = times(term, normalize(extent));
+            } else {
+                auto n = std::make_shared<NNode>();
+                n->kind = NNode::Sum;
+                n->var = var;
+                n->min = Internal::simplify(min);
+                n->extent = Internal::simplify(extent);
+                n->body = dep;
+                for (const NNodePtr &f : dep.factors) {
+                    n->free.insert(f->free.begin(), f->free.end());
+                }
+                n->free.erase(var);
+                n->free.insert(bounds_free.begin(), bounds_free.end());
+                Interval r{1, 1};
+                for (const NNodePtr &f : dep.factors) {
+                    r = interval_mul(r, f->range);
+                }
+                if (n_iter && *n_iter >= 0) {
+                    n->range = interval_mul(r, {(double)*n_iter, (double)*n_iter});
+                } else {
+                    n->range = {};
+                }
+                term = times(term, factor(n));
+            }
+            result = plus(result, term);
+        }
+        return result;
+    }
+
+    std::string fresh() {
+        return placeholder_prefix + std::to_string(counter++);
+    }
+
+    Poly call(const Call *op) {
+        std::vector<Poly> args;
+        if (op->call_type == Call::Halide && op->func.defined()) {
+            Internal::Function f(op->func);
+            if (stops.count(f.name())) {
+                NNodePtr n = atom(f.name() + (f.outputs() > 1 ? "." + std::to_string(op->value_index) : ""),
+                                  op->args, type_range(op->type));
+                const_cast<NNode &>(*n).port = true;
+                return factor(n);
+            }
+            if (f.has_pure_definition() && !f.has_extern_definition() && f.outputs() == 1 &&
+                f.updates().size() <= 1) {
+                std::map<std::string, Expr> pure;
+                for (size_t i = 0; i < f.args().size(); i++) {
+                    pure[f.args()[i]] = op->args[i];
+                }
+                if (f.updates().empty()) {
+                    return normalize(Internal::substitute(pure, f.values()[0]));
+                }
+                if (Poly p; expand_sum(f, pure, p)) {
+                    return p;
+                }
+            }
+            return factor(atom(f.name() + (f.outputs() > 1 ? "." + std::to_string(op->value_index) : ""),
+                               op->args, type_range(op->type)));
+        }
+        if (op->call_type == Call::Image) {
+            return factor(atom(op->name, op->args, type_range(op->type)));
+        }
+        if (op->is_strict_float_intrinsic()) {
+            // Real-valued, strict and fast arithmetic agree.
+            return normalize(Internal::unstrictify_float(op));
+        }
+        for (const Expr &a : op->args) {
+            args.push_back(normalize(a));
+        }
+        return opaque(op->name, op->type, std::move(args));
+    }
+
+    // A sum reduction: f(pure) = init; f(pure) = f(pure) + body over its RDom.
+    bool expand_sum(const Internal::Function &f, const std::map<std::string, Expr> &pure, Poly &out) {
+        const Internal::Definition &u = f.update(0);
+        if (u.args().size() != f.args().size() || u.values().size() != 1) {
+            return false;
+        }
+        for (size_t i = 0; i < f.args().size(); i++) {
+            const Variable *v = u.args()[i].as<Variable>();
+            if (!v || v->name != f.args()[i]) {
+                return false;
+            }
+        }
+        Expr pred = Internal::simplify(u.predicate());
+        if (pred.defined() && !Internal::is_const_one(pred)) {
+            return false;
+        }
+        const Internal::Add *add = u.values()[0].as<Internal::Add>();
+        if (!add) {
+            return false;
+        }
+        auto is_self = [&](const Expr &e) {
+            const Call *c = e.as<Call>();
+            if (!c || c->call_type != Call::Halide || c->name != f.name() || c->value_index != 0) {
+                return false;
+            }
+            for (size_t i = 0; i < c->args.size(); i++) {
+                const Variable *v = c->args[i].as<Variable>();
+                if (!v || v->name != f.args()[i]) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        Expr body;
+        if (is_self(add->a)) {
+            body = add->b;
+        } else if (is_self(add->b)) {
+            body = add->a;
+        } else {
+            return false;
+        }
+        // The body must not read f itself.
+        bool reads_self = false;
+        Internal::visit_with(body, [&](auto *self, const Call *c) {
+            reads_self |= c->call_type == Call::Halide && c->name == f.name();
+            self->visit_base(c);
+        });
+        if (reads_self) {
+            return false;
+        }
+        std::map<std::string, Expr> rename = pure;
+        std::vector<std::tuple<std::string, Expr, Expr>> rvars;
+        for (const Internal::ReductionVariable &rv : u.schedule().rvars()) {
+            std::string p = fresh();
+            rename[rv.var] = Variable::make(Int(32), p);
+            rvars.emplace_back(p, rv.min, rv.extent);
+        }
+        Poly result = normalize(Internal::substitute(rename, body));
+        for (auto &[p, min, extent] : rvars) {
+            result = sum(result, p, Internal::substitute(pure, min), Internal::substitute(pure, extent));
+        }
+        out = plus(normalize(Internal::substitute(pure, f.values()[0])), result);
+        return true;
+    }
+
+    bool exact_float(double v, Rational &r) {
+        if (!std::isfinite(v)) {
+            return false;
+        }
+        int e = 0;
+        double m = std::frexp(v, &e);
+        // v = m * 2^e, |m| in [0.5, 1): scale m to an integer.
+        int64_t n = (int64_t)std::ldexp(m, 53);
+        e -= 53;
+        while (n != 0 && (n % 2) == 0 && e < 0) {
+            n /= 2;
+            e++;
+        }
+        if (n == 0) {
+            r = {0, 1};
+            return true;
+        }
+        if (e >= 0) {
+            if (e > 8) {
+                return false;
+            }
+            r = {n << e, 1};
+            return true;
+        }
+        if (-e > 60) {
+            return false;
+        }
+        r = rat(n, (int64_t)1 << (-e));
+        return true;
+    }
+
+    static int mantissa_bits(const Type &t) {
+        if (t.is_bfloat()) {
+            return 8;
+        }
+        return t.bits() == 16 ? 11 : t.bits() == 32 ? 24 :
+                                                      53;
+    }
+
+    Poly cast(const Type &to, const Expr &value) {
+        const Type &from = value.type();
+        Poly p = normalize(value);
+        std::string round = "round<" + type_name(to) + ">";
+        if (from.is_float() && to.is_float()) {
+            if (from.is_bfloat() == to.is_bfloat() && to.bits() >= from.bits()) {
+                return p;
+            }
+            if (from.is_bfloat() && to.bits() >= 32) {
+                return p;
+            }
+            return opaque(round, to, {p});
+        }
+        if ((from.is_int() || from.is_uint()) && (to.is_int() || to.is_uint())) {
+            Interval r = range_of(p), t = type_range(to);
+            if (r.lo >= t.lo && r.hi <= t.hi) {
+                return p;
+            }
+            return opaque("cast<" + type_name(to) + ">", to, {p});
+        }
+        if ((from.is_int() || from.is_uint()) && to.is_float()) {
+            Interval r = range_of(p);
+            double limit = std::ldexp(1.0, mantissa_bits(to));
+            if (r.lo >= -limit && r.hi <= limit) {
+                return p;
+            }
+            return opaque(round, to, {p});
+        }
+        return opaque(round, to, {p});
+    }
+
+    template<typename Op>
+    bool opaque_binary(const Expr &e, const std::string &name, Poly &out) {
+        if (const Op *o = e.as<Op>()) {
+            out = opaque(name, e.type(), {normalize(o->a), normalize(o->b)});
+            return true;
+        }
+        return false;
+    }
+
+    bool ring(const Type &t) {
+        return t.is_float() || (t.is_int() && t.bits() >= 32);
+    }
+
+    Poly normalize(const Expr &e) {
+        using namespace Internal;
+        if (!failure.empty()) {
+            return {};
+        }
+        if (--budget < 0) {
+            fail("the expansion exceeds the size budget");
+            return {};
+        }
+        if (const IntImm *i = e.as<IntImm>()) {
+            return constant({i->value, 1});
+        }
+        if (const UIntImm *u = e.as<UIntImm>()) {
+            if (u->value <= (uint64_t)INT64_MAX / 4) {
+                return constant({(int64_t)u->value, 1});
+            }
+            return factor(atom(std::to_string(u->value), {}, {(double)u->value, (double)u->value}));
+        }
+        if (const FloatImm *f = e.as<FloatImm>()) {
+            Rational r;
+            if (exact_float(f->value, r)) {
+                return constant(r);
+            }
+            std::ostringstream s;
+            s << e;
+            return factor(atom(s.str(), {}, {f->value, f->value}));
+        }
+        if (const Variable *v = e.as<Variable>()) {
+            if (starts_with(v->name, placeholder_prefix)) {
+                return factor(atom("rvar", {v}, type_range(v->type)));
+            }
+            return factor(atom(v->name, {}, type_range(v->type)));
+        }
+        if (const Cast *c = e.as<Cast>()) {
+            return cast(c->type, c->value);
+        }
+        if (const Let *l = e.as<Let>()) {
+            return normalize(substitute(l->name, l->value, l->body));
+        }
+        if (const Call *c = e.as<Call>()) {
+            return call(c);
+        }
+        if (ring(e.type())) {
+            if (const Add *a = e.as<Add>()) {
+                return plus(normalize(a->a), normalize(a->b));
+            }
+            if (const Sub *s = e.as<Sub>()) {
+                return plus(normalize(s->a), scale(normalize(s->b), {-1, 1}));
+            }
+            if (const Mul *m = e.as<Mul>()) {
+                return times(normalize(m->a), normalize(m->b));
+            }
+            if (const Div *d = e.as<Div>(); d && e.type().is_float()) {
+                Poly b = normalize(d->b);
+                Rational c;
+                if (as_constant(b, c) && c.num != 0) {
+                    return scale(normalize(d->a), rat(c.den, c.num));
+                }
+                return opaque("div", e.type(), {normalize(d->a), b});
+            }
+        }
+        // Everything else is opaque: an operation over normalized children.
+        std::string t = "<" + type_name(e.type()) + ">";
+        Poly out;
+        if (opaque_binary<Add>(e, "add" + t, out) || opaque_binary<Sub>(e, "sub" + t, out) ||
+            opaque_binary<Mul>(e, "mul" + t, out) || opaque_binary<Div>(e, "div" + t, out) ||
+            opaque_binary<Mod>(e, "mod" + t, out) || opaque_binary<Min>(e, "min", out) ||
+            opaque_binary<Max>(e, "max", out) || opaque_binary<EQ>(e, "eq", out) ||
+            opaque_binary<NE>(e, "ne", out) || opaque_binary<LT>(e, "lt", out) ||
+            opaque_binary<LE>(e, "le", out) || opaque_binary<GT>(e, "gt", out) ||
+            opaque_binary<GE>(e, "ge", out) || opaque_binary<And>(e, "and", out) ||
+            opaque_binary<Or>(e, "or", out)) {
+            return out;
+        }
+        if (const Not *n = e.as<Not>()) {
+            return opaque("not", e.type(), {normalize(n->a)});
+        }
+        if (const Select *sel = e.as<Select>()) {
+            return opaque("select", e.type(),
+                          {normalize(sel->condition), normalize(sel->true_value), normalize(sel->false_value)});
+        }
+        if (const Reinterpret *r = e.as<Reinterpret>()) {
+            return opaque("reinterpret" + t, e.type(), {normalize(r->value)});
+        }
+        return factor(atom("expr", {e}, type_range(e.type())));
+    }
+};
+
+}  // namespace
+
+namespace {
+
+void port_atoms(const Poly &p, std::vector<const NNode *> &out) {
+    for (const Mono &m : p.monos) {
+        for (const NNodePtr &f : m.factors) {
+            if (f->kind == NNode::Atom && f->port) {
+                out.push_back(f.get());
+            } else if (f->kind == NNode::Opaque) {
+                for (const Poly &c : f->children) {
+                    port_atoms(c, out);
+                }
+            } else if (f->kind == NNode::Sum) {
+                port_atoms(Poly{{f->body}}, out);
+            }
+        }
+    }
+}
+
+std::string difference(Normalizer &n, const Poly &a, const Poly &b) {
+    std::vector<std::string> ka = n.mono_keys(a, {}, 0), kb = n.mono_keys(b, {}, 0), only_a, only_b;
+    std::set_difference(ka.begin(), ka.end(), kb.begin(), kb.end(), std::back_inserter(only_a));
+    std::set_difference(kb.begin(), kb.end(), ka.begin(), ka.end(), std::back_inserter(only_b));
+    std::string s = "the normal forms differ";
+    if (!only_a.empty()) {
+        s += "; only in the term: " + joined(only_a);
+    }
+    if (!only_b.empty()) {
+        s += "; only in the definition: " + joined(only_b);
+    }
+    return s;
+}
+
+}  // namespace
+
+DerivedPortMatch match_derived_port(const Func &term, const DerivedPort &port) {
+    user_assert(term.defined() && port.definition.defined())
+        << "match_derived_port: the term and the port must be defined\n";
+    DerivedPortMatch result;
+    std::set<std::string> stops = func_names(port.from);
+    stops.insert(port.stored.name());
+
+    std::vector<Expr> term_args;
+    for (const Var &v : term.args()) {
+        term_args.push_back(v);
+    }
+    Normalizer term_norm;
+    term_norm.stops = stops;
+    Poly t = term_norm.normalize(term(term_args));
+    result.term_form = term_norm.poly_key(t);
+    if (!term_norm.failure.empty()) {
+        result.reason = "normalizing the term: " + term_norm.failure;
+        return result;
+    }
+
+    std::vector<std::string> def_vars = port.definition.function().args();
+    std::vector<Expr> def_args;
+    for (const std::string &v : def_vars) {
+        def_args.push_back(Variable::make(Int(32), v));
+    }
+    Normalizer def_norm;
+    def_norm.stops = stops;
+    Poly d = def_norm.normalize(port.definition(def_args));
+    result.definition_form = def_norm.poly_key(d);
+    if (!def_norm.failure.empty()) {
+        result.reason = "normalizing the definition: " + def_norm.failure;
+        return result;
+    }
+
+    // Unify the definition's port calls, where an argument is one of its
+    // Vars, with the term's calls to the same port.
+    std::vector<const NNode *> d_atoms, t_atoms;
+    port_atoms(d, d_atoms);
+    port_atoms(t, t_atoms);
+    if (t_atoms.empty()) {
+        result.reason = "the term reads none of the ports the definition reads (" + joined(port.from_names) + ")";
+        return result;
+    }
+    std::vector<std::vector<Expr>> candidates(def_vars.size());
+    for (size_t v = 0; v < def_vars.size(); v++) {
+        std::set<std::string> seen;
+        for (const NNode *da : d_atoms) {
+            for (size_t k = 0; k < da->args.size(); k++) {
+                const Variable *var = da->args[k].as<Variable>();
+                if (!var || var->name != def_vars[v]) {
+                    continue;
+                }
+                for (const NNode *ta : t_atoms) {
+                    if (ta->name != da->name || ta->args.size() != da->args.size() || !ta->args[k].defined() ||
+                        !placeholders_in(ta->args[k]).empty()) {
+                        continue;
+                    }
+                    std::ostringstream key;
+                    key << ta->args[k];
+                    if (seen.insert(key.str()).second) {
+                        candidates[v].push_back(ta->args[k]);
+                    }
+                }
+            }
+        }
+        if (candidates[v].empty()) {
+            result.reason = "no call to a port in the term determines the definition's argument " +
+                            std::to_string(v) + " (" + def_vars[v] + ")";
+            return result;
+        }
+    }
+
+    const int max_attempts = 256;
+    std::vector<size_t> pick(def_vars.size(), 0);
+    std::string first_difference;
+    for (int attempt = 0; attempt < max_attempts; attempt++) {
+        std::vector<Expr> args;
+        for (size_t v = 0; v < def_vars.size(); v++) {
+            args.push_back(candidates[v][pick[v]]);
+        }
+        Normalizer n;
+        n.stops = stops;
+        Poly dd = n.normalize(port.definition(args));
+        std::string form = n.poly_key(dd);
+        if (n.failure.empty() && form == result.term_form) {
+            result.matched = true;
+            result.port_args = args;
+            result.definition_form = form;
+            result.reason.clear();
+            return result;
+        }
+        if (attempt == 0) {
+            result.definition_form = form;
+            first_difference = n.failure.empty() ? difference(n, t, dd) : "normalizing the definition: " + n.failure;
+        }
+        // Next combination.
+        size_t v = 0;
+        while (v < pick.size() && ++pick[v] == candidates[v].size()) {
+            pick[v++] = 0;
+        }
+        if (v == pick.size()) {
+            break;
+        }
+    }
+    result.reason = first_difference;
+    return result;
 }
 
 namespace Internal {

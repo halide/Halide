@@ -64,6 +64,9 @@ class ImageParam;
 class FuncVec;
 class Approximation;
 struct ApproximationResult;
+struct DerivedPort;
+struct DerivedSubstitution;
+enum class DerivedPortCheck;
 
 namespace Internal {
 struct AssociativeOp;
@@ -1682,6 +1685,22 @@ public:
      * fully defined at the point of the call -- there is no counterpart to
      * the global Func::in() that also covers Funcs written later. */
     ApproximationResult approximate_by(const Approximation &p, const std::vector<Func> &consumers);
+
+    /** Eagerly and destructively replace every call to this Func (a term,
+     * e.g. a block sum outlined by a schedule) inside each Func in
+     * 'consumers' with a read of a derived port (see Derive and
+     * DerivedPort), provided that this Func equals the port's definition
+     * under real-valued semantics (see match_derived_port(); a mismatch is
+     * an error that prints both normal forms). The replacement is lossy,
+     * bounded by the port's declared bound (DerivedSubstitution::error_bound),
+     * and it is an error if the port declares none. With
+     * DerivedPortCheck::Runtime, the replacement also checks the declared
+     * relation where it reads the port. */
+    // @{
+    DerivedSubstitution approximate_by(const DerivedPort &port, const std::vector<Func> &consumers);
+    DerivedSubstitution approximate_by(const DerivedPort &port, const std::vector<Func> &consumers,
+                                       DerivedPortCheck check);
+    // @}
 
     /** Declare that this function should be implemented by a call to
      * halide_buffer_copy with the given target device API. Asserts
