@@ -3424,6 +3424,65 @@ ApproximationResult Func::approximate_by(const Approximation &p, const vector<Fu
             std::move(enc.trace), std::move(dec.trace)};
 }
 
+DerivedSubstitution Func::approximate_by(const DerivedPort &port, const vector<Func> &consumers) {
+    return approximate_by(port, consumers, DerivedPortCheck::Static);
+}
+
+DerivedSubstitution Func::approximate_by(const DerivedPort &port, const vector<Func> &consumers,
+                                         DerivedPortCheck check) {
+    user_assert(defined() && outputs() == 1 && !is_extern())
+        << "approximate_by: " << name() << " must be a defined, single-valued Func to be replaced "
+        << "by a derived port\n";
+    user_assert(port.stored.defined() && port.definition.defined())
+        << "approximate_by: the derived port '" << port.name << "' is undefined\n";
+    user_assert(port.bound_problem.empty())
+        << "approximate_by: derived port '" << port.name << "' of " << port.stage.label()
+        << " declares no bound on its stored value: " << port.bound_problem << "\n";
+    user_assert(port.exact || port.error_bound.defined())
+        << "approximate_by: derived port '" << port.name << "' of " << port.stage.label()
+        << " is lossy but declares no bound\n";
+
+    DerivedPortMatch match = match_derived_port(*this, port);
+    user_assert(match.matched)
+        << "approximate_by: " << name() << " does not equal derived port '" << port.name << "' of "
+        << port.stage.label() << ": " << match.reason << "\n"
+        << "  term:       " << match.term_form << "\n"
+        << "  definition: " << match.definition_form << "\n";
+
+    Type term_type = type(), stored_type = port.stored.type();
+    user_assert(stored_type == term_type ||
+                (stored_type.is_float() && term_type.is_float() && stored_type.bits() <= term_type.bits()))
+        << "approximate_by: derived port '" << port.name << "' has type " << stored_type
+        << ", which does not widen exactly to " << name() << "'s type " << term_type << "\n";
+
+    vector<Var> vars = args();
+    vector<Expr> var_exprs(vars.begin(), vars.end());
+    Expr value = cast(term_type, port.stored(match.port_args));
+    if (check == DerivedPortCheck::Runtime) {
+        Expr stored = cast<double>(port.stored(match.port_args));
+        Expr defined = cast<double>(port.definition(match.port_args));
+        Expr holds = port.exact ? (stored == defined) :
+                                  (abs(stored - defined) <= cast<double>(port.error_bound(match.port_args)));
+        value = require(holds, value, "derived port", port.name, "of", port.stage.label(),
+                        "does not hold its declared relation at", stored, defined);
+    }
+    Func replacement(unique_name(name() + "_from_" + port.name));
+    replacement(vars) = value;
+
+    for (const Func &g : consumers) {
+        user_assert(g.name() != name())
+            << "approximate_by: " << name() << " cannot be its own consumer\n";
+        g.function().substitute_calls(func, replacement.function());
+    }
+
+    Func bound;
+    if (!port.exact) {
+        bound = Func(unique_name(name() + "_" + port.name + "_bound"));
+        bound(vars) = port.error_bound(match.port_args);
+    }
+    return {replacement, port, match.port_args, bound, port.exact};
+}
+
 Func Func::copy_to_device(DeviceAPI d) {
     user_assert(defined())
         << "copy_to_device on Func " << name() << " with no definition\n";
