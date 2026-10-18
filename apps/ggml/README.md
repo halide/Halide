@@ -193,17 +193,18 @@ Affine formats (`q4_1`: codes * d + min) use the same algorithm and recipes. In
 each recipe, `block_dot` (`schedule.h`) inlines the float decode into the
 per-block dot and splits it on the weight's codes (`split_on`, the one use of
 `Stage::distribute()`, standing in for the proposed
-`hoist_invariants({funcs})`): the codes' dot (int32 sdot times the hoisted d_w
-\* d_a, as for q4_0) and the rest, the min times d_a times the block's act sum
-(int32, sdot against ones, when the act is quantized; else of its values),
-computed in the same block loop, once per act column (broadcast across the
-tile's rows). Formats without such terms (q4_0, q8_0) are not split. q8_1 is
-activation-only (a codec row; q4_1's acts). It also stores
-`s = fp16(d * sum(qs))`, which GGML's `vec_dot_q4_1_q8_1` reads for the act sum;
-kernels here don't: s rounds d before the sum differently than fp16(d) \*
-sum(qs), and reading it soundly needs a scheme to declare s as approximating
-that reduction (with an error bound) and `approximate_by` to check the reduction
-it replaces is that one.
+`hoist_invariants({funcs})`): the codes' dot (int32 sdot times the hoisted d_w,
+as for q4_0) and the rest, the min times the block's act sum (int32, sdot
+against ones, when the act is quantized; else of its values), computed in the
+same block loop, once per act column (broadcast across the tile's rows). A
+factor common to both (d_a) hoists before the split, so each block adds d_a \*
+(d_w * codes + min * sum) to the accumulator: one FMA, not two. Formats without
+such terms (q4_0, q8_0) are not split. q8_1 is activation-only (a codec row;
+q4_1's acts). It also stores `s = fp16(d * sum(qs))`, which GGML's
+`vec_dot_q4_1_q8_1` reads for the act sum; kernels here don't: s rounds d before
+the sum differently than fp16(d) * sum(qs), and reading it soundly needs a
+scheme to declare s as approximating that reduction (with an error bound) and
+`approximate_by` to check the reduction it replaces is that one.
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds

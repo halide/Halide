@@ -172,14 +172,35 @@ inline bool affine(const std::vector<ApproximationResult> &rs) {
     return !all_terms_call(probe.value(), codes);
 }
 
+// Does f's increment (a product) have a factor free of its RVars?
+inline bool invariant_factor(Func f) {
+    Expr v = Internal::substitute_in_all_lets(f.update_value());
+    const auto *a = v.as<Internal::Add>();
+    if (!a) return false;
+    std::vector<Expr> fs{a->b};
+    for (size_t i = 0; i < fs.size(); i++) {
+        if (const auto *m = fs[i].as<Internal::Mul>()) {
+            fs.push_back(m->a);
+            fs.push_back(m->b);
+            continue;
+        }
+        bool free = true;
+        Internal::visit_with(fs[i], [&](auto *, const Internal::Variable *x) { free &= !x->reduction_domain.defined(); });
+        if (free && !Internal::is_const(fs[i])) return true;
+    }
+    return false;
+}
+
 // blk's per-block dot (r.y rfactored to a pure var) with the decoders inlined
 // and the scales hoisted: returns the dot of the codes (int32 if `integer`).
 // Affine weights first split on the weight's codes, the rest returned in
 // `rest` (else undefined): the code-free factor (the min) times the block's
-// act sum, of its codes (int32) if `integer`, else of its values.
-inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool integer, Func &rest) {
+// act sum, of its codes (int32) if `integer`, else of its values. A factor
+// common to both (the act's scale) hoists first: blk is then it times `mid`
+// (else undefined), the sum split, so one product per block reaches blk.
+inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool integer, Func &rest, Func &mid) {
     Func codes;
-    rest = Func();
+    rest = mid = Func();
     if (!affine(rs)) {
         blk.update().eager_inline(decoders(rs));
         codes = blk.update().hoist_invariants()[0];
@@ -192,7 +213,8 @@ inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool
             }
         }
         blk.update().eager_inline(floats);
-        std::tie(codes, rest) = split_on(blk, wcodes);
+        if (invariant_factor(blk)) mid = blk.update().hoist_invariants()[0];
+        std::tie(codes, rest) = split_on(mid.defined() ? mid : blk, wcodes);
         for (Func f : {codes, rest}) {
             f.update().eager_inline(ints);
         }
@@ -214,13 +236,15 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     s.split(r.x, rxc, rxo, vec).split(rxo, rxo, rxi, per);
     Func blk = s.rfactor({{rxo, lane}, {ry, u}});
     blk.bound(lane, 0, vec / per);  // the lane's range, so the block's scales hoist
-    Func rest, codes = block_dot(blk, rs, integer, rest);
+    Func rest, mid, codes = block_dot(blk, rs, integer, rest, mid);
     s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
     Func acc = s.rfactor({{rxo, lane}, {ryi, bacc}});
     Func lanes = s.rfactor(rxo, lane);
     s.atomic().vectorize(rxo).unroll(n).unroll(m);
     std::vector<Func> fs{lanes, acc, blk, codes};
-    if (rest.defined()) fs.push_back(rest);
+    for (Func f : {rest, mid}) {
+        if (f.defined()) fs.push_back(f);
+    }
     for (Func f : fs) {
         f.reorder_storage(lane, n, m);  // rfactor put the lanes last
     }
@@ -230,8 +254,11 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     lanes.compute_at(tile_at(out, st)).vectorize(lane).unroll(n).unroll(m).update().vectorize(lane).unroll(ryi).unroll(n).unroll(m);
     acc.compute_at(tile_at(out, st)).vectorize(lane).unroll(bacc).unroll(n).unroll(m);
     acc.update().reorder(lane, bacc, n, m, ryo).vectorize(lane).unroll(bacc).unroll(n).unroll(m);
-    blk.compute_at(acc, ryo).vectorize(lane).unroll(u).unroll(n).unroll(m);
-    blk.update().vectorize(lane).unroll(u).unroll(n).unroll(m);
+    for (Func f : {blk, mid}) {
+        if (!f.defined()) continue;
+        f.compute_at(acc, ryo).vectorize(lane).unroll(u).unroll(n).unroll(m);
+        f.update().vectorize(lane).unroll(u).unroll(n).unroll(m);
+    }
     codes.compute_at(acc, ryo).vectorize(lane).unroll(u).unroll(n).unroll(m);
     codes.update().atomic().vectorize(rxi).vectorize(lane).unroll(rxc).unroll(u).unroll(n).unroll(m);
     if (rest.defined()) {
@@ -344,7 +371,7 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     RVar ry = r.y, rxc("rxc"), rxk("rxk"), ryo("ryo"), ryi("ryi");
     s.split(r.x, rxc, rxk, 8);
     Func blk = s.rfactor(ry, u);
-    Func rest, codes = block_dot(blk, rs, true, rest);
+    Func rest, mid, codes = block_dot(blk, rs, true, rest, mid);
     s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
     Func acc = s.rfactor(ryi, bacc);
     // 2 x 2 sub-tiles, guarded: this code is also in other tiles' branches
@@ -353,19 +380,23 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
         return st.split(n, nio, nii, 2, TailStrategy::GuardWithIf).split(m, mio, mii, 2, TailStrategy::GuardWithIf);
     };
     s.vectorize(n, 2, TailStrategy::GuardWithIf).unroll(n).unroll(m);
-    for (Func f : {acc, blk, codes}) {
+    std::vector<Func> fs{acc, blk, codes};
+    if (mid.defined()) fs.push_back(mid);
+    for (Func f : fs) {
         Var x = f.args()[2], sno, sni, smo, smi;  // x: bacc or u
         f.split_storage(n, sno, sni, 2).split_storage(m, smo, smi, 2).reorder_storage(sni, smi, sno, smo, x);
         sub(f).reorder(nii, mii, nio, mio, x).vectorize(nii).vectorize(mii).unroll(nio).unroll(mio).unroll(x);
     }
     // tall tiles: per 2 rows, so few sums live (the weight's decode is CSE'd),
     // unless the codes are scaled (2^k): per block, as there they spill
-    for (Func f : {blk, codes}) {
-        f.compute_at(LoopLevel(acc, ts.mt > 8 && !scaled ? VarOrRVar(mio) : VarOrRVar(ryo))).bound_storage(u, ts.interleave);
+    for (size_t i = 1; i < fs.size(); i++) {
+        fs[i].compute_at(LoopLevel(acc, ts.mt > 8 && !scaled ? VarOrRVar(mio) : VarOrRVar(ryo))).bound_storage(u, ts.interleave);
     }
     acc.compute_at(tile_at(out, st));
     sub(acc.update()).reorder(nii, mii, nio, mio, bacc, ryo).vectorize(nii).vectorize(mii).unroll(nio).unroll(mio).unroll(bacc);
-    sub(blk.update()).reorder(nii, mii, nio, mio, u).vectorize(nii).vectorize(mii).unroll(nio).unroll(mio).unroll(u);
+    for (Func f : {blk, mid}) {
+        if (f.defined()) sub(f.update()).reorder(nii, mii, nio, mio, u).vectorize(nii).vectorize(mii).unroll(nio).unroll(mio).unroll(u);
+    }
     sub(codes.update()).reorder(rxk, nii, mii, rxc, nio, mio, u).atomic().vectorize(rxk).vectorize(nii).vectorize(mii).unroll(rxc).unroll(nio).unroll(mio).unroll(u);
     if (rest.defined()) {  // the act's block sum, once per act column (n vectorized)
         rest.compute_at(LoopLevel(acc, ryo)).bound_storage(u, ts.interleave).vectorize(n).unroll(m).unroll(u);
