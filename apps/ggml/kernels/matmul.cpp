@@ -70,7 +70,15 @@ public:
                 staged.push_back(approx.back().encoded[0]);
             }
         }
-        Pipeline(out).sever(cut, bound);
+        // Derived ports (e.g. q8_1's block sums) are dead in the decode until a
+        // schedule reads them instead of a term they equal: sever them too.
+        std::vector<Func> outs{out};
+        for (const ApproximationResult &res : approx) {
+            for (const DerivedPort &p : res.derived_ports()) {
+                outs.push_back(p.stored);
+            }
+        }
+        Pipeline(outs).sever(cut, bound);
         // The ABI: w [K / w block, N / w rows], a [K / a block, M], out [N, M],
         // all dense from 0 (strides as GGML's contiguous rows; K % block == 0),
         // a field's elements first.
