@@ -143,20 +143,35 @@ inline bool all_terms_call(Expr e, const std::vector<Func> &fs) {
 // hoist_invariants({fs}) proposed in the review of distribute()
 // (halide/Halide#9508), here distribute() then hoist_invariants() (the only
 // use of distribute(): swap it for that).
-inline std::pair<Func, Func> split_on(Func f, const std::vector<Func> &fs) {
-    Expr v = Internal::substitute_in_all_lets(f.update_value());
+inline std::pair<Func, Func> split_on(Stage st, Expr v, const std::string &name, const std::vector<Func> &fs) {
+    v = Internal::substitute_in_all_lets(v);
     const auto *a = v.as<Internal::Add>();
     const auto *self = a ? a->a.as<Internal::Call>() : nullptr;
-    if (!self || self->name != f.name()) throw std::invalid_argument("split_on: not a sum reduction: " + f.name());
-    if (all_terms_call(a->b, fs)) return {f, Func()};
-    if (product_over_sum(a->b)) f.update().distribute();
+    if (!self || self->name != name) throw std::invalid_argument("split_on: not a sum reduction: " + name);
+    if (all_terms_call(a->b, fs)) return {Func(), Func()};
+    if (product_over_sum(a->b)) st.distribute();
     Func with, rest;
-    for (Func h : f.update().hoist_invariants()) {
+    for (Func h : st.hoist_invariants()) {
         Func &part = calls_any(h.update_value(), fs) ? with : rest;
-        if (part.defined()) throw std::invalid_argument("split_on: several terms of each part: " + f.name());
+        if (part.defined()) throw std::invalid_argument("split_on: several terms of each part: " + name);
         part = h;
     }
     return {with, rest};
+}
+inline std::pair<Func, Func> split_on(Func f, const std::vector<Func> &fs) {
+    auto parts = split_on(f.update(), f.update_value(), f.name(), fs);
+    return parts.first.defined() ? parts : std::pair{f, Func()};
+}
+
+// The value of f's first update under `cond` (its specialization; all of it
+// if undefined), as transformed so far.
+inline Expr update_value(Func f, const Expr &cond) {
+    const Internal::Definition &d = f.function().update(0);
+    if (!cond.defined()) return d.values()[0];
+    for (const Internal::Specialization &sp : d.specializations()) {
+        if (Internal::equal(sp.condition, cond)) return sp.definition.values()[0];
+    }
+    throw std::invalid_argument("update_value: no specialization of " + f.name());
 }
 
 // Does the weight's decode have terms free of its codes (q4_1's codes * d +
@@ -246,17 +261,17 @@ inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool
 // min times the port per block); both undefined (dot untouched) if the
 // weight is not affine or the act has no derived port, and the block sum
 // is computed if none matches.
-inline Func derived_sums(Func dot, const RDom &r, const std::vector<ApproximationResult> &rs, Func &sums, Func &blk, Func &sum) {
+inline Func derived_sums(Func dot, Stage ds, const Expr &cond, const RDom &r, const std::vector<ApproximationResult> &rs, Func &sums, Func &blk, Func &sum) {
     sums = blk = sum = Func();
     if (rs.size() < 2 || rs[1].derived_ports().empty() || !affine(rs)) return Func();
     std::vector<Func> floats, codes;
     for (Func f : rs[0].decode_funcs()) {
         (f.type().is_float() ? floats : codes).push_back(f);
     }
-    dot.update().eager_inline(floats);
+    ds.eager_inline(floats);
     Func with;
-    std::tie(with, sums) = split_on(dot, codes);
-    if (!sums.defined()) throw std::invalid_argument("derived_sums: no code-free terms in " + dot.name());
+    std::tie(with, sums) = split_on(ds, update_value(dot, cond), dot.name(), codes);
+    if (!with.defined() || !sums.defined()) throw std::invalid_argument("derived_sums: no code-free terms in " + dot.name());
     blk = sums.update().rfactor(r.y, Var("u"));
     sum = blk.update().hoist_invariants()[0];
     for (const DerivedPort &p : rs[1].derived_ports()) {
@@ -274,7 +289,7 @@ inline Func derived_sums(Func dot, const RDom &r, const std::vector<Approximatio
 // lane; otherwise f32) times the hoisted scales, accumulated per lane in f32
 // (GGML's order), on ts tiles of out under `cond`. `derived`: an affine
 // weight's code-free terms read the act's derived port (derived_sums()), a
-// product per block accumulated alongside (not under cond).
+// product per block accumulated alongside.
 inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, bool integer,
                     const std::vector<ApproximationResult> &rs, const Target &t, bool derived = false) {
     Stage s = tile_out(out, st, dot, cond, ts, r);
@@ -282,8 +297,8 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     RVar ry = r.y, rxc("rxc"), rxo("rxo"), rxi("rxi"), ryo("ryo"), ryi("ryi");
     bool aff = affine(rs);
     Func sums, sblk, ssum;
-    if (derived && !cond.defined()) {
-        if (Func with = derived_sums(dot, r, rs, sums, sblk, ssum); with.defined()) {
+    if (derived) {
+        if (Func with = derived_sums(dot, s, cond, r, rs, sums, sblk, ssum); with.defined()) {
             with.compute_at(tile_at(out, st));
             s = with.update();
             aff = false;
@@ -648,8 +663,8 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         return;
     }
     pairs.busy = rows.busy = rest;
-    blocked(out, 2 * whole, dots[0], fits(pairs, 1), pairs, r, integer, rs, t);
-    blocked(out, 2 * whole, dots[0], Expr(), rows, r, integer, rs, t);
+    blocked(out, 2 * whole, dots[0], fits(pairs, 1), pairs, r, integer, rs, t, true);
+    blocked(out, 2 * whole, dots[0], Expr(), rows, r, integer, rs, t, true);
 }
 
 }  // namespace ggml
