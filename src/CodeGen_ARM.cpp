@@ -2494,6 +2494,29 @@ void CodeGen_ARM::visit(const Call *op) {
         // We want these as left shifts with a negative b instead.
         value = codegen(op->args[0] << simplify(-op->args[1]));
         return;
+    } else if (op->is_intrinsic(Call::fixed_to_float)) {
+        // Neon's fixed-point converts (scvtf/ucvtf #k, vcvt.f32.s32 #k) take
+        // 32-bit lanes on both arm32 and arm64 and 64-bit lanes on arm64. SVE
+        // has no fixed-point form.
+        const Expr &x = op->args[0];
+        auto k = as_const_uint(op->args[1]);
+        const int bits = op->type.bits();
+        if (!simd_intrinsics_disabled() && target_vscale() == 0 && op->type.is_vector() && k &&
+            (bits == 32 || (bits == 64 && target.bits == 64))) {
+            const int lanes = (op->type.lanes() * bits <= 64 ? 64 : 128) / bits;
+            const std::string name =
+                std::string(target.bits == 64 ? "llvm.aarch64" : "llvm.arm") + ".neon.vcvtfx" +
+                (x.type().is_int() ? "s" : "u") + "2fp." +
+                "v" + std::to_string(lanes) + "f" + std::to_string(bits) + "." +
+                "v" + std::to_string(lanes) + "i" + std::to_string(bits);
+            llvm::FunctionType *fn_type =
+                llvm::FunctionType::get(llvm_type_of(op->type.with_lanes(lanes)),
+                                        {llvm_type_of(x.type().with_lanes(lanes)), i32_t}, false);
+            llvm::Function *fn = llvm::cast<llvm::Function>(module->getOrInsertFunction(name, fn_type).getCallee());
+            value = call_intrin(llvm_type_of(op->type), lanes, fn,
+                                {codegen(x), llvm::ConstantInt::get(i32_t, *k)});
+            return;
+        }
     } else if (op->is_intrinsic(Call::round)) {
         // llvm's roundeven intrinsic reliably lowers to the correct
         // instructions on aarch64, but despite having the same instruction
