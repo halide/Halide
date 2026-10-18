@@ -203,11 +203,23 @@ same block loop, once per act column (broadcast across the tile's rows). A
 factor common to both (d_a) hoists before the split, so each block adds d_a \*
 (d_w * codes + min * sum) to the accumulator: one FMA, not two. Formats without
 such terms (q4_0, q8_0) are not split. q8_1 is activation-only (a codec row;
-q4_1's acts). It also stores `s = fp16(d * sum(qs))`, which GGML's
-`vec_dot_q4_1_q8_1` reads for the act sum; kernels here don't: s rounds d before
-the sum differently than fp16(d) * sum(qs), and reading it soundly needs a
-scheme to declare s as approximating that reduction (with an error bound) and
-`approximate_by` to check the reduction it replaces is that one.
+q4_1's acts). Its scheme (`schemes/legacy.h`) declares `s`, the block's sum, as
+a derived port (`Derive`): `s = fp16(fp16(d) * sum(qs))`, the sum of the decoded
+block rounded once to fp16. GGML's `s = fp16(d * sum(qs))` uses the unrounded d
+and is an fp16 ulp off ours in about a quarter of the blocks (the codec check
+compares `d` and `qs` bitwise with GGML and `s` with our formula, and reports
+how many blocks differ); decode ignores `s`. Where the act has a derived port,
+`vec_dot` takes the weight's code-free terms out of the dot before tiling
+(`derived_sums`): per block, the min times the act's block sum, which
+`Func::approximate_by(DerivedPort, ...)` replaces with a read of `s` after
+matching it against the port's definition (real-valued; the error is the
+declared fp16 rounding of `s`). This is generic: any scheme's `Derive` whose
+definition matches the outlined sum is read. `mul_mat` keeps the computed act
+sum (once per act column, amortized over the tile's rows), and q4_1 with f16/f32
+acts has no derived port. `ggml_scheme_properties` (ctest) checks q8_1's
+properties without its layout: requantizing is idempotent, `s` holds, every
+stage is closed; and with `s` derived GGML's way, requantizing changes `s` in
+about a quarter of the blocks.
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds

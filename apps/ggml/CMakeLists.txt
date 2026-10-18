@@ -48,6 +48,13 @@ target_link_libraries(ggml-quant-bench PRIVATE ggml::ggml ggml_thread_pool ${GGM
 add_test(NAME ggml_check COMMAND ggml-quant-bench --check --shapes smoke)
 set_tests_properties(ggml_check PROPERTIES LABELS ggml)
 
+# Properties of the schemes, checked by JIT (Halide's approximation testing).
+add_executable(ggml_scheme_properties schemes/q8_1_properties.cpp)
+target_include_directories(ggml_scheme_properties PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(ggml_scheme_properties PRIVATE Halide::Halide Halide::Tools)
+add_test(NAME ggml_scheme_properties COMMAND ggml_scheme_properties)
+set_tests_properties(ggml_scheme_properties PROPERTIES LABELS ggml)
+
 if (TARGET q4_0_q8_0_mul_mat_checked)
     add_executable(ggml_thread_pool_test runtime/thread_pool_test.cpp)
     target_link_libraries(ggml_thread_pool_test PRIVATE ggml_thread_pool q4_0_q8_0_mul_mat_checked)
