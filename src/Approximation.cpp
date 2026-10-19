@@ -678,11 +678,17 @@ DecodeResult Approximation::decode(const std::vector<Func> &encoded, const Appro
     }
     ApproximationSignature sig = signature(context);
     ApproximationPorts resolved = resolve_encoded(encoded, sig, context);
+    // Derive reads fresh decode-side Funcs, so that its derived port's
+    // handles are never the encoder's Funcs (see DerivedPort).
+    std::vector<Func> received = encoded;
+    if (const Derive *d = state_->impl->derive()) {
+        received = d->decode_side(encoded, names_of(resolved));
+    }
     CallScope scope;
-    std::vector<Func> decoded = state_->impl->decode(encoded, context);
+    std::vector<Func> decoded = state_->impl->decode(received, context);
     ApproximationPorts decoded_ports = output_ports(decoded, sig, context, false);
     std::vector<Func> intermediates = find_intermediates(encoded, decoded);
-    ApproximationTraceNode node = scope.finish(*this, decoded, names_of(decoded_ports), intermediates, encoded, names_of(resolved));
+    ApproximationTraceNode node = scope.finish(*this, decoded, names_of(decoded_ports), intermediates, received, names_of(resolved));
     std::vector<ApproximationStageOutputs> stage_outputs;
     flatten(node, stage_outputs);
     return {std::move(decoded), std::move(decoded_ports), std::move(intermediates), std::move(stage_outputs),
@@ -1596,6 +1602,29 @@ std::vector<Func> Derive::decode(const std::vector<Func> &encoded, const Approxi
     user_assert(!encoded.empty() && (input_ports.empty() || encoded.size() == input_ports.size() + 1))
         << name() << "::decode expects its inputs' ports followed by the derived port\n";
     return std::vector<Func>(encoded.begin(), encoded.end() - 1);
+}
+
+std::vector<Func> Derive::decode_side(const std::vector<Func> &encoded, const std::vector<std::string> &port_names) const {
+    int derived = index_of(port_names, port_);
+    if (derived < 0) {
+        derived = (int)encoded.size() - 1;
+    }
+    std::vector<Func> result = encoded;
+    for (int i = 0; i < (int)encoded.size(); i++) {
+        bool read = i == derived || (i < (int)port_names.size() && index_of(from_, port_names[i]) >= 0);
+        if (!read || !encoded[i].defined()) {
+            continue;
+        }
+        std::string name = i < (int)port_names.size() ? port_names[i] : port_;
+        std::vector<Var> args;
+        for (int k = 0; k < encoded[i].dimensions(); k++) {
+            args.emplace_back("dd" + std::to_string(k));
+        }
+        Func f(name + "_decoded");
+        f(args) = encoded[i](args);
+        result[i] = f;
+    }
+    return result;
 }
 
 ApproximationSignature Derive::signature(const ApproximationPorts &inputs) const {

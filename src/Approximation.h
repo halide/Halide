@@ -628,7 +628,8 @@ struct ApproximationTraceNode {
     std::vector<Func> intermediates;
     std::vector<ApproximationTraceNode> children;
     /** The Funcs this call consumed (the stage's inputs) and their port
-     * names (parallel to it). */
+     * names (parallel to it). For a Derive stage's decode, these are the
+     * fresh decode-side Funcs it read (see Derive::decode_side()). */
     std::vector<Func> inputs;
     std::vector<std::string> input_names;
 };
@@ -802,10 +803,17 @@ Approximation::Approximation(T &&unit, std::string label)
  *
  *     stored ~= definition = psi(from)
  *
- * where `from` are the Funcs the Derive stage's decode received for its
- * `from` ports (e.g. the decoded codes and scale) and `stored` is what it
- * received for the derived port (the stored value, after the decode of every
- * stage that followed Derive in encode order). The relation is exact if no
+ * where `from` are the Funcs the Derive stage's decode read for its `from`
+ * ports (e.g. the decoded codes and scale) and `stored` is what it read for
+ * the derived port (the stored value, after the decode of every stage that
+ * followed Derive in encode order). These are always decode-side Funcs of
+ * their own (see Derive::decode_side()), never the encoder's, whatever
+ * follows Derive (e.g. Identity, which decodes to the encoded Funcs
+ * themselves, or nothing): after Pipeline::sever() cuts the encoded ports,
+ * which rewrites calls but not Func handles, `stored` and `from` (and so
+ * `definition`, and a substitution) read the severed inputs, provided they
+ * were reachable from the severed Pipeline's outputs (e.g. include `stored`
+ * among them; `from` are read by the decoded values). The relation is exact if no
  * lossy stage follows Derive on the port, and otherwise bounded by the one
  * lossy stage that does (bounds are not composed): see error_bound and
  * bound_problem. Obtain these with ApproximationResult::derived_ports() or
@@ -1279,7 +1287,9 @@ struct Identity {
  * (e.g. the sum of a block's decoded values, next to its codes and scale).
  * encode() passes its inputs through and appends psi applied to the ports
  * named `from` (in that order); decode() drops the derived port, so the
- * round trip, and its idempotent, are unchanged. Stages after Derive (in
+ * round trip, and its idempotent, are unchanged. Through an Approximation,
+ * decode() reads fresh Funcs for the `from` ports and the derived port (see
+ * decode_side()), and passes the `from` ones on. Stages after Derive (in
  * encode order) may encode the port, e.g. round it to a narrower type; the
  * relation then holds within their declared bound (see DerivedPort).
  *
@@ -1317,6 +1327,13 @@ struct Derive {
 
     /** psi applied to `from` (Funcs for the `from` ports, in that order). */
     Func define(const std::vector<Func> &from) const;
+
+    /** The Funcs Approximation::decode() hands decode(): `encoded`, except
+     * that each `from` port and the derived port (named by `port_names`,
+     * parallel to `encoded`; else the last) is a fresh Func reading it,
+     * `<port>_decoded(args) = encoded(args)`. They are the decode trace's
+     * inputs for this stage, and so DerivedPort::from and ::stored. */
+    std::vector<Func> decode_side(const std::vector<Func> &encoded, const std::vector<std::string> &port_names) const;
 
 private:
     std::string port_;
