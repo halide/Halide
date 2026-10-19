@@ -768,8 +768,8 @@ struct Call : public ExprNode<Call> {
         // Extracts a single element from a mask vector
         extract_mask_element,
         // fixed_to_float(x, k) reads the integer x as a fixed-point number with
-        // k fractional bits: float(x) * 2^-k, where the float type has the same
-        // width as x and k is a positive constant (broadcast to x's lanes).
+        // k fractional bits: float(x) * 2^-k, where k is a positive constant
+        // (broadcast to x's lanes).
         fixed_to_float,
         // Returns the runtime value of ARM SME streaming vscale (the vector length multiplier in streaming mode)
         get_runtime_streaming_vscale,

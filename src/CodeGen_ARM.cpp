@@ -2502,6 +2502,7 @@ void CodeGen_ARM::visit(const Call *op) {
         auto k = as_const_uint(op->args[1]);
         const int bits = op->type.bits();
         if (!simd_intrinsics_disabled() && target_vscale() == 0 && op->type.is_vector() && k &&
+            x.type().bits() == bits &&
             (bits == 32 || (bits == 64 && target.bits == 64))) {
             const int lanes = (op->type.lanes() * bits <= 64 ? 64 : 128) / bits;
             const std::string name =

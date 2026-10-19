@@ -52,10 +52,10 @@ bool no_overflow(Type t) {
     return t.is_float() || no_overflow_int(t);
 }
 
-// Match float(x) * 2^-k and (float(x) * y) * 2^-k, where x is an integer as
-// wide as the float, and rewrite them to fixed_to_float(x, k) and
-// fixed_to_float(x, k) * y. Moving a power-of-two factor is exact except on
-// overflow or underflow, which non-strict float semantics lets us ignore.
+// Match float(x) * 2^-k and (float(x) * y) * 2^-k, and rewrite them to
+// fixed_to_float(x, k) and fixed_to_float(x, k) * y. Moving a power-of-two
+// factor is exact except on overflow or underflow, which non-strict float
+// semantics lets us ignore.
 Expr find_fixed_to_float(const Expr &a, const Expr &b) {
     auto f = as_const_float(b);
     if (!f) {
@@ -72,8 +72,7 @@ Expr find_fixed_to_float(const Expr &a, const Expr &b) {
     auto fixed = [&](const Expr &c) -> Expr {
         const Cast *cast = c.as<Cast>();
         if (cast &&
-            cast->value.type().is_int_or_uint() &&
-            cast->value.type().bits() == c.type().bits()) {
+            cast->value.type().is_int_or_uint()) {
             Expr bits = make_const(cast->value.type().with_code(halide_type_uint), k);
             return Call::make(c.type(), Call::fixed_to_float, {cast->value, bits}, Call::PureIntrinsic);
         }
@@ -83,10 +82,10 @@ Expr find_fixed_to_float(const Expr &a, const Expr &b) {
         return r;
     }
     if (const Mul *m = a.as<Mul>()) {
-        if (Expr r = fixed(m->a); r.defined()) {
+        if (Expr r = find_fixed_to_float(m->a, b); r.defined()) {
             return Mul::make(r, m->b);
         }
-        if (Expr r = fixed(m->b); r.defined()) {
+        if (Expr r = find_fixed_to_float(m->b, b); r.defined()) {
             return Mul::make(m->a, r);
         }
     }
