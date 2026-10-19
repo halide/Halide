@@ -7,23 +7,26 @@
 
 namespace ggml {
 
-// block_q4_0: d = the signed extreme / -8 (-0 for all-zero); nibble = min(15, (int8)(x / d + 8.5)).
+// GGML's "type-0" quantization of `bits`-bit codes, h = 2^(bits - 1)
+// (block_q4_0, h = 8; block_q5_0, h = 16): d = the signed extreme / -h (-0
+// for all-zero); code = min(2h - 1, (int8)(x / d + h + 0.5)) - h.
 // With `code_shift`, the power of two 2^code_shift moves from the scale into
 // the codes: (c * 2^code_shift, d / 2^code_shift), decoded alike (codes *
 // scale). Its decode is bit-exact with the unshifted one: both products are
 // the same real number as long as the scale stays a normal float, as fp16
 // scales do; a kernel's other products (e.g. an integer dot times the
 // scales) are exact alike, barring subnormal float intermediates.
-struct Q4_0Quant {
-    int code_shift = 0;
+struct Type0Quant {
+    int bits = 4, code_shift = 0;
 
     std::vector<Func> encode(const std::vector<Func> &in) const {
         Func x = in[0], d("scale"), q("codes");
         Var j, b;
         RDom r(0, QK);
+        int h = 1 << (bits - 1);
         Tuple m = argmax(abs(x(r, b, _)));  // first strict max, as GGML's scan
-        d(b, _) = select(x(clamp(m[0], 0, QK - 1), b, _) < 0, m[1], -m[1]) / 8.0f;
-        q(j, b, _) = min(cast<int8_t>(x(j, b, _) * inverse(d(b, _)) + 8.5f), cast<int8_t>(15)) - 8;
+        d(b, _) = select(x(clamp(m[0], 0, QK - 1), b, _) < 0, m[1], -m[1]) / (float)h;
+        q(j, b, _) = min(cast<int8_t>(x(j, b, _) * inverse(d(b, _)) + (h + 0.5f)), cast<int8_t>(2 * h - 1)) - h;
         if (!code_shift) return {q, d};
         Func qs("codes"), ds("scale");
         qs(j, b, _) = q(j, b, _) * cast<int8_t>(1 << code_shift);
@@ -34,35 +37,41 @@ struct Q4_0Quant {
         return {dequant(e)};
     }
     ApproximationSignature signature() const {
-        return codes_and_scale(-8 * (1 << code_shift), 7 * (1 << code_shift));
+        int h = 1 << (bits - 1);
+        return codes_and_scale(-h * (1 << code_shift), (h - 1) * (1 << code_shift));
     }
     Func error_bound(const std::vector<Func> &, const std::vector<Func> &e) const {
-        return step_bound(e, 1 << code_shift);  // the top code is clamped: +8 steps becomes 7
+        return step_bound(e, 1 << code_shift);  // the top code is clamped: +h steps becomes h - 1
     }
 };
 
 // `codes`: the nibble encoding (GGML's block_q4_0: offset(8); its repacked
 // layouts: twos(4)) of the codes, kept at 2^shift times their value (the same
-// bytes; see Q4_0Quant). Then the fields' values to their storage. `indexed`:
+// bytes; see Type0Quant). Then the fields' values to their storage. `indexed`:
 // the values' side is (index in block, block, ...) rather than flat.
 inline Approximation q4_0(const Approximation &codes, const std::string &lay, int shift = 0, bool indexed = false) {
     Approximation codec = shift ? Parallel{{"codes", codes}, {"scale", scale_by(1 << shift)}} : Parallel{{"codes", codes}};
-    return Compose{BlockReshape{QK, indexed}, Q4_0Quant{shift}, codec,
+    return Compose{BlockReshape{QK, indexed}, Type0Quant{4, shift}, codec,
                    Parallel{{"codes", PlanarFieldPack{4, QK / 2}}, {"scale", fp16()}},
                    layout(lay, {{"d", Float(16)}, {"qs", UInt(8), QK / 2}}, {"qs", "d"})};
 }
 
-// block_q4_1: affine, values = codes * scale + min; d = (max - min) / 15,
-// min = the block's (both first strict extremes, as GGML's scan); nibble =
-// min(15, (int8)((x - min) / d + 0.5)).
-struct Q4_1Quant {
+// GGML's "type-1" (affine) quantization of `bits`-bit codes (block_q4_1,
+// block_q5_1): values = codes * scale + min; d = (max - min) / (2^bits - 1),
+// min = the block's (both first strict extremes, as GGML's scan); code =
+// min(2^bits - 1, (int8)((x - min) / d + 0.5)). (GGML's q5_1 does without
+// the min: (x - min) / d + 0.5 stays below 2^bits there.)
+struct Type1Quant {
+    int bits = 4;
+
     std::vector<Func> encode(const std::vector<Func> &in) const {
         Func x = in[0], d("scale"), m("min"), q("codes");
         Var j, b;
         RDom r(0, QK);
+        int top = (1 << bits) - 1;
         m(b, _) = argmin(x(r, b, _))[1];
-        d(b, _) = (argmax(x(r, b, _))[1] - m(b, _)) / 15.0f;
-        q(j, b, _) = min(cast<int8_t>((x(j, b, _) - m(b, _)) * inverse(d(b, _)) + 0.5f), cast<int8_t>(15));
+        d(b, _) = (argmax(x(r, b, _))[1] - m(b, _)) / (float)top;
+        q(j, b, _) = min(cast<int8_t>((x(j, b, _) - m(b, _)) * inverse(d(b, _)) + 0.5f), cast<int8_t>(top));
         return {q, d, m};
     }
     std::vector<Func> decode(const std::vector<Func> &e) const {
@@ -71,8 +80,8 @@ struct Q4_1Quant {
         v(j, b, _) = cast<float>(e[0](j, b, _)) * e[1](b, _) + e[2](b, _);
         return {v};
     }
-    static ApproximationSignature signature() {
-        return {{{"blocks", Float(32)}}, {{"codes", Int(8), std::nullopt, ApproximationRange(0, 15)}, {"scale", Float(32)}, {"min", Float(32)}}};
+    ApproximationSignature signature() const {
+        return {{{"blocks", Float(32)}}, {{"codes", Int(8), std::nullopt, ApproximationRange(0, (1 << bits) - 1)}, {"scale", Float(32)}, {"min", Float(32)}}};
     }
     Func error_bound(const std::vector<Func> &, const std::vector<Func> &e) const {
         return step_bound(e, 0.5);
@@ -80,9 +89,29 @@ struct Q4_1Quant {
 };
 
 inline Approximation q4_1(const std::string &lay, bool indexed = false) {
-    return Compose{BlockReshape{QK, indexed}, Q4_1Quant{}, Parallel{{"codes", unsigned_codes(4)}},
+    return Compose{BlockReshape{QK, indexed}, Type1Quant{4}, Parallel{{"codes", unsigned_codes(4)}},
                    Parallel{{"codes", PlanarFieldPack{4, QK / 2}}, {"scale", fp16()}, {"min", fp16()}},
                    layout(lay, {{"d", Float(16)}, {"m", Float(16)}, {"qs", UInt(8), QK / 2}}, {"qs", "d", "m"})};
+}
+
+// block_q5_0 and block_q5_1: q4_0's and q4_1's quantization at 5 bits, each
+// (unsigned) code stored as its low nibble, packed as q4's codes (qs), and
+// its fifth bit, packed densely (qh: bit j of its little-endian word is code
+// j's).
+inline Approximation q5_codes(const Approximation &fields) {
+    return Parallel{{"codes", Compose{fields, BitSplit{5, 4}}}};
+}
+
+inline Approximation q5_0(const std::string &lay, bool indexed = false) {
+    return Compose{BlockReshape{QK, indexed}, Type0Quant{5}, q5_codes(offset(16)),
+                   Parallel{{"low", PlanarFieldPack{4, QK / 2}}, {"high", BitPack{1}}, {"scale", fp16()}},
+                   layout(lay, {{"d", Float(16)}, {"qh", UInt(8), QK / 8}, {"qs", UInt(8), QK / 2}}, {"qs", "qh", "d"})};
+}
+
+inline Approximation q5_1(const std::string &lay, bool indexed = false) {
+    return Compose{BlockReshape{QK, indexed}, Type1Quant{5}, q5_codes(unsigned_codes(5)),
+                   Parallel{{"low", PlanarFieldPack{4, QK / 2}}, {"high", BitPack{1}}, {"scale", fp16()}, {"min", fp16()}},
+                   layout(lay, {{"d", Float(16)}, {"m", Float(16)}, {"qh", UInt(8), QK / 8}, {"qs", UInt(8), QK / 2}}, {"qs", "qh", "d", "m"})};
 }
 
 // block_q8_0: d = max |x| / 127; code = roundf(x / d).

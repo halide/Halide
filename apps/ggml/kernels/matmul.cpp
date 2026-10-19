@@ -22,7 +22,7 @@ public:
         std::string an = act, cn = an.substr(an.find(':') + 1);
         an = an.substr(0, an.find(':'));
         // mul_mat on weight records of several rows takes their codes at 2^k
-        // (an exact alternative, see Q4_0Quant): it shortens the gemv's decode
+        // (an exact alternative, see Type0Quant): it shortens the gemv's decode
         bool scaled = op == "mul_mat" && ggml::format(weight).rows > 1;
         ggml::Format fw = ggml::format(weight, false, scaled, true), fa = ggml::format(an, false, false, true), fc = ggml::format(cn);
         std::vector<ImageParam> w = inputs(fw, "w"), a = inputs(fa, "a");
