@@ -791,10 +791,11 @@ inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom 
 }
 
 // mul_mat: gemm tiles the outputs (4 x 8 on smmla when the target has i8mm
-// and both operands are quantized alike, 4 x 16 for whole records of at least
-// 16 rows, 4 x 4 where those waste rows; on weight records in 4-code pieces,
-// those tiles on by-element sdot; else 4 x 4 on sdot), in tasks of up to 32
-// x 32 outputs, fewer rows where that balances the threads (small N);
+// and both operands are quantized alike; for whole act records, 4 x 12, 16 or
+// 20, whichever pads M least, 16 x 4 for one record, 4 x 8 for two; on weight
+// records in 4-code pieces, those tiles on by-element sdot; else 4 x 4 on
+// sdot), in tasks of up to 32 x 32 outputs (whole records: up to 128 rows),
+// fewer rows where that balances the threads (small N);
 // gemv (M = 1) is the vec_dot recipe on row pairs sharing each activation
 // block (single rows for N = 1). Edge tiles shift inwards: any N, M at least
 // the tile's. With act records of r = blocks[2] > 1 rows, out's first update
@@ -836,7 +837,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         }
         encoder(e, rs);
     }
-    Tiles mmla{4, 16, 1, 32, 32, 2}, mmla8{4, 8, 1, 32, 32, 2}, mmla4{4, 4, 1, 32, 32, 2}, gemm{4, 4, 1, 32, 32, 2}, pairs{2, 1, 2, 16}, rows{1, 1, 2, 16};
+    Tiles mmla8{4, 8, 1, 32, 32, 2}, gemm{4, 4, 1, 32, 32, 2}, pairs{2, 1, 2, 16}, rows{1, 1, 2, 16};
     bool mmla_ok = integer && t.has_feature(Target::ARMI8MM);
     // Weight records in 4-code pieces: by-element sdot on the same tiles (on M3,
     // KleidiAI's dotprod gemm beats both i8mm ones)
@@ -845,23 +846,29 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     // row tile (dot's bound) covers every record, with mmla when there is.
     Func dr = dots.back();
     auto fits = [&](const Tiles &ts, Expr m) { return whole ? N % ts.nt == 0 && N >= ts.nt : N >= ts.nt && m >= ts.mt; };
-    // 4-row tiles where the taller ones would compute 4 or 12 rows past Mr,
-    // up to 64 rows (measured wins at Mr = 4, 12, 20, 36, 52; losses at 28, 100).
-    // A disjunction, so the later branches learn each term false (dr's bound).
-    Expr tall = Mr >= mmla.mt, odd_n = !fits(gemm, Mr);
-    Expr quad = (Mr % mmla.mt == mmla4.mt && Mr < 4 * mmla.mt) || Mr == mmla8.mt + mmla4.mt;
-    if (whole) {  // odd N first, as tall as mmla; the bound is then constant in each branch
-        blocked(out, 1, dr, odd_n, {1, tiled ? mmla.mt : gemm.mt, 1, 32, 32, 2}, r, integer, rs, t);
-        dr.bound_extent(dr.args()[1], tiled ? select(odd_n, mmla.mt, quad, mmla4.mt, tall, mmla.mt, mmla8.mt) : Expr(gemm.mt));
+    // Whole records' row tiles: 12, 16 or 20 rows cost about the same per row,
+    // so the one computing the fewest rows past Mr (ties: 16, then 20); one
+    // record, 16 x 4 (16 accumulators, no rows past Mr); two, 8 rows. Each
+    // task's tiles cover up to 128 rows, so the weights stream once (M <= 128).
+    // A chain, so the later branches learn each condition false (dr's bound).
+    Tiles t16{4, 16, 1, 32, 128, 2}, t20{4, 20, 1, 32, 120, 2}, t12{4, 12, 1, 32, 120, 2}, t8{4, 8, 1, 32, 128, 2}, wide{16, 4, 1, 32, 128, 2};
+    auto padded = [&](const Tiles &ts) { return (Mr + ts.mt - 1) / ts.mt * ts.mt; };
+    Expr fewest = min(padded(t12), padded(t16), padded(t20)), odd_n = !fits(gemm, Mr);
+    std::vector<std::pair<Expr, Tiles>> tiles{{Mr == wide.mt && fits(wide, Mr), wide}, {Mr <= t8.mt, t8}, {padded(t16) == fewest, t16}, {padded(t20) == fewest, t20}, {Expr(), t12}};
+    if (whole) {  // odd N first, as tall as t16; the bound is then constant in each branch
+        blocked(out, 1, dr, odd_n, {1, tiled ? t16.mt : gemm.mt, 1, 32, 32, 2}, r, integer, rs, t);
+        Expr mt = t12.mt;
+        for (size_t i = tiles.size() - 1; i-- > 0;) {
+            mt = select(tiles[i].first, tiles[i].second.mt, mt);
+        }
+        dr.bound_extent(dr.args()[1], tiled ? select(odd_n, t16.mt, mt) : Expr(gemm.mt));
     }
-    if (lanes) {
-        for (auto [c, ts] : std::vector<std::pair<Expr, Tiles>>{{quad, mmla4}, {tall, mmla}, {Expr(), mmla8}}) {
-            blocked_rows(out, whole, dr, c, ts, r, blocks[4], rs, blocks[2]);
+    if (whole && tiled) {
+        for (auto [c, ts] : tiles) {
+            lanes ? blocked_rows(out, whole, dr, c, ts, r, blocks[4], rs, blocks[2]) : blocked_mmla(out, whole, dr, c, ts, r, rs);
         }
     } else if (mmla_ok) {
-        if (whole) blocked_mmla(out, whole, dr, quad, mmla4, r, rs);
-        if (whole) blocked_mmla(out, whole, dr, tall, mmla, r, rs);
-        blocked_mmla(out, whole, dr, whole ? Expr() : fits(mmla8, M), mmla8, r, rs, !whole);
+        blocked_mmla(out, whole, dr, fits(mmla8, M), mmla8, r, rs, true);
     }
     if (!whole || !tiled) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, integer, rs, t, !whole);
     // The rows past Mr (fewer than a record's): no tasks when there are none.

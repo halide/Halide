@@ -158,33 +158,35 @@ else by 4 x 4 (N, M >= 4), with 32 x 32 outputs per parallel task; otherwise
 at N = 512 balance 8-12 threads). Tiles at the edges of N and M shift inwards
 (they overlap the previous tile, recomputing a few outputs), so any token count
 M >= 8 runs on full 4 x 8 tiles. With a laid-out act, the whole records run the
-gemm tiles (smmla's for any M with i8mm, 4 x 16 when the records cover 16 rows,
-else 4 x 8; per block, all of the tile's sums, then its scales; when N is a
-multiple of their width, else 1-wide tiles as tall) starting on a record, with M
-tails guarded: `dotr` is bound to one tile's rows, and its rows past the records
-read the last activation row (clamped; nothing reads past the input). The rest
-run the gemv tiles; with a laid-out integer weight they run `blocked_rows`
-instead: one weight record per tile (rows-tall, as GGML's repacked gemv), its
-int32 sums vectorized across the record's rows and each piece's 4-code quads
-(sdot), so a piece is one dense load and the activation's piece is broadcast to
-the rows; the activation's codes are staged per block in registers, so with
-4-code pieces (`q4_0.i4.4x4`, GGML's `q4_0_4x4`) the broadcast is a by-element
-sdot. Its gemm tiles (16, 8 or 4 activation rows) use the same by-element sdot,
-as KleidiAI's dotprod gemm: per block the weight record is decoded once and the
-sums are computed per activation record, its codes staged in memory order (a
-16-byte load holds a piece of each of its 4 rows) and its 4 scales one vector.
-The default layout is `q4_0.i4.4x4`, for gemv and gemm alike (a weight is
-repacked once, as KleidiAI's is); `q4_0.i4.4x8` (smmla gemm, at parity on M3)
-and AoS are built with mul_mat as comparisons. q8_0 has the same layouts
-(`q8_0.4x4`, `q8_0.4x8`, `q8_0.soa`) on the same recipes, its codes read as
-stored (gemv: 8-byte pieces are a broadcast half-register, plain sdot). An
-in-kernel activation encoder runs first, parallel over activation rows when M >
-1, and vectorized per encoded block (`encoder`: the block's reductions, e.g. its
-scale, across the block; per-value Funcs, e.g. the codes, across their values).
-Kernel ABI (`harness/halide_providers.cpp`): `w`/`a` are
-`[K / block, N / rows or M]` records (struct types from the kernel's metadata),
-`out` is f32 `[N, M]`. The kernel declares the whole contract (checked in
-`checked`, assumed in `bench`): all mins 0, rows dense
+gemm tiles (smmla's for any M with i8mm: 4 x 12, 4 x 16 or 4 x 20, whichever
+computes the fewest rows past the records (about equal cost per row), 16 x 4 for
+one record, 4 x 8 for two, with each task's tiles covering up to 128 rows so the
+weights stream once; per block, all of the tile's sums, then its scales; when N
+is a multiple of their width, else 1-wide tiles as tall) starting on a record,
+with M tails guarded: `dotr` is bound to one tile's rows, and its rows past the
+records read the last activation row (clamped; nothing reads past the input).
+The rest run the gemv tiles; with a laid-out integer weight they run
+`blocked_rows` instead: one weight record per tile (rows-tall, as GGML's
+repacked gemv), its int32 sums vectorized across the record's rows and each
+piece's 4-code quads (sdot), so a piece is one dense load and the activation's
+piece is broadcast to the rows; the activation's codes are staged per block in
+registers, so with 4-code pieces (`q4_0.i4.4x4`, GGML's `q4_0_4x4`) the
+broadcast is a by-element sdot. Its gemm tiles (the same choice of shapes) use
+the same by-element sdot, as KleidiAI's dotprod gemm: per block the weight
+record is decoded once and the sums are computed per activation record, its
+codes staged in memory order (a 16-byte load holds a piece of each of its 4
+rows) and its 4 scales one vector. The default layout is `q4_0.i4.4x4`, for gemv
+and gemm alike (a weight is repacked once, as KleidiAI's is); `q4_0.i4.4x8`
+(smmla gemm, at parity on M3) and AoS are built with mul_mat as comparisons.
+q8_0 has the same layouts (`q8_0.4x4`, `q8_0.4x8`, `q8_0.soa`) on the same
+recipes, its codes read as stored (gemv: 8-byte pieces are a broadcast
+half-register, plain sdot). An in-kernel activation encoder runs first, parallel
+over activation rows when M > 1, and vectorized per encoded block (`encoder`:
+the block's reductions, e.g. its scale, across the block; per-value Funcs, e.g.
+the codes, across their values). Kernel ABI (`harness/halide_providers.cpp`):
+`w`/`a` are `[K / block, N / rows or M]` records (struct types from the kernel's
+metadata), `out` is f32 `[N, M]`. The kernel declares the whole contract
+(checked in `checked`, assumed in `bench`): all mins 0, rows dense
 (`dim(1).stride == dim(0).extent`), `a`'s K tied to `w`'s, `w`/`a` rows match
 `out`'s N/M, and `vec_dot` pins `out` to 1 x 1. It promises no more than GGML
 does: K is a whole number of blocks (GGML asserts `n % QK == 0`), with no even
