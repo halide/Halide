@@ -237,11 +237,14 @@ into the codes' dot and the act's offset times the weight's code sum, which it
 reads from the weight's derived port, so the dot is int32 over all of K and the
 scales apply once per output, as KleidiAI's kernels: gemv tiles of 4 rows (sdot;
 with `qsi8cx.4x8`, a record piece is one load and the act's piece a broadcast),
-gemm tiles of 4 x 8 and 4 x 2 smmla. The in-kernel encoder (`f32:qai8dx`;
+gemm tiles of 8 x 8 and 4 x 8 smmla. The in-kernel encoder (`f32:qai8dx`;
 `rowwise_encoder`) computes each row's range (per-lane vectors over the blocks),
 scale and zero point, then its codes, parallel over rows; with i8mm its codes
-are stored in 8-code pieces with the rows' pieces adjacent (`split_storage`), so
-an smmla operand is one load. The harness times them under GGML's q8_0
+are stored in groups of 8 rows (padded, repeating the last row), each group's
+8-code pieces adjacent and the group's K contiguous (`split_storage`), so an
+smmla operand is one load and a tile reads one stream; its tiles start on a
+group (the tail tile guarded). Pre-quantized acts: 8 x 8, 4 x 8 and 4 x 2. The
+harness times them under GGML's q8_0
 (`halide-qsi8cx[_4x8]_[f32_to_]qai8dx_mul_mat`, next to `ggml-cpu-kleidiai`): it
 requantizes the q8_0 weights (decoded) to qsi8cx with its codec at setup,
 untimed, as GGML's backend does on load. The codec check

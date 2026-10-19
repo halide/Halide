@@ -93,14 +93,15 @@ inline LoopLevel tile_at(Func out, int st) {
 
 // out's stage st under `cond` (all of it if undefined) on ts tiles, each
 // computing its region of dot; parallel tasks of ts.rows x ts.cols outputs.
-// `whole_n`: N is a multiple of ts.nt. Returns dot's update under `cond`.
-inline Stage tile_out(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, bool whole_n = false) {
+// `whole_n`: N is a multiple of ts.nt. `guard_m`: tiles in m from 0 mod
+// ts.mt, the last guarded. Returns dot's update under `cond`.
+inline Stage tile_out(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, bool whole_n = false, bool guard_m = false) {
     VarOrRVar n = out.args()[0], m = row_var(out, st), mo = row_var(out, st, "mo"), mi = row_var(out, st, "mi"), mc = row_var(out, st, "mc"), t = row_var(out, st, "nc");
     Var no("no"), ni("ni"), nc("nc");
     Stage o = st ? out.update(st - 1) : Stage(out), s = cond.defined() ? o.specialize(cond) : o;
     // Updates: whole tiles in n (cond knows N % nt == 0); m an RVar.
     s.split(n, no, ni, ts.nt, st || whole_n ? TailStrategy::RoundUp : TailStrategy::ShiftInwards);
-    s.split(m, mo, mi, ts.mt, st ? TailStrategy::GuardWithIf : TailStrategy::ShiftInwards);
+    s.split(m, mo, mi, ts.mt, st || guard_m ? TailStrategy::GuardWithIf : TailStrategy::ShiftInwards);
     s.reorder(ni, mi, mo, no).unroll(mi);
     ts.nt > 1 ? s.vectorize(ni) : s.unroll(ni);
     dot.compute_at(tile_at(out, st));
@@ -686,8 +687,8 @@ inline void rowwise_gemv(Func out, int st, Func dot, Expr cond, Tiles ts, const 
 // each 4 dense lanes of the codes' dot (split_storage), in registers over
 // all of K.
 inline void rowwise_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, bool whole_n,
-                         const std::vector<ApproximationResult> &rs) {
-    Stage s = tile_out(out, st, dot, cond, ts, r, whole_n);
+                         const std::vector<ApproximationResult> &rs, bool guard_m = false) {
+    Stage s = tile_out(out, st, dot, cond, ts, r, whole_n, guard_m);
     Func codes = rowwise_dot(s, dot, cond, rs);
     s.vectorize(dot.args()[0]);  // the scaling, once per output
     Var n = dot.args()[0], m = dot.args()[1], nio("nio"), nii("nii"), mio("mio"), mii("mii"), sno, sni, smo, smi;
@@ -699,6 +700,10 @@ inline void rowwise_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     codes.split_storage(n, sno, sni, 2).split_storage(m, smo, smi, 2).reorder_storage(sni, smi, sno, smo);
     sub(codes, {nii, mii, nio, mio});
     codes.compute_at(tile_at(out, st));
+    if (guard_m) {
+        // (a constant under cond; M = 1, the gemv, needs only its row)
+        codes.bound_extent(m, select(out.output_buffer().dim(1).extent() > 1, ts.mt, 1));
+    }
     Stage cu = codes.update();
     cu.split(rx, rxc, rxk, 8);
     sub(cu, {rxk, nii, mii, nio, mio, rxc, ry}).unroll(rxc).atomic().vectorize(rxk);
@@ -708,9 +713,11 @@ inline void rowwise_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
 // (min and max, vectorized), then the row's scale and zero point, computed
 // once per row (so the products' scaling reads them too), then the codes
 // (vectorized), each in parallel over the rows when there are several. With
-// `pairs`, the codes are stored in 8-code pieces, the rows' pieces adjacent
-// (split_storage, as KleidiAI's qai8dxp packs them for smmla), so that an
-// smmla operand (8 codes of 2 rows) is one dense load, whatever the rows.
+// `pairs`, the codes are stored in groups of 8 rows (M > 1 rounded up: the
+// rows past M repeat the last one), in 8-code pieces, the group's pieces adjacent
+// and its K contiguous (split_storage, as KleidiAI's qai8dxp packs them for
+// smmla): an smmla operand (8 codes of 2 rows) is one dense load, and a tile
+// of 8 rows from 0 mod 8 one stream.
 inline void rowwise_encoder(Func e, const std::vector<ApproximationResult> &rs, const Expr &M, bool pairs) {
     std::vector<Func> dec = decoders(rs);
     for (const ApproximationResult &res : rs) {
@@ -720,10 +727,10 @@ inline void rowwise_encoder(Func e, const std::vector<ApproximationResult> &rs, 
             Var row = f.args().back();
             if (f.name() == e.name()) {
                 // (specializations copy the schedule so far: vectorize first)
-                Var j = f.args()[0], b = f.args()[1], sjo, sji, ro("ro"), ri("ri");
+                Var j = f.args()[0], b = f.args()[1], sjo, sji, sro, sri, ro("ro"), ri("ri");
                 Stage s = f.compute_root().vectorize(j);
                 if (pairs) {
-                    f.split_storage(j, sjo, sji, 8).reorder_storage(sji, row, sjo, b);
+                    f.bound(row, 0, select(M > 1, (M + 7) / 8 * 8, M)).split_storage(j, sjo, sji, 8).split_storage(row, sro, sri, 8).reorder_storage(sji, sri, sjo, b, sro);
                     // 8 rows per task: a cache line's pieces in one task
                     s.specialize(M > 1).split(row, ro, ri, 8, TailStrategy::GuardWithIf).parallel(ro);
                 } else {
@@ -747,7 +754,9 @@ inline void rowwise_encoder(Func e, const std::vector<ApproximationResult> &rs, 
 
 // mul_mat on rowwise formats: gemm (M > 1, N > 1) on smmla tiles where the
 // target has i8mm, 8 x 8 (16 accumulators: enough independent smmla chains to
-// fill the pipes, as KleidiAI's 16 x 4), else 4 x 8 (4 x 2 for M < 8); gemv
+// fill the pipes, as KleidiAI's 16 x 4), else 4 x 8; on acts encoded here,
+// tiles of whole groups of 8 rows (the last guarded), any M > 1; on
+// pre-quantized acts, shifted inwards (4 x 2 for M < 8); gemv
 // tiles of 4 rows (a record of interleaved weights; planar: N >= 4, else
 // single rows), in tasks of 16 rows.
 inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const std::vector<int> &blocks,
@@ -763,9 +772,15 @@ inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom 
     auto fits = [&](const Tiles &ts) { return N >= ts.nt && M >= ts.mt; };
     if (t.has_feature(Target::ARMI8MM)) {
         // records of 4 rows: whole 8-row tiles only where N allows
-        rowwise_mmla(out, 0, dot, fits(mmla8x8) && (chunk == 0 || N % 8 == 0), mmla8x8, r, chunk > 0, rs);
-        rowwise_mmla(out, 0, dot, fits(mmla4x8), mmla4x8, r, chunk > 0, rs);
-        rowwise_mmla(out, 0, dot, fits(mmla4x2), mmla4x2, r, chunk > 0, rs);
+        if (!staged.empty()) {
+            // acts encoded here, in groups of 8 rows (padded): whole groups
+            rowwise_mmla(out, 0, dot, N >= 8 && M > 1 && (chunk == 0 || N % 8 == 0), mmla8x8, r, chunk > 0, rs, true);
+            rowwise_mmla(out, 0, dot, N >= 4 && M > 1, mmla4x8, r, chunk > 0, rs, true);
+        } else {
+            rowwise_mmla(out, 0, dot, fits(mmla8x8) && (chunk == 0 || N % 8 == 0), mmla8x8, r, chunk > 0, rs);
+            rowwise_mmla(out, 0, dot, fits(mmla4x8), mmla4x8, r, chunk > 0, rs);
+            rowwise_mmla(out, 0, dot, fits(mmla4x2), mmla4x2, r, chunk > 0, rs);
+        }
     }
     if (chunk) {  // N is a multiple of the records' rows
         rowwise_gemv(out, 0, dot, Expr(), rows, r, chunk, rs);
