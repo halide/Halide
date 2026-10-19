@@ -36,7 +36,9 @@ public:
         Func Wf("Wf"), Xf("Xf"), Xrf("Xrf"), W("W"), X("X"), Xr("Xr"), out("out");
         block = fw.block;
         Wf(k, n) = operand(fw, w, k, n);
-        Xf(k, m) = operand(fa, a, k, m);
+        // a rowwise act encoded here may be encoded on rows past M (whole
+        // groups of rows for the gemm's tiles): they repeat the last one
+        Xf(k, m) = operand(fa, a, k, fc.rowwise && cn != an ? clamp(m, 0, row(a[0]).extent() - 1) : m);
         view(W, Wf);
         view(X, Xf);
         // r.x: a value within a block, r.y: the block
