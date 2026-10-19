@@ -746,9 +746,10 @@ inline void rowwise_encoder(Func e, const std::vector<ApproximationResult> &rs, 
 }
 
 // mul_mat on rowwise formats: gemm (M > 1, N > 1) on smmla tiles where the
-// target has i8mm, 4 x 8 (4 x 2 for M < 8); gemv tiles of 4 rows (a record
-// of interleaved weights; planar: N >= 4, else single rows), in tasks of 16
-// rows.
+// target has i8mm, 8 x 8 (16 accumulators: enough independent smmla chains to
+// fill the pipes, as KleidiAI's 16 x 4), else 4 x 8 (4 x 2 for M < 8); gemv
+// tiles of 4 rows (a record of interleaved weights; planar: N >= 4, else
+// single rows), in tasks of 16 rows.
 inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const std::vector<int> &blocks,
                             const std::vector<ApproximationResult> &rs, const std::vector<Func> &staged, const Target &t) {
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
@@ -758,11 +759,13 @@ inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom 
         rowwise_encoder(e, rs, M, t.has_feature(Target::ARMI8MM));
     }
     Func dot = dots[0];
-    Tiles mmla8{4, 8, 1, 32, 32, 2}, mmla2{4, 2, 1, 32, 32, 2}, rows{4, 1, 1, 16}, single{1, 1, 1, 16};
+    Tiles mmla8x8{8, 8, 1, 32, 32, 2}, mmla4x8{4, 8, 1, 32, 32, 2}, mmla4x2{4, 2, 1, 32, 32, 2}, rows{4, 1, 1, 16}, single{1, 1, 1, 16};
     auto fits = [&](const Tiles &ts) { return N >= ts.nt && M >= ts.mt; };
     if (t.has_feature(Target::ARMI8MM)) {
-        rowwise_mmla(out, 0, dot, fits(mmla8), mmla8, r, chunk > 0, rs);
-        rowwise_mmla(out, 0, dot, fits(mmla2), mmla2, r, chunk > 0, rs);
+        // records of 4 rows: whole 8-row tiles only where N allows
+        rowwise_mmla(out, 0, dot, fits(mmla8x8) && (chunk == 0 || N % 8 == 0), mmla8x8, r, chunk > 0, rs);
+        rowwise_mmla(out, 0, dot, fits(mmla4x8), mmla4x8, r, chunk > 0, rs);
+        rowwise_mmla(out, 0, dot, fits(mmla4x2), mmla4x2, r, chunk > 0, rs);
     }
     if (chunk) {  // N is a multiple of the records' rows
         rowwise_gemv(out, 0, dot, Expr(), rows, r, chunk, rs);
