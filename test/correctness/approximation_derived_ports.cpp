@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdio>
 #include <memory>
+#include <set>
 
 using namespace Halide;
 using namespace Halide::ApproximationTesting;
@@ -316,6 +317,72 @@ int test_argument_mapping() {
     return 0;
 }
 
+// A schedule substitutes a derived port after Pipeline::sever() has cut the
+// encoded ports (e.g. quantized weights supplied as inputs). The port's
+// stored and `from` Funcs must be decode-side Funcs that read the severed
+// inputs, whatever follows Derive: here Identity, which decodes to the
+// encoded Funcs themselves, or nothing.
+int test_after_sever() {
+    const int blocks = 6;
+    for (bool identity : {true, false}) {
+        Approximation quant = BlockInt8{};
+        Approximation scheme = identity ? Approximation(Compose{BlockReshape{QB}, quant, derive_sum(), Identity{}}) :
+                                          Approximation(Compose{BlockReshape{QB}, quant, derive_sum()});
+        ImageParam xv(Float(32), 1, "sever_x");
+        Func x("sever_x_values"), use("sever_use"), dot("sever_dot"), act_sum("sever_act_sum");
+        Var i("i"), b("b");
+        RDom r(0, QB, "sever_r");
+        x(i) = xv(i);
+        use(i) = x(i);
+        ApproximationResult res = x.approximate_by(scheme, {use});
+        Func dq = res.decoded_by(quant);
+        act_sum(b) = 0.0f;
+        act_sum(b) += dq(r, b);
+        dot(b) = act_sum(b) + dq(1, b);  // reads the codes and scale too
+        DerivedPort port = res.derived_port("sum");
+        for (const Func &e : res.encoded) {
+            CHECK(port.stored.name() != e.name());
+            for (const Func &f : port.from) {
+                CHECK(f.name() != e.name());
+            }
+        }
+
+        // The offline half: the encoded ports of x.
+        CHECK(res.encoded.size() == 3);
+        Buffer<float> xb = generate(Distribution::normal(0, 1), Float(32), {QB * blocks}, 5);
+        xv.set(xb);
+        Buffer<int8_t> codes = res.encoded[0].realize({QB, blocks});
+        Buffer<float> scale = res.encoded[1].realize({blocks});
+        Buffer<float> sum = res.encoded[2].realize({blocks});
+
+        ImageParam codes_in(Int(8), 2, "sever_codes"), scale_in(Float(32), 1, "sever_scale"),
+            sum_in(Float(32), 1, "sever_sum");
+        Pipeline({dot, port.stored}).sever(res.encoded, {codes_in, scale_in, sum_in});
+        DerivedPortMatch m = match_derived_port(act_sum, port);
+        if (!m) {
+            printf("%s: %s\n  term %s\n  definition %s\n", identity ? "Identity" : "Derive last", m.reason.c_str(),
+                   m.term_form.c_str(), m.definition_form.c_str());
+        }
+        CHECK(m.matched);
+        act_sum.approximate_by(port, {dot});
+
+        std::set<std::string> args;
+        for (const Argument &a : Pipeline(dot).infer_arguments()) {
+            args.insert(a.name);
+        }
+        CHECK((args == std::set<std::string>{"sever_codes", "sever_scale", "sever_sum"}));
+        codes_in.set(codes);
+        scale_in.set(scale);
+        sum_in.set(sum);
+        xv.set(Buffer<float>(QB * blocks).fill(0.0f));  // unread
+        Buffer<float> out = dot.realize({blocks});
+        for (int k = 0; k < blocks; k++) {
+            CHECK(out(k) == sum(k) + (float)codes(1, k) * scale(k));
+        }
+    }
+    return 0;
+}
+
 int test_rejections() {
     if (!Halide::exceptions_enabled()) {
         printf("[SKIP] rejections need exceptions\n");
@@ -428,7 +495,10 @@ int test_runtime_check() {
             sum_in(b) = sums(b);
             DecodeResult dec = scheme.decode({codes_in, scale_in, sum_in});
             std::vector<DerivedPort> ports = derived_ports(enc.trace, dec.trace);
-            CHECK(ports.size() == 1 && ports[0].from[0].name() == codes_in.name());
+            // from[0] is a decode-side Func of its own that reads codes_in.
+            CHECK(ports.size() == 1 && ports[0].from[0].name() != codes_in.name());
+            const Internal::Call *read = ports[0].from[0].value().as<Internal::Call>();
+            CHECK(read && read->name == codes_in.name());
 
             Func dq;
             for (const ApproximationStageOutputs &o : dec.stage_outputs) {
@@ -575,6 +645,7 @@ int main(int argc, char **argv) {
     for (const Test &t : std::vector<Test>{{"introspection", test_introspection},
                                            {"substitution", test_substitution},
                                            {"argument_mapping", test_argument_mapping},
+                                           {"after_sever", test_after_sever},
                                            {"rejections", test_rejections},
                                            {"runtime_check", test_runtime_check},
                                            {"derived_ports_hold", test_derived_ports_hold},
