@@ -10,6 +10,10 @@
 // `chunk`: Interleave's bytes per row piece (0 for aos). A kernel may ask for
 // `scaled` codes: the same bytes, decoded to codes at 2^(8 - bits) times their
 // value (in the top bits of an int8) and scales divided alike (Q4_0Quant).
+// KleidiAI's qsi8cx (weights) and qai8dx (activations) scale per row
+// (kleidiai.h): `rowwise`; they reduce over a row's `blocks` blocks, K / QK,
+// which the caller passes (an Expr; e.g. an input's extent).
+#include "kleidiai.h"
 #include "legacy.h"
 
 namespace ggml {
@@ -17,11 +21,14 @@ namespace ggml {
 struct Format {
     Approximation scheme;
     int block = 1, rows = 1, chunk = 0;
+    bool rowwise = false;
 };
 
 // `aos`: the same format with one row per record. `indexed`: its blocks'
 // values indexed (index in block, block, ...), not flat (see BlockReshape).
-inline Format format(const std::string &spec, bool aos = false, bool scaled = false, bool indexed = false) {
+// `blocks`: a row's, for the rowwise formats (undefined: only their ports'
+// shapes are of use).
+inline Format format(const std::string &spec, bool aos = false, bool scaled = false, bool indexed = false, Expr blocks = Expr()) {
     std::vector<std::string> t;
     for (size_t i = 0, j; i <= spec.size(); i = j + 1) {
         j = std::min(spec.find('.', i), spec.size());
@@ -38,6 +45,9 @@ inline Format format(const std::string &spec, bool aos = false, bool scaled = fa
     if (type == "q4_1" && codes.empty()) return {q4_1(lay, indexed), QK, rows, chunk};
     if (type == "q8_0" && codes.empty()) return {q8_0(lay, indexed), QK, rows, chunk};
     if (type == "q8_1" && codes.empty()) return {q8_1(lay, indexed), QK, rows, chunk};
+    if (!blocks.defined()) blocks = 1;
+    if (type == "qsi8cx" && codes.empty()) return {qsi8cx(lay, blocks, indexed), QK, rows, chunk, true};
+    if (type == "qai8dx" && codes.empty()) return {qai8dx(lay, blocks, indexed), QK, rows, chunk, true};
     if (type == "f16" && t.size() == 1) return {fp16()};
     if (type == "f32" && t.size() == 1) return {};
     throw std::invalid_argument("unknown format " + spec);

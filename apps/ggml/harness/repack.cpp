@@ -204,6 +204,26 @@ std::vector<std::unique_ptr<HBuf>> port_buffers(const halide_filter_metadata_t *
     return bs;
 }
 
+bool rowwise_format(const FormatSpec &f) {
+    return f.type == "qsi8cx" || f.type == "qai8dx";
+}
+
+std::vector<std::unique_ptr<HBuf>> rowwise_ports(const halide_filter_metadata_t *md, int first, int n, const FormatSpec &f,
+                                                 int64_t K, int64_t R, std::vector<std::vector<uint8_t>> &mem) {
+    std::vector<std::unique_ptr<HBuf>> bs;
+    for (int i = first; i < first + n; i++) {
+        halide_type_t t = md->arguments[i].type;
+        std::vector<int64_t> e{R};
+        if (md->arguments[i].dimensions == 3) e = {32 * f.rows, K / 32, R / f.rows};
+        int64_t count = 1;
+        for (int64_t x : e)
+            count *= x;
+        mem.emplace_back(count * t.bytes());
+        bs.push_back(std::make_unique<HBuf>(mem.back().data(), t, e));
+    }
+    return bs;
+}
+
 std::string ggml_repack_live(ggml_type t, const uint8_t *src, std::vector<uint8_t> &dst, int64_t N, int64_t K) {
     ggml_backend_dev_t dev = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU);
     auto get = (ggml_backend_dev_get_extra_bufts_t)ggml_backend_reg_get_proc_address(ggml_backend_dev_backend_reg(dev), "ggml_backend_dev_get_extra_bufts");

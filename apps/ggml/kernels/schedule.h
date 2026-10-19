@@ -145,23 +145,32 @@ inline bool product_over_sum(const Expr &e) {
     return m && (m->a.as<Internal::Add>() || m->b.as<Internal::Add>() || product_over_sum(m->a) || product_over_sum(m->b));
 }
 
-inline bool calls_any(const Expr &e, const std::vector<Func> &fs) {
+// Which calls a split is on: of the Funcs fs (by name), or any call `is` picks.
+using CallTest = std::function<bool(const Internal::Call *)>;
+inline CallTest call_of(const std::vector<Func> &fs) {
+    return [fs](const Internal::Call *c) {
+        return std::any_of(fs.begin(), fs.end(), [&](const Func &f) { return c->name == f.name(); });
+    };
+}
+
+inline bool calls_any(const Expr &e, const CallTest &is) {
     bool found = false;
     Internal::visit_with(e, [&](auto *self, const Internal::Call *c) {
-        for (const Func &f : fs) {
-            found |= c->name == f.name();
-        }
+        found |= is(c);
         self->visit_base(c);
     });
     return found;
 }
+inline bool calls_any(const Expr &e, const std::vector<Func> &fs) {
+    return calls_any(e, call_of(fs));
+}
 
-// Does every term of e call one of fs (no product over a sum to expand)?
-inline bool all_terms_call(Expr e, const std::vector<Func> &fs) {
+// Does every term of e make such a call (no product over a sum to expand)?
+inline bool all_terms_call(Expr e, const CallTest &is) {
     e = Internal::substitute_in_all_lets(e);
     std::vector<Expr> ts;
     terms(e, ts);
-    return !product_over_sum(e) && std::all_of(ts.begin(), ts.end(), [&](const Expr &t) { return calls_any(t, fs); });
+    return !product_over_sum(e) && std::all_of(ts.begin(), ts.end(), [&](const Expr &t) { return calls_any(t, is); });
 }
 
 // Splits f's reduction into the part with the calls to fs and the rest: f
@@ -170,7 +179,7 @@ inline bool all_terms_call(Expr e, const std::vector<Func> &fs) {
 // hoist_invariants({fs}) proposed in the review of distribute()
 // (halide/Halide#9508), here distribute() then hoist_invariants() (the only
 // use of distribute(): swap it for that).
-inline std::pair<Func, Func> split_on(Stage st, Expr v, const std::string &name, const std::vector<Func> &fs) {
+inline std::pair<Func, Func> split_on(Stage st, Expr v, const std::string &name, const CallTest &fs) {
     v = Internal::substitute_in_all_lets(v);
     const auto *a = v.as<Internal::Add>();
     const auto *self = a ? a->a.as<Internal::Call>() : nullptr;
@@ -184,6 +193,9 @@ inline std::pair<Func, Func> split_on(Stage st, Expr v, const std::string &name,
         part = h;
     }
     return {with, rest};
+}
+inline std::pair<Func, Func> split_on(Stage st, Expr v, const std::string &name, const std::vector<Func> &fs) {
+    return split_on(st, std::move(v), name, call_of(fs));
 }
 inline std::pair<Func, Func> split_on(Func f, const std::vector<Func> &fs) {
     auto parts = split_on(f.update(), f.update_value(), f.name(), fs);
@@ -603,6 +615,163 @@ inline void metal_rows(Func out, Func dot, const RDom &r, const std::vector<Appr
     }
 }
 
+// Rowwise formats (schemes/kleidiai.h: weights qsi8cx, acts qai8dx): one
+// scale per row, so the codes' dot accumulates in int32 over the whole of K.
+// dot's increment, the weight's codes times its scale times the act's codes
+// plus its offset times its scale (s, out's stage tile under `cond`), splits
+// on the act's codes (an integer call reading m and r): one Func the codes'
+// dot (int32), the other the weight's code sum, read from its derived port
+// (Func::approximate_by(DerivedPort, ...): the row sums its encoder stored),
+// each times its scales once per output. Returns the codes' dot.
+inline Func rowwise_dot(Stage s, Func dot, const Expr &cond, const std::vector<ApproximationResult> &rs) {
+    std::string m = dot.args()[1].name();
+    CallTest act_codes = [m](const Internal::Call *c) {
+        if ((c->call_type != Internal::Call::Halide && c->call_type != Internal::Call::Image) || !c->type.is_int()) return false;
+        bool row = false, reduced = false;
+        for (const Expr &a : c->args) {
+            Internal::visit_with(a, [&](auto *, const Internal::Variable *v) {
+                row |= v->name == m;
+                reduced |= v->reduction_domain.defined();
+            });
+        }
+        return row && reduced;
+    };
+    s.eager_inline(decoders(rs, Of::Floats));
+    auto [with, sums] = split_on(s, update_value(dot, cond), dot.name(), act_codes);
+    if (!with.defined() || !sums.defined()) throw std::invalid_argument("rowwise_dot: no zero-point term in " + dot.name());
+    Func codes = with.change_type(Int(32)), sum = sums.change_type(Int(32));
+    for (const DerivedPort &p : rs[0].derived_ports()) {
+        if (match_derived_port(sum, p)) {
+            sum.approximate_by(p, {sums});
+            return codes;
+        }
+    }
+    throw std::invalid_argument("rowwise_dot: the weight's code sum matches none of its derived ports");
+}
+
+// The rowwise gemv: per tile of ts.nt rows, the codes' dot in int32 lanes
+// over all of K (sdot: 4 products per lane), merged once at the end. Weight
+// records of rows interleaved in `chunk`-code pieces: the lanes across the
+// record's rows and each piece's 4-code quads, so a piece of the record is
+// one dense load and the act's piece is broadcast to its rows (KleidiAI's
+// qsi8cxp4x8 gemv); planar weights (chunk 0): each row's 16-code lanes,
+// the act's shared by the rows.
+inline void rowwise_gemv(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, int chunk,
+                         const std::vector<ApproximationResult> &rs) {
+    Stage s = tile_out(out, st, dot, cond, ts, r, chunk > 0);
+    Func codes = rowwise_dot(s, dot, cond, rs);
+    Var n = dot.args()[0], m = dot.args()[1], q("q");
+    if (ts.nt > 1) s.vectorize(n);  // the scaling, once per output
+    RVar rx = r.x, ry = r.y, rp("rp"), rq("rq"), ri("ri"), ro("ro");
+    LoopLevel tile = tile_at(out, st);
+    Stage cu = codes.update();
+    if (chunk) {
+        cu.split(rx, rp, rx, chunk).split(rx, rq, ri, 4);
+        Func quads = cu.rfactor(rq, q);
+        cu.reorder(rq, n).atomic().vectorize(rq);
+        quads.update().reorder(ri, q, n, rp, ry, m).atomic().vectorize(ri);
+        regs(quads.reorder_storage(q, n, m).compute_at(tile), {q, n}, {m, rp});
+    } else {
+        cu.split(rx, ro, ri, 4);
+        Func lanes = cu.rfactor(ro, q);
+        cu.reorder(ro, n).atomic().vectorize(ro);
+        lanes.update().reorder(ri, q, n, ry, m).atomic().vectorize(ri);
+        regs(lanes.reorder_storage(q, n, m).compute_at(tile), {q}, {n, m});
+    }
+    regs(codes.compute_at(tile), {}, {n, m});
+}
+
+// The rowwise gemm on i8mm smmla (2 x 2 x 8 matrix-multiply tiles), as
+// blocked_mmla but with no per-block work: nt x mt tiles of 2 x 2 sub-tiles,
+// each 4 dense lanes of the codes' dot (split_storage), in registers over
+// all of K.
+inline void rowwise_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, bool whole_n,
+                         const std::vector<ApproximationResult> &rs) {
+    Stage s = tile_out(out, st, dot, cond, ts, r, whole_n);
+    Func codes = rowwise_dot(s, dot, cond, rs);
+    s.vectorize(dot.args()[0]);  // the scaling, once per output
+    Var n = dot.args()[0], m = dot.args()[1], nio("nio"), nii("nii"), mio("mio"), mii("mii"), sno, sni, smo, smi;
+    RVar rx = r.x, ry = r.y, rxc("rxc"), rxk("rxk");
+    auto sub = [&](Stage st, const std::vector<VarOrRVar> &order) {
+        st.split(n, nio, nii, 2, TailStrategy::GuardWithIf).split(m, mio, mii, 2, TailStrategy::GuardWithIf);
+        return st.reorder(order).vectorize(nii).vectorize(mii).unroll(nio).unroll(mio);
+    };
+    codes.split_storage(n, sno, sni, 2).split_storage(m, smo, smi, 2).reorder_storage(sni, smi, sno, smo);
+    sub(codes, {nii, mii, nio, mio});
+    codes.compute_at(tile_at(out, st));
+    Stage cu = codes.update();
+    cu.split(rx, rxc, rxk, 8);
+    sub(cu, {rxk, nii, mii, nio, mio, rxc, ry}).unroll(rxc).atomic().vectorize(rxk);
+}
+
+// A rowwise act encoded in the pipeline (qai8dx's codes e): its row ranges
+// (min and max, vectorized), then the row's scale and zero point, computed
+// once per row (so the products' scaling reads them too), then the codes
+// (vectorized), each in parallel over the rows when there are several. With
+// `pairs`, the codes are stored in 8-code pieces, the rows' pieces adjacent
+// (split_storage, as KleidiAI's qai8dxp packs them for smmla), so that an
+// smmla operand (8 codes of 2 rows) is one dense load, whatever the rows.
+inline void rowwise_encoder(Func e, const std::vector<ApproximationResult> &rs, const Expr &M, bool pairs) {
+    std::vector<Func> dec = decoders(rs);
+    for (const ApproximationResult &res : rs) {
+        if (res.encoded[0].name() != e.name()) continue;
+        for (Func f : res.intermediates) {
+            if (std::any_of(dec.begin(), dec.end(), [&](const Func &d) { return d.name() == f.name(); })) continue;
+            Var row = f.args().back();
+            if (f.name() == e.name()) {
+                // (specializations copy the schedule so far: vectorize first)
+                Var j = f.args()[0], b = f.args()[1], sjo, sji, ro("ro"), ri("ri");
+                Stage s = f.compute_root().vectorize(j);
+                if (pairs) {
+                    f.split_storage(j, sjo, sji, 8).reorder_storage(sji, row, sjo, b);
+                    // 8 rows per task: a cache line's pieces in one task
+                    s.specialize(M > 1).split(row, ro, ri, 8, TailStrategy::GuardWithIf).parallel(ro);
+                } else {
+                    s.specialize(M > 1).parallel(row);
+                }
+            } else if (f.has_update_definition()) {
+                // per lane (a value's place in its block) over the blocks, one
+                // vector of each, then across the lanes once per row
+                Var u("u");
+                RVar rx = f.rvars()[0];
+                Func lanes = f.update().rfactor(rx, u);
+                lanes.compute_at(f, row).vectorize(u).update().vectorize(u);
+                Stage(f.compute_root()).specialize(M > 1).parallel(row);
+                f.update().specialize(M > 1).parallel(row);
+            } else if (f.dimensions() == 1) {
+                f.compute_root();
+            }
+        }
+    }
+}
+
+// mul_mat on rowwise formats: gemm (M > 1, N > 1) on smmla tiles where the
+// target has i8mm, 4 x 8 (4 x 2 for M < 8); gemv tiles of 4 rows (a record
+// of interleaved weights; planar: N >= 4, else single rows), in tasks of 16
+// rows.
+inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const std::vector<int> &blocks,
+                            const std::vector<ApproximationResult> &rs, const std::vector<Func> &staged, const Target &t) {
+    Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
+    if (dots.size() > 1 || blocks[2] > 1) throw std::invalid_argument("rowwise: act records of one row");
+    int chunk = blocks[3] > 1 ? blocks[4] : 0;
+    for (Func e : staged) {
+        rowwise_encoder(e, rs, M, t.has_feature(Target::ARMI8MM));
+    }
+    Func dot = dots[0];
+    Tiles mmla8{4, 8, 1, 32, 32, 2}, mmla2{4, 2, 1, 32, 32, 2}, rows{4, 1, 1, 16}, single{1, 1, 1, 16};
+    auto fits = [&](const Tiles &ts) { return N >= ts.nt && M >= ts.mt; };
+    if (t.has_feature(Target::ARMI8MM)) {
+        rowwise_mmla(out, 0, dot, fits(mmla8), mmla8, r, chunk > 0, rs);
+        rowwise_mmla(out, 0, dot, fits(mmla2), mmla2, r, chunk > 0, rs);
+    }
+    if (chunk) {  // N is a multiple of the records' rows
+        rowwise_gemv(out, 0, dot, Expr(), rows, r, chunk, rs);
+        return;
+    }
+    rowwise_gemv(out, 0, dot, fits(rows), rows, r, 0, rs);
+    rowwise_gemv(out, 0, dot, Expr(), single, r, 0, rs);
+}
+
 // mul_mat: gemm tiles the outputs (4 x 8 on smmla when the target has i8mm
 // and both operands are quantized alike, 4 x 16 for whole records of at least
 // 16 rows, 4 x 4 where those waste rows; on weight records in 4-code pieces,
@@ -618,6 +787,10 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     if (t.has_feature(Target::Metal)) {
         if (!staged.empty() || blocks[2] > 1 || blocks[3] > 1) throw std::invalid_argument("metal: act formats stored as computed, weights one row per record");
         metal_rows(out, dots[0], r, rs);
+        return;
+    }
+    if (blocks.size() > 5 && blocks[5]) {
+        rowwise_mul_mat(out, dots, r, blocks, rs, staged, t);
         return;
     }
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();

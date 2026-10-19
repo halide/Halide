@@ -18,8 +18,12 @@ public:
 
     void configure() {
         ggml::Format f = ggml::format(type, false, scaled);
-        int ports = f.scheme.signature({{"values", Float(32), 2}}).outputs.size();  // e.g. planar: codes, scale
-        codec = ApproximationCodec::make_codec(f.scheme, Float(32), f.rows > 1 ? 2 : 1, {"x", "y", ports > 1 ? std::vector<std::string>{} : std::vector<std::string>{"blocks"}});
+        if (f.rowwise) {
+            codec = rowwise_codec();
+        } else {
+            int ports = f.scheme.signature({{"values", Float(32), 2}}).outputs.size();  // e.g. planar: codes, scale
+            codec = ApproximationCodec::make_codec(f.scheme, Float(32), f.rows > 1 ? 2 : 1, {"x", "y", ports > 1 ? std::vector<std::string>{} : std::vector<std::string>{"blocks"}});
+        }
         if (quantize) {
             codec.adopt_encoder(*this);
         } else {
@@ -43,6 +47,30 @@ public:
 
 private:
     ApproximationCodec::Codec codec;
+
+    // make_codec's codec, on rows x [K, R] of a rowwise format, which reduces
+    // over their K / QK blocks: x's extent, so x comes first.
+    ApproximationCodec::Codec rowwise_codec() const {
+        ApproximationCodec::Codec c;
+        c.values = ImageParam(Float(32), 2, "x");
+        ggml::Format f = ggml::format(type, false, scaled, false, c.values.dim(0).extent() / ggml::QK);
+        Var k("v0"), i("v1");
+        c.decoded = Func("y");
+        c.decoded(k, i) = c.values(k, i);
+        c.result = Func(c.values).approximate_by(f.scheme, {c.decoded});
+        for (Func g : c.result.intermediates) {
+            if (g.has_update_definition()) g.compute_root();
+        }
+        for (size_t p = 0; p < c.result.encoded.size(); p++) {
+            const Func &e = c.result.encoded[p];
+            c.encoded_names.push_back(ApproximationCodec::Detail::sanitize_port_name(c.result.encoded_ports[p].name, p));
+            c.encoded.emplace_back(c.encoded_names.back());
+            c.encoded.back()(_) = e(_);
+        }
+        c.encoded_inputs = Pipeline({c.decoded}).sever(c.result.encoded, c.encoded_names).online_inputs;
+        c.decoded_name = "y";
+        return c;
+    }
 };
 
 }  // namespace

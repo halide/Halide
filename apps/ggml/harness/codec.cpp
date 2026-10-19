@@ -112,6 +112,259 @@ void quantize_ref(ggml_type t, const float *x, uint8_t *dst, int64_t R, int64_t 
     }
 }
 
+#ifdef GQ_KLEIDIAI
+// KleidiAI v1.24.0 (libkleidiai.a, linked with GGML's CPU backend; its
+// headers are not installed).
+extern "C" {
+struct kai_rhs_pack_qsi8cx_params {
+    int32_t lhs_zero_point;
+    float scale_multiplier;
+};
+size_t kai_get_lhs_packed_size_lhs_quant_pack_qai8dxp_f32(size_t m, size_t k, size_t mr, size_t kr, size_t sr);
+void kai_run_lhs_quant_pack_qai8dxp_f32(size_t m, size_t k, size_t mr, size_t kr, size_t sr, size_t m_idx_start,
+                                        const float *lhs, size_t lhs_stride, void *lhs_packed);
+size_t kai_get_rhs_packed_size_rhs_pack_nxk_qsi8cxp_qsi8cx_neon(size_t n, size_t k, size_t nr, size_t kr, size_t sr);
+void kai_run_rhs_pack_nxk_qsi8cxp_qsi8cx_neon(size_t num_groups, size_t n, size_t k, size_t nr, size_t kr, size_t sr,
+                                              const int8_t *rhs, const float *bias, const float *scale, void *rhs_packed,
+                                              size_t extra_bytes, const kai_rhs_pack_qsi8cx_params *params);
+}
+#endif
+
+// GGML's q8_0 -> qsi8cx requantization of a row of K values (d * qs of its
+// q8_0 blocks), as in ggml-cpu/kleidiai/kleidiai.cpp (static there):
+// returns the scale.
+float ggml_requant_qsi8cx(const float *v, int64_t K, int8_t *q) {
+    float max_abs = 0.0f;
+    for (int64_t k = 0; k < K; k++)
+        max_abs = std::max(max_abs, std::fabs(v[k]));
+    float scale = max_abs > 0.0f ? max_abs / 127.0f : 0.0f;
+    const float inv_scale = scale > 0.0f ? 1.0f / scale : 0.0f;
+    for (int64_t k = 0; k < K; k++) {
+        int32_t c = scale > 0.0f ? static_cast<int32_t>(std::lround(v[k] * inv_scale)) : 0;
+        q[k] = (int8_t)std::clamp(c, -127, 127);
+    }
+    return scale;
+}
+
+// Row r's code k in a rowwise format's codes [32 * rows, K / 32, R / rows]
+// (rows > 1: interleaved in chunk-byte pieces).
+int8_t code_at(const FormatSpec &f, const HBuf &codes, int64_t r, int64_t k, int64_t K) {
+    const int8_t *p = (const int8_t *)codes.b.host;
+    if (f.rows == 1) return p[r * K + k];
+    int64_t j = k % 32, rec = (r / f.rows) * (K / 32) + k / 32;
+    return p[rec * 32 * f.rows + (j / f.chunk) * f.rows * f.chunk + (r % f.rows) * f.chunk + j % f.chunk];
+}
+
+template<typename T>
+T field(const HBuf &b, int64_t r) {
+    T v;
+    memcpy(&v, b.b.host + r * sizeof(T), sizeof(T));
+    return v;
+}
+
+std::string mismatch(const std::string &what, int64_t r, double got, double want) {
+    char s[160];
+    snprintf(s, sizeof(s), "row %lld %s: %.9g vs %.9g", (long long)r, what.c_str(), got, want);
+    return s;
+}
+
+// KleidiAI's formats (qsi8cx, qai8dx), which GGML has no type for: R rows
+// (N(0, 1), the first with `adversarial` blocks, then zero, constant, ties,
+// all-negative, skewed, tiny and huge rows). qsi8cx, on the rows and on
+// their q8_0 decoding (what it re-quantizes in GGML): codes and scales
+// against GGML's loop (ggml_requant_qsi8cx), the codes' bytes (layout) and
+// sums against KleidiAI's packing of them (kai_run_rhs_pack_nxk_qsi8cxp_
+// qsi8cx_neon, its reduction sums with lhs_zero_point 1, as GGML calls it).
+// qai8dx: codes, offset and scale against kai_run_lhs_quant_pack_qai8dxp_f32
+// (mr = 1, kr = 8, sr = 1: the 1x8 gemv kernel's packing). Dequantize: the
+// formats' decode, (code [+ offset]) * scale, of the quantized ports.
+void rowwise_codecs(const CodecRow &row, const std::vector<int64_t> &Ks, bool check, int rounds, double min_ms,
+                    std::vector<CodecResult> &results) {
+    FormatSpec fs = parse_format(row.type);
+    bool act = fs.type == "qai8dx";
+    const halide_filter_metadata_t *md = row.metadata();
+    int np = md->num_arguments - 1;
+    const int64_t R = 8;
+    std::mt19937 rng(11);
+    std::normal_distribution<float> normal;
+    for (int64_t K : Ks) {
+        if (K % 32) continue;
+        std::vector<float> x(K * R), y(K * R);
+        for (int64_t r = 0; r < R; r++) {
+            float *v = &x[r * K];
+            for (int64_t k = 0; k < K; k++) {
+                float n = normal(rng);
+                v[k] = r == 0 ? n : r == 1 ? (k % 3 ? 0.0f : -0.0f) :
+                                r == 2     ? 100.0f :
+                                r == 3     ? (float)(k % 255) - 127.0f + 0.5f :
+                                r == 4     ? -std::fabs(n) - 0.5f :
+                                r == 5     ? 10.0f * std::fabs(n) :
+                                r == 6     ? 1e-30f * n :
+                                             1e37f * n;
+            }
+            if (r == 0) adversarial(v, K);
+            if (r == 3) v[0] = -127.5f, v[1] = 127.5f;  // s = 1: x s at every tie
+            if (r == 5) v[0] = -0.1f;
+        }
+        std::vector<std::pair<std::string, std::vector<float>>> inputs{{"N(0,1)", x}};
+        if (!act) {
+            // GGML's q8_0 of the rows, decoded: what GGML re-quantizes.
+            // (Rows scaled to q8_0's range: its d = max |x| / 127 is fp16.)
+            std::vector<float> x8 = x;
+            for (int64_t r = 0; r < R; r++) {
+                float mx = 0, lim = 6e6f;
+                for (int64_t k = 0; k < K; k++)
+                    mx = std::max(mx, std::fabs(x8[r * K + k]));
+                for (int64_t k = 0; mx > lim && k < K; k++)
+                    x8[r * K + k] *= lim / mx;
+            }
+            std::vector<uint8_t> q8(ggml_row_size(GGML_TYPE_Q8_0, K) * R);
+            ggml_quantize_chunk(GGML_TYPE_Q8_0, x8.data(), q8.data(), 0, R, K, nullptr);
+            inputs.push_back({"q8_0", std::vector<float>(K * R)});
+            to_float(GGML_TYPE_Q8_0, q8.data(), inputs.back().second.data(), K * R);
+        }
+        for (auto &in : inputs) {
+            const std::string &input = in.first;
+            std::vector<float> &xs = in.second;
+            HBuf bx(xs.data(), halide_type_t(halide_type_float, 32), {K, R}), by(y.data(), halide_type_t(halide_type_float, 32), {K, R});
+            // The reference: codes [R, K], and the per-row fields.
+            std::vector<int8_t> rc(K * R);
+            std::vector<float> rscale(R);
+            std::vector<int32_t> roffset(R), rsum(R);
+            std::vector<uint8_t> packed;
+            std::string ref_path;
+            if (act) {
+#ifdef GQ_KLEIDIAI
+                packed.resize(kai_get_lhs_packed_size_lhs_quant_pack_qai8dxp_f32(R, K, 1, 8, 1));
+                kai_run_lhs_quant_pack_qai8dxp_f32(R, K, 1, 8, 1, 0, xs.data(), K * sizeof(float), packed.data());
+                for (int64_t r = 0; r < R; r++) {
+                    const uint8_t *p = packed.data() + r * (K + 8);
+                    memcpy(&rc[r * K], p, K);
+                    memcpy(&roffset[r], p + K, 4);
+                    memcpy(&rscale[r], p + K + 4, 4);
+                }
+                ref_path = "vs kai_run_lhs_quant_pack_qai8dxp_f32";
+#else
+                fprintf(stderr, "codec %s: no KleidiAI to check against\n", row.type.c_str());
+                return;
+#endif
+            } else {
+                for (int64_t r = 0; r < R; r++) {
+                    rscale[r] = ggml_requant_qsi8cx(&xs[r * K], K, &rc[r * K]);
+                    for (int64_t k = 0; k < K; k++)
+                        rsum[r] += rc[r * K + k];
+                }
+                ref_path = "vs ggml requant";
+#ifdef GQ_KLEIDIAI
+                int nr = fs.rows, kr = fs.rows > 1 ? fs.chunk : 8;
+                packed.resize(kai_get_rhs_packed_size_rhs_pack_nxk_qsi8cxp_qsi8cx_neon(R, K, nr, kr, 1));
+                kai_rhs_pack_qsi8cx_params params{1, 1.0f};
+                kai_run_rhs_pack_nxk_qsi8cxp_qsi8cx_neon(1, R, K, nr, kr, 1, rc.data(), nullptr, rscale.data(), packed.data(), 0, &params);
+                ref_path += " + kai_run_rhs_pack_nxk_qsi8cxp_qsi8cx_neon";
+#endif
+            }
+            std::vector<std::vector<uint8_t>> mem;
+            auto bq = rowwise_ports(md, 1, np, fs, K, R, mem);
+            // ports: codes, then qsi8cx: scale, sum; qai8dx: offset, scale
+            auto compare = [&]() -> std::string {
+                for (int64_t r = 0; r < R; r++) {
+                    for (int64_t k = 0; k < K; k++) {
+                        int8_t c = code_at(fs, *bq[0], r, k, K);
+                        if (c != rc[r * K + k]) return mismatch("code " + std::to_string(k), r, c, rc[r * K + k]);
+                    }
+                    float sc = field<float>(*bq[act ? 2 : 1], r);
+                    if (memcmp(&sc, &rscale[r], 4)) return mismatch("scale", r, sc, rscale[r]);
+                    int32_t o = field<int32_t>(*bq[act ? 1 : 2], r), want = act ? roffset[r] : rsum[r];
+                    if (o != want) return mismatch(act ? "offset" : "sum", r, o, want);
+                }
+                if (!act && !packed.empty()) {
+                    // KleidiAI's packing: per nr rows, their codes (K), then
+                    // nr sums, scales and biases.
+                    int64_t nr = fs.rows, stride = packed.size() / (R / nr);
+                    for (int64_t g = 0; g < R / nr; g++) {
+                        const uint8_t *p = packed.data() + g * stride;
+                        for (int64_t i = 0; i < nr * K; i++) {
+                            int64_t r = g * nr, k = i;
+                            if (nr > 1) {
+                                int64_t piece = i / fs.chunk;
+                                r += piece % nr, k = (piece / nr) * fs.chunk + i % fs.chunk;
+                            } else {
+                                r += i / K, k = i % K;
+                            }
+                            int8_t c = code_at(fs, *bq[0], r, k, K);
+                            if (c != (int8_t)p[i]) return mismatch("code " + std::to_string(k) + " vs kai packed", r, c, (int8_t)p[i]);
+                        }
+                        for (int64_t i = 0; i < nr; i++) {
+                            int32_t ks;
+                            memcpy(&ks, p + nr * K + 4 * i, 4);
+                            int32_t o = field<int32_t>(*bq[2], g * nr + i);
+                            if (o != ks) return mismatch("sum vs kai packed", g * nr + i, o, ks);
+                        }
+                    }
+                }
+                return "";
+            };
+            auto decoded = [&]() -> std::string {
+                for (int64_t r = 0; r < R; r++) {
+                    for (int64_t k = 0; k < K; k++) {
+                        float c = code_at(fs, *bq[0], r, k, K), want;
+                        want = act ? (c + (float)field<int32_t>(*bq[1], r)) * field<float>(*bq[2], r) : c * field<float>(*bq[1], r);
+                        if (memcmp(&y[r * K + k], &want, 4)) return mismatch("value " + std::to_string(k), r, y[r * K + k], want);
+                    }
+                }
+                return "";
+            };
+            for (const char *dir : {"quantize", "dequantize"}) {
+                bool quant = dir[0] == 'q';
+                struct Entry {
+                    std::string provider;
+                    std::unique_ptr<Kernel> k;
+                    std::string detail;
+                };
+                std::vector<Entry> es;
+                for (int bench : {0, 1, 2}) {  // checked, bench, scaled (checked; the same: rowwise codes are not scaled)
+                    if (!check && bench != 1) continue;
+                    Argv f = bench == 2 ? row.scaled[!quant] : quant ? row.quantize[bench] :
+                                                                       row.dequantize[bench];
+                    std::string name = "halide-" + row.type + (bench == 1 ? "" : bench ? ":scaled" :
+                                                                                         ":checked");
+                    std::string detail;
+                    if (quant) {
+                        for (auto &m : mem)
+                            std::fill(m.begin(), m.end(), 0x5a);
+                        int err = call(f, true, bx, bq);
+                        detail = err ? "halide error " + std::to_string(err) : compare();
+                        if (!detail.empty()) detail = input + " " + ref_path + ": " + detail;
+                    } else {
+                        call(row.quantize[0], true, bx, bq);
+                        std::fill(y.begin(), y.end(), NAN);
+                        int err = call(f, false, by, bq);
+                        detail = err ? "halide error " + std::to_string(err) : decoded();
+                        if (!detail.empty()) detail = input + ": " + detail;
+                    }
+                    es.push_back({name, lambda("halide", quant ? std::function<void()>([=, &bx, &bq] { call(f, true, bx, bq); }) : [=, &by, &bq] { call(f, false, by, bq); }), detail});
+                }
+#ifdef GQ_KLEIDIAI
+                if (!check && quant && act) {
+                    es.push_back({"kleidiai", lambda("lhs_quant_pack_qai8dxp_f32", [&] { kai_run_lhs_quant_pack_qai8dxp_f32(R, K, 1, 8, 1, 0, xs.data(), K * sizeof(float), packed.data()); }), ""});
+                }
+#endif
+                std::vector<Timing> ts;
+                if (!check) {
+                    std::vector<Kernel *> ks;
+                    for (auto &e : es)
+                        ks.push_back(e.k.get());
+                    ts = time_interleaved(ks, rounds, min_ms);
+                }
+                for (size_t i = 0; i < es.size(); i++) {
+                    results.push_back({row.type, dir, es[i].provider, es[i].k->path, K, es[i].detail, !check, check ? Timing{} : ts[i], R});
+                }
+            }
+            if (!check) break;  // timed once, on the N(0, 1) rows
+        }
+    }
+}
+
 }  // namespace
 
 std::vector<CodecResult> run_codecs(const std::vector<int64_t> &Ks, const std::vector<std::string> &filters, bool check, int rounds, double min_ms) {
@@ -122,7 +375,13 @@ std::vector<CodecResult> run_codecs(const std::vector<int64_t> &Ks, const std::v
         // Layouts of several rows per record: 2 records' worth of rows, laid
         // out by GGML's repack.
         FormatSpec fs = parse_format(row.type);
-        if (!filters.empty() && std::find(filters.begin(), filters.end(), fs.type) == filters.end() && std::find(filters.begin(), filters.end(), row.type) == filters.end()) continue;
+        auto wanted = [&](const std::string &n) { return std::find(filters.begin(), filters.end(), n) != filters.end(); };
+        // KleidiAI's formats also under q8_0 (GGML's KleidiAI q8_0 path)
+        if (!filters.empty() && !wanted(fs.type) && !wanted(row.type) && !(rowwise_format(fs) && wanted("q8_0"))) continue;
+        if (rowwise_format(fs)) {
+            rowwise_codecs(row, Ks, check, rounds, min_ms, results);
+            continue;
+        }
         ggml_type t = GGML_TYPE_COUNT;
         for (int i = 0; i < GGML_TYPE_COUNT; i++) {
             const char *n = ggml_get_type_traits((ggml_type)i)->type_name;

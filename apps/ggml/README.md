@@ -221,6 +221,40 @@ properties without its layout: requantizing is idempotent, `s` holds, every
 stage is closed; and with `s` derived GGML's way, requantizing changes `s` in
 about a quarter of the blocks.
 
+KleidiAI's q8_0 scheme (`schemes/kleidiai.h`; GGML's KleidiAI backend runs it
+for q8_0 weights) is two rowwise formats, a whole row of K values one
+quantization group: `qsi8cx` (weights: symmetric int8 codes, an f32 scale per
+row, and the row's code sum as a derived port, as KleidiAI's packer stores it)
+and `qai8dx` (acts: asymmetric int8 codes, a zero point and an f32 scale per
+row, `kai_lhs_quant_pack_qai8dxp_f32`'s arithmetic). K is known only at run
+time: `format(spec, ..., blocks)` takes the row's block count as an `Expr` (the
+weight's extent), and the rows stay in QK-value blocks, so the reduction is the
+other formats' `(r.x, r.y)` and only the per-row fields drop the block. Their
+layouts are AoS/`soa` (codes `[QK, K / QK, N]`, each field `[N]`) and
+`<rows>x<chunk>` for the codes (`qsi8cx.4x8` is the codes of KleidiAI's
+`qsi8cxp4x8`). `rowwise_mul_mat` (`schedule.h`) splits the dot (`rowwise_dot`)
+into the codes' dot and the act's offset times the weight's code sum, which it
+reads from the weight's derived port, so the dot is int32 over all of K and the
+scales apply once per output, as KleidiAI's kernels: gemv tiles of 4 rows (sdot;
+with `qsi8cx.4x8`, a record piece is one load and the act's piece a broadcast),
+gemm tiles of 4 x 8 and 4 x 2 smmla. The in-kernel encoder (`f32:qai8dx`;
+`rowwise_encoder`) computes each row's range (per-lane vectors over the blocks),
+scale and zero point, then its codes, parallel over rows; with i8mm its codes
+are stored in 8-code pieces with the rows' pieces adjacent (`split_storage`), so
+an smmla operand is one load. The harness times them under GGML's q8_0
+(`halide-qsi8cx[_4x8]_[f32_to_]qai8dx_mul_mat`, next to `ggml-cpu-kleidiai`): it
+requantizes the q8_0 weights (decoded) to qsi8cx with its codec at setup,
+untimed, as GGML's backend does on load. The codec check
+(`--op codec --types qsi8cx,qai8dx`, also under `q8_0`) is bit-exact against
+GGML's q8_0 -> qsi8cx loop (a copy in `harness/codec.cpp`), on raw rows and on
+q8_0-decoded ones, and against KleidiAI's packers (codes, row sums, scales;
+`qai8dx`'s codes, offsets and scales from `kai_lhs_quant_pack_qai8dxp_f32`).
+Error bounds: half a step for qsi8cx; for qai8dx half a step plus 2^-10 (the
+zero point, rounded and clamped, can push a range end up to half a step past
+\[-128, 127\]: argued in `Qai8dxQuant`). `ggml_kleidiai_properties` (ctest)
+checks the bounds, the declared ranges, the row sum and closure on normal,
+one-signed, skewed, outlier, constant and zero rows.
+
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds
 `GGML_BENCH_FEATURES`, i.e. `no_asserts no_bounds_query`; what gets timed).

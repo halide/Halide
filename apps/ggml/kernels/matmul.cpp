@@ -26,6 +26,12 @@ public:
         bool scaled = op == "mul_mat" && ggml::format(weight).rows > 1;
         ggml::Format fw = ggml::format(weight, false, scaled, true), fa = ggml::format(an, false, false, true), fc = ggml::format(cn);
         std::vector<ImageParam> w = inputs(fw, "w"), a = inputs(fa, "a");
+        if (fw.rowwise || fa.rowwise || fc.rowwise) {
+            // Rowwise formats reduce over a row's blocks: the weight's records
+            Expr nb = record(w[0]).extent();
+            fw = ggml::format(weight, false, scaled, true, nb), fa = ggml::format(an, false, false, true, nb), fc = ggml::format(cn, false, false, false, nb);
+            if (!fw.rowwise || !(fa.rowwise || fc.rowwise)) throw std::invalid_argument("rowwise formats: both operands'");
+        }
         Var k("k"), n("n"), m("m");
         Func Wf("Wf"), Xf("Xf"), Xrf("Xrf"), W("W"), X("X"), Xr("Xr"), out("out");
         block = fw.block;
@@ -66,7 +72,7 @@ public:
         if (cn != an) {
             if (fa.scheme.defined()) throw std::invalid_argument("act: only plain storage can be re-approximated");
             for (size_t i = 0; i < dots.size(); i++) {
-                approx.push_back(approximate(i ? Xr : X, i ? Xrf : Xf, ggml::format(cn, !i, false, true), {dots[i]}));
+                approx.push_back(approximate(i ? Xr : X, i ? Xrf : Xf, ggml::format(cn, !i, false, true, fc.rowwise ? record(w[0]).extent() : Expr()), {dots[i]}));
                 staged.push_back(approx.back().encoded[0]);
             }
         }
@@ -81,7 +87,7 @@ public:
         Pipeline(outs).sever(cut, bound);
         // The ABI: w [K / w block, N / w rows], a [K / a block, M], out [N, M],
         // all dense from 0 (strides as GGML's contiguous rows; K % block == 0),
-        // a field's elements first.
+        // a field's elements first; a rowwise format's per-row ports [N] or [M].
         for (int b : {fa.block, fc.block}) {
             if (b != 1 && b != fw.block) throw std::invalid_argument("activation blocks: the weight's, or none");
         }
@@ -91,12 +97,16 @@ public:
         for (ImageParam p : w) {
             dense(p);
             if (p.name() == w[0].name()) continue;
+            if (p.dimensions() == 1) {
+                row(p).set_extent(o.dim(0).extent());
+                continue;
+            }
             record(p).set_extent(record(w[0]).extent());
             row(p).set_extent(row(w[0]).extent());
         }
         for (ImageParam p : a) {
             dense(p);
-            record(p).set_extent(record(w[0]).extent() * (fw.block / fa.block));
+            if (p.dimensions() > 1) record(p).set_extent(record(w[0]).extent() * (fw.block / fa.block));
             row(p).set_extent(o.dim(1).extent());
         }
         for (ImageParam p : w) {
@@ -106,7 +116,7 @@ public:
             add_input(p);
         }
         result = add_output(out);
-        blocks = {fw.block, fc.block, fc.rows, fw.rows, fw.chunk};
+        blocks = {fw.block, fc.block, fc.rows, fw.rows, fw.chunk, fw.rowwise};
     }
 
     void generate() {
