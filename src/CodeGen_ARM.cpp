@@ -6,6 +6,7 @@
 #include "CodeGen_CPU.h"
 #include "CodeGen_Internal.h"
 #include "ConciseCasts.h"
+#include "ConstantBounds.h"
 #include "Debug.h"
 #include "DecomposeVectorShuffle.h"
 #include "DistributeShifts.h"
@@ -34,6 +35,68 @@ using namespace llvm;
 #if defined(WITH_ARM) || defined(WITH_AARCH64)
 
 namespace {
+
+// Rewrite ((x >> y) & m) << c, with a varying y, as (x << (c - y)) & (m << c),
+// i.e. move the bit field at y straight to c. Neon's [us]shl shifts right for
+// negative amounts, so this saves a shift. The mask may also be written as % 2^w.
+// Returns an undefined Expr if the pattern doesn't apply.
+Expr fuse_bit_field_shifts(const Call *op) {
+    const Type &t = op->type;
+    if (!op->is_intrinsic(Call::shift_left) || !t.is_vector() || t.bits() > 64) {
+        return Expr();
+    }
+    const int bits = t.bits();
+
+    // The bit pattern of a constant of either signedness.
+    auto const_bits = [](const Expr &e) -> std::optional<uint64_t> {
+        if (auto u = as_const_uint(e)) {
+            return u;
+        } else if (auto i = as_const_int(e)) {
+            return (uint64_t)*i;
+        }
+        return std::nullopt;
+    };
+
+    // A negative signed c becomes a huge unsigned value here and is rejected.
+    auto c = const_bits(op->args[1]);
+    if (!c || *c >= (uint64_t)bits) {
+        return Expr();
+    }
+
+    const Expr &field = op->args[0];
+    Expr shifted;
+    std::optional<uint64_t> mask;
+    if (const Mod *mod = field.as<Mod>()) {
+        // Halide's mod is Euclidean, so x % 2^w == x & (2^w - 1) for signed x too.
+        if (is_const_power_of_two_integer(mod->b)) {
+            shifted = mod->a;
+            mask = *const_bits(mod->b) - 1;
+        }
+    } else if (const Call *a = Call::as_intrinsic(field, {Call::bitwise_and})) {
+        shifted = a->args[0];
+        mask = const_bits(a->args[1]);
+    }
+    const Call *sr = Call::as_intrinsic(shifted, {Call::shift_right});
+    if (!mask || !sr) {
+        return Expr();
+    }
+
+    // A constant y is left to LLVM, which already combines constant shifts.
+    const Expr &x = sr->args[0];
+    const Expr &y = sr->args[1];
+    if (is_const(y)) {
+        return Expr();
+    }
+    ConstantInterval y_bounds = constant_integer_bounds(y);
+    if (!y_bounds.is_bounded() || y_bounds.min < 0 || y_bounds.max >= bits) {
+        return Expr();
+    }
+
+    Type amount_t = Int(bits, t.lanes());
+    Expr amount = simplify(make_const(amount_t, (int64_t)*c) - cast(amount_t, y));
+    Expr shifted_mask = make_const(t, *mask << *c);
+    return (x << amount) & shifted_mask;
+}
 
 // Substitute in loads that feed into slicing shuffles, to help with vld2/3/4
 // emission. These are commonly lifted as lets because they get used by multiple
@@ -2611,6 +2674,11 @@ void CodeGen_ARM::visit(const Call *op) {
             llvm::Function *fn = llvm::cast<llvm::Function>(module->getOrInsertFunction(name, fn_type).getCallee());
             value = call_intrin(llvm_type_of(op->type), lanes, fn,
                                 {codegen(x), llvm::ConstantInt::get(i32_t, *k)});
+            return;
+        }
+    } else if (op->is_intrinsic(Call::shift_left) && target_vscale() == 0 && !simd_intrinsics_disabled()) {
+        if (Expr e = fuse_bit_field_shifts(op); e.defined()) {
+            value = codegen(e);
             return;
         }
     } else if (op->is_intrinsic(Call::round)) {
