@@ -19,6 +19,11 @@ elseif (aot_USE_PLUGINS_DIRECTLY)
     set(extra_options PLUGINS Halide::Adams2019 PARAMS autoscheduler=Adams2019)
 endif ()
 
+set(aot_ENVIRONMENT "" CACHE STRING "Environment assignments for the generator invocation")
+if (aot_ENVIRONMENT)
+    list(APPEND extra_options ENVIRONMENT ${aot_ENVIRONMENT})
+endif ()
+
 add_executable(add_gen add.cpp)
 target_link_libraries(add_gen PRIVATE Halide::Generator)
 
