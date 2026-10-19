@@ -70,6 +70,67 @@ inline Approximation twos(int bits, int shift = 0) {
         .with_lossless();
 }
 
+// Unsigned `bits`-bit fields <-> their low `low` bits ("low") and the rest
+// ("high"), each its own port (GGML's q5 codes: a nibble and a fifth bit,
+// stored apart). Shape-preserving.
+struct BitSplit {
+    int bits, low;
+
+    std::vector<Func> encode(const std::vector<Func> &in) const {
+        Func l("low"), h("high");
+        l(_) = in[0](_) & cast<uint8_t>((1 << low) - 1);
+        h(_) = in[0](_) >> low;
+        return {l, h};
+    }
+    std::vector<Func> decode(const std::vector<Func> &e) const {
+        Func f("fields");
+        f(_) = e[0](_) | (e[1](_) << low);
+        return {f};
+    }
+    ApproximationSignature signature(const ApproximationPorts &in) const {
+        std::optional<int> dims = in.empty() ? std::nullopt : in[0].dimensions;
+        return {{{"fields", UInt(8), dims, ApproximationRange(0, (1 << bits) - 1)}},
+                {{"low", UInt(8), dims, ApproximationRange(0, (1 << low) - 1)},
+                 {"high", UInt(8), dims, ApproximationRange(0, (1 << (bits - low)) - 1)}}};
+    }
+    bool lossless() const {
+        return true;
+    }
+};
+
+// `bits`-bit fields packed densely, least significant first: (element,
+// record, ...) <-> (byte, record, ...), 8 / bits fields per byte, so with
+// bits 1, bit j of the record's little-endian word is element j (GGML's qh).
+struct BitPack {
+    int bits;
+
+    std::vector<Func> encode(const std::vector<Func> &in) const {
+        int per = 8 / bits;
+        Func f("packed_bits");
+        Var p, b;
+        Expr e = cast<uint8_t>(0);
+        for (int i = 0; i < per; i++) {
+            e = e | cast<uint8_t>((in[0](p * per + i, b, _) & cast<uint8_t>((1 << bits) - 1)) << (i * bits));
+        }
+        f(p, b, _) = e;
+        return {f};
+    }
+    std::vector<Func> decode(const std::vector<Func> &e) const {
+        int per = 8 / bits;
+        Func f("unpacked_bits");
+        Var j, b;
+        f(j, b, _) = (e[0](j / per, b, _) >> cast<uint8_t>(j % per * bits)) & cast<uint8_t>((1 << bits) - 1);
+        return {f};
+    }
+    ApproximationSignature signature(const ApproximationPorts &in) const {
+        std::optional<int> dims = in.empty() ? std::nullopt : in[0].dimensions;
+        return {{{"fields", UInt(8), dims, ApproximationRange(0, (1 << bits) - 1)}}, {{"bits", UInt(8), dims}}};
+    }
+    bool lossless() const {
+        return true;
+    }
+};
+
 // x * k for a power of two k: exact for normal floats (and fp16's are).
 inline Approximation scale_by(float k) {
     return Pointwise{"scale_by", [=](const Expr &x) { return x * k; }, [=](const Expr &x) { return x * (1.0f / k); }}

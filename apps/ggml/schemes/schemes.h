@@ -9,7 +9,7 @@
 // record along a row; `rows`: rows per record (f32: no scheme, one value);
 // `chunk`: Interleave's bytes per row piece (0 for aos). A kernel may ask for
 // `scaled` codes: the same bytes, decoded to codes at 2^(8 - bits) times their
-// value (in the top bits of an int8) and scales divided alike (Q4_0Quant).
+// value (in the top bits of an int8) and scales divided alike (Type0Quant).
 // KleidiAI's qsi8cx (weights) and qai8dx (activations) scale per row
 // (kleidiai.h): `rowwise`; they reduce over a row's `blocks` blocks, K / QK,
 // which the caller passes (an Expr; e.g. an input's extent).
@@ -43,6 +43,8 @@ inline Format format(const std::string &spec, bool aos = false, bool scaled = fa
     sscanf(lay.c_str(), "%dx%d", &rows, &chunk);
     if (type == "q4_0" && (codes.empty() || codes == "u4" || codes == "i4")) return {q4_0(codes == "i4" ? twos(4, scaled * 4) : offset(8, scaled * 4), lay, scaled * 4, indexed), QK, rows, chunk};
     if (type == "q4_1" && codes.empty()) return {q4_1(lay, indexed), QK, rows, chunk};
+    if (type == "q5_0" && codes.empty()) return {q5_0(lay, indexed), QK, rows, chunk};
+    if (type == "q5_1" && codes.empty()) return {q5_1(lay, indexed), QK, rows, chunk};
     if (type == "q8_0" && codes.empty()) return {q8_0(lay, indexed), QK, rows, chunk};
     if (type == "q8_1" && codes.empty()) return {q8_1(lay, indexed), QK, rows, chunk};
     if (!blocks.defined()) blocks = 1;

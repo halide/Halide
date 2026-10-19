@@ -124,7 +124,7 @@ ties, constants, tiny and huge values; inf/NaN are undefined in GGML's
 reference), and times them against those and `from_float`. It checks the same
 for each type's scaled codes (`<type>_quantize_scaled`, `_dequantize_scaled`:
 checked variant only; the scheme a kernel may pick with
-`format(spec, aos, scaled)`, see `Q4_0Quant`'s `code_shift`), and dequantize
+`format(spec, aos, scaled)`, see `Type0Quant`'s `code_shift`), and dequantize
 also on crafted blocks spanning every code byte with every finite fp16 scale
 pattern stepped by 31 (zeros, subnormals, both signs). Codec rows reuse the CSV
 columns: `atype` is the direction, `err_ratio` is 0 (bit-exact) or inf, `gops`
@@ -222,6 +222,12 @@ acts has no derived port. `ggml_scheme_properties` (ctest) checks q8_1's
 properties without its layout: requantizing is idempotent, `s` holds, every
 stage is closed; and with `s` derived GGML's way, requantizing changes `s` in
 about a quarter of the blocks.
+
+q5_0 and q5_1 are q4_0's and q4_1's quantizers at 5 bits (`Type0Quant`,
+`Type1Quant`: GGML's "type-0" and "type-1"), each unsigned code split
+(`BitSplit`, `schemes/common.h`) into its low nibble, packed as q4's (`qs`), and
+its fifth bit, packed densely (`BitPack`: `qh`, bit j of its little-endian word
+is code j's). Their kernels are the same recipes, with no new schedule code.
 
 KleidiAI's q8_0 scheme (`schemes/kleidiai.h`; GGML's KleidiAI backend runs it
 for q8_0 weights) is two rowwise formats, a whole row of K values one
