@@ -10,6 +10,14 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
 
     if (info) {
         info->bounds = a_info.bounds + b_info.bounds;
+        // a + b is the difference (a - (-b)), so the facts can say more about
+        // it than the two sides do apart.
+        if (has_facts() && no_overflow_int(op->type)) {
+            ConstantInterval d = known_linear_difference(a.get(), 1, b.get(), -1);
+            if (d.min_defined || d.max_defined) {
+                info->bounds = ConstantInterval::make_intersection(info->bounds, d);
+            }
+        }
         info->alignment = a_info.alignment + b_info.alignment;
         info->cast_to(op->type);
         info->trim_bounds_using_alignment();

@@ -58,6 +58,24 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
         std::swap(a_info, b_info);
     }
 
+    // Or when the facts learned higher up in the IR, or the shapes of the two
+    // sides, order them. One lookup answers for both sides.
+    {
+        ConstantInterval d = known_difference(a.get(), b.get());
+        if (d.min_defined && d.min >= 0) {
+            if (info) {
+                *info = a_info;
+            }
+            return a;
+        }
+        if (d.max_defined && d.max <= 0) {
+            if (info) {
+                *info = b_info;
+            }
+            return b;
+        }
+    }
+
     int lanes = op->type.lanes();
     auto rewrite = IRMatcher::rewriter(IRMatcher::max(a, b), op->type);
 
