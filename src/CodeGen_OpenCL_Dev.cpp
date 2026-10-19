@@ -517,7 +517,11 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
         internal_assert(op->type.is_vector());
 
         ostringstream rhs;
-        if ((op->alignment.modulus % op->type.lanes() == 0) &&
+        // OpenCL C pads a 3-component vector to the size and alignment of a
+        // 4-component one, so ((T3 *)p)[i] is at p + 4 * i and spans 4
+        // elements. Packed 3-lane data must go through vload3.
+        if (op->type.lanes() != 3 &&
+            (op->alignment.modulus % op->type.lanes() == 0) &&
             (op->alignment.remainder % op->type.lanes() == 0)) {
             // Get the rhs just for the cache.
             string id_ramp_base = print_expr(ramp_base / op->type.lanes());
@@ -684,7 +688,11 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
     if (ramp_base.defined()) {
         internal_assert(op->value.type().is_vector());
 
-        if ((op->alignment.modulus % op->value.type().lanes() == 0) &&
+        // OpenCL C pads a 3-component vector to the size and alignment of a
+        // 4-component one, so ((T3 *)p)[i] is at p + 4 * i and spans 4
+        // elements. Packed 3-lane data must go through vstore3.
+        if (op->value.type().lanes() != 3 &&
+            (op->alignment.modulus % op->value.type().lanes() == 0) &&
             (op->alignment.remainder % op->value.type().lanes() == 0)) {
             string id_ramp_base = print_expr(ramp_base / op->value.type().lanes());
             string array_indexing = print_array_access(op->name, t, id_ramp_base);

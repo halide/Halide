@@ -24,9 +24,9 @@ public:
     int mux_count{0};
 };
 
-int main(int argc, char **argv) {
-    Var x{"x"}, xo{"xo"}, xi{"xi"};
-    Var y{"y"}, yo{"yo"}, yi{"yi"};
+int test(bool gpu) {
+    Var x{"x"}, xo{"xo"}, xi{"xi"}, xoo{"xoo"}, xoi{"xoi"};
+    Var y{"y"}, yo{"yo"}, yi{"yi"}, yoo{"yoo"}, yoi{"yoi"};
     Func f;
     Param<int> offset_x{"offset_x"}, offset_y{"offset_y"};
     offset_x.set_range(0, 1);
@@ -48,13 +48,21 @@ int main(int argc, char **argv) {
         .never_partition_all()
         .reorder(xi, yi, xo, yo)
         .unroll(xi)
-        .unroll(yi)
-        .parallel(yo);
+        .unroll(yi);
+    if (gpu) {
+        f.gpu_tile(xo, yo, xoo, yoo, xoi, yoi, 4, 4);
+    } else {
+        f.parallel(yo);
+    }
 
-    Module module = f.compile_to_module({offset_x, offset_y});
+    // The GPU kernels are compiled to device code by the time we get a
+    // Module, so only the CPU schedule is inspected for loops and muxes.
     MuxCounter checker;
-    for (const LoweredFunc &f : module.functions()) {
-        f.body.accept(&checker);
+    if (!gpu) {
+        Module module = f.compile_to_module({offset_x, offset_y});
+        for (const LoweredFunc &f : module.functions()) {
+            f.body.accept(&checker);
+        }
     }
 
     for (int i = 0; i < 4; i++) {
@@ -62,7 +70,10 @@ int main(int argc, char **argv) {
         offset_x.set(i / 2);
         offset_y.set(i % 2);
         Buffer<int> im = f.realize({32, 32});
-        f.realize(im, get_target_from_environment());
+        if (!gpu) {
+            f.realize(im, get_target_from_environment());
+        }
+        im.copy_to_host();
 
         for (int y = 0; y < 32; y++) {
             for (int x = 0; x < 32; x++) {
@@ -76,6 +87,9 @@ int main(int argc, char **argv) {
         }
     }
 
+    if (gpu) {
+        return 0;
+    }
     if (checker.mux_count != 0) {
         std::printf("Expected 0 muxes: %d\n", checker.mux_count);
         return 1;
@@ -83,6 +97,19 @@ int main(int argc, char **argv) {
     if (checker.for_count != 1) {
         std::printf("Expected 3 for loops: %d\n", checker.for_count);
         return 1;
+    }
+    return 0;
+}
+
+int main(int argc, char **argv) {
+    if (test(false) != 0) {
+        return 1;
+    }
+    if (get_jit_target_from_environment().has_gpu_feature()) {
+        printf("Testing the GPU schedule\n");
+        if (test(true) != 0) {
+            return 1;
+        }
     }
 
     printf("Success!\n");

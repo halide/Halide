@@ -13,7 +13,7 @@
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+int test(bool gpu) {
     const int k = 8;
     for (auto ts : {TailStrategy::ShiftInwardsAndBlend, TailStrategy::RoundUpAndBlend}) {
         for (bool vec : {false, true}) {
@@ -27,6 +27,11 @@ int main(int argc, char **argv) {
             Stage s = f.update().aligned_split(x, xo, xi, k, anchor, ts);
             if (vec) {
                 s.vectorize(xi);
+            }
+            if (gpu) {
+                // The blend reads and writes neighboring tiles, so the tiles
+                // can't run in parallel.
+                s.gpu_single_thread();
             }
 
             // Read f through another Func so the blend writes into an
@@ -53,6 +58,19 @@ int main(int argc, char **argv) {
                     }
                 }
             }
+        }
+    }
+    return 0;
+}
+
+int main(int argc, char **argv) {
+    if (test(false) != 0) {
+        return 1;
+    }
+    if (get_jit_target_from_environment().has_gpu_feature()) {
+        printf("Testing the GPU schedule\n");
+        if (test(true) != 0) {
+            return 1;
         }
     }
 
