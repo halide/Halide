@@ -147,6 +147,16 @@ struct HBuf {
 // as fill `record_bytes` with the other ports' records.
 std::vector<std::unique_ptr<HBuf>> port_buffers(const halide_filter_metadata_t *md, int first, int n, const uint8_t *bytes,
                                                 const std::vector<int64_t> &records, int64_t record_bytes);
+// KleidiAI's per-row formats (qsi8cx, qai8dx: schemes/kleidiai.h), which GGML
+// has no type for: their rows are K values of a q8_0 or f32 row.
+bool rowwise_format(const FormatSpec &f);
+// A rowwise format's ports, arguments [first, first + n) in `md`, for R rows
+// of K values, each in memory of its own appended to `mem`: the codes [32 *
+// f.rows, K / 32, R / f.rows], every per-row field [R].
+std::vector<std::unique_ptr<HBuf>> rowwise_ports(const halide_filter_metadata_t *md, int first, int n, const FormatSpec &f,
+                                                 int64_t K, int64_t R, std::vector<std::vector<uint8_t>> &mem);
+// The codec of a format spec; nullptr if none.
+const CodecRow *codec_row(const std::string &spec);
 // GGML's repack (repack.cpp) of N rows of K values of type t, from its blocks
 // to f's layout; false if GGML has no such layout.
 bool ggml_repack(const FormatSpec &f, ggml_type t, const uint8_t *src, uint8_t *dst, int64_t N, int64_t K);
