@@ -206,6 +206,8 @@ int main(int argc, char **argv) {
         for (const auto &n : o.types) {
             // activation-only types (q8_1): their codecs only
             ggml_type t = type_named(n);
+            // KleidiAI's formats, which GGML has no type for: their codecs only
+            if (t == GGML_TYPE_COUNT && o.ops == GQ_codec && rowwise_format(parse_format(n))) continue;
             if (t == GGML_TYPE_COUNT || (!weight_type_ok(t) && o.ops != GQ_codec)) {
                 fprintf(stderr, "unsupported weight type %s\n", n.c_str());
                 return 2;

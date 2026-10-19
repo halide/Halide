@@ -44,6 +44,10 @@ add_executable(
 )
 target_include_directories(ggml-quant-bench PRIVATE harness "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(ggml-quant-bench PRIVATE ggml::ggml ggml_thread_pool ${GGML_HALIDE_LIBRARIES})
+if (GGML_CPU_KLEIDIAI)
+    # KleidiAI's packers, the reference of the qsi8cx and qai8dx codecs
+    target_compile_definitions(ggml-quant-bench PRIVATE GQ_KLEIDIAI)
+endif ()
 
 add_test(NAME ggml_check COMMAND ggml-quant-bench --check --shapes smoke)
 set_tests_properties(ggml_check PROPERTIES LABELS ggml)
@@ -54,6 +58,11 @@ target_include_directories(ggml_scheme_properties PRIVATE "${CMAKE_CURRENT_SOURC
 target_link_libraries(ggml_scheme_properties PRIVATE Halide::Halide Halide::Tools)
 add_test(NAME ggml_scheme_properties COMMAND ggml_scheme_properties)
 set_tests_properties(ggml_scheme_properties PROPERTIES LABELS ggml)
+add_executable(ggml_kleidiai_properties schemes/kleidiai_properties.cpp)
+target_include_directories(ggml_kleidiai_properties PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(ggml_kleidiai_properties PRIVATE Halide::Halide Halide::Tools)
+add_test(NAME ggml_kleidiai_properties COMMAND ggml_kleidiai_properties)
+set_tests_properties(ggml_kleidiai_properties PROPERTIES LABELS ggml)
 
 if (TARGET q4_0_q8_0_mul_mat_checked)
     add_executable(ggml_thread_pool_test runtime/thread_pool_test.cpp)

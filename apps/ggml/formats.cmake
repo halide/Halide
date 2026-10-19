@@ -14,6 +14,12 @@
 # `soa`: one planar array per field (a kernel input each), checked against
 # GGML's bytes laid out alike.
 #
+# qsi8cx (weights) and qai8dx (acts) are KleidiAI's per-row int8 formats
+# (schemes/kleidiai.h; no GGML type): their mul_mat rows are timed under
+# GGML's q8_0, whose weights the harness requantizes to qsi8cx at setup, as
+# GGML's KleidiAI backend does on load. Their codec is checked against GGML's
+# requantization and KleidiAI's packers.
+#
 # `ops`: codec (quantize + dequantize of a row, checked bit-exact against
 # GGML, also with the scaled codes kernels may pick: checked variant only;
 # activation-only types such as q8_1 have just this),
@@ -38,6 +44,9 @@ set(GGML_FORMATS
     "q8_0.4x4 codec,mul_mat q8_0,f32:q8_0,f32:q8_0.4x4"
     "q8_0.4x8 codec,mul_mat q8_0,f32:q8_0,f32:q8_0.4x8"
     "q8_0.soa codec,mul_mat q8_0,f32:q8_0"
+    "qsi8cx codec,mul_mat qai8dx,f32:qai8dx"
+    "qsi8cx.4x8 codec,mul_mat qai8dx,f32:qai8dx"
+    "qai8dx codec"
     "q4_0 mul_mat f32,f16,q8_0 metal"
     "q4_0.soa mul_mat f32,f16,q8_0 metal"
     "q8_0 mul_mat f32,f16,q8_0 metal"
