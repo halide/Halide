@@ -5,6 +5,7 @@
 // the values per record of each operand, and the operands'
 // ApproximationResults.
 #include "Halide.h"
+#include "schemes/tags.h"
 
 #include <functional>
 #include <set>
@@ -25,20 +26,35 @@ inline Buffer<> table_of(Func f) {
     return b;
 }
 
-// The decode Funcs eager_inline can fold into a consumer, of rs[first, last):
-// all, or only the scales (float) or the codes (integer); or the ones reading
-// a table (`Of::Tables`), which a vectorized inline would gather from: see
-// tables().
-enum class Of { All,
-                Floats,
-                Ints,
-                Tables };
-inline std::vector<Func> decoders(const std::vector<ApproximationResult> &rs, Of of = Of::All, size_t first = 0, size_t last = SIZE_MAX) {
+// Which components' decode to pick, by their port tags (schemes/tags.h):
+// only(t) those tagged any of t, all_but(t) the rest (including the Funcs
+// of several components, or of none: the values decoded from them).
+struct Pick {
+    ApproximationTags tags;
+    bool but;
+    bool operator()(const ApproximationTags &t) const {
+        bool any = std::any_of(t.begin(), t.end(), [&](const std::string &s) { return tags.count(s); });
+        bool all = std::all_of(t.begin(), t.end(), [&](const std::string &s) { return tags.count(s); });
+        return but ? t.empty() || !all : any;
+    }
+};
+inline Pick only(ApproximationTags t) {
+    return {std::move(t), false};
+}
+inline Pick all_but(ApproximationTags t) {
+    return {std::move(t), true};
+}
+
+// The decode Funcs eager_inline can fold into a consumer, of rs[first, last),
+// of the components `pick` (e.g. the codes' decode, or all but the codes':
+// the scales, offsets and the values decoded from them); with `tables`, the
+// ones reading a table instead, which a vectorized inline would gather from:
+// see tables().
+inline std::vector<Func> decoders(const std::vector<ApproximationResult> &rs, const Pick &pick = all_but({}), size_t first = 0, size_t last = SIZE_MAX, bool tables = false) {
     std::vector<Func> fs;
     for (size_t i = first; i < std::min(last, rs.size()); i++) {
         for (Func f : rs[i].decode_funcs()) {
-            if ((of == Of::Tables) != table_of(f).defined()) continue;
-            if (of == Of::All || of == Of::Tables || (of == Of::Floats) == f.type().is_float()) fs.push_back(f);
+            if (pick(rs[i].tags_of(f)) && tables == table_of(f).defined()) fs.push_back(f);
         }
     }
     return fs;
@@ -159,38 +175,14 @@ inline Stage tile_out(Func out, int st, Func dot, Expr cond, Tiles ts, const RDo
     return cond.defined() ? dot.update().specialize(cond) : dot.update();
 }
 
-// The terms of e as a sum.
-inline void terms(const Expr &e, std::vector<Expr> &ts) {
-    if (const auto *a = e.as<Internal::Add>()) {
-        terms(a->a, ts);
-        terms(a->b, ts);
-    } else {
-        ts.push_back(e);
-    }
-}
-
-// Does e (through its Muls and Adds, as distribute() sees it) multiply a sum?
-inline bool product_over_sum(const Expr &e) {
-    if (const auto *a = e.as<Internal::Add>()) return product_over_sum(a->a) || product_over_sum(a->b);
-    const auto *m = e.as<Internal::Mul>();
-    return m && (m->a.as<Internal::Add>() || m->b.as<Internal::Add>() || product_over_sum(m->a) || product_over_sum(m->b));
-}
-
-// Which calls a split is on: any call `is` picks.
-using CallTest = std::function<bool(const Internal::Call *)>;
-
-inline bool calls_any(const Expr &e, const CallTest &is) {
+// Does e call any of fs?
+inline bool calls_any(const Expr &e, const std::vector<Func> &fs) {
     bool found = false;
     Internal::visit_with(e, [&](auto *self, const Internal::Call *c) {
-        found |= is(c);
+        found |= std::any_of(fs.begin(), fs.end(), [&](const Func &f) { return c->name == f.name(); });
         self->visit_base(c);
     });
     return found;
-}
-inline bool calls_any(const Expr &e, const std::vector<Func> &fs) {
-    return calls_any(e, [&](const Internal::Call *c) {
-        return std::any_of(fs.begin(), fs.end(), [&](const Func &f) { return c->name == f.name(); });
-    });
 }
 
 // Whether a kernel decodes bit fields through constant tables (Tabulate): on
@@ -207,7 +199,7 @@ inline bool use_tables(const Target &t) {
 // their first dimension, split by the table's rows, so each read of a row is
 // a dense load.
 inline void tables(const std::vector<ApproximationResult> &rs, const std::vector<Func> &consumers, LoopLevel at) {
-    for (Func f : decoders(rs, Of::Tables)) {
+    for (Func f : decoders(rs, all_but({}), 0, SIZE_MAX, true)) {
         std::vector<Func> cs;
         for (Func c : consumers) {
             if (!c.defined()) continue;
@@ -233,24 +225,6 @@ inline void tables(const std::vector<ApproximationResult> &rs, const std::vector
     }
 }
 
-// Splits s's increment, its `scales` inlined, on the calls `test` picks:
-// returns {the terms with them, the rest}, each a reduction of its own (so
-// the invariants of each then hoist). Only the rowwise act's codes need it
-// (they are no Func of their own to name): the rest split by
-// Stage::hoist_invariants({fs}).
-inline std::pair<Func, Func> split_off(Stage s, const std::vector<Func> &scales, const CallTest &test) {
-    s.eager_inline(scales);
-    if (product_over_sum(Internal::substitute_in_all_lets(s.value()))) s.distribute();
-    Func with, rest;
-    for (Func h : s.hoist_invariants()) {
-        Func &part = calls_any(h.update_value(), test) ? with : rest;
-        if (part.defined()) throw std::invalid_argument("split_off: several terms of each part: " + s.name());
-        part = h;
-    }
-    if (!with.defined() || !rest.defined()) throw std::invalid_argument("split_off: no terms free of the calls in " + s.name());
-    return {with, rest};
-}
-
 // Then a term of the rest (e.g. its block sum) reads the first of `ports`
 // whose definition it matches (Func::approximate_by(DerivedPort, ...)) in
 // `consumer`: false if none does.
@@ -264,24 +238,11 @@ inline bool read_port(Func term, const std::vector<DerivedPort> &ports, Func con
     return false;
 }
 
-// Does the weight's decode have terms free of its codes (q4_1's codes * d +
-// min)? Its codes: its integer decode Funcs, or integer ports read as is
-// (e.g. planar int8 codes).
+// Does the weight's decode add a term free of its codes (q4_1's min: a port
+// tagged offset)?
 inline bool affine(const std::vector<ApproximationResult> &rs) {
-    Func w = rs[0].replacement, probe;
-    probe(w.args()) = w(w.args());
-    Stage(probe).eager_inline(decoders(rs, Of::Floats, 0, 1));
-    Expr e = Internal::substitute_in_all_lets(probe.value());
-    std::vector<Expr> ts;
-    terms(e, ts);
-    return product_over_sum(e) || !std::all_of(ts.begin(), ts.end(), [](const Expr &t) {
-               bool code = false;
-               Internal::visit_with(t, [&](auto *self, const Internal::Call *c) {
-                   code |= (c->call_type == Internal::Call::Halide || c->call_type == Internal::Call::Image) && c->type.is_int_or_uint();
-                   self->visit_base(c);
-               });
-               return code;
-           });
+    const ApproximationPorts &ps = rs[0].encoded_ports;
+    return std::any_of(ps.begin(), ps.end(), [](const ApproximationPort &p) { return p.tags && p.tags->count(tag::offset); });
 }
 
 // Does f's increment (a product) have a factor free of its RVars?
@@ -319,13 +280,13 @@ inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool
         blk.update().eager_inline(decoders(rs));
         codes = blk.update().hoist_invariants()[0];
     } else {
-        blk.update().eager_inline(decoders(rs, Of::Floats));
+        blk.update().eager_inline(decoders(rs, all_but({tag::codes})));
         if (invariant_factor(blk)) mid = blk.update().hoist_invariants()[0];
-        FuncVec parts = (mid.defined() ? mid : blk).update().hoist_invariants({decoders(rs, Of::Ints, 0, 1)});
+        FuncVec parts = (mid.defined() ? mid : blk).update().hoist_invariants({decoders(rs, only({tag::codes}), 0, 1)});
         codes = parts[0];
         rest = parts[1];
         for (Func f : {codes, rest}) {
-            f.update().eager_inline(decoders(rs, Of::Ints));
+            f.update().eager_inline(decoders(rs, only({tag::codes})));
         }
         if (integer) rest = rest.change_type(Int(32));
     }
@@ -346,8 +307,8 @@ struct Sums {
 inline bool derived_sums(Func out, int st, Stage &s, const RDom &r, const std::vector<ApproximationResult> &rs, Sums &d) {
     d = Sums();
     if (rs.size() < 2 || rs[1].derived_ports().empty() || !affine(rs)) return false;
-    s.eager_inline(decoders(rs, Of::Floats, 0, 1));
-    FuncVec parts = s.hoist_invariants({decoders(rs, Of::Ints, 0, 1)});
+    s.eager_inline(decoders(rs, all_but({tag::codes}), 0, 1));
+    FuncVec parts = s.hoist_invariants({decoders(rs, only({tag::codes}), 0, 1)});
     if (!parts[1].defined()) throw std::invalid_argument("derived_sums: no terms free of the codes in " + s.name());
     Func with = parts[0];
     d.sums = parts[1];
@@ -555,26 +516,13 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     // ryi_rows: not ryi, as dot's specializations share bounds by RVar name (gap M)
     RVar ry = r.y, rx = r.x, rp("rp"), rq("rq"), ri("ri"), ryo("ryo"), ryi("ryi_rows");
     Func blk = s.rfactor(ry, u);
-    // The act's codes (integer decode Funcs of rs[1..]; rs[0] is the weight's)
+    // The act's codes (the decode of rs[1..]'s codes; rs[0] is the weight's)
     // stay out of the inline: staged per block in registers, below; on gemm
-    // tiles, so do its scales (float, per block and row).
+    // tiles, so do its scales.
     bool grouped = group && ts.mt > group;
-    std::vector<Func> dec, ac, as;
-    for (Func f : decoders(rs)) {
-        bool act = false;
-        for (size_t i = 1; i < rs.size(); i++) {
-            for (const Func &g : rs[i].decode_trace.intermediates) {
-                act |= g.name() == f.name();
-            }
-        }
-        if (act && f.type().is_int()) {
-            ac.push_back(f);
-        } else if (act && grouped && f.type().is_float() && f.dimensions() == 2) {
-            as.push_back(f);
-        } else {
-            dec.push_back(f);
-        }
-    }
+    std::vector<Func> ac = decoders(rs, only({tag::codes}), 1), as = grouped ? decoders(rs, only({tag::scale}), 1) : std::vector<Func>{};
+    std::vector<Func> dec = decoders(rs, all_but({}), 0, 1), rest = decoders(rs, grouped ? all_but({tag::codes, tag::scale}) : all_but({tag::codes}), 1);
+    dec.insert(dec.end(), rest.begin(), rest.end());
     blk.update().eager_inline(dec);
     Func codes = blk.update().hoist_invariants()[0].change_type(Int(32));
     s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
@@ -683,8 +631,11 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
 // The Funcs of e's encoder: the intermediates of the result that encodes e,
 // minus its decode Funcs.
 inline std::vector<Func> encoder_funcs(Func e, const std::vector<ApproximationResult> &rs) {
-    std::vector<Func> dec = decoders(rs), tab = decoders(rs, Of::Tables), fs;
-    dec.insert(dec.end(), tab.begin(), tab.end());
+    std::vector<Func> dec, fs;
+    for (const ApproximationResult &res : rs) {
+        std::vector<Func> d = res.decode_funcs();
+        dec.insert(dec.end(), d.begin(), d.end());
+    }
     for (const ApproximationResult &res : rs) {
         for (Func f : res.encoded[0].name() == e.name() ? res.intermediates : std::vector<Func>{}) {
             if (std::none_of(dec.begin(), dec.end(), [&](const Func &d) { return d.name() == f.name(); })) fs.push_back(f);
@@ -828,26 +779,22 @@ inline void metal_flat(Func out, Func dot, const RDom &r, const std::vector<Func
 // scale per row, so the codes' dot accumulates in int32 over the whole of K.
 // dot's increment, the weight's codes times its scale times the act's codes
 // plus its offset times its scale (s, out's stage tile under `cond`), splits
-// on the act's codes (an integer call reading m and r; split_off): one Func
+// on the act's codes (its ports tagged codes and their decode): one Func
 // the codes' dot (int32), the other the weight's code sum, read from its
 // derived port (read_port: the row sums its encoder stored),
 // each times its scales once per output. Returns the codes' dot.
-inline Func rowwise_dot(Stage s, Func dot, const std::vector<ApproximationResult> &rs) {
-    std::string m = dot.args()[1].name();
-    CallTest act_codes = [m](const Internal::Call *c) {
-        if ((c->call_type != Internal::Call::Halide && c->call_type != Internal::Call::Image) || !c->type.is_int()) return false;
-        bool row = false, reduced = false;
-        for (const Expr &a : c->args) {
-            Internal::visit_with(a, [&](auto *, const Internal::Variable *v) {
-                row |= v->name == m;
-                reduced |= v->reduction_domain.defined();
-            });
+inline Func rowwise_dot(Stage s, const std::vector<ApproximationResult> &rs) {
+    std::vector<Func> act = decoders(rs, only({tag::codes}), 1);
+    for (size_t i = 1; i < rs.size(); i++) {
+        for (size_t j = 0; j < rs[i].encoded.size(); j++) {
+            if (rs[i].encoded_ports[j].tags == ApproximationTags{tag::codes}) act.push_back(rs[i].encoded[j]);
         }
-        return row && reduced;
-    };
-    auto [with, sums] = split_off(s, decoders(rs, Of::Floats), act_codes);
-    Func codes = with.change_type(Int(32)), sum = sums.change_type(Int(32));
-    if (!read_port(sum, rs[0].derived_ports(), sums)) throw std::invalid_argument("rowwise_dot: the weight's code sum matches none of its derived ports");
+    }
+    s.eager_inline(decoders(rs, all_but({tag::codes})));
+    FuncVec parts = s.hoist_invariants({act});
+    if (!parts[1].defined()) throw std::invalid_argument("rowwise_dot: no terms free of the act's codes in " + s.name());
+    Func codes = parts[0].change_type(Int(32)), sum = parts[1].change_type(Int(32));
+    if (!read_port(sum, rs[0].derived_ports(), parts[1])) throw std::invalid_argument("rowwise_dot: the weight's code sum matches none of its derived ports");
     return codes;
 }
 
@@ -861,7 +808,7 @@ inline Func rowwise_dot(Stage s, Func dot, const std::vector<ApproximationResult
 inline void rowwise_gemv(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, int chunk,
                          const std::vector<ApproximationResult> &rs) {
     Stage s = tile_out(out, st, dot, cond, ts, r, chunk > 0);
-    Func codes = rowwise_dot(s, dot, rs);
+    Func codes = rowwise_dot(s, rs);
     Var n = dot.args()[0], m = dot.args()[1], q("q");
     if (ts.nt > 1) s.vectorize(n);  // the scaling, once per output
     RVar rx = r.x, ry = r.y, rp("rp"), rq("rq"), ri("ri"), ro("ro");
@@ -890,7 +837,7 @@ inline void rowwise_gemv(Func out, int st, Func dot, Expr cond, Tiles ts, const 
 inline void rowwise_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, bool whole_n,
                          const std::vector<ApproximationResult> &rs, bool guard_m = false) {
     Stage s = tile_out(out, st, dot, cond, ts, r, whole_n, guard_m);
-    Func codes = rowwise_dot(s, dot, rs);
+    Func codes = rowwise_dot(s, rs);
     s.vectorize(dot.args()[0]);  // the scaling, once per output
     Var n = dot.args()[0], m = dot.args()[1], nio("nio"), nii("nii"), mio("mio"), mii("mii");
     RVar rx = r.x, ry = r.y, rxc("rxc"), rxk("rxk");
@@ -1100,7 +1047,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     }
     pairs.busy = rows.busy = rest;
     // A table's decode, per row pair, outweighs sharing the act's loads
-    if (decoders(rs, Of::Tables).empty()) blocked(out, 2 * whole, dots[0], fits(pairs, 1), pairs, r, integer, rs, t, true);
+    if (decoders(rs, all_but({}), 0, SIZE_MAX, true).empty()) blocked(out, 2 * whole, dots[0], fits(pairs, 1), pairs, r, integer, rs, t, true);
     blocked(out, 2 * whole, dots[0], Expr(), rows, r, integer, rs, t, true);
 }
 

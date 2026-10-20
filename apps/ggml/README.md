@@ -195,24 +195,24 @@ block count (the 2-block interleave keeps its guard) and no host alignment
 adapter.
 
 Affine formats (`q4_1`: codes * d + min) use the same algorithm and recipes. In
-each recipe, `block_dot` (`schedule.h`) inlines the float decode into the
-per-block dot and splits it on the weight's codes (`split_on`, the one use of
-`Stage::distribute()`, standing in for the proposed
-`hoist_invariants({funcs})`): the codes' dot (int32 sdot times the hoisted d_w,
-as for q4_0) and the rest, the min times the block's act sum (int32, sdot
-against ones, when the act is quantized; else of its values), computed in the
-same block loop, once per act column (broadcast across the tile's rows). A
-factor common to both (d_a) hoists before the split, so each block adds d_a \*
-(d_w * codes + min * sum) to the accumulator: one FMA, not two. Formats without
-such terms (q4_0, q8_0) are not split. q8_1 is activation-only (a codec row;
-q4_1's acts). Its scheme (`schemes/legacy.h`) declares `s`, the block's sum, as
-a derived port (`Derive`): `s = fp16(fp16(d) * sum(qs))`, the sum of the decoded
-block rounded once to fp16. GGML's `s = fp16(d * sum(qs))` uses the unrounded d
-and is an fp16 ulp off ours in about a quarter of the blocks (the codec check
-compares `d` and `qs` bitwise with GGML and `s` with our formula, and reports
-how many blocks differ); decode ignores `s`. Where the act has a derived port,
-`vec_dot` takes the weight's code-free terms out of the dot before tiling
-(`derived_sums`): per block, the min times the act's block sum, which
+each recipe, `block_dot` (`schedule.h`) inlines all but the codes' decode into
+the per-block dot and splits it on the weight's codes
+(`Stage::hoist_invariants({codes})`, its decode Funcs tagged `codes`, see
+`schemes/tags.h`): the codes' dot (int32 sdot times the hoisted d_w, as for
+q4_0) and the rest, the min times the block's act sum (int32, sdot against ones,
+when the act is quantized; else of its values), computed in the same block loop,
+once per act column (broadcast across the tile's rows). A factor common to both
+(d_a) hoists before the split, so each block adds d_a * (d_w * codes + min \*
+sum) to the accumulator: one FMA, not two. Formats without such terms (q4_0,
+q8_0) are not split. q8_1 is activation-only (a codec row; q4_1's acts). Its
+scheme (`schemes/legacy.h`) declares `s`, the block's sum, as a derived port
+(`Derive`): `s = fp16(fp16(d) * sum(qs))`, the sum of the decoded block rounded
+once to fp16. GGML's `s = fp16(d * sum(qs))` uses the unrounded d and is an fp16
+ulp off ours in about a quarter of the blocks (the codec check compares `d` and
+`qs` bitwise with GGML and `s` with our formula, and reports how many blocks
+differ); decode ignores `s`. Where the act has a derived port, `vec_dot` takes
+the weight's code-free terms out of the dot before tiling (`derived_sums`): per
+block, the min times the act's block sum, which
 `Func::approximate_by(DerivedPort, ...)` replaces with a read of `s` after
 matching it against the port's definition (real-valued; the error is the
 declared fp16 rounding of `s`). This is generic: any scheme's `Derive` whose

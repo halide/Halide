@@ -119,9 +119,9 @@ struct Qai8dxQuant {
     }
     static ApproximationSignature signature() {
         return {{{"blocks", Float(32)}},
-                {{"codes", Int(8), std::nullopt, ApproximationRange(-128, 127)},
-                 {"offset", Int(32), std::nullopt, ApproximationRange(-127, 128)},
-                 {"scale", Float(32)}}};
+                {codes_port(-128, 127),
+                 param_port("offset", Int(32), tag::offset, ApproximationRange(-127, 128)),
+                 param_port("scale", Float(32), tag::scale)}};
     }
     Func error_bound(const std::vector<Func> &, const std::vector<Func> &e) const {
         Func f("bound");

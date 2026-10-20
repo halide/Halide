@@ -5,6 +5,7 @@
 // layouts.h. Rank-polymorphic: extra dimensions (rows) pass through as
 // implicit vars.
 #include "layouts.h"
+#include "tags.h"
 
 #include <algorithm>
 #include <cmath>
@@ -300,8 +301,16 @@ inline Func step_bound(const std::vector<Func> &e, double steps) {
     return f;
 }
 
+// A quantizer's outputs: its codes in [lo, hi] and the parameters of its
+// blocks, each tagged with what it is.
+inline ApproximationPort codes_port(int lo, int hi) {
+    return {"codes", Int(8), std::nullopt, ApproximationRange(lo, hi), ApproximationTags{tag::codes}};
+}
+inline ApproximationPort param_port(const std::string &name, Type t, const std::string &what, std::optional<ApproximationRange> range = std::nullopt) {
+    return {name, t, std::nullopt, range, ApproximationTags{what}};
+}
 inline ApproximationSignature codes_and_scale(int lo, int hi) {
-    return {{{"blocks", Float(32)}}, {{"codes", Int(8), std::nullopt, ApproximationRange(lo, hi)}, {"scale", Float(32)}}};
+    return {{{"blocks", Float(32)}}, {codes_port(lo, hi), param_port("scale", Float(32), tag::scale)}};
 }
 
 // Codes in [0, 2^bits - 1] <-> the same unsigned fields (GGML's q4_1 nibbles).

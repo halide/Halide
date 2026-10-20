@@ -90,6 +90,24 @@ public:
             }
         }
         Pipeline(outs).sever(cut, bound);
+        // The schedules name an operand's Funcs by its result: its severed
+        // ports are then the stand-ins calling their ImageParams.
+        std::vector<Internal::Function> fs;
+        for (const Func &f : outs) {
+            fs.push_back(f.function());
+        }
+        std::map<std::string, Func> stand_in;
+        for (const auto &[name, f] : Internal::build_environment(fs)) {
+            const Internal::Call *c = f.is_wrapper();
+            for (size_t i = 0; c && i < cut.size(); i++) {
+                if (c->name == Func(bound[i]).name()) stand_in.emplace(cut[i].name(), Func(f));
+            }
+        }
+        for (ApproximationResult &res : approx) {
+            for (Func &e : res.encoded) {
+                if (stand_in.count(e.name())) e = stand_in.at(e.name());
+            }
+        }
         // The ABI: w [K / w block, N / w rows], a [K / a block, M], out [N, M],
         // all dense from 0 (strides as GGML's contiguous rows; K % block == 0),
         // a field's elements first; a rowwise format's per-row ports [N] or [M].
