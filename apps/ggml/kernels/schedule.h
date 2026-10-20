@@ -400,71 +400,6 @@ inline void schedule_sums(Sums d, Func out, int st, Func acc, Var n, Var m, cons
     }
 }
 
-// The weight quantized in blocks: per block (r.y) and output a dot of the
-// codes (when the activation is quantized alike, an int32 sdot: 4 products per
-// lane; otherwise f32) times the hoisted scales, accumulated per lane in f32
-// (GGML's order), on ts tiles of out under `cond`. `derived`: an affine
-// weight's code-free terms read the act's derived port (derived_sums()), a
-// product per block accumulated alongside.
-inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, bool integer,
-                    const std::vector<ApproximationResult> &rs, const Target &t, bool derived = false) {
-    Stage s = tile_out(out, st, dot, cond, ts, r);
-    Var n = dot.args()[0], m = dot.args()[1], lane("lane"), u("u"), bacc("bacc");
-    RVar ry = r.y, rxc("rxc"), rxo("rxo"), rxi("rxi"), ryo("ryo"), ryi("ryi");
-    bool aff = affine(rs);
-    Sums d;
-    if (derived && derived_sums(out, st, dot, s, cond, r, rs, d)) aff = false;
-    int per = integer ? 4 : 1, vec = t.natural_vector_size<int8_t>();
-    s.split(r.x, rxc, rxo, vec).split(rxo, rxo, rxi, per);
-    Func blk = s.rfactor({{rxo, lane}, {ry, u}});
-    blk.bound(lane, 0, vec / per);  // the lane's range, so the block's scales hoist
-    Func rest, mid, codes = block_dot(blk, rs, integer, rest, mid, aff);
-    s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
-    Func acc = s.rfactor({{rxo, lane}, {ryi, bacc}});
-    Func lanes = s.rfactor(rxo, lane);
-    s.atomic().vectorize(rxo).unroll(n).unroll(m);
-    acc.update().reorder(lane, bacc, n, m, ryo);
-    // rfactor put the lanes last in storage; per block group (ryo), the
-    // blocks' storage also in the K tail: on the stack
-    for (Func f : {lanes, acc}) {
-        regs(f.compute_at(tile_at(out, st)).reorder_storage(lane, n, m), {lane}, {ryi, bacc, n, m});
-    }
-    for (Func f : {blk, mid, codes}) {
-        if (f.defined()) regs(f.compute_at(acc, ryo).reorder_storage(lane, n, m).bound_storage(u, ts.interleave), {lane}, {u, n, m});
-    }
-    if (rest.defined()) {
-        // the act's block sum, once per act column: the rows' copies are a
-        // broadcast (n vectorized)
-        regs(rest.compute_at(acc, ryo).reorder_storage(lane, n, m).bound_storage(u, ts.interleave), {lane}, {u, m});
-        ts.nt > 1 ? regs(rest, {n}, {}) : regs(rest, {}, {n});
-    }
-    for (Func f : {codes, rest}) {
-        if (f.defined()) f.update().atomic().vectorize(rxi).unroll(rxc);
-    }
-    schedule_sums(d, out, st, acc, n, m, ts, r, ts.nt > 2, vec);
-    tables(rs, {blk, mid, codes, rest}, LoopLevel(acc, ryo));
-}
-
-// Weights of one value per record (floats: no blocks, r.x is a single value):
-// per output, the products accumulated in f32 in vectors of `vec` values of
-// r.y (2 f32 vectors: one of 16-bit floats), ts.interleave independent ones
-// (the K tail guarded), then summed across them, on ts tiles of out under
-// `cond`. The decoders (conversions to f32) are inlined.
-inline void flat(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, const Target &t) {
-    Stage s = tile_out(out, st, dot, cond, ts, r);
-    Var n = dot.args()[0], m = dot.args()[1], lane("lane"), bacc("bacc");
-    RVar rx = r.x, ry = r.y, ryo("ryo"), ryi("ryi"), ryl("ryl");
-    int vec = 2 * t.natural_vector_size<float>();
-    s.split(ry, ryo, ryi, vec * ts.interleave, TailStrategy::GuardWithIf).split(ryi, ryi, ryl, vec);
-    Func acc = s.rfactor({{ryl, lane}, {ryi, bacc}});
-    Func lanes = s.rfactor(ryl, lane);
-    s.atomic().vectorize(ryl).unroll(n).unroll(m);
-    acc.update().reorder(rx, lane, bacc, n, m, ryo);
-    for (Func f : {lanes, acc}) {
-        regs(f.compute_at(tile_at(out, st)).reorder_storage(lane, n, m), {lane}, {ryi, bacc, n, m});
-    }
-}
-
 // Eagerly inline into f's update every pure Func it calls but `kept` (as
 // staged encodes, computed apart), transitively: e.g. a float weight's view
 // and decode, so its products read the stored values.
@@ -491,6 +426,106 @@ inline void inline_operands(Func f, const std::vector<Func> &kept) {
     }
 }
 
+// s's sum as a tree of partial sums (GGML's accumulators): a chain of
+// rfactors, level i keeping the RVars of levels[i] as its Vars, so it sums
+// the others of level i - 1's (level 0: s's other RVars, `outer` outside n
+// and m; s then sums the last level's). The order is the schedule's; with
+// `acc` (an Accumulate), the first `narrow` levels' sums are acc's: each
+// approximated in its consumer (the next level), whose sum then reads it as
+// stored (level 0 its operands as stored, but `kept`). Each level per tile
+// (`at`), in registers: stored its first `fused` Vars, then n, m; vectorized
+// across those (fused into one), unrolled across its others, n, m and the
+// RVars it sums. Returns the levels' Funcs.
+using Level = std::vector<std::pair<RVar, Var>>;
+inline std::vector<Func> sum_tree(Stage s, const std::vector<Level> &levels, LoopLevel at, Var n, Var m, RVar outer, size_t fused = 1,
+                                  const Approximation &acc = Approximation(), int narrow = 0, const std::vector<Func> &kept = {}) {
+    std::vector<Func> fs;
+    for (const Level &l : levels) {
+        fs.push_back(s.rfactor(l));
+    }
+    if (narrow) inline_operands(fs[0], kept);
+    for (int i = 0; i < narrow; i++) {
+        ApproximationResult a = fs[i].approximate_by(acc, {fs[i + 1]});
+        fs[i + 1].update().eager_inline({a.replacement});
+        fs[i] = a.encoded[0];
+    }
+    for (size_t i = 0; i < fs.size(); i++) {
+        std::vector<Var> vec;
+        std::vector<VarOrRVar> unrolled{n, m};
+        for (const auto &[rv, v] : levels[i]) {
+            vec.size() < fused ? vec.push_back(v) : unrolled.push_back(v);
+        }
+        for (const auto &[rv, v] : i ? levels[i - 1] : Level()) {
+            unrolled.push_back(rv);  // (those it keeps are Vars here)
+        }
+        Var l = vec[0];
+        for (size_t j = 1; j < vec.size(); j++) {
+            Var f(l.name() + "_" + std::to_string(j));
+            fs[i].fuse(l, vec[j], f).update().fuse(l, vec[j], f);
+            l = f;
+        }
+        vec.insert(vec.end(), {n, m});
+        regs(fs[i].compute_at(at).reorder_storage(vec), {l}, unrolled);
+    }
+    fs[0].update().reorder(n, m, outer);
+    return fs;
+}
+
+// The weight quantized in blocks: per block (r.y) and output a dot of the
+// codes (when the activation is quantized alike, an int32 sdot: 4 products per
+// lane; otherwise f32) times the hoisted scales, accumulated per lane in f32
+// (GGML's order), on ts tiles of out under `cond`. `derived`: an affine
+// weight's code-free terms read the act's derived port (derived_sums()), a
+// product per block accumulated alongside.
+inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, bool integer,
+                    const std::vector<ApproximationResult> &rs, const Target &t, bool derived = false) {
+    Stage s = tile_out(out, st, dot, cond, ts, r);
+    Var n = dot.args()[0], m = dot.args()[1], lane("lane"), u("u"), bacc("bacc");
+    RVar ry = r.y, rxc("rxc"), rxo("rxo"), rxi("rxi"), ryo("ryo"), ryi("ryi");
+    bool aff = affine(rs);
+    Sums d;
+    if (derived && derived_sums(out, st, dot, s, cond, r, rs, d)) aff = false;
+    int per = integer ? 4 : 1, vec = t.natural_vector_size<int8_t>();
+    s.split(r.x, rxc, rxo, vec).split(rxo, rxo, rxi, per);
+    Func blk = s.rfactor({{rxo, lane}, {ry, u}});
+    blk.bound(lane, 0, vec / per);  // the lane's range, so the block's scales hoist
+    Func rest, mid, codes = block_dot(blk, rs, integer, rest, mid, aff);
+    s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
+    Func acc = sum_tree(s, {{{rxo, lane}, {ryi, bacc}}, {{rxo, lane}}}, tile_at(out, st), n, m, ryo)[0];
+    s.atomic().vectorize(rxo).unroll(n).unroll(m);
+    // rfactor put the lanes last in storage; per block group (ryo), the
+    // blocks' storage also in the K tail: on the stack
+    for (Func f : {blk, mid, codes}) {
+        if (f.defined()) regs(f.compute_at(acc, ryo).reorder_storage(lane, n, m).bound_storage(u, ts.interleave), {lane}, {u, n, m});
+    }
+    if (rest.defined()) {
+        // the act's block sum, once per act column: the rows' copies are a
+        // broadcast (n vectorized)
+        regs(rest.compute_at(acc, ryo).reorder_storage(lane, n, m).bound_storage(u, ts.interleave), {lane}, {u, m});
+        ts.nt > 1 ? regs(rest, {n}, {}) : regs(rest, {}, {n});
+    }
+    for (Func f : {codes, rest}) {
+        if (f.defined()) f.update().atomic().vectorize(rxi).unroll(rxc);
+    }
+    schedule_sums(d, out, st, acc, n, m, ts, r, ts.nt > 2, vec);
+    tables(rs, {blk, mid, codes, rest}, LoopLevel(acc, ryo));
+}
+
+// Weights of one value per record (floats: no blocks, r.x is a single value):
+// per output, the products accumulated in f32 in vectors of `vec` values of
+// r.y (2 f32 vectors: one of 16-bit floats), ts.interleave independent ones
+// (the K tail guarded), then summed across them, on ts tiles of out under
+// `cond`. The decoders (conversions to f32) are inlined.
+inline void flat(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, const Target &t) {
+    Stage s = tile_out(out, st, dot, cond, ts, r);
+    Var n = dot.args()[0], m = dot.args()[1], lane("lane"), bacc("bacc");
+    RVar ry = r.y, ryo("ryo"), ryi("ryi"), ryl("ryl");
+    int vec = 2 * t.natural_vector_size<float>();
+    s.split(ry, ryo, ryi, vec * ts.interleave, TailStrategy::GuardWithIf).split(ryi, ryi, ryl, vec);
+    sum_tree(s, {{{ryl, lane}, {ryi, bacc}}, {{ryl, lane}}}, tile_at(out, st), n, m, ryo);
+    s.atomic().vectorize(ryl).unroll(n).unroll(m);
+}
+
 // flat()'s dot accumulated by `acc` (an Accumulate, the format's) in the
 // order and roundings of GGML's NEON f16 vec_dot (ggml_vec_dot_f16): with
 // lane l = b0 + 2 b1 + 4 b2 + 8 b3 + 16 b4 of each 32 values of r.y, the
@@ -498,49 +533,18 @@ inline void inline_operands(Func f, const std::vector<Func> &kept) {
 // accumulators, fused multiply-adds), then over bit 4 of l (sum[j] +
 // sum[j + 2]) and bit 3 (sum[0] + sum[1]), these three by `acc`; then in
 // f32 over bit 2 (the halves' add) and bits 0 and 1 (vaddvq's pairwise
-// adds). A chain of rfactors, one per level, the first three's Funcs then
-// approximated by acc. The K tail (K % 32) is guarded into the last step's
-// lanes (GGML sums it apart, in f64: not matched).
+// adds): a sum_tree, its first three levels approximated by acc. The K tail
+// (K % 32) is guarded into the last step's lanes (GGML sums it apart, in
+// f64: not matched).
 inline void flat_tree(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, const Approximation &acc, const std::vector<Func> &staged) {
     Stage s = tile_out(out, st, dot, cond, ts, r);
     Var n = dot.args()[0], m = dot.args()[1], v0("v0"), v1("v1"), v2("v2"), v3("v3"), v4("v4");
     RVar ry = r.y, ryo("ryo"), ryi("ryi"), r16("r16"), r8("r8"), r4("r4"), b0("b0"), b1("b1"), b2("b2"), b3("b3"), b4("b4");
     s.split(ry, ryo, ryi, 32, TailStrategy::GuardWithIf).split(ryi, b4, r16, 16).split(r16, b3, r8, 8).split(r8, b2, r4, 4).split(r4, b1, b0, 2);
-    std::vector<std::vector<Var>> levels{{v0, v1, v2, v3, v4}, {v0, v1, v2, v3}, {v0, v1, v2}, {v0, v1}, {v1}};
-    std::vector<RVar> bits{b0, b1, b2, b3, b4}, tree{b4, b3, b2, b0};  // tree: each level's sum
-    std::vector<Func> fs;
-    for (const auto &vs : levels) {
-        std::vector<std::pair<RVar, Var>> pv;
-        for (const Var &v : vs) {
-            pv.emplace_back(bits[v.name()[1] - '0'], v);
-        }
-        fs.push_back(s.rfactor(pv));
-    }
-    // The f16 levels: each approximated in its consumer (the next level),
-    // whose sum then reads it as stored (the widening inlined)
-    inline_operands(fs[0], staged);
-    for (int i = 0; i < 3; i++) {
-        ApproximationResult a = fs[i].approximate_by(acc, {fs[i + 1]});
-        fs[i + 1].update().eager_inline({a.replacement});
-        fs[i] = a.encoded[0];
-    }
-    for (size_t i = 0; i < fs.size(); i++) {
-        std::vector<Var> order = levels[i];
-        order.insert(order.end(), {n, m});
-        Func f = fs[i].compute_at(tile_at(out, st)).reorder_storage(order);
-        for (int u = 0; u <= 1; u++) {
-            Stage g = u ? f.update() : Stage(f);
-            Var l = levels[i][0];
-            for (size_t j = 1; j < levels[i].size(); j++) {
-                Var fused(l.name() + "_" + std::to_string(j));
-                g.fuse(l, levels[i][j], fused);
-                l = fused;
-            }
-            g.vectorize(l).unroll(n).unroll(m);
-            if (u && !i) g.reorder(r.x, l, n, m, ryo);
-            if (u && i) g.unroll(tree[i - 1]);
-        }
-    }
+    // each level's sum: bit 4, 3, 2, then 0 (bit 1 last, in s)
+    Level all{{b0, v0}, {b1, v1}, {b2, v2}, {b3, v3}, {b4, v4}};
+    std::vector<Level> levels{all, Level(all.begin(), all.end() - 1), Level(all.begin(), all.end() - 2), Level(all.begin(), all.end() - 3), {all[1]}};
+    sum_tree(s, levels, tile_at(out, st), n, m, ryo, all.size(), acc, 3, staged);
     s.unroll(n).unroll(m);
 }
 
