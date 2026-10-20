@@ -119,6 +119,20 @@ public:
     /** Return the name of this stage, e.g. "f.update(2)" */
     std::string name() const;
 
+    /** The right-hand side of the definition this Stage refers to: the pure
+     * definition for Stage(f), the update definition for f.update(i), and the
+     * specialization's own definition for a Stage returned by specialize()
+     * (whereas Func::value() and Func::update_value() always return the
+     * unspecialized definition). The result reflects every schedule-time
+     * rewrite of that definition so far, e.g. by eager_inline(), rfactor(),
+     * or hoist_invariants(). It may contain Let nodes. value() is an error if
+     * the definition is Tuple-valued; values() returns a Tuple with one
+     * element for a single-valued definition. */
+    // @{
+    Expr value() const;
+    Tuple values() const;
+    // @}
+
     /** Calling rfactor() on an associative update definition a Func will split
      * the update into an intermediate which computes the partial results and
      * replaces the current update definition with a new definition which merges
