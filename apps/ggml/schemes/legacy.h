@@ -95,23 +95,30 @@ inline Approximation q4_1(const std::string &lay, bool indexed = false) {
 }
 
 // block_q5_0 and block_q5_1: q4_0's and q4_1's quantization at 5 bits, each
-// (unsigned) code stored as its low nibble, packed as q4's codes (qs), and
-// its fifth bit, packed densely (qh: bit j of its little-endian word is code
-// j's).
-inline Approximation q5_codes(const Approximation &fields) {
-    return Parallel{{"codes", Compose{fields, BitSplit{5, 4}}}};
+// code split into its low nibble, packed as q4's codes (qs), and the rest
+// (q5_0: -16 or 0; q5_1: 0 or 16), stored as one bit, packed densely (qh: bit
+// j of its little-endian word is code j's). `tables`: qh decoded through a
+// table of each byte's rests (GGML's table_b2b_1, its offset folded in),
+// indexed by the bytes of qh loaded as one word.
+inline Approximation q5_rest(int lo, bool tables) {
+    Approximation bits = Compose{multiples(4, lo, 2), BitPack{1}};
+    return tables ? Compose{Tabulate{bits, 8}, Words{UInt(32)}} : bits;
 }
 
-inline Approximation q5_0(const std::string &lay, bool indexed = false) {
-    return Compose{BlockReshape{QK, indexed}, Type0Quant{5}, q5_codes(offset(16)),
-                   Parallel{{"low", PlanarFieldPack{4, QK / 2}}, {"high", BitPack{1}}, {"scale", fp16()}},
-                   layout(lay, {{"d", Float(16)}, {"qh", UInt(8), QK / 8}, {"qs", UInt(8), QK / 2}}, {"qs", "qh", "d"})};
+inline StructField q5_qh(bool tables) {
+    return tables ? StructField{"qh", UInt(32)} : StructField{"qh", UInt(8), QK / 8};
 }
 
-inline Approximation q5_1(const std::string &lay, bool indexed = false) {
-    return Compose{BlockReshape{QK, indexed}, Type1Quant{5}, q5_codes(unsigned_codes(5)),
-                   Parallel{{"low", PlanarFieldPack{4, QK / 2}}, {"high", BitPack{1}}, {"scale", fp16()}, {"min", fp16()}},
-                   layout(lay, {{"d", Float(16)}, {"m", Float(16)}, {"qh", UInt(8), QK / 8}, {"qs", UInt(8), QK / 2}}, {"qs", "qh", "d", "m"})};
+inline Approximation q5_0(const std::string &lay, bool indexed = false, bool tables = false) {
+    return Compose{BlockReshape{QK, indexed}, Type0Quant{5}, Parallel{{"codes", SumSplit{4}}},
+                   Parallel{{"low", PlanarFieldPack{4, QK / 2}}, {"high", q5_rest(-16, tables)}, {"scale", fp16()}},
+                   layout(lay, {{"d", Float(16)}, q5_qh(tables), {"qs", UInt(8), QK / 2}}, {"qs", "qh", "d"})};
+}
+
+inline Approximation q5_1(const std::string &lay, bool indexed = false, bool tables = false) {
+    return Compose{BlockReshape{QK, indexed}, Type1Quant{5}, Parallel{{"codes", SumSplit{4}}},
+                   Parallel{{"low", PlanarFieldPack{4, QK / 2}}, {"high", q5_rest(0, tables)}, {"scale", fp16()}, {"min", fp16()}},
+                   layout(lay, {{"d", Float(16)}, {"m", Float(16)}, q5_qh(tables), {"qs", UInt(8), QK / 2}}, {"qs", "qh", "d", "m"})};
 }
 
 // block_q8_0: d = max |x| / 127; code = roundf(x / d).
