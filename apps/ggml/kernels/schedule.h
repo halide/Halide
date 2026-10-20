@@ -252,11 +252,8 @@ inline std::pair<Func, Func> split_on(Stage st, Expr v, const std::string &name,
     }
     return {with, rest};
 }
-inline std::pair<Func, Func> split_on(Stage st, Expr v, const std::string &name, const std::vector<Func> &fs) {
-    return split_on(st, std::move(v), name, call_of(fs));
-}
 inline std::pair<Func, Func> split_on(Func f, const std::vector<Func> &fs) {
-    auto parts = split_on(f.update(), f.update_value(), f.name(), fs);
+    auto parts = split_on(f.update(), f.update_value(), f.name(), call_of(fs));
     return parts.first.defined() ? parts : std::pair{f, Func()};
 }
 
@@ -269,6 +266,30 @@ inline Expr update_value(Func f, const Expr &cond) {
         if (Internal::equal(sp.condition, cond)) return sp.definition.values()[0];
     }
     throw std::invalid_argument("update_value: no specialization of " + f.name());
+}
+
+// The derived-port substitution (q8_1's s, qsi8cx's row sums), in two
+// steps. First dot's update under cond (s), its `scales` inlined, splits on
+// the calls `test` picks (split_on): returns {the terms with them, the
+// rest}, both there.
+inline std::pair<Func, Func> split_off(Stage s, Func dot, const Expr &cond, const std::vector<Func> &scales, const CallTest &test) {
+    s.eager_inline(scales);
+    auto parts = split_on(s, update_value(dot, cond), dot.name(), test);
+    if (!parts.first.defined() || !parts.second.defined()) throw std::invalid_argument("split_off: no terms free of the calls in " + dot.name());
+    return parts;
+}
+
+// Then a term of the rest (e.g. its block sum) reads the first of `ports`
+// whose definition it matches (Func::approximate_by(DerivedPort, ...)) in
+// `consumer`: false if none does.
+inline bool read_port(Func term, const std::vector<DerivedPort> &ports, Func consumer) {
+    for (const DerivedPort &p : ports) {
+        if (match_derived_port(term, p)) {
+            term.approximate_by(p, {consumer});
+            return true;
+        }
+    }
+    return false;
 }
 
 // Does the weight's decode have terms free of its codes (q4_1's codes * d +
@@ -339,11 +360,10 @@ inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool
 
 // An affine weight's code-free terms, read from the act's derived port where
 // one is their act part: dot's increment (s, out's stage st tile under
-// `cond`) splits on the weight's codes (split_on) into `with`, computed per
+// `cond`) splits on the weight's codes (split_off) into `with`, computed per
 // tile, s then its update, and the rest, d.sums, the weight's min times the
 // act; per block (r.y rfactored to u, d.blk), the min hoists out of the act's
-// block sum, which is then replaced by a read of the first derived port whose
-// definition it matches (Func::approximate_by(DerivedPort, ...): e.g. q8_1's
+// block sum, which then reads the act's derived port (read_port: e.g. q8_1's
 // s; d.sum, if none matches). Returns false (dot untouched) if the weight is
 // not affine or the act has no derived port.
 struct Sums {
@@ -352,19 +372,11 @@ struct Sums {
 inline bool derived_sums(Func out, int st, Func dot, Stage &s, const Expr &cond, const RDom &r, const std::vector<ApproximationResult> &rs, Sums &d) {
     d = Sums();
     if (rs.size() < 2 || rs[1].derived_ports().empty() || !affine(rs)) return false;
-    s.eager_inline(decoders(rs, Of::Floats, 0, 1));
     Func with;
-    std::tie(with, d.sums) = split_on(s, update_value(dot, cond), dot.name(), decoders(rs, Of::Ints, 0, 1));
-    if (!with.defined() || !d.sums.defined()) throw std::invalid_argument("derived_sums: no code-free terms in " + dot.name());
+    std::tie(with, d.sums) = split_off(s, dot, cond, decoders(rs, Of::Floats, 0, 1), call_of(decoders(rs, Of::Ints, 0, 1)));
     d.blk = d.sums.update().rfactor(r.y, Var("u"));
     d.sum = d.blk.update().hoist_invariants()[0];
-    for (const DerivedPort &p : rs[1].derived_ports()) {
-        if (match_derived_port(d.sum, p)) {
-            d.sum.approximate_by(p, {d.blk});
-            d.sum = Func();
-            break;
-        }
-    }
+    if (read_port(d.sum, rs[1].derived_ports(), d.blk)) d.sum = Func();
     with.compute_at(tile_at(out, st));
     s = with.update();
     return true;
@@ -824,9 +836,9 @@ inline void metal_flat(Func out, Func dot, const RDom &r, const std::vector<Func
 // scale per row, so the codes' dot accumulates in int32 over the whole of K.
 // dot's increment, the weight's codes times its scale times the act's codes
 // plus its offset times its scale (s, out's stage tile under `cond`), splits
-// on the act's codes (an integer call reading m and r): one Func the codes'
-// dot (int32), the other the weight's code sum, read from its derived port
-// (Func::approximate_by(DerivedPort, ...): the row sums its encoder stored),
+// on the act's codes (an integer call reading m and r; split_off): one Func
+// the codes' dot (int32), the other the weight's code sum, read from its
+// derived port (read_port: the row sums its encoder stored),
 // each times its scales once per output. Returns the codes' dot.
 inline Func rowwise_dot(Stage s, Func dot, const Expr &cond, const std::vector<ApproximationResult> &rs) {
     std::string m = dot.args()[1].name();
@@ -841,17 +853,10 @@ inline Func rowwise_dot(Stage s, Func dot, const Expr &cond, const std::vector<A
         }
         return row && reduced;
     };
-    s.eager_inline(decoders(rs, Of::Floats));
-    auto [with, sums] = split_on(s, update_value(dot, cond), dot.name(), act_codes);
-    if (!with.defined() || !sums.defined()) throw std::invalid_argument("rowwise_dot: no zero-point term in " + dot.name());
+    auto [with, sums] = split_off(s, dot, cond, decoders(rs, Of::Floats), act_codes);
     Func codes = with.change_type(Int(32)), sum = sums.change_type(Int(32));
-    for (const DerivedPort &p : rs[0].derived_ports()) {
-        if (match_derived_port(sum, p)) {
-            sum.approximate_by(p, {sums});
-            return codes;
-        }
-    }
-    throw std::invalid_argument("rowwise_dot: the weight's code sum matches none of its derived ports");
+    if (!read_port(sum, rs[0].derived_ports(), sums)) throw std::invalid_argument("rowwise_dot: the weight's code sum matches none of its derived ports");
+    return codes;
 }
 
 // The rowwise gemv: per tile of ts.nt rows, the codes' dot in int32 lanes
