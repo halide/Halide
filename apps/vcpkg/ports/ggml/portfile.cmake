@@ -1,4 +1,4 @@
-vcpkg_check_linkage(ONLY_STATIC_LIBRARY)
+vcpkg_check_linkage(ONLY_DYNAMIC_LIBRARY)
 
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
@@ -10,6 +10,9 @@ vcpkg_from_github(
 # Benchmark baseline: GGML's best paths on the build machine (native ISA,
 # CPU repack, KleidiAI on arm64, Metal on macOS). Backends are linked, not
 # dlopen'ed. KleidiAI is fetched here because vcpkg disables FetchContent.
+# Shared libraries, as GGML ships: statically linked, GGML's code and constant
+# tables move with every change to the benchmark's own code, which moves its
+# timings by up to ~15% (Apple M3 Max); a shared library fixes its layout.
 set(options "")
 if (VCPKG_TARGET_ARCHITECTURE STREQUAL "arm64")
     vcpkg_download_distfile(
@@ -31,7 +34,7 @@ vcpkg_cmake_configure(
     SOURCE_PATH "${SOURCE_PATH}"
     OPTIONS
     ${options}
-    -DBUILD_SHARED_LIBS=OFF
+    -DBUILD_SHARED_LIBS=ON
     -DGGML_BACKEND_DL=OFF
     -DGGML_NATIVE=ON
     -DGGML_CPU_REPACK=ON
