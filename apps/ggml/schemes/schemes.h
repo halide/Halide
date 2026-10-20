@@ -14,8 +14,14 @@
 // (kleidiai.h): `rowwise`; they reduce over a row's `blocks` blocks, K / QK,
 // which the caller passes (an Expr; e.g. an input's extent). `tables`: bit
 // fields decoded through constant tables (Tabulate; see use_tables).
+// `acc`: how a dot of the format accumulates: undefined, in f32; with
+// ".acc16" (f16.acc16), an Accumulate at the format's own 16-bit float, for
+// formats stored as one such float per value, as GGML's f16 vec_dot sums in
+// f16 (the schedule applies it to the dot's partial sums: kernels/schedule.h).
 #include "kleidiai.h"
 #include "legacy.h"
+
+#include <algorithm>
 
 namespace ggml {
 
@@ -23,6 +29,7 @@ struct Format {
     Approximation scheme;
     int block = 1, rows = 1, chunk = 0;
     bool rowwise = false;
+    Approximation acc;
 };
 
 // `aos`: the same format with one row per record. `indexed`: its blocks'
@@ -34,6 +41,17 @@ inline Format format(const std::string &spec, bool aos = false, bool scaled = fa
     for (size_t i = 0, j; i <= spec.size(); i = j + 1) {
         j = std::min(spec.find('.', i), spec.size());
         t.push_back(spec.substr(i, j - i));
+    }
+    if (std::find(t.begin() + 1, t.end(), "acc16") != t.end()) {
+        std::string rest = t[0];
+        for (size_t i = 1; i < t.size(); i++) {
+            if (t[i] != "acc16") rest += "." + t[i];
+        }
+        Format f = format(rest, aos, scaled, indexed, blocks, tables);
+        ApproximationPorts ports = f.scheme.defined() ? f.scheme.signature({{"values", Float(32), 2}}).outputs : ApproximationPorts{};
+        if (f.block != 1 || ports.size() != 1 || !ports[0].type->is_float() || ports[0].type->bits() != 16) throw std::invalid_argument("acc16: a format of 16-bit float values, not " + spec);
+        f.acc = Accumulate{*ports[0].type};
+        return f;
     }
     std::string type = t[0], codes, lay = "aos";
     for (size_t i = 1; i < t.size(); i++) {

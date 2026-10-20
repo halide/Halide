@@ -12,7 +12,11 @@
 # (as GGML's repack q4_0_4x8, q8_0_4x4 etc.; default: one row per record,
 # AoS); its weights are checked against GGML's repack (harness/repack.cpp).
 # `soa`: one planar array per field (a kernel input each), checked against
-# GGML's bytes laid out alike.
+# GGML's bytes laid out alike. `acc16` (f16.acc16): the dot's partial sums
+# approximated in f16 (an Accumulate), in the order and roundings of GGML's
+# NEON f16 vec_dot (where the CPU has fp16 arithmetic and K % 32 == 0,
+# checked bit-exact against it); else in f32. Its rows need strict_float (the
+# order is its numerics: LLVM may otherwise reassociate the partial sums).
 #
 # qsi8cx (weights) and qai8dx (acts) are KleidiAI's per-row int8 formats
 # (schemes/kleidiai.h; no GGML type): their mul_mat rows are timed under
@@ -51,6 +55,7 @@ set(GGML_FORMATS
     "qai8dx codec"
     "f16 codec,vec_dot,mul_mat f16,f32,f32:f16"
     "bf16 codec,vec_dot,mul_mat bf16,f32,f32:bf16"
+    "f16.acc16 vec_dot,mul_mat f16,f32:f16 strict_float"
     "q4_0 mul_mat f32,f16,q8_0 metal"
     "q4_0.soa mul_mat f32,f16,q8_0 metal"
     "q8_0 mul_mat f32,f16,q8_0 metal"

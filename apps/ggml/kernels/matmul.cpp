@@ -1,5 +1,7 @@
 // One mul_mat algorithm for every (weight, act) format pair:
 //   out(n, m) = sum_k W(k, n) * X(k, m)  in f32,
+// (the weight format's `acc`, if any, then approximates the sum's partial
+// sums in the schedule: e.g. f16.acc16, in f16 as GGML's f16 vec_dot),
 // each operand approximated by its format's scheme, then severed at the
 // encoded records, which become the inputs w: [K / block, N / rows], a: [.., M]
 // (one input per encoded port, e.g. per field of a planar layout, its
@@ -120,10 +122,16 @@ public:
         }
         result = add_output(out);
         blocks = {fw.block, fc.block, fc.rows, fw.rows, fw.chunk, fw.rowwise};
+        acc = fw.acc;
+        // The accumulation's order is part of its numerics: without
+        // strict_float, LLVM may reassociate the partial sums' tree
+        if (acc.defined() && !get_target().has_feature(Target::StrictFloat)) {
+            throw std::invalid_argument("matmul: weight " + std::string(weight) + " (an accumulation order) needs the strict_float target feature");
+        }
     }
 
     void generate() {
-        (op == "vec_dot" ? ggml::vec_dot : ggml::mul_mat)(*result, dots, r, blocks, approx, staged, get_target());
+        (op == "vec_dot" ? ggml::vec_dot : ggml::mul_mat)(*result, dots, r, blocks, approx, staged, get_target(), acc);
     }
 
 private:
@@ -133,6 +141,7 @@ private:
     std::vector<ApproximationResult> approx;  // the weight's first (asserted)
     std::vector<Func> staged;                 // encoded inside the pipeline
     std::vector<int> blocks;
+    Approximation acc;  // the dot's sums (undefined: f32)
     GeneratorOutput<Buffer<>> *result = nullptr;
 
     // The encoded ports of a format (the values themselves for plain f32);

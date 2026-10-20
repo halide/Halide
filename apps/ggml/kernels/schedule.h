@@ -7,6 +7,7 @@
 #include "Halide.h"
 
 #include <functional>
+#include <set>
 
 namespace ggml {
 
@@ -464,6 +465,85 @@ inline void flat(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r,
     }
 }
 
+// Eagerly inline into f's update every pure Func it calls but `kept` (as
+// staged encodes, computed apart), transitively: e.g. a float weight's view
+// and decode, so its products read the stored values.
+inline void inline_operands(Func f, const std::vector<Func> &kept) {
+    for (;;) {
+        std::vector<Func> fs;
+        std::set<std::string> seen;
+        for (const Func &k : kept) {
+            seen.insert(k.name());
+        }
+        for (const Expr &v : f.function().update(0).values()) {
+            Internal::visit_with(v, [&](auto *self, const Internal::Call *c) {
+                if (c->call_type == Internal::Call::Halide && c->func.defined() && seen.insert(c->name).second) {
+                    Internal::Function g(c->func);
+                    if (!g.has_update_definition() && !g.has_extern_definition() && g.definition().specializations().empty()) {
+                        fs.emplace_back(g);
+                    }
+                }
+                self->visit_base(c);
+            });
+        }
+        if (fs.empty()) return;
+        f.update().eager_inline(fs);
+    }
+}
+
+// flat()'s dot accumulated by `acc` (an Accumulate, the format's) in the
+// order and roundings of GGML's NEON f16 vec_dot (ggml_vec_dot_f16): with
+// lane l = b0 + 2 b1 + 4 b2 + 8 b3 + 16 b4 of each 32 values of r.y, the
+// products summed per lane over the 32-value steps (GGML's four 8-lane
+// accumulators, fused multiply-adds), then over bit 4 of l (sum[j] +
+// sum[j + 2]) and bit 3 (sum[0] + sum[1]), these three by `acc`; then in
+// f32 over bit 2 (the halves' add) and bits 0 and 1 (vaddvq's pairwise
+// adds). A chain of rfactors, one per level, the first three's Funcs then
+// approximated by acc. The K tail (K % 32) is guarded into the last step's
+// lanes (GGML sums it apart, in f64: not matched).
+inline void flat_tree(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, const Approximation &acc, const std::vector<Func> &staged) {
+    Stage s = tile_out(out, st, dot, cond, ts, r);
+    Var n = dot.args()[0], m = dot.args()[1], v0("v0"), v1("v1"), v2("v2"), v3("v3"), v4("v4");
+    RVar ry = r.y, ryo("ryo"), ryi("ryi"), r16("r16"), r8("r8"), r4("r4"), b0("b0"), b1("b1"), b2("b2"), b3("b3"), b4("b4");
+    s.split(ry, ryo, ryi, 32, TailStrategy::GuardWithIf).split(ryi, b4, r16, 16).split(r16, b3, r8, 8).split(r8, b2, r4, 4).split(r4, b1, b0, 2);
+    std::vector<std::vector<Var>> levels{{v0, v1, v2, v3, v4}, {v0, v1, v2, v3}, {v0, v1, v2}, {v0, v1}, {v1}};
+    std::vector<RVar> bits{b0, b1, b2, b3, b4}, tree{b4, b3, b2, b0};  // tree: each level's sum
+    std::vector<Func> fs;
+    for (const auto &vs : levels) {
+        std::vector<std::pair<RVar, Var>> pv;
+        for (const Var &v : vs) {
+            pv.emplace_back(bits[v.name()[1] - '0'], v);
+        }
+        fs.push_back(s.rfactor(pv));
+    }
+    // The f16 levels: each approximated in its consumer (the next level),
+    // whose sum then reads it as stored (the widening inlined)
+    inline_operands(fs[0], staged);
+    for (int i = 0; i < 3; i++) {
+        ApproximationResult a = fs[i].approximate_by(acc, {fs[i + 1]});
+        fs[i + 1].update().eager_inline({a.replacement});
+        fs[i] = a.encoded[0];
+    }
+    for (size_t i = 0; i < fs.size(); i++) {
+        std::vector<Var> order = levels[i];
+        order.insert(order.end(), {n, m});
+        Func f = fs[i].compute_at(tile_at(out, st)).reorder_storage(order);
+        for (int u = 0; u <= 1; u++) {
+            Stage g = u ? f.update() : Stage(f);
+            Var l = levels[i][0];
+            for (size_t j = 1; j < levels[i].size(); j++) {
+                Var fused(l.name() + "_" + std::to_string(j));
+                g.fuse(l, levels[i][j], fused);
+                l = fused;
+            }
+            g.vectorize(l).unroll(n).unroll(m);
+            if (u && !i) g.reorder(r.x, l, n, m, ryo);
+            if (u && i) g.unroll(tree[i - 1]);
+        }
+    }
+    s.unroll(n).unroll(m);
+}
+
 // The integer path for weight records of ts.nt rows interleaved in pieces of
 // `chunk` codes (as GGML's repacked gemv): per block, int32 sums vectorized
 // across the record's rows and each piece's 4-code quads (sdot), so a piece
@@ -625,7 +705,7 @@ inline void encoder(Func e, const std::vector<ApproximationResult> &rs) {
 // The N = M = 1 schedule (GGML's vec_dot). Activations encoded inside the
 // pipeline (`staged`) are encoded once, up front.
 inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, const std::vector<int> &blocks, const std::vector<ApproximationResult> &rs,
-                    const std::vector<Func> &staged, const Target &t) {
+                    const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation()) {
     for (Func e : staged) {
         e.compute_root();
         encoder(e, rs);
@@ -633,7 +713,7 @@ inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, cons
     }
     out.output_buffer().dim(0).set_bounds(0, 1).dim(1).set_bounds(0, 1);  // N = M = 1
     if (blocks[0] == 1) {
-        flat(out, 0, dots[0], Expr(), {1, 1, 4}, r, t);
+        acc.defined() ? flat_tree(out, 0, dots[0], Expr(), {1, 1, 4}, r, acc, staged) : flat(out, 0, dots[0], Expr(), {1, 1, 4}, r, t);
         return;
     }
     blocked(out, 0, dots[0], Expr(), {}, r, blocks[1] == blocks[0], rs, t, true);
@@ -929,8 +1009,9 @@ inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom 
 // (dots[1]) on gemm tiles starting on a record, its second the others
 // (dots[0], < r rows) on gemv tiles.
 inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const std::vector<int> &blocks, const std::vector<ApproximationResult> &rs,
-                    const std::vector<Func> &staged, const Target &t) {
+                    const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation()) {
     if (t.has_feature(Target::Metal)) {
+        if (acc.defined()) throw std::invalid_argument("metal: dots accumulated in f32");
         if (blocks[2] > 1 || blocks[3] > 1) throw std::invalid_argument("metal: weights and acts one row per record");
         if (blocks[0] == 1) {
             metal_flat(out, dots[0], r, staged);
@@ -981,9 +1062,11 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         // stream (row pairs are two, a row apart: 0.65x GGML at K = 14336).
         if (whole || blocks[3] > 1) throw std::invalid_argument("weights without blocks: one row per record, acts too");
         Tiles fg{4, 2, 1, 32, 32, 2}, fp{2, 1, 2, 16}, fr{1, 1, 4, 16};
-        flat(out, 0, dots[0], N >= fg.nt && M >= fg.mt, fg, r, t);
-        flat(out, 0, dots[0], N >= fp.nt && M > 1, fp, r, t);
-        flat(out, 0, dots[0], Expr(), fr, r, t);
+        // (GGML's tree: four f16 vectors per output; 4 x 2 tiles spill)
+        if (acc.defined()) fg = {2, 2, 1, 32, 32, 2};
+        for (auto [c, ts] : std::vector<std::pair<Expr, Tiles>>{{N >= fg.nt && M >= fg.mt, fg}, {N >= fp.nt && M > 1, fp}, {Expr(), fr}}) {
+            acc.defined() ? flat_tree(out, 0, dots[0], c, ts, r, acc, staged) : flat(out, 0, dots[0], c, ts, r, t);
+        }
         return;
     }
     Tiles mmla8{4, 8, 1, 32, 32, 2}, gemm{4, 4, 1, 32, 32, 2}, pairs{2, 1, 2, 16}, rows{1, 1, 2, 16};

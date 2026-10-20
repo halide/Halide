@@ -27,8 +27,9 @@ FormatSpec parse_format(const std::string &spec) {
     }
     f.type = t[0];
     for (size_t i = 1; i < t.size(); i++) {
+        f.acc16 |= t[i] == "acc16";
         if (t[i] == "soa") f.soa = true;
-        else if (sscanf(t[i].c_str(), "%dx%d", &f.rows, &f.chunk) != 2 && t[i] != "aos")
+        else if (sscanf(t[i].c_str(), "%dx%d", &f.rows, &f.chunk) != 2 && t[i] != "aos" && t[i] != "acc16")
             f.codes = t[i];
     }
     return f;

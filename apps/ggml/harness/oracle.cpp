@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 
 namespace gq {
@@ -74,6 +75,24 @@ std::vector<double> requant_err(const float *x, int64_t K, ggml_type t, int64_t 
     return e;
 }
 
+// GGML's CPU vec_dot of row n of the weights and row m of the acts, the acts
+// converted to the weight's vec_dot_type first (as GGML's mul_mat does).
+float ggml_vec_dot(const Inputs &in, int64_t n, int64_t m) {
+    const auto *t = ggml_get_type_traits_cpu(in.wt);
+    int64_t K = in.s.K;
+    const uint8_t *w = in.w->data() + n * ggml_row_size(in.wt, K), *a = in.a->data() + m * ggml_row_size(in.at, K);
+    std::vector<uint8_t> converted;
+    if (in.at != t->vec_dot_type) {
+        if (in.at != GGML_TYPE_F32) abort();
+        converted.resize(ggml_row_size(t->vec_dot_type, K));
+        ggml_get_type_traits_cpu(t->vec_dot_type)->from_float((const float *)a, converted.data(), K);
+        a = converted.data();
+    }
+    float s;
+    t->vec_dot((int)K, &s, 0, w, 0, a, 0, 1);
+    return s;
+}
+
 }  // namespace
 
 void to_float(ggml_type t, const uint8_t *p, float *out, int64_t K) {
@@ -115,6 +134,7 @@ Reference reference(const Inputs &in, const std::vector<float> &a_f32) {
 //   g = gamma_{chain+4}(u_acc) + gamma_{levels+1}(2^-24) + 2 u_op + u_op^2,
 // i.e. chain accumulations plus <= 4 ops per term (decode, scales) in the
 // accumulator precision, an f32 tree over K/chain partials, and operand rounding.
+// With p.ggml_dot, also bit-exact: GGML's CPU vec_dot (else INFINITY).
 double error_ratio(const Inputs &in, const Reference &ref, const Precision &p, const float *got) {
     int64_t K = ref.K, chain = p.chain > 0 ? std::min(p.chain, K) : K;
     double levels = std::ceil(std::log2((double)K / chain));
@@ -158,6 +178,13 @@ double error_ratio(const Inputs &in, const Reference &ref, const Precision &p, c
             size_t i = m * ref.ns.size() + n;
             double err = std::abs((double)got[ref.ms[m] * in.s.N + ref.ns[n]] - ref.out[i]);
             double ratio = tol > 0 ? err / tol : (err == 0 ? 0 : INFINITY);
+            if (p.ggml_dot) {
+                float v = got[ref.ms[m] * in.s.N + ref.ns[n]], g = ggml_vec_dot(in, ref.ns[n], ref.ms[m]);
+                if (std::memcmp(&v, &g, sizeof(v))) {
+                    fprintf(stderr, "not GGML's vec_dot: K=%lld n=%lld m=%lld: %a, GGML %a\n", (long long)K, (long long)ref.ns[n], (long long)ref.ms[m], v, g);
+                    ratio = INFINITY;
+                }
+            }
             worst = std::max(worst, std::isnan(ratio) ? INFINITY : ratio);
         }
     }
