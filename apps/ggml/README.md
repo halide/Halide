@@ -229,6 +229,23 @@ q5_0 and q5_1 are q4_0's and q4_1's quantizers at 5 bits (`Type0Quant`,
 its fifth bit, packed densely (`BitPack`: `qh`, bit j of its little-endian word
 is code j's). Their kernels are the same recipes, with no new schedule code.
 
+mxfp4 (`schemes/mx.h`) is OCP MX's FP4 as GGML stores it: per block of 32, an
+e8m0 scale byte `e` and the e2m1 codes, packed as q4_0's. Its quantizer
+(`MXFP4Quant`) is GGML's: `e = (uint8_t)(floorf(log2f(amax)) - 2 + 127)`
+(wrapping for tiny blocks; log2f as correctly rounded: double, rounded to
+float), `d = 2^(e - 128)`, and each code the first of `kvalues_mxfp4` (the
+doubled e2m1 values) nearest `x / d` (`best_index_mxfp4`'s strict scan of
+`|kv * d - x|`, fused as GGML's arm64 build computes it). Its lossless stages
+are `MiniFloat`s: the codes `minifloat_integers(e2m1)` (`schemes/common.h`: a
+MiniFloat's values as small integers, decoded by integer arithmetic from its
+fields: a mask, `min`, a shift and a sign select), so the kernels' sdot takes
+them as int8, as q4_0's; the scale `e8m0_half`, an e8m0 MiniFloat of `2d`
+decoded GGML's way (`GGML_E8M0_TO_FP32_HALF`; byte 0xFF is 2^127, not NaN). The
+codec is bit-exact against GGML's reference quantizer. Its kernels are the same
+recipes, with no new schedule code. `ggml_mxfp4_properties` (ctest) checks the
+error bound, the declared ranges, idempotent requantizing and closure on normal,
+tiny, huge, one-signed, outlier, constant and zero blocks.
+
 KleidiAI's q8_0 scheme (`schemes/kleidiai.h`; GGML's KleidiAI backend runs it
 for q8_0 weights) is two rowwise formats, a whole row of K values one
 quantization group: `qsi8cx` (weights: symmetric int8 codes, an f32 scale per
