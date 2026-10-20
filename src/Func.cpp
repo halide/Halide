@@ -371,6 +371,17 @@ bool dim_match(const Dim &candidate, const VarOrRVar &var) {
 
 }  // namespace
 
+Expr Stage::value() const {
+    user_assert(definition.values().size() == 1)
+        << "Can't call Stage::value() on " << name()
+        << ", because it has multiple values. Use Stage::values() instead.\n";
+    return definition.values()[0];
+}
+
+Tuple Stage::values() const {
+    return Tuple(definition.values());
+}
+
 std::string Stage::name() const {
     std::string stage_name = (stage_index == 0) ? function.name() : function.name() + ".update(" + std::to_string(stage_index - 1) + ")";
     return stage_name;
