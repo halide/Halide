@@ -8,7 +8,6 @@
 #include "Substitute.h"
 
 #include <algorithm>
-#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -50,38 +49,25 @@ void substitute_value_in_var(const string &var, const Expr &value, vector<Defini
     }
 }
 
-class SimplifyUsingFact : public IRMutator {
-public:
-    using IRMutator::mutate;
-
-    Expr mutate(const Expr &e) override {
-        if (e.type().is_bool()) {
-            if (equal(fact, e) ||
-                can_prove(!fact || e)) {
-                // fact implies e
-                return const_true();
-            }
-            if (equal(fact, !e) ||
-                equal(!fact, e) ||
-                can_prove(!fact || !e)) {
-                // fact implies !e
-                return const_false();
-            }
-        }
-        return IRMutator::mutate(e);
-    }
-
-    Expr fact;
-    SimplifyUsingFact(Expr f)
-        : fact(std::move(f)) {
-    }
-};
-
 void simplify_using_fact(const Expr &fact, vector<Definition> &definitions) {
-    SimplifyUsingFact simplifier(fact);
     for (Definition &def : definitions) {
-        mutate_definition_exprs(def, [&](const Expr &e) {
-            return simplify(simplifier(e));
+        mutate_definition_exprs(def, [&](const Expr &expr) {
+            return simplify(mutate_with(expr, [&](auto *self, const Expr &e) {
+                if (e.type().is_bool()) {
+                    if (equal(fact, e) ||
+                        can_prove(!fact || e)) {
+                        // fact implies e
+                        return const_true();
+                    }
+                    if (equal(fact, !e) ||
+                        equal(!fact, e) ||
+                        can_prove(!fact || !e)) {
+                        // fact implies !e
+                        return const_false();
+                    }
+                }
+                return self->mutate_base(e);
+            }));
         });
     }
 }
