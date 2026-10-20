@@ -121,7 +121,7 @@ public:
             add_input(p);
         }
         result = add_output(out);
-        blocks = {fw.block, fc.block, fc.rows, fw.rows, fw.chunk, fw.rowwise};
+        fmt = {fw.block, fw.rows, fw.chunk, fc.block, fc.rows, fw.rowwise};
         acc = fw.acc;
         // The accumulation's order is part of its numerics: without
         // strict_float, LLVM may reassociate the partial sums' tree
@@ -131,7 +131,7 @@ public:
     }
 
     void generate() {
-        (op == "vec_dot" ? ggml::vec_dot : ggml::mul_mat)(*result, dots, r, blocks, approx, staged, get_target(), acc);
+        (op == "vec_dot" ? ggml::vec_dot : ggml::mul_mat)(*result, dots, r, fmt, approx, staged, get_target(), acc);
     }
 
 private:
@@ -140,7 +140,7 @@ private:
     std::vector<Func> dots{Func("dot")};      // one per act encoding
     std::vector<ApproximationResult> approx;  // the weight's first (asserted)
     std::vector<Func> staged;                 // encoded inside the pipeline
-    std::vector<int> blocks;
+    ggml::Formats fmt;
     Approximation acc;  // the dot's sums (undefined: f32)
     GeneratorOutput<Buffer<>> *result = nullptr;
 
