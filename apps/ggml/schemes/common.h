@@ -344,6 +344,30 @@ inline Approximation multiples(int shift, int lo, int n) {
         .with_lossless();
 }
 
+// The values of a MiniFloat `f` with neither inf nor NaN (Specials::None),
+// all integers once scaled by 2^(bias + man - 1), the inverse of its least
+// subnormal (e2m1: OCP MX's FP4 values, doubled), as int8 codes <-> f's
+// fields. Lossless on those codes; others round as f does. The decode is
+// integer arithmetic: the mantissa with its implicit bit, shifted by the
+// exponent field less one; for subnormals (exponent field 0), the magnitude's
+// bits themselves. The lesser of the two picks between them.
+inline Approximation minifloat_integers(const MiniFloat &f) {
+    const int scale = f.bias + f.man - 1, emax = (1 << f.exp) - 1, top = ((2 << f.man) - 1) << (emax - 1);
+    if (f.specials != MiniFloat::Specials::None || f.bits() > 8 || scale < 0 || top > 127) {
+        throw std::invalid_argument("minifloat_integers: no int8 codes for " + f.name());
+    }
+    auto u8 = [](int v) { return cast<uint8_t>(v); };
+    return Pointwise{f.name() + "_integers", [=](const Expr &x) { return f.encode_bits(cast<float>(x) * (float)std::ldexp(1.0, -scale)); },
+                     [=](const Expr &x) {
+                         Expr a = x & u8((1 << (f.exp + f.man)) - 1), m = (x & u8((1 << f.man) - 1)) | u8(1 << f.man);
+                         Expr mag = cast<int8_t>(min(a, m) << saturating_sub(a >> f.man, u8(1)));
+                         return f.is_signed ? select(x >= u8(1 << (f.exp + f.man)), -mag, mag) : mag;
+                     }}
+        .with_types(Int(8), UInt(8))
+        .with_ranges(ApproximationRange(f.is_signed ? -top : 0, top), ApproximationRange(0, (1 << f.bits()) - 1))
+        .with_lossless();
+}
+
 // Codes x <-> their low `low` bits, unsigned ("low"), and the rest, a
 // multiple of 2^low ("high"): x = (x & ~m) + (x & m), so the decode is a sum
 // (GGML's q5 codes: a nibble and a fifth bit, stored apart; the sum lets a
