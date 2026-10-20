@@ -1240,7 +1240,10 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
         // Workaround for https://github.com/halide/Halide/issues/9182
         // TODO: Revisit for a better solution of compiler-rt equivalent
         llvm_func->addFnAttr("no-builtins");
-    } else if (f.attributes & LoweredFunc::Attribute::SME_NONSTREAMING_TASK) {
+    } else if (f.attributes & (LoweredFunc::Attribute::SME_STREAMING_TASK |
+                               LoweredFunc::Attribute::SME_NONSTREAMING_TASK)) {
+        // A task can have its own vscale_range, which would be lost if it
+        // were inlined into its caller.
         llvm_func->addFnAttr(llvm::Attribute::NoInline);
     }
 

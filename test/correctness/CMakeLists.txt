@@ -323,6 +323,7 @@ tests(
     interleave.cpp
     interleave_rgb.cpp
     interleave_x.cpp
+    internal_linkage.cpp
     interval.cpp
     intrinsics.cpp
     invalid_gpu_loop_nests.cpp
