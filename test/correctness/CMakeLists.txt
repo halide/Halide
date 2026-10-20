@@ -300,6 +300,7 @@ tests(
     histogram.cpp
     histogram_equalize.cpp
     hoist_invariants.cpp
+    hoist_invariants_funcs.cpp
     hoist_loop_invariant_if_statements.cpp
     hoist_storage.cpp
     hoist_storage_extern.cpp
