@@ -176,13 +176,8 @@ inline bool product_over_sum(const Expr &e) {
     return m && (m->a.as<Internal::Add>() || m->b.as<Internal::Add>() || product_over_sum(m->a) || product_over_sum(m->b));
 }
 
-// Which calls a split is on: of the Funcs fs (by name), or any call `is` picks.
+// Which calls a split is on: any call `is` picks.
 using CallTest = std::function<bool(const Internal::Call *)>;
-inline CallTest call_of(const std::vector<Func> &fs) {
-    return [fs](const Internal::Call *c) {
-        return std::any_of(fs.begin(), fs.end(), [&](const Func &f) { return c->name == f.name(); });
-    };
-}
 
 inline bool calls_any(const Expr &e, const CallTest &is) {
     bool found = false;
@@ -193,7 +188,9 @@ inline bool calls_any(const Expr &e, const CallTest &is) {
     return found;
 }
 inline bool calls_any(const Expr &e, const std::vector<Func> &fs) {
-    return calls_any(e, call_of(fs));
+    return calls_any(e, [&](const Internal::Call *c) {
+        return std::any_of(fs.begin(), fs.end(), [&](const Func &f) { return c->name == f.name(); });
+    });
 }
 
 // Whether a kernel decodes bit fields through constant tables (Tabulate): on
@@ -236,60 +233,22 @@ inline void tables(const std::vector<ApproximationResult> &rs, const std::vector
     }
 }
 
-// Does every term of e make such a call (no product over a sum to expand)?
-inline bool all_terms_call(Expr e, const CallTest &is) {
-    e = Internal::substitute_in_all_lets(e);
-    std::vector<Expr> ts;
-    terms(e, ts);
-    return !product_over_sum(e) && std::all_of(ts.begin(), ts.end(), [&](const Expr &t) { return calls_any(t, is); });
-}
-
-// Splits f's reduction into the part with the calls to fs and the rest: f
-// becomes their sum, each a reduction of its own (so the invariants of each
-// then hoist). Returns {f, undefined} if every term calls fs. It is the
-// hoist_invariants({fs}) proposed in the review of distribute()
-// (halide/Halide#9508), here distribute() then hoist_invariants() (the only
-// use of distribute(): swap it for that).
-inline std::pair<Func, Func> split_on(Stage st, Expr v, const std::string &name, const CallTest &fs) {
-    v = Internal::substitute_in_all_lets(v);
-    const auto *a = v.as<Internal::Add>();
-    const auto *self = a ? a->a.as<Internal::Call>() : nullptr;
-    if (!self || self->name != name) throw std::invalid_argument("split_on: not a sum reduction: " + name);
-    if (all_terms_call(a->b, fs)) return {Func(), Func()};
-    if (product_over_sum(a->b)) st.distribute();
+// Splits s's increment, its `scales` inlined, on the calls `test` picks:
+// returns {the terms with them, the rest}, each a reduction of its own (so
+// the invariants of each then hoist). Only the rowwise act's codes need it
+// (they are no Func of their own to name): the rest split by
+// Stage::hoist_invariants({fs}).
+inline std::pair<Func, Func> split_off(Stage s, const std::vector<Func> &scales, const CallTest &test) {
+    s.eager_inline(scales);
+    if (product_over_sum(Internal::substitute_in_all_lets(s.value()))) s.distribute();
     Func with, rest;
-    for (Func h : st.hoist_invariants()) {
-        Func &part = calls_any(h.update_value(), fs) ? with : rest;
-        if (part.defined()) throw std::invalid_argument("split_on: several terms of each part: " + name);
+    for (Func h : s.hoist_invariants()) {
+        Func &part = calls_any(h.update_value(), test) ? with : rest;
+        if (part.defined()) throw std::invalid_argument("split_off: several terms of each part: " + s.name());
         part = h;
     }
+    if (!with.defined() || !rest.defined()) throw std::invalid_argument("split_off: no terms free of the calls in " + s.name());
     return {with, rest};
-}
-inline std::pair<Func, Func> split_on(Func f, const std::vector<Func> &fs) {
-    auto parts = split_on(f.update(), f.update_value(), f.name(), call_of(fs));
-    return parts.first.defined() ? parts : std::pair{f, Func()};
-}
-
-// The value of f's first update under `cond` (its specialization; all of it
-// if undefined), as transformed so far.
-inline Expr update_value(Func f, const Expr &cond) {
-    const Internal::Definition &d = f.function().update(0);
-    if (!cond.defined()) return d.values()[0];
-    for (const Internal::Specialization &sp : d.specializations()) {
-        if (Internal::equal(sp.condition, cond)) return sp.definition.values()[0];
-    }
-    throw std::invalid_argument("update_value: no specialization of " + f.name());
-}
-
-// The derived-port substitution (q8_1's s, qsi8cx's row sums), in two
-// steps. First dot's update under cond (s), its `scales` inlined, splits on
-// the calls `test` picks (split_on): returns {the terms with them, the
-// rest}, both there.
-inline std::pair<Func, Func> split_off(Stage s, Func dot, const Expr &cond, const std::vector<Func> &scales, const CallTest &test) {
-    s.eager_inline(scales);
-    auto parts = split_on(s, update_value(dot, cond), dot.name(), test);
-    if (!parts.first.defined() || !parts.second.defined()) throw std::invalid_argument("split_off: no terms free of the calls in " + dot.name());
-    return parts;
 }
 
 // Then a term of the rest (e.g. its block sum) reads the first of `ports`
@@ -362,7 +321,9 @@ inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool
     } else {
         blk.update().eager_inline(decoders(rs, Of::Floats));
         if (invariant_factor(blk)) mid = blk.update().hoist_invariants()[0];
-        std::tie(codes, rest) = split_on(mid.defined() ? mid : blk, decoders(rs, Of::Ints, 0, 1));
+        FuncVec parts = (mid.defined() ? mid : blk).update().hoist_invariants({decoders(rs, Of::Ints, 0, 1)});
+        codes = parts[0];
+        rest = parts[1];
         for (Func f : {codes, rest}) {
             f.update().eager_inline(decoders(rs, Of::Ints));
         }
@@ -373,20 +334,23 @@ inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool
 
 // An affine weight's code-free terms, read from the act's derived port where
 // one is their act part: dot's increment (s, out's stage st tile under
-// `cond`) splits on the weight's codes (split_off) into `with`, computed per
-// tile, s then its update, and the rest, d.sums, the weight's min times the
-// act; per block (r.y rfactored to u, d.blk), the min hoists out of the act's
-// block sum, which then reads the act's derived port (read_port: e.g. q8_1's
-// s; d.sum, if none matches). Returns false (dot untouched) if the weight is
-// not affine or the act has no derived port.
+// `cond`) splits on the weight's codes (hoist_invariants) into `with`,
+// computed per tile, s then its update, and the rest, d.sums, the weight's
+// min times the act; per block (r.y rfactored to u, d.blk), the min hoists
+// out of the act's block sum, which then reads the act's derived port
+// (read_port: e.g. q8_1's s; d.sum, if none matches). Returns false (dot
+// untouched) if the weight is not affine or the act has no derived port.
 struct Sums {
     Func sums, blk, sum;
 };
-inline bool derived_sums(Func out, int st, Func dot, Stage &s, const Expr &cond, const RDom &r, const std::vector<ApproximationResult> &rs, Sums &d) {
+inline bool derived_sums(Func out, int st, Stage &s, const RDom &r, const std::vector<ApproximationResult> &rs, Sums &d) {
     d = Sums();
     if (rs.size() < 2 || rs[1].derived_ports().empty() || !affine(rs)) return false;
-    Func with;
-    std::tie(with, d.sums) = split_off(s, dot, cond, decoders(rs, Of::Floats, 0, 1), call_of(decoders(rs, Of::Ints, 0, 1)));
+    s.eager_inline(decoders(rs, Of::Floats, 0, 1));
+    FuncVec parts = s.hoist_invariants({decoders(rs, Of::Ints, 0, 1)});
+    if (!parts[1].defined()) throw std::invalid_argument("derived_sums: no terms free of the codes in " + s.name());
+    Func with = parts[0];
+    d.sums = parts[1];
     d.blk = d.sums.update().rfactor(r.y, Var("u"));
     d.sum = d.blk.update().hoist_invariants()[0];
     if (read_port(d.sum, rs[1].derived_ports(), d.blk)) d.sum = Func();
@@ -509,7 +473,7 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     RVar ry = r.y, rxc("rxc"), rxo("rxo"), rxi("rxi"), ryo("ryo"), ryi("ryi");
     bool aff = affine(rs);
     Sums d;
-    if (derived && derived_sums(out, st, dot, s, cond, r, rs, d)) aff = false;
+    if (derived && derived_sums(out, st, s, r, rs, d)) aff = false;
     int per = integer ? 4 : 1, vec = t.natural_vector_size<int8_t>();
     s.split(r.x, rxc, rxo, vec).split(rxo, rxo, rxi, per);
     Func blk = s.rfactor({{rxo, lane}, {ry, u}});
@@ -688,7 +652,7 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     RVar ry = r.y, rxc("rxc"), rxk("rxk"), ryo("ryo"), ryi("ryi");
     bool aff = affine(rs);
     Sums d;
-    if (derived && derived_sums(out, st, dot, s, cond, r, rs, d)) aff = false;
+    if (derived && derived_sums(out, st, s, r, rs, d)) aff = false;
     s.split(r.x, rxc, rxk, 8);
     Func blk = s.rfactor(ry, u);
     Func rest, mid, codes = block_dot(blk, rs, true, rest, mid, aff);
@@ -868,7 +832,7 @@ inline void metal_flat(Func out, Func dot, const RDom &r, const std::vector<Func
 // the codes' dot (int32), the other the weight's code sum, read from its
 // derived port (read_port: the row sums its encoder stored),
 // each times its scales once per output. Returns the codes' dot.
-inline Func rowwise_dot(Stage s, Func dot, const Expr &cond, const std::vector<ApproximationResult> &rs) {
+inline Func rowwise_dot(Stage s, Func dot, const std::vector<ApproximationResult> &rs) {
     std::string m = dot.args()[1].name();
     CallTest act_codes = [m](const Internal::Call *c) {
         if ((c->call_type != Internal::Call::Halide && c->call_type != Internal::Call::Image) || !c->type.is_int()) return false;
@@ -881,7 +845,7 @@ inline Func rowwise_dot(Stage s, Func dot, const Expr &cond, const std::vector<A
         }
         return row && reduced;
     };
-    auto [with, sums] = split_off(s, dot, cond, decoders(rs, Of::Floats), act_codes);
+    auto [with, sums] = split_off(s, decoders(rs, Of::Floats), act_codes);
     Func codes = with.change_type(Int(32)), sum = sums.change_type(Int(32));
     if (!read_port(sum, rs[0].derived_ports(), sums)) throw std::invalid_argument("rowwise_dot: the weight's code sum matches none of its derived ports");
     return codes;
@@ -897,7 +861,7 @@ inline Func rowwise_dot(Stage s, Func dot, const Expr &cond, const std::vector<A
 inline void rowwise_gemv(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, int chunk,
                          const std::vector<ApproximationResult> &rs) {
     Stage s = tile_out(out, st, dot, cond, ts, r, chunk > 0);
-    Func codes = rowwise_dot(s, dot, cond, rs);
+    Func codes = rowwise_dot(s, dot, rs);
     Var n = dot.args()[0], m = dot.args()[1], q("q");
     if (ts.nt > 1) s.vectorize(n);  // the scaling, once per output
     RVar rx = r.x, ry = r.y, rp("rp"), rq("rq"), ri("ri"), ro("ro");
@@ -926,7 +890,7 @@ inline void rowwise_gemv(Func out, int st, Func dot, Expr cond, Tiles ts, const 
 inline void rowwise_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, bool whole_n,
                          const std::vector<ApproximationResult> &rs, bool guard_m = false) {
     Stage s = tile_out(out, st, dot, cond, ts, r, whole_n, guard_m);
-    Func codes = rowwise_dot(s, dot, cond, rs);
+    Func codes = rowwise_dot(s, dot, rs);
     s.vectorize(dot.args()[0]);  // the scaling, once per output
     Var n = dot.args()[0], m = dot.args()[1], nio("nio"), nii("nii"), mio("mio"), mii("mii");
     RVar rx = r.x, ry = r.y, rxc("rxc"), rxk("rxk");
