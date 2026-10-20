@@ -38,6 +38,7 @@ protected:
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
     bool use_pic() const override;
+    int max_dynamic_shuffle_table_size(const Type &t) const override;
 
     void visit(const Cast *) override;
     void visit(const Call *) override;
@@ -242,6 +243,15 @@ void CodeGen_WebAssembly::visit(const Call *op) {
         {i8_sat(wild_i32x_), i8_sat(i16_sat(wild_i32x_))},
     };
 
+    if (op->is_intrinsic(Call::dynamic_shuffle) &&
+        op->type.is_vector() &&
+        op->args[0].type().lanes() <= max_dynamic_shuffle_table_size(op->type.element_of())) {
+        value = codegen_dynamic_shuffle(op, 16, 16, [&](llvm::Value *table, llvm::Value *index) {
+            return simple_call_intrin("llvm.wasm.swizzle", {table, index}, get_vector_type(i8_t, 16));
+        });
+        return;
+    }
+
     if (op->type.is_vector()) {
         std::vector<Expr> matches;
         for (const Pattern &p : patterns) {
@@ -438,6 +448,14 @@ bool CodeGen_WebAssembly::use_pic() const {
     // wasm-opt in release builds."
     // See https://github.com/halide/Halide/issues/7796
     return true;
+}
+
+int CodeGen_WebAssembly::max_dynamic_shuffle_table_size(const Type &t) const {
+    // i8x16.swizzle indexes a 16-byte table.
+    if (target.has_feature(Target::WasmSimd128) && t.is_int_or_uint() && t.bits() == 8) {
+        return 16;
+    }
+    return 0;
 }
 
 int CodeGen_WebAssembly::native_vector_bits() const {
