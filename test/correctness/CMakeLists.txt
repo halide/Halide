@@ -521,6 +521,7 @@ tests(
     stable_realization_order.cpp
     stack_allocations.cpp
     stage_strided_loads.cpp
+    stage_value.cpp
     stencil_chain_in_update_definitions.cpp
     stmt_to_html.cpp
     storage_folding.cpp
