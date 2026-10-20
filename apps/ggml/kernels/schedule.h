@@ -776,8 +776,10 @@ inline void rowwise_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
 // rows past M repeat the last one), in 8-code pieces, the group's pieces adjacent
 // and its K contiguous (split_storage, as KleidiAI's qai8dxp packs them for
 // smmla): an smmla operand (8 codes of 2 rows) is one dense load, and a tile
-// of 8 rows from 0 mod 8 one stream.
-inline void rowwise_encoder(Func e, const std::vector<ApproximationResult> &rs, const Expr &M, bool pairs) {
+// of 8 rows from 0 mod 8 one stream. One row (gemv) is dense: groups of 1,
+// computed within out's specializations, whose M > 1 or M = 1 folds the
+// layout (no stride left to the loops).
+inline void rowwise_encoder(Func e, Func out, const std::vector<ApproximationResult> &rs, const Expr &M, bool pairs) {
     std::vector<Func> dec = decoders(rs);
     for (const ApproximationResult &res : rs) {
         if (res.encoded[0].name() != e.name()) continue;
@@ -787,9 +789,9 @@ inline void rowwise_encoder(Func e, const std::vector<ApproximationResult> &rs, 
             if (f.name() == e.name()) {
                 // (specializations copy the schedule so far: vectorize first)
                 Var j = f.args()[0], b = f.args()[1], sjo, sji, sro, sri, ro("ro"), ri("ri");
-                Stage s = f.compute_root().vectorize(j);
+                Stage s = f.compute_at(out, Var::outermost()).vectorize(j);
                 if (pairs) {
-                    f.bound(row, 0, select(M > 1, (M + 7) / 8 * 8, M)).split_storage(j, sjo, sji, 8).split_storage(row, sro, sri, 8).reorder_storage(sji, sri, sjo, b, sro);
+                    f.bound(row, 0, select(M > 1, (M + 7) / 8 * 8, M)).split_storage(j, sjo, sji, 8).split_storage(row, sro, sri, select(M > 1, 8, 1)).reorder_storage(sji, sri, sjo, b, sro);
                     // 8 rows per task: a cache line's pieces in one task
                     s.specialize(M > 1).split(row, ro, ri, 8, TailStrategy::GuardWithIf).parallel(ro);
                 } else {
@@ -824,7 +826,7 @@ inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom 
     if (dots.size() > 1 || blocks[2] > 1) throw std::invalid_argument("rowwise: act records of one row");
     int chunk = blocks[3] > 1 ? blocks[4] : 0;
     for (Func e : staged) {
-        rowwise_encoder(e, rs, M, t.has_feature(Target::ARMI8MM));
+        rowwise_encoder(e, out, rs, M, t.has_feature(Target::ARMI8MM));
     }
     Func dot = dots[0];
     Tiles mmla8x8{8, 8, 1, 32, 32, 2}, mmla4x8{4, 8, 1, 32, 32, 2}, mmla4x2{4, 2, 1, 32, 32, 2}, rows{4, 1, 1, 16}, single{1, 1, 1, 16};
@@ -834,7 +836,8 @@ inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom 
         if (!staged.empty()) {
             // acts encoded here, in groups of 8 rows (padded): whole groups
             rowwise_mmla(out, 0, dot, N >= 8 && M > 1 && (chunk == 0 || N % 8 == 0), mmla8x8, r, chunk > 0, rs, true);
-            rowwise_mmla(out, 0, dot, N >= 4 && M > 1, mmla4x8, r, chunk > 0, rs, true);
+            // (records: N >= 4, so the gemv after learns M = 1)
+            rowwise_mmla(out, 0, dot, chunk ? M > 1 : N >= 4 && M > 1, mmla4x8, r, chunk > 0, rs, true);
         } else {
             rowwise_mmla(out, 0, dot, fits(mmla8x8) && (chunk == 0 || N % 8 == 0), mmla8x8, r, chunk > 0, rs);
             rowwise_mmla(out, 0, dot, fits(mmla4x8), mmla4x8, r, chunk > 0, rs);
@@ -845,7 +848,10 @@ inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom 
         rowwise_gemv(out, 0, dot, Expr(), rows, r, chunk, rs);
         return;
     }
-    rowwise_gemv(out, 0, dot, fits(rows), rows, r, 0, rs);
+    // (after the smmla tiles on encoded acts, M = 1: said, so that the acts'
+    // layout folds to dense rows)
+    bool dense = t.has_feature(Target::ARMI8MM) && !staged.empty();
+    rowwise_gemv(out, 0, dot, dense ? N >= rows.nt && M == 1 : fits(rows), rows, r, 0, rs);
     rowwise_gemv(out, 0, dot, Expr(), single, r, 0, rs);
 }
 
