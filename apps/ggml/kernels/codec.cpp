@@ -32,7 +32,11 @@ public:
     }
 
     void generate() {
-        if (quantize && codec.encoded.size() > 1) {
+        if (ggml::format(type).block == 1) {  // values (no blocks): vectorized, the conversion inlined
+            Func f = quantize ? codec.encoded[0] : codec.decoded;
+            Var k = f.args()[0], ko("ko"), ki("ki");
+            f.split(k, ko, ki, 4 * get_target().natural_vector_size<float>(), TailStrategy::GuardWithIf).vectorize(ki);
+        } else if (quantize && codec.encoded.size() > 1) {
             return;             // several outputs share the quantizer: make_codec's default schedule
         } else if (quantize) {  // per block, vectorized as mul_mat's activation encoder
             Func e = codec.result.encoded[0];

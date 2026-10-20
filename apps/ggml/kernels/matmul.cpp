@@ -179,7 +179,7 @@ private:
     // A format in the weight's blocks approximates the view (block-indexed);
     // one without blocks, the flat rows.
     ApproximationResult approximate(Func F, Func flat, const ggml::Format &f, const std::vector<Func> &consumers) const {
-        return f.block == block ? F.approximate_by(f.scheme, consumers) : flat.approximate_by(f.scheme, {F});
+        return f.block == block && block > 1 ? F.approximate_by(f.scheme, consumers) : flat.approximate_by(f.scheme, {F});
     }
 };
 
