@@ -14,6 +14,7 @@
 #include <iosfwd>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -54,6 +55,17 @@ struct ApproximationRange {
     }
 };
 
+/** User-defined tags saying what a port's values are, e.g. "codes" or
+ * "scale" for the components a quantizer splits values into. The core
+ * prescribes no vocabulary: it carries the tags through the combinators (see
+ * Approximation::signature()) and through the Funcs a round trip traces (see
+ * ApproximationTraceNode), so a schedule can ask for the Funcs of a component
+ * by its tag (ApproximationResult::decode_funcs(tag)) rather than by their
+ * types or the shapes of their definitions. A port carrying several
+ * components (e.g. a record of a block's codes and scale) has all of their
+ * tags. */
+using ApproximationTags = std::set<std::string>;
+
 /** A named slot in an Approximation's interface: one Func that flows into or
  * out of a stage. The name identifies the port (for lookups and for
  * name-based combinators like Parallel); `type` and `dimensions`, when set,
@@ -79,22 +91,29 @@ struct ApproximationRange {
  * nothing in generated code. They are checked statically (see
  * check_ranges() and Approximation::describe()) by comparing each producer's
  * guaranteed output range with the consumer's required input range, and
- * dynamically by the helpers in tools/halide_approximation_testing.h. */
+ * dynamically by the helpers in tools/halide_approximation_testing.h.
+ *
+ * `tags`, when set, say what the port's values *are* (see
+ * ApproximationTags); unset tags are inferred (see
+ * Approximation::signature()), and set but empty ones are none. */
 struct ApproximationPort {
     std::string name;
     std::optional<Type> type;
     std::optional<int> dimensions;
     std::optional<ApproximationRange> range;
+    std::optional<ApproximationTags> tags;
 
     ApproximationPort(std::string name, std::optional<Type> type = std::nullopt,
                       std::optional<int> dimensions = std::nullopt,
-                      std::optional<ApproximationRange> range = std::nullopt)
-        : name(std::move(name)), type(type), dimensions(dimensions), range(range) {
+                      std::optional<ApproximationRange> range = std::nullopt,
+                      std::optional<ApproximationTags> tags = std::nullopt)
+        : name(std::move(name)), type(type), dimensions(dimensions), range(range), tags(std::move(tags)) {
     }
     ApproximationPort(const char *name, std::optional<Type> type = std::nullopt,
                       std::optional<int> dimensions = std::nullopt,
-                      std::optional<ApproximationRange> range = std::nullopt)
-        : name(name), type(type), dimensions(dimensions), range(range) {
+                      std::optional<ApproximationRange> range = std::nullopt,
+                      std::optional<ApproximationTags> tags = std::nullopt)
+        : name(name), type(type), dimensions(dimensions), range(range), tags(std::move(tags)) {
     }
 };
 
@@ -565,7 +584,17 @@ public:
      *   for the input names;
      * - undeclared single-Func unit: one input (`inputs`, or "0" if none
      *   were given) and one output with the same name;
-     * - undeclared multi-Func unit: unknown (see ApproximationSignature). */
+     * - undeclared multi-Func unit: unknown (see ApproximationSignature).
+     *
+     * Tags (ApproximationTags) flow in like names: an input port takes the
+     * tags of the port in `inputs`, if it has any, else the declared ones,
+     * else none. An output port whose tags the unit leaves unset inherits,
+     * in order: the tags of the input port of the same name (the same wire);
+     * those of input i, for output i, if there are as many outputs as inputs
+     * (e.g. Pointwise, BlockReshape, a bit packer); else the union of the
+     * inputs' tags (e.g. StructLayout's record of fields). So only the units
+     * that split values into components (quantizers) need to declare tags,
+     * and Derive gives its derived port its own (none by default). */
     ApproximationSignature signature(const ApproximationPorts &inputs = {}) const;
 
     /** A per-element upper bound on |decode(encode(x)) - x|, given the
@@ -632,6 +661,14 @@ struct ApproximationTraceNode {
      * fresh decode-side Funcs it read (see Derive::decode_side()). */
     std::vector<Func> inputs;
     std::vector<std::string> input_names;
+    /** The tags of `ports`, `inputs` and `intermediates` (parallel to each).
+     * An intermediate a child reports has the child's tags for it. Any other
+     * has the tags of the ports it reaches, if they are exactly one (e.g. a
+     * layout's decode of one field); else those of the inputs it reads, if
+     * they are exactly one (e.g. the codes' part of a quantizer's decode);
+     * else the union of the tags of the ports it reaches (none, e.g., for a
+     * partly decoded value). */
+    std::vector<ApproximationTags> port_tags, input_tags, intermediate_tags;
 };
 
 /** The ports produced by one stage during encode or decode, plus the
@@ -644,6 +681,9 @@ struct ApproximationStageOutputs {
     /** The names of `ports` (parallel to it). */
     std::vector<std::string> port_names;
     std::vector<Func> intermediates;
+    /** The tags of `ports` and `intermediates` (parallel to each; see
+     * ApproximationTraceNode). */
+    std::vector<ApproximationTags> port_tags, intermediate_tags;
 };
 
 /** The result of Approximation::encode(): the Func(s) that make up the
@@ -916,6 +956,25 @@ struct ApproximationResult {
      * whole inlinable decode chain into the consumer, leaving calls to
      * `encoded` and to the Funcs left out. Schedule those first. */
     std::vector<Func> decode_funcs() const;
+
+    /** The decode_funcs() tagged `tag` (see tags_of()): e.g. with a
+     * quantizer whose codes port is tagged "codes", decode_funcs("codes") is
+     * the decode of the codes alone, ready to inline into a dot of the codes.
+     * A Func carrying several components (e.g. a record's) has the tags of
+     * each. */
+    std::vector<Func> decode_funcs(const std::string &tag) const;
+
+    /** Does this round trip have `f` (matched by name): is it a port, input
+     * or intermediate of a stage in the decode or the encode trace? */
+    bool owns(const Func &f) const;
+
+    /** The tags of `f` (matched by name) in this round trip: as a port, input
+     * or intermediate of the innermost stage that reports it, in the decode
+     * trace, else in the encode trace (see ApproximationTraceNode); none if
+     * neither has it (see owns()). The tags are those of the definitions
+     * when they were traced: later rewrites (e.g. Pipeline::sever()) do not
+     * change them. */
+    ApproximationTags tags_of(const Func &f) const;
 
     /** The derived ports of this round trip (see DerivedPort), and the one
      * named `name` (an error if there is none, or more than one). */
@@ -1301,14 +1360,15 @@ struct Identity {
 struct Derive {
     using Definition = std::function<Func(const std::vector<Func> &)>;
 
-    Derive(std::string port, std::vector<std::string> from, Definition psi);
+    /** The derived port is tagged `tags` (see ApproximationTags). */
+    Derive(std::string port, std::vector<std::string> from, Definition psi, ApproximationTags tags = {});
 
     std::vector<Func> encode(const std::vector<Func> &inputs, const ApproximationPorts &input_ports) const;
     std::vector<Func> decode(const std::vector<Func> &encoded, const ApproximationPorts &input_ports) const;
 
     /** The inputs, then the derived port (type and dimensions left to the
-     * Func psi produces). Unknown if there are no inputs or a `from` port is
-     * missing. */
+     * Func psi produces; tagged tags()). Unknown if there are no inputs or a
+     * `from` port is missing. */
     ApproximationSignature signature(const ApproximationPorts &inputs) const;
 
     bool lossless() const {
@@ -1323,6 +1383,9 @@ struct Derive {
     }
     const std::vector<std::string> &from() const {
         return from_;
+    }
+    const ApproximationTags &tags() const {
+        return tags_;
     }
 
     /** psi applied to `from` (Funcs for the `from` ports, in that order). */
@@ -1339,6 +1402,7 @@ private:
     std::string port_;
     std::vector<std::string> from_;
     Definition psi_;
+    ApproximationTags tags_;
 };
 
 /** The result of match_derived_port(). */

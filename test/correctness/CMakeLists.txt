@@ -21,6 +21,7 @@ tests(
     approximation_derived_ports.cpp
     approximation_parallel.cpp
     approximation_signatures.cpp
+    approximation_tags.cpp
     approximation_testing.cpp
     approximation_trace.cpp
     approximation_unit_forms.cpp
