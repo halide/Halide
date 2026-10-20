@@ -936,11 +936,12 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     if (blocks[0] == 1) {
         // Float weights (no blocks): 4 x 2 tiles (each vector of a row's
         // weights used for both act columns, each act vector for 4 rows), row
-        // pairs, single rows.
+        // pairs, single rows. gemv (M = 1) takes single rows: one weight
+        // stream (row pairs are two, a row apart: 0.65x GGML at K = 14336).
         if (whole || blocks[3] > 1) throw std::invalid_argument("weights without blocks: one row per record, acts too");
         Tiles fg{4, 2, 1, 32, 32, 2}, fp{2, 1, 2, 16}, fr{1, 1, 4, 16};
         flat(out, 0, dots[0], N >= fg.nt && M >= fg.mt, fg, r, t);
-        flat(out, 0, dots[0], N >= fp.nt, fp, r, t);
+        flat(out, 0, dots[0], N >= fp.nt && M > 1, fp, r, t);
         flat(out, 0, dots[0], Expr(), fr, r, t);
         return;
     }
