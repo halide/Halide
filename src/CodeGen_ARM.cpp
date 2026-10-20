@@ -2635,6 +2635,7 @@ void CodeGen_ARM::visit(const Call *op) {
                                   "llvm.arm.neon.vtbl" + std::to_string(regs);
         value = codegen_dynamic_shuffle(op, regs * reg_lanes, slice_lanes, [&](Value *table, Value *index) {
             vector<Value *> args;
+            args.reserve(regs + 1);
             for (int i = 0; i < regs; i++) {
                 args.push_back(slice_vector(table, i * reg_lanes, reg_lanes));
             }
