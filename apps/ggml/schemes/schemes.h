@@ -52,6 +52,7 @@ inline Format format(const std::string &spec, bool aos = false, bool scaled = fa
     if (type == "qsi8cx" && codes.empty()) return {qsi8cx(lay, blocks, indexed), QK, rows, chunk, true};
     if (type == "qai8dx" && codes.empty()) return {qai8dx(lay, blocks, indexed), QK, rows, chunk, true};
     if (type == "f16" && t.size() == 1) return {fp16()};
+    if (type == "bf16" && t.size() == 1) return {bf16()};
     if (type == "f32" && t.size() == 1) return {};
     throw std::invalid_argument("unknown format " + spec);
 }

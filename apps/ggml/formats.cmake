@@ -49,6 +49,8 @@ set(GGML_FORMATS
     "qsi8cx codec,mul_mat qai8dx,f32:qai8dx"
     "qsi8cx.4x8 codec,mul_mat qai8dx,f32:qai8dx"
     "qai8dx codec"
+    "f16 codec,vec_dot,mul_mat f16,f32,f32:f16"
+    "bf16 codec,vec_dot,mul_mat bf16,f32,f32:bf16"
     "q4_0 mul_mat f32,f16,q8_0 metal"
     "q4_0.soa mul_mat f32,f16,q8_0 metal"
     "q8_0 mul_mat f32,f16,q8_0 metal"

@@ -92,8 +92,8 @@ activations for quantized weights; Metal's mul_mv has no quantized x f16 kernels
 ## Formats and codecs
 
 A format is a scheme plus its values per encoded record (`schemes/`, mapped from
-its GGML type name in `schemes/schemes.h`; f16 is the `fp16` scheme, f32 has
-none) and one row of `GGML_FORMATS` in `formats.cmake`
+its GGML type name in `schemes/schemes.h`; f16 and bf16 are the `fp16` and
+`bf16` schemes, f32 has none) and one row of `GGML_FORMATS` in `formats.cmake`
 (`type ops [acts [target-features]]`). A type may name two lossless stages
 composed after the quantizer, which knows neither:
 `<ggml type>[.<codes>][.<rows>x<chunk>|.soa]`. The codes pick the integer
@@ -265,6 +265,20 @@ zero point, rounded and clamped, can push a range end up to half a step past
 \[-128, 127\]: argued in `Qai8dxQuant`). `ggml_kleidiai_properties` (ctest)
 checks the bounds, the declared ranges, the row sum and closure on normal,
 one-signed, skewed, outlier, constant and zero rows.
+
+Float weights `f16` and `bf16` are `MiniFloat` schemes (`schemes/common.h`: a
+GGML-free minifloat parameterized by exponent and mantissa bits, bias, sign,
+inf/NaN encoding, overflow and rounding; `binary16` lowers to `Float(16)`,
+`bfloat16` to bit arithmetic stored as `BFloat(16)`) with one value per record.
+Their encoders are bit-exact against `ggml_fp32_to_fp16_row` and
+`ggml_fp32_to_bf16_row_ref` (RNE, NaNs quieted), exhaustively over all 2^32
+floats (`ggml_minifloat_properties`, ctest, which also checks generic shapes
+such as e4m3, e5m2 and e8m0). The acts are GGML's: the weight's own type, f32,
+and f32 converted in-kernel (`f32:f16`, `f32:bf16`). Without blocks, vec_dot and
+mul_mat take `flat` (`schedule.h`): f32 accumulators vectorized along K, the
+conversions inlined (`fmlal`/`fmlal2` for f16 x f16; `fcvtl` or `shll` widening
+otherwise), mul_mat on 4 x 2, pair and single-row tiles. GGML's `f16` vec_dot
+accumulates in f16 on ARM (`--check` models it); ours accumulates in f32.
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds
