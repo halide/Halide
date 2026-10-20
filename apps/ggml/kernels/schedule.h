@@ -716,23 +716,32 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     tables(rs, {blk, mid, codes, rest}, LoopLevel(acc, ryo));
 }
 
+// The Funcs of e's encoder: the intermediates of the result that encodes e,
+// minus its decode Funcs.
+inline std::vector<Func> encoder_funcs(Func e, const std::vector<ApproximationResult> &rs) {
+    std::vector<Func> dec = decoders(rs), tab = decoders(rs, Of::Tables), fs;
+    dec.insert(dec.end(), tab.begin(), tab.end());
+    for (const ApproximationResult &res : rs) {
+        for (Func f : res.encoded[0].name() == e.name() ? res.intermediates : std::vector<Func>{}) {
+            if (std::none_of(dec.begin(), dec.end(), [&](const Func &d) { return d.name() == f.name(); })) fs.push_back(f);
+        }
+    }
+    return fs;
+}
+
 // An encoder computed per record (each block of values), vectorized: the
 // Funcs with an element per value (e.g. the codes, packed bytes) across their
 // elements, and its reductions (e.g. the block's scale) across the block.
 inline void encoder(Func e, const std::vector<ApproximationResult> &rs) {
-    std::vector<Func> dec = decoders(rs), tab = decoders(rs, Of::Tables);
-    dec.insert(dec.end(), tab.begin(), tab.end());
-    for (const ApproximationResult &res : rs) {
-        for (Func f : res.encoded[0].name() == e.name() ? res.intermediates : std::vector<Func>{}) {
-            if (f.name() == e.name() || std::any_of(dec.begin(), dec.end(), [&](const Func &d) { return d.name() == f.name(); })) continue;
-            if (f.dimensions() > e.dimensions()) {
-                f.compute_at(e, e.args()[0]).vectorize(f.args()[0]);
-                for (int u = 0; u < f.num_update_definitions(); u++) {
-                    f.update(u).vectorize(f.args()[0]);
-                }
-            } else if (f.has_update_definition()) {
-                f.compute_at(e, e.args()[0]).update().atomic().vectorize(f.rvars()[0]);
+    for (Func f : encoder_funcs(e, rs)) {
+        if (f.name() == e.name()) continue;
+        if (f.dimensions() > e.dimensions()) {
+            f.compute_at(e, e.args()[0]).vectorize(f.args()[0]);
+            for (int u = 0; u < f.num_update_definitions(); u++) {
+                f.update(u).vectorize(f.args()[0]);
             }
+        } else if (f.has_update_definition()) {
+            f.compute_at(e, e.args()[0]).update().atomic().vectorize(f.rvars()[0]);
         }
     }
 }
@@ -944,35 +953,30 @@ inline void rowwise_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
 // computed within out's specializations, whose M > 1 or M = 1 folds the
 // layout (no stride left to the loops).
 inline void rowwise_encoder(Func e, Func out, const std::vector<ApproximationResult> &rs, const Expr &M, bool pairs) {
-    std::vector<Func> dec = decoders(rs);
-    for (const ApproximationResult &res : rs) {
-        if (res.encoded[0].name() != e.name()) continue;
-        for (Func f : res.intermediates) {
-            if (std::any_of(dec.begin(), dec.end(), [&](const Func &d) { return d.name() == f.name(); })) continue;
-            Var row = f.args().back();
-            if (f.name() == e.name()) {
-                // (specializations copy the schedule so far: vectorize first)
-                Var j = f.args()[0], b = f.args()[1], sjo, sji, sro, sri, ro("ro"), ri("ri");
-                Stage s = f.compute_at(out, Var::outermost()).vectorize(j);
-                if (pairs) {
-                    f.bound(row, 0, select(M > 1, (M + 7) / 8 * 8, M)).split_storage(j, sjo, sji, 8).split_storage(row, sro, sri, select(M > 1, 8, 1)).reorder_storage(sji, sri, sjo, b, sro);
-                    // 8 rows per task: a cache line's pieces in one task
-                    s.specialize(M > 1).split(row, ro, ri, 8, TailStrategy::GuardWithIf).parallel(ro);
-                } else {
-                    s.specialize(M > 1).parallel(row);
-                }
-            } else if (f.has_update_definition()) {
-                // per lane (a value's place in its block) over the blocks, one
-                // vector of each, then across the lanes once per row
-                Var u("u");
-                RVar rx = f.rvars()[0];
-                Func lanes = f.update().rfactor(rx, u);
-                lanes.compute_at(f, row).vectorize(u).update().vectorize(u);
-                Stage(f.compute_root()).specialize(M > 1).parallel(row);
-                f.update().specialize(M > 1).parallel(row);
-            } else if (f.dimensions() == 1) {
-                f.compute_root();
+    for (Func f : encoder_funcs(e, rs)) {
+        Var row = f.args().back();
+        if (f.name() == e.name()) {
+            // (specializations copy the schedule so far: vectorize first)
+            Var j = f.args()[0], b = f.args()[1], sjo, sji, sro, sri, ro("ro"), ri("ri");
+            Stage s = f.compute_at(out, Var::outermost()).vectorize(j);
+            if (pairs) {
+                f.bound(row, 0, select(M > 1, (M + 7) / 8 * 8, M)).split_storage(j, sjo, sji, 8).split_storage(row, sro, sri, select(M > 1, 8, 1)).reorder_storage(sji, sri, sjo, b, sro);
+                // 8 rows per task: a cache line's pieces in one task
+                s.specialize(M > 1).split(row, ro, ri, 8, TailStrategy::GuardWithIf).parallel(ro);
+            } else {
+                s.specialize(M > 1).parallel(row);
             }
+        } else if (f.has_update_definition()) {
+            // per lane (a value's place in its block) over the blocks, one
+            // vector of each, then across the lanes once per row
+            Var u("u");
+            RVar rx = f.rvars()[0];
+            Func lanes = f.update().rfactor(rx, u);
+            lanes.compute_at(f, row).vectorize(u).update().vectorize(u);
+            Stage(f.compute_root()).specialize(M > 1).parallel(row);
+            f.update().specialize(M > 1).parallel(row);
+        } else if (f.dimensions() == 1) {
+            f.compute_root();
         }
     }
 }
