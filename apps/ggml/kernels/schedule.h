@@ -647,6 +647,24 @@ inline void blocked_rows(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     regs(acc.compute_at(tile_at(out, st)), {n}, {bacc, m, mi, mo});
 }
 
+// An i8mm stage's 2 x 2 sub-tiles (smmla's results): n and m split in 2
+// (nio, nii; mio, mii), guarded (this code is also in other tiles' branches,
+// never run there, whose bounds must not grow past their tiles), the loops
+// `order` (innermost first), each sub-tile's 4 lanes vectorized, the
+// sub-tiles unrolled.
+inline Stage sub_tiles(Stage s, Var n, Var m, const std::vector<VarOrRVar> &order) {
+    Var nio("nio"), nii("nii"), mio("mio"), mii("mii");
+    s.split(n, nio, nii, 2, TailStrategy::GuardWithIf).split(m, mio, mii, 2, TailStrategy::GuardWithIf);
+    return s.reorder(order).vectorize(nii).vectorize(mii).unroll(nio).unroll(mio);
+}
+
+// f stored in sub-tiles: each 4 dense lanes, then the sub-tiles, then `outer`.
+inline Func sub_tile_storage(Func f, Var n, Var m, std::vector<Var> outer = {}) {
+    Var sno, sni, smo, smi;
+    outer.insert(outer.begin(), {sni, smi, sno, smo});
+    return f.split_storage(n, sno, sni, 2).split_storage(m, smo, smi, 2).reorder_storage(outer);
+}
+
 // The integer path on i8mm smmla (2 x 2 x 8 matrix-multiply tiles): nt x mt
 // tiles of 2 x 2 sub-tiles, each 4 dense lanes of the intermediates' storage
 // (split_storage), so the tile's accumulators stay in registers.
@@ -663,32 +681,20 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     Func rest, mid, codes = block_dot(blk, rs, true, rest, mid, aff);
     s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
     Func acc = s.rfactor(ryi, bacc);
-    // 2 x 2 sub-tiles (loops `order`, innermost first), guarded: this code is
-    // also in other tiles' branches (never run there), whose bounds must not
-    // grow past their tiles
-    auto sub = [&](Stage st, const std::vector<VarOrRVar> &order, const std::vector<VarOrRVar> &unrolled) {
-        st.split(n, nio, nii, 2, TailStrategy::GuardWithIf).split(m, mio, mii, 2, TailStrategy::GuardWithIf);
-        st.reorder(order).vectorize(nii).vectorize(mii).unroll(nio).unroll(mio);
-        for (const VarOrRVar &v : unrolled) {
-            st.unroll(v);
-        }
-        return st;
-    };
     s.vectorize(n, 2, TailStrategy::GuardWithIf).unroll(n).unroll(m);
     for (Func f : {acc, blk, codes, mid}) {
         if (!f.defined()) continue;
-        Var x = f.args()[2], sno, sni, smo, smi;  // x: bacc or u
-        f.split_storage(n, sno, sni, 2).split_storage(m, smo, smi, 2).reorder_storage(sni, smi, sno, smo, x);
-        sub(f, {nii, mii, nio, mio, x}, {x});
+        Var x = f.args()[2];  // x: bacc or u
+        sub_tiles(sub_tile_storage(f, n, m, {x}), n, m, {nii, mii, nio, mio, x}).unroll(x);
         // per block (per 2 rows, tall tiles keep the weight's codes live and spill)
         if (x.name() == u.name()) f.compute_at(acc, ryo).bound_storage(u, ts.interleave);
     }
     acc.compute_at(tile_at(out, st));
-    sub(acc.update(), {nii, mii, nio, mio, bacc, ryo}, {bacc});
+    sub_tiles(acc.update(), n, m, {nii, mii, nio, mio, bacc, ryo}).unroll(bacc);
     for (Func f : {blk, mid}) {
-        if (f.defined()) sub(f.update(), {nii, mii, nio, mio, u}, {u});
+        if (f.defined()) sub_tiles(f.update(), n, m, {nii, mii, nio, mio, u}).unroll(u);
     }
-    sub(codes.update(), {rxk, nii, mii, rxc, nio, mio, u}, {rxc, u}).atomic().vectorize(rxk);
+    sub_tiles(codes.update(), n, m, {rxk, nii, mii, rxc, nio, mio, u}).unroll(rxc).unroll(u).atomic().vectorize(rxk);
     if (rest.defined()) {  // the act's block sum, once per act column (n vectorized)
         regs(rest.compute_at(acc, ryo).bound_storage(u, ts.interleave), {n}, {m, u});
         rest.update().reorder(rxk, rxc, n, m, u).atomic().vectorize(rxk).vectorize(rxc);
@@ -900,14 +906,9 @@ inline void rowwise_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     Stage s = tile_out(out, st, dot, cond, ts, r, whole_n, guard_m);
     Func codes = rowwise_dot(s, dot, cond, rs);
     s.vectorize(dot.args()[0]);  // the scaling, once per output
-    Var n = dot.args()[0], m = dot.args()[1], nio("nio"), nii("nii"), mio("mio"), mii("mii"), sno, sni, smo, smi;
+    Var n = dot.args()[0], m = dot.args()[1], nio("nio"), nii("nii"), mio("mio"), mii("mii");
     RVar rx = r.x, ry = r.y, rxc("rxc"), rxk("rxk");
-    auto sub = [&](Stage st, const std::vector<VarOrRVar> &order) {
-        st.split(n, nio, nii, 2, TailStrategy::GuardWithIf).split(m, mio, mii, 2, TailStrategy::GuardWithIf);
-        return st.reorder(order).vectorize(nii).vectorize(mii).unroll(nio).unroll(mio);
-    };
-    codes.split_storage(n, sno, sni, 2).split_storage(m, smo, smi, 2).reorder_storage(sni, smi, sno, smo);
-    sub(codes, {nii, mii, nio, mio});
+    sub_tiles(sub_tile_storage(codes, n, m), n, m, {nii, mii, nio, mio});
     codes.compute_at(tile_at(out, st));
     if (guard_m) {
         // (a constant under cond; M = 1, the gemv, needs only its row)
@@ -915,7 +916,7 @@ inline void rowwise_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     }
     Stage cu = codes.update();
     cu.split(rx, rxc, rxk, 8);
-    sub(cu, {rxk, nii, mii, nio, mio, rxc, ry}).unroll(rxc).atomic().vectorize(rxk);
+    sub_tiles(cu, n, m, {rxk, nii, mii, nio, mio, rxc, ry}).unroll(rxc).atomic().vectorize(rxk);
 }
 
 // A rowwise act encoded in the pipeline (qai8dx's codes e): its row ranges
