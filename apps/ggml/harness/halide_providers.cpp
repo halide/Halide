@@ -198,6 +198,16 @@ void register_halide_providers() {
         ggml_type wt = kai ? GGML_TYPE_Q8_0 : type_named(fs.type.c_str()), at = kai ? GGML_TYPE_F32 : type_named(row.at),
                   aq = kai ? GGML_TYPE_Q8_0 : type_named(parse_format(row.aq).type.c_str());
         bool gpu = strstr(row.features, "metal") != nullptr;
+        // f16 accumulation (acc16): 32 f16 lanes, then 3 f16 tree levels, as
+        // GGML's f16 vec_dot, whose results it then equals where GGML has
+        // fp16 arithmetic (else it accumulates in f32) and K % 32 == 0 (GGML
+        // sums the tail apart, in f64; ours joins the lanes' last step)
+        auto narrow = [acc16 = fs.acc16](Kernel &k, const Inputs &in) {
+            if (!acc16) return;
+            k.prec.acc_bits = 11;
+            k.prec.chain = (in.s.K + 31) / 32 + 3;
+            k.prec.ggml_dot = ggml_cpu_has_fp16_va() && in.s.K % 32 == 0;
+        };
         for (bool bench : {false, true}) {
             Argv f = bench ? row.bench : row.checked;
             ggml_vec_dot_t vd = bench ? row.vd_bench : row.vd_checked;
@@ -209,6 +219,7 @@ void register_halide_providers() {
                                            auto k = vec_dot_kernel(vd, in);
                                            k->path = "halide";
                                            if (aq != at) k->prec.act_quant = aq;
+                                           narrow(*k, in);
                                            return k;
                                        }});
             }
@@ -224,6 +235,7 @@ void register_halide_providers() {
                                            k->path = gpu ? "halide:metal" : "halide";
                                            if (aq != at) k->prec.act_quant = aq;
                                            if (kai) k->prec.act_block = k->prec.w_block = s.K;  // as ggml-cpu-kleidiai's
+                                           narrow(*k, in);
                                            size_t wbytes = ggml_row_size(wt, s.K) * s.N;
                                            // w's ports, a's, then out
                                            int nw = 0;

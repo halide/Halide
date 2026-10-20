@@ -8,6 +8,7 @@
 
 #include <cmath>
 #include <map>
+#include <sstream>
 #include <stdexcept>
 
 namespace ggml {
@@ -225,6 +226,52 @@ private:
         return Pointwise{name(), [=](const Expr &x) { return mf.encode(x); }, [=](const Expr &x) { return mf.decode(x); }}
             .with_types(Float(32), type())
             .with_error_bound([=](const Expr &x) { return max(abs(cast<double>(x)) * Expr(std::ldexp(1.0, -(mf.man + k))), Expr(std::ldexp(1.0, 1 - k - (mf.bias + mf.man)))); });
+    }
+};
+
+// Accumulate: a reduction (a Func with update definitions, e.g. a sum)
+// computed at the narrower float `type` (Float(16), BFloat(16)): its value
+// and every partial sum rounded to `type`, in the order the reduction adds
+// them (as scheduled: rfactor and split decide that order, so this unit is
+// applied to the Funcs whose partial sums are to be rounded). Implemented as
+// Func::change_type(type, unsafe = true): change_type's check proves exact
+// integer accumulations only, so this unit is what declares the value
+// change. Encode retypes the reduction (its update schedules kept; the input
+// Func becomes change_type's cast-back wrapper of it, which approximate_by
+// leaves without consumers), decode widens it back to `from`. Lossy; no
+// error_bound Func: with u = 2^-(mantissa bits + 1), a sum of n terms is
+// within ((1 + u)^n - 1) * sum |term| of the exact one (each partial sum
+// rounded once: change_type fuses a product of `type` values into it, an
+// fma, as fmla), until a partial sum passes `type`'s largest finite value
+// (inf). The rounding order is the schedule's, so it needs strict_float.
+struct Accumulate {
+    Type type, from = Float(32);
+
+    std::string name() const {
+        return "accumulate_" + std::string(type.is_bfloat() ? "bf" : "f") + std::to_string(type.bits());
+    }
+    ApproximationSignature signature(const ApproximationPorts &in) const {
+        ApproximationPort i = in.empty() ? ApproximationPort("values") : in[0];
+        i.type = from;
+        return {{i}, {ApproximationPort("partials", type, i.dimensions)}};
+    }
+    Func encode(const Func &in) const {
+        if (!type.is_float() || in.type() != from || !in.has_update_definition()) {
+            throw std::invalid_argument("Accumulate: a reduction of " + type_name(from) + " values, to a float type");
+        }
+        return Func(in).change_type(type, /*unsafe=*/true);
+    }
+    Func decode(const Func &e) const {
+        Func d(e.name() + "_wide");
+        d(_) = cast(from, e(_));
+        return d;
+    }
+
+private:
+    static std::string type_name(Type t) {
+        std::ostringstream s;
+        s << t;
+        return s.str();
     }
 };
 

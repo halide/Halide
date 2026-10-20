@@ -279,6 +279,18 @@ mul_mat take `flat` (`schedule.h`): f32 accumulators vectorized along K, the
 conversions inlined (`fmlal`/`fmlal2` for f16 x f16; `fcvtl` or `shll` widening
 otherwise), mul_mat on 4 x 2, pair and single-row tiles. GGML's `f16` vec_dot
 accumulates in f16 on ARM (`--check` models it); ours accumulates in f32.
+`f16.acc16` (vec_dot, mul_mat; f16 and `f32:f16` acts) is the same algorithm
+with the weight format's `acc`, an `Accumulate` (`schemes/common.h`: a reduction
+at a narrower float, `Func::change_type(type, unsafe = true)`, declared lossy),
+which `flat_tree` (`schedule.h`) applies with `approximate_by` to GGML's f16
+partial sums: K split by 32, an rfactor chain over the step's lanes (4
+accumulators of 8; per step one f16 `fmla.8h`, the product fused by
+change_type), the accumulators summed (0 + 2) + (1 + 3) in f16, then widened and
+summed in f32 as GGML's `vaddvq`. Any format of one 16-bit float per value can
+take it. Its rows need `strict_float` (the generator throws without it; LLVM
+would otherwise reassociate the tree), and `--check` compares it bit-exact with
+GGML's f16 vec_dot where the CPU has fp16 arithmetic and K % 32 == 0 (GGML sums
+the rest in f64; ours in f16).
 
 Each library has two variants: `checked` (default target features; asserts and
 bounds queries on; for `--check` and tests) and `bench` (adds
