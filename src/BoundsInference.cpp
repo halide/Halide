@@ -206,14 +206,14 @@ public:
 
     struct DefinitionBounds {
         Expr condition;  // Condition on params only (can't depend on loop variables)
-        vector<Expr> exprs;
+        // Bundle the LHS and RHS so they share one traversal for bounds analysis.
+        Expr exprs;
         vector<ReductionVariable> rvars;
 
         // Schedule-only specializations with identical domains need only
         // one bounds analysis.
         bool can_share_bounds_analysis_with(const DefinitionBounds &other) const {
-            return std::equal(exprs.begin(), exprs.end(), other.exprs.begin(), other.exprs.end(),
-                              [](const Expr &a, const Expr &b) { return equal(a, b); }) &&
+            return equal(exprs, other.exprs) &&
                    std::equal(rvars.begin(), rvars.end(), other.rvars.begin(), other.rvars.end(),
                               [](const ReductionVariable &a, const ReductionVariable &b) {
                                   return a.var == b.var && equal(a.min, b.min) && equal(a.extent, b.extent);
@@ -228,6 +228,8 @@ public:
         vector<int> consumers;
         map<pair<string, int>, Box> bounds;
         vector<DefinitionBounds> definitions;
+        // Full RVar domains, selected by specialization condition. The same
+        // RVar name can have a different min or max in each definition.
         map<string, Interval> rvars;
         string stage_prefix;
         size_t fused_group_index;
@@ -290,19 +292,22 @@ public:
             DefinitionBounds bounds;
             bounds.condition = default_condition;
             bounds.rvars = def.schedule().rvars();
+            vector<Expr> exprs;
             if (is_update) {
-                bounds.exprs = def.args();
+                exprs = def.args();
             }
-            bounds.exprs.insert(bounds.exprs.end(), def.values().begin(), def.values().end());
+            exprs.insert(exprs.end(), def.values().begin(), def.values().end());
+            if (func.extern_definition_proxy_expr().defined()) {
+                exprs.push_back(func.extern_definition_proxy_expr());
+            }
+            bounds.exprs = Call::make(Int(32), Call::bundle, exprs, Call::PureIntrinsic);
 
             vector<Expr> predicates = def.split_predicate();
-            for (Expr &val : bounds.exprs) {
-                val = std::accumulate(
-                    predicates.begin(), predicates.end(), val,
-                    [](const auto &acc, const auto &pred) {
-                        return Call::make(acc.type(), Call::if_then_else, {likely(pred), acc}, Call::PureIntrinsic);
-                    });
-            }
+            bounds.exprs = std::accumulate(
+                predicates.begin(), predicates.end(), bounds.exprs,
+                [](const auto &acc, const auto &pred) {
+                    return Call::make(acc.type(), Call::if_then_else, {likely(pred), acc}, Call::PureIntrinsic);
+                });
             definitions.push_back(std::move(bounds));
 
             Expr remaining_condition = condition;
@@ -321,7 +326,11 @@ public:
             compute_exprs_helper(def, is_update, const_true());
             if (definitions.empty()) {
                 internal_assert(func.has_extern_definition());
-                definitions.push_back({const_true(), {}, {}});
+                vector<Expr> exprs;
+                if (func.extern_definition_proxy_expr().defined()) {
+                    exprs.push_back(func.extern_definition_proxy_expr());
+                }
+                definitions.push_back({const_true(), Call::make(Int(32), Call::bundle, exprs, Call::PureIntrinsic), {}});
             }
 
             const DefinitionBounds &first = definitions.front();
@@ -335,9 +344,6 @@ public:
             }
 
             for (DefinitionBounds &d : definitions) {
-                if (func.extern_definition_proxy_expr().defined()) {
-                    d.exprs.push_back(func.extern_definition_proxy_expr());
-                }
                 for (const ReductionVariable &rv : d.rvars) {
                     Interval bounds(rv.min, simplify(rv.min + rv.extent - 1));
                     auto [it, inserted] = rvars.emplace(rv.var, bounds);
@@ -372,9 +378,7 @@ public:
             } select_to_if_then_else;
 
             for (DefinitionBounds &d : definitions) {
-                for (Expr &e : d.exprs) {
-                    e = select_to_if_then_else(e);
-                }
+                d.exprs = select_to_if_then_else(d.exprs);
             }
         }
 
@@ -583,8 +587,10 @@ public:
             }
 
             if (stage > 0) {
-                // Iteration bounds select the active definition, rather than
-                // covering the domains of definitions that do not execute.
+                // These symbols control how many reduction iterations execute.
+                // If r is [0, 3] in one specialization and [0, 7] in another,
+                // its max must be select(condition, 3, 7), not max(3, 7):
+                // taking the union would run extra iterations in the first case.
                 for (const auto &[var, bounds] : rvars) {
                     string arg = stage_prefix + var;
                     s = LetStmt::make(arg + ".min", bounds.min, s);
@@ -757,6 +763,13 @@ public:
                     Interval definition_bounds(rv.min, simplify(rv.min + rv.extent - 1));
                     if (!equal(stage_bounds.min, definition_bounds.min) ||
                         !equal(stage_bounds.max, definition_bounds.max)) {
+                        // The symbolic bounds describe the current loop level:
+                        // inside a loop over r they may be just [r, r]. Using
+                        // only the full definition domain would make a producer
+                        // compute all iterations at every compute_at site.
+                        // Conversely, intersect with this definition's domain
+                        // so analysis outside the specialization can use its
+                        // exact bounds without resolving stage-wide selects.
                         bounds = Interval::make_intersection(bounds, definition_bounds);
                     }
                     result.push(rv.var, bounds);
@@ -827,10 +840,7 @@ public:
         // Do any pure inlining
         for (auto &s : stages) {
             for (DefinitionBounds &d : s.definitions) {
-                for (Expr &e : d.exprs) {
-                    internal_assert(e.defined());
-                    e = inliner(e);
-                }
+                d.exprs = inliner(d.exprs);
             }
         }
 
@@ -881,12 +891,7 @@ public:
                 for (const DefinitionBounds &d : consumer.definitions) {
                     Scope<Interval> scope;
                     consumer.populate_scope(scope, d);
-                    map<string, Box> definition_boxes;
-                    for (const Expr &e : d.exprs) {
-                        for (const auto &[name, box] : boxes_required(e, scope, func_bounds)) {
-                            merge_boxes(definition_boxes[name], box);
-                        }
-                    }
+                    map<string, Box> definition_boxes = boxes_required(d.exprs, scope, func_bounds);
                     for (auto &[name, box] : definition_boxes) {
                         box.used = box.used.defined() ? simplify(box.used && d.condition) : d.condition;
                         merge_boxes(boxes[name], box);
@@ -1018,24 +1023,30 @@ public:
 
     using IRMutator::visit;
 
-    vector<Expr> conditions;
-    set<const DefinitionBounds *> active_definitions;
+    // Conditions known true along the current path through nested IfThenElses.
+    vector<Expr> branch_conditions;
+    // Definitions whose exact RVar bounds are already bound by an enclosing
+    // branch. Avoid rebinding them inside loops with tighter, localized bounds.
+    set<const DefinitionBounds *> bound_definitions;
 
     Stmt mutate_specialization_branch(Stmt body, const Expr &condition) {
-        conditions.push_back(simplify(condition));
+        branch_conditions.push_back(simplify(condition));
         vector<pair<string, Interval>> bindings;
         vector<const DefinitionBounds *> selected;
+        // Match this IR branch to definitions by proving their specialization
+        // conditions under the current path. Only consider Funcs whose
+        // produce/consume nodes enclose us; their RVar bound symbols are in scope.
         for (const Stage &s : stages) {
             if (s.rvars.empty() || s.definitions.size() == 1 || !in_pipeline.count(s.name)) {
                 continue;
             }
             for (const DefinitionBounds &d : s.definitions) {
-                if (active_definitions.count(&d) ||
+                if (bound_definitions.count(&d) ||
                     !is_const_one(simplify(d.condition, Scope<Interval>::empty_scope(),
-                                           Scope<ModulusRemainder>::empty_scope(), conditions))) {
+                                           Scope<ModulusRemainder>::empty_scope(), branch_conditions))) {
                     continue;
                 }
-                active_definitions.insert(&d);
+                bound_definitions.insert(&d);
                 selected.push_back(&d);
                 for (const ReductionVariable &rv : d.rvars) {
                     bindings.emplace_back(s.stage_prefix + rv.var,
@@ -1046,16 +1057,18 @@ public:
 
         body = mutate(body);
 
-        // Keep exact iteration bounds inside the specialization, so later
-        // allocation analysis need not recover them from stage-wide selects.
+        // Shadow the stage-wide selects with this definition's exact bounds.
+        // For example, an outer r.max = select(c, 3, 7) becomes r.max = 3
+        // inside if (c). Allocation bounds inference can then see a constant
+        // extent for an intermediate computed here, allowing stack allocation.
         for (const auto &[var, bounds] : bindings) {
             body = LetStmt::make(var + ".min", bounds.min, body);
             body = LetStmt::make(var + ".max", bounds.max, body);
         }
         for (const DefinitionBounds *d : selected) {
-            active_definitions.erase(d);
+            bound_definitions.erase(d);
         }
-        conditions.pop_back();
+        branch_conditions.pop_back();
         return body;
     }
 
