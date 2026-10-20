@@ -1041,6 +1041,8 @@ public:
             return op;
         }
 
+        ScopedBinding<> bind(let_vars_in_scope, op->name);
+
         set<string> old_inner_productions;
         inner_productions.swap(old_inner_productions);
 
@@ -1163,10 +1165,7 @@ public:
         }
 
         // Recurse.
-        {
-            ScopedBinding<> bind(let_vars_in_scope, op->name);
-            body = mutate(body);
-        }
+        body = mutate(body);
 
         if (!no_pipelines) {
             // We only care about the bounds of a func if:
