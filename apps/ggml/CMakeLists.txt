@@ -63,6 +63,11 @@ target_include_directories(ggml_kleidiai_properties PRIVATE "${CMAKE_CURRENT_SOU
 target_link_libraries(ggml_kleidiai_properties PRIVATE Halide::Halide Halide::Tools)
 add_test(NAME ggml_kleidiai_properties COMMAND ggml_kleidiai_properties)
 set_tests_properties(ggml_kleidiai_properties PROPERTIES LABELS ggml)
+add_executable(ggml_minifloat_properties schemes/minifloat_properties.cpp)
+target_include_directories(ggml_minifloat_properties PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(ggml_minifloat_properties PRIVATE Halide::Halide Halide::Tools)
+add_test(NAME ggml_minifloat_properties COMMAND ggml_minifloat_properties)
+set_tests_properties(ggml_minifloat_properties PROPERTIES LABELS ggml)
 
 if (TARGET q4_0_q8_0_mul_mat_checked)
     add_executable(ggml_thread_pool_test runtime/thread_pool_test.cpp)

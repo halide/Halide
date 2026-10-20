@@ -14,6 +14,222 @@ namespace ggml {
 
 using namespace Halide;
 
+// ---------------------------------------------------------------------------
+// MiniFloat: a generic float format unit, independent of GGML (a candidate
+// for the core: it uses nothing below this section).
+// ---------------------------------------------------------------------------
+
+// f32 values rounded to a float of `exp` exponent bits (bias `bias`, at most
+// f32's 127) and `man` mantissa bits (with gradual underflow: subnormals),
+// with a sign bit if `is_signed`, stored as its bits in the low bits of an
+// unsigned field (sign, exponent, mantissa), or lowered to Halide's float16_t
+// or bfloat16_t where it is one of theirs (IEEE binary16, bfloat16: to
+// nearest even, overflow to inf). Encode rounds the magnitude by `rounding`
+// (Down, Up: toward -inf, +inf); a rounded magnitude past the largest finite
+// value `overflow`s: to inf (Infinity; NaN for NaNOnly formats, which have no
+// inf) or to the largest finite value (Saturate). `specials`: IEEE (the top
+// exponent is inf and NaN; a NaN keeps its payload's top bits, quieted, as
+// hardware converts), NaNOnly (only the all-ones magnitude is NaN, as OCP's
+// e4m3fn and e8m0) or None (every code finite; NaN inputs unspecified).
+// Unsigned formats encode x <= 0 as 0. A format with no mantissa (e8m0) has
+// no zero or subnormals: code 0 is 2^-bias. Decode is exact (NaNs quieted;
+// values past f32's range, inf), and within half an ulp of x (rounding to
+// nearest; else an ulp) for finite x up to the largest finite value (unsigned:
+// x >= 0).
+struct MiniFloat {
+    enum class Specials { IEEE,
+                          NaNOnly,
+                          None };
+    enum class Overflow { Infinity,
+                          Saturate };
+    enum class Rounding { NearestEven,
+                          NearestAway,
+                          TowardZero,
+                          Down,
+                          Up };
+
+    int exp, man, bias;
+    bool is_signed = true;
+    Specials specials = Specials::IEEE;
+    Overflow overflow = Overflow::Infinity;
+    Rounding rounding = Rounding::NearestEven;
+
+    static MiniFloat binary16() {
+        return {5, 10, 15};
+    }
+    static MiniFloat bfloat16() {
+        return {8, 7, 127};
+    }
+
+    // "fp16", "bf16", else e.g. "e4m3" ("ue8m0": unsigned).
+    std::string name() const {
+        if (native_fp16()) return "fp16";
+        if (native_bf16()) return "bf16";
+        return std::string(is_signed ? "" : "u") + "e" + std::to_string(exp) + "m" + std::to_string(man);
+    }
+    int bits() const {
+        return is_signed + exp + man;
+    }
+    // The bits' field, whatever the stored type.
+    Type field_type() const {
+        return UInt(bits() <= 8 ? 8 : bits() <= 16 ? 16 :
+                                                     32);
+    }
+    // The stored type: Halide's float where there is one, else the field.
+    Type type() const {
+        return native_fp16() ? Float(16) : native_bf16() ? BFloat(16) :
+                                                           field_type();
+    }
+
+    // The unit: one Func in (f32), one out (type()), elementwise.
+    Func encode(const Func &in) const {
+        return pointwise().encode(in);
+    }
+    Func decode(const Func &in) const {
+        return pointwise().decode(in);
+    }
+    ApproximationSignature signature(const ApproximationPorts &in) const {
+        return pointwise().signature(in);
+    }
+    Func error_bound(const std::vector<Func> &in, const std::vector<Func> &e) const {
+        return pointwise().error_bound(in, e);
+    }
+
+    // The element-wise conversions.
+    Expr encode(const Expr &x) const {
+        // strict_float: with fast math, LLVM may otherwise fold away an
+        // in-register round trip f32(f16(x)), so a consumer in the same
+        // pipeline (one reading the rounded value) would see x unrounded.
+        if (native_fp16()) return strict_float(cast<float16_t>(x));
+        // (Halide's own f32 -> bf16 does not quiet NaNs: the bits instead)
+        if (native_bf16()) return reinterpret(BFloat(16), encode_bits(x));
+        return encode_bits(x);
+    }
+    Expr decode(const Expr &f) const {
+        if (native_fp16()) return cast<float>(f);
+        // (as bits, so Halide's bf16 emulation does not warn: the same shift)
+        if (native_bf16()) return decode_bits(reinterpret<uint16_t>(f));
+        return decode_bits(f);
+    }
+
+    // The bits, from f32's: its mantissa rounded at our last bit, its exponent
+    // rebiased (below our normal range: its mantissa, with the implicit bit,
+    // shifted to our subnormals'; f32's subnormals as exponent 1).
+    Expr encode_bits(const Expr &x) const {
+        check();
+        const int shift = 23 - man, off = 127 - bias;
+        const uint32_t emax = (1u << exp) - 1, mmask = (1u << man) - 1, magnitudes = (1u << (exp + man)) - 1;
+        const uint32_t top = specials == Specials::IEEE ? (emax << man) - 1 : specials == Specials::NaNOnly ? magnitudes - 1 :
+                                                                                                              magnitudes;
+        const bool wide = exp < 8 || off;  // not f32's exponents
+        // (NaNs and signs from the bits: fast math may assume no NaNs)
+        Expr u = reinterpret<uint32_t>(cast<float>(x)), a = u & u32(0x7fffffff), neg = (u >> 31) == u32(1);
+        Expr nan = a > u32(0x7f800000);
+        auto rounded = [&](const Expr &v, const Expr &sh) {
+            Expr half = u32(1) << (sh - 1), all = (u32(1) << sh) - 1, r;
+            switch (rounding) {
+            case Rounding::NearestEven:
+                r = half - 1 + ((v >> sh) & 1);
+                break;
+            case Rounding::NearestAway:
+                r = half;
+                break;
+            case Rounding::TowardZero:
+                r = u32(0);
+                break;
+            case Rounding::Down:
+                r = select(neg, all, u32(0));
+                break;
+            case Rounding::Up:
+                r = select(neg, u32(0), all);
+                break;
+            }
+            return (v + r) >> sh;
+        };
+        Expr t = shift ? rounded(a, u32(shift)) : a;
+        if (off) t -= u32((uint32_t)off << man);
+        if (wide) {
+            Expr e = a >> 23, mm = (a & u32(0x7fffff)) | select(e > 0, u32(0x800000), u32(0));
+            Expr sh = cast<uint32_t>(clamp((151 - bias - man) - max(cast<int>(e), 1), 1, 25));
+            t = select(a < u32((uint32_t)(128 - bias) << 23), rounded(mm, sh), t);
+        }
+        // past the largest finite magnitude (f32's exponents with IEEE
+        // specials: inf as is)
+        uint32_t past = overflow == Overflow::Saturate ? top : specials == Specials::IEEE ? emax << man :
+                                                                                            magnitudes;
+        if (wide || specials != Specials::IEEE || overflow == Overflow::Saturate) t = select(t > u32(top), u32(past), t);
+        if (specials == Specials::IEEE && man) {
+            t = select(nan, u32(emax << man) | ((a >> shift) & mmask) | u32(1u << (man - 1)), t);
+        } else if (specials == Specials::NaNOnly) {
+            t = select(nan, u32(magnitudes), t);
+        }
+        if (is_signed) return cast(field_type(), t | ((u >> 31) << (exp + man)));
+        Expr keep = !neg && a != u32(0);
+        if (specials != Specials::None) keep = keep || nan;
+        return cast(field_type(), select(keep, t, u32(0)));
+    }
+    // f32's bits, from ours: the exponent rebiased, the mantissa shifted;
+    // subnormals as mantissa * 2^(1 - bias - man).
+    Expr decode_bits(const Expr &f) const {
+        check();
+        const int shift = 23 - man, off = 127 - bias;
+        const uint32_t emax = (1u << exp) - 1, mmask = (1u << man) - 1, magnitudes = (1u << (exp + man)) - 1;
+        const bool wide = exp < 8 || off;
+        Expr b = cast<uint32_t>(f), e = (b >> man) & u32(emax), m = b & u32(mmask);
+        // (f32's exponents: its top bits)
+        Expr v = wide ? ((off ? e + u32(off) : e) << 23) | (m << shift) : b << shift;
+        if (!man) {
+            v = select(e == u32(0), reinterpret<uint32_t>(Expr((float)std::ldexp(1.0, -bias))), v);
+        } else if (wide) {
+            v = select(e == u32(0), reinterpret<uint32_t>(cast<float>(m) * (float)std::ldexp(1.0, 1 - bias - man)), v);
+        }
+        // (NaNs quieted, as hardware widens fp16; on f32's exponents, as is)
+        if (specials == Specials::IEEE && wide) {
+            v = select(e == u32(emax), u32(0x7f800000) | (m << shift) | select(m != 0, u32(0x400000), u32(0)), v);
+        } else if (specials == Specials::NaNOnly) {
+            v = select((b & u32(magnitudes)) == u32(magnitudes), u32(0x7fc00000), v);
+        }
+        // (f32's exponents: the sign in place, but in NaNOnly's NaN)
+        if (is_signed && (wide || specials == Specials::NaNOnly)) v = v | ((b >> (exp + man)) << 31);
+        return reinterpret<float>(v);
+    }
+
+private:
+    bool native(int e, int m, int b) const {
+        return exp == e && man == m && bias == b && is_signed && specials == Specials::IEEE && overflow == Overflow::Infinity && rounding == Rounding::NearestEven;
+    }
+    bool native_fp16() const {
+        return native(5, 10, 15);
+    }
+    bool native_bf16() const {
+        return native(8, 7, 127);
+    }
+    bool nearest() const {
+        return rounding == Rounding::NearestEven || rounding == Rounding::NearestAway;
+    }
+    static Expr u32(uint32_t v) {
+        return Internal::make_const(UInt(32), v);
+    }
+    void check() const {
+        if (exp < 1 || exp > 8 || man < 0 || man > 23 || bias > 127 || bits() > 32 || (!man && is_signed) ||
+            (!man && specials == Specials::IEEE) || (specials == Specials::None && overflow == Overflow::Infinity)) {
+            throw std::invalid_argument("MiniFloat: unsupported format " + name());
+        }
+    }
+    // Half an ulp (an ulp, if not rounding to nearest), relative to x; below
+    // the normal range, of the least subnormal.
+    Pointwise pointwise() const {
+        check();
+        MiniFloat mf = *this;
+        int k = nearest() ? 1 : 0;
+        return Pointwise{name(), [=](const Expr &x) { return mf.encode(x); }, [=](const Expr &x) { return mf.decode(x); }}
+            .with_types(Float(32), type())
+            .with_error_bound([=](const Expr &x) { return max(abs(cast<double>(x)) * Expr(std::ldexp(1.0, -(mf.man + k))), Expr(std::ldexp(1.0, 1 - k - (mf.bias + mf.man)))); });
+    }
+};
+
+// ---------------------------------------------------------------------------
+
 constexpr int QK = 32;
 
 inline Expr inverse(const Expr &d) {
@@ -231,14 +447,16 @@ inline Approximation scale_by(float k) {
 
 // Round to fp16 (to nearest even): within half an fp16 ulp, relative to x
 // (2^-25 below fp16's normal range); finite inputs below 65520 only. The
-// rounding is strict_float: with fast math, LLVM may otherwise fold away an
-// in-register round trip f32(f16(x)), so a consumer in the same pipeline (a
-// Derive reading the rounded scale) would see x unrounded.
+// rounding is strict_float (see MiniFloat::encode).
 inline Approximation fp16() {
-    return Pointwise{"fp16", [](const Expr &x) { return strict_float(cast<float16_t>(x)); },
-                     [](const Expr &x) { return cast<float>(x); }}
-        .with_types(Float(32), Float(16))
-        .with_error_bound([](const Expr &x) { return max(abs(cast<double>(x)) * Expr(std::ldexp(1.0, -11)), Expr(std::ldexp(1.0, -25))); });
+    return MiniFloat::binary16();
+}
+
+// Round to bf16 (to nearest even; NaNs quieted, keeping their payload's top
+// bits: GGML's ggml_compute_fp32_to_bf16): within half a bf16 ulp, relative
+// to x.
+inline Approximation bf16() {
+    return MiniFloat::bfloat16();
 }
 
 }  // namespace ggml
