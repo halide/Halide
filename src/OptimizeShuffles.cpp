@@ -1,8 +1,10 @@
 #include "OptimizeShuffles.h"
 #include "Bounds.h"
+#include "Buffer.h"
 #include "CSE.h"
 #include "CodeGen_Internal.h"
 #include "ConciseCasts.h"
+#include "ConstantBounds.h"
 #include "ExprUsesVar.h"
 #include "FindIntrinsics.h"
 #include "HexagonAlignment.h"
@@ -135,11 +137,148 @@ public:
         : lut_alignment(lut_alignment) {
     }
 };
+
+class OptimizeSmallTableLookups : public IRMutator {
+    const std::function<int(const Type &)> &max_table_size;
+    Scope<ConstantInterval> bounds;
+
+    using IRMutator::visit;
+
+    // The largest table of the given element type we may turn into a
+    // dynamic_shuffle. The index is narrowed to uint8, so at most 256.
+    int max_entries(const Type &t) const {
+        return std::min(max_table_size(t.element_of()), 256);
+    }
+
+    template<typename LetOrLetStmt>
+    auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
+        Expr value = mutate(op->value);
+        const Type &t = value.type();
+        ScopedBinding<ConstantInterval> bind(t.is_int_or_uint() && !t.is_bool(),
+                                             bounds, op->name,
+                                             constant_integer_bounds(value, bounds));
+        auto body = mutate(op->body);
+        if (value.same_as(op->value) && body.same_as(op->body)) {
+            return op;
+        }
+        return LetOrLetStmt::make(op->name, std::move(value), std::move(body));
+    }
+
+    Expr visit(const Let *op) override {
+        return visit_let(op);
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        return visit_let(op);
+    }
+
+    // Make a dynamic_shuffle that looks up index (already known to be in [0,
+    // table.lanes() - 1]) in table.
+    static Expr make_lookup(const Type &t, const Expr &table, const Expr &index) {
+        int n = table.type().lanes();
+        Expr idx = cast(UInt(8, index.type().lanes()), index);
+        return Call::make(t, Call::dynamic_shuffle, {table, idx, 0, n - 1}, Call::PureIntrinsic);
+    }
+
+    Expr visit(const Call *op) override {
+        if (!op->is_intrinsic(Call::mux) || !op->type.is_vector()) {
+            return IRMutator::visit(op);
+        }
+
+        const int n = (int)op->args.size() - 1;
+        const Expr &index = op->args[0];
+        const Type &it = index.type();
+        if (n < 2 ||
+            it.lanes() != op->type.lanes() ||
+            !it.is_int_or_uint() ||
+            it.bits() < 8 ||
+            n > max_entries(op->type)) {
+            return IRMutator::visit(op);
+        }
+
+        std::vector<Expr> table;
+        table.reserve(n);
+        for (int i = 1; i <= n; i++) {
+            Expr v = op->args[i];
+            if (const Broadcast *b = v.as<Broadcast>()) {
+                v = b->value;
+            }
+            if (!v.type().is_scalar() ||
+                !(v.as<IntImm>() || v.as<UIntImm>() || v.as<FloatImm>())) {
+                return IRMutator::visit(op);
+            }
+            table.push_back(v);
+        }
+
+        Expr idx = mutate(index);
+        if (!ConstantInterval(0, n - 1).contains(constant_integer_bounds(idx, bounds))) {
+            // mux returns the last value for any out-of-range index,
+            // including negative ones, so clamp as unsigned.
+            Type ut = it.with_code(halide_type_uint);
+            idx = min(reinterpret(ut, idx), make_const(ut, n - 1));
+        }
+        return make_lookup(op->type, Shuffle::make_concat(table), idx);
+    }
+
+    Expr visit(const Load *op) override {
+        if (!op->type.is_vector() ||
+            !op->image.defined() ||
+            op->param.defined() ||
+            op->index.as<Ramp>() ||
+            op->index.as<Broadcast>() ||
+            !is_const_one(op->predicate)) {
+            return IRMutator::visit(op);
+        }
+        const int max_n = max_entries(op->type);
+        if (max_n < 2) {
+            return IRMutator::visit(op);
+        }
+
+        Expr index = mutate(op->index);
+        ConstantInterval ib = constant_integer_bounds(index, bounds);
+        if (ib.is_bounded() && ib.min < ib.max && ib.max - ib.min < max_n) {
+            // The shape of an embedded buffer is fixed at compile time (it
+            // is asserted on entry to the pipeline), so we know which
+            // flattened indices are safe to load from.
+            const halide_buffer_t *buf = op->image.raw_buffer();
+            const int64_t elem_bytes = buf->type.bytes();
+            const int64_t base = (int64_t)(buf->begin() - buf->host);
+            const int64_t end = (int64_t)(buf->end() - buf->host);
+            if (elem_bytes == op->type.bytes() &&
+                base % elem_bytes == 0 &&
+                end % elem_bytes == 0 &&
+                ib.min >= base / elem_bytes &&
+                ib.max < end / elem_bytes) {
+                int n = (int)(ib.max - ib.min + 1);
+                Expr table_base = make_const(index.type().element_of(), ib.min);
+                Expr table = op->with(Ramp::make(table_base, make_one(table_base.type()), n),
+                                      const_true(n), ModulusRemainder());
+                Expr idx = index - make_const(index.type(), ib.min);
+                return make_lookup(op->type, table, idx);
+            }
+        }
+        if (index.same_as(op->index)) {
+            return op;
+        }
+        return op->with(index, op->predicate, op->alignment);
+    }
+
+public:
+    OptimizeSmallTableLookups(const std::function<int(const Type &)> &max_table_size)
+        : max_table_size(max_table_size) {
+    }
+};
+
 }  // namespace
 
 Stmt optimize_shuffles(Stmt s, int lut_alignment) {
     s = OptimizeShuffles(lut_alignment)(s);
     return s;
+}
+
+Stmt optimize_small_table_lookups(const Stmt &s,
+                                  const std::function<int(const Type &)> &max_table_size) {
+    return OptimizeSmallTableLookups(max_table_size)(s);
 }
 
 }  // namespace Internal
