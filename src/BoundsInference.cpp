@@ -1264,16 +1264,17 @@ public:
                             }
                             body = LetStmt::make(var + ".min", in.min, body);
                             body = LetStmt::make(var + ".max", in.max, body);
-                        } else if (let_vars_in_scope.contains(var + ".guarded")) {
+                        } else if (let_vars_in_scope.contains(var)) {
                             // If it's not found, we're already in the
                             // scope of the injected let. The let was
                             // probably lifted to an outer level.
-                            // Use a guarded version if it exists, for tighter bounds inference.
-                            Expr val = Variable::make(Int(32), var + ".guarded");
-                            body = LetStmt::make(var + ".min", val, body);
-                            body = LetStmt::make(var + ".max", val, body);
-                        } else if (let_vars_in_scope.contains(var)) {
-                            Expr val = Variable::make(Int(32), var);
+                            Expr val;
+                            if (let_vars_in_scope.contains(var + ".guarded")) {
+                                // Use a guarded version if it exists, for tighter bounds inference.
+                                val = Variable::make(Int(32), var + ".guarded");
+                            } else {
+                                val = Variable::make(Int(32), var);
+                            }
                             body = LetStmt::make(var + ".min", val, body);
                             body = LetStmt::make(var + ".max", val, body);
                         }
