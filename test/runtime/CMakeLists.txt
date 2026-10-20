@@ -56,6 +56,9 @@ if (NOT MSVC)
     # memory_arena.cpp
     halide_define_runtime_internal_test(memory_arena)
 
+    # pointer_table.cpp
+    halide_define_runtime_internal_test(pointer_table)
+
     # string_storage.cpp
     halide_define_runtime_internal_test(string_storage)
 
