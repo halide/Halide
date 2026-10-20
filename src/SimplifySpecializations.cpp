@@ -153,6 +153,76 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
     return result;
 }
 
+bool same_rvars(const vector<ReductionVariable> &a, const vector<ReductionVariable> &b) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < a.size(); i++) {
+        if (a[i].var != b[i].var ||
+            !equal(a[i].min, b[i].min) ||
+            !equal(a[i].extent, b[i].extent)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void collect_definitions(Definition &def, vector<Definition *> &defs) {
+    defs.push_back(&def);
+    for (Specialization &s : def.specializations()) {
+        if (s.definition.defined()) {
+            collect_definitions(s.definition, defs);
+        }
+    }
+}
+
+void uniquify_specialization_rvars(Definition &def) {
+    vector<Definition *> defs;
+    collect_definitions(def, defs);
+    if (defs.size() <= 1) {
+        return;
+    }
+
+    bool rvars_differ = false;
+    for (size_t i = 1; i < defs.size(); i++) {
+        if (!same_rvars(defs[0]->schedule().rvars(), defs[i]->schedule().rvars())) {
+            rvars_differ = true;
+            break;
+        }
+    }
+    if (!rvars_differ) {
+        return;
+    }
+
+    for (size_t i = 0; i < defs.size(); i++) {
+        Definition &d = *defs[i];
+        if (d.schedule().rvars().empty()) {
+            continue;
+        }
+        vector<Split> rename_splits;
+        map<string, Expr> var_renames;
+        for (ReductionVariable &rv : d.schedule().rvars()) {
+            string old_var = rv.var;
+            string new_var = "s" + std::to_string(i) + "." + old_var;
+            rv.var = new_var;
+            var_renames[old_var] = Variable::make(Int(32), new_var);
+            rename_splits.push_back(
+                Split{new_var, old_var, "", 0, Expr(), true, TailStrategy::RoundUp, Split::RenameVar});
+        }
+        for (Expr &arg : d.args()) {
+            arg = substitute(var_renames, arg);
+        }
+        for (Expr &val : d.values()) {
+            val = substitute(var_renames, val);
+        }
+        if (d.predicate().defined()) {
+            d.predicate() = substitute(var_renames, d.predicate());
+        }
+        auto &splits = d.schedule().splits();
+        splits.insert(splits.begin(), rename_splits.begin(), rename_splits.end());
+    }
+}
+
 }  // namespace
 
 void simplify_specializations(map<string, Function> &env) {
@@ -160,6 +230,9 @@ void simplify_specializations(map<string, Function> &env) {
         Function &func = iter.second;
         if (func.definition().defined()) {
             propagate_specialization_in_definition(func.definition(), func.name());
+        }
+        for (size_t i = 0; i < func.updates().size(); i++) {
+            uniquify_specialization_rvars(func.update(i));
         }
     }
 }

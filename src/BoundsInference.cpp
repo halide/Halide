@@ -204,20 +204,12 @@ public:
 
     Inliner inliner;
 
-    struct DefinitionBounds {
-        Expr condition;  // Condition on params only (can't depend on loop variables)
-        // Bundle the LHS and RHS so they share one traversal for bounds analysis.
-        Expr exprs;
-        vector<ReductionVariable> rvars;
+    struct CondValue {
+        Expr cond;  // Condition on params only (can't depend on loop variable)
+        Expr value;
 
-        // Schedule-only specializations with identical domains need only
-        // one bounds analysis.
-        bool can_share_bounds_analysis_with(const DefinitionBounds &other) const {
-            return equal(exprs, other.exprs) &&
-                   std::equal(rvars.begin(), rvars.end(), other.rvars.begin(), other.rvars.end(),
-                              [](const ReductionVariable &a, const ReductionVariable &b) {
-                                  return a.var == b.var && equal(a.min, b.min) && equal(a.extent, b.extent);
-                              });
+        CondValue(const Expr &c, const Expr &v)
+            : cond(c), value(v) {
         }
     };
 
@@ -227,10 +219,8 @@ public:
         string name;
         vector<int> consumers;
         map<pair<string, int>, Box> bounds;
-        vector<DefinitionBounds> definitions;
-        // Full RVar domains, selected by specialization condition. The same
-        // RVar name can have a different min or max in each definition.
-        map<string, Interval> rvars;
+        vector<CondValue> exprs;
+        set<ReductionVariable, ReductionVariable::Compare> rvars;
         string stage_prefix;
         size_t fused_group_index;
         Inliner *inliner;
@@ -278,85 +268,116 @@ public:
             return true;
         }
 
-        // Keep each definition's expressions paired with its reduction domain.
-        void compute_exprs_helper(const Definition &def, bool is_update, const Expr &condition) {
+        // Computed expressions on the left and right-hand sides.
+        // Note that a function definition might have different LHS or reduction domain
+        // (if it's an update def) or RHS per specialization. All specializations
+        // of an init definition should have the same LHS.
+        // This also pushes all the reduction domains it encounters into the 'rvars'
+        // set for later use.
+        vector<vector<CondValue>> compute_exprs_helper(const Definition &def, bool is_update) {
+            vector<vector<CondValue>> result(2);  // <args, values>
+
             if (!def.defined()) {
-                return;
+                return result;
             }
 
-            Expr default_condition = condition;
-            for (const Specialization &s : def.specializations()) {
-                default_condition = simplify(default_condition && !s.condition);
+            // Default case (no specialization)
+            for (const ReductionVariable &rv : def.schedule().rvars()) {
+                rvars.insert(rv);
             }
 
-            DefinitionBounds bounds;
-            bounds.condition = default_condition;
-            bounds.rvars = def.schedule().rvars();
-            vector<Expr> exprs;
+            vector<vector<Expr>> vecs(2);
             if (is_update) {
-                exprs = def.args();
+                vecs[0] = def.args();
             }
-            exprs.insert(exprs.end(), def.values().begin(), def.values().end());
-            if (func.extern_definition_proxy_expr().defined()) {
-                exprs.push_back(func.extern_definition_proxy_expr());
-            }
-            bounds.exprs = Call::make(Int(32), Call::bundle, exprs, Call::PureIntrinsic);
+            vecs[1] = def.values();
 
             vector<Expr> predicates = def.split_predicate();
-            bounds.exprs = std::accumulate(
-                predicates.begin(), predicates.end(), bounds.exprs,
-                [](const auto &acc, const auto &pred) {
-                    return Call::make(acc.type(), Call::if_then_else, {likely(pred), acc}, Call::PureIntrinsic);
-                });
-            definitions.push_back(std::move(bounds));
-
-            Expr remaining_condition = condition;
-            for (const Specialization &s : def.specializations()) {
-                compute_exprs_helper(s.definition, is_update, simplify(remaining_condition && s.condition));
-                remaining_condition = simplify(remaining_condition && !s.condition);
-            }
-        }
-
-        void compute_exprs() {
-            definitions.clear();
-            rvars.clear();
-
-            bool is_update = (stage != 0);
-            const Definition &def = is_update ? func.update(stage - 1) : func.definition();
-            compute_exprs_helper(def, is_update, const_true());
-            if (definitions.empty()) {
-                internal_assert(func.has_extern_definition());
-                vector<Expr> exprs;
-                if (func.extern_definition_proxy_expr().defined()) {
-                    exprs.push_back(func.extern_definition_proxy_expr());
+            for (size_t i = 0; i < result.size(); ++i) {
+                for (const Expr &val : vecs[i]) {
+                    Expr cond_val = std::accumulate(
+                        predicates.begin(), predicates.end(), val,
+                        [](const auto &acc, const auto &pred) {
+                            return Call::make(acc.type(), Call::if_then_else, {likely(pred), acc}, Call::PureIntrinsic);
+                        });
+                    result[i].emplace_back(const_true(), cond_val);
                 }
-                definitions.push_back({const_true(), Call::make(Int(32), Call::bundle, exprs, Call::PureIntrinsic), {}});
             }
 
-            const DefinitionBounds &first = definitions.front();
-            bool can_share_analysis = std::all_of(definitions.begin() + 1, definitions.end(),
-                                                  [&](const DefinitionBounds &other) {
-                                                      return first.can_share_bounds_analysis_with(other);
-                                                  });
-            if (can_share_analysis) {
-                definitions.resize(1);
-                definitions.front().condition = const_true();
+            for (const auto &s : reverse_view(def.specializations())) {
+                const Expr s_cond = s.condition;
+                const Definition &s_def = s.definition;
+
+                // Else case (i.e. specialization condition is false)
+                for (auto &vec : result) {
+                    for (CondValue &cval : vec) {
+                        cval.cond = simplify(!s_cond && cval.cond);
+                    }
+                }
+
+                // Then case (i.e. specialization condition is true)
+                vector<vector<CondValue>> s_result = compute_exprs_helper(s_def, is_update);
+                for (auto &vec : s_result) {
+                    for (CondValue &cval : vec) {
+                        cval.cond = simplify(s_cond && cval.cond);
+                    }
+                }
+                for (size_t i = 0; i < result.size(); i++) {
+                    result[i].insert(result[i].end(), s_result[i].begin(), s_result[i].end());
+                }
             }
 
-            for (DefinitionBounds &d : definitions) {
-                for (const ReductionVariable &rv : d.rvars) {
-                    Interval bounds(rv.min, simplify(rv.min + rv.extent - 1));
-                    auto [it, inserted] = rvars.emplace(rv.var, bounds);
-                    if (!inserted) {
-                        if (!equal(it->second.min, bounds.min)) {
-                            it->second.min = select(d.condition, bounds.min, it->second.min);
+            // Optimization: If the args/values across specializations including
+            // the default case, are the same, we can combine those args/values
+            // into one arg/value with a const_true() condition for the purpose
+            // of bounds inference.
+            for (auto &vec : result) {
+                if (vec.size() > 1) {
+                    bool all_equal = true;
+                    Expr val = vec[0].value;
+                    for (size_t i = 1; i < vec.size(); ++i) {
+                        if (!equal(val, vec[i].value)) {
+                            all_equal = false;
+                            break;
                         }
-                        if (!equal(it->second.max, bounds.max)) {
-                            it->second.max = select(d.condition, bounds.max, it->second.max);
-                        }
+                    }
+                    if (all_equal) {
+                        debug(4) << "compute_exprs: all values (size: " << vec.size() << ") "
+                                 << "(" << val << ") are equal, combine them together\n";
+                        internal_assert(val.defined());
+                        vec.clear();
+                        vec.emplace_back(const_true(), val);
                     }
                 }
             }
+            return result;
+        }
+
+        // Computed expressions on the left and right-hand sides. This also
+        // pushes all reduction domains it encounters into the 'rvars' set
+        // for later use.
+        void compute_exprs() {
+            // We need to clear 'exprs' and 'rvars' first, in case compute_exprs()
+            // is called multiple times.
+            exprs.clear();
+            rvars.clear();
+
+            bool is_update = (stage != 0);
+            vector<vector<CondValue>> result;
+            if (!is_update) {
+                result = compute_exprs_helper(func.definition(), is_update);
+            } else {
+                const Definition &def = func.update(stage - 1);
+                result = compute_exprs_helper(def, is_update);
+            }
+            internal_assert(result.size() == 2);
+            exprs = result[0];
+
+            if (func.extern_definition_proxy_expr().defined()) {
+                exprs.emplace_back(const_true(), func.extern_definition_proxy_expr());
+            }
+
+            exprs.insert(exprs.end(), result[1].begin(), result[1].end());
 
             // For the purposes of computation bounds inference, we
             // don't care what sites are loaded, just what sites need
@@ -377,8 +398,8 @@ public:
                 }
             } select_to_if_then_else;
 
-            for (DefinitionBounds &d : definitions) {
-                d.exprs = select_to_if_then_else(d.exprs);
+            for (auto &e : exprs) {
+                e.value = select_to_if_then_else(e.value);
             }
         }
 
@@ -587,14 +608,10 @@ public:
             }
 
             if (stage > 0) {
-                // These symbols control how many reduction iterations execute.
-                // If r is [0, 3] in one specialization and [0, 7] in another,
-                // its max must be select(condition, 3, 7), not max(3, 7):
-                // taking the union would run extra iterations in the first case.
-                for (const auto &[var, bounds] : rvars) {
-                    string arg = stage_prefix + var;
-                    s = LetStmt::make(arg + ".min", bounds.min, s);
-                    s = LetStmt::make(arg + ".max", bounds.max, s);
+                for (const ReductionVariable &rvar : rvars) {
+                    string arg = name + ".s" + std::to_string(stage) + "." + rvar.var;
+                    s = LetStmt::make(arg + ".min", rvar.min, s);
+                    s = LetStmt::make(arg + ".max", rvar.extent + rvar.min - 1, s);
                 }
             }
 
@@ -745,9 +762,10 @@ public:
             return s;
         }
 
-        // Analyze each definition in its own domain, while respecting bounds
-        // localized by enclosing loops.
-        void populate_scope(Scope<Interval> &result, const DefinitionBounds &def) {
+        // A scope giving the bounds for variables used by this stage.
+        // We need to take into account specializations which may refer to
+        // different reduction variables as well.
+        void populate_scope(Scope<Interval> &result) {
             for (const string &farg : func.args()) {
                 string arg = name + ".s" + std::to_string(stage) + "." + farg;
                 result.push(farg,
@@ -755,24 +773,10 @@ public:
                                      Variable::make(Int(32), arg + ".max")));
             }
             if (stage > 0) {
-                for (const ReductionVariable &rv : def.rvars) {
+                for (const ReductionVariable &rv : rvars) {
                     string arg = name + ".s" + std::to_string(stage) + "." + rv.var;
-                    Interval bounds(Variable::make(Int(32), arg + ".min"),
-                                    Variable::make(Int(32), arg + ".max"));
-                    const Interval &stage_bounds = rvars.at(rv.var);
-                    Interval definition_bounds(rv.min, simplify(rv.min + rv.extent - 1));
-                    if (!equal(stage_bounds.min, definition_bounds.min) ||
-                        !equal(stage_bounds.max, definition_bounds.max)) {
-                        // The symbolic bounds describe the current loop level:
-                        // inside a loop over r they may be just [r, r]. Using
-                        // only the full definition domain would make a producer
-                        // compute all iterations at every compute_at site.
-                        // Conversely, intersect with this definition's domain
-                        // so analysis outside the specialization can use its
-                        // exact bounds without resolving stage-wide selects.
-                        bounds = Interval::make_intersection(bounds, definition_bounds);
-                    }
-                    result.push(rv.var, bounds);
+                    result.push(rv.var, Interval(Variable::make(Int(32), arg + ".min"),
+                                                 Variable::make(Int(32), arg + ".max")));
                 }
             }
 
@@ -839,8 +843,9 @@ public:
 
         // Do any pure inlining
         for (auto &s : stages) {
-            for (DefinitionBounds &d : s.definitions) {
-                d.exprs = inliner(d.exprs);
+            for (auto &cond_val : s.exprs) {
+                internal_assert(cond_val.value.defined());
+                cond_val.value = inliner(cond_val.value);
             }
         }
 
@@ -858,6 +863,11 @@ public:
         for (size_t i = 0; i < stages.size(); i++) {
 
             Stage &consumer = stages[i];
+
+            // Set up symbols representing the bounds over which this
+            // stage will be computed.
+            Scope<Interval> scope;
+            consumer.populate_scope(scope);
 
             // Compute all the boxes of the producers this consumer
             // uses.
@@ -888,13 +898,14 @@ public:
                     }
                 }
             } else {
-                for (const DefinitionBounds &d : consumer.definitions) {
-                    Scope<Interval> scope;
-                    consumer.populate_scope(scope, d);
-                    map<string, Box> definition_boxes = boxes_required(d.exprs, scope, func_bounds);
-                    for (auto &[name, box] : definition_boxes) {
-                        box.used = box.used.defined() ? simplify(box.used && d.condition) : d.condition;
-                        merge_boxes(boxes[name], box);
+                for (const auto &cval : consumer.exprs) {
+                    map<string, Box> new_boxes;
+                    new_boxes = boxes_required(cval.value, scope, func_bounds);
+                    for (auto &i : new_boxes) {
+                        // Add the condition on which this value is evaluated to the box before merging
+                        Box &box = i.second;
+                        box.used = cval.cond;
+                        merge_boxes(boxes[i.first], box);
                     }
                 }
             }
@@ -1022,65 +1033,6 @@ public:
     }
 
     using IRMutator::visit;
-
-    // Conditions known true along the current path through nested IfThenElses.
-    vector<Expr> branch_conditions;
-    // Definitions whose exact RVar bounds are already bound by an enclosing
-    // branch. Avoid rebinding them inside loops with tighter, localized bounds.
-    set<const DefinitionBounds *> bound_definitions;
-
-    Stmt mutate_specialization_branch(Stmt body, const Expr &condition) {
-        branch_conditions.push_back(simplify(condition));
-        vector<pair<string, Interval>> bindings;
-        vector<const DefinitionBounds *> selected;
-        // Match this IR branch to definitions by proving their specialization
-        // conditions under the current path. Only consider Funcs whose
-        // produce/consume nodes enclose us; their RVar bound symbols are in scope.
-        for (const Stage &s : stages) {
-            if (s.rvars.empty() || s.definitions.size() == 1 || !in_pipeline.count(s.name)) {
-                continue;
-            }
-            for (const DefinitionBounds &d : s.definitions) {
-                if (bound_definitions.count(&d) ||
-                    !is_const_one(simplify(d.condition, Scope<Interval>::empty_scope(),
-                                           Scope<ModulusRemainder>::empty_scope(), branch_conditions))) {
-                    continue;
-                }
-                bound_definitions.insert(&d);
-                selected.push_back(&d);
-                for (const ReductionVariable &rv : d.rvars) {
-                    bindings.emplace_back(s.stage_prefix + rv.var,
-                                          Interval(rv.min, simplify(rv.min + rv.extent - 1)));
-                }
-            }
-        }
-
-        body = mutate(body);
-
-        // Shadow the stage-wide selects with this definition's exact bounds.
-        // For example, an outer r.max = select(c, 3, 7) becomes r.max = 3
-        // inside if (c). Allocation bounds inference can then see a constant
-        // extent for an intermediate computed here, allowing stack allocation.
-        for (const auto &[var, bounds] : bindings) {
-            body = LetStmt::make(var + ".min", bounds.min, body);
-            body = LetStmt::make(var + ".max", bounds.max, body);
-        }
-        for (const DefinitionBounds *d : selected) {
-            bound_definitions.erase(d);
-        }
-        branch_conditions.pop_back();
-        return body;
-    }
-
-    Stmt visit(const IfThenElse *op) override {
-        Expr condition = mutate(op->condition);
-        Stmt then_case = mutate_specialization_branch(op->then_case, condition);
-        Stmt else_case;
-        if (op->else_case.defined()) {
-            else_case = mutate_specialization_branch(op->else_case, !condition);
-        }
-        return op->with(condition, then_case, else_case);
-    }
 
     Stmt visit(const For *op) override {
         // Don't recurse inside loops marked 'Extern', they will be
@@ -1211,7 +1163,10 @@ public:
         }
 
         // Recurse.
-        body = mutate(body);
+        {
+            ScopedBinding<> bind(let_vars_in_scope, op->name);
+            body = mutate(body);
+        }
 
         if (!no_pipelines) {
             // We only care about the bounds of a func if:
@@ -1291,8 +1246,8 @@ public:
                         vars = s.func.args();
                     }
                     if (s.stage > 0) {
-                        for (const auto &[var, bounds] : s.rvars) {
-                            vars.push_back(var);
+                        for (const ReductionVariable &rv : s.rvars) {
+                            vars.push_back(rv.var);
                         }
                     }
                     for (const string &i : vars) {
@@ -1309,17 +1264,16 @@ public:
                             }
                             body = LetStmt::make(var + ".min", in.min, body);
                             body = LetStmt::make(var + ".max", in.max, body);
-                        } else {
+                        } else if (let_vars_in_scope.contains(var + ".guarded")) {
                             // If it's not found, we're already in the
                             // scope of the injected let. The let was
                             // probably lifted to an outer level.
-                            Expr val;
-                            if (let_vars_in_scope.contains(var + ".guarded")) {
-                                // Use a guarded version if it exists, for tighter bounds inference.
-                                val = Variable::make(Int(32), var + ".guarded");
-                            } else {
-                                val = Variable::make(Int(32), var);
-                            }
+                            // Use a guarded version if it exists, for tighter bounds inference.
+                            Expr val = Variable::make(Int(32), var + ".guarded");
+                            body = LetStmt::make(var + ".min", val, body);
+                            body = LetStmt::make(var + ".max", val, body);
+                        } else if (let_vars_in_scope.contains(var)) {
+                            Expr val = Variable::make(Int(32), var);
                             body = LetStmt::make(var + ".min", val, body);
                             body = LetStmt::make(var + ".max", val, body);
                         }
