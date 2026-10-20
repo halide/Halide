@@ -139,6 +139,64 @@ std::vector<Func> ApproximationResult::decode_funcs() const {
 
 namespace {
 
+// The tags of the Funcs a trace reports, by name: the innermost stage's
+// (children first), as ports, then inputs, then intermediates.
+void collect_tags(const ApproximationTraceNode &node, std::map<std::string, ApproximationTags> &tags) {
+    for (const ApproximationTraceNode &child : node.children) {
+        collect_tags(child, tags);
+    }
+    auto add = [&](const std::vector<Func> &fs, const std::vector<ApproximationTags> &ts) {
+        for (size_t i = 0; i < fs.size(); i++) {
+            if (fs[i].defined()) {
+                tags.emplace(fs[i].name(), i < ts.size() ? ts[i] : ApproximationTags{});
+            }
+        }
+    };
+    add(node.ports, node.port_tags);
+    add(node.inputs, node.input_tags);
+    add(node.intermediates, node.intermediate_tags);
+}
+
+}  // namespace
+
+std::vector<Func> ApproximationResult::decode_funcs(const std::string &tag) const {
+    std::map<std::string, ApproximationTags> known;
+    collect_tags(decode_trace, known);
+    std::vector<Func> result;
+    for (const Func &f : decode_funcs()) {
+        auto it = known.find(f.name());
+        if (it != known.end() && it->second.count(tag)) {
+            result.push_back(f);
+        }
+    }
+    return result;
+}
+
+bool ApproximationResult::owns(const Func &f) const {
+    for (const ApproximationTraceNode *trace : {&decode_trace, &encode_trace}) {
+        std::map<std::string, ApproximationTags> known;
+        collect_tags(*trace, known);
+        if (f.defined() && known.count(f.name())) {
+            return true;
+        }
+    }
+    return false;
+}
+
+ApproximationTags ApproximationResult::tags_of(const Func &f) const {
+    for (const ApproximationTraceNode *trace : {&decode_trace, &encode_trace}) {
+        std::map<std::string, ApproximationTags> known;
+        collect_tags(*trace, known);
+        auto it = f.defined() ? known.find(f.name()) : known.end();
+        if (it != known.end()) {
+            return it->second;
+        }
+    }
+    return {};
+}
+
+namespace {
+
 void replace_all(std::string &s, const std::string &from, const std::string &to) {
     for (size_t pos = s.find(from); pos != std::string::npos; pos = s.find(from, pos + to.size())) {
         s.replace(pos, from.size(), to);
@@ -177,7 +235,8 @@ void flatten(const ApproximationTraceNode &node, std::vector<ApproximationStageO
     for (const ApproximationTraceNode &child : node.children) {
         flatten(child, out);
     }
-    out.push_back({node.stage, node.ports, node.port_names, node.intermediates});
+    out.push_back({node.stage, node.ports, node.port_names, node.intermediates, node.port_tags,
+                   node.intermediate_tags});
 }
 
 }  // namespace
@@ -265,6 +324,100 @@ namespace {
 // this thread (null outside any call). Encode and decode share it.
 thread_local std::vector<ApproximationTraceNode> *active_children = nullptr;
 
+// The tags of a stage's intermediates (see ApproximationTraceNode).
+std::vector<ApproximationTags> intermediate_tags(const std::vector<Func> &ports, const std::vector<ApproximationTags> &port_tags,
+                                                 const std::vector<Func> &inputs, const std::vector<ApproximationTags> &input_tags,
+                                                 const std::vector<Func> &intermediates,
+                                                 const std::vector<ApproximationTraceNode> &children) {
+    std::map<std::string, ApproximationTags> known, of_inputs, reaches, reads;
+    for (const ApproximationTraceNode &child : children) {
+        collect_tags(child, known);
+    }
+    for (size_t i = 0; i < inputs.size() && i < input_tags.size(); i++) {
+        if (inputs[i].defined()) {
+            of_inputs[inputs[i].name()].insert(input_tags[i].begin(), input_tags[i].end());
+        }
+    }
+    std::map<std::string, Internal::Function> inner;
+    for (const Func &f : intermediates) {
+        if (f.defined()) {
+            inner.emplace(f.name(), f.function());
+        }
+    }
+    for (const Func &f : ports) {
+        if (f.defined() && !of_inputs.count(f.name())) {
+            inner.emplace(f.name(), f.function());
+        }
+    }
+    // The ports each Func reaches: walk down from each port, stopping at the
+    // inputs.
+    for (size_t i = 0; i < ports.size() && i < port_tags.size(); i++) {
+        if (!ports[i].defined() || of_inputs.count(ports[i].name())) {
+            continue;
+        }
+        std::set<std::string> seen;
+        std::vector<Internal::Function> stack{ports[i].function()};
+        while (!stack.empty()) {
+            Internal::Function f = stack.back();
+            stack.pop_back();
+            for (const auto &[name, callee] : Internal::find_direct_calls(f)) {
+                if (inner.count(name) && seen.insert(name).second) {
+                    reaches[name].insert(port_tags[i].begin(), port_tags[i].end());
+                    stack.push_back(callee);
+                }
+            }
+        }
+    }
+    // The inputs each Func reads, through the others.
+    std::function<ApproximationTags(const std::string &)> read = [&](const std::string &name) {
+        auto it = reads.find(name);
+        if (it != reads.end()) {
+            return it->second;
+        }
+        reads[name] = {};  // (a cycle reads nothing more)
+        ApproximationTags r;
+        for (const auto &[callee, f] : Internal::find_direct_calls(inner.at(name))) {
+            if (auto in = of_inputs.find(callee); in != of_inputs.end()) {
+                r.insert(in->second.begin(), in->second.end());
+            } else if (inner.count(callee)) {
+                ApproximationTags c = read(callee);
+                r.insert(c.begin(), c.end());
+            }
+        }
+        return reads[name] = r;
+    };
+    std::vector<ApproximationTags> result;
+    for (const Func &f : intermediates) {
+        ApproximationTags r;
+        if (!f.defined()) {
+        } else if (auto it = known.find(f.name()); it != known.end()) {
+            r = it->second;
+        } else {
+            ApproximationTags to = reaches[f.name()], from = read(f.name());
+            r = to.size() == 1 ? to : from.size() == 1 ? from :
+                                                         to;
+        }
+        result.push_back(r);
+    }
+    return result;
+}
+
+std::vector<std::string> names_of(const ApproximationPorts &ports) {
+    std::vector<std::string> names;
+    for (const ApproximationPort &p : ports) {
+        names.push_back(p.name);
+    }
+    return names;
+}
+
+std::vector<ApproximationTags> tags_of(const ApproximationPorts &ports) {
+    std::vector<ApproximationTags> tags;
+    for (const ApproximationPort &p : ports) {
+        tags.push_back(p.tags.value_or(ApproximationTags{}));
+    }
+    return tags;
+}
+
 struct CallScope {
     std::vector<ApproximationTraceNode> children;
     std::vector<ApproximationTraceNode> *parent;
@@ -280,11 +433,15 @@ struct CallScope {
 
     // Finish the call: nest the node under the enclosing call, if any.
     ApproximationTraceNode finish(const Approximation &stage, std::vector<Func> ports,
-                                  std::vector<std::string> port_names, std::vector<Func> intermediates,
-                                  std::vector<Func> inputs, std::vector<std::string> input_names) {
-        ApproximationTraceNode node{stage, stage.label(), std::move(ports), std::move(port_names),
+                                  const ApproximationPorts &port_info, std::vector<Func> intermediates,
+                                  std::vector<Func> inputs, const ApproximationPorts &input_info) {
+        std::vector<ApproximationTags> port_tags = tags_of(port_info), input_tags = tags_of(input_info);
+        std::vector<ApproximationTags> inner_tags =
+            intermediate_tags(ports, port_tags, inputs, input_tags, intermediates, children);
+        ApproximationTraceNode node{stage, stage.label(), std::move(ports), names_of(port_info),
                                     std::move(intermediates), std::move(children), std::move(inputs),
-                                    std::move(input_names)};
+                                    names_of(input_info), std::move(port_tags), std::move(input_tags),
+                                    std::move(inner_tags)};
         if (parent) {
             parent->push_back(node);
         }
@@ -409,12 +566,56 @@ ApproximationPorts names_only(const ApproximationPorts &ports) {
     return result;
 }
 
-std::vector<std::string> names_of(const ApproximationPorts &ports) {
-    std::vector<std::string> names;
-    for (const ApproximationPort &p : ports) {
-        names.push_back(p.name);
+// The ports of `count` outputs of an undeclared unit (or one whose signature
+// is unknown), by the naming rule: named like the inputs, if there are as
+// many (with their tags), else positionally (with the union of their tags).
+ApproximationPorts inherited_ports(const ApproximationPorts &inputs, size_t count) {
+    ApproximationPorts result;
+    if (count == inputs.size()) {
+        for (const ApproximationPort &p : inputs) {
+            result.emplace_back(p.name, std::nullopt, std::nullopt, std::nullopt, p.tags.value_or(ApproximationTags{}));
+        }
+        return result;
     }
-    return names;
+    ApproximationTags all;
+    for (const ApproximationPort &p : inputs) {
+        if (p.tags) {
+            all.insert(p.tags->begin(), p.tags->end());
+        }
+    }
+    result = positional_ports(count);
+    for (ApproximationPort &p : result) {
+        p.tags = all;
+    }
+    return result;
+}
+
+// Resolve the tags of a known signature in the context `context` (see
+// Approximation::signature()).
+void resolve_tags(ApproximationSignature &sig, const ApproximationPorts &context) {
+    if (!sig.known) {
+        return;
+    }
+    ApproximationTags all;
+    for (size_t i = 0; i < sig.inputs.size(); i++) {
+        ApproximationPort &p = sig.inputs[i];
+        if (context.size() == sig.inputs.size() && context[i].tags && !context[i].tags->empty()) {
+            p.tags = context[i].tags;
+        }
+        p.tags = p.tags.value_or(ApproximationTags{});
+        all.insert(p.tags->begin(), p.tags->end());
+    }
+    for (size_t i = 0; i < sig.outputs.size(); i++) {
+        ApproximationPort &p = sig.outputs[i];
+        if (p.tags) {
+            continue;
+        }
+        auto same = std::find_if(sig.inputs.begin(), sig.inputs.end(),
+                                 [&](const ApproximationPort &in) { return in.name == p.name; });
+        p.tags = same != sig.inputs.end()                ? same->tags :
+                 sig.outputs.size() == sig.inputs.size() ? sig.inputs[i].tags :
+                                                           all;
+    }
 }
 
 // Fill in whatever the ports leave unset from the actual Funcs.
@@ -485,7 +686,11 @@ ApproximationPorts Approximation::resolve_inputs(const std::vector<Func> &inputs
         for (size_t i = 0; i < n; i++) {
             ports[i].type = sig.inputs[i].type ? sig.inputs[i].type : ports[i].type;
             ports[i].dimensions = sig.inputs[i].dimensions ? sig.inputs[i].dimensions : ports[i].dimensions;
+            ports[i].tags = sig.inputs[i].tags;
         }
+    }
+    for (ApproximationPort &p : ports) {
+        p.tags = p.tags.value_or(ApproximationTags{});
     }
     validate_ports(*this, "encode", "input", inputs, ports);
     fill_from_funcs(ports, inputs);
@@ -503,7 +708,7 @@ ApproximationPorts Approximation::resolve_encoded(const std::vector<Func> &encod
             << " encoded Funcs were given\n";
         ports = sig.outputs;
     } else {
-        ports = n == input_ports.size() ? names_only(input_ports) : positional_ports(n);
+        ports = inherited_ports(input_ports, n);
     }
     validate_ports(*this, "decode", "encoded", encoded, ports);
     fill_from_funcs(ports, encoded);
@@ -521,12 +726,12 @@ ApproximationPorts Approximation::output_ports(const std::vector<Func> &outputs,
             << ports.size() << (encode_direction ? " output" : " input") << " ports (" << ports_string(ports)
             << ") but the unit returned " << outputs.size() << " Funcs\n";
     } else if (encode_direction) {
-        ports = outputs.size() == input_ports.size() ? names_only(input_ports) : positional_ports(outputs.size());
+        ports = inherited_ports(input_ports, outputs.size());
     } else if (sig.known) {
         // Undeclared single-Func unit: its one output is named like its input.
-        ports = names_only(sig.inputs);
+        ports = inherited_ports(sig.inputs, sig.inputs.size());
     } else {
-        ports = outputs.size() == input_ports.size() ? names_only(input_ports) : positional_ports(outputs.size());
+        ports = inherited_ports(input_ports, outputs.size());
     }
     validate_ports(*this, direction, "output", outputs, ports);
     fill_from_funcs(ports, outputs);
@@ -549,14 +754,15 @@ ApproximationSignature Approximation::signature(const ApproximationPorts &inputs
         }
         result.inputs = inputs.empty() ? positional_ports(1) : inputs;
         result.outputs = {ApproximationPort(result.inputs[0].name)};
-        return result;
+        break;
     }
-    // Names that flow in win over declared ones.
+    // Names that flow in win over declared ones, and so do tags.
     if (result.known && !inputs.empty() && result.inputs.size() == inputs.size()) {
         for (size_t i = 0; i < inputs.size(); i++) {
             result.inputs[i].name = inputs[i].name;
         }
     }
+    resolve_tags(result, inputs);
     return result;
 }
 
@@ -661,7 +867,7 @@ EncodeResult Approximation::encode(const std::vector<Func> &inputs, const Approx
     std::vector<Func> encoded = state_->impl->encode(inputs, resolved);
     ApproximationPorts encoded_ports = output_ports(encoded, signature(resolved), resolved, true);
     std::vector<Func> intermediates = find_intermediates(inputs, encoded);
-    ApproximationTraceNode node = scope.finish(*this, encoded, names_of(encoded_ports), intermediates, inputs, names_of(resolved));
+    ApproximationTraceNode node = scope.finish(*this, encoded, encoded_ports, intermediates, inputs, resolved);
     std::vector<ApproximationStageOutputs> stage_outputs;
     flatten(node, stage_outputs);
     return {std::move(encoded), std::move(encoded_ports), std::move(intermediates), std::move(stage_outputs),
@@ -688,7 +894,7 @@ DecodeResult Approximation::decode(const std::vector<Func> &encoded, const Appro
     std::vector<Func> decoded = state_->impl->decode(received, context);
     ApproximationPorts decoded_ports = output_ports(decoded, sig, context, false);
     std::vector<Func> intermediates = find_intermediates(encoded, decoded);
-    ApproximationTraceNode node = scope.finish(*this, decoded, names_of(decoded_ports), intermediates, received, names_of(resolved));
+    ApproximationTraceNode node = scope.finish(*this, decoded, decoded_ports, intermediates, received, resolved);
     std::vector<ApproximationStageOutputs> stage_outputs;
     flatten(node, stage_outputs);
     return {std::move(decoded), std::move(decoded_ports), std::move(intermediates), std::move(stage_outputs),
@@ -1561,8 +1767,8 @@ std::string joined(const std::vector<std::string> &names) {
 
 }  // namespace
 
-Derive::Derive(std::string port, std::vector<std::string> from, Definition psi)
-    : port_(std::move(port)), from_(std::move(from)), psi_(std::move(psi)) {
+Derive::Derive(std::string port, std::vector<std::string> from, Definition psi, ApproximationTags tags)
+    : port_(std::move(port)), from_(std::move(from)), psi_(std::move(psi)), tags_(std::move(tags)) {
     user_assert(!port_.empty() && psi_) << "Derive requires a port name and a definition\n";
     user_assert(!from_.empty()) << "Derive(" << port_ << ") must read at least one port\n";
     for (size_t i = 0; i < from_.size(); i++) {
@@ -1635,7 +1841,7 @@ ApproximationSignature Derive::signature(const ApproximationPorts &inputs) const
         }
     }
     ApproximationSignature s{inputs, inputs};
-    s.outputs.emplace_back(port_);
+    s.outputs.emplace_back(port_, std::nullopt, std::nullopt, std::nullopt, tags_);
     return s;
 }
 

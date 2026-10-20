@@ -333,6 +333,7 @@ struct ApproximationPort {
     std::optional<Type> type;
     std::optional<int> dimensions;
     std::optional<ApproximationRange> range;  // constant [lo, hi], see below
+    std::optional<ApproximationTags> tags;     // what the values are, see "Tags"
 };
 using ApproximationPorts = std::vector<ApproximationPort>;
 ```
@@ -372,6 +373,47 @@ A port name identifies one wire, in both directions. Declared names are
 - **Limit.** If a stage in a `Compose` has an unknown signature (an undeclared
   multi-Func unit), the contexts after it are unknown and fall back to defaults,
   so mirror naming past it is best-effort.
+
+### Tags
+
+A port's `tags` (`ApproximationTags`, a set of strings) say what its values
+*are*, in a vocabulary of the user's own: e.g. a quantizer may tag its outputs
+`"codes"`, `"scale"` and `"min"`. The core prescribes no tags; it only carries
+them, so that only the units that split values into components (quantizers) need
+to declare them, on their signatures' outputs. A port carrying several
+components, e.g. a `StructLayout` record of codes and scale, has all of their
+tags. Unset tags (`std::nullopt`) are inferred; set but empty ones are none.
+
+- **Tags flow in.** An input port takes the tags that flow in, if any, else the
+  declared ones, else none.
+- **Untagged outputs inherit**, in order: the tags of the input of the same name
+  (the same wire: `Identity`, `Permute`, a by-name `Parallel`'s pass-through
+  ports, `Derive`'s), those of input `i` for output `i` when the counts match
+  (`Pointwise`, `BlockReshape`, a bit packer), else the union of the inputs'
+  tags (`StructLayout`). `Derive(port, from, psi, tags)` gives its port `tags`
+  (none by default). Undeclared units follow the same rule at run time.
+- **Traced Funcs.** Every trace node records the tags of its ports, inputs and
+  intermediates (`port_tags`, `input_tags`, `intermediate_tags`). An
+  intermediate takes the tags a child stage gave it; else those of the ports it
+  reaches, if they are exactly one tag (a layout's decode of one field); else
+  those of the inputs it reads, if they are exactly one tag (the codes' part of
+  a quantizer's decode); else the union of the ports it reaches (none, e.g., for
+  a partly decoded value).
+
+Schedules then ask for a component's Funcs by tag, not by type or by the shape
+of their definitions: `ApproximationResult::decode_funcs(tag)` is the
+`decode_funcs()` tagged `tag`, `tags_of(f)` a Func's tags in the round trip, and
+`owns(f)` whether the round trip has `f` at all. For example, to fold all but
+the codes' decode into a dot and then split it on the codes:
+
+```cpp
+std::vector<Func> codes = r.decode_funcs("codes"), rest;
+for (const Func &f : r.decode_funcs()) {
+    if (!r.tags_of(f).count("codes")) rest.push_back(f);
+}
+dot.update().eager_inline(rest);
+FuncVec parts = dot.update().hoist_invariants({codes});
+```
 
 ### Signatures and validation
 
@@ -434,13 +476,15 @@ struct ApproximationTraceNode {
     std::vector<ApproximationTraceNode> children;  // in invocation order
     std::vector<Func> inputs;                // what the call consumed
     std::vector<std::string> input_names;    // parallel to `inputs`
+    std::vector<ApproximationTags> port_tags, input_tags, intermediate_tags;  // see "Tags"
 };
 ```
 
 exposed as `EncodeResult::trace`, `DecodeResult::trace`, and
 `ApproximationResult::encode_trace`/`decode_trace`. The flat `stage_outputs`
-lists (`ApproximationStageOutputs{stage, ports, port_names, intermediates}`) are
-its post-order flattening. `operator<<` prints a trace node, or a whole
+lists
+(`ApproximationStageOutputs{stage, ports, port_names, intermediates, port_tags, intermediate_tags}`)
+are its post-order flattening. `operator<<` prints a trace node, or a whole
 `ApproximationResult` (under `encode:` and `decode:`), as an indented tree of
 `label -> port=Func`, with each stage's intermediates on an `intermediates:`
 line:
@@ -495,6 +539,8 @@ then calls `encoded` directly, e.g. ahead of `rfactor()`:
 for (Func e : r.encoded) e.compute_root();
 dot.update().eager_inline(r.decode_funcs());
 ```
+
+`decode_funcs(tag)` restricts it to the Funcs of one component (see "Tags").
 
 **`describe()`.** `Approximation::describe(inputs = {})` (also `operator<<`)
 renders a stage's structure without running anything: one
