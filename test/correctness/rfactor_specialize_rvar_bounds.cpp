@@ -40,7 +40,7 @@ public:
 // dot(x, y) = sum_r a(r, x) * a(r, y), with `factors[i]` the split factor of
 // specialization i (on extent(y) >= threshold[i]) and the last factor the
 // default definition's.
-int check(const std::vector<int> &factors, const std::vector<int> &thresholds, bool nested, Placement placement) {
+int check(const std::vector<int> &factors, const std::vector<int> &thresholds, bool nested, Placement placement, bool split_merge = false) {
     const int K = 16, N = 8;
     Buffer<int> a(K, N);
     for (int y = 0; y < N; y++) {
@@ -81,6 +81,10 @@ int check(const std::vector<int> &factors, const std::vector<int> &thresholds, b
         }
         // Projected RVars remain schedulable with the original handles.
         d.reorder(ri, x, y);
+        if (split_merge) {
+            RVar merge_outer("merge_outer");
+            d.split(ri, merge_outer, ri, 2);
+        }
         intm.update().reorder(ro, x, y, u);
         if (placement == Placement::Root) {
             intm.compute_root();
@@ -95,6 +99,12 @@ int check(const std::vector<int> &factors, const std::vector<int> &thresholds, b
     dot.bound(x, 0, N);
 
     Module module = dot.compile_to_module({});
+    for (const Stage &d : definitions) {
+        if (d.get_schedule().rvars().front().var != "ri") {
+            printf("Lowering must not rename RVars in the original schedule\n");
+            return 1;
+        }
+    }
     module.functions().front().body.accept(&checker);
     if (checker.failed || !checker.expected.empty()) {
         printf("Expected a constant-sized allocation for every rfactor intermediate\n");
@@ -161,6 +171,46 @@ int check_inherited_domain() {
     return 0;
 }
 
+int check_compute_with() {
+    for (LoopAlignStrategy align : {LoopAlignStrategy::NoAlign, LoopAlignStrategy::AlignStart, LoopAlignStrategy::AlignEnd}) {
+        Param<int> mode;
+        RDom r(0, 16);
+        RVar ro("ro"), ri("ri");
+        Var u("u");
+        Func first("first"), second("second"), output("output");
+        first() = 0;
+        first() += r.x;
+        second() = 0;
+        second() += r.x;
+        output() = first() + second();
+
+        Stage specialized = first.update().specialize(mode >= 1);
+        Stage nested = specialized.specialize(mode == 2);
+        nested.split(r.x, ro, ri, 2);
+        nested.rfactor(ri, u).compute_root();
+        specialized.split(r.x, ro, ri, 8);
+        specialized.rfactor(ri, u).compute_root();
+        first.update().split(r.x, ro, ri, 4);
+        first.update().rfactor(ri, u).compute_root();
+        second.update().split(r.x, ro, ri, 4);
+        second.update().rfactor(ri, u).compute_root();
+        first.compute_root();
+        second.compute_root();
+        second.update().compute_with(first.update(), ri, align);
+
+        for (int value : {0, 1, 2}) {
+            mode.set(value);
+            Buffer<int> result = output.realize();
+            if (result() != 240) {
+                printf("Specialized compute_with: mode = %d: got %d instead of 240\n",
+                       value, result());
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -170,11 +220,12 @@ int main(int argc, char **argv) {
         if (check({4, 2}, {8}, false, placement) ||
             check({2, 4}, {8}, false, placement) ||
             check({8, 4, 2}, {8, 4}, false, placement) ||
-            check({4, 8, 2}, {4, 8}, true, placement)) {
+            check({4, 8, 2}, {4, 8}, true, placement) ||
+            check({8, 4, 2}, {8, 4}, false, placement, true)) {
             return 1;
         }
     }
-    if (check_inherited_domain()) {
+    if (check_inherited_domain() || check_compute_with()) {
         return 1;
     }
 
