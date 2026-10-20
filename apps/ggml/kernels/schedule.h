@@ -183,11 +183,12 @@ inline bool calls_any(const Expr &e, const std::vector<Func> &fs) {
 }
 
 // Whether a kernel decodes bit fields through constant tables (Tabulate): on
-// CPUs, for vec_dot only. A table moves the decode off the SIMD units, which
-// bound vec_dot; gemv is bound by loads, so its extra loads slow it (Apple M3 Max,
-// q5_0 4096x14336, one thread: from 0.97x GGML's speed to 0.84x).
-inline bool use_tables(const std::string &op, const Target &t) {
-    return !t.has_gpu_feature() && op == "vec_dot";
+// CPUs. A table moves the decode off the SIMD units, which bound the dot
+// (Apple M3 Max, q5_0, one thread, medians over link layouts: vec_dot from
+// 0.80x GGML's speed to 1.01x, gemv on single rows from 0.86x to 1.0x, gemm
+// M = 32 from 2.2x to 2.7x).
+inline bool use_tables(const Target &t) {
+    return !t.has_gpu_feature();
 }
 
 // The table decodes at `at` (per block group), each a copy for its calls from
@@ -855,10 +856,11 @@ inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom 
 // sdot), in tasks of up to 32 x 32 outputs (whole records: up to 128 rows),
 // fewer rows where that balances the threads (small N);
 // gemv (M = 1) is the vec_dot recipe on row pairs sharing each activation
-// block (single rows for N = 1). Edge tiles shift inwards: any N, M at least
-// the tile's. With act records of r = blocks[2] > 1 rows, out's first update
-// is the rows in whole records (dots[1]) on gemm tiles starting on a record,
-// its second the others (dots[0], < r rows) on gemv tiles.
+// block (single rows for N = 1, or for weights decoded through tables). Edge
+// tiles shift inwards: any N, M at least the tile's. With act records of
+// r = blocks[2] > 1 rows, out's first update is the rows in whole records
+// (dots[1]) on gemm tiles starting on a record, its second the others
+// (dots[0], < r rows) on gemv tiles.
 inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const std::vector<int> &blocks, const std::vector<ApproximationResult> &rs,
                     const std::vector<Func> &staged, const Target &t) {
     if (t.has_feature(Target::Metal)) {
@@ -936,7 +938,8 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         return;
     }
     pairs.busy = rows.busy = rest;
-    blocked(out, 2 * whole, dots[0], fits(pairs, 1), pairs, r, integer, rs, t, true);
+    // A table's decode, per row pair, outweighs sharing the act's loads
+    if (decoders(rs, Of::Tables).empty()) blocked(out, 2 * whole, dots[0], fits(pairs, 1), pairs, r, integer, rs, t, true);
     blocked(out, 2 * whole, dots[0], Expr(), rows, r, integer, rs, t, true);
 }
 
