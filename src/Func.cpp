@@ -1098,6 +1098,26 @@ Expr apply_hoisted_factor(const Expr &r, const optional<HoistedFactor> &factor) 
     return make_binary_op(factor->op, factor->factor, r);
 }
 
+// The RDom an update definition reduces over, if any.
+ReductionDomain reduction_domain_of(const Definition &definition) {
+    ReductionDomain rdom;
+    auto find = [&](const Expr &e) {
+        visit_with(e, [&](auto *self, const Variable *op) {
+            if (!rdom.defined() && op->reduction_domain.defined()) {
+                rdom = op->reduction_domain;
+            }
+        });
+    };
+    for (const Expr &e : definition.args()) {
+        find(e);
+    }
+    for (const Expr &e : definition.values()) {
+        find(e);
+    }
+    find(definition.predicate());
+    return rdom;
+}
+
 }  // namespace
 
 pair<vector<Split>, vector<Split>> Stage::rfactor_validate_args(const std::vector<std::pair<RVar, Var>> &preserved, const AssociativeOp &prover_result) {
@@ -1505,6 +1525,7 @@ FuncVec Stage::hoist_invariants() {
     FuncVec intms(function.name() + "_intm", intermediate_count);
 
     // Define one factor-free scalar intermediate reduction per outer term.
+    const ReductionDomain rdom = reduction_domain_of(definition);
     for (size_t i = 0; i < hoisted_terms.size(); ++i) {
         for (const HoistedTerm &term : hoisted_terms[i]) {
             Func &intm = intms[term.intermediate_index];
@@ -1514,9 +1535,10 @@ FuncVec Stage::hoist_invariants() {
                                        Call::Halide, FunctionPtr());
             Expr value = make_binary_op(prover_result.pattern.ops[i].node_type(), self_ref, term.body);
 
-            // The args and value still refer to the original RDom, so define_update()
-            // discovers and reuses it. The entire update schedule transfers unchanged.
-            intm.function().define_update(definition.args(), {value});
+            // Reuse the original RDom, with its predicate, even if this term
+            // doesn't use the RVars: it still runs once per point of the
+            // domain. The entire update schedule transfers unchanged.
+            intm.function().define_update(definition.args(), {value}, rdom);
             intm.function().update(0).schedule() = definition.schedule().get_copy();
         }
     }
