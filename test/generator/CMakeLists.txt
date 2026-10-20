@@ -473,6 +473,11 @@ _add_halide_aot_tests(
     INCLUDES "${Halide_SOURCE_DIR}/src/runtime"
 )
 
+# compress_kernels_aottest.cpp
+# compress_kernels_generator.cpp
+_add_halide_libraries(compress_kernels FEATURES compress_kernels)
+_add_halide_aot_tests(compress_kernels)
+
 # configure_aottest.cpp
 # configure_generator.cpp
 _add_halide_libraries(configure)

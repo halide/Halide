@@ -40,6 +40,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_current_thread_id,
     (void *)&halide_current_time_ns,
     (void *)&halide_debug_to_file,
+    (void *)&halide_decompress_kernels,
     (void *)&halide_default_can_use_target_features,
     (void *)&halide_device_and_host_free,
     (void *)&halide_device_and_host_free_as_destructor,

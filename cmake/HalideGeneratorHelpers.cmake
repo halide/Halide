@@ -1387,6 +1387,17 @@ function(_Halide_target_link_gpu_libs TARGET VISIBILITY)
         find_package(Halide_WebGPU REQUIRED)
         target_link_libraries("${TARGET}" "${VISIBILITY}" Halide::WebGPU)  # nolint
     endif ()
+
+    # The runtime decompresses compressed GPU kernels with the Windows
+    # Compression API on Windows, and with zlib everywhere else.
+    if ("${ARGN}" MATCHES "compress_kernels")
+        if (WIN32)
+            target_link_libraries("${TARGET}" "${VISIBILITY}" cabinet)  # nolint
+        else ()
+            find_package(ZLIB REQUIRED)
+            target_link_libraries("${TARGET}" "${VISIBILITY}" ZLIB::ZLIB)  # nolint
+        endif ()
+    endif ()
 endfunction()
 
 ##

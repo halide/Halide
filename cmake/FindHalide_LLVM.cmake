@@ -160,6 +160,12 @@ if (Halide_LLVM_FOUND)
         else ()
             _Halide_LLVM_link(Halide_LLVM::Core orcjit bitwriter linker passes)
         endif ()
+
+        # Kernel compression (CompressKernels.cpp) calls into the zlib that
+        # LLVM was built with directly, not only through LLVMSupport.
+        if (LLVM_ENABLE_ZLIB AND TARGET ZLIB::ZLIB)
+            target_link_libraries(Halide_LLVM::Core INTERFACE ZLIB::ZLIB)
+        endif ()
     endif ()
 
     foreach (comp IN LISTS Halide_LLVM_COMPONENTS)

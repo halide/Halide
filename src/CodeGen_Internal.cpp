@@ -93,6 +93,7 @@ bool function_takes_user_context(const std::string &name) {
         "halide_d3d12compute_initialize_kernels",
         "halide_vulkan_initialize_kernels",
         "halide_webgpu_initialize_kernels",
+        "halide_decompress_kernels",
         "halide_get_gpu_device",
         "_halide_buffer_crop",
         "_halide_buffer_retire_crop_after_extern_stage",

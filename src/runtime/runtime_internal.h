@@ -192,6 +192,12 @@ WEAK void halide_enable_timer_interrupt();
 
 WEAK int halide_host_cpu_count();
 
+// Decompress GPU kernel sources embedded by the compress_kernels target
+// feature into a buffer that is kept for the lifetime of the process, and
+// store a pointer to it in *cache. Does nothing if *cache is already set.
+WEAK int halide_decompress_kernels(void *user_context, void **cache,
+                                   const void *src, int src_size, int size);
+
 WEAK int halide_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf,
                                        const struct halide_device_interface_t *device_interface);
 WEAK int halide_device_and_host_free(void *user_context, struct halide_buffer_t *buf);

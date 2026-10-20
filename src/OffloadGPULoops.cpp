@@ -9,6 +9,7 @@
 #include "CodeGen_PTX_Dev.h"
 #include "CodeGen_Vulkan_Dev.h"
 #include "CodeGen_WebGPU_Dev.h"
+#include "CompressKernels.h"
 #include "ExprUsesVar.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -327,7 +328,27 @@ public:
 
             debug(2) << "Generating init_kernels for " << api_unique_name << "\n";
             vector<char> kernel_src = i.second->compile_to_src();
-            Expr kernel_src_buf = make_buffer_ptr(kernel_src, api_unique_name + "_gpu_source_kernels");
+            string kernel_src_name = api_unique_name + "_gpu_source_kernels";
+
+            // JIT-compiled code never links against the decompressor, so only
+            // compress the source for AOT compilation. The runtime decompresses
+            // it once, into a static slot that keeps it for the lifetime of the
+            // process, like the uncompressed source would be.
+            Stmt decompress_kernels;
+            Expr kernel_src_buf;
+            if (target.has_feature(Target::CompressKernels) && !target.has_feature(Target::JIT)) {
+                vector<char> compressed = compress_kernel_source(kernel_src, target);
+                debug(2) << "Compressed " << api_unique_name << " kernels from "
+                         << kernel_src.size() << " to " << compressed.size() << " bytes\n";
+                Expr compressed_buf = make_buffer_ptr(compressed, api_unique_name + "_gpu_compressed_kernels");
+                Expr cache_var = Variable::make(type_of<void *>(), kernel_src_name);
+                decompress_kernels = call_extern_and_assert("halide_decompress_kernels",
+                                                            {cache_var, compressed_buf, Expr((int)compressed.size()),
+                                                             Expr((int)kernel_src.size())});
+                kernel_src_buf = Load::make(type_of<void *>(), kernel_src_name, 0);
+            } else {
+                kernel_src_buf = make_buffer_ptr(kernel_src, kernel_src_name);
+            }
 
             string init_kernels_name = "halide_" + api_unique_name + "_initialize_kernels";
             vector<Expr> init_args = {state_ptr_var, kernel_src_buf, Expr((int)kernel_src.size())};
@@ -338,7 +359,13 @@ public:
             Stmt register_destructor = Evaluate::make(
                 Call::make(Handle(), Call::register_destructor, finalize_args, Call::Intrinsic));
 
-            result = LetStmt::make(api_unique_name, state_ptr, Block::make({init_kernels, register_destructor, result}));
+            if (decompress_kernels.defined()) {
+                result = Block::make({decompress_kernels, init_kernels, register_destructor, result});
+                result = LetStmt::make(kernel_src_name, make_state_var(kernel_src_name), result);
+            } else {
+                result = Block::make({init_kernels, register_destructor, result});
+            }
+            result = LetStmt::make(api_unique_name, state_ptr, result);
         }
         return result;
     }
