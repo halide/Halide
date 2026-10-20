@@ -639,6 +639,32 @@ inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, cons
     blocked(out, 0, dots[0], Expr(), {}, r, blocks[1] == blocks[0], rs, t, true);
 }
 
+// The Metal tiles of out: threadgroups (gpu_blocks) of `sg` simdgroups
+// (gpu_threads ns), each `rows(cols)` rows (ni, unrolled) of `cols` columns
+// (mi, unrolled), for the widest cols <= 8 that M allows (gemv: nr rows of
+// one column); N < nr * sg, a row per threadgroup. Edge tiles shift inwards.
+// dot is computed per output (ni): warp allocations of one value.
+inline void metal_tiles(Func out, Func dot, int nr, int sg, const std::function<int(int)> &rows) {
+    Var n = out.args()[0], m = out.args()[1], no("no"), ns("ns"), ni("ni"), mo("mo"), mi("mi");
+    Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
+    auto tile = [&](Stage o, int rows, int groups, int cols) {
+        o.split(n, no, ni, rows * groups, TailStrategy::ShiftInwards).split(ni, ns, ni, rows);
+        if (cols > 1) {
+            o.split(m, mo, mi, cols, TailStrategy::ShiftInwards).reorder(ni, mi, ns, no, mo).unroll(mi).gpu_blocks(no, mo);
+        } else {
+            o.reorder(ni, ns, no, m).gpu_blocks(no, m);
+        }
+        o.unroll(ni).gpu_threads(ns);
+    };
+    Stage big = Stage(out).specialize(N >= nr * sg);
+    for (int cols = 8; cols > 1; cols--) {
+        tile(big.specialize(M >= cols), rows(cols), sg, cols);
+    }
+    tile(big, nr, sg, 1);
+    tile(Stage(out), 1, 1, 1);
+    dot.compute_at(out, ni);
+}
+
 // Metal (Apple GPUs), as GGML's kernel_mul_mv_q4_0_f32: threadgroups of `sg`
 // simdgroups (gpu_threads), each `nr` rows of one column of out. A lane takes
 // half a block (one of its two 8-byte halves: 16 values) of every 16th block,
@@ -653,25 +679,10 @@ inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, cons
 // apart, are strided: far slower for that many columns). Each kernel has both
 // trees, behind uniform flags (dot's specialization, done on the host).
 inline void metal_rows(Func out, Func dot, const RDom &r, const std::vector<ApproximationResult> &rs, int nr = 4, int sg = 2) {
-    Var n = out.args()[0], m = out.args()[1], no("no"), ns("ns"), ni("ni"), mo("mo"), mi("mi"), uh("uh"), ub("ub"), u("u"), l("l");
+    Var n = out.args()[0], m = out.args()[1], ns("ns"), uh("uh"), ub("ub"), u("u"), l("l");
     RVar rx = r.x, ry = r.y, rxn("rxn"), rxh("rxh"), rxi("rxi"), ryo("ryo"), ryi("ryi"), rl("rl");
-    Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
-    auto tile = [&](Stage o, int rows, int groups, int cols) {
-        o.split(n, no, ni, rows * groups, TailStrategy::ShiftInwards).split(ni, ns, ni, rows);
-        if (cols > 1) {
-            o.split(m, mo, mi, cols, TailStrategy::ShiftInwards).reorder(ni, mi, ns, no, mo).unroll(mi).gpu_blocks(no, mo);
-        } else {
-            o.reorder(ni, ns, no, m).gpu_blocks(no, m);
-        }
-        o.unroll(ni).gpu_threads(ns);
-    };
-    Stage big = Stage(out).specialize(N >= nr * sg);
-    for (int cols = 8; cols > 1; cols--) {
-        tile(big.specialize(M >= cols), cols > 4 ? 2 : 4, sg, cols);
-    }
-    tile(big, nr, sg, 1);
-    tile(Stage(out), 1, 1, 1);  // N < nr * sg: a row per threadgroup
-    dot.compute_at(out, ni);    // per row: warp allocations of one value
+    Expr M = out.output_buffer().dim(1).extent();
+    metal_tiles(out, dot, nr, sg, [](int cols) { return cols > 4 ? 2 : 4; });
     Var lx("lx");
     RVar ryk("ryk"), ryu("ryu");
     Stage sm = dot.update().specialize(M >= 2);
@@ -697,6 +708,31 @@ inline void metal_rows(Func out, Func dot, const RDom &r, const std::vector<Appr
     blk.update().unroll(blk.args()[0]);
     for (Func f : {codes, rest}) {
         if (f.defined()) f.update().reorder(f.args()[0], rxi, rxn).unroll(f.args()[0]).unroll(rxi).unroll(rxn);
+    }
+}
+
+// Metal on weights of one value per record (floats: no blocks), as GGML's
+// kernel_mul_mv_f16_f32_4: metal_tiles of 2 rows (gemv) or 4 rows of up to 8
+// columns. A lane takes `c` contiguous values of every 32 * c (the
+// simdgroup's: one coalesced stream per row; the Metal compiler merges the
+// unrolled loads into half4 / float4), accumulating each output in a scalar
+// register (float4 accumulators spill for M > 1); the lanes' sums then reduce
+// across the simdgroup (gpu_lanes) and lane 0 writes. The K tail is guarded.
+// Staged acts (f32 encoded per value) get a kernel of their own: inlined,
+// every tile of rows would encode its columns again.
+inline void metal_flat(Func out, Func dot, const RDom &r, const std::vector<Func> &staged, int nr = 2, int sg = 2, int c = 16) {
+    Var n = out.args()[0], m = out.args()[1], ns("ns"), l("l");
+    RVar rx = r.x, ry = r.y, ryo("ryo"), rl("rl"), ryi("ryi");
+    metal_tiles(out, dot, nr, sg, [](int) { return 4; });
+    Stage s = dot.update();
+    s.split(ry, ryo, ryi, 32 * c, TailStrategy::GuardWithIf).split(ryi, rl, ryi, c);
+    Func lanes = s.rfactor(rl, l);
+    s.atomic().gpu_lanes(rl);
+    lanes.compute_at(out, ns).gpu_lanes(l).unroll(n).unroll(m);
+    lanes.update().reorder(rx, ryi, n, m, ryo, l).unroll(ryi).unroll(n).unroll(m).gpu_lanes(l);
+    for (Func e : staged) {
+        Var k = e.args()[0], em = e.args()[1], ko("ko"), kv("kv");
+        e.compute_root().split(k, ko, k, 256, TailStrategy::GuardWithIf).split(k, k, kv, 4).vectorize(kv).gpu_blocks(ko, em).gpu_threads(k);
     }
 }
 
@@ -895,7 +931,12 @@ inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom 
 inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const std::vector<int> &blocks, const std::vector<ApproximationResult> &rs,
                     const std::vector<Func> &staged, const Target &t) {
     if (t.has_feature(Target::Metal)) {
-        if (!staged.empty() || blocks[2] > 1 || blocks[3] > 1) throw std::invalid_argument("metal: act formats stored as computed, weights one row per record");
+        if (blocks[2] > 1 || blocks[3] > 1) throw std::invalid_argument("metal: weights and acts one row per record");
+        if (blocks[0] == 1) {
+            metal_flat(out, dots[0], r, staged);
+            return;
+        }
+        if (!staged.empty()) throw std::invalid_argument("metal: blocked act formats stored as computed");
         metal_rows(out, dots[0], r, rs);
         return;
     }
