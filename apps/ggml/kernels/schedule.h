@@ -85,6 +85,16 @@ inline Expr balanced(const std::vector<int> &ps, float overhead, const std::func
     return best;
 }
 
+// The operands' formats, as the schedules see them (matmul.cpp's): the
+// weight's values per block (1: floats, no blocks), rows per record
+// (interleaved in pieces of `chunk` codes) and whether it is rowwise; the act
+// codes' values per block (the weight's: an integer dot; 1: values) and rows
+// per record.
+struct Formats {
+    int block = 1, rows = 1, chunk = 0, act_block = 1, act_rows = 1;
+    bool rowwise = false;
+};
+
 // The tile shape of one mul_mat schedule: nt x mt outputs (N >= nt, M >= mt;
 // edge tiles shift inwards; in out's updates, M tails are guarded) share each decoded weight row and activation
 // column; `interleave` blocks per iteration into independent accumulators;
@@ -729,19 +739,19 @@ inline void encoder(Func e, const std::vector<ApproximationResult> &rs) {
 
 // The N = M = 1 schedule (GGML's vec_dot). Activations encoded inside the
 // pipeline (`staged`) are encoded once, up front.
-inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, const std::vector<int> &blocks, const std::vector<ApproximationResult> &rs,
+inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs,
                     const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation()) {
     for (Func e : staged) {
         e.compute_root();
         encoder(e, rs);
-        if (blocks[1] == 1) e.vectorize(e.args()[0], t.natural_vector_size<float>() * 4, TailStrategy::GuardWithIf);
+        if (fmt.act_block == 1) e.vectorize(e.args()[0], t.natural_vector_size<float>() * 4, TailStrategy::GuardWithIf);
     }
     out.output_buffer().dim(0).set_bounds(0, 1).dim(1).set_bounds(0, 1);  // N = M = 1
-    if (blocks[0] == 1) {
+    if (fmt.block == 1) {
         acc.defined() ? flat_tree(out, 0, dots[0], Expr(), {1, 1, 4}, r, acc, staged) : flat(out, 0, dots[0], Expr(), {1, 1, 4}, r, t);
         return;
     }
-    blocked(out, 0, dots[0], Expr(), {}, r, blocks[1] == blocks[0], rs, t, true);
+    blocked(out, 0, dots[0], Expr(), {}, r, fmt.act_block == fmt.block, rs, t, true);
 }
 
 // The Metal tiles of out: threadgroups (gpu_blocks) of `sg` simdgroups
@@ -974,11 +984,11 @@ inline void rowwise_encoder(Func e, Func out, const std::vector<ApproximationRes
 // pre-quantized acts, shifted inwards (4 x 2 for M < 8); gemv
 // tiles of 4 rows (a record of interleaved weights; planar: N >= 4, else
 // single rows), in tasks of 16 rows.
-inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const std::vector<int> &blocks,
+inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const Formats &fmt,
                             const std::vector<ApproximationResult> &rs, const std::vector<Func> &staged, const Target &t) {
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
-    if (dots.size() > 1 || blocks[2] > 1) throw std::invalid_argument("rowwise: act records of one row");
-    int chunk = blocks[3] > 1 ? blocks[4] : 0;
+    if (dots.size() > 1 || fmt.act_rows > 1) throw std::invalid_argument("rowwise: act records of one row");
+    int chunk = fmt.rows > 1 ? fmt.chunk : 0;
     for (Func e : staged) {
         rowwise_encoder(e, out, rs, M, t.has_feature(Target::ARMI8MM));
     }
@@ -1016,15 +1026,15 @@ inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom 
 // gemv (M = 1) is the vec_dot recipe on row pairs sharing each activation
 // block (single rows for N = 1, or for weights decoded through tables). Edge
 // tiles shift inwards: any N, M at least the tile's. With act records of
-// r = blocks[2] > 1 rows, out's first update is the rows in whole records
+// r = fmt.act_rows > 1 rows, out's first update is the rows in whole records
 // (dots[1]) on gemm tiles starting on a record, its second the others
 // (dots[0], < r rows) on gemv tiles.
-inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const std::vector<int> &blocks, const std::vector<ApproximationResult> &rs,
+inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs,
                     const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation()) {
     if (t.has_feature(Target::Metal)) {
         if (acc.defined()) throw std::invalid_argument("metal: dots accumulated in f32");
-        if (blocks[2] > 1 || blocks[3] > 1) throw std::invalid_argument("metal: weights and acts one row per record");
-        if (blocks[0] == 1) {
+        if (fmt.act_rows > 1 || fmt.rows > 1) throw std::invalid_argument("metal: weights and acts one row per record");
+        if (fmt.block == 1) {
             metal_flat(out, dots[0], r, staged);
             return;
         }
@@ -1032,13 +1042,13 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         metal_rows(out, dots[0], r, rs);
         return;
     }
-    if (blocks.size() > 5 && blocks[5]) {
-        rowwise_mul_mat(out, dots, r, blocks, rs, staged, t);
+    if (fmt.rowwise) {
+        rowwise_mul_mat(out, dots, r, fmt, rs, staged, t);
         return;
     }
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
-    bool integer = blocks[1] == blocks[0], whole = blocks[2] > 1;
-    Expr Mr = M / blocks[2] * blocks[2];
+    bool integer = fmt.act_block == fmt.block, whole = fmt.act_rows > 1;
+    Expr Mr = M / fmt.act_rows * fmt.act_rows;
     const int fv = 4 * t.natural_vector_size<float>();
     for (size_t i = 0; i < staged.size(); i++) {
         // staged[i] encodes dots[i]'s act. Records in tasks of up to 16 chunks
@@ -1052,26 +1062,26 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         if (whole && !i) {
             s.parallel(rec);
         } else {
-            Expr B = r.y.extent(), recs = whole ? Mr / blocks[2] : M;
+            Expr B = r.y.extent(), recs = whole ? Mr / fmt.act_rows : M;
             std::vector<int> cs;
             for (int c = 1; c <= 16; c++) {
                 cs.push_back(c);
             }
-            Expr chunks = balanced(cs, 4096, [&](int c) { return std::pair{recs * c, (B + c - 1) / c * blocks[1] * blocks[2]}; });
+            Expr chunks = balanced(cs, 4096, [&](int c) { return std::pair{recs * c, (B + c - 1) / c * fmt.act_block * fmt.act_rows}; });
             s.split(b, bo, b, (B + chunks - 1) / chunks, TailStrategy::GuardWithIf).fuse(rec, bo, t).parallel(t);
         }
         encoder(e, rs);
-        if (blocks[1] == 1) {  // values: vectorized (also for M = 1)
+        if (fmt.act_block == 1) {  // values: vectorized (also for M = 1)
             s.vectorize(b, fv, TailStrategy::GuardWithIf);
             e.vectorize(b, fv, TailStrategy::GuardWithIf);
         }
     }
-    if (blocks[0] == 1) {
+    if (fmt.block == 1) {
         // Float weights (no blocks): 4 x 2 tiles (each vector of a row's
         // weights used for both act columns, each act vector for 4 rows), row
         // pairs, single rows. gemv (M = 1) takes single rows: one weight
         // stream (row pairs are two, a row apart: 0.65x GGML at K = 14336).
-        if (whole || blocks[3] > 1) throw std::invalid_argument("weights without blocks: one row per record, acts too");
+        if (whole || fmt.rows > 1) throw std::invalid_argument("weights without blocks: one row per record, acts too");
         Tiles fg{4, 2, 1, 32, 32, 2}, fp{2, 1, 2, 16}, fr{1, 1, 4, 16};
         // (GGML's tree: four f16 vectors per output; 4 x 2 tiles spill)
         if (acc.defined()) fg = {2, 2, 1, 32, 32, 2};
@@ -1084,7 +1094,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     bool mmla_ok = integer && t.has_feature(Target::ARMI8MM);
     // Weight records in 4-code pieces: by-element sdot on the same tiles (on M3,
     // KleidiAI's dotprod gemm beats both i8mm ones)
-    bool lanes = whole && integer && blocks[3] > 1 && blocks[4] == 4, tiled = mmla_ok || lanes;
+    bool lanes = whole && integer && fmt.rows > 1 && fmt.chunk == 4, tiled = mmla_ok || lanes;
     // Whole records: the tiles' rows past Mr read clamped records, so one
     // row tile (dot's bound) covers every record, with mmla when there is.
     Func dr = dots.back();
@@ -1108,16 +1118,16 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     }
     if (whole && tiled) {
         for (auto [c, ts] : tiles) {
-            lanes ? blocked_rows(out, whole, dr, c, ts, r, blocks[4], rs, blocks[2]) : blocked_mmla(out, whole, dr, c, ts, r, rs);
+            lanes ? blocked_rows(out, whole, dr, c, ts, r, fmt.chunk, rs, fmt.act_rows) : blocked_mmla(out, whole, dr, c, ts, r, rs);
         }
     } else if (mmla_ok) {
         blocked_mmla(out, whole, dr, fits(mmla8, M), mmla8, r, rs, true);
     }
     if (!whole || !tiled) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, integer, rs, t, !whole);
     // The rows past Mr (fewer than a record's): no tasks when there are none.
-    Expr rest = whole ? M % blocks[2] != 0 : Expr();
-    if (integer && blocks[3] > 1) {  // N is a multiple of the records' rows
-        blocked_rows(out, 2 * whole, dots[0], Expr(), {blocks[3], 1, 2, 16, 0, 0, rest}, r, blocks[4], rs);
+    Expr rest = whole ? M % fmt.act_rows != 0 : Expr();
+    if (integer && fmt.rows > 1) {  // N is a multiple of the records' rows
+        blocked_rows(out, 2 * whole, dots[0], Expr(), {fmt.rows, 1, 2, 16, 0, 0, rest}, r, fmt.chunk, rs);
         return;
     }
     pairs.busy = rows.busy = rest;
