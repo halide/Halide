@@ -81,7 +81,8 @@ struct Type1Quant {
         return {v};
     }
     ApproximationSignature signature() const {
-        return {{{"blocks", Float(32)}}, {{"codes", Int(8), std::nullopt, ApproximationRange(0, (1 << bits) - 1)}, {"scale", Float(32)}, {"min", Float(32)}}};
+        return {{{"blocks", Float(32)}},
+                {codes_port(0, (1 << bits) - 1), param_port("scale", Float(32), tag::scale), param_port("min", Float(32), tag::offset)}};
     }
     Func error_bound(const std::vector<Func> &, const std::vector<Func> &e) const {
         return step_bound(e, 0.5);
