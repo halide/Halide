@@ -95,6 +95,9 @@ struct Tiles {
     int nt = 1, mt = 1, interleave = 2, rows = 0, cols = 0, tasks = 0;
     Expr busy;
 };
+// Tiles under their conditions, in order (the last undefined: the rest),
+// on one stage of out: the later branches learn each earlier false.
+using Chain = std::vector<std::pair<Expr, Tiles>>;
 
 // Out's stage `st`: 0 is its pure definition, over all of M; i > 0 its i-th
 // update, over the rows of one RDom. Its row loops are named per stage.
@@ -983,16 +986,14 @@ inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom 
     Tiles mmla8x8{8, 8, 1, 32, 32, 2}, mmla4x8{4, 8, 1, 32, 32, 2}, mmla4x2{4, 2, 1, 32, 32, 2}, rows{4, 1, 1, 16}, single{1, 1, 1, 16};
     auto fits = [&](const Tiles &ts) { return N >= ts.nt && M >= ts.mt; };
     if (t.has_feature(Target::ARMI8MM)) {
-        // records of 4 rows: whole 8-row tiles only where N allows
-        if (!staged.empty()) {
-            // acts encoded here, in groups of 8 rows (padded): whole groups
-            rowwise_mmla(out, 0, dot, N >= 8 && M > 1 && (chunk == 0 || N % 8 == 0), mmla8x8, r, chunk > 0, rs, true);
-            // (records: N >= 4, so the gemv after learns M = 1)
-            rowwise_mmla(out, 0, dot, chunk ? M > 1 : N >= 4 && M > 1, mmla4x8, r, chunk > 0, rs, true);
-        } else {
-            rowwise_mmla(out, 0, dot, fits(mmla8x8) && (chunk == 0 || N % 8 == 0), mmla8x8, r, chunk > 0, rs);
-            rowwise_mmla(out, 0, dot, fits(mmla4x8), mmla4x8, r, chunk > 0, rs);
-            rowwise_mmla(out, 0, dot, fits(mmla4x2), mmla4x2, r, chunk > 0, rs);
+        // records of 4 rows: whole 8-row tiles only where N allows. Acts
+        // encoded here, in groups of 8 rows (padded): whole groups (records:
+        // N >= 4, so the gemv after learns M = 1)
+        Expr whole8 = chunk == 0 || N % 8 == 0;
+        Chain enc{{N >= 8 && M > 1 && whole8, mmla8x8}, {chunk ? M > 1 : N >= 4 && M > 1, mmla4x8}};
+        Chain pre{{fits(mmla8x8) && whole8, mmla8x8}, {fits(mmla4x8), mmla4x8}, {fits(mmla4x2), mmla4x2}};
+        for (auto [c, ts] : staged.empty() ? pre : enc) {
+            rowwise_mmla(out, 0, dot, c, ts, r, chunk > 0, rs, !staged.empty());
         }
     }
     if (chunk) {  // N is a multiple of the records' rows
@@ -1074,7 +1075,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         Tiles fg{4, 2, 1, 32, 32, 2}, fp{2, 1, 2, 16}, fr{1, 1, 4, 16};
         // (GGML's tree: four f16 vectors per output; 4 x 2 tiles spill)
         if (acc.defined()) fg = {2, 2, 1, 32, 32, 2};
-        for (auto [c, ts] : std::vector<std::pair<Expr, Tiles>>{{N >= fg.nt && M >= fg.mt, fg}, {N >= fp.nt && M > 1, fp}, {Expr(), fr}}) {
+        for (auto [c, ts] : Chain{{N >= fg.nt && M >= fg.mt, fg}, {N >= fp.nt && M > 1, fp}, {Expr(), fr}}) {
             acc.defined() ? flat_tree(out, 0, dots[0], c, ts, r, acc, staged) : flat(out, 0, dots[0], c, ts, r, t);
         }
         return;
@@ -1096,7 +1097,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     Tiles t16{4, 16, 1, 32, 128, 2}, t20{4, 20, 1, 32, 120, 2}, t12{4, 12, 1, 32, 120, 2}, t8{4, 8, 1, 32, 128, 2}, wide{16, 4, 1, 32, 128, 2};
     auto padded = [&](const Tiles &ts) { return (Mr + ts.mt - 1) / ts.mt * ts.mt; };
     Expr fewest = min(padded(t12), padded(t16), padded(t20)), odd_n = !fits(gemm, Mr);
-    std::vector<std::pair<Expr, Tiles>> tiles{{Mr == wide.mt && fits(wide, Mr), wide}, {Mr <= t8.mt, t8}, {padded(t16) == fewest, t16}, {padded(t20) == fewest, t20}, {Expr(), t12}};
+    Chain tiles{{Mr == wide.mt && fits(wide, Mr), wide}, {Mr <= t8.mt, t8}, {padded(t16) == fewest, t16}, {padded(t20) == fewest, t20}, {Expr(), t12}};
     if (whole) {  // odd N first, as tall as t16; the bound is then constant in each branch
         blocked(out, 1, dr, odd_n, {1, tiled ? t16.mt : gemm.mt, 1, 32, 32, 2}, r, integer, rs, t);
         Expr mt = t12.mt;
