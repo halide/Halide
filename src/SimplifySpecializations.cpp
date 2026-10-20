@@ -26,6 +26,17 @@ void substitute_value_in_var(const string &var, const Expr &value, vector<Defini
         for (auto &def_val : def.values()) {
             def_val = simplify(substitute(var, value, def_val));
         }
+        if (def.predicate().defined()) {
+            def.predicate() = simplify(substitute(var, value, def.predicate()));
+        }
+        for (ReductionVariable &rv : def.schedule().rvars()) {
+            if (rv.min.defined()) {
+                rv.min = simplify(substitute(var, value, rv.min));
+            }
+            if (rv.extent.defined()) {
+                rv.extent = simplify(substitute(var, value, rv.extent));
+            }
+        }
     }
 }
 
@@ -63,6 +74,17 @@ void simplify_using_fact(const Expr &fact, vector<Definition> &definitions) {
         }
         for (auto &def_val : def.values()) {
             def_val = simplify(SimplifyUsingFact(fact).mutate(def_val));
+        }
+        if (def.predicate().defined()) {
+            def.predicate() = simplify(SimplifyUsingFact(fact).mutate(def.predicate()));
+        }
+        for (ReductionVariable &rv : def.schedule().rvars()) {
+            if (rv.min.defined()) {
+                rv.min = simplify(SimplifyUsingFact(fact).mutate(rv.min));
+            }
+            if (rv.extent.defined()) {
+                rv.extent = simplify(SimplifyUsingFact(fact).mutate(rv.extent));
+            }
         }
     }
 }
@@ -106,10 +128,11 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
         const Definition s_def = specializations.back().definition;
         specializations.pop_back();
 
-        // The values/args needs to be copied over since they might have
+        // The values/args/predicate need to be copied over since they might have
         // been simplified based on the predicate of the specialization.
         def.values() = s_def.values();
         def.args() = s_def.args();
+        def.predicate() = s_def.predicate();
 
         // Copy over the schedule.
         def.schedule() = s_def.schedule().get_copy();
@@ -167,25 +190,14 @@ bool same_rvars(const vector<ReductionVariable> &a, const vector<ReductionVariab
     return true;
 }
 
-void collect_definitions(Definition &def, vector<Definition *> &defs) {
-    defs.push_back(&def);
-    for (Specialization &s : def.specializations()) {
-        if (s.definition.defined()) {
-            collect_definitions(s.definition, defs);
-        }
-    }
-}
-
-void uniquify_specialization_rvars(Definition &def) {
-    vector<Definition *> defs;
-    collect_definitions(def, defs);
+void uniquify_specialization_rvars(vector<Definition> &defs) {
     if (defs.size() <= 1) {
         return;
     }
 
     bool rvars_differ = false;
     for (size_t i = 1; i < defs.size(); i++) {
-        if (!same_rvars(defs[0]->schedule().rvars(), defs[i]->schedule().rvars())) {
+        if (!same_rvars(defs[0].schedule().rvars(), defs[i].schedule().rvars())) {
             rvars_differ = true;
             break;
         }
@@ -195,7 +207,7 @@ void uniquify_specialization_rvars(Definition &def) {
     }
 
     for (size_t i = 0; i < defs.size(); i++) {
-        Definition &d = *defs[i];
+        Definition &d = defs[i];
         if (d.schedule().rvars().empty()) {
             continue;
         }
@@ -226,13 +238,11 @@ void uniquify_specialization_rvars(Definition &def) {
 }  // namespace
 
 void simplify_specializations(map<string, Function> &env) {
-    for (auto &iter : env) {
-        Function &func = iter.second;
-        if (func.definition().defined()) {
-            propagate_specialization_in_definition(func.definition(), func.name());
-        }
+    for (auto &[name, func] : env) {
+        propagate_specialization_in_definition(func.definition(), name);
         for (size_t i = 0; i < func.updates().size(); i++) {
-            uniquify_specialization_rvars(func.update(i));
+            vector<Definition> defs = propagate_specialization_in_definition(func.update(i), name);
+            uniquify_specialization_rvars(defs);
         }
     }
 }
