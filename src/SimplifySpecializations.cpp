@@ -7,6 +7,7 @@
 #include "Simplify.h"
 #include "Substitute.h"
 
+#include <algorithm>
 #include <utility>
 
 namespace Halide {
@@ -172,33 +173,23 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
     return result;
 }
 
-bool same_rvars(const vector<ReductionVariable> &a, const vector<ReductionVariable> &b) {
-    if (a.size() != b.size()) {
-        return false;
+bool same_rvar(const ReductionVariable &a, const ReductionVariable &b) {
+    return a.var == b.var && equal(a.min, b.min) && equal(a.extent, b.extent);
+}
+
+bool no_rvars_differ(const vector<Definition> &defs) {
+    if (defs.size() <= 1) {
+        return true;
     }
-    for (size_t i = 0; i < a.size(); i++) {
-        if (a[i].var != b[i].var ||
-            !equal(a[i].min, b[i].min) ||
-            !equal(a[i].extent, b[i].extent)) {
-            return false;
-        }
-    }
-    return true;
+    const auto &first = defs[0].schedule().rvars();
+    return std::all_of(defs.begin() + 1, defs.end(), [&](const Definition &d) {
+        const auto &other = d.schedule().rvars();
+        return std::equal(first.begin(), first.end(), other.begin(), other.end(), same_rvar);
+    });
 }
 
 void uniquify_specialization_rvars(vector<Definition> &defs) {
-    if (defs.size() <= 1) {
-        return;
-    }
-
-    bool rvars_differ = false;
-    for (size_t i = 1; i < defs.size(); i++) {
-        if (!same_rvars(defs[0].schedule().rvars(), defs[i].schedule().rvars())) {
-            rvars_differ = true;
-            break;
-        }
-    }
-    if (!rvars_differ) {
+    if (no_rvars_differ(defs)) {
         return;
     }
 
