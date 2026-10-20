@@ -18,25 +18,34 @@ using std::vector;
 
 namespace {
 
-void substitute_value_in_var(const string &var, const Expr &value, vector<Definition> &definitions) {
-    for (Definition &def : definitions) {
-        for (auto &def_arg : def.args()) {
-            def_arg = simplify(substitute(var, value, def_arg));
-        }
-        for (auto &def_val : def.values()) {
-            def_val = simplify(substitute(var, value, def_val));
-        }
-        if (def.predicate().defined()) {
-            def.predicate() = simplify(substitute(var, value, def.predicate()));
-        }
+template<typename Fn>
+void mutate_definition_exprs(Definition &def, Fn &&mutate_expr, bool include_rvars = true) {
+    for (Expr &def_arg : def.args()) {
+        def_arg = mutate_expr(def_arg);
+    }
+    for (Expr &def_val : def.values()) {
+        def_val = mutate_expr(def_val);
+    }
+    if (def.predicate().defined()) {
+        def.predicate() = mutate_expr(def.predicate());
+    }
+    if (include_rvars) {
         for (ReductionVariable &rv : def.schedule().rvars()) {
             if (rv.min.defined()) {
-                rv.min = simplify(substitute(var, value, rv.min));
+                rv.min = mutate_expr(rv.min);
             }
             if (rv.extent.defined()) {
-                rv.extent = simplify(substitute(var, value, rv.extent));
+                rv.extent = mutate_expr(rv.extent);
             }
         }
+    }
+}
+
+void substitute_value_in_var(const string &var, const Expr &value, vector<Definition> &definitions) {
+    for (Definition &def : definitions) {
+        mutate_definition_exprs(def, [&](const Expr &e) {
+            return simplify(substitute(var, value, e));
+        });
     }
 }
 
@@ -68,24 +77,11 @@ public:
 };
 
 void simplify_using_fact(const Expr &fact, vector<Definition> &definitions) {
+    SimplifyUsingFact simplifier(fact);
     for (Definition &def : definitions) {
-        for (auto &def_arg : def.args()) {
-            def_arg = simplify(SimplifyUsingFact(fact).mutate(def_arg));
-        }
-        for (auto &def_val : def.values()) {
-            def_val = simplify(SimplifyUsingFact(fact).mutate(def_val));
-        }
-        if (def.predicate().defined()) {
-            def.predicate() = simplify(SimplifyUsingFact(fact).mutate(def.predicate()));
-        }
-        for (ReductionVariable &rv : def.schedule().rvars()) {
-            if (rv.min.defined()) {
-                rv.min = simplify(SimplifyUsingFact(fact).mutate(rv.min));
-            }
-            if (rv.extent.defined()) {
-                rv.extent = simplify(SimplifyUsingFact(fact).mutate(rv.extent));
-            }
-        }
+        mutate_definition_exprs(def, [&](const Expr &e) {
+            return simplify(simplifier(e));
+        });
     }
 }
 
@@ -221,28 +217,25 @@ void uniquify_specialization_rvars(vector<Definition> &defs) {
             rename_splits.push_back(
                 Split{new_var, old_var, "", 0, Expr(), true, TailStrategy::RoundUp, Split::RenameVar});
         }
-        for (Expr &arg : d.args()) {
-            arg = substitute(var_renames, arg);
-        }
-        for (Expr &val : d.values()) {
-            val = substitute(var_renames, val);
-        }
-        if (d.predicate().defined()) {
-            d.predicate() = substitute(var_renames, d.predicate());
-        }
+        mutate_definition_exprs(
+            d, [&](const Expr &e) { return substitute(var_renames, e); }, /*include_rvars=*/false);
         auto &splits = d.schedule().splits();
         splits.insert(splits.begin(), rename_splits.begin(), rename_splits.end());
     }
+}
+
+void simplify_stage_specializations(Definition &def, const string &name) {
+    vector<Definition> defs = propagate_specialization_in_definition(def, name);
+    uniquify_specialization_rvars(defs);
 }
 
 }  // namespace
 
 void simplify_specializations(map<string, Function> &env) {
     for (auto &[name, func] : env) {
-        propagate_specialization_in_definition(func.definition(), name);
+        simplify_stage_specializations(func.definition(), name);
         for (size_t i = 0; i < func.updates().size(); i++) {
-            vector<Definition> defs = propagate_specialization_in_definition(func.update(i), name);
-            uniquify_specialization_rvars(defs);
+            simplify_stage_specializations(func.update(i), name);
         }
     }
 }
