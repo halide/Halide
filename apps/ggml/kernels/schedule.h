@@ -12,16 +12,32 @@ namespace ggml {
 
 using namespace Halide;
 
+// A decode Func's constant table (a Buffer it reads), if any.
+inline Buffer<> table_of(Func f) {
+    Buffer<> b;
+    for (const Expr &v : f.function().definition().values()) {
+        Internal::visit_with(v, [&](auto *self, const Internal::Call *c) {
+            if (c->call_type == Internal::Call::Image && c->image.defined()) b = c->image;
+            self->visit_base(c);
+        });
+    }
+    return b;
+}
+
 // The decode Funcs eager_inline can fold into a consumer, of rs[first, last):
-// all, or only the scales (float) or the codes (integer).
+// all, or only the scales (float) or the codes (integer); or the ones reading
+// a table (`Of::Tables`), which a vectorized inline would gather from: see
+// tables().
 enum class Of { All,
                 Floats,
-                Ints };
+                Ints,
+                Tables };
 inline std::vector<Func> decoders(const std::vector<ApproximationResult> &rs, Of of = Of::All, size_t first = 0, size_t last = SIZE_MAX) {
     std::vector<Func> fs;
     for (size_t i = first; i < std::min(last, rs.size()); i++) {
         for (Func f : rs[i].decode_funcs()) {
-            if (of == Of::All || (of == Of::Floats) == f.type().is_float()) fs.push_back(f);
+            if ((of == Of::Tables) != table_of(f).defined()) continue;
+            if (of == Of::All || of == Of::Tables || (of == Of::Floats) == f.type().is_float()) fs.push_back(f);
         }
     }
     return fs;
@@ -164,6 +180,45 @@ inline bool calls_any(const Expr &e, const CallTest &is) {
 }
 inline bool calls_any(const Expr &e, const std::vector<Func> &fs) {
     return calls_any(e, call_of(fs));
+}
+
+// Whether a kernel decodes bit fields through constant tables (Tabulate): on
+// CPUs, for vec_dot only. A table moves the decode off the SIMD units, which
+// bound vec_dot; gemv is bound by loads, so its extra loads slow it (Apple M3 Max,
+// q5_0 4096x14336, one thread: from 0.97x GGML's speed to 0.84x).
+inline bool use_tables(const std::string &op, const Target &t) {
+    return !t.has_gpu_feature() && op == "vec_dot";
+}
+
+// The table decodes at `at` (per block group), each a copy for its calls from
+// `consumers` (a pipeline computes them per kernel): unrolled over all but
+// their first dimension, split by the table's rows, so each read of a row is
+// a dense load.
+inline void tables(const std::vector<ApproximationResult> &rs, const std::vector<Func> &consumers, LoopLevel at) {
+    for (Func f : decoders(rs, Of::Tables)) {
+        std::vector<Func> cs;
+        for (Func c : consumers) {
+            if (!c.defined()) continue;
+            bool calls = false;
+            const Internal::Function &fn = c.function();
+            for (const Expr &v : fn.definition().values()) {
+                calls |= calls_any(v, {f});
+            }
+            for (const Internal::Definition &u : fn.updates()) {
+                for (const Expr &v : u.values()) {
+                    calls |= calls_any(v, {f});
+                }
+            }
+            if (calls) cs.push_back(c);
+        }
+        if (cs.empty()) continue;
+        Func g = f.clone_in(cs);
+        Var j = g.args()[0], jo("jo"), ji("ji");
+        g.compute_at(at).split(j, jo, ji, table_of(f).dim(0).extent()).vectorize(ji).unroll(jo);
+        for (size_t k = 1; k < g.args().size(); k++) {
+            g.unroll(g.args()[k]);
+        }
+    }
 }
 
 // Does every term of e make such a call (no product over a sum to expand)?
@@ -385,6 +440,7 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
         if (f.defined()) f.update().atomic().vectorize(rxi).unroll(rxc);
     }
     schedule_sums(d, out, st, acc, n, m, ts, r, ts.nt > 2, vec);
+    tables(rs, {blk, mid, codes, rest}, LoopLevel(acc, ryo));
 }
 
 // The integer path for weight records of ts.nt rows interleaved in pieces of
@@ -521,13 +577,15 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
         rest.update().reorder(rxk, rxc, n, m, u).atomic().vectorize(rxk).vectorize(rxc);
     }
     schedule_sums(d, out, st, acc, n, m, ts, r, true, 16);
+    tables(rs, {blk, mid, codes, rest}, LoopLevel(acc, ryo));
 }
 
 // An encoder computed per record (each block of values), vectorized: the
 // Funcs with an element per value (e.g. the codes, packed bytes) across their
 // elements, and its reductions (e.g. the block's scale) across the block.
 inline void encoder(Func e, const std::vector<ApproximationResult> &rs) {
-    std::vector<Func> dec = decoders(rs);
+    std::vector<Func> dec = decoders(rs), tab = decoders(rs, Of::Tables);
+    dec.insert(dec.end(), tab.begin(), tab.end());
     for (const ApproximationResult &res : rs) {
         for (Func f : res.encoded[0].name() == e.name() ? res.intermediates : std::vector<Func>{}) {
             if (f.name() == e.name() || std::any_of(dec.begin(), dec.end(), [&](const Func &d) { return d.name() == f.name(); })) continue;
