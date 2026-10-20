@@ -108,6 +108,20 @@ public:
                 // so we should definitely try to do better.
                 // check("v8x16.swizzle", 16*w, in_u8(in_u8(x+32)));
 
+                // Lookups into small constant tables (a mux of constants) or
+                // small embedded Buffers do use swizzle.
+                {
+                    std::vector<Expr> table;
+                    Buffer<int8_t> lut(16);
+                    for (int i = 0; i < 16; i++) {
+                        table.push_back(u8(i * 53 + 7));
+                        lut(i) = (int8_t)(i * 29 - 50);
+                    }
+                    check("i8x16.swizzle", 16 * w, mux(u8_1 % 16, table));
+                    check("i8x16.swizzle", 16 * w, mux(i32_1, table));
+                    check("i8x16.swizzle", 16 * w, lut(i32(u8_1 % 16)));
+                }
+
                 // Integer addition
                 check("i8x16.add", 16 * w, i8_1 + i8_2);
                 check("i16x8.add", 8 * w, i16_1 + i16_2);

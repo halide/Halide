@@ -43,6 +43,8 @@ protected:
 
     int vector_lanes_for_slice(const Type &t) const;
 
+    int max_dynamic_shuffle_table_size(const Type &t) const override;
+
     using CodeGen_CPU::visit;
 
     void init_module() override;
@@ -567,7 +569,55 @@ void CodeGen_X86::visit(const Cast *op) {
     CodeGen_CPU::visit(op);
 }
 
+int CodeGen_X86::max_dynamic_shuffle_table_size(const Type &t) const {
+    if (!t.is_int_or_uint() || t.bits() != 8) {
+        return 0;
+    }
+    if (target.has_feature(Target::AVX512_Cannonlake)) {
+        // vpermb indexes a 64-byte table.
+        return 64;
+    } else if (target.has_feature(Target::SSE41)) {
+        // pshufb indexes a 16-byte table.
+        return 16;
+    }
+    return 0;
+}
+
 void CodeGen_X86::visit(const Call *op) {
+    if (op->is_intrinsic(Call::dynamic_shuffle) &&
+        op->type.is_vector() &&
+        op->args[0].type().lanes() <= max_dynamic_shuffle_table_size(op->type.element_of())) {
+        const int table_lanes = op->args[0].type().lanes();
+        const int lanes = op->type.lanes();
+        if (table_lanes > 16) {
+            value = codegen_dynamic_shuffle(op, 64, 64, [&](Value *table, Value *index) {
+                return simple_call_intrin("llvm.x86.avx512.permvar.qi.512", {table, index},
+                                          get_vector_type(i8_t, 64));
+            });
+        } else {
+            // pshufb looks up within each 128-bit lane, so for wider vectors
+            // the table must be replicated across lanes.
+            int slice_lanes = 16;
+            const char *intrin = "llvm.x86.ssse3.pshuf.b.128";
+            if (lanes >= 64 && target.has_feature(Target::AVX512_Skylake)) {
+                slice_lanes = 64;
+                intrin = "llvm.x86.avx512.pshuf.b.512";
+            } else if (lanes >= 32 && target.has_feature(Target::AVX2)) {
+                slice_lanes = 32;
+                intrin = "llvm.x86.avx2.pshuf.b";
+            }
+            value = codegen_dynamic_shuffle(op, 16, slice_lanes, [&](Value *table, Value *index) {
+                std::vector<int> indices(slice_lanes);
+                for (int i = 0; i < slice_lanes; i++) {
+                    indices[i] = i % 16;
+                }
+                table = shuffle_vectors(table, indices);
+                return simple_call_intrin(intrin, {table, index}, get_vector_type(i8_t, slice_lanes));
+            });
+        }
+        return;
+    }
+
     if (!op->type.is_vector()) {
         // We only have peephole optimizations for vectors beyond this point.
         CodeGen_CPU::visit(op);

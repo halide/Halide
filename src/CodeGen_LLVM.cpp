@@ -26,6 +26,7 @@
 #include "LLVM_Runtime_Linker.h"
 #include "Lerp.h"
 #include "LowerParallelTasks.h"
+#include "OptimizeShuffles.h"
 #include "Pipeline.h"
 #include "Simplify.h"
 #include "StrictifyFloat.h"
@@ -985,9 +986,15 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f, const std::string &simple_
         }
     }
 
+    // Turn lookups into small tables into dynamic_shuffle calls if the
+    // target has a fast way to do them.
+    Stmt body = optimize_small_table_lookups(f.body, [&](const Type &t) {
+        return max_dynamic_shuffle_table_size(t);
+    });
+
     // Generate the function body.
     debug(1) << "Generating llvm bitcode for function " << f.name << "...\n";
-    f.body.accept(this);
+    body.accept(this);
 
     // Show one time warning and clear it.
     for (auto it = onetime_warnings.begin(); it != onetime_warnings.end(); it = onetime_warnings.erase(it)) {
@@ -3968,6 +3975,23 @@ void CodeGen_LLVM::visit(const Call *op) {
         value = codegen(lower_float16_transcendental_to_float32_equivalent(op));
     } else if (op->is_intrinsic(Call::mux)) {
         value = codegen(lower_mux(op));
+    } else if (op->is_intrinsic(Call::dynamic_shuffle)) {
+        // Targets with table-lookup instructions handle this
+        // themselves. This fallback is correct for any table and index
+        // type, but slow: it does one variable extractelement per lane.
+        internal_assert(op->args.size() == 4);
+        Value *table = codegen(op->args[0]);
+        Value *index = codegen(op->args[1]);
+        if (op->type.is_scalar()) {
+            value = builder->CreateExtractElement(table, index);
+        } else {
+            value = PoisonValue::get(llvm_type_of(op->type));
+            for (int i = 0; i < op->type.lanes(); i++) {
+                Value *idx = builder->CreateExtractElement(index, (uint64_t)i);
+                Value *elem = builder->CreateExtractElement(table, idx);
+                value = builder->CreateInsertElement(value, elem, (uint64_t)i);
+            }
+        }
     } else if (op->is_intrinsic(Call::extract_bits)) {
         value = codegen(lower_extract_bits(op));
     } else if (op->is_intrinsic(Call::concat_bits)) {
@@ -5610,6 +5634,43 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
 
     CallInst *call = builder->CreateCall(intrin, arg_values);
     return call;
+}
+
+Value *CodeGen_LLVM::codegen_dynamic_shuffle(const Call *op, int table_lanes, int slice_lanes,
+                                             const std::function<Value *(Value *, Value *)> &lookup) {
+    internal_assert(op->is_intrinsic(Call::dynamic_shuffle) && op->args.size() == 4);
+    const Expr &table_expr = op->args[0];
+    internal_assert(table_expr.type().is_vector() && table_expr.type().lanes() <= table_lanes)
+        << "dynamic_shuffle table " << table_expr << " has more than " << table_lanes << " lanes\n";
+
+    // Take lanes [start, start + size) of a fixed vector, padding with zeros.
+    auto slice_or_zero = [&](Value *v, int start, int size) {
+        int lanes = get_vector_num_elements(v->getType());
+        if (start == 0 && size == lanes) {
+            return v;
+        }
+        std::vector<int> indices(size);
+        for (int i = 0; i < size; i++) {
+            indices[i] = (start + i < lanes) ? start + i : lanes;
+        }
+        return shuffle_vectors(v, Constant::getNullValue(v->getType()), indices);
+    };
+
+    Value *table = slice_or_zero(codegen(table_expr), 0, table_lanes);
+
+    Expr index_expr = op->args[1];
+    const int lanes = op->type.lanes();
+    index_expr = cast(UInt(8, index_expr.type().lanes()), index_expr);
+    Value *index = codegen(index_expr);
+    if (!index->getType()->isVectorTy()) {
+        index = create_broadcast(index, 1);
+    }
+
+    std::vector<Value *> results;
+    for (int i = 0; i < lanes; i += slice_lanes) {
+        results.push_back(lookup(table, slice_or_zero(index, i, slice_lanes)));
+    }
+    return slice_vector(concat_vectors(results), 0, lanes);
 }
 
 Value *CodeGen_LLVM::slice_vector(Value *vec, int start, int size) {
