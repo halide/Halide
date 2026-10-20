@@ -28,7 +28,7 @@ int main() {
     int failures = 0;
     Approximation q = ggml::MXFP4Quant{};  // held: its bound checked at it
     Approximation a = Compose{BlockReshape{ggml::QK}, q,
-                              Parallel{{"codes", ggml::minifloat_integers(ggml::e2m1())}, {"scale", ggml::e8m0_half()}},
+                              Parallel{{"codes", ggml::e2m1_codes()}, {"scale", ggml::e8m0_half()}},
                               Parallel{{"codes", PlanarFieldPack{4, ggml::QK / 2}}}};
     for (const auto &[name, dist] : dists) {
         for (const Property &p : {within_declared_bound().at(q), outputs_within_declared_ranges(), idempotent_requantize(0), closed()}) {
