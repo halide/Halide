@@ -444,6 +444,26 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     tables(rs, {blk, mid, codes, rest}, LoopLevel(acc, ryo));
 }
 
+// Weights of one value per record (floats: no blocks, r.x is a single value):
+// per output, the products accumulated in f32 in vectors of `vec` values of
+// r.y (2 f32 vectors: one of 16-bit floats), ts.interleave independent ones
+// (the K tail guarded), then summed across them, on ts tiles of out under
+// `cond`. The decoders (conversions to f32) are inlined.
+inline void flat(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, const Target &t) {
+    Stage s = tile_out(out, st, dot, cond, ts, r);
+    Var n = dot.args()[0], m = dot.args()[1], lane("lane"), bacc("bacc");
+    RVar rx = r.x, ry = r.y, ryo("ryo"), ryi("ryi"), ryl("ryl");
+    int vec = 2 * t.natural_vector_size<float>();
+    s.split(ry, ryo, ryi, vec * ts.interleave, TailStrategy::GuardWithIf).split(ryi, ryi, ryl, vec);
+    Func acc = s.rfactor({{ryl, lane}, {ryi, bacc}});
+    Func lanes = s.rfactor(ryl, lane);
+    s.atomic().vectorize(ryl).unroll(n).unroll(m);
+    acc.update().reorder(rx, lane, bacc, n, m, ryo);
+    for (Func f : {lanes, acc}) {
+        regs(f.compute_at(tile_at(out, st)).reorder_storage(lane, n, m), {lane}, {ryi, bacc, n, m});
+    }
+}
+
 // The integer path for weight records of ts.nt rows interleaved in pieces of
 // `chunk` codes (as GGML's repacked gemv): per block, int32 sums vectorized
 // across the record's rows and each piece's 4-code quads (sdot), so a piece
@@ -609,8 +629,13 @@ inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, cons
     for (Func e : staged) {
         e.compute_root();
         encoder(e, rs);
+        if (blocks[1] == 1) e.vectorize(e.args()[0], t.natural_vector_size<float>() * 4, TailStrategy::GuardWithIf);
     }
     out.output_buffer().dim(0).set_bounds(0, 1).dim(1).set_bounds(0, 1);  // N = M = 1
+    if (blocks[0] == 1) {
+        flat(out, 0, dots[0], Expr(), {1, 1, 4}, r, t);
+        return;
+    }
     blocked(out, 0, dots[0], Expr(), {}, r, blocks[1] == blocks[0], rs, t, true);
 }
 
@@ -881,6 +906,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     Expr N = out.output_buffer().dim(0).extent(), M = out.output_buffer().dim(1).extent();
     bool integer = blocks[1] == blocks[0], whole = blocks[2] > 1;
     Expr Mr = M / blocks[2] * blocks[2];
+    const int fv = 4 * t.natural_vector_size<float>();
     for (size_t i = 0; i < staged.size(); i++) {
         // staged[i] encodes dots[i]'s act. Records in tasks of up to 16 chunks
         // of their blocks (work in values), so even a few records (small M)
@@ -902,6 +928,21 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
             s.split(b, bo, b, (B + chunks - 1) / chunks, TailStrategy::GuardWithIf).fuse(rec, bo, t).parallel(t);
         }
         encoder(e, rs);
+        if (blocks[1] == 1) {  // values: vectorized (also for M = 1)
+            s.vectorize(b, fv, TailStrategy::GuardWithIf);
+            e.vectorize(b, fv, TailStrategy::GuardWithIf);
+        }
+    }
+    if (blocks[0] == 1) {
+        // Float weights (no blocks): 4 x 2 tiles (each vector of a row's
+        // weights used for both act columns, each act vector for 4 rows), row
+        // pairs, single rows.
+        if (whole || blocks[3] > 1) throw std::invalid_argument("weights without blocks: one row per record, acts too");
+        Tiles fg{4, 2, 1, 32, 32, 2}, fp{2, 1, 2, 16}, fr{1, 1, 4, 16};
+        flat(out, 0, dots[0], N >= fg.nt && M >= fg.mt, fg, r, t);
+        flat(out, 0, dots[0], N >= fp.nt, fp, r, t);
+        flat(out, 0, dots[0], Expr(), fr, r, t);
+        return;
     }
     Tiles mmla8{4, 8, 1, 32, 32, 2}, gemm{4, 4, 1, 32, 32, 2}, pairs{2, 1, 2, 16}, rows{1, 1, 2, 16};
     bool mmla_ok = integer && t.has_feature(Target::ARMI8MM);
