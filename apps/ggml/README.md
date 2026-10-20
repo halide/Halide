@@ -235,16 +235,18 @@ e8m0 scale byte `e` and the e2m1 codes, packed as q4_0's. Its quantizer
 (wrapping for tiny blocks; log2f as correctly rounded: double, rounded to
 float), `d = 2^(e - 128)`, and each code the first of `kvalues_mxfp4` (the
 doubled e2m1 values) nearest `x / d` (`best_index_mxfp4`'s strict scan of
-`|kv * d - x|`, fused as GGML's arm64 build computes it). Its lossless stages
-are `MiniFloat`s: the codes `minifloat_integers(e2m1)` (`schemes/common.h`: a
-MiniFloat's values as small integers, decoded by integer arithmetic from its
-fields: a mask, `min`, a shift and a sign select), so the kernels' sdot takes
-them as int8, as q4_0's; the scale `e8m0_half`, an e8m0 MiniFloat of `2d`
-decoded GGML's way (`GGML_E8M0_TO_FP32_HALF`; byte 0xFF is 2^127, not NaN). The
-codec is bit-exact against GGML's reference quantizer. Its kernels are the same
-recipes, with no new schedule code. `ggml_mxfp4_properties` (ctest) checks the
-error bound, the declared ranges, idempotent requantizing and closure on normal,
-tiny, huge, one-signed, outlier, constant and zero blocks.
+`|kv * d - x|`, fused as GGML's arm64 build computes it). Its lossless stages:
+the codes `e2m1_codes()`, `kvalues_mxfp4` as a `codebook` (`schemes/common.h`:
+int8 codes and their indices in a constant table; the table itself is computed
+from the e2m1 MiniFloat by `minifloat_integers`), decoded by a `mux` of the
+table's constants, which Halide lowers to a register table lookup (NEON `tbl`,
+as GGML's `vqtbl1q_s8`), so the kernels' sdot takes them as int8, as q4_0's; the
+scale `e8m0_half`, an e8m0 MiniFloat of `2d` decoded GGML's way
+(`GGML_E8M0_TO_FP32_HALF`; byte 0xFF is 2^127, not NaN). The codec is bit-exact
+against GGML's reference quantizer. Its kernels are the same recipes, with no
+new schedule code. `ggml_mxfp4_properties` (ctest) checks the error bound, the
+declared ranges, idempotent requantizing and closure on normal, tiny, huge,
+one-signed, outlier, constant and zero blocks.
 
 KleidiAI's q8_0 scheme (`schemes/kleidiai.h`; GGML's KleidiAI backend runs it
 for q8_0 weights) is two rowwise formats, a whole row of K values one

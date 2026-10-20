@@ -6,6 +6,7 @@
 // implicit vars.
 #include "layouts.h"
 
+#include <algorithm>
 #include <cmath>
 #include <map>
 #include <sstream>
@@ -365,6 +366,37 @@ inline Approximation minifloat_integers(const MiniFloat &f) {
                      }}
         .with_types(Int(8), UInt(8))
         .with_ranges(ApproximationRange(f.is_signed ? -top : 0, top), ApproximationRange(0, (1 << f.bits()) - 1))
+        .with_lossless();
+}
+
+// A codebook: int8 codes drawn from a table of n <= 256 `values` <-> their
+// indices in it, unsigned (GGML's kvalues_mxfp4, kvalues_iq4nl), the first
+// index for a value the table repeats. The decode is a lookup in the constant
+// table (a mux of constants: a register table lookup, e.g. NEON's tbl, where
+// the target has one); the encode compares against each value in turn.
+// Lossless on the table's values; others encode to index 0.
+inline Approximation codebook(const std::string &name, const std::vector<int> &values) {
+    const int n = (int)values.size();
+    if (n < 2 || n > 256) {
+        throw std::invalid_argument("codebook: " + name + " has " + std::to_string(n) + " values");
+    }
+    std::vector<Expr> table;
+    for (int v : values) {
+        if (v < -128 || v > 127) {
+            throw std::invalid_argument("codebook: " + name + " has a value outside int8: " + std::to_string(v));
+        }
+        table.push_back(cast<int8_t>(v));
+    }
+    auto [lo, hi] = std::minmax_element(values.begin(), values.end());
+    return Pointwise{name, [=](const Expr &x) {
+                         Expr i = cast<uint8_t>(0);
+                         for (int k = n - 1; k >= 0; k--) {
+                             i = select(x == table[k], cast<uint8_t>(k), i);
+                         }
+                         return i; },
+                     [=](const Expr &x) { return mux(x, table); }}
+        .with_types(Int(8), UInt(8))
+        .with_ranges(ApproximationRange(*lo, *hi), ApproximationRange(0, n - 1))
         .with_lossless();
 }
 
