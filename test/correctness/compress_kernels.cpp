@@ -25,6 +25,23 @@ bool check(const std::string &what, const std::string &text, const std::string &
     return true;
 }
 
+// Decode the first n bytes of the LLVM IR string constant (c"...") that
+// starts at pos, in which non-printable bytes are written as \XX.
+std::vector<uint8_t> ll_string_bytes(const std::string &ll, size_t pos, int n) {
+    std::vector<uint8_t> bytes;
+    pos += 2;  // c"
+    while ((int)bytes.size() < n && pos < ll.size() && ll[pos] != '"') {
+        if (ll[pos] == '\\') {
+            bytes.push_back((uint8_t)std::stoi(ll.substr(pos + 1, 2), nullptr, 16));
+            pos += 3;
+        } else {
+            bytes.push_back((uint8_t)ll[pos]);
+            pos += 1;
+        }
+    }
+    return bytes;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -62,8 +79,21 @@ int main(int argc, char **argv) {
             ok &= check(what, ll, "define weak i32 @halide_decompress_kernels(", compress);
 
             if (compress && os == std::string("windows")) {
-                // MSZIP magic, and the autolink of the Windows Compression API.
-                ok &= check(what, ll, "c\"\\0AQ\\E5\\C0\\18\\00", true);
+                // The first MSZIP block: a u32 size below 64KB, and the "CK" signature.
+                std::vector<uint8_t> first_block;
+                size_t at = ll.find("gpu_compressed_kernels.data");
+                if (at != std::string::npos) {
+                    at = ll.find("c\"", at);
+                }
+                if (at != std::string::npos) {
+                    first_block = ll_string_bytes(ll, at, 6);
+                }
+                if (first_block.size() != 6 || first_block[2] != 0 || first_block[3] != 0 ||
+                    first_block[4] != 'C' || first_block[5] != 'K') {
+                    printf("%s: compressed kernels do not start with an MSZIP block\n", what.c_str());
+                    ok = false;
+                }
+                // The autolink of the Windows Compression API.
                 ok &= check(what, ll, "!\"/DEFAULTLIB:cabinet.lib\"", true);
                 ok &= check(what, ll, "@Decompress(", true);
             } else if (compress) {
