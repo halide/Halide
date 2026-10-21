@@ -50,8 +50,8 @@ set(GGML_FORMATS
     "q5_0 codec,vec_dot,mul_mat q8_0,f16,f32,f32:q8_0"
     "q5_1 codec,vec_dot,mul_mat q8_1,f16,f32,f32:q8_1"
     "mxfp4 codec,vec_dot,mul_mat q8_0,f16,f32,f32:q8_0"
-    "iq4_nl codec"
-    "iq4_xs codec"
+    "iq4_nl codec,vec_dot,mul_mat q8_0,f16,f32,f32:q8_0"
+    "iq4_xs codec,vec_dot,mul_mat q8_K,f16,f32,f32:q8_K"
     "q4_0.i4.4x4 codec,mul_mat q8_0,f32:q8_0,f32:q8_0.4x4"
     "q4_0.i4.4x8 codec,mul_mat q8_0,f32:q8_0,f32:q8_0.4x8"
     "q4_0.i4.8x8 codec"
@@ -73,6 +73,7 @@ set(GGML_FORMATS
     "q5_0 mul_mat f32,f16,q8_0 metal"
     "q5_1 mul_mat f32,f16,q8_1 metal"
     "mxfp4 mul_mat f32,f16,q8_0 metal"
+    "iq4_nl mul_mat f32,f16,q8_0 metal"
     "f16 mul_mat f16,f32,f32:f16 metal"
     "bf16 mul_mat bf16,f32,f32:bf16 metal"
 )
