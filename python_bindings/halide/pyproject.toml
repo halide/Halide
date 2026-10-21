@@ -19,7 +19,7 @@ requires-python = ">=3.10"
 dynamic = ['version', 'dependencies']
 dependencies = [
   "imageio>=2",
-  "pillow; platform_machine == 'armv8l' or platform_machine == 'armv7l'",
+  "pillow; (platform_machine == 'armv8l' or platform_machine == 'armv7l') and python_full_version >= '3.11'",
 ]
 keywords = [
   "array",
