@@ -395,6 +395,7 @@ tests(
     nonexistent_update_stage.cpp
     null_host_field.cpp
     obscure_image_references.cpp
+    opencl_allocation_cache.cpp
     out_constraint.cpp
     out_of_memory.cpp
     output_func_input_buffer_name_collision.cpp
