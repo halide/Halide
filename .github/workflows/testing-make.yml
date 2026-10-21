@@ -23,7 +23,12 @@ on:
       - "pyproject.toml"
       - "uv.lock"
 
-      - "README.md"
+      - "**.md"
+      - ".claude/**"
+      - ".devcontainer/**"
+      - ".pre-commit-config.yaml"
+      - ".git-blame-ignore-revs"
+      - ".gdbinit"
       - "CODE_OF_CONDUCT.md"
       - "LICENSE.txt"
       - ".gitignore"
@@ -34,6 +39,10 @@ on:
       - "run-clang-tidy.sh"
       - "**.clang-tidy"
       - "**.py"
+
+      # Not used by the Makefile build.
+      - "apps/Hello*/**"
+      - "test/integration/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

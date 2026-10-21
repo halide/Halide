@@ -93,3 +93,12 @@ add_test(
         "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/filter_dll_exports.out.def" -P
         "${CMAKE_CURRENT_SOURCE_DIR}/filter_dll_exports/run.cmake"
 )
+
+if (Halide_BUILDING_IN_CI)
+    add_test(
+        NAME audit_test_labels
+        COMMAND
+            "$<TARGET_FILE:Python3::Interpreter>" "${Halide_SOURCE_DIR}/tools/test_audit_test_labels.py"
+    )
+    set_tests_properties(audit_test_labels PROPERTIES LABELS cmake)
+endif ()
