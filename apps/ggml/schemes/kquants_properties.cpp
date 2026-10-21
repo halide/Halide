@@ -15,7 +15,8 @@ using namespace Halide;
 using namespace Halide::ApproximationTesting;
 
 int main() {
-    // Each run of 32 (a q4_K sub-block, two of q6_K's) or of 256 (a
+    // Each run of 16 (a q2_K, q3_K or q6_K sub-block), of 32 (a q4_K or q5_K
+    // one) or of 256 (a
     // super-block) drawn from one of these: super-blocks of sub-blocks of
     // every magnitude, and homogeneous ones. (One JIT compilation per
     // trial, so all in each trial.)
@@ -31,16 +32,21 @@ int main() {
         Distribution::zeros(),
     };
     const std::vector<std::pair<std::string, Distribution>> dists = {
+        {"mixed per 16", Distribution::mixture(parts, 16)},
         {"mixed per 32", Distribution::mixture(parts, 32)},
         {"mixed per 256", Distribution::mixture(parts, ggml::QK_K)},
     };
 
     // held: their bounds checked at them
-    Approximation q8 = ggml::Q8KQuant{}, q4 = ggml::Q4KQuant{}, q6 = ggml::Q6KQuant{};
+    Approximation q8 = ggml::Q8KQuant{}, q4 = ggml::q4_K_quant(), q6 = ggml::Q6KQuant{};
+    Approximation q5 = ggml::q5_K_quant(), q2 = ggml::q2_K_quant(), q3 = ggml::Q3KQuant{};
     const std::vector<std::tuple<std::string, Approximation, Approximation>> schemes = {
         {"q8_K", q8, Compose{BlockReshape{ggml::QK_K}, q8, Derive{"bsums", {"codes"}, ggml::partial_sums(16)}, ggml::layout("aos", {{"d", Float(32)}, {"qs", Int(8), ggml::QK_K}, {"bsums", Int(16), ggml::QK_K / 16}}, {"qs", "d", "bsums"})}},
         {"q4_K", q4, Compose{BlockReshape{ggml::QK_K}, q4, Parallel{{"codes", ggml::unsigned_codes(4)}}, Parallel{{"codes", ggml::q4_K_nibbles()}, {"scales", ggml::KScales{}}, {"scale", ggml::fp16()}, {"min", ggml::fp16()}}}},
         {"q6_K", q6, Compose{BlockReshape{ggml::QK_K}, q6, Parallel{{"codes", ggml::SumSplit{4}}}, Parallel{{"low", Compose{BlockReshape{128}, PlanarFieldPack{4, 64}, ggml::Unblock{64}}}, {"high", Compose{ggml::multiples(4, -32, 4), BlockReshape{128}, PlanarFieldPack{2, 32}, ggml::Unblock{32}}}, {"scale", ggml::fp16()}}}},
+        {"q5_K", q5, Compose{BlockReshape{ggml::QK_K}, q5, Parallel{{"codes", ggml::SumSplit{4}}}, Parallel{{"low", ggml::q4_K_nibbles()}, {"high", Compose{ggml::multiples(4, 0, 2), PlanarFieldPack{1, 32}}}, {"scales", ggml::KScales{}}, {"scale", ggml::fp16()}, {"min", ggml::fp16()}}}},
+        {"q2_K", q2, Compose{BlockReshape{ggml::QK_K}, q2, Parallel{{"codes", ggml::unsigned_codes(2)}}, Parallel{{"codes", ggml::two_bit_planes()}, {"scales", PlanarFieldPack{4, 16}}, {"scale", ggml::fp16()}, {"min", ggml::fp16()}}}},
+        {"q3_K", q3, Compose{BlockReshape{ggml::QK_K}, q3, Parallel{{"codes", ggml::SumSplit{2}}}, Parallel{{"low", ggml::two_bit_planes()}, {"high", Compose{ggml::multiples(2, -4, 2), PlanarFieldPack{1, 32}}}}, Parallel{{"scales", Compose{ggml::SumSplit{4}, Parallel{{"low", PlanarFieldPack{4, 8}}, {"high", Compose{ggml::multiples(4, -32, 4), PlanarFieldPack{2, 4}}}}}}, {"scale", ggml::fp16()}}}},
     };
     int failures = 0;
     for (const auto &[scheme, q, a] : schemes) {
