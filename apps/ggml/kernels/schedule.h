@@ -539,7 +539,11 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
         inner.update().atomic().vectorize(rxi).unroll(rxc);
     }
     schedule_sums(d, out, st, acc, n, m, ts, r, ts.nt > 2, vec);
-    tables(rs, {blk, mid, codes, rest}, LoopLevel(acc, ryo));
+    std::vector<Func> readers{blk, mid, codes, rest};
+    for (auto [f, part, inner] : subs) {
+        readers.insert(readers.end(), {part, inner});
+    }
+    tables(rs, readers, LoopLevel(acc, ryo));
 }
 
 // Weights of one value per record (floats: no blocks, r.x is a single value):
@@ -721,7 +725,7 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
         rest.update().reorder(rxk, rxc, n, m, u).atomic().vectorize(rxk).vectorize(rxc);
     }
     schedule_sums(d, out, st, acc, n, m, ts, r, true, 16);
-    tables(rs, {blk, mid, codes, rest}, LoopLevel(acc, ryo));
+    tables(rs, {blk, mid, codes, rest, part, inner}, LoopLevel(acc, ryo));
 }
 
 // The Funcs of e's encoder: the intermediates of the result that encodes e,
