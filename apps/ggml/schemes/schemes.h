@@ -81,6 +81,9 @@ inline Format format(const std::string &spec, bool aos = false, bool scaled = fa
     if (type == "q8_K" && codes.empty()) return sub_blocks({q8_K(lay, indexed), QK_K, rows, chunk}, 16);
     if (type == "q4_K" && codes.empty()) return sub_blocks({q4_K(lay, indexed), QK_K, rows, chunk}, 32);
     if (type == "q6_K" && codes.empty()) return sub_blocks({q6_K(lay, indexed), QK_K, rows, chunk}, 16);
+    if (type == "q5_K" && codes.empty()) return sub_blocks({q5_K(lay, indexed), QK_K, rows, chunk}, 32);
+    if (type == "q2_K" && codes.empty()) return sub_blocks({q2_K(lay, indexed), QK_K, rows, chunk}, 16);
+    if (type == "q3_K" && codes.empty()) return sub_blocks({q3_K(lay, indexed), QK_K, rows, chunk}, 16);
     if (!blocks.defined()) blocks = 1;
     if (type == "qsi8cx" && codes.empty()) return {qsi8cx(lay, blocks, indexed), QK, rows, chunk, true};
     if (type == "qai8dx" && codes.empty()) return {qai8dx(lay, blocks, indexed), QK, rows, chunk, true};
