@@ -5,6 +5,7 @@
 #include <iterator>
 #include <map>
 #include <numeric>
+#include <optional>
 #include <ostream>
 #include <set>
 #include <sstream>
@@ -15,6 +16,7 @@
 #endif
 
 #include "Error.h"
+#include "ExprUsesVar.h"
 #include "FindCalls.h"
 #include "Function.h"
 #include "IROperator.h"
@@ -2744,17 +2746,26 @@ public:
 
 namespace {
 
-void port_atoms(const Poly &p, std::vector<const NNode *> &out) {
+// The calls to ports in p, each with its enclosing sums' binders named by
+// depth (#0 the outermost), as the keys name them.
+struct PortAtom {
+    const NNode *node;
+    std::map<std::string, Expr> binders;
+};
+
+void port_atoms(const Poly &p, std::vector<PortAtom> &out, const std::map<std::string, Expr> &env = {}, int depth = 0) {
     for (const Mono &m : p.monos) {
         for (const NNodePtr &f : m.factors) {
             if (f->kind == NNode::Atom && f->port) {
-                out.push_back(f.get());
+                out.push_back({f.get(), env});
             } else if (f->kind == NNode::Opaque) {
                 for (const Poly &c : f->children) {
-                    port_atoms(c, out);
+                    port_atoms(c, out, env, depth);
                 }
             } else if (f->kind == NNode::Sum) {
-                port_atoms(Poly{{f->body}}, out);
+                std::map<std::string, Expr> inner = env;
+                inner[f->var] = Variable::make(Int(32), "#" + std::to_string(depth));
+                port_atoms(Poly{{f->body}}, out, inner, depth + 1);
             }
         }
     }
@@ -2811,36 +2822,136 @@ DerivedPortMatch match_derived_port(const Func &term, const DerivedPort &port) {
     }
 
     // Unify the definition's port calls, where an argument is one of its
-    // Vars, with the term's calls to the same port.
-    std::vector<const NNode *> d_atoms, t_atoms;
+    // Vars or affine in one, c * v + w (c a nonzero integer constant, w free
+    // of v), with the term's calls to the same port: the term's argument e
+    // proposes v = (e - w) / c, where that divides exactly and leaves no
+    // binder (w's binders cancel e's) and no other Var of the definition
+    // (those in w are first replaced by their own candidates). Candidates
+    // are only proposals: the definition normalized at them must equal the
+    // term.
+    std::vector<PortAtom> d_atoms, t_atoms;
     port_atoms(d, d_atoms);
     port_atoms(t, t_atoms);
     if (t_atoms.empty()) {
         result.reason = "the term reads none of the ports the definition reads (" + joined(port.from_names) + ")";
         return result;
     }
+    // The definition's Vars renamed apart from the term's, which may share
+    // their names.
+    std::vector<std::string> fresh;
+    std::map<std::string, Expr> renamed;
+    for (const std::string &v : def_vars) {
+        fresh.push_back("$dv" + std::to_string(fresh.size()) + "." + v);
+        renamed[v] = Variable::make(Int(32), fresh.back());
+    }
+    auto uses_def_var = [&](const Expr &e) {
+        return std::any_of(fresh.begin(), fresh.end(), [&](const std::string &n) { return Internal::expr_uses_var(e, n); });
+    };
+    // a == c * v + w, w free of v.
+    auto affine_in = [&](const Expr &a, const std::string &v, int64_t &c, Expr &w) {
+        if (!a.defined() || a.type() != Int(32) || !Internal::expr_uses_var(a, v)) {
+            return false;
+        }
+        w = Internal::simplify(Internal::substitute(v, Internal::make_zero(a.type()), a));
+        std::optional<int64_t> k =
+            Internal::as_const_int(Internal::simplify(Internal::substitute(v, Internal::make_one(a.type()), a) - w));
+        if (!k || *k == 0) {
+            return false;
+        }
+        c = *k;
+        Expr rebuilt = Internal::make_const(a.type(), c) * Variable::make(a.type(), v) + w;
+        return Internal::is_const_zero(Internal::simplify(a - rebuilt)) && !Internal::expr_uses_var(w, v);
+    };
+    // e = c * v + w solved for v, exactly.
+    auto solve = [&](const Expr &e, int64_t c, const Expr &w) -> Expr {
+        if (e.type() != w.type()) {
+            return Expr();
+        }
+        Expr diff = Internal::simplify(e - w);
+        Expr v = c == 1 ? diff : Internal::simplify(diff / Internal::make_const(e.type(), c));
+        if (c != 1 && !Internal::is_const_zero(Internal::simplify(Internal::make_const(e.type(), c) * v - diff))) {
+            return Expr();
+        }
+        bool bound = false;
+        Internal::visit_with(v, [&](auto *self, const Variable *x) { bound |= Internal::starts_with(x->name, "#"); });
+        if (bound || !placeholders_in(v).empty() || uses_def_var(v)) {
+            return Expr();
+        }
+        return v;
+    };
     std::vector<std::vector<Expr>> candidates(def_vars.size());
-    for (size_t v = 0; v < def_vars.size(); v++) {
-        std::set<std::string> seen;
-        for (const NNode *da : d_atoms) {
-            for (size_t k = 0; k < da->args.size(); k++) {
-                const Variable *var = da->args[k].as<Variable>();
-                if (!var || var->name != def_vars[v]) {
-                    continue;
+    std::vector<std::set<std::string>> seen(def_vars.size());
+    auto propose = [&](size_t v, const Expr &e) {
+        if (!e.defined() || candidates[v].size() >= 16) {
+            return false;
+        }
+        std::ostringstream key;
+        key << e;
+        if (!seen[v].insert(key.str()).second) {
+            return false;
+        }
+        candidates[v].push_back(e);
+        return true;
+    };
+    // w with the other Vars of the definition it uses replaced by their
+    // candidates, every combination (a few).
+    auto instances = [&](const Expr &w, size_t v) {
+        std::vector<Expr> out{w};
+        for (size_t u = 0; u < def_vars.size(); u++) {
+            if (u == v || !Internal::expr_uses_var(w, fresh[u])) {
+                continue;
+            }
+            std::vector<Expr> next;
+            for (const Expr &x : out) {
+                for (const Expr &c : candidates[u]) {
+                    if (next.size() < 64) {
+                        next.push_back(Internal::substitute(fresh[u], c, x));
+                    }
                 }
-                for (const NNode *ta : t_atoms) {
-                    if (ta->name != da->name || ta->args.size() != da->args.size() || !ta->args[k].defined() ||
-                        !placeholders_in(ta->args[k]).empty()) {
+            }
+            out = next;
+        }
+        return out;
+    };
+    // A Var in w needs its own candidates first: repeat until none are new.
+    for (bool grew = true; grew;) {
+        grew = false;
+        for (size_t v = 0; v < def_vars.size(); v++) {
+            for (const PortAtom &dp : d_atoms) {
+                const NNode *da = dp.node;
+                std::map<std::string, Expr> env = dp.binders;
+                env.insert(renamed.begin(), renamed.end());
+                for (size_t k = 0; k < da->args.size(); k++) {
+                    const Variable *var = da->args[k].as<Variable>();
+                    int64_t c = 0;
+                    Expr w;
+                    bool plain = var && var->name == def_vars[v];
+                    if (!plain && !affine_in(Internal::substitute(env, da->args[k]), fresh[v], c, w)) {
                         continue;
                     }
-                    std::ostringstream key;
-                    key << ta->args[k];
-                    if (seen.insert(key.str()).second) {
-                        candidates[v].push_back(ta->args[k]);
+                    for (const PortAtom &tp : t_atoms) {
+                        const NNode *ta = tp.node;
+                        if (ta->name != da->name || ta->args.size() != da->args.size() || !ta->args[k].defined()) {
+                            continue;
+                        }
+                        if (plain) {
+                            if (placeholders_in(ta->args[k]).empty()) {
+                                grew |= propose(v, ta->args[k]);
+                            }
+                            continue;
+                        }
+                        Expr e = Internal::simplify(Internal::substitute(tp.binders, ta->args[k]));
+                        for (const Expr &wi : instances(w, v)) {
+                            if (!uses_def_var(wi)) {
+                                grew |= propose(v, solve(e, c, wi));
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+    for (size_t v = 0; v < def_vars.size(); v++) {
         if (candidates[v].empty()) {
             result.reason = "no call to a port in the term determines the definition's argument " +
                             std::to_string(v) + " (" + def_vars[v] + ")";

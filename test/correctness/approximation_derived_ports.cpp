@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <functional>
 #include <memory>
 #include <set>
 
@@ -461,6 +462,155 @@ int test_rejections() {
     return 0;
 }
 
+// Integer codes, no scale, on blocks of AB values (k, b).
+constexpr int AB = 64, SUB = 16;
+
+struct Int8Codes {
+    std::vector<Func> encode(const std::vector<Func> &in) const {
+        Func q("i8c_codes");
+        Var k("k"), b("b");
+        q(k, b, _) = cast<int8_t>(clamp(round(in[0](k, b, _)), -127, 127));
+        return {q};
+    }
+    std::vector<Func> decode(const std::vector<Func> &e) const {
+        Func v("i8c_decoded");
+        Var k("k"), b("b");
+        v(k, b, _) = cast<float>(e[0](k, b, _));
+        return {v};
+    }
+    ApproximationSignature signature() const {
+        return {{{"block", Float(32)}}, {{"codes", Int(8), std::nullopt, ApproximationRange(-127, 127)}}};
+    }
+};
+
+// A port whose definition indexes the codes by an affine expression of one
+// of its Vars: index(t, r, b) for sub-block t, its value r, block b.
+struct AffinePort {
+    Approximation codes = Int8Codes{};
+    ApproximationResult res;
+    DerivedPort port;
+    Func dq;
+
+    AffinePort(Func x, Func use, std::function<Expr(Expr, Expr, Expr)> index, Type stored = Int(16)) {
+        Derive::Definition sums = [=](const std::vector<Func> &from) {
+            Func s("affine_sums");
+            Var t("t"), b("b");
+            RDom r(0, SUB, "affine_r");
+            s(t, b) = cast(stored, sum(cast<int>(from[0](index(t, r, b), b))));
+            return s;
+        };
+        res = x.approximate_by(Compose{BlockReshape{AB}, codes, Derive{"sums", {"codes"}, sums}}, {use});
+        port = res.derived_port("sums");
+        dq = res.decoded_by(codes);
+    }
+};
+
+// A definition argument c * v + w (c a constant, w free of v, binders and
+// other Vars allowed) determines v from the term's argument e: (e - w) / c,
+// where that divides exactly. The candidate is only a proposal: the
+// definition at it must still normalize to the term.
+int test_affine_arguments() {
+    const int blocks = 3;
+    Buffer<float> xb(AB * blocks);
+    for (int i = 0; i < AB * blocks; i++) {
+        xb(i) = (float)((i * 37) % 255 - 127);
+    }
+    Var i("i"), t("t"), b("b");
+    RDom r(0, SUB, "term_r");
+    auto setup = [&](const char *name, std::function<Expr(Expr, Expr, Expr)> index, Type stored = Int(16)) {
+        Func x(std::string(name) + "_x"), use(std::string(name) + "_use");
+        x(i) = xb(i);
+        use(i) = x(i);
+        return AffinePort(x, use, std::move(index), stored);
+    };
+    auto report = [](const DerivedPortMatch &m) {
+        if (!m) {
+            printf("  %s\n  term %s\n  definition %s\n", m.reason.c_str(), m.term_form.c_str(), m.definition_form.c_str());
+        }
+    };
+
+    // Sums of each 16 codes (q8_K's bsums): codes(16 t + r, b), read through
+    // the port, also at the next sub-block.
+    {
+        AffinePort a = setup("sub", [](Expr t, Expr r, Expr b) { return t * SUB + r; });
+        Func term("sub_term");
+        term(t, b) = 0.0f;
+        term(t, b) += a.dq(t * SUB + r, b);
+        DerivedPortMatch m = match_derived_port(term, a.port);
+        report(m);
+        CHECK(m.matched && m.port_args.size() == 2);
+        CHECK(Internal::equal(m.port_args[0], t) && Internal::equal(m.port_args[1], b));
+
+        Func next("sub_next");
+        next(t, b) = 0.0f;
+        next(t, b) += a.dq(t * SUB + SUB + r, b);
+        m = match_derived_port(next, a.port);
+        report(m);
+        CHECK(m.matched && Internal::equal(Internal::simplify(m.port_args[0] - (t + 1)), 0));
+    }
+
+    // Read through the port: approximate_by needs a stored type that widens
+    // exactly to the term's, so this port stores floats.
+    {
+        AffinePort a = setup("read", [](Expr t, Expr r, Expr b) { return t * SUB + r; }, Float(32));
+        Func term("read_term"), consumer("read_consumer");
+        term(t, b) = 0.0f;
+        term(t, b) += a.dq(t * SUB + r, b);
+        consumer(t, b) = term(t, b) * 2.0f;
+        Buffer<float> before = consumer.realize({AB / SUB, blocks});
+        DerivedSubstitution sub = term.approximate_by(a.port, {consumer});
+        CHECK(sub.replacement.defined() && sub.port_args.size() == 2);
+        Buffer<float> stored = a.res.encoded[1].realize({AB / SUB, blocks});
+        Buffer<float> after = consumer.realize({AB / SUB, blocks});
+        for (int bb = 0; bb < blocks; bb++) {
+            for (int tt = 0; tt < AB / SUB; tt++) {
+                CHECK(after(tt, bb) == before(tt, bb) && after(tt, bb) == 2.0f * stored(tt, bb));
+            }
+        }
+    }
+
+    // A negative coefficient: the sub-blocks counted from the block's end.
+    {
+        AffinePort a = setup("neg", [](Expr t, Expr r, Expr b) { return (AB - 1) - t * SUB - r; });
+        Func term("neg_term");
+        term(t, b) = 0.0f;
+        term(t, b) += a.dq((AB - 1) - t * SUB - r, b);
+        DerivedPortMatch m = match_derived_port(term, a.port);
+        report(m);
+        CHECK(m.matched && Internal::equal(m.port_args[0], t));
+    }
+
+    // w with another of the definition's Vars, determined by another
+    // argument (b, the block, also the codes' second index).
+    {
+        AffinePort a = setup("other", [](Expr t, Expr r, Expr b) { return t * SUB + b + r; });
+        Func term("other_term");
+        term(t, b) = 0.0f;
+        term(t, b) += a.dq(t * SUB + b + r, b);
+        DerivedPortMatch m = match_derived_port(term, a.port);
+        report(m);
+        CHECK(m.matched && Internal::equal(m.port_args[0], t) && Internal::equal(m.port_args[1], b));
+    }
+
+    // Rejections: a coefficient that does not divide (8 t + r against
+    // 16 t + r) proposes nothing; a proposal whose sums differ (8 of the 16
+    // values) does not match.
+    {
+        AffinePort a = setup("rej", [](Expr t, Expr r, Expr b) { return t * SUB + r; });
+        Func half("rej_half"), short_sum("rej_short");
+        half(t, b) = 0.0f;
+        half(t, b) += a.dq(t * (SUB / 2) + r, b);
+        DerivedPortMatch m = match_derived_port(half, a.port);
+        CHECK(!m.matched && m.reason.find("determines the definition's argument 0") != std::string::npos);
+        RDom r8(0, SUB / 2, "short_r");
+        short_sum(t, b) = 0.0f;
+        short_sum(t, b) += a.dq(t * SUB + r8, b);
+        m = match_derived_port(short_sum, a.port);
+        CHECK(!m.matched && m.reason.find("differ") != std::string::npos);
+    }
+    return 0;
+}
+
 bool error_occurred = false;
 std::string error_message;
 void record_error(JITUserContext *, const char *msg) {
@@ -645,6 +795,7 @@ int main(int argc, char **argv) {
     for (const Test &t : std::vector<Test>{{"introspection", test_introspection},
                                            {"substitution", test_substitution},
                                            {"argument_mapping", test_argument_mapping},
+                                           {"affine_arguments", test_affine_arguments},
                                            {"after_sever", test_after_sever},
                                            {"rejections", test_rejections},
                                            {"runtime_check", test_runtime_check},
