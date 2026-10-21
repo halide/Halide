@@ -1,10 +1,12 @@
-// Properties of tq1_0 and tq2_0 (schemes/ternary.h), without their layouts:
+// Properties of tq1_0 and tq2_0 (schemes/ternary.h) and q1_0
+// (schemes/binary.h), without their layouts:
 // the round trip is within the declared error bound, the codes are within
 // their declared range, and every stage is closed. The blocks are drawn to
 // reach the quantizer's corners: binades of every size, one-signed blocks,
 // blocks dominated by one value, constants and zeros.
 #include "Halide.h"
 #include "halide_approximation_testing.h"
+#include "schemes/binary.h"
 #include "schemes/ternary.h"
 
 #include <iostream>
@@ -29,14 +31,15 @@ int main() {
         {"mixed per 256", Distribution::mixture(parts, ggml::QK_K)},
     };
 
-    // held: its bound checked at it
-    Approximation q = ggml::TernaryQuant{};
-    const std::vector<std::tuple<std::string, Approximation>> schemes = {
-        {"tq2_0", Compose{BlockReshape{ggml::QK_K}, q, Parallel{{"codes", ggml::multiples(0, -1, 4)}, {"scale", ggml::fp16()}}, Parallel{{"codes", ggml::two_bit_planes()}}}},
-        {"tq1_0", Compose{BlockReshape{ggml::QK_K}, q, Parallel{{"codes", ggml::multiples(0, -1, 3)}, {"scale", ggml::fp16()}}, Parallel{{"codes", ggml::Segments{{{"qs_lo", 160}, {"qs_hi", 80}, {"qh", 16}}}}}, Parallel{{"qs_lo", ggml::TritPack{32}}, {"qs_hi", ggml::TritPack{16}}, {"qh", ggml::TritPack{4, 4}}}}},
+    // held: their bounds checked at them
+    Approximation q = ggml::TernaryQuant{}, s = ggml::SignQuant{};
+    const std::vector<std::tuple<std::string, Approximation, Approximation>> schemes = {
+        {"q1_0", s, Compose{BlockReshape{ggml::SignQuant::block}, s, Parallel{{"codes", ggml::multiples(1, -1, 2)}, {"scale", ggml::fp16()}}, Parallel{{"codes", ggml::BitPack{1}}}}},
+        {"tq2_0", q, Compose{BlockReshape{ggml::QK_K}, q, Parallel{{"codes", ggml::multiples(0, -1, 4)}, {"scale", ggml::fp16()}}, Parallel{{"codes", ggml::two_bit_planes()}}}},
+        {"tq1_0", q, Compose{BlockReshape{ggml::QK_K}, q, Parallel{{"codes", ggml::multiples(0, -1, 3)}, {"scale", ggml::fp16()}}, Parallel{{"codes", ggml::Segments{{{"qs_lo", 160}, {"qs_hi", 80}, {"qh", 16}}}}}, Parallel{{"qs_lo", ggml::TritPack{32}}, {"qs_hi", ggml::TritPack{16}}, {"qh", ggml::TritPack{4, 4}}}}},
     };
     int failures = 0;
-    for (const auto &[scheme, a] : schemes) {
+    for (const auto &[scheme, q, a] : schemes) {
         for (const auto &[name, dist] : dists) {
             for (const Property &p : {within_declared_bound().at(q), outputs_within_declared_ranges(), closed()}) {
                 PropertyResult r;
