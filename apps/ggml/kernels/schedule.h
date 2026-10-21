@@ -485,12 +485,12 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     blk.bound(lane, 0, vec / per);  // the lane's range, so the block's scales hoist
     Func rest, mid, codes = block_dot(blk, rs, integer, rest, mid, aff);
     // per sub-block (v): its scale times its codes' dot (inner)
-    std::vector<std::pair<Func, Func>> subs;
+    std::vector<std::tuple<Func, Func, Func>> subs;
     for (Func f : {codes, rest}) {
         if (!sub || !f.defined()) continue;
         Func part = f.update().rfactor(rxs, v);
         part.bound(lane, 0, vec / per);
-        subs.emplace_back(part, part.update().hoist_invariants()[0]);
+        subs.emplace_back(f, part, part.update().hoist_invariants()[0]);
     }
     s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
     Func acc = sum_tree(s, {{{rxo, lane}, {ryi, bacc}}, {{rxo, lane}}}, tile_at(out, st), n, m, ryo)[0];
@@ -507,12 +507,14 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
         ts.nt > 1 ? regs(rest, {n}, {}) : regs(rest, {}, {n});
     }
     for (Func f : {codes, rest}) {
-        if (f.defined()) sub ? f.update().unroll(rxs) : f.update().atomic().vectorize(rxi).unroll(rxc);
+        if (f.defined() && !sub) f.update().atomic().vectorize(rxi).unroll(rxc);
     }
-    // per block group, the tile's sub-block dots (inner), then their scales
-    for (auto [part, inner] : subs) {
-        for (Func f : {part, inner}) {
-            regs(f.compute_at(acc, ryo).reorder_storage(lane, v, n, m).bound_storage(u, ts.interleave), {lane}, {v, u, n, m});
+    // per block and sub-block, the tile's sub-block dots (inner), then their
+    // scales (part)
+    for (auto [f, part, inner] : subs) {
+        f.update().reorder(lane, n, m, rxs, u).unroll(rxs);
+        for (Func g : {part, inner}) {
+            regs(g.compute_at(f, rxs).reorder_storage(lane, n, m), {lane}, {v, u, n, m});
         }
         inner.update().atomic().vectorize(rxi).unroll(rxc);
     }
@@ -653,32 +655,45 @@ inline Func sub_tile_storage(Func f, Var n, Var m, std::vector<Var> outer = {}) 
 // tiles of 2 x 2 sub-tiles, each 4 dense lanes of the intermediates' storage
 // (split_storage), so the tile's accumulators stay in registers.
 inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r,
-                         const std::vector<ApproximationResult> &rs, bool derived = false) {
+                         const std::vector<ApproximationResult> &rs, bool derived = false, int sub = 0, int act_sub = 0) {
     Stage s = tile_out(out, st, dot, cond, ts, r);
-    Var n = dot.args()[0], m = dot.args()[1], nio("nio"), nii("nii"), mio("mio"), mii("mii"), u("u"), bacc("bacc");
-    RVar ry = r.y, rxc("rxc"), rxk("rxk"), ryo("ryo"), ryi("ryi");
+    Var n = dot.args()[0], m = dot.args()[1], nio("nio"), nii("nii"), mio("mio"), mii("mii"), u("u"), v("v"), bacc("bacc");
+    RVar ry = r.y, rxs("rxs"), rxc("rxc"), rxk("rxk"), ryo("ryo"), ryi("ryi");
     bool aff = affine(rs);
     Sums d;
-    if (derived && derived_sums(out, st, s, r, rs, d)) aff = false;
-    s.split(r.x, rxc, rxk, 8);
+    if (derived && derived_sums(out, st, s, r, rs, d, act_sub)) aff = false;
+    sub ? s.split(r.x, rxs, rxc, sub).split(rxc, rxc, rxk, 8) : s.split(r.x, rxc, rxk, 8);
     Func blk = s.rfactor(ry, u);
     Func rest, mid, codes = block_dot(blk, rs, true, rest, mid, aff);
+    // per sub-block (v): its scale times its codes' dot (inner), as blocked()
+    Func part, inner;
+    if (sub) {
+        part = codes.update().rfactor(rxs, v);
+        inner = part.update().hoist_invariants()[0];
+    }
     s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
     Func acc = s.rfactor(ryi, bacc);
     s.vectorize(n, 2, TailStrategy::GuardWithIf).unroll(n).unroll(m);
-    for (Func f : {acc, blk, codes, mid}) {
+    for (Func f : {acc, blk, codes, mid, part, inner}) {
         if (!f.defined()) continue;
         Var x = f.args()[2];  // x: bacc or u
-        sub_tiles(sub_tile_storage(f, n, m, {x}), n, m, {nii, mii, nio, mio, x}).unroll(x);
+        std::vector<Var> outer = f.dimensions() > 3 ? std::vector<Var>{v, x} : std::vector<Var>{x};
+        sub_tiles(sub_tile_storage(f, n, m, outer), n, m, {nii, mii, nio, mio, x}).unroll(x);
         // per block (per 2 rows, tall tiles keep the weight's codes live and spill)
         if (x.name() == u.name()) f.compute_at(acc, ryo).bound_storage(u, ts.interleave);
+    }
+    if (sub) {  // per block and sub-block: the tile's sub-block dots, then their scales
+        sub_tiles(codes.update(), n, m, {nii, mii, nio, mio, rxs, u}).unroll(rxs).unroll(u);
+        sub_tiles(part.update(), n, m, {nii, mii, nio, mio, v, u}).unroll(v).unroll(u);
+        part.compute_at(codes, rxs);
+        inner.compute_at(codes, rxs);
     }
     acc.compute_at(tile_at(out, st));
     sub_tiles(acc.update(), n, m, {nii, mii, nio, mio, bacc, ryo}).unroll(bacc);
     for (Func f : {blk, mid}) {
         if (f.defined()) sub_tiles(f.update(), n, m, {nii, mii, nio, mio, u}).unroll(u);
     }
-    sub_tiles(codes.update(), n, m, {rxk, nii, mii, rxc, nio, mio, u}).unroll(rxc).unroll(u).atomic().vectorize(rxk);
+    sub_tiles((sub ? inner : codes).update(), n, m, {rxk, nii, mii, rxc, nio, mio, u}).unroll(rxc).unroll(u).atomic().vectorize(rxk);
     if (rest.defined()) {  // the act's block sum, once per act column (n vectorized)
         regs(rest.compute_at(acc, ryo).bound_storage(u, ts.interleave), {n}, {m, u});
         rest.update().reorder(rxk, rxc, n, m, u).atomic().vectorize(rxk).vectorize(rxc);
@@ -1095,9 +1110,9 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
             lanes ? blocked_rows(out, whole, dr, c, ts, r, fmt.chunk, rs, fmt.act_rows) : blocked_mmla(out, whole, dr, c, ts, r, rs);
         }
     } else if (mmla_ok) {
-        blocked_mmla(out, whole, dr, fits(mmla8, M), mmla8, r, rs, true);
+        blocked_mmla(out, whole, dr, fits(mmla8, M), mmla8, r, rs, true, fmt.sub, fmt.act_sub);
     }
-    if (!whole || !tiled) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, integer, rs, t, !whole);
+    if (!whole || !tiled) blocked(out, whole, dr, whole ? Expr() : fits(gemm, M), gemm, r, integer, rs, t, !whole, fmt.sub, fmt.act_sub);
     // The rows past Mr (fewer than a record's): no tasks when there are none.
     Expr rest = whole ? M % fmt.act_rows != 0 : Expr();
     if (integer && fmt.rows > 1) {  // N is a multiple of the records' rows
@@ -1106,8 +1121,8 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     }
     pairs.busy = rows.busy = rest;
     // A table's decode, per row pair, outweighs sharing the act's loads
-    if (decoders(rs, all_but({}), 0, SIZE_MAX, true).empty()) blocked(out, 2 * whole, dots[0], fits(pairs, 1), pairs, r, integer, rs, t, true);
-    blocked(out, 2 * whole, dots[0], Expr(), rows, r, integer, rs, t, true);
+    if (decoders(rs, all_but({}), 0, SIZE_MAX, true).empty()) blocked(out, 2 * whole, dots[0], fits(pairs, 1), pairs, r, integer, rs, t, true, fmt.sub, fmt.act_sub);
+    blocked(out, 2 * whole, dots[0], Expr(), rows, r, integer, rs, t, true, fmt.sub, fmt.act_sub);
 }
 
 }  // namespace ggml
