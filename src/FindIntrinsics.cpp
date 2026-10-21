@@ -1630,6 +1630,9 @@ Expr lower_intrinsic(const Call *op) {
     } else if (op->is_intrinsic(Call::mul_shift_right)) {
         internal_assert(op->args.size() == 3);
         return lower_mul_shift_right(op->args[0], op->args[1], op->args[2]);
+    } else if (op->is_intrinsic(Call::round_half_away)) {
+        internal_assert(op->args.size() == 1);
+        return lower_round_half_away_from_zero(op->args[0]);
     } else if (op->is_intrinsic(Call::sorted_avg)) {
         internal_assert(op->args.size() == 2);
         return lower_sorted_avg(op->args[0], op->args[1]);
