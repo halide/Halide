@@ -41,6 +41,7 @@ add_executable(
     harness/oracle.cpp
     harness/repack.cpp
     harness/shapes.cpp
+    harness/trusted.cpp
 )
 target_include_directories(ggml-quant-bench PRIVATE harness "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(ggml-quant-bench PRIVATE ggml::ggml ggml_thread_pool ${GGML_HALIDE_LIBRARIES})

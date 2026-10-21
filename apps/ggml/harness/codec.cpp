@@ -114,7 +114,7 @@ int64_t consistent_q8_1_sums(uint8_t *blocks, int64_t nb) {
 // GGML's reference quantizer of R rows of K values.
 void quantize_ref(ggml_type t, const float *x, uint8_t *dst, int64_t R, int64_t K) {
     if (chunked(t)) {
-        ggml_quantize_chunk(t, x, dst, 0, R, K, nullptr);
+        ggml_quantize_chunk(t, x, dst, 0, R, K, importance(t, K));
     } else {
         // (q8_K's reference quantizer is its CPU from_float)
         auto ref = ggml_get_type_traits(t)->from_float_ref;

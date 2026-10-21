@@ -37,7 +37,10 @@ public:
             Var k = f.args()[0], ko("ko"), ki("ki");
             f.split(k, ko, ki, 4 * get_target().natural_vector_size<float>(), TailStrategy::GuardWithIf).vectorize(ki);
         } else if (quantize && codec.encoded.size() > 1) {
-            return;             // several outputs share the quantizer: make_codec's default schedule
+            return;  // several outputs share the quantizer: make_codec's default schedule
+        } else if (quantize && codec.result.encoded[0].function().has_extern_definition()) {
+            // a trusted encoder: an extern stage, at once
+            codec.result.encoded[0].compute_root();
         } else if (quantize) {  // per block, vectorized as mul_mat's activation encoder
             Func e = codec.result.encoded[0];
             e.compute_at(codec.encoded[0], codec.encoded[0].args()[0]);
