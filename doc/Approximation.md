@@ -755,11 +755,21 @@ compares them exactly; nothing is evaluated.
   looked through.
 - The arguments come from unifying each call to a port in the definition with
   one in the term, e.g. `codes(r, b)` in `psi` against `codes(r, b + 1)` in the
-  term gives `port_args = {b + 1}`.
+  term gives `port_args = {b + 1}`. A definition argument may also be affine in
+  one of its Vars, `c * v + w` with `c` a nonzero integer constant and `w` free
+  of `v` (`w` may use the sum's binders and the definition's other Vars): the
+  term's argument `e` proposes `v = (e - w) / c` when that divides exactly and
+  leaves no binder (the binders of `w` must cancel those of `e`) and no Var of
+  the definition (those in `w` are first replaced by their own candidates). E.g.
+  per-16 sums `s(t, b) = sum(codes(16 * t + r, b))` against a term
+  `sum(codes(16 * t + 16 + r, b))` give `port_args = {t + 1, b}`; against
+  `sum(codes(8 * t + r, b))` nothing is proposed. Proposals are never trusted:
+  the definition at the proposed arguments must normalize to the term.
 
 Limits: no index shifting, splitting, or merging of reduction domains (a sum
 over `[0, 32)` does not match two sums over `[0, 16)`); nested sums must be
-nested in the same order; index arithmetic is compared after plain
+nested in the same order; definition arguments that are not affine in a single
+Var (e.g. `v / 2`) determine nothing; index arithmetic is compared after plain
 simplification (with `likely` and `promise_clamped` tags removed), so a term
 must index the blocked decode-side Funcs, not a flat Func through `/` and `%`;
 anything that is not a polynomial over port calls and sums is opaque.
