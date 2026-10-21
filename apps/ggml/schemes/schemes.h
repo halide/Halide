@@ -23,6 +23,7 @@
 #include "kquants.h"
 #include "legacy.h"
 #include "mx.h"
+#include "ternary.h"
 
 #include <algorithm>
 
@@ -82,6 +83,8 @@ inline Format format(const std::string &spec, bool aos = false, bool scaled = fa
     if (type == "iq4_nl" && codes.empty()) return {iq4_nl(lay, indexed), QK, rows, chunk};
     if (type == "nvfp4" && codes.empty()) return sub_blocks({nvfp4(lay, indexed), NVFP4Quant::block, rows, chunk}, NVFP4Quant::n);
     if (type == "iq4_xs" && codes.empty()) return sub_blocks({iq4_xs(lay, indexed), QK_K, rows, chunk}, 32);
+    if (type == "tq2_0" && codes.empty()) return {tq2_0(lay, indexed), QK_K, rows, chunk};
+    if (type == "tq1_0" && codes.empty()) return {tq1_0(lay, indexed), QK_K, rows, chunk};
     if (type == "q8_K" && codes.empty()) return sub_blocks({q8_K(lay, indexed), QK_K, rows, chunk}, 16);
     if (type == "q4_K" && codes.empty()) return sub_blocks({q4_K(lay, indexed), QK_K, rows, chunk}, 32);
     if (type == "q6_K" && codes.empty()) return sub_blocks({q6_K(lay, indexed), QK_K, rows, chunk}, 16);

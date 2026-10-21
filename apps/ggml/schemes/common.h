@@ -521,6 +521,96 @@ struct Unblock {
     }
 };
 
+// A record's elements in consecutive runs of the given sizes, each run its
+// own records, under its own name: (element, record, ...) <-> one output per
+// run, (element - start, record, ...) (GGML's block_tq1_0: runs of 160, 80
+// and 16 values, each packed its own way). The decode concatenates them.
+struct Segments {
+    std::vector<std::pair<std::string, int>> runs;
+
+    std::vector<Func> encode(const std::vector<Func> &in) const {
+        std::vector<Func> out;
+        Var j;
+        int start = 0;
+        for (const auto &[name, n] : runs) {
+            Func f(name);
+            f(j, _) = in[0](j + start, _);
+            out.push_back(f);
+            start += n;
+        }
+        return out;
+    }
+    std::vector<Func> decode(const std::vector<Func> &e) const {
+        Func f("concatenated");
+        Var j;
+        int start = 0;
+        for (const auto &r : runs) {
+            start += r.second;
+        }
+        Expr v;
+        for (int i = (int)runs.size() - 1; i >= 0; i--) {
+            start -= runs[i].second;
+            Expr ei = e[i](clamp(j - start, 0, runs[i].second - 1), _);
+            v = v.defined() ? select(j < start + runs[i].second, ei, v) : ei;
+        }
+        f(j, _) = v;
+        return {f};
+    }
+    ApproximationSignature signature(const ApproximationPorts &in) const {
+        ApproximationPort i = in.empty() ? ApproximationPort("elements") : in[0];
+        ApproximationPorts out;
+        for (const auto &r : runs) {
+            ApproximationPort o = i;
+            o.name = r.first;
+            out.push_back(o);
+        }
+        return {{i}, out};
+    }
+    bool lossless() const {
+        return true;
+    }
+};
+
+// Base-3 fields (in [0, 2]) packed `trits` (<= 5; 3^5 = 243) per byte, GGML's
+// block_tq1_0: byte p of a record holds elements p + n * positions, n <
+// trits, the first the most significant base-3 digit of q = sum f_n 3^(4 - n)
+// (so with trits < 5, the last digits 0), stored as ceil(q * 256 / 243): its
+// digit n is then the top bits of (byte * 3^n mod 256) * 3. Arithmetic mod
+// 256, as GGML's (fields past 2 still pack, as GGML packs them).
+struct TritPack {
+    int positions, trits = 5;
+
+    std::vector<Func> encode(const std::vector<Func> &in) const {
+        Func f("packed_trits");
+        Var p, b;
+        Expr q = cast<uint8_t>(0);
+        for (int n = 0; n < 5; n++) {
+            q = q * cast<uint8_t>(3);
+            if (n < trits) q = q + cast<uint8_t>(in[0](n * positions + p, b, _));
+        }
+        f(p, b, _) = cast<uint8_t>((cast<uint16_t>(q) * cast<uint16_t>(256) + cast<uint16_t>(242)) / cast<uint16_t>(243));
+        return {f};
+    }
+    std::vector<Func> decode(const std::vector<Func> &e) const {
+        Func f("unpacked_trits");
+        Var j, b;
+        std::vector<Expr> pow3;
+        for (int n = 0, k = 1; n < trits; n++, k *= 3) {
+            pow3.push_back(cast<uint8_t>(k));
+        }
+        Expr t = e[0](j % positions, b, _) * (trits == 1 ? pow3[0] : mux(j / positions, pow3));
+        f(j, b, _) = cast<uint8_t>((cast<uint16_t>(t) * cast<uint16_t>(3)) >> 8);
+        return {f};
+    }
+    ApproximationSignature signature(const ApproximationPorts &in) const {
+        std::optional<int> dims = in.empty() ? std::nullopt : in[0].dimensions;
+        return {{{"fields", UInt(8), dims, ApproximationRange(0, 2)}}, {{"trits", UInt(8), dims}}};
+    }
+    bool lossless() const {
+        return true;
+    }
+};
+
 // `inner`, a stage onto bytes whose decode's element j reads only byte
 // j / per (e.g. Compose{multiples, BitPack}), with an exact alternative
 // decode: a constant table of its decodes of each byte value (a row of `per`
