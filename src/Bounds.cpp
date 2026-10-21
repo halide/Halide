@@ -1553,7 +1553,7 @@ protected:
                                 }
                                 Expr m = simplify(i.max);
                                 if (auto u = as_const_uint(m)) {
-                                    return *u;
+                                    return u;
                                 } else if (auto s = as_const_int(m); s && *s >= 0) {
                                     return (uint64_t)*s;
                                 }
