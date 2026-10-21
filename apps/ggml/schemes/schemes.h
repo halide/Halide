@@ -19,6 +19,7 @@
 // formats stored as one such float per value, as GGML's f16 vec_dot sums in
 // f16 (the schedule applies it to the dot's partial sums: kernels/schedule.h).
 #include "kleidiai.h"
+#include "kquants.h"
 #include "legacy.h"
 #include "mx.h"
 
@@ -68,6 +69,9 @@ inline Format format(const std::string &spec, bool aos = false, bool scaled = fa
     if (type == "q8_0" && codes.empty()) return {q8_0(lay, indexed), QK, rows, chunk};
     if (type == "q8_1" && codes.empty()) return {q8_1(lay, indexed), QK, rows, chunk};
     if (type == "mxfp4" && codes.empty()) return {mxfp4(lay, indexed), QK, rows, chunk};
+    if (type == "q8_K" && codes.empty()) return {q8_K(lay, indexed), QK_K, rows, chunk};
+    if (type == "q4_K" && codes.empty()) return {q4_K(lay, indexed), QK_K, rows, chunk};
+    if (type == "q6_K" && codes.empty()) return {q6_K(lay, indexed), QK_K, rows, chunk};
     if (!blocks.defined()) blocks = 1;
     if (type == "qsi8cx" && codes.empty()) return {qsi8cx(lay, blocks, indexed), QK, rows, chunk, true};
     if (type == "qai8dx" && codes.empty()) return {qai8dx(lay, blocks, indexed), QK, rows, chunk, true};
