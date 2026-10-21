@@ -742,7 +742,8 @@ inline std::vector<Func> encoder_funcs(Func e, const std::vector<ApproximationRe
 
 // An encoder computed per record (each block of values), vectorized: the
 // Funcs with an element per value (e.g. the codes, packed bytes) across their
-// elements, and its reductions (e.g. the block's scale) across the block.
+// elements, and its reductions (e.g. the block's scale) across the block,
+// those Halide can reorder (not a strict_float sum, kept in order: q1_0's).
 inline void encoder(Func e, const std::vector<ApproximationResult> &rs) {
     for (Func f : encoder_funcs(e, rs)) {
         if (f.name() == e.name()) continue;
@@ -752,7 +753,9 @@ inline void encoder(Func e, const std::vector<ApproximationResult> &rs) {
                 f.update(u).vectorize(f.args()[0]);
             }
         } else if (f.has_update_definition()) {
-            f.compute_at(e, e.args()[0]).update().atomic().vectorize(f.rvars()[0]);
+            f.compute_at(e, e.args()[0]);
+            const Internal::Definition &u = f.function().update(0);
+            if (Internal::prove_associativity(f.name(), u.args(), u.values()).associative()) f.update().atomic().vectorize(f.rvars()[0]);
         }
     }
 }
