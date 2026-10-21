@@ -248,6 +248,29 @@ new schedule code. `ggml_mxfp4_properties` (ctest) checks the error bound, the
 declared ranges, idempotent requantizing and closure on normal, tiny, huge,
 one-signed, outlier, constant and zero blocks.
 
+iq4_nl and iq4_xs (`schemes/iq.h`) are `IQ4Quant`, GGML's search
+(`quantize_row_iq4_nl_impl` as `ggml_quantize_chunk` runs it: no importance
+matrix, `ntry = 7`) step for step, with codes drawn from `kvalues_iq4nl` (a
+`codebook`, decoded by `tbl` as mxfp4's): iq4_nl a block of 32 under an fp16
+scale; iq4_xs a super-block of 256 whose sub-blocks of 32 have 6-bit scales
+(`SumSplit` into a low nibble and 2 high bits) under an fp16 one. nvfp4
+(`schemes/mx.h`, `NVFP4Quant`) is a block of 64, each sub-block of 16 with a
+ue4m3 scale (a `MiniFloat` with GGML's quirks, `ue4m3_half`) and e2m1 codes as
+mxfp4's. tq2_0 and tq1_0 (`schemes/ternary.h`, `TernaryQuant`) are codes in {-1,
+0, 1} under an fp16 scale per 256 values (GGML's MAX scan, NaN and all, and
+`lroundf` as arm64's saturating `fcvtas`), stored as 2-bit fields (tq2_0) or
+five base-3 digits per byte (tq1_0: `Segments` splits the block into its `qs`
+and `qh` runs, `TritPack` packs each). q1_0 (`schemes/binary.h`, `SignQuant`) is
+the signs of 128 values (`BitPack{1}`) under their mean magnitude (GGML's
+sequential float sum, kept serial by the encoder schedule). All six codecs are
+bit-exact against GGML's quantizers and dequantizers; their kernels are the
+existing one-level and two-level recipes, the q8_0 acts of iq4_nl, nvfp4 and
+q1_0 a divisor of the weight's block (nvfp4: 2 per block, q1_0: 4) and float
+sub-block scales (nvfp4, iq4_xs) multiplied in per sub-block.
+`ggml_iq_properties`, `ggml_mxfp4_properties` (nvfp4) and
+`ggml_ternary_properties` (tq1_0, tq2_0, q1_0) check their bounds, ranges and
+closure.
+
 KleidiAI's q8_0 scheme (`schemes/kleidiai.h`; GGML's KleidiAI backend runs it
 for q8_0 weights) is two rowwise formats, a whole row of K values one
 quantization group: `qsi8cx` (weights: symmetric int8 codes, an f32 scale per
