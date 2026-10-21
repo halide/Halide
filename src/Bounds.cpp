@@ -2068,6 +2068,13 @@ private:
 // treated the same way using the negated condition. This IR is temporary and
 // only consumed by BoxesTouched, so the redundant if doesn't escape into the
 // rest of lowering.
+//
+// ScheduleFunctions lowers RDom::where predicates using split_predicate(),
+// turning conjunctions into nested IfThenElses. Each conjunct can therefore
+// supply a bound independently here. Conditions from other sources need not
+// have this form: this pass only names an expression if solving the condition
+// yields a single comparison with that expression's variable on the left.
+// Results containing && or || are not decomposed into individual bounds.
 class NameGuardedIndices : public IRMutator {
     using IRMutator::visit;
     using ExprSet = set<Expr, IRDeepCompare>;
