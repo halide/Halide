@@ -521,6 +521,7 @@ tests(
     strict_float_bounds.cpp
     strict_fma.cpp
     strided_load.cpp
+    struct_mixed_field_stores.cpp
     struct_nested_field_load.cpp
     struct_nested_field_store.cpp
     struct_type.cpp

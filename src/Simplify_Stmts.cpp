@@ -586,6 +586,7 @@ Stmt Simplify::visit(const Block *op) {
     } else if (store_first &&
                store_next &&
                store_first->name == store_next->name &&
+               store_first->value.type() == store_next->value.type() &&
                equal(store_first->index, store_next->index) &&
                equal(store_first->predicate, store_next->predicate) &&
                is_pure(store_first->index) &&
