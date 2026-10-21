@@ -1534,15 +1534,50 @@ protected:
                             }
                         }
 
-                    } else if (op->is_intrinsic(Call::bitwise_or) &&
-                               a_interval.has_lower_bound() &&
-                               b_interval.has_lower_bound()) {
-                        if (t.is_int()) {
-                            // Larger than the smaller arg
-                            interval.min = min(a_interval.min, b_interval.min);
-                        } else if (t.is_uint()) {
-                            // Larger than both args
-                            interval.min = max(a_interval.min, b_interval.min);
+                    } else if (op->is_intrinsic(Call::bitwise_or) ||
+                               op->is_intrinsic(Call::bitwise_xor)) {
+                        bool is_or = op->is_intrinsic(Call::bitwise_or);
+                        bool a_positive = t.is_uint() || (a_interval.has_lower_bound() &&
+                                                          can_prove(a_interval.min >= 0));
+                        bool b_positive = t.is_uint() || (b_interval.has_lower_bound() &&
+                                                          can_prove(b_interval.min >= 0));
+                        if (a_positive && b_positive) {
+                            if (!is_or) {
+                                interval.min = make_zero(t);
+                            }
+                            // Neither sets a bit above the highest bit either
+                            // arg can have.
+                            auto const_max = [](const Interval &i) -> std::optional<uint64_t> {
+                                if (!i.has_upper_bound()) {
+                                    return std::nullopt;
+                                }
+                                Expr m = simplify(i.max);
+                                if (auto u = as_const_uint(m)) {
+                                    return *u;
+                                } else if (auto s = as_const_int(m); s && *s >= 0) {
+                                    return (uint64_t)*s;
+                                }
+                                return std::nullopt;
+                            };
+                            auto a_max = const_max(a_interval), b_max = const_max(b_interval);
+                            if (a_max && b_max) {
+                                uint64_t mask = std::max(*a_max, *b_max);
+                                for (int s = 1; s < 64; s *= 2) {
+                                    mask |= mask >> s;
+                                }
+                                interval.max = make_const(t, mask);
+                            }
+                        }
+                        if (is_or &&
+                            a_interval.has_lower_bound() &&
+                            b_interval.has_lower_bound()) {
+                            if (t.is_uint() || (a_positive && b_positive)) {
+                                // Larger than both args
+                                interval.min = max(a_interval.min, b_interval.min);
+                            } else {
+                                // Larger than the smaller arg
+                                interval.min = min(a_interval.min, b_interval.min);
+                            }
                         }
                     }
                 }
