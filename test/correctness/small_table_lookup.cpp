@@ -118,8 +118,11 @@ bool test(int n, int vec, const Target &target) {
         }
     }
 
+#ifndef WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING
     // Embedded buffers are passed by reference to JIT-compiled pipelines, so
-    // changes to their contents must be visible on the next run.
+    // changes to their contents must be visible on the next run. (Not under
+    // serialization round-trip testing, which JIT-compiles a deserialized
+    // copy of the pipeline, and so of its embedded buffers.)
     lut.for_each_element([&](int i) { lut(i) = table_value<T>(i, 3); });
     lut_offset.for_each_element([&](int i) { lut_offset(i) = table_value<T>(i, 4); });
     lut_2d.for_each_element([&](int i, int j) { lut_2d(i, j) = table_value<T>(i + 4 * j, 6); });
@@ -129,6 +132,7 @@ bool test(int n, int vec, const Target &target) {
             return false;
         }
     }
+#endif
 
     return true;
 }
