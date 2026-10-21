@@ -271,6 +271,40 @@ sub-block scales (nvfp4, iq4_xs) multiplied in per sub-block.
 `ggml_ternary_properties` (tq1_0, tq2_0, q1_0) check their bounds, ranges and
 closure.
 
+The grid formats iq2_xxs, iq2_xs, iq2_s, iq3_xxs, iq3_s, iq1_s and iq1_m
+(`schemes/grid.h`) decode natively and encode by GGML's quantizer. Their decode
+(`dequantize_row_iq*`) is a `ScaledCodes` stage (int8 codes times an odd
+sub-block scale times the fp16 one) over lossless units: each group of 8 codes
+(iq3: 4) is a point of a lattice grid (`Lattice`: GGML's `kgrid_*` lists, their
+digits mapped to values by a `codebook`), decoded through a constant table of
+the points' codes (`Tabulate`: a row per point, an embedded Buffer), times signs
+(iq2_xxs, iq2_xs, iq3_xxs: 7 bits of even parity per 8 values, `EvenSigns`,
+GGML's `ksigns_iq2xs`; iq2_s, iq3_s: 8 raw bits) or, for iq1, plus a ±1/8 delta
+per run (`RunShift`, codes at 8 times their value). The indices' high bits,
+signs and scales are bit fields of GGML's structs (`BitFields`, `BitSplit`,
+`BitPack`); iq1_m's fp16 scale is spread over the top nibbles of its 4 scale
+words (`fp16_bits`, `Inverse`). The encode is `TrustedInverse` (core): an extern
+stage (`ExternQuantize`, `define_extern` of `ggml_trusted_quantize` in
+`harness/trusted.cpp`) calling `ggml_quantize_chunk`, paired with the native
+decode. GGML's grid quantizers are searches, not compositions: per group they
+pick signs by parity (flipping the least-weighted value), try 13–31 trial
+scales, round each group to the grid's integer lattice and, off the grid, search
+the neighbour list of the point (`iq2xs_init_impl` / `iq3xs_init_impl` build a
+map of the 43692 (iq2, iq1) or 4096 (iq3) lattice points and their nearest grid
+points at init); iq1 sorts each group and searches all two-cut partitions into
+{-1, 0, 1} (O(n²) per 32 or 16 values) with both delta signs; all weighted by an
+importance matrix. Only the codec's quantize pipelines call the extern; the
+kernels read weights GGML quantized. GGML requires an importance matrix for
+iq2_xxs, iq2_xs and iq1_s (`ggml_quantize_requires_imatrix`): the harness's is
+synthetic and deterministic (`importance`: column k's weight 1 + h(k) / 64, h(k)
+the top byte of k · 2654435761, in \[1, 5)), used for the reference quantizer,
+the weights and the extern alike; the others take GGML's no-imatrix path, as
+llama-quantize without one. Their kernels are the two-level recipe with the
+tables cloned into the sub-block dots (`tables()`), acts q8_K (their
+vec_dot_type), f16, f32 and f32:q8_K; `ggml_grid_properties` checks the decode's
+declared ranges through GGML's quantizer and that every grid and the even sign
+table are bijections on their indices.
+
 KleidiAI's q8_0 scheme (`schemes/kleidiai.h`; GGML's KleidiAI backend runs it
 for q8_0 weights) is two rowwise formats, a whole row of K values one
 quantization group: `qsi8cx` (weights: symmetric int8 codes, an f32 scale per
