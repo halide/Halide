@@ -230,16 +230,15 @@ int main(int argc, char **argv) {
                     ggml_type at = an == "dot" ? ggml_get_type_traits_cpu(wt)->vec_dot_type : type_named(an);
                     if (at != GGML_TYPE_COUNT && std::find(ats.begin(), ats.end(), at) == ats.end()) ats.push_back(at);
                 }
-                // Weights: N(0, 1), quantized by GGML (an all-ones importance
-                // matrix for types that require one).
+                // Weights: N(0, 1), quantized by GGML (the synthetic importance
+                // matrix for types that require one: importance).
                 size_t wrow = ggml_row_size(wt, s.K), wbytes = wrow * s.N;
                 int copies = o.cold ? (int)std::max<int64_t>(1, ((int64_t)512 << 20) / wbytes + 1) : 1;
                 std::vector<float> wf(s.N * s.K);
                 for (float &x : wf)
                     x = normal(rng);
-                std::vector<float> ones(s.K, 1.0f);
                 std::vector<uint8_t> w(wbytes * copies);
-                ggml_quantize_chunk(wt, wf.data(), w.data(), 0, s.N, s.K, ggml_quantize_requires_imatrix(wt) ? ones.data() : nullptr);
+                ggml_quantize_chunk(wt, wf.data(), w.data(), 0, s.N, s.K, importance(wt, s.K));
                 for (int c = 1; c < copies; c++)
                     memcpy(&w[c * wbytes], w.data(), wbytes);
                 std::vector<float> af(s.M * s.K);

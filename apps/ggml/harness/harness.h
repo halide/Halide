@@ -165,6 +165,12 @@ bool ggml_repack(const FormatSpec &f, ggml_type t, const uint8_t *src, uint8_t *
 // layout's name (e.g. q4_0_4x8), empty if it does not repack them.
 std::string ggml_repack_live(ggml_type t, const uint8_t *src, std::vector<uint8_t> &dst, int64_t N, int64_t K);
 
+// The importance matrix the harness quantizes weights of type t with, a
+// row's of K values (trusted.cpp): the synthetic one for types GGML requires
+// one for (ggml_quantize_requires_imatrix), else nullptr (GGML's no-imatrix
+// path, as llama-quantize without one).
+const float *importance(ggml_type t, int64_t K);
+
 // Logging: GGML log lines captured since the last call.
 std::vector<std::string> take_log();
 int probe_metal(int argc, char **argv);
