@@ -125,6 +125,7 @@ tests(
     gameoflife.cpp
     growing_stack.cpp
     half_native_interleave.cpp
+    halidoscope.cpp
     handle.cpp
     heap_cleanup.cpp
     histogram_equalize.cpp
@@ -155,6 +156,7 @@ tests(
     intrinsics.cpp
     iterate_over_circle.cpp
     jit_host_environment.cpp
+    jit_set_trace_file.cpp
     lambda.cpp
     lazy_convolution.cpp
     left_shift_negative.cpp
@@ -276,6 +278,7 @@ tests(
     tiled_matmul.cpp
     tracing.cpp
     tracing_bounds.cpp
+    tracing_bounds_required.cpp
     tracing_broadcast.cpp
     tracing_errors.cpp
     tracing_stack.cpp
@@ -415,18 +418,15 @@ tests(
     gpu_transpose.cpp
     gpu_vectorize.cpp
     gpu_vectorized_shared_memory.cpp
-    halidoscope.cpp
     hello_gpu.cpp
     histogram.cpp
     in_place.cpp
     interleave_rgb.cpp
     interleave_x.cpp
-    internal_linkage.cpp
     invalid_gpu_loop_nests.cpp
     inverse.cpp
     isnan.cpp
     issue_3926.cpp
-    jit_set_trace_file.cpp
     leak_device_memory.cpp
     load_library.cpp
     logical.cpp
@@ -438,23 +438,18 @@ tests(
     multi_way_select.cpp
     multiple_outputs.cpp
     newtons_method.cpp
-    no_metadata.cpp
     param.cpp
     reduction_non_rectangular.cpp
     register_shuffle.cpp
     round.cpp
-    simplify_region_bound_regression.cpp
     specialize_to_gpu.cpp
     strict_fma.cpp
     thread_id_outside_block_id.cpp
-    tracing_bounds_required.cpp
-    tracing_matched_events.cpp
     trim_no_ops.cpp
     tuple_reduction.cpp
     undef.cpp
     vector_shuffle.cpp
     vectorized_gpu_allocation.cpp
-    vulkan_bool_scalar_abi.cpp
     widening_reduction.cpp
     # keep-sorted end
 )
@@ -573,6 +568,7 @@ tests(
     shift_inwards_and_blend_race.cpp
     shifted_image.cpp
     simplify.cpp
+    simplify_region_bound_regression.cpp
     solve.cpp
     spirv_ir.cpp
     split_inner_wrong_tail_strategy.cpp
@@ -614,6 +610,8 @@ tests(
     fallback_vscale_sve.cpp
     generator_cache.cpp
     generator_internal.cpp
+    internal_linkage.cpp
+    no_metadata.cpp
     pytorch.cpp
     runtime_prefixes.cpp
     sve_codegen_predicated.cpp
@@ -625,7 +623,13 @@ tests(GROUPS correctness gpu SOURCES metal_vector_too_large.cpp)
 
 tests(
     GROUPS correctness gpu calls_llvm
-    SOURCES gpu_async_copy_errors.cpp gpu_thread_extent_under_outer_split.cpp
+    SOURCES
+    # keep-sorted start
+    gpu_async_copy_errors.cpp
+    gpu_thread_extent_under_outer_split.cpp
+    vulkan_bool_minmax.cpp
+    vulkan_bool_scalar_abi.cpp
+    # keep-sorted end
 )
 
 # These test the host CPU detection logic that libHalide shares with the
@@ -713,12 +717,12 @@ tests(
     struct_type.cpp
     thread_pool_keep_awake.cpp
     thread_safety.cpp
+    tracing_matched_events.cpp
     tracing_thread_ids.cpp
     transitive_in.cpp
     truncated_pyramid.cpp
     tuple_vector_reduce.cpp
     vector_reductions.cpp
-    vulkan_bool_minmax.cpp
     # keep-sorted end
 )
 
