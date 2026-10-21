@@ -740,6 +740,18 @@ inline std::vector<Func> encoder_funcs(Func e, const std::vector<ApproximationRe
     return fs;
 }
 
+// Whether f's update may be computed out of order (atomic()): not if it
+// accumulates by a strict_float add, subtract, multiply or fma, which must
+// keep its order (min and max may reorder).
+inline bool reassociable(const Func &f) {
+    using Internal::Call;
+    for (const Expr &v : f.function().update(0).values()) {
+        const Call *c = v.as<Call>();
+        if (c && (c->is_intrinsic(Call::strict_add) || c->is_intrinsic(Call::strict_sub) || c->is_intrinsic(Call::strict_mul) || c->is_intrinsic(Call::strict_fma))) return false;
+    }
+    return true;
+}
+
 // An encoder computed per record (each block of values), vectorized: the
 // Funcs with an element per value (e.g. the codes, packed bytes) across their
 // elements, and its reductions (e.g. the block's scale) across the block,
@@ -754,8 +766,7 @@ inline void encoder(Func e, const std::vector<ApproximationResult> &rs) {
             }
         } else if (f.has_update_definition()) {
             f.compute_at(e, e.args()[0]);
-            const Internal::Definition &u = f.function().update(0);
-            if (Internal::prove_associativity(f.name(), u.args(), u.values()).associative()) f.update().atomic().vectorize(f.rvars()[0]);
+            if (reassociable(f)) f.update().atomic().vectorize(f.rvars()[0]);
         }
     }
 }
