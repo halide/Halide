@@ -63,9 +63,17 @@ void adversarial(float *x, int64_t K) {
     }
 }
 
-std::string first_diff(const void *a, const void *b, size_t n, size_t block_bytes) {
+// With `floats`, any two NaNs are equal: neither C nor LLVM fixes the sign or
+// payload of an arithmetic NaN (GGML's q4_K dequantize negates dmin * m after
+// the product, which LLVM may fold into the subtraction), and only blocks with
+// a non-finite scale decode to NaN.
+std::string first_diff(const void *a, const void *b, size_t n, size_t block_bytes, bool floats = false) {
     const uint8_t *p = (const uint8_t *)a, *q = (const uint8_t *)b;
     for (size_t i = 0; i < n; i++) {
+        if (floats && i % 4 == 0 && i + 4 <= n && std::isnan(((const float *)a)[i / 4]) && std::isnan(((const float *)b)[i / 4])) {
+            i += 3;
+            continue;
+        }
         if (p[i] != q[i]) {
             char s[96];
             snprintf(s, sizeof(s), "byte %zu (block %zu): %02x vs ggml %02x", i, i / block_bytes, p[i], q[i]);
@@ -75,9 +83,9 @@ std::string first_diff(const void *a, const void *b, size_t n, size_t block_byte
     return "";
 }
 
-// ggml_quantize_chunk lacks GGML's activation-only types (q8_1).
+// ggml_quantize_chunk lacks GGML's activation-only types (q8_1, q8_K).
 bool chunked(ggml_type t) {
-    return t != GGML_TYPE_Q8_1;
+    return t != GGML_TYPE_Q8_1 && t != GGML_TYPE_Q8_K;
 }
 
 // GGML's q8_1 stores s = f16(d * sum(qs)) from the unrounded scale d, which in
@@ -108,7 +116,9 @@ void quantize_ref(ggml_type t, const float *x, uint8_t *dst, int64_t R, int64_t 
     if (chunked(t)) {
         ggml_quantize_chunk(t, x, dst, 0, R, K, nullptr);
     } else {
-        ggml_get_type_traits(t)->from_float_ref(x, dst, R * K);
+        // (q8_K's reference quantizer is its CPU from_float)
+        auto ref = ggml_get_type_traits(t)->from_float_ref;
+        ref ? ref(x, dst, R * K) : ggml_get_type_traits_cpu(t)->from_float(x, dst, R * K);
     }
 }
 
@@ -441,7 +451,7 @@ std::vector<CodecResult> run_codecs(const std::vector<int64_t> &Ks, const std::v
                     int err = quant ? call(f, true, bx, bq) : call(f, false, by, bref);
                     std::string detail = err   ? "halide error " + std::to_string(err) :
                                          quant ? first_diff(q.data(), ref.data(), bytes, bytes / records) :
-                                                 first_diff(y.data(), ref_y.data(), K * R * sizeof(float), ggml_blck_size(t) * sizeof(float));
+                                                 first_diff(y.data(), ref_y.data(), K * R * sizeof(float), ggml_blck_size(t) * sizeof(float), true);
                     es.push_back({name, lambda("halide", quant ? std::function<void()>([=, &bx, &bq] { call(f, true, bx, bq); }) : [=, &bref, &by] { call(f, false, by, bref); }), detail});
                 }
                 if (!check) {
@@ -489,7 +499,7 @@ std::vector<CodecResult> run_codecs(const std::vector<int64_t> &Ks, const std::v
             for (auto [f, name] : {std::pair{row.dequantize[0], ":checked"}, {row.scaled[1], ":scaled"}}) {
                 std::fill(y.begin(), y.end(), NAN);
                 int err = call(f, false, by, bq);
-                std::string detail = err ? "halide error " + std::to_string(err) : first_diff(y.data(), ref_y.data(), K * R * sizeof(float), ggml_blck_size(t) * sizeof(float));
+                std::string detail = err ? "halide error " + std::to_string(err) : first_diff(y.data(), ref_y.data(), K * R * sizeof(float), ggml_blck_size(t) * sizeof(float), true);
                 results.push_back({row.type, "dequantize", "halide-" + row.type + name, "crafted", K, detail, false, {}, R});
             }
         }
