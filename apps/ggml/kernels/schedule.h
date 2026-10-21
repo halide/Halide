@@ -395,11 +395,11 @@ inline void schedule_sums(Sums d, Func out, int st, Func acc, Var n, Var m, cons
         Var t = d.part.args().back();
         RVar rxt("rxt"), rxj("rxj");
         d.sum.compute_at(blocks).unroll(u).unroll(n).unroll(m);
-        d.sum.update().atomic().vectorize(rxt);
+        d.sum.update().atomic().vectorize(rxt).unroll(u).unroll(n).unroll(m);
         regs(d.part.compute_at(blocks).reorder_storage(t, u, n, m), {t}, {u, n, m});
     } else if (d.sum.defined()) {  // no port matched: the act's block sums
         d.sum.compute_at(blocks).unroll(u).unroll(n).unroll(m);
-        d.sum.update().atomic().vectorize(r.x, vec);
+        d.sum.update().atomic().vectorize(r.x, vec).unroll(u).unroll(n).unroll(m);
     }
 }
 
