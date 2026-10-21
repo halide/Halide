@@ -50,11 +50,13 @@ WEAK char *halide_uint64_to_string(char *dst, char *end, uint64_t arg, int min_d
 WEAK char *halide_int64_to_string(char *dst, char *end, int64_t arg, int min_digits) {
     halide_debug_assert(nullptr, dst <= end);
 
+    // Negate in unsigned arithmetic so that INT64_MIN doesn't overflow.
+    uint64_t magnitude = (uint64_t)arg;
     if (arg < 0 && dst < end) {
         *dst++ = '-';
-        arg = -arg;
+        magnitude = -magnitude;
     }
-    return halide_uint64_to_string(dst, end, arg, min_digits);
+    return halide_uint64_to_string(dst, end, magnitude, min_digits);
 }
 
 WEAK char *halide_double_to_string(char *dst, char *end, double arg, int scientific) {
