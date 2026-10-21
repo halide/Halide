@@ -25,7 +25,11 @@ int test(bool gpu) {
             f(x) = f(x) + 1;
             f.compute_root();
             Stage s = f.update().aligned_split(x, xo, xi, k, anchor, ts);
-            if (vec) {
+            if (vec && gpu) {
+                // Not every GPU backend has vectors of k lanes (HLSL needs
+                // sm69 for more than 4), so vectorize the tile in pieces of 4.
+                s.vectorize(xi, 4);
+            } else if (vec) {
                 s.vectorize(xi);
             }
             if (gpu) {
