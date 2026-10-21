@@ -37,25 +37,32 @@ public:
         }
         Var k("k"), n("n"), m("m");
         Func Wf("Wf"), Xf("Xf"), Xrf("Xrf"), W("W"), X("X"), Xr("Xr"), out("out");
-        block = fw.block;
+        // The reduction's blocks: the weight's, or an act's blocks dividing
+        // them (nvfp4, q1_0 with q8_0 acts): each weight block then spans
+        // `per` of the reduction's
+        int ab = std::max(fa.block, fc.block);
+        wblock = fw.block;
+        block = ab > 1 && ab < wblock && wblock % ab == 0 ? ab : wblock;
+        const int per = wblock / block;
         Wf(k, n) = operand(fw, w, k, n);
         // a rowwise act encoded here may be encoded on rows past M (whole
         // groups of rows for the gemm's tiles): they repeat the last one
         Xf(k, m) = operand(fa, a, k, fc.rowwise && cn != an ? clamp(m, 0, row(a[0]).extent() - 1) : m);
-        view(W, Wf);
-        view(X, Xf);
+        view(W, Wf, wblock);
+        view(X, Xf, block);
         // r.x: a value within a block, r.y: the block
-        r = RDom(0, block, 0, record(w[0]).extent(), "r");
-        dots[0](n, m) += W(r.x, r.y, n) * X(r.x, r.y, m);  // from 0; out writes each output once
+        r = RDom(0, block, 0, record(w[0]).extent() * per, "r");
+        Expr wj = per > 1 ? r.x + r.y % per * block : r.x, wb = per > 1 ? r.y / per : r.y;
+        dots[0](n, m) += W(wj, wb, n) * X(r.x, r.y, m);  // from 0; out writes each output once
         if (fc.rows > 1) {
             // Act records of several rows (as GGML's x4 activations): the
             // rows in whole records from them (dots[1]; rows past M repeat the
             // last one), the others one row per record.
             Expr M = row(a[0]).extent(), Mr = M / fc.rows * fc.rows;
             Xrf(k, m) = operand(fa, a, k, clamp(m, 0, M - 1));
-            view(Xr, Xrf);
+            view(Xr, Xrf, block);
             dots.push_back(Func("dotr"));
-            dots[1](n, m) += W(r.x, r.y, n) * Xr(r.x, r.y, m);
+            dots[1](n, m) += W(wj, wb, n) * Xr(r.x, r.y, m);
             RDom whole(0, Mr, "whole"), rest(Mr, M - Mr, "rest");
             out(n, m) = undef<float>();
             out(n, whole) = dots[1](n, whole);
@@ -69,7 +76,7 @@ public:
         if (!fw.scheme.defined()) throw std::invalid_argument("weight: a quantized format");
         for (auto [F, Ff, f, p] : {std::tuple{W, Wf, fw, w}, std::tuple{X, Xf, fa, a}}) {
             if (f.scheme.defined()) {
-                approx.push_back(approximate(F, Ff, f, dots));
+                approx.push_back(approximate(F, Ff, f, dots, F.name() == W.name() ? wblock : block));
                 cut.insert(cut.end(), approx.back().encoded.begin(), approx.back().encoded.end());
                 bound.insert(bound.end(), p.begin(), p.end());
             }
@@ -77,7 +84,7 @@ public:
         if (cn != an) {
             if (fa.scheme.defined()) throw std::invalid_argument("act: only plain storage can be re-approximated");
             for (size_t i = 0; i < dots.size(); i++) {
-                approx.push_back(approximate(i ? Xr : X, i ? Xrf : Xf, ggml::format(cn, !i, false, true, fc.rowwise ? record(w[0]).extent() : Expr()), {dots[i]}));
+                approx.push_back(approximate(i ? Xr : X, i ? Xrf : Xf, ggml::format(cn, !i, false, true, fc.rowwise ? record(w[0]).extent() : Expr()), {dots[i]}, block));
                 staged.push_back(approx.back().encoded[0]);
             }
         }
@@ -112,7 +119,7 @@ public:
         // all dense from 0 (strides as GGML's contiguous rows; K % block == 0),
         // a field's elements first; a rowwise format's per-row ports [N] or [M].
         for (int b : {fa.block, fc.block}) {
-            if (b != 1 && b != fw.block) throw std::invalid_argument("activation blocks: the weight's, or none");
+            if (b != 1 && b != block) throw std::invalid_argument("activation blocks: the weight's, ones dividing them, or none");
         }
         if (fa.rows > 1) throw std::invalid_argument("act: one row per record");
         OutputImageParam o = out.output_buffer();
@@ -139,7 +146,7 @@ public:
             add_input(p);
         }
         result = add_output(out);
-        fmt = {fw.block, fw.rows, fw.chunk, fc.block, fc.rows, fw.rowwise, fw.sub, fc.sub};
+        fmt = {block, fw.rows, fw.chunk, fc.block, fc.rows, fw.rowwise, fw.sub, fc.sub};
         acc = fw.acc;
         // The accumulation's order is part of its numerics: without
         // strict_float, LLVM may reassociate the partial sums' tree
@@ -154,7 +161,7 @@ public:
 
 private:
     RDom r;
-    int block = 1;
+    int block = 1, wblock = 1;                // the reduction's blocks, the weight's
     std::vector<Func> dots{Func("dot")};      // one per act encoding
     std::vector<ApproximationResult> approx;  // the weight's first (asserted)
     std::vector<Func> staged;                 // encoded inside the pipeline
@@ -197,16 +204,17 @@ private:
     static Expr operand(const ggml::Format &f, const std::vector<ImageParam> &p, const Expr &k, const Expr &i) {
         return f.scheme.defined() ? ImageParam(Float(32), 2, p[0].name() + "_values")(k, i) : p[0](k, i);
     }
-    // F(j, b, i): the flat operand's value j of block b (of the weight's), as
-    // the reduction reads it, so no index into a block is a % or / of r.
-    void view(Func F, Func flat) const {
+    // F(j, b, i): the flat operand's value j of block b (of n values: the
+    // weight's or the reduction's), as the reduction reads it, so no index
+    // into a block is a % or / of r.x.
+    static void view(Func F, Func flat, int n) {
         Var j("j"), b("b"), i("i");
-        F(j, b, i) = flat(b * block + j, i);
+        F(j, b, i) = flat(b * n + j, i);
     }
-    // A format in the weight's blocks approximates the view (block-indexed);
-    // one without blocks, the flat rows.
-    ApproximationResult approximate(Func F, Func flat, const ggml::Format &f, const std::vector<Func> &consumers) const {
-        return f.block == block && block > 1 ? F.approximate_by(f.scheme, consumers) : flat.approximate_by(f.scheme, {F});
+    // A format in its view's blocks (of n values) approximates the view
+    // (block-indexed); one without blocks, the flat rows.
+    static ApproximationResult approximate(Func F, Func flat, const ggml::Format &f, const std::vector<Func> &consumers, int n) {
+        return f.block == n && n > 1 ? F.approximate_by(f.scheme, consumers) : flat.approximate_by(f.scheme, {F});
     }
 };
 
