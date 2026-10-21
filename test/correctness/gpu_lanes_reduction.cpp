@@ -1,12 +1,10 @@
 #include "Halide.h"
 
 // Run reductions across gpu lanes on a GPU and check the results.
-// gpu_lanes_reduction_metal_codegen.cpp checks the Metal source
+// gpu_lanes_reduction_codegen.cpp checks the Metal and PTX source
 // generated for the same schedules.
 
 using namespace Halide;
-
-namespace {
 
 // A butterfly reduction of values held in registers across the lanes.
 // Each stage reads the value from another lane, so the stages are
@@ -130,8 +128,6 @@ bool check_lane_reduction(Op op, int lanes, int width, int height) {
     return true;
 }
 
-}  // namespace
-
 int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
     bool has_metal = t.has_feature(Target::Metal);
@@ -160,14 +156,6 @@ int main(int argc, char **argv) {
                 return 1;
             }
         }
-    }
-
-    // Reductions across lanes expressed as an atomic update are only
-    // supported on Metal, so on CUDA only the butterfly above is tested.
-    if (!has_metal) {
-        printf("Atomic reductions across gpu lanes are only supported on Metal; not testing them.\n");
-        printf("Success!\n");
-        return 0;
     }
 
     for (int lanes : {32, 16, 8}) {

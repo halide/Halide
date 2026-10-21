@@ -772,6 +772,21 @@ struct Call : public ExprNode<Call> {
         // Returns the runtime value of ARM SVE vscale (the vector length multiplier)
         get_runtime_vscale,
         get_user_context,
+        // Read a value held by another lane of the same group of gpu lanes.
+        // Args are (value, x, width). The lanes are partitioned into groups
+        // of width lanes, which must be a power of two no greater than 32
+        // and correspond to aligned groups of hardware SIMD lanes. x is
+        // the source lane relative to the current one (gpu_shuffle_down
+        // reads lane + x, gpu_shuffle_up reads lane - x, and
+        // gpu_shuffle_xor reads lane ^ x), or, for gpu_shuffle_idx, the
+        // index of the source lane within the group. For all but
+        // gpu_shuffle_idx, x must be the same in every lane. The result is
+        // undefined if the source lane is outside the group or is
+        // inactive. value must be a 32-bit scalar.
+        gpu_shuffle_down,
+        gpu_shuffle_idx,
+        gpu_shuffle_up,
+        gpu_shuffle_xor,
         gpu_thread_barrier,
         halving_add,
         halving_sub,
