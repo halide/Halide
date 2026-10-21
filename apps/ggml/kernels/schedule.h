@@ -229,11 +229,19 @@ inline void tables(const std::vector<ApproximationResult> &rs, const std::vector
 
 // Then a term of the rest (e.g. its block sum) reads the first of `ports`
 // whose definition it matches (Func::approximate_by(DerivedPort, ...)) in
-// `consumer`: false if none does.
+// `consumer`: false if none does. A port whose type does not widen exactly
+// to the term's (e.g. q8_K's int16 bsums, of an int32 sum) replaces the term
+// retyped to it (change_type proves the narrower sum exact), which the term
+// then casts.
 inline bool read_port(Func term, const std::vector<DerivedPort> &ports, Func consumer) {
     for (const DerivedPort &p : ports) {
         if (match_derived_port(term, p)) {
-            term.approximate_by(p, {consumer});
+            Type st = p.stored.type(), tt = term.type();
+            if (st == tt || (st.is_float() && tt.is_float() && st.bits() <= tt.bits())) {
+                term.approximate_by(p, {consumer});
+            } else {
+                term.change_type(st).approximate_by(p, {term});
+            }
             return true;
         }
     }
@@ -302,13 +310,14 @@ inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool
 // min times the act; per block (r.y rfactored to u, d.blk), the min hoists
 // out of the act's block sum, which then reads the act's derived port
 // (read_port: e.g. q8_1's s; d.sum, if none matches). Acts whose derived
-// port sums sub-blocks of `act_sub` values (q8_K's bsums): the block's sum
-// (d.sum, int32) splits per act sub-block (rfactor: d.part), the weight's
-// factor of each (its sub-block's min) hoists out, and the act's sub-block
-// sum reads the port (d.inner, if none matches). Returns false (dot
-// untouched) if the weight is not affine or the act has no derived port.
+// port sums sub-blocks of `act_sub` values (q8_K's bsums): the block's sum,
+// int32 (d.sum: the act's codes decoded up to what its ports read), splits
+// per act sub-block (rfactor: d.part), the weight's factor of each (its
+// sub-block's min) hoists out, and the act's sub-block sum reads the port.
+// Returns false (dot untouched) if the weight is not affine or the act has
+// no derived port.
 struct Sums {
-    Func sums, blk, sum, part, inner, quads;
+    Func sums, blk, sum, part;
 };
 inline bool derived_sums(Func out, int st, Stage &s, const RDom &r, const std::vector<ApproximationResult> &rs, Sums &d, int act_sub = 0) {
     d = Sums();
@@ -323,16 +332,21 @@ inline bool derived_sums(Func out, int st, Stage &s, const RDom &r, const std::v
     if (act_sub) d.blk.update().eager_inline(decoders(rs, all_but({tag::codes}), 1));
     d.sum = d.blk.update().hoist_invariants()[0];
     if (act_sub) {
+        // the act's codes decoded up to what its ports read: an int32 sum
+        std::set<std::string> read;
+        for (const DerivedPort &p : rs[1].derived_ports()) {
+            for (const Func &f : p.from) {
+                read.insert(f.name());
+            }
+        }
+        std::vector<Func> dec = decoders(rs, only({tag::codes}), 1), above;
+        std::copy_if(dec.begin(), dec.end(), std::back_inserter(above), [&](const Func &f) { return !read.count(f.name()); });
+        d.sum.update().eager_inline(above);
+        d.sum = d.sum.change_type(Int(32));
         RVar rxt("rxt"), rxj("rxj");
         d.part = d.sum.update().split(r.x, rxt, rxj, act_sub).rfactor(rxt, Var("t"));
-        d.inner = d.part.update().hoist_invariants()[0];
-        if (read_port(d.inner, rs[1].derived_ports(), d.part)) {
-            d.inner = Func();
-        } else {  // the sub-block sums of the act's codes, int32, by quads (sdot)
-            RVar rxk("rxk"), rxq("rxq");
-            d.inner.update().eager_inline(decoders(rs, only({tag::codes}), 1));
-            d.inner = d.inner.change_type(Int(32));
-            d.quads = d.inner.update().split(rxj, rxk, rxq, 4).rfactor(rxk, Var("i"));
+        if (!read_port(d.part.update().hoist_invariants()[0], rs[1].derived_ports(), d.part)) {
+            throw std::invalid_argument("derived_sums: the act's sub-block sums in " + s.name() + " match none of its derived ports");
         }
     } else if (read_port(d.sum, rs[1].derived_ports(), d.blk)) {
         d.sum = Func();
@@ -373,14 +387,6 @@ inline void schedule_sums(Sums d, Func out, int st, Func acc, Var n, Var m, cons
         d.sum.compute_at(blocks).unroll(u).unroll(n).unroll(m);
         d.sum.update().atomic().vectorize(rxt);
         regs(d.part.compute_at(blocks).reorder_storage(t, u, n, m), {t}, {u, n, m});
-        if (d.inner.defined()) {  // no port matched
-            Var i = d.quads.args().back();
-            RVar rxk("rxk"), rxq("rxq");
-            regs(d.inner.compute_at(blocks).reorder_storage(t, u, n, m), {t}, {u, n, m});
-            d.inner.update().reorder(rxk, t).atomic().vectorize(rxk).vectorize(t, 4);
-            d.quads.compute_at(blocks).reorder_storage(i, t, u, n, m).vectorize(i).unroll(t).unroll(u).unroll(n).unroll(m);
-            d.quads.update().reorder(rxq, i, t).atomic().vectorize(rxq).vectorize(i).unroll(t).unroll(u).unroll(n).unroll(m);
-        }
     } else if (d.sum.defined()) {  // no port matched: the act's block sums
         d.sum.compute_at(blocks).unroll(u).unroll(n).unroll(m);
         d.sum.update().atomic().vectorize(r.x, vec);
