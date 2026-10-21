@@ -27,6 +27,15 @@ inline Expr sf(const Expr &e) {
     return strict_float(e);
 }
 
+// args, then x's dimensions past its record's (j, b: the rows `_` stands
+// for), for the pure definitions of constants, whose `_` would be empty.
+inline std::vector<Expr> rows_of(const Func &x, std::vector<Expr> args) {
+    for (int i = 2; i < x.dimensions(); i++) {
+        args.push_back(Var::implicit(i - 2));
+    }
+    return args;
+}
+
 // The sums of each run of n codes, codes(j, b, ...) -> (j / n, b, ...), as
 // int16 (block_q8_K's bsums, n = 16): a derived port.
 inline Derive::Definition partial_sums(int n) {
@@ -128,7 +137,7 @@ struct Q4KQuant {
         Var j, s, b, k;
         RDom r(0, n), r1(1, n - 1), rs(0, sub);
         Expr xr = x(s * n + r, b, _);
-        sx2(s, b, _) = 0.0f;
+        sx2(rows_of(x, {s, b})) = 0.0f;
         sx2(s, b, _) = fma(xr, xr, sx2(s, b, _));
         w(j, b, _) = sf(sqrt(sx2(j / n, b, _) / (float)n) + abs(x(j, b, _)));
         Expr wr = w(s * n + r, b, _);
@@ -145,7 +154,7 @@ struct Q4KQuant {
         auto sq = [](const Expr &e) { return e * e; };
         // the state: (best error, scale, min, the iscale and min of the best codes)
         Expr is0 = sf(15.0f / (hi - lo)), sc0 = sf(1.0f / is0);
-        init(s, b, _) = 0.0f;
+        init(rows_of(x, {s, b})) = 0.0f;
         init(s, b, _) = sf(init(s, b, _) + wr * sq(fma(sc0, codes(is0, lo, xr), lo) - xr));
         Func st("qkx2_state0");
         st(s, b, _) = Tuple(init(s, b, _), sc0, lo, is0, lo);
@@ -154,14 +163,14 @@ struct Q4KQuant {
             Func sums("qkx2_sums" + i), fit("qkx2_fit" + i), err("qkx2_err" + i), next("qkx2_state" + std::to_string(step + 1));
             float t = std::fma(0.1f, (float)step, -1.0f) + 15.0f;  // rmin + rdelta * is + nmax
             Expr m = st(s, b, _)[2], iscale = sf(t / (hi - m)), l = codes(iscale, m, xr), wl = sf(wr * l);
-            sums(s, b, _) = Tuple(0.0f, 0.0f, 0.0f);
+            sums(rows_of(x, {s, b})) = Tuple(0.0f, 0.0f, 0.0f);
             sums(s, b, _) = Tuple(sf(sums(s, b, _)[0] + wl), sf(sums(s, b, _)[1] + wl * l), sf(sums(s, b, _)[2] + wl * xr));
             Expr s_l = sums(s, b, _)[0], s_l2 = sums(s, b, _)[1], s_xl = sums(s, b, _)[2];
             Expr D = sf(fma(sum_w, s_l2, -(s_l * s_l))), ts = sf(fma(sum_w, s_xl, -(sum_x * s_l)) / D), tm = sf(fma(s_l2, sum_x, -(s_l * s_xl)) / D);
             Expr pos = tm > 0.0f;
             fit(s, b, _) = Tuple(D, sf(select(pos, s_xl / s_l2, ts)), select(pos, 0.0f, tm));
             Expr fs = fit(s, b, _)[1], fm = fit(s, b, _)[2];
-            err(s, b, _) = 0.0f;
+            err(rows_of(x, {s, b})) = 0.0f;
             err(s, b, _) = sf(fma(wr, sq(fma(fs, l, fm) - xr), err(s, b, _)));
             Expr better = sf(fit(s, b, _)[0] > 0.0f && err(s, b, _) < st(s, b, _)[0]);
             next(s, b, _) = Tuple(select(better, err(s, b, _), st(s, b, _)[0]), select(better, fs, st(s, b, _)[1]), select(better, fm, m),
@@ -251,7 +260,7 @@ struct Q6KQuant {
         RDom r(0, n), rk(1, trials - 1), rs(0, sub);
         Expr xr = x(s * n + r, b, _);
         // GGML's strict scan for the greatest |x|: (amax, max)
-        am(s, b, _) = Tuple(0.0f, 0.0f);
+        am(rows_of(x, {s, b})) = Tuple(0.0f, 0.0f);
         Expr gt = sf(abs(xr) > am(s, b, _)[0]);
         am(s, b, _) = Tuple(select(gt, abs(xr), am(s, b, _)[0]), select(gt, xr, am(s, b, _)[1]));
         Expr mx = am(s, b, _)[1];
@@ -263,7 +272,7 @@ struct Q6KQuant {
         auto iscale = [&](const Expr &t) { return sf(mux(t, nums) / mx); };
         auto codes = [&](const Expr &is, const Expr &v) { return clamp(nearest_int(sf(is * v)), -32, 31); };
         Expr cx = x(s * n + r, b, _), l = cast<float>(codes(iscale(c), cx)), wx = sf(cx * cx * cx);
-        cand(c, s, b, _) = Tuple(0.0f, 0.0f);
+        cand(rows_of(x, {c, s, b})) = Tuple(0.0f, 0.0f);
         // (the first pass's sums are not fused: GGML's build vectorizes its products)
         Expr wl = sf(cx * cx * l), lx = cand(c, s, b, _)[0], l2 = cand(c, s, b, _)[1];
         cand(c, s, b, _) = Tuple(select(c == 0, sf(lx + wx * l), fma(wx, l, lx)), select(c == 0, sf(l2 + wl * l), fma(wl, l, l2)));
