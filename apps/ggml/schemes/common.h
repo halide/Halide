@@ -493,6 +493,34 @@ struct Words {
     }
 };
 
+// Records of n elements back to one flat dimension: (i, o, rest...) <->
+// (o * n + i, rest...), BlockReshape(n)'s inverse (e.g. a field's bytes
+// packed in pieces, then stored as one array).
+struct Unblock {
+    int n;
+
+    std::vector<Func> encode(const std::vector<Func> &in) const {
+        Func f("unblocked");
+        Var k;
+        f(k, _) = in[0](k % n, k / n, _);
+        return {f};
+    }
+    std::vector<Func> decode(const std::vector<Func> &e) const {
+        Func f("reblocked");
+        Var i, o;
+        f(i, o, _) = e[0](o * n + i, _);
+        return {f};
+    }
+    ApproximationSignature signature(const ApproximationPorts &in) const {
+        ApproximationPort i = in.empty() ? ApproximationPort("records") : in[0], o = i;
+        if (i.dimensions) o.dimensions = *i.dimensions - 1;
+        return {{i}, {o}};
+    }
+    bool lossless() const {
+        return true;
+    }
+};
+
 // `inner`, a stage onto bytes whose decode's element j reads only byte
 // j / per (e.g. Compose{multiples, BitPack}), with an exact alternative
 // decode: a constant table of its decodes of each byte value (a row of `per`
