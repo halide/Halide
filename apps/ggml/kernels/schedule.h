@@ -105,10 +105,12 @@ inline Expr balanced(const std::vector<int> &ps, float overhead, const std::func
 // weight's values per block (1: floats, no blocks), rows per record
 // (interleaved in pieces of `chunk` codes) and whether it is rowwise; the act
 // codes' values per block (the weight's: an integer dot; 1: values) and rows
-// per record.
+// per record; two-level formats' values per sub-block (0: one level), the
+// weight's each with its own scale, the act's each with its own derived sum.
 struct Formats {
     int block = 1, rows = 1, chunk = 0, act_block = 1, act_rows = 1;
     bool rowwise = false;
+    int sub = 0, act_sub = 0;
 };
 
 // The tile shape of one mul_mat schedule: nt x mt outputs (N >= nt, M >= mt;
@@ -299,12 +301,16 @@ inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool
 // computed per tile, s then its update, and the rest, d.sums, the weight's
 // min times the act; per block (r.y rfactored to u, d.blk), the min hoists
 // out of the act's block sum, which then reads the act's derived port
-// (read_port: e.g. q8_1's s; d.sum, if none matches). Returns false (dot
+// (read_port: e.g. q8_1's s; d.sum, if none matches). Acts whose derived
+// port sums sub-blocks of `act_sub` values (q8_K's bsums): the block's sum
+// (d.sum, int32) splits per act sub-block (rfactor: d.part), the weight's
+// factor of each (its sub-block's min) hoists out, and the act's sub-block
+// sum reads the port (d.inner, if none matches). Returns false (dot
 // untouched) if the weight is not affine or the act has no derived port.
 struct Sums {
-    Func sums, blk, sum;
+    Func sums, blk, sum, part, inner, quads;
 };
-inline bool derived_sums(Func out, int st, Stage &s, const RDom &r, const std::vector<ApproximationResult> &rs, Sums &d) {
+inline bool derived_sums(Func out, int st, Stage &s, const RDom &r, const std::vector<ApproximationResult> &rs, Sums &d, int act_sub = 0) {
     d = Sums();
     if (rs.size() < 2 || rs[1].derived_ports().empty() || !affine(rs)) return false;
     s.eager_inline(decoders(rs, all_but({tag::codes}), 0, 1));
@@ -313,8 +319,24 @@ inline bool derived_sums(Func out, int st, Stage &s, const RDom &r, const std::v
     Func with = parts[0];
     d.sums = parts[1];
     d.blk = d.sums.update().rfactor(r.y, Var("u"));
+    // a port of the act's codes alone (no scale): the act's scale hoists too
+    if (act_sub) d.blk.update().eager_inline(decoders(rs, all_but({tag::codes}), 1));
     d.sum = d.blk.update().hoist_invariants()[0];
-    if (read_port(d.sum, rs[1].derived_ports(), d.blk)) d.sum = Func();
+    if (act_sub) {
+        RVar rxt("rxt"), rxj("rxj");
+        d.part = d.sum.update().split(r.x, rxt, rxj, act_sub).rfactor(rxt, Var("t"));
+        d.inner = d.part.update().hoist_invariants()[0];
+        if (read_port(d.inner, rs[1].derived_ports(), d.part)) {
+            d.inner = Func();
+        } else {  // the sub-block sums of the act's codes, int32, by quads (sdot)
+            RVar rxk("rxk"), rxq("rxq");
+            d.inner.update().eager_inline(decoders(rs, only({tag::codes}), 1));
+            d.inner = d.inner.change_type(Int(32));
+            d.quads = d.inner.update().split(rxj, rxk, rxq, 4).rfactor(rxk, Var("i"));
+        }
+    } else if (read_port(d.sum, rs[1].derived_ports(), d.blk)) {
+        d.sum = Func();
+    }
     with.compute_at(tile_at(out, st));
     s = with.update();
     return true;
@@ -344,7 +366,22 @@ inline void schedule_sums(Sums d, Func out, int st, Func acc, Var n, Var m, cons
         regs(d.blk, {}, {u, n, m});
     }
     d.blk.compute_at(blocks).bound_storage(u, ts.interleave);
-    if (d.sum.defined()) {  // no port matched: the act's block sums
+    if (d.part.defined()) {
+        // per act sub-block, vectorized across them: its factor times its sum
+        Var t = d.part.args().back();
+        RVar rxt("rxt"), rxj("rxj");
+        d.sum.compute_at(blocks).unroll(u).unroll(n).unroll(m);
+        d.sum.update().atomic().vectorize(rxt);
+        regs(d.part.compute_at(blocks).reorder_storage(t, u, n, m), {t}, {u, n, m});
+        if (d.inner.defined()) {  // no port matched
+            Var i = d.quads.args().back();
+            RVar rxk("rxk"), rxq("rxq");
+            regs(d.inner.compute_at(blocks).reorder_storage(t, u, n, m), {t}, {u, n, m});
+            d.inner.update().reorder(rxk, t).atomic().vectorize(rxk).vectorize(t, 4);
+            d.quads.compute_at(blocks).reorder_storage(i, t, u, n, m).vectorize(i).unroll(t).unroll(u).unroll(n).unroll(m);
+            d.quads.update().reorder(rxq, i, t).atomic().vectorize(rxq).vectorize(i).unroll(t).unroll(u).unroll(n).unroll(m);
+        }
+    } else if (d.sum.defined()) {  // no port matched: the act's block sums
         d.sum.compute_at(blocks).unroll(u).unroll(n).unroll(m);
         d.sum.update().atomic().vectorize(r.x, vec);
     }
@@ -426,20 +463,35 @@ inline std::vector<Func> sum_tree(Stage s, const std::vector<Level> &levels, Loo
 // lane; otherwise f32) times the hoisted scales, accumulated per lane in f32
 // (GGML's order), on ts tiles of out under `cond`. `derived`: an affine
 // weight's code-free terms read the act's derived port (derived_sums()), a
-// product per block accumulated alongside.
+// product per block accumulated alongside. Two-level weights (`sub` values
+// per sub-block, each with its own scale): the block's dot splits per
+// sub-block (rfactor), whose scale hoists out of its dot of the codes, so
+// the codes' products stay those of the codes (sdot) and the scales apply
+// once per sub-block; `act_sub`: the act's (derived_sums()).
 inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, bool integer,
-                    const std::vector<ApproximationResult> &rs, const Target &t, bool derived = false) {
+                    const std::vector<ApproximationResult> &rs, const Target &t, bool derived = false,
+                    int sub = 0, int act_sub = 0) {
     Stage s = tile_out(out, st, dot, cond, ts, r);
-    Var n = dot.args()[0], m = dot.args()[1], lane("lane"), u("u"), bacc("bacc");
-    RVar ry = r.y, rxc("rxc"), rxo("rxo"), rxi("rxi"), ryo("ryo"), ryi("ryi");
+    Var n = dot.args()[0], m = dot.args()[1], lane("lane"), u("u"), v("v"), bacc("bacc");
+    RVar ry = r.y, rxs("rxs"), rxc("rxc"), rxo("rxo"), rxi("rxi"), ryo("ryo"), ryi("ryi");
     bool aff = affine(rs);
     Sums d;
-    if (derived && derived_sums(out, st, s, r, rs, d)) aff = false;
+    if (derived && derived_sums(out, st, s, r, rs, d, act_sub)) aff = false;
     int per = integer ? 4 : 1, vec = t.natural_vector_size<int8_t>();
-    s.split(r.x, rxc, rxo, vec).split(rxo, rxo, rxi, per);
+    if (sub * per <= vec) sub = 0;  // a sub-block per lane step: no sum to hoist its scale from
+    sub ? s.split(r.x, rxs, rxc, sub).split(rxc, rxc, rxo, vec) : s.split(r.x, rxc, rxo, vec);
+    s.split(rxo, rxo, rxi, per);
     Func blk = s.rfactor({{rxo, lane}, {ry, u}});
     blk.bound(lane, 0, vec / per);  // the lane's range, so the block's scales hoist
     Func rest, mid, codes = block_dot(blk, rs, integer, rest, mid, aff);
+    // per sub-block (v): its scale times its codes' dot (inner)
+    std::vector<std::pair<Func, Func>> subs;
+    for (Func f : {codes, rest}) {
+        if (!sub || !f.defined()) continue;
+        Func part = f.update().rfactor(rxs, v);
+        part.bound(lane, 0, vec / per);
+        subs.emplace_back(part, part.update().hoist_invariants()[0]);
+    }
     s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
     Func acc = sum_tree(s, {{{rxo, lane}, {ryi, bacc}}, {{rxo, lane}}}, tile_at(out, st), n, m, ryo)[0];
     s.atomic().vectorize(rxo).unroll(n).unroll(m);
@@ -455,7 +507,14 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
         ts.nt > 1 ? regs(rest, {n}, {}) : regs(rest, {}, {n});
     }
     for (Func f : {codes, rest}) {
-        if (f.defined()) f.update().atomic().vectorize(rxi).unroll(rxc);
+        if (f.defined()) sub ? f.update().unroll(rxs) : f.update().atomic().vectorize(rxi).unroll(rxc);
+    }
+    // per block group, the tile's sub-block dots (inner), then their scales
+    for (auto [part, inner] : subs) {
+        for (Func f : {part, inner}) {
+            regs(f.compute_at(acc, ryo).reorder_storage(lane, v, n, m).bound_storage(u, ts.interleave), {lane}, {v, u, n, m});
+        }
+        inner.update().atomic().vectorize(rxi).unroll(rxc);
     }
     schedule_sums(d, out, st, acc, n, m, ts, r, ts.nt > 2, vec);
     tables(rs, {blk, mid, codes, rest}, LoopLevel(acc, ryo));
@@ -675,7 +734,7 @@ inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, cons
         acc.defined() ? flat_tree(out, 0, dots[0], Expr(), {1, 1, 4}, r, acc, staged) : flat(out, 0, dots[0], Expr(), {1, 1, 4}, r, t);
         return;
     }
-    blocked(out, 0, dots[0], Expr(), {}, r, fmt.act_block == fmt.block, rs, t, true);
+    blocked(out, 0, dots[0], Expr(), {}, r, fmt.act_block == fmt.block, rs, t, true, fmt.sub, fmt.act_sub);
 }
 
 // The Metal tiles of out: threadgroups (gpu_blocks) of `sg` simdgroups
