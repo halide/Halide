@@ -1060,7 +1060,7 @@ inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom 
 // (dots[1]) on gemm tiles starting on a record, its second the others
 // (dots[0], < r rows) on gemv tiles.
 inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs,
-                    const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation()) {
+                    const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation(), int interleave = 2) {
     if (t.has_feature(Target::Metal)) {
         if (acc.defined()) throw std::invalid_argument("metal: dots accumulated in f32");
         if (fmt.act_rows > 1 || fmt.rows > 1) throw std::invalid_argument("metal: weights and acts one row per record");
@@ -1161,6 +1161,7 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
         return;
     }
     pairs.busy = rows.busy = rest;
+    pairs.interleave = rows.interleave = interleave;
     // A table's decode, per row pair, outweighs sharing the act's loads
     if (decoders(rs, all_but({}), 0, SIZE_MAX, true).empty()) blocked(out, 2 * whole, dots[0], fits(pairs, 1), pairs, r, integer, rs, t, true, fmt.sub, fmt.act_sub);
     blocked(out, 2 * whole, dots[0], Expr(), rows, r, integer, rs, t, true, fmt.sub, fmt.act_sub);

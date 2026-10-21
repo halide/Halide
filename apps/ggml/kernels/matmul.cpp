@@ -19,7 +19,7 @@ using namespace Halide;
 class MatMul : public Generator<MatMul> {
 public:
     GeneratorParam<std::string> weight{"weight", "q4_0"}, act{"act", "q8_0"}, op{"op", "vec_dot"};
-    // vec_dot's blocks per iteration (ggml::vec_dot)
+    // blocks per iteration of vec_dot and of mul_mat's gemv tiles
     GeneratorParam<int> interleave{"interleave", 2};
 
     void configure() {
@@ -161,7 +161,7 @@ public:
         if (op == "vec_dot") {
             ggml::vec_dot(*result, dots, r, fmt, approx, staged, get_target(), acc, interleave);
         } else {
-            ggml::mul_mat(*result, dots, r, fmt, approx, staged, get_target(), acc);
+            ggml::mul_mat(*result, dots, r, fmt, approx, staged, get_target(), acc, interleave);
         }
     }
 

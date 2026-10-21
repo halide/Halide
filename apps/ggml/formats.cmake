@@ -91,10 +91,10 @@ set(GGML_FORMATS
 set(GGML_BENCH_FEATURES no_asserts no_bounds_query)
 
 # Schedule parameters (kernels/matmul.cpp's GeneratorParams) of some of the
-# rows' libraries: `type op act params...`. vec_dot's interleave=1 (one block
-# per iteration, default 2) where measured faster on Apple M3: a q8_K act's
-# block is 292 bytes, so a second block's loads fall outside ldur's immediate
-# range and each needs its own address.
+# rows' libraries: `type op act params...`. interleave=1 (one block per
+# iteration of vec_dot and of mul_mat's gemv tiles, default 2) where measured
+# faster on Apple M3: a q8_K act's block is 292 bytes, so a second block's
+# loads fall outside ldur's immediate range and each needs its own address.
 set(GGML_SCHEDULE_PARAMS
     "q2_K vec_dot q8_K interleave=1"
     "q3_K vec_dot q8_K interleave=1"
@@ -103,6 +103,14 @@ set(GGML_SCHEDULE_PARAMS
     "iq3_xxs vec_dot q8_K interleave=1"
     "iq1_s vec_dot q8_K interleave=1"
     "iq4_xs vec_dot q8_K interleave=1"
+    "iq2_xxs mul_mat q8_K interleave=1"
+    "iq2_xxs mul_mat f32:q8_K interleave=1"
+    "iq3_xxs mul_mat q8_K interleave=1"
+    "iq3_xxs mul_mat f32:q8_K interleave=1"
+    "iq1_s mul_mat q8_K interleave=1"
+    "iq1_s mul_mat f32:q8_K interleave=1"
+    "iq4_xs mul_mat q8_K interleave=1"
+    "iq4_xs mul_mat f32:q8_K interleave=1"
 )
 
 set(GGML_HALIDE_LIBRARIES "")
