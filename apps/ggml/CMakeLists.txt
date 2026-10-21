@@ -79,6 +79,14 @@ target_include_directories(ggml_iq_properties PRIVATE "${CMAKE_CURRENT_SOURCE_DI
 target_link_libraries(ggml_iq_properties PRIVATE Halide::Halide Halide::Tools)
 add_test(NAME ggml_iq_properties COMMAND ggml_iq_properties)
 set_tests_properties(ggml_iq_properties PROPERTIES LABELS ggml)
+# the grid formats' trusted encoders: GGML's quantizers, the JIT resolving
+# the harness's extern (ggml_trusted_quantize) in the executable
+add_executable(ggml_grid_properties schemes/grid_properties.cpp harness/trusted.cpp)
+target_include_directories(ggml_grid_properties PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" harness)
+target_link_libraries(ggml_grid_properties PRIVATE Halide::Halide Halide::Tools ggml::ggml)
+set_target_properties(ggml_grid_properties PROPERTIES ENABLE_EXPORTS ON)
+add_test(NAME ggml_grid_properties COMMAND ggml_grid_properties)
+set_tests_properties(ggml_grid_properties PROPERTIES LABELS ggml)
 add_executable(ggml_ternary_properties schemes/ternary_properties.cpp)
 target_include_directories(ggml_ternary_properties PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(ggml_ternary_properties PRIVATE Halide::Halide Halide::Tools)
