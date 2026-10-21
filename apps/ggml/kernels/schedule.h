@@ -274,6 +274,15 @@ inline bool invariant_factor(Func f) {
     return false;
 }
 
+// Has the weight a float scale per sub-block (a decoded scale port with
+// the values' dimensions: (sub-block, block, row))?
+inline bool float_sub_scales(const std::vector<ApproximationResult> &rs) {
+    for (Func f : decoders(rs, only({tag::scale}), 0, 1)) {
+        if (f.type().is_float() && f.dimensions() == 3) return true;
+    }
+    return false;
+}
+
 // blk's per-block dot (r.y rfactored to a pure var) with the decoders inlined
 // and the scales hoisted: returns the dot of the codes (int32 if `integer`).
 // Affine weights first split on the weight's codes, the rest returned in
@@ -288,7 +297,8 @@ inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool
     rest = mid = Func();
     if (!aff) {
         blk.update().eager_inline(decoders(rs));
-        codes = blk.update().hoist_invariants()[0];
+        // (scales per sub-block alone, as nvfp4's with f32 acts: none hoists)
+        codes = invariant_factor(blk) ? blk.update().hoist_invariants()[0] : blk;
     } else {
         blk.update().eager_inline(decoders(rs, all_but({tag::codes})));
         if (invariant_factor(blk)) mid = blk.update().hoist_invariants()[0];
@@ -489,14 +499,18 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     s.split(rxo, rxo, rxi, per);
     Func blk = s.rfactor({{rxo, lane}, {ry, u}});
     blk.bound(lane, 0, vec / per);  // the lane's range, so the block's scales hoist
-    Func rest, mid, codes = block_dot(blk, rs, integer, rest, mid, aff);
+    // float sub-block scales (nvfp4's): the codes' dot is integer per
+    // sub-block only, once they hoist
+    bool fsub = sub && integer && float_sub_scales(rs);
+    Func rest, mid, codes = block_dot(blk, rs, integer && !fsub, rest, mid, aff);
     // per sub-block (v): its scale times its codes' dot (inner)
     std::vector<std::tuple<Func, Func, Func>> subs;
     for (Func f : {codes, rest}) {
         if (!sub || !f.defined()) continue;
         Func part = f.update().rfactor(rxs, v);
         part.bound(lane, 0, vec / per);
-        subs.emplace_back(f, part, part.update().hoist_invariants()[0]);
+        Func inner = part.update().hoist_invariants()[0];
+        subs.emplace_back(f, part, fsub ? inner.change_type(Int(32)) : inner);
     }
     s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
     Func acc = sum_tree(s, {{{rxo, lane}, {ryi, bacc}}, {{rxo, lane}}}, tile_at(out, st), n, m, ryo)[0];
@@ -670,12 +684,14 @@ inline void blocked_mmla(Func out, int st, Func dot, Expr cond, Tiles ts, const 
     if (derived && derived_sums(out, st, s, r, rs, d, act_sub)) aff = false;
     sub ? s.split(r.x, rxs, rxc, sub).split(rxc, rxc, rxk, 8) : s.split(r.x, rxc, rxk, 8);
     Func blk = s.rfactor(ry, u);
-    Func rest, mid, codes = block_dot(blk, rs, true, rest, mid, aff);
+    bool fsub = sub && float_sub_scales(rs);
+    Func rest, mid, codes = block_dot(blk, rs, !fsub, rest, mid, aff);
     // per sub-block (v): its scale times its codes' dot (inner), as blocked()
     Func part, inner;
     if (sub) {
         part = codes.update().rfactor(rxs, v);
         inner = part.update().hoist_invariants()[0];
+        if (fsub) inner = inner.change_type(Int(32));
     }
     s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
     Func acc = s.rfactor(ryi, bacc);
