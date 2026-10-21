@@ -18,6 +18,7 @@
 // ".acc16" (f16.acc16), an Accumulate at the format's own 16-bit float, for
 // formats stored as one such float per value, as GGML's f16 vec_dot sums in
 // f16 (the schedule applies it to the dot's partial sums: kernels/schedule.h).
+#include "binary.h"
 #include "iq.h"
 #include "kleidiai.h"
 #include "kquants.h"
@@ -85,6 +86,7 @@ inline Format format(const std::string &spec, bool aos = false, bool scaled = fa
     if (type == "iq4_xs" && codes.empty()) return sub_blocks({iq4_xs(lay, indexed), QK_K, rows, chunk}, 32);
     if (type == "tq2_0" && codes.empty()) return {tq2_0(lay, indexed), QK_K, rows, chunk};
     if (type == "tq1_0" && codes.empty()) return {tq1_0(lay, indexed), QK_K, rows, chunk};
+    if (type == "q1_0" && codes.empty()) return {q1_0(lay, indexed), SignQuant::block, rows, chunk};
     if (type == "q8_K" && codes.empty()) return sub_blocks({q8_K(lay, indexed), QK_K, rows, chunk}, 16);
     if (type == "q4_K" && codes.empty()) return sub_blocks({q4_K(lay, indexed), QK_K, rows, chunk}, 32);
     if (type == "q6_K" && codes.empty()) return sub_blocks({q6_K(lay, indexed), QK_K, rows, chunk}, 16);
