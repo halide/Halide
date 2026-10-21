@@ -262,6 +262,11 @@ public:
             }
 
             if (!arm32) {
+                check("frinta", 2 * w, round_half_away(f32_1));
+                check("frinta", w, round_half_away(f64_1));
+                check("fcvtas *v", 2 * w, i32(round_half_away(f32_1)));
+                check("fcvtau *v", 2 * w, u32(round_half_away(f32_1)));
+                check("fcvtas *v", 8 * w, i8(round_half_away(f32_1)));
                 check("fcvtmu *v", 2 * w, u32(floor(f32_1)));
                 check("fcvtpu *v", 2 * w, u32(ceil(f32_1)));
                 check("fcvtms *v", 2 * w, i32(floor(f32_1)));

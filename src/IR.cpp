@@ -911,6 +911,7 @@ constexpr const char *intrinsic_op_names[] = {
     "require_mask",
     "return_second",
     "round",
+    "round_half_away",
     "rounding_halving_add",
     "rounding_mul_shift_right",
     "rounding_shift_left",

@@ -71,6 +71,7 @@ tests(
     bounds_internal.cpp
     bounds_of_abs.cpp
     bounds_of_cast.cpp
+    bounds_of_compound_index_from_where.cpp
     bounds_of_func.cpp
     bounds_of_monotonic_math.cpp
     bounds_of_multiply.cpp
@@ -322,6 +323,7 @@ tests(
     interleave.cpp
     interleave_rgb.cpp
     interleave_x.cpp
+    internal_linkage.cpp
     interval.cpp
     intrinsics.cpp
     invalid_gpu_loop_nests.cpp
@@ -469,6 +471,7 @@ tests(
     side_effects.cpp
     simplified_away_embedded_image.cpp
     simplify.cpp
+    simplify_region_bound_regression.cpp
     skip_stages.cpp
     skip_stages_cse_bug.cpp
     skip_stages_external_array_functions.cpp
@@ -534,6 +537,7 @@ tests(
     tracing_bounds_required.cpp
     tracing_broadcast.cpp
     tracing_errors.cpp
+    tracing_matched_events.cpp
     tracing_stack.cpp
     transitive_bounds.cpp
     transpose_idioms.cpp
@@ -692,6 +696,7 @@ tests(
     vector_cast.cpp
     vector_math.cpp
     vector_reductions.cpp
+    vulkan_bool_minmax.cpp
     # keep-sorted end
 )
 
@@ -716,6 +721,10 @@ find_package(SPIRV-Headers 1.5.5 REQUIRED HINTS "${Halide_SOURCE_DIR}/dependenci
 target_include_directories(correctness_spirv_ir PRIVATE "${Halide_SOURCE_DIR}/src")
 target_link_libraries(correctness_spirv_ir PRIVATE SPIRV-Headers::SPIRV-Headers)
 target_compile_definitions(correctness_spirv_ir PRIVATE WITH_SPIRV)
+
+target_include_directories(correctness_vulkan_bool_minmax PRIVATE "${Halide_SOURCE_DIR}/src")
+target_link_libraries(correctness_vulkan_bool_minmax PRIVATE SPIRV-Headers::SPIRV-Headers)
+target_compile_definitions(correctness_vulkan_bool_minmax PRIVATE WITH_SPIRV)
 
 # Tests which use external funcs need to enable exports.
 set_target_properties(

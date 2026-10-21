@@ -1687,6 +1687,9 @@ Expr lower_intrinsic(const Call *op) {
     } else if (op->is_intrinsic(Call::fixed_to_float)) {
         internal_assert(op->args.size() == 2);
         return lower_fixed_to_float(op->type, op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::round_half_away)) {
+        internal_assert(op->args.size() == 1);
+        return lower_round_half_away_from_zero(op->args[0]);
     } else if (op->is_intrinsic(Call::sorted_avg)) {
         internal_assert(op->args.size() == 2);
         return lower_sorted_avg(op->args[0], op->args[1]);

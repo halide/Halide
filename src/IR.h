@@ -837,6 +837,9 @@ struct Call : public ExprNode<Call> {
         return_second,
         // Round a floating point value to nearest integer, with ties going to even
         round,
+        // Round a floating point value to nearest integer, with ties going away
+        // from zero (C's round)
+        round_half_away,
         rounding_halving_add,
         rounding_mul_shift_right,
         rounding_shift_left,
