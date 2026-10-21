@@ -776,9 +776,10 @@ inline void encoder(Func e, const std::vector<ApproximationResult> &rs) {
 }
 
 // The N = M = 1 schedule (GGML's vec_dot). Activations encoded inside the
-// pipeline (`staged`) are encoded once, up front.
+// pipeline (`staged`) are encoded once, up front. `interleave` blocks per
+// iteration (blocked weights; a per-format parameter, formats.cmake).
 inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs,
-                    const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation()) {
+                    const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation(), int interleave = 2) {
     for (Func e : staged) {
         e.compute_root();
         encoder(e, rs);
@@ -789,7 +790,7 @@ inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, cons
         acc.defined() ? flat_tree(out, 0, dots[0], Expr(), {1, 1, 4}, r, acc, staged) : flat(out, 0, dots[0], Expr(), {1, 1, 4}, r, t);
         return;
     }
-    blocked(out, 0, dots[0], Expr(), {}, r, fmt.act_block == fmt.block, rs, t, true, fmt.sub, fmt.act_sub);
+    blocked(out, 0, dots[0], Expr(), {1, 1, interleave}, r, fmt.act_block == fmt.block, rs, t, true, fmt.sub, fmt.act_sub);
 }
 
 // The Metal tiles of out: threadgroups (gpu_blocks) of `sg` simdgroups
