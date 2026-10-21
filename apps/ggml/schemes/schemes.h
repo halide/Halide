@@ -27,12 +27,21 @@
 
 namespace ggml {
 
+// `sub`: the values per sub-block of a two-level format (K-quants: each of
+// a weight's with its own scale, each of an act's with its own derived sum);
+// 0: one level, the block.
 struct Format {
     Approximation scheme;
     int block = 1, rows = 1, chunk = 0;
     bool rowwise = false;
     Approximation acc;
+    int sub = 0;
 };
+
+inline Format sub_blocks(Format f, int sub) {
+    f.sub = sub;
+    return f;
+}
 
 // `aos`: the same format with one row per record. `indexed`: its blocks'
 // values indexed (index in block, block, ...), not flat (see BlockReshape).
@@ -69,9 +78,9 @@ inline Format format(const std::string &spec, bool aos = false, bool scaled = fa
     if (type == "q8_0" && codes.empty()) return {q8_0(lay, indexed), QK, rows, chunk};
     if (type == "q8_1" && codes.empty()) return {q8_1(lay, indexed), QK, rows, chunk};
     if (type == "mxfp4" && codes.empty()) return {mxfp4(lay, indexed), QK, rows, chunk};
-    if (type == "q8_K" && codes.empty()) return {q8_K(lay, indexed), QK_K, rows, chunk};
-    if (type == "q4_K" && codes.empty()) return {q4_K(lay, indexed), QK_K, rows, chunk};
-    if (type == "q6_K" && codes.empty()) return {q6_K(lay, indexed), QK_K, rows, chunk};
+    if (type == "q8_K" && codes.empty()) return sub_blocks({q8_K(lay, indexed), QK_K, rows, chunk}, 16);
+    if (type == "q4_K" && codes.empty()) return sub_blocks({q4_K(lay, indexed), QK_K, rows, chunk}, 32);
+    if (type == "q6_K" && codes.empty()) return sub_blocks({q6_K(lay, indexed), QK_K, rows, chunk}, 16);
     if (!blocks.defined()) blocks = 1;
     if (type == "qsi8cx" && codes.empty()) return {qsi8cx(lay, blocks, indexed), QK, rows, chunk, true};
     if (type == "qai8dx" && codes.empty()) return {qai8dx(lay, blocks, indexed), QK, rows, chunk, true};
