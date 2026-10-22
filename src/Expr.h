@@ -456,8 +456,12 @@ enum class MemoryType {
     /** General-purpose (scalar integer) registers of the host CPU. Like
      * Stack, this is allocated using alloca and requires a constant
      * size, so that the allocation can be promoted into registers.
-     * See Func::store_in. Only supported for Funcs computed on the host
-     * CPU, not on GPUs or other devices. */
+     * Vectorized loops that store to such an allocation are lowered as
+     * "SIMD within a register": the lanes of each vector are packed into
+     * one general-purpose integer register, and lane-wise operations
+     * become ordinary integer instructions, instead of using the SIMD
+     * register file. See Func::store_in. Only supported for Funcs
+     * computed on the host CPU, not on GPUs or other devices. */
     GPR,
 };
 

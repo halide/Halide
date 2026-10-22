@@ -2842,10 +2842,42 @@ public:
      *
      * MemoryType::GPR places the Func in the general-purpose (scalar
      * integer) registers of the host CPU. Its allocation must have a
-     * constant size, as for MemoryType::Stack and MemoryType::Register,
-     * and is a stack allocation that LLVM can promote to registers. The
-     * Func can't be an output of the pipeline, have an extern definition,
-     * or be computed or used on a GPU or other device. */
+     * constant size, as for MemoryType::Stack and MemoryType::Register.
+     * The vectorized loops of all of its stages are then lowered as
+     * "SIMD within a register": all the lanes of each vector are packed
+     * into a single general-purpose register (32 or 64 bits wide,
+     * depending on the target), and lane-wise operations are implemented
+     * with ordinary integer instructions, masking off bits that would
+     * cross lane boundaries. This can be faster than using SIMD registers
+     * for short vectors of narrow integers that are only loaded, shuffled
+     * with shifts and masks, and stored, where moving data between the
+     * general-purpose and SIMD register files would dominate. A common
+     * pattern is to split and unroll the outer dimension so that shift
+     * amounts and masks become uniform across the lanes of each word:
+     \code
+     f.compute_at(g, y).split(k, j, i, 4).unroll(j).vectorize(i, 4).store_in(MemoryType::GPR);
+     \endcode
+     * Consumers of the Func are unaffected, and may be vectorized in SIMD
+     * registers as usual.
+     *
+     * The lanes of these vectors must be integers, the vectors must fit
+     * in one general-purpose register, and every operation in the
+     * vectorized loops must be one that can be done lane-wise within an
+     * integer register: dense loads and stores, broadcasts and ramps,
+     * bitwise operations, shifts by constant (possibly different per
+     * lane) or uniform amounts, multiplication, division, and modulo by
+     * constant powers of two, addition and subtraction, same-width casts
+     * and reinterprets, and selects. Anything else is a compile-time
+     * error. Selects on conditions that vary across the lanes at runtime,
+     * and loads and stores in vector tails predicated by the tail
+     * strategy, are done one lane at a time. A vectorized loop that
+     * stores to a Func in MemoryType::GPR can't also store to Funcs
+     * computed outside of it that are stored elsewhere. A Func stored in
+     * MemoryType::GPR without any vectorized loops is just a
+     * constant-sized stack allocation that LLVM can promote to
+     * registers. The Func can't be an output of the pipeline, have an
+     * extern definition, or be computed or used on a GPU or other
+     * device. */
     Func &store_in(MemoryType memory_type);
 
     /** Tell the GPU shader compiler to fit the kernel this Func's loop over gpu

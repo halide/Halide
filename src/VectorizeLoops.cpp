@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <numeric>
+#include <set>
 #include <utility>
 
 #include "CSE.h"
@@ -15,7 +16,9 @@
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
+#include "Target.h"
 #include "Util.h"
+#include "VectorizeGPR.h"
 #include "VectorizeLoops.h"
 
 namespace Halide {
@@ -23,6 +26,7 @@ namespace Internal {
 
 using std::map;
 using std::pair;
+using std::set;
 using std::string;
 using std::vector;
 
@@ -364,7 +368,7 @@ public:
     }
 };
 
-Stmt vectorize_statement(const Stmt &stmt);
+Stmt vectorize_statement(const Stmt &stmt, const Target &target, const set<string> &gpr_allocations);
 
 struct VectorizedVar {
     string name;
@@ -776,7 +780,10 @@ protected:
             // which would mean control flow divergence within the
             // SIMD lanes.
 
-            bool vectorize_predicate = true;
+            // Predicated loads and stores can't be done in
+            // general-purpose registers, so in loops that store to
+            // MemoryType::GPR we scalarize instead.
+            bool vectorize_predicate = !in_gpr_loop;
 
             Stmt predicated_stmt;
             if (vectorize_predicate) {
@@ -822,7 +829,7 @@ protected:
                     // itself which we may want to handle. All the context is invalid though, so
                     // we just start anew for this specific statement.
                     Stmt scalarized = scalarize(without_likelies, false);
-                    scalarized = vectorize_statement(scalarized);
+                    scalarized = vectorize_statement(scalarized, target, gpr_allocations);
                     Stmt stmt =
                         IfThenElse::make(all_true,
                                          then_case,
@@ -1451,8 +1458,20 @@ protected:
         }
     }
 
+    // Whether the outermost vectorized loop stores to MemoryType::GPR, so
+    // its vectors will be packed into general-purpose registers.
+    const bool in_gpr_loop;
+
+    const Target &target;
+
+    // The names of the allocations in MemoryType::GPR enclosing the
+    // outermost vectorized loop.
+    const set<string> &gpr_allocations;
+
 public:
-    VectorSubs(const VectorizedVar &vv) {
+    VectorSubs(const VectorizedVar &vv, bool in_gpr_loop, const Target &target,
+               const set<string> &gpr_allocations)
+        : in_gpr_loop(in_gpr_loop), target(target), gpr_allocations(gpr_allocations) {
         vectorized_vars.push_back(vv);
         update_replacements();
     }
@@ -1631,8 +1650,81 @@ class VectorizeLoops : public IRMutator {
 protected:
     using IRMutator::visit;
 
+    const Target &target;
+
+    // The names of the enclosing allocations in MemoryType::GPR.
+    set<string> gpr_allocations;
+
+    // Whether we're inside a loop that runs on a device other than the
+    // host.
+    bool in_device_loop = false;
+
+    // If the vectorized loop stores to a Func in MemoryType::GPR, its
+    // vectors go in general-purpose registers. Returns the name of that
+    // Func, or an empty string if the loop should use SIMD registers.
+    string gpr_func_stored_by(const For *loop) const {
+        set<string> inner_allocations, inner_gpr_allocations, stored;
+        vector<string> stores;
+        visit_with(
+            loop->body,
+            [&](auto *self, const Allocate *op) {
+                inner_allocations.insert(op->name);
+                if (op->memory_type == MemoryType::GPR) {
+                    inner_gpr_allocations.insert(op->name);
+                }
+                self->visit_base(op);
+            },
+            [&](auto *self, const Store *op) {
+                if (stored.insert(op->name).second) {
+                    stores.push_back(op->name);
+                }
+                self->visit_base(op);
+            });
+
+        string gpr_func;
+        for (const string &name : stores) {
+            if (gpr_allocations.count(name) || inner_gpr_allocations.count(name)) {
+                gpr_func = name;
+                break;
+            }
+        }
+        if (gpr_func.empty()) {
+            return gpr_func;
+        }
+        // The values stored to Funcs allocated within the loop are
+        // vectorized along with it, but anything stored outside of
+        // the loop must be in general-purpose registers too.
+        for (const string &name : stores) {
+            if (!inner_allocations.count(name) && !gpr_allocations.count(name)) {
+                user_error << "Vectorized loop " << loop->name << " stores to both "
+                           << gpr_func << ", which is stored in MemoryType::GPR, and "
+                           << name << ", which is not. A vectorized loop that stores to "
+                           << "a Func in MemoryType::GPR keeps its vectors in general-purpose "
+                           << "registers, so every Func it stores to that is not computed "
+                           << "within the loop must be in MemoryType::GPR too. Store " << name
+                           << " in MemoryType::GPR as well, or compute " << gpr_func
+                           << " outside of this loop.\n";
+            }
+        }
+        return gpr_func;
+    }
+
+    Stmt visit(const Allocate *op) override {
+        if (op->memory_type == MemoryType::GPR &&
+            gpr_allocations.insert(op->name).second) {
+            Stmt stmt = IRMutator::visit(op);
+            gpr_allocations.erase(op->name);
+            return stmt;
+        }
+        return IRMutator::visit(op);
+    }
+
     Stmt visit(const For *for_loop) override {
         Stmt stmt;
+        ScopedValue<bool> old_in_device_loop(in_device_loop,
+                                             in_device_loop ||
+                                                 (for_loop->device_api != DeviceAPI::None &&
+                                                  for_loop->device_api != DeviceAPI::Host));
         if (for_loop->for_type == ForType::Vectorized) {
             Expr loop_extent = simplify(for_loop->extent());
             const IntImm *extent = loop_extent.as<IntImm>();
@@ -1643,13 +1735,27 @@ protected:
                            << "constant extent > 1\n";
             }
 
+            const string gpr_func = gpr_func_stored_by(for_loop);
+            const bool gpr = !gpr_func.empty();
+            internal_assert(!gpr || !in_device_loop)
+                << "Func " << gpr_func << " is stored in MemoryType::GPR inside a device loop. "
+                << "This should have been caught in bound_small_allocations.\n";
+
             VectorizedVar vectorized_var = {for_loop->name, for_loop->min, (int)extent->value};
-            stmt = VectorSubs(vectorized_var)(for_loop->body);
+            stmt = VectorSubs(vectorized_var, gpr, target, gpr_allocations)(for_loop->body);
+            if (gpr) {
+                stmt = lower_gpr_vectors(stmt, gpr_func, for_loop->name, target);
+            }
         } else {
             stmt = IRMutator::visit(for_loop);
         }
 
         return stmt;
+    }
+
+public:
+    VectorizeLoops(const Target &target, const set<string> &gpr_allocations)
+        : target(target), gpr_allocations(gpr_allocations) {
     }
 };
 
@@ -1711,17 +1817,17 @@ protected:
     }
 };
 
-Stmt vectorize_statement(const Stmt &stmt) {
-    return VectorizeLoops()(stmt);
+Stmt vectorize_statement(const Stmt &stmt, const Target &target, const set<string> &gpr_allocations) {
+    return VectorizeLoops(target, gpr_allocations)(stmt);
 }
 
 }  // namespace
-Stmt vectorize_loops(const Stmt &stmt, const map<string, Function> &env) {
+Stmt vectorize_loops(const Stmt &stmt, const map<string, Function> &env, const Target &target) {
     // Limit the scope of atomic nodes to just the necessary stuff.
     // TODO: Should this be an earlier pass? It's probably a good idea
     // for non-vectorizing stuff too.
     Stmt s = LiftVectorizableExprsOutOfAllAtomicNodes(env)(stmt);
-    s = vectorize_statement(s);
+    s = vectorize_statement(s, target, {});
     s = RemoveUnnecessaryAtomics()(s);
     return s;
 }
