@@ -17,6 +17,7 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "LLVM_Headers.h"
+#include "OptimizeShuffles.h"
 #include "Simplify.h"
 #include "Substitute.h"
 #include "Util.h"
@@ -243,8 +244,6 @@ protected:
         return target.has_feature(Target::NoNEON) &&
                target_vscale() == 0;
     }
-
-    int max_dynamic_shuffle_table_size(const Type &t) const override;
 
     bool is_float16_and_has_feature(const Type &t) const {
         // NOTE : t.is_float() returns true even in case of BFloat16. We don't include it for now.
@@ -2607,23 +2606,10 @@ void CodeGen_ARM::visit(const Ramp *op) {
     CodeGen_CPU::visit(op);
 }
 
-int CodeGen_ARM::max_dynamic_shuffle_table_size(const Type &t) const {
-    // TODO: Use SVE2 tbl/tbl2 for scalable vectors.
-    if (target_vscale() != 0 ||
-        target.has_feature(Target::NoNEON) ||
-        !t.is_int_or_uint() ||
-        t.bits() != 8) {
-        return 0;
-    }
-    // AArch64 tbl1-tbl4 index up to four 128-bit registers. ARMv7 vtbl1-vtbl4
-    // index up to four 64-bit registers.
-    return target.bits == 64 ? 64 : 32;
-}
-
 void CodeGen_ARM::visit(const Call *op) {
     if (op->is_intrinsic(Call::dynamic_shuffle) &&
         op->type.is_vector() &&
-        op->args[0].type().lanes() <= max_dynamic_shuffle_table_size(op->type.element_of())) {
+        op->args[0].type().lanes() <= max_dynamic_shuffle_table_size(op->type.element_of(), target)) {
         const int table_lanes = op->args[0].type().lanes();
         // Each table register holds 16 (AArch64) or 8 (ARMv7) bytes.
         const int reg_lanes = target.bits == 64 ? 16 : 8;
@@ -2633,15 +2619,13 @@ void CodeGen_ARM::visit(const Call *op) {
         const string intrin = target.bits == 64 ?
                                   "llvm.aarch64.neon.tbl" + std::to_string(regs) + (slice_lanes == 8 ? ".v8i8" : ".v16i8") :
                                   "llvm.arm.neon.vtbl" + std::to_string(regs);
-        value = codegen_dynamic_shuffle(op, regs * reg_lanes, slice_lanes, [&](Value *table, Value *index) {
-            vector<Value *> args;
-            args.reserve(regs + 1);
-            for (int i = 0; i < regs; i++) {
-                args.push_back(slice_vector(table, i * reg_lanes, reg_lanes));
-            }
-            args.push_back(index);
-            return simple_call_intrin(intrin, args, get_vector_type(i8_t, slice_lanes));
-        });
+        Value *table = codegen(op->args[0]);
+        vector<Value *> tables;
+        tables.reserve(regs);
+        for (int i = 0; i < regs; i++) {
+            tables.push_back(slice_vector(table, i * reg_lanes, reg_lanes));
+        }
+        value = codegen_dynamic_shuffle(op, slice_lanes, intrin, tables);
         return;
     }
 

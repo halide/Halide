@@ -7,6 +7,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "LLVM_Headers.h"
+#include "OptimizeShuffles.h"
 #include "Simplify.h"
 #include "Substitute.h"
 #include "Util.h"
@@ -42,8 +43,6 @@ protected:
     int native_vector_bits() const override;
 
     int vector_lanes_for_slice(const Type &t) const;
-
-    int max_dynamic_shuffle_table_size(const Type &t) const override;
 
     using CodeGen_CPU::visit;
 
@@ -569,31 +568,15 @@ void CodeGen_X86::visit(const Cast *op) {
     CodeGen_CPU::visit(op);
 }
 
-int CodeGen_X86::max_dynamic_shuffle_table_size(const Type &t) const {
-    if (!t.is_int_or_uint() || t.bits() != 8) {
-        return 0;
-    }
-    if (target.has_feature(Target::AVX512_Cannonlake)) {
-        // vpermb indexes a 64-byte table.
-        return 64;
-    } else if (target.has_feature(Target::SSE41)) {
-        // pshufb indexes a 16-byte table.
-        return 16;
-    }
-    return 0;
-}
-
 void CodeGen_X86::visit(const Call *op) {
     if (op->is_intrinsic(Call::dynamic_shuffle) &&
         op->type.is_vector() &&
-        op->args[0].type().lanes() <= max_dynamic_shuffle_table_size(op->type.element_of())) {
+        op->args[0].type().lanes() <= max_dynamic_shuffle_table_size(op->type.element_of(), target)) {
         const int table_lanes = op->args[0].type().lanes();
         const int lanes = op->type.lanes();
         if (table_lanes > 16) {
-            value = codegen_dynamic_shuffle(op, 64, 64, [&](Value *table, Value *index) {
-                return simple_call_intrin("llvm.x86.avx512.permvar.qi.512", {table, index},
-                                          get_vector_type(i8_t, 64));
-            });
+            Value *table = slice_vector(codegen(op->args[0]), 0, 64);
+            value = codegen_dynamic_shuffle(op, 64, "llvm.x86.avx512.permvar.qi.512", {table});
         } else {
             // pshufb looks up within each 128-bit lane, so for wider vectors
             // the table must be replicated across lanes.
@@ -606,14 +589,13 @@ void CodeGen_X86::visit(const Call *op) {
                 slice_lanes = 32;
                 intrin = "llvm.x86.avx2.pshuf.b";
             }
-            value = codegen_dynamic_shuffle(op, 16, slice_lanes, [&](Value *table, Value *index) {
-                std::vector<int> indices(slice_lanes);
-                for (int i = 0; i < slice_lanes; i++) {
-                    indices[i] = i % 16;
-                }
-                table = shuffle_vectors(table, indices);
-                return simple_call_intrin(intrin, {table, index}, get_vector_type(i8_t, slice_lanes));
-            });
+            Value *table = slice_vector(codegen(op->args[0]), 0, 16);
+            std::vector<int> indices(slice_lanes);
+            for (int i = 0; i < slice_lanes; i++) {
+                indices[i] = i % 16;
+            }
+            table = shuffle_vectors(table, indices);
+            value = codegen_dynamic_shuffle(op, slice_lanes, intrin, {table});
         }
         return;
     }

@@ -160,7 +160,9 @@ protected:
     // GCC's __builtin_shuffle takes an integer vector of
     // the size of its input vector. Make sure this type exists.
     void visit(const Shuffle *op) override {
-        vector_types_used.insert(Int(32, op->vectors[0].type().lanes()));
+        if (op->vectors[0].type().is_vector()) {
+            vector_types_used.insert(Int(32, op->vectors[0].type().lanes()));
+        }
         IRGraphVisitor::visit(op);
     }
 
@@ -1909,6 +1911,23 @@ void CodeGen_C::visit(const Call *op) {
         rhs << print_expr(op->args[0]) << " % " << print_expr(op->args[1]);
     } else if (op->is_intrinsic(Call::mux)) {
         rhs << print_expr(lower_mux(op));
+    } else if (op->is_intrinsic(Call::dynamic_shuffle)) {
+        internal_assert(op->args.size() == 4);
+        string table = print_scalarized_expr(op->args[0]);
+        string index = print_expr(op->args[1]);
+        if (op->type.is_scalar()) {
+            rhs << table << "[" << index << "]";
+        } else {
+            string ops = print_type(op->type) + "_ops";
+            string result = print_assignment(op->type, ops + "::broadcast(0)");
+            for (int lane = 0; lane < op->type.lanes(); lane++) {
+                std::ostringstream replace;
+                replace << ops << "::replace(" << result << ", " << lane << ", "
+                        << table << "[" << index << "[" << lane << "]])";
+                result = print_assignment(op->type, replace.str());
+            }
+            rhs << result;
+        }
     } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
                       " integer overflow for int32 and int64 is undefined behavior in"

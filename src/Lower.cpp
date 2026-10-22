@@ -50,6 +50,7 @@
 #include "LowerWarpShuffles.h"
 #include "Memoization.h"
 #include "OffloadGPULoops.h"
+#include "OptimizeShuffles.h"
 #include "PartitionLoops.h"
 #include "Prefetch.h"
 #include "Profiling.h"
@@ -528,6 +529,14 @@ void lower_impl(const vector<Function> &output_funcs,
     } else {
         debug(1) << "Skipping GPU offload...\n";
     }
+
+    debug(1) << "Optimizing small table lookups...\n";
+    s = optimize_small_table_lookups(s, t);
+    for (size_t i = initial_lowered_function_count; i < result_module.functions().size(); i++) {
+        auto &func = result_module.functions()[i];
+        func.body = optimize_small_table_lookups(func.body, t);
+    }
+    log("Lowering after optimizing small table lookups:", s);
 
     // TODO: This needs to happen before lowering parallel tasks, because global
     // images used inside parallel loops are rewritten from loads from images to
