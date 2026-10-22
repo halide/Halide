@@ -2838,7 +2838,14 @@ public:
     /** Set the type of memory this Func should be stored in. Controls
      * whether allocations go on the stack or the heap on the CPU, and
      * in global vs shared vs local on the GPU. See the documentation
-     * on MemoryType for more detail. */
+     * on MemoryType for more detail.
+     *
+     * MemoryType::GPR places the Func in the general-purpose (scalar
+     * integer) registers of the host CPU. Its allocation must have a
+     * constant size, as for MemoryType::Stack and MemoryType::Register,
+     * and is a stack allocation that LLVM can promote to registers. The
+     * Func can't be an output of the pipeline, have an extern definition,
+     * or be computed or used on a GPU or other device. */
     Func &store_in(MemoryType memory_type);
 
     /** Tell the GPU shader compiler to fit the kernel this Func's loop over gpu

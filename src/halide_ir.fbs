@@ -118,6 +118,7 @@ enum MemoryType: byte {
     VTCM,
     AMXTile,
     GPUSharedAsync,
+    GPR,
 }
 
 table Range {

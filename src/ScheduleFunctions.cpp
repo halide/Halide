@@ -2412,6 +2412,18 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         }
     }
 
+    if (f.schedule().memory_type() == MemoryType::GPR) {
+        user_assert(!is_output)
+            << "Func " << f.name() << " is stored in MemoryType::GPR, but it is an output "
+            << "of the pipeline, so it is stored in the output buffer instead. "
+            << "To compute it in general-purpose registers, compute it in another Func "
+            << "stored in MemoryType::GPR at some loop level of " << f.name()
+            << ", and make " << f.name() << " a copy of that.\n";
+        user_assert(!f.has_extern_definition())
+            << "Func " << f.name() << " is stored in MemoryType::GPR, but it has an "
+            << "extern definition, which needs it to be in memory.\n";
+    }
+
     if (is_output) {
         // None of the checks below apply to outputs
         return true;

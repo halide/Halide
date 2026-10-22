@@ -3,7 +3,10 @@
 #include "CodeGen_Internal.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
 #include "Simplify.h"
+
+#include <optional>
 
 namespace Halide {
 namespace Internal {
@@ -74,10 +77,45 @@ class BoundSmallAllocations : public IRMutator {
     }
 
     bool must_be_constant(MemoryType memory_type) const {
-        return memory_type == MemoryType::Register;
+        return memory_type == MemoryType::Register ||
+               memory_type == MemoryType::GPR;
+    }
+
+    // The realizations in MemoryType::GPR that we're inside of.
+    Scope<> gpr_realizations;
+
+    // MemoryType::GPR is the general-purpose registers of the host CPU, so
+    // the Func can't be computed or used on any other device.
+    void check_gpr_on_host(const std::string &name, const char *verb) const {
+        if (device_api != DeviceAPI::None &&
+            device_api != DeviceAPI::Host &&
+            gpr_realizations.contains(name)) {
+            user_error << "Func " << name << " is stored in MemoryType::GPR, but it is "
+                       << verb << " in code that runs on device API " << device_api
+                       << ". MemoryType::GPR is only supported for Funcs computed and "
+                       << "used on the host CPU.\n";
+        }
+    }
+
+    Stmt visit(const Provide *op) override {
+        check_gpr_on_host(op->name, "computed");
+        return IRMutator::visit(op);
+    }
+
+    Expr visit(const Call *op) override {
+        if (op->call_type == Call::Halide) {
+            check_gpr_on_host(op->name, "used");
+        }
+        return IRMutator::visit(op);
     }
 
     Stmt visit(const Realize *op) override {
+        std::optional<ScopedBinding<>> bind_gpr;
+        if (op->memory_type == MemoryType::GPR) {
+            bind_gpr.emplace(gpr_realizations, op->name);
+            check_gpr_on_host(op->name, "computed");
+        }
+
         // Called pre-storage-flattening. At this point we just want
         // to ensure any extents on allocations which *must* be
         // constant *are* constant.
@@ -85,8 +123,16 @@ class BoundSmallAllocations : public IRMutator {
             Region region = op->bounds;
             bool changed = false;
             bool found_non_constant_extent = false;
-            for (Range &r : region) {
+            for (size_t i = 0; i < region.size(); i++) {
+                Range &r = region[i];
                 Expr bound = find_constant_bound(r.extent, Direction::Upper, scope);
+                user_assert(bound.defined() || op->memory_type != MemoryType::GPR)
+                    << "Func " << op->name << " is stored in MemoryType::GPR, but Halide was "
+                    << "unable to infer a constant upper bound on the extent of dimension "
+                    << i << " of its realization, which is " << r.extent << ". "
+                    << "Allocations in MemoryType::GPR must have a constant size. "
+                    << "Use Func::bound, Func::bound_extent, or Func::bound_storage "
+                    << "to specify it.\n";
                 // We can allow non-constant extents for now, as long as all
                 // remaining dimensions are 1 (so the stride is unused, which
                 // will be non-constant).
@@ -119,7 +165,8 @@ class BoundSmallAllocations : public IRMutator {
         Expr bound = find_constant_bound(total_extent, Direction::Upper, scope);
 
         if (!bound.defined() && must_be_constant(op->memory_type)) {
-            user_assert(op->memory_type != MemoryType::Register)
+            user_assert(op->memory_type != MemoryType::Register &&
+                        op->memory_type != MemoryType::GPR)
                 << "Allocation " << op->name << " has a dynamic size. "
                 << "Only fixed-size allocations can be stored in registers. "
                 << "Try storing on the heap or stack instead.";

@@ -89,6 +89,7 @@ CodeGen_CPU::Allocation CodeGen_CPU::create_allocation(const std::string &name, 
             user_error << "Total size for allocation " << name << " is constant but exceeds " << str_max_size << ".";
         } else if (memory_type == MemoryType::Heap ||
                    (memory_type != MemoryType::Register &&
+                    memory_type != MemoryType::GPR &&
                     !can_allocation_fit_on_stack(stack_bytes))) {
             // We should put the allocation on the heap if it's
             // explicitly placed on the heap, or if it's not
@@ -100,7 +101,8 @@ CodeGen_CPU::Allocation CodeGen_CPU::create_allocation(const std::string &name, 
         }
     } else {
         // Should have been caught in bound_small_allocations
-        internal_assert(memory_type != MemoryType::Register);
+        internal_assert(memory_type != MemoryType::Register &&
+                        memory_type != MemoryType::GPR);
         llvm_size = codegen_allocation_size(name, type, extents, condition);
     }
 

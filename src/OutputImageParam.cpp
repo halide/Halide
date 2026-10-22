@@ -103,6 +103,9 @@ OutputImageParam &OutputImageParam::set_estimates(const Region &estimates) {
 }
 
 OutputImageParam &OutputImageParam::store_in(MemoryType type) {
+    user_assert(type != MemoryType::GPR)
+        << "Buffer " << name() << " can't be stored in MemoryType::GPR. Only Funcs "
+        << "computed within the pipeline can be stored in general-purpose registers.\n";
     param.store_in(type);
     return *this;
 }
