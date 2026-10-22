@@ -110,8 +110,13 @@ bool is_unordered_parallel(ForType for_type) {
 /** Returns true if for_type executes for loop iterations in parallel. */
 bool is_parallel(ForType for_type) {
     return (is_unordered_parallel(for_type) ||
-            for_type == ForType::Vectorized ||
+            is_vectorized(for_type) ||
             for_type == ForType::GPULane);
+}
+
+bool is_vectorized(ForType for_type) {
+    return (for_type == ForType::Vectorized ||
+            for_type == ForType::VectorizedGPR);
 }
 
 /** Returns true if for_type is GPUBlock, GPUThread, or GPULane. */

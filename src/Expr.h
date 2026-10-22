@@ -477,9 +477,11 @@ namespace Internal {
  * appear to have finished before the next begins. Parallel, GPUBlock,
  * and GPUThread are parallel and unordered: iterations may occur in
  * any order, and multiple iterations may occur
- * simultaneously. Vectorized and GPULane are parallel and
- * synchronous: they act as if all iterations occur at the same time
- * in lockstep. */
+ * simultaneously. Vectorized, VectorizedGPR, and GPULane are parallel
+ * and synchronous: they act as if all iterations occur at the same time
+ * in lockstep. VectorizedGPR loops are vectorized like Vectorized loops,
+ * but the lanes are packed into a single general-purpose integer
+ * register instead of a SIMD register. */
 enum class ForType {
     Serial,
     Parallel,
@@ -489,7 +491,11 @@ enum class ForType {
     GPUBlock,
     GPUThread,
     GPULane,
+    VectorizedGPR,
 };
+
+/** Returns true if for_type is Vectorized or VectorizedGPR. */
+bool is_vectorized(ForType for_type);
 
 /** Check if for_type executes for loop iterations in parallel and unordered. */
 bool is_unordered_parallel(ForType for_type);

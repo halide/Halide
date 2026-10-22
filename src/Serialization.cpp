@@ -184,6 +184,8 @@ Serialize::ForType Serializer::serialize_for_type(const ForType &for_type) {
         return Serialize::ForType::GPUThread;
     case ForType::GPULane:
         return Serialize::ForType::GPULane;
+    case ForType::VectorizedGPR:
+        return Serialize::ForType::VectorizedGPR;
     default:
         user_error << "Unsupported for type\n";
         return Serialize::ForType::Serial;

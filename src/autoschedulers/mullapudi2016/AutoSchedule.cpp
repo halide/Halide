@@ -3375,7 +3375,7 @@ void Partitioner::generate_group_cpu_schedule(
         int dim_start = dims.size() - 2;
         string seq_var;
         for (int d = dim_start; d >= 0; d--) {
-            if (dims[d].for_type == ForType::Vectorized) {
+            if (is_vectorized(dims[d].for_type)) {
                 break;
             }
 
