@@ -292,11 +292,15 @@ inline bool float_sub_scales(const std::vector<ApproximationResult> &rs) {
 // (else undefined), the sum split, so one product per block reaches blk.
 // `aff`: blk has the affine weight's code-free terms (affine(rs), unless
 // derived_sums() took them out).
-inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool integer, Func &rest, Func &mid, bool aff) {
+inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool integer, Func &rest, Func &mid, bool aff, const std::vector<Func> &kept = {}) {
     Func codes;
     rest = mid = Func();
     if (!aff) {
-        blk.update().eager_inline(decoders(rs));
+        std::vector<Func> dec;
+        for (Func f : decoders(rs)) {
+            if (std::none_of(kept.begin(), kept.end(), [&](const Func &k) { return k.name() == f.name(); })) dec.push_back(f);
+        }
+        blk.update().eager_inline(dec);
         // (scales per sub-block alone, as nvfp4's with f32 acts: none hoists)
         codes = invariant_factor(blk) ? blk.update().hoist_invariants()[0] : blk;
     } else {
@@ -483,10 +487,15 @@ inline std::vector<Func> sum_tree(Stage s, const std::vector<Level> &levels, Loo
 // per sub-block, each with its own scale): the block's dot splits per
 // sub-block (rfactor), whose scale hoists out of its dot of the codes, so
 // the codes' products stay those of the codes (sdot) and the scales apply
-// once per sub-block; `act_sub`: the act's (derived_sums()).
+// once per sub-block; `act_sub`: the act's (derived_sums()). `sublanes`
+// (two-level weights, a per-format parameter): the lanes are the sub-blocks
+// instead (mod vec / per), as GGML's NEON iq2_xs: per lane its sub-block's
+// dot (sdot, then pairwise adds across the sdot's lanes), and the
+// sub-blocks' scales, decoded once per block as a vector, apply as one
+// vector multiply-add per vec / per sub-blocks.
 inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, bool integer,
                     const std::vector<ApproximationResult> &rs, const Target &t, bool derived = false,
-                    int sub = 0, int act_sub = 0) {
+                    int sub = 0, int act_sub = 0, bool sublanes = false) {
     Stage s = tile_out(out, st, dot, cond, ts, r);
     Var n = dot.args()[0], m = dot.args()[1], lane("lane"), u("u"), v("v"), bacc("bacc");
     RVar ry = r.y, rxs("rxs"), rxc("rxc"), rxo("rxo"), rxi("rxi"), ryo("ryo"), ryi("ryi");
@@ -495,14 +504,27 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     if (derived && derived_sums(out, st, s, r, rs, d, act_sub)) aff = false;
     int per = integer ? 4 : 1, vec = t.natural_vector_size<int8_t>();
     if (sub * per <= vec) sub = 0;  // a sub-block per lane step: no sum to hoist its scale from
-    sub ? s.split(r.x, rxs, rxc, sub).split(rxc, rxc, rxo, vec) : s.split(r.x, rxc, rxo, vec);
+    bool sl = sub && sublanes;
+    RVar rxl("rxl");  // (sl: the sub-block's lane)
+    if (sl) {
+        s.split(r.x, rxs, rxc, sub).split(rxs, rxs, rxl, vec / per).split(rxc, rxc, rxo, vec);
+    } else {
+        sub ? s.split(r.x, rxs, rxc, sub).split(rxc, rxc, rxo, vec) : s.split(r.x, rxc, rxo, vec);
+    }
     s.split(rxo, rxo, rxi, per);
-    Func blk = s.rfactor({{rxo, lane}, {ry, u}});
+    Func blk = s.rfactor({{sl ? rxl : rxo, lane}, {ry, u}});
     blk.bound(lane, 0, vec / per);  // the lane's range, so the block's scales hoist
     // float sub-block scales (nvfp4's): the codes' dot is integer per
     // sub-block only, once they hoist
     bool fsub = sub && integer && float_sub_scales(rs);
-    Func rest, mid, codes = block_dot(blk, rs, integer && !fsub, rest, mid, aff);
+    // sub-blocks across the lanes: their scales decoded per block, a vector
+    std::vector<Func> kept;
+    if (sl && !aff) {
+        for (Func f : decoders(rs, only({tag::scale}), 0, 1)) {
+            if (f.dimensions() == 3) kept.push_back(f);
+        }
+    }
+    Func rest, mid, codes = block_dot(blk, rs, integer && !fsub, rest, mid, aff, kept);
     // per sub-block (v): its scale times its codes' dot (inner)
     std::vector<std::tuple<Func, Func, Func>> subs;
     for (Func f : {codes, rest}) {
@@ -513,8 +535,9 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
         subs.emplace_back(f, part, fsub ? inner.change_type(Int(32)) : inner);
     }
     s.split(ry, ryo, ryi, ts.interleave, TailStrategy::GuardWithIf);
-    Func acc = sum_tree(s, {{{rxo, lane}, {ryi, bacc}}, {{rxo, lane}}}, tile_at(out, st), n, m, ryo)[0];
-    s.atomic().vectorize(rxo).unroll(n).unroll(m);
+    RVar rl = sl ? rxl : rxo;
+    Func acc = sum_tree(s, {{{rl, lane}, {ryi, bacc}}, {{rl, lane}}}, tile_at(out, st), n, m, ryo)[0];
+    s.atomic().vectorize(rl).unroll(n).unroll(m);
     // rfactor put the lanes last in storage; per block group (ryo), the
     // blocks' storage also in the K tail: on the stack
     for (Func f : {blk, mid, codes}) {
@@ -531,17 +554,43 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     }
     // per block and sub-block, the tile's sub-block dots (inner), then their
     // scales (part)
+    std::vector<Func> readers{blk, mid, codes, rest};
     for (auto [f, part, inner] : subs) {
+        readers.insert(readers.end(), {part, inner});
         f.update().reorder(lane, n, m, rxs, u).unroll(rxs);
         for (Func g : {part, inner}) {
             regs(g.compute_at(f, rxs).reorder_storage(lane, n, m), {lane}, {v, u, n, m});
         }
-        inner.update().atomic().vectorize(rxi).unroll(rxc);
+        if (sl) {
+            // the sub-blocks across the lanes: per lane, its sub-block's
+            // sdots accumulated across its chunks (quads, a vector per lane),
+            // then summed across their lanes (pairwise adds)
+            Var q("q"), ql("ql");
+            Func quads = inner.update().rfactor(rxo, q);
+            regs(quads.compute_at(f, rxs).reorder_storage(q, lane, n, m), {}, {v, u, n, m});
+            quads.fuse(q, lane, ql).vectorize(ql);
+            quads.update().reorder(rxi, q, lane).fuse(q, lane, ql).atomic().vectorize(rxi).vectorize(ql).unroll(rxc);
+            readers.push_back(quads);
+            inner.update().reorder(rxo, lane).atomic().vectorize(rxo).vectorize(lane);
+        } else {
+            inner.update().atomic().vectorize(rxi).unroll(rxc);
+        }
     }
     schedule_sums(d, out, st, acc, n, m, ts, r, ts.nt > 2, vec);
-    std::vector<Func> readers{blk, mid, codes, rest};
     for (auto [f, part, inner] : subs) {
-        readers.insert(readers.end(), {part, inner});
+        // the kept scales part reads (the rest inline into them): per block
+        // group, vectorized across the sub-blocks
+        for (const Expr &e : part.function().update(0).values()) {
+            Internal::visit_with(e, [&](auto *self, const Internal::Call *c) {
+                for (Func k : kept) {
+                    if (c->name == k.name()) {
+                        k.compute_at(acc, ryo).vectorize(k.args()[0], vec);
+                        readers.push_back(k);
+                    }
+                }
+                self->visit_base(c);
+            });
+        }
     }
     tables(rs, readers, LoopLevel(acc, ryo));
 }
@@ -779,7 +828,8 @@ inline void encoder(Func e, const std::vector<ApproximationResult> &rs) {
 // pipeline (`staged`) are encoded once, up front. `interleave` blocks per
 // iteration (blocked weights; a per-format parameter, formats.cmake).
 inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs,
-                    const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation(), int interleave = 2) {
+                    const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation(), int interleave = 2,
+                    bool sublanes = false) {
     for (Func e : staged) {
         e.compute_root();
         encoder(e, rs);
@@ -790,7 +840,7 @@ inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, cons
         acc.defined() ? flat_tree(out, 0, dots[0], Expr(), {1, 1, 4}, r, acc, staged) : flat(out, 0, dots[0], Expr(), {1, 1, 4}, r, t);
         return;
     }
-    blocked(out, 0, dots[0], Expr(), {1, 1, interleave}, r, fmt.act_block == fmt.block, rs, t, true, fmt.sub, fmt.act_sub);
+    blocked(out, 0, dots[0], Expr(), {1, 1, interleave}, r, fmt.act_block == fmt.block, rs, t, true, fmt.sub, fmt.act_sub, sublanes);
 }
 
 // The Metal tiles of out: threadgroups (gpu_blocks) of `sg` simdgroups
