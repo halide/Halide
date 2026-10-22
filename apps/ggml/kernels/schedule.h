@@ -539,10 +539,13 @@ inline std::vector<Func> sum_tree(Stage s, const std::vector<Level> &levels, Loo
 // instead (mod vec / per), as GGML's NEON iq2_xs: per lane its sub-block's
 // dot (sdot, then pairwise adds across the sdot's lanes), and the
 // sub-blocks' scales, decoded once per block as a vector, apply as one
-// vector multiply-add per vec / per sub-blocks.
+// vector multiply-add per vec / per sub-blocks. `gpr_scales` (a per-format
+// parameter): the sub-blocks' decoded scales (and mins), per block in
+// general-purpose registers, 4 bytes a word (store_in(MemoryType::GPR): GGML's SWAR
+// decode of q4_K's 6-bit scales and mins).
 inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom &r, bool integer,
                     const std::vector<ApproximationResult> &rs, const Target &t, bool derived = false,
-                    int sub = 0, int act_sub = 0, bool sublanes = false) {
+                    int sub = 0, int act_sub = 0, bool sublanes = false, bool gpr_scales = false) {
     Stage s = tile_out(out, st, dot, cond, ts, r);
     Var n = dot.args()[0], m = dot.args()[1], lane("lane"), u("u"), v("v"), bacc("bacc");
     RVar ry = r.y, rxs("rxs"), rxc("rxc"), rxo("rxo"), rxi("rxi"), ryo("ryo"), ryi("ryi");
@@ -559,7 +562,22 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     }
     bool aff = affine(rs);
     Sums d;
-    if (derived && derived_sums(out, st, s, r, rs, d, act_sub, sub > act_sub ? sub : 0, kept)) aff = false;
+    // scales decoded in GPRs stay their own stage, for the derived sums and
+    // the dot
+    std::vector<Func> dkept = kept, gpr;
+    if (!sl && gpr_scales) {
+        // (the decoded scales: the per-sub-block decoders no other reads)
+        std::vector<Func> sc = decoders(rs, only({tag::scale}), 0, 1);
+        for (Func f : sc) {
+            bool read = std::any_of(sc.begin(), sc.end(), [&](const Func &g) {
+                const auto &vals = g.function().values();
+                return std::any_of(vals.begin(), vals.end(), [&](const Expr &e) { return calls_any(e, {f}); });
+            });
+            if (f.dimensions() == 3 && !read) gpr.push_back(f);
+        }
+        dkept.insert(dkept.end(), gpr.begin(), gpr.end());
+    }
+    if (derived && derived_sums(out, st, s, r, rs, d, act_sub, sub > act_sub ? sub : 0, dkept)) aff = false;
     if (aff) kept.clear();
     RVar rxl("rxl");  // (sl: the sub-block's lane)
     if (sl) {
@@ -573,7 +591,9 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     // float sub-block scales (nvfp4's): the codes' dot is integer per
     // sub-block only, once they hoist
     bool fsub = sub && integer && float_sub_scales(rs);
-    Func rest, mid, codes = block_dot(blk, rs, integer && !fsub, rest, mid, aff, kept);
+    std::vector<Func> bkept = kept;
+    bkept.insert(bkept.end(), gpr.begin(), gpr.end());
+    Func rest, mid, codes = block_dot(blk, rs, integer && !fsub, rest, mid, aff, bkept);
     // per sub-block (v): its scale times its codes' dot (inner)
     std::vector<std::tuple<Func, Func, Func>> subs;
     for (Func f : {codes, rest}) {
@@ -626,6 +646,32 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
         }
     }
     schedule_sums(d, out, st, acc, n, m, ts, r, ts.nt > 2, vec);
+    // ... decoded per block for the derived sums and the sub-blocks' dots,
+    // a word of 4 bytes at a time in a GPR (each word's bytes one shift and
+    // mask, as GGML's q4_K: its dot from 76 SIMD instructions per block to
+    // 72), the mins handed to the derived sums' vectors in registers (fmov,
+    // mov.s), the scales extracted from their words
+    std::vector<Func> sum_readers;
+    if (d.part.defined()) sum_readers.push_back(d.part);
+    for (auto [f, part, inner] : subs) {
+        sum_readers.push_back(part);
+    }
+    for (Func k : gpr) {
+        std::vector<Func> callers;
+        for (Func g : sum_readers) {
+            const auto &vals = g.function().update(0).values();
+            if (std::any_of(vals.begin(), vals.end(), [&](const Expr &e) { return calls_any(e, {k}); })) callers.push_back(g);
+        }
+        if (callers.empty()) continue;
+        Func w = k.in(callers);
+        Var kw("kw"), kb("kb");
+        // (all unrolled: a loop here splits the block's code, and LLVM
+        // hoists the block's loads above it and spills them)
+        w.compute_at(acc, ryo).split(w.args()[0], kw, kb, 4).unroll(kw).vectorize(kb, 4).store_in(MemoryType::GPR);
+        for (size_t i = 1; i < w.args().size(); i++)
+            w.unroll(w.args()[i]);
+        readers.push_back(w);
+    }
     for (auto [f, part, inner] : subs) {
         // the kept scales part reads (the rest inline into them): per block
         // group, vectorized across the sub-blocks
@@ -942,7 +988,7 @@ inline void encoder(Func e, const std::vector<ApproximationResult> &rs) {
 // iteration (blocked weights; a per-format parameter, formats.cmake).
 inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs,
                     const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation(), int interleave = 2,
-                    bool sublanes = false) {
+                    bool sublanes = false, bool gpr_scales = false) {
     for (Func e : staged) {
         e.compute_root();
         encoder(e, rs);
@@ -953,7 +999,7 @@ inline void vec_dot(Func out, const std::vector<Func> &dots, const RDom &r, cons
         acc.defined() ? flat_tree(out, 0, dots[0], Expr(), {1, 1, 4}, r, acc, staged) : flat(out, 0, dots[0], Expr(), {1, 1, 4}, r, t);
         return;
     }
-    blocked(out, 0, dots[0], Expr(), {1, 1, interleave}, r, fmt.act_block == fmt.block, rs, t, true, fmt.sub, fmt.act_sub, sublanes);
+    blocked(out, 0, dots[0], Expr(), {1, 1, interleave}, r, fmt.act_block == fmt.block, rs, t, true, fmt.sub, fmt.act_sub, sublanes, gpr_scales);
 }
 
 // The Metal tiles of out: threadgroups (gpu_blocks) of `sg` simdgroups
@@ -1223,7 +1269,8 @@ inline void rowwise_mul_mat(Func out, const std::vector<Func> &dots, const RDom 
 // (dots[1]) on gemm tiles starting on a record, its second the others
 // (dots[0], < r rows) on gemv tiles.
 inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, const Formats &fmt, const std::vector<ApproximationResult> &rs,
-                    const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation(), int interleave = 2) {
+                    const std::vector<Func> &staged, const Target &t, const Approximation &acc = Approximation(), int interleave = 2,
+                    bool gpr_scales = false) {
     if (t.has_feature(Target::Metal)) {
         if (acc.defined()) throw std::invalid_argument("metal: dots accumulated in f32");
         if (fmt.act_rows > 1 || fmt.rows > 1) throw std::invalid_argument("metal: weights and acts one row per record");
@@ -1336,8 +1383,8 @@ inline void mul_mat(Func out, const std::vector<Func> &dots, const RDom &r, cons
     pairs.busy = rows.busy = rest;
     pairs.interleave = rows.interleave = interleave;
     // A table's decode, per row pair, outweighs sharing the act's loads
-    if (decoders(rs, all_but({}), 0, SIZE_MAX, true).empty()) blocked(out, 2 * whole, dots[0], fits(pairs, 1), pairs, r, integer, rs, t, true, fmt.sub, fmt.act_sub);
-    blocked(out, 2 * whole, dots[0], Expr(), rows, r, integer, rs, t, true, fmt.sub, fmt.act_sub);
+    if (decoders(rs, all_but({}), 0, SIZE_MAX, true).empty()) blocked(out, 2 * whole, dots[0], fits(pairs, 1), pairs, r, integer, rs, t, true, fmt.sub, fmt.act_sub, false, gpr_scales);
+    blocked(out, 2 * whole, dots[0], Expr(), rows, r, integer, rs, t, true, fmt.sub, fmt.act_sub, false, gpr_scales);
 }
 
 }  // namespace ggml
