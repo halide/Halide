@@ -52,15 +52,14 @@ add_halide_library(
 )
 
 # Main executable
-set_target_properties(linear_blur_pipeline PROPERTIES OUTPUT_NAME linear_blur)
-set_target_properties(linear_blur_pipeline.runtime PROPERTIES OUTPUT_NAME linear_blur.runtime)
-add_executable(linear_blur run_linear_blur.cpp)
-target_link_libraries(linear_blur PRIVATE Halide::ImageIO linear_blur_pipeline simple_blur)
+add_executable(linear_blur_process run_linear_blur.cpp)
+target_link_libraries(linear_blur_process PRIVATE Halide::ImageIO linear_blur_pipeline simple_blur)
+add_custom_target(linear_blur DEPENDS linear_blur_process)
 
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgb.png)
 if (EXISTS ${IMAGE})
-    add_test(NAME linear_blur_test COMMAND linear_blur 1 ${IMAGE} out.png)
+    add_test(NAME linear_blur_test COMMAND linear_blur_process 1 ${IMAGE} out.png)
     set_tests_properties(
         linear_blur_test
         PROPERTIES

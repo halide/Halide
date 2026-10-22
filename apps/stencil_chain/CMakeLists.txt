@@ -23,8 +23,6 @@ add_halide_library(
     FILE_BASE_NAME stencil_chain
     REGISTRATION stencil_chain_registration
 )
-set_target_properties(stencil_chain_pipeline PROPERTIES OUTPUT_NAME stencil_chain)
-set_target_properties(stencil_chain_pipeline.runtime PROPERTIES OUTPUT_NAME stencil_chain.runtime)
 add_halide_library(
     stencil_chain_auto_schedule
     FROM stencil_chain.generator

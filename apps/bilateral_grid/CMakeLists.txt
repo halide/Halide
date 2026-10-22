@@ -29,8 +29,6 @@ add_halide_library(
     STMT bilateral_grid_STMT
     SCHEDULE bilateral_grid_SCHEDULE
 )
-set_target_properties(bilateral_grid_pipeline PROPERTIES OUTPUT_NAME bilateral_grid)
-set_target_properties(bilateral_grid_pipeline.runtime PROPERTIES OUTPUT_NAME bilateral_grid.runtime)
 
 add_halide_library(
     bilateral_grid_auto_schedule

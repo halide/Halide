@@ -35,21 +35,20 @@ add_halide_library(
 )
 
 # Main executable
-set_target_properties(compositing_pipeline PROPERTIES OUTPUT_NAME compositing)
-set_target_properties(compositing_pipeline.runtime PROPERTIES OUTPUT_NAME compositing.runtime)
-add_executable(compositing process.cpp)
+add_executable(compositing_process process.cpp)
 target_link_libraries(
-    compositing
+    compositing_process
     PRIVATE
     Halide::ImageIO
     compositing_pipeline
     compositing_auto_schedule
 )
+add_custom_target(compositing DEPENDS compositing_process)
 
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgba.png)
 if (EXISTS ${IMAGE})
-    add_test(NAME compositing_process COMMAND compositing ${IMAGE} 10 out.png)
+    add_test(NAME compositing_process COMMAND compositing_process ${IMAGE} 10 out.png)
     set_tests_properties(
         compositing_process
         PROPERTIES

@@ -31,15 +31,17 @@ add_halide_library(
 )
 
 # Main executable
-set_target_properties(hist_pipeline PROPERTIES OUTPUT_NAME hist)
-set_target_properties(hist_pipeline.runtime PROPERTIES OUTPUT_NAME hist.runtime)
-add_executable(hist filter.cpp)
-target_link_libraries(hist PRIVATE Halide::ImageIO Halide::Tools hist_pipeline hist_auto_schedule)
+add_executable(hist_filter filter.cpp)
+target_link_libraries(
+    hist_filter
+    PRIVATE Halide::ImageIO Halide::Tools hist_pipeline hist_auto_schedule
+)
+add_custom_target(hist DEPENDS hist_filter)
 
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgba.png)
 if (EXISTS ${IMAGE})
-    add_test(NAME hist_filter COMMAND hist ${IMAGE} out.png)
+    add_test(NAME hist_filter COMMAND hist_filter ${IMAGE} out.png)
     set_tests_properties(
         hist_filter
         PROPERTIES

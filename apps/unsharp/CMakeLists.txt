@@ -30,15 +30,14 @@ add_halide_library(
 )
 
 # Main executable
-set_target_properties(unsharp_pipeline PROPERTIES OUTPUT_NAME unsharp)
-set_target_properties(unsharp_pipeline.runtime PROPERTIES OUTPUT_NAME unsharp.runtime)
-add_executable(unsharp filter.cpp)
-target_link_libraries(unsharp PRIVATE Halide::ImageIO unsharp_pipeline unsharp_auto_schedule)
+add_executable(unsharp_filter filter.cpp)
+target_link_libraries(unsharp_filter PRIVATE Halide::ImageIO unsharp_pipeline unsharp_auto_schedule)
+add_custom_target(unsharp DEPENDS unsharp_filter)
 
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgba.png)
 if (EXISTS ${IMAGE})
-    add_test(NAME unsharp_filter COMMAND unsharp ${IMAGE} out.png)
+    add_test(NAME unsharp_filter COMMAND unsharp_filter ${IMAGE} out.png)
     set_tests_properties(
         unsharp_filter
         PROPERTIES

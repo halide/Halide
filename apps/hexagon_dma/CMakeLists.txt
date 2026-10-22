@@ -118,6 +118,8 @@ foreach (label IN LISTS ro_schedules)
     list(APPEND raw_libs pipeline_raw_linear_interleaved_ro_${label})
 endforeach ()
 
+add_dependencies(hexagon_dma ${yuv_libs} ${raw_libs})
+
 ##
 # Processing executables (run on the host against the mock DMA driver)
 ##
@@ -146,7 +148,6 @@ if (NOT MSVC)
         target_compile_definitions(process_yuv_linear_basic PRIVATE SCHEDULE_ALL)
         target_compile_definitions(process_raw_linear_interleaved_basic PRIVATE SCHEDULE_ALL)
     endif ()
-    add_dependencies(hexagon_dma ${yuv_libs} ${raw_libs})
 
     # Test that the apps actually work!
     add_test(NAME process_yuv_linear_basic COMMAND process_yuv_linear_basic 256 128 async rw nv12)

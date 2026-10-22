@@ -23,8 +23,6 @@ add_halide_library(
     FILE_BASE_NAME nl_means
     REGISTRATION nl_means_registration
 )
-set_target_properties(nl_means_pipeline PROPERTIES OUTPUT_NAME nl_means)
-set_target_properties(nl_means_pipeline.runtime PROPERTIES OUTPUT_NAME nl_means.runtime)
 add_halide_library(
     nl_means_auto_schedule
     FROM nl_means.generator

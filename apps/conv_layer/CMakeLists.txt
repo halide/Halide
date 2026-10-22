@@ -31,19 +31,18 @@ add_halide_library(
 )
 
 # Main executable
-set_target_properties(conv_layer_pipeline PROPERTIES OUTPUT_NAME conv_layer)
-set_target_properties(conv_layer_pipeline.runtime PROPERTIES OUTPUT_NAME conv_layer.runtime)
-add_executable(conv_layer process.cpp)
+add_executable(conv_layer_process process.cpp)
 target_link_libraries(
-    conv_layer
+    conv_layer_process
     PRIVATE
     Halide::ImageIO
     conv_layer_pipeline
     conv_layer_auto_schedule
 )
+add_custom_target(conv_layer DEPENDS conv_layer_process)
 
 # Test that the app actually works!
-add_test(NAME conv_layer_process COMMAND conv_layer)
+add_test(NAME conv_layer_process COMMAND conv_layer_process)
 set_tests_properties(
     conv_layer_process
     PROPERTIES

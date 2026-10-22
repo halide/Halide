@@ -31,15 +31,14 @@ add_halide_library(
 )
 
 # Main executable
-set_target_properties(harris_pipeline PROPERTIES OUTPUT_NAME harris)
-set_target_properties(harris_pipeline.runtime PROPERTIES OUTPUT_NAME harris.runtime)
-add_executable(harris filter.cpp)
-target_link_libraries(harris PRIVATE Halide::ImageIO harris_pipeline harris_auto_schedule)
+add_executable(harris_filter filter.cpp)
+target_link_libraries(harris_filter PRIVATE Halide::ImageIO harris_pipeline harris_auto_schedule)
+add_custom_target(harris DEPENDS harris_filter)
 
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgba.png)
 if (EXISTS ${IMAGE})
-    add_test(NAME harris_filter COMMAND harris ${IMAGE} out.png)
+    add_test(NAME harris_filter COMMAND harris_filter ${IMAGE} out.png)
     set_tests_properties(
         harris_filter
         PROPERTIES

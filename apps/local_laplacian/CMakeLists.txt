@@ -27,11 +27,6 @@ add_halide_library(
     FILE_BASE_NAME local_laplacian
     REGISTRATION local_laplacian_registration
 )
-set_target_properties(local_laplacian_pipeline PROPERTIES OUTPUT_NAME local_laplacian)
-set_target_properties(local_laplacian_pipeline.runtime
-    PROPERTIES
-    OUTPUT_NAME local_laplacian.runtime
-)
 add_halide_library(
     local_laplacian_auto_schedule
     FROM local_laplacian.generator

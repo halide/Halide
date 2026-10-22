@@ -382,8 +382,14 @@ D:\Halide\apps> cmake --build --preset=release-vcpkg
 These commands configure all apps and resolve the dependencies in
 `apps/vcpkg.json`; vcpkg may build both Debug and Release versions of those
 dependencies. To build a single app without configuring the full apps project,
-configure from that app's directory instead. For example, with `blur` and
-dependencies already installed in the selected vcpkg triplet:
+configure from that app's directory instead. To build just one app in an
+already-configured apps project, pass its directory name as the build target,
+for example `cmake --build --preset=release-vcpkg --target blur`. This builds
+all targets needed by that app; the app-named target may be an executable or a
+custom target aggregating several targets.
+
+For example, to build `blur` standalone with dependencies already installed in
+the selected vcpkg triplet:
 
 ```
 D:\Halide\apps\blur> cmake -G Ninja -S . -B build ^

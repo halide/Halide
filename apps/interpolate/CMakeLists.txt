@@ -30,21 +30,20 @@ add_halide_library(
 )
 
 # Main executable
-set_target_properties(interpolate_pipeline PROPERTIES OUTPUT_NAME interpolate)
-set_target_properties(interpolate_pipeline.runtime PROPERTIES OUTPUT_NAME interpolate.runtime)
-add_executable(interpolate filter.cpp)
+add_executable(interpolate_filter filter.cpp)
 target_link_libraries(
-    interpolate
+    interpolate_filter
     PRIVATE
     Halide::ImageIO
     interpolate_pipeline
     interpolate_auto_schedule
 )
+add_custom_target(interpolate DEPENDS interpolate_filter)
 
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgba.png)
 if (EXISTS ${IMAGE})
-    add_test(NAME interpolate_filter COMMAND interpolate ${IMAGE} out.png)
+    add_test(NAME interpolate_filter COMMAND interpolate_filter ${IMAGE} out.png)
     set_tests_properties(
         interpolate_filter
         PROPERTIES

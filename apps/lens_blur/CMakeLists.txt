@@ -23,8 +23,6 @@ add_halide_library(
     FILE_BASE_NAME lens_blur
     REGISTRATION lens_blur_registration
 )
-set_target_properties(lens_blur_pipeline PROPERTIES OUTPUT_NAME lens_blur)
-set_target_properties(lens_blur_pipeline.runtime PROPERTIES OUTPUT_NAME lens_blur.runtime)
 add_halide_library(
     lens_blur_auto_schedule
     FROM lens_blur.generator

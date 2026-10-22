@@ -34,25 +34,18 @@ add_halide_library(
 )
 
 # Main executable
-set_target_properties(depthwise_separable_conv_pipeline
-    PROPERTIES
-    OUTPUT_NAME depthwise_separable_conv
-)
-set_target_properties(depthwise_separable_conv_pipeline.runtime
-    PROPERTIES
-    OUTPUT_NAME depthwise_separable_conv.runtime
-)
-add_executable(depthwise_separable_conv process.cpp)
+add_executable(depthwise_separable_conv_process process.cpp)
 target_link_libraries(
-    depthwise_separable_conv
+    depthwise_separable_conv_process
     PRIVATE
     Halide::ImageIO
     depthwise_separable_conv_pipeline
     depthwise_separable_conv_auto_schedule
 )
+add_custom_target(depthwise_separable_conv DEPENDS depthwise_separable_conv_process)
 
 # Test that the app actually works!
-add_test(NAME depthwise_separable_conv_process COMMAND depthwise_separable_conv)
+add_test(NAME depthwise_separable_conv_process COMMAND depthwise_separable_conv_process)
 set_tests_properties(
     depthwise_separable_conv_process
     PROPERTIES
