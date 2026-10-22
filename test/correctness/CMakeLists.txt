@@ -606,6 +606,7 @@ tests(
     vectorized_load_from_vectorized_allocation.cpp
     vectorized_reduction_bug.cpp
     vulkan_bool_scalar_abi.cpp
+    warp_shuffle_hoisting.cpp
     widening_reduction.cpp
     wrap_custom_after_shared.cpp
     wrap_frozen.cpp
