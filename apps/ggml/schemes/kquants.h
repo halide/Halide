@@ -101,11 +101,16 @@ struct KScales {
     std::vector<Func> decode(const std::vector<Func> &e) const {
         Func f("k_scales_decoded");
         Var k, b;
-        auto byte = [&](const Expr &i) { return e[0](clamp(i, 0, 11), b, _); };
-        Expr s = k % 8, m = k / 8;
-        Expr lo = byte(s + 4 * m) & cast<uint8_t>(63);
-        Expr hi = ((byte(s + 4) >> cast<uint8_t>(4 * m)) & cast<uint8_t>(15)) | ((byte(s - 4 + 4 * m) >> 6) << 4);
-        f(k, b, _) = select(s < 4, lo, hi);
+        // Per k, x's low six bits (k % 8 < 4) or a nibble of x under y's top
+        // two bits: the shifts and masks per k, the bytes' indices in
+        // [0, 11] (a vector of k reads dense bytes, shuffled, and selects
+        // the bytes, not the decodes).
+        auto byte = [&](const Expr &i) { return e[0](i, b, _); };
+        auto u8 = [](const Expr &v) { return cast<uint8_t>(v); };
+        Expr s = k % 8, m = k / 8, lo = s < 4;
+        Expr x = select(lo, byte(s + 4 * m), byte(s + 4)), y = byte(s % 4 + 4 * m);
+        Expr shift = u8(select(lo, 0, 4 * m)), mask = u8(select(lo, 63, 15)), top = u8(select(lo, 0, 48));
+        f(k, b, _) = ((x >> shift) & mask) | ((y >> 2) & top);
         return {f};
     }
     ApproximationSignature signature(const ApproximationPorts &in) const {
