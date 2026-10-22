@@ -336,10 +336,14 @@ inline Func block_dot(Func blk, const std::vector<ApproximationResult> &rs, bool
 struct Sums {
     Func sums, blk, sum, part, pair;
 };
-inline bool derived_sums(Func out, int st, Stage &s, const RDom &r, const std::vector<ApproximationResult> &rs, Sums &d, int act_sub = 0, int sub = 0) {
+inline bool derived_sums(Func out, int st, Stage &s, const RDom &r, const std::vector<ApproximationResult> &rs, Sums &d, int act_sub = 0, int sub = 0, const std::vector<Func> &kept = {}) {
     d = Sums();
     if (rs.size() < 2 || rs[1].derived_ports().empty() || !affine(rs)) return false;
-    s.eager_inline(decoders(rs, all_but({tag::codes}), 0, 1));
+    std::vector<Func> dec;
+    for (Func f : decoders(rs, all_but({tag::codes}), 0, 1)) {
+        if (std::none_of(kept.begin(), kept.end(), [&](const Func &k) { return k.name() == f.name(); })) dec.push_back(f);
+    }
+    s.eager_inline(dec);
     FuncVec parts = s.hoist_invariants({decoders(rs, only({tag::codes}), 0, 1)});
     if (!parts[1].defined()) throw std::invalid_argument("derived_sums: no terms free of the codes in " + s.name());
     Func with = parts[0];
@@ -436,6 +440,13 @@ inline void schedule_sums(Sums d, Func out, int st, Func acc, Var n, Var m, cons
         d.sum.compute_at(blocks).unroll(u).unroll(n).unroll(m);
         d.sum.update().atomic().vectorize(rxt).unroll(u).unroll(n).unroll(m);
         regs(d.part.compute_at(blocks).reorder_storage(t, u, n, m), {t}, {u, n, m});
+        if (d.pair.defined()) {
+            // the act's sums per weight sub-block (pairwise adds of its
+            // port's), vectorized across them as d.part
+            RVar rxh("rxh");
+            regs(d.pair.compute_at(blocks).reorder_storage(t, u, n, m), {t}, {u, n, m});
+            d.pair.update().reorder(t, rxh).unroll(rxh);
+        }
     } else if (d.sum.defined()) {  // no port matched: the act's block sums
         d.sum.compute_at(blocks).unroll(u).unroll(n).unroll(m);
         d.sum.update().atomic().vectorize(r.x, vec).unroll(u).unroll(n).unroll(m);
@@ -522,7 +533,8 @@ inline std::vector<Func> sum_tree(Stage s, const std::vector<Level> &levels, Loo
 // per sub-block, each with its own scale): the block's dot splits per
 // sub-block (rfactor), whose scale hoists out of its dot of the codes, so
 // the codes' products stay those of the codes (sdot) and the scales apply
-// once per sub-block; `act_sub`: the act's (derived_sums()). `sublanes`
+// once per sub-block; `act_sub`: the act's (derived_sums(); sub-blocks of
+// several act sub-blocks, as q4_K's: their sums paired, d.pair). `sublanes`
 // (two-level weights, a per-format parameter): the lanes are the sub-blocks
 // instead (mod vec / per), as GGML's NEON iq2_xs: per lane its sub-block's
 // dot (sdot, then pairwise adds across the sdot's lanes), and the
@@ -534,12 +546,21 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     Stage s = tile_out(out, st, dot, cond, ts, r);
     Var n = dot.args()[0], m = dot.args()[1], lane("lane"), u("u"), v("v"), bacc("bacc");
     RVar ry = r.y, rxs("rxs"), rxc("rxc"), rxo("rxo"), rxi("rxi"), ryo("ryo"), ryi("ryi");
-    bool aff = affine(rs);
-    Sums d;
-    if (derived && derived_sums(out, st, s, r, rs, d, act_sub)) aff = false;
     int per = integer ? 4 : 1, vec = t.natural_vector_size<int8_t>();
     if (sub * per <= vec) sub = 0;  // a sub-block per lane step: no sum to hoist its scale from
     bool sl = sub && sublanes;
+    // sub-blocks across the lanes: their scales decoded per block, a vector
+    // (derived_sums() leaves them too)
+    std::vector<Func> kept;
+    if (sl) {
+        for (Func f : decoders(rs, only({tag::scale}), 0, 1)) {
+            if (f.dimensions() == 3) kept.push_back(f);
+        }
+    }
+    bool aff = affine(rs);
+    Sums d;
+    if (derived && derived_sums(out, st, s, r, rs, d, act_sub, sub > act_sub ? sub : 0, kept)) aff = false;
+    if (aff) kept.clear();
     RVar rxl("rxl");  // (sl: the sub-block's lane)
     if (sl) {
         s.split(r.x, rxs, rxc, sub).split(rxs, rxs, rxl, vec / per).split(rxc, rxc, rxo, vec);
@@ -552,13 +573,6 @@ inline void blocked(Func out, int st, Func dot, Expr cond, Tiles ts, const RDom 
     // float sub-block scales (nvfp4's): the codes' dot is integer per
     // sub-block only, once they hoist
     bool fsub = sub && integer && float_sub_scales(rs);
-    // sub-blocks across the lanes: their scales decoded per block, a vector
-    std::vector<Func> kept;
-    if (sl && !aff) {
-        for (Func f : decoders(rs, only({tag::scale}), 0, 1)) {
-            if (f.dimensions() == 3) kept.push_back(f);
-        }
-    }
     Func rest, mid, codes = block_dot(blk, rs, integer && !fsub, rest, mid, aff, kept);
     // per sub-block (v): its scale times its codes' dot (inner)
     std::vector<std::tuple<Func, Func, Func>> subs;
