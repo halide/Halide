@@ -603,6 +603,8 @@ tests(
     vector_store_alignment.cpp
     vector_tile.cpp
     vectorize_dynamic.cpp
+    vectorize_gpr.cpp
+    vectorize_gpr_errors.cpp
     vectorize_guard_with_if.cpp
     vectorize_mixed_widths.cpp
     vectorize_nested.cpp
